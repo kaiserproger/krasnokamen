@@ -95,7 +95,7 @@ fn effect_trigger_oozing_births_two_medium_slimes_once_and_survives_wal_and_chec
         2
     );
     let (_, entities, _) = crate::core::checkpoint_data_for(&state, output.tick);
-    let dir = std::env::temp_dir().join(format!("solaris-oozing-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("krasnokamen-oozing-{}", uuid::Uuid::new_v4()));
     mc_world::anvil::entity_regions::write_entity_regions(
         &dir,
         &state.registry.items,

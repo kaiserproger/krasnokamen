@@ -356,7 +356,7 @@ async fn fractional_path_steps_to_full_block_without_jump_and_stops_at_obstructi
 
 #[test]
 fn collision_support_recognizes_path_and_farmland_but_rejects_fence() {
-    let blocks = mc_data::blocks::solaris_required_blocks_report();
+    let blocks = mc_data::blocks::krasnokamen_required_blocks_report();
     for name in ["minecraft:dirt_path", "minecraft:farmland"] {
         let block = blocks
             .iter()
@@ -391,7 +391,7 @@ fn collision_support_recognizes_path_and_farmland_but_rejects_fence() {
 
 #[test]
 fn observed_farmland_with_wheat_is_walkable_but_solid_and_hazard_cells_are_not() -> Result<()> {
-    let blocks = mc_data::blocks::solaris_required_blocks_report();
+    let blocks = mc_data::blocks::krasnokamen_required_blocks_report();
     let names = [
         "minecraft:air",
         "minecraft:farmland",

@@ -2,14 +2,14 @@ use super::*;
 
 #[test]
 fn vanilla_unassigned_wire_ids_stay_absent_until_native_import_finalizes_them() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let mut entity = VanillaEntity {
         id: "minecraft:cow".into(),
         uuid: uuid::Uuid::from_u128(1),
         ..Default::default()
     };
     let fields = entity_to_fields(&items, &entity).unwrap();
-    assert!(field(&fields, "solaris:WireId").is_none());
+    assert!(field(&fields, "krasnokamen:WireId").is_none());
     assert_eq!(
         entity_from_fields(&items, Default::default(), &fields)
             .unwrap()
@@ -18,7 +18,7 @@ fn vanilla_unassigned_wire_ids_stay_absent_until_native_import_finalizes_them() 
     );
     entity.wire_id = 123;
     let fields = entity_to_fields(&items, &entity).unwrap();
-    assert_eq!(field(&fields, "solaris:WireId"), Some(&Tag::Int(123)));
+    assert_eq!(field(&fields, "krasnokamen:WireId"), Some(&Tag::Int(123)));
     assert_eq!(
         entity_from_fields(&items, Default::default(), &fields)
             .unwrap()
@@ -29,7 +29,7 @@ fn vanilla_unassigned_wire_ids_stay_absent_until_native_import_finalizes_them() 
 
 #[test]
 fn present_native_wire_id_requires_a_nonnegative_int() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     for value in [
         Tag::Int(-1),
         Tag::Long(1),
@@ -39,11 +39,11 @@ fn present_native_wire_id_requires_a_nonnegative_int() {
         let error = entity_from_fields(
             &items,
             Default::default(),
-            &[("solaris:WireId".into(), value)],
+            &[("krasnokamen:WireId".into(), value)],
         )
         .unwrap_err()
         .to_string();
-        assert!(error.contains("solaris:WireId: expected nonnegative int"));
+        assert!(error.contains("krasnokamen:WireId: expected nonnegative int"));
     }
     let entity = VanillaEntity {
         wire_id: -1,
@@ -53,13 +53,13 @@ fn present_native_wire_id_requires_a_nonnegative_int() {
         entity_to_fields(&items, &entity)
             .unwrap_err()
             .to_string()
-            .contains("solaris:WireId")
+            .contains("krasnokamen:WireId")
     );
 }
 
 #[test]
 fn accepted_numeric_health_never_silently_defaults_during_import() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     for value in [
         Tag::Float(5.0),
         Tag::Double(5.0),

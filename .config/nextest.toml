@@ -19,7 +19,7 @@ priority = 100
 # CI short run: tests that took more than 3 s in the last local L2 run
 # (.analysis/validation/20261018T113559-correctness-9qpwfhdd). The local
 # `run correctness` gate keeps the full suite (profile default with
-# --ignore-default-filter); CI selects this profile via SOLARIS_NEXTEST_PROFILE=ci.
+# --ignore-default-filter); CI selects this profile via KRASNOKAMEN_NEXTEST_PROFILE=ci.
 [profile.ci]
 fail-fast = false
 retries = 0

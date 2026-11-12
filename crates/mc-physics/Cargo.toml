@@ -1,6 +1,6 @@
 [package]
 name = "mc-physics"
-description = "block physics, collisions, fluids (Solaris)."
+description = "block physics, collisions, fluids (Krasnokamen)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

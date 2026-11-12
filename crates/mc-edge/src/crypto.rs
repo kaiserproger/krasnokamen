@@ -63,7 +63,7 @@ impl MinecraftCipher {
 ///
 /// This is the de-facto standard offline-mode UUID derivation. Reproducing
 /// it exactly means a player who connects to a vanilla offline server and
-/// later to a Solaris offline server keeps the same UUID, so any external
+/// later to a Krasnokamen offline server keeps the same UUID, so any external
 /// persistence (whitelists, permissions, claims) survives the migration.
 #[must_use]
 pub fn offline_uuid(name: &str) -> uuid::Uuid {

@@ -11,7 +11,7 @@
 //! invertible mixer) would let a client recover the seed. SHA-256 under a
 //! secret prefix is one-way for the salt and the seed is not an input at all.
 //! The salt is minted once per world and persisted next to the terrain epoch
-//! in `level.dat/Data` (`SolarisEntitySalt`), so it rides every checkpoint.
+//! in `level.dat/Data` (`KrasnokamenEntitySalt`), so it rides every checkpoint.
 use sha2::{Digest, Sha256};
 
 use crate::boundary::EntityId;
@@ -20,7 +20,7 @@ use crate::tick::TickState;
 
 /// Per-world salt width in bytes.
 pub(crate) const SALT_LEN: usize = 16;
-pub(crate) const SALT_FIELD: &str = "SolarisEntitySalt";
+pub(crate) const SALT_FIELD: &str = "KrasnokamenEntitySalt";
 
 /// UUID (v4 layout) for the entity `id` spawned at `tick` under `salt`.
 pub(crate) fn derive(salt: &[u8; SALT_LEN], tick: u64, id: EntityId) -> uuid::Uuid {

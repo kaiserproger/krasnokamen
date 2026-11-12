@@ -126,7 +126,7 @@ impl PacketLimiter {
     }
 }
 
-const NATIVE_SETTLEMENTS_OWNER: &str = "solaris-settlements";
+const NATIVE_SETTLEMENTS_OWNER: &str = "krasnokamen-settlements";
 
 fn native_settlements_bundle() -> anyhow::Result<mc_script::ClientBundle> {
     static BUNDLE: LazyLock<Result<mc_script::ClientBundle, String>> =
@@ -141,19 +141,19 @@ fn build_native_settlements_bundle() -> anyhow::Result<mc_script::ClientBundle> 
     let index = br#"{
   "schema": 2,
   "screens": [{
-    "id": "solaris-settlements:overview",
+    "id": "krasnokamen-settlements:overview",
     "overlay": true,
     "title": "Settlements",
     "widgets": [],
     "view_request_bindings": [{
       "key": "key.keyboard.c",
-      "view": "solaris-settlements:overview"
+      "view": "krasnokamen-settlements:overview"
     }]
   }]
 }"#;
     let mut archive = zip::ZipWriter::new(Cursor::new(Vec::new()));
     archive.start_file(
-        "solaris-client.json",
+        "krasnokamen-client.json",
         zip::write::SimpleFileOptions::default(),
     )?;
     archive.write_all(index)?;
@@ -279,11 +279,11 @@ pub struct EdgeServer {
     pub(crate) lod: Option<crate::lod::LodService>,
     /// Optional Java Distant Horizons presentation; shares native LOD workers.
     pub(crate) dh: Option<Arc<crate::dh::Service>>,
-    /// `solaris:screen` relay (ADR 0018 "Screen sharing").
+    /// `krasnokamen:screen` relay (ADR 0018 "Screen sharing").
     pub(crate) screens: crate::screen_service::Service,
     operator_updates: tokio::sync::Mutex<()>,
     pub(crate) computer_processes: Arc<tokio::sync::Semaphore>,
-    /// `solaris:voice` proximity relay (ADR 0019).
+    /// `krasnokamen:voice` proximity relay (ADR 0019).
     pub(crate) voice: crate::voice_service::Service,
 }
 
@@ -365,15 +365,15 @@ impl EdgeServer {
             anyhow::anyhow!("worldgen/biome registry missing: chunk encoding impossible")
         })?;
         let blocks = mc_world::BlockRegistry::from_report(
-            &mc_data::blocks::solaris_required_blocks_report(),
+            &mc_data::blocks::krasnokamen_required_blocks_report(),
         )
         .map_err(|e| anyhow::anyhow!("block registry: {e}"))?;
         let wire = WireRegistries {
             dimension_type_ids: crate::dimensions::registry_ids(&data)?,
             biomes,
             blocks,
-            items: mc_data::items::solaris_required_items(),
-            block_entity_types: mc_data::block_entity_types::solaris_required_block_entity_types(),
+            items: mc_data::items::krasnokamen_required_items(),
+            block_entity_types: mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
         };
         crate::recipes::for_join(&hub.current_registry())?;
         let admin = crate::admin::Admin::open(&cfg.server_dir)?;
@@ -406,7 +406,7 @@ impl EdgeServer {
             .iter()
             .map(|(name, _)| name.to_string())
             .collect();
-        let suggestion_blocks = mc_data::blocks::solaris_required_blocks_report()
+        let suggestion_blocks = mc_data::blocks::krasnokamen_required_blocks_report()
             .into_iter()
             .map(|block| block.id.to_string())
             .collect();
@@ -1660,7 +1660,7 @@ pub fn load_tags(
     } else {
         &cfg.data.vanilla_data_dir
     };
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let tags = crate::startup_data::load_effective_tags(root, data, &items)?;
     Ok(Arc::new(tags))
 }

@@ -233,7 +233,7 @@ fn filled_named_box_break_pickup_and_normal_place_restore_once_and_wal_replays()
 }
 #[test]
 fn shulker_checkpoint_native_restart_keeps_slot_twenty_six_and_components() {
-    let dir = std::env::temp_dir().join(format!("solaris-shulker-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("krasnokamen-shulker-{}", uuid::Uuid::new_v4()));
     let (mut state, actor) = fixture(Some(dir.clone()));
     install(&mut state, actor, "red_shulker_box");
     let mut item = stack(&state, "diamond", 29);

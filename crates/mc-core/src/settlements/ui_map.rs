@@ -823,7 +823,7 @@ fn cells_component(grid: &Grid, id: SettlementId) -> Tag {
                         ("action".to_owned(), Tag::String("custom".to_owned())),
                         (
                             "id".to_owned(),
-                            Tag::String(format!("solaris:{OWNER}/{action}")),
+                            Tag::String(format!("krasnokamen:{OWNER}/{action}")),
                         ),
                         ("payload".to_owned(), Tag::Compound(payload)),
                     ]),

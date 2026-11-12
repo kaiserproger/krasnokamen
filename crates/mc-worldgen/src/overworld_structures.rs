@@ -1,5 +1,5 @@
 //! Immutable generation-time structure plans. Locate and chunk paste share starts.
-//! Shapes are Solaris-authored, not copies of decompiled game implementation.
+//! Shapes are Krasnokamen-authored, not copies of decompiled game implementation.
 use crate::vanilla_features::{LegacyRandom, RandomSource};
 use crate::{
     structures::{StructureTemplate, TemplateBlock, TemplateBlockEntity, TemplateChest},

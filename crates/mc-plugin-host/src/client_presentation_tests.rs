@@ -9,11 +9,11 @@
 //! text, not a behavior.
 
 use super::map_event;
-use crate::bindings::exports::solaris::plugin::events::{
+use crate::bindings::exports::krasnokamen::plugin::events::{
     ClientSelectionOutcome, ClientViewOutcome, Event, LoaderItemGrantFailure,
     LoaderItemGrantOutcome, ViewFailure,
 };
-use crate::bindings::solaris::plugin::client_presentation::ViewFieldValue;
+use crate::bindings::krasnokamen::plugin::client_presentation::ViewFieldValue;
 use mc_script::{
     ScriptClientViewFailure, ScriptClientViewField, ScriptEventKind, ScriptLoaderItemGrantFailure,
     ScriptPlayerId,
@@ -157,7 +157,7 @@ fn selection_start_exposes_only_the_owners_decided_context_or_refusal() {
     let started = ScriptEventKind::ClientSelectionStarted {
         request_id: "select-1".to_owned(),
         player_id: ScriptPlayerId::new(SESSION),
-        selection_context_id: Some("solaris:selection-1".to_owned()),
+        selection_context_id: Some("krasnokamen:selection-1".to_owned()),
         expires_at_tick: Some(1200),
         failure: None,
     };
@@ -168,7 +168,7 @@ fn selection_start_exposes_only_the_owners_decided_context_or_refusal() {
         panic!("an admitted selection has a single-use context");
     };
     assert_eq!(answer.session, SESSION);
-    assert_eq!(context.id, "solaris:selection-1");
+    assert_eq!(context.id, "krasnokamen:selection-1");
     assert_eq!(context.expires_at_tick, 1200);
 
     let refused = ScriptEventKind::ClientSelectionStarted {
@@ -189,7 +189,7 @@ fn selection_start_exposes_only_the_owners_decided_context_or_refusal() {
     let inconsistent = ScriptEventKind::ClientSelectionStarted {
         request_id: "select-3".to_owned(),
         player_id: ScriptPlayerId::new(SESSION),
-        selection_context_id: Some("solaris:selection-2".to_owned()),
+        selection_context_id: Some("krasnokamen:selection-2".to_owned()),
         expires_at_tick: None,
         failure: None,
     };

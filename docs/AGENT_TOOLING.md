@@ -23,18 +23,18 @@ client prerequisites, graphical gates, the render oracle),
   continues unbounded.
 - Java profiles (`java`, `--client java`): Java 25
   (`java -XshowSettings:properties -version` must report specification 25), an
-  executable `../solaris-loader/gradlew` (`SOLARIS_LOADER_ROOT` selects another
-  Loader checkout), a Minecraft client jar via `SOLARIS_CLIENT_JAR` (CI
+  executable `../solaris-loader/gradlew` (`KRASNOKAMEN_LOADER_ROOT` selects another
+  Loader checkout), a Minecraft client jar via `KRASNOKAMEN_CLIENT_JAR` (CI
   downloads the version in the Loader's `gradle.properties` and verifies
   Mojang's SHA-1), and Xvfb for every graphical profile. Wasm package coverage
   comes from `standard-pack` over `../solaris-default-plugins`
-  (`SOLARIS_DEFAULT_PLUGINS_ROOT`), not from an in-core plugin copy.
-- Native client profiles (`--client native`): a built `solaris-client` and a
+  (`KRASNOKAMEN_DEFAULT_PLUGINS_ROOT`), not from an in-core plugin copy.
+- Native client profiles (`--client native`): a built `krasnokamen-client` and a
   prepared data root; see the prerequisites block in
   [real-client gates](development/real-client-gates.md#prerequisites).
-- Real-client and scale profiles need a **release** `solaris-v2` as
-  `SOLARIS_SERVER_BINARY` (`cargo build --release --locked -p mc-edge --bin
-  solaris-v2`; on the owner host a path from `tools/dev/pin-release`).
+- Real-client and scale profiles need a **release** `krasnokamen` as
+  `KRASNOKAMEN_SERVER_BINARY` (`cargo build --release --locked -p mc-edge --bin
+  krasnokamen`; on the owner host a path from `tools/dev/pin-release`).
 - Free loopback ports (default MCP `39095`, scenario servers such as
   `25565`/`25567`, per-run bridge ports); a run that cannot bind fails closed.
   Readiness on Linux uses inotify/pidfd event waits, Xvfb process management and
@@ -59,7 +59,7 @@ Typed-option constraints (the run fails closed with exit 2 on violation; the
 source of truth is `tools/harness/__main__.py`):
 
 - `--server-bin` is only supported by `loader-live` (immutable candidate
-  executable). Other launch paths honor the read-only `SOLARIS_SERVER_BINARY`
+  executable). Other launch paths honor the read-only `KRASNOKAMEN_SERVER_BINARY`
   environment candidate instead of building.
 - `--plugins-dir` requires `--client native`, `java-v2-p5-towns`, `loader-live`
   or `graves`. The directory must already exist; it is used as-is.
@@ -84,8 +84,8 @@ terminate their stage descendants, including separate process groups. A timeout
 writes a `timeout` receipt; a signal writes an `interrupted` receipt naming it.
 
 Real-client and functional-native runs check prerequisites before their
-profile launches: set `SOLARIS_SERVER_BINARY` to a pinned executable and, for
-native clients, `SOLARIS_CLIENT_BINARY` and the client data paths described in
+profile launches: set `KRASNOKAMEN_SERVER_BINARY` to a pinned executable and, for
+native clients, `KRASNOKAMEN_CLIENT_BINARY` and the client data paths described in
 the real-client guide. Pooled `targets/slot-*` binary paths are refused. Scene
 JSON step contracts are checked before startup. Failed receipts include
 `details.failure` with available binary hashes, logs and child exit or signal;
@@ -104,7 +104,7 @@ Adapter guidance: [matrix domains](../tools/harness/matrix_domains/README.md),
 [platform coverage](../tools/harness/matrix_domains/platform.md).
 
 The true-vanilla Java lane requires Loader's vanilla premain event transformer
-and a direct, non-symlink `SOLARIS_LEGACY_CONTENT_CACHE` for protocol 775.
+and a direct, non-symlink `KRASNOKAMEN_LEGACY_CONTENT_CACHE` for protocol 775.
 The real client reached Play in
 `/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T173128-java-matrix-hymtay_4/`;
 that run blocked later on missing player eye-height observation and is not a
@@ -129,7 +129,7 @@ verified `pin-release` server and the imported vanilla data directory. For
 example, from this checkout run:
 
 ```sh
-tools/dev/scenario-nightly --install --server-bin /absolute/pin/solaris-v2 --vanilla-data /absolute/vanilla-data
+tools/dev/scenario-nightly --install --server-bin /absolute/pin/krasnokamen --vanilla-data /absolute/vanilla-data
 ```
 
 The user timer runs at 03:00 local time. Disable it with
@@ -199,13 +199,13 @@ Each of these is a limit on what a green receipt means; never state more.
   `--prepare` creates a run directory and observation templates,
   `--validate-run <dir>` checks an existing run shape.
 - The regression runner is fail-closed on scenario provenance: for `--check` and
-  `--run`, `SOLARIS_REAL_CLIENT_AGENT_SCENARIO` must name exactly one scenario in
-  `SOLARIS_REAL_CLIENT_MANIFEST`; an implemented but undeclared debug scenario is
+  `--run`, `KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO` must name exactly one scenario in
+  `KRASNOKAMEN_REAL_CLIENT_MANIFEST`; an implemented but undeclared debug scenario is
   not valid evidence for a no-debug playable manifest.
 - `oracle` without `--run` is readiness inspection only (`prepared`,
   blocked/degraded when artifacts are absent); `oracle --run` executes
   comparisons against the local artifacts each manifest names. `quirk-parity`
-  compares a real vanilla oracle with Solaris; see
+  compares a real vanilla oracle with Krasnokamen; see
   [QUIRK_PARITY.md](QUIRK_PARITY.md).
 - `catalog-load` and `constantinople`: [catalog load](development/catalog-load.md)
   and [Constantinople](development/constantinople-fixture.md). Smoke runs and
@@ -302,7 +302,7 @@ host budget; other packages fill the remaining CPU slots. Do not add a
 process-wide guest mutex/semaphore or change production Wasmtime limits for a
 heavy run; use an explicit environment override for a proven-heavy scope instead.
 
-CI short run: `SOLARIS_NEXTEST_PROFILE=ci` selects the `ci` profile in
+CI short run: `KRASNOKAMEN_NEXTEST_PROFILE=ci` selects the `ci` profile in
 `.config/nextest.toml`, whose `default-filter` is a **fixed list of test names**
 that were slow (over 3 s) in one L2 run on 2026-10-18. It is not recomputed:
 a test added or slowed since is not excluded. The local gate keeps the full
@@ -338,15 +338,15 @@ The frozen combinatorial specs and generator live in
 26.1.2 cells; its recorded source heads are provenance, not current coverage.
 Keep mutable ledger JSONL, copied live plugins and run directories outside Git,
 by default in `/run/media/kaiserroman/games/solaris-work/scenarios/`.
-`SOLARIS_MATRIX_DATA` changes that root; `SCENARIO_LEDGER` changes the ledger.
+`KRASNOKAMEN_MATRIX_DATA` changes that root; `SCENARIO_LEDGER` changes the ledger.
 Generation reads this checkout and sibling repositories selected by
-`SOLARIS_WORK_ROOT`. A changed frozen id set requires explicit `--refreeze`.
+`KRASNOKAMEN_WORK_ROOT`. A changed frozen id set requires explicit `--refreeze`.
 
 For a protocol adapter probe, use the pinned release binary and the current
 26.3 content cache; its version metadata selects the wire protocol:
 
 ```sh
-python3 -m tools.harness run protocol-matrix --server-bin "$SOLARIS_SERVER_BINARY" --vanilla-data /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla --subject block_place.full_block
+python3 -m tools.harness run protocol-matrix --server-bin "$KRASNOKAMEN_SERVER_BINARY" --vanilla-data /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla --subject block_place.full_block
 ```
 
 Select a frozen protocol row with `--matrix tools/harness/matrix_specs/matrix.yaml
@@ -360,7 +360,7 @@ wrapper. On the owner host wrap every run in Main's absolute
 The wrapper points `XDG_DATA_HOME` at its private graph, where the native client
 finds no content and exits before MCP is ready. Run the harness through
 `sh -c 'XDG_DATA_HOME=<client data XDG> exec python3 -m tools.harness run native-matrix ...'`
-inside the wrapper, with that XDG's `solaris-client/` symlinking the client content
+inside the wrapper, with that XDG's `krasnokamen-client/` symlinking the client content
 (see [real-client gates](development/real-client-gates.md)).
 
 Optional CRAP measurement: `cargo-llvm-cov` and `cargo-crap` measure line
@@ -416,23 +416,23 @@ a total, not per-process.
 
 | Property | Default | Env |
 |---|---|---|
-| `CPUQuota` (+`CPUWeight=50`) | every physical core | `SOLARIS_HARNESS_CPU_QUOTA` |
-| `MemoryHigh` | `off` (no throttle) | `SOLARIS_HARNESS_MEMORY_HIGH` |
-| `MemoryMax` | `12G` for `test`/`correctness`; `4G` for other profiles and clients | `SOLARIS_HARNESS_MEMORY_MAX` |
-| `MemorySwapMax` | `1G` | `SOLARIS_HARNESS_MEMORY_SWAP_MAX` |
+| `CPUQuota` (+`CPUWeight=50`) | every physical core | `KRASNOKAMEN_HARNESS_CPU_QUOTA` |
+| `MemoryHigh` | `off` (no throttle) | `KRASNOKAMEN_HARNESS_MEMORY_HIGH` |
+| `MemoryMax` | `12G` for `test`/`correctness`; `4G` for other profiles and clients | `KRASNOKAMEN_HARNESS_MEMORY_MAX` |
+| `MemorySwapMax` | `1G` | `KRASNOKAMEN_HARNESS_MEMORY_SWAP_MAX` |
 
 ```sh
 python3 -m tools.harness run correctness              # the defaults above
-SOLARIS_HARNESS_CPU_QUOTA=150% python3 -m tools.harness run test
+KRASNOKAMEN_HARNESS_CPU_QUOTA=150% python3 -m tools.harness run test
 python3 -m tools.harness run test -p mc-core --lib inventory  # focused Rust loop
-SOLARIS_HARNESS_MEMORY_MAX=12G python3 -m tools.harness client   # heavier client runs
-SOLARIS_HARNESS_CPU_QUOTA=off  python3 -m tools.harness run test  # unbounded, opt-out
+KRASNOKAMEN_HARNESS_MEMORY_MAX=12G python3 -m tools.harness client   # heavier client runs
+KRASNOKAMEN_HARNESS_CPU_QUOTA=off  python3 -m tools.harness run test  # unbounded, opt-out
 ```
 
 `run`/`client` refuse admission when `MemAvailable` is below the selected
 `MemoryMax` + 1 GiB, naming the knob to change; that refusal is not acceptance
 evidence. On the shared agent host heavy commands additionally run under
-`tools/dev/mem-run.sh` (it exports `SOLARIS_HARNESS_CPU_SCOPE=1` so the harness
+`tools/dev/mem-run.sh` (it exports `KRASNOKAMEN_HARNESS_CPU_SCOPE=1` so the harness
 does not open a second scope); the runner, its lanes and the Cargo
 rules are in [heavy commands](development/heavy-commands-and-memory.md). A run
 without a user systemd scope prints a warning and continues unbounded; the
@@ -461,7 +461,7 @@ unclassified failure remains `unknown`.
 
 Preflight selects prerequisites from the profile's declaration in
 `tools/harness/profiles.py`, not from its scope label. Native profiles that
-launch a client read its schemas with `solaris-client mcp-schema`; the command
+launch a client read its schemas with `krasnokamen-client mcp-schema`; the command
 prints JSON with `tools` (windowed) and `headless_tools` arrays from the same
 catalog as MCP `tools/list`, without starting a game. A release that predates
 the command (it answers `unknown_command: mcp-schema`) still runs, with
@@ -489,7 +489,7 @@ not proven by static validation.
   held, stop the stray Gradle/Minecraft/Xvfb process by PID. Never delete
   `.analysis/validation/` evidence or historical logs.
 - Second real-client (multiplayer) failures almost always mean a missing
-  `SOLARIS_REAL_CLIENT_SECOND_AGENT_SECRET` or bridge URL/port pair; the backend
+  `KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_SECRET` or bridge URL/port pair; the backend
   errors name the exact variable.
 - `civilization-seed-qa` awaits each console sprint's exact `tick sprint
   finished` event under the remaining scenario deadline, not the 120-second MCP
@@ -511,7 +511,7 @@ not proven by static validation.
 
 The default (platformless) development client lives under the sibling
 `../solaris-loader/fabric-agent/`; despite that name it is a **NeoForge** mod
-(entrypoint `dev.solaris.agent.neoforge.SolarisClientAgentMod`, fixed launch task
+(entrypoint `dev.krasnokamen.agent.neoforge.KrasnokamenClientAgentMod`, fixed launch task
 `:fabric-agent:runClientMcp`). The three Loader adapters (`loader-fabric`,
 `loader-neoforge`, `loader-forge`) register the same Configuration-state
 manifest/ack payloads through their native networking APIs and launch as
@@ -521,21 +521,21 @@ Loader's `minecraftVersion` in its `gradle.properties`.
 `client` (launch and `--check` alike) needs these per-run values. The token is a
 random local bearer secret you generate, not an account credential:
 
-- `SOLARIS_CLIENT_MCP_TOKEN`: random bearer token, no default; without it
+- `KRASNOKAMEN_CLIENT_MCP_TOKEN`: random bearer token, no default; without it
   `client` exits 2 before Gradle starts.
-- `SOLARIS_CLIENT_MCP_PORT`: free IPv4 loopback port, default `39095`.
-- `SOLARIS_CLIENT_MCP_GAME_DIR`: isolated game dir; default
+- `KRASNOKAMEN_CLIENT_MCP_PORT`: free IPv4 loopback port, default `39095`.
+- `KRASNOKAMEN_CLIENT_MCP_GAME_DIR`: isolated game dir; default
   `../solaris-loader/fabric-agent/run-mcp`, or
   `.analysis/minecraft-loader-mcp/<platform>` when `--platform` is given.
-- `SOLARIS_CLIENT_MCP_USERNAME`: `1..16` ASCII letters/digits/underscores;
-  default `SolarisMcp` (platformless) or `SolarisLoader` (Loader platforms).
+- `KRASNOKAMEN_CLIENT_MCP_USERNAME`: `1..16` ASCII letters/digits/underscores;
+  default `KrasnoMcp` (platformless) or `KrasnoLoader` (Loader platforms).
 
 ```sh
-SOLARIS_CLIENT_MCP_TOKEN=local-check-token python3 -m tools.harness client --check
-export SOLARIS_CLIENT_MCP_TOKEN="$(openssl rand -hex 32)"
-export SOLARIS_CLIENT_MCP_PORT=39095
-export SOLARIS_CLIENT_MCP_GAME_DIR=.analysis/minecraft-mcp-primary
-export SOLARIS_CLIENT_MCP_USERNAME=SolarisMcpA
+KRASNOKAMEN_CLIENT_MCP_TOKEN=local-check-token python3 -m tools.harness client --check
+export KRASNOKAMEN_CLIENT_MCP_TOKEN="$(openssl rand -hex 32)"
+export KRASNOKAMEN_CLIENT_MCP_PORT=39095
+export KRASNOKAMEN_CLIENT_MCP_GAME_DIR=.analysis/minecraft-mcp-primary
+export KRASNOKAMEN_CLIENT_MCP_USERNAME=KrasnoMcpA
 python3 -m tools.harness client
 python3 -m tools.harness client --platform neoforge   # Loader client on another port/dir/user
 ```
@@ -547,7 +547,7 @@ validates Java 25, configuration, MCP transport tests and the Gradle adapter
 without launching Minecraft. Use a second port, token, game directory and
 username for multiplayer gates. The endpoint is `http://127.0.0.1:<port>/mcp`.
 
-MCP smoke against an already-running client (`SOLARIS_CLIENT_MCP_TOKEN` still
+MCP smoke against an already-running client (`KRASNOKAMEN_CLIENT_MCP_TOKEN` still
 required):
 
 ```sh
@@ -570,25 +570,25 @@ The harness never reads a config file for these; export them before `run`:
 | Variable | Effect (default) |
 |---|---|
 | `RUST_TEST_THREADS`, `NEXTEST_TEST_THREADS` | `run test` default concurrency (CPU count; `RUST_TEST_THREADS` wins). Nextest `--test-threads=N` overrides. |
-| `SOLARIS_NEXTEST_PROFILE` | Nextest profile (`default` local full suite; CI sets `ci` short run) |
-| `SOLARIS_REAL_CLIENT_MANIFEST` | Regression pack manifest (`docs/real-client-regression/manifests/m94-regression-pack.json`; `playable` presets its loop manifest, `replay` its seed-81 manifest) |
-| `SOLARIS_REAL_CLIENT_RUN_ROOT` | Local artifact root (preset under the run artifact `regression/` dir) |
-| `SOLARIS_REAL_CLIENT_SERVER_CONFIG` | Server config (`example.toml`; `playable` presets `playable.toml`) |
-| `SOLARIS_REAL_CLIENT_FRESH_WORLD` | `1` copies the config into the run dir with a fresh per-run world (`playable`/`replay` preset `1`) |
-| `SOLARIS_REAL_CLIENT_SERVER_SEED` | Optional signed 64-bit decimal overriding `data.seed` |
-| `SOLARIS_REAL_CLIENT_SERVER_ADDR` | Server address for the in-client driver (`127.0.0.1:25565`) |
-| `SOLARIS_REAL_CLIENT_TIMEOUT_SECONDS` | Gradle runClient adapter timeout (180; `playable` 1500, `replay` 180). `--timeout-seconds` overrides it for `playable`/`replay`. |
-| `SOLARIS_REAL_CLIENT_SERVER_READY_TIMEOUT_SECONDS` | Server-readiness wait (120) |
-| `SOLARIS_REAL_CLIENT_AGENT_BRIDGE_URL` / `AGENT_SECRET` / `AGENT_PORT` / `AGENT_DRIVER` / `AGENT_SCENARIO` | Loopback JSON bridge URL, per-run bridge secret (required for agent-driver mode), bridge port, internal driver path, scenario id. Second-client mode additionally needs `SOLARIS_REAL_CLIENT_SECOND_AGENT_SECRET` plus bridge URL or port. |
+| `KRASNOKAMEN_NEXTEST_PROFILE` | Nextest profile (`default` local full suite; CI sets `ci` short run) |
+| `KRASNOKAMEN_REAL_CLIENT_MANIFEST` | Regression pack manifest (`docs/real-client-regression/manifests/m94-regression-pack.json`; `playable` presets its loop manifest, `replay` its seed-81 manifest) |
+| `KRASNOKAMEN_REAL_CLIENT_RUN_ROOT` | Local artifact root (preset under the run artifact `regression/` dir) |
+| `KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG` | Server config (`example.toml`; `playable` presets `playable.toml`) |
+| `KRASNOKAMEN_REAL_CLIENT_FRESH_WORLD` | `1` copies the config into the run dir with a fresh per-run world (`playable`/`replay` preset `1`) |
+| `KRASNOKAMEN_REAL_CLIENT_SERVER_SEED` | Optional signed 64-bit decimal overriding `data.seed` |
+| `KRASNOKAMEN_REAL_CLIENT_SERVER_ADDR` | Server address for the in-client driver (`127.0.0.1:25565`) |
+| `KRASNOKAMEN_REAL_CLIENT_TIMEOUT_SECONDS` | Gradle runClient adapter timeout (180; `playable` 1500, `replay` 180). `--timeout-seconds` overrides it for `playable`/`replay`. |
+| `KRASNOKAMEN_REAL_CLIENT_SERVER_READY_TIMEOUT_SECONDS` | Server-readiness wait (120) |
+| `KRASNOKAMEN_REAL_CLIENT_AGENT_BRIDGE_URL` / `AGENT_SECRET` / `AGENT_PORT` / `AGENT_DRIVER` / `AGENT_SCENARIO` | Loopback JSON bridge URL, per-run bridge secret (required for agent-driver mode), bridge port, internal driver path, scenario id. Second-client mode additionally needs `KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_SECRET` plus bridge URL or port. |
 | `M79_ORACLE_REPORT_DIR` / `M79_ORACLE_CHECK_ROOT` | Oracle report/check roots (harness presets them under the run artifact) |
-| `SOLARIS_ENTITY_BENCH_*` | Scale workload knobs (preset under artifact `bench/`) |
-| `SOLARIS_VALIDATION_RUN_DIR` | Canonical run dir injected into every backend env; used by seed-review evidence |
+| `KRASNOKAMEN_ENTITY_BENCH_*` | Scale workload knobs (preset under artifact `bench/`) |
+| `KRASNOKAMEN_VALIDATION_RUN_DIR` | Canonical run dir injected into every backend env; used by seed-review evidence |
 
-Native-client variables (`SOLARIS_CLIENT_*`) are in the
+Native-client variables (`KRASNOKAMEN_CLIENT_*`) are in the
 [real-client gates prerequisites](development/real-client-gates.md#prerequisites).
-Normal operator launches never set `SOLARIS_HARNESS_LOG_STDOUT`,
-`SOLARIS_HARNESS_CPU_SCOPE` or the memory-cap variables beyond the recipes above;
-the canonical `run` entrypoint sets `SOLARIS_HARNESS_LOG_STDOUT=1` for its
+Normal operator launches never set `KRASNOKAMEN_HARNESS_LOG_STDOUT`,
+`KRASNOKAMEN_HARNESS_CPU_SCOPE` or the memory-cap variables beyond the recipes above;
+the canonical `run` entrypoint sets `KRASNOKAMEN_HARNESS_LOG_STDOUT=1` for its
 subprocesses so readiness events and per-run captured logs stay available
 (`RUST_LOG` controls `logs/debug.log`, not the captured threshold).
 

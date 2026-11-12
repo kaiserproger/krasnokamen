@@ -1,7 +1,7 @@
 //! Vanilla entity-region container (`entities/r.x.z.mca`): one chunk
 //! compound per 32×32 region slot with `DataVersion`, `Position` and the
 //! `Entities` list (records via [`mc_data::entity_nbt`]). Written through the
-//! existing mc-world region file writer (atomic); Solaris-only bookkeeping
+//! existing mc-world region file writer (atomic); Krasnokamen-only bookkeeping
 //! stays in the manifest, never in these files.
 
 use std::collections::BTreeMap;
@@ -269,8 +269,8 @@ pub fn validate_shared_fields(fields: &[(String, Tag)]) -> Result<(), String> {
                 Tag::Byte(_) | Tag::Short(_) | Tag::Int(_) | Tag::Long(_) => {}
                 _ => return Err("Health: expected finite numeric health".into()),
             },
-            "solaris:WireId" if !matches!(tag, Tag::Int(value) if *value >= 0) => {
-                return Err("solaris:WireId: expected nonnegative int".into());
+            "krasnokamen:WireId" if !matches!(tag, Tag::Int(value) if *value >= 0) => {
+                return Err("krasnokamen:WireId: expected nonnegative int".into());
             }
             "Item" => {
                 let Tag::Compound(item) = tag else {
@@ -443,7 +443,7 @@ mod tests {
     use super::*;
 
     fn items() -> ItemRegistry {
-        mc_data::items::solaris_required_items()
+        mc_data::items::krasnokamen_required_items()
     }
 
     #[test]

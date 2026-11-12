@@ -601,7 +601,7 @@ class NativeV2ProbeTests(unittest.TestCase):
                         username="HarnessUnit", display=":99")
             with self.assertRaisesRegex(ValueError, "platform"):
                 runtime.start_client(**args, platform="invalid")
-            with mock.patch.dict(os.environ, {"SOLARIS_LOADER_ROOT": str(root)}), \
+            with mock.patch.dict(os.environ, {"KRASNOKAMEN_LOADER_ROOT": str(root)}), \
                     mock.patch("tools.harness.audio.private_audio_preflight"):
                 with self.assertRaisesRegex(RuntimeError, "missing executable Gradle wrapper"):
                     runtime.start_client(**args, platform="fabric")

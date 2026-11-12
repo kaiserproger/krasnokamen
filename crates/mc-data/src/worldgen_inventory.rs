@@ -2,7 +2,7 @@
 //!
 //! This module records which declarative data files are present under the
 //! ADR 0001 sidecar. It intentionally does not interpret vanilla worldgen
-//! algorithms; concrete loaders decide which facts Solaris can consume.
+//! algorithms; concrete loaders decide which facts Krasnokamen can consume.
 
 use std::path::{Path, PathBuf};
 

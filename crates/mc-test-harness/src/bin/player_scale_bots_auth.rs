@@ -1,4 +1,4 @@
-// Optional solaris-auth login for servers with `[auth] require_plugin_login`.
+// Optional krasnokamen-auth login for servers with `[auth] require_plugin_login`.
 // The plugin replies with literal private system chat: a join/command prompt naming
 // the missing step, then `AUTH_UNLOCKED` once the native gate unlocks this connection.
 const AUTH_PROMPT_REGISTER: &str =
@@ -40,7 +40,7 @@ impl BotAuth {
 }
 
 impl Bot {
-    /// Record solaris-auth replies; every other system chat is ignored here.
+    /// Record krasnokamen-auth replies; every other system chat is ignored here.
     fn observe_auth_chat(&mut self, frame: &RawFrame) -> Result<()> {
         let Some(auth) = self.auth.as_mut().filter(|auth| !auth.unlocked) else {
             return Ok(());
@@ -56,7 +56,7 @@ impl Bot {
             auth.prompt = Some(AuthPrompt::Login);
         } else if literal_component_matches(&tag, AUTH_WRONG_PASSWORD) {
             bail!(
-                "solaris-auth rejected --auth-password for {}",
+                "krasnokamen-auth rejected --auth-password for {}",
                 self.username
             );
         }

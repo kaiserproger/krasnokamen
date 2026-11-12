@@ -34,10 +34,10 @@ jobs:
       - name: Import the canonical 26.3 content cache as local test data (never redistributed)
         run: |
           set -euo pipefail
-          XDG_DATA_HOME="$RUNNER_TEMP/xdg" cargo run --locked -p mc-edge --bin solaris-v2 -- content import --version 26.3 --download
+          XDG_DATA_HOME="$RUNNER_TEMP/xdg" cargo run --locked -p mc-edge --bin krasnokamen -- content import --version 26.3 --download
           rm -rf data/vanilla
           mkdir -p data
-          cp -a "$RUNNER_TEMP/xdg/solaris/content/26.3" data/vanilla
+          cp -a "$RUNNER_TEMP/xdg/krasnokamen/content/26.3" data/vanilla
       # The CI short-run profile excludes the fixed slow-test name list in .config/nextest.toml.
       - name: mc-core, mc-world, mc-world-conversion and mc-world-tools lib tests
         run: cargo nextest run --locked --profile ci -p mc-core -p mc-world -p mc-world-conversion -p mc-world-tools --lib

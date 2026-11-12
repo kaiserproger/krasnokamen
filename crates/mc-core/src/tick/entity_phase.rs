@@ -118,7 +118,7 @@ struct CorePerfIndex {
 
 fn coreperf_index() -> Option<&'static CorePerfIndex> {
     static INDEX: std::sync::LazyLock<Option<CorePerfIndex>> = std::sync::LazyLock::new(|| {
-        let path = std::env::var_os("SOLARIS_COREPERF_REGIONS")?;
+        let path = std::env::var_os("KRASNOKAMEN_COREPERF_REGIONS")?;
         let input: CorePerfInput = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
         let mut chunks = HashMap::default();
         for (region, positions) in input.regions.into_iter().enumerate() {

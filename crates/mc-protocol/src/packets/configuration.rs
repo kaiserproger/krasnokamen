@@ -593,7 +593,7 @@ mod tests {
         assert_eq!(ClientboundCustomPayload::ID, 0x01);
         let packet = ClientboundCustomPayload {
             payload: CustomPayload::Unknown {
-                channel: Identifier::parse("solaris:test").unwrap(),
+                channel: Identifier::parse("krasnokamen:test").unwrap(),
                 payload: vec![0xDE, 0xAD, 0xBE, 0xEF],
             },
         };
@@ -855,7 +855,7 @@ mod tests {
 
     #[test]
     fn serverbound_custom_payload_enforces_unknown_body_limit_symmetrically() {
-        let channel = Identifier::parse("solaris:test").unwrap();
+        let channel = Identifier::parse("krasnokamen:test").unwrap();
         let packet = ServerboundCustomPayload {
             payload: CustomPayload::Unknown {
                 channel: channel.clone(),
@@ -894,7 +894,7 @@ mod tests {
     fn clientbound_custom_payload_does_not_use_serverbound_body_limit() {
         round_trip(ClientboundCustomPayload {
             payload: CustomPayload::Unknown {
-                channel: Identifier::parse("solaris:test").unwrap(),
+                channel: Identifier::parse("krasnokamen:test").unwrap(),
                 payload: vec![0xCD; 32_768],
             },
         });

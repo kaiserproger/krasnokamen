@@ -3,7 +3,7 @@
 use crate::plan::entity_type_flags::{is_boss, is_leash_knot};
 
 fn type_id_of(name: &str) -> u32 {
-    mc_data::entity_types::solaris_required_entity_types()
+    mc_data::entity_types::krasnokamen_required_entity_types()
         .id_of(&mc_data::Identifier::parse(name).unwrap())
         .unwrap()
 }

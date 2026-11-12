@@ -1,6 +1,6 @@
 [package]
 name = "mc-protocol"
-description = "Wire protocol: packets, codec, encryption (Solaris)."
+description = "Wire protocol: packets, codec, encryption (Krasnokamen)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -31,12 +31,12 @@ class MatrixRuntimeTests(unittest.TestCase):
     def test_plugin_copy_defaults_full_and_excludes_manifest_id(self):
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp); source=root/'source'; source.mkdir()
-            for directory,plugin_id in [('computer','solaris'),('graves','graves')]:
+            for directory,plugin_id in [('computer','krasnokamen'),('graves','graves')]:
                 package=source/directory; package.mkdir()
                 (package/'plugin.toml').write_text(f'id = "{plugin_id}"\n')
                 (package/'plugin.wasm').write_bytes(b'fixture')
-            self.assertEqual(copy_plugins(source,root/'all'),['solaris','graves'])
-            self.assertEqual(copy_plugins(source,root/'without',['graves']),['solaris'])
+            self.assertEqual(copy_plugins(source,root/'all'),['krasnokamen','graves'])
+            self.assertEqual(copy_plugins(source,root/'without',['graves']),['krasnokamen'])
             self.assertFalse((root/'without/graves').exists())
             with self.assertRaisesRegex(ValueError,'unknown excluded'):
                 copy_plugins(source,root/'bad',['unknown'])

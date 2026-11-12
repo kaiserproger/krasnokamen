@@ -917,7 +917,7 @@ fn moving_rows_journal_microbench() {
 }
 
 #[test]
-#[ignore = "eight-species owner attribution; run with SOLARIS_TRACE_ROW_MUT=1"]
+#[ignore = "eight-species owner attribution; run with KRASNOKAMEN_TRACE_ROW_MUT=1"]
 fn mixed_rows_journal_attribution() {
     let mut state = fixture();
     let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };

@@ -94,19 +94,19 @@ fn blueprint_error_of(error: &CatalogError) -> &BlueprintError {
 fn foreign_id_is_rejected() {
     let registry = stone_registry();
     let files = vec![file("structures/house.toml", base_toml("other:house"))];
-    let error = BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap_err();
+    let error = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap_err();
     assert!(matches!(
         blueprint_error_of(&error),
-        BlueprintError::ForeignId { id, owner } if id == "other:house" && owner == "solaris"
+        BlueprintError::ForeignId { id, owner } if id == "other:house" && owner == "krasnokamen"
     ));
 }
 
 #[test]
 fn unknown_key_is_rejected() {
     let registry = stone_registry();
-    let text = format!("bogus = 1\n{}", base_toml("solaris:house"));
+    let text = format!("bogus = 1\n{}", base_toml("krasnokamen:house"));
     let files = vec![file("structures/house.toml", text)];
-    let error = BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap_err();
+    let error = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap_err();
     assert!(matches!(
         blueprint_error_of(&error),
         BlueprintError::UnknownKey { key, .. } if key == "bogus"
@@ -116,10 +116,10 @@ fn unknown_key_is_rejected() {
 #[test]
 fn unknown_nested_key_is_rejected() {
     let registry = stone_registry();
-    let text = base_toml("solaris:house")
+    let text = base_toml("krasnokamen:house")
         .replace("[[blocks]]\nx = 0", "[[blocks]]\ncolour = \"red\"\nx = 0");
     let files = vec![file("structures/house.toml", text)];
-    let error = BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap_err();
+    let error = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap_err();
     assert!(matches!(
         blueprint_error_of(&error),
         BlueprintError::UnknownKey { key, .. } if key == "colour"
@@ -136,13 +136,13 @@ fn out_of_range_property_is_rejected() {
             ("shape", vec!["straight"]),
         ],
     )]);
-    let text = "id = \"solaris:stairs\"\nrevision = 1\n\
+    let text = "id = \"krasnokamen:stairs\"\nrevision = 1\n\
          [footprint]\nsize = [4, 4, 4]\nanchor = [0, 0, 0]\n\
          [[palette]]\nindex = 0\nblock = \"minecraft:oak_stairs\"\n\
          properties = { facing = \"up\", half = \"bottom\", shape = \"straight\" }\n\
          [[blocks]]\nx = 0\ny = 0\nz = 0\npalette = 0\n";
     let files = vec![file("structures/stairs.toml", text.to_owned())];
-    let error = BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap_err();
+    let error = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap_err();
     assert!(matches!(
         blueprint_error_of(&error),
         BlueprintError::OutOfRangeProperty { property, value, .. }
@@ -153,20 +153,20 @@ fn out_of_range_property_is_rejected() {
 #[test]
 fn undeclared_property_and_unknown_block_are_rejected() {
     let registry = registry(vec![("minecraft:stone", Vec::new())]);
-    let text = base_toml("solaris:house").replace(
+    let text = base_toml("krasnokamen:house").replace(
         "block = \"minecraft:stone\"\nproperties = {}",
         "block = \"minecraft:stone\"\nproperties = { facing = \"north\" }",
     );
     let files = vec![file("structures/house.toml", text)];
-    let error = BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap_err();
+    let error = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap_err();
     assert!(matches!(
         blueprint_error_of(&error),
         BlueprintError::UnknownProperty { property, .. } if property == "facing"
     ));
 
-    let text = base_toml("solaris:house").replace("minecraft:stone", "minecraft:granite");
+    let text = base_toml("krasnokamen:house").replace("minecraft:stone", "minecraft:granite");
     let files = vec![file("structures/house.toml", text)];
-    let error = BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap_err();
+    let error = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap_err();
     assert!(matches!(
         blueprint_error_of(&error),
         BlueprintError::UnknownBlock { block, .. } if block == "minecraft:granite"
@@ -176,7 +176,7 @@ fn undeclared_property_and_unknown_block_are_rejected() {
 #[test]
 fn oversized_body_is_rejected() {
     let registry = stone_registry();
-    let mut text = "id = \"solaris:big\"\nrevision = 1\n\
+    let mut text = "id = \"krasnokamen:big\"\nrevision = 1\n\
          [footprint]\nsize = [64, 64, 64]\nanchor = [0, 0, 0]\n\
          [[palette]]\nindex = 0\nblock = \"minecraft:stone\"\nproperties = {}\n"
         .to_owned();
@@ -184,7 +184,7 @@ fn oversized_body_is_rejected() {
         text.push_str("[[blocks]]\nx = 0\ny = 0\nz = 0\npalette = 0\n");
     }
     let files = vec![file("structures/big.toml", text)];
-    let error = BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap_err();
+    let error = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap_err();
     assert!(matches!(
         blueprint_error_of(&error),
         BlueprintError::TooManyBlocks { count: 65_537, .. }
@@ -194,9 +194,9 @@ fn oversized_body_is_rejected() {
 #[test]
 fn hash_mismatch_is_rejected() {
     let registry = stone_registry();
-    let files = vec![file("structures/house.toml", base_toml("solaris:house"))];
-    let expected = BTreeMap::from([("solaris:house".to_owned(), "0".repeat(64))]);
-    let error = BlueprintCatalog::from_files_with_hashes(&registry, "solaris", &files, &expected)
+    let files = vec![file("structures/house.toml", base_toml("krasnokamen:house"))];
+    let expected = BTreeMap::from([("krasnokamen:house".to_owned(), "0".repeat(64))]);
+    let error = BlueprintCatalog::from_files_with_hashes(&registry, "krasnokamen", &files, &expected)
         .unwrap_err();
     assert!(matches!(
         blueprint_error_of(&error),
@@ -212,7 +212,7 @@ fn catalog_limits_fail_closed() {
         .map(|index| file(&format!("structures/{index}.toml"), String::new()))
         .collect();
     assert!(matches!(
-        BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap_err(),
+        BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap_err(),
         CatalogError::TooManyBlueprints { .. }
     ));
 
@@ -221,7 +221,7 @@ fn catalog_limits_fail_closed() {
         "x".repeat(MAX_CATALOG_DECODED_BYTES + 1),
     )];
     assert!(matches!(
-        BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap_err(),
+        BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap_err(),
         CatalogError::CatalogTooLarge { .. }
     ));
 }
@@ -230,31 +230,31 @@ fn catalog_limits_fail_closed() {
 fn stray_and_duplicate_files_are_rejected() {
     let registry = stone_registry();
 
-    let files = vec![file("structures/house.txt", base_toml("solaris:house"))];
+    let files = vec![file("structures/house.txt", base_toml("krasnokamen:house"))];
     assert!(matches!(
-        BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap_err(),
+        BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap_err(),
         CatalogError::StrayFile { .. }
     ));
 
     let files = vec![
-        file("structures/house.toml", base_toml("solaris:house")),
-        file("structures/house_copy.toml", base_toml("solaris:house")),
+        file("structures/house.toml", base_toml("krasnokamen:house")),
+        file("structures/house_copy.toml", base_toml("krasnokamen:house")),
     ];
-    let error = BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap_err();
+    let error = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap_err();
     assert!(matches!(
         blueprint_error_of(&error),
-        BlueprintError::DuplicateId { id } if id == "solaris:house"
+        BlueprintError::DuplicateId { id } if id == "krasnokamen:house"
     ));
 }
 
 #[test]
 fn catalog_hashes_fence_changed_physical_content() {
     let registry = stone_registry();
-    let files = vec![file("structures/house.toml", base_toml("solaris:house"))];
-    let catalog = BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap();
-    assert!(catalog.get("solaris:absent").is_none());
+    let files = vec![file("structures/house.toml", base_toml("krasnokamen:house"))];
+    let catalog = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap();
+    assert!(catalog.get("krasnokamen:absent").is_none());
 
-    let house = catalog.get("solaris:house").unwrap();
+    let house = catalog.get("krasnokamen:house").unwrap();
     assert_eq!(house.content_hash().len(), 64);
     assert!(
         house
@@ -262,25 +262,25 @@ fn catalog_hashes_fence_changed_physical_content() {
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     );
-    let expected = BTreeMap::from([("solaris:house".to_owned(), house.content_hash().to_owned())]);
+    let expected = BTreeMap::from([("krasnokamen:house".to_owned(), house.content_hash().to_owned())]);
     assert!(
-        BlueprintCatalog::from_files_with_hashes(&registry, "solaris", &files, &expected).is_ok()
+        BlueprintCatalog::from_files_with_hashes(&registry, "krasnokamen", &files, &expected).is_ok()
     );
 
-    let expected = BTreeMap::from([("solaris:absent".to_owned(), "0".repeat(64))]);
+    let expected = BTreeMap::from([("krasnokamen:absent".to_owned(), "0".repeat(64))]);
     assert!(matches!(
-        BlueprintCatalog::from_files_with_hashes(&registry, "solaris", &files, &expected)
+        BlueprintCatalog::from_files_with_hashes(&registry, "krasnokamen", &files, &expected)
             .unwrap_err(),
         CatalogError::MissingBlueprint { .. }
     ));
 
     // The content hash ignores authored ordering but tracks revisions.
-    let reordered = base_toml("solaris:house").replace("revision = 1", "revision = 2");
+    let reordered = base_toml("krasnokamen:house").replace("revision = 1", "revision = 2");
     let files = vec![file("structures/house.toml", reordered)];
-    let other = BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap();
+    let other = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap();
     assert_ne!(
         house.content_hash(),
-        other.get("solaris:house").unwrap().content_hash()
+        other.get("krasnokamen:house").unwrap().content_hash()
     );
 }
 
@@ -494,7 +494,7 @@ fn rotation_catalog() -> (BlockRegistry, Arc<Blueprint>) {
             ],
         ),
     ]);
-    let text = "id = \"solaris:cottage\"\nrevision = 1\n\
+    let text = "id = \"krasnokamen:cottage\"\nrevision = 1\n\
          [footprint]\nsize = [4, 5, 4]\nanchor = [0, 0, 0]\n\
          [[palette]]\nindex = 0\nblock = \"minecraft:oak_stairs\"\n\
          properties = { facing = \"north\", half = \"bottom\", shape = \"straight\" }\n\
@@ -512,8 +512,8 @@ fn rotation_catalog() -> (BlockRegistry, Arc<Blueprint>) {
          [[blocks]]\nx = 2\ny = 0\nz = 0\npalette = 3\n\
          [[blocks]]\nx = 2\ny = 0\nz = 1\npalette = 4\n";
     let files = vec![file("structures/cottage.toml", text.to_owned())];
-    let catalog = BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap();
-    let blueprint = Arc::clone(catalog.get("solaris:cottage").unwrap());
+    let catalog = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap();
+    let blueprint = Arc::clone(catalog.get("krasnokamen:cottage").unwrap());
     assert_eq!(blueprint.blocks().len(), 5);
     assert_eq!(blueprint.palette().len(), 5);
     (registry, blueprint)
@@ -576,7 +576,7 @@ fn quarter_turns_rotate_stair_door_and_bed_groups() {
 #[test]
 fn instances_project_blocks_connections_and_hashes() {
     let registry = stone_registry();
-    let text = "id = \"solaris:house\"\nrevision = 1\n\
+    let text = "id = \"krasnokamen:house\"\nrevision = 1\n\
          [footprint]\nsize = [4, 4, 4]\nanchor = [0, 0, 0]\n\
          [[palette]]\nindex = 0\nblock = \"minecraft:stone\"\nproperties = {}\n\
          [[blocks]]\nx = 0\ny = 0\nz = 0\npalette = 0\n\
@@ -584,14 +584,14 @@ fn instances_project_blocks_connections_and_hashes() {
          [[block_entity]]\nat = [1, 1, 1]\nkind = \"bed\"\n\
          [[stage]]\nid = \"frame\"\nblocks = [ { x = 2, y = 0, z = 0, palette = 0 } ]\n";
     let files = vec![file("structures/house.toml", text.to_owned())];
-    let catalog = BlueprintCatalog::from_files(&registry, "solaris", &files).unwrap();
-    let blueprint = Arc::clone(catalog.get("solaris:house").unwrap());
+    let catalog = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap();
+    let blueprint = Arc::clone(catalog.get("krasnokamen:house").unwrap());
     assert_eq!(blueprint.revision(), 1);
     assert_eq!(blueprint.stages().len(), 1);
     assert_eq!(blueprint.block_entities().len(), 1);
 
     let instance = BlueprintInstance::new(Arc::clone(&blueprint), QuarterTurn::Cw90, [100, 5, 200]);
-    assert_eq!(instance.blueprint().id(), "solaris:house");
+    assert_eq!(instance.blueprint().id(), "krasnokamen:house");
     assert_eq!(instance.turn(), QuarterTurn::Cw90);
     assert_eq!(instance.origin(), [100, 5, 200]);
     assert_eq!(

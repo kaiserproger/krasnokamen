@@ -441,7 +441,7 @@ impl Packet for EntityEvent {
 }
 
 /// 26.3 `ClientboundMoveEntityPacket` properties VarInt:
-/// `onGround | stepCount << 1`. Solaris always sends linear deltas
+/// `onGround | stepCount << 1`. Krasnokamen always sends linear deltas
 /// (`stepCount` 0), i.e. three i16 deltas follow.
 fn write_linear_move_properties<B: BufMut>(buf: &mut B, on_ground: bool) {
     buf.write_varint(i32::from(on_ground));

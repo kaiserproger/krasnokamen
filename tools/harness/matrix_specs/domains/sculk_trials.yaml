@@ -65,7 +65,7 @@ subjects:
     - client:block_state_trace
 - subject: sculk_trials.ominous_trials
   matrix_ids:
-  - pw:sculk_trials.ominous_trials/forge_solaris_loader/survival/the_nether/normal/1/reconnect_mid_action/steady/non_op_0
+  - pw:sculk_trials.ominous_trials/forge_krasnokamen_loader/survival/the_nether/normal/1/reconnect_mid_action/steady/non_op_0
   - pw:sculk_trials.ominous_trials/fabric_distant_horizons/spectator/the_end/hard/2/malformed_or_stale_packet/clean_restart_mid_action/non_op_0
   preconditions:
     setup_callable: sculk_trials.ADAPTERS['sculk_trials.ominous_trials'].setup
@@ -97,7 +97,7 @@ subjects:
   subject_oracle_text: 'reference: ominous waves; ominous item spawners'
 - subject: sculk_trials.sculk_catalyst_spread
   matrix_ids:
-  - pw:sculk_trials.sculk_catalyst_spread/neoforge_solaris_loader/spectator/the_end/hard/2/malformed_or_stale_packet/hot_backup_during_action/op_3
+  - pw:sculk_trials.sculk_catalyst_spread/neoforge_krasnokamen_loader/spectator/the_end/hard/2/malformed_or_stale_packet/hot_backup_during_action/op_3
   preconditions:
     setup_callable: sculk_trials.ADAPTERS['sculk_trials.sculk_catalyst_spread'].setup
     fixture_calls:
@@ -240,7 +240,7 @@ subjects:
   subject_oracle_text: 'reference: mob count by player count; reward loot; cooldown'
 - subject: sculk_trials.warden_behaviour
   matrix_ids:
-  - pw:sculk_trials.warden_behaviour/fabric_solaris_loader/adventure/the_end/easy/2/slow_reader_backpressure/steady/non_op_0
+  - pw:sculk_trials.warden_behaviour/fabric_krasnokamen_loader/adventure/the_end/easy/2/slow_reader_backpressure/steady/non_op_0
   preconditions:
     setup_callable: sculk_trials.ADAPTERS['sculk_trials.warden_behaviour'].setup
     fixture_calls:

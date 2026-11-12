@@ -16,8 +16,8 @@ execution_contract:
     Received packets, exact console predicates, and pushed dashboard tick events only. No sleeps.
     Feedback fence proves only ordering.
   references:
-    Vanilla mechanics reference minecraft.wiki; Solaris extensions/SLOs explicitly separate. No claim
-    that Solaris WAL/hot backup/anti-xray are vanilla features.
+    Vanilla mechanics reference minecraft.wiki; Krasnokamen extensions/SLOs explicitly separate. No claim
+    that Krasnokamen WAL/hot backup/anti-xray are vanilla features.
   temporal_snapshots:
     Freeze or record exact simulation tick; compare timers relative to ticks, not literal after
     arbitrary elapsed time.
@@ -189,9 +189,9 @@ subjects:
       - crates/mc-edge/src/configuration.rs
       - crates/mc-core/src/tick/input/session.rs
     matrix_rows:
-      - id: pw:session.join_fresh_spawn/fabric_solaris_loader/spectator/overworld/peaceful/2/duplicate_login/steady/non_op_0@vanilla
+      - id: pw:session.join_fresh_spawn/fabric_krasnokamen_loader/spectator/overworld/peaceful/2/duplicate_login/steady/non_op_0@vanilla
         context:
-          client_kind: fabric_solaris_loader
+          client_kind: fabric_krasnokamen_loader
           game_mode: spectator
           dimension: overworld
           difficulty: peaceful
@@ -207,15 +207,15 @@ subjects:
           - "vanilla 26.1.2 newcomer wins (owner requirement, BugTriage DUPLICATE-LOGIN): the existing session is disconnected
             ('You logged in from another location'), the new connection reaches Play with the same persisted player
             state; exactly one live player entity for the UUID, no inventory copy or loss, no join-wait timeout. Current
-            Solaris (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
+            Krasnokamen (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
             — expected to fail until ServerFixes lands"
           - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
             desync between observers
-          - "plugin profile vanilla (solaris-auth not deployed): plain server behaviour per reference; no solaris-auth
+          - "plugin profile vanilla (krasnokamen-auth not deployed): plain server behaviour per reference; no krasnokamen-auth
             side effects"
-      - id: pw:session.join_fresh_spawn/fabric_solaris_loader/spectator/overworld/peaceful/2/duplicate_login/steady/non_op_0@live
+      - id: pw:session.join_fresh_spawn/fabric_krasnokamen_loader/spectator/overworld/peaceful/2/duplicate_login/steady/non_op_0@live
         context:
-          client_kind: fabric_solaris_loader
+          client_kind: fabric_krasnokamen_loader
           game_mode: spectator
           dimension: overworld
           difficulty: peaceful
@@ -231,15 +231,15 @@ subjects:
           - "vanilla 26.1.2 newcomer wins (owner requirement, BugTriage DUPLICATE-LOGIN): the existing session is disconnected
             ('You logged in from another location'), the new connection reaches Play with the same persisted player
             state; exactly one live player entity for the UUID, no inventory copy or loss, no join-wait timeout. Current
-            Solaris (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
+            Krasnokamen (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
             — expected to fail until ServerFixes lands"
           - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
             desync between observers
-          - "live set (solaris-auth): the player is locked (no build/damage/commands) until /register or /login succeeds"
+          - "live set (krasnokamen-auth): the player is locked (no build/damage/commands) until /register or /login succeeds"
     minimum_tested_action_permission: 0
     plugin_profiles:
       changed_by:
-        - solaris-auth
+        - krasnokamen-auth
       vanilla: 4374e3bce7dc3ed09aa5c700d7b62d2e33470b749fc153db45d339dceaa2676b
       live: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
     plugin_profile_contract:
@@ -626,7 +626,7 @@ subjects:
         operator: equals
         expected: matrix-warning
     reference:
-      scope: solaris_extension_no_vanilla_equivalent
+      scope: krasnokamen_extension_no_vanilla_equivalent
       source:
         - crates/mc-edge/src/admin.rs
         - crates/mc-core/src/boundary.rs
@@ -654,7 +654,7 @@ subjects:
           plugin_profile: vanilla
         driver: native_mcp
         context_oracle:
-          - "reference: muted chat and /me,/msg refused natively; unmute restores; warn delivered (Solaris moderation,
+          - "reference: muted chat and /me,/msg refused natively; unmute restores; warn delivered (Krasnokamen moderation,
             no vanilla analogue)"
           - "NEGATIVE (permission op_2 < op 3): command not advertised in the command tree, execution answers 'Unknown
             or incomplete command', no state change"
@@ -665,7 +665,7 @@ subjects:
             partially finished processes equal the last committed pre-stop state; no duplication or loss
           - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
             desync between observers
-          - "plugin profile vanilla (solaris-essentials not deployed): plain server behaviour per reference; no solaris-essentials
+          - "plugin profile vanilla (krasnokamen-essentials not deployed): plain server behaviour per reference; no krasnokamen-essentials
             side effects"
       - id: pw:session.mute_warn/native_linux/adventure/overworld/peaceful/2/malformed_or_stale_packet/clean_restart_mid_action/op_2@live
         context:
@@ -680,7 +680,7 @@ subjects:
           plugin_profile: live
         driver: native_mcp
         context_oracle:
-          - "reference: muted chat and /me,/msg refused natively; unmute restores; warn delivered (Solaris moderation,
+          - "reference: muted chat and /me,/msg refused natively; unmute restores; warn delivered (Krasnokamen moderation,
             no vanilla analogue)"
           - "NEGATIVE (permission op_2 < op 3): command not advertised in the command tree, execution answers 'Unknown
             or incomplete command', no state change"
@@ -691,11 +691,11 @@ subjects:
             partially finished processes equal the last committed pre-stop state; no duplication or loss
           - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
             desync between observers
-          - "live set: /msg is solaris-essentials; record whether a native mute also refuses the plugin's /msg"
+          - "live set: /msg is krasnokamen-essentials; record whether a native mute also refuses the plugin's /msg"
     minimum_tested_action_permission: 3
     plugin_profiles:
       changed_by:
-        - solaris-essentials
+        - krasnokamen-essentials
       vanilla: 767fbd3331effa358e238e39e2a88ed1345d5623207015671228536e53975f00
       live: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
     plugin_profile_contract:
@@ -772,7 +772,7 @@ subjects:
         operator: equals
         expected: null
     reference:
-      scope: solaris_extension_no_vanilla_equivalent
+      scope: krasnokamen_extension_no_vanilla_equivalent
       source:
         - crates/mc-edge/src/conn_limit.rs
     missing_capabilities:
@@ -785,9 +785,9 @@ subjects:
       - crates/mc-edge/src/configuration.rs
       - crates/mc-core/src/tick/input/session.rs
     matrix_rows:
-      - id: pw:session.connection_limit/forge_solaris_loader/creative/overworld/hard/N8/reconnect_mid_action/clean_restart_mid_action/op_2
+      - id: pw:session.connection_limit/forge_krasnokamen_loader/creative/overworld/hard/N8/reconnect_mid_action/clean_restart_mid_action/op_2
         context:
-          client_kind: forge_solaris_loader
+          client_kind: forge_krasnokamen_loader
           game_mode: creative
           dimension: overworld
           difficulty: hard
@@ -964,7 +964,7 @@ subjects:
     preconditions:
       - actor ru_ru; observer en_us
     actions:
-      - issue same Solaris-localized response; set actor en_us; repeat; send vanilla translatable tellraw
+      - issue same Krasnokamen-localized response; set actor en_us; repeat; send vanilla translatable tellraw
     checks:
       - observation: localized ru text
         operator: equals_capture
@@ -976,7 +976,7 @@ subjects:
         operator: equals
         expected: true
     reference:
-      scope: solaris_extension_no_vanilla_equivalent
+      scope: krasnokamen_extension_no_vanilla_equivalent
       source:
         - crates/mc-core/src/boundary.rs
     missing_capabilities:
@@ -1001,7 +1001,7 @@ subjects:
           permission: op_2
         driver: protocol_bot
         context_oracle:
-          - "reference: server-translated Solaris texts follow ClientInformation locale; vanilla translatable components
+          - "reference: server-translated Krasnokamen texts follow ClientInformation locale; vanilla translatable components
             untouched"
           - "after SIGKILL + restart (no wait for a published WAL fence) the world equals a consistent prefix of the
             committed transactions: every transaction is all-or-nothing (no torn/split/half-moved stacks), no item duplication,
@@ -1243,7 +1243,7 @@ subjects:
         operator: greater_than
         expected: 0
     reference:
-      scope: solaris_extension_no_vanilla_equivalent
+      scope: krasnokamen_extension_no_vanilla_equivalent
       source:
         - crates/mc-edge/src/dashboard.rs:675-701
     missing_capabilities:
@@ -1256,9 +1256,9 @@ subjects:
       - crates/mc-edge/src/configuration.rs
       - crates/mc-core/src/tick/input/session.rs
     matrix_rows:
-      - id: pw:session.dashboard_metrics/neoforge_solaris_loader/adventure/the_end/normal/2/slow_reader_backpressure/save_all_checkpoint/op_3
+      - id: pw:session.dashboard_metrics/neoforge_krasnokamen_loader/adventure/the_end/normal/2/slow_reader_backpressure/save_all_checkpoint/op_3
         context:
-          client_kind: neoforge_solaris_loader
+          client_kind: neoforge_krasnokamen_loader
           game_mode: adventure
           dimension: the_end
           difficulty: normal
@@ -1288,12 +1288,12 @@ subjects:
     checks:
       - observation: brand
         operator: equals
-        expected: Solaris
+        expected: Krasnokamen
       - observation: chat token echo
         operator: equals
         expected: true
     reference:
-      scope: solaris_brand_vanilla_custom_payload_surface
+      scope: krasnokamen_brand_vanilla_custom_payload_surface
       source: https://minecraft.wiki/w/Debug_screen
     missing_capabilities:
       - read_hud_ui
@@ -1316,7 +1316,7 @@ subjects:
           permission: non_op_0
         driver: java_mcp
         context_oracle:
-          - "reference: server brand shows Solaris; client keeps play"
+          - "reference: server brand shows Krasnokamen; client keeps play"
     minimum_tested_action_permission: 0
     implementation:
       class: registered_stub

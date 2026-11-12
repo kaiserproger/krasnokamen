@@ -38,7 +38,7 @@ requests:
       source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:87
   fixture:loader_view:
     - subject: loader_content.loader_view_request
-      call: p.fixture(ctx, 'loader_view', package='solaris-towns')
+      call: p.fixture(ctx, 'loader_view', package='krasnokamen-towns')
       source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:66
   fixture:monitor_row:
     - subject: computer.screen_share_to_others
@@ -1050,7 +1050,7 @@ requests:
       source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:265
   rich_action:item_display_name:
     - subject: monitor.monitor_native_bundle_render
-      call: p.rich_action(ctx,'item_display_name','solaris:monitor')
+      call: p.rich_action(ctx,'item_display_name','krasnokamen:monitor')
       source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:40
   rich_action:item_entities_in_radius:
     - subject: plugins.graves_custody
@@ -1283,7 +1283,7 @@ requests:
       call: p.rich_action(ctx, 'select_inventory_item', 'chisel:chisel')
       source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/loader_content.py:76
     - subject: monitor.monitor_give_place_break
-      call: p.rich_action(ctx,'select_inventory_item','solaris:monitor')
+      call: p.rich_action(ctx,'select_inventory_item','krasnokamen:monitor')
       source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/monitor.py:19
     - subject: monitor.monitor_plain_terracotta_not_placeable
       call: p.rich_action(ctx,'select_inventory_item','minecraft:black_glazed_terracotta')
@@ -1317,7 +1317,7 @@ requests:
       source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/sculk_trials.py:122
   rich_action:send_custom_payload:
     - subject: voice.native_voice_listen_and_state
-      call: p.rich_action(ctx, 'send_custom_payload', 'solaris:voice', payload)
+      call: p.rich_action(ctx, 'send_custom_payload', 'krasnokamen:voice', payload)
       source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:95
   rich_action:set_screen_input:
     - subject: ui_presentation.server_dialogs

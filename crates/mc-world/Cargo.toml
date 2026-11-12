@@ -1,6 +1,6 @@
 [package]
 name = "mc-world"
-description = "block states, chunk format, world storage (Solaris)."
+description = "block states, chunk format, world storage (Krasnokamen)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

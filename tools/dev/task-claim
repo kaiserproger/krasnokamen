@@ -15,7 +15,7 @@ refused naming the holder (exit 1); a released or expired lease is taken over an
 takeover is logged with the previous holder. Each change happens under an flock on
 claims/.lock and replaces the file atomically (temp + rename); <work>/fleet/claims.log
 is an append-only JSONL of claim, takeover, renew, release and refuse lines.
-SOLARIS_FLEET_DIR moves <work>/fleet; SOLARIS_FLEET_NOW (epoch seconds) fixes the
+KRASNOKAMEN_FLEET_DIR moves <work>/fleet; KRASNOKAMEN_FLEET_NOW (epoch seconds) fixes the
 clock. Both are for tests only.
 """
 
@@ -38,11 +38,11 @@ GRACE_MIN = 15
 
 
 def fleet_dir() -> Path:
-    return Path(os.environ.get("SOLARIS_FLEET_DIR") or w.WORK / "fleet")
+    return Path(os.environ.get("KRASNOKAMEN_FLEET_DIR") or w.WORK / "fleet")
 
 
 def now() -> int:
-    return int(os.environ.get("SOLARIS_FLEET_NOW") or time.time())
+    return int(os.environ.get("KRASNOKAMEN_FLEET_NOW") or time.time())
 
 
 def stamp(epoch: int) -> str:

@@ -628,7 +628,7 @@ async def smoke(args):
     import asyncio
     import os
     from tools.harness.backends import catalog_load as catalog
-    if not os.environ.get("SOLARIS_HARNESS_CPU_SCOPE"):
+    if not os.environ.get("KRASNOKAMEN_HARNESS_CPU_SCOPE"):
         raise RuntimeError("run the harness under tools/dev/mem-run.sh")
     plan = json.loads((args.plan / "plan.json").read_text())
     if plan["target_villagers"] > 5000 or len(plan["animals"]) > 500 or len(plan["street_routes"]) > 10:
@@ -888,7 +888,7 @@ async def native_cohort_snapshot(args, directory, config, population):
             payload = row["payload"]
             if payload["id"] == "minecraft:villager":
                 actual[row["uuid"]] = names.get(
-                    payload.get("solaris:VillagerRuntime", {}).get("settlement"))
+                    payload.get("krasnokamen:VillagerRuntime", {}).get("settlement"))
     if actual != expected:
         wrong = [identity for identity in expected if actual.get(identity) != expected[identity]]
         raise RuntimeError(f"native bound UUID membership mismatch: {wrong[:5]}")
@@ -902,7 +902,7 @@ async def native_smoke(args):
     import os
     import time
     from tools.harness.backends import catalog_load as catalog
-    if not os.environ.get("SOLARIS_HARNESS_CPU_SCOPE"):
+    if not os.environ.get("KRASNOKAMEN_HARNESS_CPU_SCOPE"):
         raise RuntimeError("run the harness under tools/dev/mem-run.sh")
     population = json.loads((args.world / "population.json").read_text())
     args.readiness_seconds = args.timeout_seconds

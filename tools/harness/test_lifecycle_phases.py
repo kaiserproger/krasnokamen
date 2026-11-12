@@ -46,8 +46,8 @@ class LifecyclePhases(unittest.TestCase):
             root = Path(directory)
             config = root / 'config.toml'
             config.write_text('')
-            with patch.dict('os.environ', {'SOLARIS_VALIDATION_RUN_DIR': directory,
-                                          'SOLARIS_SERVER_BINARY': '/bin/true'}), \
+            with patch.dict('os.environ', {'KRASNOKAMEN_VALIDATION_RUN_DIR': directory,
+                                          'KRASNOKAMEN_SERVER_BINARY': '/bin/true'}), \
                  patch.object(seed_review, 'write_config', return_value=(config, root / 'world')), \
                  patch.object(seed_review, 'prepare_operator_fixture'), \
                  patch.object(runtime, 'start_xvfb', side_effect=RuntimeError('display failed')):
@@ -62,8 +62,8 @@ class LifecyclePhases(unittest.TestCase):
             root = Path(directory)
             config = root / 'config.toml'
             config.write_text('')
-            with patch.dict('os.environ', {'SOLARIS_VALIDATION_RUN_DIR': directory,
-                                          'SOLARIS_SERVER_BINARY': '/bin/true'}), \
+            with patch.dict('os.environ', {'KRASNOKAMEN_VALIDATION_RUN_DIR': directory,
+                                          'KRASNOKAMEN_SERVER_BINARY': '/bin/true'}), \
                  patch.object(seed_review, 'write_config', return_value=(config, root / 'world')), \
                  patch.object(seed_review, 'prepare_operator_fixture'), \
                  patch.object(runtime, 'start_xvfb', side_effect=RuntimeError('display failed')), \
@@ -91,7 +91,7 @@ class LifecyclePhases(unittest.TestCase):
             wrapper = root / 'gradlew'
             wrapper.write_text('#!/bin/sh\nexit 37\n')
             wrapper.chmod(0o755)
-            with patch.dict(os.environ, {'SOLARIS_LOADER_ROOT': str(root)}), \
+            with patch.dict(os.environ, {'KRASNOKAMEN_LOADER_ROOT': str(root)}), \
                     patch('tools.harness.audio.private_audio_preflight'):
                 with self.assertRaises(runtime.ChildExited) as caught:
                     runtime.start_client(game_dir=root / 'game', log_path=root / 'java.log',

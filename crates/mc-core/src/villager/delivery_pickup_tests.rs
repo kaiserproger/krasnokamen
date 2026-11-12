@@ -30,7 +30,7 @@ fn matching_ground_pickup_is_deferred_while_unrelated_pickup_still_works() {
                 "start".into(),
                 "pickup-delivery".into(),
                 worker.to_string(),
-                "solaris-settlements:bread".into(),
+                "krasnokamen-settlements:bread".into(),
                 "1".into(),
                 ((settlement.0 << 32) | 1).to_string(),
                 "3,201,3".into(),

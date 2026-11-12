@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Native-client renderer showcase: curated captures + per-preset benchmark.
 
-One solaris release server (own world, far-terrain LOD on) and one native client per graphics preset, windowed,
+One krasnokamen release server (own world, far-terrain LOD on) and one native client per graphics preset, windowed,
 pinned to one GPU through VK_ICD_FILENAMES and presented into a headless sway compositor that renders on the
 same GPU (the laptop panel is wired to the NVIDIA dGPU, so the Radeon iGPU cannot present to :0).
 Everything is driven through the client's MCP (`client_capture`, `minecraft_*`); fixture commands
@@ -12,7 +12,7 @@ Everything is driven through the client's MCP (`client_capture`, `minecraft_*`);
     python3 tools/showcase/client_render_showcase.py bench            # 60 s frame-time + GPU pass timings
     python3 tools/showcase/client_render_showcase.py bench --gpu nvidia --render-node /dev/dri/renderD129
 
-Frame-time p50/p99 come from the client's own per-frame trace (SOLARIS_CLIENT_FRAME_TRACE, branch
+Frame-time p50/p99 come from the client's own per-frame trace (KRASNOKAMEN_CLIENT_FRAME_TRACE, branch
 pauline/client-input); pass a client built with it via --client-bin. The client repo is only READ.
 """
 from __future__ import annotations
@@ -32,12 +32,12 @@ import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve()
-REPO = HERE.parents[2]  # solaris worktree/checkout: tools.harness lives here
+REPO = HERE.parents[2]  # krasnokamen worktree/checkout: tools.harness lives here
 sys.path.insert(0, str(REPO))
 
 WORK_ROOT = Path("/run/media/kaiserroman/games/solaris-work")
-DEFAULT_CLIENT = WORK_ROOT / "targets/client-local-release/release/solaris-client"
-DEFAULT_SERVER = WORK_ROOT / "targets/shader-show/release/solaris-v2"
+DEFAULT_CLIENT = WORK_ROOT / "targets/client-local-release/release/krasnokamen-client"
+DEFAULT_SERVER = WORK_ROOT / "targets/shader-show/release/krasnokamen"
 CLIENT_REPO = WORK_ROOT / "solaris-client"  # read-only: resources + asset index
 VANILLA = Path("/home/kaiserroman/solaris/data/vanilla")
 ASSET_ROOT = Path("/home/kaiserroman/.local/share/PrismLauncher/assets")
@@ -179,14 +179,14 @@ share_terrain_keys = false
     def client_env(self, settings_path: Path):
         a = self.args
         env = {
-            "SOLARIS_CLIENT_SETTINGS": str(settings_path),
-            "SOLARIS_CLIENT_ROOT": str(self.work / "client-root"),
-            "SOLARIS_CLIENT_DATA_DIR": str(VANILLA),
-            "SOLARIS_CLIENT_RESOURCE_ROOT": str(CLIENT_REPO / ".analysis/resources"),
-            "SOLARIS_CLIENT_ASSET_ROOT": str(ASSET_ROOT),
-            "SOLARIS_CLIENT_ASSET_INDEX": str(CLIENT_REPO / ".analysis/evidence/C00/asset-index-current.json"),
-            "SOLARIS_CLIENT_FAR_TERRAIN": str(a.far),
-            "SOLARIS_CLIENT_LOADER_PERMISSIONS": "present_views,send_view_actions,load_assets,"
+            "KRASNOKAMEN_CLIENT_SETTINGS": str(settings_path),
+            "KRASNOKAMEN_CLIENT_ROOT": str(self.work / "client-root"),
+            "KRASNOKAMEN_CLIENT_DATA_DIR": str(VANILLA),
+            "KRASNOKAMEN_CLIENT_RESOURCE_ROOT": str(CLIENT_REPO / ".analysis/resources"),
+            "KRASNOKAMEN_CLIENT_ASSET_ROOT": str(ASSET_ROOT),
+            "KRASNOKAMEN_CLIENT_ASSET_INDEX": str(CLIENT_REPO / ".analysis/evidence/C00/asset-index-current.json"),
+            "KRASNOKAMEN_CLIENT_FAR_TERRAIN": str(a.far),
+            "KRASNOKAMEN_CLIENT_LOADER_PERMISSIONS": "present_views,send_view_actions,load_assets,"
             "register_items,send_world_selection,present_world_previews,play_sounds",
         }
         if a.gpu != "default":
@@ -371,7 +371,7 @@ def pct(xs, q):
 
 
 def read_frame_trace(path: Path, f0: int, f1: int):
-    """Rows of the client's own per-frame TSV (SOLARIS_CLIENT_FRAME_TRACE) with f0 <= frame_id <= f1."""
+    """Rows of the client's own per-frame TSV (KRASNOKAMEN_CLIENT_FRAME_TRACE) with f0 <= frame_id <= f1."""
     if not path.exists():
         return None
     lines = path.read_text().splitlines()
@@ -389,7 +389,7 @@ def run_bench(env: Env, presets, results_path: Path):
     """Fixed view per preset: (A) frame-time window with no captures, (B) GPU pass window with 1 capture/cycle.
 
     Window clock = game ticks (minecraft_wait_ticks, 20 TPS), never wall-clock sleeps. Frame-time distribution
-    comes from the client's own per-frame trace when the binary supports SOLARIS_CLIENT_FRAME_TRACE; otherwise only
+    comes from the client's own per-frame trace when the binary supports KRASNOKAMEN_CLIENT_FRAME_TRACE; otherwise only
     the exact average (frame_id delta over the tick-clocked window) is reported and p50/p99 are marked unavailable.
     """
     args = env.args
@@ -402,7 +402,7 @@ def run_bench(env: Env, presets, results_path: Path):
         trace = out / "frames.tsv"
         if trace.exists():
             trace.unlink()
-        os.environ["SOLARIS_CLIENT_FRAME_TRACE"] = str(trace)
+        os.environ["KRASNOKAMEN_CLIENT_FRAME_TRACE"] = str(trace)
         ctx, client, mcp = env.launch_client(preset, out)
         s = None
         try:
@@ -458,7 +458,7 @@ def run_bench(env: Env, presets, results_path: Path):
             print(preset, res["avg_fps_exact"], "fps", res.get("frame_interval_ms"), "gpu", res["gpu_total_ms"]["p50"],
                   flush=True)
         finally:
-            os.environ.pop("SOLARIS_CLIENT_FRAME_TRACE", None)
+            os.environ.pop("KRASNOKAMEN_CLIENT_FRAME_TRACE", None)
             if s:
                 s.close()
             env.stop_client(ctx, client, mcp, out)

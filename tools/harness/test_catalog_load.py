@@ -279,7 +279,7 @@ class CatalogLoadTests(unittest.TestCase):
             "entity_records": [
                 {"uuid": member["uuid"], "active": True, "payload": {
                     "id": "minecraft:villager",
-                    "solaris:VillagerRuntime": {"settlement": index + 1}}}
+                    "krasnokamen:VillagerRuntime": {"settlement": index + 1}}}
                 for index, member in enumerate(population["cohort"])],
             "source_world": {"sha256": "fixture-digest"},
         }
@@ -299,7 +299,7 @@ class CatalogLoadTests(unittest.TestCase):
             if fault == "replaced_uuid":
                 row["uuid"] = str(uuid.UUID(int=999))
             elif fault == "wrong_settlement":
-                row["payload"]["solaris:VillagerRuntime"]["settlement"] = 2
+                row["payload"]["krasnokamen:VillagerRuntime"]["settlement"] = 2
             else:
                 changed["entity_records"].append(row)
             with self.subTest(fault=fault), self.assertRaisesRegex(
@@ -465,7 +465,7 @@ class CatalogPluginEvidenceTests(unittest.TestCase):
             for owner in required:
                 log += f'INFO plugin.command_result: plugin_id={owner} tick=10 request=storage-write outcome="committed"\n'
                 log += (f'INFO plugin.command_result: plugin_id={owner} tick=10 request=send-message outcome="admitted"\n') * 20
-            log += 'INFO plugin.command_result: plugin_id=solaris-economy tick=9 request=pay-status-1 outcome="rejected"\n'
+            log += 'INFO plugin.command_result: plugin_id=krasnokamen-economy tick=9 request=pay-status-1 outcome="rejected"\n'
         log += extra_log
         if replies is None:
             replies = [{"bot": action["bot"], "window": action["window"],
@@ -493,7 +493,7 @@ class CatalogPluginEvidenceTests(unittest.TestCase):
         self.assertTrue(proof["durable"])
         self.assertEqual(proof["town_name"], "load_matrix")
         self.assertEqual(proof["host_operations"], 99)
-        self.assertEqual(proof["journal"]["solaris-towns"]["committed"], 1)
+        self.assertEqual(proof["journal"]["krasnokamen-towns"]["committed"], 1)
         self.assertFalse(proof["infra_errors"])
         self.assertFalse(proof["errors"])
 
@@ -505,7 +505,7 @@ class CatalogPluginEvidenceTests(unittest.TestCase):
         self.assertEqual(len(proof["unmatched_replies"]), 100)
 
     def test_missing_and_outside_window_journal_results_fail_closed(self):
-        for log in ("", 'INFO plugin.runtime_ready: loaded_packages=6\nINFO plugin.command_result: plugin_id=solaris-towns tick=999 request=send-message outcome="admitted"\n'):
+        for log in ("", 'INFO plugin.runtime_ready: loaded_packages=6\nINFO plugin.command_result: plugin_id=krasnokamen-towns tick=999 request=send-message outcome="admitted"\n'):
             with self.subTest(log=log):
                 proof = self.evidence(log=log)
                 self.assertFalse(proof["journal"])
@@ -561,9 +561,9 @@ class CatalogPluginEvidenceTests(unittest.TestCase):
         self.assertEqual(len(proof["payment_absence_probes"]), 1)
         self.assertFalse(proof["errors"])
         self.assertTrue(self.evidence(replies=[])["errors"])
-        duplicate = 'INFO plugin.command_result: plugin_id=solaris-economy tick=9 request=pay-status-2 outcome="rejected"\n'
+        duplicate = 'INFO plugin.command_result: plugin_id=krasnokamen-economy tick=9 request=pay-status-2 outcome="rejected"\n'
         self.assertTrue(self.evidence(extra_log=duplicate)["errors"])
-        mutation = 'INFO plugin.command_result: plugin_id=solaris-economy tick=9 request=ledger-write outcome="rejected"\n'
+        mutation = 'INFO plugin.command_result: plugin_id=krasnokamen-economy tick=9 request=ledger-write outcome="rejected"\n'
         self.assertTrue(self.evidence(extra_log=mutation)["errors"])
 
 
@@ -597,8 +597,8 @@ class CatalogEventTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "source"
-            (source / "solaris-towns").mkdir(parents=True)
-            (source / "solaris-towns/plugin.toml").write_text('id = "solaris-towns"\n')
+            (source / "krasnokamen-towns").mkdir(parents=True)
+            (source / "krasnokamen-towns/plugin.toml").write_text('id = "krasnokamen-towns"\n')
             with self.assertRaises(load.ClassifiedFailure) as raised:
                 await load.prepare_control(SimpleNamespace(plugins_dir=source),
                     root / "prepare", load.catalog_controls.recipe("plugin-heavy", 2, True))

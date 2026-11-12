@@ -13,17 +13,17 @@ lists come from `python3 -m tools.harness list` and `explain`, not from here.
 
 Everything below is reproducible from public sources, except where a line says
 **owner-local**. Sibling repositories: the native client
-([solaris-client](https://github.com/kaiserproger/solaris-client)), the Loader
-([solaris-loader](https://github.com/kaiserproger/solaris-loader)) and the first-party
-plugins ([solaris-default-plugins](https://github.com/kaiserproger/solaris-default-plugins)),
+([krasnokamen-client](https://github.com/kaiserproger/krasnokamen-client)), the Loader
+([krasnokamen-loader](https://github.com/kaiserproger/krasnokamen-loader)) and the first-party
+plugins ([krasnokamen-default-plugins](https://github.com/kaiserproger/krasnokamen-default-plugins)),
 checked out beside this repository unless an environment variable says otherwise.
 
 ### 1. Build the release server and the native client
 
-- Server: `cargo build --release -p mc-edge --bin solaris-v2`
-  (the harness reads it from `SOLARIS_SERVER_BINARY`; debug servers drop to 2-9
+- Server: `cargo build --release -p mc-edge --bin krasnokamen`
+  (the harness reads it from `KRASNOKAMEN_SERVER_BINARY`; debug servers drop to 2-9
   TPS while chunks generate, so timing-sensitive gates need release).
-- Client (in the client checkout): `cargo build --release --bin solaris-client`.
+- Client (in the client checkout): `cargo build --release --bin krasnokamen-client`.
   On Linux it links ALSA and needs the distro development packages (the client's
   release workflow installs `pkg-config libasound2-dev libudev-dev
   libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxi-dev
@@ -41,7 +41,7 @@ checked out beside this repository unless an environment variable says otherwise
   `alsa-sys` panic; missing `LIBRARY_PATH` fails linking `-lasound`. Check the
   binary's mtime afterwards: an early-exiting wrapped build leaves the old binary.
   On the shared host wrap the build:
-  `<work>/solaris/tools/dev/mem-run.sh -m 10G cargo build --release --bin solaris-client`.
+  `<work>/solaris/tools/dev/mem-run.sh -m 10G cargo build --release --bin krasnokamen-client`.
 
 ### 2. Build the client data root from public sources
 
@@ -49,19 +49,19 @@ The client refuses to start without a complete data root. Let the launcher
 produce it, from a release build of the client repository:
 
 ```sh
-solaris-launcher --headless-bootstrap --data-dir <root>      # needs internet access
+krasnokamen-launcher --headless-bootstrap --data-dir <root>      # needs internet access
 ```
 
 `--headless-bootstrap` is the whole first-run install without a window (also
 usable in CI or on a server); `--force` reinstalls and `--manifest URL` overrides
-the content manifest baked into the launcher. It downloads the Solaris facts
+the content manifest baked into the launcher. It downloads the Krasnokamen facts
 bundle (data tables only) and, from Mojang's own endpoints, the 26.3 `client.jar`
 and the asset objects, then unpacks the textures, models and fonts. No Mojang
 account is involved and no Mojang bytes are in Git. The resulting layout
 (`launcher/src/paths.rs` and the client README in the client repository):
 
 ```text
-<root>/facts/                     Solaris facts tables
+<root>/facts/                     Krasnokamen facts tables
 <root>/data/vanilla/reports/      blocks.json, block_mining.json, block_light.json, registries.json, ...
 <root>/resources/assets/          textures/models/fonts unpacked from client.jar
 <root>/assets/asset-index.json    Mojang asset index (+ objects/)
@@ -69,8 +69,8 @@ account is involved and no Mojang bytes are in Git. The resulting layout
 <root>/cache/  installed.json     launcher state
 ```
 
-`<root>` defaults to `$XDG_DATA_HOME/solaris-client` (`~/.local/share/solaris-client`).
-Without internet access the client's own alternative is `solaris-client setup
+`<root>` defaults to `$XDG_DATA_HOME/krasnokamen-client` (`~/.local/share/krasnokamen-client`).
+Without internet access the client's own alternative is `krasnokamen-client setup
 --from-dist DIST --assets ASSETS`, which links a locally prepared bundle and an
 asset cache. The owner's `<work>/qa-armada/template-data` is only a launcher
 output kept on the owner's disk; recreate it with the command above.
@@ -83,41 +83,41 @@ prerequisite.
 Keep these in one env file per gate wave and source it; never retype paths.
 
 ```sh
-export SOLARIS_SERVER_BINARY=<core>/target/release/solaris-v2   # release build
-export SOLARIS_CLIENT_ROOT=<client checkout>                    # default: solaris-client beside the main checkout
-export SOLARIS_CLIENT_BINARY=<client>/target/release/solaris-client
+export KRASNOKAMEN_SERVER_BINARY=<core>/target/release/krasnokamen   # release build
+export KRASNOKAMEN_CLIENT_ROOT=<client checkout>                    # default: krasnokamen-client beside the main checkout
+export KRASNOKAMEN_CLIENT_BINARY=<client>/target/release/krasnokamen-client
 # The data root from step 2:
-export SOLARIS_CLIENT_DATA_DIR=<root>/data/vanilla              # the vanilla metadata dir, not <root>
-export SOLARIS_CLIENT_RESOURCE_ROOT=<root>/resources
-export SOLARIS_CLIENT_ASSET_ROOT=<root>/assets
-export SOLARIS_CLIENT_ASSET_INDEX=<root>/assets/asset-index.json
+export KRASNOKAMEN_CLIENT_DATA_DIR=<root>/data/vanilla              # the vanilla metadata dir, not <root>
+export KRASNOKAMEN_CLIENT_RESOURCE_ROOT=<root>/resources
+export KRASNOKAMEN_CLIENT_ASSET_ROOT=<root>/assets
+export KRASNOKAMEN_CLIENT_ASSET_INDEX=<root>/assets/asset-index.json
 # Sibling repositories, only to select a checkout other than the one beside the main checkout
 # (worktrees resolve it too: runtime.sibling_root):
 # Java probes and survival: point at canonical content with adjacent protocol caches:
-export SOLARIS_SERVER_VANILLA_DATA_DIR=<content-root>/26.3
-export SOLARIS_LOADER_ROOT=<solaris-loader checkout>            # Java/Loader clients; default: beside the main checkout
-export SOLARIS_DEFAULT_PLUGINS_ROOT=<solaris-default-plugins>   # standard-pack and plugin gates; same default
+export KRASNOKAMEN_SERVER_VANILLA_DATA_DIR=<content-root>/26.3
+export KRASNOKAMEN_LOADER_ROOT=<krasnokamen-loader checkout>            # Java/Loader clients; default: beside the main checkout
+export KRASNOKAMEN_DEFAULT_PLUGINS_ROOT=<krasnokamen-default-plugins>   # standard-pack and plugin gates; same default
 ```
 
 *Owner host:* builds land in a pooled target dir (`targets/slot-<l>`) that
-other trees reuse, so the harness refuses `SOLARIS_SERVER_BINARY` or
-`SOLARIS_CLIENT_BINARY` inside a slot. Pin instead:
+other trees reuse, so the harness refuses `KRASNOKAMEN_SERVER_BINARY` or
+`KRASNOKAMEN_CLIENT_BINARY` inside a slot. Pin instead:
 `<work>/solaris/tools/dev/pin-release <worktree> [--client]` builds once per
 tree (HEAD plus the hash of uncommitted changes), copies the binary to
 `<work>/pins/<sha12>[-<diff8>]/` with a manifest, prints the
-`SOLARIS_SERVER_BINARY=` (or `SOLARIS_CLIENT_BINARY=`) line and reuses an
+`KRASNOKAMEN_SERVER_BINARY=` (or `KRASNOKAMEN_CLIENT_BINARY=`) line and reuses an
 existing pin without building. Pins are immutable; the build is incremental by
 default, `--no-incremental` makes the full build performance windows require. A harness profile that
 builds the release server itself (`regressions-client`) hard-links its build
 into the run's artifact dir.
 
-- A headless native run (`--client native`) needs `SOLARIS_CLIENT_DATA_DIR`
+- A headless native run (`--client native`) needs `KRASNOKAMEN_CLIENT_DATA_DIR`
   with its block and registry reports. `--windowed` additionally needs
-  `SOLARIS_CLIENT_RESOURCE_ROOT`, `SOLARIS_CLIENT_ASSET_ROOT` and
-  `SOLARIS_CLIENT_ASSET_INDEX`, including the assets directory, objects and a
+  `KRASNOKAMEN_CLIENT_RESOURCE_ROOT`, `KRASNOKAMEN_CLIENT_ASSET_ROOT` and
+  `KRASNOKAMEN_CLIENT_ASSET_INDEX`, including the assets directory, objects and a
   nonempty asset index. Missing or incomplete paths fail before launch.
-  Real-client runs require executable `SOLARIS_SERVER_BINARY` and native runs
-  also require `SOLARIS_CLIENT_BINARY`; paths under owner-host pooled
+  Real-client runs require executable `KRASNOKAMEN_SERVER_BINARY` and native runs
+  also require `KRASNOKAMEN_CLIENT_BINARY`; paths under owner-host pooled
   `targets/slot-*` are refused. Pin copies outside the pool and use those paths.
   Unlisted profiles are rejected for native; see
   [AGENT_TOOLING](../AGENT_TOOLING.md#harness-entrypoint).
@@ -127,17 +127,17 @@ into the run's artifact dir.
 - A single wrong path (for example an item properties file under the wrong repo)
   leaves the client on a white "loading content" screen forever without naming
   the file; diff the env against the last green gate line by line.
-- The client's own data folder is `$XDG_DATA_HOME/solaris-client`. Give each gate
-  a fresh `XDG_DATA_HOME` whose `solaris-client/` **symlinks** (never copies; 650 MB
+- The client's own data folder is `$XDG_DATA_HOME/krasnokamen-client`. Give each gate
+  a fresh `XDG_DATA_HOME` whose `krasnokamen-client/` **symlinks** (never copies; 650 MB
   per run filled the disk) `facts assets data resources mojang`. A shared XDG
   leaks `client-settings.json` between gates (an FOV assertion broke that way).
-  Without it the client looks under `~/.local/share/solaris-client` (a dangling
+  Without it the client looks under `~/.local/share/krasnokamen-client` (a dangling
   `facts` symlink there) and exits before MCP is ready. `scene-shot` does this
   itself (symlinks those four plus `assets`, copies the rest, forces fov 70).
 - The singleplayer scenarios (`native-world-first-start-interrupted`,
-  `native-sp-relaunch-lease-race`) need `SOLARIS_SERVER_BINARY` naming the release
+  `native-sp-relaunch-lease-race`) need `KRASNOKAMEN_SERVER_BINARY` naming the release
   server and an imported 26.3 content cache at `<core>/data/vanilla`
-  (`solaris-v2 content import --version 26.3 --download --cache data/vanilla`,
+  (`krasnokamen content import --version 26.3 --download --cache data/vanilla`,
   see [OPERATING](../OPERATING.md#vanilla-content-cache)); they copy it into the
   private client data root as `servers/content/26.3`.
 - Run each graphical gate through the scene slot so at most six run on the
@@ -149,12 +149,12 @@ into the run's artifact dir.
 
 No harness gate needs a Mojang or Microsoft account: the native client uses the
 `offline-test` profile (official authentication is not implemented) and the
-Java/Loader client uses offline identities. The `SOLARIS_CLIENT_MCP_TOKEN` and
+Java/Loader client uses offline identities. The `KRASNOKAMEN_CLIENT_MCP_TOKEN` and
 the bridge secrets are per-run random values you generate. What only the owner
 holds:
 
-- the public test server (`SOLARIS_TEST_HOST`, SSH, `solaris-auth` passwords,
-  `SOLARIS_SOAK_AUTH`): [test server operations](test-server-ops.md), the
+- the public test server (`KRASNOKAMEN_TEST_HOST`, SSH, `krasnokamen-auth` passwords,
+  `KRASNOKAMEN_SOAK_AUTH`): [test server operations](test-server-ops.md), the
   headless join smoke below against that host, `tools/dev/test-server/soak.py`;
 - the Windows VM login: [Windows and macOS client QA](windows-and-macos-client-qa.md);
 - release publication (`gh`, tags, GitHub secrets):
@@ -214,7 +214,7 @@ proofs need a physical XTest click (pattern: `_scroll` in
   no operators and hostile spawning disabled. The generic harness fallback builds
   the current debug server; it does not satisfy real-client gate requirements.
   For these gates pass the pinned `--release --locked` server through
-  `SOLARIS_SERVER_BINARY` as required by AGENTS.md (path and SHA-256 are receipted).
+  `KRASNOKAMEN_SERVER_BINARY` as required by AGENTS.md (path and SHA-256 are receipted).
   `--plugins-dir PATH` (an existing directory used directly as `[plugins].directory`)
   is accepted by the profiles that allow it and supplies no plugin-specific
   scenarios or unlock proofs.
@@ -249,11 +249,11 @@ proofs need a physical XTest click (pattern: `_scroll` in
   the old server until the new one logs its lease wait. They create private client
   data and worlds, use a private Xvfb, and do not cover the lease timeout branch or
   Windows. For the first-start negative control only,
-  `SOLARIS_FIRST_START_RECOVERY_BINARY` can select an older server for the
+  `KRASNOKAMEN_FIRST_START_RECOVERY_BINARY` can select an older server for the
   recovery attempt after the fixed server created and interrupted the world.
 - `java-v2-p5-parity`, `java-v2-p5-towns` and `loader-v2-settlements-smoke` run the
   real Java/Loader clients under private Xvfb against a frozen candidate
-  (`SOLARIS_SERVER_BINARY` or `--server-bin`, plus `--plugins-dir`); they never
+  (`KRASNOKAMEN_SERVER_BINARY` or `--server-bin`, plus `--plugins-dir`); they never
   build a server.
 
 - `native-v2-ledger-painting` places one painting and observes its removal
@@ -271,7 +271,7 @@ proofs need a physical XTest click (pattern: `_scroll` in
 ## Scene shots
 
 `python3 -m tools.harness run scene-shot --client native --windowed` runs a
-scripted capture. Set `SOLARIS_SERVER_BINARY`, `SOLARIS_CLIENT_BINARY`, the native
+scripted capture. Set `KRASNOKAMEN_SERVER_BINARY`, `KRASNOKAMEN_CLIENT_BINARY`, the native
 env block above and `SCENE_SHOT_SCENARIO` to a JSON file. The JSON has `steps`,
 each one of `cmd`, `tp` (five coordinates), `look`, `hotbar`, `wait_ticks`, `wait_play`,
 `wait_respawn` (waits for live health and a closed death screen), `pause` (native only), `wait_terrain`, `shot`, `observe`, `use_item_on`, `click_screen_button`,
@@ -420,7 +420,7 @@ the Settings dialog or the map territory.
   mesh revisions must match. The completed frame is a readiness fence, not proof
   of visible pixels, and capture is not atomic with the fence.
 - `--client java --windowed` connects a NeoForge Java client with the Loader
-  automation mod to the Solaris server (`:fabric-agent:runClientMcp`): `shot`
+  automation mod to the Krasnokamen server (`:fabric-agent:runClientMcp`): `shot`
   uses `minecraft_screenshot` and matches the 1280x720 window, fov, GUI scale 3
   and render distance. It is an instrumented rendering oracle, not an unmodified
   vanilla client or a vanilla-server AI or movement oracle. Mojang's client is a
@@ -472,9 +472,9 @@ sizes, SHA-512/SHA-1) and the baseline loader pins in
 [`tools/harness/dh-artifacts.json`](../../tools/harness/dh-artifacts.json), which
 is the pin owner.
 
-- Inputs: `SOLARIS_DH_JAR` (the pinned DH jar), `SOLARIS_SERVER_BINARY` (the
+- Inputs: `KRASNOKAMEN_DH_JAR` (the pinned DH jar), `KRASNOKAMEN_SERVER_BINARY` (the
   candidate), Java 25, Xvfb, Python Pillow, and the real DH scenario driver in the
-  sibling `solaris-loader` (`SOLARIS_LOADER_ROOT` selects the checkout). The driver
+  sibling `krasnokamen-loader` (`KRASNOKAMEN_LOADER_ROOT` selects the checkout). The driver
   uses a private copy under `.analysis/prism-26.1.2/minecraft` inside that
   checkout, never the owner's Prism, and mints fresh local MCP bearer tokens per
   client.
@@ -523,7 +523,7 @@ client-visible bug.
    --ignored --nocapture`.
 3. `python3 -m tools.harness run village-autonomy-qa --client native --windowed`
    takes 40-55 min (cap 3600 s); run it async with `timeout: 0`. Two in parallel
-   are fine on the 12-core host; stop stale `solaris-v2` processes from old runs by
+   are fine on the 12-core host; stop stale `krasnokamen` processes from old runs by
    PID first.
 4. Receipt: `.analysis/validation/<UTC>-village-autonomy-qa-*/village-autonomy-qa/scenario.json`:
    `assertions`, `autonomy_acceptance.storage_rounds` (chest totals and buildings
@@ -584,7 +584,7 @@ then write a minimal failing-first test without the world, fix, delete the probe
 Proves join, auth, one action and persistence; not a graphical gate.
 
 1. Launch as a supervised service, ready on `automation descriptor`:
-   `solaris-client play --headless --profile offline-test --server <host:port>
+   `krasnokamen-client play --headless --profile offline-test --server <host:port>
    --username <name<=16> --automation --mcp-http 127.0.0.1:0 --artifact-dir <dir>`.
    MCP: `initialize` with the descriptor's nonce, `notifications/initialized`,
    then `tools/call`.
@@ -614,20 +614,20 @@ binaries. It produces no receipt and proves nothing; the automated
 clients instead and must never touch the owner's desktop.
 
 1. Prepare the server cache once:
-   `solaris-v2 content import --version 26.3 --download --cache data/vanilla`
-   then `solaris-v2 content verify --cache data/vanilla`.
+   `krasnokamen content import --version 26.3 --download --cache data/vanilla`
+   then `krasnokamen content verify --cache data/vanilla`.
 2. Copy the manual profile and edit the copy, never `playable.toml` itself:
    `cp playable.toml .analysis/playable-run.toml`; set `world_dir`, `port` and
    `seed` (the profile is offline, loopback `127.0.0.1:25565`, view distance 4).
    A reused `world_dir` keeps its old seed and generation contract; use a new
    directory for a fresh world.
-3. Start the server: `target/release/solaris-v2 --config .analysis/playable-run.toml`.
+3. Start the server: `target/release/krasnokamen --config .analysis/playable-run.toml`.
    It is ready when it logs that the listener is bound. Type `stop` on its stdin
    (or send Ctrl+C) to write the final checkpoint.
 4. Install and start the client from the client repository's release build:
-   run `solaris-launcher --headless-bootstrap` once (or the launcher window), then
-   `solaris-client` (Title screen: Multiplayer, Add Server or Direct Connect) or
-   `solaris-client --server 127.0.0.1:25565 --username Steve`. Use the same
+   run `krasnokamen-launcher --headless-bootstrap` once (or the launcher window), then
+   `krasnokamen-client` (Title screen: Multiplayer, Add Server or Direct Connect) or
+   `krasnokamen-client --server 127.0.0.1:25565 --username Steve`. Use the same
    `--data-dir` as the bootstrap if you did not use the default.
 
 ## Vanilla render oracle (native visual parity)
@@ -636,7 +636,7 @@ The owner requires a side-by-side comparison with the real Java client, not
 memory or wiki images. Reproducible from this repository: the two captures.
 **Not reproducible from this repository:** the panel step. The owner's runners
 and panel composer live in the owner-local `<work>/vref-kit` (a throwaway
-Pillow script that pastes the vanilla and Solaris PNGs of each row side by side
+Pillow script that pastes the vanilla and Krasnokamen PNGs of each row side by side
 with labels); it is not tracked anywhere. To review, put the two PNGs of the
 same scenario step next to each other with any image viewer or a few lines of
 Pillow, and follow the review rules below.
@@ -644,7 +644,7 @@ Pillow, and follow the review rules below.
 - Capture both clients with the same scenario JSON: `python3 -m tools.harness run
   scene-shot --client java|native --windowed` (steps in [Scene shots](#scene-shots)).
   The Java oracle uses a Loader checkout for the server's Minecraft version
-  (`SOLARIS_LOADER_ROOT`).
+  (`KRASNOKAMEN_LOADER_ROOT`).
 - Same window 1280x720, FOV 70, GUI scale 3, seed, server build, render distance
   and pose for both clients. Java shots change only when the server changes: reuse
   them and reshoot native only.
@@ -665,7 +665,7 @@ Pillow, and follow the review rules below.
   and layouts for the server are read from local reports and `javap`, see
   [ADR 0002](../decisions/0002-vanilla-protocol-metadata-as-reference.md).)
 - The owner workstation cannot reach minecraft.wiki; reference files were fetched
-  through the test server with `ssh "$SOLARIS_TEST_HOST" "curl ..."` into
+  through the test server with `ssh "$KRASNOKAMEN_TEST_HOST" "curl ..."` into
   `/tmp/wiki-ref` there and rsynced back. That needs the owner's SSH access.
 
 ## Combinatorial scenario matrix with bots

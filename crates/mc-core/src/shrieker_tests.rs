@@ -257,7 +257,7 @@ fn warning_and_inflight_shriek_survive_wal_checkpoint_restart_without_duplicate_
         .to_string();
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
     let entries = crate::core::journal_entries_for_tick(&mut state, &output);
-    let root = std::env::temp_dir().join(format!("solaris-shrieker-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("krasnokamen-shrieker-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).unwrap();
     let mut writer = JournalWriter::open(&root, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();

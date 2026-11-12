@@ -24,12 +24,12 @@ use mc_script::{
     ScriptStorageMutation, ScriptZoneProtection,
 };
 
-use crate::bindings::solaris::plugin::client_presentation::{
+use crate::bindings::krasnokamen::plugin::client_presentation::{
     ClientCommand, ViewField, ViewFieldValue, ViewFormation, ViewModel,
 };
-use crate::bindings::solaris::plugin::commands::{Command, MessageTarget, StorageMutation};
-use crate::bindings::solaris::plugin::domain_operations::DomainOperation;
-use crate::bindings::solaris::plugin::types::Position;
+use crate::bindings::krasnokamen::plugin::commands::{Command, MessageTarget, StorageMutation};
+use crate::bindings::krasnokamen::plugin::domain_operations::DomainOperation;
+use crate::bindings::krasnokamen::plugin::types::Position;
 
 /// Where a plugin's stable player identity is looked up.
 ///

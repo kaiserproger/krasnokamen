@@ -1638,7 +1638,7 @@ fn district_requires_committed_matching_structure_and_loses_destroyed_readiness(
             &mut fixture.state,
             id,
             1,
-            district(vec![structure("solaris:farm")]),
+            district(vec![structure("krasnokamen:farm")]),
         ),
         Err(Failure::InvalidRequest)
     );
@@ -1689,7 +1689,7 @@ fn district_requires_committed_matching_structure_and_loses_destroyed_readiness(
         buildings.push(ScriptSettlementBuildingRef::new(
             "worksite".into(),
             worksite.worksite_id,
-            "solaris:warehouse".into(),
+            "krasnokamen:warehouse".into(),
         ));
     }
     let foot = [at[0] + 6, at[1], at[2] + 1];
@@ -1759,7 +1759,7 @@ fn district_requires_committed_matching_structure_and_loses_destroyed_readiness(
     .unwrap();
     assert_eq!(ready.stage.as_deref(), Some("hamlet"));
     assert_eq!((ready.population, ready.housed, ready.food), (1, 1, 1));
-    assert_eq!(ready.working, ["authored:house", "solaris:warehouse"]);
+    assert_eq!(ready.working, ["authored:house", "krasnokamen:warehouse"]);
     let air = fixture.state.registry.states.air;
     fixture
         .state

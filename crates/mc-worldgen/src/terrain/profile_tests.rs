@@ -23,7 +23,7 @@ fn generator(seed: i64) -> TerrainGenerator {
     use crate::village::{VillageDecor, load_village_closure};
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
     let blocks = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     let data = Arc::new(mc_data::load(&root).unwrap());
     let tags = Arc::new(mc_data::tags::load(&root, &data).unwrap());
@@ -220,7 +220,7 @@ fn gpu_density_chunks_match_cpu_chunks() {
 }
 
 fn stage_profile(seeds: &[i64], runs: usize, solids: Solids) {
-    let report = mc_data::blocks::solaris_required_blocks_report();
+    let report = mc_data::blocks::krasnokamen_required_blocks_report();
     let light_table =
         mc_data::block_light::BlockLightTable::conservative_from_blocks_report(&report);
     let positions: Vec<ChunkPos> = (-3..3)

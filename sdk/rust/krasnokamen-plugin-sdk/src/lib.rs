@@ -1,4 +1,4 @@
-//! Guest SDK for Solaris plugins.
+//! Guest SDK for Krasnokamen plugins.
 //!
 //! One source of truth: the WIT package in the core repository
 //! (`crates/mc-script/wit`). This crate generates the guest bindings from it, so
@@ -10,7 +10,7 @@
 //! conversion between the guest-facing Rust types and the contract's own types,
 //! which are the same types.
 
-/// The generated guest side of the `solaris:plugin` contract.
+/// The generated guest side of the `krasnokamen:plugin` contract.
 ///
 /// The bindings live in a named module so the export macro the guest invokes can
 /// name them by an absolute path: a plugin crate expands its own `#[no_mangle]`
@@ -21,14 +21,14 @@ pub mod bindings {
         path: "../../../crates/mc-script/wit",
         world: "plugin",
         pub_export_macro: true,
-        default_bindings_module: "solaris_plugin_sdk::bindings",
+        default_bindings_module: "krasnokamen_plugin_sdk::bindings",
         additional_derives: [serde::Serialize, serde::Deserialize],
     });
 }
 
 pub use bindings::export as __export;
-pub use bindings::exports::solaris::plugin::{events, lifecycle, precommit};
-pub use bindings::solaris::plugin::{
+pub use bindings::exports::krasnokamen::plugin::{events, lifecycle, precommit};
+pub use bindings::krasnokamen::plugin::{
     client_presentation, command_permissions, commands, domain_operations, host, inventories,
     npc_routes, npcs, operation_types, settlements, storage, types, world_events,
 };
@@ -41,7 +41,7 @@ mod settlement_ops;
 mod world_structure_ops;
 /// Generic physical world facts and durable worksite/structure operations.
 pub mod world_structures {
-    pub use crate::bindings::solaris::plugin::world_structures::*;
+    pub use crate::bindings::krasnokamen::plugin::world_structures::*;
     pub use crate::world_structure_ops::*;
 }
 
@@ -53,7 +53,7 @@ pub use world_structure_ops::*;
 
 /// Native settlement records, households, and district plans.
 pub mod settlements_api {
-    pub use crate::bindings::solaris::plugin::settlements::*;
+    pub use crate::bindings::krasnokamen::plugin::settlements::*;
     pub use crate::settlement_ops::*;
 }
 

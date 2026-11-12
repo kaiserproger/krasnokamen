@@ -1,10 +1,10 @@
 use super::vanilla_outline_shapes;
-use crate::blocks::solaris_required_blocks_report;
+use crate::blocks::krasnokamen_required_blocks_report;
 
 #[test]
 fn outline_table_covers_every_fingerprinted_vanilla_state() {
     let table = vanilla_outline_shapes();
-    let blocks = solaris_required_blocks_report();
+    let blocks = krasnokamen_required_blocks_report();
     let mut count = 0;
     for block in &blocks {
         for state in &block.states {
@@ -30,7 +30,7 @@ fn outline_table_covers_every_fingerprinted_vanilla_state() {
 
 #[test]
 fn outline_table_distinguishes_torch_and_low_fire_from_collision_and_full_voxels() {
-    let blocks = solaris_required_blocks_report();
+    let blocks = krasnokamen_required_blocks_report();
     let state = |name: &str| {
         blocks
             .iter()
@@ -68,7 +68,7 @@ fn outline_table_distinguishes_torch_and_low_fire_from_collision_and_full_voxels
 
 #[test]
 fn outline_table_refuses_mismatched_state_identity() {
-    let blocks = solaris_required_blocks_report();
+    let blocks = krasnokamen_required_blocks_report();
     let torch = blocks
         .iter()
         .find(|block| block.id.as_str() == "minecraft:torch")

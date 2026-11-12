@@ -167,7 +167,7 @@ async fn negotiate(client: &mut Client, manifest: LoaderManifest, cache: &Path) 
     let ack = LoaderClientAck {
         protocol: manifest.protocol,
         platform: LoaderPlatform::Native,
-        loader_version: "solaris-protocol-bots-0.0.8".into(),
+        loader_version: "krasnokamen-protocol-bots-0.0.8".into(),
         accepted_permissions: accepted.into_iter().collect(),
         cached_bundles: cached,
         carrier_block_state_ids: BTreeMap::new(),

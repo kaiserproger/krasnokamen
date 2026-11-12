@@ -1,4 +1,4 @@
-"""Loot-count bounds derived from the installed 26.1.2 vanilla data, not Solaris.
+"""Loot-count bounds derived from the installed 26.1.2 vanilla data, not Krasnokamen.
 
 Fixture: adult, no vehicle/equipment, not burning, no looting, white unsheared
 sheep, size-one slime. Probability is not asserted from one random sample.

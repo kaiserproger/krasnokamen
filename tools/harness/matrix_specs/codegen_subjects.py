@@ -1,4 +1,4 @@
-"""Subjects enumerated directly from Solaris source files (read at generation time)."""
+"""Subjects enumerated directly from Krasnokamen source files (read at generation time)."""
 import os
 import json
 import re
@@ -68,9 +68,9 @@ def villager_professions():
 
 def plugin_manifests():
     out = {}
-    work = Path(os.environ.get("SOLARIS_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
+    work = Path(os.environ.get("KRASNOKAMEN_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
     roots = [work / "solaris-default-plugins",
-             Path(os.environ.get("SOLARIS_MATRIX_DATA", work / "scenarios")) / "live-plugins"]
+             Path(os.environ.get("KRASNOKAMEN_MATRIX_DATA", work / "scenarios")) / "live-plugins"]
     for p in sorted(q for root in roots for q in root.glob("*/plugin.toml")):
         if p.parent.name in out:
             continue
@@ -93,7 +93,7 @@ CMD_EX = {
     "w": ("/w <player> hi", "alias of msg"),
     "teammsg": ("/teammsg hi", "message to own team only; error if no team"),
     "tm": ("/tm hi", "alias of teammsg"),
-    "settlement": ("/settlement guide", "Solaris settlement root (see settlements domain)"),
+    "settlement": ("/settlement guide", "Krasnokamen settlement root (see settlements domain)"),
     "trigger": ("/trigger <objective> [add|set n]", "only enabled trigger objectives; once"),
     "gamemode": ("/gamemode creative|survival|adventure|spectator [target]", "game mode changes; abilities packet; tab list"),
     "teleport": ("/teleport <targets> <x y z | entity> [rotation]", "targets moved; cross-dimension when target elsewhere"),
@@ -103,7 +103,7 @@ CMD_EX = {
     "give": ("/give <targets> <item>[components] [count]", "items inserted; overflow dropped; components kept"),
     "clear": ("/clear <targets> [item] [max]", "matching items removed; count reported"),
     "kill": ("/kill [targets]", "targets die from minecraft:generic_kill (vanilla 26.1.2 DamageSources.genericKill; death message death.attack.genericKill; bypasses armor/creative). "
-                                "Known Solaris gap: survival.rs maps /kill to Void -> minecraft:out_of_world, so the damage type/death message differ until fixed"),
+                                "Known Krasnokamen gap: survival.rs maps /kill to Void -> minecraft:out_of_world, so the damage type/death message differ until fixed"),
     "time": ("/time set day|noon|night|midnight|<n>[d|s|t]; add; query", "time updated and broadcast"),
     "weather": ("/weather clear|rain|thunder [duration]", "weather changes (overworld)"),
     "difficulty": ("/difficulty peaceful|easy|normal|hard", "difficulty set; peaceful removes hostiles"),
@@ -122,10 +122,10 @@ CMD_EX = {
     "enchant": ("/enchant <targets> <enchantment> [level]", "applied when compatible; error otherwise"),
     "effect": ("/effect give|clear <targets> <effect> [seconds|infinite] [amp] [hideParticles]", "effect applied/removed"),
     "advancement": ("/advancement grant|revoke <targets> everything|only|from|through|until", "advancements changed with criteria"),
-    "debug": ("/debug (Solaris fixture: hotbar give)", "DIVERGENCE: Solaris test fixture (hotbar give) occupies the root; vanilla 26.1.2 /debug is the start|stop|function profiler; op only"),
+    "debug": ("/debug (Krasnokamen fixture: hotbar give)", "DIVERGENCE: Krasnokamen test fixture (hotbar give) occupies the root; vanilla 26.1.2 /debug is the start|stop|function profiler; op only"),
     "team": ("/team add|remove|join|leave|modify|list|empty", "team state updated (see scoreboard_teams)"),
-    "tps": ("/tps", "Solaris: ticks-per-second report"),
-    "mspt": ("/mspt", "Solaris: milliseconds-per-tick report"),
+    "tps": ("/tps", "Krasnokamen: ticks-per-second report"),
+    "mspt": ("/mspt", "Krasnokamen: milliseconds-per-tick report"),
     "scoreboard": ("/scoreboard objectives|players ...", "scoreboard updated (see scoreboard_teams)"),
     "locate": ("/locate structure|biome|poi <id>", "nearest location reported or not-found"),
     "tellraw": ("/tellraw <targets> <component>", "component delivered"),
@@ -139,12 +139,12 @@ CMD_EX = {
              "vanilla 26.1.2 (pinned by DataCommands from the jar): root/unscaled -> '<name> has the following entity data: <SNBT>' / 'x, y, z has the following block data: <SNBT>'; "
              "scaled numeric -> '<path> on <name> after scale factor of <%.2f> is <floor(v*scale)>' / '<path> on block x, y, z after scale factor of <%.2f> is <int>'; "
              "result numeric=floor, list/compound=size, string=UTF-16 length, root=1; zero or multiple path matches fail; 26.1 paths (active_effects, equipment, respawn). "
-             "Solaris advertises the root but has no handler yet (server gap; DataCommands implementing)"),
+             "Krasnokamen advertises the root but has no handler yet (server gap; DataCommands implementing)"),
     "tick": ("/tick query|rate|freeze|unfreeze|step|sprint", "tick rate control; frozen world steps"),
     "kick": ("/kick <player> [reason]", "player disconnected"),
-    "mute": ("/mute <player> (Solaris)", "player chat blocked"),
-    "unmute": ("/unmute <player> (Solaris)", "chat restored"),
-    "warn": ("/warn <player> <reason> (Solaris)", "warning delivered/recorded"),
+    "mute": ("/mute <player> (Krasnokamen)", "player chat blocked"),
+    "unmute": ("/unmute <player> (Krasnokamen)", "chat restored"),
+    "warn": ("/warn <player> <reason> (Krasnokamen)", "warning delivered/recorded"),
     "transfer": ("/transfer <host> [port] [players]", "players transferred"),
     "ban": ("/ban <player> [reason]", "banned + kicked"),
     "ban-ip": ("/ban-ip <ip|player> [reason]", "IP banned"),
@@ -154,7 +154,7 @@ CMD_EX = {
     "deop": ("/deop <player>", "op removed; command tree shrinks immediately"),
     "whitelist": ("/whitelist on|off|add|remove|list|reload", "whitelist managed"),
     "banlist": ("/banlist [ips|players]", "ban entries listed"),
-    "co": ("/co inspect|lookup|rollback|restore", "Solaris block log (see block_log)"),
+    "co": ("/co inspect|lookup|rollback|restore", "Krasnokamen block log (see block_log)"),
     "stop": ("/stop", "players saved and disconnected; clean shutdown; checkpoint written"),
     "save-all": ("/save-all [flush]", "checkpoint written; 'Saved the game'"),
 }
@@ -162,7 +162,7 @@ NOT_CONSOLE = {"trigger", "settlement", "teammsg", "tm"}
 
 # ------------------------------------------------------------------ damage
 DMG = {
-    "Generic": ("/damage-like generic source via plugin/command fixture", "generic damage bypasses armor (vanilla; Solaris survival.rs agrees)"),
+    "Generic": ("/damage-like generic source via plugin/command fixture", "generic damage bypasses armor (vanilla; Krasnokamen survival.rs agrees)"),
     "Melee": ("mob/player melee hit", "armor + protection reduce; mob_attack/player_attack type"),
     "Thorns": ("attack a thorns-armored target", "thorns damage to attacker"),
     "Projectile": ("arrow/trident/thrown hit", "projectile protection applies; arrow/trident/thrown types"),
@@ -416,7 +416,7 @@ def build():
     rules = gamerules()
     domain("gamerules", ["core:command_rules.rs", "core:dimensions_rules.rs"], ["command_send"],
            [(r, f"/gamerule minecraft:{r}" + (f" (legacy alias {', '.join(al)})" if al else "") + " query, then set non-default and exercise",
-             f"canonical name queried/set and persisted (vanilla command tree uses canonical names only); legacy alias acceptance is a Solaris compatibility extension, not a vanilla requirement (vanilla GameRuleRegistryFix only upgrades saved data) — record it, don't fail on it; behaviour '{next((GAMERULE_EFFECT[a] for a in al if a in GAMERULE_EFFECT), 'per vanilla GameRules description')}' switches"
+             f"canonical name queried/set and persisted (vanilla command tree uses canonical names only); legacy alias acceptance is a Krasnokamen compatibility extension, not a vanilla requirement (vanilla GameRuleRegistryFix only upgrades saved data) — record it, don't fail on it; behaviour '{next((GAMERULE_EFFECT[a] for a in al if a in GAMERULE_EFFECT), 'per vanilla GameRules description')}' switches"
              + (f"; second player: {GAMERULE_SECOND_PLAYER[r]}" if r in GAMERULE_SECOND_PLAYER else ""),
              {"op": 2, "console": True, "aliases": al, **({"second_player": True} if r in GAMERULE_SECOND_PLAYER else {})})
             for r, al in rules])
@@ -446,7 +446,7 @@ def build():
     profs = villager_professions()
     for p in profs:
         D["villagers"]["subjects"].append((f"profession_{p}", f"villager with profession {p}: open trades / observe work",
-                                           f"{p} trade table/work loop per vanilla (Solaris-only: Miner/Lumberjack/Builder/Soldier)",
+                                           f"{p} trade table/work loop per vanilla (Krasnokamen-only: Miner/Lumberjack/Builder/Soldier)",
                                            {"caps": ["select_trade"], "menu": p not in ("None", "Nitwit"), "custody": True}))
     helps, eco = settlement_help()
     subs = [(h.replace(" ", "_"), f"/settlement {h} ...: {desc[:140]}", "native settlement state/dialog updated per command; persisted across restart; non-owner refused where owned",

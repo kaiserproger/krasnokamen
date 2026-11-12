@@ -1,4 +1,4 @@
-//! Autonomous parity-test primitives for comparing Solaris with a local vanilla
+//! Autonomous parity-test primitives for comparing Krasnokamen with a local vanilla
 //! oracle.
 //!
 //! This module deliberately keeps Mojang-owned artifacts outside the repo. The
@@ -99,7 +99,7 @@ pub fn vanilla_oracle_availability(repo_root: impl AsRef<Path>) -> OracleAvailab
     }
 }
 
-/// A fact captured from either Solaris or vanilla.
+/// A fact captured from either Krasnokamen or vanilla.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ObservationFact {
@@ -262,7 +262,7 @@ pub fn diff_observations(expected: &ObservationSet, actual: &ObservationSet) -> 
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServerKind {
-    Solaris,
+    Krasnokamen,
     Vanilla,
 }
 
@@ -402,7 +402,7 @@ pub trait ParityScenario: Send + Sync {
     fn run<'a>(&'a self, ctx: ScenarioContext) -> ScenarioFuture<'a>;
 }
 
-/// Deterministic core-action scenario shared by Solaris-only smoke tests and
+/// Deterministic core-action scenario shared by Krasnokamen-only smoke tests and
 /// vanilla-backed parity diffs. It drives the login/play prelude, then executes
 /// a small movement/look/wait sequence while recording ordered observations.
 #[derive(Debug, Clone)]
@@ -439,7 +439,7 @@ pub async fn observe_core_action_sequence(
     actions: &[CoreAction],
 ) -> Result<ObservationSet> {
     let subject = match ctx.kind {
-        ServerKind::Solaris => "solaris",
+        ServerKind::Krasnokamen => "krasnokamen",
         ServerKind::Vanilla => "vanilla",
     };
     let mut client = Client::connect(ctx.addr).await?;

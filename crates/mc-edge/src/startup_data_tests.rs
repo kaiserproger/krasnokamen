@@ -492,7 +492,7 @@ fn effective_recipes_keep_embedded_display_ids_when_sidecar_is_present() {
     .unwrap();
 
     let recipes = load_effective_recipes(tmp.path()).unwrap();
-    let embedded = mc_data::recipes::solaris_required_recipes();
+    let embedded = mc_data::recipes::krasnokamen_required_recipes();
     let oak_planks_index = embedded
         .iter()
         .position(|recipe| recipe.id.as_str() == "minecraft:oak_planks")

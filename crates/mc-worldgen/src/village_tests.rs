@@ -33,9 +33,9 @@ fn identifier(value: &str) -> Identifier {
     Identifier::parse(value.to_owned()).unwrap()
 }
 
-/// `<SOLARIS_CONTENT_CACHE>`, then `<workspace>/data/vanilla`.
+/// `<KRASNOKAMEN_CONTENT_CACHE>`, then `<workspace>/data/vanilla`.
 fn content_cache() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var("SOLARIS_CONTENT_CACHE") {
+    if let Ok(dir) = std::env::var("KRASNOKAMEN_CONTENT_CACHE") {
         let dir = PathBuf::from(dir);
         return dir
             .join("data")
@@ -142,11 +142,11 @@ fn village_closure_walks_the_real_cache() {
     let Some(cache) = content_cache() else {
         println!(
             "SKIP village_closure_walks_the_real_cache: no vanilla content cache found \
-             (set SOLARIS_CONTENT_CACHE)"
+             (set KRASNOKAMEN_CONTENT_CACHE)"
         );
         return;
     };
-    let blocks = BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+    let blocks = BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
         .expect("embedded block report");
     let closure =
         crate::village::load_village_closure(&cache, &identifier("minecraft:villages"), &blocks)
@@ -245,11 +245,11 @@ fn template_jigsaws_load_from_the_real_cache() {
     let Some(cache) = content_cache() else {
         println!(
             "SKIP template_jigsaws_load_from_the_real_cache: no vanilla content cache found \
-             (set SOLARIS_CONTENT_CACHE)"
+             (set KRASNOKAMEN_CONTENT_CACHE)"
         );
         return;
     };
-    let blocks = BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+    let blocks = BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
         .expect("embedded block report");
     let piece = cache
         .join("data")

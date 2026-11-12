@@ -75,7 +75,7 @@ fn maximum_supported_component_patch_round_trips_thirteen_components_and_leaf_am
         .with_damage(47)
         .with_enchantment(id("unbreaking"), 3)
         .with_custom_name("Full component payload")
-        .with_item_model(Identifier::parse("solaris_loader:component_model").unwrap());
+        .with_item_model(Identifier::parse("krasnokamen_loader:component_model").unwrap());
     stack.stew_effects = vec![StewEffect {
         id: id("poison"),
         duration: 220,

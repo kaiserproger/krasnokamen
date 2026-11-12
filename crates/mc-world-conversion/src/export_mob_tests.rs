@@ -12,7 +12,7 @@ fn custom_mob_export_uses_presentation_and_retains_native_marker() {
         payload: Some(Tag::Compound(vec![
             ("id".into(), Tag::String("sky-creeper:sky_creeper".into())),
             (
-                "solaris:Presentation".into(),
+                "krasnokamen:Presentation".into(),
                 Tag::String("minecraft:creeper".into()),
             ),
         ])),
@@ -36,11 +36,11 @@ fn custom_mob_export_uses_presentation_and_retains_native_marker() {
     };
     assert!(entity.contains(&("id".into(), Tag::String("minecraft:creeper".into()))));
     assert!(entity.contains(&(
-        "solaris:MobBlueprint".into(),
+        "krasnokamen:MobBlueprint".into(),
         Tag::String("sky-creeper:sky_creeper".into())
     )));
     assert!(
-        !entity.iter().any(|(key, _)| key == "solaris:Presentation"),
+        !entity.iter().any(|(key, _)| key == "krasnokamen:Presentation"),
         "internal export marker must not survive a vanilla Anvil round trip"
     );
 }

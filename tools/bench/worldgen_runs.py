@@ -1,4 +1,4 @@
-"""Chunk-generation throughput: `solaris-v2 world pregenerate` and an optional vanilla server."""
+"""Chunk-generation throughput: `krasnokamen world pregenerate` and an optional vanilla server."""
 from __future__ import annotations
 
 import json
@@ -71,7 +71,7 @@ def parse_pregenerate(output: str) -> dict[str, Any]:
             "chunks_per_s": generated / generation, "chunks_per_s_incl_setup": generated / elapsed if elapsed else None}
 
 
-def solaris_pregenerate(*, host: Any, out: Path, workdir: str, server_bin: str, vanilla_data_dir: str, seed: int,
+def krasnokamen_pregenerate(*, host: Any, out: Path, workdir: str, server_bin: str, vanilla_data_dir: str, seed: int,
                         count: int, mode: str, pool: list[int], memory: str | None, slice_name: str | None,
                         radius: int, center: str, keep_world: bool) -> dict[str, Any]:
     """One fresh-world pregenerate of a fixed square with the server pinned to `count` CPUs.
@@ -99,7 +99,7 @@ vanilla_data_dir = "{vanilla_data_dir}"
     wall = time.monotonic() - started
     (out / "stdout.log").write_text(completed.stdout)
     (out / "stderr.log").write_text(completed.stderr)
-    record: dict[str, Any] = {"engine": "solaris", "cores": count, "cpu_mode": mode, "cpus": split["server"],
+    record: dict[str, Any] = {"engine": "krasnokamen", "cores": count, "cpu_mode": mode, "cpus": split["server"],
                               "physical_cores_touched": split["physical_cores_touched"], "memory_max": memory,
                               "seed": seed, "radius_blocks": radius, "center_block": center, "wall_seconds": wall,
                               **parse_time_text(host.read_text(time_file) if timed else None)}

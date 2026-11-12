@@ -1,4 +1,4 @@
-schema: solaris-world-adapter-index/1
+schema: krasnokamen-world-adapter-index/1
 domain: fluids
 note:
   Documentation index only; execution is the shared Python Adapter interface, not a YAML DSL. Registration is
@@ -65,7 +65,7 @@ subjects:
     server_gap_evidence: []
   - id: fluids.infinite_water_source
     matrix_ids:
-      - pw:fluids.infinite_water_source/fabric_solaris_loader/adventure/overworld/easy/1/slow_reader_backpressure/steady/op_1
+      - pw:fluids.infinite_water_source/fabric_krasnokamen_loader/adventure/overworld/easy/1/slow_reader_backpressure/steady/op_1
     status: adapter_authored_not_matrix_verified
     server_evidence:
       - crates/mc-core/src/fluids.rs
@@ -117,7 +117,7 @@ subjects:
     server_gap_evidence: []
   - id: fluids.water_lava_interaction
     matrix_ids:
-      - pw:fluids.water_lava_interaction/forge_solaris_loader/adventure/overworld/easy/2/duplicate_login/pause_when_empty_resume/op_2
+      - pw:fluids.water_lava_interaction/forge_krasnokamen_loader/adventure/overworld/easy/2/duplicate_login/pause_when_empty_resume/op_2
     status: adapter_authored_not_matrix_verified
     server_evidence:
       - crates/mc-core/src/fluids.rs
@@ -290,7 +290,7 @@ subjects:
     server_gap_evidence: []
   - id: fluids.concrete_powder
     matrix_ids:
-      - pw:fluids.concrete_powder/neoforge_solaris_loader/creative/the_nether/hard/N8/reconnect_mid_action/hot_backup_during_action/non_op_0
+      - pw:fluids.concrete_powder/neoforge_krasnokamen_loader/creative/the_nether/hard/N8/reconnect_mid_action/hot_backup_during_action/non_op_0
     status: adapter_authored_not_matrix_verified
     server_evidence:
       - crates/mc-core/src/falling.rs

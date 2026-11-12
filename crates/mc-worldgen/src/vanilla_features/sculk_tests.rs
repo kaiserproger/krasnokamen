@@ -39,7 +39,7 @@ impl FeatureLevel for Level {
 #[test]
 fn modern_jigsaw_sculk_patch_is_seeded_bounded_and_preserves_protected_blocks() {
     let blocks =
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap();
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap();
     let semantics = BlockSemantics::new(&blocks, &Tags);
     let owner = Identifier::parse("minecraft:sculk_fixture").unwrap();
     let spec = SculkPatchSpec {

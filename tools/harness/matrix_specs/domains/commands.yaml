@@ -8,7 +8,7 @@ evidence_scope: Specifications and blocked requirements are not runtime passes; 
 subjects:
   - id: commands.advancement
     matrix_ids:
-      - pw:commands.advancement/forge_solaris_loader/survival/the_nether/peaceful/1/reconnect_mid_action/hot_backup_during_action/console
+      - pw:commands.advancement/forge_krasnokamen_loader/survival/the_nether/peaceful/1/reconnect_mid_action/hot_backup_during_action/console
     adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.advancement]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -104,7 +104,7 @@ subjects:
       claim complete without separate op_(minimum-1) probe capability
   - id: commands.bossbar
     matrix_ids:
-      - pw:commands.bossbar/neoforge_solaris_loader/adventure/the_nether/hard/1/malformed_or_stale_packet/clean_restart_mid_action/op_1
+      - pw:commands.bossbar/neoforge_krasnokamen_loader/adventure/the_nether/hard/1/malformed_or_stale_packet/clean_restart_mid_action/op_1
     adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.bossbar]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -151,7 +151,7 @@ subjects:
       claim complete without separate op_(minimum-1) probe capability
   - id: commands.co
     matrix_ids:
-      - pw:commands.co/fabric_solaris_loader/creative/the_end/easy/1/normal/save_all_checkpoint/op_4
+      - pw:commands.co/fabric_krasnokamen_loader/creative/the_end/easy/1/normal/save_all_checkpoint/op_4
     adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.co]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -166,7 +166,7 @@ subjects:
         text: co inspect
     oracle:
       inspector_mode: true
-    reference_scope: Solaris extension; no vanilla equivalent
+    reference_scope: Krasnokamen extension; no vanilla equivalent
     required_permission_probe:
       threshold: root minimum in matrix subject steps
       below_threshold: root absent from command tree; command error; no mutation
@@ -333,15 +333,15 @@ subjects:
       status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
     plugin_profiles:
       changed_by:
-        - solaris-essentials
+        - krasnokamen-essentials
       vanilla: 767fbd3331effa358e238e39e2a88ed1345d5623207015671228536e53975f00
       live: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
     plugin_profile_oracle:
       vanilla: core private messaging semantics; selectors forbidden below op2
       live:
-        solaris-essentials exact-name resolution; @a produces Online player not found or ambiguous.; messages
+        krasnokamen-essentials exact-name resolution; @a produces Online player not found or ambiguous.; messages
         use [to target] and [from sender] prefixes
-      source: /run/media/kaiserroman/games/solaris-work/solaris-default-plugins/sources/solaris-essentials/src/lib.rs:450-471,607-610,636-645,853-863
+      source: /run/media/kaiserroman/games/solaris-work/solaris-default-plugins/sources/krasnokamen-essentials/src/lib.rs:450-471,607-610,636-645,853-863
     permission_contract:
       low-permission branch rejects with hidden command root; authorized successful branch cannot
       claim complete without separate op_(minimum-1) probe capability
@@ -462,7 +462,7 @@ subjects:
         text: settlement guide
     oracle:
       feedback.contains: settlement
-    reference_scope: Solaris extension; no vanilla equivalent
+    reference_scope: Krasnokamen extension; no vanilla equivalent
     required_permission_probe:
       threshold: root minimum in matrix subject steps
       below_threshold: root absent from command tree; command error; no mutation
@@ -1071,7 +1071,7 @@ subjects:
     server_gap:
       id: DEBUG-PROFILER
       evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/commands.rs:963-975
-      description: Vanilla profiler root replaced with Solaris give fixture.
+      description: Vanilla profiler root replaced with Krasnokamen give fixture.
       status: source-confirmed on original Hotfix tree; live receipts separate
     permission_contract:
       low-permission branch rejects with hidden command root; authorized successful branch cannot
@@ -1119,8 +1119,8 @@ subjects:
       parsed_tps.range:
         - 0
         - 20
-      reference: Solaris extension
-    reference_scope: Solaris extension; no vanilla equivalent
+      reference: Krasnokamen extension
+    reference_scope: Krasnokamen extension; no vanilla equivalent
     required_permission_probe:
       threshold: root minimum in matrix subject steps
       below_threshold: root absent from command tree; command error; no mutation
@@ -1145,8 +1145,8 @@ subjects:
         text: mspt
     oracle:
       parsed_mspt.min: 0
-      reference: Solaris extension
-    reference_scope: Solaris extension; no vanilla equivalent
+      reference: Krasnokamen extension
+    reference_scope: Krasnokamen extension; no vanilla equivalent
     required_permission_probe:
       threshold: root minimum in matrix subject steps
       below_threshold: root absent from command tree; command error; no mutation
@@ -1393,7 +1393,7 @@ subjects:
         text: mute {q}
     oracle:
       public_message_count: 0
-    reference_scope: Solaris extension; no vanilla equivalent
+    reference_scope: Krasnokamen extension; no vanilla equivalent
     required_permission_probe:
       threshold: root minimum in matrix subject steps
       below_threshold: root absent from command tree; command error; no mutation
@@ -1418,7 +1418,7 @@ subjects:
         text: unmute {q}
     oracle:
       public_message_count: 1
-    reference_scope: Solaris extension; no vanilla equivalent
+    reference_scope: Krasnokamen extension; no vanilla equivalent
     required_permission_probe:
       threshold: root minimum in matrix subject steps
       below_threshold: root absent from command tree; command error; no mutation
@@ -1443,7 +1443,7 @@ subjects:
         text: warn {q} MatrixWarn
     oracle:
       target.message: MatrixWarn
-    reference_scope: Solaris extension; no vanilla equivalent
+    reference_scope: Krasnokamen extension; no vanilla equivalent
     required_permission_probe:
       threshold: root minimum in matrix subject steps
       below_threshold: root absent from command tree; command error; no mutation

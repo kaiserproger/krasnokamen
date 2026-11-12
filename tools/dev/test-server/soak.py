@@ -8,18 +8,18 @@ The caller's timeout is only an emergency bound.
 """
 import json, os, subprocess, sys
 
-host = os.environ.get("SOLARIS_TEST_HOST")
+host = os.environ.get("KRASNOKAMEN_TEST_HOST")
 if not host:
-    sys.exit("SOLARIS_TEST_HOST must be set to the test server (ssh destination; any user@ part is ignored)")
+    sys.exit("KRASNOKAMEN_TEST_HOST must be set to the test server (ssh destination; any user@ part is ignored)")
 host = host.rsplit("@", 1)[-1]
-schedule = os.environ.get("SOLARIS_SOAK_SCHEDULE")
+schedule = os.environ.get("KRASNOKAMEN_SOAK_SCHEDULE")
 if not schedule:
-    sys.exit("SOLARIS_SOAK_SCHEDULE must be set to the schedule JSON path")
-auth = os.environ.get("SOLARIS_SOAK_AUTH")
+    sys.exit("KRASNOKAMEN_SOAK_SCHEDULE must be set to the schedule JSON path")
+auth = os.environ.get("KRASNOKAMEN_SOAK_AUTH")
 if not auth:
-    sys.exit("SOLARIS_SOAK_AUTH must be set for the test accounts")
+    sys.exit("KRASNOKAMEN_SOAK_AUTH must be set for the test accounts")
 bots, clients, report = sys.argv[1], sys.argv[2], sys.argv[3]
-addr = f"{host}:{os.environ.get('SOLARIS_TEST_PORT', '25565')}"
+addr = f"{host}:{os.environ.get('KRASNOKAMEN_TEST_PORT', '25565')}"
 proc = subprocess.Popen(
     [bots, "--addr", addr, "--clients", clients, "--view-distance", "4",
      "--report", report, "--name-prefix", "soak", "--respawn",

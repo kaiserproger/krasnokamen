@@ -23,7 +23,7 @@ fn observation_diff_reports_fact_mismatch_and_points_at_phase() {
         state_id: 0,
     });
 
-    let mut actual = ObservationSet::new("solaris", "break-dirt");
+    let mut actual = ObservationSet::new("krasnokamen", "break-dirt");
     actual.push(ObservationFact::PacketSeen { id: 0x23 });
     actual.push(ObservationFact::BlockState {
         x: 0,
@@ -48,7 +48,7 @@ fn sequence_normalization_preserves_order_and_multiplicity() {
     let normalized = left.clone().normalize_sequence();
     assert_eq!(normalized.facts(), left.facts());
 
-    let mut right = ObservationSet::new("solaris", "spawn");
+    let mut right = ObservationSet::new("krasnokamen", "spawn");
     right.push(ObservationFact::PacketSeen { id: 2 });
     right.push(ObservationFact::PacketSeen { id: 2 });
     right.push(ObservationFact::PacketSeen { id: 1 });

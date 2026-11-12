@@ -1,19 +1,19 @@
 #!/bin/bash
 # Runs ON the VPS. Fresh-world redeploy; every destructive step depends on the previous one.
 set -euo pipefail
-cd "${SOLARIS_SERVER_DIR:-/opt/solaris}"
-test -x solaris-v2.next
+cd "${KRASNOKAMEN_SERVER_DIR:-/opt/solaris}"
+test -x krasnokamen.next
 systemctl start solaris-metrics.service || true
 systemctl stop solaris
-if systemctl is-active --quiet solaris; then echo "solaris still active after stop" >&2; exit 1; fi
-backup=${SOLARIS_BACKUP_DIR:-/root}/world-backup-$(date +%Y%m%d-%H%M).tgz
+if systemctl is-active --quiet krasnokamen; then echo "krasnokamen still active after stop" >&2; exit 1; fi
+backup=${KRASNOKAMEN_BACKUP_DIR:-/root}/world-backup-$(date +%Y%m%d-%H%M).tgz
 tar czf "$backup" world
 tar tzf "$backup" >/dev/null
 echo "backup ok: $backup $(du -h "$backup" | cut -f1)"
 rm -rf world
-mv solaris-v2 solaris-v2.prev
-mv solaris-v2.next solaris-v2
-chown "${SOLARIS_SERVER_USER:-solaris}:" solaris-v2
+mv krasnokamen krasnokamen.prev
+mv krasnokamen.next krasnokamen
+chown "${KRASNOKAMEN_SERVER_USER:-solaris}:" krasnokamen
 since=$(date '+%Y-%m-%d %H:%M:%S')
 echo "starting"
 systemctl start solaris

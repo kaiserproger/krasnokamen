@@ -1,6 +1,6 @@
-//! Offline-linked Java bytecode uses the ordinary Solaris component ABI.
+//! Offline-linked Java bytecode uses the ordinary Krasnokamen component ABI.
 
-use solaris_plugin_sdk::{
+use krasnokamen_plugin_sdk::{
     export_plugin, log, message_session, BuildContext, BuildDecision, BuildResult, Command, Config,
     Event, EventContext, Failure, HookActor, InitContext, LogLevel, Plugin,
 };

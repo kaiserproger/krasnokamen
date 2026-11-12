@@ -123,7 +123,7 @@ fn replace(fields: &mut Vec<(String, Tag)>, key: &str, value: Tag) {
 
 #[test]
 fn exact_vanilla_fields_roundtrip_components_gossip_pois_and_memories() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let state = fixture(&items);
     let fields = villager_to_fields(&items, &state, 100).unwrap();
     assert_eq!(field(&fields, "FoodLevel").unwrap(), Some(&Tag::Byte(12)));
@@ -161,7 +161,7 @@ fn exact_vanilla_fields_roundtrip_components_gossip_pois_and_memories() {
 
 #[test]
 fn zombie_conversion_preserves_retained_villager_fields() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut state = fixture(&items);
     state.sleeping = false;
     state.conversion_time = Some(2345);
@@ -187,11 +187,11 @@ fn zombie_conversion_preserves_retained_villager_fields() {
 }
 
 #[test]
-fn vanilla_without_solaris_fields_uses_compact_inventory_and_relative_ttl() {
-    let items = mc_data::items::solaris_required_items();
+fn vanilla_without_krasnokamen_fields_uses_compact_inventory_and_relative_ttl() {
+    let items = mc_data::items::krasnokamen_required_items();
     let original = fixture(&items);
     let mut fields = villager_to_fields(&items, &original, 100).unwrap();
-    fields.retain(|(name, _)| !name.starts_with("solaris:"));
+    fields.retain(|(name, _)| !name.starts_with("krasnokamen:"));
     let loaded = villager_from_fields(&items, &fields, 300).unwrap();
     assert_eq!(loaded.golem_detected_until, Some(700));
     assert_eq!(loaded.inventory[0], original.inventory[1]);
@@ -212,7 +212,7 @@ fn vanilla_without_solaris_fields_uses_compact_inventory_and_relative_ttl() {
 
 #[test]
 fn vanilla_villager_level_minimum_normalizes_without_mutating_input() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let original = fixture(&items);
     for level in [i32::MIN, -1, 0, 1, 5, 7, i32::from(u8::MAX)] {
         let mut fields = villager_to_fields(&items, &original, 100).unwrap();
@@ -359,7 +359,7 @@ fn real_vanilla_level_seven_villager_preserves_body_and_master_trades() {
 
 #[test]
 fn malformed_present_fields_never_decode_as_cleared_state() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let original = fixture(&items);
     let fields = villager_to_fields(&items, &original, 100).unwrap();
     for (key, value) in [
@@ -387,7 +387,7 @@ fn malformed_present_fields_never_decode_as_cleared_state() {
     let mut bad_slots = fields.clone();
     let runtime = bad_slots
         .iter_mut()
-        .find(|(name, _)| name == "solaris:VillagerRuntime")
+        .find(|(name, _)| name == "krasnokamen:VillagerRuntime")
         .unwrap();
     let Tag::Compound(runtime) = &mut runtime.1 else {
         panic!("runtime");
@@ -402,7 +402,7 @@ fn malformed_present_fields_never_decode_as_cleared_state() {
 
 #[test]
 fn malformed_components_and_offer_prices_fail_before_saving() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut state = fixture(&items);
     state.offers[0].price_multiplier = f32::NAN;
     assert!(villager_to_fields(&items, &state, 100).is_err());
@@ -420,7 +420,7 @@ fn malformed_components_and_offer_prices_fail_before_saving() {
 
 #[test]
 fn journal_images_ignore_only_navigation_cache() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut state = fixture(&items);
     state.navigation_path.push(BlockPos { x: 1, y: 2, z: 3 });
     state.navigation_target = Some(BlockPos { x: 8, y: 9, z: 10 });
@@ -518,7 +518,7 @@ fn journal_clock_projection_preserves_events_and_paused_brains() {
     assert_eq!(frozen.age, unchanged.age);
     assert_eq!(frozen.last_gossip_decay, unchanged.last_gossip_decay);
     assert_eq!(frozen.last_gossip, unchanged.last_gossip);
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let fields = villager_to_fields(&items, &frozen, 225).unwrap();
     assert_eq!(villager_from_fields(&items, &fields, 225).unwrap(), frozen);
     let mut legacy_json = serde_json::to_value(&working).unwrap();
@@ -528,7 +528,7 @@ fn journal_clock_projection_preserves_events_and_paused_brains() {
     let mut legacy_fields = villager_to_fields(&items, &working, 225).unwrap();
     let runtime = legacy_fields
         .iter_mut()
-        .find(|(key, _)| key == "solaris:VillagerRuntime")
+        .find(|(key, _)| key == "krasnokamen:VillagerRuntime")
         .unwrap();
     let Tag::Compound(runtime) = &mut runtime.1 else {
         panic!("runtime compound");
@@ -543,7 +543,7 @@ fn journal_clock_projection_preserves_events_and_paused_brains() {
 
 #[test]
 fn entity_region_codec_preserves_species_fields_without_duplicate_age() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let state = fixture(&items);
     let record = mc_data::entity_nbt::VanillaEntity {
         id: "minecraft:zombie_villager".into(),
@@ -569,7 +569,7 @@ fn entity_region_codec_preserves_species_fields_without_duplicate_age() {
 
 #[test]
 fn golem_memory_ttl_matches_inclusive_brain_deadline_and_handles_expired_or_permanent() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     for until in [Some(100), Some(99), Some(500), Some(u64::MAX), None] {
         let state = VillagerState {
             golem_detected_until: until,
@@ -603,7 +603,7 @@ fn golem_memory_ttl_matches_inclusive_brain_deadline_and_handles_expired_or_perm
 
 #[test]
 fn malformed_brain_values_and_known_component_shapes_fail_closed() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     for value in [
         Tag::Int(1),
         Tag::Compound(vec![("value".into(), Tag::Int(1))]),
@@ -641,7 +641,7 @@ fn malformed_brain_values_and_known_component_shapes_fail_closed() {
 
 #[test]
 fn retained_trade_and_inventory_counts_must_fit_one_to_sixty_four() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     for count in [0, 65] {
         for kind in 0..4 {
             let mut state = fixture(&items);
@@ -717,7 +717,7 @@ fn retained_trade_and_inventory_counts_must_fit_one_to_sixty_four() {
 #[test]
 fn miner_progress_persists_through_nbt_and_durable_projection() {
     use crate::villager::mining::Progress as MiningProgress;
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut state = fixture(&items);
     state.data.profession = VillagerProfession::Miner;
     state.mining_progress = MiningProgress {
@@ -734,14 +734,14 @@ fn miner_progress_persists_through_nbt_and_durable_projection() {
         stalled_since: 777,
     };
     let fields = villager_to_fields(&items, &state, 100).unwrap();
-    let Tag::Compound(runtime) = field(&fields, "solaris:VillagerRuntime").unwrap().unwrap() else {
+    let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime").unwrap().unwrap() else {
         panic!("runtime compound");
     };
     let Some(Tag::String(json)) = runtime
         .iter()
-        .find_map(|(name, tag)| (name == "SolarisMiningProgress").then_some(tag))
+        .find_map(|(name, tag)| (name == "KrasnokamenMiningProgress").then_some(tag))
     else {
-        panic!("SolarisMiningProgress tag");
+        panic!("KrasnokamenMiningProgress tag");
     };
     let value: serde_json::Value = serde_json::from_str(json).unwrap();
     assert_eq!(
@@ -764,7 +764,7 @@ fn miner_progress_persists_through_nbt_and_durable_projection() {
     assert!(
         runtime
             .iter()
-            .all(|(name, _)| name != "SolarisLumberProgress"),
+            .all(|(name, _)| name != "KrasnokamenLumberProgress"),
         "default lumber progress must not emit a tag"
     );
     let loaded = villager_from_fields(&items, &fields, 100).unwrap();
@@ -786,7 +786,7 @@ fn miner_progress_persists_through_nbt_and_durable_projection() {
 #[test]
 fn lumberjack_progress_persists_through_nbt_and_durable_projection() {
     use crate::villager::lumber::Progress as LumberProgress;
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut state = fixture(&items);
     state.data.profession = VillagerProfession::Lumberjack;
     state.lumber_progress = LumberProgress {
@@ -803,14 +803,14 @@ fn lumberjack_progress_persists_through_nbt_and_durable_projection() {
         stalled_since: 777,
     };
     let fields = villager_to_fields(&items, &state, 100).unwrap();
-    let Tag::Compound(runtime) = field(&fields, "solaris:VillagerRuntime").unwrap().unwrap() else {
+    let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime").unwrap().unwrap() else {
         panic!("runtime compound");
     };
     let Some(Tag::String(json)) = runtime
         .iter()
-        .find_map(|(name, tag)| (name == "SolarisLumberProgress").then_some(tag))
+        .find_map(|(name, tag)| (name == "KrasnokamenLumberProgress").then_some(tag))
     else {
-        panic!("SolarisLumberProgress tag");
+        panic!("KrasnokamenLumberProgress tag");
     };
     let value: serde_json::Value = serde_json::from_str(json).unwrap();
     assert_eq!(
@@ -844,48 +844,48 @@ fn lumberjack_progress_persists_through_nbt_and_durable_projection() {
 
 #[test]
 fn default_worker_progress_omitted_and_invalid_present_data_fails_closed() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let state = fixture(&items);
     let fields = villager_to_fields(&items, &state, 100).unwrap();
-    let Tag::Compound(runtime) = field(&fields, "solaris:VillagerRuntime").unwrap().unwrap() else {
+    let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime").unwrap().unwrap() else {
         panic!("runtime compound");
     };
     assert!(
         runtime
             .iter()
-            .all(|(name, _)| name != "SolarisMiningProgress" && name != "SolarisLumberProgress"),
+            .all(|(name, _)| name != "KrasnokamenMiningProgress" && name != "KrasnokamenLumberProgress"),
         "default worker progress must not emit tags"
     );
     let cases: [(&str, Tag); 10] = [
-        ("SolarisMiningProgress", Tag::String("not json".into())),
-        ("SolarisMiningProgress", Tag::String("{}".into())),
+        ("KrasnokamenMiningProgress", Tag::String("not json".into())),
+        ("KrasnokamenMiningProgress", Tag::String("{}".into())),
         (
-            "SolarisMiningProgress",
+            "KrasnokamenMiningProgress",
             Tag::String(
                 r#"{"building":1,"revision":1,"bounds":{"min":[0,0,0],"max":[8,16,8]},"last_open":[1,2,3],"lane":2,"level":0,"cell":1,"layer":1,"returning":false,"bogus":1}"#
                     .into(),
             ),
         ),
-        ("SolarisMiningProgress", Tag::Int(1)),
-        ("SolarisLumberProgress", Tag::String("not json".into())),
-        ("SolarisLumberProgress", Tag::String("{}".into())),
+        ("KrasnokamenMiningProgress", Tag::Int(1)),
+        ("KrasnokamenLumberProgress", Tag::String("not json".into())),
+        ("KrasnokamenLumberProgress", Tag::String("{}".into())),
         (
-            "SolarisLumberProgress",
+            "KrasnokamenLumberProgress",
             Tag::String(
                 r#"{"building":1,"revision":1,"cursor":1,"base":[0,0,0],"sapling":1,"height":1,"layer":1,"has_target":false,"returning":false,"bogus":1}"#
                     .into(),
             ),
         ),
-        ("SolarisLumberProgress", Tag::Int(0)),
+        ("KrasnokamenLumberProgress", Tag::Int(0)),
         (
-            "SolarisLumberProgress",
+            "KrasnokamenLumberProgress",
             Tag::String(
                 r#"{"building":1,"revision":1,"cursor":1,"search_origin":"north","base":[0,0,0],"sapling":1,"height":1,"layer":1,"has_target":false,"returning":false}"#
                     .into(),
             ),
         ),
         (
-            "SolarisLumberProgress",
+            "KrasnokamenLumberProgress",
             Tag::String(
                 r#"{"building":1,"revision":1,"cursor":1,"search_origin":[1],"base":[0,0,0],"sapling":1,"height":1,"layer":1,"has_target":false,"returning":false}"#
                     .into(),
@@ -896,7 +896,7 @@ fn default_worker_progress_omitted_and_invalid_present_data_fails_closed() {
         let mut bad_fields = fields.clone();
         let Tag::Compound(runtime) = &mut bad_fields
             .iter_mut()
-            .find(|(name, _)| name == "solaris:VillagerRuntime")
+            .find(|(name, _)| name == "krasnokamen:VillagerRuntime")
             .unwrap()
             .1
         else {
@@ -912,7 +912,7 @@ fn default_worker_progress_omitted_and_invalid_present_data_fails_closed() {
     let mut good_fields = fields.clone();
     let Tag::Compound(runtime) = &mut good_fields
         .iter_mut()
-        .find(|(name, _)| name == "solaris:VillagerRuntime")
+        .find(|(name, _)| name == "krasnokamen:VillagerRuntime")
         .unwrap()
         .1
     else {
@@ -920,7 +920,7 @@ fn default_worker_progress_omitted_and_invalid_present_data_fails_closed() {
     };
     replace(
         runtime,
-        "SolarisLumberProgress",
+        "KrasnokamenLumberProgress",
         Tag::String(
             r#"{"building":1,"revision":1,"cursor":1,"search_origin":[1,2],"base":[0,0,0],"sapling":1,"height":1,"layer":1,"has_target":false,"returning":false}"#
                 .into(),
@@ -945,7 +945,7 @@ fn default_worker_progress_omitted_and_invalid_present_data_fails_closed() {
 /// removed band is ignored.
 #[test]
 fn legacy_worker_progress_shapes_still_decode() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let state = fixture(&items);
     let mining = serde_json::json!({
         "building": 9, "revision": 3,
@@ -959,7 +959,7 @@ fn legacy_worker_progress_shapes_still_decode() {
     let mut fields = villager_to_fields(&items, &state, 100).unwrap();
     let Tag::Compound(runtime) = &mut fields
         .iter_mut()
-        .find(|(name, _)| name == "solaris:VillagerRuntime")
+        .find(|(name, _)| name == "krasnokamen:VillagerRuntime")
         .unwrap()
         .1
     else {
@@ -967,12 +967,12 @@ fn legacy_worker_progress_shapes_still_decode() {
     };
     replace(
         runtime,
-        "SolarisMiningProgress",
+        "KrasnokamenMiningProgress",
         Tag::String(mining.to_string()),
     );
     replace(
         runtime,
-        "SolarisLumberProgress",
+        "KrasnokamenLumberProgress",
         Tag::String(lumber.to_string()),
     );
     let loaded = villager_from_fields(&items, &fields, 100).unwrap();
@@ -991,7 +991,7 @@ fn legacy_worker_progress_shapes_still_decode() {
 
 #[test]
 fn worker_anvil_projection_is_vanilla_and_runtime_role_wins_on_import() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     for (profession, vanilla, vanilla_id, role) in [
         (
             VillagerProfession::Miner,
@@ -1022,7 +1022,7 @@ fn worker_anvil_projection_is_vanilla_and_runtime_role_wins_on_import() {
             field(data, "profession").unwrap(),
             Some(&Tag::String(vanilla_id.into()))
         );
-        let Tag::Compound(runtime) = field(&fields, "solaris:VillagerRuntime").unwrap().unwrap()
+        let Tag::Compound(runtime) = field(&fields, "krasnokamen:VillagerRuntime").unwrap().unwrap()
         else {
             panic!("runtime compound");
         };
@@ -1040,7 +1040,7 @@ fn worker_anvil_projection_is_vanilla_and_runtime_role_wins_on_import() {
         let mut vanilla_only = fields.clone();
         let Tag::Compound(runtime) = &mut vanilla_only
             .iter_mut()
-            .find(|(key, _)| key == "solaris:VillagerRuntime")
+            .find(|(key, _)| key == "krasnokamen:VillagerRuntime")
             .unwrap()
             .1
         else {
@@ -1053,7 +1053,7 @@ fn worker_anvil_projection_is_vanilla_and_runtime_role_wins_on_import() {
                 .data
                 .profession,
             vanilla,
-            "a vanilla import without Solaris runtime must keep its actual vanilla role"
+            "a vanilla import without Krasnokamen runtime must keep its actual vanilla role"
         );
         let mut overridden = fields.clone();
         let Tag::Compound(data) = &mut overridden
@@ -1085,18 +1085,18 @@ fn worker_anvil_projection_is_vanilla_and_runtime_role_wins_on_import() {
 
 #[test]
 fn custom_roles_are_rejected_in_vanilla_nbt_and_invalid_runtime_roles_fail_closed() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let state = fixture(&items);
     let fields = villager_to_fields(&items, &state, 100).unwrap();
     for name in [
         "minecraft:miner",
         "minecraft:lumberjack",
-        "solaris:miner",
-        "solaris:lumberjack",
+        "krasnokamen:miner",
+        "krasnokamen:lumberjack",
         "miner",
         "lumberjack",
         "minecraft:archaeologist",
-        "solaris:archaeologist",
+        "krasnokamen:archaeologist",
     ] {
         let mut bad = fields.clone();
         let Tag::Compound(data) = &mut bad
@@ -1117,12 +1117,12 @@ fn custom_roles_are_rejected_in_vanilla_nbt_and_invalid_runtime_roles_fail_close
         Tag::Int(1),
         Tag::String("unknown".into()),
         Tag::String("toolsmith".into()),
-        Tag::String("solaris:miner".into()),
+        Tag::String("krasnokamen:miner".into()),
     ] {
         let mut bad = fields.clone();
         let Tag::Compound(runtime) = &mut bad
             .iter_mut()
-            .find(|(key, _)| key == "solaris:VillagerRuntime")
+            .find(|(key, _)| key == "krasnokamen:VillagerRuntime")
             .unwrap()
             .1
         else {
@@ -1168,7 +1168,7 @@ fn journal_image_runtime_fields_are_zeroed() {
     // Exp-VillagerBox stretch input: enumerate the runtime-only fields that
     // `journal_image` zeroes/defaults, and price the cheapest durable
     // projection (remove them from the stored baseline type entirely).
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut live = fixture(&items);
     // Prove zeroing against a live state that actually holds runtime caches.
     live.navigation_path = vec![BlockPos { x: 1, y: 2, z: 3 }];
@@ -1236,7 +1236,7 @@ fn journal_baseline_map_footprint() {
     /// platform-specific estimate, not a measurement.
     const MALLOC_BOX_OVERHEAD: usize = 16;
     const N500: usize = 500_000;
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let template = fixture(&items);
     let image = journal_image(&template);
     let slot = std::mem::size_of::<(u64, VillagerState)>();

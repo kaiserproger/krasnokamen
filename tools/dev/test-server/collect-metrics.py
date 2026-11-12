@@ -3,8 +3,8 @@
 import json, os, time, urllib.request
 from collections import defaultdict
 
-BASE = os.environ.get("SOLARIS_DASHBOARD_URL", "http://localhost:25580")
-OUT = os.environ.get("SOLARIS_METRICS_DIR", "/opt/solaris/metrics")
+BASE = os.environ.get("KRASNOKAMEN_DASHBOARD_URL", "http://localhost:25580")
+OUT = os.environ.get("KRASNOKAMEN_METRICS_DIR", "/opt/solaris/metrics")
 CURSOR = os.path.join(OUT, ".cursor")
 
 

@@ -865,7 +865,7 @@ fn native_gateway_int_array_import_preserves_order_and_rejects_invalid_indices()
         fight.gateways,
         order.iter().map(|i| *i as u8).collect::<Vec<_>>()
     );
-    // Solaris's existing native writer emits an Int list, also accepted by the
+    // Krasnokamen's existing native writer emits an Int list, also accepted by the
     // vanilla Codec.list(INT) reader. Keep its round-trip alongside IntArray.
     let encoded = to_nbt(&fight);
     assert_eq!(from_nbt(&encoded).unwrap().gateways, fight.gateways);

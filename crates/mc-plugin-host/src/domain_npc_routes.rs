@@ -1,7 +1,7 @@
 //! Lossless finite-route DTO conversion. Native authority owns all validation,
 //! physical observations, epochs and receipt production.
 
-use crate::bindings::solaris::plugin::{npc_routes as wire, npcs};
+use crate::bindings::krasnokamen::plugin::{npc_routes as wire, npcs};
 use mc_script::{
     ScriptNpcExecutorMode as Mode, ScriptNpcLifecycle, ScriptNpcLoadedState,
     ScriptNpcRouteBlockReason as Reason, ScriptNpcRouteOperation, ScriptNpcRouteResult,

@@ -813,7 +813,7 @@ impl Packet for ClientboundOpenSignEditor {
 /// `ClientboundBlockDestructionPacket` (CB): per-breaker block-break crack
 /// animation stage (MOBS-06 zombie door banging: stage 0-9 while banging,
 /// clearing when the chain breaks). `progress` 0-10 on the wire where 10+
-/// clears; Solaris only sends 0-9.
+/// clears; Krasnokamen only sends 0-9.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ClientboundBlockDestruction {
     pub breaker_entity_id: i32,

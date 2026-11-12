@@ -1,6 +1,6 @@
 [package]
 name = "mc-edge"
-description = "Network edge for core model v2 (ADR 0013): I/O threads own sockets, decode off-tick into PlayerInput, fan out TickOutput per viewer (Solaris)."
+description = "Network edge for core model v2 (ADR 0013): I/O threads own sockets, decode off-tick into PlayerInput, fan out TickOutput per viewer (Krasnokamen)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,8 +16,8 @@ workspace = true
 gpu = ["mc-worldgen/gpu"]
 
 [[bin]]
-name = "solaris-v2"
-path = "src/bin/solaris-v2.rs"
+name = "krasnokamen"
+path = "src/bin/krasnokamen.rs"
 
 [dependencies]
 workspace-features.workspace = true

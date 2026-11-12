@@ -4,7 +4,7 @@ Each fuzz scenario packs many independent 16x16 cells (48 blocks apart, so
 blasts never meet) that all run on the same tick timeline. Vanilla is the
 oracle: cells where vanilla ends with more TNT (blocks + primed entities) than
 it started with are classified as duplication cells and reported separately,
-because those are the player-relied quirks Solaris must keep.
+because those are the player-relied quirks Krasnokamen must keep.
 """
 from __future__ import annotations
 

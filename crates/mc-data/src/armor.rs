@@ -102,7 +102,7 @@ pub fn builtin() -> &'static ArmorTable {
             BUILTIN_SURVIVAL_ARMOR,
             Path::new("crates/mc-data/data/survival_armor.json"),
         )
-        .expect("built-in Solaris survival armor JSON is valid")
+        .expect("built-in Krasnokamen survival armor JSON is valid")
     })
 }
 

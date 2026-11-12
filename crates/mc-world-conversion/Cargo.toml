@@ -1,6 +1,6 @@
 [package]
 name = "mc-world-conversion"
-description = "Offline Anvil interchange, native census and probes for Solaris worlds."
+description = "Offline Anvil interchange, native census and probes for Krasnokamen worlds."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

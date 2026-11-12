@@ -475,8 +475,8 @@ async fn run_connection(
     } else {
         None
     };
-    // Solaris Loader clients (native, or the Fabric mod that admitted the monitor
-    // bundle's `solaris:screen` channel) take part in screen sharing.
+    // Krasnokamen Loader clients (native, or the Fabric mod that admitted the monitor
+    // bundle's `krasnokamen:screen` channel) take part in screen sharing.
     let screen_client = supports_screen_sharing(
         config_outcome
             .loader_session

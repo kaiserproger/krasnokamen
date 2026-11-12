@@ -1,4 +1,4 @@
-"""Centralized Solaris validation harness (stdlib only).
+"""Centralized Krasnokamen validation harness (stdlib only).
 
 Canonical entrypoint: ``python3 -m tools.harness``.
 """

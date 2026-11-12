@@ -26,18 +26,18 @@ directory is the operator authorization decision.
 
 Packages without `[client]` bundles are `server_only` and support ordinary
 vanilla clients. Any package that declares client bundles makes the relevant
-deployment `server_and_client`: connecting players need a compatible Solaris
+deployment `server_and_client`: connecting players need a compatible Krasnokamen
 Loader and must approve the bundle's requested client permissions. Bundle paths,
 hashes, sizes, content kinds, supported loaders, and permissions are validated
 before a player is served content. There is no server-only substitute for a
-package that requires client content. See [`SOLARIS_LOADER.md`](../SOLARIS_LOADER.md)
+package that requires client content. See [`KRASNOKAMEN_LOADER.md`](../KRASNOKAMEN_LOADER.md)
 for player installation.
 
 A bundle may set `required = false` (default `true`) in its `[[client.bundles]]`
 table for content that enriches rather than enables the package, such as a custom
 item texture. When every bundle of a deployment is optional, Configuration sends
-a `solaris:loader/probe` payload (empty) before known-pack negotiation. A Loader
-client answers `solaris:loader/hello` (empty) while handling it, so the hello
+a `krasnokamen:loader/probe` payload (empty) before known-pack negotiation. A Loader
+client answers `krasnokamen:loader/hello` (empty) while handling it, so the hello
 precedes its known-pack reply; the server then runs the normal manifest/artifact/
 ACK negotiation. A client that does not answer (a vanilla client, or a Loader
 build that predates the probe) joins without any Loader content, and its item
@@ -67,15 +67,15 @@ types cannot become a deployable artifact. The plugin repository owns
 `plugin.toml` and optional `config.toml`; the core repository neither ships nor
 compiles first-party product plugins.
 
-Authors implement `solaris_plugin_sdk::Plugin` (or bindings for the same WIT
+Authors implement `krasnokamen_plugin_sdk::Plugin` (or bindings for the same WIT
 world) and use the WIT and SDK definitions as the API reference. Do not copy
 internal host types into a guest or rely on a host implementation detail.
 
-The contract is `solaris:plugin@0.8.0`: WIT record layout changes require
+The contract is `krasnokamen:plugin@0.9.0`: WIT record layout changes require
 regenerating host and guest bindings, and every guest must be rebuilt and
 re-encoded against it (the Rust SDK workspace is 0.8.0; add `mob_blueprints:
 None` to existing full `StartupContribution` literals and update the manifest
-`api`). This applies to the first-party `solaris-default-plugins` packages too;
+`api`). This applies to the first-party `krasnokamen-default-plugins` packages too;
 no 0.7.0 component or old record-layout shim is accepted, and an older
 component's record layout is not a compatible fallback.
 
@@ -136,7 +136,7 @@ The use is one native intent (`IntentKind::BlockTool`) planned beside hoe tillin
 together against the world and inventory they were planned on. Protection zones
 and reach are checked by the same early use gate as block placement; plugin
 before-build hooks do not cover it, like hoes. The `chisel` package in
-`solaris-default-plugins` is the reference user.
+`krasnokamen-default-plugins` is the reference user.
 
 ## Custom native mobs
 
@@ -165,7 +165,7 @@ allow-list authorizes type names, not bypasses of session or capacity checks.
 Each defining plugin has a 1024-live-custom-mob limit across dimensions; splitters
 reserve descendant capacity as described in ADR 0016. Custom types have no natural
 spawn weight. Native checkpoints retain their custom identity; Anvil export uses
-the vanilla presentation id and a `solaris:MobBlueprint` marker, not custom
+the vanilla presentation id and a `krasnokamen:MobBlueprint` marker, not custom
 gameplay on a vanilla server.
 
 ## Events, commands, and capability boundaries
@@ -197,7 +197,7 @@ A manifest may require one node per command root it already declares:
 
 ```toml
 player_commands = ["home", "sethome"]
-command_permissions = { home = "solaris.essentials.use", sethome = "solaris.essentials.use" }
+command_permissions = { home = "krasnokamen.essentials.use", sethome = "krasnokamen.essentials.use" }
 ```
 
 Nodes become enforced when the deployment installs one permission provider

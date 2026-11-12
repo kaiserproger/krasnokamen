@@ -17,7 +17,7 @@ subjects:
 - subject: advancements_stats.advancement_location
   matrix_ids:
   - pw:advancements_stats.advancement_location/native_windows/creative/the_nether/normal/1/malformed_or_stale_packet/pause_when_empty_resume/op_4
-  - pw:advancements_stats.advancement_location/fabric_solaris_loader/creative/the_end/normal/2/normal/crash_kill9_wal_replay/op_2
+  - pw:advancements_stats.advancement_location/fabric_krasnokamen_loader/creative/the_end/normal/2/normal/crash_kill9_wal_replay/op_2
   preconditions:
     setup_callable: advancements_stats.ADAPTERS['advancements_stats.advancement_location'].setup
     fixture_calls:
@@ -80,7 +80,7 @@ subjects:
   subject_oracle_text: 'reference: SeenAdvancements handled; no toast flood'
 - subject: advancements_stats.earn_advancements
   matrix_ids:
-  - pw:advancements_stats.earn_advancements/forge_solaris_loader/adventure/overworld/hard/N8/normal/clean_restart_mid_action/op_1
+  - pw:advancements_stats.earn_advancements/forge_krasnokamen_loader/adventure/overworld/hard/N8/normal/clean_restart_mid_action/op_1
   - pw:advancements_stats.earn_advancements/vanilla_java_26_1_2/adventure/overworld/easy/1/duplicate_login/crash_kill9_wal_replay/op_3
   preconditions:
     setup_callable: advancements_stats.ADAPTERS['advancements_stats.earn_advancements'].setup
@@ -173,7 +173,7 @@ subjects:
   subject_oracle_text: 'reference: recipe book entries added'
 - subject: advancements_stats.statistics_request
   matrix_ids:
-  - pw:advancements_stats.statistics_request/neoforge_solaris_loader/creative/the_nether/normal/1/duplicate_login/hot_backup_during_action/op_3
+  - pw:advancements_stats.statistics_request/neoforge_krasnokamen_loader/creative/the_nether/normal/1/duplicate_login/hot_backup_during_action/op_3
   preconditions:
     setup_callable: advancements_stats.ADAPTERS['advancements_stats.statistics_request'].setup
     fixture_calls:

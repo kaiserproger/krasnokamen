@@ -18,7 +18,7 @@ use mc_vanilla::registry_capture::capture_registry_payloads_from_jar;
     about = "Capture exact full RegistryData payloads from a local vanilla server"
 )]
 struct Cli {
-    /// Mojang server bundle jar for the exact Solaris target release.
+    /// Mojang server bundle jar for the exact Krasnokamen target release.
     #[arg(long, default_value = ".analysis/server.jar")]
     jar: PathBuf,
 

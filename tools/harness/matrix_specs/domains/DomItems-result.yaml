@@ -395,7 +395,7 @@ validation:
       to JSON dictionaries, covered by regression and subsequent canonical pass
   owner_issue_review:
     gh issue list --state open --author kaiserproger; gh issue view1
-    before followup commit; https://github.com/kaiserproger/solaris/issues/1
+    before followup commit; https://github.com/kaiserproger/krasnokamen/issues/1
   canonical_runs:
     All release attempts use mem-run -m3G. Headroom waits were followed
     by successful launch; earlier Main message interpreting truncated output as a

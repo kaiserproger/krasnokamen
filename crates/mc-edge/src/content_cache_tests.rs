@@ -77,7 +77,7 @@ pub(crate) fn write_valid_cache(root: &Path) {
             &json!({"values": [format!("minecraft:{entry}")]}),
         );
     }
-    let state_count = mc_data::blocks::solaris_required_blocks_report()
+    let state_count = mc_data::blocks::krasnokamen_required_blocks_report()
         .iter()
         .flat_map(|block| block.states.iter().map(|state| state.id as usize + 1))
         .max()
@@ -314,7 +314,7 @@ fn search_supports_xdg_without_home_and_home_fallback_and_checkout_ancestors() {
     let with_xdg = ContentSearch::from_locations(None, None, Some(xdg), None, cwd);
     assert_eq!(
         with_xdg.import_target(),
-        xdg.join("solaris/content")
+        xdg.join("krasnokamen/content")
             .join(mc_protocol::TARGET_RELEASE)
     );
     assert!(
@@ -325,7 +325,7 @@ fn search_supports_xdg_without_home_and_home_fallback_and_checkout_ancestors() {
     let with_home = ContentSearch::from_locations(None, None, None, Some(home), cwd);
     assert_eq!(
         with_home.import_target(),
-        home.join(".local/share/solaris/content")
+        home.join(".local/share/krasnokamen/content")
             .join(mc_protocol::TARGET_RELEASE)
     );
     let relative_xdg =

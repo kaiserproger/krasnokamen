@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check, cost and preview Solaris settlement blueprints.
+"""Check, cost and preview Krasnokamen settlement blueprints.
 
     tools/blueprints.py check                  # structural validation of every blueprint
     tools/blueprints.py materials [id ...]     # item totals and base-resource totals per level

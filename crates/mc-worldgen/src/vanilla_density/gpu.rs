@@ -55,7 +55,7 @@ impl GpuDensity {
         let timestamps = adapter.features().contains(wgpu::Features::TIMESTAMP_QUERY);
         let supported = adapter.limits();
         let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("solaris worldgen"),
+            label: Some("krasnokamen worldgen"),
             required_features: if timestamps {
                 wgpu::Features::TIMESTAMP_QUERY
             } else {

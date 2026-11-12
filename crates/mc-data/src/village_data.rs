@@ -16,7 +16,7 @@
 //!   processors with their rule fields.
 //!
 //! Only entries the caller names are read; the vanilla registries are never
-//! enumerated, so registries Solaris does not implement cannot fail a load.
+//! enumerated, so registries Krasnokamen does not implement cannot fail a load.
 //! One exception is deliberate and reads no codec:
 //! [`VillageDataLoader::structures_in_step`] lists `worldgen/structure/*.json`
 //! to recover the registry order vanilla's feature-placement seeding indexes
@@ -212,7 +212,7 @@ pub enum VerticalAnchor {
     BelowTop(i32),
 }
 
-/// A `HeightProvider`; the providers whose sampling Solaris needs.
+/// A `HeightProvider`; the providers whose sampling Krasnokamen needs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HeightProviderSpec {
     Constant(VerticalAnchor),

@@ -16,7 +16,7 @@ else:
     from driver_replay import CORE_REPLAY_IDENTIFIER, require_exact_fields, require_identifier, require_object
 
 
-RESTART_INVARIANT_SCHEMA = "solaris.restart_invariants.v1"
+RESTART_INVARIANT_SCHEMA = "krasnokamen.restart_invariants.v1"
 RESTART_INVARIANT_FILE = "restart-invariants.json"
 RESTART_INVARIANT_CATEGORIES = {"player", "inventory", "world", "container", "entity", "time"}
 RESTART_INVARIANT_TYPES = {"string", "integer", "boolean", "record"}

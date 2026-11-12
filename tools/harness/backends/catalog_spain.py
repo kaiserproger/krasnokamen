@@ -349,7 +349,7 @@ class SpainPopulation:
         evidence_path = self.directory / f"{haul_id}-evidence.json"
         scale.dump(evidence_path, evidence)
         start = (f"settlement production {settlement} start {haul_id} {worker} "
-                 f"solaris-settlements:bread 1 {building} "
+                 f"krasnokamen-settlements:bread 1 {building} "
                  f"{','.join(map(str, station))} {','.join(map(str, stand))}")
         accepted = await owner.command(owner_bot, f"{haul_id}-start", start, "Production operation processed", remaining())
         evidence["accepted"] = accepted

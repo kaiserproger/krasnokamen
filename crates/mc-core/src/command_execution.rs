@@ -481,7 +481,7 @@ pub(crate) fn execute(
                 vec![mode_name(*mode)],
             );
             // Vanilla returns the number of players it forced into the mode: none without
-            // `force-gamemode`, which Solaris does not have.
+            // `force-gamemode`, which Krasnokamen does not have.
             return Success(0);
         }
         Command::Give {
@@ -603,7 +603,7 @@ pub(crate) fn execute(
                     state.push_player(
                         connection,
                         PlayerChange::Chat {
-                            message: format!("SOLARIS_MENU {snapshot}"),
+                            message: format!("KRASNOKAMEN_MENU {snapshot}"),
                         },
                     );
                     return CommandResult::Completed;

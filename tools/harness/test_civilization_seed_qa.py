@@ -95,7 +95,7 @@ class CivilizationEvidenceTests(unittest.TestCase):
                                birth_parents=["a", "b"])
             return {"uuid": uuid, "active": True, "payload": {
                 "id": "minecraft:villager", "Health": 20,
-                "solaris:VillagerRuntime": runtime}}
+                "krasnokamen:VillagerRuntime": runtime}}
         snapshot = {"read_only": True, "checkpoint_tick": 200, "globals": {
             "settlement/1": {"payload": {"value": {"id": 1, "name": "Test"}}}},
             "entities": [member("a"), member("b"), member("baby", 150), member("child", 160)]}
@@ -114,7 +114,7 @@ class CivilizationEvidenceTests(unittest.TestCase):
         for field, foreign in (("settlement", 2), ("household", "1-2")):
             with self.subTest(foreign_binding=field):
                 rebound = copy.deepcopy(snapshot)
-                rebound["entities"][-1]["payload"]["solaris:VillagerRuntime"][field] = foreign
+                rebound["entities"][-1]["payload"]["krasnokamen:VillagerRuntime"][field] = foreign
                 self.assertFalse(verify(log, rebound)["verified"])
 
     def test_new_certificate_requires_matching_observed_project(self):

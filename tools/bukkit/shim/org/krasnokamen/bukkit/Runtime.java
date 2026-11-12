@@ -1,4 +1,4 @@
-package org.solaris.bukkit;
+package org.krasnokamen.bukkit;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import org.bukkit.Server;
