@@ -888,23 +888,7 @@ impl FormationRuntime {
             && !m.wounded
             && let Some(enemy) = r.enemy
         {
-            if r.spec.frontage <= 1.0 {
-                return (enemy, 0.28);
-            }
-            // Riders pursue as a block: each aims at the enemy point shifted by
-            // its own slot's offset from the leader. One shared point piled a
-            // whole mounted regiment into one cell wherever it caught up with
-            // no foe in reach (r8: 15 blue horses on the notch terrace from
-            // t 280 to the end of the take).
-            let slot = position(&r.spec, m.file, m.rank, r.spec.frontage);
-            return (
-                [
-                    enemy[0] + slot[0] - r.spec.origin[0],
-                    enemy[1],
-                    enemy[2] + slot[2] - r.spec.origin[2],
-                ],
-                0.28,
-            );
+            return (enemy, 0.28);
         }
         let engaged = r.gap <= 6.0;
         let interval = if engaged { r.interval } else { r.spec.frontage };
