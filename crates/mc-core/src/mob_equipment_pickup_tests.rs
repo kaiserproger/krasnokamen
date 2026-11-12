@@ -560,3 +560,18 @@ fn native_checkpoint_plus_disk_wal_replays_equipment_and_item_custody_once() {
         assert!(changes.entities_removed.is_empty());
     }
 }
+
+/// Negative control: indexing a ground item only under its own chunk (no reach
+/// margin) skips the collector across the chunk border and this goes red.
+#[test]
+fn collector_across_a_chunk_border_from_the_item_still_collects() {
+    let mut state = state(None);
+    // Only chunk (0, 0) is active: the item lies in chunk (-1, 0), the collector in (0, 0).
+    let collector = collector(&mut state, "minecraft:zombie", [0.2, 201.0, 4.5]);
+    let helmet = item(&state, "minecraft:iron_helmet", 1);
+    let dropped = ground(&mut state, helmet.clone(), [-0.05, 201.0, 4.5]);
+    let mut changes = ChangeSet::default();
+    run(&mut state, &mut changes);
+    assert_eq!(row(&state, collector).appearance.equipment[5], Some(helmet));
+    assert_eq!(changes.entities_removed, vec![dropped]);
+}

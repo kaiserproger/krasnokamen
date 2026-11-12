@@ -1,10 +1,11 @@
 //! Nearby humanoid equipment collection. Ground debit, equipment credit, swap
 //! drops and appearance post-images are published in the same tick/WAL batch.
-use crate::boundary::{ChangeSet, EntityEvent};
+use crate::boundary::{ChangeSet, ChunkPos, EntityEvent};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::inventory::ItemRules;
 use crate::tick::TickState;
 use mc_data::ItemStack;
+use rustc_hash::FxHashSet as HashSet;
 use std::sync::Arc;
 
 fn tagged(rules: &ItemRules<'_>, stack: &ItemStack, tag: &str) -> bool {
@@ -143,6 +144,41 @@ fn swap_drop(chance: f32, mut seed: u64) -> bool {
     roll - 0.1 < f64::from(chance)
 }
 
+/// Chunks that can hold a collector within pickup reach of a collectable ground
+/// item, or `None` when no such item exists.
+///
+/// Bottleneck: the collector filter read the body and cold row of every
+/// equipment-capable mob (about 25,000 zombies and skeletons on native-100,
+/// 0.5 to 1 ms per tick) although almost no ground item is ever within reach of
+/// one. Boundary: built per call from the item membership list; only the
+/// collector filter below consults it, before it touches a body or row.
+/// Correctness fence: a collector reaches an item only within `collector
+/// half-width + 1 + item half-width` horizontally and every collector is at
+/// most `max_half_width` wide, so the item's chunk range at that margin holds
+/// every collector that could pick it up; the pickup loop below re-applies its
+/// exact tests, and a collector outside the set has no candidate there, so
+/// collector order and results are those of the unfiltered scan. Removal path:
+/// drop the `near_items` filter in [`run`] (identical result).
+fn collectable_item_chunks(state: &TickState) -> Option<HashSet<ChunkPos>> {
+    let chunk = |coordinate: f64| mc_physics::mth::floor_i32(coordinate).div_euclid(16);
+    let widest = state.entities.max_half_width();
+    let mut chunks = HashSet::default();
+    for slot in state.entities.item_slots() {
+        let body = state.entities.body(slot);
+        if !body.alive || body.pickup_delay != 0 {
+            continue;
+        }
+        let at = state.entities.pos(slot);
+        let margin = widest + 1.0 + body.half_width;
+        for z in chunk(at[2] - margin)..=chunk(at[2] + margin) {
+            for x in chunk(at[0] - margin)..=chunk(at[0] + margin) {
+                chunks.insert(ChunkPos { x, z });
+            }
+        }
+    }
+    (!chunks.is_empty()).then_some(chunks)
+}
+
 /// Called after the existing specialized collectors and player merge. Removing
 /// immediately by ID makes custody exclusive even for overlapping collectors;
 /// partial stacks keep their identity and journal an updated item post-image.
@@ -150,6 +186,9 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
     if !crate::command_rules::boolean(state, crate::command_rules::BoolRule::MOB_GRIEFING) {
         return;
     }
+    let Some(near_items) = collectable_item_chunks(state) else {
+        return;
+    };
     let collectors: Vec<_> = state
         .entities
         .mob_slots_matching(|type_id| {
@@ -159,6 +198,7 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
                 .is_some_and(|bp| bp.capabilities.equipment_pickup)
         })
         .into_iter()
+        .filter(|&slot| near_items.contains(&state.entities.chunk_of(slot)))
         .filter_map(|slot| {
             let body = state.entities.body(slot);
             let row = state.entities.row(slot);
