@@ -322,13 +322,15 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     detail["nametags_before_order"] = nametags()
 
     def resident_for(form: dict[str, Any]) -> str:
-        """The uuid of the form's `Resident: <name>` option: the nametag of each summoned villager
-        starts with that resident's name."""
+        """The uuid of the form's `Resident: <name>` option. Villager names are random, so two summoned
+        residents can share one; the dialog only offers a resident that is not a Builder (production.rs
+        worker_slot), so the match is the non-Builder whose nametag starts with that name."""
         label = next(label for label in _labels(form) if label.startswith("Resident: "))
         name = label.removeprefix("Resident: ")
         tags = nametags()
         detail["resident_nametags"] = tags
-        matching = [uuid for uuid, tag in tags.items() if tag.split(" · ")[0] == name]
+        matching = [uuid for uuid, tag in tags.items()
+                    if tag.split(" · ")[0] == name and BUILDER_TAG not in tag]
         if len(matching) != 1:
             raise RuntimeError(f"autocraft-qa: Resident {name!r} matches {matching} in {tags}")
         return matching[0]
