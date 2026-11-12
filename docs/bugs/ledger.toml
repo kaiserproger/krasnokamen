@@ -2666,11 +2666,12 @@ title = "NPC block mutations do not reach client"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1 (comment 2026-10-19 15:55: blocks villagers changed did not reach the client); fixed by a6979209 (2026-10-19: villager commit-tail block edits are folded before the chunk snapshot is published). Fix patch docs/bugs/fix-patches/ISSUE-1-28.patch is that fold at the candidate (tick.rs publish); reversing it publishes the chunk without the villagers' commit-tail edits"
 regression = ["harness:village-qa:door_walk", "harness:village-qa:farmer_harvest", "harness:village-qa:miner_deposit", "harness:village-qa:lumberjack"]
 failing_first = "reported"
 fix_commit = "patch:b6347ae3aad17693f228d31153fe846cd59121bf85b57021678beaf241031cd7"
+promotion = "docs/bugs/promotions/ISSUE-1-28.json"
 
 [[bug]]
 id = "HUNT-REJOIN-LOCALE"

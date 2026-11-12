@@ -1,0 +1,61 @@
+{
+  "id": "ISSUE-1-28",
+  "verdict": "promoted",
+  "fix_commit": "patch:b6347ae3aad17693f228d31153fe846cd59121bf85b57021678beaf241031cd7",
+  "fix_commit_full": "patch:b6347ae3aad17693f228d31153fe846cd59121bf85b57021678beaf241031cd7",
+  "promoted_at": "2026-11-12T17:53:33+00:00",
+  "tree_head": "c6bf91ae9d26c705af2a4e51326af40e5bc6c567",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "b6347ae3aad17693f228d31153fe846cd59121bf85b57021678beaf241031cd7",
+  "reversed_files": [
+    "crates/mc-core/src/tick.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:village-qa:door_walk": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run village-qa --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T174425-ledger-promote-y4pguhis/regressions-client-1.log"
+    },
+    "harness:village-qa:farmer_harvest": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run village-qa --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T174425-ledger-promote-y4pguhis/regressions-client-1.log"
+    },
+    "harness:village-qa:miner_deposit": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run village-qa --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T174425-ledger-promote-y4pguhis/regressions-client-1.log"
+    },
+    "harness:village-qa:lumberjack": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run village-qa --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T174425-ledger-promote-y4pguhis/regressions-client-1.log"
+    }
+  },
+  "restored": {
+    "harness:village-qa:miner_deposit": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T175223-village-qa-6erm_9o_/result.json"
+    },
+    "harness:village-qa:lumberjack": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T175223-village-qa-6erm_9o_/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T174135-village-qa-y5qw17mf/result.json",
+    "tree_head": "c6bf91ae9d26c705af2a4e51326af40e5bc6c567",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "1f1cce450019048a674d24ea7b78a67b1789f957a1b9c375f654fb3b7ff8bfa1",
+    "covers": [
+      "harness:village-qa:door_walk",
+      "harness:village-qa:farmer_harvest",
+      "harness:village-qa:miner_deposit",
+      "harness:village-qa:lumberjack"
+    ],
+    "profile": "village-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T174425-ledger-promote-y4pguhis"
+}
