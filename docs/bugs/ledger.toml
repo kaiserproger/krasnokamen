@@ -4958,11 +4958,12 @@ title = "Closing a native store leaves its lock held while any process forked du
 area = "gameplay"
 repro = "cargo"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "CrashTestLock 2026-11-12 (receipts/CrashTestLock/REPORT.md). Main's full `cargo test --no-fail-fast -p mc-core --lib` on 0d777899 under load (receipts/MainMerges/0d777899-core-edge-lib.log:800, 4089): core::persistence_crash_tests::sigkill_during_wal_write_ignores_only_unpublished_tail, second case (wal_before_fsync): the re-executed crash child failed `recover_dimension_state` with Storage(\"native database: Database already open. Cannot acquire lock.\") on a directory that only the parent's baseline() had opened and closed. Cause: mc-world native.rs NativeFile::acquire takes the lease with File::try_lock (flock), whose lock belongs to the open file description. Every Command::spawn elsewhere in the process copies that descriptor into the forked child until its exec closes it (CLOEXEC), so dropping the store did not release the lock while a sibling spawn was between fork and exec. No parent thread holds the store after baseline() (ChunkLoader joins its workers; the baseline path starts no other thread; kill_at now asserts it). Fix: NativeFile unlocks on drop, which releases the lock for every copy of the description. Same exposure, not fixed here: redb's own read-only open (shared lock) in NativeReadOnlyStore."
 regression = ["cargo:mc-world:native::tests::closed_store_releases_its_lease_while_a_forked_child_holds_the_descriptor"]
 failing_first = "reported"
 fix_commit = "4d4e3ce73bc129f32737628821edffe8a0dd15c3"
+promotion = "docs/bugs/promotions/NATIVE-STORE-LEASE-HELD-BY-FORKED-CHILD.json"
 
 [[bug]]
 id = "SETTLEMENT-FOREST-WORKER-DETACHED-HOLDS-STORE"
