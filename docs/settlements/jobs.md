@@ -44,7 +44,8 @@ Builder workshops, mines and lumber camps can use a crafting table or barrel; mi
 
 ## Rest and routes
 
-- At night a bound resident with a roofed home bed can sleep there. Other resting or idle residents seek an unoccupied roofed standing place near a reachable settlement bed. Panic and soldier duty take priority.
+- At night a bound resident with a roofed home bed can sleep there. Residents claim only roofed beds as homes (and release a home whose roof is removed), so an open-air bed stays free for unbound villagers; a resident without a roofed bed draws no stored rations (see [breeding](breeding.md)). Other resting or idle residents seek an unoccupied roofed standing place near a reachable settlement bed. Panic and soldier duty take priority.
+- As in vanilla, using a bed a villager sleeps in only wakes that villager; it stays up for 100 ticks, so the next use puts the player to bed.
 - Rest takes precedence over hauling and economy travel: workers keep their carried items while going home. Visible hostiles and recent damage can cause panic; hostile sensing checks line of sight.
 - Resident routes and short walks stay in entity-simulated chunks. Villagers can wade through water at their feet, but not head-height water or lava. Water is wadeable only when the row above the feet is dry, so a baby, whose head is in its foot row, cannot walk onto the floor of a pond. Blocked routes require a usable path.
 - Villagers open wooden doors along their routes, not iron or copper doors. They close doors they opened after passing, waiting for another villager occupying or approaching the doorway; they leave player-opened doors alone.

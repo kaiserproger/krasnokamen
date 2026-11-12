@@ -10,6 +10,7 @@ python3 -m unittest tools.harness.test_protocol_lifecycle
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,7 +19,7 @@ from typing import Any
 from unittest import mock
 
 from .backends import protocol_lifecycle as lifecycle
-from .backends.protocol_lifecycle import Blocked, ProtocolServer
+from .backends.protocol_lifecycle import Blocked, PortReservation, ProtocolServer
 
 
 def _harness(tmp: str, **overrides: object) -> ProtocolServer:
@@ -88,10 +89,12 @@ class ConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             (Path(tmp) / "vanilla").mkdir()
             server = _harness(tmp)
-            server.write_config()
-            assert server.dashboard_port is not None
-            self.assertTrue(26100 <= server.dashboard_port <= 26199)
-            self.assertNotEqual(server.dashboard_port, server.port)
+            with mock.patch.object(lifecycle, "PORT_LOCK_DIR", Path(tmp) / "locks"):
+                server.write_config()
+                assert server.dashboard_port is not None
+                self.assertTrue(26100 <= server.dashboard_port <= 26199)
+                self.assertNotEqual(server.dashboard_port, server.port)
+                server._close_handles()
 
 
 class LifecycleGuardTests(unittest.TestCase):
@@ -346,6 +349,160 @@ class PauseProbeTests(unittest.TestCase):
             server = _harness(tmp)
             with self.assertRaises(Blocked):
                 server.pause_empty_probe()
+
+
+class PortLeaseTests(unittest.TestCase):
+    def test_concurrent_reservations_get_distinct_ports(self) -> None:
+        # Regression (red on ef508fc7): reserve_matrix_port used to bind-probe
+        # and close the socket before the caller bound it, so N concurrent
+        # callers could all be handed the same port. The flock lease must hand
+        # out N distinct ports to N simultaneous callers.
+        import threading
+        from . import runtime
+        count = 8
+        with tempfile.TemporaryDirectory() as tmp:
+            base = runtime.reserve_port()
+            port_range = (base, base + 63)
+            with mock.patch.object(lifecycle, "PORT_LOCK_DIR", Path(tmp) / "locks"):
+                barrier = threading.Barrier(count)
+                results: list[int] = []
+                errors: list[BaseException] = []
+                held: list = []
+
+                def grab() -> None:
+                    try:
+                        barrier.wait(timeout=15)
+                        reservation = lifecycle.reserve_matrix_port(port_range=port_range)
+                        held.append(reservation)
+                        results.append(int(reservation))
+                        barrier.wait(timeout=15)  # hold every lease until all reserved
+                    except BaseException as error:  # noqa: BLE001 - collected below
+                        errors.append(error)
+
+                threads = [threading.Thread(target=grab) for _ in range(count)]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join(timeout=30)
+                for reservation in held:
+                    release = getattr(reservation, "release", None)
+                    if callable(release):
+                        release()
+            self.assertEqual(errors, [])
+            self.assertEqual(len(results), count)
+            self.assertEqual(len(set(results)), count,
+                             f"concurrent reservations collided: {sorted(results)}")
+
+    def test_held_lease_blocks_the_same_port_until_released(self) -> None:
+        from . import runtime
+        with tempfile.TemporaryDirectory() as tmp:
+            base = runtime.reserve_port()
+            with mock.patch.object(lifecycle, "PORT_LOCK_DIR", Path(tmp) / "locks"):
+                first = lifecycle.reserve_matrix_port(port_range=(base, base))
+                with self.assertRaises(Blocked):
+                    lifecycle.reserve_matrix_port(port_range=(base, base))
+                release = getattr(first, "release", None)
+                if callable(release):
+                    release()
+                second = lifecycle.reserve_matrix_port(port_range=(base, base))
+                self.assertEqual(int(second), base)
+                release = getattr(second, "release", None)
+                if callable(release):
+                    release()
+
+    def test_leases_survive_stop_and_release_on_final_close(self) -> None:
+        # Restarts (stop/start, kill9) reuse the same fixed port, so the lease
+        # must survive _close_handles (stop) and drop only on close().
+        with tempfile.TemporaryDirectory() as tmp:
+            (Path(tmp) / "vanilla").mkdir()
+            server = _harness(tmp)
+            with mock.patch.object(lifecycle, "PORT_LOCK_DIR", Path(tmp) / "locks"):
+                server.write_config()
+                assert server.dashboard_port is not None
+                reservation = server._reservations[-1]
+                self.assertIsInstance(reservation, PortReservation)
+                self.assertEqual(int(reservation), server.dashboard_port)
+                server._close_handles()  # what stop() does
+                with self.assertRaises(Blocked):
+                    lifecycle.reserve_matrix_port(port_range=(int(reservation), int(reservation)))
+                server.close()
+                again = lifecycle.reserve_matrix_port(port_range=(int(reservation), int(reservation)))
+                self.assertEqual(int(again), int(reservation))
+                release = getattr(again, "release", None)
+                if callable(release):
+                    release()
+
+    def test_lock_dir_is_one_fixed_path_regardless_of_env(self) -> None:
+        # Main decision: the lock namespace must not depend on ANY env var.
+        # Every process on the host uses the same literal directory, created
+        # sticky 1777 with one lock file per port.
+        import stat
+        import subprocess
+        import sys
+        self.assertEqual(lifecycle.PORT_LOCK_DIR, Path("/tmp/solaris-port-locks"))
+        root = str(Path(__file__).resolve().parents[2])
+        for extra in ({"SOLARIS_WORK_ROOT": "/w", "TMPDIR": "/t",
+                       "SOLARIS_PORT_LOCK_DIR": "/ignored"}, {}):
+            env = {k: v for k, v in os.environ.items()
+                   if k not in ("SOLARIS_WORK_ROOT", "TMPDIR", "SOLARIS_PORT_LOCK_DIR")}
+            env.update(extra)
+            out = subprocess.run(
+                [sys.executable, "-c",
+                 f"import sys; sys.path.insert(0, {root!r});"
+                 "from tools.harness.backends import protocol_lifecycle as lc;"
+                 "print(lc.PORT_LOCK_DIR)"],
+                env=env, capture_output=True, text=True, check=True).stdout.strip()
+            self.assertEqual(out, "/tmp/solaris-port-locks")
+        from . import runtime
+        base = runtime.reserve_port()
+        reservation = lifecycle.reserve_matrix_port(port_range=(base, base))
+        try:
+            mode = stat.S_IMODE(os.stat(lifecycle.PORT_LOCK_DIR).st_mode)
+            self.assertEqual(mode, 0o1777)
+            self.assertTrue((lifecycle.PORT_LOCK_DIR / f"{base}.lock").is_file())
+        finally:
+            reservation.release()
+
+    def test_reservations_coordinate_across_processes_with_different_env(self) -> None:
+        # Regression (red on 207b7097): the lock dir used to be derived from
+        # env, so two OS processes with different SOLARIS_WORK_ROOT/TMPDIR
+        # used different lock dirs and both leased the same port. Separate
+        # processes with deliberately different env holding live leases must
+        # get distinct ports from the one machine-wide namespace.
+        import subprocess
+        import sys
+        from . import runtime
+        base = runtime.reserve_port()
+        root = str(Path(__file__).resolve().parents[2])
+        child = (
+            "import sys, time; sys.path.insert(0, {root!r});"
+            "from tools.harness.backends import protocol_lifecycle as lc;"
+            "r = lc.reserve_matrix_port(port_range=({base}, {base} + 3));"
+            "print(int(r), flush=True); time.sleep(30)"  # hold the live lease
+        ).format(root=root, base=base)
+        envs = [
+            {"SOLARIS_WORK_ROOT": "/tmp/fake-root-a", "TMPDIR": "/tmp/fake-tmp-a"},  # set
+            {},  # unset
+        ]
+        procs = []
+        for extra in envs:
+            env = {k: v for k, v in os.environ.items()
+                   if k not in ("SOLARIS_WORK_ROOT", "TMPDIR", "SOLARIS_PORT_LOCK_DIR")}
+            env.update(extra)
+            procs.append(subprocess.Popen(
+                [sys.executable, "-c", child], env=env,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
+        try:
+            ports = [int(procs[i].stdout.readline().strip()) for i in range(2)]
+            for proc in procs:
+                proc.stdout.close()
+                proc.stderr.close()
+        finally:
+            for proc in procs:
+                proc.kill()
+                proc.wait(timeout=10)
+        self.assertEqual(len(set(ports)), 2,
+                         f"cross-process leases collided despite different env: {ports}")
 
 
 if __name__ == "__main__":

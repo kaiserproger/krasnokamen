@@ -423,6 +423,11 @@ async def run_spain(args: Any) -> int:
         if any(binary is None or not binary.is_file() or not os.access(binary, os.X_OK)
                for binary in (args.server_bin, args.bots_bin)):
             raise ClassifiedFailure("INFRA_BLOCKED", "Spain requires explicit executable server and bot binaries")
+        for name, binary in (("server", args.server_bin), ("bots", args.bots_bin)):
+            try:
+                scale.refuse_incremental_pin(binary, name)
+            except ValueError as error:
+                raise ClassifiedFailure("INFRA_BLOCKED", str(error)) from error
         if shutil.disk_usage(args.out).free < 60 * 1024**3:
             raise ClassifiedFailure("INFRA_BLOCKED", "Spain launch requires at least 60 GiB free")
         registry_path = Path(fixture["embedded_registry"]).resolve()

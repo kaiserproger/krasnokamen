@@ -52,10 +52,9 @@ class WeakFirstViewTests(unittest.TestCase):
                 context.exits[len(context.commands) - 1] = 7
                 raise RuntimeError("client startup failed")
 
-            with patch.dict(os.environ, {"SOLARIS_SERVER_BINARY": "/bin/true"}), \
+            with patch.dict(os.environ, {"SOLARIS_SERVER_BINARY": "/bin/true", "SOLARIS_CLIENT_ROOT": str(source)}), \
                     patch.object(weak_first_view, "validate_args", return_value=args), \
                     patch.object(weak_first_view.native_client, "resolve_binary", return_value=Path("/bin/true")), \
-                    patch.object(weak_first_view.native_client, "_client_root", return_value=source), \
                     patch.object(weak_first_view.native_client, "start", side_effect=fail_client), \
                     patch.object(weak_first_view.catalog_load, "config", return_value=(artifact / "server.toml", None, 1234)), \
                     patch.object(weak_first_view.common, "scope_prefix", return_value=[]), \

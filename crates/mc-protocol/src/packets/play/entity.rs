@@ -42,7 +42,7 @@ impl PlayerInfoActions {
         )
     }
 
-    fn contains(self, other: Self) -> bool {
+    pub fn contains(self, other: Self) -> bool {
         self.0 & other.0 != 0
     }
 }
@@ -773,12 +773,12 @@ impl EffectParticle {
     }
 }
 
-/// Entity-data serializers implemented for 26.1.2.
+/// Entity-data serializers implemented for the supported Java protocol family.
 ///
-/// Supported serializer ids are 0-6, 7-20, and 42. Particle serializers
-/// support the options used by built-in effects; other particle types and
-/// variant, global-position, vector, quaternion, and resolvable-profile
-/// serializers are rejected explicitly.
+/// Primitive serializers 0..=20 and 42, the painting and climate/nautilus
+/// registry holders, and copper-golem/weathering enums are supported. Particles
+/// cover built-in effects; other particle types, variant holders, global positions,
+/// vectors, quaternions and resolvable profiles are rejected explicitly.
 #[derive(Debug, Clone)]
 pub enum EntityDataValue {
     /// 26.1.2 serializer 34: registry holder reference (wire id = registry id + 1).
@@ -791,6 +791,22 @@ pub enum EntityDataValue {
         index: u8,
         value: u32,
     },
+    /// Climate and zombie-nautilus holders use `ByteBufCodecs.holderRegistry`: the
+    /// registry id as a plain VarInt (the painting holder adds 1). Serializer ids
+    /// 23/28/32 come from EntityDataSerializers.<clinit> order
+    /// (receipts/Q04CoreFix/derived-indices.txt).
+    CowVariant {
+        index: u8,
+        value: u32,
+    },
+    PigVariant {
+        index: u8,
+        value: u32,
+    },
+    ZombieNautilusVariant {
+        index: u8,
+        value: u32,
+    },
     /// CopperGolem enum serializers, javap EntityDataSerializers 26.1.2:
     /// state = 37, weathering = 38; both use VarInt ordinal codecs.
     CopperGolemState {
@@ -798,6 +814,11 @@ pub enum EntityDataValue {
         value: u8,
     },
     WeatheringCopper {
+        index: u8,
+        value: u8,
+    },
+    /// Local 26.2 EntityDataSerializers registration: Sniffer.State ordinal, id 35.
+    SnifferState {
         index: u8,
         value: u8,
     },
@@ -913,8 +934,17 @@ impl PartialEq for EntityDataValue {
             (
                 Self::ChickenVariant { value: left, .. },
                 Self::ChickenVariant { value: right, .. },
+            )
+            | (Self::CowVariant { value: left, .. }, Self::CowVariant { value: right, .. })
+            | (Self::PigVariant { value: left, .. }, Self::PigVariant { value: right, .. })
+            | (
+                Self::ZombieNautilusVariant { value: left, .. },
+                Self::ZombieNautilusVariant { value: right, .. },
             ) => left == right,
             (Self::Byte { value: left, .. }, Self::Byte { value: right, .. }) => left == right,
+            (Self::SnifferState { value: left, .. }, Self::SnifferState { value: right, .. }) => {
+                left == right
+            }
             (
                 Self::CopperGolemState { value: left, .. },
                 Self::CopperGolemState { value: right, .. },
@@ -1018,8 +1048,12 @@ impl EntityDataValue {
             Self::Byte { index, .. }
             | Self::PaintingVariant { index, .. }
             | Self::ChickenVariant { index, .. }
+            | Self::CowVariant { index, .. }
+            | Self::PigVariant { index, .. }
+            | Self::ZombieNautilusVariant { index, .. }
             | Self::CopperGolemState { index, .. }
             | Self::WeatheringCopper { index, .. }
+            | Self::SnifferState { index, .. }
             | Self::Int { index, .. }
             | Self::Long { index, .. }
             | Self::Float { index, .. }
@@ -1049,9 +1083,13 @@ impl EntityDataValue {
         match self {
             Self::PaintingVariant { .. } => 34,
             Self::ChickenVariant { .. } => 30,
+            Self::CowVariant { .. } => 23,
+            Self::PigVariant { .. } => 28,
+            Self::ZombieNautilusVariant { .. } => 32,
             Self::Byte { .. } => ENTITY_DATA_BYTE_SERIALIZER_ID,
             Self::CopperGolemState { .. } => 37,
             Self::WeatheringCopper { .. } => 38,
+            Self::SnifferState { .. } => 35,
             Self::Int { .. } => ENTITY_DATA_INT_SERIALIZER_ID,
             Self::Long { .. } => ENTITY_DATA_LONG_SERIALIZER_ID,
             Self::Float { .. } => ENTITY_DATA_FLOAT_SERIALIZER_ID,
@@ -1082,10 +1120,13 @@ impl EntityDataValue {
         buf.write_u8(self.index());
         buf.write_varint(self.serializer_id());
         match self {
-            Self::ChickenVariant { value, .. } => {
+            Self::ChickenVariant { value, .. }
+            | Self::CowVariant { value, .. }
+            | Self::PigVariant { value, .. }
+            | Self::ZombieNautilusVariant { value, .. } => {
                 buf.write_varint(
                     i32::try_from(*value)
-                        .map_err(|_| CodecError::NotSupported("chicken variant id out of range"))?,
+                        .map_err(|_| CodecError::NotSupported("entity variant id out of range"))?,
                 );
             }
             Self::PaintingVariant { value, .. } => {
@@ -1096,9 +1137,9 @@ impl EntityDataValue {
                 buf.write_varint(wire);
             }
             Self::Byte { value, .. } => buf.write_i8(*value),
-            Self::CopperGolemState { value, .. } | Self::WeatheringCopper { value, .. } => {
-                buf.write_varint(i32::from(*value))
-            }
+            Self::SnifferState { value, .. }
+            | Self::CopperGolemState { value, .. }
+            | Self::WeatheringCopper { value, .. } => buf.write_varint(i32::from(*value)),
             Self::Int { value, .. } => buf.write_varint(*value),
             Self::Long { value, .. } => buf.write_varlong(*value),
             Self::Float { value, .. } => buf.write_f32(*value),
@@ -1324,6 +1365,15 @@ impl EntityDataValue {
                     EffectParticle::decode,
                 )?,
             },
+            23 | 28 | 32 => {
+                let value = u32::try_from(buf.read_varint()?)
+                    .map_err(|_| CodecError::NotSupported("negative entity variant id"))?;
+                match serializer_id {
+                    23 => Self::CowVariant { index, value },
+                    28 => Self::PigVariant { index, value },
+                    _ => Self::ZombieNautilusVariant { index, value },
+                }
+            }
             30 => {
                 let value = buf.read_varint()?;
                 if value < 0 {
@@ -1342,6 +1392,16 @@ impl EntityDataValue {
                 Self::PaintingVariant {
                     index,
                     value: (wire - 1) as u32,
+                }
+            }
+            35 => {
+                let value = buf.read_varint()?;
+                if !(0..=6).contains(&value) {
+                    return Err(CodecError::NotSupported("invalid sniffer state ordinal"));
+                }
+                Self::SnifferState {
+                    index,
+                    value: value as u8,
                 }
             }
             37 | 38 => {
@@ -1615,3 +1675,7 @@ mod copper_tests;
 #[cfg(test)]
 #[path = "entity_painting_tests.rs"]
 mod painting_tests;
+
+#[cfg(test)]
+#[path = "entity_sniffer_tests.rs"]
+mod sniffer_tests;

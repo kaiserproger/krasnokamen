@@ -27,22 +27,39 @@ pub(crate) fn runtime() -> tokio::runtime::Runtime {
         .expect("test runtime")
 }
 
-/// Drain broadcasts until the channel goes quiet (a paused world) or 40 ticks
-/// arrived. Returns the highest observed tick.
-pub(crate) fn drain_until_idle(
+/// Wait for the tick owner's acknowledgement, then drain only pre-pause broadcasts.
+pub(crate) fn wait_for_pause(
+    core: &Core,
     rt: &tokio::runtime::Runtime,
     rx: &mut tokio::sync::broadcast::Receiver<TickOutput>,
-) -> u64 {
-    rt.block_on(async {
-        let mut last = 0;
-        for _ in 0..40 {
-            match tokio::time::timeout(Duration::from_millis(250), rx.recv()).await {
-                Ok(Ok(output)) => last = output.tick,
-                _ => break,
+) -> (u64, Option<TickOutput>) {
+    let mut pause = core.subscribe_pause();
+    let paused_at = rt.block_on(async {
+        let observed =
+            tokio::time::timeout(Duration::from_secs(2), pause.wait_for(Option::is_some))
+                .await
+                .expect("tick owner acknowledges pause")
+                .expect("tick owner remains alive");
+        observed.expect("acknowledged pause tick")
+    });
+    let mut last = None;
+    loop {
+        match rx.try_recv() {
+            Ok(output) => {
+                assert!(
+                    output.tick <= paused_at,
+                    "tick published after pause acknowledgement"
+                );
+                last = Some(output);
+            }
+            Err(tokio::sync::broadcast::error::TryRecvError::Lagged(_)) => continue,
+            Err(tokio::sync::broadcast::error::TryRecvError::Empty) => break,
+            Err(tokio::sync::broadcast::error::TryRecvError::Closed) => {
+                panic!("tick owner exited while paused")
             }
         }
-        last
-    })
+    }
+    (paused_at, last)
 }
 
 pub(crate) fn next_tick(
@@ -61,7 +78,7 @@ fn empty_server_stops_ticking_and_a_join_resumes() {
     let mut rx = core.subscribe();
 
     // One second of grace = 20 ticks, then the world pauses.
-    let paused_at = drain_until_idle(&rt, &mut rx);
+    let (paused_at, _) = wait_for_pause(&core, &rt, &mut rx);
     assert!(
         paused_at >= 19,
         "the world ticked through its grace period before pausing (tick {paused_at})"
@@ -85,7 +102,12 @@ fn empty_server_stops_ticking_and_a_join_resumes() {
     let resumed =
         next_tick(&rt, &mut rx, Duration::from_secs(2)).expect("the join resumes ticking");
     assert!(resumed.tick > paused_at, "tick advances after the join");
-    let after_join = drain_until_idle(&rt, &mut rx);
+    let mut after_join = resumed.tick;
+    for _ in 0..5 {
+        after_join = next_tick(&rt, &mut rx, Duration::from_secs(2))
+            .expect("online player keeps world running")
+            .tick;
+    }
     assert!(
         after_join >= resumed.tick + 5,
         "a player online keeps the world ticking (tick {after_join})"
@@ -101,7 +123,12 @@ fn zero_seconds_never_pauses() {
     let core = Core::open(config).expect("open");
     let rt = runtime();
     let mut rx = core.subscribe();
-    let last = drain_until_idle(&rt, &mut rx);
+    let mut last = 0;
+    for _ in 0..40 {
+        last = next_tick(&rt, &mut rx, Duration::from_secs(2))
+            .expect("empty world keeps running when pause is disabled")
+            .tick;
+    }
     assert!(
         last >= 25,
         "0 disables the pause: the world keeps ticking while empty (tick {last})"

@@ -20,13 +20,12 @@ Rules for entries:
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from .runtime import REPO_ROOT
+from .runtime import REPO_ROOT, sibling_root
 
 # Evidence kinds. A graphical or client entry never falls back to TCP evidence.
 EVIDENCE_KINDS = (
@@ -85,6 +84,40 @@ def _entry(**kwargs: object) -> Scenario:
 
 
 SCENARIOS: dict[str, Scenario] = {
+    "native-v2-ledger-painting": _entry(
+        id="native-v2-ledger-painting", summary="Place a painting and remove its support",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-painting",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One painting on a fixture wall; privileged support removal.",
+    ),
+
+    "native-v2-ledger-axe": _entry(
+        id="native-v2-ledger-axe", summary="Use an axe to strip, scrape and unwax blocks",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-axe",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One log orientation and two copper states; fixture-supplied axe.",
+    ),
+
+    "native-v2-ledger-sponge": _entry(
+        id="native-v2-ledger-sponge", summary="Place a sponge beside a water source and observe absorption",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-sponge",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One adjacent source; not the full absorption radius.",
+    ),
+
+    "native-v2-ledger-setblock-snbt": _entry(
+        id="native-v2-ledger-setblock-snbt", summary="Open a chest populated by setblock SNBT and withdraw its contents",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-setblock-snbt",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One chest with seven diamonds in slot zero; privileged setup.",
+    ),
+    "native-v2-ledger-crafting-pickup": _entry(
+        id="native-v2-ledger-crafting-pickup", summary="Crafting table remains open on the first inventory pickup",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-crafting-pickup",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One first pickup from 16 fixture-supplied planks; not the disconnect path.",
+    ),
+
     "native-world-first-start-interrupted": _entry(
         id="native-world-first-start-interrupted",
         summary="Recover a singleplayer world interrupted during its first start",
@@ -201,6 +234,126 @@ SCENARIOS: dict[str, Scenario] = {
         proves="same golem changes received pumpkin flag after ordinary shears use; player collects a carved pumpkin",
         limits="face/removed-pumpkin screenshots require recorded review; no persistence or global drop count claim",
     ),
+    "native-v2-peaceful-removal": _entry(
+        id="native-v2-peaceful-removal", summary="Peaceful removes an existing zombie but retains a cow",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-peaceful-removal",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_mobs.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="a visible zombie and cow with natural spawning disabled",
+        proves="after the peaceful command the same zombie disappears and the same cow remains visible",
+        limits="one zombie and cow; no claim about other hostile categories",
+    ),
+    "native-v2-command-score-store": _entry(
+        id="native-v2-command-score-store", summary="Damage, death protection, writable counters and execute-store",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-command-score-store",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_commands.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="operator player with empty inventory and fresh scoreboard",
+        proves="generic damage changes health; held totem and custom protection are consumed; counters, swaps and stored give/clear outcomes work",
+        limits="single player and main hand; a passing receipt and negative control are required",
+    ),
+    "native-v2-summon-age": _entry(
+        id="native-v2-summon-age", summary="Age:-24000 and IsBaby summons sync as babies",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-summon-age",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="water/horse families summoned with Age:-24000 and zombie/piglin/zoglin with IsBaby:1b",
+        proves="every summoned row reports received_baby and the squid's Age reads -24000",
+        limits="seven representative kinds; NoAI fixtures; no persistence claim",
+    ),
+    "native-v2-data-query": _entry(
+        id="native-v2-data-query", summary="data get entity/block paths return live values and absent paths error",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-data-query",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="operator with one stone and a placed chest",
+        proves="Health/Inventory/block id queries return live values and an absent path is a chat error, not empty custody",
+        limits="four query shapes only",
+    ),
+    "native-v2-death-messages": _entry(
+        id="native-v2-death-messages", summary="/kill shows the victim a generic_kill death message despite show_death_messages false",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-death-messages",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="show_death_messages false, then /kill @s",
+        proves="the dying player still receives the generic_kill message and the death screen, then respawns",
+        limits="single client is the victim; team packets excluded (pinned client parses set_player_team with pre-26.3 field order; TEAM-DEATH-VISIBILITY blocked separately)",
+    ),
+    "native-v2-score-food": _entry(
+        id="native-v2-score-food", summary="food criterion is creatable and auto-updates when hunger drains",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-score-food",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="fresh scoreboard, hunger objective",
+        proves="objective creation succeeds, score reads 20, then drops below 20 under the hunger effect without an explicit set",
+        limits="one player, one objective",
+    ),
+    "native-v2-spawner-egg": _entry(
+        id="native-v2-spawner-egg", summary="Cow egg on a spawner configures SpawnData and the spawner spawns the cow on peaceful",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-spawner-egg",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="placed spawner, day, peaceful difficulty",
+        proves="SpawnData.entity.id reads minecraft:cow after egg use, no adjacent mob appears on use, and the spawner later spawns the cow",
+        limits="one spawner, one egg, one spawned cow",
+    ),
+    "native-v2-golem": _entry(
+        id="native-v2-golem", summary="Villager detects a diagonal AABB golem, ingot repairs +25 without overheal, melee damage scales with difficulty",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-golem",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="one villager, two iron golems (NoAI repair target, AI fighter), survival player",
+        proves="golem_detected_recently memory set at diagonal 15/15, golem heals 40->65 exactly, player melee drop strictly increases easy<normal<hard",
+        limits="single golem per check; no persistence claim",
+    ),
+    "native-v2-axolotl-play-dead": _entry(
+        id="native-v2-axolotl-play-dead", summary="Sourced melee on a hurt water axolotl sets play-dead metadata and Regeneration",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-axolotl-play-dead",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="axolotl in a water pool hurt to 6 of 14 health",
+        proves="received metadata index 19 becomes true and active_effects lists minecraft:regeneration",
+        limits="chance-based roll, repeated attacks; one axolotl",
+    ),
+    "native-v2-dolphin-treasure": _entry(
+        id="native-v2-dolphin-treasure", summary="GotFish dolphin swims toward the treasure chest",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-dolphin-treasure",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="dolphin in a 13-long water channel, chest 16 blocks away, fed a real raw cod",
+        proves="after being fed a raw cod the dolphin's distance to the chest shrinks well past the starting distance",
+        limits="server approximates vanilla treasure structures with the nearest container within 48 blocks",
+    ),
+    "native-v2-goat-ram": _entry(
+        id="native-v2-goat-ram", summary="A natural goat rams a nearby stationary armor stand",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-goat-ram",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="AI goat next to a NoAI armor stand, day, creative observer (not a ram target)",
+        proves="the armor stand's received health drops below max (or it is destroyed) while the goat remains",
+        limits="natural ram cadence, single pair; horn loss on block ram is cargo-covered",
+    ),
+    "native-v2-golem-gossip": _entry(
+        id="native-v2-golem-gossip", summary="Five recently-slept villagers gossip-summon an iron golem",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-golem-gossip",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_wave1.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="bell plus five villagers with last_slept/last_gossip brain data merged near the current gametime, frozen day",
+        proves="an iron golem appears within 32 blocks",
+        limits="single summon attempt; brain NBT merged via data merge",
+    ),
     "native-v2-cursor-close": _entry(
         id="native-v2-cursor-close", summary="Three-apple cursor closes and reopens inventory and crafting without a phantom",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-cursor-close",
@@ -210,6 +363,26 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="private pad, crafting table and three apples; ordinary pickup, close, reopen",
         proves="before any repair click, reopened inventory and crafting cursor is empty and exactly three apples remain",
         limits="original three-apple repro only; no full-inventory overflow or disconnect branch",
+    ),
+    "native-v2-happy-ghast-harness": _entry(
+        id="native-v2-happy-ghast-harness", summary="Harness custody and four distinct native happy-ghast riders",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-happy-ghast-harness",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_happy_ghast.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="private ghast, one survival harness, graphical rider and four independent headless peers",
+        proves="bare-ghast refusal, harness debit, four distinct passenger ids, fifth refusal and independent dismount",
+        limits="the checkpoint codec round trip is covered by the focused core regression, not a restart; screenshots require recorded review",
+    ),
+    "native-v2-mob-metadata-spot": _entry(
+        id="native-v2-mob-metadata-spot", summary="Frog, strider, camel and sniffer entity data decode in one native client",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-mob-metadata-spot",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_mob_metadata.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="private obsidian pad, one dirt cell, one each of frog, strider, camel, sniffer and one small slime",
+        proves="the client stays in play through the sniffer state, strider cold, frog tongue target and the unchanged camel accessors, and its log has no decode failure",
+        limits="the camel dash flag needs a mounted jump and is covered by the focused core test and wire test, not this spot-check; screenshots require recorded review",
     ),
     "native-v2-custody-mount-export": _entry(
         id="native-v2-custody-mount-export", summary="Imported chested donkey withdrawal and deposit survive native export and reimport",
@@ -230,6 +403,27 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="private offline server with optional loopback resource-pack URL; unmodified wire observer",
         proves="actual Configuration offer, matching serverbound Declined, subsequent Play login, ordered chat and graphical frame",
         limits="no installation, required-pack acceptance or Play-phase pack-offer claim",
+    ),
+    "native-v2-console-shutdown": _entry(
+        id="native-v2-console-shutdown", summary="Console stop logs orderly shutdown and preserves a graphical session across restart",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-console-shutdown",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_promotion_world.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="private native server with console stdin and a graphical native player",
+        proves="console stop exits cleanly, commits a checkpoint without ERROR, and the same player reconnects",
+        limits="no injected storage failure; separate unit regression covers journal failure",
+    ),
+    "native-v2-lease-navigation": _entry(
+        id="native-v2-lease-navigation",
+        summary="Native writer lifetime, cancellation handoff, edge and open-door navigation",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-lease-navigation",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_lease_navigation.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="private operator platform, airborne stand, two MCP sessions, support edge and open-door corridor",
+        proves="bounded 120-second action retains writer; cancelled old writer leaves replacement and its held input; grounded edge and open-door routes arrive",
+        limits="single Linux native fixture; cancellation scheduling is nondeterministic",
     ),
     "native-v2-end-restart": _entry(
         id="native-v2-end-restart", summary="Live peaceful End dragon survives clean checkpoint and graphical reconnect",
@@ -324,6 +518,36 @@ SCENARIOS: dict[str, Scenario] = {
         proves="disabled success messages are absent, failure and chat remain visible, enabled success is visible",
         limits="native player command path; console behavior is covered separately by a Rust regression",
     ),
+    "native-frozen-game-age": _entry(
+        id="native-frozen-game-age",
+        summary="Frozen simulated age stays fixed across teleport and local input",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-frozen-game-age", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/frozen_game_age_scene.json"),
+        fixture="private native client, operator freeze and teleport, local input",
+        proves="received game age stays constant across held frames and teleport",
+        limits="one native client; does not cover restart",
+    ),
+    "native-low-roof-house": _entry(
+        id="native-low-roof-house",
+        summary="Certify a house with an ordinary bed under a low roof",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-low-roof-house", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/low_roof_house_scene.json"),
+        fixture="private world with a two-block-high enclosed house and paired bed",
+        proves="the native player receives house certification despite absent breeding headroom",
+        limits="certification only; villager sleep and breeding are not checked",
+    ),
+    "native-falling-block-prediction": _entry(
+        id="native-falling-block-prediction",
+        summary="A received falling sand block renders and moves between server updates",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-falling-block-prediction", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/falling_block_scene.json"),
+        fixture="private windowed client; sand dropped in front of a dark backdrop",
+        proves="the same rendered falling block moves downward between received movement updates",
+        limits="one sand block in air over solid terrain; no landing, restart or TNT coverage",
+    ),
     "native-v2-chest-drag-disconnect": _entry(
         id="native-v2-chest-drag-disconnect",
         summary="Physical chest drag then disconnect with an item on the cursor",
@@ -336,6 +560,42 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="private world, empty chest and one operator-granted oak log",
         proves="server cursor survives drag and disconnect returns exactly one log on rejoin",
         limits="single log, one chest and native client; no full-inventory overflow branch",
+    ),
+    "native-v2-input-pick": _entry(
+        id="native-v2-input-pick", summary="Physical middle-click block/entity and gameplay F custody",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-input-pick", requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_player_input.py"),
+        fixture="diamond block, no-AI cow and declared inventory in survival and creative",
+        proves="physical pick selects a matching stack, creative creates one, survival creates none, F swaps hands",
+        limits="ordinary block and cow spawn egg; no control-pick block entity data",
+    ),
+    "native-v2-input-sand": _entry(
+        id="native-v2-input-sand", summary="Setblock sand becomes a descending rendered entity and lands",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-input-sand", requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_player_input.py"),
+        fixture="sand 30 blocks above a private obsidian pad; stepped at one tick per second, then running world",
+        proves="frozen server holds the falling block between steps; falling entity predicts vanilla gravity between position updates, source clears, sand lands; retained airborne/descent/landing frames",
+        limits="frames require visual review; not Windows/VNC transport",
+    ),
+    "native-v2-input-menus": _entry(
+        id="native-v2-input-menus", summary="Physical number/offhand/drop keys and short clicks in ordinary and creative inventory",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-input-menus", requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_player_input.py"),
+        fixture="declared diamond/emerald stacks in survival and creative menus on a private pad",
+        proves="physical 1-9, F, Q, Ctrl+Q, short press/release, cursor pixels and authoritative move after reopen",
+        limits="native X11; not Windows/VNC transport",
+    ),
+    "native-v2-input-camera": _entry(
+        id="native-v2-input-camera", summary="Frozen teleport camera, live client waits and F1 HUD pixels",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-input-camera", requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_player_input.py"),
+        fixture="private pad, frozen server and local teleport",
+        proves="camera follows teleport while frozen, client tick wait completes, F1 hides and restores hotbar pixels",
+        limits="native X11; not server tick-control parity",
     ),
     "native-v2-shift-double-click": _entry(
         id="native-v2-shift-double-click",
@@ -414,6 +674,17 @@ SCENARIOS: dict[str, Scenario] = {
         fixture="explicit --server-bin and --plugins-dir; isolated Loader permission/cache; no settlements package deployed",
         proves="Loader connection, core-owned C binding opens the native settlement dialog, and native settlement create/list/info",
         limits="minimal native settlement smoke, not plugin production/war coverage; visual review required",
+    ),
+    "loader-fabric-screen-admission": _entry(
+        id="loader-fabric-screen-admission",
+        summary="Release server starts the solaris:screen service for a real Fabric Loader session",
+        owner="core:harness", evidence="graphical", profile="loader-live",
+        scenario_id="loader-fabric-screen-admission",
+        requires=("sibling:solaris-loader", "client-token", "xvfb"),
+        sources=("tools/harness/loader.py", "tools/harness/loader_screen_admission.py"),
+        fixture="explicit --server-bin and --plugins-dir; real Solaris Loader Fabric client joins; assertion reads the server log",
+        proves="the server log records 'screen service started for admitted loader session' with platform=Fabric for the joined session",
+        limits="admission of the screen service only; no H264 frame flow or viewer-side rendering is asserted",
     ),
     "native-composter-chance": _entry(
         id="native-composter-chance",
@@ -629,7 +900,7 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-automation-storage",
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/client_probes.py"),
         fixture="native v2 only; explicit crafter/log, shelf/one diamond/one emerald, lever/sensor fixtures",
-        proves="one ordinary pulse yields four planks without held-power duplicate; shelf swap/withdraw conserves both items; sensor active/cooldown/inactive follows ordinary use",
+        proves="one ordinary pulse yields four planks without held-power duplicate; shelf swap/withdraw conserves both items; sensor active then inactive follows ordinary use",
         limits="no powered shelf chains, disabled crafter slots, calibrated filtering, shrieker/warden or visual model parity",
     ),
     "native-v2-storage-adversarial": _entry(
@@ -714,11 +985,39 @@ SCENARIOS: dict[str, Scenario] = {
     ),
     "native-v2-p4-damage": _entry(
         id="native-v2-p4-damage", summary="Native zombie hit and retained before/hit/after frames",
-        owner="core:harness", evidence="tcp", profile="entities", scenario_id="native-v2-p4-damage",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-p4-damage",
+        requires=("xvfb",),
         sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_p4.py"),
         fixture="native v2; nighttime zombie beside healthy survival player",
         proves="received health loss and live client/input after the hit",
         limits="hurt tilt/direction requires hit-frame visual review; health loss alone is not presentation",
+    ),
+    "native-v2-p4-identities": _entry(
+        id="native-v2-p4-identities", summary="Named damage identities and an angered warden sonic attack",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-p4-identities",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_p4.py"),
+        fixture="seven explicit damage types on a healthy survival player, then lever-provoked warden behind a wall",
+        proves="received command damage identities and health loss; real warden sonic cause, death screen and respawn",
+        limits="command cases prove identities, not freeze/cramming/wall collision mechanics; no complete damage or rendering parity",
+    ),
+    "native-v2-p4-death-protection": _entry(
+        id="native-v2-p4-death-protection", summary="Custom held death protection consumes authored effects",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-p4-death-protection",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_p4.py"),
+        fixture="held stick with clear-all and speed actions, followed by lethal generic damage",
+        proves="survival at one health, one item consumed, authored speed without default totem effects",
+        limits="clear/apply actions only; remove, probability, sound and codec variants have separate Cargo regressions",
+    ),
+    "native-v2-team-deaths": _entry(
+        id="native-v2-team-deaths", summary="Two native clients in different teams read each other's death messages",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-team-deaths",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_team_deaths.py"),
+        fixture="victim in team red, second windowed client in team blue; /kill, a zombie kill and each deathMessageVisibility value",
+        proves="each client's rendered chat shows generic_kill and mob death texts, and honours always/never/hideForOtherTeams/hideForOwnTeam",
+        limits="chat text of the received components and the death-screen class; no teammate peer, spectator or dimension-global roster",
     ),
     "native-v2-p4-hopper": _entry(
         id="native-v2-p4-hopper", summary="Native Q drop enters nearby hopper, exact withdrawal and no duplicate",
@@ -857,10 +1156,8 @@ def repo_revisions() -> dict[str, str]:
     """
     repos = {
         "solaris": REPO_ROOT,
-        "solaris-default-plugins": Path(
-            os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", REPO_ROOT.parent / "solaris-default-plugins")
-        ),
-        "solaris-loader": Path(os.environ.get("SOLARIS_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")),
+        "solaris-default-plugins": sibling_root("plugins"),
+        "solaris-loader": sibling_root("loader"),
     }
     revisions: dict[str, str] = {}
     for name, path in repos.items():

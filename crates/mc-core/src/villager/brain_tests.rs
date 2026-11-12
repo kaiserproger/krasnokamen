@@ -1,5 +1,6 @@
 use super::*;
 use crate::boundary::EntityId;
+use crate::settlements::allocator::tests::roofed_bed;
 use crate::settlements::allocator::{
     PICKUP_REACH, POI_REFRESH_CHUNKS_PER_TICK, Poi, PoiCache, PoiKind, PoiValidation,
     bed_has_baby_space, distance, find_path, find_path_exact, standing, validate_pois,
@@ -151,8 +152,8 @@ fn exhausted_spare_bed_search_does_not_starve_a_lumber_delivery() {
     let (mut state, slot, mut worker) =
         super::super::mining_tests::fixture(BuildingKind::LumberCamp);
     state.entities.set_pos(slot, [2.5, 201.0, 3.5]);
-    let home = bed(&mut state, 5, 3);
-    bed(&mut state, 14, 14);
+    let home = roofed_bed(&mut state, 5, 3);
+    roofed_bed(&mut state, 14, 14);
     super::super::mining_tests::storage(&mut state, &worker, [12, 201, 12]);
     let logs = item(&state, "minecraft:birch_log");
     worker.home = Some(home);
@@ -715,9 +716,9 @@ fn courtship_birth_claims_a_third_bed_and_charges_each_parent() {
     state.day_time = 1000;
     let first = villager(&mut state, [8.0, 201.0, 8.0]);
     let second = villager(&mut state, [8.5, 201.0, 8.0]);
-    let a_home = bed(&mut state, 4, 4);
-    let b_home = bed(&mut state, 8, 4);
-    let child_home = bed(&mut state, 12, 4);
+    let a_home = roofed_bed(&mut state, 4, 4);
+    let b_home = roofed_bed(&mut state, 8, 4);
+    let child_home = roofed_bed(&mut state, 12, 4);
     state.world.fold_overlay();
     let a_id = state.entities.body(first).id;
     let b_id = state.entities.body(second).id;
@@ -4827,17 +4828,17 @@ fn city_with_ten_thousand_residents_forms_large_households_and_births_use_real_b
     let second = state.entities.slot_of(people[1]).unwrap();
     state.entities.set_pos(first, [8.0, 201.0, 8.0]);
     state.entities.set_pos(second, [8.5, 201.0, 8.0]);
-    let mut homes = vec![bed(&mut state, 4, 4), bed(&mut state, 8, 4)];
+    let mut homes = vec![roofed_bed(&mut state, 4, 4), roofed_bed(&mut state, 8, 4)];
     for z in [10, 12, 14] {
         for x in [1, 3, 5, 7, 9, 11] {
-            homes.push(bed(&mut state, x, z));
+            homes.push(roofed_bed(&mut state, x, z));
         }
     }
     for (&entity, home) in people.iter().zip(homes) {
         let slot = state.entities.slot_of(entity).unwrap();
         state.entities.row_mut(slot).villager.as_mut().unwrap().home = Some(home);
     }
-    let child_home = bed(&mut state, 12, 4);
+    let child_home = roofed_bed(&mut state, 12, 4);
     state.world.fold_overlay();
     for family in people.chunks(20) {
         crate::settlements::households::form(

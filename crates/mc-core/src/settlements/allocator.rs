@@ -1094,6 +1094,29 @@ fn scope_allows(scope: HousingScope, pos: BlockPos) -> bool {
     }
 }
 
+/// Whether solid collision stands anywhere above `pos` in its column.
+pub(crate) fn roofed(
+    world: &crate::world::ChunkWorld,
+    registry: &CoreRegistry,
+    pos: BlockPos,
+) -> bool {
+    (pos.y + 1..world.geometry().max_y()).any(|y| {
+        world
+            .block_at(pos.x, y, pos.z)
+            .and_then(|id| registry.collision_boxes.get(id as usize))
+            .is_some_and(|shapes| !shapes.is_empty())
+    })
+}
+
+/// Settlement residents sleep only in roofed beds and shelter otherwise, so a
+/// resident never claims an open-air bed: it would stay empty yet barred to
+/// every other villager. Unbound villagers keep vanilla bed claims.
+fn bed_allowed(state: &TickState, scope: HousingScope, poi: Poi) -> bool {
+    !matches!(scope, HousingScope::Bound { .. })
+        || poi.kind != PoiKind::Home
+        || roofed(&state.world, &state.registry, poi.pos)
+}
+
 fn acquire(
     state: &mut TickState,
     cache: &mut PoiCache,
@@ -1109,6 +1132,9 @@ fn acquire(
         // Only certified slots are settlement jobs. Work-point lists are
         // bounded at certification; never rescan the settlement radius here.
         cache.candidates.clear();
+        if let Some(settlement) = v.settlement {
+            super::buildings::follow_moved_stations(state, settlement, &cache.chunks);
+        }
         if let Some(record) = v.settlement.and_then(|id| state.settlements.get(id)) {
             // Storage is a destination, not a replacement for extraction.
             // Keep staffing the certified resource slots after it is built.
@@ -1174,7 +1200,7 @@ fn acquire(
         });
         cache
             .candidates
-            .retain(|(_, poi)| scope_allows(scope, poi.pos));
+            .retain(|(_, poi)| scope_allows(scope, poi.pos) && bed_allowed(state, scope, *poi));
     }
     let kind_index = match kind {
         PoiKind::Home => 0,
@@ -1532,7 +1558,7 @@ pub(crate) fn free_bed(
     cache.nearby(pos, owner, |kind| kind == PoiKind::Home);
     cache
         .candidates
-        .retain(|(_, poi)| scope_allows(scope, poi.pos));
+        .retain(|(_, poi)| scope_allows(scope, poi.pos) && bed_allowed(state, scope, *poi));
     for _ in 0..5 {
         let (_, poi) = cache.candidates.pop()?;
         if !bed_has_baby_space(state, poi.pos) || claimed_home == Some(poi.pos) {
@@ -1649,6 +1675,12 @@ fn validate_changed_claims(state: &mut TickState, cache: &mut PoiCache) -> usize
             state.entities.row_mut(slot);
             cache.allocator_updates.push(id);
         }
+        // The brain diffs VillagerData only across its own decision, which
+        // runs after this phase: a profession lost here must reach the client
+        // now, not when the next sleep toggles the pose.
+        if before.3 != after.3 {
+            crate::villager::sync_appearance(state, slot);
+        }
         cache.sync_search(state, slot);
     }
     cache.promote_searches(state.tick);
@@ -1662,6 +1694,10 @@ pub(crate) mod tests;
 #[cfg(test)]
 #[path = "allocator_event_tests.rs"]
 mod event_tests;
+
+#[cfg(test)]
+#[path = "allocator_claim_tests.rs"]
+mod claim_tests;
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct ValidatedPoi {
     pos: BlockPos,
@@ -1670,6 +1706,8 @@ pub(crate) struct ValidatedPoi {
     foot: Option<(ChunkPos, u64)>,
     block: Option<u32>,
     bed_valid: bool,
+    /// False only for a loaded bed head with open sky above it.
+    roofed: bool,
 }
 
 /// Geometry only: dimensions, profession and authoritative claim custody are
@@ -1752,6 +1790,8 @@ impl PoiCtx<'_> {
             bed_valid: home
                 && (foot.is_some_and(|(chunk, _)| !self.world.has_chunk(chunk.x, chunk.z))
                     || bed_pair(self.world, self.registry, pos).is_some()),
+            // The roof column shares the head's chunk, so its revision covers it.
+            roofed: !home || roofed(self.world, self.registry, pos),
         };
         memory.sites[index] = Some(known);
         known
@@ -1785,7 +1825,15 @@ impl PoiCtx<'_> {
                 kind: PoiKind::Home,
             };
             let geometry = self.geometry(cache, &mut v.poi_validation, 0, pos);
-            if !cached_valid_poi(geometry, cache, poi.kind) || cache.claimed(owner, poi) {
+            // A resident never keeps an open-air bed: a roof removed after the
+            // claim, or a claim made before residents needed a roofed bed.
+            let resident = v
+                .settlement
+                .is_some_and(|id| self.settlements.get(id).is_some());
+            if !cached_valid_poi(geometry, cache, poi.kind)
+                || cache.claimed(owner, poi)
+                || (resident && !geometry.roofed)
+            {
                 v.home = None;
             }
         }

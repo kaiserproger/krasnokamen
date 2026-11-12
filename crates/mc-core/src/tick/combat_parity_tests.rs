@@ -283,6 +283,106 @@ fn parity_death_announced_to_other_players() {
 }
 
 #[test]
+fn parity_special_mob_melee_death_names_the_mob_for_the_two_argument_template() {
+    let (mut state, player, pos) = flat_player_fixture();
+    let mob = state.spawn_mob(
+        state.registry.zombie_type_id,
+        [pos[0] + 1.0, pos[1], pos[2]],
+        100.0,
+    );
+    // The source `special_mobs::damage` submits for warden/guardian-style attacks.
+    let source = DamageSource::Projectile {
+        projectile: mob,
+        direct_type_id: state.registry.zombie_type_id,
+        owner: mob,
+        velocity: [0.0; 2],
+        punch: 0,
+        flame: false,
+    };
+    state.outbox.clear();
+    hit(&mut state, player, DamageKind::Melee, Some(source));
+    state.commit_merge_effects();
+    let message = state.outbox[&ConnectionId(1)]
+        .iter()
+        .find_map(|change| match change {
+            PlayerChange::Died { message } => Some(format!("{message:?}")),
+            _ => None,
+        })
+        .expect("the player died");
+    assert!(message.contains("death.attack.mob"), "{message}");
+    assert!(message.contains("entity.minecraft.zombie"), "{message}");
+}
+
+#[test]
+fn parity_death_message_keys_match_the_damage_type_registry_and_language_file() {
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/vanilla/26.3");
+    let lang: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(format!("{root}/assets/minecraft/lang/en_us.json")).unwrap(),
+    )
+    .unwrap();
+    let mut mismatches = Vec::new();
+    for kind in [
+        DamageKind::Generic,
+        DamageKind::Melee,
+        DamageKind::Thorns,
+        DamageKind::Projectile,
+        DamageKind::Fireball,
+        DamageKind::Lightning,
+        DamageKind::Explosion,
+        DamageKind::InFire,
+        DamageKind::OnFire,
+        DamageKind::Lava,
+        DamageKind::Suffocation,
+        DamageKind::OutsideBorder,
+        DamageKind::Cactus,
+        DamageKind::SweetBerryBush,
+        DamageKind::HotFloor,
+        DamageKind::Campfire,
+        DamageKind::Fall,
+        DamageKind::FallingAnvil,
+        DamageKind::FallingStalactite,
+        DamageKind::Drowning,
+        DamageKind::Starvation,
+        DamageKind::Wither,
+        DamageKind::Magic,
+        DamageKind::GenericKill,
+        DamageKind::Freeze,
+        DamageKind::FlyIntoWall,
+        DamageKind::Cramming,
+        DamageKind::SonicBoom,
+        DamageKind::IndirectMagic,
+        DamageKind::Stalagmite,
+        DamageKind::DragonBreath,
+        DamageKind::Void,
+    ] {
+        let (mut state, player, _) = flat_player_fixture();
+        hit(&mut state, player, kind, None);
+        state.commit_merge_effects();
+        let message = state.outbox[&ConnectionId(1)]
+            .iter()
+            .find_map(|change| match change {
+                PlayerChange::Died { message } => Some(format!("{message:?}")),
+                _ => None,
+            })
+            .expect("the player died");
+        let type_name = kind.type_name(None, false);
+        let registry: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(format!(
+                "{root}/data/minecraft/damage_type/{}.json",
+                type_name.strip_prefix("minecraft:").unwrap()
+            ))
+            .unwrap(),
+        )
+        .unwrap();
+        let key = format!("death.attack.{}", registry["message_id"].as_str().unwrap());
+        if !message.contains(&format!("\"{key}\"")) || lang.get(&key).is_none() {
+            mismatches.push(format!("{kind:?}: want {key}, got {message}"));
+        }
+    }
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
+}
+
+#[test]
 fn parity_shield_blocks_front_explosion() {
     let (mut state, player, pos) = flat_player_fixture();
     state.difficulty = Difficulty::Normal;

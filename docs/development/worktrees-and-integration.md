@@ -31,9 +31,13 @@ pooled target dir.
   refuses symlinked sidecar dirs (`wt-new` hard-links it). It must contain
   `data/minecraft/advancement/`; extract a full set with
   `tools/extract-vanilla-data.sh` from the local server jar.
-- **`SOLARIS_LOADER_ROOT`** must point at a Loader checkout in worktree gates;
-  without it the `real_client_manifest` tests in `mc-test-harness` fail on the
-  missing Gradle adapter, which is environment, not code.
+- **Sibling checkouts resolve from the main checkout.** In a worktree the
+  harness (`tools/harness/runtime.py` `sibling_root`, and the shell runners
+  `regression.sh` and `prepare-real-client-scenario.sh`) finds `solaris-loader`,
+  `solaris-client` and `solaris-default-plugins` beside the main checkout, via
+  `git rev-parse --git-common-dir`. No `SOLARIS_*_ROOT` export is needed; set
+  `SOLARIS_LOADER_ROOT`, `SOLARIS_CLIENT_ROOT` or `SOLARIS_DEFAULT_PLUGINS_ROOT`
+  only to select another checkout.
 - Heavy outputs go under `<work>/targets/`; the runner's pooled target dirs
   handle this (see [heavy commands](heavy-commands-and-memory.md)).
 - When the main checkout's binary or config changes under running agents,

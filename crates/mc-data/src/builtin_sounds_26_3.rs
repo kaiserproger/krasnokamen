@@ -6,6 +6,13 @@ use std::sync::LazyLock;
 
 /// Canonical name; gameplay need not initialize the wire-ID catalogue to use it.
 pub const CHORUS_FRUIT_TELEPORT: &str = "minecraft:item.chorus_fruit.teleport";
+/// `SoundEvents.AMETHYST_BLOCK_CHIME`, played by a projectile striking an
+/// amethyst block, budding amethyst, a bud or a cluster.
+pub const AMETHYST_BLOCK_CHIME: &str = "minecraft:block.amethyst_block.chime";
+/// `SoundEvents.BIG_DRIPLEAF_TILT_DOWN`.
+pub const BIG_DRIPLEAF_TILT_DOWN: &str = "minecraft:block.big_dripleaf.tilt_down";
+/// `SoundEvents.BIG_DRIPLEAF_TILT_UP`.
+pub const BIG_DRIPLEAF_TILT_UP: &str = "minecraft:block.big_dripleaf.tilt_up";
 
 static NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
     serde_json::from_str(include_str!("../data/builtin_sounds_26_3.json"))

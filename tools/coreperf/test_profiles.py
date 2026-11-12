@@ -121,6 +121,70 @@ class ProfilesTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     profiles.pinned_binary(binary, "server")
 
+    def test_incremental_pin_is_refused_but_pre_field_and_full_pins_pass(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = root / "absent-owner-host" / "pins"
+            pin = root / "remote-artifacts" / "pin"
+            pin.mkdir(parents=True)
+            binary = pin / "solaris-v2"
+            binary.write_bytes(b"server")
+            manifest = {"repo": "core", "kind": "server", "binary": str(binary),
+                        "head": "abc", "diff_sha256": "def", "command": "cargo build --release",
+                        "target": "test-target", "binary_sha256": profiles.load.scale.binary_sha256(binary)}
+            receipt = pin / "manifest.json"
+            with patch.object(profiles, "PIN_ROOT", store):
+                for recorded, accepted in ((None, True), (False, True), (True, False)):
+                    with self.subTest(incremental=recorded):
+                        receipt.write_text(json.dumps(manifest if recorded is None else dict(manifest, incremental=recorded)))
+                        if accepted:
+                            profiles.pinned_binary(binary, "server")
+                        else:
+                            with self.assertRaisesRegex(ValueError, "incremental"):
+                                profiles.pinned_binary(binary, "server")
+
+    def test_capacity_ladder_refuses_incremental_or_mismatched_pins_before_any_rung(self):
+        import asyncio
+        from tools.coreperf import capacity_ladder
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = root / "absent-owner-host" / "pins"
+            def pin(kind, name, *, head="abc", **extra):
+                folder = root / kind
+                folder.mkdir()
+                binary = folder / name
+                binary.write_bytes(kind.encode())
+                binary.chmod(0o755)
+                (folder / "manifest.json").write_text(json.dumps(
+                    {"repo": "core", "kind": kind, "binary": str(binary), "head": head, "diff_sha256": "def",
+                     "command": "cargo build --release", "target": "t",
+                     "binary_sha256": profiles.load.scale.binary_sha256(binary), **extra}))
+                return binary
+            server = pin("server", "solaris-v2")
+            bots = pin("bots", "player-scale-bots")
+            args = argparse.Namespace(out=root / "out", server_bin=server, bots_bin=bots)
+            with patch.object(profiles, "PIN_ROOT", store), patch.object(capacity_ladder, "rung") as rung:
+                (server.parent / "manifest.json").write_text(json.dumps(
+                    dict(json.loads((server.parent / "manifest.json").read_text()), incremental=True)))
+                args.out = root / "out1"
+                with self.assertRaisesRegex(SystemExit, "incremental"):
+                    asyncio.run(capacity_ladder.main_async(args))
+                (server.parent / "manifest.json").write_text(json.dumps(
+                    dict(json.loads((server.parent / "manifest.json").read_text()), incremental=False, head="other")))
+                args.out = root / "out2"
+                with self.assertRaisesRegex(SystemExit, "different source trees"):
+                    asyncio.run(capacity_ladder.main_async(args))
+                rung.assert_not_called()
+
+    def test_unpinned_binary_without_manifest_passes_the_soft_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "solaris-v2"
+            binary.write_bytes(b"x")
+            profiles.load.scale.refuse_incremental_pin(binary, "server")
+            (Path(directory) / "manifest.json").write_text(json.dumps({"incremental": True}))
+            with self.assertRaisesRegex(ValueError, "incremental"):
+                profiles.load.scale.refuse_incremental_pin(binary, "server")
+
     def test_owner_host_requires_pin_store_and_exact_manifest_path(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -234,6 +298,7 @@ class ProfilesTests(unittest.TestCase):
                 for i, row in enumerate(recipe["coverage"])]
         sample = {"tick": 3, "coreperf": {"tick": 3, "resident_entities": 90,
                   "xp_orbs_processed": 9, "xp_orbs_by_region": {str(recipe["stress"]["regions"][0]): 7},
+                  "xp_value_by_region": {str(recipe["stress"]["regions"][0]): 10},
                   "regions": rows}}
         self.assertEqual(profiles.validate_scale_sample(recipe, sample)["xp_orbs"], 7)
         del sample["coreperf"]["xp_orbs_processed"]
@@ -253,7 +318,7 @@ class ProfilesTests(unittest.TestCase):
         row = {"region": index, "active_chunks": 16, "motion_admitted": 0,
                "motion_full": 0, "motion_resting": 0}
         sample = {"tick": 1, "coreperf": {"tick": 1, "resident_entities": 11,
-                  "regions": [row], "xp_orbs_processed": 0, "xp_orbs_by_region": {}}}
+                  "regions": [row], "xp_orbs_processed": 0, "xp_orbs_by_region": {}, "xp_value_by_region": {}}}
         observed = profiles.validate_scale_sample(recipe, sample)
         self.assertEqual((observed["xp_orbs"], observed["active"]), (0, 0))
         row["active_chunks"] = 15
@@ -293,6 +358,37 @@ class ProfilesTests(unittest.TestCase):
         sample["coreperf"]["brewing_discovery_by_region"][region] = 7
         with self.assertRaisesRegex(ValueError, "below requested containers"):
             profiles.validate_scale_sample(recipe, sample)
+
+    def test_mutating_workload_commands_are_fenced_after_passive_warmup(self):
+        args = argparse.Namespace(profile="scale-100k-all-active", mobs=80,
+                                  warmup_seconds=2, measure_seconds=5)
+        for kind in ("brewing-containers", "churn"):
+            recipe = {"stress": {"kind": kind, "pulse_interval_ms": 500, "commands": ["a", "b"]}}
+            warmup, measured = profiles.schedule(args, recipe)["windows"]
+            self.assertNotIn("commands", warmup)
+            self.assertTrue(measured["command_fence"])
+            self.assertEqual(measured["commands"], ["a", "b"])
+
+    def test_churn_measurement_ends_after_a_complete_replacement_cycle(self):
+        recipe = {"stress": {"kind": "churn", "pulse_interval_ms": 500,
+                             "commands": ["summon-pig", "kill-cow", "summon-cow", "kill-pig"]}}
+        for seconds in (5, 120):
+            args = argparse.Namespace(profile="scale-100k-all-active", mobs=80,
+                                      warmup_seconds=2, measure_seconds=seconds)
+            window = profiles.schedule(args, recipe)["windows"][1]
+            slots = (window["duration_ms"] - 1) // window["command_interval_ms"]
+            self.assertGreater(slots, 0)
+            self.assertEqual(slots % len(window["commands"]), 0)
+
+    def test_one_bottle_smoke_pulses_early_enough_to_observe_yield(self):
+        recipe = profiles.scale_fixture(10, "all-active", active_override=0)
+        profiles.add_xp_fixture(recipe, 1, smoke=True, players=100, locality="spread")
+        self.assertEqual(recipe["stress"]["pulse_interval_ms"], 1500)
+        args = argparse.Namespace(profile="scale-100k-all-active", mobs=10, smoke=True,
+                                  warmup_seconds=2, measure_seconds=5)
+        warmup, measurement = profiles.schedule(args, recipe)["windows"]
+        self.assertNotIn("commands", warmup)
+        self.assertEqual(measurement["command_interval_ms"], 1500)
 
     def test_productive_workers_require_real_distinct_farm_cell_changes(self):
         recipe = profiles.scale_fixture(78, "all-active")
@@ -484,7 +580,7 @@ class ProfilesTests(unittest.TestCase):
         self.assertFalse(any(row["active"] for row in recipe["coverage"]))
         self.assertEqual(recipe["stress"]["anchors"], [])
         sample = {"tick": 2, "coreperf": {"tick": 2, "resident_entities": 10,
-                  "regions": [], "xp_orbs_processed": 0, "xp_orbs_by_region": {}}}
+                  "regions": [], "xp_orbs_processed": 0, "xp_orbs_by_region": {}, "xp_value_by_region": {}}}
         self.assertEqual(profiles.validate_scale_sample(recipe, sample)["active"], 0)
         with self.assertRaisesRegex(ValueError, "invalid XP workload"):
             profiles.add_xp_fixture(profiles.scale_fixture(10, "all-active", active_override=0),
@@ -514,6 +610,18 @@ class ProfilesTests(unittest.TestCase):
             with self.subTest(bad=bad, count=count), self.assertRaises(ValueError):
                 profiles.exact_cohort_tick(bad, "xp_orbs", count)
         self.assertEqual(profiles.exact_cohort_tick([{"tick": 12, "xp_orbs": 0}], "xp_orbs", 0), 12)
+
+    def test_bottle_yield_uses_orb_value_and_count_not_bottle_count(self):
+        samples = [{"tick": 1, "xp_orbs": 0, "xp_value": 0},
+                   {"tick": 2, "xp_orbs": 2, "xp_value": 10}]
+        self.assertEqual(profiles.xp_bottle_cohort_tick(samples, 1), 2)
+        for sample in ({"tick": 1, "xp_orbs": 1, "xp_value": 2},
+                       {"tick": 1, "xp_orbs": 4, "xp_value": 10},
+                       {"tick": 1, "xp_orbs": 1, "xp_value": 12},
+                       {"tick": 1, "xp_orbs": 1}):
+            with self.subTest(sample=sample), self.assertRaises(ValueError):
+                profiles.xp_bottle_cohort_tick([sample], 1)
+        self.assertEqual(profiles.xp_bottle_cohort_tick([samples[0]], 0), 1)
 
     def test_saved_fixture_block_census_rejects_wrong_or_missing_blocks(self):
         recipe = {"expected_blocks": [{"position": [1, 2, 3], "block": "minecraft:chest"}]}

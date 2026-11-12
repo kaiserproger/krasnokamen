@@ -31,6 +31,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+from .runtime import SIBLING_NAMES, sibling_root
+
 # ------------------------------------------------------------------ sources
 
 AGENTS_VALIDATION = "AGENTS.md#build-and-validation"
@@ -279,9 +281,6 @@ PROTOCOL_EDGE_FILTERS = ("wire", "decode", "translation")
 CUSTODY_FILTERS = ("conservation", "custody")
 SCENARIO_COLLAPSE = 3  # more matching scenarios than this: run their profile instead
 HARNESS_SUITE = "python3 -m unittest discover -t . -s tools/harness -p 'test_*.py'"
-SIBLING_NAMES = {"client": "solaris-client", "loader": "solaris-loader", "plugins": "solaris-default-plugins"}
-SIBLING_ENV = {"client": "SOLARIS_CLIENT_ROOT", "loader": "SOLARIS_LOADER_ROOT",
-               "plugins": "SOLARIS_DEFAULT_PLUGINS_ROOT"}
 SIBLING_MARKERS = {
     "client": ("launcher", "SPECIFICATION.md"),
     "loader": ("loader-core", "settings.gradle.kts"),
@@ -465,13 +464,7 @@ def repo_kind(root: Path) -> str:
 
 
 def sibling_roots(root: Path) -> dict[str, Path]:
-    roots = {}
-    for kind, name in SIBLING_NAMES.items():
-        env = os.environ.get(SIBLING_ENV[kind])
-        candidates = [Path(env)] if env else []
-        candidates += [root.parent / name, root.parent.parent / name]
-        roots[kind] = next((c for c in candidates if c.is_dir()), root.parent / name)
-    return roots
+    return {kind: sibling_root(kind, root) for kind in SIBLING_NAMES}
 
 
 def locate(path: str, root: Path, own: str, siblings: dict[str, Path]) -> Changed:

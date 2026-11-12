@@ -282,6 +282,17 @@ warped case, including a negative control that skips a consequential tick.
 `/tick sprint`, including the civilization-seed QA sprint, removes waits but
 still executes every tick.
 
+Live pause tests await `pause_when_empty_tests::wait_for_pause`, which observes
+the tick owner's test-only pause acknowledgement and drains only broadcasts
+at or before that acknowledged tick. A quiet broadcast channel is not proof
+of pause: a busy tick can exceed the old idle-gap window. Tests for continued
+simulation await a concrete number of ticks instead.
+
+Raider casting fixtures advance real ticks until the target owner records
+acquisition, bounded by `raiders::SEARCH_INTERVAL` for the fixed fixture.
+Checkpoint/WAL tests journal every intervening tick, not just the casting tick,
+and retain all spell, projectile and recovery assertions.
+
 Concurrency: `RUST_TEST_THREADS` (first priority), else `NEXTEST_TEST_THREADS`
 (default `num-cpus`), selects the gate default; nextest's `--test-threads=N`
 overrides it (place it before any `--`). Unsupported Cargo/libtest and
@@ -344,7 +355,13 @@ Select a frozen protocol row with `--matrix tools/harness/matrix_specs/matrix.ya
 `--only-id`, `--ledger`, `--run-root`. Both graphical lanes require
 `--plugins-dir` and the private hardware-free `tools/harness/screen_audio_graph.sh`
 wrapper. On the owner host wrap every run in Main's absolute
-`tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER=` invocation.
+`tools/dev/mem-run.sh -m 6G` invocation.
+
+The wrapper points `XDG_DATA_HOME` at its private graph, where the native client
+finds no content and exits before MCP is ready. Run the harness through
+`sh -c 'XDG_DATA_HOME=<client data XDG> exec python3 -m tools.harness run native-matrix ...'`
+inside the wrapper, with that XDG's `solaris-client/` symlinking the client content
+(see [real-client gates](development/real-client-gates.md)).
 
 Optional CRAP measurement: `cargo-llvm-cov` and `cargo-crap` measure line
 coverage and cyclomatic complexity per function on one source tree. Retain the

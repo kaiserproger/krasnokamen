@@ -41,7 +41,7 @@ checked out beside this repository unless an environment variable says otherwise
   `alsa-sys` panic; missing `LIBRARY_PATH` fails linking `-lasound`. Check the
   binary's mtime afterwards: an early-exiting wrapped build leaves the old binary.
   On the shared host wrap the build:
-  `<work>/solaris/tools/dev/mem-run.sh -m 10G env RUSTC_WRAPPER= cargo build --release --bin solaris-client`.
+  `<work>/solaris/tools/dev/mem-run.sh -m 10G cargo build --release --bin solaris-client`.
 
 ### 2. Build the client data root from public sources
 
@@ -84,18 +84,19 @@ Keep these in one env file per gate wave and source it; never retype paths.
 
 ```sh
 export SOLARIS_SERVER_BINARY=<core>/target/release/solaris-v2   # release build
-export SOLARIS_CLIENT_ROOT=<client checkout>                    # default ../solaris-client
+export SOLARIS_CLIENT_ROOT=<client checkout>                    # default: solaris-client beside the main checkout
 export SOLARIS_CLIENT_BINARY=<client>/target/release/solaris-client
 # The data root from step 2:
 export SOLARIS_CLIENT_DATA_DIR=<root>/data/vanilla              # the vanilla metadata dir, not <root>
 export SOLARIS_CLIENT_RESOURCE_ROOT=<root>/resources
 export SOLARIS_CLIENT_ASSET_ROOT=<root>/assets
 export SOLARIS_CLIENT_ASSET_INDEX=<root>/assets/asset-index.json
-# Sibling repositories, only for the gates that use them:
+# Sibling repositories, only to select a checkout other than the one beside the main checkout
+# (worktrees resolve it too: runtime.sibling_root):
 # Java probes and survival: point at canonical content with adjacent protocol caches:
 export SOLARIS_SERVER_VANILLA_DATA_DIR=<content-root>/26.3
-export SOLARIS_LOADER_ROOT=<solaris-loader checkout>            # Java/Loader clients; default ../solaris-loader
-export SOLARIS_DEFAULT_PLUGINS_ROOT=<solaris-default-plugins>   # standard-pack and plugin gates
+export SOLARIS_LOADER_ROOT=<solaris-loader checkout>            # Java/Loader clients; default: beside the main checkout
+export SOLARIS_DEFAULT_PLUGINS_ROOT=<solaris-default-plugins>   # standard-pack and plugin gates; same default
 ```
 
 *Owner host:* builds land in a pooled target dir (`targets/slot-<l>`) that
@@ -105,7 +106,8 @@ other trees reuse, so the harness refuses `SOLARIS_SERVER_BINARY` or
 tree (HEAD plus the hash of uncommitted changes), copies the binary to
 `<work>/pins/<sha12>[-<diff8>]/` with a manifest, prints the
 `SOLARIS_SERVER_BINARY=` (or `SOLARIS_CLIENT_BINARY=`) line and reuses an
-existing pin without building. Pins are immutable. A harness profile that
+existing pin without building. Pins are immutable; the build is incremental by
+default, `--no-incremental` makes the full build performance windows require. A harness profile that
 builds the release server itself (`regressions-client`) hard-links its build
 into the run's artifact dir.
 
@@ -138,8 +140,9 @@ into the run's artifact dir.
   (`solaris-v2 content import --version 26.3 --download --cache data/vanilla`,
   see [OPERATING](../OPERATING.md#vanilla-content-cache)); they copy it into the
   private client data root as `servers/content/26.3`.
-- Run each graphical gate through the scene slot so at most three run on the
-  host: `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER=
+- Run each graphical gate through the scene slot so at most six run on the
+  host and the gate's scope outranks tests and builds for CPU:
+  `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G
   python3 -m tools.harness run <profile> --client native --windowed`.
 
 ### 4. Which gates need owner-held access
@@ -253,6 +256,18 @@ proofs need a physical XTest click (pattern: `_scroll` in
   (`SOLARIS_SERVER_BINARY` or `--server-bin`, plus `--plugins-dir`); they never
   build a server.
 
+- `native-v2-ledger-painting` places one painting and observes its removal
+  after its fixture support is removed.
+- `native-v2-ledger-axe` uses a fixture axe to strip a log, scrape oxidized
+  copper and unwax weathered copper, observing each received block state.
+- `native-v2-ledger-sponge` places a sponge beside one water source and observes
+  the wet sponge and absorbed source through the graphical client's received blocks.
+- `native-v2-ledger-setblock-snbt` opens a fixture chest created with `/setblock`
+  SNBT and withdraws the seven diamonds received in its first slot.
+- `native-v2-ledger-crafting-pickup` opens a crafting table and checks that its
+  menu remains open and 16 planks are on the cursor after the first pickup.
+  This does not exercise disconnect custody.
+
 ## Scene shots
 
 `python3 -m tools.harness run scene-shot --client native --windowed` runs a
@@ -260,12 +275,30 @@ scripted capture. Set `SOLARIS_SERVER_BINARY`, `SOLARIS_CLIENT_BINARY`, the nati
 env block above and `SCENE_SHOT_SCENARIO` to a JSON file. The JSON has `steps`,
 each one of `cmd`, `tp` (five coordinates), `look`, `hotbar`, `wait_ticks`, `wait_play`,
 `wait_respawn` (waits for live health and a closed death screen), `pause` (native only), `wait_terrain`, `shot`, `observe`, `use_item_on`, `click_screen_button`,
-`scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, `timed_entities`,
+`scan_blocks`, `read_block`, `navigate_to_block`, `list_entities`, `require_entities`, `timed_entities`,
 `mob_motion`, or `key` (`keys` and `ticks` MCP arguments; released when the step finishes). Optional
 `seed` defaults to 100, `world` copies an existing world, `server_view_distance`
-defaults to 4, and `client_settings` accepts `graphics_preset`, `render_distance`
-and `fov` (default 70: the owner's saved fov is never inherited). PNG paths are
+defaults to 4, `lod_enabled` optionally sets `[lod].enabled` in the private
+server config, and `lod_share_terrain_keys` optionally sets
+`[lod].share_terrain_keys` when LOD is enabled. Sharing reveals seed-derived
+terrain parameters to the client; use only with an isolated test world.
+`client_settings` accepts `graphics_preset`, `render_distance`
+and `fov` (default 70: the owner's saved fov is never inherited). Set
+`RUST_LOG=mc_edge::lod=debug` to retain a server log line for each successfully
+queued LOD tile response. PNG paths are
 recorded in `result.json`; settings and world are isolated per run.
+`tools/harness/tool_clipping_scene.json` captures the diamond pickaxe against
+obsidian from far and close positions, including held attack frames.
+`tool_wall_visible` checks the received target, selected tool and eye distance,
+then requires turquoise tool pixels over a dark wall in the fixed close-view
+frame. Inspect the attack frames separately; the pixel check covers rest only.
+
+
+`require_entities` takes `name`, `args` for `minecraft_list_entities`, and a nonempty
+`types` list of namespaced entity IDs. Place it immediately before a shot: it
+records the client-visible entity snapshot as `<name>.json` and fails if any
+required type is absent. It works with native and Java MCP clients, but presence
+in the snapshot does not establish that the entity appears in the captured frame.
 
 `use_phases` (native only) takes `name` and `ticks` (1–100), holds use across
 start and hold captures, releases it even on failure, and requires the client's
@@ -299,11 +332,21 @@ is required; use an ordered chat fence after the commands under test before
 checking absence. `tools/harness/command_feedback_scene.json` exercises player
 success suppression, failure visibility and the enabled feedback control.
 
+`assert_same_game_time` compares integer `time.game_time` from two named native
+observations and requires the specified daylight change, proving a fresh clock
+update arrived. The registered `native-frozen-game-age` scene fences freeze,
+teleport and time-command replies across held frames and local input.
+
 `wait_chat` (native only) takes a nonempty substring and waits on client state
 notifications until `recent_chat` contains it. Use a received acknowledgement
 before observing a server-driven transition; waiting client ticks does not
 acknowledge a command. This checks current chat history, not freshness: use a
 unique ordered fence when the same reply could already be present.
+
+`native-low-roof-house` certifies a two-block-high enclosed house with a paired
+bed. An ordered command fence and block predicates check the bed and roof before
+the native client asserts the certification reply. This checks certification,
+not whether a villager sleeps or breeds.
 
 
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains

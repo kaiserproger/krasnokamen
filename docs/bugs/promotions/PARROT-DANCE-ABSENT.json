@@ -1,0 +1,30 @@
+{
+  "id": "PARROT-DANCE-ABSENT",
+  "verdict": "promoted",
+  "fix_commit": "patch:9a0887f770f42d564833bdc7dd038433ee7f4803e16c4dee3051eb49cb17bbe7",
+  "fix_commit_full": "patch:9a0887f770f42d564833bdc7dd038433ee7f4803e16c4dee3051eb49cb17bbe7",
+  "promoted_at": "2026-11-11T20:50:16+00:00",
+  "tree_head": "4b375f8008a36ddc12b5ff702df76bae139600ae",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "9a0887f770f42d564833bdc7dd038433ee7f4803e16c4dee3051eb49cb17bbe7",
+  "reversed_files": [
+    "crates/mc-core/src/tick.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:vanilla_mob_behavior_tests::parrot_record_events_and_nearby_hostile_imitation": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:vanilla_mob_behavior_tests::parrot_record_events_and_nearby_hostile_imitation": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/LedgerMobsB01/.analysis/validation/20261111T204614-ledger-promote-_zw7z9a_"
+}

@@ -7,16 +7,20 @@ wooden door and a valid bed, a workshop (composter + mature wheat farmland
 inside reach), a storage (chest), a top-of-zone mine (smithing table at grade)
 and a lumber camp (fletching table) near mature persistent=false oaks;
 `/settlement create` with a computed radius covering the fixtures, certify
-buildings via chat commands, `/summon` plain villagers (no profession NBT:
-the allocator assigns certified slots), sequential nearest-bind per role.
+buildings via chat commands, `/summon` one plain villager per job (no
+profession NBT: the allocator assigns certified slots), sequential nearest-bind per role.
 Frozen daylight (`gamerule advance_time false`, no natural clock advance) and frozen
 random growth (`gamerule random_tick_speed 0`, mature saplings/leaves persist) + real
 event ticks, single `time set` per phase (3000 work, 18000 night, 3000 morning, 9000):
 
 1. a worker physically crosses a certified door (open seen + plane flip by a
    worker UUID, close awaited on a bounded exact predicate);
-2. the same 4 entities persist through the night, one in sleep pose by the
-   bed, and each worker returns within 6 blocks of its station at 3000;
+2. the same 3 entities persist through the night; a villager holding a fixture
+   job (nameplate and received VillagerData agree, whatever role it was
+   summoned for) sleeps in the bed within NIGHT_TICKS game ticks, still holds
+   that job on waking at 3000 and gets back to work within MORNING_TICKS:
+   within 2.5 blocks of its station, or (miner) inside the mine, or
+   (lumberjack) a log beside the spot where it stopped is cut while it stands there;
 3. farmer harvests mature wheat (age 7 -> replanted);
 4. miner digs inside the zone and the chest holds mining products;
 5. lumberjack cuts a mature oak AND replants AND the chest holds oak logs
@@ -72,9 +76,28 @@ def _rect(origin: tuple[int, int, int], lo: tuple[int, int, int],
     return (_abs(origin, *lo), _abs(origin, *hi))
 
 
-def bed_cells(hx0: int, hy0: int, hz0: int) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
-    """Bed foot west of head (vanilla east-facing pair, cf. brain_tests)."""
-    return ((hx0 + 1, hy0 + 1, hz0 + 1), (hx0 + 2, hy0 + 1, hz0 + 1))
+def house_beds(hx0: int, hy0: int, hz0: int) -> list[tuple[tuple[int, int, int], tuple[int, int, int]]]:
+    """One bed per fixture worker, foot west of head (vanilla east-facing pair, cf. brain_tests),
+    side by side along z; the interior's east column stays the walkway from the door."""
+    return [((hx0 + 1, hy0 + 1, hz0 + dz), (hx0 + 2, hy0 + 1, hz0 + dz))
+            for dz in range(1, len(VILLAGER_ROLES) + 1)]
+
+
+# A zombie's sensor reach plus the miner's dig reach (mining.rs hostile_near: threat_range 8 + 3).
+CAVE_HOSTILE_REACH = 11.0
+
+
+def cave_hostile_feet(mine_lo: tuple[int, int, int],
+                      entrance: tuple[int, int, int]) -> tuple[int, int, int]:
+    """Feet cell of a zombie sealed in stone two columns west of the mine, under the pad (the
+    u2wl2u3f cave hunter): in reach of the first staircase cell, never on the staircase's way east."""
+    return (mine_lo[0] - 2, entrance[1] - 7, entrance[2])
+
+
+def within_hostile_reach(feet: tuple[int, int, int], cell: tuple[int, int, int]) -> bool:
+    """hostile_near's range test: mob feet to the dig cell's centre."""
+    return math.dist((feet[0] + 0.5, feet[1], feet[2] + 0.5),
+                     (cell[0] + 0.5, cell[1] + 0.5, cell[2] + 0.5)) <= CAVE_HOSTILE_REACH
 
 
 def bed_facing_valid(foot: tuple[int, int, int], head: tuple[int, int, int], facing: str) -> bool:
@@ -139,6 +162,152 @@ def sleeping_at_bed(row: dict[str, Any], bed: tuple[int, int, int]) -> bool:
                           (bed[0] + 0.5, bed[2] + 0.5)) < 0.75)
 
 
+# Fixture jobs as the server shows them on a villager: the nameplate word
+# (`name · job · activity`) and the vanilla VillagerData profession a vanilla
+# client renders as the outfit (miner -> toolsmith, lumberjack -> fletcher).
+JOB_ROLES = {"фермер": "farmer", "шахтёр": "miner", "лесоруб": "lumberjack"}
+JOB_WIRE_PROFESSION = {"farmer": 5, "miner": 13, "lumberjack": 7}
+RETURN_RADIUS = 2.5
+# One summoned villager per fixture job, house villager first. A jobless extra
+# villager could hold a bed, leaving sleep_return no worker to judge.
+VILLAGER_ROLES = ("farmer", "miner", "lumberjack")
+# The sleeper sleep_return judges. Every worker has a bed, so the miner always
+# sleeps; the sealed cave zombie parks its digging under the pre-fix hostile
+# rule, so only the woken worker's walk to its job site (ISSUE-1-11) and the
+# visibility rule (ISSUE-1-27) get it back to work.
+SLEEP_RETURN_JOB = "miner"
+
+
+def nameplate(row: dict[str, Any]) -> str | None:
+    text = ((row.get("received_metadata") or {}).get("2") or {}).get("value")
+    return text if isinstance(text, str) else None
+
+
+def villager_job(row: dict[str, Any]) -> str | None:
+    """Fixture role of the job a villager holds, from client-received data.
+
+    Jobs follow the allocator, not summon order, so the role a villager was
+    summoned for proves nothing. Both client-visible signals must agree."""
+    parts = (nameplate(row) or "").split(" · ")
+    role = JOB_ROLES.get(parts[1]) if len(parts) == 3 else None
+    data = ((row.get("received_metadata") or {}).get("19") or {}).get("value")
+    if role is None or not isinstance(data, list) or len(data) != 3:
+        return None
+    return role if data[1] == JOB_WIRE_PROFESSION[role] else None
+
+
+def returned_to_job(row: dict[str, Any], job: str,
+                    stations: dict[str, tuple[int, int, int]]) -> bool:
+    """Still holds `job` and stands within RETURN_RADIUS of that job's station."""
+    station = stations[job]
+    return (villager_job(row) == job
+            and math.dist((float(row["x"]), float(row["z"])),
+                          (station[0] + 0.5, station[2] + 0.5)) < RETURN_RADIUS)
+
+
+# The server cuts a tree within this distance of its trunk (lumber.rs REACH).
+LUMBER_REACH = 4.0
+# Game ticks after `time set 3000` for the woken sleeper to get back to work:
+# a lumberjack's tree can be a long route away inside the settlement radius.
+MORNING_TICKS = 2400
+# Game ticks after `time set 18000` for a worker to walk home and lie down.
+NIGHT_TICKS = 1200
+
+
+def log_cells_near(rows: list[dict[str, Any]], pos: tuple[float, float, float],
+                   reach: float = LUMBER_REACH) -> list[tuple[int, int, int]]:
+    """Received log blocks within cutting reach of a standing villager."""
+    cells = [(int(row["x"]), int(row["y"]), int(row["z"])) for row in rows
+             if str(row.get("block_id", "")).endswith("_log")]
+    near = [cell for cell in cells
+            if math.dist((pos[0], pos[2]), (cell[0] + 0.5, cell[2] + 0.5)) <= reach]
+    return sorted(near, key=lambda cell: math.dist((pos[0], pos[2]), (cell[0] + 0.5, cell[2] + 0.5)))[:8]
+
+
+class WorkReturn:
+    """Whether a woken worker got back to work, from client-received state only.
+
+    Every job: it still shows the job and stands within RETURN_RADIUS of that
+    job's station. Or it starts the job's work where the job is done: a miner
+    stands inside the mine footprint; a lumberjack cuts a tree, i.e. a log
+    block within LUMBER_REACH of where it stopped turns into something else
+    while it is still there. A farmer has only the station check."""
+
+    def __init__(self, job: str, stations: dict[str, tuple[int, int, int]],
+                 mine: tuple[tuple[int, int, int], tuple[int, int, int]]) -> None:
+        self.job = job
+        self.stations = stations
+        self.mine = mine
+        self.evidence: str | None = None
+        self.pos: tuple[float, float, float] | None = None
+        self.stationary = False
+        self.scanned_at: tuple[float, float, float] | None = None
+        self.watched: list[tuple[int, int, int]] = []
+        self.travelled = 0.0
+
+    def see(self, row: dict[str, Any]) -> None:
+        pos = (float(row["x"]), float(row["y"]), float(row["z"]))
+        if self.pos is not None:
+            step = math.dist(self.pos, pos)
+            self.travelled += step
+            self.stationary = step < 0.2
+        self.pos = pos
+        if self.evidence is not None or villager_job(row) != self.job:
+            return
+        if returned_to_job(row, self.job, self.stations):
+            self.evidence = f"within {RETURN_RADIUS} of its station {list(self.stations[self.job])}"
+        elif self.job == "miner":
+            (x0, _, z0), (x1, y1, z1) = self.mine
+            if x0 <= pos[0] < x1 + 1 and z0 <= pos[2] < z1 + 1 and pos[1] <= y1 + 1:
+                self.evidence = f"inside the mine at {[round(v, 2) for v in pos]}"
+
+    def scan_spot(self) -> tuple[float, float, float] | None:
+        """Where to look for its tree: a lumberjack that stopped somewhere new."""
+        if (self.job != "lumberjack" or self.evidence is not None or not self.stationary
+                or self.pos is None):
+            return None
+        if self.scanned_at is not None and math.dist(self.scanned_at, self.pos) < 1.0:
+            return None
+        return self.pos
+
+    def scanned(self, spot: tuple[float, float, float], rows: list[dict[str, Any]]) -> None:
+        self.scanned_at = spot
+        self.watched = log_cells_near(rows, spot)
+
+    def logs_now(self, blocks: dict[tuple[int, int, int], str]) -> None:
+        """Fresh reads of the watched logs; a vanished one next to it is a cut."""
+        if self.evidence is not None or self.pos is None:
+            return
+        for cell, block_id in blocks.items():
+            if (cell in self.watched and not block_id.endswith("_log")
+                    and math.dist((self.pos[0], self.pos[2]), (cell[0] + 0.5, cell[2] + 0.5))
+                    <= LUMBER_REACH + 0.5):
+                self.evidence = f"cut the log at {list(cell)} -> {block_id}"
+                return
+
+
+def _game_time(steps: ProbeSteps) -> int:
+    """Server world age as the client received it (advances while daylight is frozen)."""
+    return int((steps.observe().get("time") or {}).get("game_time") or 0)
+
+
+def _scan(steps: ProbeSteps, lo: tuple[int, int, int], hi: tuple[int, int, int]) -> list[dict[str, Any]]:
+    """Every received block in the box, following the scan's byte-bounded pages."""
+    rows: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        page = steps.call("minecraft_scan_blocks", {
+            "min_x": lo[0], "min_y": lo[1], "min_z": lo[2],
+            "max_x": hi[0], "max_y": hi[1], "max_z": hi[2], "offset": offset})
+        rows.extend(row for row in page.get("blocks", []) if isinstance(row, dict))
+        following = page.get("next_offset")
+        if following is None:
+            return rows
+        if following <= offset:
+            raise RuntimeError(f"village-qa scan did not advance past offset {offset}")
+        offset = following
+
+
 def _block_id(block: dict[str, Any]) -> str:
     return str(block.get("block_id", ""))
 
@@ -181,12 +350,27 @@ def _chat_echo(steps: ProbeSteps, label: str) -> dict[str, Any]:
                       f"{label}_server_echo")
 
 
-def _villagers(steps: ProbeSteps) -> list[dict[str, Any]]:
-    """Client-visible villagers via the explicit list tool (observe has none)."""
+def _entities(steps: ProbeSteps, entity_type: str) -> list[dict[str, Any]]:
+    """Client-visible entities of one type via the explicit list tool (observe has none)."""
     result = steps.call("minecraft_list_entities", {"radius": 64, "limit": 128})
     rows = result.get("entities", [])
     return [row for row in rows if isinstance(row, dict)
-            and row.get("entity_type") == "minecraft:villager"]
+            and row.get("entity_type") == entity_type]
+
+
+def _villagers(steps: ProbeSteps) -> list[dict[str, Any]]:
+    return _entities(steps, "minecraft:villager")
+
+
+def _sealed_hostile(steps: ProbeSteps, feet: tuple[int, int, int]) -> list[float] | None:
+    """Position of the live zombie still in its one-cell pocket, if the client lists one."""
+    for row in _entities(steps, "minecraft:zombie"):
+        pos = [float(row["x"]), float(row["y"]), float(row["z"])]
+        if (float(row.get("health", 0)) > 0
+                and math.dist((pos[0], pos[2]), (feet[0] + 0.5, feet[2] + 0.5)) < 0.8
+                and abs(pos[1] - feet[1]) < 0.6):
+            return [round(v, 2) for v in pos]
+    return None
 
 
 def _tick(steps: ProbeSteps) -> None:
@@ -357,7 +541,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     fixture("time set 18000")
     _expect_block(probe, (x0, y0 - 1, z0), "minecraft:stone", "spawn_pad_leveled")
 
-    # --- house 5x5x5: floor y0, roof y0+4, walls y0+1..y0+3, east door, valid east bed ---
+    # --- house 5x5x5: floor y0, roof y0+4, walls y0+1..y0+3, east door, one east bed per worker ---
     house_lo, house_hi = _rect(origin, (0, 0, 0), (4, 4, 4))
     hx0, hy0, hz0 = house_lo
     hx1, hy1, hz1 = house_hi
@@ -373,15 +557,18 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     fixture(f"setblock {door_top[0]} {door_top[1]} {door_top[2]} minecraft:air")
     fixture(f"setblock {door[0]} {door[1]} {door[2]} minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]")
     fixture(f"setblock {door_top[0]} {door_top[1]} {door_top[2]} minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]")
-    bed_foot, bed_head = bed_cells(hx0, hy0, hz0)
-    assert bed_facing_valid(bed_foot, bed_head, "east"), "bed fixture must be east foot->head"
-    assert house_headroom_ok(bed_head[1], hy1), "bed needs two air blocks under the roof"
-    fixture(f"setblock {bed_foot[0]} {bed_foot[1]} {bed_foot[2]} minecraft:red_bed[facing=east,part=foot,occupied=false]")
-    fixture(f"setblock {bed_head[0]} {bed_head[1]} {bed_head[2]} minecraft:red_bed[facing=east,part=head,occupied=false]")
+    beds = house_beds(hx0, hy0, hz0)
+    for bed_foot, bed_head in beds:
+        assert bed_facing_valid(bed_foot, bed_head, "east"), "bed fixture must be east foot->head"
+        assert house_headroom_ok(bed_head[1], hy1), "bed needs two air blocks under the roof"
+        fixture(f"setblock {bed_foot[0]} {bed_foot[1]} {bed_foot[2]} minecraft:red_bed[facing=east,part=foot,occupied=false]")
+        fixture(f"setblock {bed_head[0]} {bed_head[1]} {bed_head[2]} minecraft:red_bed[facing=east,part=head,occupied=false]")
     _expect_block(probe, door, "minecraft:oak_door", "house_door_placed")
-    _expect_block(probe, bed_head, "minecraft:red_bed", "house_bed_placed")
-    sleeper_stage = (hx0 + 3, hy0 + 1, hz0 + 3)
-    fixture(f"setblock {sleeper_stage[0]} {sleeper_stage[1]} {sleeper_stage[2]} minecraft:air")
+    for index, (_, bed_head) in enumerate(beds):
+        _expect_block(probe, bed_head, "minecraft:red_bed", f"house_bed_{index}_placed")
+    bed_heads = [head for _, head in beds]
+    house_stage = (hx0 + 3, hy0 + 1, hz0 + 3)
+    fixture(f"setblock {house_stage[0]} {house_stage[1]} {house_stage[2]} minecraft:air")
     if ctx.windowed:
         native_client.capture(probe.client, artifact, "village-qa-house")
 
@@ -462,6 +649,27 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     dig_before = {cell: _block_id(_read(probe, cell)) for cell in dig_cells}
     detail["mine_probe_cells"] = len(dig_cells)
 
+    # --- a zombie sealed in stone beside the mine, under the pad (u2wl2u3f): within the
+    # miner's sensor reach of the first staircase cell, but no resident can see or reach it.
+    # The pre-fix hostile rule counted it and parked the miner on every lane. ---
+    cave = cave_hostile_feet(mine_lo, entrance)
+    assert cave[0] < mine_lo[0], "the cave lies outside the mine, off the staircase"
+    assert within_hostile_reach(cave, (entrance[0] + 1, entrance[1] - 1, entrance[2])), \
+        "the cave zombie must be in reach of the first staircase cell"
+    kx, ky, kz = cave
+    fixture(f"fill {kx - 1} {ky - 1} {kz - 1} {kx + 1} {ky + 2} {kz + 1} minecraft:stone")
+    fixture(f"fill {kx} {ky} {kz} {kx} {ky + 1} {kz} minecraft:air")
+    fixture(f"summon minecraft:zombie {kx + 0.5:.1f} {ky:.1f} {kz + 0.5:.1f} {{PersistenceRequired:1b}}")
+    settled("cave_hostile_summoned")
+    cave_start = None
+    for _ in range(25):  # bounded: the summon reaches the client within a few ticks
+        if (cave_start := _sealed_hostile(probe, cave)) is not None:
+            break
+        _tick(probe)
+    if cave_start is None:
+        raise RuntimeError(f"village-qa fixture failed: no live zombie listed in the sealed cave at {list(cave)}")
+    detail["cave_hostile"] = {"feet": list(cave), "start": cave_start}
+
     # --- lumber camp 5x5x5 with west door; two separated mature persistent=false oaks ---
     camp_lo, camp_hi = _rect(origin, (14, 0, 12), (18, 4, 16))
     cx0, cy0, cz0 = camp_lo
@@ -510,7 +718,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     # --- settlement radius covers every fixture, then certification ---
     cover = [house_lo, house_hi, work_lo, work_hi, store_lo, store_hi,
              mine_lo, mine_hi, camp_lo, camp_hi, *tree_soils,
-             farmer_stage, miner_stage, lumber_stage, sleeper_stage]
+             farmer_stage, miner_stage, lumber_stage, house_stage]
     radius = required_radius(origin, cover)
     detail["settlement_radius"] = radius
     fixture(f"settlement create {SETTLEMENT} {radius}")
@@ -551,10 +759,9 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     if empty_totals:
         raise RuntimeError(f"village-qa fixture failed: chest not empty: {empty_totals}")
 
-    # --- summon + bind sequentially, nearest fresh villager per role (sleeper last) ---
+    # --- summon + bind sequentially, nearest fresh villager per role ---
     detail["villager_uuids"] = []
-    role_plan = (("farmer", sleeper_stage), ("miner", miner_stage),
-                 ("lumberjack", lumber_stage), ("sleeper", farmer_stage))
+    role_plan = tuple(zip(VILLAGER_ROLES, (house_stage, miner_stage, lumber_stage), strict=True))
     role_uuid: dict[str, str] = {}
     for role, stage in role_plan:
         fixture(f"summon minecraft:villager {stage[0]} {stage[1]} {stage[2]}")
@@ -576,7 +783,8 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     detail["bind_chat"] = bound_echo.get("recent_chat", [])[:12]
     detail["bind_ok_count"] = sum(1 for line in probe.observe().get("recent_chat", [])
                                   if "Bound " in line and f" to {SETTLEMENT}." in line)
-    probe.check("four_villagers_bound", len(set(role_uuid.values())) == 4 and detail["bind_ok_count"] >= 4)
+    probe.check("three_villagers_bound", len(set(role_uuid.values())) == len(VILLAGER_ROLES)
+                and detail["bind_ok_count"] >= len(VILLAGER_ROLES))
     detail["villagers_visible"] = len(_villagers(probe))
     detail["villager_uuids_observed"] = list(role_uuid.values())
     if count_time_sets(probe.report["fixture_commands"]) != 1:
@@ -649,55 +857,107 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
                      "server log: villager door open/close lines")
     if ctx.windowed:
         native_client.capture(probe.client, artifact, "village-qa-workday")
+    # --- (1b) every fixture job is taken before the night ---
+    # Bounded wait for the exact state: each of the three jobs is shown held by
+    # some villager (nameplate and VillagerData agree), whoever was summoned
+    # for which role.
+    day_jobs: dict[str, str] = {}
+    jobs_deadline = _time.monotonic() + 90.0
+    while _time.monotonic() < jobs_deadline:
+        day_jobs = {str(row.get("entity_uuid")): job for row in _villagers(probe)
+                    if (job := villager_job(row)) is not None}
+        if set(day_jobs.values()) == set(stations):
+            break
+        _tick(probe)
+    detail["day_jobs"] = {uuid[:8]: job for uuid, job in day_jobs.items()}
 
-    # --- (2) night sleep: same entities persist, one in sleep pose by the bed ---
+    # --- (2) night sleep: same entities persist, every worker sleeps in a bed; the one
+    # holding SLEEP_RETURN_JOB is the sleeper judged in the morning ---
     evening = {str(row["entity_uuid"]): (float(row["x"]), float(row["y"]), float(row["z"]))
                for row in _villagers(probe)}
     fixture("time set 18000")
     settled("night_falls")
     night_tracks: dict[str, tuple[float, float, float]] = {}
+    bed_sleepers: dict[str, str | None] = {}
     sleeper: str | None = None
-    night_deadline = _time.monotonic() + 50.0
-    while _time.monotonic() < night_deadline:
+    sleeper_job: str | None = None
+    sleeper_bed: tuple[int, int, int] | None = None
+    # Game ticks, not seconds: a loaded host slows the server, and a worker far
+    # from home needs the same simulated walk either way.
+    night_start = _game_time(probe)
+    night_ticks = 0
+    while night_ticks < NIGHT_TICKS:
         for row in _villagers(probe):
             uuid = str(row.get("entity_uuid"))
             pos = (float(row["x"]), float(row["y"]), float(row["z"]))
             night_tracks[uuid] = pos
-            if uuid in worker_uuids and sleeping_at_bed(row, bed_head):
-                sleeper = uuid
+            for head in bed_heads:
+                if sleeping_at_bed(row, head):
+                    bed_sleepers[uuid[:8]] = nameplate(row)
+                    if villager_job(row) == SLEEP_RETURN_JOB:
+                        sleeper, sleeper_job, sleeper_bed = uuid, SLEEP_RETURN_JOB, head
         if sleeper is not None and set(evening) <= set(night_tracks):
             break
         _tick(probe)
-    # --- morning return at work hours 3000 (not idle 23000), same UUIDs to same jobs ---
+        night_ticks = _game_time(probe) - night_start
+    detail["night_ticks"] = night_ticks
+    detail["bed_sleepers"] = bed_sleepers
+    # --- morning at work hours 3000 (not idle 23000): the same entity still
+    # holds the same job and gets back to work, within MORNING_TICKS game ticks ---
     fixture("time set 3000")
     settled("morning_returns")
     morning: dict[str, tuple[float, float, float]] = {}
-    morning_deadline = _time.monotonic() + 45.0
-    morning_near: dict[str, bool] = {}
-    while _time.monotonic() < morning_deadline:
+    woke_plate: str | None = None
+    closest: float | None = None
+    work = WorkReturn(sleeper_job, stations, (mine_lo, mine_hi)) if sleeper_job else None
+    morning_start = _game_time(probe)
+    morning_ticks = 0
+    while morning_ticks < MORNING_TICKS:
         for row in _villagers(probe):
-            morning[str(row.get("entity_uuid"))] = (float(row["x"]), float(row["y"]), float(row["z"]))
-        morning_near = {
-            role: role_uuid[role] in morning and math.dist(
-                (morning[role_uuid[role]][0], morning[role_uuid[role]][2]),
-                (stations[role][0] + 0.5, stations[role][2] + 0.5)) < 2.5
-            for role in stations
-        }
-        returned = any(role_uuid[role] == sleeper and near for role, near in morning_near.items())
-        if set(evening) <= set(morning) and returned:
+            uuid = str(row.get("entity_uuid"))
+            morning[uuid] = (float(row["x"]), float(row["y"]), float(row["z"]))
+            if uuid == sleeper and work is not None:
+                woke_plate = nameplate(row)
+                station = stations[work.job]
+                gap = math.dist((float(row["x"]), float(row["z"])),
+                                (station[0] + 0.5, station[2] + 0.5))
+                closest = gap if closest is None else min(closest, gap)
+                work.see(row)
+        if work is not None and (spot := work.scan_spot()) is not None:
+            x, y, z = (math.floor(v) for v in spot)
+            work.scanned(spot, _scan(probe, (x - 5, y - 1, z - 5), (x + 5, y + 7, z + 5)))
+        if work is not None and work.watched and work.evidence is None:
+            work.logs_now({cell: _block_id(_read(probe, cell)) for cell in work.watched})
+        if set(evening) <= set(morning) and work is not None and work.evidence is not None:
             break
         _tick(probe)
+        morning_ticks = _game_time(probe) - morning_start
     same_entities = set(evening) != set() and set(evening) <= set(morning)
-    returned = any(role_uuid[role] == sleeper and near for role, near in morning_near.items())
-    if same_entities and sleeper is not None and returned:
+    held_by_day = sleeper is not None and day_jobs.get(sleeper) == sleeper_job
+    station = list(stations[sleeper_job]) if sleeper_job else None
+    evidence = work.evidence if work is not None else None
+    # The check exercises the fix only while the cave zombie is still sealed in reach.
+    detail["cave_hostile"]["morning"] = _sealed_hostile(probe, cave)
+    detail["sleeper"] = {"uuid": sleeper, "job": sleeper_job, "day_job": day_jobs.get(sleeper or ""),
+                         "station": station, "closest": closest, "woke_nameplate": woke_plate,
+                         "back_to_work": evidence, "morning_ticks": morning_ticks,
+                         "travelled": round(work.travelled, 1) if work is not None else None,
+                         "watched_logs": [list(cell) for cell in work.watched] if work is not None else []}
+    if (same_entities and held_by_day and evidence is not None
+            and detail["cave_hostile"]["morning"] is not None):
         _verdict(detail, "sleep_return", "PASS",
-                 f"same 4 entities persist; {sleeper[:8]} slept by bed {list(bed_head)}; "
-                 f"same worker returned within 2.5 of its original certified station: {morning_near}")
+                 f"same {len(evening)} entities persist; {sleeper[:8]} held {sleeper_job} by day, slept by bed "
+                 f"{list(sleeper_bed)}, still held it on waking and got back to work: {evidence}")
     else:
         _verdict(detail, "sleep_return", "FAIL",
-                 f"same_entities={same_entities} sleeper={sleeper} morning_near={morning_near}",
-                 "time set 18000; minecraft_list_entities radius 64; time set 3000; "
-                 "re-observe same entity_uuid near same job site")
+                 f"same_entities={same_entities} sleeper={sleeper} job={sleeper_job} "
+                 f"day_job={day_jobs.get(sleeper or '')} station={station} closest={closest} "
+                 f"back_to_work={evidence} morning_ticks={morning_ticks} "
+                 f"woke_nameplate={woke_plate!r} bed_sleepers={bed_sleepers} "
+                 f"cave_hostile={detail['cave_hostile']}",
+                 "time set 18000; minecraft_list_entities radius 64; time set 3000; re-observe the "
+                 "sleeper's nameplate/VillagerData job, its station distance and (miner) mine "
+                 "footprint or (lumberjack) the logs around where it stops")
     if ctx.windowed:
         native_client.capture(probe.client, artifact, "village-qa-morning")
 
@@ -771,14 +1031,16 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     teleport(float(store_stage[0]) + 0.5, float(store_stage[1]), float(store_stage[2]) + 0.5)
     totals = _chest_totals(_open_chest(probe, chest))
     detail["chest_final_totals"] = totals
+    detail["cave_hostile"]["end"] = _sealed_hostile(probe, cave)
 
-    if dug_seen is not None and chest_has(totals, MINING_ITEMS):
+    if dug_seen is not None and chest_has(totals, MINING_ITEMS) and detail["cave_hostile"]["end"] is not None:
         _verdict(detail, "miner_deposit", "PASS",
                  f"dug {list(dug_seen)} {dig_before[dug_seen]} -> "
-                 f"{_block_id(_read(probe, dug_seen))}; chest holds mining {totals}")
+                 f"{_block_id(_read(probe, dug_seen))}; chest holds mining {totals}; "
+                 f"cave zombie still sealed at {detail['cave_hostile']['end']}")
     else:
         _verdict(detail, "miner_deposit", "FAIL",
-                 f"dug={dug_seen} chest={totals}",
+                 f"dug={dug_seen} chest={totals} cave_hostile={detail['cave_hostile']}",
                  f"time set 9000 (frozen day-end); open chest at {list(chest)} "
                  "(minecraft_use_item_on face up -> ChestMenu slots 0..26); "
                  "server log: mining dig/deposit lines")

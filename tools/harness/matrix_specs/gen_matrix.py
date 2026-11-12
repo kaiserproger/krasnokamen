@@ -771,7 +771,7 @@ PC_ORACLE = {"2": "second client observes the same result (block/entity/menu/inv
 
 SCENARIO_TEMPLATE = {
     "execution_path": "tools/harness (python3 -m tools.harness run ...; single cmd_run, shared lifecycle/receipts) and catalog_mixes.py for composite bot scenarios; this generator only selects/describes scenarios and validates ledger lines",
-    "run_wrapper": "every run goes through /run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER= <harness cmd>; no direct server launches",
+    "run_wrapper": "every run goes through /run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G <harness cmd>; no direct server launches",
     "setup": [
         "Server: the release solaris-v2 binary (its full sha256 is the ledger server_sha) on a fresh isolated world per run; harness owns process/Xvfb lifecycle and receipts",
         f"Plugins: [plugins].directory = {LIVE_PLUGINS} (live VPS set of 10: basic-economy, chisel, computer(id solaris), graves, solaris-audit, solaris-auth, solaris-economy, solaris-essentials, solaris-permissions, solaris-towns); copy into the run dir when a plugin writes state. "
@@ -1037,7 +1037,8 @@ for sc in SCEN:
         seen[f].add(v)
     seen["domain"].add(sc["domain"])
     seen["subject"].add(sc["subject"])
-PI_MAP = {"Join": "session.join_fresh_spawn", "PluginClientReady": "loader_content.bundle_handshake_cache", "LoaderViewRequest": "loader_content.loader_view_request",
+PI_MAP = {"Join": "session.join_fresh_spawn", "ProfileLogin": "session.join_fresh_spawn",
+          "PluginClientReady": "loader_content.bundle_handshake_cache", "LoaderViewRequest": "loader_content.loader_view_request",
           "PermissionLevel": "commands.op", "SetViewDistance": "session.view_distance_negotiation", "SetLocale": "session.locale_presentation",
           "Leave": "session.rejoin_restore_state", "Move": "movement.walk_sprint_jump", "MoveRotation": "movement.walk_sprint_jump", "MoveStatus": "movement.walk_sprint_jump",
           "ConfirmTeleport": "movement.teleport_confirm", "Dig": "block_break.tool_tier_required", "BuildPreviewFence": "settlements.build",

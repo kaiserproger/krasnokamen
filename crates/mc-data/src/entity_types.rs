@@ -450,6 +450,29 @@ fn independently_sourced_attributes_and_loot(
             },
             static_id(&format!("minecraft:entities/{}", id.path())),
         ),
+        // 26.1.2 `createAttributes` FOLLOW_RANGE (javap): the raiders' target
+        // search radius; every other raider keeps the generic 16.
+        "minecraft:vindicator" | "minecraft:evoker" => (
+            EntityAttributeFacts {
+                follow_range: Some(12.0),
+                ..EntityAttributeFacts::default()
+            },
+            None,
+        ),
+        "minecraft:illusioner" => (
+            EntityAttributeFacts {
+                follow_range: Some(18.0),
+                ..EntityAttributeFacts::default()
+            },
+            None,
+        ),
+        "minecraft:pillager" => (
+            EntityAttributeFacts {
+                follow_range: Some(32.0),
+                ..EntityAttributeFacts::default()
+            },
+            None,
+        ),
         _ => (EntityAttributeFacts::default(), None),
     }
 }

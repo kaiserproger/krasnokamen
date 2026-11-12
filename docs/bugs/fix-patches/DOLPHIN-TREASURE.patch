@@ -1,0 +1,11 @@
+diff --git a/crates/mc-core/src/dolphin.rs b/crates/mc-core/src/dolphin.rs
+--- a/crates/mc-core/src/dolphin.rs
++++ b/crates/mc-core/src/dolphin.rs
+@@ -137,6 +137,7 @@
+         }
+         crate::effects::sync_appearance(state, entity);
+     }
++    treasure_search(state);
+     if state.tick.is_multiple_of(40) {
+         // Play by tossing the existing floating item; no pickup/drop duplication.
+         for index in 0..state.entities.len() {

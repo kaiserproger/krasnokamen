@@ -531,7 +531,9 @@ authenticated reverse proxy; `allow_remote` is required for non-loopback binds.
   holds the autonomous world (entities, random and scheduled block updates,
   redstone, fluids, spawning, weather, daylight) while players still move, build
   and chat. The WAL tick number keeps advancing, so absolute-tick deadlines fire
-  on `unfreeze`. Rate, freeze and sprint state is never saved.
+  on `unfreeze`. Rate, freeze and sprint state is never saved, but the game age
+  (`/time query gametime`) survives a restart: a world restarted while frozen keeps
+  the age it was frozen at.
 - `/locate structure|biome|poi` (level 2) runs on a worker thread and never
   blocks the tick; a request is refused while two are pending or eight queued.
   Structure searches read saved native or imported start metadata and plan
@@ -605,6 +607,15 @@ Map-making command surface (full status in [COMPATIBILITY.md](COMPATIBILITY.md))
   command-block `Command` and `auto`. Namespaced storage supports `get`, `merge`,
   `remove` and `modify` (world-global, journaled). Entity and block `/data modify`
   are not supported.
+- `/summon` accepts the vanilla string `variant` field for cows, pigs and chickens
+  (`minecraft:temperate`, `minecraft:cold`, `minecraft:warm`) and zombie nautiluses
+  (`minecraft:temperate`, `minecraft:warm`). For example,
+  `/summon cow ~ ~ ~ {variant:"minecraft:cold"}`. The species' registry validates
+  the value before allocation; typed appearance metadata, the tick journal and
+  vanilla checkpoint fields retain it. Painting variants keep their painting
+  registry and holder codec. See the vanilla [cow](https://minecraft.wiki/w/Cow),
+  [pig](https://minecraft.wiki/w/Pig), [chicken](https://minecraft.wiki/w/Chicken)
+  and [zombie nautilus](https://minecraft.wiki/w/Zombie_Nautilus) entity data.
 - `/clone <begin> <end> <dest> [replace|masked|filtered <block|#tag>]
   [normal|force|move]` copies loaded regions within the `max_block_modifications`
   gamerule limit. Block-entity copies use the command-data snapshot; live state
@@ -659,6 +670,8 @@ a record whose block (or container slots) someone else changed afterwards is
 skipped and counted, never overwritten. A rolled-back chest gets its recorded
 contents back; items the griefer already took stay with them. Rolled-back
 records stay listed `(rolled back)` and are skipped by a second rollback.
+Each listed record shows its committing server tick as `[tick=N]`; records
+written before ticks were recorded show `[tick=unknown]`.
 Commands and records are per dimension.
 
 Records ride the tick WAL and live in the `block_log` table of
@@ -818,6 +831,12 @@ inventory and hashes before writing; the target must be empty or absent and
 separate from the backup. Missing, changed or extra files, incompatible
 manifests and symlinks are refused. Retain the TOML, plugin artifacts and access
 lists separately; backups are never pruned automatically.
+
+Database copies read through the file handle holding the lease, including on
+Windows; they do not release the lock or reopen `state.redb` to copy it.
+Anvil conversion and census receipts use `/`-separated world-relative paths on
+every host. The Windows `.solaris-world.lock` file is coordination, not imported
+world metadata or backup contents.
 
 #### Hot backup of a running server
 

@@ -1,0 +1,12 @@
+diff --git a/crates/mc-core/src/command_execution.rs b/crates/mc-core/src/command_execution.rs
+--- a/crates/mc-core/src/command_execution.rs
++++ b/crates/mc-core/src/command_execution.rs
+@@ -989,7 +989,7 @@
+                             physical: None,
+                             custom_armor: false,
+                             amount: f32::MAX,
+-                            kind: crate::survival::DamageKind::Void,
++                            kind: crate::survival::DamageKind::GenericKill,
+                             source: None,
+                         },
+                     ));

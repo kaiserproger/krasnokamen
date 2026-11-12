@@ -655,6 +655,8 @@ async def run(args: argparse.Namespace) -> int:
         for binary in (args.server_bin, args.bots_bin):
             if not binary.is_file() or not os.access(binary, os.X_OK):
                 raise ValueError(f'missing/nonexecutable explicit binary: {binary}')
+        load.scale.refuse_incremental_pin(args.server_bin, 'server')
+        load.scale.refuse_incremental_pin(args.bots_bin, 'bots')
         result['binaries'] = {str(binary): load.scale.binary_sha256(binary)
                               for binary in (args.server_bin, args.bots_bin)}
         result['registry_hashes'] = load.tree_hash(args.vanilla_data_dir)

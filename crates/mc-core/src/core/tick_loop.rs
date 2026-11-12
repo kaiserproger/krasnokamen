@@ -19,6 +19,8 @@ pub(super) struct TickChannels {
     pub(super) outbox: std::sync::mpsc::Sender<TimedOutboxBatch>,
     pub(super) tick_broadcast: broadcast::Sender<TickOutput>,
     pub(super) timing_broadcast: broadcast::Sender<(u64, TickTimes)>,
+    #[cfg(test)]
+    pub(super) pause_state: tokio::sync::watch::Sender<Option<u64>>,
     pub(super) work_tx: std::sync::mpsc::SyncSender<JournalWork>,
     /// Byte bound on queued `Append` payload (see `journal_budget`).
     pub(super) journal_budget: Arc<JournalBudget>,
@@ -156,7 +158,17 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             empty_ticks = 0;
             paused = false;
         }
-        if (paused && !activity) || !singleplayer_runs {
+        let pause_world = (paused && !activity) || !singleplayer_runs;
+        #[cfg(test)]
+        channels.pause_state.send_if_modified(|observed| {
+            let next = pause_world.then_some(pause_tick);
+            if *observed == next {
+                return false;
+            }
+            *observed = next;
+            true
+        });
+        if pause_world {
             if !checkpoint_in_flight && let Ok(reply) = channels.checkpoint_rx.try_recv() {
                 checkpoint_in_flight = start_checkpoint_with_reply(
                     &mut state,

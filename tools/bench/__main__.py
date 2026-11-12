@@ -174,6 +174,11 @@ def setup(args: argparse.Namespace, *, bots: bool) -> tuple[Path, list[int], dic
             raise BenchError(f"invalid release pin: {error}") from error
         source.update(commit=server_pin["head"], dirty_tracked_files=server_pin["dirty"],
                       server_pin=server_pin, bots_pin=bots_pin)
+    else:
+        try:
+            profiles.load.scale.refuse_incremental_pin(server, "server")
+        except ValueError as error:
+            raise BenchError(f"invalid release pin: {error}") from error
     return out, pool, common.hardware(pool), source, find_data_dir(args.vanilla_data_dir)
 
 

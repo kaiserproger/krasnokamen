@@ -309,7 +309,9 @@ pub(super) fn convert(
     for dimension in [Dimension::Overworld, Dimension::Nether, Dimension::End] {
         let replay = &world.dimensions[&dimension];
         let root = dimension.directory(Path::new(""));
-        let saved_path = |name: &str| format!("{}/data/minecraft/{name}", root.display());
+        let root = mc_data::resource_path::slash_relative(Path::new(""), &root)
+            .ok_or_else(|| fail("invalid dimension path"))?;
+        let saved_path = |name: &str| format!("{root}/data/minecraft/{name}");
         let raid_path = saved_path("raids.dat");
         let fight_path = saved_path("ender_dragon_fight.dat");
         let border_path = saved_path("world_border.dat");

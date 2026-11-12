@@ -77,6 +77,27 @@ class ClientSettingsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 cli.resolve_client_settings("quilt")
 
+class SiblingRootTests(unittest.TestCase):
+    def test_a_linked_worktree_finds_the_main_checkouts_sibling_and_the_variable_wins(self) -> None:
+        # <work>/solaris (main checkout), <work>/wt/Name (git worktree), <work>/solaris-loader (sibling).
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp).resolve()
+            main, worktree, loader = work / "solaris", work / "wt" / "Name", work / "solaris-loader"
+            loader.mkdir()
+            git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "init.defaultBranch=main"]
+            subprocess.run([*git, "init", "-q", str(main)], check=True)
+            subprocess.run([*git, "-C", str(main), "commit", "-q", "--allow-empty", "-m", "base"], check=True)
+            subprocess.run([*git, "-C", str(main), "worktree", "add", "-q", "-b", "wt/Name", str(worktree)],
+                           check=True)
+            unset = {key: value for key, value in os.environ.items() if key not in runtime.SIBLING_ENV.values()}
+            with mock.patch.dict(os.environ, unset, clear=True):
+                self.assertEqual(runtime.sibling_root("loader", worktree), loader)
+                self.assertEqual(runtime.sibling_root("loader", main), loader)
+            other = work / "other-loader"
+            with mock.patch.dict(os.environ, {"SOLARIS_LOADER_ROOT": str(other)}):
+                self.assertEqual(runtime.sibling_root("loader", worktree), other)
+
+
 class DriverLabelTests(unittest.TestCase):
     def test_missing_manifest_defaults_to_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -731,6 +752,94 @@ class ReadinessCleanupTests(unittest.TestCase):
                     self.assertEqual(process.wait(timeout=10), 3)
                 finally:
                     runtime.stop_process(process)
+
+    def test_wait_port_does_not_accept_a_foreign_listener(self) -> None:
+        # Regression: a concurrent/stale server holding the port made wait_port
+        # return success for a child that never bound it, so clients joined the
+        # wrong server (java-matrix auth ack missing, "logged in from another
+        # location"). Readiness must be the child's own LISTEN socket.
+        port = runtime.reserve_port()
+        holder_source = (
+            "import signal,socket,sys; "
+            "listener=socket.socket(); "
+            "listener.bind(('127.0.0.1',int(sys.argv[1]))); "
+            "listener.listen(); print('foreign ready',flush=True); signal.pause()"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "child.log"
+            with log_path.open("wb") as log:
+                holder = subprocess.Popen(
+                    [sys.executable, "-c", holder_source, str(port)],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                child = subprocess.Popen(
+                    [sys.executable, "-c", "import signal; signal.pause()"],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                try:
+                    runtime.wait_port(port, 10.0, holder, log_path=log_path)  # holder owns it
+                    self.assertTrue(runtime.port_open(port))  # the foreign listener accepts
+                    with self.assertRaises(RuntimeError) as raised:
+                        runtime.wait_port(port, 3.0, child, log_path=log_path)
+                    self.assertIn("did not become ready", str(raised.exception))
+                    self.assertIsNone(child.poll())
+                finally:
+                    runtime.stop_process(holder)
+                    runtime.stop_process(child)
+
+    def test_wait_port_child_exit_wins_over_foreign_listener(self) -> None:
+        port = runtime.reserve_port()
+        holder_source = (
+            "import signal,socket,sys; "
+            "listener=socket.socket(); "
+            "listener.bind(('127.0.0.1',int(sys.argv[1]))); "
+            "listener.listen(); signal.pause()"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "child.log"
+            with log_path.open("wb") as log:
+                holder = subprocess.Popen(
+                    [sys.executable, "-c", holder_source, str(port)],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                child = subprocess.Popen(
+                    [sys.executable, "-c", "import time; time.sleep(0.5); raise SystemExit(3)"],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                try:
+                    with self.assertRaises(runtime.ChildExited):
+                        runtime.wait_port(port, 10.0, child, log_path=log_path)
+                finally:
+                    runtime.stop_process(holder)
+                    runtime.stop_process(child)
+
+    def test_wait_port_accepts_a_descendant_listener(self) -> None:
+        # Loader clients are forked by Gradle's JavaExec: the MCP listener
+        # belongs to a child of the spawned process and must count as ready.
+        port = runtime.reserve_port()
+        binder = (
+            "import signal,socket,sys; "
+            "listener=socket.socket(); "
+            "listener.bind(('127.0.0.1',int(sys.argv[1]))); "
+            "listener.listen(); print('bound',flush=True); signal.pause()"
+        )
+        parent_source = (
+            "import signal,subprocess,sys; "
+            f"subprocess.Popen([sys.executable,'-c',{binder!r},str(sys.argv[1])]); "
+            "print('parent ready',flush=True); signal.pause()"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "parent.log"
+            with log_path.open("wb") as log:
+                parent = subprocess.Popen(
+                    [sys.executable, "-c", parent_source, str(port)],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                try:
+                    runtime.wait_port(port, 10.0, parent, log_path=log_path)
+                    self.assertIsNone(parent.poll())
+                finally:
+                    runtime.stop_process(parent)
 
     def test_xvfb_closed_display_announcement_stops_process_before_fallback(self) -> None:
         popen = subprocess.Popen

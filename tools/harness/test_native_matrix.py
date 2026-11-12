@@ -76,6 +76,24 @@ class NativeMatrixTests(unittest.TestCase):
         self.assertIsNone(result['menu']['offers'][0]['input2'])
         self.assertEqual(result['menu']['level'],2)
 
+    def test_item_birth_position_is_first_received_and_mobs_get_none(self):
+        from tools.harness.backends.native_matrix_client import NativeMatrixClient
+        rows=[{'entity_id':1,'entity_uuid':'item','entity_type':'minecraft:item','x':1.,'y':2.,'z':3.},
+              {'entity_id':2,'entity_uuid':'cow','entity_type':'minecraft:cow','x':4.,'y':5.,'z':6.}]
+        class Mcp:
+            def call_tool(self, tool, arguments):
+                if tool == 'minecraft_list_entities':
+                    return {'entities':[dict(row) for row in rows],'truncated':False}
+                return {'in_play':True,'player':{}}
+        client=NativeMatrixClient('test',Mcp(),'127.0.0.1:1',[])
+        first=client.snapshot()['entities']
+        rows[0]['y']=0.; rows[1]['y']=0.
+        later=client.snapshot()['entities']
+        self.assertEqual(first[0]['spawn_position'],[1.,2.,3.])
+        self.assertEqual(later[0]['spawn_position'],[1.,2.,3.])
+        self.assertEqual(later[0]['position'],[1.,0.,3.])
+        self.assertNotIn('spawn_position',later[1])
+
     def test_native_wait_ticks_respects_live_tool_bound(self):
         from tools.harness.backends.native_matrix_client import NativeMatrixClient
         class Mcp:
@@ -118,6 +136,63 @@ class NativeMatrixTests(unittest.TestCase):
             with self.assertRaises(MissingCapability):
                 lane.launch('test')
             start.assert_not_called()
+
+    def test_native_launch_context_has_every_attribute_start_reads(self):
+        from types import SimpleNamespace
+        from unittest.mock import MagicMock, patch
+        lane=object.__new__(native_matrix.Lane)
+        lane.directory=Path(tempfile.mkdtemp())
+        lane.processes=[]; lane.handles=[]; lane.contexts=[]
+        lane.native=Path('/native'); lane.address='127.0.0.1:1'; lane.timeout=5; lane.display=':99'
+        lane.ctx=SimpleNamespace(client_evidence={},commands=[],cwds=[],exits=[],logs=[])
+        client=MagicMock()
+        seen={}
+        def fake_start(ctx,*_,**__):
+            # native_client.start reads ctx.scenario_id to pick the window size.
+            seen['scenario_id']=ctx.scenario_id
+            return MagicMock(),MagicMock(),client
+        with patch('tools.harness.audio.private_audio_preflight'), \
+             patch.object(native_matrix.native_client,'start',side_effect=fake_start):
+            lane.launch('test')
+        self.assertIsNone(seen['scenario_id'])
+
+    def _loaded_lane(self, home):
+        from unittest.mock import MagicMock
+        lane=object.__new__(native_matrix.Lane)
+        lane.timeout=300; lane.chunk_fences=[]; lane.names=['a']
+        lane.scenario={'context':{'dimension':'overworld','game_mode':'survival'}}
+        lane.commands=[]
+        lane.console=lane.commands.append
+        client=MagicMock()
+        client.call_tool.side_effect=lambda tool,args=None:(
+            {'player':home} if tool=='minecraft_observe' else {'loaded':True})
+        lane.clients=[client]
+        return lane,client
+
+    def test_loaded_block_wait_stays_inside_declared_tool_range(self):
+        # minecraft_wait_for_loaded_block accepts at most 120 s; a 300 s run
+        # timeout must not be forwarded as the per-call bound.
+        lane,client=self._loaded_lane({'x':1.5,'y':100.,'z':1.5})
+        lane.ensure_loaded(((0,60,0),(0,70,0)))
+        waits=[call.args[1] for call in client.call_tool.call_args_list
+               if call.args[0]=='minecraft_wait_for_loaded_block']
+        self.assertEqual([wait['timeout_seconds'] for wait in waits],[120])
+        self.assertEqual(lane.commands,[])
+
+    def test_fixture_area_outside_view_distance_is_visited_and_player_returned(self):
+        # A native client only receives chunks inside its view distance, so a far
+        # fixture area is visited as a spectator and the exact position and game
+        # mode are restored.
+        lane,client=self._loaded_lane({'x':192.5,'y':100.,'z':-447.5})
+        lane.ensure_loaded(((-16,199,-16),(16,215,16)))
+        self.assertEqual(lane.commands,[
+            'gamemode spectator a',
+            'execute in minecraft:overworld run tp a 0.5 207.0 0.5',
+            'execute in minecraft:overworld run tp a 192.5 100.0 -447.5',
+            'gamemode survival a'])
+        loaded=[(call.args[1]['x'],call.args[1]['z']) for call in client.call_tool.call_args_list
+                if call.args[0]=='minecraft_wait_for_loaded_block']
+        self.assertEqual(sorted(loaded),sorted((x*16,z*16) for x in (-1,0,1) for z in (-1,0,1)))
 
     def test_profile_fingerprint_is_retained_in_ledger(self):
         with tempfile.TemporaryDirectory() as directory:

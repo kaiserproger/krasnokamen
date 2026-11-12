@@ -24,6 +24,7 @@ import sys
 import time
 from typing import Any
 
+from tools.coreperf import profiles
 from tools.harness.backends import catalog_load as load
 from tools.harness.backends import catalog_support as scale
 
@@ -405,6 +406,13 @@ async def main_async(args: argparse.Namespace) -> int:
         binary = getattr(args, name)
         if not binary.is_file() or not os.access(binary, os.X_OK):
             raise SystemExit(f"missing/nonexecutable {name}: {binary}")
+    try:
+        server_pin = profiles.pinned_binary(args.server_bin, "server")
+        bots_pin = profiles.pinned_binary(args.bots_bin, "bots")
+        if (server_pin["head"], server_pin["diff_sha256"]) != (bots_pin["head"], bots_pin["diff_sha256"]):
+            raise ValueError("server and bots pins identify different source trees")
+    except (OSError, ValueError) as error:
+        raise SystemExit(f"invalid release pin: {error}") from error
     summary: dict[str, Any] = {
         "command": [sys.executable, "-m", "tools.coreperf.capacity_ladder", *sys.argv[1:]],
         "binaries": {n: {"path": str(getattr(args, n)), "sha256": scale.binary_sha256(getattr(args, n))}

@@ -81,7 +81,8 @@ Dates are when the lesson was learned (owner time zone, UTC+7).
 - **2026-10-24 — an sccache daemon started inside a runner scope keeps the
   scope alive** and, under the old admission design, orphan Xvfb and sccache
   scopes made admission refuse work on an idle machine. Start sccache outside
-  the slice; run Cargo with `env RUSTC_WRAPPER=`.
+  the slice (the runner now selects the cached wrapper itself; no
+  `env RUSTC_WRAPPER=` needed).
 - **2026-10-24 — advisor escalations need source checks.** A "baseline is
   broken" report was wrong: the functions existed and were public at the pinned
   commit.

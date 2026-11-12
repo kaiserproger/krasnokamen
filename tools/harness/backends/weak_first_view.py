@@ -62,7 +62,7 @@ def run(ctx: ProfileContext) -> dict:
     ctx.client_evidence["server_binary_path"] = str(server)
     root = artifact / "client-data" / "solaris-client"
     root.mkdir(parents=True)
-    source = native_client._client_root()
+    source = runtime.sibling_root("client")
     for name in ("facts", "mojang", "resources", "assets", "data"):
         path = source / name
         if path.exists():

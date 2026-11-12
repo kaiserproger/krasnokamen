@@ -209,5 +209,49 @@ allow_remote = false
         self.assertEqual(remote["server"]["max_players"], 20)
 
 
+class SetupPinTests(unittest.TestCase):
+    """Bots runs record both pins in the source record; server-only runs refuse an incremental pin."""
+
+    def setup_with(self, root, *, bots, incremental):
+        import argparse
+        from contextlib import ExitStack
+        from tools.bench import __main__ as bench
+        from tools.coreperf import profiles
+        binaries = {}
+        for kind, name in (("server", "solaris-v2"), ("bots", "player-scale-bots")):
+            folder = root / kind
+            folder.mkdir()
+            binary = folder / name
+            binary.write_bytes(kind.encode())
+            binary.chmod(0o755)
+            (folder / "manifest.json").write_text(json.dumps(
+                {"repo": "core", "kind": kind, "binary": str(binary), "head": "abc", "diff_sha256": "def",
+                 "dirty": False, "command": "cargo build --release", "target": "t", "incremental": incremental,
+                 "binary_sha256": profiles.load.scale.binary_sha256(binary)}))
+            binaries[kind] = binary
+        args = argparse.Namespace(memory=None, cpu_pool=None, out=root / "out", command="test", commit=None,
+                                  server_bin=binaries["server"], bots_bin=binaries["bots"], vanilla_data_dir=None)
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(profiles, "PIN_ROOT", root / "absent-owner-host" / "pins"))
+            stack.enter_context(patch.object(common, "preflight", return_value=[]))
+            stack.enter_context(patch.object(common, "available_pool", return_value=[0]))
+            stack.enter_context(patch.object(common, "hardware", return_value={}))
+            stack.enter_context(patch.object(common, "source_record", return_value={}))
+            stack.enter_context(patch.object(bench, "find_data_dir", return_value=root))
+            return bench.setup(args, bots=bots)
+
+    def test_bots_run_records_pins_and_server_only_run_refuses_incremental(self):
+        with tempfile.TemporaryDirectory() as raw:
+            source = self.setup_with(Path(raw), bots=True, incremental=False)[3]
+            self.assertEqual((source["commit"], source["server_pin"]["kind"], source["bots_pin"]["kind"]),
+                             ("abc", "server", "bots"))
+        with tempfile.TemporaryDirectory() as raw:
+            self.assertEqual(self.setup_with(Path(raw), bots=False, incremental=False)[3], {})
+        with tempfile.TemporaryDirectory() as raw:
+            from tools.bench.common import BenchError
+            with self.assertRaisesRegex(BenchError, "incremental"):
+                self.setup_with(Path(raw), bots=False, incremental=True)
+
+
 if __name__ == "__main__":
     unittest.main()

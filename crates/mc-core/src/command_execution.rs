@@ -751,7 +751,10 @@ pub(crate) fn execute(
             return Success(1);
         }
         Command::TimeQuery(query) => {
-            let value = query.value(state.tick_control.game_ticks(state.tick), state.day_time);
+            // Inputs run before the frame number advances; a held frame has
+            // already counted itself, so read the age the last frame published.
+            let frame = state.tick + u64::from(!state.tick_control.runs_normally());
+            let value = query.value(state.tick_control.game_ticks(frame), state.day_time);
             success_feedback(state, connection, "commands.time.query", vec![text(value)]);
             return Success((value % i64::from(i32::MAX)) as i32);
         }
@@ -957,8 +960,7 @@ pub(crate) fn execute(
                 .registry
                 .blueprint(type_id)
                 .map_or(20.0, |blueprint| blueprint.params.max_health);
-            let id = state.spawn_mob(type_id, at, health);
-            crate::command_summon::apply(state, id, image);
+            let id = crate::command_summon::spawn(state, type_id, at, health, image);
             changes.entities_spawned.push(id);
             success_feedback(
                 state,

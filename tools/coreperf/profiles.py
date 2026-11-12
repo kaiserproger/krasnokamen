@@ -52,6 +52,7 @@ def pinned_binary(binary: Path, kind: str) -> dict[str, Any]:
             or not manifest.get("command") or not manifest.get("target")
             or manifest.get("binary_sha256") != load.scale.binary_sha256(binary)):
         raise ValueError(f"{kind} pin-release manifest does not match binary")
+    load.scale.refuse_incremental_pin(binary, kind)
     return manifest
 
 
@@ -306,7 +307,7 @@ def add_xp_fixture(recipe: dict[str, Any], count: int, *, smoke: bool,
                         "observer_region": group, "requested_count": count,
                         "dispenser_capacity": capacity, "players": players,
                         "locality": locality, "anchors": anchors,
-                        "pulse_interval_ms": max(1, 6000 // max(1, len(on)+len(off))),
+                        "pulse_interval_ms": max(1, (3000 if smoke and count == 1 else 6000) // max(1, len(on)+len(off))),
                         "commands": on + off}
 
 
@@ -795,12 +796,16 @@ def validate_scale_sample(recipe: dict[str, Any], sample: dict[str, Any],
     if stress.get("kind") == "xp-orbs":
         xp = data.get("xp_orbs_processed")
         regions = data.get("xp_orbs_by_region")
+        values = data.get("xp_value_by_region")
         if (type(xp) is not int or xp < 0 or not isinstance(regions, dict)
-                or any(type(value) is not int or value < 0 for value in regions.values())):
+                or not isinstance(values, dict)
+                or any(type(value) is not int or value < 0
+                       for counters in (regions, values) for value in counters.values())):
             raise ValueError("missing XP-orb owner telemetry")
         if not stress_regions and xp:
             raise ValueError("zero XP control observed active orbs")
         totals["xp_orbs"] = sum(regions.get(str(i), 0) for i in stress_regions)
+        totals["xp_value"] = sum(values.get(str(i), 0) for i in stress_regions)
         totals["xp_orbs_global"] = xp
     if stress.get("kind") in ("damage", "reactive-damage"):
         victims = data.get("damage_victims_by_region")
@@ -906,6 +911,30 @@ def exact_cohort_tick(samples: list[dict[str, Any]], field: str, requested: int)
     raise ValueError(f"no source tick observed exactly {requested} {field}")
 
 
+def xp_bottle_cohort_tick(samples: list[dict[str, Any]], bottles: int) -> int:
+    """Require a source tick with a vanilla-compatible bottle yield and orb count.
+
+    A bottle yields 3–11 XP, split into 1, 3 and 7 XP denominations:
+    https://minecraft.wiki/w/Bottle_o%27_Enchanting
+    https://minecraft.wiki/w/Experience_orb
+    Orbs may merge, so the number of bodies need not equal the bottle count.
+    """
+    if not samples or any(type(row.get("tick")) is not int
+                          or type(row.get("xp_orbs")) is not int or row["xp_orbs"] < 0
+                          or type(row.get("xp_value")) is not int or row["xp_value"] < 0
+                          for row in samples):
+        raise ValueError("missing XP-orb value or body source-tick samples")
+    if bottles == 0:
+        if any(row["xp_orbs"] or row["xp_value"] for row in samples):
+            raise ValueError("zero XP control observed a nonzero cohort")
+        return samples[0]["tick"]
+    for row in samples:
+        if (3 * bottles <= row["xp_value"] <= 11 * bottles
+                and 1 <= row["xp_orbs"] <= min(3 * bottles, row["xp_value"])):
+            return row["tick"]
+    raise ValueError(f"no source tick observed a valid yield from {bottles} XP bottles")
+
+
 def validate_xp_observers(stress: dict[str, Any], bots: dict[str, Any]) -> dict[str, Any]:
     players = bots.get("mechanics", {}).get("players")
     anchors = stress["anchors"]
@@ -956,9 +985,22 @@ def schedule(args: argparse.Namespace, recipe: dict[str, Any] | None = None) -> 
             window["edit_hz"] = 0
             window["chat_hz"] = 0
     if recipe and recipe.get("stress", {}).get("commands"):
+        fenced = recipe["stress"]["kind"] in ("brewing-containers", "churn")
         for window in plan["windows"]:
+            single_bottle_smoke = (getattr(args, "smoke", False)
+                                   and recipe["stress"]["kind"] == "xp-orbs"
+                                   and recipe["stress"]["requested_count"] == 1)
+            if (fenced or single_bottle_smoke) and window["name"] == "warmup":
+                continue
             window["command_interval_ms"] = recipe["stress"]["pulse_interval_ms"]
+            if recipe["stress"]["kind"] == "churn":
+                slots = (window["duration_ms"] - 1) // window["command_interval_ms"]
+                slots -= slots % len(recipe["stress"]["commands"])
+                if slots:
+                    window["command_interval_ms"] = (window["duration_ms"] + slots) // (slots + 1)
             window["commands"] = recipe["stress"]["commands"]
+            if fenced:
+                window["command_fence"] = True
     return plan
 
 
@@ -1189,8 +1231,11 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
                 peak = max(row["xp_orbs"] for row in coverage_samples)
                 projectile_peak = max(row["projectiles"] for row in coverage_samples)
                 requested = recipe["stress"]["requested_count"]
-                matching_tick = exact_cohort_tick(coverage_samples, "xp_orbs", requested)
+                matching_tick = (xp_bottle_cohort_tick(coverage_samples, 1)
+                                 if args.smoke and requested == 1
+                                 else exact_cohort_tick(coverage_samples, "xp_orbs", requested))
                 result["stress"] = {**recipe["stress"], "xp_orbs_processed_peak": peak,
+                                    "xp_value_peak": max(row["xp_value"] for row in coverage_samples),
                                     "requested_cohort_tick": matching_tick,
                                     "all_active_orbs_peak": max(row["xp_orbs_global"] for row in coverage_samples),
                                     "projectile_candidates_peak": projectile_peak,
@@ -1250,6 +1295,10 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             measurement = next((row for row in windows if row.get("name") == "measurement"), {})
             if measurement.get("command", {}).get("writes_completed", 0) == 0:
                 raise ValueError("fixture measurement sent no trigger command")
+            if recipe["stress"]["kind"] in ("brewing-containers", "churn") and (
+                    measurement.get("command", {}).get("completed") !=
+                    measurement.get("command", {}).get("offered")):
+                raise ValueError("fixture trigger commands lack input-ordered acknowledgements")
     snapshot = await compare.snapshot(args, directory, world, config)
     result["entity_counts_after"] = {kind: group["active"] for kind, group in snapshot["entities"].items()}
     if recipe.get("spawn_rules"):

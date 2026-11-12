@@ -208,6 +208,56 @@ impl Packet for ConfigurationDisconnect {
     }
 }
 
+/// Clientbound configuration `minecraft:keep_alive`. A configuration stall (a Loader
+/// client verifying or fetching bundles) must not look like silence to the client's own
+/// 30 s read timeout; the client echoes the id back.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConfigurationKeepAlive {
+    pub id: i64,
+}
+
+impl Packet for ConfigurationKeepAlive {
+    // Local `data/vanilla/{26.1.2,26.2,26.3}/reports/packets.json` and every
+    // `steps/*/{lower,upper}/reports/packets.json`: configuration clientbound
+    // `minecraft:keep_alive` is wire id 4. Body: `javap -c` of the 26.1.2 and 26.3
+    // client jars' `ClientboundKeepAlivePacket` is one `writeLong`/`readLong`.
+    const ID: i32 = 0x04;
+
+    fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
+        buf.write_i64(self.id);
+        Ok(())
+    }
+
+    fn decode<B: Buf>(buf: &mut B) -> Result<Self, CodecError> {
+        Ok(Self {
+            id: buf.read_i64()?,
+        })
+    }
+}
+
+/// Serverbound configuration `minecraft:keep_alive`: the echo of [`ConfigurationKeepAlive`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ServerboundConfigurationKeepAlive {
+    pub id: i64,
+}
+
+impl Packet for ServerboundConfigurationKeepAlive {
+    // Same reports: serverbound configuration `minecraft:keep_alive` is wire id 4; body
+    // is the `ServerboundKeepAlivePacket` single long (javap, 26.1.2 and 26.3).
+    const ID: i32 = 0x04;
+
+    fn encode<B: BufMut>(&self, buf: &mut B) -> Result<(), CodecError> {
+        buf.write_i64(self.id);
+        Ok(())
+    }
+
+    fn decode<B: Buf>(buf: &mut B) -> Result<Self, CodecError> {
+        Ok(Self {
+            id: buf.read_i64()?,
+        })
+    }
+}
+
 /// Serverbound 0x07 — client tells the server which of the advertised
 /// known packs it also has bundled.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -571,6 +621,21 @@ mod tests {
         };
         assert_eq!(ConfigurationDisconnect::ID, 0x02);
         round_trip(packet);
+    }
+
+    #[test]
+    fn configuration_keep_alive_ids_and_single_long_layout_match_the_reports() {
+        assert_eq!(ConfigurationKeepAlive::ID, 0x04);
+        assert_eq!(ServerboundConfigurationKeepAlive::ID, 0x04);
+        let mut buf = Vec::new();
+        ConfigurationKeepAlive {
+            id: 0x0102_0304_0506_0708,
+        }
+        .encode(&mut buf)
+        .unwrap();
+        assert_eq!(buf, [1, 2, 3, 4, 5, 6, 7, 8]);
+        round_trip(ConfigurationKeepAlive { id: i64::MIN });
+        round_trip(ServerboundConfigurationKeepAlive { id: -1 });
     }
 
     #[test]

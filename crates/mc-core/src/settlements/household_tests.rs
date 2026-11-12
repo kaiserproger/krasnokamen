@@ -258,9 +258,11 @@ fn relocation_releases_old_claims_and_reacquires_destination_without_replacing_b
         y: 201,
         z: 6,
     };
+    // Residents claim only roofed beds; a roof block keeps both claimable.
     for pos in [old, new] {
         state.world.set_block(pos.x - 1, pos.y, pos.z, foot);
         state.world.set_block(pos.x, pos.y, pos.z, head);
+        state.world.set_block(pos.x, pos.y + 3, pos.z, stone);
     }
     state.world.fold_overlay();
     let v = state.entities.row_mut(slot).villager.as_mut().unwrap();

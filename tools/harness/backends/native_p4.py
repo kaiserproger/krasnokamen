@@ -233,8 +233,76 @@ def _advancements(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.report["visual_review_required"] = ["Minecraft story root", "Stone Age and Getting an Upgrade completion", "same completions after server restart", "completion chat; no join toast flood"]
 
 
+def _wait_damage_identity(steps: ProbeSteps, predicate: Any, label: str, start: int,
+                          **kwargs: Any) -> dict[str, Any]:
+    """Wait for a received damage identity; a timeout reports the wire events it saw."""
+    try:
+        return steps.wait(predicate, label, **kwargs)
+    except TimeoutError:
+        steps.report.setdefault("damage_wire_on_timeout", {})[label] = steps.client.p4_damage_wire()[start:]
+        raise
+
+
+def _note_region(steps: ProbeSteps, label: str, origin: tuple[int, int, int], reach: int = 1) -> None:
+    """Record the non-air cells (blocks and fluids) around the player's cell as the client sees them."""
+    x, y, z = origin
+    scan = steps.call("minecraft_scan_blocks", {
+        "min_x": x - 1, "max_x": x + 1, "min_y": y - 1, "max_y": y + 3,
+        "min_z": z - 1, "max_z": z + reach, "max_blocks": 128})
+    steps.report.setdefault("region_cells", {})[label] = [
+        row for row in scan.get("blocks", [])
+        if row.get("block_id") != "minecraft:air" or not (row.get("fluid") or {}).get("empty", True)]
+
+
+def _douse_and_drain(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    """Douse a burning player, then wait until the client sees no water around the fixture cell.
+
+    Removing the sources leaves flowing water that decays for dozens of ticks; a player standing in
+    it is cushioned from falls, cannot ignite and loses a berry bush to the flow."""
+    x, y, z = origin
+    steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:water")
+    steps.call("minecraft_wait_ticks", {"ticks": 10})
+    steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:air")
+
+    def dry(_: dict[str, Any]) -> bool:
+        scan = steps.call("minecraft_scan_blocks", {
+            "min_x": x - 3, "max_x": x + 3, "min_y": y, "max_y": y + 3,
+            "min_z": z - 3, "max_z": z + 3, "max_blocks": 256})
+        return all((row.get("fluid") or {}).get("empty", True) for row in scan.get("blocks", []))
+
+    steps.wait(dry, "douse_water_drained", timeout_seconds=60)
+
+
+def _disable_gamerule(steps: ProbeSteps, rule: str) -> None:
+    """Set a boolean rule false and wait for the server's acknowledgement."""
+    steps.fixture(f"gamerule {rule} false")
+    steps.wait(
+        lambda state: f"Game rule {rule} is now set to false" in state.get("recent_chat", []),
+        f"{rule}_disabled",
+    )
+
+
+# A falling stalactite deals 6 damage per fallen block (cap 40); from y+5 that is
+# 24 and kills the 20 HP survival player before the scenario can clean up, so it
+# starts lower. The anvil row keeps y+5 (2 per block, 8 damage).
+_STALACTITE_DROP = 3
+
+
+_DAMAGE_ZOMBIE_UUID = "00000000-0000-0000-0000-00000001e242"  # UUID:[I;0,0,0,123458]
+
+
 def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     x, y, z = origin
+    # The night below would otherwise spawn zombies that kill the survival player
+    # during the long environment rows; authored mobs are summoned by command.
+    _disable_gamerule(steps, "spawn_mobs")
+    # Rain douses a burning player in the open; the on_fire row waits for the burn to outlast
+    # the fire block, so the weather must stay clear however long the earlier rows ran.
+    _disable_gamerule(steps, "advance_weather")
+    steps.fixture("weather clear")
+    # A zombified piglin that already stands in the world walks up during the 60 s starve row and
+    # kills the survival player (receipt 20261111T223458-native-v2-p4-damage-ey95lu17).
+    steps.fixture("kill @e[type=!minecraft:player]")
     steps.fixture("time set 18000")
     _echo(steps, "damage_night_fixture_ordered_receipt")
     steps.call("minecraft_wait_ticks", {"ticks": 20})
@@ -246,7 +314,7 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     zombie: dict[str, Any] = {}
     def zombie_received(_: dict[str, Any]) -> bool:
         row = next((row for row in _rows(steps, 16)
-                    if row.get("entity_uuid") == "00000000-0000-0000-0000-00000001e242"), None)
+                    if row.get("entity_uuid") == _DAMAGE_ZOMBIE_UUID), None)
         if row is None:
             return False
         zombie.update(row)
@@ -254,9 +322,14 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.wait(zombie_received, "damage_zombie_authored_uuid_received")
     hit = steps.call("minecraft_wait_for_health_below", {"health": baseline, "timeout_seconds": steps.remaining()})
     steps.report["hit"] = hit
+    # The hurt tilt lasts about ten client ticks, so it is observed before anything slow.
     hurt = steps.wait(lambda current: current["player"].get("hurt_tick") is not None
                       and abs(current["player"].get("hurt_tilt_deg", 0)) > .05,
                       "received_damage_event_nonzero_camera_tilt")
+    # One received hit is the whole claim. Screenshots and observations below take
+    # many client ticks; a living zombie keeps hitting and kills the survival
+    # player before the cleanup fixture below reaches the server.
+    steps.fixture(f"kill {_DAMAGE_ZOMBIE_UUID}")
     steps.report["hurt_observation"] = {key: hurt["player"].get(key) for key in
                                        ("hurt_tick", "hurt_tilt_deg", "hurt_direction", "health")}
     steps.report["hurt_observation"]["client_tick"] = hurt["client_tick"]
@@ -277,10 +350,24 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     _capture(steps, "p4-damage-after")
     steps.report["visual_review_required"] = ["hit frame hurt direction/tilt versus before", "no client errors or runtime disconnect"]
 
+    _death_protection(steps, origin)
+
+    _warden_damage(steps, origin)
+    _damage_environment(steps, origin, steps.observe()["player"]["entity_id"])
+
+
+def _death_protection(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    player_id = steps.observe()["player"]["entity_id"]
+    steps.fixture("gamerule natural_health_regeneration false")
     # Real client receives and consumes a non-totem death-protection component.
-    steps.fixture("kill @e[type=minecraft:zombie,distance=..32]")
     steps.fixture("gamemode creative @s")
     steps.fixture("effect give @s minecraft:instant_health 1 5 true")
+    steps.fixture("effect give @s minecraft:slowness 60 0 true")
+    steps.fixture("data get entity @s active_effects")
+    steps.wait(lambda state: any("has the following entity data:" in line and
+                               "minecraft:slowness" in line
+                               for line in state.get("recent_chat", [])),
+               "custom_death_protection_initial_effect_received")
     steps.fixture("clear @s")
     steps.fixture(
         "give @s minecraft:stick[death_protection={death_effects:["
@@ -310,12 +397,19 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.check("no_generic_totem_effects",
                 all(name not in effects for name in (
                     "minecraft:regeneration", "minecraft:absorption", "minecraft:fire_resistance")))
+    steps.check("custom_death_protection_clears_initial_effect",
+                "minecraft:slowness" not in effects)
     steps.report["custom_death_protection"] = {"health": saved["player"]["health"], "effects": effects}
+    _capture(steps, "custom-death-protection")
 
+
+def _warden_damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    x, y, z = origin
+    player_id = steps.observe()["player"]["entity_id"]
     # Provoke a real warden with ordinary lever vibrations, then observe its
     # sonic attack on the native connection (not a /damage identity alias).
     steps.fixture("gamemode creative @s")
-    steps.fixture("gamerule natural_regeneration false")
+    _disable_gamerule(steps, "natural_health_regeneration")
     steps.fixture("effect clear @s")
     steps.fixture("effect give @s minecraft:instant_health 1 5 true")
     steps.fixture(f"tp @s {x + .5} {y} {z + .5}")
@@ -323,6 +417,7 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                abs(state["player"]["z"] - z - .5) < .3, "warden_fixture_player_ready")
     lever = _point(origin, dz=-2)
     _set(steps, lever, "minecraft:lever[face=floor,facing=north]")
+    steps.fixture(f"fill {x - 5} {y} {z - 4} {x + 5} {y + 4} {z - 4} minecraft:stone")
     steps.fixture(f"summon minecraft:warden {x + .5} {y} {z - 7.5} {{UUID:[I;0,0,0,123457]}}")
     warden: dict[str, Any] = {}
     def warden_received(_: dict[str, Any]) -> bool:
@@ -338,9 +433,11 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     for _ in range(3):
         _use(steps, lever)
         steps.call("minecraft_wait_ticks", {"ticks": 50})
-    steps.fixture(f"fill {x - 5} {y} {z - 4} {x + 5} {y + 4} {z - 4} minecraft:stone")
     steps.fixture("damage @s 13 minecraft:generic")
-    steps.wait(lambda state: 0 < state["player"]["health"] < 10, "warden_lethal_health_prepared")
+    # Observations lag the server by many ticks on a graphical client: the warden's
+    # first sonic boom can land before the 7 HP state is ever observed, so "below
+    # lethal" includes already dead. The sonic wire identity is asserted next.
+    steps.wait(lambda state: state["player"]["health"] < 10, "warden_lethal_health_prepared")
 
     def sonic_received(_: dict[str, Any]) -> bool:
         return any(event["entity_id"] == player_id and event["type"] == "minecraft:sonic_boom"
@@ -360,7 +457,34 @@ def _damage(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture("gamemode creative @s")
     steps.fixture("kill @e[type=minecraft:warden]")
     steps.call("minecraft_wait_ticks", {"ticks": 70})
-    _damage_environment(steps, origin, steps.observe()["player"]["entity_id"])
+
+
+def _damage_identities(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    """Identity admission and emission, not absent physical implementations."""
+    player_id = steps.observe()["player"]["entity_id"]
+    steps.fixture("gamerule natural_health_regeneration false")
+    events = []
+    for kind in ("freeze", "fly_into_wall", "cramming", "sonic_boom",
+                 "stalagmite", "dragon_breath", "indirect_magic"):
+        steps.fixture("gamemode creative @s")
+        steps.fixture("effect give @s minecraft:instant_health 1 5 true")
+        steps.wait(lambda state: state["player"]["health"] == 20, f"{kind}_healed")
+        steps.call("minecraft_wait_ticks", {"ticks": 25})
+        steps.fixture("effect clear @s")
+        start = len(steps.client.p4_damage_wire())
+        steps.fixture("gamemode survival @s")
+        steps.fixture(f"damage @s 2 minecraft:{kind}")
+        steps.wait(lambda state: state["player"]["health"] < 20 and any(
+            event["entity_id"] == player_id and event["type"] == f"minecraft:{kind}"
+            for event in steps.client.p4_damage_wire()[start:]),
+            f"{kind}_command_identity_received")
+        events.extend(steps.client.p4_damage_wire()[start:])
+    steps.report["command_damage_identities"] = events
+    _warden_damage(steps, origin)
+    steps.report["limits"] = [
+        "Command identity cases do not claim freeze, cramming or wall collision mechanics.",
+        "Physical source: angered warden sonic attack, including death and respawn.",
+    ]
 
 
 def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_id: int) -> None:
@@ -375,7 +499,7 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
         ("fall", f"tp @s {x + .5} {y + 10} {z + .5}"),
         ("stalagmite", f"tp @s {x + .5} {y + 10} {z + .5}"),
         ("falling_anvil", f"setblock {x} {y + 5} {z} minecraft:anvil"),
-        ("falling_stalactite", f"setblock {x} {y + 5} {z} minecraft:pointed_dripstone[vertical_direction=down,thickness=tip]"),
+        ("falling_stalactite", f"setblock {x} {y + _STALACTITE_DROP} {z} minecraft:pointed_dripstone[vertical_direction=down,thickness=tip]"),
         ("arrow", f"summon minecraft:arrow {x + .5} {y + 1} {z + 4.5} {{Motion:[0d,0d,-1d]}}"),
         ("trident", f"summon minecraft:trident {x + .5} {y + 1} {z + 4.5} {{Motion:[0d,0d,-1d]}}"),
         ("thrown", f"summon minecraft:wind_charge {x + .5} {y + 1} {z + 4.5} {{Motion:[0d,0d,-1d]}}"),
@@ -394,13 +518,11 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
     results = []
     for kind, fixture in fixtures:
         steps.fixture("gamemode creative @s")
-        steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:water")
-        steps.call("minecraft_wait_ticks", {"ticks": 10})
-        steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:air")
+        _douse_and_drain(steps, origin)
         if kind in ("fall", "stalagmite", "falling_anvil", "falling_stalactite"):
             steps.fixture(f"fill {x} {y + 4} {z} {x} {y + 11} {z} minecraft:air")
         if kind == "falling_stalactite":
-            steps.fixture(f"setblock {x} {y + 6} {z} minecraft:stone")
+            steps.fixture(f"setblock {x} {y + _STALACTITE_DROP + 1} {z} minecraft:stone")
         if kind == "cactus":
             steps.fixture(f"setblock {x + 1} {y - 1} {z} minecraft:sand")
         steps.fixture(f"setblock {x} {y - 1} {z} minecraft:obsidian")
@@ -414,13 +536,14 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
                    abs(state["player"]["z"] - z - .5) < .3, f"{kind}_fixture_ready")
         steps.call("minecraft_wait_ticks", {"ticks": 25})
         baseline = steps.observe()["player"]["health"]
+        _note_region(steps, f"{kind}_before_fixture", origin)
         start = len(steps.client.p4_damage_wire())
         steps.fixture("gamemode survival @s")
         if kind == "stalagmite":
             steps.fixture(f"setblock {x} {y} {z} minecraft:pointed_dripstone[vertical_direction=up,thickness=tip]")
         steps.fixture(fixture)
         if kind == "falling_stalactite":
-            steps.fixture(f"setblock {x} {y + 6} {z} minecraft:air")
+            steps.fixture(f"setblock {x} {y + _STALACTITE_DROP + 1} {z} minecraft:air")
         if kind in ("cactus", "sweet_berry_bush"):
             steps.call("minecraft_look", {"yaw_deg": -90, "pitch_deg": 0})
             steps.call("minecraft_press_inputs", {"keys": ["forward"], "ticks": 10})
@@ -429,8 +552,8 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
             return (state["player"]["health"] < baseline and any(
                 event["entity_id"] == player_id and event["type"] == f"minecraft:{identity}"
                 for event in steps.client.p4_damage_wire()[start:]))
-        hit_state = steps.wait(hit_received, f"{kind}_physical_identity_received",
-                               timeout_seconds=60 if kind == "starve" else 30)
+        hit_state = _wait_damage_identity(steps, hit_received, f"{kind}_physical_identity_received", start,
+                                          timeout_seconds=60 if kind == "starve" else 30)
         results.append({"type": kind, "health": hit_state["player"]["health"],
                         "events": steps.client.p4_damage_wire()[start:]})
         if kind == "outside_border":
@@ -442,17 +565,15 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
         if kind == "in_fire":
             before_burn = len(steps.client.p4_damage_wire())
             steps.fixture(f"setblock {x} {y} {z} minecraft:air")
-            burned = steps.wait(lambda state: state["player"]["health"] < hit_state["player"]["health"]
-                                and any(event["entity_id"] == player_id and
-                                        event["type"] == "minecraft:on_fire"
-                                        for event in steps.client.p4_damage_wire()[before_burn:]),
-                                "on_fire_physical_identity_received", timeout_seconds=30)
+            burned = _wait_damage_identity(
+                steps, lambda state: state["player"]["health"] < hit_state["player"]["health"]
+                and any(event["entity_id"] == player_id and event["type"] == "minecraft:on_fire"
+                        for event in steps.client.p4_damage_wire()[before_burn:]),
+                "on_fire_physical_identity_received", start, timeout_seconds=30)
             results.append({"type": "on_fire", "health": burned["player"]["health"],
                             "events": steps.client.p4_damage_wire()[before_burn:]})
     steps.fixture("gamemode creative @s")
-    steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:water")
-    steps.call("minecraft_wait_ticks", {"ticks": 10})
-    steps.fixture(f"fill {x - 1} {y} {z - 1} {x + 1} {y + 3} {z + 1} minecraft:air")
+    _douse_and_drain(steps, origin)
     steps.fixture(f"tp @s {x + .5} {y} {z + .5}")
     steps.fixture("effect give @s minecraft:instant_health 1 5 true")
     steps.fixture("clear @s")
@@ -466,14 +587,17 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
     steps.fixture("gamemode survival @s")
     steps.call("minecraft_look", {"yaw_deg": 0, "pitch_deg": 90})
     steps.call("minecraft_press_inputs", {"keys": ["use"], "ticks": 1})
-    splash = steps.wait(lambda state: state["player"]["health"] < baseline and any(
+    splash = _wait_damage_identity(steps, lambda state: state["player"]["health"] < baseline and any(
         event["entity_id"] == player_id and event["type"] == "minecraft:indirect_magic"
-        for event in steps.client.p4_damage_wire()[start:]), "splash_potion_indirect_magic_received",
+        for event in steps.client.p4_damage_wire()[start:]), "splash_potion_indirect_magic_received", start,
         timeout_seconds=30)
     results.append({"type": "indirect_magic", "health": splash["player"]["health"],
                     "events": steps.client.p4_damage_wire()[start:]})
     steps.fixture("gamemode creative @s")
     steps.fixture("effect give @s minecraft:instant_health 1 5 true")
+    # The earlier rows run into dawn on a slow host; the sun would set the thorns zombie on fire
+    # and its burn invulnerability swallows the player's hit.
+    steps.fixture("time set 18000")
     steps.fixture(
         f'summon minecraft:zombie {x + .5} {y} {z + 2.5} '
         '{UUID:[I;0,0,0,123456],NoAI:1b,equipment:{chest:{id:"minecraft:diamond_chestplate",count:1,'
@@ -488,19 +612,29 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
         target.update(row)
         return True
     steps.wait(thorns_target_received, "thorns_authored_uuid_received")
-    steps.wait(lambda state: state["player"]["health"] >= 18, "thorns_fixture_healed")
+    steps.fixture(f"tp @s {x + .5} {y} {z + .5}")
+    steps.wait(lambda state: state["player"]["health"] >= 18 and
+               abs(state["player"]["x"] - x - .5) < .3 and abs(state["player"]["z"] - z - .5) < .3,
+               "thorns_fixture_ready")
     steps.call("minecraft_wait_ticks", {"ticks": 25})
     baseline = steps.observe()["player"]["health"]
     start = len(steps.client.p4_damage_wire())
     steps.fixture("gamemode survival @s")
+    # A creative player takes no reflected damage; the command and the attack packet are not
+    # ordered, so let the server apply the mode before the hit.
+    steps.call("minecraft_wait_ticks", {"ticks": 10})
     steps.call("minecraft_attack_entity_once", {
         **{key: target[key] for key in ("entity_id", "entity_uuid", "entity_type")},
         "timeout_seconds": steps.remaining(),
     })
-    thorn_state = steps.wait(lambda state: state["player"]["health"] < baseline and any(
-        event["entity_id"] == player_id and event["type"] == "minecraft:thorns"
-        for event in steps.client.p4_damage_wire()[start:]), "thorns_physical_identity_received",
-        timeout_seconds=30)
+    try:
+        thorn_state = _wait_damage_identity(steps, lambda state: state["player"]["health"] < baseline and any(
+            event["entity_id"] == player_id and event["type"] == "minecraft:thorns"
+            for event in steps.client.p4_damage_wire()[start:]), "thorns_physical_identity_received", start,
+            timeout_seconds=30)
+    except TimeoutError:
+        _note_region(steps, "thorns_timeout", origin, reach=3)
+        raise
     steps.check("player_attack_physical_identity_received", any(
         event["entity_id"] == target["entity_id"] and event["type"] == "minecraft:player_attack"
         and event["cause_entity_id"] == player_id
@@ -516,14 +650,16 @@ def _damage_environment(steps: ProbeSteps, origin: tuple[int, int, int], player_
     start = len(steps.client.p4_damage_wire())
     steps.fixture("gamemode survival @s")
     steps.fixture(f"tp @s {x + .5} -200 {z + .5}")
-    void_state = steps.wait(lambda state: state["player"]["health"] < 18 and any(
+    # Below the world's block range the client shows no playable world (in_play false, no player
+    # row), so health is not observable there: the row is the received out_of_world wire event
+    # for the player and then the death screen.
+    steps.wait(lambda state: any(
         event["entity_id"] == player_id and event["type"] == "minecraft:out_of_world"
         for event in steps.client.p4_damage_wire()[start:]), "void_physical_identity_received",
-        timeout_seconds=30)
-    results.append({"type": "out_of_world", "health": void_state["player"]["health"],
-                    "events": steps.client.p4_damage_wire()[start:]})
-    steps.wait(lambda state: state["player"]["health"] == 0 and state["screen"]["open"],
-               "void_death_screen_received")
+        outside_play=True, timeout_seconds=30)
+    results.append({"type": "out_of_world", "events": steps.client.p4_damage_wire()[start:]})
+    steps.wait(lambda state: state["screen"]["open"], "void_death_screen_received",
+               outside_play=True)
     steps.call("minecraft_respawn", {"timeout_seconds": steps.remaining()})
     steps.wait(lambda state: state["player"]["health"] > 0 and not state["screen"]["open"],
                "void_respawn_received", wait_for_play=True)
@@ -659,6 +795,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int], surface: str) -> None:
     steps.report["surface"] = surface
     try:
         {"nameplates": _nameplates, "advancements": _advancements, "damage": _damage,
+         "identities": _damage_identities, "death-protection": _death_protection,
          "hopper": _hopper, "statistics": _stats}[surface](steps, origin)
     except Exception:
         try:

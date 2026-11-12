@@ -434,6 +434,7 @@ impl TickState {
                     type_id: *type_id,
                     health: *health,
                     wool: None,
+                    variant: None,
                     taming: None,
                     advancement_breeding: None,
                 });
@@ -569,6 +570,7 @@ impl TickState {
             intent.kind,
             IntentKind::PlaceBlock { .. }
                 | IntentKind::FeedAnimal { .. }
+                | IntentKind::DolphinFeed { .. }
                 | IntentKind::Bucket { .. }
                 | IntentKind::Cultivate { .. }
                 | IntentKind::ComposterFill { .. }
@@ -847,6 +849,13 @@ impl TickState {
                     Arc::make_mut(&mut self.entities.row_mut(slot).appearance),
                     wool,
                 );
+            }
+            if let Some((index, value)) = spawn.variant
+                && let Some(slot) = self.entities.slot_of(id)
+            {
+                let appearance = Arc::make_mut(&mut self.entities.row_mut(slot).appearance);
+                appearance.extra.retain(|(at, _)| *at != index);
+                appearance.extra.push((index, value));
             }
             if let Some((player, mut evidence)) = spawn.advancement_breeding {
                 evidence["child"] = crate::advancements::entity_snapshot(self, id);

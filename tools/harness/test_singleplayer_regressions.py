@@ -1,13 +1,20 @@
 """Focused checks for singleplayer regression registration and event setup."""
 import os
 from pathlib import Path
+import shutil
+import subprocess
 import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
-from tools.harness import regressions, scenarios
+from tools.harness import regressions, runtime, scenarios
 from tools.harness.backends import singleplayer_regressions as sp
+
+
+def setUpModule() -> None:
+    # .analysis/ is gitignored, so a fresh checkout or worktree lacks it.
+    (runtime.REPO_ROOT / ".analysis").mkdir(exist_ok=True)
 
 
 class SingleplayerRegressionTests(unittest.TestCase):
@@ -91,9 +98,8 @@ class SingleplayerRegressionTests(unittest.TestCase):
                                   extra_args=[], platform=None, timeout_seconds=30,
                                   artifact_dir=artifact, client_evidence={})
             with (
-                patch.dict(sp.os.environ, {"SOLARIS_SERVER_BINARY": str(binary)}),
+                patch.dict(sp.os.environ, {"SOLARIS_SERVER_BINARY": str(binary), "SOLARIS_CLIENT_ROOT": str(template)}),
                 patch.object(sp.runtime, "REPO_ROOT", root / "repo"),
-                patch.object(sp.native_client, "_client_root", return_value=template),
                 patch.object(sp.native_client, "resolve_binary", return_value=binary),
                 patch.object(sp.runtime, "start_xvfb", side_effect=RuntimeError("fixture staged")),
             ):
@@ -122,6 +128,24 @@ class SingleplayerRegressionTests(unittest.TestCase):
             with patch.object(sp.runtime, "wait_for_path_condition", appeared):
                 sp._wait_path(database, 30)
             self.assertEqual(seen, [world, world / "native", database])
+
+    def test_owned_server_is_matched_by_binary_not_by_file_name(self):
+        # The ledger tooling hard-links the server it built as `solaris-v2-<sha256>`.
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            server = root / "solaris-v2-0123abcd"
+            other = root / "unrelated-binary"
+            shutil.copy2("/usr/bin/sleep", server)
+            shutil.copy2("/usr/bin/sleep", other)
+            owner = SimpleNamespace(pid=os.getpid())
+            child = subprocess.Popen([str(server), "30"])
+            try:
+                self.assertEqual(sp._server_child(owner, server.resolve()), child.pid)
+                with self.assertRaisesRegex(RuntimeError, "expected one owned singleplayer server"):
+                    sp._server_child(owner, other.resolve())
+            finally:
+                child.kill()
+                child.wait()
 
 
 if __name__ == "__main__":

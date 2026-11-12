@@ -33,6 +33,8 @@ use crate::world::ChunkWorld;
 
 mod auth;
 pub(crate) use auth::unlock_session;
+pub(crate) mod blocks;
+mod book_actions;
 mod container_access;
 pub(crate) mod damage;
 mod death_message;
@@ -58,6 +60,8 @@ pub(crate) use containers::*;
 mod build;
 pub(crate) use build::*;
 
+#[cfg(test)]
+mod duplicate_login_tests;
 #[cfg(test)]
 mod furnace_tests;
 #[cfg(test)]
@@ -600,6 +604,8 @@ pub struct MergeSpawn {
     pub type_id: u32,
     pub health: f32,
     pub wool: Option<u8>,
+    /// Climate variant inherited from one parent (cow, pig, chicken).
+    pub variant: Option<(u8, crate::boundary::EntityDataValue)>,
     pub taming: Option<crate::taming::TamingState>,
     pub advancement_breeding: Option<(EntityId, serde_json::Value)>,
 }
@@ -1414,6 +1420,9 @@ fn run_dimension_tick_inner<'a>(
         crate::axolotl::run(state);
         crate::turtle::run(state);
         crate::frog::run(state);
+        crate::sniffer::run(state);
+        crate::strider::run(state);
+        crate::parrot::run(state);
         crate::goat::run(state, &mut intents, &mut changes);
         crate::piglin::run(state, &mut changes);
         crate::llama::run(state);
@@ -1493,7 +1502,7 @@ fn run_dimension_tick_inner<'a>(
         state.world.set_block(pos.x, pos.y, pos.z, write_state);
         block_writes.push((pos, write_state));
     }
-    crate::blocks::run(
+    blocks::run(
         state,
         &mut block_writes,
         &mut popped_drops,
@@ -1547,12 +1556,9 @@ fn run_dimension_tick_inner<'a>(
     }
     crate::shulker::commit_placements(state);
     crate::block_entity_defaults::after_blocks(state, &block_writes);
-    crate::block_entity_defaults::commit_item_components(state);
     crate::trial_spawner::after_blocks(state, &block_writes);
-    crate::monster_spawner::after_blocks(state, &block_writes);
     crate::vault::after_blocks(state, &block_writes);
-    crate::item_frame::blocks_changed(state, &block_writes, &mut popped_drops);
-    crate::painting::blocks_changed(state, &block_writes, &mut popped_drops);
+    post_write_consequences(state, &block_writes, &mut popped_drops);
     crate::block_log::after_blocks(state);
     if sim {
         crate::trial_spawner::run(state, &mut block_writes, &mut changes);

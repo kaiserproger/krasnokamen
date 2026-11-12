@@ -8,7 +8,9 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 MANIFEST="${SOLARIS_REAL_CLIENT_MANIFEST:-$REPO_ROOT/docs/real-client-regression/manifests/m94-regression-pack.json}"
 RUN_ROOT="${SOLARIS_REAL_CLIENT_RUN_ROOT:-$REPO_ROOT/.analysis/real-client-runs}"
-AGENT_ROOT="${SOLARIS_LOADER_ROOT:-$REPO_ROOT/../solaris-loader}"
+# The Loader beside the main checkout, also from a linked worktree (as tools/harness/runtime.py sibling_root).
+MAIN_CHECKOUT="$(dirname "$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$REPO_ROOT/.git")")"
+AGENT_ROOT="${SOLARIS_LOADER_ROOT:-$(dirname "$MAIN_CHECKOUT")/solaris-loader}"
 GRADLE_RUNCLIENT_TASK=":fabric-agent:runClientAgent"
 CLIENT_ADAPTER_SOURCE="auto-gradle-runclient"
 CLIENT_KIND="gradle-runclient"
@@ -40,7 +42,7 @@ Usage: python3 -m tools.harness run regression [--check|--prepare|--run|--valida
 Environment:
 	  Primary client adapter is auto-selected as the repo-native
 	                                Gradle runClient adapter:
-	                                ../solaris-loader/gradlew
+	                                <main checkout>/../solaris-loader/gradlew (SOLARIS_LOADER_ROOT selects another)
 	                                --no-daemon --no-configuration-cache :fabric-agent:runClientAgent.
   SOLARIS_REAL_CLIENT_MANIFEST  Regression pack manifest path.
   SOLARIS_REAL_CLIENT_RUN_ROOT  Local-only artifact root. Defaults to .analysis/real-client-runs.

@@ -298,6 +298,16 @@ to exit and write its final checkpoint. Serving writes the native
 `native/state.redb` and tick WAL, **not** the old Anvil files; keep the same
 config, content and deployment with the native world.
 
+### Downgrading the Solaris binary
+
+Do not run an older Solaris binary on a world that a build with cow, pig,
+chicken and zombie-nautilus variant persistence has served. The tick WAL refuses
+to recover (the older decoder does not know the variant records), and a
+checkpoint is rewritten without them: the older build ignores the `variant`
+field of a loaded entity and never writes it, so cow, pig and zombie-nautilus
+variants are lost silently when the older binary checkpoints a loaded chunk.
+Restore a backup instead.
+
 ### Rollback option A: restore the untouched original
 
 Stop Solaris and restore the entire original vanilla/Paper installation from the
@@ -322,7 +332,8 @@ written as 26.1.2 (`DataVersion` 4790) unless a record had to be promoted to
 26.3 (5023); `level.dat` and the receipt report the highest version emitted
 (`Version.Name`), and a promoted export needs a vanilla server of that release.
 It is not a downgrade to older Minecraft versions. Retain a native-world backup
-as well.
+as well. Export writes the WAL frame as `Data.Time`, so exporting and importing a
+world that was ever frozen adds the held (frozen) ticks to its game age.
 
 In a separate vanilla test installation of the reported release, put the export
 at the configured `level-name` path, keep your already accepted EULA, set a

@@ -29,7 +29,40 @@ from typing import Any
 from .matrix_api import MissingCapability
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-AGENT_ROOT = Path(os.environ.get("SOLARIS_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")).expanduser().resolve()
+# The sibling repositories beside the core checkout, and the variable that names another checkout of each.
+SIBLING_NAMES = {"client": "solaris-client", "loader": "solaris-loader", "plugins": "solaris-default-plugins"}
+SIBLING_ENV = {"client": "SOLARIS_CLIENT_ROOT", "loader": "SOLARIS_LOADER_ROOT",
+               "plugins": "SOLARIS_DEFAULT_PLUGINS_ROOT"}
+
+
+@functools.lru_cache(maxsize=None)
+def main_checkout(root: Path = REPO_ROOT) -> Path:
+    """The main working tree of the repository holding ``root``.
+
+    In the main checkout that is ``root`` itself. In a linked worktree (`git worktree add`, e.g.
+    `<work>/wt/<Name>`) it is the checkout the worktree belongs to: the parent of the shared
+    `--git-common-dir`. Without git or outside a repository it is ``root``."""
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            capture_output=True, text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return root
+    common = completed.stdout.strip()
+    return Path(common).parent if completed.returncode == 0 and common else root
+
+
+def sibling_root(kind: str, root: Path = REPO_ROOT) -> Path:
+    """The checkout of sibling repository ``kind`` (a SIBLING_NAMES key).
+
+    Its SIBLING_ENV variable wins; otherwise it is the sibling beside the main checkout, so a
+    linked worktree finds the same `<work>/solaris-loader` as the main checkout instead of a
+    nonexistent `<work>/wt/solaris-loader`."""
+    override = os.environ.get(SIBLING_ENV[kind])
+    if override:
+        return Path(override).expanduser().resolve()
+    return main_checkout(root).parent / SIBLING_NAMES[kind]
+
 
 USERNAME_RE = re.compile(r"[A-Za-z0-9_]{1,16}\Z")
 CLIENT_PROFILES = ("vanilla", "loader", "svc", "dh")
@@ -293,6 +326,17 @@ def _tail_log(log_path: Path, max_bytes: int = _LOG_TAIL_BYTES) -> str:
         return ""
 
 
+def ensure_loader_gradle_home(loader_root: Path | None = None) -> Path:
+    """The Gradle home Loader gates use. When GRADLE_USER_HOME is unset and the owner host's
+    `<work>/loader-gradle-home` (beside the Loader checkout; the one `ledger probe` uses)
+    exists, export it so the schema compiler and the Gradle client launch share one cache."""
+    if not os.environ.get("GRADLE_USER_HOME"):
+        shared = (loader_root or sibling_root("loader")).parent / "loader-gradle-home"
+        if shared.is_dir():
+            os.environ["GRADLE_USER_HOME"] = str(shared)
+    return Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
+
+
 def reserve_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -328,6 +372,77 @@ def _probe_port(port: int, timeout_seconds: float) -> bool:
         return False
     finally:
         sock.close()
+
+
+def _listener_inodes(port: int) -> set[int]:
+    """Socket inodes of the LISTEN sockets on 127.0.0.1:<port> (procfs)."""
+    inodes: set[int] = set()
+    for table in ("/proc/net/tcp", "/proc/net/tcp6"):
+        try:
+            rows = Path(table).read_text().splitlines()[1:]
+        except OSError:
+            continue
+        for row in rows:
+            fields = row.split()
+            if len(fields) < 10 or fields[3] != "0A":  # 0A = LISTEN
+                continue
+            if int(fields[1].rsplit(":", 1)[1], 16) == port:
+                inodes.add(int(fields[9]))
+    return inodes
+
+
+def _descendant_pids(root_pid: int) -> set[int]:
+    """`root_pid` plus all its descendants, via /proc/<pid>/task/<tid>/children.
+
+    Loader clients are forked by Gradle's JavaExec, so the MCP listener can
+    belong to a grandchild of the spawned process.
+    """
+    seen = {root_pid}
+    pending = [root_pid]
+    while pending:
+        pid = pending.pop()
+        task_dir = Path(f"/proc/{pid}/task")
+        try:
+            tids = os.listdir(task_dir)
+        except OSError:
+            continue
+        for tid in tids:
+            try:
+                children = (task_dir / tid / "children").read_text().split()
+            except OSError:
+                continue
+            for child in children:
+                child_pid = int(child)
+                if child_pid not in seen:
+                    seen.add(child_pid)
+                    pending.append(child_pid)
+    return seen
+
+
+def _owns_listener(process: subprocess.Popen[Any], port: int) -> bool:
+    """True only when a LISTEN socket on `port` belongs to `process` or one of
+    its descendants.
+
+    A port that merely accepts may belong to a foreign process (a concurrent
+    or stale server on the shared host); readiness must be proven, not assumed.
+    """
+    inodes = _listener_inodes(port)
+    if not inodes:
+        return False
+    for pid in _descendant_pids(process.pid):
+        fd_dir = Path(f"/proc/{pid}/fd")
+        try:
+            entries = os.listdir(fd_dir)
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                target = os.readlink(fd_dir / entry)
+            except OSError:
+                continue
+            if target.startswith("socket:[") and int(target[8:-1]) in inodes:
+                return True
+    return False
 
 
 def _require_event_fds(
@@ -432,10 +547,13 @@ def wait_port(
     log_path: Path,
     phase_name: str = "server_start",
 ) -> None:
-    """Return once port accepts; raise if the process exits or time runs out.
+    """Return once `process` itself listens on the port; raise if the process
+    exits or time runs out.
 
-    `phase_name` is the lifecycle phase a failure belongs to: the server's
-    readiness by default, `client_start` when the port is a client's MCP.
+    A bare accept on the port is not readiness: on the shared host another
+    run's server may hold it. `phase_name` is the lifecycle phase a failure
+    belongs to: the server's readiness by default, `client_start` when the
+    port is a client's MCP.
     """
     with phase(phase_name):
         _wait_port(port, timeout_seconds, process, log_path)
@@ -444,6 +562,9 @@ def wait_port(
 def _wait_port(port: int, timeout_seconds: float, process: subprocess.Popen[Any], log_path: Path) -> None:
     """Re-probes happen only after real events: socket writability, log growth
     (inotify), or process exit (pidfd). There is no polling quantum.
+
+    A probe that succeeds against a foreign listener is not readiness: the
+    port counts as ready only once `process` owns the LISTEN socket itself.
     """
     if timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be positive")
@@ -467,7 +588,7 @@ def _wait_port(port: int, timeout_seconds: float, process: subprocess.Popen[Any]
                     f"port {port} did not become ready within "
                     f"{timeout_seconds:.1f}s; log {log_path}: {tail[-2000:]}"
                 )
-            if _probe_port(port, remaining):
+            if _probe_port(port, remaining) and _owns_listener(process, port):
                 return
             # Only log growth or process exit wakes us to probe again.
             for key, _ in selector.select(max(0.0, deadline - time.monotonic())):
@@ -742,7 +863,7 @@ def _agent_jar_path() -> Path:
     override = os.environ.get("SOLARIS_JAVA_AGENT_JAR")
     if override:
         return Path(override).expanduser()
-    candidates = sorted(AGENT_ROOT.glob("java-agent/build/libs/*.jar"))
+    candidates = sorted(sibling_root("loader").glob("java-agent/build/libs/*.jar"))
     if candidates:
         return candidates[0]
     raise MissingCapability(
@@ -763,6 +884,7 @@ def start_client(
     platform: str | None = None,
     launch_manifest: Path | None = None,
     client_profile: str | None = None,
+    window_size: tuple[int, int] | None = None,
 ) -> tuple[subprocess.Popen[Any], Any]:
     """Launch a real client and return (process, log_handle) once MCP is ready.
 
@@ -852,6 +974,10 @@ def start_client(
             command = (prepared_fabric_command(launch_manifest, game_dir, username)
                        if launch_manifest is not None else vanilla_command(
                            game_dir=game_dir, username=username, agent_jar=_agent_jar_path()))
+            if window_size is not None:
+                if min(window_size) < 1:
+                    raise ValueError("client window dimensions must be positive")
+                command.extend(["--width", str(window_size[0]), "--height", str(window_size[1])])
             process = subprocess.Popen(
                 command,
                 cwd=REPO_ROOT,
@@ -861,7 +987,8 @@ def start_client(
                 start_new_session=True,
             )
         else:
-            gradlew = AGENT_ROOT / "gradlew"
+            loader_root = sibling_root("loader")
+            gradlew = loader_root / "gradlew"
             if not (gradlew.is_file() and os.access(gradlew, os.X_OK)):
                 raise RuntimeError(f"missing executable Gradle wrapper: {gradlew}")
             process = subprocess.Popen(
@@ -870,7 +997,7 @@ def start_client(
                     "--no-daemon",
                     "--no-configuration-cache",
                     "-p",
-                    str(AGENT_ROOT),
+                    str(loader_root),
                     f"-Psolaris.clientMcp.gameDir={game_dir}",
                     f"-Psolaris.clientMcp.username={username}",
                     task,

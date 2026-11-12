@@ -1113,6 +1113,7 @@ pub enum EntityDataValueImage {
     BlockState(u32),
     WeatheringCopper(u8),
     CopperGolemState(u8),
+    SnifferState(u8),
     Direction(u8),
     PaintingVariant(u32),
     Item(Option<mc_data::ItemStack>),
@@ -1126,6 +1127,9 @@ pub enum EntityDataValueImage {
         level: i32,
     },
     ChickenVariant(u32),
+    CowVariant(u32),
+    PigVariant(u32),
+    ZombieNautilusVariant(u32),
 }
 
 impl From<&crate::boundary::EntityAppearance> for EntityAppearanceImage {
@@ -1161,9 +1165,15 @@ impl From<&crate::boundary::EntityDataValue> for EntityDataValueImage {
             crate::boundary::EntityDataValue::Boolean(v) => Self::Boolean(*v),
             crate::boundary::EntityDataValue::WeatheringCopper(v) => Self::WeatheringCopper(*v),
             crate::boundary::EntityDataValue::CopperGolemState(v) => Self::CopperGolemState(*v),
+            crate::boundary::EntityDataValue::SnifferState(v) => Self::SnifferState(*v),
             crate::boundary::EntityDataValue::Direction(v) => Self::Direction(*v),
             crate::boundary::EntityDataValue::PaintingVariant(v) => Self::PaintingVariant(*v),
             crate::boundary::EntityDataValue::ChickenVariant(v) => Self::ChickenVariant(*v),
+            crate::boundary::EntityDataValue::CowVariant(v) => Self::CowVariant(*v),
+            crate::boundary::EntityDataValue::PigVariant(v) => Self::PigVariant(*v),
+            crate::boundary::EntityDataValue::ZombieNautilusVariant(v) => {
+                Self::ZombieNautilusVariant(*v)
+            }
             crate::boundary::EntityDataValue::String(v) => Self::String(v.clone()),
             crate::boundary::EntityDataValue::BlockState(v) => Self::BlockState(*v),
             crate::boundary::EntityDataValue::Item(v) => Self::Item(v.clone()),

@@ -1,5 +1,7 @@
 //! Retained native projectiles: one flight authority for mobs, items and dispensers.
 
+mod block_impact;
+mod can_break;
 pub(crate) mod embedded_projectiles;
 pub(crate) mod eye;
 
@@ -8,7 +10,7 @@ mod eye_tests;
 pub mod fishing;
 pub(crate) mod flight;
 #[cfg(test)]
-mod flight_tests;
+pub(crate) mod flight_tests;
 pub mod payloads;
 pub mod persistence;
 pub mod weapons;

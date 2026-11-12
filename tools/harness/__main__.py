@@ -31,12 +31,11 @@ from pathlib import Path
 from typing import Any
 
 from .profiles import LOADER_PLATFORMS, ProfileContext, list_profiles
-from .runtime import AGENT_ROOT, REPO_ROOT, USERNAME_RE, port_open
+from .runtime import REPO_ROOT, USERNAME_RE, port_open, sibling_root
 
 ARTIFACT_ROOT = Path(os.environ.get("SOLARIS_VALIDATION_ROOT", REPO_ROOT / ".analysis" / "validation"))
 
 CLIENT_DEFAULT_PORT = 39095
-CLIENT_DEFAULT_GAME_DIR = AGENT_ROOT / "fabric-agent" / "run-mcp"
 CLIENT_DEFAULT_USERNAME = "SolarisMcp"
 LOADER_DEFAULT_USERNAME = "SolarisLoader"
 
@@ -61,7 +60,7 @@ def resolve_client_settings(platform: str | None) -> dict[str, Any]:
     default_game_dir = (
         str(REPO_ROOT / ".analysis" / "minecraft-loader-mcp" / platform)
         if platform is not None
-        else str(CLIENT_DEFAULT_GAME_DIR)
+        else str(sibling_root("loader") / "fabric-agent" / "run-mcp")
     )
     raw_game_dir = os.environ.get("SOLARIS_CLIENT_MCP_GAME_DIR", default_game_dir)
     game_dir = (
@@ -119,13 +118,14 @@ def client_check_commands(
 ) -> list[list[str]]:
     game_dir = str(settings["game_dir"])
     username = str(settings["username"])
+    loader = sibling_root("loader")
     if platform is None:
         return [
             [
-                str(AGENT_ROOT / "gradlew"),
+                str(loader / "gradlew"),
                 "--no-configuration-cache",
                 "-p",
-                str(AGENT_ROOT),
+                str(loader),
                 f"-Psolaris.clientMcp.gameDir={game_dir}",
                 f"-Psolaris.clientMcp.username={username}",
                 ":fabric-agent:validateClientMcpRunProperties",
@@ -136,21 +136,21 @@ def client_check_commands(
         ]
     return [
         [
-            str(AGENT_ROOT / "gradlew"),
+            str(loader / "gradlew"),
             "--no-configuration-cache",
             "-p",
-            str(AGENT_ROOT),
+            str(loader),
             f"-Psolaris.clientMcp.gameDir={game_dir}",
             f"-Psolaris.clientMcp.username={username}",
             ":validateLoaderClientMcpRunProperties",
             ":java-agent:jar",
         ],
         [
-            str(AGENT_ROOT / "gradlew"),
+            str(loader / "gradlew"),
             "--no-configuration-cache",
             "--dry-run",
             "-p",
-            str(AGENT_ROOT),
+            str(loader),
             f"-Psolaris.clientMcp.gameDir={game_dir}",
             f"-Psolaris.clientMcp.username={username}",
             f":loader-{platform}:runClientMcp",
@@ -164,11 +164,12 @@ def client_launch_command(
     game_dir = str(settings["game_dir"])
     username = str(settings["username"])
     task = ":fabric-agent:runClientMcp" if platform is None else f":loader-{platform}:runClientMcp"
+    loader = sibling_root("loader")
     return [
-        str(AGENT_ROOT / "gradlew"),
+        str(loader / "gradlew"),
         "--no-configuration-cache",
         "-p",
-        str(AGENT_ROOT),
+        str(loader),
         f"-Psolaris.clientMcp.gameDir={game_dir}",
         f"-Psolaris.clientMcp.username={username}",
         task,
@@ -181,7 +182,7 @@ def run_client(platform: str | None, check: bool) -> int:
     except (RuntimeError, ValueError) as error:
         print(f"harness client: {error}", file=sys.stderr)
         return 2
-    gradlew = AGENT_ROOT / "gradlew"
+    gradlew = sibling_root("loader") / "gradlew"
     if not (gradlew.is_file() and os.access(gradlew, os.X_OK)):
         print(f"harness client: missing executable Gradle wrapper: {gradlew}",
               file=sys.stderr)
@@ -502,8 +503,10 @@ def cmd_run(argv: list[str]) -> int:
         if (ctx.plugins_dir is not None and client != "native"
                 and ctx.scenario_id != "java-v2-p5-towns" and profile not in {"loader-live", "graves", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}):
             raise ValueError("--plugins-dir requires native gameplay, java-v2-p5-towns, loader-live, graves or matrix profiles")
-        if ctx.windowed and client != "native" and not (client == "java" and profile in {"scene-shot", "settlement-map-qa"}):
-            raise ValueError("--windowed requires --client native (or --client java for scene-shot and settlement-map-qa)")
+        if (ctx.windowed and client != "native"
+                and not (client == "java" and (profile in {"scene-shot", "settlement-map-qa"}
+                                               or ctx.scenario_id == "java-v2-p5-shift-double-click"))):
+            raise ValueError("--windowed requires native, a supported Java graphical profile, or java-v2-p5-shift-double-click")
         if client == "native" and profile not in {"survival", "inventory", "entities", "core-client", "native-lifecycle", "logical-native", "native-scale", "native-matrix", "title-connect", "singleplayer-regressions", "weak-first-view", "dialogs", "admin-commands", "chisel", "anti-xray", "block-log", "composter-chance", "village-qa", "village-autonomy-qa", "civilization-seed-qa", "village-owner-order-qa", "scene-shot", "settlement-map-qa", "claim-only-qa", "buildings-qa", "army-qa", "autocraft-qa"}:
             raise RuntimeError(
                 f"profile {profile!r} is not enabled for native; "

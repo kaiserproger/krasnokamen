@@ -1,0 +1,38 @@
+diff --git a/crates/mc-core/src/settlements/allocator.rs b/crates/mc-core/src/settlements/allocator.rs
+--- a/crates/mc-core/src/settlements/allocator.rs
++++ b/crates/mc-core/src/settlements/allocator.rs
+@@ -1197,7 +1197,7 @@
+         });
+         cache
+             .candidates
+-            .retain(|(_, poi)| scope_allows(scope, poi.pos));
++            .retain(|(_, poi)| scope_allows(scope, poi.pos) && bed_allowed(state, scope, *poi));
+     }
+     let kind_index = match kind {
+         PoiKind::Home => 0,
+@@ -1555,7 +1555,7 @@
+     cache.nearby(pos, owner, |kind| kind == PoiKind::Home);
+     cache
+         .candidates
+-        .retain(|(_, poi)| scope_allows(scope, poi.pos));
++        .retain(|(_, poi)| scope_allows(scope, poi.pos) && bed_allowed(state, scope, *poi));
+     for _ in 0..5 {
+         let (_, poi) = cache.candidates.pop()?;
+         if !bed_has_baby_space(state, poi.pos) || claimed_home == Some(poi.pos) {
+@@ -1822,7 +1822,15 @@
+                 kind: PoiKind::Home,
+             };
+             let geometry = self.geometry(cache, &mut v.poi_validation, 0, pos);
+-            if !cached_valid_poi(geometry, cache, poi.kind) || cache.claimed(owner, poi) {
++            // A resident never keeps an open-air bed: a roof removed after the
++            // claim, or a claim made before residents needed a roofed bed.
++            let resident = v
++                .settlement
++                .is_some_and(|id| self.settlements.get(id).is_some());
++            if !cached_valid_poi(geometry, cache, poi.kind)
++                || cache.claimed(owner, poi)
++                || (resident && !geometry.roofed)
++            {
+                 v.home = None;
+             }
+         }

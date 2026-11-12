@@ -3,7 +3,7 @@ use std::time::Duration;
 use crate::boundary::{ConnectionId, PlayerInput};
 use crate::composter::tests::{POS, data_dir, fixture, snapshot_block};
 use crate::core::Core;
-use crate::pause_when_empty_tests::{config, drain_until_idle, next_tick, runtime};
+use crate::pause_when_empty_tests::{config, next_tick, runtime, wait_for_pause};
 use crate::tick::run_tick;
 use mc_data::Identifier;
 use mc_world::ScheduledBlockTick;
@@ -27,7 +27,8 @@ fn singleplayer_pause_stops_world_until_resume() {
         command: "solaris_pause on".into(),
         permission_level: 4,
     });
-    let paused_at = drain_until_idle(&rt, &mut rx).max(joined.tick);
+    let (paused_at, _) = wait_for_pause(&core, &rt, &mut rx);
+    assert!(paused_at >= joined.tick);
     assert!(
         next_tick(&rt, &mut rx, Duration::from_millis(400)).is_none(),
         "world ticks must stop while paused"
@@ -40,6 +41,74 @@ fn singleplayer_pause_stops_world_until_resume() {
     });
     let resumed = next_tick(&rt, &mut rx, Duration::from_secs(2)).expect("resume tick");
     assert_eq!(resumed.tick, paused_at + 1);
+    core.shutdown();
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// A paused owner whose client reconnects: the new login's `ProfileLogin` arrives in its own
+/// batch before `Join`, so the pause must not drop it or the stale session is never kicked and
+/// the refused `Join` leaves the owner locked out.
+#[test]
+fn paused_owner_relogin_kicks_the_stale_session_and_joins() {
+    let (config, dir) = config("singleplayer-relogin", 0);
+    let core = Core::open(config).expect("open");
+    let rt = runtime();
+    let mut rx = core.subscribe();
+    let owner = ConnectionId(1);
+    let uuid = uuid::Uuid::new_v4();
+    core.submit(PlayerInput::Join {
+        connection: owner,
+        uuid,
+        name: "owner".into(),
+        permission_level: 4,
+    });
+    next_tick(&rt, &mut rx, Duration::from_secs(2)).expect("join");
+    next_tick(&rt, &mut rx, Duration::from_secs(2)).expect("joined");
+    core.submit(PlayerInput::Command {
+        connection: owner,
+        command: "solaris_pause on".into(),
+        permission_level: 4,
+    });
+    wait_for_pause(&core, &rt, &mut rx);
+    core.try_drain_outbox();
+    let relogin = ConnectionId(2);
+    core.submit(PlayerInput::ProfileLogin {
+        connection: relogin,
+        uuid,
+    });
+    next_tick(&rt, &mut rx, Duration::from_secs(2)).expect("a login resumes the paused world");
+    let kicked = |batches: &[(ConnectionId, Vec<crate::boundary::PlayerChange>)], id| {
+        batches
+            .iter()
+            .filter(|(c, _)| *c == id)
+            .flat_map(|(_, q)| q)
+            .any(|change| {
+                matches!(change, crate::boundary::PlayerChange::Disconnect { reason, .. }
+                if reason == "You logged in from another location")
+            })
+    };
+    let mut drained = core.try_drain_outbox();
+    assert!(
+        kicked(&drained, owner),
+        "the stale paused session is kicked by the newer login"
+    );
+    core.submit(PlayerInput::Join {
+        connection: relogin,
+        uuid,
+        name: "owner".into(),
+        permission_level: 4,
+    });
+    next_tick(&rt, &mut rx, Duration::from_secs(2)).expect("join tick");
+    next_tick(&rt, &mut rx, Duration::from_secs(2)).expect("joined tick");
+    drained = core.try_drain_outbox();
+    assert!(!kicked(&drained, relogin), "the relogin is not refused");
+    assert!(
+        drained
+            .iter()
+            .filter(|(c, _)| *c == relogin)
+            .flat_map(|(_, q)| q)
+            .any(|change| { matches!(change, crate::boundary::PlayerChange::Joined { .. }) })
+    );
     core.shutdown();
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -74,7 +143,7 @@ fn singleplayer_pause_requires_one_operator_and_join_resumes() {
         command: "solaris_pause on".into(),
         permission_level: 4,
     });
-    drain_until_idle(&rt, &mut rx);
+    wait_for_pause(&core, &rt, &mut rx);
     assert!(next_tick(&rt, &mut rx, Duration::from_millis(400)).is_none());
     core.submit(PlayerInput::Join {
         connection: ConnectionId(2),
@@ -194,7 +263,8 @@ fn singleplayer_pause_holds_scheduled_block_deadline_and_entity() {
         command: "solaris_pause on".into(),
         permission_level: 4,
     });
-    while let Some(output) = next(&mut rx, Duration::from_millis(500)) {
+    let (_, last) = wait_for_pause(&core, &rt, &mut rx);
+    if let Some(output) = last {
         held = Some(output.snapshot);
     }
     let held = held.expect("last snapshot before pause");

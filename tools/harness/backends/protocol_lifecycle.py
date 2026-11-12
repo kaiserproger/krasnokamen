@@ -23,7 +23,9 @@ Repo evidence used (never memory):
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
 import re
 import socket
 import subprocess
@@ -58,17 +60,72 @@ def _check_port(port: int, name: str, port_range=(PORT_MIN, PORT_MAX)) -> int:
     return port
 
 
-def reserve_matrix_port(exclude: int = -1, port_range=(PORT_MIN, PORT_MAX)) -> int:
-    """Bind-probe a free port inside this driver's assigned range."""
+# One fixed, machine-wide lock namespace for EVERY harness process on this
+# host. It must never be derived from any env var (SOLARIS_WORK_ROOT, TMPDIR,
+# ...): two processes with different environments would otherwise use
+# different lock dirs and both be handed the same port. The harness already
+# requires Linux, so /tmp always exists; the dir is created sticky 1777 and
+# each port gets its own lock file.
+PORT_LOCK_DIR = Path("/tmp/solaris-port-locks")
+
+
+class PortReservation(int):
+    """Cross-process lease on one port: an exclusive flock on a per-port lock
+    file under the fixed machine-wide PORT_LOCK_DIR, held for the instance lifetime.
+
+    It is an int (the port) so existing callers keep working; `release()`
+    closes the lock fd, which drops the flock.
+    """
+
+    def __new__(cls, port: int, lock_path: Path, fd: int) -> "PortReservation":
+        obj = super().__new__(cls, port)
+        obj.lock_path = lock_path
+        obj._lock_fd = fd
+        return obj
+
+    def release(self) -> None:
+        if getattr(self, "_lock_fd", -1) >= 0:
+            fd, self._lock_fd = self._lock_fd, -1
+            try:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            finally:
+                os.close(fd)
+
+
+def reserve_matrix_port(exclude: int = -1, port_range=(PORT_MIN, PORT_MAX)) -> PortReservation:
+    """Lease a free port inside this driver's assigned range for the caller's
+    lifetime.
+
+    The lease is an exclusive flock, so it is cross-process: concurrent
+    reservations skip ports whose lock is held and can never be handed the
+    same port. A bind probe after locking still rejects ports held by
+    processes outside the harness.
+    """
+    PORT_LOCK_DIR.mkdir(mode=0o1777, parents=True, exist_ok=True)
+    try:
+        os.chmod(PORT_LOCK_DIR, 0o1777)
+    except OSError:
+        pass
     for port in range(port_range[0], port_range[1] + 1):
         if port == exclude:
+            continue
+        lock_path = PORT_LOCK_DIR / f"{port}.lock"
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o666)
+        except OSError:
+            continue
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            os.close(fd)
             continue
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             try:
                 sock.bind(("127.0.0.1", port))
             except OSError:
+                os.close(fd)
                 continue
-            return port
+        return PortReservation(port, lock_path, fd)
     raise Blocked(f"no free matrix port in {port_range}")
 
 
@@ -88,11 +145,11 @@ class ProtocolServer:
         *,
         binary: Path,
         run_dir: Path,
-        port: int,
+        port: int | PortReservation,
         vanilla_data: Path,
         seed: int,
         plugins_dir: Path | None = None,
-        dashboard_port: int | None = None,
+        dashboard_port: int | PortReservation | None = None,
         server_name: str = "runproto",
         pause_when_empty_seconds: int = 0,
         view_distance: int = 2,
@@ -103,8 +160,15 @@ class ProtocolServer:
         self.binary = Path(binary)
         self.run_dir = Path(run_dir)
         self.port_range = port_range
+        self._reservations: list[PortReservation] = []
+        if isinstance(port, PortReservation):
+            self._reservations.append(port)
+        # Clients cache server.port across restarts, so ports are fixed per
+        # instance and leased with a cross-process flock (see PortReservation).
         self.port = _check_port(port, "port", port_range)
         if dashboard_port is not None:
+            if isinstance(dashboard_port, PortReservation):
+                self._reservations.append(dashboard_port)
             _check_port(dashboard_port, "dashboard_port", port_range)
             if dashboard_port == self.port:
                 raise ValueError("dashboard_port must differ from port")
@@ -136,7 +200,10 @@ class ProtocolServer:
     # -- config ---------------------------------------------------------
     def write_config(self) -> Path:
         if self.dashboard_port is None:
-            self.dashboard_port = reserve_matrix_port(exclude=self.port, port_range=self.port_range)
+            reservation = reserve_matrix_port(exclude=self.port, port_range=self.port_range)
+            if isinstance(reservation, PortReservation):
+                self._reservations.append(reservation)
+            self.dashboard_port = reservation
         assert self.dashboard_port is not None
         self.run_dir.mkdir(parents=True, exist_ok=True)
         self.world_dir.mkdir(parents=True, exist_ok=True)
@@ -261,12 +328,20 @@ seed = {self.seed}
         except BaseException:
             runtime.stop_process(self._process)
             self._process = None
+            self._release_reservations()
             try:
                 if self._log_handle is not None:
                     self._log_handle.close()
             finally:
                 self._log_handle = None
             raise
+
+    def _release_reservations(self) -> None:
+        for reservation in self._reservations:
+            release = getattr(reservation, "release", None)
+            if callable(release):
+                release()
+        self._reservations.clear()
 
     def console(self, command: str, expect: str, timeout: float | None = None) -> str:
         proc = self._process
@@ -380,12 +455,15 @@ seed = {self.seed}
                 self._log_handle.close()
             finally:
                 self._log_handle = None
+        # Port leases intentionally survive stop()/restarts (clients cache
+        # server.port); they are released by the final close() only.
 
     def close(self) -> None:
         try:
             runtime.stop_process(self._process)
         finally:
             self._close_handles()
+            self._release_reservations()
 
     def __enter__(self) -> ProtocolServer:
         return self

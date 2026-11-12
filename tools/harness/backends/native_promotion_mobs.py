@@ -82,9 +82,33 @@ def _snow(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.report["limits"] = ["One received carved pumpkin in initially empty player inventory; not a proof of global absence of extra drops or checkpoint persistence."]
 
 
+def _peaceful(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    x, y, z = origin
+    steps.fixture("gamerule spawn_mobs false")
+    steps.fixture("time set 18000")
+    steps.fixture("gamerule advance_time false")
+    steps.fixture("difficulty normal")
+    steps.fixture(f"summon minecraft:zombie {x + .5} {y} {z + 2.5} {{NoAI:1b}}")
+    steps.fixture(f"summon minecraft:cow {x + 2.5} {y} {z + 2.5} {{NoAI:1b}}")
+    _echo(steps, "peaceful_fixtures_ordered")
+    zombie = _identity(_entity_at(steps, "minecraft:zombie", x + .5, z + 2.5))
+    cow = _identity(_entity_at(steps, "minecraft:cow", x + 2.5, z + 2.5))
+    _capture(steps, "peaceful-before")
+    steps.fixture("difficulty peaceful")
+    _echo(steps, "peaceful_command_ordered")
+    steps.wait(lambda _state: _same_row(steps, zombie) is None,
+               "same_zombie_removed_after_peaceful", timeout_seconds=20)
+    steps.check("same_cow_remains", _same_row(steps, cow) is not None)
+    _capture(steps, "peaceful-after")
+    steps.report["identities"] = {"zombie": zombie, "cow": cow}
+
+
 def run(steps: ProbeSteps, origin: tuple[int, int, int], kind: str) -> None:
-    if kind != "snow-golem-shear":
+    if kind not in ("snow-golem-shear", "peaceful-removal"):
         raise ValueError(f"unknown mob promotion probe: {kind}")
     if not getattr(steps.client, "p4_window", None):
         raise RuntimeError("mob promotion probe requires the harness-owned windowed Xvfb client")
-    _snow(steps, origin)
+    if kind == "snow-golem-shear":
+        _snow(steps, origin)
+    else:
+        _peaceful(steps, origin)

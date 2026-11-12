@@ -50,8 +50,10 @@ pub struct Replay {
     pub settlements: BTreeMap<u64, crate::settlements::SettlementRecord>,
     pub settlement_removed: BTreeSet<u64>,
     pub settlement_high_water: u64,
-    /// Block-log table rows followed by WAL-tail deltas, in order.
+    /// Block-log checkpoint table rows.
     pub block_log: Vec<crate::block_log::Delta>,
+    /// Recovered WAL tail, which must be persisted before the WAL is pruned.
+    pub(crate) block_log_tail: Vec<crate::block_log::Delta>,
     /// Highest tick seen.
     pub tick: u64,
 }
@@ -376,6 +378,18 @@ impl EntityStateImage {
             ..Default::default()
         };
         crate::mounts::persistence::from_fields(&mut image.entity_life, &record.extra_fields)?;
+        // The live image and WAL replay share one capacity bound, so a state
+        // accepted here (checkpoint load, /summon) can always be replayed.
+        let capacity = registry
+            .entity_type_id(&record.id)
+            .map_or(1, crate::mounts::seat_capacity);
+        if image.entity_life.mount.riders.len() > capacity {
+            return Err(CoreError::Storage(format!(
+                "solaris:Riders: {} riders exceed the seat capacity {capacity} of {}",
+                image.entity_life.mount.riders.len(),
+                record.id
+            )));
+        }
         crate::mounts::persistence::cargo_from_record(
             &mut image.entity_life.mount,
             &registry.items,
@@ -390,6 +404,7 @@ impl EntityStateImage {
         image.entity_life.portal = crate::portals::from_fields(&record.extra_fields)?;
         image.entity_life.vehicle = crate::vehicles::from_record(registry, record)?.map(Box::new);
         image.entity_life.dolphin = crate::dolphin::from_record(record)?;
+        image.entity_life.sniffer = crate::sniffer::from_record(record)?;
         crate::entity_loot::extra_equipment_from_fields(
             &registry.items,
             &record.extra_fields,
@@ -663,7 +678,7 @@ pub(crate) fn apply_batch_images(
                     replay.blocks.insert((pos[0], pos[1], pos[2]), *state);
                 }
                 JournalEntry::BlockLog { value } => {
-                    replay.block_log.push((**value).clone());
+                    replay.block_log_tail.push((**value).clone());
                 }
                 JournalEntry::Statistics {
                     uuid,

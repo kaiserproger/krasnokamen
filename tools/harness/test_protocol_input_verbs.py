@@ -20,8 +20,11 @@ class _Observer:
         self.sent = []
         self.sequence = 0
         self.game_time = game_time
+        self.block_ack_sequence = 0
 
     def send(self, packet_id, body=b''):
+        if packet_id == verbs.USE_ITEM_ID:
+            self.block_ack_sequence = self.sequence
         self.sent.append((packet_id, bytes(body)))
 
 
@@ -47,6 +50,13 @@ def _packed(position):
 
 
 class EncodingTests(unittest.TestCase):
+    def test_select_hotbar_uses_263_set_carried_item_packet(self):
+        from .protocol_matrix_client import ProtocolMatrixClient
+        client = object.__new__(ProtocolMatrixClient)
+        client.observer = _Observer()
+        client.select_hotbar(3)
+        self.assertEqual(client.observer.sent, [(0x36, b'\x00\x03'), (0x0D, b'')])
+
     def test_break_block_sends_start_then_stop_with_sequence(self):
         observer = _Observer()
         self.assertEqual(_Client(observer).break_block((10, -60, -7), face='up'), 2)
@@ -92,11 +102,36 @@ class EncodingTests(unittest.TestCase):
         # the pinned 300/90/-15 vector shape (hand, sequence, yRot, xRot).
         self.assertEqual(observer.sent,
                          [(0x43, b'\x00\x01' + struct.pack('>ff', 0.0, 0.0)), (0x0D, b'')])
-        self.assertEqual(observer.game_time, 53)
+        self.assertEqual(observer.game_time, 54)
         with self.assertRaises(ValueError):
             _Client(_Observer(game_time=1)).use_item(hand='third')
         with self.assertRaises(ValueError):
             _Client(_Observer(game_time=1)).use_item(ticks=0)
+
+    def test_use_hold_starts_after_admission_and_new_time_sample(self):
+        class DelayedAckObserver(_Observer):
+            def send(self, packet_id, body=b''):
+                self.sent.append((packet_id, bytes(body)))
+        observer = DelayedAckObserver(game_time=332)
+        class CoarseClock(_Client):
+            def wait_until(self, predicate, *, description, timeout_seconds=30):
+                if 'admission' in description:
+                    if predicate():
+                        raise AssertionError('accepted a stale block ACK')
+                    observer.block_ack_sequence = observer.sequence
+                    self.asserted_admission = True
+                else:
+                    for _ in range(10):
+                        if predicate():
+                            return True
+                        observer.game_time += 20
+                if not predicate():
+                    raise AssertionError(description)
+                return True
+        client = CoarseClock(observer)
+        client.use_item(ticks=20)
+        self.assertTrue(getattr(client, 'asserted_admission', False))
+        self.assertGreaterEqual(observer.game_time, 372)
 
     def test_release_and_swap_use_player_action_ids(self):
         observer = _Observer()

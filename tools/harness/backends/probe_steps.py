@@ -8,6 +8,8 @@ from typing import Any, Callable
 
 from .. import runtime
 
+CLIENT_STATE_EVENT_EXPIRED = "client state event did not arrive"
+
 
 class ProbeSteps:
     def __init__(self, client: Any, artifact_dir: Path, timeout: float, scenario: str) -> None:
@@ -43,14 +45,17 @@ class ProbeSteps:
             entry["error"] = str(error)
             raise
 
-    def observe(self, *, wait_for_play: bool = False) -> dict[str, Any]:
+    def observe(self, *, wait_for_play: bool = False, outside_play: bool = False) -> dict[str, Any]:
+        """`outside_play` returns the state the client reports while it shows no playable world
+        (the player below the world's block range); such a state has no player row."""
         state = self.call("minecraft_observe")
         if wait_for_play and state.get("in_play") is not True:
             # Only declared respawn/travel boundaries may await a rebuilt world.
             # The Play tool remains bounded and errors/timeouts still fail.
             self.call("minecraft_wait_for_play", {"timeout_seconds": self.remaining()})
             state = self.call("minecraft_observe")
-        self.check("in_play", state.get("in_play") is True)
+        if not outside_play:
+            self.check("in_play", state.get("in_play") is True)
         return state
 
     def check(self, name: str, condition: bool) -> None:
@@ -60,14 +65,14 @@ class ProbeSteps:
                 raise RuntimeError(f"{self.report['id']} assertion failed: {name}")
 
     def wait(self, predicate: Callable[[dict[str, Any]], bool], label: str,
-             *, wait_for_play: bool = False,
+             *, wait_for_play: bool = False, outside_play: bool = False,
              timeout_seconds: float | None = None) -> dict[str, Any]:
         deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
         try:
             while True:
                 if deadline is not None and time.monotonic() >= deadline:
                     raise TimeoutError(f"{self.report['id']} timed out waiting for {label}")
-                state = self.observe(wait_for_play=wait_for_play)
+                state = self.observe(wait_for_play=wait_for_play, outside_play=outside_play)
                 if predicate(state):
                     self.check(label, True)
                     return state
@@ -77,9 +82,17 @@ class ProbeSteps:
                     # Below the tool's 0.1 s minimum: re-check until the deadline names the label.
                     if remaining < 0.1:
                         continue
-                self.call("minecraft_wait_for_state_change", {
-                    "observed_version": state["state_version"], "timeout_seconds": remaining,
-                })
+                try:
+                    self.call("minecraft_wait_for_state_change", {
+                        "observed_version": state["state_version"], "timeout_seconds": remaining,
+                    })
+                except RuntimeError as error:
+                    # The client reports "no state change inside this window" as a tool error.
+                    # That is a normal outcome for an idle client (a dead player, an open
+                    # screen): the predicate and the deadline above own the verdict, so
+                    # re-observe and let the label name a timeout. Any other error is fatal.
+                    if CLIENT_STATE_EVENT_EXPIRED not in str(error):
+                        raise
         except TimeoutError as error:
             self.report["assertions"][label] = False
             runtime.tag_failure(error, "assertion")

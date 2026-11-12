@@ -5,7 +5,7 @@ use mc_protocol::TARGET_RELEASE;
 use mc_protocol::packets::Packet as _;
 use mc_protocol::packets::configuration::{
     AcknowledgeFinishConfiguration, ClientboundKnownPacks, FinishConfiguration,
-    ServerboundClientInformation, ServerboundKnownPacks,
+    ServerboundClientInformation, ServerboundCustomPayload, ServerboundKnownPacks,
 };
 use mc_protocol::packets::{ChatVisibility, ClientInformation, MainHand, ParticleStatus};
 use tokio::net::TcpStream;
@@ -402,7 +402,7 @@ async fn loader_hello_before_known_packs_starts_negotiation_of_optional_bundles(
 }
 
 #[tokio::test]
-async fn required_bundles_skip_the_probe_and_negotiate_with_every_client() {
+async fn required_bundles_probe_and_negotiate_with_every_client() {
     let (mut client, mut server) = loopback_pair().await;
     let data = test_data();
     let manifest = items_bundle(true);
@@ -429,9 +429,14 @@ async fn required_bundles_skip_the_probe_and_negotiate_with_every_client() {
         .unwrap();
     assert_eq!(
         next.id,
-        ClientboundKnownPacks::ID,
-        "no probe for required content"
+        mc_protocol::packets::configuration::ClientboundCustomPayload::ID,
+        "required content probes too: a vanilla client is told apart from a slow Loader client"
     );
+    let known = client
+        .read_frame_in(mc_protocol::State::Configuration)
+        .await
+        .unwrap();
+    assert_eq!(known.id, ClientboundKnownPacks::ID);
     drop(client);
     let _ = server_task.await;
 }
@@ -561,4 +566,203 @@ async fn optional_pack_decline_completes_configuration() {
         .await
         .unwrap();
     assert!(task.await.unwrap().is_ok());
+}
+
+fn loader_ack(manifest: &mc_loader::LoaderManifest) -> ServerboundCustomPayload {
+    let ack = mc_loader::LoaderClientAck {
+        protocol: mc_loader::LOADER_PROTOCOL_VERSION,
+        platform: mc_loader::LoaderPlatform::Native,
+        loader_version: "test".to_owned(),
+        accepted_permissions: manifest.bundles[0].permissions.clone(),
+        cached_bundles: vec![manifest.bundles[0].cache_key.clone()],
+        carrier_block_state_ids: Default::default(),
+    };
+    ServerboundCustomPayload {
+        payload: mc_protocol::packets::CustomPayload::Unknown {
+            channel: mc_loader::loader_ack_channel().clone(),
+            payload: serde_json::to_vec(&ack).unwrap(),
+        },
+    }
+}
+
+fn brand_payload() -> ServerboundCustomPayload {
+    ServerboundCustomPayload {
+        payload: mc_protocol::packets::CustomPayload::Unknown {
+            channel: mc_data::Identifier::parse("minecraft:brand").unwrap(),
+            payload: vec![0],
+        },
+    }
+}
+
+/// 2026-11-11 loader-live flake: a Fabric client stalled about 90 s after the manifest
+/// (its render thread was busy), the edge read timed out in Configuration, and the Java
+/// client closes a connection that is silent for 30 s on its own. Virtual time: the server
+/// must keep the stalled Loader client's connection alive with configuration keepalives
+/// (never silent for 30 s) through a 90 s stall, and finish when the ack arrives.
+#[tokio::test(start_paused = true)]
+async fn loader_negotiation_keeps_a_90_second_stall_alive_with_keepalives() {
+    use mc_protocol::packets::configuration::{
+        ConfigurationKeepAlive, ServerboundConfigurationKeepAlive,
+    };
+    use tokio::time::{Duration, Instant};
+    let (mut client, mut server) = loopback_pair().await;
+    let manifest = items_bundle(true);
+    let ack = loader_ack(&manifest);
+    let server_task = tokio::spawn(async move {
+        let mut prefs = super::ClientPrefs::default();
+        crate::plugin_loader::negotiate(&mut server, &manifest, &mut prefs, true).await
+    });
+    let manifest_frame = client
+        .read_frame_in_untimed(mc_protocol::State::Configuration)
+        .await
+        .unwrap();
+    assert_eq!(
+        manifest_frame.id,
+        mc_protocol::packets::configuration::ClientboundCustomPayload::ID
+    );
+    let stall_start = Instant::now();
+    let stall_end = stall_start + Duration::from_secs(90);
+    let mut last_byte = stall_start;
+    let mut longest_silence = Duration::ZERO;
+    let mut keepalives = 0;
+    // The client is busy: it only reads (as the netty thread does) and echoes.
+    while let Ok(frame) = tokio::time::timeout_at(
+        stall_end,
+        client.read_frame_in_untimed(mc_protocol::State::Configuration),
+    )
+    .await
+    {
+        let frame = frame.unwrap();
+        assert_eq!(
+            frame.id,
+            ConfigurationKeepAlive::ID,
+            "only keepalives while waiting"
+        );
+        let mut body = frame.body.clone();
+        let keepalive = ConfigurationKeepAlive::decode(&mut body).unwrap();
+        longest_silence = longest_silence.max(Instant::now() - last_byte);
+        last_byte = Instant::now();
+        keepalives += 1;
+        client
+            .send_packet(&ServerboundConfigurationKeepAlive { id: keepalive.id })
+            .await
+            .unwrap();
+    }
+    longest_silence = longest_silence.max(stall_end - last_byte);
+    assert!(keepalives >= 8, "{keepalives} keepalives in 90 s");
+    assert!(
+        longest_silence < Duration::from_secs(30),
+        "the Java client's ReadTimeoutHandler(30) would have fired: {longest_silence:?}"
+    );
+    client.send_packet(&ack).await.unwrap();
+    let session = server_task.await.unwrap().unwrap();
+    assert_eq!(session.platform(), mc_loader::LoaderPlatform::Native);
+}
+
+/// A client that drips an ignored payload faster than any per-read deadline must not
+/// hold the pre-play slot past the total negotiation deadline.
+#[tokio::test(start_paused = true)]
+async fn loader_negotiation_closes_a_dripping_client_at_the_total_deadline() {
+    use mc_protocol::packets::configuration::ConfigurationDisconnect;
+    use tokio::time::{Duration, Instant};
+    let (mut client, mut server) = loopback_pair().await;
+    let manifest = items_bundle(true);
+    let server_task = tokio::spawn(async move {
+        let mut prefs = super::ClientPrefs::default();
+        crate::plugin_loader::negotiate(&mut server, &manifest, &mut prefs, true).await
+    });
+    let start = Instant::now();
+    let mut disconnected = false;
+    let mut drip = tokio::time::interval(Duration::from_secs(9));
+    drip.tick().await;
+    while !disconnected {
+        tokio::select! {
+            frame = client.read_frame_in_untimed(mc_protocol::State::Configuration) => {
+                disconnected = frame.unwrap().id == ConfigurationDisconnect::ID;
+            }
+            _ = drip.tick() => {
+                // The server may already have closed; the disconnect frame is read above.
+                let _ = client.send_packet(&brand_payload()).await;
+            }
+        }
+    }
+    let elapsed = Instant::now() - start;
+    assert!(
+        elapsed >= crate::plugin_loader::LOADER_NEGOTIATION_TOTAL_TIMEOUT
+            && elapsed
+                < crate::plugin_loader::LOADER_NEGOTIATION_TOTAL_TIMEOUT + Duration::from_secs(5),
+        "closed after {elapsed:?}"
+    );
+    let error = server_task.await.unwrap().unwrap_err().to_string();
+    assert!(error.contains("not finished within"), "{error}");
+}
+
+/// A Loader-required server must still tell a vanilla client what to install: with no
+/// hello, request or ack the negotiation refuses it within the short hello window,
+/// before the Java client's own 30 s read timeout shows its generic "Timed out".
+#[tokio::test(start_paused = true)]
+async fn required_loader_content_refuses_a_vanilla_client_with_the_loader_message_quickly() {
+    use mc_protocol::packets::configuration::ConfigurationDisconnect;
+    use tokio::time::{Duration, Instant};
+    let (mut client, mut server) = loopback_pair().await;
+    let data = test_data();
+    let manifest = items_bundle(true);
+    let server_task = tokio::spawn(async move {
+        let tags = test_tags();
+        super::handle_configuration(
+            &mut server,
+            &data,
+            &tags,
+            Some(&manifest),
+            true,
+            &Default::default(),
+        )
+        .await
+    });
+    // Features, register, probe (a vanilla client ignores both), known packs.
+    for _ in 0..3 {
+        client
+            .read_frame_in(mc_protocol::State::Configuration)
+            .await
+            .unwrap();
+    }
+    let known = client
+        .read_frame_in(mc_protocol::State::Configuration)
+        .await
+        .unwrap();
+    assert_eq!(known.id, ClientboundKnownPacks::ID);
+    let packs = ClientboundKnownPacks::decode(&mut known.body.clone()).unwrap();
+    client
+        .send_packet(&ServerboundKnownPacks { packs: packs.packs })
+        .await
+        .unwrap();
+    let started = Instant::now();
+    let reason = loop {
+        let frame = client
+            .read_frame_in_untimed(mc_protocol::State::Configuration)
+            .await
+            .unwrap();
+        if frame.id == ConfigurationDisconnect::ID {
+            break frame.body;
+        }
+        assert_ne!(
+            frame.id,
+            mc_protocol::packets::configuration::ConfigurationKeepAlive::ID,
+            "no keepalive for a client that never said it is a Loader client"
+        );
+    };
+    // Virtual time from the KnownPacks reply: the hello window (10 s) plus the server's
+    // own configuration sends; far inside the Java client's 30 s ReadTimeoutHandler.
+    let refused_after = Instant::now() - started;
+    assert!(
+        refused_after >= crate::plugin_loader::LOADER_HELLO_TIMEOUT
+            && refused_after < Duration::from_secs(20),
+        "refused after {refused_after:?}"
+    );
+    let reason = String::from_utf8_lossy(&reason).into_owned();
+    assert!(
+        reason.contains("requires the Solaris Loader client mod"),
+        "{reason}"
+    );
+    assert!(server_task.await.unwrap().is_err());
 }

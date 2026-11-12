@@ -88,6 +88,15 @@ pub(crate) fn bed(state: &mut TickState, x: i32, z: i32) -> BlockPos {
     state.world.set_block(x, 201, z, head);
     BlockPos { x, y: 201, z }
 }
+
+/// A bed with a stone roof block above its head: settlement residents claim
+/// only roofed beds (docs/settlements/breeding.md).
+pub(crate) fn roofed_bed(state: &mut TickState, x: i32, z: i32) -> BlockPos {
+    let head = bed(state, x, z);
+    let stone = state.registry.states.stone;
+    state.world.set_block(x, 205, z, stone);
+    head
+}
 fn step(state: &mut TickState) -> ChangeSet {
     state.tick_budget.reset(state.tick);
     let mut changes = ChangeSet::default();

@@ -234,6 +234,9 @@ pub(super) fn apply_inputs<'a>(
                 permission_level,
             } => input::session::join(state, (connection, uuid, name, permission_level), changes),
             PlayerInput::Leave { connection } => input::session::leave(state, connection, changes),
+            PlayerInput::ProfileLogin { connection, uuid } => {
+                input::session::profile_login(state, (connection, uuid), changes)
+            }
             PlayerInput::RequestStats { connection } => {
                 input::social::request_stats(state, connection)
             }
@@ -389,7 +392,7 @@ pub(super) fn apply_inputs<'a>(
                 pages,
                 title,
             } => {
-                crate::books::edit(state, *connection, *slot, pages, title.as_deref());
+                super::book_actions::edit(state, *connection, *slot, pages, title.as_deref());
             }
             PlayerInput::SignUpdate {
                 connection,
@@ -638,6 +641,12 @@ pub(super) fn tick_players(
         let Some(slot) = state.entities.slot_of(entity) else {
             continue;
         };
+        // Vanilla LivingEntity.rideTick resets a passenger's fall distance every tick.
+        if crate::mounts::vehicle(state, entity).is_some()
+            && let Some(player) = state.players.get_mut(&entity)
+        {
+            player.fall_distance = 0.0;
+        }
         elytra::tick(state, entity);
         let bundle_in_use = state
             .players

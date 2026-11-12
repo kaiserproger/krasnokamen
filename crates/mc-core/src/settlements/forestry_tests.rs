@@ -627,13 +627,14 @@ fn identical_replacement_after_history_expiry_is_felled_and_conserved() {
         .set_block(root[0], root[1], root[2], state.registry.states.air);
     state.world.set_block(root[0], root[1], root[2], log);
     state.block_log = crate::block_log::BlockLog::restore(
-        crate::block_log::Settings {
+        crate::config::BlockLogSettings {
             retention_secs: 1,
             ..Default::default()
         },
         vec![crate::block_log::Delta {
             records: vec![crate::block_log::Record {
                 seq: 0,
+                tick: Some(1),
                 time: 0,
                 actor: Arc::from("player"),
                 pos: root,
@@ -673,13 +674,14 @@ fn retained_player_placement_vetoes_an_identical_worldgen_log() {
     let (mut state, _, _, _, root, _) = forest();
     let log = state.world.block_at(root[0], root[1], root[2]).unwrap();
     state.block_log = crate::block_log::BlockLog::restore(
-        crate::block_log::Settings {
+        crate::config::BlockLogSettings {
             retention_secs: 0,
             ..Default::default()
         },
         vec![crate::block_log::Delta {
             records: vec![crate::block_log::Record {
                 seq: 0,
+                tick: Some(1),
                 time: 0,
                 actor: Arc::from("player"),
                 pos: root,
@@ -816,13 +818,14 @@ fn protected_crown_above_access_headroom_stays_while_the_building_finishes() {
     let at = [access[0], access[1] + 4, access[2]];
     let leaves = state.world.block_at(at[0], at[1], at[2]).unwrap();
     state.block_log = crate::block_log::BlockLog::restore(
-        crate::block_log::Settings {
+        crate::config::BlockLogSettings {
             retention_secs: 0,
             ..Default::default()
         },
         vec![crate::block_log::Delta {
             records: vec![crate::block_log::Record {
                 seq: 0,
+                tick: Some(1),
                 time: 0,
                 actor: Arc::from("player"),
                 pos: at,

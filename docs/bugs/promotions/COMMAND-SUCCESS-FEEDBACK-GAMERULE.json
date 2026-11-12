@@ -1,0 +1,87 @@
+{
+  "id": "COMMAND-SUCCESS-FEEDBACK-GAMERULE",
+  "verdict": "promoted",
+  "fix_commit": "3fe868f1",
+  "fix_commit_full": "3fe868f1fcd93ae097ce5c08ae81973e5e89665f",
+  "promoted_at": "2026-11-11T17:15:49+00:00",
+  "tree_head": "be8e547d046047b0cee0d3be0c6a28d1da7c6290",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/bossbar.rs",
+    "crates/mc-core/src/command_attribute.rs",
+    "crates/mc-core/src/command_blocks.rs",
+    "crates/mc-core/src/command_context.rs",
+    "crates/mc-core/src/command_damage.rs",
+    "crates/mc-core/src/command_data.rs",
+    "crates/mc-core/src/command_debug.rs",
+    "crates/mc-core/src/command_enchant.rs",
+    "crates/mc-core/src/command_execution.rs",
+    "crates/mc-core/src/command_item_replace.rs",
+    "crates/mc-core/src/command_locate.rs",
+    "crates/mc-core/src/command_loot.rs",
+    "crates/mc-core/src/command_storage.rs",
+    "crates/mc-core/src/command_tag.rs",
+    "crates/mc-core/src/command_text.rs",
+    "crates/mc-core/src/command_tick.rs",
+    "crates/mc-core/src/command_world.rs",
+    "crates/mc-core/src/datapack_management.rs",
+    "crates/mc-core/src/datapacks.rs",
+    "crates/mc-core/src/dimensions_commands.rs",
+    "crates/mc-core/src/dimensions_travel.rs",
+    "crates/mc-core/src/effects.rs",
+    "crates/mc-core/src/tick_control.rs",
+    "tools/harness/backends/client_probes.py",
+    "tools/harness/backends/menu_observer.py",
+    "tools/harness/backends/native_chest_drag_disconnect.py",
+    "tools/harness/backends/native_v2.py",
+    "tools/harness/backends/scene_shot.py",
+    "tools/harness/scenarios.py"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/command_execution_tests.rs",
+    "crates/mc-core/src/dimensions_tests.rs",
+    "crates/mc-core/src/journal_touched_tests.rs",
+    "tools/harness/test_chest_drag_disconnect.py",
+    "tools/harness/test_craft_drag_components.py",
+    "tools/harness/test_scene_shot.py"
+  ],
+  "negative_control": {
+    "cargo:mc-core:dimensions::tests::dimensional_teleport_success_obeys_player_feedback_rule": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:command_execution::tests::gamerule_suppresses_player_scene_success_but_not_failure_or_console": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-command-feedback": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-command-feedback --client native --windowed exited 2; see /run/media/kaiserroman/games/solaris-work/wt/PromoteJoinInventory/.analysis/validation/20261111T171050-ledger-promote-gi5j5o2w/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:dimensions::tests::dimensional_teleport_success_obeys_player_feedback_rule": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:command_execution::tests::gamerule_suppresses_player_scene_success_but_not_failure_or_console": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/PromoteJoinInventory/.analysis/validation/20261111T132510-native-command-feedback-xgkxzp8l/result.json",
+    "tree_head": "be8e547d046047b0cee0d3be0c6a28d1da7c6290",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "78b5422188066599b0c3bcb51a47f17608bd01acf745a91783350d91f8deace4",
+    "covers": [
+      "harness:scene-shot:native-command-feedback"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteJoinInventory/.analysis/validation/20261111T171050-ledger-promote-gi5j5o2w"
+}

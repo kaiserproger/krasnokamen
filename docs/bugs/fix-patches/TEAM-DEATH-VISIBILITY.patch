@@ -1,0 +1,33 @@
+diff --git a/crates/mc-core/src/tick/death_message.rs b/crates/mc-core/src/tick/death_message.rs
+--- a/crates/mc-core/src/tick/death_message.rs
++++ b/crates/mc-core/src/tick/death_message.rs
+@@ -96,12 +96,28 @@
+     if !crate::command_rules::boolean(state, crate::command_rules::BoolRule::SHOW_DEATH_MESSAGES) {
+         return;
+     }
+-    let recipients: Vec<_> = state.connections.all_connections().collect();
++    let victim_name = state.connections.name_of(victim).unwrap_or("");
++    let recipients: Vec<_> = state
++        .connections
++        .all_connections()
++        .filter(|connection| {
++            state
++                .connections
++                .entity_of(*connection)
++                .and_then(|entity| state.connections.name_of(entity))
++                .is_some_and(|name| state.scoreboard.permits_death_message(victim_name, name))
++        })
++        .collect();
+     if state.dimension_globals.active {
+         let members = state
+             .dimension_globals
+             .roster
+             .iter()
++            .filter(|player| {
++                state
++                    .scoreboard
++                    .permits_death_message(victim_name, &player.name)
++            })
+             .map(|player| player.name.clone())
+             .collect();
+         state

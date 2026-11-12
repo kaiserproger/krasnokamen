@@ -39,15 +39,6 @@ def _flag_value(args: list[str], flag: str) -> str | None:
     return None
 
 
-def _loader_root() -> Path:
-    override = os.environ.get("SOLARIS_LOADER_ROOT")
-    if override:
-        return Path(override).expanduser()
-    from .. import runtime
-
-    return runtime.REPO_ROOT.parent / "solaris-loader"
-
-
 def _check_server_candidate() -> dict[str, Any]:
     override = os.environ.get("SOLARIS_SERVER_BINARY")
     if not override:
@@ -99,7 +90,7 @@ def collect_prerequisites(platform: str) -> dict[str, Any]:
             "No download happens inside this gate."
         )
 
-    loader_root = _loader_root()
+    loader_root = runtime.sibling_root("loader")
     loader: dict[str, Any] = {"path": str(loader_root), "present": loader_root.is_dir()}
     if loader_root.is_dir():
         props = loader_root / "gradle.properties"

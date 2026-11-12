@@ -37,6 +37,8 @@ mod mining_tests;
 pub(crate) mod shepherd;
 #[cfg(test)]
 mod shepherd_tests;
+#[cfg(test)]
+mod sleep_return_tests;
 pub(crate) mod smelting;
 #[cfg(test)]
 mod smelting_tests;
