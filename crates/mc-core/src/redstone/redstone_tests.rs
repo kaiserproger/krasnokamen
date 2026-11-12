@@ -840,16 +840,25 @@ fn local_entity_query_prunes_distant_population_and_keeps_giant_border_bodies() 
     s.entities.body_mut(slot).height = 3.0;
     let mut query = entity_query::EntityQuery::default();
     assert_eq!(
-        query.count(&s, [0.125, 200.0, 0.125], [0.875, 200.25, 0.875], 15, |_| true),
+        query.count(
+            &s,
+            [0.125, 200.0, 0.125],
+            [0.875, 200.25, 0.875],
+            15,
+            |_| true
+        ),
         1
     );
-    assert!(
-        query.visited < 128,
-        "distant rows must be spatially pruned"
-    );
+    assert!(query.visited < 128, "distant rows must be spatially pruned");
     s.entities.body_mut(slot).alive = false;
     assert_eq!(
-        query.count(&s, [0.125, 200.0, 0.125], [0.875, 200.25, 0.875], 15, |_| true),
+        query.count(
+            &s,
+            [0.125, 200.0, 0.125],
+            [0.875, 200.25, 0.875],
+            15,
+            |_| true
+        ),
         0
     );
     assert!(query.visited < 128);

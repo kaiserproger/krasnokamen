@@ -228,10 +228,10 @@ fn churn(s: &mut TickState, rng: &mut Rng, slots: &[EntitySlot]) {
             }
             1 if matches!(s.entities.body(slot).kind, EntityKind::Mob { .. }) => {
                 let origin = s.entities.pos(slot);
-                s.entities
-                    .set_kind(slot, EntityKind::Mob { type_id: pig });
+                s.entities.set_kind(slot, EntityKind::Mob { type_id: pig });
                 if origin.iter().all(|v| v.is_finite()) {
-                    s.entities.set_pos(slot, [origin[0] + 20.0, origin[1], origin[2]]);
+                    s.entities
+                        .set_pos(slot, [origin[0] + 20.0, origin[1], origin[2]]);
                     s.entities.set_pos(slot, origin);
                 }
             }
