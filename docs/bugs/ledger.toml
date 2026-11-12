@@ -4987,6 +4987,7 @@ severity = "minor"
 status = "open"
 source = "BreakB10Commands round 3 H1 (receipts/BreakB10Commands/REBREAK3.md); vanilla 26.1.2 TeamMsgCommand javap: ServerPlayer.sendChatMessage for each member."
 regression = ["cargo:mc-core:chat_visibility_tests::team_messages_are_chat_for_every_copy_the_senders_included", "harness:chat-visibility:native-chat-visibility"]
+fix_commit = "patch:d1239b8456cf4e82c2700078ad70693c22cb91add90039a882b258d9cbd74c48"
 
 [[bug]]
 id = "DATAPACK-RELOAD-SECOND-SKIP-SILENT"
@@ -4997,6 +4998,7 @@ severity = "minor"
 status = "open"
 source = "BreakB10Commands round 3 H2 (REBREAK3.md). A /reload now states every warning it finds; enable/disable still report only new ones."
 regression = ["cargo:mc-core:datapacks::command_tests::a_second_reload_still_names_a_new_pack_that_stays_skipped", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "patch:01eb44ed0a8ee00a1ffa90b014f4d2a3c99ca9fd75c8894d1078416caa7190e1"
 
 [[bug]]
 id = "DATAPACK-LIST-HIDES-BROKEN-SELECTED-PACK"
@@ -5007,6 +5009,7 @@ severity = "minor"
 status = "open"
 source = "BreakB10Commands round 3 H3 (REBREAK3.md). The listing now keeps a selected pack that failed to scan, with the load error as its hover."
 regression = ["cargo:mc-core:datapacks::command_tests::the_list_keeps_a_selected_pack_whose_pack_mcmeta_broke", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "patch:4b74ef2fefca7443e10acdf6e42eb5d4a52250cb4d7b4674b0c54b97dc5246fb"
 
 [[bug]]
 id = "DATAPACK-DISABLE-SKIPPED-PACK-UNKNOWN"
@@ -5017,6 +5020,7 @@ severity = "minor"
 status = "open"
 source = "BreakB10Commands round 3 H4 (REBREAK3.md); vanilla 26.1.2 DataPackCommand.getPack javap (getPack null -> unknown; selected.contains(pack) == enabling -> failed)."
 regression = ["cargo:mc-core:datapacks::command_tests::disabling_a_skipped_pack_says_it_is_not_enabled", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "patch:66e66c89e001d20f24ede3fb3e32e719cb587286bf4cee7cb95fb72fbf90bf5b"
 
 [[bug]]
 id = "DATAPACK-WARNINGS-CHAT-FLOOD"
@@ -5027,6 +5031,7 @@ severity = "minor"
 status = "open"
 source = "BreakB10Commands round 3 H5 (REBREAK3.md). The log gets every warning; the operator's chat gets three and a count."
 regression = ["cargo:mc-core:datapacks::command_tests::many_pack_warnings_are_a_few_chat_lines_and_a_count", "harness:datapack-reload:native-datapack-reload"]
+fix_commit = "patch:0b5f5cb44123d114ea150df190a015bc68d8f63abe579c9c789338cb2c8e19e4"
 
 [[bug]]
 id = "VILLAGER-IDLE-STROLL-UNBOUNDED-DRIFT"

@@ -244,11 +244,12 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     says("reload_still_completes", "Reloading!")  # vanilla text of commands.reload.success
 
     def says_after(label: str, after: str, *markers: str) -> None:
-        """Wait for a chat line holding every marker that arrives after the line holding `after`."""
+        """Wait for a chat line holding every marker that arrives after the newest line holding `after`."""
         def seen(state: dict[str, Any]) -> bool:
+            # `recent_chat` lists the newest line first: what arrived after `after` precedes it.
             lines = [str(line) for line in state.get("recent_chat", [])]
             starts = [i for i, line in enumerate(lines) if after in line]
-            return bool(starts) and any(all(m in line for m in markers) for line in lines[starts[-1] + 1:])
+            return bool(starts) and any(all(m in line for m in markers) for line in lines[:starts[0]])
         try:
             probe.wait(seen, label, timeout_seconds=30)
         except TimeoutError:
