@@ -2362,8 +2362,10 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+source = "https://github.com/kaiserproger/solaris/issues/1 (\"непонятно как создать заказ производству\"); the order dialog first landed in 177a1205 (2026-10-19) and is the Production page of the civil settlement UI since b34c1d0b (dashboard -> Production orders -> New order -> workstation -> recipe -> form with craft count and resident -> confirm). settlement-map-qa walks it with the real pointer on the native client: it certifies a workshop with a crafting table, opens Production orders, presses New order, picks the open_hay recipe, confirms the form (default count 8), then reads `settlement production <name> job <id>` from the server: the order exists with one of the bound residents as worker, and the order is done only when that resident has crafted for it (receipts). Fix patch docs/bugs/fix-patches/ISSUE-1-06.patch is the entry hunk of the Production page (ui_menus.rs production_screen, the New order icon that opens order_start); reversing it removes the only way from the page into the order flow, so the gate's production_new_order_entry fails at the Production orders page"
+regression = ["harness:settlement-map-qa:production_order"]
+failing_first = "not recorded"
+fix_commit = "patch:22765c01364fe7d4d36b37141dd85e13c087b6b6999475d9cad22aa518c10519"
 
 [[bug]]
 id = "ISSUE-1-07"
