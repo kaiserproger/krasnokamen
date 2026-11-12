@@ -5039,3 +5039,57 @@ source = "Seed-24 civilization-seed-qa, two fresh runs. llr1bc4e (server 107ddb9
 failing_first = "not recorded"
 regression = ["cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_strolls_stay_bound_to_the_village_over_many_decisions", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_resident_outside_the_village_strolls_back_toward_it", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::resident_in_deep_water_swims_up_to_the_surface"]
 fix_commit = "patch:85195e25eabb2e4a202ef619a549dfe7d3326abfb0045413fbf46e382934a38d"
+
+[[bug]]
+id = "PLUGIN-EVENT-BACKLOG-HALTS-WORLD"
+title = "A plugin whose durable-event backlog passes 1024 (a slow on_events callback while players keep sending its commands) halts the whole world without a final checkpoint instead of refusing that plugin's new commands"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "CoreAuditFable CAF-01 (receipts/CoreAuditFable/REPORT.md, queue.yaml; static read at 21607d42): crates/mc-core/src/plugin/events.rs:23-34 returns Err when retained+pending exceeds MAX_SCRIPT_EVENT_QUEUE_CAPACITY (1024, crates/mc-script/src/lib.rs:239) or delivery_failed is set; crates/mc-core/src/core/tick_loop.rs:266-271 then calls halt_authority and leaves the loop without a final checkpoint (:628-672). One mc-plugin-host thread delivers to every plugin (host.rs:703-712) and one callback may run 50M fuel / 30 s (limits.rs:84-87). Not documented in docs/PLUGINS.md or ADR 0013. Reachability on the standard pack unproven. Proof: a real component that burns its fuel in on_events while two bots send its command at the maximum rate; today every player sees 'plugin callback backlog overflow: world halted'."
+regression = []
+
+[[bug]]
+id = "VILLAGER-STRANDED-IN-DEEP-WATER"
+title = "A resident more than one block from the bank of water two or more blocks deep floats in place forever, never goes home and can drown"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Breaker finding (BreakVillageParity, break-it pass of bb39cf65 on main 21607d42, agent-run): residents carried onto the centre floor of 5x5 pools (banks level with the water top, like a pond) swim up but stay at the centre cell of the 2-deep and the 5-deep pool for the whole Idle afternoon (700 ticks) and the whole night (900 ticks, activity rest, never in bed); in seed 7 the 5-deep swimmer lost 12 health (20 -> 8, client health metadata) while floating. A resident in the deep pool's edge cell climbs out within 100 ticks; one in a 1-deep pool walks out. Server pin 21607d42f23f (sha256 156427f7...3b07a0), native client d5f25569, scene receipts/BreakVillageParity/glue/swim.json (+ -s7), artifacts 20261112T055259-scene-shot-k4pwpv4z and 20261112T055617-scene-shot-x35io18c (2/2); pre-change baseline 4bfacdf6391f: all stay on the pool floor (20261112T055213-scene-shot-giag7rfb). Vanilla 26.3: Villager sets setCanFloat(true) and WalkNodeEvaluator starts and floors floating mobs at the fluid surface, so a villager paths across the water to the bank and jumpOutOfFluid lifts it out (javap in receipts/BreakVillageParity/vanilla). Source: settlements/allocator.rs body_clear refuses water above the foot row, so no cell over 2+ deep water is standable; the route search finds no step unless a bank cell is adjacent, the swimmer gets no horizontal input and jumpOutOfFluid (needs a sideways block) never fires. VILLAGER-IDLE-STROLL-UNBOUNDED-DRIFT's open-water symptom remains for this case."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "VILLAGER-POPLAR-DOOR-NOT-WOODEN"
+title = "Villagers cannot open or close a poplar door (26.3 wooden door): residents are shut in, and a poplar door left open stays open all night"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Breaker finding (BreakVillageParity, ISSUE-1-08 break-it pass on main 21607d42, agent-run): a certified house whose only door is minecraft:poplar_door; at the meeting time (9500) its resident stays inside pressed against the closed door while every other resident walks to the bell; after the player opens the door the resident goes out, walks home through it at night and sleeps, and the door stays open=true at night+600, +1200 and after a chunk-unload cycle (server truth execute if block; 2/2, artifacts 20261112T055302-scene-shot-6pk_5bzv and 20261112T055325-scene-shot-icrmzr1s, scene receipts/BreakVillageParity/glue/doors.json). A spruce door used the same way is shut every night. Vanilla 26.3: poplar_door is in #minecraft:wooden_doors and #minecraft:mob_interactable_doors (InteractWithDoor), and WalkNodeEvaluator routes through any door whose BlockSetType canOpenByHand. Source: registry.rs builds wooden_doors from an exact 12-family name list that predates poplar (26.3's tag has 13 entries), used by villager/doors.rs and the route search."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "VILLAGER-COPPER-DOOR-BLOCKS-RESIDENTS"
+title = "Villagers treat copper doors like iron doors: residents are shut in by a closed copper door, and an open one stays open all night"
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "Breaker finding (BreakVillageParity, ISSUE-1-08 break-it pass on main 21607d42, agent-run): same fixture as VILLAGER-POPLAR-DOOR-NOT-WOODEN with minecraft:copper_door; the resident is shut in at the meeting time, and the player-opened copper door stays open=true all night (2/2, artifacts 20261112T055302-scene-shot-6pk_5bzv and 20261112T055325-scene-shot-icrmzr1s). Vanilla 26.3 #minecraft:mob_interactable_doors lists all eight copper doors and BlockSetType copper has canOpenByHand=true (WalkNodeEvaluator DOOR_WOOD_CLOSED), so villagers open, pass and close them. Documented deviation: docs/settlements/jobs.md says villagers open wooden doors, 'not iron or copper doors'; needs an owner disposition. Houses with a copper door still certify (buildings.rs counts any *_door)."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "VILLAGER-AFTER-HOURS-CLAIM-NOT-EMPLOYED"
+title = "A resident that claims a workstation after work hours stays jobless until the next work period unless it happens to stroll within reach"
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "Breaker finding (BreakVillageParity, ISSUE-1-10 break-it pass of 5557f47b on main 21607d42, agent-run): a farmer workshop certified at day time 11000 (Idle) about 12 blocks from the house of three jobless residents. Seed 7 with Brain.memories dumps (artifact 20261112T060555-scene-shot-5eubuwxv): one resident holds minecraft:job_site at the composter from tick +150 but VillagerData.profession stays minecraft:none at +150, +300 and +450 while it strolls 6-20 blocks away; jobs scene (no dumps) 20261112T055641-scene-shot-5slekruf and 20261112T055702-scene-shot-daa763xe: nobody employed for 450 and 1050 ticks; the same fixture or a 2-resident variant employed a farmer within 150 ticks in 3 other runs (jobsmem 060523-aajt3ztv, latejob 060124-5qz4w6ey, 060140-g80j9ag9). Rate 3/6 not employed. Next morning (time 2500) the profession arrives within 200 ticks. Vanilla 26.3: GoToPotentialJobSite runs in the IDLE, WORK and PLAY activities and walks the villager to its POTENTIAL_JOB_SITE, where AssignProfessionFromJobSite assigns the profession. Source: allocator::acquire sets the route to the claimed job site with navigation_repath_at +40, after which the Idle stroll replaces it; villager/brain.rs awaiting_profession (walk to the job site) requires Activity::Work, and the profession is assigned only within JOB_SITE_REACH. The claim also keeps other jobless residents off that station. Residual of VILLAGER-WORKSTATION-IGNORED-AFTER-WORK-HOURS for bound residents."
+regression = []
+failing_first = "reported"
