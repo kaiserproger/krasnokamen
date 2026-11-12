@@ -563,9 +563,27 @@ fn hydrate(state: &mut TickState) {
             }
         });
     }
-    let mut resident = state.world.resident_positions();
-    resident.sort_unstable_by_key(|pos| (pos.x, pos.z));
-    for cp in resident {
+    // Bottleneck: collecting, sorting and visiting every resident chunk (about
+    // 5,400 on native-100) each tick, though a chunk with no vanilla block
+    // ticks and already registered here is a no-op. Boundary: the candidates
+    // are exactly the chunks that can do work (vanilla ticks to import; while
+    // residency moved, chunks missing from `signal_residents` or `loaded`),
+    // visited in the same (x, z) order with the same body. Effect: the settled
+    // pass reads one length per resident chunk and sorts only the candidates.
+    // Removal: iterate the sorted `resident_positions()` again.
+    let mut pending: Vec<ChunkPos> = state
+        .world
+        .chunks()
+        .filter(|chunk| {
+            !chunk.scheduled_block_ticks().is_empty()
+                || (!settled
+                    && !(state.redstone.signal_residents.contains(&chunk.pos)
+                        && state.redstone.loaded.contains(&chunk.pos)))
+        })
+        .map(|chunk| chunk.pos)
+        .collect();
+    pending.sort_unstable_by_key(|pos| (pos.x, pos.z));
+    for cp in pending {
         let Some(chunk) = state.world.chunk(cp) else {
             continue;
         };

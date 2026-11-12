@@ -117,6 +117,34 @@ fn wake(state: &mut TickState, pos: BlockPos) {
 }
 
 #[test]
+fn hydrate_registers_and_scans_a_chunk_that_turns_resident_after_a_settled_pass() {
+    let mut s = state();
+    hydrate(&mut s);
+    hydrate(&mut s);
+    assert_eq!(
+        s.redstone.hydrated,
+        Some((s.world.active_revision(), s.world.resident_count())),
+        "the second pass is the settled one"
+    );
+    let later = ChunkPos { x: 1, z: 0 };
+    s.world.ensure_blocking(
+        &[(ChunkPos { x: 0, z: 0 }, 0), (later, 0)]
+            .into_iter()
+            .collect(),
+    );
+    assert!(s.world.has_chunk(later.x, later.z));
+    let repeater = place(&mut s, 19, 70, 3, "repeater", &[]);
+    hydrate(&mut s);
+    assert!(s.redstone.signal_residents.contains(&later));
+    assert!(s.redstone.loaded.contains(&later));
+    let id = at(&s, repeater).unwrap().block.id.clone();
+    assert!(
+        s.block_ticks.contains(repeater, &id, 0),
+        "the initial scan schedules the reactive cell"
+    );
+}
+
+#[test]
 fn large_wire_network_obeys_one_tick_budget_and_eventually_sleeps() {
     let mut s = state();
     for x in 0..3 {
