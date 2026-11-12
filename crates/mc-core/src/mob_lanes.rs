@@ -25,15 +25,18 @@ static SNOW_GOLEM_TYPE: std::sync::LazyLock<Option<u32>> = std::sync::LazyLock::
 /// Protocol ids of the kinds that carry villager state (`EntityStore`'s
 /// resident kinds): villager, zombie villager and wandering trader.
 static VILLAGER_KIND_TYPES: std::sync::LazyLock<Vec<u32>> = std::sync::LazyLock::new(|| {
-    [
-        "minecraft:villager",
-        "minecraft:zombie_villager",
-        "minecraft:wandering_trader",
-    ]
-    .into_iter()
-    .filter_map(mc_data::entity_types::entity_type_contract_26_1_2_by_name)
-    .map(|contract| contract.protocol_id)
-    .collect()
+    (0..mc_data::entity_types::ENTITY_TYPE_COUNT as u32)
+        .filter(|&id| {
+            mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(id).is_some_and(
+                |contract| {
+                    matches!(
+                        contract.name.rsplit(':').next(),
+                        Some("villager" | "zombie_villager" | "wandering_trader")
+                    )
+                },
+            )
+        })
+        .collect()
 });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
