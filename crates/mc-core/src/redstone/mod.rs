@@ -472,17 +472,6 @@ pub(crate) fn run(
     };
     wires.settled.clear();
     let mut entity_query = std::mem::take(&mut state.redstone.entity_query);
-    if due.iter().any(|tick| {
-        at(state, tick.pos).is_some_and(|block| {
-            let path = block.block.id.path();
-            path.ends_with("_pressure_plate")
-                || path == "detector_rail"
-                || (path.ends_with("_button")
-                    && !matches!(path, "stone_button" | "polished_blackstone_button"))
-        })
-    }) {
-        entity_query.rebuild(state);
-    }
     for tick in due {
         if at(state, tick.pos).is_some_and(|b| b.block.id == tick.block) {
             tick_cell(
@@ -492,7 +481,7 @@ pub(crate) fn run(
                 tick,
                 &registry,
                 &mut wires,
-                &entity_query,
+                &mut entity_query,
             );
         }
     }
@@ -631,7 +620,7 @@ fn tick_cell(
     tick: ScheduledBlockTick,
     registry: &crate::registry::CoreRegistry,
     wires: &mut WirePass,
-    entity_query: &entity_query::EntityQuery,
+    entity_query: &mut entity_query::EntityQuery,
 ) {
     let pos = tick.pos;
     rails::reshape(state, writes, pos);
@@ -874,6 +863,7 @@ fn tick_cell(
             let wooden = !matches!(path, "stone_button" | "polished_blackstone_button");
             let arrow = wooden
                 && entity_query.count(
+                    state,
                     [f64::from(pos.x), f64::from(pos.y), f64::from(pos.z)],
                     [
                         f64::from(pos.x) + 1.0,
@@ -921,6 +911,7 @@ fn tick_cell(
                 _ => 1,
             };
             let count = entity_query.count(
+                state,
                 [
                     f64::from(pos.x) + 0.125,
                     f64::from(pos.y),
