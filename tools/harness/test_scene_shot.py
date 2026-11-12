@@ -714,10 +714,12 @@ class SceneShotTests(unittest.TestCase):
             native_capture.assert_not_called()
 
     def test_java_shot_with_wrong_window_size_fails(self):
+        class Probe:
+            client = object()
         with tempfile.TemporaryDirectory() as tmp, patch.object(scene_shot.java_p5, "capture", return_value="/x/a.png"), \
                 patch.object(scene_shot, "png_size", return_value=(854, 480)):
             with self.assertRaisesRegex(RuntimeError, "expected"):
-                scene_shot.execute(object(), Path(tmp), [{"shot": "a"}], "java")
+                scene_shot.execute(Probe(), Path(tmp), [{"shot": "a"}], "java")
 
     def test_java_rejects_native_only_held_screenshot(self):
         with self.assertRaisesRegex(ValueError, "unsupported for --client java"):
@@ -729,6 +731,63 @@ class SceneShotTests(unittest.TestCase):
         self.assertEqual((options["fov"], options["guiScale"], options["renderDistance"]), ("0.0", "3", "32"))
         self.assertEqual(options["graphicsPreset"], '"custom"')
         self.assertEqual(scene_shot.java_options(8, 110).count("fov:1.0"), 1)
+
+    def test_java_display_settings_are_explicit_and_fail_closed(self):
+        for scale in (2, 3):
+            for language in ("en_us", "ru_ru"):
+                options = dict(line.split(":", 1) for line in scene_shot.java_options(
+                    8, 70, gui_scale=scale, language=language).splitlines())
+                self.assertEqual(options["guiScale"], str(scale))
+                self.assertEqual(options["lang"], language)
+                ctx = scene_shot.ProfileContext(Path("/tmp/scene-display"), client="java", windowed=True)
+                settings = {"gui_scale": scale, "language": language}
+                validated = scene_shot.validate_scenario(ctx, {"steps": [], "client_settings": settings})
+                self.assertEqual(validated[7], settings)
+        for settings in ({"gui_scale": True}, {"gui_scale": 0}, {"gui_scale": 4},
+                         {"gui_scale": 2.0}, {"language": "ru_ru\noperator:true"},
+                         {"language": None}, {"language": "unknown"}):
+            with self.subTest(settings=settings), self.assertRaises(ValueError):
+                ctx = scene_shot.ProfileContext(Path("/tmp/scene-display"), client="java", windowed=True)
+                scene_shot.validate_scenario(ctx, {"steps": [], "client_settings": settings})
+        with self.assertRaisesRegex(ValueError, "Java-only"):
+            ctx = scene_shot.ProfileContext(Path("/tmp/scene-display"), client="native", windowed=True)
+            scene_shot.validate_scenario(ctx, {"steps": [], "client_settings": {"gui_scale": 2}})
+
+    def test_java_screen_size_reaches_options_and_capture_expectation(self):
+        options = dict(line.split(":", 1) for line in scene_shot.java_options(
+            8, 70, gui_scale=3, language="ru_ru", screen_size=(1920, 1080)).splitlines())
+        self.assertEqual((options["overrideWidth"], options["overrideHeight"]), ("1920", "1080"))
+        ctx = scene_shot.ProfileContext(Path("/tmp/scene-display"), client="java", windowed=True)
+        settings = {"screen_size": [1920, 1080]}
+        self.assertEqual(scene_shot.validate_scenario(
+            ctx, {"steps": [], "client_settings": settings})[7], settings)
+        class Client:
+            scene_window_size = (1920, 1080)
+        class Probe:
+            client = Client()
+        with patch.object(scene_shot.java_p5, "capture", return_value="/capture.png"), \
+                patch.object(scene_shot, "png_size", return_value=(1920, 1080)):
+            self.assertEqual(scene_shot.capture_java(Probe(), Path("/tmp"), "fit"), "/capture.png")
+        with self.assertRaisesRegex(ValueError, "clamping"):
+            scene_shot.java_options(8, 70, gui_scale=3, screen_size=(640, 480))
+
+    def test_private_xvfb_size_is_validated_and_preserved_by_fallback(self):
+        runtime = scene_shot.runtime
+        for size, expected in (((1280, 720), "1280x720x24"), ((1920, 1080), "1920x1080x24")):
+            with self.subTest(size=size), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(runtime.subprocess, "Popen", side_effect=FileNotFoundError) as start, \
+                    patch.object(runtime, "_start_xvfb_scan", return_value=(None, ":99", None)) as fallback:
+                runtime.start_xvfb(Path(tmp), size)
+                self.assertIn(expected, start.call_args.args[0])
+                self.assertEqual(fallback.call_args.args[2], expected)
+                fallback.call_args.args[1].close()
+        for size in (None, [1280], [True, 720], [1280, 720.0], [0, 720], [3841, 720], [1280, 2161]):
+            with self.subTest(size=size), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(runtime.subprocess, "Popen") as start:
+                with self.assertRaises(ValueError):
+                    runtime.start_xvfb(Path(tmp) / "must-not-exist", size)
+                start.assert_not_called()
+                self.assertFalse((Path(tmp) / "must-not-exist").exists())
 
     def test_java_effective_render_distance_is_checked(self):
         with tempfile.TemporaryDirectory() as tmp:
