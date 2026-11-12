@@ -42,7 +42,9 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // Q04 climate variants, 2026-11-11: +1 (2647). The cow, pig, chicken and
     // zombie_nautilus identifiers live once as blueprint::VARIANT_* constants
     // that key both the registry mapping and the capture path.
-    vanilla_id_literals: 2_647,
+    // CivSimLanding merge of main 71d1c127, 2026-11-12: the ITEM_REGISTRY
+    // cutover and main's mob ids measure 2628 together, no spare headroom.
+    vanilla_id_literals: 2_628,
     path_equality: 114,
     panics: 5,
     merge_block_write_pushes: 17,

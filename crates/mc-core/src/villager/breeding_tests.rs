@@ -201,6 +201,12 @@ fn ration_trip_completes_when_storage_is_beyond_the_spare_bed_scan() {
     }
     let home = bed(&mut state, 44, 3);
     let spare = bed(&mut state, 70, 3);
+    // Residents claim only roofed beds; roof both clear of breeding headroom.
+    for head in [home, spare] {
+        state
+            .world
+            .set_block(head.x, 205, head.z, state.registry.states.stone);
+    }
     let settlement = state
         .settlements
         .create(
