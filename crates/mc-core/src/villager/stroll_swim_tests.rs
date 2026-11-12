@@ -206,7 +206,7 @@ fn resident_in_a_pond_with_no_adjacent_bank_swims_to_the_bank() {
             step(&mut state);
             let pos = state.entities.pos(slot);
             if arrived.is_none()
-                && (pos[0] - 1.5).hypot(pos[2] - 7.5) < 2.5
+                && (pos[0] - 1.5).powi(2) + (pos[2] - 7.5).powi(2) < 2.5 * 2.5
                 && pos[1] >= 206.0
                 && state.entities.ground(slot)
             {
