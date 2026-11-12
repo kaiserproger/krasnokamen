@@ -18,6 +18,10 @@ wireplumber.profiles = {
 }
 CONF
 export SOLARIS_PW_ROOT="$root"
+# A wrapped command may nest tools/dev/mem-run.sh (a ledger control's release-server build), which reaches the
+# user's systemd manager through $XDG_RUNTIME_DIR/systemd/private: link only that directory into the private runtime.
+host_runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
+if [ -d "$host_runtime/systemd" ]; then ln -s "$host_runtime/systemd" "$root/systemd"; fi
 exec dbus-run-session -- sh -c '
   export XDG_RUNTIME_DIR="$SOLARIS_PW_ROOT" PIPEWIRE_RUNTIME_DIR="$SOLARIS_PW_ROOT" \
     XDG_CONFIG_HOME="$SOLARIS_PW_ROOT/config" XDG_STATE_HOME="$SOLARIS_PW_ROOT/state" \
