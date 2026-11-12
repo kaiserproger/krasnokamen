@@ -1489,6 +1489,9 @@ mod sculk_checkpoint_tests;
 mod ticket_checkpoint_tests;
 
 #[cfg(test)]
+#[path = "core/default_game_mode_persistence_tests.rs"]
+mod default_game_mode_persistence_tests;
+#[cfg(test)]
 #[path = "core/difficulty_persistence_tests.rs"]
 mod difficulty_persistence_tests;
 

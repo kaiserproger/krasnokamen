@@ -197,6 +197,16 @@ pub fn import_tags(
             _ => Err(failure(level_path, format!("invalid Data.spawn.{key}"))),
         };
         manifest.world_spawn_rotation = [angle("yaw")?, angle("pitch")?];
+        // Vanilla `WorldData.GameType` (`/defaultgamemode`): absent keeps survival, any other
+        // value than the four ids fails closed rather than silently joining players in survival.
+        manifest.default_game_mode = match field(data, "GameType") {
+            None => crate::commands::GameMode::Survival,
+            Some(Tag::Int(0)) => crate::commands::GameMode::Survival,
+            Some(Tag::Int(1)) => crate::commands::GameMode::Creative,
+            Some(Tag::Int(2)) => crate::commands::GameMode::Adventure,
+            Some(Tag::Int(3)) => crate::commands::GameMode::Spectator,
+            Some(_) => return Err(failure(level_path, "invalid Data.GameType")),
+        };
         if let Some(settings) = field(data, "difficulty_settings") {
             let Tag::Compound(settings) = settings else {
                 return Err(failure(level_path, "invalid difficulty_settings"));
@@ -416,8 +426,12 @@ pub fn checkpoint_tags(
     ] {
         put(version, key, value);
     }
+    put(
+        data,
+        "GameType",
+        Tag::Int(i32::from(manifest.default_game_mode.id())),
+    );
     for (key, value) in [
-        ("GameType", Tag::Int(0)),
         ("initialized", Tag::Byte(1)),
         ("allowCommands", Tag::Byte(1)),
     ] {
@@ -858,6 +872,42 @@ mod tests {
                 .collect();
             assert_ne!(actual, expected);
         }
+    }
+
+    #[test]
+    fn default_game_mode_is_level_dat_game_type_and_a_bad_value_fails_closed() {
+        let mut tags = MetadataTags::new();
+        let manifest = CheckpointManifest {
+            default_game_mode: crate::commands::GameMode::Creative,
+            world_spawn: Some([0, 64, 0]),
+            ..Default::default()
+        };
+        checkpoint_tags(&mut tags, 42, &manifest).unwrap();
+        let Some(Tag::Compound(level)) = tags.get_mut("level.dat") else {
+            panic!("missing level.dat")
+        };
+        let Some((_, Tag::Compound(data))) = level.iter_mut().find(|(key, _)| key == "Data") else {
+            panic!("missing Data")
+        };
+        assert_eq!(field(data, "GameType"), Some(&Tag::Int(1)));
+        let mut imported = CheckpointManifest::default();
+        import_tags(&tags, &mut imported).unwrap();
+        assert_eq!(
+            imported.default_game_mode,
+            crate::commands::GameMode::Creative
+        );
+        let Some(Tag::Compound(level)) = tags.get_mut("level.dat") else {
+            unreachable!()
+        };
+        let Some((_, Tag::Compound(data))) = level.iter_mut().find(|(key, _)| key == "Data") else {
+            unreachable!()
+        };
+        put(data, "GameType", Tag::Int(9));
+        let error = import_tags(&tags, &mut CheckpointManifest::default()).unwrap_err();
+        assert!(
+            error.to_string().contains("invalid Data.GameType"),
+            "{error}"
+        );
     }
 
     #[test]
