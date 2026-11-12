@@ -294,6 +294,8 @@ pub(crate) fn settle(state: &mut TickState, writes: &mut Vec<(crate::boundary::B
             .filter(|pos| settle_phase(*pos) == phase && state.world.is_block_active(pos.x, pos.z)),
     );
     chunks.sort_unstable_by_key(|pos| (pos.x, pos.z));
+    // Columns of chunks with pending overlay edits take the exact surface read.
+    let overlay = surface::overlay_columns(state);
     for chunk in &chunks {
         let mut rng = crate::natural_spawn::Rng(
             state.world.seed() as u64
@@ -303,7 +305,7 @@ pub(crate) fn settle(state: &mut TickState, writes: &mut Vec<(crate::boundary::B
         );
         let x = chunk.x * 16 + rng.below(16) as i32;
         let z = chunk.z * 16 + rng.below(16) as i32;
-        let Some(pos) = surface::surface(state, x, z) else {
+        let Some(pos) = surface::surface(state, &overlay, x, z) else {
             continue;
         };
         if state.weather.0 == Weather::Thunder && rng.below(100_000) < 16 && rains_at(state, pos) {

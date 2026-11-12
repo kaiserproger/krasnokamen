@@ -47,13 +47,69 @@ pub(super) fn at(state: &TickState, pos: BlockPos) -> Precipitation {
         .map_or(Precipitation::None, |biome| climate(biome.as_str(), pos.y))
 }
 
+/// Chunk columns with pending overlay edits: their cells need the overlay-aware read.
+pub(super) fn overlay_columns(state: &TickState) -> rustc_hash::FxHashSet<(i32, i32)> {
+    state
+        .world
+        .overlay_entries()
+        .map(|((x, _, z), _)| (x.div_euclid(16), z.div_euclid(16)))
+        .collect()
+}
+
 /// Top collision/fluid cell, including this tick's overlay. The scan is bounded
 /// by dimension height and runs only for sampled active columns.
-pub(super) fn surface(state: &TickState, x: i32, z: i32) -> Option<BlockPos> {
-    for y in (state.dimension.geometry().min_y()..state.dimension.geometry().max_y()).rev() {
-        let id = state.world.block_at(x, y, z)?;
-        if state.registry.materials.classify(id) != mc_physics::BlockMaterial::Air {
-            return Some(BlockPos { x, y, z });
+///
+/// Bottleneck: the downward per-cell scan paid one chunk-map lookup per cell,
+/// about 300 for a surface column under open sky. Boundary: the column's chunk
+/// is read once, sections holding only air are skipped by their non-air count
+/// and the rest are read cell by cell from the section; a chunk with pending
+/// overlay edits (`overlay`), a missing chunk or a chunk whose height differs
+/// from the dimension's take the exact per-cell `block_at` scan, so the result
+/// is identical to scanning every cell. Effect: one chunk lookup and one
+/// counter read per empty section instead of a lookup per cell. Removal:
+/// restore the plain `block_at` loop from `max_y` down to `min_y`.
+pub(super) fn surface(
+    state: &TickState,
+    overlay: &rustc_hash::FxHashSet<(i32, i32)>,
+    x: i32,
+    z: i32,
+) -> Option<BlockPos> {
+    let geometry = state.dimension.geometry();
+    let solid = |id: u32| state.registry.materials.classify(id) != mc_physics::BlockMaterial::Air;
+    let column = (x.div_euclid(16), z.div_euclid(16));
+    let direct = state
+        .world
+        .chunk(crate::boundary::ChunkPos {
+            x: column.0,
+            z: column.1,
+        })
+        .filter(|chunk| {
+            !overlay.contains(&column)
+                && chunk.geometry().min_y() == geometry.min_y()
+                && chunk.geometry().max_y() == geometry.max_y()
+        });
+    let Some(chunk) = direct else {
+        for y in (geometry.min_y()..geometry.max_y()).rev() {
+            let id = state.world.block_at(x, y, z)?;
+            if solid(id) {
+                return Some(BlockPos { x, y, z });
+            }
+        }
+        return None;
+    };
+    let (local_x, local_z) = (x.rem_euclid(16) as u8, z.rem_euclid(16) as u8);
+    for (index, section) in chunk.sections.iter().enumerate().rev() {
+        if section.is_empty() {
+            continue;
+        }
+        for local_y in (0..16u8).rev() {
+            if solid(section.get(local_x, local_y, local_z).0) {
+                return Some(BlockPos {
+                    x,
+                    y: geometry.min_y() + index as i32 * 16 + i32::from(local_y),
+                    z,
+                });
+            }
         }
     }
     None
@@ -71,11 +127,11 @@ pub(super) fn precipitate(
     let Some(block) = state.registry.blocks.by_id(mc_world::BlockStateId(current)) else {
         return;
     };
-    let weather = at(state, pos);
     let name = block.block.id.path();
     if state.weather.0 == crate::commands::Weather::Clear && name != "water" {
         return;
     }
+    let weather = at(state, pos);
     let level = block
         .properties
         .iter()
