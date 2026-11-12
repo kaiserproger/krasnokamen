@@ -223,6 +223,7 @@ pub(crate) fn merge_neighbours(state: &mut TickState) -> usize {
 
 /// Resident item population for the `MC_CORE_PHASE_LOG` item census (diagnostic).
 fn print_census(state: &TickState) {
+    let census_start = std::time::Instant::now();
     let mut census = crate::item_perf::Census::default();
     for slot in state.entities.item_slots() {
         census.items += 1;
@@ -243,7 +244,12 @@ fn print_census(state: &TickState) {
             .map_or(0, |item| u64::from(item.count.max(0) as u32));
     }
     if census.items > 0 || state.dimension == crate::dimensions::Dimension::Overworld {
-        crate::item_perf::print_census(state.tick, state.dimension, &census);
+        crate::item_perf::print_census(
+            state.tick,
+            state.dimension,
+            &census,
+            census_start.elapsed(),
+        );
     }
 }
 

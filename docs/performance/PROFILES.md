@@ -313,7 +313,11 @@ visits, item movement/spawn/metadata packets and bytes, and the fanout phases `i
 per-item step and merge costs, and the least-squares slope in microseconds per item per tick of every
 column across the ladder (phases, laps, `tick outer ms:` and amortized `checkpoint capture ms:` lines,
 edge fanout), plus a within-run slope per leg. The step timer sums CPU over the rayon
-workers (not wall time); the other lines are wall time on the thread that ran them.
+workers (not wall time); the other lines are wall time on the thread that ran them. The attribution
+costs time itself: every timed item carries one clock-read pair (`clock_ns`, subtracted from the step
+CPU), the census runs inside the entity commit (`census_ms`) and the views probe inside the views phase
+(`probe_ms`); the table reports the entity and views phases net of them, and `probe_ms` on the edge
+line is the pump-thread cost of counting pairs, kept out of `total_ms`.
 
 ## Reproduce
 

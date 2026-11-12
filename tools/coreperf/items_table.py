@@ -27,7 +27,7 @@ KV = re.compile(r"(\w+)=([-\w.]+)")
 LAPS = re.compile(r"^\s+(.+?) detail ms:(.*)$")
 PHASE_COLUMNS = ("input", "chunks", "entity", "merge", "block", "commit", "snapshot", "views",
                  "entity_tail", "block_prepare", "publish_tail", "before_return")
-EDGE_COLUMNS = ("prelude_ms", "index_ms", "plan_ms", "fill_ms", "total_ms")
+EDGE_COLUMNS = ("prelude_ms", "index_ms", "plan_ms", "fill_ms", "total_ms", "probe_ms")
 EDGE_COUNTS = ("packets", "bytes", "item_pairs", "all_pairs", "item_visits", "all_visits",
                "item_spawn_pkts", "item_spawn_bytes", "item_move_pkts", "item_move_bytes",
                "item_meta_pkts", "item_meta_bytes")
@@ -152,6 +152,14 @@ def analyze_leg(root: Path, label: str) -> dict[str, Any]:
                     "mature_mean": mean([row.get("mature", 0.0) for row in census])}
     out["phases_ms"] = {key: mean([row["phase"][key] for row in window.values() if key in row["phase"]])
                         for key in PHASE_COLUMNS}
+    # What the attribution itself costs inside the timed phases (diagnostic overhead, subtracted below):
+    # the per-tick census runs in the entity commit, the views probe inside the views phase.
+    out["overhead_ms"] = {
+        "census": sum(row.get("census_ms", 0.0) for row in census) / len(window) if window else 0.0,
+        "views_probe": sum(row["views"].get("probe_ms", 0.0) for row in window.values() if "views" in row)
+        / len(window) if window else 0.0}
+    out["phases_net_ms"] = {"entity": out["phases_ms"]["entity"] - out["overhead_ms"]["census"],
+                            "views": out["phases_ms"]["views"] - out["overhead_ms"]["views_probe"]}
     laps: dict[str, dict[str, list[float]]] = {}
     for row in window.values():
         for label_, values in row.get("laps", {}).items():
@@ -229,6 +237,8 @@ def flat(leg: dict[str, Any]) -> dict[str, float]:
     """The columns the ladder regresses: every per-tick mean that can scale with the item count."""
     row = {f"phase.{key}": value for key, value in leg["phases_ms"].items()}
     row["wall"] = leg["wall_ms"]["mean"]
+    row["phase.entity_net"] = leg["phases_net_ms"]["entity"]
+    row["phase.views_net"] = leg["phases_net_ms"]["views"]
     row["step.cpu"] = leg["step"]["cpu_ms_per_tick"]
     row["merge.amortized"] = leg["merge"]["ms_per_tick"]
     row["checkpoint.amortized"] = leg["checkpoint"]["ms_per_tick"]
@@ -282,9 +292,11 @@ def markdown(legs: list[dict[str, Any]], ladder: dict[str, Any]) -> str:
             kib=leg["edge"].get("bytes", 0.0) / 1024, pairs=leg["edge"].get("item_pairs", 0.0),
             ckpt=leg["checkpoint"]["ms_per_tick"], post=leg["outer_ms"]["post"]))
     lines += ["", "## Phases (mean ms per tick, Overworld)", "",
-              "| leg | " + " | ".join(PHASE_COLUMNS) + " |", "|---|" + "---:|" * len(PHASE_COLUMNS)]
+              "| leg | " + " | ".join(PHASE_COLUMNS) + " | entity net of census | views net of probe |",
+              "|---|" + "---:|" * (len(PHASE_COLUMNS) + 2)]
     for leg in legs:
-        lines.append(f"| {leg['label']} | " + " | ".join(f"{leg['phases_ms'][key]:.2f}" for key in PHASE_COLUMNS) + " |")
+        lines.append(f"| {leg['label']} | " + " | ".join(f"{leg['phases_ms'][key]:.2f}" for key in PHASE_COLUMNS)
+                     + f" | {leg['phases_net_ms']['entity']:.2f} | {leg['phases_net_ms']['views']:.2f} |")
     lines += ["", "## Item-owned stages", "",
               "| leg | step ns/item (clock-corrected) | merge ns/item/pass | candidates/item | overlapping/item | expiry removed | expiry µs/item | views items pending | views items changed |",
               "|---|---:|---:|---:|---:|---:|---:|---:|---:|"]

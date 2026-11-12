@@ -11,13 +11,14 @@ def tick_log(tick: int, items: int, *, merge: bool, entity_ms: float, plan_ms: f
     lines = [
         f"items census: tick={tick} dimension=Overworld items={items} alive={items} ground={items // 2} "
         f"moving={items // 4} mature={items} stack_count={items} step_items={items} "
-        f"step_cpu_ms={items * 0.0004:.3f} clock_ns=40",
+        f"step_cpu_ms={items * 0.0004:.3f} clock_ns=40 census_ms={items * 0.00002:.3f}",
     ]
     if merge:
         lines.append(f"items merge: tick={tick} dimension=Overworld examined={items} gather_sort_ms=1.000 "
                      f"scan_ms={items * 0.0005:.3f} candidates={items * 3} overlapping={items} merged=0")
     lines += [
-        f"items views: pending={items // 4} items_pending={items // 4} changed={items // 4} items_changed={items // 4}",
+        f"items views: pending={items // 4} items_pending={items // 4} changed={items // 4} "
+        f"items_changed={items // 4} probe_ms={items * 0.00001:.3f}",
         "  entity phase detail ms: pre=0.01 step_scope=2.50",
         f"phase ms: tick={tick} input=1.0 chunks=0.5 entity={entity_ms:.2f} merge=0.00 block=2.0 commit=1.0 "
         "snapshot=0.1 views=0.7 intents=0 dimension=Overworld entity_tail=0.0 block_prepare=0.0 "
@@ -29,7 +30,7 @@ def tick_log(tick: int, items: int, *, merge: bool, entity_ms: float, plan_ms: f
         f"all_pairs={items * 10 + 500} item_visits={items * 10} all_visits={items * 10 + 500} "
         "item_spawn_pkts=0 item_spawn_bytes=0 "
         f"item_move_pkts={items // 4} item_move_bytes={items * 3} item_meta_pkts=0 item_meta_bytes=0 "
-        f"prelude_ms=0.1 index_ms=0.2 plan_ms={plan_ms:.3f} fill_ms=0.1 total_ms={plan_ms + 0.4:.3f}",
+        f"prelude_ms=0.1 index_ms=0.2 plan_ms={plan_ms:.3f} fill_ms=0.1 total_ms={plan_ms + 0.4:.3f} probe_ms=0.05",
     ]
     return "\n".join(lines)
 
@@ -109,6 +110,15 @@ class ItemsTableTests(unittest.TestCase):
             self.assertIn("phase.entity", text)
             self.assertIn("| phase.entity | 1.00, 11.00, 31.00 | 1.000 |", text)  # 0.001 ms = 1.000 µs per item per tick
             self.assertIn("| edge.bytes | 0.00, 90000.00, 270000.00 | 9.000 |", text)  # counts are not scaled
+
+    def test_attribution_overhead_is_subtracted_from_the_timed_phases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = items_table.analyze_leg(leg(Path(directory), 10000), "n10k")
+            self.assertAlmostEqual(result["overhead_ms"]["census"], 0.2, places=6)
+            self.assertAlmostEqual(result["overhead_ms"]["views_probe"], 0.1, places=6)
+            self.assertAlmostEqual(result["phases_net_ms"]["entity"], result["phases_ms"]["entity"] - 0.2, places=6)
+            self.assertAlmostEqual(result["phases_net_ms"]["views"], 0.7 - 0.1, places=6)
+            self.assertAlmostEqual(result["edge"]["probe_ms"], 0.05, places=6)
 
     def test_checkpoint_capture_is_amortized_over_window_ticks(self):
         with tempfile.TemporaryDirectory() as directory:

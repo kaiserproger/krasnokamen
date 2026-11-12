@@ -959,6 +959,7 @@ impl EntityStore {
         self.wire_marked.fill(false);
         self.wire_removed.clear();
         // Item attribution (MC_CORE_PHASE_LOG only): how many queued candidates are items.
+        let probe_start = crate::item_perf::start();
         let item_census = crate::item_perf::enabled().then(|| {
             let mut item_type = None;
             let items = pending
@@ -984,6 +985,7 @@ impl EntityStore {
                 .count();
             (items, item_type)
         });
+        let probe_before = probe_start.map(|start| start.elapsed());
         let mut views = std::mem::take(&mut self.wire_views);
         views.publish(
             &pending,
@@ -1005,6 +1007,7 @@ impl EntityStore {
         );
         self.wire_views = views;
         if let Some((items_pending, item_type)) = item_census {
+            let after_start = std::time::Instant::now();
             let changed = self.wire_views.changed();
             let items_changed = changed
                 .iter()
@@ -1019,6 +1022,7 @@ impl EntityStore {
                 items_pending,
                 changed.len(),
                 items_changed,
+                probe_before.unwrap_or_default() + after_start.elapsed(),
             );
         }
         pending.clear();

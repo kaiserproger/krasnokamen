@@ -192,6 +192,7 @@ pub fn publish_with_registries<'a>(
     if let (Some(start), Some(index_start), Some(plan_start), Some(fill_start), Some(fill_time)) =
         (probe, index_start, plan_start, fill_start, fill_time)
     {
+        let total_time = start.elapsed();
         let (packets, bytes) = planned
             .iter()
             .fold((0u64, 0u64), |(count, bytes), (_, row)| {
@@ -207,7 +208,9 @@ pub fn publish_with_registries<'a>(
         let (item_pairs, all_pairs) =
             crate::plan::item_probe::tracked_item_pairs(viewers.iter().map(|viewer| &**viewer));
         eprintln!(
-            "edge items: tick={} viewers={} packets={packets} bytes={bytes} item_pairs={item_pairs}              all_pairs={all_pairs} {} prelude_ms={:.3} index_ms={:.3} plan_ms={:.3} fill_ms={:.3}              total_ms={:.3}",
+            "edge items: tick={} viewers={} packets={packets} bytes={bytes} item_pairs={item_pairs} \
+             all_pairs={all_pairs} {} prelude_ms={:.3} index_ms={:.3} plan_ms={:.3} fill_ms={:.3} \
+             total_ms={:.3} probe_ms={:.3}",
             output.tick,
             viewers.len(),
             crate::plan::item_probe::take_line(),
@@ -215,7 +218,8 @@ pub fn publish_with_registries<'a>(
             plan_start.duration_since(index_start).as_secs_f64() * 1000.0,
             fill_start.duration_since(plan_start).as_secs_f64() * 1000.0,
             fill_time.as_secs_f64() * 1000.0,
-            start.elapsed().as_secs_f64() * 1000.0,
+            total_time.as_secs_f64() * 1000.0,
+            (start.elapsed() - total_time).as_secs_f64() * 1000.0,
         );
     }
     let mut addressed = Vec::new();

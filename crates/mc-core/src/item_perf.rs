@@ -104,11 +104,17 @@ pub(crate) struct Census {
 /// Prints the census with the step CPU of the tick that just ran. Called once per
 /// simulated dimension tick from the merge pass, after the step and commit stages
 /// and before the views and phase lines.
-pub(crate) fn print_census(tick: u64, dimension: impl std::fmt::Debug, census: &Census) {
+pub(crate) fn print_census(
+    tick: u64,
+    dimension: impl std::fmt::Debug,
+    census: &Census,
+    census_time: std::time::Duration,
+) {
     let (step_ns, step_items) = take(Part::Step);
     eprintln!(
         "items census: tick={tick} dimension={dimension:?} items={} alive={} ground={} moving={} \
-         mature={} stack_count={} step_items={step_items} step_cpu_ms={:.3} clock_ns={}",
+         mature={} stack_count={} step_items={step_items} step_cpu_ms={:.3} clock_ns={} \
+         census_ms={:.3}",
         census.items,
         census.alive,
         census.ground,
@@ -117,6 +123,7 @@ pub(crate) fn print_census(tick: u64, dimension: impl std::fmt::Debug, census: &
         census.stack_count,
         step_ns as f64 / 1e6,
         clock_ns(),
+        census_time.as_secs_f64() * 1000.0,
     );
 }
 
@@ -161,16 +168,19 @@ pub(crate) fn print_expiry(
 }
 
 /// Wire-view publication candidates: how many were queued, how many were items,
-/// and how many images actually changed.
+/// how many images actually changed, and what counting them cost (`probe_time`,
+/// which the phase's `views=` time includes).
 pub(crate) fn print_views(
     pending: usize,
     items_pending: usize,
     changed: usize,
     items_changed: usize,
+    probe_time: std::time::Duration,
 ) {
     eprintln!(
         "items views: pending={pending} items_pending={items_pending} changed={changed} \
-         items_changed={items_changed}"
+         items_changed={items_changed} probe_ms={:.3}",
+        probe_time.as_secs_f64() * 1000.0,
     );
 }
 
