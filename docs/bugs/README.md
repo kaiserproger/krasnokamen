@@ -175,7 +175,14 @@ worker, runs the negative control.
    its own `error` reads `<id> assertion failed: <name>` (never the argv of the
    child), with `<name>` not a connection check (`in_play`, `*_entered_play`,
    join) and the failure not tagged before the scenario body (`join`, start-up
-   phases). Any other failure, a timeout or a join flake never counts. Control worktrees
+   phases). Any other failure, a timeout or a join flake never counts. A profile
+   ref whose run cannot name a failing verdict follows the same assertion rule:
+   `all` of a profile without a verdict map (`settlement-map-qa`, `autocraft-qa`,
+   `village-autonomy-qa`) is red when the failed receipt's `error` reads
+   `<id> assertion failed: <name>`, and a `buildings-qa` `<blueprint>.<behaviour>`
+   that was never recorded is red when that assertion's name starts with
+   `buildings_<blueprint>_` (a probe check raises before the verdict is written).
+   Control worktrees
    are temporary `git worktree`s beside the other worktrees (`<work>/wt/`),
    one promotion at a time (a lock), at fixed paths (`ledger-control-candidate`,
    `ledger-control-fix`). Every cargo build or test for such a tree runs through
