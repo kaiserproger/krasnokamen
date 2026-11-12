@@ -243,9 +243,10 @@ pub(in crate::tick) fn join(
     state
         .connections
         .insert(*connection, id, *uuid, name.clone());
-    state
-        .players
-        .insert(id, hydrate_player(*connection, offline.as_ref()));
+    state.players.insert(
+        id,
+        hydrate_player(*connection, offline.as_ref(), state.default_game_mode),
+    );
     if state.require_plugin_login {
         state.locked_sessions.insert(*connection);
         // Empty, nonpersistent authentication presentation.

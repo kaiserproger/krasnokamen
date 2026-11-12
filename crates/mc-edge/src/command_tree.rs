@@ -838,6 +838,9 @@ pub(crate) fn tree(op_level: u8, plugins: &[(String, u8)]) -> ClientboundCommand
     if let Some(root) = t.root("settlement", false) {
         settlement_tree(&mut t, root);
     }
+    if let Some(root) = t.root("defaultgamemode", false) {
+        t.argument(root, "gamemode", Parser::GameMode, true);
+    }
     if let Some(root) = t.root("gamemode", false) {
         let mode = t.argument(root, "gamemode", Parser::GameMode, true);
         t.argument(mode, "target", players(false), true);

@@ -363,6 +363,8 @@ pub struct TickState {
     /// Recovered offline records by uuid: consumed by Join to restore full
     /// player state (inventory, vitals, xp, mode, position).
     pub offline_players: HashMap<uuid::Uuid, crate::journal::ReplayPlayer>,
+    /// Game mode a player without a saved record joins in (`/defaultgamemode`).
+    pub(crate) default_game_mode: crate::commands::GameMode,
     pub(crate) advancement_events: Vec<crate::advancements::Event>,
     pub(crate) advancement_reward_spawns: Vec<EntityId>,
     pub(crate) native_globals:
@@ -653,6 +655,7 @@ impl TickState {
             mob_griefing: crate::config::MobGriefingRules::default(),
             players: HashMap::default(),
             offline_players: HashMap::default(),
+            default_game_mode: crate::commands::GameMode::Survival,
             advancement_events: Vec::new(),
             advancement_reward_spawns: Vec::new(),
             native_globals: Default::default(),
@@ -1096,9 +1099,9 @@ mod collision_sampler_tests;
 fn hydrate_player(
     connection: ConnectionId,
     offline: Option<&crate::journal::ReplayPlayer>,
+    default_game_mode: crate::commands::GameMode,
 ) -> crate::player::PlayerState {
-    let mut player =
-        crate::player::PlayerState::new(connection, crate::commands::GameMode::Survival);
+    let mut player = crate::player::PlayerState::new(connection, default_game_mode);
     let Some(record) = offline else {
         return player;
     };

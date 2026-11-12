@@ -113,6 +113,7 @@ pub(crate) fn prepare(
 
 pub(crate) fn install(state: &mut TickState, pos: BlockPos, mut image: Prepared) {
     let cell = (pos.x, pos.y, pos.z);
+    let wakes = crate::command_blocks::wakes_on_load(&image.fields);
     image.fields.extend([
         ("x".into(), Tag::Int(pos.x)),
         ("y".into(), Tag::Int(pos.y)),
@@ -139,6 +140,9 @@ pub(crate) fn install(state: &mut TickState, pos: BlockPos, mut image: Prepared)
     state.block_entities.mark_dirty(cell);
     state.world.mark_block_entity_visible(pos);
     publish(state, pos);
+    if wakes {
+        crate::command_blocks::loaded(state, pos);
+    }
 }
 
 /// Viewers already hold the chunk, so the installed image reaches them as the same

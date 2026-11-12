@@ -126,7 +126,7 @@ def count_time_sets(commands: list[str]) -> int:
 
 
 def all_behaviours_pass(behaviour: dict[str, str]) -> bool:
-    required = ("door_walk", "sleep_return", "farmer_harvest", "miner_deposit", "lumberjack")
+    required = ("door_walk", "sleep_return", "night_door", "farmer_harvest", "miner_deposit", "lumberjack")
     return all(behaviour.get(name) == "PASS" for name in required)
 
 
@@ -212,6 +212,11 @@ LUMBER_REACH = 4.0
 MORNING_TICKS = 2400
 # Game ticks after `time set 18000` for a worker to walk home and lie down.
 NIGHT_TICKS = 1200
+# Game ticks for the house door to read shut after the night phase. Vanilla closes
+# a door once the villager that opened it has passed (InteractWithDoor; SleepInBed.start
+# closes the rest). The night phase ends when the judged sleeper lies down, so other
+# workers may still be walking in through the door: allow them half the walk-home budget.
+DOOR_CLOSE_TICKS = NIGHT_TICKS // 2
 
 
 def log_cells_near(rows: list[dict[str, Any]], pos: tuple[float, float, float],
@@ -902,6 +907,23 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
         night_ticks = _game_time(probe) - night_start
     detail["night_ticks"] = night_ticks
     detail["bed_sleepers"] = bed_sleepers
+    # --- (2b) issue #1 (ISSUE-1-08): the workers that walked in for the night left the
+    # house door shut; read from the client within DOOR_CLOSE_TICKS game ticks ---
+    door_start = _game_time(probe)
+    door_state = _props(_read(probe, door)).get("open")
+    while door_state != "false" and _game_time(probe) - door_start < DOOR_CLOSE_TICKS:
+        _tick(probe)
+        door_state = _props(_read(probe, door)).get("open")
+    detail["night_door"] = {"door": list(door), "open": door_state,
+                            "ticks": _game_time(probe) - door_start}
+    if bed_sleepers and door_state == "false":
+        _verdict(detail, "night_door", "PASS",
+                 f"{len(bed_sleepers)} workers asleep, house door {list(door)} shut")
+    else:
+        _verdict(detail, "night_door", "FAIL",
+                 f"bed_sleepers={bed_sleepers} house door {list(door)} open={door_state!r} "
+                 f"after {detail['night_door']['ticks']} ticks",
+                 f"time set 18000; minecraft_read_block {door[0]} {door[1]} {door[2]} once the workers sleep")
     # --- morning at work hours 3000 (not idle 23000): the same entity still
     # holds the same job and gets back to work, within MORNING_TICKS game ticks ---
     fixture("time set 3000")

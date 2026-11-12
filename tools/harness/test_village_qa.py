@@ -60,10 +60,11 @@ class VillageQaHelpersTests(unittest.TestCase):
         commands = [f"fill 0 0 0 1 1 1 stone", *phases]
         self.assertEqual(village_qa.count_time_sets(commands), 5)
 
-    def test_all_behaviours_pass_requires_five_passes(self) -> None:
+    def test_all_behaviours_pass_requires_six_passes(self) -> None:
         good = {name: "PASS" for name in
-                ("door_walk", "sleep_return", "farmer_harvest", "miner_deposit", "lumberjack")}
+                ("door_walk", "sleep_return", "night_door", "farmer_harvest", "miner_deposit", "lumberjack")}
         self.assertTrue(village_qa.all_behaviours_pass(good))
+        self.assertFalse(village_qa.all_behaviours_pass(dict(good, night_door="FAIL")))
         bad = dict(good, miner_deposit="FAIL")
         self.assertFalse(village_qa.all_behaviours_pass(bad))
         inconclusive = dict(good, lumberjack="INCONCLUSIVE")
