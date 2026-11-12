@@ -2024,11 +2024,12 @@ title = "A corrupt chiseled-shelf block entity in a loaded chunk crashes the tic
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHELF-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 fix_commit = "patch:76ab6a600e8e315df18b8710efd3f019485b62430d80d795d49a042b9b67982e"
+promotion = "docs/bugs/promotions/SHELF-HYDRATE-PANIC.json"
 
 [[bug]]
 id = "CRAFTER-HYDRATE-PANIC"
@@ -2036,11 +2037,12 @@ title = "A corrupt crafter block entity in a loaded chunk crashes the tick threa
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CRAFTER-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 fix_commit = "patch:fa0061ac6c30abdb5b093e99bb66ce012856f93f0f68edb6640b49c2d63393d6"
+promotion = "docs/bugs/promotions/CRAFTER-HYDRATE-PANIC.json"
 
 [[bug]]
 id = "VILLAGER-CURE-SPEEDUP"
@@ -2116,11 +2118,12 @@ title = "A corrupt conduit block entity crashes the tick thread at runtime (not 
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONDUIT-RUNTIME-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 fix_commit = "patch:6f19be18656653f07316721c01d4a22e18141504f6b8c2217281bc0270d903b1"
+promotion = "docs/bugs/promotions/CONDUIT-RUNTIME-PANIC.json"
 
 [[bug]]
 id = "BEACON-RUNTIME-PANIC"
