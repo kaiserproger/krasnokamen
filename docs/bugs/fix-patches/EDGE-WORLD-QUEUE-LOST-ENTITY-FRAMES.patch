@@ -1,0 +1,369 @@
+diff --git a/crates/mc-edge/src/plan.rs b/crates/mc-edge/src/plan.rs
+index d8edce10..87685bf1 100644
+--- a/crates/mc-edge/src/plan.rs
++++ b/crates/mc-edge/src/plan.rs
+@@ -345,6 +345,10 @@ const TIME_SYNC_INTERVAL_TICKS: u64 = 20;
+ /// Smallest squared entity move sent to clients (vanilla `ServerEntity`).
+ const MIN_MOVE_DISTANCE_SQ: f64 = 7.629_394_5e-6;
+ 
++/// Recorded type of an entity whose frames were lost: no entity has it, so
++/// the identity check fails and the plan removes and respawns the entity.
++const UNDELIVERED_TYPE: u32 = u32::MAX;
++
+ /// One delivered entity baseline; retaining the appearance Arc makes pointer
+ /// comparison a sound change detector until the next successful delivery.
+ #[derive(Debug)]
+@@ -355,6 +359,10 @@ pub(crate) struct TrackedEntity {
+     head_yaw: u8,
+     appearance: Arc<EntityAppearance>,
+     seen: u64,
++    /// Frames of this entity were lost and it cannot be removed (it carries
++    /// the viewer): the next plan sends its whole state again, over the
++    /// client's copy.
++    resend: bool,
+ }
+ 
+ impl TrackedEntity {
+@@ -365,6 +373,20 @@ impl TrackedEntity {
+             head_yaw: pack_degrees(entity.head_yaw),
+             appearance: Arc::clone(&entity.appearance),
+             seen,
++            resend: false,
++        }
++    }
++
++    /// Stand-in for an entity the client may still hold though the viewer
++    /// forgot it: its identity matches no entity, so the plan removes it.
++    fn undelivered() -> Self {
++        Self {
++            type_id: UNDELIVERED_TYPE,
++            baseline: ([0.0; 3], 0.0, 0.0, 0.0),
++            head_yaw: 0,
++            appearance: Arc::default(),
++            seen: 0,
++            resend: false,
+         }
+     }
+ }
+@@ -443,6 +465,11 @@ pub struct ViewerState {
+     /// Free outbound world-queue slots, refreshed by the pump before each
+     /// publish: the plan emits at most this many best-effort frames.
+     pub world_credit: usize,
++    /// Entities whose frames the last plan queued; the pump reports a frame
++    /// of that plan that the world queue refused ([`Self::world_frame_unsent`]).
++    world_entities: Vec<EntityId>,
++    /// Entities whose removal the last plan queued.
++    world_removed: Vec<EntityId>,
+     /// A same-dimension respawn is pending its forget pass: the vanilla
+     /// client keeps its level across it (`ClientPacketListener.handleRespawn`
+     /// builds a new `ClientLevel` only on a dimension change), so, like the
+@@ -495,6 +522,8 @@ impl ViewerState {
+             radius_sent: None,
+             skipped: false,
+             world_credit: usize::MAX,
++            world_entities: Vec::new(),
++            world_removed: Vec::new(),
+             forget_all: false,
+             labels: crate::settlement_labels::LabelBaseline::default(),
+             seats: HashMap::default(),
+@@ -522,6 +551,45 @@ impl ViewerState {
+         self.chunk_sync = None;
+     }
+ 
++    /// A planned world frame was not queued: the world queue filled after
++    /// the plan read its credit, because another producer (an LOD tile) took
++    /// a slot. The viewer recorded everything the last plan emitted as
++    /// delivered, so held geometry and the client state of every entity that
++    /// plan touched are repaired from the next plan.
++    pub(crate) fn world_frame_unsent(&mut self) {
++        self.geometry_unsent();
++        for id in std::mem::take(&mut self.world_removed) {
++            // The client may still hold it: track it again to have it removed.
++            self.tracked_entities
++                .entry(id)
++                .or_insert_with(TrackedEntity::undelivered);
++            self.entity_interest.respawn_tracked(id);
++        }
++        for id in std::mem::take(&mut self.world_entities) {
++            self.entity_unsent(id);
++        }
++    }
++
++    /// The client may miss any frame planned for `id`. The own entity forgets
++    /// its baseline and resends its data. The viewer's own vehicle keeps its
++    /// place (removing it dismounts the player) and resends its state.
++    /// Another tracked entity no longer matches its recorded identity, so the
++    /// next plan removes and respawns it, with its passengers and leash; one
++    /// that left view meanwhile is removed as usual.
++    fn entity_unsent(&mut self, id: EntityId) {
++        if id == self.entity_id {
++            self.untrack(id);
++        } else if self.vehicles.get(&self.entity_id) == Some(&id) {
++            if let Some(tracked) = self.tracked_entities.get_mut(&id) {
++                tracked.resend = true;
++            }
++            self.entity_interest.revisit(id);
++        } else if let Some(tracked) = self.tracked_entities.get_mut(&id) {
++            tracked.type_id = UNDELIVERED_TYPE;
++            self.entity_interest.respawn_tracked(id);
++        }
++    }
++
+     /// All geometry already planned for this viewer precedes a world-queue fence.
+     pub(crate) fn geometry_drained(&self, server_distance: i32, chunks: &[SnapshotChunk]) -> bool {
+         let radius = self
+@@ -609,6 +677,9 @@ fn forget_everything(
+             return false;
+         }
+     }
++    viewer
++        .world_removed
++        .extend(scratch.removed.iter().map(|&id| EntityId(id)));
+     viewer.untrack_all();
+     viewer.entity_tick = None;
+     viewer.entity_interest = entity_interest::EntityInterest::default();
+@@ -753,6 +824,8 @@ fn plan_viewer_inner(
+     let changes = &output.changes;
+     let conn = viewer.connection;
+     let mut credit = viewer.world_credit;
++    viewer.world_entities.clear();
++    viewer.world_removed.clear();
+     // Resolve the authoritative anchor before range-checking one-shot effects.
+     if let Some(own) = own_entity(snapshot, viewer) {
+         viewer.position = own.position;
+@@ -1484,6 +1557,14 @@ fn plan_seats(viewer: &mut ViewerState, out: &mut Vec<PlannedPacket>, credit: &m
+     }
+ }
+ 
++/// Whether the viewer's record of `id` was invalidated by lost frames.
++fn is_undelivered(viewer: &ViewerState, id: EntityId) -> bool {
++    viewer
++        .tracked_entities
++        .get(&id)
++        .is_some_and(|tracked| tracked.type_id == UNDELIVERED_TYPE)
++}
++
+ fn plan_entities(
+     snapshot: &WorldSnapshot,
+     viewer: &mut ViewerState,
+@@ -1509,6 +1590,18 @@ fn plan_entities(
+         .boss_baseline
+         .sync_raids(conn, viewer.position, &snapshot.raid_bars, out);
+ 
++    // The removal of a visible entity whose frames were lost rides with its
++    // spawn below: sent alone, it would hide the entity until the credit
++    // carries the spawn, for every entity at once.
++    if !scratch.removed.is_empty() && !scratch.spawns.is_empty() {
++        let repaired: HashSet<i32> = scratch
++            .spawns
++            .iter()
++            .filter(|(id, _)| is_undelivered(viewer, *id))
++            .map(|(id, _)| id.0)
++            .collect();
++        scratch.removed.retain(|id| !repaired.contains(id));
++    }
+     if !scratch.removed.is_empty() && *credit > 0 {
+         let packet = RemoveEntities {
+             entity_ids: std::mem::take(&mut scratch.removed),
+@@ -1518,6 +1611,7 @@ fn plan_entities(
+                 let id = EntityId(id);
+                 viewer.untrack(id);
+                 interest.removed(id);
++                viewer.world_removed.push(id);
+             }
+         }
+         scratch.removed = packet.entity_ids;
+@@ -1526,6 +1620,7 @@ fn plan_entities(
+     // The client's own entity gets no AddEntity but still needs its
+     // SetEntityData (pose/flags/health), or the client player object never
+     // resolves; resent whenever its appearance changes.
++    let own_start = out.len();
+     if let Some(own) = own_entity(snapshot, viewer)
+         && appearance_stale(viewer, own)
+         && try_push(out, credit, |out| {
+@@ -1546,6 +1641,9 @@ fn plan_entities(
+         })
+     {
+         viewer.track(own);
++        if out.len() > own_start {
++            viewer.world_entities.push(own.id);
++        }
+     }
+     interest.spawned(viewer.entity_id);
+ 
+@@ -1579,7 +1677,24 @@ fn plan_entities(
+                     .collect(),
+             })
+         });
++        // A respawn after lost frames removes the client's copy first, and
++        // seats a seated villager again (the removal drops its link).
++        let repair = is_undelivered(viewer, id);
++        let seat = viewer
++            .seats
++            .get(&id)
++            .filter(|_| repair)
++            .map(|&(seat, _)| seat);
+         let spawned = try_push(out, credit, |out| {
++            if repair {
++                push_best_effort(
++                    out,
++                    conn,
++                    &RemoveEntities {
++                        entity_ids: vec![id.0],
++                    },
++                );
++            }
+             push_best_effort(
+                 out,
+                 conn,
+@@ -1601,11 +1716,26 @@ fn plan_entities(
+             if let Some(link) = &vehicle {
+                 push_best_effort(out, conn, link);
+             }
++            if let Some(seat) = seat {
++                push_best_effort(
++                    out,
++                    conn,
++                    &mc_protocol::packets::play::ClientboundSetPassengers {
++                        vehicle_id: seat,
++                        passenger_ids: vec![id.0],
++                    },
++                );
++            }
+         });
+         if !spawned {
+             break;
+         }
++        if repair {
++            viewer.untrack(id);
++            interest.removed(id);
++        }
+         viewer.track(entity);
++        viewer.world_entities.push(id);
+         interest.spawned(entity.id);
+     }
+ 
+@@ -1635,13 +1765,26 @@ fn plan_entities(
+             0
+         };
+         let turned = due && tracked.head_yaw != packed_head;
+-        if !stale && movement.is_none() && !turned {
++        let resend = tracked.resend;
++        if !stale && !resend && movement.is_none() && !turned {
+             interest.completed(entity, tracked, snapshot.tick, due);
+             continue;
+         }
++        let update_start = out.len();
++        // Against an appearance that differs in every field, a resend carries
++        // the whole state, passengers included.
++        let resend_baseline = EntityAppearance {
++            passengers: vec![EntityId(i32::MIN)],
++            ..Default::default()
++        };
++        let baseline = if resend {
++            &resend_baseline
++        } else {
++            tracked.appearance.as_ref()
++        };
+         let sent = try_push(out, credit, |out| {
+-            if stale {
+-                push_appearance(out, conn, entity, Some(tracked.appearance.as_ref()));
++            if stale || resend {
++                push_appearance(out, conn, entity, Some(baseline));
+             }
+             if let Some(packet) = &movement {
+                 out.push(PlannedPacket {
+@@ -1670,7 +1813,10 @@ fn plan_entities(
+             viewer.entity_interest = interest;
+             return;
+         }
+-        if stale {
++        if out.len() > update_start {
++            viewer.world_entities.push(id);
++        }
++        if stale || resend {
+             relink_passengers(
+                 &mut viewer.vehicles,
+                 id,
+@@ -1678,6 +1824,7 @@ fn plan_entities(
+                 &entity.appearance.passengers,
+             );
+             tracked.appearance = Arc::clone(&entity.appearance);
++            tracked.resend = false;
+         }
+         if let Some(packet) = movement {
+             tracked.baseline = packet.next;
+diff --git a/crates/mc-edge/src/plan/entity_interest.rs b/crates/mc-edge/src/plan/entity_interest.rs
+index 443d79f4..efe08c7a 100644
+--- a/crates/mc-edge/src/plan/entity_interest.rs
++++ b/crates/mc-edge/src/plan/entity_interest.rs
+@@ -112,7 +112,8 @@ impl EntityInterest {
+                     if let Some(tracked) = viewer.tracked_entities.get(&id)
+                         && tracked.type_id == entity.type_id
+                     {
+-                        if !Arc::ptr_eq(&tracked.appearance, &entity.appearance)
++                        if tracked.resend
++                            || !Arc::ptr_eq(&tracked.appearance, &entity.appearance)
+                             || entity_movement(entity, tracked.baseline).is_some()
+                             || tracked.head_yaw != pack_degrees(entity.head_yaw)
+                         {
+@@ -362,6 +363,25 @@ impl EntityInterest {
+         }
+     }
+ 
++    /// A delivered entity's frames were lost and its recorded identity no
++    /// longer matches: the client may hold a stale copy, or none. Remove it,
++    /// and spawn it again while it is in view, as for a type change, though
++    /// the unchanged snapshot schedules neither.
++    pub(super) fn respawn_tracked(&mut self, id: EntityId) {
++        self.removals.insert(id);
++        if self.visible.contains_key(&id) {
++            self.spawns.insert(id);
++        }
++        self.clean(id);
++    }
++
++    /// Visit `id` in the next plan though its snapshot row did not change.
++    pub(super) fn revisit(&mut self, id: EntityId) {
++        if self.visible.contains_key(&id) {
++            self.dirty.insert(id);
++        }
++    }
++
+     pub(super) fn spawned(&mut self, id: EntityId) {
+         self.spawns.remove(&id);
+         self.clean(id);
+diff --git a/crates/mc-edge/src/server/pump.rs b/crates/mc-edge/src/server/pump.rs
+index 0f8fe6e9..85927887 100644
+--- a/crates/mc-edge/src/server/pump.rs
++++ b/crates/mc-edge/src/server/pump.rs
+@@ -348,8 +348,10 @@ pub(super) async fn publish_and_route(
+     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+ ) {
+     viewers.retain(|id, _| connections.contains_key(id));
+-    // Only the pump sends world packets; available slots can only grow
+-    // between this credit read and routing.
++    // Planning spends this credit, but it is not exclusive: an LOD tile
++    // (`lod.rs`) also takes world-queue slots, at any time from this read
++    // until the send, which is the whole planning time of every viewer, so a
++    // planned frame can still find the queue full below.
+     {
+         let registry = server.connections.inner.lock();
+         for (id, viewer) in viewers.iter_mut() {
+@@ -407,13 +409,12 @@ pub(super) async fn publish_and_route(
+                 }
+             }
+             crate::fanout::Priority::BestEffort => {
+-                // Another producer may consume the credit after planning.
+                 if handles.world_tx.try_send(packet.data).is_err()
+                     && let Some(viewer) = viewers.get_mut(&packet.connection)
+                 {
+-                    // Another producer can exhaust the credit after planning.
+-                    // The failed frame may have contained geometry.
+-                    viewer.geometry_unsent();
++                    // The viewer recorded this publication as delivered:
++                    // repair the geometry and entity state it carried.
++                    viewer.world_frame_unsent();
+                 }
+             }
+         }
