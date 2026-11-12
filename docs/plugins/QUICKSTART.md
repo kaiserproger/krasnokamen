@@ -3,7 +3,7 @@
 Build a server-only Rust component that logs when enabled, greets joining players
 and answers `/hello`. Allow extra time for the first Rust dependency download and
 server content installation. Use a Krasnokamen checkout matching the server: SDK and
-WIT are generated together and 0.8.0 components must match that server's WIT.
+WIT are generated together and 0.9.0 components must match that server's WIT.
 
 ## Prerequisites
 
@@ -96,7 +96,7 @@ cat > plugins/hello/plugin.toml <<'EOF'
 id = "hello"
 name = "Hello"
 version = "0.1.0"
-api = "0.8.0"
+api = "0.9.0"
 events = ["player.joined"]
 player_commands = ["hello"]
 EOF

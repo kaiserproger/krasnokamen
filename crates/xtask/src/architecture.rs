@@ -24,7 +24,11 @@ const WIT_DIR: &str = "crates/mc-script/wit";
 // documentation-only: local presence is reported on stdout and never baked
 // into the compared artifact, so a fresh core checkout without siblings
 // produces byte-identical output.
-const SIBLING_REPOS: &[&str] = &["krasnokamen-default-plugins", "krasnokamen-loader"];
+// (repository name, local checkout directory); the directories keep their pre-rename names.
+const SIBLING_REPOS: &[(&str, &str)] = &[
+    ("krasnokamen-default-plugins", "solaris-default-plugins"),
+    ("krasnokamen-loader", "solaris-loader"),
+];
 
 pub(super) fn run_architecture(check: bool) -> Result<(), i32> {
     let root = workspace_root().map_err(|err| {
@@ -78,8 +82,8 @@ pub(super) fn run_architecture(check: bool) -> Result<(), i32> {
 }
 
 fn report_sibling_availability(root: &Path) {
-    for sibling in SIBLING_REPOS {
-        let status = if root.join("..").join(sibling).is_dir() {
+    for (sibling, checkout) in SIBLING_REPOS {
+        let status = if root.join("..").join(checkout).is_dir() {
             "present (local only, not part of compared artifact)"
         } else {
             "unavailable"
@@ -226,7 +230,7 @@ fn crate_graph_document(root: &Path) -> Result<String, String> {
     out.push_str("## Sibling availability\n\n");
     out.push_str("Sibling checkouts are external to the core map; local presence is\n");
     out.push_str("reported on stdout only and never baked into this file.\n\n");
-    for sibling in SIBLING_REPOS {
+    for (sibling, _) in SIBLING_REPOS {
         out.push_str(&format!("- {sibling}: external\n"));
     }
     out.push_str(

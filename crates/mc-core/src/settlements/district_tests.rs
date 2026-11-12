@@ -465,7 +465,10 @@ fn hamlet_ready_with_exact_bed_and_single_bread() {
     assert!(snap.reason.is_none());
     assert_eq!(
         snap.working,
-        vec!["krasnokamen:farm".to_owned(), "krasnokamen:warehouse".to_owned()]
+        vec![
+            "krasnokamen:farm".to_owned(),
+            "krasnokamen:warehouse".to_owned()
+        ]
     );
 
     // Acknowledged native chunks may unload; querying must not reload a bed

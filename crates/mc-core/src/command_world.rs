@@ -1660,8 +1660,10 @@ mod tests {
             [90.0, -30.0]
         );
         let record = crate::core::player_record_for(&state, actor, state.tick).unwrap();
-        let dir =
-            std::env::temp_dir().join(format!("krasnokamen-command-spawn-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!(
+            "krasnokamen-command-spawn-{}",
+            uuid::Uuid::new_v4()
+        ));
         let uuid = uuid::Uuid::new_v4();
         let config = crate::CoreConfig::new(dir.clone(), 42);
         crate::native_checkpoint::tests::write_player(

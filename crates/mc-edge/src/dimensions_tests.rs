@@ -137,9 +137,10 @@ fn packet_cache_keeps_equal_coordinates_and_revisions_in_distinct_dimensions() {
     };
     use mc_core::boundary::{SnapshotChunk, TickOutput, WorldSnapshot};
     use mc_protocol::packets::play::LevelChunkWithLight;
-    let blocks =
-        mc_world::BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
-            .unwrap();
+    let blocks = mc_world::BlockRegistry::from_report(
+        &mc_data::blocks::krasnokamen_required_blocks_report(),
+    )
+    .unwrap();
     let items = mc_data::items::krasnokamen_required_items();
     let block_entity_types = mc_data::block_entity_types::krasnokamen_required_block_entity_types();
     let biomes = crate::chunks::test_biome_registry(&[

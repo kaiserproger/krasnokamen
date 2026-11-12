@@ -505,7 +505,8 @@ fn vanilla_nbt_preserves_signed_age_stew_and_retained_prerequisites() {
         entity_life::from_record(&decoded, true),
         (life.clone(), 321)
     );
-    let dir = std::env::temp_dir().join(format!("krasnokamen-life-region-{}", uuid::Uuid::new_v4()));
+    let dir =
+        std::env::temp_dir().join(format!("krasnokamen-life-region-{}", uuid::Uuid::new_v4()));
     let chunks = std::collections::BTreeMap::from([(
         (0, 0),
         mc_world::anvil::EntityChunk {

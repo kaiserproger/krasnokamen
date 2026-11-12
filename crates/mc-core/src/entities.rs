@@ -958,34 +958,6 @@ impl EntityStore {
         // All queued identities are consumed, including removal tombstones.
         self.wire_marked.fill(false);
         self.wire_removed.clear();
-        // Item attribution (MC_CORE_PHASE_LOG only): how many queued candidates are items.
-        let probe_start = crate::item_perf::start();
-        let item_census = crate::item_perf::enabled().then(|| {
-            let mut item_type = None;
-            let items = pending
-                .iter()
-                .filter(|&&(id, hint)| {
-                    let slot = if self
-                        .bodies
-                        .get(hint.0 as usize)
-                        .is_some_and(|body| body.id == id)
-                    {
-                        Some(hint)
-                    } else {
-                        self.slot_of_any(id)
-                    };
-                    match slot.map(|slot| self.bodies[slot.0 as usize].kind) {
-                        Some(EntityKind::Item { type_id }) => {
-                            item_type = Some(type_id);
-                            true
-                        }
-                        _ => false,
-                    }
-                })
-                .count();
-            (items, item_type)
-        });
-        let probe_before = probe_start.map(|start| start.elapsed());
         let mut views = std::mem::take(&mut self.wire_views);
         views.publish(
             &pending,
@@ -1006,25 +978,6 @@ impl EntityStore {
             |slot| self.wire_view(slot),
         );
         self.wire_views = views;
-        if let Some((items_pending, item_type)) = item_census {
-            let after_start = std::time::Instant::now();
-            let changed = self.wire_views.changed();
-            let items_changed = changed
-                .iter()
-                .filter(|&&id| {
-                    self.wire_views
-                        .get(id)
-                        .is_some_and(|view| Some(view.type_id) == item_type)
-                })
-                .count();
-            crate::item_perf::print_views(
-                pending.len(),
-                items_pending,
-                changed.len(),
-                items_changed,
-                probe_before.unwrap_or_default() + after_start.elapsed(),
-            );
-        }
         pending.clear();
         self.wire_pending = pending;
         self.wire_views.clone()
@@ -1240,8 +1193,9 @@ impl EntityStore {
         let index = slot.0 as usize;
         #[cfg(test)]
         {
-            static TRACE: std::sync::LazyLock<bool> =
-                std::sync::LazyLock::new(|| std::env::var_os("KRASNOKAMEN_TRACE_ROW_MUT").is_some());
+            static TRACE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+                std::env::var_os("KRASNOKAMEN_TRACE_ROW_MUT").is_some()
+            });
             if *TRACE {
                 let caller = std::panic::Location::caller();
                 let counts = self

@@ -194,10 +194,14 @@ fn oversized_body_is_rejected() {
 #[test]
 fn hash_mismatch_is_rejected() {
     let registry = stone_registry();
-    let files = vec![file("structures/house.toml", base_toml("krasnokamen:house"))];
+    let files = vec![file(
+        "structures/house.toml",
+        base_toml("krasnokamen:house"),
+    )];
     let expected = BTreeMap::from([("krasnokamen:house".to_owned(), "0".repeat(64))]);
-    let error = BlueprintCatalog::from_files_with_hashes(&registry, "krasnokamen", &files, &expected)
-        .unwrap_err();
+    let error =
+        BlueprintCatalog::from_files_with_hashes(&registry, "krasnokamen", &files, &expected)
+            .unwrap_err();
     assert!(matches!(
         blueprint_error_of(&error),
         BlueprintError::HashMismatch { .. }
@@ -250,7 +254,10 @@ fn stray_and_duplicate_files_are_rejected() {
 #[test]
 fn catalog_hashes_fence_changed_physical_content() {
     let registry = stone_registry();
-    let files = vec![file("structures/house.toml", base_toml("krasnokamen:house"))];
+    let files = vec![file(
+        "structures/house.toml",
+        base_toml("krasnokamen:house"),
+    )];
     let catalog = BlueprintCatalog::from_files(&registry, "krasnokamen", &files).unwrap();
     assert!(catalog.get("krasnokamen:absent").is_none());
 
@@ -262,9 +269,13 @@ fn catalog_hashes_fence_changed_physical_content() {
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     );
-    let expected = BTreeMap::from([("krasnokamen:house".to_owned(), house.content_hash().to_owned())]);
+    let expected = BTreeMap::from([(
+        "krasnokamen:house".to_owned(),
+        house.content_hash().to_owned(),
+    )]);
     assert!(
-        BlueprintCatalog::from_files_with_hashes(&registry, "krasnokamen", &files, &expected).is_ok()
+        BlueprintCatalog::from_files_with_hashes(&registry, "krasnokamen", &files, &expected)
+            .is_ok()
     );
 
     let expected = BTreeMap::from([("krasnokamen:absent".to_owned(), "0".repeat(64))]);

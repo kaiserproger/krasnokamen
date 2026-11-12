@@ -269,12 +269,10 @@ Install the Rust toolchain pinned in [`rust-toolchain.toml`](rust-toolchain.toml
 and JDK 25. Linux x86-64 builds use Clang and mold, as configured in
 [`.cargo/config.toml`](.cargo/config.toml).
 
-The code still uses the Solaris names until the rename lands in the source tree:
-
 ```sh
-cargo build -p mc-edge --bin solaris-v2
-cargo run -p mc-edge --bin solaris-v2 -- content import --version 26.3 --download
-cargo run -p mc-edge --bin solaris-v2 -- --config example.toml
+cargo build -p mc-edge --bin krasnokamen
+cargo run -p mc-edge --bin krasnokamen -- content import --version 26.3 --download
+cargo run -p mc-edge --bin krasnokamen -- --config example.toml
 ```
 
 To use server jars you already have, replace `--download` with

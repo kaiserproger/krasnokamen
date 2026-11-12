@@ -628,7 +628,10 @@ fn export_hopper_deadlines_become_bounded_portable_remaining_cooldowns() {
             ("y".into(), Tag::Int(80)),
             ("z".into(), Tag::Int(1)),
             ("TransferCooldown".into(), Tag::Int(8)),
-            ("krasnokamen:TransferCooldownUntil".into(), Tag::Long(deadline)),
+            (
+                "krasnokamen:TransferCooldownUntil".into(),
+                Tag::Long(deadline),
+            ),
         ]);
         let mut bytes = Vec::new();
         mc_nbt::write_network(&mut bytes, &tag).unwrap();
@@ -672,7 +675,9 @@ fn export_hopper_deadlines_become_bounded_portable_remaining_cooldowns() {
             let Tag::Compound(fields) = mc_nbt::read_network(&mut bytes.as_slice()).unwrap() else {
                 panic!("hopper compound");
             };
-            assert!(mc_data::item_nbt::field(&fields, "krasnokamen:TransferCooldownUntil").is_none());
+            assert!(
+                mc_data::item_nbt::field(&fields, "krasnokamen:TransferCooldownUntil").is_none()
+            );
         }
     }
 }

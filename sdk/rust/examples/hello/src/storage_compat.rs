@@ -8,7 +8,7 @@
 
 use krasnokamen_plugin_sdk::events::{OperationFailure, OperationOutcome, OperationPayload};
 use krasnokamen_plugin_sdk::{
-    Command, Event, Failure, LogLevel, StorageGetOutcome, commands, log, storage, storage_get,
+    commands, log, storage, storage_get, Command, Event, Failure, LogLevel, StorageGetOutcome,
 };
 
 /// The key the legacy standalone compare-and-swap wrote. This fixture only reads

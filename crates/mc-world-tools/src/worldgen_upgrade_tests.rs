@@ -202,7 +202,10 @@ fn older_storage_format_is_refused_with_export_import_guidance_and_not_written()
     drop_bossbars(&path);
 
     let guided = |error: &str| {
-        assert!(error.contains("older Krasnokamen storage format"), "{error}");
+        assert!(
+            error.contains("older Krasnokamen storage format"),
+            "{error}"
+        );
         assert!(error.contains("world export-anvil"), "{error}");
         assert!(error.contains("world import-anvil"), "{error}");
         assert!(!error.contains("upgrade-worldgen"), "{error}");
