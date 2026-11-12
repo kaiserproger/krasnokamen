@@ -5021,7 +5021,7 @@ status = "open"
 source = "Breaker finding F1 (VillageBreak2, ISSUE-1-08 break-it pass, agent-run): in a certified house the player opens the spruce door by day; at time 18000 both residents walk home through it and fall asleep, and the door stays open=true all night (server truth via execute if block; native client d5f25569, server pin 4bfacdf6391f-3f0eb5d2 = main 71d1c127; scene-shot artifacts 20261112T012120-scene-shot-1449j9i8 and 20261112T012900-scene-shot-bbujr1zg, 2/2). Every door the villagers opened themselves was shut. Vanilla 26.3 InteractWithDoor opens the previous path node's door if closed and remembers it for closing either way (javap offsets 142-166), so closeDoorsThatIHaveOpenedOrPassedThrough closes doors a villager passed through. crates/mc-core/src/villager/doors.rs remembers only doors it opened, as docs/settlements/jobs.md documents (they leave player-opened doors alone): owner decision whether to keep the documented deviation."
 regression = ["cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened", "harness:scene-shot:native-village-night-door"]
 failing_first = "reported"
-fix_commit = "patch:f4ea931605068a8dc08f2193760cecfc8042eb82c942c9c79e3277fb3a7af5d7"
+fix_commit = "patch:8d3d9a432564e87c614ffc59aa05029dca3dd4bbd59df325dfd03f12b527a2cc"
 
 [[bug]]
 id = "VILLAGER-WORKSTATION-IGNORED-AFTER-WORK-HOURS"
