@@ -510,7 +510,7 @@ pub(crate) fn can_fund(
             .get(index, requirements, slots(), ProbeKind::Boolean)
             .cloned()
     };
-    let funded = if raw_shortage {
+    if raw_shortage {
         false
     } else if let Some(MemoResult::Boolean(funded)) = cached {
         #[cfg(test)]
@@ -533,8 +533,7 @@ pub(crate) fn can_fund(
                 .remember(index, requirements, slots(), MemoResult::Boolean(funded));
             funded
         }
-    };
-    funded
+    }
 }
 
 /// The first missing extraction capability in the same whole-bill proof.
@@ -759,9 +758,8 @@ fn take_matching(
     work: &mut Work<'_>,
     ingredient: &IngredientPlan,
 ) -> bool {
-    for image in 0..post.len() {
-        for index in 0..post[image].len() {
-            let slot = &post[image][index];
+    for (image, stacks) in post.iter_mut().enumerate() {
+        for (index, slot) in stacks.iter_mut().enumerate() {
             if slot.is_empty() {
                 continue;
             }
@@ -789,7 +787,6 @@ fn take_matching(
             }
             work.undo.push((image, index, slot.clone()));
             work.totals.replace(slot, slot.item_id, slot.count - 1);
-            let slot = &mut post[image][index];
             slot.count -= 1;
             if slot.count <= 0 {
                 *slot = ItemStack::EMPTY;

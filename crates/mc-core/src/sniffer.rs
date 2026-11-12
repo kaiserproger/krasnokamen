@@ -260,7 +260,9 @@ pub(crate) fn run(state: &mut TickState) {
                         sniffer.target = None;
                     }
                 }
-            } else if state.entities.ground(slot) && tick.wrapping_add(phase) % SCAN_PERIOD == 0 {
+            } else if state.entities.ground(slot)
+                && tick.wrapping_add(phase).is_multiple_of(SCAN_PERIOD)
+            {
                 let explored = state
                     .entities
                     .row(slot)

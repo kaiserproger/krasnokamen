@@ -371,19 +371,21 @@ impl VillagePlanSet {
     /// beside their centreline: an authored door can be offset from its jigsaw.
     pub(crate) fn entrance_headroom(&self, pos: BlockPos) -> bool {
         self.plans.iter().any(|plan| {
-            plan.entrance_terrain_caps.chunks_exact(2).any(|caps| {
-                let step = caps[0];
-                let approach = caps[1];
-                let x = i64::from(pos.x) - i64::from(step.x);
-                let z = i64::from(pos.z) - i64::from(step.z);
-                let y = i64::from(pos.y) - i64::from(step.y);
-                let dx = i64::from(approach.x) - i64::from(step.x);
-                let dz = i64::from(approach.z) - i64::from(step.z);
-                (dx != 0 || dz != 0)
-                    && (1..=3).contains(&y)
-                    && (0..=1).contains(&(x * dx + z * dz))
-                    && (-1..=1).contains(&(x * dz - z * dx))
-            })
+            plan.entrance_terrain_caps
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .any(|&[step, approach]| {
+                    let x = i64::from(pos.x) - i64::from(step.x);
+                    let z = i64::from(pos.z) - i64::from(step.z);
+                    let y = i64::from(pos.y) - i64::from(step.y);
+                    let dx = i64::from(approach.x) - i64::from(step.x);
+                    let dz = i64::from(approach.z) - i64::from(step.z);
+                    (dx != 0 || dz != 0)
+                        && (1..=3).contains(&y)
+                        && (0..=1).contains(&(x * dx + z * dz))
+                        && (-1..=1).contains(&(x * dz - z * dx))
+                })
         })
     }
 
