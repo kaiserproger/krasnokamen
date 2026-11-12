@@ -708,6 +708,7 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             sub["L1_origin"] = list(origin)
             _verify_level(probe, sub, ctx, artifact, bp, 1, origin, tag,
                           sname, tuple(sub["storage_chest"]))
+            _verdict(sub, "L1_built", "PASS", f"L1 cert at {list(origin)}; block-matched, entrance and light checked")
         if ctx.windowed:
             try:
                 native_client.capture(probe.client, artifact, f"{tag}-L1")
