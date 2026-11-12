@@ -132,6 +132,16 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             log.close()
 
 
+def chat_says_after(recent_chat: list[Any], after: str, *markers: str) -> bool:
+    """True when a line holding every marker is newer than the newest line holding `after`.
+
+    The client's `recent_chat` is newest first (`.rev()` in the observation), so the lines newer than
+    the fence are the ones before it in the list."""
+    lines = [str(line) for line in recent_chat]
+    fence = next((i for i, line in enumerate(lines) if after in line), None)
+    return fence is not None and any(all(m in line for m in markers) for line in lines[:fence])
+
+
 def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     probe.call("minecraft_wait_for_play", {"timeout_seconds": probe.remaining()})
     probe.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float), "player_present")
@@ -245,12 +255,8 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
 
     def says_after(label: str, after: str, *markers: str) -> None:
         """Wait for a chat line holding every marker that arrives after the line holding `after`."""
-        def seen(state: dict[str, Any]) -> bool:
-            lines = [str(line) for line in state.get("recent_chat", [])]
-            starts = [i for i, line in enumerate(lines) if after in line]
-            return bool(starts) and any(all(m in line for m in markers) for line in lines[starts[-1] + 1:])
         try:
-            probe.wait(seen, label, timeout_seconds=30)
+            probe.wait(lambda s: chat_says_after(s.get("recent_chat", []), after, *markers), label, timeout_seconds=30)
         except TimeoutError:
             probe.report.setdefault("chat_at_timeout", {})[label] = probe.observe().get("recent_chat", [])
             raise
