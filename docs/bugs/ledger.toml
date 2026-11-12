@@ -2438,9 +2438,11 @@ title = "Villager breeding absent"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["harness:village-autonomy-qa:all"]
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1 (breeding exists since 8a1c5453/73a7b32c; no gate had ever seen a birth. Fix patch docs/bugs/fix-patches/ISSUE-1-13.patch is the spare-bed scan of settlements/allocator.rs free_bed in the form c506b8ab/5557f47b gave it: vanilla VillagerMakeLove.takeVacantBed takes any reachable bed with no headroom rule; reversing it restores the two-block headroom requirement, so a house whose roof sits one block over the beds has no spare bed and no birth. The scene native-village-breeding builds exactly such a house)"
+regression = ["harness:scene-shot:native-village-breeding"]
+fix_commit = "patch:08fa6042200d71e8a416fecae88b7fbdb8e758c27e1fe37faf85ae05b484b436"
+promotion = "docs/bugs/promotions/ISSUE-1-13.json"
 
 [[bug]]
 id = "ISSUE-1-14"

@@ -800,3 +800,68 @@ class SceneShotTests(unittest.TestCase):
             options.write_text("fov:0.0\n")
             with self.assertRaisesRegex(RuntimeError, "renderDistance"):
                 scene_shot.check_java_render_distance(options, 32)
+
+
+class AssertEntitiesTests(unittest.TestCase):
+    @staticmethod
+    def villager(x, y, z, profession=0, height=1.95):
+        return {"entity_type": "minecraft:villager", "x": x, "y": y, "z": z,
+                "bounding_box": {"min_y": y, "max_y": y + height},
+                "received_metadata": {"19": {"value": ["plains", profession, 1]}}}
+
+    def test_filters_box_pose_and_profession(self):
+        rows = [self.villager(1, 70, 1), self.villager(50, 70, 1),
+                self.villager(2, 70, 2, profession=9), self.villager(3, 70, 3, height=0.2),
+                {"entity_type": "minecraft:zombie", "x": 1, "y": 70, "z": 1}]
+        spec = {"entity_type": "minecraft:villager"}
+        self.assertEqual(len(scene_shot.matching_entities(rows, spec)), 4)
+        self.assertEqual(len(scene_shot.matching_entities(rows, {**spec, "box": [0, 60, 0, 10, 80, 10]})), 3)
+        self.assertEqual(len(scene_shot.matching_entities(rows, {**spec, "max_height": 0.5})), 1)
+        self.assertEqual(len(scene_shot.matching_entities(rows, {**spec, "profession": "librarian"})), 1)
+        self.assertEqual(len(scene_shot.matching_entities(rows, {**spec, "profession": "none"})), 3)
+
+    def test_baby_filter_matches_only_received_flag(self):
+        adult = {**self.villager(1, 70, 1), "received_baby": False}
+        baby = {**self.villager(2, 70, 2), "received_baby": True}
+        unknown = {**self.villager(3, 70, 3), "received_baby": None}
+        silent = self.villager(4, 70, 4)
+        rows = [adult, baby, unknown, silent]
+        spec = {"entity_type": "minecraft:villager"}
+        self.assertEqual(scene_shot.matching_entities(rows, {**spec, "baby": True}), [baby])
+        self.assertEqual(scene_shot.matching_entities(rows, {**spec, "baby": False}), [adult])
+        self.assertEqual(len(scene_shot.matching_entities(rows, spec)), 4)
+
+    def test_baby_step_validation(self):
+        step = {"name": "n", "args": {"radius": 8}, "entity_type": "minecraft:villager", "min": 1, "baby": True}
+        scene_shot.validate_steps([{"assert_entities": step}], "native")
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([{"assert_entities": {**step, "baby": 1}}], "native")
+
+    def test_breeding_scene_judges_a_birth_in_game_ticks(self):
+        scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness/village_breeding_scene.json").read_text())
+        steps = scene["steps"]
+        scene_shot.validate_steps(steps, "native")
+        ticks = [step["wait_ticks"] for step in steps if "wait_ticks" in step]
+        self.assertEqual(sum(ticks[1:]), 40 + 3000)  # after the 100-tick join wait: settle, then 6 * 500
+        self.assertFalse([step for step in steps if "sleep" in step or "wait_seconds" in step])
+        asserts = {step["assert_entities"]["name"]: step["assert_entities"] for step in steps if "assert_entities" in step}
+        self.assertEqual(asserts["breeding_start_no_baby"]["max"], 0)
+        self.assertTrue(asserts["breeding_start_no_baby"]["baby"])
+        born = asserts["breeding_baby_born"]
+        self.assertEqual((born["baby"], born["min"], born["entity_type"]), (True, 1, "minecraft:villager"))
+        # The newborn is asserted after every tick wait, never before.
+        order = [next(iter(step)) for step in steps]
+        self.assertGreater(steps.index({"assert_entities": born}), max(i for i, kind in enumerate(order) if kind == "wait_ticks"))
+
+    def test_step_validation_and_village_scenes(self):
+        good = {"assert_entities": {"name": "n", "args": {"radius": 8}, "entity_type": "minecraft:villager",
+                                    "min": 1, "box": [0, 0, 0, 1, 1, 1], "profession": "librarian"}}
+        scene_shot.validate_steps([good], "native")
+        for bad in ({**good["assert_entities"], "profession": "wizard"},
+                    {**good["assert_entities"], "box": [0, 0, 0]},
+                    {k: v for k, v in good["assert_entities"].items() if k != "min"}):
+            with self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"assert_entities": bad}], "native")
+        for name in ("idle_stroll", "night_door", "late_job", "distant_job", "breeding"):
+            scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness" / f"village_{name}_scene.json").read_text())
+            scene_shot.validate_steps(scene["steps"], "native")
