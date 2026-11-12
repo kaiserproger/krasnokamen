@@ -307,7 +307,15 @@ The `entities` profile includes windowed native-client probes:
   checkpoint must both commit (one error lists every refused chunk), and a restarted server
   refuses the same chunks again. The beacon record is decodable by construction: that fixture is
   the runtime-path control and must not be refused. Crafter, shelf, shulker box and conduit
-  records are validated by the importer through their block and never reach the server.
+  records are validated by the importer through their block and never reach the server that way:
+  a crafter and an oak shelf, each alone in its own chunk, instead reach it as forged opaque images
+  in a tick-WAL batch (`wal_forge.py`) published over a clean shutdown checkpoint, under a foreign
+  record id that replay's id-based validator does not check. The next start must refuse exactly
+  those two chunks (one error naming each owner), never panic and keep ticking; a hydration owner
+  that panics instead kills the tick thread before the server listens, which fails
+  `server_starts_over_the_forged_wal_batch`. A conduit record has no such route (replay
+  validation and `conduit::validate_loaded` refuse it at start, imports validate it), so
+  CONDUIT-RUNTIME-PANIC has no check in this scenario that goes red under its fix.
 - `native-v2-corrupt-chunk-near-camera`: known-red repro, not a gate. The same corruption in the
   player's own chunk keeps the native client on its loading screen.
 - `native-v2-cursor-close`: pick up exactly three apples, close and reopen both
