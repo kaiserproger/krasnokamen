@@ -321,7 +321,11 @@ regression = []
         failed = lambda name, **more: {'status': 'failed', 'error': f'autocraft-qa-settlements assertion failed: {name}', **more}
         # `all` of a profile that reports no verdict map: its own assertion failing is the red.
         self.assertTrue(ledger._failing_verdict(failed('raw_material_refused'), 'autocraft-qa', 'all'))
-        self.assertTrue(ledger._failing_verdict(failed('viewer_drawn'), 'settlement-map-qa', 'all'))
+        # settlement-map-qa publishes a boolean verdict map: red is an explicit false, never a bare assertion text.
+        mapped = lambda value: failed('viewer_drawn', details={'verdicts': {'all': value}})
+        self.assertTrue(ledger._failing_verdict(mapped(False), 'settlement-map-qa', 'all'))
+        self.assertFalse(ledger._failing_verdict(mapped(None), 'settlement-map-qa', 'all'))
+        self.assertFalse(ledger._failing_verdict(failed('viewer_drawn'), 'settlement-map-qa', 'all'))
         # A connection assertion, a failure before the scenario body and a missing receipt error are not.
         self.assertFalse(ledger._failing_verdict(failed('in_play'), 'autocraft-qa', 'all'))
         self.assertFalse(ledger._failing_verdict(failed('x', details={'failure': {'phase': 'client_start'}}), 'autocraft-qa', 'all'))

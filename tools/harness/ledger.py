@@ -117,7 +117,7 @@ def _failing_verdict(receipt, profile, verdict):
     """A failed profile run is red for `verdict` when the receipt reports it unmet, or, for a
     verdict the profile cannot report on failure, when its own assertion failed:
 
-    - `all` of a profile without a verdict map (settlement-map-qa, autocraft-qa, village-autonomy-qa);
+    - `all` of a profile without a verdict map (autocraft-qa, village-autonomy-qa);
     - a buildings-qa `<blueprint>.<behaviour>` that never got recorded because an assertion named
       `buildings_<blueprint>_*` aborted the run (a probe check raises before the verdict is written)."""
     try:
