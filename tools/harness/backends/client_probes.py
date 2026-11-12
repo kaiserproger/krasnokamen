@@ -136,7 +136,7 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     if auth_scenario:
         # The shipping solaris-auth package behind the native login gate; the harness copies
         # the sibling checkout's package into the private plugin directory.
-        root = Path(os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", runtime.REPO_ROOT.parent / "solaris-default-plugins"))
+        root = runtime.sibling_root("plugins")
         package = plugin_dir / "solaris-auth"
         package.mkdir()
         for name in ("plugin.toml", "plugin.wasm"):

@@ -95,7 +95,7 @@ def run(ctx: ProfileContext) -> dict:
         raise RuntimeError("SOLARIS_SERVER_BINARY must name the release server")
     with server.open("rb") as executable:
         server_hash = hashlib.file_digest(executable, "sha256").hexdigest()
-    source_root = native_client._client_root()
+    source_root = runtime.sibling_root("client")
     client_binary = native_client.resolve_binary(ctx)
     artifact = ctx.artifact_dir
     stage = artifact / "bin"

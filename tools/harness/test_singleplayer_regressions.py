@@ -93,9 +93,8 @@ class SingleplayerRegressionTests(unittest.TestCase):
                                   extra_args=[], platform=None, timeout_seconds=30,
                                   artifact_dir=artifact, client_evidence={})
             with (
-                patch.dict(sp.os.environ, {"SOLARIS_SERVER_BINARY": str(binary)}),
+                patch.dict(sp.os.environ, {"SOLARIS_SERVER_BINARY": str(binary), "SOLARIS_CLIENT_ROOT": str(template)}),
                 patch.object(sp.runtime, "REPO_ROOT", root / "repo"),
-                patch.object(sp.native_client, "_client_root", return_value=template),
                 patch.object(sp.native_client, "resolve_binary", return_value=binary),
                 patch.object(sp.runtime, "start_xvfb", side_effect=RuntimeError("fixture staged")),
             ):

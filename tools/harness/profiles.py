@@ -20,10 +20,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from .runtime import AGENT_ROOT, REPO_ROOT, ChildExited, PHASES, start_xvfb, stop_process, tag_failure
+from .runtime import REPO_ROOT, ChildExited, PHASES, sibling_root, start_xvfb, stop_process, tag_failure
 
 BACKENDS = REPO_ROOT / "tools" / "harness" / "backends"
-DEFAULT_PLUGINS_ROOT = REPO_ROOT.parent / "solaris-default-plugins"
 
 
 
@@ -320,9 +319,10 @@ def run_build(ctx: ProfileContext) -> dict[str, Any]:
 
 
 def run_java(ctx: ProfileContext) -> dict[str, Any]:
+    loader = sibling_root("loader")
     return _run_command(
         [
-            str(AGENT_ROOT / "gradlew"),
+            str(loader / "gradlew"),
             "--no-daemon",
             "--console=plain",
             "--continue",
@@ -335,7 +335,7 @@ def run_java(ctx: ProfileContext) -> dict[str, Any]:
         ],
         ctx,
         "java.log",
-        cwd=AGENT_ROOT,
+        cwd=loader,
     )
 
 
@@ -347,9 +347,7 @@ def run_fixture_check(ctx: ProfileContext) -> dict[str, Any]:
     )
 
 def _run_first_party_gate(ctx: ProfileContext, profile: str) -> dict[str, Any]:
-    plugins_root = Path(
-        os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", str(DEFAULT_PLUGINS_ROOT))
-    )
+    plugins_root = sibling_root("plugins")
     argv = [
         sys.executable,
         str(plugins_root / "tools" / "run_integration.py"),
@@ -600,9 +598,7 @@ def run_loader_live(ctx: ProfileContext) -> dict[str, Any]:
         scenario = {"run": run}
     elif ctx.scenario_id is not None:
         # Named first-party scenarios normally live beside their sibling package.
-        plugins_root = Path(
-            os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", str(DEFAULT_PLUGINS_ROOT))
-        )
+        plugins_root = sibling_root("plugins")
         scenario = runpy.run_path(str(plugins_root / "tools" / f"{ctx.scenario_id}.py"))
     result = loader.run(
         platform, timeout, ctx.artifact_dir, scenario,
