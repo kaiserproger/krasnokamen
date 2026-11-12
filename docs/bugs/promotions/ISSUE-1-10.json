@@ -1,0 +1,57 @@
+{
+  "id": "ISSUE-1-10",
+  "verdict": "promoted",
+  "fix_commit": "patch:fe58612e34bab7e5ae287f4c9d0dd604420d495b59408b7e31133a7f587aa9ee",
+  "fix_commit_full": "patch:fe58612e34bab7e5ae287f4c9d0dd604420d495b59408b7e31133a7f587aa9ee",
+  "promoted_at": "2026-11-12T17:31:53+00:00",
+  "tree_head": "34199dc0dcf3bbbb1d65b06533e75abaa15dbfa3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "fe58612e34bab7e5ae287f4c9d0dd604420d495b59408b7e31133a7f587aa9ee",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/allocator.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_settlement_job_is_claimed_beyond_vanilla_reach": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-village-distant-job": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-village-distant-job --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T172736-ledger-promote-uf20eud2/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_settlement_job_is_claimed_beyond_vanilla_reach": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:native-village-distant-job": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T173029-native-village-distant-job-mbohh70p/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T164850-native-village-distant-job-ughns7i4/result.json",
+    "tree_head": "34199dc0dcf3bbbb1d65b06533e75abaa15dbfa3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "1f1cce450019048a674d24ea7b78a67b1789f957a1b9c375f654fb3b7ff8bfa1",
+    "covers": [
+      "harness:scene-shot:native-village-distant-job"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T172736-ledger-promote-uf20eud2"
+}

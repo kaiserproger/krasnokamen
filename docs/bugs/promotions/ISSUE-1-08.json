@@ -1,0 +1,74 @@
+{
+  "id": "ISSUE-1-08",
+  "verdict": "promoted",
+  "fix_commit": "patch:ecb5306d97a64d29220b6bd0c1897411943ed19cb08bc6505f222dc882ae6083",
+  "fix_commit_full": "patch:ecb5306d97a64d29220b6bd0c1897411943ed19cb08bc6505f222dc882ae6083",
+  "promoted_at": "2026-11-12T17:27:36+00:00",
+  "tree_head": "34199dc0dcf3bbbb1d65b06533e75abaa15dbfa3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "ecb5306d97a64d29220b6bd0c1897411943ed19cb08bc6505f222dc882ae6083",
+  "reversed_files": [
+    "crates/mc-core/src/villager/doors.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::brain::tests::door_tests::resident_opens_both_door_halves_and_closes_after_entering_bed_at_night": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::brain::tests::door_tests::bound_bedless_nitwit_enters_occupied_house_at_night": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:village-qa:night_door": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run village-qa --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T171844-ledger-promote-plf8jz4g/regressions-client-3.log"
+    },
+    "harness:scene-shot:native-village-night-door": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-village-night-door --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T171844-ledger-promote-plf8jz4g/regressions-client-4.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::door_tests::resident_opens_both_door_halves_and_closes_after_entering_bed_at_night": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::door_tests::bound_bedless_nitwit_enters_occupied_house_at_night": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:village-qa:night_door": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T172447-village-qa-akfzomy4/result.json"
+    },
+    "harness:scene-shot:native-village-night-door": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T172557-native-village-night-door-_yj036s3/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T165434-native-village-night-door-kq1gbblu/result.json",
+    "tree_head": "34199dc0dcf3bbbb1d65b06533e75abaa15dbfa3",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "1f1cce450019048a674d24ea7b78a67b1789f957a1b9c375f654fb3b7ff8bfa1",
+    "covers": [
+      "harness:scene-shot:native-village-night-door"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/VillageClientGates/.analysis/validation/20261112T171844-ledger-promote-plf8jz4g"
+}
