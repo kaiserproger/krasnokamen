@@ -21,6 +21,9 @@ mod job_memory_tests;
 #[path = "route_continuation_tests.rs"]
 mod route_continuation_tests;
 
+#[path = "stroll_swim_tests.rs"]
+mod stroll_swim_tests;
+
 fn test_state() -> TickState {
     let registry = Arc::new(CoreRegistry::load(None).expect("registry"));
     let generator: Arc<dyn mc_world::ChunkGenerator> = Arc::new(

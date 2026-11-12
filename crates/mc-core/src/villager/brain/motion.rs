@@ -525,7 +525,8 @@ pub(super) fn move_skipped(
         && !has_next
         && state.entities.ground(slot)
         && state.entities.vel(slot) == [0.0; 3]
-        && state.entities.horizontal_impulse(slot) == [0.0; 2];
+        && state.entities.horizontal_impulse(slot) == [0.0; 2]
+        && !immersion(state, slot).1;
     let motion = if still {
         None
     } else {
@@ -536,6 +537,39 @@ pub(super) fn move_skipped(
         state.entities.advance_villager_path(slot, reached);
     }
     apply_body_motion(state, slot, motion);
+}
+
+/// Vanilla villagers carry `Swim(0.8f)` in their core package: while the water
+/// is deeper than the 0.4-block fluid jump threshold they jump in liquid
+/// (+0.04 blocks/tick) on 80% of ticks. Immersed bodies do not fall: they keep
+/// 0.8 of their vertical speed per tick and sink by gravity/16
+/// (`LivingEntity.travelInWater`).
+const SWIM_CHANCE: f64 = 0.8;
+const SWIM_JUMP_BLOCKS_PER_SECOND: f64 = 0.04 / mc_physics::TICK_SECONDS;
+const WATER_VERTICAL_DRAG: f64 = 0.8;
+
+/// (body overlaps fluid, fluid deeper than the swim jump threshold).
+fn immersion(state: &TickState, slot: EntitySlot) -> (bool, bool) {
+    let pos = state.entities.pos(slot);
+    let body = state.entities.body(slot);
+    let body = mc_physics::EntityBody {
+        position: mc_physics::Vec3::new(pos[0], pos[1], pos[2]),
+        velocity: mc_physics::Vec3::ZERO,
+        aabb: mc_physics::Aabb {
+            half_width: body.half_width,
+            height: body.height,
+        },
+        on_ground: false,
+    };
+    let live = TickSampler {
+        world: &state.world,
+        registry: &state.registry,
+    };
+    let wet = mc_physics::body_overlaps_fluid(body, &live);
+    (
+        wet,
+        wet && mc_physics::fluid_reaches_swim_threshold(body, &live),
+    )
 }
 
 #[derive(Debug, PartialEq)]
@@ -565,9 +599,14 @@ pub(super) fn resolve_body_motion(
     );
     let mut velocity = state.entities.vel(slot);
     let dt = mc_physics::TICK_SECONDS;
-    if !state.entities.row(slot).controls.no_gravity {
+    let gravity = !state.entities.row(slot).controls.no_gravity;
+    let (wet, deep) = immersion(state, slot);
+    if gravity && !wet {
         velocity[1] = (velocity[1] - mc_physics::GRAVITY_BLOCKS_PER_SECOND_SQUARED * dt)
             .max(mc_physics::TERMINAL_VELOCITY_BLOCKS_PER_SECOND);
+    }
+    if deep && crate::entity_motion::unit(body.id.0, state.tick) < SWIM_CHANCE {
+        velocity[1] += SWIM_JUMP_BLOCKS_PER_SECOND;
     }
     let mut horizontal = [0.0; 2];
     if let Some(next) = next {
@@ -624,6 +663,8 @@ pub(super) fn resolve_body_motion(
         let n = v * drag;
         if n.abs() < 0.06 { 0.0 } else { n }
     });
+    let blocked =
+        (fixed.delta.x - requested.x).abs() > 1e-7 || (fixed.delta.z - requested.z).abs() > 1e-7;
     if (fixed.delta.x - requested.x).abs() > 1e-7 {
         velocity[0] = 0.0;
         next_impulse[0] = 0.0;
@@ -634,9 +675,40 @@ pub(super) fn resolve_body_motion(
     }
     velocity[1] = if fixed.grounded || (fixed.delta.y - requested.y).abs() > 1e-7 {
         0.0
+    } else if wet {
+        velocity[1] * WATER_VERTICAL_DRAG
+            - if gravity {
+                mc_physics::WATER_SINK_BLOCKS_PER_SECOND_SQUARED * dt
+            } else {
+                0.0
+            }
     } else {
         velocity[1] * 0.98
     };
+    // Vanilla jumpOutOfFluid: a swimmer blocked sideways climbs out (0.3
+    // blocks/tick up) when its box raised by 0.6, plus this tick's remaining
+    // vertical travel, is free of blocks and fluid.
+    if wet && blocked && !fixed.grounded {
+        let rise = 0.6 + velocity[1] * dt - fixed.delta.y;
+        let here = mc_physics::Vec3::new(new[0], new[1], new[2]);
+        let raised = mc_physics::EntityBody {
+            position: mc_physics::Vec3::new(new[0], new[1] + rise, new[2]),
+            ..body
+        };
+        if mc_physics::resolve_collision_displacement(
+            &sampler,
+            here,
+            body.aabb,
+            mc_physics::Vec3::new(0.0, rise, 0.0),
+            false,
+            0.0,
+        )
+        .is_some_and(|clear| (clear.delta.y - rise).abs() <= 1e-7)
+            && !mc_physics::body_overlaps_fluid(raised, &sampler)
+        {
+            velocity[1] = 0.3 / dt;
+        }
+    }
     Some(BodyMotion {
         position: new,
         velocity,

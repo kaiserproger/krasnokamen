@@ -5021,3 +5021,15 @@ severity = "minor"
 status = "open"
 source = "BreakB10Commands round 3 H5 (REBREAK3.md). The log gets every warning; the operator's chat gets three and a count."
 regression = ["cargo:mc-core:datapacks::command_tests::many_pack_warnings_are_a_few_chat_lines_and_a_count", "harness:datapack-reload:native-datapack-reload"]
+
+[[bug]]
+id = "VILLAGER-IDLE-STROLL-UNBOUNDED-DRIFT"
+title = "Residents drift 60-70 blocks out of the village on untethered strolls, end up on the floor of open water and are killed by zombies at night"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa, two fresh runs. llr1bc4e (server 107ddb91): newborn f7a21a80 on the floor of a two-deep pond at (73.4,60.9,-231.4), 58 blocks from the meeting point (131,78,-217), killed by a zombie at tick 65504 (server.log line 638; receipts/CivSimSeed24/snap3/probe-baby.json). fx4gdz87 (server 7ed4d504, baby wading fix): adult nitwit 49efa776 killed by a zombie at tick 43690, activity Panic, position (61.7,58.0,-252.3), 70 blocks west of the meeting point, on dirt at y=57 under water y=58-62 (receipts/CivSimSeed24/snap5/probe-nitwit.json); routes refuse that water for an adult, so it did not arrive by a planned route. Two source findings: villager/brain.rs short_wander picks each Idle/Play/Work stroll target within +-6 of the current cell (range 13, new target every 40 ticks) with no reference to the village, so position is an unbounded random walk (vanilla VillageBoundRandomStroll keeps to village sections and walks back from outside); and no caller gives terrestrial mobs the FloatGoal/Swim upward drive mc-physics expects (entity_motion.rs Walker path; mc-physics lib.rs step_entity), so a villager that enters deep water sinks to the floor and cannot climb out. Fixed on main by 32116b00 and b7f7234c (fix patch docs/bugs/fix-patches/VILLAGER-IDLE-STROLL-UNBOUNDED-DRIFT.patch): strolls follow vanilla VillageBoundRandomStroll (random within one section of the resident's meeting point, home or job site; outside, a step back toward the nearest), and resident body motion follows vanilla Swim(0.8f) and LivingEntity.travelInWater (no full gravity in water: 0.8 vertical drag, gravity/16 sink, +0.04 blocks/tick liquid jump on 80% of ticks while deeper than the 0.4-block threshold; jumpOutOfFluid lifts a swimmer blocked by a bank), javap of the local 26.3 jar."
+failing_first = "not recorded"
+regression = ["cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_strolls_stay_bound_to_the_village_over_many_decisions", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::idle_resident_outside_the_village_strolls_back_toward_it", "cargo:mc-core:villager::brain::tests::stroll_swim_tests::resident_in_deep_water_swims_up_to_the_surface"]
+fix_commit = "patch:85195e25eabb2e4a202ef619a549dfe7d3326abfb0045413fbf46e382934a38d"
