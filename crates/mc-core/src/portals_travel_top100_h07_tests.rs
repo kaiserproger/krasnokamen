@@ -216,6 +216,42 @@ fn h07_quiet_cost_fence_counts_cauldron_tail_separately() {
 }
 
 #[test]
+fn h07_row_without_proof_in_portal_free_sections_is_banked_by_the_classifier() {
+    let pos = mc_world::ChunkPos { x: -1, z: -1 };
+    let mut state = local(Dimension::Overworld, None);
+    load(&mut state, pos, 0);
+    let id = cow(&mut state, [-0.5, 200.0, -0.5]);
+    let slot = state.entities.slot_of(id).unwrap();
+    take_work_counts();
+    assert!(portals(&mut state, false).is_empty());
+    assert_eq!(
+        take_work_counts()[1],
+        0,
+        "a fresh row in portal-free sections never reaches the serial body"
+    );
+    assert!(state.portal_contact_stamps[slot.0 as usize].is_some());
+    // Moving into other cells re-banks the proof the same way.
+    let moved = [-5.5, 200.0, -3.5];
+    state.entities.set_pos(slot, moved);
+    assert!(portals(&mut state, false).is_empty());
+    assert_eq!(take_work_counts()[1], 0);
+    let stamp = state.portal_contact_stamps[slot.0 as usize].expect("rebanked stamp");
+    assert_eq!(stamp.position, moved);
+    // A portal block elsewhere in a covered section keeps the serial body.
+    let mut near = local(
+        Dimension::Overworld,
+        Some(([-9, 200, -9], block("nether_portal"))),
+    );
+    load(&mut near, pos, 0);
+    let id = cow(&mut near, [-0.5, 200.0, -0.5]);
+    let slot = near.entities.slot_of(id).unwrap();
+    take_work_counts();
+    assert!(portals(&mut near, false).is_empty());
+    assert_eq!(take_work_counts()[1], 1);
+    assert!(near.portal_contact_stamps[slot.0 as usize].is_some());
+}
+
+#[test]
 fn h07_eviction_readmission_and_missing_column_load_invalidate_proofs() {
     let pos = mc_world::ChunkPos { x: -1, z: -1 };
     let mut state = worlds(Some(([-1, 200, -1], block("nether_portal"))));

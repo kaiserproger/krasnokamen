@@ -180,11 +180,16 @@ fn quiet_proof(
 /// the serial body must run; `false` rows are fully resolved here (cleared or
 /// refreshed stamp, nothing else). Players always go serial (spectator/dead
 /// fence and timers); an idle row with a still-valid warm proof, or an idle
-/// ineligible row, would only `continue` in the serial body.
+/// ineligible row, would only `continue` in the serial body. An idle eligible
+/// row without a valid proof whose covered sections hold no portal state
+/// (the palette gate the serial body applies) banks its stamp here: the serial
+/// body would only bank that same stamp and `continue`, so a mob that moved to
+/// other cells never reaches it.
 fn classify_row(
     entities: &crate::entities::EntityStore,
     chunks: &crate::world::ChunkWorld,
     filter: &Filter<'_>,
+    dimension: Dimension,
     cache: &crate::world::SectionMatchCache,
     index: usize,
     stamp: &mut Option<crate::world::ContactStamp>,
@@ -217,9 +222,15 @@ fn classify_row(
     } else {
         contact_box(entities, slot)
     };
-    // Current block_at reads of an absent untouched single column are None.
-    // Reproduce the serial negative stamp; players and timers were fenced above.
-    if chunks.contact_box_missing_column(covered.0, covered.1, cache) {
+    // Current block_at reads of an absent untouched single column are None,
+    // and a covered box whose sections hold no portal state reads none either
+    // (the serial gate, minus its memo). Reproduce the serial negative stamp;
+    // players and timers were fenced above.
+    if chunks.contact_box_missing_column(covered.0, covered.1, cache)
+        || !chunks.may_hold_matching_state_shared(covered.0, covered.1, cache, |seen| {
+            contact_candidate(filter, dimension, seen)
+        })
+    {
         *stamp = Some(crate::world::ContactStamp {
             entity: body.id,
             position: entities.pos(slot),
@@ -476,12 +487,14 @@ pub(crate) fn finish_with(
         let mut stamps = std::mem::take(&mut world.portal_contact_stamps);
         let pending = {
             let (entities, chunks) = (&world.entities, &world.world);
-            let (filter, cache) = (&filter, &match_cache);
+            let (filter, cache, dimension) = (&filter, &match_cache, world.dimension);
             match min_parallel {
                 Some(min_parallel) => crate::contact_hazards::classify_rows(
                     &mut stamps,
                     min_parallel,
-                    |index, stamp| classify_row(entities, chunks, filter, cache, index, stamp),
+                    |index, stamp| {
+                        classify_row(entities, chunks, filter, dimension, cache, index, stamp)
+                    },
                 ),
                 // Test reference: every row takes the exact serial body.
                 None => vec![(0..stamps.len() as u32).map(|index| (index, ())).collect()],
