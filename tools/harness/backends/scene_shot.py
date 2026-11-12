@@ -367,7 +367,7 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
         elif kind == "assert_entities":
             valid = (client == "native" and isinstance(value, dict)
                      and set(value) <= {"name", "args", "entity_type", "box", "min", "max",
-                                        "max_height", "profession"}
+                                        "max_height", "profession", "baby"}
                      and {"name", "args", "entity_type", "min"} <= set(value)
                      and isinstance(value["name"], str)
                      and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
@@ -378,6 +378,7 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and type(value.get("max", 0)) is int
                      and type(value.get("max_height", 0)) in (int, float)
                      and value.get("profession", "farmer") in PROFESSIONS
+                     and type(value.get("baby", True)) is bool
                      and ("box" not in value
                           or (isinstance(value["box"], list) and len(value["box"]) == 6
                               and all(type(n) in (int, float) and math.isfinite(n)
@@ -425,7 +426,8 @@ PROFESSIONS = ("none", "armorer", "butcher", "cartographer", "cleric", "farmer",
 def matching_entities(entities: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[str, Any]]:
     """Received entities of `spec["entity_type"]` that satisfy every optional filter of an
     assert_entities step: feet inside `box` (x0,y0,z0,x1,y1,z1), standing no taller than
-    `max_height` (a sleeping pose), showing the villager `profession`."""
+    `max_height` (a sleeping pose), showing the villager `profession`, and whose received
+    DATA_BABY_ID equals `baby` (a row that never received it matches neither value)."""
     found = []
     for row in entities:
         if row.get("entity_type") != spec["entity_type"]:
@@ -438,6 +440,8 @@ def matching_entities(entities: list[dict[str, Any]], spec: dict[str, Any]) -> l
             bounds = row.get("bounding_box") or {}
             if float(bounds.get("max_y", 0)) - float(bounds.get("min_y", 0)) > spec["max_height"]:
                 continue
+        if "baby" in spec and row.get("received_baby") is not spec["baby"]:
+            continue
         if "profession" in spec:
             data = ((row.get("received_metadata") or {}).get("19") or {}).get("value")
             if not (isinstance(data, list) and len(data) == 3 and isinstance(data[1], int)
@@ -846,6 +850,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-village-night-door": "village_night_door_scene.json",
         "native-village-late-job": "village_late_job_scene.json",
         "native-village-distant-job": "village_distant_job_scene.json",
+        "native-village-breeding": "village_breeding_scene.json",
     }
     if ctx.scenario_id in named_fixtures:
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):

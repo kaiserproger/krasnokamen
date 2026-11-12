@@ -574,6 +574,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="within 1200 game ticks the received villager shows the librarian profession",
         limits="flat platform route; one resident, one profession",
     ),
+    "native-village-breeding": _entry(
+        id="native-village-breeding", summary="Two bound residents with stored bread raise a baby villager in a spare bed",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="native-village-breeding", requires=("xvfb",),
+        sources=("tools/harness/backends/scene_shot.py", "tools/harness/village_breeding_scene.json"),
+        fixture="private native client; frozen day tick 3000; radius-32 settlement on a flat pad with a certified house (three beds under a one-block-high ceiling, two for the two bound adult villagers, one spare) and a certified storage holding 16 bread",
+        proves="the client starts with two adult villagers and no baby, and within 3000 game ticks receives a baby villager (DATA_BABY_ID) while both parents are still adults",
+        limits="one household, ration from storage (not a farm), daytime, flat pad; spare bed has no headroom by design (vanilla takeVacantBed); no growth to adult, no second birth",
+    ),
     "native-falling-block-prediction": _entry(
         id="native-falling-block-prediction",
         summary="A received falling sand block renders and moves between server updates",
