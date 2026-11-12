@@ -362,6 +362,18 @@ impl EntityInterest {
         }
     }
 
+    /// A delivered entity's frames were lost and its recorded identity no
+    /// longer matches: the client may hold a stale copy, or none. Remove it,
+    /// and spawn it again while it is in view, as for a type change, though
+    /// the unchanged snapshot schedules neither.
+    pub(super) fn respawn_tracked(&mut self, id: EntityId) {
+        self.removals.insert(id);
+        if self.visible.contains_key(&id) {
+            self.spawns.insert(id);
+        }
+        self.clean(id);
+    }
+
     pub(super) fn spawned(&mut self, id: EntityId) {
         self.spawns.remove(&id);
         self.clean(id);

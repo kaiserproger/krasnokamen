@@ -348,8 +348,9 @@ pub(super) async fn publish_and_route(
     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
 ) {
     viewers.retain(|id, _| connections.contains_key(id));
-    // Only the pump sends world packets; available slots can only grow
-    // between this credit read and routing.
+    // Planning spends this credit, but it is not exclusive: an LOD tile
+    // (`lod.rs`) also takes world-queue slots, so a planned frame can still
+    // find the queue full below.
     {
         let registry = server.connections.inner.lock();
         for (id, viewer) in viewers.iter_mut() {
@@ -407,13 +408,12 @@ pub(super) async fn publish_and_route(
                 }
             }
             crate::fanout::Priority::BestEffort => {
-                // Another producer may consume the credit after planning.
                 if handles.world_tx.try_send(packet.data).is_err()
                     && let Some(viewer) = viewers.get_mut(&packet.connection)
                 {
-                    // Another producer can exhaust the credit after planning.
-                    // The failed frame may have contained geometry.
-                    viewer.geometry_unsent();
+                    // The viewer recorded this publication as delivered:
+                    // repair the geometry and entity state it carried.
+                    viewer.world_frame_unsent();
                 }
             }
         }
