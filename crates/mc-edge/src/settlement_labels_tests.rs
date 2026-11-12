@@ -543,3 +543,39 @@ fn villager_custom_name_wire_uses_entity_boolean_index_three() {
         "unchanged visibility is not a name delta"
     );
 }
+
+/// A viewer who walks into a dense settlement (a bed and a workstation per
+/// villager, as in the villager-heavy fixture) is planned more than one reliable
+/// queue of label frames: the pump disconnects such a connection
+/// (`cause=reliable-overflow`). The labels arrive over several ticks instead.
+#[test]
+fn dense_settlement_labels_never_overflow_the_reliable_queue_and_all_arrive() {
+    let mut chunks = Vec::new();
+    for x in 0..3 {
+        for z in 0..3 {
+            chunks.push(chunk_at(x, z));
+        }
+    }
+    // 40 x 25 points of interest within 48 blocks of the viewer.
+    let labels: Vec<_> = (0..40)
+        .flat_map(|x| (0..25).map(move |z| label([x, 64, z], "Дом")))
+        .collect();
+    let total = labels.len();
+    let out = output(chunks, labels, Dimension::Overworld);
+    let mut viewer = viewer_at(1, [20.0, 66.0, 12.0]);
+    settle_chunks(&mut viewer, &out, 3);
+    let mut spawned = 0;
+    for tick in 0..16 {
+        viewer.world_credit = 512;
+        let packets = crate::fanout::publish(&out, [&mut viewer].into_iter(), 3);
+        assert!(
+            crate::fanout::reliable_overflow(&packets).is_empty(),
+            "tick {tick} plans more reliable frames than the queue holds"
+        );
+        spawned = viewer.labels.by_anchor.len();
+        if spawned == total {
+            break;
+        }
+    }
+    assert_eq!(spawned, total, "every label is spawned within 16 ticks");
+}
