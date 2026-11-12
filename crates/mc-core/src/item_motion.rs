@@ -74,10 +74,11 @@ pub(crate) fn step<S: BlockSampler>(
 }
 
 /// Vanilla `ItemEntity.mergeWithNeighbours`: every twentieth entity tick,
-/// merge compatible item boxes expanded by `.5, 0, .5`.
-pub(crate) fn merge_neighbours(state: &mut TickState) {
+/// merge compatible item boxes expanded by `.5, 0, .5`. Returns how many
+/// item entities the pass examined (zero off the cadence).
+pub(crate) fn merge_neighbours(state: &mut TickState) -> usize {
     if !state.tick.is_multiple_of(20) {
-        return;
+        return 0;
     }
     let mut slots = std::mem::take(&mut state.serial_entity_slots);
     slots.clear();
@@ -166,8 +167,10 @@ pub(crate) fn merge_neighbours(state: &mut TickState) {
             state.appearance_changed.push(receiver_id);
         }
     }
+    let examined = slots.len();
     slots.clear();
     state.serial_entity_slots = slots;
+    examined
 }
 
 fn item_cell(state: &TickState, slot: EntitySlot) -> (i32, i32, i32) {

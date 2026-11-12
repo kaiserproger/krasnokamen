@@ -1494,8 +1494,10 @@ fn run_dimension_tick_inner<'a>(
 
     // 2. Entity phase (parallel by data over the fixed pool).
     let entity_start = std::time::Instant::now();
+    let mut entity_life_time = std::time::Duration::ZERO;
     if sim {
         crate::entity_life::advance(state);
+        entity_life_time = entity_start.elapsed();
         crate::brushing::run(state);
         crate::axolotl::run(state);
         crate::turtle::run(state);
@@ -1509,6 +1511,7 @@ fn run_dimension_tick_inner<'a>(
         crate::tnt::run(state, &mut intents);
         crate::mob_lanes::snowballs(state);
     }
+    let entity_species_time = entity_start.elapsed().saturating_sub(entity_life_time);
     let entity_intents = run_entity_phase(state, sim);
     let mut coreperf = state.entity_phase_scratch.coreperf.take();
     let entity_time = entity_start.elapsed();
@@ -1883,7 +1886,7 @@ fn run_dimension_tick_inner<'a>(
             + publish_tail_time;
         let log_start = std::time::Instant::now();
         eprintln!(
-            "phase ms: tick={} input={:.2} chunks={:.2} entity={:.2} merge={:.2} block={:.2} commit={:.2} snapshot={:.2} views={:.2} intents={} dimension={:?} entity_tail={:.2} block_prepare={:.2} publish_tail={:.2} boundary_gaps={:.2} before_return={:.2} allocator={:.2}",
+            "phase ms: tick={} input={:.2} chunks={:.2} entity={:.2} merge={:.2} block={:.2} commit={:.2} snapshot={:.2} views={:.2} intents={} dimension={:?} entity_tail={:.2} block_prepare={:.2} publish_tail={:.2} boundary_gaps={:.2} before_return={:.2} allocator={:.2} entity_life={:.2} entity_species={:.2}",
             state.tick,
             input_time.as_secs_f64() * 1000.0,
             chunk_time.as_secs_f64() * 1000.0,
@@ -1901,6 +1904,8 @@ fn run_dimension_tick_inner<'a>(
             log.before_return.saturating_sub(measured).as_secs_f64() * 1000.0,
             log.before_return.as_secs_f64() * 1000.0,
             log.allocator_us as f64 / 1000.0,
+            entity_life_time.as_secs_f64() * 1000.0,
+            entity_species_time.as_secs_f64() * 1000.0,
         );
         log.logging = log_start.elapsed();
     }
