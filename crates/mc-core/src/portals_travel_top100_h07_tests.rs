@@ -261,7 +261,11 @@ fn h07_eviction_readmission_and_missing_column_load_invalidate_proofs() {
     load(&mut quiet, pos, 0);
     contact_hazards::take_work_counts();
     contact(&mut quiet, false);
-    assert_eq!(contact_hazards::take_work_counts()[1], 1);
+    // The readmitted sections hold no hazard, so the pool classifier re-proves
+    // the row with a fresh stamp and no serial scan; the dropped proof above
+    // (`negative` was `None`) is not what makes it quiet.
+    let counts = contact_hazards::take_work_counts();
+    assert_eq!((counts[1], counts[2]), (0, 1));
     assert!(quiet.contact_hazards_scratch.negative[slot.0 as usize].is_some());
 }
 

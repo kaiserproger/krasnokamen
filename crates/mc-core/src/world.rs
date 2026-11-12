@@ -295,6 +295,15 @@ pub(crate) struct SectionMatchCache {
     overlay_chunks: HashSet<ChunkPos>,
 }
 
+/// Whether one section's palette (or its single state) holds a matching state.
+fn section_matches(section: &ChunkSection, matches: &mut impl FnMut(BlockStateId) -> bool) -> bool {
+    if let Some(palette) = section.palette() {
+        palette.iter().copied().any(matches)
+    } else {
+        matches(section.get(0, 0, 0))
+    }
+}
+
 impl SectionMatchCache {
     /// Clear per-section results (keeping capacity) and re-seed overlay marks
     /// from the world's current dirty-block overlay.
@@ -973,6 +982,47 @@ impl ChunkWorld {
         cache: &mut SectionMatchCache,
         mut matches: impl FnMut(BlockStateId) -> bool,
     ) -> bool {
+        let SectionMatchCache {
+            entries,
+            overlay_chunks,
+        } = cache;
+        self.any_section_matches(min, max, overlay_chunks, |key, section| {
+            if let Some(hit) = entries.get(&key) {
+                return *hit;
+            }
+            let hit = section_matches(section, &mut matches);
+            entries.insert(key, hit);
+            hit
+        })
+    }
+
+    /// [`Self::may_hold_matching_state_cached`] without the memo: a `&self`
+    /// read for the classifier pool, probing each covered section's palette
+    /// directly. The cache argument only supplies the overlay-touched chunks
+    /// (which fail open to `true`); its entries are neither read nor written.
+    #[must_use]
+    pub(crate) fn may_hold_matching_state_shared(
+        &self,
+        min: (i32, i32, i32),
+        max: (i32, i32, i32),
+        cache: &SectionMatchCache,
+        mut matches: impl FnMut(BlockStateId) -> bool,
+    ) -> bool {
+        self.any_section_matches(min, max, &cache.overlay_chunks, |_, section| {
+            section_matches(section, &mut matches)
+        })
+    }
+
+    /// Walk the sections covering an inclusive block box and report whether
+    /// `probe` matches any of them. Overlay-touched chunks and missing columns
+    /// fail open to `true` without probing; out-of-geometry spans are skipped.
+    fn any_section_matches(
+        &self,
+        min: (i32, i32, i32),
+        max: (i32, i32, i32),
+        overlay_chunks: &HashSet<ChunkPos>,
+        mut probe: impl FnMut((ChunkPos, usize), &ChunkSection) -> bool,
+    ) -> bool {
         if min.0 > max.0 || min.1 > max.1 || min.2 > max.2 {
             return false;
         }
@@ -985,7 +1035,7 @@ impl ChunkWorld {
         for cx in min_cx..=max_cx {
             for cz in min_cz..=max_cz {
                 let pos = ChunkPos { x: cx, z: cz };
-                if cache.overlay_chunks.contains(&pos) {
+                if overlay_chunks.contains(&pos) {
                     return true;
                 }
                 let Some(chunk) = self.chunks.get(&pos) else {
@@ -1000,20 +1050,7 @@ impl ChunkWorld {
                 let lo_idx = ((lo - geometry.min_y()) / 16) as usize;
                 let hi_idx = ((hi - geometry.min_y()) / 16) as usize;
                 for (offset, section) in chunk.sections[lo_idx..=hi_idx].iter().enumerate() {
-                    let key = (pos, lo_idx + offset);
-                    if let Some(hit) = cache.entries.get(&key) {
-                        if *hit {
-                            return true;
-                        }
-                        continue;
-                    }
-                    let hit = if let Some(palette) = section.palette() {
-                        palette.iter().copied().any(&mut matches)
-                    } else {
-                        matches(section.get(0, 0, 0))
-                    };
-                    cache.entries.insert(key, hit);
-                    if hit {
+                    if probe((pos, lo_idx + offset), section) {
                         return true;
                     }
                 }
