@@ -940,7 +940,7 @@ class LedgerToolTests(unittest.TestCase):
         with patch.object(regressions, 'MEM_RUN', mem_run), patch.object(regressions, 'REPO_ROOT', tree_a), \
                 patch.dict('os.environ', {'CARGO_TARGET_DIR': str(base / 'targets/slot-a')}):
             argv, env = regressions.tree_build_command(tree_b, ['cargo', 'build'])
-            self.assertEqual(argv, [str(mem_run), '-m', '6G', 'cargo', 'build'])
+            self.assertEqual(argv, [str(mem_run), '-m', '12G', 'cargo', 'build'])
             self.assertNotIn('CARGO_TARGET_DIR', env)  # never the caller's slot, marked for tree A
             argv, env = regressions.tree_build_command(tree_a, ['cargo', 'build'])
             self.assertEqual((argv, env['CARGO_TARGET_DIR']), (['cargo', 'build'], str(base / 'targets/slot-a')))

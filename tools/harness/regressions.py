@@ -231,12 +231,13 @@ def tree_build_command(tree, argv):
     """(argv, env) for a build in `tree`. For a tree other than REPO_ROOT on the owner host it goes
     through mem-run with cwd=tree and without the caller's CARGO_TARGET_DIR, so the runner gives that
     tree its own pooled slot (marks it and touches the files on a tree switch): a build must never
-    land in a slot marked for another tree."""
+    land in a slot marked for another tree. The cap is 12G: an mc-core test build peaks above 6G and
+    was OOM-killed there, which left every mc-core negative control unrunnable (2026-11-12)."""
     env = os.environ.copy()
     if not is_other_tree(tree) or not MEM_RUN.exists():
         return list(argv), env
     env.pop('CARGO_TARGET_DIR', None)
-    return [str(MEM_RUN), '-m', '6G', *argv], env
+    return [str(MEM_RUN), '-m', '12G', *argv], env
 
 
 def _built_executable(log):
