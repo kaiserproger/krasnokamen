@@ -1,0 +1,168 @@
+diff --git a/crates/mc-core/src/command_blocks.rs b/crates/mc-core/src/command_blocks.rs
+index d2d22d2..b11538d 100644
+--- a/crates/mc-core/src/command_blocks.rs
++++ b/crates/mc-core/src/command_blocks.rs
+@@ -278,12 +278,13 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
+                             pos.y as f64 + 0.5,
+                             pos.z as f64 + 0.5,
+                         ]);
+-                        let context = crate::command_context::Context::source(
++                        let mut context = crate::command_context::Context::source(
+                             state,
+                             crate::command_console::CONNECTION,
+                             crate::command_console::EXECUTOR,
+                             2,
+                         );
++                        context.command_block = true;
+                         let successes = crate::command_context::run(
+                             state,
+                             command.trim_start_matches('/'),
+diff --git a/crates/mc-core/src/command_context.rs b/crates/mc-core/src/command_context.rs
+index e35738c..25e4f89 100644
+--- a/crates/mc-core/src/command_context.rs
++++ b/crates/mc-core/src/command_context.rs
+@@ -23,6 +23,8 @@ pub(crate) struct Context {
+     pub dimension: Dimension,
+     pub eyes: bool,
+     pub eye_height: f64,
++    /// The source is a command block: vanilla names it `@` and informs admins of its output.
++    pub command_block: bool,
+ }
+ impl Context {
+     pub(crate) fn source(
+@@ -45,6 +47,7 @@ impl Context {
+             dimension: state.dimension,
+             eyes: false,
+             eye_height: eye_height(state, executor),
++            command_block: false,
+         }
+     }
+     pub(crate) fn coordinate_origin(self, local: bool) -> [f64; 3] {
+diff --git a/crates/mc-core/src/command_execution.rs b/crates/mc-core/src/command_execution.rs
+index 82f7eb2..ec0cf33 100644
+--- a/crates/mc-core/src/command_execution.rs
++++ b/crates/mc-core/src/command_execution.rs
+@@ -79,11 +79,62 @@ pub(crate) fn success_feedback(
+     key: &str,
+     arguments: Vec<Tag>,
+ ) {
++    if state
++        .command_context
++        .current
++        .is_some_and(|context| context.command_block)
++    {
++        inform_admins(state, key, &arguments);
++    }
+     if accepts_success(state, connection) {
+         feedback(state, connection, key, arguments);
+     }
+ }
+ 
++/// Vanilla `CommandSourceStack.broadcastToAdmins`: a command block with `commandBlockOutput` on shows
++/// its success text to every operator as gray italic `[@: ...]`, but only while
++/// `sendCommandFeedback` is on (javap `CommandSourceStack.broadcastToAdmins`,
++/// `BaseCommandBlock$CloseableCommandBlockSource.shouldInformAdmins`).
++fn inform_admins(state: &mut TickState, key: &str, arguments: &[Tag]) {
++    use crate::command_rules::{BoolRule, boolean};
++    if !boolean(state, BoolRule::SEND_COMMAND_FEEDBACK)
++        || !boolean(state, BoolRule::COMMAND_BLOCK_OUTPUT)
++    {
++        return;
++    }
++    let Tag::Compound(mut fields) = translated(
++        "chat.type.admin",
++        vec![
++            entity_name(state, crate::command_console::EXECUTOR),
++            translated(key, arguments.to_vec()),
++        ],
++    ) else {
++        unreachable!("translated builds a compound")
++    };
++    fields.push(("color".into(), Tag::String("gray".into())));
++    fields.push(("italic".into(), Tag::Byte(1)));
++    let content = Tag::Compound(fields);
++    let operators: Vec<_> = state
++        .connections
++        .all_connections()
++        .filter(|connection| state.plugin_players.is_operator(*connection))
++        .collect();
++    for connection in operators {
++        state.push_player(
++            connection,
++            PlayerChange::StyledChat {
++                content: content.clone(),
++            },
++        );
++    }
++    if state.dimension_globals.active {
++        state
++            .dimension_globals
++            .broadcasts
++            .push(crate::dimensions::globals::Broadcast::AdminChat(content));
++    }
++}
++
+ pub(crate) fn accepts_success(state: &TickState, connection: ConnectionId) -> bool {
+     connection == crate::command_console::CONNECTION
+         || crate::command_rules::boolean(
+@@ -161,7 +212,12 @@ fn plain_entity_name(state: &TickState, entity: EntityId) -> String {
+ 
+ pub(crate) fn entity_name(state: &TickState, entity: EntityId) -> Tag {
+     if entity == crate::command_console::EXECUTOR {
+-        return text("Server");
++        // Vanilla `BaseCommandBlock` names its source `@`; the console is `Server`.
++        let block = state
++            .command_context
++            .current
++            .is_some_and(|context| context.command_block);
++        return text(if block { "@" } else { "Server" });
+     }
+     if let Some(name) = state.connections.name_of(entity) {
+         return text(name);
+diff --git a/crates/mc-core/src/command_rules.rs b/crates/mc-core/src/command_rules.rs
+index 93dce22..e8abb5e 100644
+--- a/crates/mc-core/src/command_rules.rs
++++ b/crates/mc-core/src/command_rules.rs
+@@ -302,6 +302,7 @@ handles!(BoolRule, false:
+     ADVANCE_WEATHER = "advance_weather",
+     ALLOW_ENTERING_NETHER_USING_PORTALS = "allow_entering_nether_using_portals",
+     BLOCK_DROPS = "block_drops",
++    COMMAND_BLOCK_OUTPUT = "command_block_output",
+     DROWNING_DAMAGE = "drowning_damage",
+     ENDER_PEARLS_VANISH_ON_DEATH = "ender_pearls_vanish_on_death",
+     ENTITY_DROPS = "entity_drops",
+diff --git a/crates/mc-core/src/dimensions_globals.rs b/crates/mc-core/src/dimensions_globals.rs
+index 365fc07..864f81a 100644
+--- a/crates/mc-core/src/dimensions_globals.rs
++++ b/crates/mc-core/src/dimensions_globals.rs
+@@ -17,6 +17,8 @@ pub struct RosterPlayer {
+ #[derive(Debug)]
+ pub(crate) enum Broadcast {
+     Chat(mc_nbt::Tag),
++    /// Command-block output shown to operators only (vanilla `broadcastToAdmins`).
++    AdminChat(mc_nbt::Tag),
+     DefaultGameMode(crate::commands::GameMode),
+     TeamChat {
+         members: std::collections::BTreeSet<String>,
+@@ -71,6 +73,21 @@ fn relay(world: &mut TickState, event: &Broadcast) {
+             content: content.clone(),
+         }),
+         Broadcast::DefaultGameMode(mode) => world.default_game_mode = *mode,
++        Broadcast::AdminChat(content) => {
++            let operators: Vec<_> = world
++                .connections
++                .all_connections()
++                .filter(|connection| world.plugin_players.is_operator(*connection))
++                .collect();
++            for connection in operators {
++                world.push_player(
++                    connection,
++                    PlayerChange::StyledChat {
++                        content: content.clone(),
++                    },
++                );
++            }
++        }
+         Broadcast::TeamChat { members, content } => {
+             let recipients: Vec<_> = world
+                 .connections
