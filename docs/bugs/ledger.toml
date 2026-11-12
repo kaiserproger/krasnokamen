@@ -3881,6 +3881,28 @@ failing_first = "not recorded"
 regression = ["cargo:mc-core:settlements::allocator::tests::routes_wade_through_foot_deep_water_but_never_deeper_or_lava"]
 
 [[bug]]
+id = "CIV-STALL-ORACLE-WAITING-MATERIALS"
+title = "civilization-seed-qa's one-day stall oracle is reset by materials gathered for waiting projects while the active project stands still"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civilization-seed-qa-ufgbv77d (server pin 107ddb91, harness d7f98cd4): the active Road level 1 at [158,71,-257] showed 'Road · level 1 · 0/33' from sprint 45000 to the 96000 limit (51,000 ticks) and held the only project slot, but the oracle signature included the whole status dialog, whose waiting Farm line went 'Dirt 3/30' -> 'Dirt 16/30', so the run ended on the bounded limit instead of the stall. tools/harness/backends/civilization_seed_qa.py stall_signature now keeps only the active project's own dialog line (dialog/body/0) while a project holds the slot; without one the waiting lists still count as progress."
+failing_first = "python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/stall-oracle-fix-hunks.patch, sha256 959a3fb2) test_waiting_project_materials_do_not_hide_a_stalled_active_project fails with 'bounded observation limit reached', the gate's symptom (receipts/CivSimSeed24/stall-oracle-negative-control.log); fixed tree 81/81 with test_village_autonomy_qa (receipts/CivSimSeed24/stall-oracle-tests.log)."
+regression = []
+
+[[bug]]
+id = "CIV-SEED24-ROAD-CLEAR-STALL"
+title = "Seed-24 Road level 1 holds the only project slot at 0/33 for 51,000 ticks with one short-grass clear cell left"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civilization-seed-qa-ufgbv77d (server pin 107ddb91): project Road level 1, origin [158,71,-257], structure settlement-1-732, borrowed builder 63c408b1 (Miner), 0/33 from sprint 45000 to 96000; the funded House stayed waiting ('White Bed 0/1', 'Birch Planks 0/106 awaiting production'). Final checkpoint 116853 (bots snapshot receipts/CivSimSeed24/snap4/report.json): clear stage 0, one cell [158,73,-249] with 0 completed work units and no receipts; world probe (snap4/probe-road.json): short_grass on grass_block at y=72, open air above, standable grass at [158,73,-248]. Builder at checkpoint resting at (114.5,72.7,-277.5) with stale SolarisMiningProgress stalled_since 56076. Cause not yet established."
+failing_first = "not recorded"
+regression = []
+
+[[bug]]
 id = "TICK-FROZEN-GAME-AGE-WIRE"
 title = "SET_TIME advances client game age during tick freeze by sending the WAL frame counter"
 area = "gameplay"

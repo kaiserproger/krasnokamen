@@ -269,8 +269,9 @@ class CivilizationEvidenceTests(unittest.TestCase):
             with self.assertRaisesRegex(TimeoutError, "sprint deadline expired"):
                 probe.remaining(limit=None)
 
-    def first_observation(self, sprint, workstations=(), read_container=None, wait=None):
-        """Drive scenario() through its first snapshot up to the first sprint."""
+    def observe(self, sprint, error="completion event awaited", workstations=(),
+                read_container=None, wait=None, planner=None):
+        """Drive scenario() through its snapshots until the expected error."""
         player = {"player": {"x": 1.0, "y": 70.0, "z": 1.0}}
         with patch("tools.harness.backends.probe_steps.time.monotonic", return_value=100.0):
             probe = qa.ProbeSteps(Mock(), None, 7200.0, "sprint")
@@ -280,32 +281,65 @@ class CivilizationEvidenceTests(unittest.TestCase):
             "entities": [], "visible_count": 0, "truncated": False, "next_cursor": None,
         })
 
-        def planner(probe, detail, chest, read_container, capture):
+        def empty_planner(probe, detail, chest, read_container, capture):
             capture()
             return {"buildings_now": []}
 
+        def send(probe, command):
+            return {"settlement list": ["Settlements: Test."],
+                    "settlement claim": ["Claimed Test"]}.get(
+                command, ["Test | owner=autonomous anchor=[1, 70, 1] members=5"])
+
+        stations = iter([[], *([list(workstations)] if workstations else [])])
         detail = {}
         with patch.object(qa.time, "monotonic", return_value=100.0), \
              patch.object(qa, "walk_to_village", return_value=player), \
-             patch.object(qa.village, "_send", side_effect=[
-                 ["Settlements: Test."], ["owner=autonomous anchor=[1, 70, 1]"], ["Claimed Test"],
-                 ["Test | owner=VillageAuto members=5"], ["Test | owner=VillageAuto members=5"]]), \
+             patch.object(qa.village, "_send", side_effect=send), \
              patch.object(qa.village, "_recent_chat", side_effect=lambda lines, _: lines), \
              patch.object(qa.village, "_founding_storage", return_value=(1, 70, 1)), \
              patch.object(qa.village, "_open_chest", return_value={}), \
              patch.object(qa, "fund", side_effect=lambda p, d, s, c: d.update(certified_buildings_before_stock=[])), \
              patch.object(qa.item_merge, "_console"), \
              patch.object(qa.native_client, "capture", return_value={"path": "frame.png"}), \
-             patch.object(qa.village, "_planner_status", side_effect=planner), \
+             patch.object(qa.village, "_planner_status", side_effect=planner or empty_planner), \
              patch.object(qa.village, "_probe_ecology", return_value={}), \
              patch.object(qa.village, "_gametime", return_value=0), \
              patch.object(qa, "building_blocks", return_value=[]), \
-             patch.object(qa, "workstation_blocks", side_effect=[[], list(workstations)]), \
+             patch.object(qa, "workstation_blocks", side_effect=lambda *_: next(stations, [])), \
              patch.object(qa, "baseline_server_tick", return_value=120), \
              patch.object(qa.item_merge, "_sprint", side_effect=sprint):
-            with self.assertRaisesRegex(RuntimeError, "completion event awaited"):
+            with self.assertRaisesRegex(RuntimeError, error):
                 qa.scenario(probe, detail, "artifact", Mock(), "server.log", read_container or Mock())
         return detail
+
+    def test_waiting_project_materials_do_not_hide_a_stalled_active_project(self):
+        # Seed-24 run ufgbv77d: Road 0/33 held the only project slot from sprint
+        # 45000 to the 96000 limit while the waiting Farm's dirt rose 3 -> 16; the
+        # whole dialog text changed, so the one-day stall oracle never fired.
+        road = {"blueprint": "road", "level": 1, "done": 0, "total": 33, "origin": [158, 71, -257]}
+        dirt = iter(range(1000))
+
+        def planner(probe, detail, chest, read_container, capture):
+            capture()
+            return {"buildings_now": [], "project": road, "project_ui": [
+                {"id": "dialog/body/0", "role": "text", "label": "Road · level 1 · 0/33\nSite: 158, 71, -257"},
+                {"id": "dialog/body/1", "role": "text",
+                 "label": f"Farm:\nDirt {next(dirt)}/30 — awaiting production"}]}
+
+        detail = self.observe(lambda *_: "", "one full game day", planner=planner)
+        self.assertEqual(detail["stop"]["since_sprint_tick"], 0)
+        self.assertEqual(detail["stop"]["at_sprint_tick"], qa.STALL_TICKS)
+
+    def test_waiting_projects_count_as_progress_without_an_active_project(self):
+        dirt = iter(range(1000))
+
+        def planner(probe, detail, chest, read_container, capture):
+            capture()
+            return {"buildings_now": [], "project": None, "project_ui": [
+                {"id": "dialog/body/0", "role": "text",
+                 "label": f"Farm:\nDirt {next(dirt)}/30 — awaiting production"}]}
+
+        self.observe(lambda *_: "", "bounded observation limit", planner=planner)
 
     def test_civilization_sprint_wait_can_outlast_one_mcp_request(self):
         def sprint(server, log, ticks, timeout):
@@ -313,7 +347,7 @@ class CivilizationEvidenceTests(unittest.TestCase):
             self.assertEqual(timeout, 7200.0)
             raise RuntimeError("completion event awaited")
 
-        self.first_observation(sprint)
+        self.observe(sprint)
 
     def test_furnace_output_collected_before_the_menu_does_not_abort_the_run(self):
         # Seed-24 run o31rlnkb: the console read saw one ingot, a resident took
@@ -330,7 +364,7 @@ class CivilizationEvidenceTests(unittest.TestCase):
         def sprint(server, log, ticks, timeout):
             raise RuntimeError("completion event awaited")
 
-        detail = self.first_observation(
+        detail = self.observe(
             sprint, workstations=[{"x": 134, "y": 78, "z": -217, "block_id": "minecraft:furnace"}],
             read_container=lambda pos: next(reads), wait=wait)
         self.assertNotIn("iron_smelted", detail["milestones"])

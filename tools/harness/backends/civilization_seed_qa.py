@@ -28,6 +28,20 @@ def acceptance_verdict(stages: dict[str, bool], *, stalled: bool) -> dict[str, b
     return verdict
 
 
+def stall_signature(status: dict[str, Any]) -> tuple[Any, ...]:
+    """What must change within a day: the active project's own progress and the buildings.
+
+    The status dialog also lists waiting projects. While a project holds the
+    slot their gathered materials are unrelated resource growth and must not
+    conceal its stall; without an active project they are the progress.
+    """
+    project = status.get("project")
+    ui = status.get("project_ui") or []
+    if project:
+        ui = [node for node in ui if node.get("id") == "dialog/body/0"]
+    return project, ui, village._listed_buildings(status["buildings_now"])
+
+
 def population(lines: list[str], name: str) -> int:
     match = re.search(rf"(?m)^{re.escape(name)} \|[^\n]*\bmembers=(\d+)\b", "\n".join(lines))
     if match is None:
@@ -681,10 +695,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
         candidate = acceptance_verdict({name: name in detail["milestones"] for name in STAGES}, stalled=False)
         verdicts.update(candidate)
         verdicts["births"] = verdicts["all"] = False
-        # Unrelated resource growth must not conceal a stalled project.
-        # Project UI retains its actual material blocker and progress.
-        signature = (status.get("project"), status.get("project_ui"),
-                     village._listed_buildings(status["buildings_now"]))
+        signature = stall_signature(status)
         if signature != previous:
             previous = signature
             unchanged_since = advanced
