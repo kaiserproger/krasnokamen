@@ -1,0 +1,72 @@
+{
+  "id": "EDGE-WORLD-QUEUE-LOST-ENTITY-FRAMES",
+  "verdict": "promoted",
+  "fix_commit": "patch:87cb7ba485291aa283a807710069088bbf4a191e2a486040f1edbe04109d2082",
+  "fix_commit_full": "patch:87cb7ba485291aa283a807710069088bbf4a191e2a486040f1edbe04109d2082",
+  "promoted_at": "2026-11-12T11:30:25+00:00",
+  "tree_head": "b20e4b043dc2bff9027ab4a681bedc58c76c6393",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "87cb7ba485291aa283a807710069088bbf4a191e2a486040f1edbe04109d2082",
+  "reversed_files": [
+    "crates/mc-edge/src/plan.rs",
+    "crates/mc-edge/src/plan/entity_interest.rs",
+    "crates/mc-edge/src/server/pump.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_own_entity_data_is_sent_again": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_dismount_is_repaired_by_respawning_the_vehicle": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_frames_of_the_own_vehicle_are_resent_without_removing_it": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_spawn_frames_are_sent_again_on_the_next_publication": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_repairs_remove_only_what_the_credit_respawns": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_removal_is_sent_again_on_the_next_publication": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_own_entity_data_is_sent_again": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_dismount_is_repaired_by_respawning_the_vehicle": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_frames_of_the_own_vehicle_are_resent_without_removing_it": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_spawn_frames_are_sent_again_on_the_next_publication": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_repairs_remove_only_what_the_credit_respawns": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_removal_is_sent_again_on_the_next_publication": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/LostEntityFrames2/.analysis/validation/20261112T112853-ledger-promote-csjgelq4"
+}
