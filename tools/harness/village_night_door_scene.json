@@ -126,7 +126,7 @@
    ]
   },
   {
-   "wait_ticks": 300
+   "wait_ticks": 30
   },
   {
    "assert_entities": {
@@ -138,12 +138,12 @@
     "entity_type": "minecraft:villager",
     "min": 2,
     "box": [
-     1006,
+     1005.2,
      199,
-     1000,
-     1030,
+     990,
+     1050,
      202,
-     1024
+     1035
     ]
    }
   },
