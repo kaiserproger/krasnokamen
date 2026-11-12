@@ -967,10 +967,11 @@ title = "F8 Leave does not delete pending server request; later Allow still gran
 area = "client"
 repro = "source"
 severity = "minor"
-status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P4"
-regression = ["cargo:mc-edge:screen::tests::leave_cancels_an_unanswered_request"]
-fix_commit = "68c0df4cef91a64a62fb1c646ff6ca791cc9f0ee"
+status = "fixed"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P4 (promotion control: docs/bugs/fix-patches/P4.patch is the requests.retain line of 68c0df4c in Message::Leave; reversed, the owner's Allow after the viewer's F8 reaches the viewer again)"
+regression = ["cargo:mc-edge:screen::tests::leave_cancels_an_unanswered_request", "harness:screen-share:native-screen-share-leave"]
+fix_commit = "patch:7afa8bad2c72e3fe31326a40d46950a3a0dd47321a515ffb95cad979cf12668d"
+promotion = "docs/bugs/promotions/P4.json"
 
 [[bug]]
 id = "INTERACT-001"
@@ -1491,10 +1492,11 @@ title = "Loot predicate selector arguments are explicitly rejected until a real 
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-OPTION-COVERAGE Fix patch: reversing it removes the `predicate` selector-option arm in commands.rs, so `@e[predicate=...]` is rejected as an unknown option again."
 regression = ["cargo:mc-core:datapacks::command_tests::selector_predicate_selects_and_negates_datapack_predicates", "cargo:mc-core:datapacks::command_tests::predicates_with_conditions_the_selector_cannot_evaluate_are_refused_at_load", "cargo:mc-data:advancements::tests::selector_predicates_evaluate_scores_time_weather_and_chance_from_facts", "cargo:mc-data:advancements::tests::predicate_support_reports_conditions_that_cannot_be_evaluated", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:57f423038d585e7d4ef178f508013b198add0ee60a4eb6976878f604e53811f0"
+promotion = "docs/bugs/promotions/SELECTOR-PREDICATE-UNSUPPORTED.json"
 
 [[bug]]
 id = "SELECTOR-DEAD-PLAYERS"
@@ -1613,10 +1615,11 @@ title = "debug start/stop rejected in favor of Solaris debug give fixture gramma
 area = "gameplay"
 repro = "manual"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-PROFILER Fix patch: reversing it turns the /debug start and /debug stop dispatch arms back into an unsupported-syntax result."
 regression = ["cargo:mc-core:command_debug::tests::profiler_reports_seconds_ticks_and_rate_and_refuses_double_start_and_stop", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:099e67237851fc2045b6895f76198518921e163ac5e0d90525e76149f73d6b3b"
+promotion = "docs/bugs/promotions/DEBUG-PROFILER.json"
 
 [[bug]]
 id = "DEBUG-FUNCTION-TRACE"
@@ -2024,11 +2027,12 @@ title = "A corrupt chiseled-shelf block entity in a loaded chunk crashes the tic
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHELF-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 fix_commit = "patch:76ab6a600e8e315df18b8710efd3f019485b62430d80d795d49a042b9b67982e"
+promotion = "docs/bugs/promotions/SHELF-HYDRATE-PANIC.json"
 
 [[bug]]
 id = "CRAFTER-HYDRATE-PANIC"
@@ -2036,11 +2040,12 @@ title = "A corrupt crafter block entity in a loaded chunk crashes the tick threa
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CRAFTER-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 fix_commit = "patch:fa0061ac6c30abdb5b093e99bb66ce012856f93f0f68edb6640b49c2d63393d6"
+promotion = "docs/bugs/promotions/CRAFTER-HYDRATE-PANIC.json"
 
 [[bug]]
 id = "VILLAGER-CURE-SPEEDUP"
@@ -2116,11 +2121,12 @@ title = "A corrupt conduit block entity crashes the tick thread at runtime (not 
 area = "gameplay"
 repro = "manual"
 severity = "blocker"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONDUIT-RUNTIME-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
 fix_commit = "patch:6f19be18656653f07316721c01d4a22e18141504f6b8c2217281bc0270d903b1"
+promotion = "docs/bugs/promotions/CONDUIT-RUNTIME-PANIC.json"
 
 [[bug]]
 id = "BEACON-RUNTIME-PANIC"
@@ -2349,11 +2355,12 @@ title = "Villagers stuck or stop pathfinding early"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1 (villagers stop short of their target and drop the route early); fixed by 8a1c5453 (2026-10-19: progressing routes are no longer replaced on the 40-tick retry; stuck or pushed villagers replan). Fix patch docs/bugs/fix-patches/ISSUE-1-05.patch is that code at the candidate (villager/brain/motion.rs: progress tracking at due checks and the replan condition); reversing it brings back a new route search at every due check, so a route the villager is still walking is searched and replaced every 40 ticks. progressing_route_is_kept_at_due_check_without_a_new_search observes that search; the older route tests guard the stalled/pushed half and stay green with the patch reversed"
-regression = ["cargo:mc-core:villager::brain::tests::route_continuation_tests::progressing_route_is_kept_at_due_check_without_a_new_search", "cargo:mc-core:villager::brain::tests::route_continuation_tests::due_replan_search_failure_keeps_valid_progress_route", "cargo:mc-core:villager::brain::tests::route_continuation_tests::pushed_off_route_replans_from_pushed_position_at_due_check", "cargo:mc-core:villager::brain::tests::route_continuation_tests::unchanged_waypoint_distance_is_stalled_not_progress", "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon"]
+regression = ["cargo:mc-core:villager::brain::tests::route_continuation_tests::progressing_route_is_kept_at_due_check_without_a_new_search", "cargo:mc-core:villager::brain::tests::route_continuation_tests::due_replan_search_failure_keeps_valid_progress_route", "cargo:mc-core:villager::brain::tests::route_continuation_tests::pushed_off_route_replans_from_pushed_position_at_due_check", "cargo:mc-core:villager::brain::tests::route_continuation_tests::unchanged_waypoint_distance_is_stalled_not_progress", "cargo:mc-core:villager::brain::tests::route_continuation_tests::distant_claim_keeps_walking_without_forty_tick_abandon", "harness:village-qa:miner_deposit", "harness:village-qa:lumberjack"]
 failing_first = "reported"
 fix_commit = "patch:012a79cda0c63a0980159b11373de82cf67b3469bf5405692dd190f54b233d10"
+promotion = "docs/bugs/promotions/ISSUE-1-05.json"
 
 [[bug]]
 id = "ISSUE-1-06"
@@ -2372,8 +2379,9 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
+source = "https://github.com/kaiserproger/solaris/issues/1 (miner and lumberjack work landed in 177a1205 (2026-10-19) with later fixes. Fix patch docs/bugs/fix-patches/ISSUE-1-07.patch is the dispatch of villager/brain.rs tick (Profession::Miner -> mining::work, Profession::Lumberjack -> lumber::work); reversing it leaves both professions idle at their station while the mining/lumber modules stay unused)"
 regression = ["harness:village-qa:miner_deposit", "harness:village-qa:lumberjack"]
+fix_commit = "patch:0424e7aa22b5d6e3947f2be4ad4d6542733a825c0bc566b1be60fad7c6a0cc3e"
 
 [[bug]]
 id = "ISSUE-1-08"
@@ -2393,9 +2401,12 @@ title = "Individual buildings and upgrades missing"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1 (build separate buildings: walls, production, military, fortification, and upgrade them); implemented by 177a1205 (2026-10-19: certified buildings by blocks, levels 1-3, `/settlement building certify|upgrade|list`, blueprints) and 18f71536 (Builder blueprint orders and upgrades, docs/settlements/construction.md#owner-build-requests). Fix patch docs/bugs/fix-patches/ISSUE-1-09.patch is the one statement that raises a certificate's level in settlements/buildings.rs `upgrade`; reversing it makes every upgrade reply `to level 1` and change nothing. The real-client scene certifies a wall, tower (fortification), barracks (military) and farmer workshop (production), expands the wall to its next level and gives the workshop a second composter, and checks `Upgraded building #<id> to level 2.` for both. Builder-built coverage gaps are the row ISSUE-1-09-BUILDERS-CANNOT-BUILD-GATES-OR-MOST-WORKSHOPS"
+regression = ["cargo:mc-core:settlements::buildings::tests::workshop_certifies_upgrades_and_caps_distinct_slots", "harness:scene-shot:native-settlement-buildings-upgrade"]
+failing_first = "not recorded"
+fix_commit = "patch:e193f9c8a608a391c69ddcfdf9d2d5ba89a0d6b243b017d61c2e58c62ec6a358"
+promotion = "docs/bugs/promotions/ISSUE-1-09.json"
 
 [[bug]]
 id = "ISSUE-1-10"
@@ -2428,9 +2439,12 @@ title = "Village radius does not expand"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1 (settlement radius grows with population); implemented by 8a1c5453 (2026-10-19: GROWTH_PER_RESIDENT = 4 in settlements/registry.rs, `grow_radii` raising the record radius to 4 blocks per resident, capped at MAX_RADIUS 256, never shrinking; docs/settlements/construction.md#natural-zones-and-radius). Fix patch docs/bugs/fix-patches/ISSUE-1-12.patch is the two `grow_radii()` calls that run it (settlements/mod.rs rebuild_counts and refresh_counts); reversing them leaves the radius at its creation value while residents join. The real-client scene founds radius 8 with six villagers inside it and reads radius=24 from `/settlement info`, then binds a seventh and reads radius=28"
+regression = ["cargo:mc-core:settlements::binding_tests::radius_grows_with_population_persists_and_never_shrinks", "harness:scene-shot:native-settlement-radius-growth"]
+failing_first = "not recorded"
+fix_commit = "patch:b47625083f6b75b19e0a4edde8b431b718480ad92327ece6249242958df06d14"
+promotion = "docs/bugs/promotions/ISSUE-1-12.json"
 
 [[bug]]
 id = "ISSUE-1-13"
@@ -2438,9 +2452,11 @@ title = "Villager breeding absent"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["harness:village-autonomy-qa:all"]
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1 (breeding exists since 8a1c5453/73a7b32c; no gate had ever seen a birth. Fix patch docs/bugs/fix-patches/ISSUE-1-13.patch is the spare-bed scan of settlements/allocator.rs free_bed in the form c506b8ab/5557f47b gave it: vanilla VillagerMakeLove.takeVacantBed takes any reachable bed with no headroom rule; reversing it restores the two-block headroom requirement, so a house whose roof sits one block over the beds has no spare bed and no birth. The scene native-village-breeding builds exactly such a house)"
+regression = ["harness:scene-shot:native-village-breeding"]
+fix_commit = "patch:08fa6042200d71e8a416fecae88b7fbdb8e758c27e1fe37faf85ae05b484b436"
+promotion = "docs/bugs/promotions/ISSUE-1-13.json"
 
 [[bug]]
 id = "ISSUE-1-14"
@@ -2463,9 +2479,11 @@ title = "Village territory and building map missing"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1 (the settlement map page landed in 5013acff (2026-11-03). Fix patch docs/bugs/fix-patches/ISSUE-1-15.patch is the two dialog body lines of settlements/ui_map.rs screen (the cell grid and its legend); reversing it opens the Map page with title and buttons but no territory, buildings or viewer)"
 regression = ["harness:settlement-map-qa:all"]
+fix_commit = "patch:c998825110cb856759bb5928b0cb57978552dc3ba8cb9877b970b5589a993dff"
+promotion = "docs/bugs/promotions/ISSUE-1-15.json"
 
 [[bug]]
 id = "ISSUE-1-16"
@@ -2474,8 +2492,9 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
+source = "https://github.com/kaiserproger/solaris/issues/1 (the wall blueprint landed in 177a1205 (2026-10-19), registered with the other blueprints. Fix patch docs/bugs/fix-patches/ISSUE-1-16.patch is its registration in settlements/blueprints.rs SOURCES; reversing it leaves no wall blueprint, so a wall cannot be ordered or built)"
 regression = ["harness:buildings-qa:wall.L1_built"]
+fix_commit = "patch:a3d1b2cdbe066d281a5250253906b702e92ee2c3a4fceb8a6b33f415f79c6fa2"
 
 [[bug]]
 id = "ISSUE-1-17"
@@ -2484,8 +2503,41 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
+source = "https://github.com/kaiserproger/solaris/issues/1 (ledger title: automatic settlement layout and infrastructure). Partial on main 747e2cc6, split into the rows below instead of promoting: AUTOMATIC LAYOUT exists in the planner (docs/settlements/construction.md#planning-and-streets: the planner picks storage, houses, farm, lumber camp, mine, Builder hut, barracks from 6 residents, tower from 8, wall from 10 by itself; street grid, lots in walking order, road/lamp projects; crates/mc-core/src/settlements/layout.rs, layout_tests.rs, construction_planner_tests.rs) and was seen on a real client (seed-24 civilization-seed-qa timeline: road L1, lamp L1, mason L1/L2, lumber camp, mine projects, receipts/CivSimSeed24/REPORT-2.md), but a real-client house never completed in any recorded civilization-seed-qa receipt (ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME); INFRASTRUCTURE exists as roads, paving and lamps (layout.rs) and a single wall section, with no perimeter wall, gate or well (ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL). Receipts: receipts/Issue1EvidenceE/REPORT.md"
 regression = []
+
+[[bug]]
+id = "ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME"
+title = "The settlement plans and builds storage, workshops, roads and lamps by itself on a real client, but never completed a new house or grew its population in any recorded run"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Owner expectation (issue 1, ISSUE-1-17): the settlement lays itself out and grows without the player placing every building. Planner source: docs/settlements/construction.md#planning-and-streets (houses are planned when certified house capacity is below population; the first House needs a bed: 3 wool, shears, 2 iron ingots, docs/settlements/construction.md#builders-and-supplies). Evidence: harness profile civilization-seed-qa verdict map, scanned over the 51 result.json receipts under wt/*/.analysis/validation and receipts/ on 2026-11-12: new_house true in 0, second_building true in 3, iron_smelted true in 17, births 0, all 0 (last full runs 2026-11-08/09 on older trees; the three runs of 2026-11-12 failed at start on a missing client root, no evidence). receipts/CivSimSeed24/REPORT.md and REPORT-2.md name the stalls (bed iron never smelted, the first Farm cannot be funded without seeds). Related rows: CIV-SEED24-HOUSE-BED-IRON-NEVER-SMELTED, CIV-SEED24-FARM-SEEDS-NEED-A-FARM, CIV-SEED24-STALLED-PROJECT-HOLDS-SLOT. The remaining wish of ISSUE-1-17: civilization-seed-qa `new_house` and `second_building` true on main in one run"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL"
+title = "The settlement lays at most one wall section: no enclosing perimeter, no gate and no well"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Owner expectation (issue 1, ISSUE-1-17 infrastructure; ISSUE-1-09 fortification buildings). docs/settlements/construction.md#owner-build-requests: a wall order builds a wall section with Builders, and is neither certification of player blocks nor an automatically enclosed perimeter or gate system. docs/settlements/construction.md#planning-and-streets: the planner adds one wall from 10 residents and one tower from 8 (missing kinds only) and there is no automatic water placement for a well. crates/mc-core/assets/blueprints has barracks, farm, house, lumber_camp, mason, mine, shepherd, storage, wall (2 levels), watch_tower (2 levels) and no gate blueprint; BuildingKind::Gate (crates/mc-core/src/settlements/buildings.rs) is certification-only. Remaining wish: the settlement walls itself in with gated openings at the street grid (layout.rs roads), and builds a well"
+regression = []
+failing_first = "not recorded"
+
+[[bug]]
+id = "ISSUE-1-09-BUILDERS-CANNOT-BUILD-GATES-OR-MOST-WORKSHOPS"
+title = "Builders can build only ten blueprint kinds: no gate, no armorer, butcher, cartographer, cleric, fisherman, fletcher, leatherworker, librarian, toolsmith or weaponsmith, and walls, towers and barracks stop at level 2"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Owner expectation (issue 1, ISSUE-1-09): build separate buildings (walls, production, military, fortification) and upgrade them. docs/settlements/construction.md#blueprint-files: the embedded catalog is house 1-3; storage, farm, mason, lumber_camp, mine, barracks, wall and watch_tower 1-2; shepherd 1 (crates/mc-core/assets/blueprints/*.json, read 2026-11-12: kinds barracks, farmer, house, lumber_camp, builder, mine, shepherd, storage, wall, tower). Player-built gates and every workshop kind can be certified and upgraded to level 3 (`settlement building certify|upgrade`, docs/settlements/construction.md#certification-commands), so the gap is Builder-built coverage only. Remaining wish: blueprints for gate and the other workshop kinds, and level 3 where the certificate allows it"
+regression = []
+failing_first = "not recorded"
 
 [[bug]]
 id = "ISSUE-1-18"
@@ -2535,8 +2587,9 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
+source = "https://github.com/kaiserproger/solaris/issues/1 (recursive autocraft landed in 5013acff (2026-11-03). Fix patch docs/bugs/fix-patches/ISSUE-1-22.patch is the 'Craft missing ingredients' branch of settlements/ui.rs order_create (autocraft::order plans and admits the dependency chain, refuses raw-material and cycle orders); reversing it makes the checked box order a plain job with no chain)"
 regression = ["harness:autocraft-qa:all"]
+fix_commit = "patch:e2ade9910f894ef99f8d865d83adf9a7451484dedbcc1e0a5671ef49b6fbafc2"
 
 [[bug]]
 id = "ISSUE-1-23"
@@ -2574,10 +2627,11 @@ title = "Housing certification wrongly requires baby clearance"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["harness:scene-shot:native-low-roof-house"]
-fix_commit = "a6979209045bdae03d35ba6609a32ed71d92298c"
+status = "fixed"
+source = "https://github.com/kaiserproger/solaris/issues/1; fixed by a6979209 (2026-10-19: house certification counts a valid bed pair, not breeding headroom). Fix patch docs/bugs/fix-patches/ISSUE-1-26.patch is that hunk at the candidate (settlements/buildings.rs inspect); reversing it counts only beds with baby space again, so a bed under a low roof does not certify. The commit a6979209 also carries the ISSUE-1-28 fold and the village-qa harness, so the control reverses this one hunk only"
+regression = ["cargo:mc-core:settlements::buildings::tests::ordinary_sleep_bed_certifies_without_breeding_headroom", "harness:scene-shot:native-low-roof-house"]
+fix_commit = "patch:d621068b278bfa6128741ae7e78b112c17d93670be93099adf78012915876b5e"
+promotion = "docs/bugs/promotions/ISSUE-1-26.json"
 
 [[bug]]
 id = "ISSUE-1-27"
@@ -3890,9 +3944,12 @@ title = "WAL recovery replays an OpaqueBlockEntity record into a chunk that is r
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
-source = "Independent review, 2026-11-07 (not reproduced). Recovery refuses to open on chunk load error and retains the WAL; the registered test exercises that path. A negative control removing the recovery guard failed at the recovery assertion (receipts/CoreBlockers/custody-replay-negative-control.log outside the repository). Disposition pending."
+status = "fixed"
+source = "Independent review, 2026-11-07 (not reproduced). Recovery refuses to open on chunk load error and retains the WAL; the registered test exercises that path. A negative control removing the recovery guard failed at the recovery assertion (receipts/CoreBlockers/custody-replay-negative-control.log outside the repository). Disposition (Main 2026-11-12, core audit CAF-02): the custody loss cannot happen because load_dimension_state refuses a world whose WAL replay hit a chunk load error (core/recovery.rs guard), so the WAL is kept; the guard is the fix (fix patch = that guard), test green on main 7feee34b (receipts/CoreAuditFable/caf02/custody-test.log)."
 regression = ["cargo:mc-core:core::checkpoint_custody_tests::opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal"]
+failing_first = "reported"
+fix_commit = "patch:a8c4023144038f091465c416777c1890e91e55a1a0d3f9481299d2fc3b7bebf9"
+promotion = "docs/bugs/promotions/OPAQUE-CUSTODY-LOST-ON-REFUSED-REPLAY.json"
 
 [[bug]]
 id = "CONTAINER-CUSTODY-LOST-ON-UNLOADED-REPLAY"
@@ -4060,8 +4117,8 @@ area = "gameplay"
 repro = "client"
 severity = "major"
 status = "open"
-source = "Seed-24 civilization-seed-qa 20261111T200623-90d4lq2w on 5ae49587, 96,000 sprint ticks: wood was not the blocker (64 birch logs by sprint 1200, 148 at the end), the town furnace at [134,78,-217] stayed empty in all 41 reads while 8 raw iron and 7-13 coal sat in storage, and the House stayed 'White Bed 0/1 awaiting production' behind funded mason, lumber camp, mine and road projects. construction::iron_demand returned only the active project's bill (no iron), and only unemployed residents or shepherds loaded ore; the one unemployed adult died to a zombie at tick 7536, leaving a lumberjack, a miner, a builder and two nitwits."
-failing_first = "Both tests fail with only the fix hunks reverted (receipts/CivSimSeed24/fix-hunks.patch, sha256 434a04ce): the planner test gets iron demand 0 instead of 2 once the funded farm starts, and the miner never loads the furnace (receipts/CivSimSeed24/unit-negative-control.log); fixed tree 109/109 in receipts/CivSimSeed24/unit-fixed.log."
+source = "Seed-24 civilization-seed-qa 20261111T200623-90d4lq2w on 5ae49587, 96,000 sprint ticks: wood was not the blocker (64 birch logs by sprint 1200, 148 at the end), the town furnace at [134,78,-217] stayed empty in all 41 reads while 8 raw iron and 7-13 coal sat in storage, and the House stayed 'White Bed 0/1 awaiting production' behind funded mason, lumber camp, mine and road projects. construction::iron_demand returned only the active project's bill (no iron), and only unemployed residents or shepherds loaded ore; the one unemployed adult died to a zombie at tick 7536, leaving a lumberjack, a miner, a builder and two nitwits. Negative control: Both tests fail with only the fix hunks reverted (receipts/CivSimSeed24/fix-hunks.patch, sha256 434a04ce): the planner test gets iron demand 0 instead of 2 once the funded farm starts, and the miner never loads the furnace (receipts/CivSimSeed24/unit-negative-control.log); fixed tree 109/109 in receipts/CivSimSeed24/unit-fixed.log."
+failing_first = "reported"
 regression = [
   "cargo:mc-core:settlements::construction::planner_tests::funded_project_keeps_iron_demand_for_the_skipped_house_bed",
   "cargo:mc-core:villager::smelting_tests::employed_miner_smelts_construction_iron_through_native_ticks",
@@ -4074,8 +4131,8 @@ area = "gameplay"
 repro = "client"
 severity = "major"
 status = "open"
-source = "Seed-24 civilization-seed-qa 20261111T214942-gh1mr776 on server pin a64a2dbe (house-bed iron fix): iron smelted at sprint 600, shears and 6 white wool in storage by 6000, birch logs 118 by 27000, yet Lumber camp L1 at site [113,72,-226] went 41/239 -> 47/239 between 42000 and 84000 (Mason L2 at 25/72 from 27000 to 39000 then finished); the House left the waiting list at 45000 (funded) but never started, and the gate stopped on its one-day stall oracle (60000-84000). Final checkpoint 102855 and a read-only world probe: structure settlement-1-411 in its clear stage at work unit 47/56, next cell [121,76,-225] = short grass over the cleared pit (footing [121,73,-225]); borrowed builder 63c408b1 at (121.5,76,-227.5) on the hill. villager/building.rs preparation_target chose the open stand nearest the builder (its own cell), while in_reach needs feet within 4.0 of the footing (here 4.24), so it never moved and never advanced. Run 90d4lq2w shows the same site at 0-29/239 for 33,000 sprint ticks."
-failing_first = "Fails with only the stand fix hunks reverted (receipts/CivSimSeed24/stand-fix-hunks.patch, sha256 2bc9e1ad): the builder keeps its own hill cell BlockPos {x:6,y:204,z:5} out of reach of footing {6,201,8}, the gate's stall (receipts/CivSimSeed24/stand-negative-control.log); at 107ddb91 settlements+villager 848 passed, 0 failed (receipts/CivSimSeed24/suite-107ddb91.log)."
+source = "Seed-24 civilization-seed-qa 20261111T214942-gh1mr776 on server pin a64a2dbe (house-bed iron fix): iron smelted at sprint 600, shears and 6 white wool in storage by 6000, birch logs 118 by 27000, yet Lumber camp L1 at site [113,72,-226] went 41/239 -> 47/239 between 42000 and 84000 (Mason L2 at 25/72 from 27000 to 39000 then finished); the House left the waiting list at 45000 (funded) but never started, and the gate stopped on its one-day stall oracle (60000-84000). Final checkpoint 102855 and a read-only world probe: structure settlement-1-411 in its clear stage at work unit 47/56, next cell [121,76,-225] = short grass over the cleared pit (footing [121,73,-225]); borrowed builder 63c408b1 at (121.5,76,-227.5) on the hill. villager/building.rs preparation_target chose the open stand nearest the builder (its own cell), while in_reach needs feet within 4.0 of the footing (here 4.24), so it never moved and never advanced. Run 90d4lq2w shows the same site at 0-29/239 for 33,000 sprint ticks. Negative control: Fails with only the stand fix hunks reverted (receipts/CivSimSeed24/stand-fix-hunks.patch, sha256 2bc9e1ad): the builder keeps its own hill cell BlockPos {x:6,y:204,z:5} out of reach of footing {6,201,8}, the gate's stall (receipts/CivSimSeed24/stand-negative-control.log); at 107ddb91 settlements+villager 848 passed, 0 failed (receipts/CivSimSeed24/suite-107ddb91.log)."
+failing_first = "reported"
 regression = ["cargo:mc-core:villager::building_preparation_tests::clearing_stand_on_a_hill_edge_is_within_felling_reach_of_the_pit_footing"]
 
 [[bug]]
@@ -4085,8 +4142,8 @@ area = "harness"
 repro = "client"
 severity = "major"
 status = "open"
-source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T230450-civilization-seed-qa-o31rlnkb on server pin 107ddb91 (stand fix): after sprint 300 the read-only console read of furnace [134,78,-217] showed one iron ingot in its output slot (server.log line 33); the observer's furnace menu then opened (container 6, 111 transcript observations) with all three furnace slots empty for the whole 15 s wait, so the ingot had left the furnace in between (furnace output is collected by residents, docs/settlements/construction.md); the gate failed after 174 s on 'timed out waiting for furnace_iron_output_visible'. Iron was smelted; the failure is the harness observation race. tools/harness/backends/civilization_seed_qa.py capture_iron_menu now holds the simulation with tick freeze, re-reads the output, captures the menu, then unfreezes; output collected before the hold leaves the milestone to a later snapshot."
-failing_first = "python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/iron-hold-fix-hunks.patch, sha256 db052414) test_furnace_output_collected_before_the_menu_does_not_abort_the_run fails with the gate's TimeoutError on furnace_iron_output_visible (receipts/CivSimSeed24/iron-hold-negative-control.log); fixed tree 79/79 with test_village_autonomy_qa (receipts/CivSimSeed24/iron-hold-tests.log)."
+source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T230450-civilization-seed-qa-o31rlnkb on server pin 107ddb91 (stand fix): after sprint 300 the read-only console read of furnace [134,78,-217] showed one iron ingot in its output slot (server.log line 33); the observer's furnace menu then opened (container 6, 111 transcript observations) with all three furnace slots empty for the whole 15 s wait, so the ingot had left the furnace in between (furnace output is collected by residents, docs/settlements/construction.md); the gate failed after 174 s on 'timed out waiting for furnace_iron_output_visible'. Iron was smelted; the failure is the harness observation race. tools/harness/backends/civilization_seed_qa.py capture_iron_menu now holds the simulation with tick freeze, re-reads the output, captures the menu, then unfreezes; output collected before the hold leaves the milestone to a later snapshot. Negative control: python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/iron-hold-fix-hunks.patch, sha256 db052414) test_furnace_output_collected_before_the_menu_does_not_abort_the_run fails with the gate's TimeoutError on furnace_iron_output_visible (receipts/CivSimSeed24/iron-hold-negative-control.log); fixed tree 79/79 with test_village_autonomy_qa (receipts/CivSimSeed24/iron-hold-tests.log)."
+failing_first = "reported"
 regression = []
 
 [[bug]]
@@ -4096,8 +4153,8 @@ area = "gameplay"
 repro = "client"
 severity = "major"
 status = "open"
-source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T230749-civilization-seed-qa-llr1bc4e (server pin 107ddb91): the only newborn f7a21a80 (settlement_birth tick 50318, baby observed at sprint 42000) was seen in client censuses at (73.4,60.9,-229.9) at sprint 48000 and (73.4,60.9,-231.4) at 51000, 58 blocks from the meeting point, on the floor of a pond (world probe receipts/CivSimSeed24/snap3/probe-baby.json: dirt at y=60, water at y=61-62, banks to y=64). server.log line 638: 'resident received lethal damage tick=65504 ... activity=Panic position=[73.85, 61.0, -231.85] attacker_type=Some(\"minecraft:zombie\")'; the checkpoint (receipts/CivSimSeed24/snap3/report.json, tick 115347) holds a tombstone for it at chunk [4,-15], journal LSN 66000. Membership dropped 6 -> 5, so the gate's +2 growth never held. Not an entity-custody loss: the death is logged and the tombstone follows it. Cause: settlements/allocator.rs body_clear lets a route body wade when water is only in its foot row, but a baby (0.975 tall) has its head in that row too, so the floor of any pond passed as a ford."
-failing_first = "Fails with only the allocator.rs fix hunk reverted (receipts/CivSimSeed24/baby-wade-fix-hunks.patch, sha256 ea5ca185): 'head-deep water is a barrier: (0.15, 0.975)', the baby body routes over the floor of two-deep water while the adult body is refused (receipts/CivSimSeed24/baby-wade-negative-control.log); at 615ca404 settlements+villager 848 passed, 0 failed (receipts/CivSimSeed24/suite-615ca404.log)."
+source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T230749-civilization-seed-qa-llr1bc4e (server pin 107ddb91): the only newborn f7a21a80 (settlement_birth tick 50318, baby observed at sprint 42000) was seen in client censuses at (73.4,60.9,-229.9) at sprint 48000 and (73.4,60.9,-231.4) at 51000, 58 blocks from the meeting point, on the floor of a pond (world probe receipts/CivSimSeed24/snap3/probe-baby.json: dirt at y=60, water at y=61-62, banks to y=64). server.log line 638: 'resident received lethal damage tick=65504 ... activity=Panic position=[73.85, 61.0, -231.85] attacker_type=Some(\"minecraft:zombie\")'; the checkpoint (receipts/CivSimSeed24/snap3/report.json, tick 115347) holds a tombstone for it at chunk [4,-15], journal LSN 66000. Membership dropped 6 -> 5, so the gate's +2 growth never held. Not an entity-custody loss: the death is logged and the tombstone follows it. Cause: settlements/allocator.rs body_clear lets a route body wade when water is only in its foot row, but a baby (0.975 tall) has its head in that row too, so the floor of any pond passed as a ford. Negative control: Fails with only the allocator.rs fix hunk reverted (receipts/CivSimSeed24/baby-wade-fix-hunks.patch, sha256 ea5ca185): 'head-deep water is a barrier: (0.15, 0.975)', the baby body routes over the floor of two-deep water while the adult body is refused (receipts/CivSimSeed24/baby-wade-negative-control.log); at 615ca404 settlements+villager 848 passed, 0 failed (receipts/CivSimSeed24/suite-615ca404.log)."
+failing_first = "reported"
 regression = ["cargo:mc-core:settlements::allocator::tests::routes_wade_through_foot_deep_water_but_never_deeper_or_lava"]
 
 [[bug]]
@@ -4107,8 +4164,8 @@ area = "harness"
 repro = "client"
 severity = "major"
 status = "open"
-source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civilization-seed-qa-ufgbv77d (server pin 107ddb91, harness d7f98cd4): the active Road level 1 at [158,71,-257] showed 'Road · level 1 · 0/33' from sprint 45000 to the 96000 limit (51,000 ticks) and held the only project slot, but the oracle signature included the whole status dialog, whose waiting Farm line went 'Dirt 3/30' -> 'Dirt 16/30', so the run ended on the bounded limit instead of the stall. tools/harness/backends/civilization_seed_qa.py stall_signature now keeps only the active project's own dialog line (dialog/body/0) while a project holds the slot; without one the waiting lists still count as progress."
-failing_first = "python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/stall-oracle-fix-hunks.patch, sha256 959a3fb2) test_waiting_project_materials_do_not_hide_a_stalled_active_project fails with 'bounded observation limit reached', the gate's symptom (receipts/CivSimSeed24/stall-oracle-negative-control.log); fixed tree 81/81 with test_village_autonomy_qa (receipts/CivSimSeed24/stall-oracle-tests.log)."
+source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civilization-seed-qa-ufgbv77d (server pin 107ddb91, harness d7f98cd4): the active Road level 1 at [158,71,-257] showed 'Road · level 1 · 0/33' from sprint 45000 to the 96000 limit (51,000 ticks) and held the only project slot, but the oracle signature included the whole status dialog, whose waiting Farm line went 'Dirt 3/30' -> 'Dirt 16/30', so the run ended on the bounded limit instead of the stall. tools/harness/backends/civilization_seed_qa.py stall_signature now keeps only the active project's own dialog line (dialog/body/0) while a project holds the slot; without one the waiting lists still count as progress. Negative control: python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/stall-oracle-fix-hunks.patch, sha256 959a3fb2) test_waiting_project_materials_do_not_hide_a_stalled_active_project fails with 'bounded observation limit reached', the gate's symptom (receipts/CivSimSeed24/stall-oracle-negative-control.log); fixed tree 81/81 with test_village_autonomy_qa (receipts/CivSimSeed24/stall-oracle-tests.log)."
+failing_first = "reported"
 regression = []
 
 [[bug]]
@@ -4369,9 +4426,9 @@ area = "gameplay"
 repro = "cargo"
 severity = "major"
 status = "open"
-source = "village-autonomy-qa run mgep0_gi (CivSimLanding .analysis/validation/20261111T140725-village-autonomy-qa-mgep0_gi, server pin 4e6874de): after Storage L1 the planner admitted the funded Storage L2 upgrade (site 121,69,-2, no missing materials) and its status stayed 'Storage · level 2 · 0/65' to the end. It held the single project slot, so builder_completes_autonomous_upgrade and builder_completes_further_building both failed. The final checkpoint (receipts/CivSimLanding/probe-mgep0-storage.json) has the stock in the level-one barrels: 126,70,-1 (acacia_log 59, birch_log 12) and 126,70,0 (cobblestone 205, coal 4, wheat_seeds 4). storage.json level 2 turned the first barrel into a chest and removed the second. The structure executor refuses any cell whose block entity holds items (plugin_structures.rs AdvanceStructure, Failure::Blocked), and villager/building.rs ignores that error, so the upgrade could never advance. mason level 2 (furnace, chest) and barracks level 2 (two barrels replaced by beds) had the same defect. Fix: the blueprint loader refuses a level that replaces or removes a previous-level container, and the three level-2 layouts keep their level-one containers."
+source = "village-autonomy-qa run mgep0_gi (CivSimLanding .analysis/validation/20261111T140725-village-autonomy-qa-mgep0_gi, server pin 4e6874de): after Storage L1 the planner admitted the funded Storage L2 upgrade (site 121,69,-2, no missing materials) and its status stayed 'Storage · level 2 · 0/65' to the end. It held the single project slot, so builder_completes_autonomous_upgrade and builder_completes_further_building both failed. The final checkpoint (receipts/CivSimLanding/probe-mgep0-storage.json) has the stock in the level-one barrels: 126,70,-1 (acacia_log 59, birch_log 12) and 126,70,0 (cobblestone 205, coal 4, wheat_seeds 4). storage.json level 2 turned the first barrel into a chest and removed the second. The structure executor refuses any cell whose block entity holds items (plugin_structures.rs AdvanceStructure, Failure::Blocked), and villager/building.rs ignores that error, so the upgrade could never advance. mason level 2 (furnace, chest) and barracks level 2 (two barrels replaced by beds) had the same defect. Fix: the blueprint loader refuses a level that replaces or removes a previous-level container, and the three level-2 layouts keep their level-one containers. Negative control: Both tests fail with only the fix hunks reverted (receipts/CivSimLanding/negative-container-upgrade-fix-hunks.patch, sha256 b95def36): the storage test stops at 'Blocks: 0/65 · Prepared', the gate's symptom, and the loader test accepts a level that replaces the chest (receipts/CivSimLanding/negative-container-upgrade.log)."
 regression = ["cargo:mc-core:settlements::construction::tests::stocked_storage_upgrades_around_its_level_one_containers", "cargo:mc-core:settlements::blueprints::tests::upgrade_levels_keep_previous_containers"]
-failing_first = "Both tests fail with only the fix hunks reverted (receipts/CivSimLanding/negative-container-upgrade-fix-hunks.patch, sha256 b95def36): the storage test stops at 'Blocks: 0/65 · Prepared', the gate's symptom, and the loader test accepts a level that replaces the chest (receipts/CivSimLanding/negative-container-upgrade.log)."
+failing_first = "reported"
 
 [[bug]]
 id = "RAIDER-TARGET-SCAN-EVERY-TICK-COLLAPSE"
@@ -4631,11 +4688,13 @@ id = "EDGE-WORLD-QUEUE-LOST-ENTITY-FRAMES"
 title = "A world-queue send that fails after planning loses entity frames (AddEntity, data, passengers, leash) while the viewer records them as delivered; only geometry is repaired"
 area = "gameplay"
 repro = "source"
-severity = "minor"
-status = "open"
-source = "Rule-5 review of the recorder fix c731c550 (ReviewRecorderOverflow, 2026-11-12, finding F2): pump.rs:398-406 repairs only geometry after a failed world try_send; LOD tiles are a second producer on world_tx (lod.rs:317, LOD on by default config.rs:383), so pump.rs:341-342 'Only the pump sends world packets' is false. Example: a dismount SetPassengers(horse,[]) is lost and the client keeps the rider mounted until the next link change or re-pairing. Fix direction: take LOD tiles off world_tx, or treat a lost entity frame as a re-pair."
-regression = []
-failing_first = "not recorded"
+severity = "major"
+status = "fixed"
+source = "Rule-5 review of the recorder fix c731c550 (ReviewRecorderOverflow, 2026-11-12, finding F2): pump.rs:398-406 repairs only geometry after a failed world try_send; LOD tiles are a second producer on world_tx (lod.rs:317, LOD on by default config.rs:383), so pump.rs:341-342 'Only the pump sends world packets' is false. Example: a dismount SetPassengers(horse,[]) is lost and the client keeps the rider mounted until the next link change or re-pairing. Fix direction: take LOD tiles off world_tx, or treat a lost entity frame as a re-pair. Race window (review 2026-11-12): the credit is read before the plan of every viewer on the rayon pool and the send follows it, so an LOD tile can take a slot at any time during the whole planning time (possibly milliseconds on a heavy tick), not only between the read and the send; LOD streaming during a login or spawn burst makes a refusal likely there."
+regression = ["cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_spawn_frames_are_sent_again_on_the_next_publication", "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_dismount_is_repaired_by_respawning_the_vehicle", "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_removal_is_sent_again_on_the_next_publication", "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_repairs_remove_only_what_the_credit_respawns", "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_frames_of_the_own_vehicle_are_resent_without_removing_it", "cargo:mc-edge:server::admin_tests::lost_entity_frames_tests::refused_own_entity_data_is_sent_again"]
+fix_commit = "patch:87cb7ba485291aa283a807710069088bbf4a191e2a486040f1edbe04109d2082"
+failing_first = "reported"
+promotion = "docs/bugs/promotions/EDGE-WORLD-QUEUE-LOST-ENTITY-FRAMES.json"
 
 [[bug]]
 id = "NATIVE-SET-PLAYER-TEAM-26-3-LAYOUT"
@@ -4654,11 +4713,12 @@ title = "tellraw with a plain JSON string component (tellraw @s \"text\") shows 
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F3, 2/2, with send_command_feedback true and false). Vanilla 26.3 accepts a bare string as a text component. Cause: the SystemChat planner wrote the component with the compound-only mc_nbt::write_network and dropped a bare string or list silently; vanilla ComponentSerialization encodes plain text as a string tag (the codec is ByteBufCodecs.fromCodecTrusted, any root tag)."
-fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
-regression = ["cargo:mc-edge:plan::plan_tests::styled_chat_delivers_string_and_list_components", "harness:admin-commands:all"]
+fix_commit = "patch:67793e0ff44df09e569fb2aa01ed6b4e0f966eb1efa7af3d9e5b3351ca57db6f"
+regression = ["cargo:mc-edge:plan::plan_tests::styled_chat_delivers_string_and_list_components", "harness:entities:native-v2-command-rows"]
 failing_first = "reported"
+promotion = "docs/bugs/promotions/TELLRAW-PLAIN-STRING-COMPONENT-DROPPED.json"
 
 [[bug]]
 id = "COMMAND-BLOCK-SETBLOCK-AUTO-NEVER-RUNS"
@@ -4666,11 +4726,12 @@ title = "A command block placed by /setblock with {auto:1b} never runs; the same
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F6, 2/2; javap receipts/BreakJoinRows/javap/CommandBlockEntity.txt: loadAdditional -> setAutomatic -> scheduleTick). Cause: the neighbour update that wakes a command block runs before the block entity image is installed, and nothing scheduled the first tick after the install."
-fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
-regression = ["cargo:mc-core:command_blocks::tests::setblock_with_auto_runs_the_command_block_but_a_powered_or_chain_one_waits"]
+fix_commit = "patch:01110d16794914eb9e293df02bf4e3633c0df0f48118b80d38408859f4f98ea4"
+regression = ["cargo:mc-core:command_blocks::tests::setblock_with_auto_runs_the_command_block_but_a_powered_or_chain_one_waits", "harness:entities:native-v2-command-rows"]
 failing_first = "reported"
+promotion = "docs/bugs/promotions/COMMAND-BLOCK-SETBLOCK-AUTO-NEVER-RUNS.json"
 
 [[bug]]
 id = "SP-PLAYER-ROTATION-LOST-ON-REOPEN"
@@ -4700,11 +4761,12 @@ title = "defaultgamemode is an unknown command (vanilla DefaultGameModeCommands:
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md 'Noticed', single run). The command sets an in-memory default that players without a saved record join in; persisting it (level.dat GameType) is COMMAND-DEFAULTGAMEMODE-NOT-PERSISTED."
-fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
-regression = ["cargo:mc-core:command_context::tests::defaultgamemode_sets_the_mode_new_players_join_in", "cargo:mc-core:commands::tests::defaultgamemode_takes_exactly_one_mode_and_needs_operator"]
+fix_commit = "patch:0965bf5edd61ea165094fae17cb4a56b14b3c8dbfb95f036889fdbcc907f85ac"
+regression = ["cargo:mc-core:command_context::tests::defaultgamemode_sets_the_mode_new_players_join_in", "cargo:mc-core:commands::tests::defaultgamemode_takes_exactly_one_mode_and_needs_operator", "harness:entities:native-v2-command-rows"]
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/COMMAND-DEFAULTGAMEMODE-UNKNOWN.json"
 
 [[bug]]
 id = "COMMAND-DEFAULTGAMEMODE-NOT-PERSISTED"
@@ -4712,10 +4774,12 @@ title = "The /defaultgamemode setting is lost on restart: level.dat GameType is 
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "CommandGaps 2026-11-12: vanilla MinecraftServer.setDefaultGameType writes WorldData; Solaris keeps TickState.default_game_mode in memory only."
-regression = []
+fix_commit = "patch:eca69e54ae06c31d701f1e2b322f203a40d1a0d25503a1b5191efb5b0fdc1fd9"
+regression = ["cargo:mc-core:core::default_game_mode_persistence_tests::default_game_mode_survives_wal_restart_and_checkpoint_and_joins_new_players", "cargo:mc-core:core::default_game_mode_persistence_tests::a_bad_default_game_mode_is_refused_not_defaulted", "cargo:mc-core:level_metadata::tests::default_game_mode_is_level_dat_game_type_and_a_bad_value_fails_closed", "harness:entities:native-v2-command-persist"]
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/COMMAND-DEFAULTGAMEMODE-NOT-PERSISTED.json"
 
 [[bug]]
 id = "COMMAND-FAILURE-RAW-LANG-KEY"
@@ -4723,11 +4787,12 @@ title = "Global-command failures reached from the command context (kill/tp/effec
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (FINDINGS.md 'Noticed'; scene-shot 20261111T194930-scene-shot-13ikb1el, kill @e[type=minecraft:cow,distance=..0] and tp @s NobodyHere). Cause: command_context::run delivered Err(key) strings from dimensions::travel::execute as plain chat; now a vanilla lang key is sent as a translate component."
-fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
-regression = ["cargo:mc-core:command_context::tests::global_command_failure_reaches_the_player_as_a_translatable_key", "cargo:mc-core:command_feedback::tests::translation_keys_are_told_apart_from_english_errors"]
+fix_commit = "patch:40033192055f37f08900db10089a5ac4d01631d61c47972d5fc32fff6e251289"
+regression = ["cargo:mc-core:command_context::tests::global_command_failure_reaches_the_player_as_a_translatable_key", "cargo:mc-core:command_feedback::tests::translation_keys_are_told_apart_from_english_errors", "harness:entities:native-v2-command-rows"]
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/COMMAND-FAILURE-RAW-LANG-KEY.json"
 
 [[bug]]
 id = "COMMAND-BLOCK-SOURCE-NAME-AND-ADMIN-BROADCAST"
@@ -4735,11 +4800,12 @@ title = "A command block's say shows [Server] instead of [@], and operators get 
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (FINDINGS.md F6 aside); javap CommandSourceStack.sendSuccess/broadcastToAdmins and BaseCommandBlock (default name @, shouldInformAdmins = COMMAND_BLOCK_OUTPUT). Admin broadcast is implemented for command-block sources only; player and console sources do not inform other operators yet."
-fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
-regression = ["cargo:mc-core:command_blocks::tests::command_block_is_named_at_and_informs_operators_of_its_output"]
+fix_commit = "patch:4a450a9f261ef2fb286bced2b381fb5963ad1b53935274c12c3538a8f26a3149"
+regression = ["cargo:mc-core:command_blocks::tests::command_block_is_named_at_and_informs_operators_of_its_output", "harness:entities:native-v2-command-rows"]
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/COMMAND-BLOCK-SOURCE-NAME-AND-ADMIN-BROADCAST.json"
 
 [[bug]]
 id = "LOOT-GIVE-BLOCK-TABLES-UNSUPPORTED"
@@ -4747,10 +4813,12 @@ title = "/loot give @s loot minecraft:blocks/stone reports an unknown or unsuppo
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (FINDINGS.md 'Noticed'); command_loot.rs generate(): Source::Table reads state.registry.chest_loot only."
-regression = []
+fix_commit = "patch:32eedfeb063f45f7adc94498723b3378ee66404fba9ababc92b27801a3d0579f"
+regression = ["cargo:mc-core:command_execution::tests::admin_loot_give_rolls_block_tables_like_vanilla_chest_context", "harness:entities:native-v2-command-persist"]
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/LOOT-GIVE-BLOCK-TABLES-UNSUPPORTED.json"
 
 [[bug]]
 id = "PROJECTILE-STUCK-ARROW-NEVER-FALLS"
@@ -5042,13 +5110,16 @@ fix_commit = "patch:85195e25eabb2e4a202ef619a549dfe7d3326abfb0045413fbf46e382934
 
 [[bug]]
 id = "PLUGIN-EVENT-BACKLOG-HALTS-WORLD"
-title = "A plugin whose durable-event backlog passes 1024 (a slow on_events callback while players keep sending its commands) halts the whole world without a final checkpoint instead of refusing that plugin's new commands"
+title = "A plugin whose durable-event backlog passes 1024 (a slow on_events callback while players keep sending its commands) halts the whole world without a final checkpoint instead of refusing new plugin commands"
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "CoreAuditFable CAF-01 (receipts/CoreAuditFable/REPORT.md, queue.yaml; static read at 21607d42): crates/mc-core/src/plugin/events.rs:23-34 returns Err when retained+pending exceeds MAX_SCRIPT_EVENT_QUEUE_CAPACITY (1024, crates/mc-script/src/lib.rs:239) or delivery_failed is set; crates/mc-core/src/core/tick_loop.rs:266-271 then calls halt_authority and leaves the loop without a final checkpoint (:628-672). One mc-plugin-host thread delivers to every plugin (host.rs:703-712) and one callback may run 50M fuel / 30 s (limits.rs:84-87). Not documented in docs/PLUGINS.md or ADR 0013. Reachability on the standard pack unproven. Proof: a real component that burns its fuel in on_events while two bots send its command at the maximum rate; today every player sees 'plugin callback backlog overflow: world halted'."
-regression = []
+failing_first = "reported"
+regression = ["cargo:mc-core:plugin_backlog_tests::a_stalled_plugin_refuses_new_commands_instead_of_halting_the_world"]
+fix_commit = "patch:68f37e19635593f8a0504b42fb63a2f08cb8c09387c7f595d4a44ff5d22fa026"
+promotion = "docs/bugs/promotions/PLUGIN-EVENT-BACKLOG-HALTS-WORLD.json"
 
 [[bug]]
 id = "VILLAGER-STRANDED-IN-DEEP-WATER"
@@ -5099,3 +5170,33 @@ regression = ["cargo:mc-core:villager::brain::tests::stroll_swim_tests::jobless_
 failing_first = "reported"
 fix_commit = "patch:7018c1e0edf51288b239b4577b3c51fdad9426023a81e3a5ac4c029d85fa34e8"
 promotion = "docs/bugs/promotions/VILLAGER-AFTER-HOURS-CLAIM-NOT-EMPLOYED.json"
+
+[[bug]]
+id = "PLUGIN-MENU-CLICK-FLOOD-HALTS-WORLD"
+title = "Repeated clicks on a plugin inventory menu, one durable event each, fill the plugin event queue past 1024 and halt the whole world without a final checkpoint, even with a healthy plugin host"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "Rule-5 review of PluginBacklogHalt (receipts/PluginBacklogHalt/REVIEW.md, finding medium; static read at bd2c27a1): crates/mc-core/src/tick/players.rs:182-183 passed every InventoryMenuClicked from plugin_player::menu_input to enqueue_result with no backlog check. refresh_menu does not raise the native state_id, so a client repeating the same click on an open menu gets one event per click; with the optional basic-economy package (the only deployed one that calls open_inventory_menu) two or three hostile clients with a burst of 1000 ContainerClick per tick push pending_events to 1024, which sets delivery_failed and halts the world at seal_events. A stalled plugin host reaches the same state with fewer clicks. Not reachable in the standard pack, which opens no menu."
+failing_first = "reported"
+regression = ["cargo:mc-core:plugin_player::tests::a_stalled_plugin_drops_menu_clicks_instead_of_halting_the_world"]
+fix_commit = "patch:8aa0536fa9665224a4f38e0d364390e0b59f8f6e1ba0e84cb4a2d5c8dd4cf0d8"
+promotion = "docs/bugs/promotions/PLUGIN-MENU-CLICK-FLOOD-HALTS-WORLD.json"
+
+[[bug]]
+id = "FLUID-FLOW-WASHES-KELP-SEAGRASS-SUGAR-CANE"
+title = "Flowing water washes kelp, kelp_plant, seagrass and sugar cane into loot and writes water over them, which vanilla never does"
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "fixed"
+source = "Owner question about the native-100 item load (items are 98.5 % kelp), then code reading and a reproduction on ae0147a9 (crates/mc-core fluids.rs flow_into washed every state with an empty collision shape and no waterlogged property). Vanilla 26.3 FlowingFluid.canHoldAnyFluid/canHoldSpecificFluid: only the washed_away_by_fluids block tag gives way, and a LiquidBlockContainer (kelp, kelp_plant, seagrass, tall_seagrass: canPlaceLiquid false) refuses a flow; sugar cane is not in the tag. Fixed for vanilla parity; the native-100 item count is measured separately."
+regression = [
+  "cargo:mc-core:fluids_tests::plants::flowing_water_leaves_kelp_seagrass_and_sugar_cane_standing",
+  "cargo:mc-core:fluids_tests::plants::flow_into_refuses_plants_and_still_washes_tagged_decoration",
+  "cargo:mc-core:fluids_tests::plants::kelp_growth_write_in_a_pool_washes_no_column",
+]
+failing_first = "reported"
+fix_commit = "af58aeb920b1403c294982c477f53e1ceabc66c1"
+promotion = "docs/bugs/promotions/FLUID-FLOW-WASHES-KELP-SEAGRASS-SUGAR-CANE.json"

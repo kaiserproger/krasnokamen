@@ -2292,7 +2292,9 @@ pub(crate) fn wool_color(state: &TickState, id: SettlementId) -> Option<u8> {
         .find_map(|bill| color_for(&bill))
 }
 
-/// Whether the planner can fund at least one of its current candidates.
+/// Whether the planner can fund at least one of its current candidates (test oracle: the
+/// project card no longer derives an idle reason from it).
+#[cfg(test)]
 pub(crate) fn has_funded_candidate(state: &TickState, id: SettlementId) -> bool {
     let Some(record) = state.settlements.get(id) else {
         return false;

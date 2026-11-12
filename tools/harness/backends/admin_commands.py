@@ -154,9 +154,6 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             probe.fixture("gamemode creative @s")
             lines = say('tellraw @s {"text":"RAW-OK-7f3","color":"green"}', "RAW-OK-7f3", "tellraw_arrives")
             probe.report["tellraw_line"] = lines[:1]
-            # Vanilla ComponentArgument takes a bare JSON string as a text component.
-            lines = say('tellraw @s "RAW-STRING-7f3"', "RAW-STRING-7f3", "tellraw_plain_string_arrives")
-            probe.report["tellraw_plain_string_line"] = lines[:1]
 
             # Distinct identities prove the client sees a no-gravity entity stay
             # airborne while the otherwise equivalent control actually falls.

@@ -147,6 +147,12 @@ pub struct CoreRegistry {
     /// registry modes carry the tag. Shared (`Arc`) so world constructors clone
     /// without copying the table.
     pub(crate) mob_interactable_doors: Arc<[bool]>,
+    /// Dense per-state flag, indexed by global state id: flowing fluid washes
+    /// the block away (pops its loot). Vanilla 26.3 `FlowingFluid.canHoldFluid`:
+    /// the `washed_away_by_fluids` block tag, minus every `LiquidBlockContainer`
+    /// (kelp, kelp_plant, seagrass, tall_seagrass refuse a fluid; waterloggable
+    /// blocks only take a source, never a flow). Empty without that tag.
+    pub(crate) washed_by_fluids: Arc<[bool]>,
     /// Native world-fire state, attachment, support and ignition tables.
     pub(crate) fire_states: crate::fire::FireStates,
     /// Per-state blast resistance (`reports/block_explosion.json`); absent
@@ -408,6 +414,13 @@ impl CoreRegistry {
             .map(|state| state.id.0 as usize + 1)
             .max()
             .unwrap_or(0);
+        let washed_away: std::collections::HashSet<i32> = tags
+            .raw_ids("minecraft:block", "minecraft:washed_away_by_fluids")
+            .unwrap_or_default()
+            .iter()
+            .copied()
+            .collect();
+        let mut washed_by_fluids = vec![false; state_count];
         let mut hazard_flags = vec![0u8; state_count];
         let mut mob_interactable_doors = vec![false; state_count];
         let door_blocks = tags
@@ -447,8 +460,15 @@ impl CoreRegistry {
             }
             hazard_flags[state.id.0 as usize] = flags;
             mob_interactable_doors[state.id.0 as usize] = door_blocks.contains(&state.block.raw_id);
+            washed_by_fluids[state.id.0 as usize] = washed_away.contains(&state.block.raw_id)
+                && !matches!(
+                    state.block.id.path(),
+                    "kelp" | "kelp_plant" | "seagrass" | "tall_seagrass"
+                )
+                && state.properties.iter().all(|(key, _)| key != "waterlogged");
         }
         let mob_interactable_doors: Arc<[bool]> = mob_interactable_doors.into();
+        let washed_by_fluids: Arc<[bool]> = washed_by_fluids.into();
         let mut collision_boxes = vec![Box::default(); state_count];
         let outline_shapes = mc_data::outline_shapes::vanilla_outline_shapes();
         let mut outlines = vec![crate::pov_ray::OutlineState::default(); state_count];
@@ -560,6 +580,7 @@ impl CoreRegistry {
             farming,
             hazard_flags,
             mob_interactable_doors,
+            washed_by_fluids,
             fire_states,
             plugin_rules: None,
             plugin_ore_profile: None,

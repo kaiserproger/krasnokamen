@@ -4,6 +4,7 @@ use super::allocator::PoiKind;
 use crate::boundary::BlockPos;
 use crate::tick::TickState;
 use crate::villager::VillagerProfession as Profession;
+use rustc_hash::FxHashMap;
 use std::collections::BTreeMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -20,6 +21,14 @@ pub struct SettlementLabel {
 pub(crate) struct Cache {
     // `PoiCache` is taken/restored by each native phase: Default must not allocate.
     current: Option<(u64, Arc<Vec<SettlementLabel>>)>,
+    entrances: Entrances,
+}
+
+/// Entrance of each POI, valid while the revisions of the chunks around it
+/// are unchanged; POIs that left the loaded set drop out at the next rebuild.
+#[derive(Default)]
+pub(crate) struct Entrances {
+    known: FxHashMap<BlockPos, (u64, [i32; 3])>,
 }
 
 /// Fixed algorithm/list, independent of process hash seeds and entity wire IDs.
@@ -215,7 +224,36 @@ fn key(state: &TickState) -> u64 {
 
 /// POIs do not carry building bounds. The nearest lower door in the bounded
 /// loaded neighborhood is the entrance; outdoor worksites stay at their POI.
-fn entrance(state: &TickState, poi: BlockPos) -> [i32; 3] {
+fn entrance(
+    state: &TickState,
+    doors: &mut crate::world::SectionMatchCache,
+    poi: BlockPos,
+) -> [i32; 3] {
+    // A 17x5x17 box scan costs 1445 block reads per POI; section palettes
+    // prove the common door-less neighbourhood (pens, farms) without them.
+    // Overlay and missing columns fail open to the exact scan below.
+    let box_min = (
+        poi.x.saturating_sub(8),
+        poi.y.saturating_sub(2),
+        poi.z.saturating_sub(8),
+    );
+    let box_max = (
+        poi.x.saturating_add(8),
+        poi.y.saturating_add(2),
+        poi.z.saturating_add(8),
+    );
+    if !state
+        .world
+        .may_hold_matching_state_cached(box_min, box_max, doors, |id| {
+            state
+                .registry
+                .blocks
+                .by_id(id)
+                .is_some_and(|block| block.block.id.path().ends_with("_door"))
+        })
+    {
+        return coordinates(poi);
+    }
     let mut nearest = None;
     for x in poi.x.saturating_sub(8)..=poi.x.saturating_add(8) {
         for z in poi.z.saturating_sub(8)..=poi.z.saturating_add(8) {
@@ -291,14 +329,36 @@ struct Building {
     bell: Option<String>,
 }
 
-fn labels(state: &TickState) -> Vec<SettlementLabel> {
+/// Revisions of the 3x3 chunks around `chunk`: everything `entrance` can read
+/// (its box reaches 8 blocks, so never beyond the neighbouring chunk).
+fn neighbourhood_revision(state: &TickState, chunk: crate::boundary::ChunkPos) -> u64 {
+    let mut hash = std::collections::hash_map::DefaultHasher::new();
+    for x in chunk.x - 1..=chunk.x + 1 {
+        for z in chunk.z - 1..=chunk.z + 1 {
+            state.world.chunk_revision(x, z).hash(&mut hash);
+        }
+    }
+    hash.finish()
+}
+
+fn labels(state: &TickState, entrances: &mut Entrances) -> Vec<SettlementLabel> {
+    let occupancy = occupancy(state);
+    let mut doors = crate::world::SectionMatchCache::default();
+    doors.reset(&state.world);
+    let mut known = std::mem::take(&mut entrances.known);
     let mut buildings: BTreeMap<[i32; 3], Building> = BTreeMap::new();
-    for chunk in state.villager_pois.chunks.values() {
+    for (&chunk_pos, chunk) in &state.villager_pois.chunks {
+        let revision = neighbourhood_revision(state, chunk_pos);
         for poi in &chunk.pois {
             let anchor = if poi.kind == PoiKind::Bell {
                 coordinates(poi.pos)
             } else {
-                entrance(state, poi.pos)
+                let anchor = match known.remove(&poi.pos) {
+                    Some((seen, anchor)) if seen == revision => anchor,
+                    _ => entrance(state, &mut doors, poi.pos),
+                };
+                entrances.known.insert(poi.pos, (revision, anchor));
+                anchor
             };
             let building = buildings.entry(anchor).or_default();
             let source = (poi.kind != PoiKind::Home, coordinates(poi.pos));
@@ -308,10 +368,15 @@ fn labels(state: &TickState) -> Vec<SettlementLabel> {
             match poi.kind {
                 PoiKind::Home => {
                     building.homes += 1;
-                    building.occupants += residents_at(state, poi.pos, false).count();
+                    building.occupants += occupancy.homes.get(&poi.pos).copied().unwrap_or(0);
                 }
                 PoiKind::Job(profession) => {
-                    let mut names: Vec<_> = residents_at(state, poi.pos, true)
+                    let mut names: Vec<_> = occupancy
+                        .jobs
+                        .get(&poi.pos)
+                        .into_iter()
+                        .flatten()
+                        .copied()
                         .map(villager_name)
                         .collect();
                     names.sort_unstable();
@@ -396,28 +461,44 @@ fn labels(state: &TickState) -> Vec<SettlementLabel> {
         .collect()
 }
 
-fn residents_at(
-    state: &TickState,
-    poi: BlockPos,
-    job: bool,
-) -> impl Iterator<Item = uuid::Uuid> + '_ {
-    state
-        .entities
-        .villager_chunks()
-        .values()
-        .flatten()
-        .filter_map(move |&id| {
-            let slot = state.entities.slot_of(id)?;
-            let body = state.entities.body(slot);
-            let villager = state.entities.row(slot).villager.as_ref()?;
-            let (at, dimension) = if job {
-                (villager.job_site, &villager.job_site_dimension)
-            } else {
-                (villager.home, &villager.home_dimension)
-            };
-            (body.alive && at == Some(poi) && dimension == state.dimension.name())
-                .then_some(state.entities.row(slot).uuid)
-        })
+/// Residents by claimed home / job site, built in ONE pass over the villagers
+/// per rebuild. A scan of every villager per POI made a rebuild
+/// `loaded POIs x all villagers` (2.8 s ticks at 15k villagers).
+#[derive(Default)]
+struct Occupancy {
+    homes: FxHashMap<BlockPos, usize>,
+    jobs: FxHashMap<BlockPos, Vec<uuid::Uuid>>,
+}
+
+fn occupancy(state: &TickState) -> Occupancy {
+    let mut occupancy = Occupancy::default();
+    let dimension = state.dimension.name();
+    for &id in state.entities.villager_chunks().values().flatten() {
+        let Some(slot) = state.entities.slot_of(id) else {
+            continue;
+        };
+        let Some(villager) = state.entities.row(slot).villager.as_ref() else {
+            continue;
+        };
+        if !state.entities.body(slot).alive {
+            continue;
+        }
+        if let Some(home) = villager.home
+            && villager.home_dimension == dimension
+        {
+            *occupancy.homes.entry(home).or_default() += 1;
+        }
+        if let Some(job) = villager.job_site
+            && villager.job_site_dimension == dimension
+        {
+            occupancy
+                .jobs
+                .entry(job)
+                .or_default()
+                .push(state.entities.row(slot).uuid);
+        }
+    }
+    occupancy
 }
 
 pub(crate) fn snapshot(state: &mut TickState) -> Arc<Vec<SettlementLabel>> {
@@ -429,7 +510,9 @@ pub(crate) fn snapshot(state: &mut TickState) -> Arc<Vec<SettlementLabel>> {
         .as_ref()
         .is_none_or(|(old, _)| *old != key)
     {
-        let labels = Arc::new(labels(state));
+        let mut entrances = std::mem::take(&mut state.villager_pois.presentation.entrances);
+        let labels = Arc::new(labels(state, &mut entrances));
+        state.villager_pois.presentation.entrances = entrances;
         state.villager_pois.presentation.current = Some((key, labels));
     }
     Arc::clone(

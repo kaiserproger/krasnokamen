@@ -474,11 +474,6 @@ pub(crate) fn execute(
         }
         Command::DefaultGameMode(mode) => {
             state.default_game_mode = *mode;
-            if state.dimension_globals.active {
-                state.dimension_globals.broadcasts.push(
-                    crate::dimensions::globals::Broadcast::DefaultGameMode(*mode),
-                );
-            }
             success_feedback(
                 state,
                 connection,

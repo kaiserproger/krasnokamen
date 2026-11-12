@@ -1,4 +1,4 @@
-//! Settlement map page (`/settlement menu map`, the main page's **Map** button).
+//! Settlement map page (`/settlement menu map`, the dashboard's **Map** icon).
 //!
 //! A top-down grid of the live record: the territory disk (`anchor` ± `radius`
 //! in X/Z, the widest cut of the settlement sphere), every certified building's
@@ -14,9 +14,9 @@
 //! so the rows form square cells. Vanilla dialog text shows `show_text` hovers
 //! and runs `custom` click events (`DialogBodyHandlers.PlainMessageHandler`:
 //! a `FocusableTextWidget` with a component click handler), so hovering a cell
-//! names what is there, clicking a building sends `buildings` with `b` = its id
-//! and clicking the construction site opens Project status. Those clicks are
-//! untrusted like every button: `dispatch` re-resolves `s` and permissions.
+//! names what is there. Cell clicks carry every stable building/site identity to
+//! a paged picker; one feature opens its own card directly. Clicks are untrusted
+//! like every button: `dispatch` re-resolves the settlement and permissions.
 //!
 //! The page is a snapshot of live state and **Refresh** rebuilds it. A vanilla
 //! client does not report closing a dialog, so the server never re-sends the map
@@ -36,21 +36,11 @@ use crate::settlements::registry::MAX_RADIUS;
 use crate::settlements::{SettlementId, SettlementRecord};
 use crate::tick::TickState;
 
-/// Cells per side; odd, so the anchor sits in the centre cell. The dialog body
-/// of a 720p window at GUI scale 3 is 174 GUI pixels tall and does not scroll in a
-/// screenshot: 13 rows of 9 (117) + the 10-pixel gap leave 47 for the legend, i.e.
-/// [`LEGEND_LINES`] lines of 9. 13 glyphs fit the default 200-pixel `plain_message`
-/// width without wrapping.
+/// Thirteen nine-pixel rows leave room for two compact action rows at scale 3.
+/// The full legend has its own page; it must not displace navigation.
 const SIZE: usize = 13;
-/// Legend `plain_message` width (the dialog's content is 410 wide at that size).
 const LEGEND_WIDTH: u32 = 408;
-/// Estimated pixel budget of one legend line, under [`LEGEND_WIDTH`] so the client
-/// never re-wraps a line the packer laid out (a swatch stranded from its label).
 const LEGEND_LINE: usize = 396;
-/// Legend lines that fit under the map: the entries (at most four for every kind
-/// and feature at once) and the scale line.
-#[cfg(test)]
-const LEGEND_LINES: usize = 5;
 const GLYPH: char = '█';
 /// Labels listed in one cell's hover before "(+n more)".
 const MAX_HOVER: usize = 4;
@@ -58,6 +48,7 @@ const MAX_HOVER: usize = 4;
 const OUTSIDE: u32 = 0x2B2B2B;
 const TERRITORY: u32 = 0x4C7A34;
 const SITE: u32 = 0xFF8800;
+const PAUSED_SITE: u32 = 0x880000;
 const YOU: u32 = 0xFF55FF;
 /// Street plan: finished road (a dirt path), a road stretch still to pave, a lamp
 /// post still to set. No building kind shares a colour with them.
@@ -81,10 +72,10 @@ fn style(kind: BuildingKind) -> (u32, Key) {
 }
 
 /// What clicking a cell opens.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Click {
     Building(BuildingId),
-    Site,
+    Site(String),
 }
 
 /// One drawn footprint, in X/Z block coordinates (inclusive). Planned street
@@ -101,7 +92,9 @@ struct Feature {
 struct Cell {
     color: u32,
     hover: String,
-    click: Option<Click>,
+    click: Vec<Click>,
+    bounds: [[i32; 2]; 2],
+    streets: String,
 }
 
 /// The rendered page: `cells[row * SIZE + column]`, row 0 north, column 0 west;
@@ -109,45 +102,429 @@ struct Cell {
 struct Grid {
     /// Blocks per cell side.
     scale: i32,
+    centre: [i32; 2],
     cells: Vec<Cell>,
     /// Legend entries: colour and label.
     legend: Vec<(u32, String)>,
     buildings: usize,
 }
 
-/// `map` action: the grid, its legend, and Refresh / Buildings / Back. The grid
-/// and the legend (every colour on the map, named) are what a 720p window at GUI
-/// scale 3 shows without scrolling; the buttons share one row below them (reached
-/// with the wheel), Close is the footer.
-pub(super) fn screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
-    let viewer = player_pos(state, connection);
+pub(super) fn screen_at(
+    state: &mut TickState,
+    connection: ConnectionId,
+    ctx: &Ctx,
+    payload: crate::dialog::ClickPayload<'_>,
+) {
     let Some(record) = state.settlements.get(ctx.id) else {
         return;
     };
-    let grid = grid(ctx, state, record, viewer);
-    let title = ctx.f(Key::TitleMap, &[("name", &record.name)]);
-    let buttons = [
-        (Key::Refresh, "map"),
-        (Key::Buildings, "buildings"),
-        (Key::Back, "main"),
-    ]
-    .map(|(key, action)| button(ctx.t(key), action, ctx.id).width(100));
-    let dialog = Dialog::multi_action(title, buttons.into())
-        .columns(3)
-        .text(cells_component(&grid, ctx.id))
-        .text_width(legend_component(ctx, &grid), LEGEND_WIDTH)
-        .exit(Button::plain(ctx.t(Key::Close)));
+    let overview = ((2 * record.radius.min(MAX_RADIUS) + 1).div_ceil(SIZE as u32) as i32).max(1);
+    let scale = payload
+        .string("ms")
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(overview)
+        .clamp(1, overview);
+    let centre = [("mx", record.anchor[0]), ("mz", record.anchor[2])].map(|(key, anchor)| {
+        payload
+            .string(key)
+            .and_then(|s| s.parse::<i32>().ok())
+            .unwrap_or(anchor)
+            .clamp(
+                anchor.saturating_sub(record.radius as i32),
+                anchor.saturating_add(record.radius as i32),
+            )
+    });
+    let grid = grid_at(
+        ctx,
+        state,
+        record,
+        player_pos(state, connection),
+        centre,
+        scale,
+    );
+    let title = format!(
+        "{} · N↑ · 1:{} · {},{}",
+        ctx.t(Key::Map),
+        scale,
+        centre[0],
+        centre[1]
+    );
+    let step = scale * (SIZE as i32 / 2);
+    let mut buttons = Vec::new();
+    for (en, ru, at, zoom) in [
+        ("Refresh", "Обновить", centre, scale),
+        (
+            "Overview",
+            "Обзор",
+            [record.anchor[0], record.anchor[2]],
+            overview,
+        ),
+        ("Zoom +", "Зум +", centre, (scale / 2).max(1)),
+        ("Zoom -", "Зум -", centre, (scale * 2).min(overview)),
+        (
+            "N ↑",
+            "С ↑",
+            [centre[0], centre[1].saturating_sub(step)],
+            scale,
+        ),
+        (
+            "E →",
+            "В →",
+            [centre[0].saturating_add(step), centre[1]],
+            scale,
+        ),
+        (
+            "S ↓",
+            "Ю ↓",
+            [centre[0], centre[1].saturating_add(step)],
+            scale,
+        ),
+        (
+            "W ←",
+            "З ←",
+            [centre[0].saturating_sub(step), centre[1]],
+            scale,
+        ),
+    ] {
+        buttons.push(view_button(
+            ctx,
+            if ctx.lang == super::Lang::Ru { ru } else { en },
+            "map",
+            at,
+            zoom,
+        ));
+    }
+    buttons.push(
+        button(
+            if ctx.lang == super::Lang::Ru {
+                "Здания"
+            } else {
+                "Buildings"
+            },
+            "buildings",
+            ctx.id,
+        )
+        .width(60),
+    );
+    buttons.push(
+        button(
+            if ctx.lang == super::Lang::Ru {
+                "Проекты"
+            } else {
+                "Projects"
+            },
+            "projects",
+            ctx.id,
+        )
+        .width(60),
+    );
+    buttons.push(view_button(
+        ctx,
+        if ctx.lang == super::Lang::Ru {
+            "Легенда"
+        } else {
+            "Legend"
+        },
+        "map_legend",
+        centre,
+        scale,
+    ));
+    buttons.push(button(ctx.t(Key::Back), "dashboard", ctx.id).width(60));
+    let mut dialog = Dialog::multi_action(title, buttons)
+        .columns(6)
+        .text(cells_component(&grid, ctx.id));
+    if let Some(project) = &record.project {
+        let caption = match crate::plugin_structures::settlement_builds::status(
+            state,
+            ctx.id,
+            &project.structure,
+        ) {
+            Ok(status) if status.state.as_str() == "paused" || status.pause_reason.is_some() => {
+                Some(if ctx.lang == super::Lang::Ru {
+                    "Пауза — откройте стройплощадку"
+                } else {
+                    "Paused — open the construction site"
+                })
+            }
+            Err(_) => Some(if ctx.lang == super::Lang::Ru {
+                "Состояние стройки недоступно"
+            } else {
+                "Construction state unavailable"
+            }),
+            _ => None,
+        };
+        if let Some(caption) = caption {
+            dialog = dialog.text(caption);
+        }
+    }
     present(state, connection, dialog);
 }
 
+fn view_button(ctx: &Ctx, label: &str, action: &str, centre: [i32; 2], scale: i32) -> Button {
+    button(label, action, ctx.id)
+        .width(60)
+        .with("mx", Tag::String(centre[0].to_string()))
+        .with("mz", Tag::String(centre[1].to_string()))
+        .with("ms", Tag::String(scale.to_string()))
+}
+
+pub(super) fn legend(
+    state: &mut TickState,
+    connection: ConnectionId,
+    ctx: &Ctx,
+    payload: crate::dialog::ClickPayload<'_>,
+) {
+    let Some(record) = state.settlements.get(ctx.id) else {
+        return;
+    };
+    let grid = grid(ctx, state, record, player_pos(state, connection));
+    let centre = [("mx", record.anchor[0]), ("mz", record.anchor[2])].map(|(key, fallback)| {
+        payload
+            .string(key)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(fallback)
+    });
+    let scale = payload
+        .string("ms")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(grid.scale);
+    present(
+        state,
+        connection,
+        Dialog::notice(
+            ctx.t(Key::Map),
+            view_button(ctx, ctx.t(Key::Back), "map", centre, scale),
+        )
+        .text_width(legend_component(ctx, &grid), LEGEND_WIDTH),
+    );
+}
+
+/// Selection is bound to IDs carried by the rendered cell, not a new first-hit
+/// lookup. Removed features refuse individually; a new overlapping feature cannot
+/// take the place of the one the player saw.
+pub(super) fn pick(
+    state: &mut TickState,
+    connection: ConnectionId,
+    ctx: &Ctx,
+    payload: crate::dialog::ClickPayload<'_>,
+) {
+    let Some(record) = state.settlements.get(ctx.id) else {
+        return;
+    };
+    let ids = payload.string("bids").unwrap_or("");
+    let page = payload
+        .string("page")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(0);
+    let site = payload.string("site").unwrap_or("");
+    let centre = ["mx", "mz"].map(|key| {
+        payload
+            .string(key)
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(0)
+    });
+    let scale = payload
+        .string("ms")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1);
+    let streets = payload.string("streets").unwrap_or("");
+    if let Some(page) = payload.string("sp").and_then(|s| s.parse::<usize>().ok()) {
+        let count = streets.lines().count().max(1);
+        let page = page.min(count - 1);
+        let mut buttons = vec![view_button(ctx, ctx.t(Key::Back), "map", centre, scale)];
+        for next in [page.checked_sub(1), (page + 1 < count).then_some(page + 1)]
+            .into_iter()
+            .flatten()
+        {
+            buttons.push(
+                view_button(
+                    ctx,
+                    if next < page { "←" } else { "→" },
+                    "map_pick",
+                    centre,
+                    scale,
+                )
+                .with("streets", Tag::String(streets.to_owned()))
+                .with("sp", Tag::String(next.to_string())),
+            );
+        }
+        present(
+            state,
+            connection,
+            Dialog::multi_action(
+                format!("{} {}/{}", ctx.t(Key::Map), page + 1, count),
+                buttons,
+            )
+            .text(streets.lines().nth(page).unwrap_or("")),
+        );
+        return;
+    }
+    // Only a single stable feature bypasses the selection page.
+    if streets.is_empty()
+        && !ids.is_empty()
+        && !ids.contains(',')
+        && site.is_empty()
+        && let Ok(raw) = ids.parse::<u64>()
+        && record.buildings.contains_key(&BuildingId(raw))
+    {
+        let payload = Tag::Compound(vec![
+            ("from".to_owned(), Tag::String("map".to_owned())),
+            ("mx".to_owned(), Tag::String(centre[0].to_string())),
+            ("mz".to_owned(), Tag::String(centre[1].to_string())),
+            ("ms".to_owned(), Tag::String(scale.to_string())),
+        ]);
+        super::menus::building_from(
+            state,
+            connection,
+            ctx,
+            BuildingId(raw),
+            crate::dialog::ClickPayload(Some(&payload)),
+        );
+        return;
+    }
+    if streets.is_empty()
+        && ids.is_empty()
+        && !site.is_empty()
+        && record
+            .project
+            .as_ref()
+            .is_some_and(|project| project.structure == site)
+    {
+        super::menus::project(state, connection, ctx);
+        return;
+    }
+    let mut choices = Vec::new();
+    if !site.is_empty() {
+        if record
+            .project
+            .as_ref()
+            .is_some_and(|project| project.structure == site)
+        {
+            choices.push(button(ctx.t(Key::Status), "project_status", ctx.id));
+        } else {
+            choices.push(view_button(
+                ctx,
+                ctx.t(Key::StateChanged),
+                "map",
+                centre,
+                scale,
+            ));
+        }
+    }
+    for id in ids
+        .split(',')
+        .filter_map(|id| id.parse::<u64>().ok())
+        .map(BuildingId)
+    {
+        if let Some(building) = record.buildings.get(&id) {
+            choices.push(
+                view_button(
+                    ctx,
+                    &format!(
+                        "{} #{} L{}",
+                        kind_label(ctx, building.kind),
+                        short(id),
+                        building.level
+                    ),
+                    "buildings",
+                    centre,
+                    scale,
+                )
+                .width(300)
+                .with("b", Tag::String(id.0.to_string()))
+                .with("from", Tag::String("map".to_owned())),
+            );
+        } else {
+            choices.push(
+                view_button(
+                    ctx,
+                    &format!("{} #{}", ctx.t(Key::BuildingGone), short(id)),
+                    "map",
+                    centre,
+                    scale,
+                )
+                .width(300),
+            );
+        }
+    }
+    let pages = choices.len().div_ceil(4).max(1);
+    let page = page.min(pages - 1);
+    let mut buttons: Vec<_> = choices.into_iter().skip(page * 4).take(4).collect();
+    for next in [page.checked_sub(1), (page + 1 < pages).then_some(page + 1)]
+        .into_iter()
+        .flatten()
+    {
+        buttons.push(
+            view_button(
+                ctx,
+                if next < page { "←" } else { "→" },
+                "map_pick",
+                centre,
+                scale,
+            )
+            .with("bids", Tag::String(ids.to_owned()))
+            .with("site", Tag::String(site.to_owned()))
+            .with("streets", Tag::String(streets.to_owned()))
+            .with(
+                "cell",
+                Tag::String(payload.string("cell").unwrap_or("").to_owned()),
+            )
+            .with("page", Tag::String(next.to_string())),
+        );
+    }
+    if !streets.is_empty() {
+        buttons.push(
+            view_button(ctx, ctx.t(Key::Status), "map_pick", centre, scale)
+                .with("streets", Tag::String(streets.to_owned()))
+                .with("sp", Tag::String("0".to_owned())),
+        );
+    }
+    buttons.push(view_button(ctx, ctx.t(Key::Back), "map", centre, scale));
+    let text = payload
+        .string("cell")
+        .unwrap_or("")
+        .lines()
+        .next()
+        .unwrap_or("");
+    present(
+        state,
+        connection,
+        Dialog::multi_action(
+            format!("{} {}/{}", ctx.t(Key::Map), page + 1, pages),
+            buttons,
+        )
+        .columns(1)
+        .text(text)
+        .exit(view_button(ctx, ctx.t(Key::Back), "map", centre, scale)),
+    );
+}
+
 fn grid(ctx: &Ctx, state: &TickState, record: &SettlementRecord, viewer: Option<[i32; 3]>) -> Grid {
+    let scale = ((2 * record.radius.min(MAX_RADIUS) + 1).div_ceil(SIZE as u32) as i32).max(1);
+    grid_at(
+        ctx,
+        state,
+        record,
+        viewer,
+        [record.anchor[0], record.anchor[2]],
+        scale,
+    )
+}
+
+fn grid_at(
+    ctx: &Ctx,
+    state: &TickState,
+    record: &SettlementRecord,
+    viewer: Option<[i32; 3]>,
+    centre: [i32; 2],
+    scale: i32,
+) -> Grid {
     let radius = record.radius.min(MAX_RADIUS);
-    let scale = (2 * radius + 1).div_ceil(SIZE as u32) as i32;
     let radius = radius as i32;
     let size = SIZE as i32;
     let half = size / 2;
     let anchor = [record.anchor[0], record.anchor[2]];
-    let origin = anchor.map(|centre| centre - half * scale - scale / 2);
+    let origin = centre.map(|centre| centre.saturating_sub(half * scale + scale / 2));
     let features = features(ctx, state, record);
     let you = viewer.map(|at| [at[0], at[2]]);
     let mut cells = Vec::with_capacity(SIZE * SIZE);
@@ -169,7 +546,10 @@ fn grid(ctx: &Ctx, state: &TickState, record: &SettlementRecord, viewer: Option<
             you_shown |= mine;
             // Territory by cell centre, doubled to stay in integers.
             let inside = (0..2)
-                .map(|axis| i64::from(min[axis] + max[axis] - 2 * anchor[axis]).pow(2))
+                .map(|axis| {
+                    (i64::from(min[axis]) + i64::from(max[axis]) - 2 * i64::from(anchor[axis]))
+                        .pow(2)
+                })
                 .sum::<i64>()
                 <= (2 * i64::from(radius)).pow(2);
             let mut lines = Vec::new();
@@ -203,7 +583,17 @@ fn grid(ctx: &Ctx, state: &TickState, record: &SettlementRecord, viewer: Option<
             cells.push(Cell {
                 color,
                 hover: lines.join("\n"),
-                click: here.first().and_then(|feature| feature.click),
+                click: here
+                    .iter()
+                    .filter_map(|feature| feature.click.clone())
+                    .collect(),
+                bounds: [min, max],
+                streets: here
+                    .iter()
+                    .filter(|feature| feature.click.is_none())
+                    .map(|feature| feature.label.replace('\n', " · "))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
             });
         }
     }
@@ -214,11 +604,11 @@ fn grid(ctx: &Ctx, state: &TickState, record: &SettlementRecord, viewer: Option<
     if you_shown {
         legend.push((YOU, ctx.t(Key::MapYou).to_owned()));
     }
-    if features
+    if let Some(feature) = features
         .iter()
-        .any(|feature| feature.click == Some(Click::Site))
+        .find(|feature| matches!(feature.click, Some(Click::Site(_))))
     {
-        legend.push((SITE, ctx.t(Key::MapSite).to_owned()));
+        legend.push((feature.color, feature.label.clone()));
     }
     for (color, key) in [
         (PAVED_ROAD, Key::MapPavedRoads),
@@ -244,6 +634,7 @@ fn grid(ctx: &Ctx, state: &TickState, record: &SettlementRecord, viewer: Option<
     );
     Grid {
         scale,
+        centre,
         cells,
         legend,
         buildings: record.buildings.len(),
@@ -265,20 +656,45 @@ fn features(ctx: &Ctx, state: &TickState, record: &SettlementRecord) -> Vec<Feat
     if let Some(project) = &record.project
         && let Some(bounds) = layout::project_bounds(state, project)
     {
+        let status = crate::plugin_structures::settlement_builds::status(
+            state,
+            record.id,
+            &project.structure,
+        )
+        .ok();
+        let paused = status.as_ref().is_some_and(|snapshot| {
+            snapshot.state.as_str() == "paused" || snapshot.pause_reason.is_some()
+        });
+        let caption = match &status {
+            Some(snapshot) => {
+                let phase = super::project_phase(ctx, snapshot.state.as_str());
+                snapshot
+                    .pause_reason
+                    .as_ref()
+                    .map_or_else(|| phase.to_owned(), |reason| format!("{phase}: {reason}"))
+            }
+            None => match ctx.lang {
+                super::Lang::En => "Construction state unavailable; cause unknown".to_owned(),
+                super::Lang::Ru => "Состояние стройки недоступно; причина неизвестна".to_owned(),
+            },
+        };
         out.push(Feature {
             min: [bounds.min[0], bounds.min[2]],
             max: [bounds.max[0], bounds.max[2]],
-            color: SITE,
-            label: ctx.f(
-                Key::MapSiteAt,
-                &[
-                    ("blueprint", blueprint_label(ctx, &project.blueprint)),
-                    ("level", &project.level.to_string()),
-                    ("from", &corner_text(bounds.min)),
-                    ("to", &corner_text(bounds.max)),
-                ],
+            color: if paused { PAUSED_SITE } else { SITE },
+            label: format!(
+                "{caption}\n{}",
+                ctx.f(
+                    Key::MapSiteAt,
+                    &[
+                        ("blueprint", blueprint_label(ctx, &project.blueprint)),
+                        ("level", &project.level.to_string()),
+                        ("from", &corner_text(bounds.min)),
+                        ("to", &corner_text(bounds.max)),
+                    ],
+                )
             ),
-            click: Some(Click::Site),
+            click: Some(Click::Site(project.structure.clone())),
         });
     }
     for building in record.buildings.values() {
@@ -346,21 +762,15 @@ fn root(parts: Vec<Tag>) -> Tag {
     ])
 }
 
-/// One text run per stretch of equal cells in a row, rows joined by newlines.
+/// One independently clickable run per bounded cell, with rows joined by newlines.
 fn cells_component(grid: &Grid, id: SettlementId) -> Tag {
     let mut parts = Vec::new();
     for row in grid.cells.chunks(SIZE) {
         if !parts.is_empty() {
             parts.push(literal("\n"));
         }
-        let mut start = 0;
-        while start < row.len() {
-            let cell = &row[start];
-            let length = row[start..]
-                .iter()
-                .take_while(|other| *other == cell)
-                .count();
-            let mut entries = colored(GLYPH.to_string().repeat(length), cell.color);
+        for cell in row {
+            let mut entries = colored(GLYPH, cell.color);
             entries.push((
                 "hover_event".to_owned(),
                 Tag::Compound(vec![
@@ -368,15 +778,45 @@ fn cells_component(grid: &Grid, id: SettlementId) -> Tag {
                     ("value".to_owned(), Tag::String(cell.hover.clone())),
                 ]),
             ));
-            if let Some(click) = cell.click {
-                let mut payload = vec![("s".to_owned(), Tag::String(id.0.to_string()))];
-                let action = match click {
-                    Click::Building(building) => {
-                        payload.push(("b".to_owned(), Tag::String(building.0.to_string())));
-                        "buildings"
-                    }
-                    Click::Site => "project_status",
-                };
+            {
+                let buildings = cell
+                    .click
+                    .iter()
+                    .filter_map(|click| match click {
+                        Click::Building(building) => Some(building.0.to_string()),
+                        Click::Site(_) => None,
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                let site = cell
+                    .click
+                    .iter()
+                    .find_map(|click| match click {
+                        Click::Site(site) => Some(site.as_str()),
+                        _ => None,
+                    })
+                    .unwrap_or("");
+                let payload = vec![
+                    ("s".to_owned(), Tag::String(id.0.to_string())),
+                    ("bids".to_owned(), Tag::String(buildings)),
+                    ("site".to_owned(), Tag::String(site.to_owned())),
+                    ("mx".to_owned(), Tag::String(grid.centre[0].to_string())),
+                    ("mz".to_owned(), Tag::String(grid.centre[1].to_string())),
+                    ("ms".to_owned(), Tag::String(grid.scale.to_string())),
+                    (
+                        "cell".to_owned(),
+                        Tag::String(format!(
+                            "X {}..{} · Z {}..{}\n{}",
+                            cell.bounds[0][0],
+                            cell.bounds[1][0],
+                            cell.bounds[0][1],
+                            cell.bounds[1][1],
+                            cell.hover
+                        )),
+                    ),
+                    ("streets".to_owned(), Tag::String(cell.streets.clone())),
+                ];
+                let action = "map_pick";
                 entries.push((
                     "click_event".to_owned(),
                     Tag::Compound(vec![
@@ -390,7 +830,6 @@ fn cells_component(grid: &Grid, id: SettlementId) -> Tag {
                 ));
             }
             parts.push(Tag::Compound(entries));
-            start += length;
         }
     }
     root(parts)

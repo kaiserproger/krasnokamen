@@ -1,0 +1,49 @@
+{
+  "id": "ISSUE-1-26",
+  "verdict": "promoted",
+  "fix_commit": "patch:d621068b278bfa6128741ae7e78b112c17d93670be93099adf78012915876b5e",
+  "fix_commit_full": "patch:d621068b278bfa6128741ae7e78b112c17d93670be93099adf78012915876b5e",
+  "promoted_at": "2026-11-12T03:05:01+00:00",
+  "tree_head": "29f0f612ea7501d189c43066a653ed1797ecb5f7",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "d621068b278bfa6128741ae7e78b112c17d93670be93099adf78012915876b5e",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/buildings.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:settlements::buildings::tests::ordinary_sleep_bed_certifies_without_breeding_headroom": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-low-roof-house": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-low-roof-house --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/PromoteIssue1/.analysis/validation/20261112T024434-ledger-promote-k3jagnup/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::buildings::tests::ordinary_sleep_bed_certifies_without_breeding_headroom": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:native-low-roof-house": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T030443-native-low-roof-house-p12vtz2t/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/PromoteIssue1/.analysis/validation/20261112T020753-native-low-roof-house-3mokpasc/result.json",
+    "tree_head": "29f0f612ea7501d189c43066a653ed1797ecb5f7",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "4840a08470fbb6f71c3f0b26600e6fb066179bb7caab6a0b8234a6e2d495dbe8",
+    "covers": [
+      "harness:scene-shot:native-low-roof-house"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteIssue1/.analysis/validation/20261112T024434-ledger-promote-k3jagnup"
+}

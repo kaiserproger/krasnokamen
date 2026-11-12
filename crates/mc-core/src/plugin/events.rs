@@ -3,6 +3,62 @@
 
 use super::*;
 
+/// Plugin commands are refused once this many durable entries (events, player
+/// changes and execution traces, pending or retained) wait for the plugin host.
+/// A quarter of the halt capacity: the rest absorbs what the commands already
+/// admitted still add (one tick's guest command results are at most
+/// `MAX_SCRIPT_COMMAND_QUEUE_CAPACITY`, each an event, a change and a trace).
+pub(crate) const COMMAND_BACKLOG_LIMIT: usize = mc_script::MAX_SCRIPT_EVENT_QUEUE_CAPACITY / 4;
+
+/// What a player is told when a plugin command is refused for backlog.
+pub(crate) const COMMAND_BACKLOG_REFUSAL: &str =
+    "This plugin is backed up; try the command again in a moment.";
+
+impl PluginRuntime {
+    /// Durable entries not yet handed to the plugin host: this tick's pending
+    /// ones plus every retained batch. This sum is what halts the world past
+    /// [`mc_script::MAX_SCRIPT_EVENT_QUEUE_CAPACITY`].
+    pub(crate) fn backlog_len(&self) -> usize {
+        let pending =
+            self.pending_events.len() + self.pending_changes.len() + self.pending_traces.len();
+        let retained: usize = self
+            .committed_events
+            .iter()
+            .map(|batch| batch.events.len() + batch.changes.len() + batch.traces.len())
+            .sum();
+        pending.saturating_add(retained)
+    }
+
+    /// The backlog by event kind, for the halt log: which kind filled the queue.
+    pub(crate) fn backlog_summary(&self) -> String {
+        let mut kinds: BTreeMap<&'static str, usize> = BTreeMap::new();
+        for event in self
+            .pending_events
+            .iter()
+            .chain(self.committed_events.iter().flat_map(|batch| &batch.events))
+        {
+            *kinds.entry(event.event_name()).or_default() += 1;
+        }
+        let changes = self.pending_changes.len()
+            + self
+                .committed_events
+                .iter()
+                .map(|batch| batch.changes.len())
+                .sum::<usize>();
+        let traces = self.pending_traces.len()
+            + self
+                .committed_events
+                .iter()
+                .map(|batch| batch.traces.len())
+                .sum::<usize>();
+        let mut summary = format!("player_changes={changes} traces={traces}");
+        for (kind, count) in kinds {
+            summary.push_str(&format!(" {kind}={count}"));
+        }
+        summary
+    }
+}
+
 /// Seal durable callbacks under the completed tick's WAL batch. Observations
 /// have independent per-subscriber shedding queues and never halt authority.
 pub(crate) fn seal_events(state: &mut TickState, tick: u64) -> Result<bool, &'static str> {
@@ -21,15 +77,18 @@ pub(crate) fn seal_events(state: &mut TickState, tick: u64) -> Result<bool, &'st
     runtime.boundary.seal_observations(tick);
     let pending =
         runtime.pending_events.len() + runtime.pending_changes.len() + runtime.pending_traces.len();
-    let retained: usize = runtime
-        .committed_events
-        .iter()
-        .map(|batch| batch.events.len() + batch.changes.len() + batch.traces.len())
-        .sum();
     if runtime.delivery_failed {
         return Err("plugin native authority failed: world halted (fail closed)");
     }
-    if retained.saturating_add(pending) > mc_script::MAX_SCRIPT_EVENT_QUEUE_CAPACITY {
+    let backlog = runtime.backlog_len();
+    if backlog > mc_script::MAX_SCRIPT_EVENT_QUEUE_CAPACITY {
+        tracing::error!(
+            target: "plugin.backlog",
+            backlog,
+            capacity = mc_script::MAX_SCRIPT_EVENT_QUEUE_CAPACITY,
+            entries = %runtime.backlog_summary(),
+            "plugin callback backlog overflow: halting the world"
+        );
         return Err("plugin callback backlog overflow: world halted (fail closed)");
     }
     if pending == 0 {

@@ -350,8 +350,9 @@ not whether a villager sleeps or breeds.
 
 `assert_entities` (native only) takes `name`, `args` (as `list_entities`), `entity_type`
 and `min`, plus optional `max`, `box` (`[x0,y0,z0,x1,y1,z1]` on the received feet
-position), `max_height` (a sleeping pose is 0.2 tall) and `profession` (the received
-VillagerData). It counts the matching received entities and fails `<name>_min` or
+position), `max_height` (a sleeping pose is 0.2 tall), `profession` (the received
+VillagerData) and `baby` (the received DATA_BABY_ID; a row that never received it matches
+neither `true` nor `false`). It counts the matching received entities and fails `<name>_min` or
 `<name>_max`; the artifact keeps the same-thread `game_time` and every received row.
 The village scenes judge settlement behaviour with it, in game ticks on a frozen clock:
 `native-village-idle-stroll` (six residents dropped 40 blocks from the bell walk back
@@ -363,9 +364,33 @@ unbound villager and a bound resident take a free lectern),
 `native-village-deep-water` (residents dropped onto the floor of 2- and 5-deep ponds, with no bank cell
 beside them, leave the water and sleep at home), `native-village-mob-doors` (residents shut behind
 poplar, copper and waxed oxidized copper doors walk to the bell and the doors read shut afterwards;
-an iron door keeps its resident in) and `native-village-after-hours-job` (at Idle day tick 11000 a bound
-jobless resident walks 44 blocks to a new farmer workshop and takes the profession).
+an iron door keeps its resident in), `native-village-after-hours-job` (at Idle day tick 11000 a bound
+jobless resident walks 44 blocks to a new farmer workshop and takes the profession) and
+`native-village-breeding` (two bound adults ration bread from a certified storage and, in a
+house whose roof sits one block over its three beds, raise a baby villager the client receives
+within 3000 game ticks; the fix patch of `ISSUE-1-13` is the headroom-free spare-bed scan).
 Each runs on a sky platform with spawning and time frozen; none covers terrain routes.
+
+`upgrade_certified` (native only) takes `{"kind": "<building kind>", "level": 2|3}`:
+it waits for the newest `Certified <kind> #<id>` reply in `recent_chat`, sends
+`settlement building upgrade <id>` (a building id is a settlement and sequence
+pair, so a fixed scenario cannot spell it), waits 20 ticks and fails the named
+assertion `<kind>_upgraded_to_level_<level>` unless `Upgraded building #<id> to
+level <level>.` arrived.
+
+`native-settlement-buildings-upgrade` hand-builds a stone wall, a tower, a
+barracks with two beds and a farmer workshop with a composter inside a founded
+settlement and certifies each, expands the wall to the next level's size and
+adds a second composter, then upgrades both through `upgrade_certified`. It
+covers ISSUE-1-09 on the command path; it does not press the Buildings dialog's
+Upgrade button (`army-qa` does), build with Builders (`buildings-qa`), or cover
+gates, level 3 or the other workshop kinds.
+
+`native-settlement-radius-growth` founds a settlement of radius 8 around six
+villagers, then binds a seventh. `/settlement info` must show `radius=24
+members=6` after founding and `radius=28 members=7` after the bind (four blocks
+per resident, docs/settlements/construction.md). It reads the command reply, not
+the Settings dialog or the map territory.
 
 
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains

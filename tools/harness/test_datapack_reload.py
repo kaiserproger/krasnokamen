@@ -35,6 +35,18 @@ class DatapackReloadTests(unittest.TestCase):
                              datapack_reload.PACK_RESULT)
         self.assertNotEqual(datapack_reload.PACK_RESULT, datapack_reload.VANILLA_RESULT)
 
+    def test_says_after_reads_recent_chat_newest_first(self) -> None:
+        # The client lists recent_chat newest first: the count line is the newest, the fence is older.
+        chat = ["3 more datapack warning(s), see the server log", "Skipping new datapack file/nometa",
+                "Reloading!", "Round2Begin", "Skipping new datapack file/brokenzip.zip", "Reloading!"]
+        self.assertTrue(datapack_reload.chat_says_after(chat, "Round2Begin", "more datapack warning(s)"))
+        self.assertTrue(datapack_reload.chat_says_after(chat, "Round2Begin", "Skipping new datapack file/nometa"))
+        # A line from before the fence (older, so later in the list) never counts.
+        self.assertFalse(datapack_reload.chat_says_after(chat, "Round2Begin", "Skipping new datapack file/brokenzip.zip"))
+        self.assertFalse(datapack_reload.chat_says_after(chat[1:], "Round2Begin", "more datapack warning(s)"))
+        self.assertFalse(datapack_reload.chat_says_after(chat[:3], "Round2Begin", "Reloading!x"))
+        self.assertFalse(datapack_reload.chat_says_after(chat[:3], "Round2Begin", "Reloading!"))
+
 
 if __name__ == "__main__":
     unittest.main()

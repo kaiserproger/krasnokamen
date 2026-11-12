@@ -68,6 +68,13 @@ const LABEL_SHADOW_STRENGTH: f32 = 1.0;
 const LABEL_VISIBILITY_RANGE: f64 = 48.0;
 const LABEL_VISIBILITY_RANGE_SQ: f64 = LABEL_VISIBILITY_RANGE * LABEL_VISIBILITY_RANGE;
 
+/// Reliable frames the labels of one plan may emit. A reliable queue holds
+/// [`crate::fanout::OUTBOUND_QUEUE_BOUND`] frames and the pump disconnects a
+/// connection that is planned more in one publication; a dense settlement
+/// (two frames per point of interest) would otherwise close the connection of
+/// the viewer who walks in. The rest follows on the next ticks.
+const LABEL_FRAMES_PER_PLAN: usize = crate::fanout::OUTBOUND_QUEUE_BOUND / 2;
+
 /// Connection-local virtual ids: negative, never aliasing gameplay positives.
 /// One label per stable anchor key; ids are assigned in anchor order and never
 /// reused after a label leaves, so a removed slot cannot alias a later label.
@@ -235,19 +242,23 @@ pub(crate) fn plan_labels(
             },
         );
     }
+    // Deferred spawns and text updates stay owed: the snapshot keeps them
+    // and the baseline has not advanced, so the next plan emits them.
+    let mut frames = 0;
     for label in snapshot
         .settlement_labels
         .iter()
         .filter(|label| visible(label))
     {
         if let Some((id, _, text)) = viewer.labels.by_anchor.get_mut(&label.anchor) {
-            if *text != label.text {
+            if *text != label.text && frames < LABEL_FRAMES_PER_PLAN {
                 push_reliable(out, connection, &label_metadata(*id, &label.text));
                 text.clone_from(&label.text);
+                frames += 1;
             }
             continue;
         }
-        if *credit == 0 {
+        if *credit == 0 || frames + 2 > LABEL_FRAMES_PER_PLAN {
             continue;
         }
         let Some(id) = viewer.labels.alloc() else {
@@ -279,6 +290,7 @@ pub(crate) fn plan_labels(
             },
         );
         *credit -= 1;
+        frames += 2;
         viewer
             .labels
             .by_anchor

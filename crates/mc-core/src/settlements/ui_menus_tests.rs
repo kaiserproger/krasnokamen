@@ -424,12 +424,24 @@ fn view_only_full_inventory_and_stale_clicks_move_nothing() {
 /// A plugin-inventory hold on the joined player's inventory (the same
 /// operation production and construction holds use).
 fn reserve(state: &mut TickState, name: &str, count: u64) {
+    reserve_endpoint(
+        state,
+        name,
+        count,
+        mc_script::ScriptInventoryEndpoint::PlayerInventory { player_id: CONN.0 },
+    );
+}
+
+fn reserve_endpoint(
+    state: &mut TickState,
+    name: &str,
+    count: u64,
+    endpoint: mc_script::ScriptInventoryEndpoint,
+) {
     use mc_script::{
-        ScriptInventoryEndpoint, ScriptInventoryMaterial, ScriptInventoryResourcePlan,
-        ScriptInventoryWorkPortion, ScriptOperation, ScriptOperationRequest,
-        ScriptOwnedInventoryOperation,
+        ScriptInventoryMaterial, ScriptInventoryResourcePlan, ScriptInventoryWorkPortion,
+        ScriptOperation, ScriptOperationRequest, ScriptOwnedInventoryOperation,
     };
-    let endpoint = ScriptInventoryEndpoint::PlayerInventory { player_id: CONN.0 };
     let operation_id = Uuid::new_v4().simple().to_string();
     let request = ScriptOperationRequest::try_new(
         &operation_id,
@@ -640,7 +652,9 @@ fn resident_slot(state: &TickState, uuid: Uuid) -> usize {
     open(state)
         .targets
         .iter()
-        .position(|target| matches!(target, Target::Pick { worker, .. } if *worker == uuid))
+        .position(
+            |target| matches!(target, Target::Show(View::Resident { worker }) if *worker == uuid),
+        )
         .expect("resident icon")
 }
 
@@ -650,12 +664,14 @@ fn residents_menu_assigns_a_free_certified_place_and_explains_refusals() {
     let (id, building) = farm(&mut state);
     let first = resident(&mut state, id, 5.5);
     let second = resident(&mut state, id, 6.5);
-    let opened = dialog(&mut state, id, "residents_icons", &[]);
-    assert!(title(&opened).contains("Residents · oak"));
+    let opened = dialog(&mut state, id, "residents", &[]);
+    assert!(title(&opened).contains("Residents / households"));
 
     // Resident icon -> workplace icons -> assignment through the claim index.
     let icon = resident_slot(&state, first);
     press(&mut state, icon as i16, 0, ClickMode::Pickup);
+    assert!(matches!(open(&state).view, View::Resident { worker } if worker == first));
+    press(&mut state, ACTION as i16, 0, ClickMode::Pickup);
     assert!(matches!(open(&state).view, View::Assign { worker, .. } if worker == first));
     let place = open(&state)
         .targets
@@ -679,8 +695,10 @@ fn residents_menu_assigns_a_free_certified_place_and_explains_refusals() {
     ));
 
     // The single place is taken: the second resident is refused, unchanged.
+    press(&mut state, BACK as i16, 0, ClickMode::Pickup);
     let icon = resident_slot(&state, second);
     press(&mut state, icon as i16, 0, ClickMode::Pickup);
+    press(&mut state, ACTION as i16, 0, ClickMode::Pickup);
     let full = press(&mut state, place as i16, 0, ClickMode::Pickup);
     assert!(said(&full, "No free work place"), "{:?}", chat(&full));
     assert_eq!(job(&state, second), None);
@@ -707,7 +725,13 @@ fn map_click_opens_the_building_page_and_hires_into_its_free_place() {
         &mut state,
         id,
         "buildings",
-        &[("b", Tag::String(building.0.to_string()))],
+        &[
+            ("b", Tag::String(building.0.to_string())),
+            ("from", Tag::String("map".to_owned())),
+            ("mx", Tag::String("42".to_owned())),
+            ("mz", Tag::String("-9".to_owned())),
+            ("ms", Tag::String("2".to_owned())),
+        ],
     );
     assert!(title(&opened).contains("#1"), "{}", title(&opened));
     assert!(matches!(
@@ -718,10 +742,24 @@ fn map_click_opens_the_building_page_and_hires_into_its_free_place() {
     let candidate = resident_or_assign(&state, worker);
     press(&mut state, candidate as i16, 0, ClickMode::Pickup);
     assert_eq!(job(&state, worker), Some(BlockPos { x: 4, y: 201, z: 4 }));
-    assert_eq!(open(&state).view, View::Building { building });
+    let origin = Origin::Map {
+        centre: [42, -9],
+        scale: 2,
+    };
+    assert_eq!(
+        open(&state).view,
+        View::BuildingContext { building, origin }
+    );
     assert!(matches!(
         open(&state).targets[BUILDING_PLACES],
-        Target::Pick { worker: w, from: Some(b) } if w == worker && b == building
+        Target::Pick { worker: w, from: Some((b, o)) } if w == worker && b == building && o == origin
+    ));
+    assert!(matches!(
+        open(&state).targets[BACK],
+        Target::MapView {
+            centre: [42, -9],
+            scale: 2
+        }
     ));
 }
 
@@ -758,4 +796,363 @@ fn back_closes_the_window_and_returns_the_cursor_before_the_dialog() {
     // The half stack taken onto the cursor is now in the inventory, not lost.
     assert_eq!(stored(&state, "minecraft:bread"), 2);
     assert_eq!(held(&state, "minecraft:bread"), 3);
+}
+
+fn metadata(screen: &Screen) -> String {
+    screen
+        .icons
+        .iter()
+        .flat_map(|stack| &stack.extended().preserved_components)
+        .filter(|component| {
+            matches!(
+                component.name.as_str(),
+                "minecraft:custom_name" | "minecraft:lore"
+            )
+        })
+        .map(|component| {
+            let mut bytes = component.value.as_slice();
+            let tag = mc_nbt::read_network_value(&mut bytes).unwrap();
+            assert!(bytes.is_empty());
+            format!("{tag:?}")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[test]
+fn resources_keep_component_distinct_stacks_and_native_reservation_floors() {
+    let mut state = joined();
+    let id = storage_town(&mut state, PLAYER);
+    let named = decorate(
+        &state,
+        ItemStack::new(item(&state, "minecraft:cobblestone"), 7),
+        text("Marked stone"),
+        &[],
+    );
+    state.block_entities.get_mut(&(4, 201, 4)).unwrap().slots[2] = named.clone();
+    let dimension = state.dimension.name().into();
+    reserve_endpoint(
+        &mut state,
+        "minecraft:cobblestone",
+        5,
+        mc_script::ScriptInventoryEndpoint::Container {
+            dimension,
+            position: mc_script::ScriptBlockPosition::new(4, 201, 4),
+        },
+    );
+    let snapshot = stores(&state, id);
+    assert!(!snapshot.unavailable);
+    let entries = stock(&snapshot);
+    let stone = entries
+        .iter()
+        .filter(|entry| entry.template.item_id == named.item_id)
+        .collect::<Vec<_>>();
+    assert_eq!(stone.len(), 2, "component-distinct stacks must not merge");
+    let ordinary = stone
+        .iter()
+        .find(|entry| !can_stack(&entry.template, &named))
+        .unwrap();
+    let marked = stone
+        .iter()
+        .find(|entry| can_stack(&entry.template, &named))
+        .unwrap();
+    assert_eq!((ordinary.total, ordinary.free), (70, 70));
+    assert_eq!((marked.total, marked.free), (7, 2));
+    let ctx = Ctx {
+        id,
+        manage: true,
+        lang: Lang::En,
+    };
+    assert!(metadata(&resources_screen(&state, &ctx)).contains("77 / 5 / 72"));
+    let reserved = resource_screen(&state, &ctx, 7, 0);
+    assert_eq!(
+        reserved
+            .targets
+            .iter()
+            .filter(|target| matches!(target, Target::StockDetail(_)))
+            .count(),
+        1
+    );
+    assert!(metadata(&reserved).contains("7 / 5 / 2"));
+}
+
+#[test]
+fn unreadable_storage_and_container_cap_are_unknown_not_zero_stock() {
+    let mut state = joined();
+    let id = storage_town(&mut state, PLAYER);
+    state.block_entities.remove(&(6, 201, 4));
+    let snapshot = stores(&state, id);
+    assert!(snapshot.unavailable);
+    assert_eq!(
+        stock(&snapshot)
+            .iter()
+            .map(|entry| entry.total)
+            .sum::<u64>(),
+        70
+    );
+    let ctx = Ctx {
+        id,
+        manage: true,
+        lang: Lang::En,
+    };
+    let summary = metadata(&resources_screen(&state, &ctx));
+    assert!(summary.contains("Partial readable stock only; totals unknown."));
+    assert!(!summary.contains("0 / 0 / 0"));
+    let details = resource_screen(&state, &ctx, 6, 0);
+    assert!(matches!(details.targets[INFO], Target::Dialog("storage")));
+    assert!(metadata(&details).contains("totals unknown"));
+
+    let mut capped = joined();
+    let id = town(&mut capped, PLAYER);
+    for index in 0..64 {
+        chest(
+            &mut capped,
+            [index % 16, 201, index / 16],
+            &[("minecraft:bread", 1)],
+        );
+    }
+    buildings::certify(
+        &mut capped,
+        id,
+        BuildingKind::Storage,
+        ScriptWorldBounds::new([0, 200, 0], [15, 204, 3]).unwrap(),
+    )
+    .unwrap();
+    // A single certificate owns at most 64 work points. Exceed the UI's
+    // aggregate inspection budget with a second, independently certified store.
+    chest(&mut capped, [1, 201, 8], &[("minecraft:bread", 1)]);
+    buildings::certify(
+        &mut capped,
+        id,
+        BuildingKind::Storage,
+        ScriptWorldBounds::new([0, 200, 7], [2, 204, 9]).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(buildings::storage_points(&capped, id).len(), 65);
+    let snapshot = stores(&capped, id);
+    assert!(
+        snapshot.unavailable,
+        "a capped projection cannot claim completeness"
+    );
+    assert_eq!(snapshot.images.len(), MAX_CONTAINERS);
+    let ctx = Ctx {
+        id,
+        manage: true,
+        lang: Lang::En,
+    };
+    assert!(metadata(&resources_screen(&capped, &ctx)).contains("totals unknown"));
+}
+
+#[test]
+fn seventy_residents_and_no_household_members_are_paged_without_lost_ids() {
+    let mut state = joined();
+    let id = town(&mut state, PLAYER);
+    let mut expected = (0..70)
+        .map(|_| resident(&mut state, id, 8.5))
+        .collect::<Vec<_>>();
+    expected.sort_unstable();
+    assert!(
+        people(&state, id)
+            .iter()
+            .all(|person| person.household.is_none())
+    );
+    dialog(&mut state, id, "residents", &[]);
+    let mut seen = Vec::new();
+    for page in 0..2 {
+        assert_eq!(open(&state).view, View::Census { filter: 0, page });
+        let members = open(&state).targets[9..45]
+            .iter()
+            .filter_map(|target| match target {
+                Target::Show(View::Resident { worker }) => Some(*worker),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(members.len(), if page == 0 { 36 } else { 34 });
+        seen.extend(members);
+        if page == 0 {
+            press(&mut state, NEXT as i16, 0, ClickMode::Pickup);
+        }
+    }
+    seen.sort_unstable();
+    assert_eq!(seen, expected);
+    let worker = match open(&state).targets[9] {
+        Target::Show(View::Resident { worker }) => worker,
+        _ => panic!("resident head"),
+    };
+    press(&mut state, 9, 0, ClickMode::Pickup);
+    assert_eq!(open(&state).view, View::Resident { worker });
+    press(&mut state, 16, 0, ClickMode::Pickup);
+    let mut members = Vec::new();
+    for page in 0..3 {
+        assert_eq!(open(&state).view, View::Household { id: None, page });
+        members.extend(
+            open(&state).targets[18..45]
+                .iter()
+                .filter_map(|target| match target {
+                    Target::Show(View::Resident { worker }) => Some(*worker),
+                    _ => None,
+                }),
+        );
+        if page < 2 {
+            press(&mut state, NEXT as i16, 0, ClickMode::Pickup);
+        }
+    }
+    members.sort_unstable();
+    assert_eq!(members, expected);
+    press(&mut state, BACK as i16, 0, ClickMode::Pickup);
+    assert_eq!(open(&state).view, View::Households { page: 0 });
+    press(&mut state, BACK as i16, 0, ClickMode::Pickup);
+    assert_eq!(open(&state).view, View::Census { filter: 0, page: 0 });
+}
+
+#[test]
+fn visitor_resident_and_building_cards_have_no_assignment_actuators() {
+    let mut state = joined();
+    let (id, building) = farm(&mut state);
+    let worker = resident(&mut state, id, 8.5);
+    let ctx = Ctx {
+        id,
+        manage: false,
+        lang: Lang::En,
+    };
+    let person = resident_screen(&state, &ctx, worker);
+    assert!(person.targets.iter().all(|target| !matches!(
+        target,
+        Target::Pick { .. } | Target::Assign { .. } | Target::Show(View::Hire { .. })
+    )));
+    let building = building_context_screen(
+        &state,
+        &ctx,
+        building,
+        Origin::List {
+            kind: None,
+            page: 0,
+        },
+    );
+    assert!(building.targets.iter().all(|target| !matches!(
+        target,
+        Target::Pick { .. } | Target::Assign { .. } | Target::Show(View::Hire { .. })
+    )));
+}
+
+#[test]
+fn unavailable_native_project_is_not_a_complete_bar_or_a_funded_map_action() {
+    use crate::settlements::construction::tests::{fixture, fund, open_plan};
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "storage", 1);
+    crate::settlements::construction::request_build(&mut state, id, "storage").unwrap();
+    state
+        .settlements
+        .get_mut(id)
+        .unwrap()
+        .project
+        .as_mut()
+        .unwrap()
+        .structure = "gone-native-site".into();
+    let ctx = Ctx {
+        id,
+        manage: true,
+        lang: Lang::En,
+    };
+    let screen = project_screen(&state, &ctx, 0);
+    assert!(metadata(&screen).contains("Project records unavailable; cause unknown."));
+    assert!(screen.icons[18..27].iter().all(ItemStack::is_empty));
+    assert!(matches!(screen.targets[ACTION], Target::Dialog("storage")));
+}
+
+#[test]
+fn cached_icon_names_keep_numeric_ids_local_to_the_registry() {
+    let mut state = joined();
+    let original = icon(&state, Icon::Book, 1, text("Book"), &[]).item_id;
+    let changed = original + 100_000;
+    let items = mc_data::items::ItemRegistry::from_report(&[
+        mc_data::items::ItemReport {
+            id: Icon::Book.identifier().clone(),
+            protocol_id: changed,
+        },
+        mc_data::items::ItemReport {
+            id: Icon::Paper.identifier().clone(),
+            protocol_id: changed + 1,
+        },
+    ]);
+    std::sync::Arc::make_mut(&mut state.registry).items = std::sync::Arc::new(items);
+    assert_eq!(
+        icon(&state, Icon::Book, 1, text("Book"), &[]).item_id,
+        changed
+    );
+    assert!(std::ptr::eq(
+        Icon::Book.identifier(),
+        Icon::Book.identifier()
+    ));
+}
+
+#[test]
+fn certificate_and_request_policies_are_multiline_lore_in_both_locales() {
+    let mut state = joined();
+    let id = storage_town(&mut state, PLAYER);
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    for lang in [Lang::En, Lang::Ru] {
+        let ctx = Ctx {
+            id,
+            manage: true,
+            lang,
+        };
+        let screen = building_context_screen(
+            &state,
+            &ctx,
+            building,
+            Origin::List {
+                kind: None,
+                page: 0,
+            },
+        );
+        for (slot, policy) in [
+            (BUILDING_UPGRADE, Key::CertificatePolicy),
+            (ACTION, Key::RequestPolicy),
+            (INFO, Key::CertificatePolicy),
+        ] {
+            let component = screen.icons[slot]
+                .extended()
+                .preserved_components
+                .iter()
+                .find(|component| component.name == "minecraft:lore")
+                .expect("policy is lore, not an oversized item name");
+            let mut bytes = component.value.as_slice();
+            let Tag::List(lore) = mc_nbt::read_network_value(&mut bytes).unwrap() else {
+                panic!("expected encoded lore list");
+            };
+            assert!(bytes.is_empty());
+            let lines = lore
+                .elements
+                .iter()
+                .map(|line| {
+                    let Tag::Compound(fields) = line else {
+                        panic!("expected text component")
+                    };
+                    fields
+                        .iter()
+                        .find_map(|(key, value)| {
+                            if key == "text"
+                                && let Tag::String(text) = value
+                            {
+                                Some(text.as_str())
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap()
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(lines.len(), 4, "slot {slot}: {lines:?}");
+            assert_eq!(lines.join("\n"), ctx.t(policy));
+        }
+    }
 }

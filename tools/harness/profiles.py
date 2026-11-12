@@ -438,6 +438,12 @@ def run_chat_visibility(ctx: ProfileContext) -> dict[str, Any]:
 
     return chat_visibility.run(ctx)
 
+def run_screen_share(ctx: ProfileContext) -> dict[str, Any]:
+    """Graphical screen-sharing gate: two native clients, F8 withdraws an unanswered request."""
+    from .backends import screen_share
+
+    return screen_share.run(ctx)
+
 
 def run_datapack_reload(ctx: ProfileContext) -> dict[str, Any]:
     """Graphical datapack hot-reload recipe gate (enable and disable without a restart)."""
@@ -1031,6 +1037,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Native player behind a proxy that sets its chat mode: full, commands-only and hidden clients, and a hidden client joining into the Nether, hear only what the server sends them",
         "run": run_chat_visibility,
     },
+    "screen-share": {
+        "scope": "real-client",
+        "description": "Two native players share a computer monitor: F8 before the owner answers withdraws the request (a later Allow grants nothing); an allowed request streams the picture and F8 stops it",
+        "run": run_screen_share,
+    },
     "datapack-reload": {
         "scope": "real-client",
         "description": "Native player crafts before, during and after a live /datapack enable and disable; the output slot follows the reloaded recipe without a restart",
@@ -1224,6 +1235,7 @@ PROFILE_PREREQUISITES = {
     "anti-xray": _NATIVE,
     "composter-chance": _NATIVE,
     "chat-visibility": _NATIVE,
+    "screen-share": _NATIVE,
     "datapack-reload": _NATIVE,
     "block-log": _NATIVE,
     "chisel": _NATIVE,

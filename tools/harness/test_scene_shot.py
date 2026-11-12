@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from tools.harness import scenarios
 from tools.harness.backends import scene_shot
 
 
@@ -368,6 +369,68 @@ class SceneShotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             scene_shot.validate_steps([{"assert_chat": {"name": "x", "contains": [], "excludes": []}}], "native")
 
+    def test_upgrade_certified_upgrades_the_one_certified_id_and_checks_the_reply(self):
+        class Probe:
+            def __init__(self, reply, walls=("17179869187", "17179869187")):
+                self.reply = reply
+                self.walls = walls
+                self.sent = []
+                self.upgraded = False
+            def call(self, name, args=None):
+                if name == "minecraft_send_chat":
+                    self.sent.append(args["message"])
+                    self.upgraded = True
+                return {"in_play": True}
+            def observe(self):
+                # The client reports its last 20 lines newest first; entries may be error objects.
+                lines = [f"Certified wall #{wall} (level 1)." for wall in self.walls]
+                lines.insert(1, "Certified tower #17179869186 (level 1).")
+                lines.append({"error": "unrenderable"})
+                if self.upgraded:
+                    lines.insert(0, self.reply)
+                return {"recent_chat": lines}
+            def wait(self, predicate, label, *, wait_for_play=False, timeout_seconds=None):
+                assert predicate(self.observe())
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+            def remaining(self):
+                return 50
+        step = {"upgrade_certified": {"kind": "wall", "level": 2}}
+        ok = Probe("Upgraded building #17179869187 to level 2.")
+        scene_shot.execute(ok, Path("."), [step])
+        self.assertEqual(ok.sent, ["settlement building upgrade 17179869187"])
+        stuck = Probe("Upgraded building #17179869187 to level 1.")
+        with self.assertRaisesRegex(AssertionError, "wall_upgraded_to_level_2"):
+            scene_shot.execute(stuck, Path("."), [step])
+        ambiguous = Probe("", walls=("17179869187", "17179869188"))
+        with self.assertRaisesRegex(AssertionError, "wall_one_certified_building"):
+            scene_shot.execute(ambiguous, Path("."), [step])
+        self.assertEqual(ambiguous.sent, [])
+        for bad in ({"kind": "wall"}, {"kind": "wall", "level": 1}, {"kind": "Wall", "level": 2}):
+            with self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"upgrade_certified": bad}], "native")
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([step], "java")
+
+    def test_named_settlement_scenes_are_registered_and_reject_overrides(self):
+        for name, command in (("native-settlement-radius-growth", "settlement bind radiusqa"),
+                              ("native-settlement-buildings-upgrade", "settlement building certify tower")):
+            class Context:
+                client = "native"
+                windowed = True
+                platform = None
+                scenario_id = name
+                extra_args = []
+                timeout_seconds = 180
+            with patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": ""}):
+                scenario = scene_shot.validate_scenario(Context())[0]
+                self.assertTrue(any(step.get("cmd", "").startswith(command) for step in scenario["steps"]))
+                self.assertTrue(any("assert_chat" in step for step in scenario["steps"]))
+                with self.assertRaisesRegex(ValueError, "without overrides"):
+                    scene_shot.validate_scenario(Context(), {"steps": []})
+            self.assertEqual(scenarios.SCENARIOS[name].profile, "scene-shot")
+
     def test_named_feedback_scene_rejects_overrides(self):
         class Context:
             client = "native"
@@ -714,10 +777,12 @@ class SceneShotTests(unittest.TestCase):
             native_capture.assert_not_called()
 
     def test_java_shot_with_wrong_window_size_fails(self):
+        class Probe:
+            client = object()
         with tempfile.TemporaryDirectory() as tmp, patch.object(scene_shot.java_p5, "capture", return_value="/x/a.png"), \
                 patch.object(scene_shot, "png_size", return_value=(854, 480)):
             with self.assertRaisesRegex(RuntimeError, "expected"):
-                scene_shot.execute(object(), Path(tmp), [{"shot": "a"}], "java")
+                scene_shot.execute(Probe(), Path(tmp), [{"shot": "a"}], "java")
 
     def test_java_rejects_native_only_held_screenshot(self):
         with self.assertRaisesRegex(ValueError, "unsupported for --client java"):
@@ -729,6 +794,63 @@ class SceneShotTests(unittest.TestCase):
         self.assertEqual((options["fov"], options["guiScale"], options["renderDistance"]), ("0.0", "3", "32"))
         self.assertEqual(options["graphicsPreset"], '"custom"')
         self.assertEqual(scene_shot.java_options(8, 110).count("fov:1.0"), 1)
+
+    def test_java_display_settings_are_explicit_and_fail_closed(self):
+        for scale in (2, 3):
+            for language in ("en_us", "ru_ru"):
+                options = dict(line.split(":", 1) for line in scene_shot.java_options(
+                    8, 70, gui_scale=scale, language=language).splitlines())
+                self.assertEqual(options["guiScale"], str(scale))
+                self.assertEqual(options["lang"], language)
+                ctx = scene_shot.ProfileContext(Path("/tmp/scene-display"), client="java", windowed=True)
+                settings = {"gui_scale": scale, "language": language}
+                validated = scene_shot.validate_scenario(ctx, {"steps": [], "client_settings": settings})
+                self.assertEqual(validated[7], settings)
+        for settings in ({"gui_scale": True}, {"gui_scale": 0}, {"gui_scale": 4},
+                         {"gui_scale": 2.0}, {"language": "ru_ru\noperator:true"},
+                         {"language": None}, {"language": "unknown"}):
+            with self.subTest(settings=settings), self.assertRaises(ValueError):
+                ctx = scene_shot.ProfileContext(Path("/tmp/scene-display"), client="java", windowed=True)
+                scene_shot.validate_scenario(ctx, {"steps": [], "client_settings": settings})
+        with self.assertRaisesRegex(ValueError, "Java-only"):
+            ctx = scene_shot.ProfileContext(Path("/tmp/scene-display"), client="native", windowed=True)
+            scene_shot.validate_scenario(ctx, {"steps": [], "client_settings": {"gui_scale": 2}})
+
+    def test_java_screen_size_reaches_options_and_capture_expectation(self):
+        options = dict(line.split(":", 1) for line in scene_shot.java_options(
+            8, 70, gui_scale=3, language="ru_ru", screen_size=(1920, 1080)).splitlines())
+        self.assertEqual((options["overrideWidth"], options["overrideHeight"]), ("1920", "1080"))
+        ctx = scene_shot.ProfileContext(Path("/tmp/scene-display"), client="java", windowed=True)
+        settings = {"screen_size": [1920, 1080]}
+        self.assertEqual(scene_shot.validate_scenario(
+            ctx, {"steps": [], "client_settings": settings})[7], settings)
+        class Client:
+            scene_window_size = (1920, 1080)
+        class Probe:
+            client = Client()
+        with patch.object(scene_shot.java_p5, "capture", return_value="/capture.png"), \
+                patch.object(scene_shot, "png_size", return_value=(1920, 1080)):
+            self.assertEqual(scene_shot.capture_java(Probe(), Path("/tmp"), "fit"), "/capture.png")
+        with self.assertRaisesRegex(ValueError, "clamping"):
+            scene_shot.java_options(8, 70, gui_scale=3, screen_size=(640, 480))
+
+    def test_private_xvfb_size_is_validated_and_preserved_by_fallback(self):
+        runtime = scene_shot.runtime
+        for size, expected in (((1280, 720), "1280x720x24"), ((1920, 1080), "1920x1080x24")):
+            with self.subTest(size=size), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(runtime.subprocess, "Popen", side_effect=FileNotFoundError) as start, \
+                    patch.object(runtime, "_start_xvfb_scan", return_value=(None, ":99", None)) as fallback:
+                runtime.start_xvfb(Path(tmp), size)
+                self.assertIn(expected, start.call_args.args[0])
+                self.assertEqual(fallback.call_args.args[2], expected)
+                fallback.call_args.args[1].close()
+        for size in (None, [1280], [True, 720], [1280, 720.0], [0, 720], [3841, 720], [1280, 2161]):
+            with self.subTest(size=size), tempfile.TemporaryDirectory() as tmp, \
+                    patch.object(runtime.subprocess, "Popen") as start:
+                with self.assertRaises(ValueError):
+                    runtime.start_xvfb(Path(tmp) / "must-not-exist", size)
+                start.assert_not_called()
+                self.assertFalse((Path(tmp) / "must-not-exist").exists())
 
     def test_java_effective_render_distance_is_checked(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -761,6 +883,39 @@ class AssertEntitiesTests(unittest.TestCase):
         self.assertEqual(len(scene_shot.matching_entities(rows, {**spec, "profession": "librarian"})), 1)
         self.assertEqual(len(scene_shot.matching_entities(rows, {**spec, "profession": "none"})), 3)
 
+    def test_baby_filter_matches_only_received_flag(self):
+        adult = {**self.villager(1, 70, 1), "received_baby": False}
+        baby = {**self.villager(2, 70, 2), "received_baby": True}
+        unknown = {**self.villager(3, 70, 3), "received_baby": None}
+        silent = self.villager(4, 70, 4)
+        rows = [adult, baby, unknown, silent]
+        spec = {"entity_type": "minecraft:villager"}
+        self.assertEqual(scene_shot.matching_entities(rows, {**spec, "baby": True}), [baby])
+        self.assertEqual(scene_shot.matching_entities(rows, {**spec, "baby": False}), [adult])
+        self.assertEqual(len(scene_shot.matching_entities(rows, spec)), 4)
+
+    def test_baby_step_validation(self):
+        step = {"name": "n", "args": {"radius": 8}, "entity_type": "minecraft:villager", "min": 1, "baby": True}
+        scene_shot.validate_steps([{"assert_entities": step}], "native")
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([{"assert_entities": {**step, "baby": 1}}], "native")
+
+    def test_breeding_scene_judges_a_birth_in_game_ticks(self):
+        scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness/village_breeding_scene.json").read_text())
+        steps = scene["steps"]
+        scene_shot.validate_steps(steps, "native")
+        ticks = [step["wait_ticks"] for step in steps if "wait_ticks" in step]
+        self.assertEqual(sum(ticks[1:]), 40 + 3000)  # after the 100-tick join wait: settle, then 6 * 500
+        self.assertFalse([step for step in steps if "sleep" in step or "wait_seconds" in step])
+        asserts = {step["assert_entities"]["name"]: step["assert_entities"] for step in steps if "assert_entities" in step}
+        self.assertEqual(asserts["breeding_start_no_baby"]["max"], 0)
+        self.assertTrue(asserts["breeding_start_no_baby"]["baby"])
+        born = asserts["breeding_baby_born"]
+        self.assertEqual((born["baby"], born["min"], born["entity_type"]), (True, 1, "minecraft:villager"))
+        # The newborn is asserted after every tick wait, never before.
+        order = [next(iter(step)) for step in steps]
+        self.assertGreater(steps.index({"assert_entities": born}), max(i for i, kind in enumerate(order) if kind == "wait_ticks"))
+
     def test_step_validation_and_village_scenes(self):
         good = {"assert_entities": {"name": "n", "args": {"radius": 8}, "entity_type": "minecraft:villager",
                                     "min": 1, "box": [0, 0, 0, 1, 1, 1], "profession": "librarian"}}
@@ -771,6 +926,6 @@ class AssertEntitiesTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 scene_shot.validate_steps([{"assert_entities": bad}], "native")
         for name in ("idle_stroll", "night_door", "late_job", "distant_job",
-                     "deep_water", "mob_doors", "after_hours_job"):
+                     "deep_water", "mob_doors", "after_hours_job", "breeding"):
             scene = json.loads((scene_shot.runtime.REPO_ROOT / "tools/harness" / f"village_{name}_scene.json").read_text())
             scene_shot.validate_steps(scene["steps"], "native")

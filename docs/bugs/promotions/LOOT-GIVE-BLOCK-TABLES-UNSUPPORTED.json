@@ -1,0 +1,49 @@
+{
+  "id": "LOOT-GIVE-BLOCK-TABLES-UNSUPPORTED",
+  "verdict": "promoted",
+  "fix_commit": "patch:32eedfeb063f45f7adc94498723b3378ee66404fba9ababc92b27801a3d0579f",
+  "fix_commit_full": "patch:32eedfeb063f45f7adc94498723b3378ee66404fba9ababc92b27801a3d0579f",
+  "promoted_at": "2026-11-12T11:12:31+00:00",
+  "tree_head": "fa00f3d969b11da5a43d8b058a79d2e6e859eb4f",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "32eedfeb063f45f7adc94498723b3378ee66404fba9ababc92b27801a3d0579f",
+  "reversed_files": [
+    "crates/mc-core/src/command_loot.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:command_execution::tests::admin_loot_give_rolls_block_tables_like_vanilla_chest_context": {
+      "state": "unrunnable",
+      "detail": "nextest list produced no listing (build error?); see log"
+    },
+    "harness:entities:native-v2-command-persist": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-command-persist --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/CommandPersistLoot/.analysis/validation/20261112T110337-ledger-promote-gws7g9ky/regressions-client-2.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_execution::tests::admin_loot_give_rolls_block_tables_like_vanilla_chest_context": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:entities:native-v2-command-persist": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T111159-native-v2-command-persist-nsv7xzg2/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/CommandPersistLoot/.analysis/validation/20261112T085641-native-v2-command-persist-fcdeegnx/result.json",
+    "tree_head": "fa00f3d969b11da5a43d8b058a79d2e6e859eb4f",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "cdb84989d9486c39ed8f7f1ba6608ac6ef82c6e1b3786fe6c25b8be4b23cb05a",
+    "covers": [
+      "harness:entities:native-v2-command-persist"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/CommandPersistLoot/.analysis/validation/20261112T110337-ledger-promote-gws7g9ky"
+}

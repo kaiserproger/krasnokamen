@@ -112,7 +112,8 @@ impl EntityInterest {
                     if let Some(tracked) = viewer.tracked_entities.get(&id)
                         && tracked.type_id == entity.type_id
                     {
-                        if !Arc::ptr_eq(&tracked.appearance, &entity.appearance)
+                        if tracked.resend
+                            || !Arc::ptr_eq(&tracked.appearance, &entity.appearance)
                             || entity_movement(entity, tracked.baseline).is_some()
                             || tracked.head_yaw != pack_degrees(entity.head_yaw)
                         {
@@ -359,6 +360,25 @@ impl EntityInterest {
         self.removed(id);
         if self.visible.contains_key(&id) {
             self.spawns.insert(id);
+        }
+    }
+
+    /// A delivered entity's frames were lost and its recorded identity no
+    /// longer matches: the client may hold a stale copy, or none. Remove it,
+    /// and spawn it again while it is in view, as for a type change, though
+    /// the unchanged snapshot schedules neither.
+    pub(super) fn respawn_tracked(&mut self, id: EntityId) {
+        self.removals.insert(id);
+        if self.visible.contains_key(&id) {
+            self.spawns.insert(id);
+        }
+        self.clean(id);
+    }
+
+    /// Visit `id` in the next plan though its snapshot row did not change.
+    pub(super) fn revisit(&mut self, id: EntityId) {
+        if self.visible.contains_key(&id) {
+            self.dirty.insert(id);
         }
     }
 

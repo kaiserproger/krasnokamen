@@ -212,20 +212,30 @@ fn army_nav_and_projects_page_render() {
         }],
     ));
     assert!(main.has("army"));
-    assert!(main.has("projects"));
+    assert!(main.has("dashboard"));
     let army = last_dialog(&click(&mut state, id, "army", &[]));
     assert_eq!(army.title, "Army - oak");
     assert!(army.body.contains("No soldiers"));
     assert!(army.has("army_recruit"));
-    let projects = last_dialog(&click(&mut state, id, "projects", &[]));
-    assert_eq!(projects.title, "Projects - oak");
-    // The Projects page carries no status text: its grid comes first.
-    assert!(projects.body.is_empty(), "{}", projects.body);
-    assert!(projects.has("project_order"));
-    let status = last_dialog(&click(&mut state, id, "project_status", &[]));
-    assert_eq!(status.title, "Project status - oak");
-    assert!(!status.body.is_empty());
-    assert!(status.has("projects"));
+    let dashboard = super::tests::last_dialog(&click(&mut state, id, "dashboard", &[]));
+    assert_eq!(dashboard.title, "Settlement");
+    assert!(dashboard.body.contains("Projects"));
+    let projects = super::tests::last_dialog(&super::tests::press(&mut state, 30));
+    assert_eq!(projects.title, "Projects");
+    assert!(
+        !projects.icons.is_empty(),
+        "native blueprint icons must be received"
+    );
+    let review = super::tests::last_dialog(&super::tests::press(&mut state, 0));
+    assert!(
+        review.has("project_order"),
+        "the selected blueprint has a real request control"
+    );
+    let status = super::tests::last_dialog(&click(&mut state, id, "project_status", &[]));
+    assert_eq!(status.title, "Construction");
+    assert!(status.body.contains("No active project; no queued order"));
+    let back = super::tests::last_dialog(&super::tests::press(&mut state, 45));
+    assert_eq!(back.title, "Projects");
     let page = last_dialog(&run(
         &mut state,
         &[PlayerInput::Command {
@@ -448,23 +458,42 @@ fn residents_screen_counts_barracks_soldiers_not_job_slots() {
     let id = town(&mut state, PLAYER);
     barracks_with_storage(&mut state, id);
     idle_resident(&mut state, id);
-    let before = last_dialog(&click(&mut state, id, "residents", &[]));
+    let before = super::tests::last_dialog(&click(&mut state, id, "residents", &[]));
+    let work = &before.icons.iter().find(|(slot, _)| *slot == 6).unwrap().1;
     assert!(
-        before.body.contains("unemployed residents: 1"),
-        "{}",
-        before.body
+        super::tests::icon_text(work).contains("0 / 1"),
+        "one eligible unemployed civilian"
     );
     click(&mut state, id, "army_recruit", &[]);
-    let after = last_dialog(&click(&mut state, id, "residents", &[]));
-    assert!(after.body.contains("1/2 soldiers"), "{}", after.body);
+    let after = super::tests::last_dialog(&click(&mut state, id, "residents", &[]));
+    let work = &after.icons.iter().find(|(slot, _)| *slot == 6).unwrap().1;
     assert!(
-        after.body.contains("unemployed residents: 0"),
-        "{}",
-        after.body
+        super::tests::icon_text(work).contains("0 / 0"),
+        "soldiers are not eligible unemployed civilians"
     );
-    // Recruit rows carry the runtime order; the main hint no longer flags
-    // soldiers as workshop-less workers.
-    assert!(after.body.contains("; soldier Patrol"), "{}", after.body);
+    assert!(after.body.contains("Serves in barracks"), "{}", after.body);
+    let barracks = state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .values()
+        .find(|building| building.kind == buildings::BuildingKind::Barracks)
+        .unwrap()
+        .id;
+    let card = super::tests::last_dialog(&click(
+        &mut state,
+        id,
+        "buildings",
+        &[("b", string(&barracks.0.to_string()))],
+    ));
+    assert!(card.body.contains("Soldiers: 1/2"), "{}", card.body);
+    let army = last_dialog(&click(&mut state, id, "army", &[]));
+    assert!(
+        army.body.contains("Patrol"),
+        "the same recruit retains its runtime order: {}",
+        army.body
+    );
     let main = last_dialog(&click(&mut state, id, "main", &[]));
     assert!(
         !main.body.contains("need a certified workshop"),

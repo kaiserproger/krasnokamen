@@ -78,6 +78,7 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
                        else 600.0 if ctx.scenario_id in (native_light.SCENARIO_ID,
                                                         "native-v2-radius-full-view",
                                                         "native-v2-p4-damage",
+                                                        "native-v2-command-rows", "native-v2-command-persist",
                                                         "native-v2-team-deaths",
                                                         "native-v2-automation-storage",
                                                         "native-v2-lease-navigation")
@@ -121,6 +122,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         required = required | {"minecraft_approach_entity", "minecraft_navigate_to_block", "client_capture"}
     if ctx.scenario_id == "native-v2-duplicate-login":
         required = required | {"minecraft_connect"}
+    if ctx.scenario_id == "native-v2-command-persist":
+        required = required | {"minecraft_connect", "minecraft_disconnect"}
     if p5_scenario:
         required = java_p5.REQUIRED_TOOLS
     if protocol_pot:
@@ -160,6 +163,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         view_distance, simulation_distance = 8, 4
     # The towns gate tests plugin protection with non-operators, not spawn protection.
     town_spawn_setting = "spawn_protection = 0\n" if ctx.scenario_id == "java-v2-p5-towns" else ""
+    if ctx.scenario_id == "native-v2-command-rows":
+        town_spawn_setting += "enable_command_block = true\n"
     auth_setting = "require_plugin_login = true\n" if auth_scenario else ""
     config.write_text(f'''[server]
 name = "shared-{kind}-probe"
@@ -369,6 +374,20 @@ seed = 81
                 peer_mcp.request_timeout_seconds = 130.0
                 peer_mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
                 mcp.nether_peer = peer_mcp
+            if ctx.scenario_id in ("native-v2-command-rows", "native-v2-command-persist"):
+                def start_peer(peer_name: str) -> Any:
+                    # A fresh, non-operator second client with its own identity, joined on demand.
+                    nonlocal peer_process, peer_log, peer_mcp
+                    peer_ctx = replace(ctx, artifact_dir=artifact / "late-peer",
+                                       client_evidence=peer_evidence, windowed=False)
+                    evidence["late_peer_client"] = peer_evidence
+                    peer_process, peer_log, peer_mcp = native_client.start(
+                        peer_ctx, native_client.resolve_binary(peer_ctx), client_address, peer_name,
+                        startup_timeout)
+                    peer_mcp.request_timeout_seconds = 130.0
+                    return peer_mcp
+
+                mcp.start_peer = start_peer
             if ctx.scenario_id == "native-v2-duplicate-login":
                 def start_second_login() -> Any:
                     # Same username, hence the same offline identity, on a second client.
@@ -528,7 +547,7 @@ seed = 81
             mcp.server_log_path = server_log_path
             if (ctx.scenario_id in native_p4.RESTART_SCENARIOS
                     or ctx.scenario_id in (native_light.SCENARIO_ID, "native-v2-end-restart",
-                                           "native-v2-console-shutdown",
+                                           "native-v2-console-shutdown", "native-v2-command-persist",
                                            "native-v2-custody-mount-export",
                                            "native-v2-corrupt-block-entities",
                                            "native-v2-corrupt-chunk-near-camera")):
@@ -558,6 +577,9 @@ seed = 81
 
                         convert_world(ctx, binary, config, evidence,
                                       corrupt=getattr(mcp, "corrupt_fixture", None))
+                    if getattr(mcp, "wal_forge", None):
+                        evidence.setdefault("forged_wal_batches", []).append(
+                            str(mcp.wal_forge(Path(evidence["world_dir"]))))
                     server_log = server_log_path.open("ab")
                     server = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
                                               cwd=runtime.REPO_ROOT, stdout=server_log,

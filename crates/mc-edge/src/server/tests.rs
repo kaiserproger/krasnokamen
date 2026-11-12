@@ -412,3 +412,18 @@ fn packet_limiter_is_per_type_refills_and_can_be_disabled() {
     assert!(limiter.allow_at(5, now));
     assert!(limiter.allow_at(5, now));
 }
+
+#[tokio::test]
+async fn close_wakes_the_connection_owner_with_its_cause() {
+    let registry = ConnectionRegistry::new();
+    let id = ConnectionId(7);
+    let (close, cancelled) = tokio::sync::oneshot::channel();
+    registry.inner.lock().closers.insert(id, close);
+    registry.close(id, "reliable-overflow");
+    assert_eq!(cancelled.await, Ok("reliable-overflow"));
+    // A plain remove names no abnormal cause.
+    let (close, cancelled) = tokio::sync::oneshot::channel();
+    registry.inner.lock().closers.insert(id, close);
+    registry.remove(id);
+    assert_eq!(cancelled.await, Ok("removed"));
+}
