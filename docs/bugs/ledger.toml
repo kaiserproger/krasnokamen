@@ -3890,9 +3890,12 @@ title = "WAL recovery replays an OpaqueBlockEntity record into a chunk that is r
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
-source = "Independent review, 2026-11-07 (not reproduced). Recovery refuses to open on chunk load error and retains the WAL; the registered test exercises that path. A negative control removing the recovery guard failed at the recovery assertion (receipts/CoreBlockers/custody-replay-negative-control.log outside the repository). Disposition pending."
+status = "fixed"
+source = "Independent review, 2026-11-07 (not reproduced). Recovery refuses to open on chunk load error and retains the WAL; the registered test exercises that path. A negative control removing the recovery guard failed at the recovery assertion (receipts/CoreBlockers/custody-replay-negative-control.log outside the repository). Disposition (Main 2026-11-12, core audit CAF-02): the custody loss cannot happen because load_dimension_state refuses a world whose WAL replay hit a chunk load error (core/recovery.rs guard), so the WAL is kept; the guard is the fix (fix patch = that guard), test green on main 7feee34b (receipts/CoreAuditFable/caf02/custody-test.log)."
 regression = ["cargo:mc-core:core::checkpoint_custody_tests::opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal"]
+failing_first = "reported"
+fix_commit = "patch:a8c4023144038f091465c416777c1890e91e55a1a0d3f9481299d2fc3b7bebf9"
+promotion = "docs/bugs/promotions/OPAQUE-CUSTODY-LOST-ON-REFUSED-REPLAY.json"
 
 [[bug]]
 id = "CONTAINER-CUSTODY-LOST-ON-UNLOADED-REPLAY"
