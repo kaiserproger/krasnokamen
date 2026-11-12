@@ -410,14 +410,60 @@ struct Pass<'a> {
     border: crate::command_border::Border,
 }
 
+/// Whether the exact cells of one body hold neither a suffocating eye block
+/// nor a hazard (body cells or magma support): the verdict the serial scan
+/// would reach for a row with no hazard, as pure reads.
+///
+/// The section-palette gates alone rule out most rows. A gate that fires only
+/// says some state in the 16-high section matches (a roof, a wall or a pond
+/// elsewhere in it), so the exact cells are read here, on the pool, instead of
+/// handing every moved mob in such a section to the serial scan. Missing
+/// chunks read as `None`, which neither suffocates nor holds a hazard, as in
+/// [`scan_row`]; overlay edits are seen through `block_at`.
+fn exactly_clear(
+    pass: &Pass,
+    min: (i32, i32, i32),
+    max: (i32, i32, i32),
+    [support, eye]: [[i32; 3]; 2],
+) -> bool {
+    let (world, hazard, registry) = (pass.world, pass.hazard, pass.registry);
+    let suffocates = |id: u32| registry.light.suffocating(id) == Some(true);
+    if world.may_hold_matching_state_shared(
+        (eye[0], eye[1], eye[2]),
+        (eye[0], eye[1], eye[2]),
+        hazard,
+        |seen| suffocates(seen.0),
+    ) && world
+        .block_at(eye[0], eye[1], eye[2])
+        .is_some_and(suffocates)
+    {
+        return false;
+    }
+    let flags = &registry.hazard_flags;
+    if !world.may_hold_matching_state_shared((min.0, support[1], min.2), max, hazard, |seen| {
+        flags.get(seen.0 as usize).copied().unwrap_or(0) != 0
+    }) {
+        return true;
+    }
+    let flag_at = |x, y, z| {
+        world
+            .block_at(x, y, z)
+            .and_then(|id| flags.get(id as usize).copied())
+            .unwrap_or(0)
+    };
+    flag_at(support[0], support[1], support[2]) & HAZARD_MAGMA == 0
+        && (min.0..=max.0)
+            .all(|x| (min.1..=max.1).all(|y| (min.2..=max.2).all(|z| flag_at(x, y, z) == 0)))
+}
+
 /// Body/position part of the classifier: scan, quiet, or neither.
 ///
 /// A mob without a valid proof (new, moved to other cells, or its chunk
-/// changed) is proven quiet here when no section covering its body cells,
-/// foot-support cell or eye cell holds a hazard or suffocating state: the
-/// same palette gates the serial scan applies, which would then find nothing,
-/// bank this exact stamp and only run `retained_burn`. Rows whose sections do
-/// hold such a state keep the exact serial scan.
+/// changed) is proven quiet here when its exact eye cell, body cells and
+/// foot-support cell hold no hazard or suffocating state ([`exactly_clear`]):
+/// the serial scan would then find nothing, bank this exact stamp and only run
+/// `retained_burn`. Rows with a real hazard or suffocation keep the exact
+/// serial scan.
 fn classify_contact(
     pass: &Pass,
     index: usize,
@@ -478,21 +524,7 @@ fn classify_contact(
         return Some(Verdict::Quiet);
     }
     let (min, max, probes) = computed.unwrap_or_else(|| contact_cells(pos, shape, foot_xz));
-    let [support, eye] = probes;
-    let flags = &pass.registry.hazard_flags;
-    // Same boxes and predicates as `scan_row`'s gates.
-    let clear = !world.may_hold_matching_state_shared(
-        (eye[0], eye[1], eye[2]),
-        (eye[0], eye[1], eye[2]),
-        hazard,
-        |seen| pass.registry.light.suffocating(seen.0) == Some(true),
-    ) && !world.may_hold_matching_state_shared(
-        (min.0, support[1], min.2),
-        max,
-        hazard,
-        |seen| flags.get(seen.0 as usize).copied().unwrap_or(0) != 0,
-    );
-    if !clear {
+    if !exactly_clear(pass, min, max, probes) {
         return Some(Verdict::Scan);
     }
     *stamp = Some(crate::world::ContactStamp {

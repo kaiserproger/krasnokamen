@@ -585,6 +585,39 @@ fn moved_mob_in_clean_sections_is_proven_quiet_without_a_serial_scan() {
 }
 
 #[test]
+fn moved_mob_below_a_roof_in_its_section_is_proven_quiet_without_a_serial_scan() {
+    // A roof elsewhere in the eye's section makes the palette gate fire; the
+    // exact eye cell is still air, so the pool proves the row quiet.
+    let (mut state, player, pos) = flat_player_fixture();
+    let cow = state.registry.cow_type_id;
+    place(&mut state, [pos[0], pos[1] + 7.0, pos[2]], "stone", &[]);
+    let at = [pos[0] + 2.0, pos[1], pos[2]];
+    let mob = state.spawn_mob(cow, at, 10.0);
+    let slot = state.entities.slot_of(mob).unwrap();
+    crate::contact_hazards::take_work_counts();
+    assert!(!sample(&mut state, player, DamageKind::Suffocation));
+    let counts = crate::contact_hazards::take_work_counts();
+    assert_eq!(
+        counts[1], 1,
+        "only the player scans; the roofed mob is proven quiet on the pool"
+    );
+    assert_eq!(counts[2], 1);
+    let stamp = state.contact_hazards_scratch.negative[slot.0 as usize].expect("banked stamp");
+    assert_eq!(stamp.position, at);
+    // The same row with its eye inside the roof keeps the exact scan and damage.
+    let inside = [at[0] + 1.0, pos[1] + 6.0, at[2]];
+    place(
+        &mut state,
+        [inside[0], inside[1] + 1.0, inside[2]],
+        "stone",
+        &[],
+    );
+    state.entities.set_pos(slot, inside);
+    assert!(sample(&mut state, mob, DamageKind::Suffocation));
+    assert_eq!(crate::contact_hazards::take_work_counts()[1], 2);
+}
+
+#[test]
 fn support_and_eye_cells_wake_when_body_box_is_unchanged() {
     let (mut state, _, pos) = flat_player_fixture();
     let cow = state.registry.cow_type_id;
@@ -1106,4 +1139,104 @@ fn touching_a_cauldron_wall_from_outside_does_nothing() {
         100 - 1,
         "burn decays normally, no cauldron contact"
     );
+}
+
+/// Native-100-like input-phase micro: 100 creative players, `N100_MOBS`
+/// persistent mobs on a flat 384x384 world with a stone roof over every column
+/// (the benchmark pens are roofed, so every eye section holds a suffocating
+/// state), through the real `run_tick`. Per-callee laps come from
+/// `MC_CORE_PHASE_LOG=1` (`input detail ms:`, `contact detail ms:`,
+/// `dimension travel ms:`); build with `cargo test --release --no-run`, run the
+/// executable under `mem-run.sh -p` with `--ignored --nocapture`.
+#[test]
+#[ignore = "release micro: native-100-like input-phase callee timings"]
+fn native100_input_phase_micro() {
+    const SIDE: i32 = 384;
+    let mobs: usize = std::env::var("N100_MOBS")
+        .map(|value| value.parse().expect("N100_MOBS must be an integer"))
+        .unwrap_or(104_000);
+    let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+    let world = crate::horde_bench::flat_world(&registry);
+    let mut state = TickState::new(std::sync::Arc::clone(&registry), world, 2, 512);
+    state.gamerules.insert("spawn_mobs".into(), "false".into());
+    // Night: no daylight burning in the micro's unlit-roof lighting.
+    state.day_time = 14_000;
+    for x in 0..SIDE / 16 {
+        for z in 0..SIDE / 16 {
+            state.tickets.insert(
+                format!("n100-{x}-{z}"),
+                (crate::boundary::ChunkPos { x, z }, 0),
+            );
+        }
+    }
+    let joins: Vec<_> = (1..=100u64)
+        .map(|connection| PlayerInput::Join {
+            connection: ConnectionId(connection),
+            uuid: uuid::Uuid::from_u128(u128::from(connection)),
+            name: format!("bot{connection}"),
+            permission_level: 0,
+        })
+        .collect();
+    run_tick(&mut state, &joins);
+    let mut rng = 0x4852_4F44_4531u64;
+    let mut next = move || {
+        rng = rng.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = rng;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        (z ^ (z >> 31)) >> 11
+    };
+    let mut position = move || {
+        let unit = |bits: u64| bits as f64 / (1u64 << 53) as f64;
+        [
+            unit(next()) * f64::from(SIDE),
+            64.0,
+            unit(next()) * f64::from(SIDE),
+        ]
+    };
+    for connection in 1..=100u64 {
+        let id = state
+            .connections
+            .entity_of(ConnectionId(connection))
+            .unwrap();
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.set_pos(slot, position());
+        state.entities.row_mut(slot).protected_until = u64::MAX;
+        state.players.get_mut(&id).unwrap().game_mode = crate::commands::GameMode::Creative;
+    }
+    let want = state.desired_chunks();
+    state.world.ensure_blocking(&want);
+    if std::env::var_os("N100_NO_ROOF").is_none() {
+        let stone = state.registry.states.stone;
+        for x in 0..SIDE {
+            for z in 0..SIDE {
+                state.world.set_block(x, 71, z, stone);
+            }
+        }
+        state.world.fold_overlay();
+    }
+    for name in [
+        "minecraft:chicken",
+        "minecraft:cow",
+        "minecraft:creeper",
+        "minecraft:pig",
+        "minecraft:sheep",
+        "minecraft:skeleton",
+        "minecraft:spider",
+        "minecraft:zombie",
+    ] {
+        let type_id = state
+            .registry
+            .entity_types
+            .id_of(&Identifier::parse(name).unwrap())
+            .unwrap();
+        for _ in 0..mobs / 8 {
+            let id = state.spawn_mob(type_id, position(), 20.0);
+            let slot = state.entities.slot_of(id).unwrap();
+            state.entities.row_mut(slot).persistent = true;
+        }
+    }
+    for _ in 0..80 {
+        run_tick(&mut state, &[]);
+    }
 }
