@@ -1,0 +1,58 @@
+{
+  "id": "VILLAGER-POPLAR-DOOR-NOT-WOODEN",
+  "verdict": "promoted",
+  "fix_commit": "patch:ac9c9dd419e1d51c77c17771469e0657af539b43c3b413acbb358052b5cdbcc1",
+  "fix_commit_full": "patch:ac9c9dd419e1d51c77c17771469e0657af539b43c3b413acbb358052b5cdbcc1",
+  "promoted_at": "2026-11-12T16:33:55+00:00",
+  "tree_head": "edb59e5cd73142da8aa1d9f05d85f9c3b45c19f2",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "ac9c9dd419e1d51c77c17771469e0657af539b43c3b413acbb358052b5cdbcc1",
+  "reversed_files": [
+    "crates/mc-core/src/registry.rs",
+    "crates/mc-data/src/tags.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:registry::tests::mob_interactable_doors_table_follows_the_26_3_tag": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "cargo:mc-core:villager::brain::tests::door_tests::poplar_door_route_reaches_other_side": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:scene-shot:native-village-mob-doors": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-village-mob-doors --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/VillageFixes3/.analysis/validation/20261112T162618-ledger-promote-mt6wez7s/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:registry::tests::mob_interactable_doors_table_follows_the_26_3_tag": {
+      "state": "green",
+      "detail": ""
+    },
+    "cargo:mc-core:villager::brain::tests::door_tests::poplar_door_route_reaches_other_side": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:scene-shot:native-village-mob-doors": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T163208-native-village-mob-doors-awpcp0tw/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/VillageFixes3/.analysis/validation/20261112T162424-native-village-mob-doors-y9r82j2s/result.json",
+    "tree_head": "edb59e5cd73142da8aa1d9f05d85f9c3b45c19f2",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "f0060add1f62c81b6028fc2cf9d3d9585f263a1bc1d9300505340533df307769",
+    "covers": [
+      "harness:scene-shot:native-village-mob-doors"
+    ],
+    "profile": "scene-shot"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/VillageFixes3/.analysis/validation/20261112T162618-ledger-promote-mt6wez7s"
+}
