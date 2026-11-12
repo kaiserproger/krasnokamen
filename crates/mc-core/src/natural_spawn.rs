@@ -232,7 +232,8 @@ fn age_pass(
     }
     if let Some(started) = removal_start {
         crate::item_perf::print_expiry(
-            state,
+            state.tick,
+            state.dimension,
             "age",
             expired.len(),
             expired.len(),

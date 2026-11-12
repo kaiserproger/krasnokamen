@@ -43,13 +43,19 @@ def numbers(text: str) -> dict[str, Any]:
     return out
 
 
-def parse_log(text: str) -> tuple[dict[int, dict[str, Any]], dict[int, dict[str, Any]]]:
-    """Overworld tick records keyed by phase-log tick, and edge publish records keyed by tick."""
+def parse_log(text: str) -> tuple[dict[int, dict[str, Any]], dict[int, dict[str, Any]], dict[str, list[dict[str, Any]]]]:
+    """Overworld tick records keyed by phase-log tick, edge publish records keyed by tick, and the
+    loop-level `tick outer ms:` and `checkpoint capture ms:` lines (outside any dimension tick)."""
     ticks: dict[int, dict[str, Any]] = {}
     edge: dict[int, dict[str, Any]] = {}
+    loop: dict[str, list[dict[str, Any]]] = {"outer": [], "checkpoint": []}
     pending: dict[str, Any] = {}
     for line in text.splitlines():
-        if line.startswith("items "):
+        if line.startswith("tick outer ms:"):
+            loop["outer"].append(numbers(line))
+        elif line.startswith("checkpoint capture ms:"):
+            loop["checkpoint"].append(numbers(line))
+        elif line.startswith("items "):
             kind, _, rest = line[len("items "):].partition(":")
             row = numbers(rest)
             if kind == "expiry":
@@ -69,7 +75,7 @@ def parse_log(text: str) -> tuple[dict[int, dict[str, Any]], dict[int, dict[str,
             match = LAPS.match(line)
             if match:
                 pending.setdefault("laps", {})[match.group(1)] = numbers(match.group(2))
-    return ticks, edge
+    return ticks, edge, loop
 
 
 def pct(values: list[float], q: float) -> float:
@@ -126,7 +132,7 @@ def regression(xs: list[float], ys: list[float]) -> dict[str, float] | None:
 def analyze_leg(root: Path, label: str) -> dict[str, Any]:
     run = root / "run" if (root / "run").is_dir() else root
     samples, result = load_window(run)
-    ticks, edge = parse_log((run / "server.log").read_text(errors="replace"))
+    ticks, edge, loop = parse_log((run / "server.log").read_text(errors="replace"))
     offset = tick_offset(samples, ticks)
     window = {tick: ticks[tick + offset] for tick in samples if tick + offset in ticks}
     wall = [samples[tick]["wall_us"] / 1000 for tick in window]
@@ -185,6 +191,17 @@ def analyze_leg(root: Path, label: str) -> dict[str, Any]:
                     "items_pending_mean": sum(row.get("items_pending", 0.0) for row in views) / len(window) if window else 0.0,
                     "changed_mean": sum(row.get("changed", 0.0) for row in views) / len(window) if window else 0.0,
                     "items_changed_mean": sum(row.get("items_changed", 0.0) for row in views) / len(window) if window else 0.0}
+    low, high = min(window, default=0) + offset, max(window, default=0) + offset
+    outer = [row for row in loop["outer"] if low <= row.get("tick", -1) <= high]
+    out["outer_ms"] = {key: mean([row.get(key, 0.0) for row in outer])
+                       for key in ("pre", "run", "journal", "seal_send_generated", "post")}
+    captures = [row for row in loop["checkpoint"] if low <= row.get("tick", -1) <= high]
+    capture_ms = [sum(value for key, value in row.items() if key != "tick" and isinstance(value, float))
+                  for row in captures]
+    out["checkpoint"] = {"captures": len(captures), "ms_per_capture": mean(capture_ms),
+                         "max_ms": max(capture_ms, default=0.0),
+                         "ms_per_tick": sum(capture_ms) / len(window) if window else 0.0,
+                         "data_ms": mean([row.get("data", 0.0) for row in captures])}
     joined = [edge[tick] for tick in window if tick in edge]
     out["edge"] = {"ticks": len(joined)}
     out["edge"].update({key: mean([row.get(key, 0.0) for row in joined]) for key in (*EDGE_COLUMNS, *EDGE_COUNTS, "viewers")})
@@ -214,6 +231,9 @@ def flat(leg: dict[str, Any]) -> dict[str, float]:
     row["wall"] = leg["wall_ms"]["mean"]
     row["step.cpu"] = leg["step"]["cpu_ms_per_tick"]
     row["merge.amortized"] = leg["merge"]["ms_per_tick"]
+    row["checkpoint.amortized"] = leg["checkpoint"]["ms_per_tick"]
+    for key, value in leg["outer_ms"].items():
+        row[f"outer.{key}"] = value
     row["views.items_pending"] = leg["views"]["items_pending_mean"]
     row["views.items_changed"] = leg["views"]["items_changed_mean"]
     for label, group in leg["laps_ms"].items():
@@ -222,6 +242,11 @@ def flat(leg: dict[str, Any]) -> dict[str, float]:
     for key in (*EDGE_COLUMNS, *EDGE_COUNTS):
         row[f"edge.{key}"] = leg["edge"].get(key, 0.0)
     return row
+
+
+def is_count(key: str) -> bool:
+    """Columns that count things (packets, bytes, visits, candidates) rather than milliseconds."""
+    return key.startswith("views.") or (key.startswith("edge.") and key[len("edge."):] in EDGE_COUNTS)
 
 
 def ladder_table(legs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -240,21 +265,22 @@ def ladder_table(legs: list[dict[str, Any]]) -> dict[str, Any]:
         slope, intercept = statistics.linear_regression(xs, ys)
         steps = [(ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]) for i in range(len(xs) - 1) if xs[i + 1] != xs[i]]
         columns[key] = {"values": ys, "per_item_per_tick": slope, "base": intercept,
-                        "segment_slopes": steps}
+                        "segment_slopes": steps, "unit": "count" if is_count(key) else "ms"}
     return {"sizes": [size for size, _ in rungs], "items_mean": xs, "columns": columns}
 
 
 def markdown(legs: list[dict[str, Any]], ladder: dict[str, Any]) -> str:
     lines = ["# Many-items per-item cost table", ""]
-    lines += ["| leg | TPS | wall mean | p50 | p95 | items (mean) | moving | step cpu ms | merge ms/pass | edge plan ms | edge pkts/tick | edge KiB/tick | item pairs |",
-              "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    lines += ["| leg | TPS | wall mean | p50 | p95 | items (mean) | moving | step cpu ms | merge ms/pass | edge plan ms | edge pkts/tick | edge KiB/tick | item pairs | checkpoint ms/tick | outer post ms |",
+              "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for leg in legs:
-        lines.append("| {label} | {tps:.2f} | {wall:.1f} | {p50:.1f} | {p95:.1f} | {items:.0f} | {moving:.0f} | {step:.2f} | {merge:.2f} | {plan:.2f} | {pkts:.0f} | {kib:.1f} | {pairs:.0f} |".format(
+        lines.append("| {label} | {tps:.2f} | {wall:.1f} | {p50:.1f} | {p95:.1f} | {items:.0f} | {moving:.0f} | {step:.2f} | {merge:.2f} | {plan:.2f} | {pkts:.0f} | {kib:.1f} | {pairs:.0f} | {ckpt:.2f} | {post:.2f} |".format(
             label=leg["label"], tps=leg["tps"], wall=leg["wall_ms"]["mean"], p50=leg["wall_ms"]["p50"],
             p95=leg["wall_ms"]["p95"], items=leg["items"]["mean"], moving=leg["items"]["moving_mean"],
             step=leg["step"]["cpu_ms_per_tick"], merge=leg["merge"]["ms_per_pass"],
             plan=leg["edge"].get("plan_ms", 0.0), pkts=leg["edge"].get("packets", 0.0),
-            kib=leg["edge"].get("bytes", 0.0) / 1024, pairs=leg["edge"].get("item_pairs", 0.0)))
+            kib=leg["edge"].get("bytes", 0.0) / 1024, pairs=leg["edge"].get("item_pairs", 0.0),
+            ckpt=leg["checkpoint"]["ms_per_tick"], post=leg["outer_ms"]["post"]))
     lines += ["", "## Phases (mean ms per tick, Overworld)", "",
               "| leg | " + " | ".join(PHASE_COLUMNS) + " |", "|---|" + "---:|" * len(PHASE_COLUMNS)]
     for leg in legs:
@@ -269,14 +295,21 @@ def markdown(legs: list[dict[str, Any]], ladder: dict[str, Any]) -> str:
             removed=leg["expiry"]["removed"], us=leg["expiry"]["us_per_removed"],
             pending=leg["views"]["items_pending_mean"], changed=leg["views"]["items_changed_mean"]))
     if ladder:
-        lines += ["", f"## Ladder slopes (items mean {', '.join(f'{x:.0f}' for x in ladder['items_mean'])}): µs per item per tick", "",
-                  "| column | values at each rung | µs/item/tick | base | segment µs/item/tick |", "|---|---|---:|---:|---|"]
-        ranked = sorted(ladder["columns"].items(), key=lambda pair: -abs(pair[1]["per_item_per_tick"]))
-        for key, column in ranked:
-            lines.append("| {key} | {values} | {slope:.3f} | {base:.2f} | {segments} |".format(
-                key=key, values=", ".join(f"{value:.2f}" for value in column["values"]),
-                slope=column["per_item_per_tick"] * 1000, base=column["base"],
-                segments=", ".join(f"{value * 1000:.3f}" for value in column["segment_slopes"])))
+        sizes = ", ".join(f"{x:.0f}" for x in ladder["items_mean"])
+        for unit, title, scale, digits in (
+                ("ms", f"Ladder slopes, time (items mean {sizes}): µs per item per tick", 1000, 3),
+                ("count", f"Ladder slopes, counts (items mean {sizes}): packets, bytes, visits per item per tick", 1, 3)):
+            ranked = sorted(((key, column) for key, column in ladder["columns"].items() if column["unit"] == unit),
+                            key=lambda pair: -abs(pair[1]["per_item_per_tick"]))
+            if not ranked:
+                continue
+            lines += ["", f"## {title}", "",
+                      "| column | values at each rung | per item per tick | base | segments |", "|---|---|---:|---:|---|"]
+            for key, column in ranked:
+                lines.append("| {key} | {values} | {slope:.{d}f} | {base:.2f} | {segments} |".format(
+                    key=key, values=", ".join(f"{value:.2f}" for value in column["values"]),
+                    slope=column["per_item_per_tick"] * scale, base=column["base"], d=digits,
+                    segments=", ".join(f"{value * scale:.{digits}f}" for value in column["segment_slopes"])))
     lines += ["", "## Within-run slope (µs per item per tick, non-merge ticks)", "",
               "| leg | " + " | ".join(("entity", "block", "input", "views", "commit", "before_return", "edge_plan_ms")) + " |",
               "|---|" + "---:|" * 7]

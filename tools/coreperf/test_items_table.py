@@ -44,6 +44,10 @@ def leg(root: Path, items: int, ticks: int = 40, offset: int = 1) -> Path:
                         "phase_us": {"entity_us": round(entity_ms * 1000)}})
         log.append(tick_log(sample_tick + offset, items, merge=(sample_tick + offset) % 20 == 0,
                             entity_ms=entity_ms, plan_ms=0.5 + items * 0.0002))
+        log.append(f"tick outer ms: tick={sample_tick + offset} pre=0.1 run=5.0 journal=0.5 seal_send_generated=0.2 post=0.3")
+        if (sample_tick + offset) % 20 == 0:
+            log.append(f"checkpoint capture ms: tick={sample_tick + offset} data={items * 0.002:.2f} owners=1.0 "
+                       "scheduler=0.1 chunks=2.0 absent=0.0 dimensions=0.0 job=0.1")
     (run / "samples.jsonl").write_text(json.dumps({"metrics": {"samples": samples}}) + "\n")
     (run / "server.log").write_text("\n".join(log) + "\n")
     (run / "result.json").write_text(json.dumps({
@@ -55,7 +59,7 @@ def leg(root: Path, items: int, ticks: int = 40, offset: int = 1) -> Path:
 
 class ItemsTableTests(unittest.TestCase):
     def test_parse_attaches_item_lines_to_the_next_overworld_phase_line_only(self):
-        ticks, edge = items_table.parse_log(tick_log(7, 1000, merge=True, entity_ms=2.0, plan_ms=1.0))
+        ticks, edge, loop = items_table.parse_log(tick_log(7, 1000, merge=True, entity_ms=2.0, plan_ms=1.0))
         self.assertEqual(list(ticks), [7])
         row = ticks[7]
         self.assertEqual(row["census"]["items"], 1000)
@@ -63,9 +67,18 @@ class ItemsTableTests(unittest.TestCase):
         self.assertEqual(row["views"]["items_pending"], 250)
         self.assertEqual(row["laps"]["entity phase"]["step_scope"], 2.5)
         self.assertEqual(edge[7]["item_pairs"], 10000)
+        self.assertEqual(loop, {"outer": [], "checkpoint": []})
+
+    def test_loop_level_lines_are_collected_apart_from_dimension_ticks(self):
+        _, _, loop = items_table.parse_log(
+            "tick outer ms: tick=9 pre=0.10 run=5.00 journal=0.50 seal_send_generated=0.20 post=0.30\n"
+            "checkpoint capture ms: tick=9 data=12.50 owners=1.00 scheduler=0.10 chunks=3.00 absent=0.00 "
+            "dimensions=0.20 job=0.10\n")
+        self.assertEqual(loop["outer"][0]["run"], 5.0)
+        self.assertEqual(loop["checkpoint"][0]["data"], 12.5)
 
     def test_expiry_lines_collect_per_pass(self):
-        ticks, _ = items_table.parse_log(
+        ticks, _, _ = items_table.parse_log(
             "items expiry: tick=5 dimension=Overworld pass=age items=40 removed=40 remove_ms=2.000\n"
             "phase ms: tick=5 input=0 chunks=0 entity=0 merge=0 block=0 commit=0 snapshot=0 views=0 intents=0 "
             "dimension=Overworld entity_tail=0 block_prepare=0 publish_tail=0 boundary_gaps=0 before_return=0 "
@@ -94,7 +107,16 @@ class ItemsTableTests(unittest.TestCase):
             self.assertAlmostEqual(ladder["columns"]["edge.bytes"]["per_item_per_tick"], 9.0, places=6)
             text = items_table.markdown(legs, ladder)
             self.assertIn("phase.entity", text)
-            self.assertIn("1.000", text)  # 0.001 ms = 1.000 µs per item per tick
+            self.assertIn("| phase.entity | 1.00, 11.00, 31.00 | 1.000 |", text)  # 0.001 ms = 1.000 µs per item per tick
+            self.assertIn("| edge.bytes | 0.00, 90000.00, 270000.00 | 9.000 |", text)  # counts are not scaled
+
+    def test_checkpoint_capture_is_amortized_over_window_ticks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = items_table.analyze_leg(leg(Path(directory), 1000, ticks=40), "n1k")
+            self.assertEqual(result["checkpoint"]["captures"], 2)
+            self.assertAlmostEqual(result["checkpoint"]["data_ms"], 2.0, places=3)
+            self.assertAlmostEqual(result["checkpoint"]["ms_per_tick"], 2 * (2.0 + 1.0 + 0.1 + 2.0 + 0.1) / 40, places=3)
+            self.assertAlmostEqual(result["outer_ms"]["run"], 5.0)
 
     def test_step_cost_subtracts_the_clock_pair(self):
         with tempfile.TemporaryDirectory() as directory:

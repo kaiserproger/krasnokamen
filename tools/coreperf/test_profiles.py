@@ -69,9 +69,8 @@ class ProfilesTests(unittest.TestCase):
         recipe = profiles.items_fixture(3000)
         rows = {}
         for command in recipe["regions"][1]["commands"]:
-            parts = command.split()
-            rows.setdefault((round(float(parts[4]), 3), round(float(parts[3]), 3) // 1 * 0), []).append(
-                (float(parts[2]), parts[5]))
+            parts = command.split()  # summon minecraft:item X Y Z {Item:{id:'..',count:N}}
+            rows.setdefault((float(parts[3]), float(parts[4])), []).append((float(parts[2]), parts[5]))
         for items in rows.values():
             ordered = sorted(items)
             for (xa, ka), (xb, kb) in zip(ordered, ordered[1:]):
@@ -949,6 +948,39 @@ class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["status"], "failed")
             self.assertIn("--require-cache-hit refuses to prepare", result["error"])
             self.assertTrue(result["noncanonical"])
+
+
+    async def test_items_heavy_preparation_requires_the_requested_saved_item_count(self):
+        manifest = {"head": "base", "diff_sha256": "diff", "binary_sha256": "sha"}
+        async def prepared(_args, _directory, recipe, _key, _hashes):
+            return Path("/unused"), {"recipe_sha256": profiles.load.digest(recipe),
+                "cohort": {"counts": {}, "identities": {}}, "fixture_cache": {"status": "disabled"},
+                "snapshot": {"entities": {"minecraft:item": {"active": saved}}}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for saved in (20, 19):
+                args = argparse.Namespace(out=root / str(saved), profile="items-heavy", productive_npcs=None,
+                    server_bin=root / "server" / "solaris-v2", bots_bin=root / "bots" / "player-scale-bots",
+                    build_receipt=root / "server" / "manifest.json", vanilla_data_dir=root, mobs=0,
+                    villagers=0, damage_victims=None, map_frames=None, churn_percent=None,
+                    daylight_zombies=None, wool_sheep=None, reactive_pairs=None, xp_orbs=None,
+                    spawn_mobs=None, spawn_monsters=None, xp_players=None, xp_locality=None,
+                    projectiles=None, containers=None, smoke=True, prepare_only=True,
+                    readiness_seconds=1800, items=20, seed=42, view_distance=8, fixture_cache=root / "cache")
+                with patch.object(profiles, "host_receipt", return_value={}), \
+                     patch.object(profiles, "pinned_binary", return_value=manifest), \
+                     patch.object(profiles.load, "tree_hash", return_value={"sha256": "registry"}), \
+                     patch.object(profiles.compare, "prepare", new=prepared):
+                    status = await profiles.run(args)
+                result = json.loads((args.out / "result.json").read_text())
+                self.assertEqual(status, int(saved != 20))
+                self.assertTrue(result["noncanonical"])
+                self.assertEqual(result["variant"], "items-heavy-sky-platform-20")
+                if saved == 20:
+                    self.assertEqual((result["status"], result["items_before"]), ("prepared", 20))
+                    self.assertFalse(result.get("publication_evidence", False))
+                else:
+                    self.assertIn("holds 19 item entities", result["error"])
 
 
 if __name__ == "__main__":

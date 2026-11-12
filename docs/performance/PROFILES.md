@@ -308,7 +308,8 @@ visits, item movement/spawn/metadata packets and bytes, and the fanout phases `i
 `fill_ms`). `python3 -m tools.coreperf.items_table --leg n0=<run> --leg n10k=<run> --leg n30k=<run>
 --leg kelp1=<run> [--md table.md]` turns the runs into the per-phase table, the clock-corrected
 per-item step and merge costs, and the least-squares slope in microseconds per item per tick of every
-column across the ladder, plus a within-run slope per leg. The step timer sums CPU over the rayon
+column across the ladder (phases, laps, `tick outer ms:` and amortized `checkpoint capture ms:` lines,
+edge fanout), plus a within-run slope per leg. The step timer sums CPU over the rayon
 workers (not wall time); the other lines are wall time on the thread that ran them.
 
 ## Reproduce
