@@ -242,3 +242,41 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     says("reload_skips_unreadable_new_packs", "Skipping new datapack file/brokenzip.zip")
     says("reload_names_the_pack_without_mcmeta", "Skipping new datapack file/nometa")
     says("reload_still_completes", "Reloading!")  # vanilla text of commands.reload.success
+
+    def says_after(label: str, after: str, *markers: str) -> None:
+        """Wait for a chat line holding every marker that arrives after the line holding `after`."""
+        def seen(state: dict[str, Any]) -> bool:
+            lines = [str(line) for line in state.get("recent_chat", [])]
+            starts = [i for i, line in enumerate(lines) if after in line]
+            return bool(starts) and any(all(m in line for m in markers) for line in lines[starts[-1] + 1:])
+        try:
+            probe.wait(seen, label, timeout_seconds=30)
+        except TimeoutError:
+            probe.report.setdefault("chat_at_timeout", {})[label] = probe.observe().get("recent_chat", [])
+            raise
+
+    def fenced(marker: str) -> None:
+        probe.fixture(f'tellraw @s {{"text":"{marker}"}}')
+        says(f"fence_{marker}", marker)
+
+    # A second /reload still names the pack it skips, and a long warning list is a few lines and a count
+    # (the server log has every one).
+    for index in range(4):
+        (packs_dir / f"stray{index}.txt").write_text("x\n")
+    fenced("Round2Begin")
+    probe.fixture("reload")
+    says_after("second_reload_still_names_the_skipped_pack", "Round2Begin", "Skipping new datapack file/brokenzip.zip")
+    says_after("reload_counts_the_rest_instead_of_listing_them", "Round2Begin",
+               "more datapack warning(s), see the server log")
+
+    # Vanilla getPack: a pack that exists but is not selected is "not enabled", not unknown.
+    fenced("Round3Begin")
+    probe.fixture("datapack disable file/nometa")
+    says_after("disable_of_a_skipped_pack_says_not_enabled", "Round3Begin", "is not enabled!")
+
+    # A selected pack whose pack.mcmeta breaks keeps running, so the listing keeps it.
+    pack_barrier("madeit_enable_reported", "datapack enable file/madeit", "file/madeit")
+    (packs_dir / "madeit" / "pack.mcmeta").write_text('{"pack": {')
+    fenced("Round4Begin")
+    probe.fixture("datapack list enabled")
+    says_after("list_keeps_a_selected_pack_that_no_longer_reads", "Round4Begin", "enabled", "file/madeit")

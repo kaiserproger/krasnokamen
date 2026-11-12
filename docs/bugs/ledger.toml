@@ -4971,3 +4971,53 @@ severity = "minor"
 status = "open"
 source = "CrashTestLock 2026-11-12, code reading only (not the cause of the crash-test flake, whose fixture never starts this worker): settlements/forestry.rs:126 spawns `settlement-forest` with a clone of the world's Arc<ChunkSource> (which owns the Arc<NativeStore>) and keeps no JoinHandle. When the TickState drops, the worker exits only after its current chunk generation finishes and its next recv fails, so the store (and its lease) can outlive the world; a reopen in the same process right after a stop can refuse with \"Database already open\". Fix direction: keep the JoinHandle in forestry::Cache and on drop close the request channel and join."
 regression = []
+
+[[bug]]
+id = "COMMAND-TEAMMSG-COMMANDS-ONLY-SENDER-COPY"
+title = "/teammsg shows a Commands-only sender its own `chat.type.team.sent` copy; vanilla TeamMsgCommand sends every copy, the sender's included, as chat (TEAM_MSG_COMMAND_OUTGOING), which a Commands-only client does not accept (same class as the fixed /msg F2)."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "BreakB10Commands round 3 H1 (receipts/BreakB10Commands/REBREAK3.md); vanilla 26.1.2 TeamMsgCommand javap: ServerPlayer.sendChatMessage for each member."
+regression = ["cargo:mc-core:chat_visibility_tests::team_messages_are_chat_for_every_copy_the_senders_included", "harness:chat-visibility:native-chat-visibility"]
+
+[[bug]]
+id = "DATAPACK-RELOAD-SECOND-SKIP-SILENT"
+title = "A second /reload with the same still-broken new pack answered only `Reloading!`: warnings were diffed against the previous pack set, so a persisting skip was reported once and then never again in chat or log."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "BreakB10Commands round 3 H2 (REBREAK3.md). A /reload now states every warning it finds; enable/disable still report only new ones."
+regression = ["cargo:mc-core:datapacks::command_tests::a_second_reload_still_names_a_new_pack_that_stays_skipped", "harness:datapack-reload:native-datapack-reload"]
+
+[[bug]]
+id = "DATAPACK-LIST-HIDES-BROKEN-SELECTED-PACK"
+title = "/datapack list hid a selected pack whose pack.mcmeta became unreadable while its recipes were still active and the next start would refuse it."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "BreakB10Commands round 3 H3 (REBREAK3.md). The listing now keeps a selected pack that failed to scan, with the load error as its hover."
+regression = ["cargo:mc-core:datapacks::command_tests::the_list_keeps_a_selected_pack_whose_pack_mcmeta_broke", "harness:datapack-reload:native-datapack-reload"]
+
+[[bug]]
+id = "DATAPACK-DISABLE-SKIPPED-PACK-UNKNOWN"
+title = "/datapack disable on a pack skipped at /reload answered `Unknown data pack` while /datapack list showed it; vanilla DataPackCommand.getPack throws unknown only when the repository has no such pack and otherwise commands.datapack.disable.failed (`Pack '...' is not enabled!`)."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "BreakB10Commands round 3 H4 (REBREAK3.md); vanilla 26.1.2 DataPackCommand.getPack javap (getPack null -> unknown; selected.contains(pack) == enabling -> failed)."
+regression = ["cargo:mc-core:datapacks::command_tests::disabling_a_skipped_pack_says_it_is_not_enabled", "harness:datapack-reload:native-datapack-reload"]
+
+[[bug]]
+id = "DATAPACK-WARNINGS-CHAT-FLOOD"
+title = "Every datapack warning was a separate chat line to the operator (50 bad entries gave 50 lines, pushing `Reloading!` out of view); vanilla logs them to the console."
+area = "gameplay"
+repro = "manual"
+severity = "minor"
+status = "open"
+source = "BreakB10Commands round 3 H5 (REBREAK3.md). The log gets every warning; the operator's chat gets three and a count."
+regression = ["cargo:mc-core:datapacks::command_tests::many_pack_warnings_are_a_few_chat_lines_and_a_count", "harness:datapack-reload:native-datapack-reload"]

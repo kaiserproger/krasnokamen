@@ -1596,3 +1596,109 @@ fn a_filter_the_regex_engine_refuses_is_a_pack_load_error_named_like_any_other()
         "{error}"
     );
 }
+
+fn shown(state: &mut TickState) -> String {
+    messages(state)
+        .iter()
+        .map(crate::command_debug::plain)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// H2: a `/reload` states every condition it finds, so a new pack that stays broken is not
+/// silent the second time.
+#[test]
+fn a_second_reload_still_names_a_new_pack_that_stays_skipped() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    std::fs::create_dir_all(&root).unwrap();
+    let mut state = fixture(&root);
+    pack(
+        &root,
+        "broken",
+        "\"B\"",
+        &[("test/recipe/cut.json", BAD_RECIPE)],
+    );
+    for round in ["first", "second"] {
+        run(&mut state, "reload");
+        settle(&mut state);
+        let text = shown(&mut state);
+        assert!(
+            text.contains("Skipping new datapack file/broken"),
+            "{round} reload: {text}"
+        );
+    }
+}
+
+/// H5: the operator's chat gets a few warnings and a count, the server log all of them.
+#[test]
+fn many_pack_warnings_are_a_few_chat_lines_and_a_count() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    std::fs::create_dir_all(&root).unwrap();
+    let mut state = fixture(&root);
+    for index in 0..8 {
+        std::fs::write(root.join(format!("stray{index}.txt")), "x").unwrap();
+    }
+    run(&mut state, "reload");
+    settle(&mut state);
+    let lines = messages(&mut state)
+        .iter()
+        .map(crate::command_debug::plain)
+        .collect::<Vec<_>>();
+    let non_pack = lines
+        .iter()
+        .filter(|line| line.contains("non-pack entry"))
+        .count();
+    assert_eq!(non_pack, 3, "{lines:?}");
+    assert!(
+        lines
+            .iter()
+            .any(|line| line.contains("5 more datapack warning(s), see the server log")),
+        "{lines:?}"
+    );
+}
+
+/// H3: a selected pack that no longer reads is still running, so the listing keeps it.
+#[test]
+fn the_list_keeps_a_selected_pack_whose_pack_mcmeta_broke() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    pack(&root, "gems", "\"Gems\"", &GEM_RECIPES);
+    let mut state = fixture(&root);
+    std::fs::write(root.join("gems/pack.mcmeta"), r#"{"pack": {"#).unwrap();
+    run(&mut state, "datapack list enabled");
+    settle(&mut state);
+    let text = shown(&mut state);
+    assert!(text.contains("file/gems"), "{text}");
+}
+
+/// H4: vanilla `getPack`: a pack the repository has but that is not selected is "not enabled".
+#[test]
+fn disabling_a_skipped_pack_says_it_is_not_enabled() {
+    let world = tempfile::tempdir().unwrap();
+    let root = world.path().join("datapacks");
+    std::fs::create_dir_all(&root).unwrap();
+    let mut state = fixture(&root);
+    pack(
+        &root,
+        "skipme",
+        "\"S\"",
+        &[("test/recipe/cut.json", BAD_RECIPE)],
+    );
+    std::fs::write(root.join("skipzip.zip"), b"PK not really a zip").unwrap();
+    run(&mut state, "reload");
+    settle(&mut state);
+    messages(&mut state);
+    for id in ["file/skipme", "file/skipzip.zip"] {
+        assert_eq!(run(&mut state, &format!("datapack disable {id}")), Failed);
+        let reply = messages(&mut state);
+        assert_eq!(
+            key(&reply[0]),
+            "commands.datapack.disable.failed",
+            "{id}: {reply:?}"
+        );
+    }
+    assert_eq!(run(&mut state, "datapack disable file/nosuch"), Failed);
+    assert_eq!(key(&messages(&mut state)[0]), "commands.datapack.unknown");
+}
