@@ -2336,7 +2336,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1 (some villagers leave house doors open at night); fixed by 8a1c5453 (2026-10-19: villagers open/close wooden doors on their route and close only doors they opened, never on another villager in the doorway). Vanilla 26.3 SleepInBed.start and InteractWithDoor close the doors a villager opened or passed through (javap of the local server jar). Fix patch docs/bugs/fix-patches/ISSUE-1-08.patch is the closing call at the candidate (villager/doors.rs interact); reversing it leaves every door a villager opened open"
-regression = ["cargo:mc-core:villager::brain::tests::door_tests::resident_opens_both_door_halves_and_closes_after_entering_bed_at_night", "cargo:mc-core:villager::brain::tests::door_tests::bound_bedless_nitwit_enters_occupied_house_at_night", "cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened"]
+regression = ["cargo:mc-core:villager::brain::tests::door_tests::resident_opens_both_door_halves_and_closes_after_entering_bed_at_night", "cargo:mc-core:villager::brain::tests::door_tests::bound_bedless_nitwit_enters_occupied_house_at_night", "cargo:mc-core:villager::brain::tests::door_tests::interrupted_route_closes_only_the_door_the_resident_opened", "harness:village-qa:night_door"]
 failing_first = "reported"
 fix_commit = "patch:ecb5306d97a64d29220b6bd0c1897411943ed19cb08bc6505f222dc882ae6083"
 
