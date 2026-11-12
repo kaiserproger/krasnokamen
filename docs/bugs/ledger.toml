@@ -4476,8 +4476,9 @@ area = "gameplay"
 repro = "client"
 severity = "minor"
 status = "open"
-source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F3, 2/2, with send_command_feedback true and false). Vanilla 26.3 accepts a bare string as a text component."
-regression = []
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F3, 2/2, with send_command_feedback true and false). Vanilla 26.3 accepts a bare string as a text component. Cause: the SystemChat planner wrote the component with the compound-only mc_nbt::write_network and dropped a bare string or list silently; vanilla ComponentSerialization encodes plain text as a string tag (the codec is ByteBufCodecs.fromCodecTrusted, any root tag)."
+fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
+regression = ["cargo:mc-edge:plan::plan_tests::styled_chat_delivers_string_and_list_components", "harness:admin-commands:all"]
 failing_first = "reported"
 
 [[bug]]
@@ -4487,8 +4488,9 @@ area = "gameplay"
 repro = "client"
 severity = "minor"
 status = "open"
-source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F6, 2/2; javap receipts/BreakJoinRows/javap/CommandBlockEntity.txt: loadAdditional -> setAutomatic -> scheduleTick)."
-regression = []
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F6, 2/2; javap receipts/BreakJoinRows/javap/CommandBlockEntity.txt: loadAdditional -> setAutomatic -> scheduleTick). Cause: the neighbour update that wakes a command block runs before the block entity image is installed, and nothing scheduled the first tick after the install."
+fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
+regression = ["cargo:mc-core:command_blocks::tests::setblock_with_auto_runs_the_command_block_but_a_powered_or_chain_one_waits"]
 failing_first = "reported"
 
 [[bug]]
@@ -4514,15 +4516,62 @@ regression = []
 failing_first = "reported"
 
 [[bug]]
-id = "COMMAND-GAPS-BREAKJOINROWS-NOTICED"
-title = "Small command gaps seen once each: defaultgamemode is an unknown command; loot table minecraft:blocks/stone reported unsupported; failure messages show the raw key argument.entity.notfound.entity; command-block say shows [Server] instead of @ and ops get no [@: ...] admin broadcast."
+id = "COMMAND-DEFAULTGAMEMODE-UNKNOWN"
+title = "defaultgamemode is an unknown command (vanilla DefaultGameModeCommands: level 2, one gamemode argument, commands.defaultgamemode.success)."
 area = "gameplay"
 repro = "client"
 severity = "minor"
 status = "open"
-source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md 'Noticed', single runs). Split into separate rows when one is picked up."
+source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md 'Noticed', single run). The command sets an in-memory default that players without a saved record join in; persisting it (level.dat GameType) is COMMAND-DEFAULTGAMEMODE-NOT-PERSISTED."
+fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
+regression = ["cargo:mc-core:command_context::tests::defaultgamemode_sets_the_mode_new_players_join_in", "cargo:mc-core:commands::tests::defaultgamemode_takes_exactly_one_mode_and_needs_operator"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "COMMAND-DEFAULTGAMEMODE-NOT-PERSISTED"
+title = "The /defaultgamemode setting is lost on restart: level.dat GameType is a constant 0 (level_metadata.rs) and no journal record carries the default, so new players join in survival again."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "CommandGaps 2026-11-12: vanilla MinecraftServer.setDefaultGameType writes WorldData; Solaris keeps TickState.default_game_mode in memory only."
 regression = []
-failing_first = "reported"
+failing_first = "not recorded"
+
+[[bug]]
+id = "COMMAND-FAILURE-RAW-LANG-KEY"
+title = "Global-command failures reached from the command context (kill/tp/effect with no matching entity) show the raw lang key argument.entity.notfound.entity instead of the translated text."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (FINDINGS.md 'Noticed'; scene-shot 20261111T194930-scene-shot-13ikb1el, kill @e[type=minecraft:cow,distance=..0] and tp @s NobodyHere). Cause: command_context::run delivered Err(key) strings from dimensions::travel::execute as plain chat; now a vanilla lang key is sent as a translate component."
+fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
+regression = ["cargo:mc-core:command_context::tests::global_command_failure_reaches_the_player_as_a_translatable_key", "cargo:mc-core:command_feedback::tests::translation_keys_are_told_apart_from_english_errors"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "COMMAND-BLOCK-SOURCE-NAME-AND-ADMIN-BROADCAST"
+title = "A command block's say shows [Server] instead of [@], and operators get no gray italic [@: ...] admin broadcast of its command output while commandBlockOutput and sendCommandFeedback are on."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (FINDINGS.md F6 aside); javap CommandSourceStack.sendSuccess/broadcastToAdmins and BaseCommandBlock (default name @, shouldInformAdmins = COMMAND_BLOCK_OUTPUT). Admin broadcast is implemented for command-block sources only; player and console sources do not inform other operators yet."
+fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
+regression = ["cargo:mc-core:command_blocks::tests::command_block_is_named_at_and_informs_operators_of_its_output"]
+failing_first = "not recorded"
+
+[[bug]]
+id = "LOOT-GIVE-BLOCK-TABLES-UNSUPPORTED"
+title = "/loot give @s loot minecraft:blocks/stone reports an unknown or unsupported loot table: command_loot resolves only chest loot tables (registry.chest_loot), not block drop tables."
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "BreakJoinRows 2026-11-12 (FINDINGS.md 'Noticed'); command_loot.rs generate(): Source::Table reads state.registry.chest_loot only."
+regression = []
+failing_first = "not recorded"
 
 [[bug]]
 id = "PROJECTILE-STUCK-ARROW-NEVER-FALLS"
