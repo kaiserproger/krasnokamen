@@ -561,7 +561,7 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="graphical", profile="scene-shot",
         scenario_id="native-village-late-job", requires=("xvfb",),
         sources=("tools/harness/backends/scene_shot.py", "tools/harness/village_late_job_scene.json"),
-        fixture="private native client; frozen day tick 10000; one unbound villager beside a new lectern, one bound resident whose settlement certifies a librarian workshop",
+        fixture="private native client; frozen day tick 10000; one unbound villager beside a new lectern, one bound resident standing in a workshop its settlement certifies for a librarian",
         proves="within 1200 game ticks both received villagers show the librarian profession",
         limits="one profession; the morning control is not part of the gate",
     ),
