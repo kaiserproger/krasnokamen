@@ -176,7 +176,7 @@ performance numbers.
 | Idle world | 0 clients, generated Overworld | 271 / 265 MiB | 0.22 / 0.33 / 0.43 / 3.6 ms | 20.00 |
 | Exploration | 20 protocol bots exploring fresh terrain | 679 / 673 MiB | 8.6 / 27.7 / 33.0 / 50.3 ms | 20.00 |
 | Native-100 | 100 protocol bots + 100,000 mixed mobs | 1,676 / 1,612 MiB | 63.5 / 79.2 / 88.6 / 210.7 ms | 15.17 |
-| Villager-heavy | 100 protocol bots + 100,000 mixed mobs + 20,000 villagers | 2,096 / 2,073 MiB | 141.5 / 160.0 / 171.4 / 180.0 ms | 7.07 |
+| Villager-heavy | 100 protocol bots + 100,000 mixed mobs + 20,000 villagers | pending | pending | pending |
 
 Reference host: Ryzen 5 7535HS (6 cores / 12 threads), 32 GB RAM, NVMe SSD,
 Ubuntu 26.04.1. Already measured: the single-threaded in-process terrain

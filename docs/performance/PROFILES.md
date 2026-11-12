@@ -11,26 +11,26 @@ from a successful measurement.
 **Measured 2026-11-13** on the reference host below, tree `74aed9fc`, with
 release pins from `tools/dev/pin-release --no-incremental`. The runs used the
 exclusive measurement lane (`tools/dev/mem-run.sh -x -p`, scope `CPUQuota=600%`):
-seed 42, 30 s warmup, 120 s measured. All four receipts are complete
-(`status: measured`, `publication_evidence: true`). They are kept on the
-reference host under `receipts/PerfReference/74aed9fc/`.
+seed 42, 30 s warmup, 120 s measured, 6 GiB server cgroup. The three published
+receipts are complete (`status: measured`, `publication_evidence: true`) and
+are kept on the reference host under `receipts/PerfReference/74aed9fc/`.
 
 | Profile | Server RSS peak / steady (MiB) | MSPT p50 / p95 / p99 / max (ms) | TPS | Generated chunks/s |
 |---|---|---|---|---|
 | `idle` | 271.3 / 264.8 | 0.217 / 0.327 / 0.433 / 3.646 | 20.00 | not instrumented |
 | `explore-20` | 679.0 / 673.3 | 8.618 / 27.729 / 32.978 / 50.272 | 20.00 | not instrumented |
 | `native-100` | 1675.5 / 1611.6 | 63.450 / 79.179 / 88.588 / 210.675 | 15.17 | not instrumented |
-| `villager-heavy` | 2096.3 / 2072.9 | 141.458 / 159.991 / 171.381 / 179.956 | 7.07 | not instrumented |
+| `villager-heavy` | pending | pending | pending | not instrumented |
 
-Bot RSS is reported separately: 77.1 MiB (`explore-20`), 125.2 MiB
-(`native-100`), 124.8 MiB (`villager-heavy`). Before measurement the
-`native-100` world held 293 item entities. The previous measurement (tree
-`931b1699`, 7.91 TPS) held about 19,000, almost all kelp washed out by flowing
-water; the kelp-wash fix removed them. That fix, the redstone entity query
-(`67407dd9`) and the entity-commit spike fix (`17c963b4`) all landed between
-the two trees, and these runs do not split the gain between them.
-`villager-heavy` is measured here for the first time; its preparation had
-failed before the settlement-label fix (`3633261b`).
+Bot RSS is reported separately: 77.1 MiB (`explore-20`) and 125.2 MiB
+(`native-100`). Before measurement the `native-100` world held 293 item
+entities. The previous measurement (tree `931b1699`, 7.91 TPS) held about
+19,000, almost all of them kelp washed out by flowing water; the kelp-wash fix
+removed them. That fix, the redstone entity query (`67407dd9`) and the
+entity-commit spike fix (`17c963b4`) all landed between the two trees, and
+these runs do not split the gain between them. The `villager-heavy` preparation
+completes since the settlement-label fix (`3633261b`). Its first measurement
+ran under a 12 GiB cgroup instead of 6 GiB, so it is not published.
 
 Only a complete `measured` receipt from an approved quiet window can replace a
 cell. Preparation, short smoke results and the historical in-process generator
