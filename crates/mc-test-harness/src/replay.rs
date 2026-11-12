@@ -1016,7 +1016,10 @@ pub async fn run_protocol_replay(
 ) -> Result<ObservationSet> {
     manifest.validate()?;
     let (driver, lane_name) = match context.kind {
-        ServerKind::Krasnokamen => (ReplayDriver::KrasnokamenProtocol, "krasnokamen protocol lane"),
+        ServerKind::Krasnokamen => (
+            ReplayDriver::KrasnokamenProtocol,
+            "krasnokamen protocol lane",
+        ),
         ServerKind::Vanilla => (ReplayDriver::VanillaOracle, "vanilla oracle lane"),
     };
     ensure!(

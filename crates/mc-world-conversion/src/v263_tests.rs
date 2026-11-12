@@ -34,9 +34,11 @@ fn native_26_3_source_versions_are_accepted_without_accepting_snapshots() {
 #[test]
 #[ignore = "requires a clean-stopped local 26.3 vanilla world; KRASNOKAMEN_26_3_ANVIL_WORLD and KRASNOKAMEN_26_3_IMPORT_OUTPUT"]
 fn imports_real_native_26_3_vanilla_world_with_pass_receipt() {
-    let source = PathBuf::from(std::env::var_os("KRASNOKAMEN_26_3_ANVIL_WORLD").expect("source world"));
-    let output =
-        PathBuf::from(std::env::var_os("KRASNOKAMEN_26_3_IMPORT_OUTPUT").expect("artifact directory"));
+    let source =
+        PathBuf::from(std::env::var_os("KRASNOKAMEN_26_3_ANVIL_WORLD").expect("source world"));
+    let output = PathBuf::from(
+        std::env::var_os("KRASNOKAMEN_26_3_IMPORT_OUTPUT").expect("artifact directory"),
+    );
     fs::create_dir_all(&output).unwrap();
     let destination = output.join("native");
     let mut config = crate::test_support::config(destination.clone(), 263);

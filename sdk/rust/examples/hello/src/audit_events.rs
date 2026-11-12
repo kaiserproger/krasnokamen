@@ -30,7 +30,7 @@
 use std::collections::VecDeque;
 
 use krasnokamen_plugin_sdk::events::{CommandInvoked, EventContext};
-use krasnokamen_plugin_sdk::{Command, Config, Event, Failure, LogLevel, log, message_player};
+use krasnokamen_plugin_sdk::{log, message_player, Command, Config, Event, Failure, LogLevel};
 
 /// The prefix of every line this fixture publishes, so a driver can wait on its
 /// own reports while the server interleaves frames of its own.

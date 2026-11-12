@@ -88,7 +88,8 @@ pub fn publish<'a>(
             biomes,
             blocks,
             items: mc_data::items::krasnokamen_required_items(),
-            block_entity_types: mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
+            block_entity_types:
+                mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
         }
     });
     let registries = PlanRegistries {

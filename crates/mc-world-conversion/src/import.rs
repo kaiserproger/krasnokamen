@@ -745,7 +745,12 @@ fn admit_player(
     let Tag::Compound(fields) = &mut tag else {
         return Err(fail(format!("{path}: player is not compound")));
     };
-    fields.retain(|(key, _)| !matches!(key.as_str(), "krasnokamen:Tick" | "KrasnokamenUnlockedRecipes"));
+    fields.retain(|(key, _)| {
+        !matches!(
+            key.as_str(),
+            "krasnokamen:Tick" | "KrasnokamenUnlockedRecipes"
+        )
+    });
     if let Some((_, Tag::Compound(book))) = fields.iter_mut().find(|(key, _)| key == "recipeBook") {
         book.retain(|(key, _)| key != "recipes");
     }
@@ -1573,7 +1578,9 @@ pub(super) fn convert(
                 }
                 // An offline import starts a new native journal lineage, even
                 // when Java retained metadata from an earlier Krasnokamen export.
-                chunk.extras.retain(|(key, _)| key != "KrasnokamenJournalLsn");
+                chunk
+                    .extras
+                    .retain(|(key, _)| key != "KrasnokamenJournalLsn");
                 // The inline list was taken above: chunk_from_nbt never saw
                 // it, but drop any same-named remainder defensively so a
                 // future decoder change cannot resurrect the duplicate.

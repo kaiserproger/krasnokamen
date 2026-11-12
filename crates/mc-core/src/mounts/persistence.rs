@@ -62,7 +62,9 @@ pub(crate) fn from_fields(
     if fields.iter().any(|(name, _)| name == "krasnokamen:Rider") {
         // The scalar form predates the ordered rider list; reading it as an
         // opaque field would silently unseat the rider.
-        return Err(invalid("krasnokamen:Rider is obsolete, use krasnokamen:Riders"));
+        return Err(invalid(
+            "krasnokamen:Rider is obsolete, use krasnokamen:Riders",
+        ));
     }
     if let Some(tag) = field(fields, "krasnokamen:Riders")? {
         let Tag::List(list) = tag else {

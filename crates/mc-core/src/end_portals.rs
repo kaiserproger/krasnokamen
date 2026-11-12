@@ -381,7 +381,11 @@ fn stored_gateway(state: &TickState, pos: BlockPos) -> Result<Gateway, String> {
     let cooldown_until = match find("krasnokamen:CooldownUntil")? {
         None => 0,
         Some(Tag::Long(value)) if *value >= 0 => *value as u64,
-        _ => return Err(fail("krasnokamen:CooldownUntil must be nonnegative TAG_Long")),
+        _ => {
+            return Err(fail(
+                "krasnokamen:CooldownUntil must be nonnegative TAG_Long",
+            ));
+        }
     };
     let exit = match find("exit_portal")? {
         None => None,
