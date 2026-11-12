@@ -243,13 +243,17 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     says("reload_names_the_pack_without_mcmeta", "Skipping new datapack file/nometa")
     says("reload_still_completes", "Reloading!")  # vanilla text of commands.reload.success
 
-    def says_after(label: str, after: str, *markers: str) -> None:
-        """Wait for a chat line holding every marker that arrives after the newest line holding `after`."""
+    def says_after(label: str, after: str, *markers: str | tuple[str, ...]) -> None:
+        """Wait for a chat line holding every marker that arrives after the newest line holding `after`;
+        a tuple marker is satisfied by any one of its strings."""
+        def holds(line: str, marker: str | tuple[str, ...]) -> bool:
+            return any(m in line for m in marker) if isinstance(marker, tuple) else marker in line
+
         def seen(state: dict[str, Any]) -> bool:
             # `recent_chat` lists the newest line first: what arrived after `after` precedes it.
             lines = [str(line) for line in state.get("recent_chat", [])]
             starts = [i for i, line in enumerate(lines) if after in line]
-            return bool(starts) and any(all(m in line for m in markers) for line in lines[:starts[0]])
+            return bool(starts) and any(all(holds(line, m) for m in markers) for line in lines[:starts[0]])
         try:
             probe.wait(seen, label, timeout_seconds=30)
         except TimeoutError:
@@ -277,10 +281,12 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
     probe.fixture("datapack disable file/nometa")
     says_after("disable_of_a_skipped_pack_says_not_enabled", "Round3Begin", "is not enabled!")
 
-    # A selected pack whose pack.mcmeta breaks keeps running, so the listing keeps it.
+    # A selected pack whose pack.mcmeta breaks keeps running, so the listing keeps it. The /reloads
+    # above may already have selected madeit (a reload enables each new pack the disabled list does not
+    # hold, crates/mc-core/src/datapacks.rs), so the enable answers "Enabling data pack" or "already enabled".
     fenced("Round4Enable")
     probe.fixture("datapack enable file/madeit")
-    says_after("madeit_enable_reported", "Round4Enable", "Enabling data pack", "file/madeit")
+    says_after("madeit_enable_reported", "Round4Enable", "file/madeit", ("Enabling data pack", "is already enabled!"))
     (packs_dir / "madeit" / "pack.mcmeta").write_text('{"pack": {')
     fenced("Round4Begin")
     probe.fixture("datapack list enabled")
