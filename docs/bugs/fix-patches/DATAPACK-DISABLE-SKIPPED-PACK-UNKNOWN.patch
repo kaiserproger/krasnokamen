@@ -1,0 +1,44 @@
+diff --git a/crates/mc-core/src/datapack_management.rs b/crates/mc-core/src/datapack_management.rs
+index c2dda6cc..3accd21b 100644
+--- a/crates/mc-core/src/datapack_management.rs
++++ b/crates/mc-core/src/datapack_management.rs
+@@ -451,11 +451,17 @@ fn disable(
+     }
+     let mut selection = state.datapacks.selection().clone();
+     if !selection.enabled.iter().any(|entry| entry == &name) {
+-        return Err(if selection.disabled.iter().any(|entry| entry == &name) {
+-            translated_failure("commands.datapack.disable.failed", &name)
+-        } else {
+-            unknown(&name)
+-        });
++        // Vanilla `DataPackCommand.getPack`: a pack the repository has but that is not
++        // selected is "not enabled", whether it was disabled, skipped for failing to load, or
++        // never selected; only a pack nobody has is unknown.
++        let known = state.datapacks.packs().has_pack(&name);
++        return Err(
++            if known || selection.disabled.iter().any(|entry| entry == &name) {
++                translated_failure("commands.datapack.disable.failed", &name)
++            } else {
++                unknown(&name)
++            },
++        );
+     }
+     selection.enabled.retain(|entry| entry != &name);
+     selection.disabled.push(name.clone());
+diff --git a/crates/mc-core/src/datapacks.rs b/crates/mc-core/src/datapacks.rs
+index b474ad7e..37725f0a 100644
+--- a/crates/mc-core/src/datapacks.rs
++++ b/crates/mc-core/src/datapacks.rs
+@@ -918,6 +918,12 @@ impl PackSet {
+         })
+     }
+ 
++    /// Whether the last scan found a pack (or archive that failed to read) by this id,
++    /// selected or not: the repository "has" it, as vanilla's `getPack` means it.
++    pub(crate) fn has_pack(&self, id: &str) -> bool {
++        self.descriptions.contains_key(id) || self.failed.contains_key(id)
++    }
++
+     /// Whether installing `self` instead of `current` changes the registry:
+     /// any difference in recipes, loot or predicates.
+     pub(crate) fn changes_registry(&self, current: &Self) -> bool {
