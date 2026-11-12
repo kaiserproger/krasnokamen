@@ -9,7 +9,7 @@
 //!   outside their built camps. Both prove real carry and block journaling.
 //! * Storage: the certificate's container points are usable settlement stock:
 //!   a real native container endpoint load succeeds at certified points.
-//! * Wall / Tower: defensive certificate with intentionally zero worker
+//! * Wall / Tower / Gate: defensive certificate with intentionally zero worker
 //!   slots; no invented worker type is ever assigned or claimed.
 //! * Every level runs prepared and completed `plugin_structures::validate`
 //!   boundaries; upgrades keep the BuildingId.
@@ -574,25 +574,19 @@ fn farm_levels_build_claim_farmer_and_certify_bounds() {
     }
 }
 
-#[test]
-fn mason_levels_are_claimable_by_builder_despite_planner_role() {
+/// Every level of `blueprint` is built by the real Builder, certifies at the
+/// intended level with exactly its worker slots, and an unemployed resident
+/// organically claims one of its job sites as `profession`.
+fn workshop_levels_are_built_and_claimed(blueprint: &str, profession: VillagerProfession) {
     let (mut state, id, builder) = site::fixture();
-    let levels = blueprint_levels(
-        &state,
-        "mason",
-        &BuildingKind::Workshop(VillagerProfession::Builder),
-    );
+    let levels = blueprint_levels(&state, blueprint, &BuildingKind::Workshop(profession));
     let mut bid: Option<BuildingId> = None;
     for level in 1..=levels {
-        build_level(&mut state, id, builder, "mason", level, bid);
-        let (found, building) = building_of(
-            &state,
-            id,
-            BuildingKind::Workshop(VillagerProfession::Builder),
-        );
+        build_level(&mut state, id, builder, blueprint, level, bid);
+        let (found, building) = building_of(&state, id, BuildingKind::Workshop(profession));
         assert_eq!(
             building.level, level,
-            "builder hut certifies at the intended level"
+            "{blueprint} certifies at the intended level"
         );
         if let Some(expected) = bid {
             assert_eq!(found, expected, "the upgrade retains the BuildingId");
@@ -601,13 +595,13 @@ fn mason_levels_are_claimable_by_builder_despite_planner_role() {
         }
         assert_eq!(
             building.bounds,
-            expected_bounds(&state, "mason", level),
+            expected_bounds(&state, blueprint, level),
             "the certificate matches the blueprint level geometry"
         );
         assert_eq!(
             building.work_points.len(),
             job_slots(building.kind, level),
-            "mason level {level} exposes exactly its worker slots"
+            "{blueprint} level {level} exposes exactly its worker slots"
         );
         delay_builder(&mut state, builder);
         let spawn = adjacent_spawn(&state, &building.work_points);
@@ -617,18 +611,50 @@ fn mason_levels_are_claimable_by_builder_despite_planner_role() {
             &mut state,
             candidate,
             &building.work_points,
-            VillagerProfession::Builder,
+            profession,
             level,
         );
         assert!(
             (building.bounds.min[0]..=building.bounds.max[0]).contains(&job.x)
                 && (building.bounds.min[1]..=building.bounds.max[1]).contains(&job.y)
                 && (building.bounds.min[2]..=building.bounds.max[2]).contains(&job.z),
-            "the claimed builder job lies inside this level's certificate"
+            "the claimed {blueprint} job lies inside this level's certificate"
         );
         release_builder(&mut state, builder);
         assert_builder_role(&state, builder);
     }
+}
+
+#[test]
+fn mason_levels_are_claimable_by_builder_despite_planner_role() {
+    workshop_levels_are_built_and_claimed("mason", VillagerProfession::Builder);
+}
+
+/// The ten workshops Builders can build for the owner: each one's job-site
+/// block is claimed by its vanilla profession at every level.
+macro_rules! workshop_claim_tests {
+    ($($name:ident => $profession:ident),+ $(,)?) => {$(
+        #[test]
+        fn $name() {
+            workshop_levels_are_built_and_claimed(
+                stringify!($name),
+                VillagerProfession::$profession,
+            );
+        }
+    )+};
+}
+
+workshop_claim_tests! {
+    armorer => Armorer,
+    butcher => Butcher,
+    cartographer => Cartographer,
+    cleric => Cleric,
+    fisherman => Fisherman,
+    fletcher => Fletcher,
+    leatherworker => Leatherworker,
+    librarian => Librarian,
+    toolsmith => Toolsmith,
+    weaponsmith => Weaponsmith,
 }
 
 #[test]
@@ -816,10 +842,11 @@ fn storage_levels_expose_usable_native_container_load() {
 }
 
 #[test]
-fn wall_and_tower_certify_with_intentionally_zero_worker_slots() {
+fn wall_tower_and_gate_certify_with_intentionally_zero_worker_slots() {
     for (blueprint, kind) in [
         ("wall", BuildingKind::Wall),
         ("watch_tower", BuildingKind::Tower),
+        ("gate", BuildingKind::Gate),
     ] {
         let (mut state, id, builder) = site::fixture();
         let levels = blueprint_levels(&state, blueprint, &kind);

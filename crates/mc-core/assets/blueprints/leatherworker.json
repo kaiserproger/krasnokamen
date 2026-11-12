@@ -1,0 +1,45 @@
+{
+  "id": "leatherworker",
+  "kind": "leatherworker",
+  "palette": {
+    "C": "cobblestone",
+    "L": "oak_log[axis=y]",
+    "N": "oak_stairs[facing=north,half=bottom]",
+    "O": "oak_door[facing=north,half=upper]",
+    "S": "cauldron",
+    "X": "oak_planks",
+    "Z": "oak_slab[type=top]",
+    "c": "chest[facing=south]",
+    "d": "oak_fence",
+    "o": "oak_door[facing=north,half=lower]",
+    "t": "torch",
+    "w": "wall_torch[facing=east]",
+    "x": "oak_stairs[facing=south,half=bottom]"
+  },
+  "levels": [
+    {
+      "cert": [7, 4, 5],
+      "entrance": [3, 1, 4],
+      "layers": [
+        ["CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC"],
+        ["LCCCCCL", "CS...cC", "C.....C", "C.....C", "LCCoCCL"],
+        ["LCdCdCL", "C.....C", "Cw....C", "C.....C", "LdCOCdL"],
+        ["xxxxxxx", "XZZZZZX", "XZZZZZX", "XZZZZZX", "NNNNNNN"],
+        [".......", "xxxxxxx", "X.....X", "NNNNNNN", "......."],
+        [".......", ".......", "XXXXXXX", ".......", "......."]
+      ]
+    },
+    {
+      "cert": [9, 4, 5],
+      "entrance": [3, 1, 4],
+      "layers": [
+        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
+        ["LCCCCCCCL", "CS.S.c..C", "C.......C", "C.......C", "LCCoCCCCL"],
+        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL"],
+        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "NNNNNNNNN"],
+        [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
+        [".........", ".........", "XXXXXXXXX", ".........", "........."]
+      ]
+    }
+  ]
+}
