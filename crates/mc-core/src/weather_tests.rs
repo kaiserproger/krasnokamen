@@ -706,6 +706,33 @@ fn precipitation_respects_dry_biomes_roofs_and_clear_weather() {
 }
 
 #[test]
+fn settle_samples_every_active_chunk_once_per_interval_without_a_burst() {
+    let mut state = precipitation_fixture("minecraft:plains");
+    let grid: Vec<_> = (-4..4)
+        .flat_map(|x| (-4..4).map(move |z| crate::boundary::ChunkPos { x, z }))
+        .collect();
+    state
+        .world
+        .ensure_blocking(&grid.iter().map(|chunk| (*chunk, 0)).collect());
+    state
+        .world
+        .set_active_chunks(grid.iter().copied().collect(), 0);
+    let mut seen = std::collections::HashMap::new();
+    let mut busiest = 0;
+    for tick in 1000..1016 {
+        state.tick = tick;
+        settle(&mut state, &mut Vec::new());
+        busiest = busiest.max(state.weather_chunks.len());
+        for chunk in &state.weather_chunks {
+            *seen.entry(*chunk).or_insert(0) += 1;
+        }
+    }
+    assert_eq!(seen.len(), grid.len());
+    assert!(seen.values().all(|count| *count == 1));
+    assert!(busiest < grid.len() / 2, "burst of {busiest} chunks");
+}
+
+#[test]
 fn natural_storm_scheduler_launches_retained_projectile_only_in_weather_dimension() {
     let mut state = precipitation_fixture("minecraft:plains");
     state.weather = (Weather::Thunder, 1000);
