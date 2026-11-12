@@ -231,6 +231,8 @@ def _resolve_profile_task(profile: str | None, platform: str | None) -> dict[str
 
 _CLIENT_READY_TIMEOUT_SECONDS = 180.0
 _XVFB_READY_TIMEOUT_SECONDS = 20.0
+# Owner rule (real-client gates, isolation): agent clients never use :0 or :1.
+_OWNER_DISPLAYS = frozenset({0, 1})
 _LOG_TAIL_BYTES = 8192
 
 _LIBC = ctypes.CDLL(None, use_errno=True)
@@ -550,13 +552,24 @@ def _wait_for_file(path: Path, timeout_seconds: float, process: subprocess.Popen
             os.close(pid_fd)
 
 
+def validate_screen_size(size: tuple[int, int] | list[int]) -> tuple[int, int]:
+    """Bound a private display before creating files or starting a process."""
+    if (not isinstance(size, (tuple, list)) or len(size) != 2
+            or any(type(side) is not int for side in size)
+            or not 320 <= size[0] <= 3840 or not 240 <= size[1] <= 2160):
+        raise ValueError("screen_size must be [width, height] in 320..3840 × 240..2160")
+    return size[0], size[1]
+
+
 @in_phase("client_start")
-def start_xvfb(artifact_dir: Path) -> tuple[subprocess.Popen[Any], str, Any]:
+def start_xvfb(artifact_dir: Path, screen_size: tuple[int, int] = (1280, 720)) -> tuple[subprocess.Popen[Any], str, Any]:
     """Start Xvfb and return (process, display, log_handle).
 
     Readiness comes from Xvfb's -displayfd announcement (or the X socket
     file event on fallback), never from assuming survival after a delay.
     """
+    width, height = validate_screen_size(screen_size)
+    screen_spec = f"{width}x{height}x24"
     artifact_dir.mkdir(parents=True, exist_ok=True)
     log_handle = (artifact_dir / "xvfb.log").open("wb")
     read_fd, write_fd = os.pipe()
@@ -569,7 +582,7 @@ def start_xvfb(artifact_dir: Path) -> tuple[subprocess.Popen[Any], str, Any]:
                     str(write_fd),
                     "-screen",
                     "0",
-                    "1280x720x24",
+                    screen_spec,
                     "-nolisten",
                     "tcp",
                 ],
@@ -580,7 +593,7 @@ def start_xvfb(artifact_dir: Path) -> tuple[subprocess.Popen[Any], str, Any]:
                 pass_fds=(write_fd,),
             )
         except (FileNotFoundError, OSError):
-            return _start_xvfb_scan(artifact_dir, log_handle)
+            return _start_xvfb_scan(artifact_dir, log_handle, screen_spec)
         finally:
             try:
                 os.close(write_fd)
@@ -598,7 +611,7 @@ def start_xvfb(artifact_dir: Path) -> tuple[subprocess.Popen[Any], str, Any]:
                 if process.poll() is not None:
                     # -displayfd unsupported or Xvfb failed: fall back to scan.
                     stop_process(process)
-                    return _start_xvfb_scan(artifact_dir, log_handle)
+                    return _start_xvfb_scan(artifact_dir, log_handle, screen_spec)
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     stop_process(process)
@@ -608,11 +621,14 @@ def start_xvfb(artifact_dir: Path) -> tuple[subprocess.Popen[Any], str, Any]:
                         chunk = os.read(read_fd, 64)
                         if not chunk:
                             stop_process(process)
-                            return _start_xvfb_scan(artifact_dir, log_handle)
+                            return _start_xvfb_scan(artifact_dir, log_handle, screen_spec)
                         display_number += chunk
                         if display_number.endswith(b"\n"):
-                            display = f":{display_number.decode().strip()}"
-                            return process, display, log_handle
+                            number = int(display_number.decode().strip())
+                            if number in _OWNER_DISPLAYS:
+                                stop_process(process)
+                                return _start_xvfb_scan(artifact_dir, log_handle, screen_spec)
+                            return process, f":{number}", log_handle
                     else:
                         _drain(key.fd)
         finally:
@@ -627,14 +643,14 @@ def start_xvfb(artifact_dir: Path) -> tuple[subprocess.Popen[Any], str, Any]:
 
 
 def _start_xvfb_scan(
-    artifact_dir: Path, log_handle: Any
+    artifact_dir: Path, log_handle: Any, screen_spec: str
 ) -> tuple[subprocess.Popen[Any], str, Any]:
-    for display_number in range(99, 120):
+    for display_number in range(99, 200):
         socket_path = Path(f"/tmp/.X11-unix/X{display_number}")
         if socket_path.exists():
             continue
         process = subprocess.Popen(
-            ["Xvfb", f":{display_number}", "-screen", "0", "1280x720x24", "-nolisten", "tcp"],
+            ["Xvfb", f":{display_number}", "-screen", "0", screen_spec, "-nolisten", "tcp"],
             cwd=REPO_ROOT,
             stdout=log_handle,
             stderr=subprocess.STDOUT,
@@ -645,8 +661,19 @@ def _start_xvfb_scan(
         except RuntimeError:
             stop_process(process)
             continue
+        if _x_lock_pid(display_number) != process.pid:
+            # A concurrent Xvfb won this number; its socket satisfied the wait.
+            stop_process(process)
+            continue
         return process, f":{display_number}", log_handle
     raise RuntimeError("could not start an isolated Xvfb display")
+
+
+def _x_lock_pid(display_number: int) -> int | None:
+    try:
+        return int(Path(f"/tmp/.X{display_number}-lock").read_text().strip())
+    except (OSError, ValueError):
+        return None
 
 
 def current_client_state(client: Any, timeout_seconds: float) -> dict[str, Any]:

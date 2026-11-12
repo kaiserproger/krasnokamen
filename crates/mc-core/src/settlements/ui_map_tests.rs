@@ -116,6 +116,9 @@ fn string(tag: Option<&Tag>) -> &str {
 
 /// Plain text of a component: its `text` then every `extra` child, in order.
 fn plain(tag: &Tag) -> String {
+    if let Tag::String(value) = tag {
+        return value.clone();
+    }
     let mut out = string(field(tag, "text")).to_owned();
     for child in elements(field(tag, "extra")) {
         out.push_str(&plain(child));
@@ -194,14 +197,14 @@ fn empty_village_shows_the_territory_disk_on_square_cells() {
     for (x, z) in [(-43, -43), (-43, 58), (58, -43), (58, 58)] {
         assert_eq!(at(&grid, x, z).color, OUTSIDE, "corner ({x}, {z})");
     }
-    assert!(grid.cells.iter().all(|cell| cell.click.is_none()));
+    assert!(grid.cells.iter().all(|cell| cell.click.is_empty()));
     assert_eq!(
         grid.legend,
         vec![(TERRITORY, "Territory, radius 48".to_owned())]
     );
 
     let dialog = command(&mut state, "settlement menu map");
-    assert_eq!(string(field(&dialog, "title")), "Map - oak");
+    assert_eq!(string(field(&dialog, "title")), "Map · N↑ · 1:8 · 8,8");
     let body = elements(field(&dialog, "body"));
     let map = plain(field(&body[0], "contents").unwrap());
     let rows: Vec<&str> = map.split('\n').collect();
@@ -210,35 +213,29 @@ fn empty_village_shows_the_territory_disk_on_square_cells() {
         rows.iter()
             .all(|row| row.chars().count() == SIZE && row.chars().all(|c| c == GLYPH))
     );
-    let legend = plain(field(&body[1], "contents").unwrap());
+    assert_eq!(actions(&dialog).len(), 12);
+    assert!(actions(&dialog).contains(&"solaris:settlement/map_legend".to_owned()));
+    assert!(actions(&dialog).contains(&"solaris:settlement/dashboard".to_owned()));
+    assert!(
+        field(&dialog, "exit_action").is_none(),
+        "the navigation already contains Back; a second exit row clips it at 720p/scale 3"
+    );
+    // Bounds make every cell independently clickable, including empty land.
+    assert_eq!(runs(&dialog).len(), SIZE * SIZE + SIZE - 1);
+    assert!(runs(&dialog).iter().all(|run| plain(run) == "\n"
+        || (field(run, "hover_event").is_some() && field(run, "click_event").is_some())));
+    let legend = click(&mut state, id, "map_legend");
+    let legend = plain(field(&elements(field(&legend, "body"))[0], "contents").unwrap());
     assert!(legend.contains("Territory, radius 48"), "{legend}");
     assert!(legend.contains("1 cell = 8×8 blocks"), "{legend}");
     assert!(legend.contains("No buildings yet."), "{legend}");
-    assert_eq!(
-        actions(&dialog),
-        [
-            "solaris:settlement/map",
-            "solaris:settlement/buildings",
-            "solaris:settlement/main"
-        ]
-    );
-    // Equal neighbours share one run, and every run carries a hover.
-    assert!(runs(&dialog).len() < SIZE * SIZE);
-    assert!(
-        runs(&dialog)
-            .iter()
-            .all(|run| plain(run) == "\n" || field(run, "hover_event").is_some())
-    );
-    // The claimed main page links the map; every settlement's Buildings page
-    // does too (the compact unclaimed main page keeps its four buttons).
     let main = command(&mut state, "settlement menu main");
-    assert!(actions(&main).contains(&"solaris:settlement/map".to_owned()));
+    assert_eq!(actions(&main).len(), 5);
+    assert!(actions(&main).contains(&"solaris:settlement/dashboard".to_owned()));
     state.settlements.get_mut(id).unwrap().owner = None;
-    let buildings = click(&mut state, id, "buildings");
-    assert!(actions(&buildings).contains(&"solaris:settlement/map".to_owned()));
     // Reads stay open on an unclaimed village.
     let map = click(&mut state, id, "map");
-    assert_eq!(string(field(&map, "title")), "Map - oak");
+    assert_eq!(string(field(&map, "title")), "Map · N↑ · 1:8 · 8,8");
 }
 
 #[test]
@@ -256,7 +253,7 @@ fn buildings_sit_on_their_footprint_cells_with_hover_and_click() {
         let cell = at(&grid, x, z);
         assert_eq!(cell.color, HOUSE);
         assert_eq!(cell.hover, "House #1 L1\n20 201 20 .. 24 205 24");
-        assert_eq!(cell.click, Some(Click::Building(house)));
+        assert_eq!(cell.click, vec![Click::Building(house)]);
     }
     assert_eq!(at(&grid, 14, 14).color, TERRITORY);
     assert_eq!(at(&grid, 30, 20).color, TERRITORY);
@@ -271,12 +268,12 @@ fn buildings_sit_on_their_footprint_cells_with_hover_and_click() {
         .expect("a house run");
     let event = field(run, "click_event").unwrap();
     assert_eq!(string(field(event, "action")), "custom");
-    assert_eq!(string(field(event, "id")), "solaris:settlement/buildings");
+    assert_eq!(string(field(event, "id")), "solaris:settlement/map_pick");
     let payload = field(event, "payload").unwrap();
     assert_eq!(string(field(payload, "s")), id.0.to_string());
-    assert_eq!(string(field(payload, "b")), house.0.to_string());
-    let legend = plain(field(&elements(field(&dialog, "body"))[1], "contents").unwrap());
-    assert!(!legend.contains("No buildings yet."), "{legend}");
+    assert_eq!(string(field(payload, "bids")), house.0.to_string());
+    assert_eq!(string(field(payload, "ms")), "8");
+    assert_eq!(string(field(payload, "mx")), "8");
 }
 
 #[test]
@@ -332,7 +329,7 @@ fn construction_site_covers_its_reserved_rotated_footprint() {
         let cell = at(&grid, x, z);
         assert_eq!(cell.color, SITE);
         assert!(
-            cell.hover.starts_with("Construction: Storage L1\n11 "),
+            cell.hover.contains("Construction: Storage L1\n11 "),
             "{}",
             cell.hover
         );
@@ -341,9 +338,13 @@ fn construction_site_covers_its_reserved_rotated_footprint() {
             "{}",
             cell.hover
         );
-        assert_eq!(cell.click, Some(Click::Site));
+        assert_eq!(cell.click, vec![Click::Site(project.structure.clone())]);
     }
-    assert!(grid.legend.contains(&(SITE, "Construction".to_owned())));
+    assert!(
+        grid.legend
+            .iter()
+            .any(|(color, label)| *color == SITE && label.contains("Storage L1"))
+    );
     let map = cells_component(&grid, id);
     let site = elements(field(&map, "extra"))
         .iter()
@@ -351,7 +352,7 @@ fn construction_site_covers_its_reserved_rotated_footprint() {
         .expect("a site run");
     assert_eq!(
         string(field(field(site, "click_event").unwrap(), "id")),
-        "solaris:settlement/project_status"
+        "solaris:settlement/map_pick"
     );
 }
 
@@ -396,10 +397,10 @@ fn street_plan_work_is_drawn_under_buildings_without_clicks() {
         "{}",
         road.hover
     );
-    assert_eq!(road.click, None);
+    assert!(road.click.is_empty());
     let post = at(&grid, 10, 19);
     assert_eq!(post.color, PLANNED_LAMP, "{}", post.hover);
-    assert_eq!(post.click, None);
+    assert!(post.click.is_empty());
     let lamp = at(&grid, 10, 28);
     assert!(
         lamp.hover
@@ -436,7 +437,7 @@ fn paved_road_is_drawn_and_named_in_the_legend() {
     let road = at(&grid, 8, 15);
     assert_eq!(road.color, PAVED_ROAD);
     assert_eq!(road.hover, "Paved road\n7 200 13 .. 9 200 23");
-    assert_eq!(road.click, None);
+    assert!(road.click.is_empty());
     assert!(
         grid.legend
             .contains(&(PAVED_ROAD, "Road (paved)".to_owned()))
@@ -444,16 +445,15 @@ fn paved_road_is_drawn_and_named_in_the_legend() {
     assert!(grid.legend.iter().all(|(color, _)| *color != PLANNED_ROAD));
 }
 
-/// Every colour on the map is told apart at a glance, and the legend that names
-/// them all - every kind, the site, the viewer and the whole street plan at once,
-/// English and Russian - lays out in the lines that fit under the map, an entry
-/// never split from its swatch.
+/// Every stable palette swatch remains distinguishable, including a paused site.
+/// The separate legend names all native building kinds in English and Russian.
 #[test]
 fn legend_names_every_colour_in_the_lines_that_fit_under_the_map() {
     let mut colours = vec![
         OUTSIDE,
         TERRITORY,
         SITE,
+        PAUSED_SITE,
         YOU,
         PAVED_ROAD,
         PLANNED_ROAD,
@@ -478,7 +478,7 @@ fn legend_names_every_colour_in_the_lines_that_fit_under_the_map() {
     colours.dedup();
     assert_eq!(
         colours.len(),
-        7 + 9,
+        8 + 9,
         "one colour per kind (workshops share one)"
     );
     for (index, a) in colours.iter().enumerate() {
@@ -512,7 +512,7 @@ fn legend_names_every_colour_in_the_lines_that_fit_under_the_map() {
         let record = state.settlements.get(id).unwrap();
         let mut grid = grid(&ctx, &state, record, player_pos(&state, CONN));
         for (colour, key) in [
-            (SITE, Key::MapSite),
+            (SITE, Key::Projects),
             (PAVED_ROAD, Key::MapPavedRoads),
             (PLANNED_ROAD, Key::MapUnpavedRoads),
             (PLANNED_LAMP, Key::MapLampSites),
@@ -524,11 +524,7 @@ fn legend_names_every_colour_in_the_lines_that_fit_under_the_map() {
         assert_eq!(grid.legend.len(), 15, "{:?}", grid.legend);
         let text = plain(&legend_component(&ctx, &grid));
         let lines: Vec<&str> = text.split('\n').collect();
-        assert!(
-            lines.len() <= LEGEND_LINES,
-            "{lang:?}: {} lines\n{text}",
-            lines.len()
-        );
+        assert!(lines.len() < grid.legend.len(), "{lang:?}: {text}");
         let (scale, entries) = lines.split_last().unwrap();
         assert!(scale.contains("8×8"), "{text}");
         for line in entries {
@@ -571,5 +567,216 @@ fn russian_client_gets_russian_map_text() {
     };
     let grid = grid(&ru, &state, record, None);
     assert_eq!(grid.legend[0].1, "Территория, радиус 48");
-    assert_eq!(ru.f(Key::TitleMap, &[("name", "oak")]), "Карта — oak");
+    assert_eq!(ru.t(Key::Map), "Карта");
+}
+
+fn pick_payload(state: &mut TickState, payload: Tag) -> Tag {
+    run(
+        state,
+        PlayerInput::DialogClick {
+            connection: CONN,
+            id: "solaris:settlement/map_pick".to_owned(),
+            payload: Some(payload),
+        },
+    )
+}
+
+#[test]
+fn overlapping_cell_keeps_all_seventy_two_ids_and_refuses_replaced_features() {
+    let (mut state, id) = town();
+    let expected = (0..72)
+        .map(|_| {
+            add(
+                &mut state,
+                id,
+                BuildingKind::House,
+                [9, 201, 9],
+                [10, 204, 10],
+            )
+        })
+        .collect::<Vec<_>>();
+    let map = render(&state, id);
+    let cell = at(&map, 9, 9);
+    assert_eq!(
+        cell.click.len(),
+        expected.len(),
+        "hover limits never truncate authority"
+    );
+    let wire = cells_component(&map, id);
+    let payload = elements(field(&wire, "extra"))
+        .iter()
+        .find_map(|run| {
+            let payload = field(field(run, "click_event")?, "payload")?;
+            (string(field(payload, "bids")).split(',').count() == expected.len())
+                .then(|| payload.clone())
+        })
+        .expect("the actual rendered cell carries every stable building ID");
+    assert_eq!(string(field(&payload, "bids")).split(',').count(), 72);
+    let mut current = payload.clone();
+    let mut seen = Vec::new();
+    for index in 0..18 {
+        let dialog = pick_payload(&mut state, current);
+        assert_eq!(
+            plain(field(&dialog, "title").unwrap()),
+            format!("Map {}/18", index + 1)
+        );
+        let buttons = elements(field(&dialog, "actions"));
+        let choices = buttons
+            .iter()
+            .filter_map(|button| {
+                let action = field(button, "action")?;
+                (string(field(action, "id")) == "solaris:settlement/buildings").then(|| {
+                    string(field(field(action, "additions").unwrap(), "b"))
+                        .parse::<u64>()
+                        .unwrap()
+                })
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(choices.len(), 4);
+        seen.extend(choices);
+        // Selection body has only the world cell range; candidates live in the controls.
+        assert!(elements(field(&dialog, "body")).len() <= 1);
+        let next = buttons
+            .iter()
+            .find(|button| plain(field(button, "label").unwrap()) == "→");
+        assert_eq!(next.is_some(), index + 1 < 18);
+        current = next
+            .map(|button| {
+                field(field(button, "action").unwrap(), "additions")
+                    .unwrap()
+                    .clone()
+            })
+            .unwrap_or_else(|| payload.clone());
+    }
+    assert_eq!(seen, expected.iter().map(|id| id.0).collect::<Vec<_>>());
+    for building in &expected {
+        state
+            .settlements
+            .get_mut(id)
+            .unwrap()
+            .buildings
+            .remove(building);
+    }
+    let replacement = add(
+        &mut state,
+        id,
+        BuildingKind::House,
+        [9, 201, 9],
+        [10, 204, 10],
+    );
+    let stale = pick_payload(&mut state, payload);
+    assert!(
+        actions(&stale)
+            .iter()
+            .all(|action| action != "solaris:settlement/buildings")
+    );
+    assert!(!format!("{stale:?}").contains(&format!("String(\"{}\")", replacement.0)));
+    assert!(format!("{stale:?}").contains("no longer exists"));
+}
+
+#[test]
+fn viewer_marker_does_not_hide_selection_and_radius_256_edges_survive_overview_and_zoom() {
+    let (mut state, id) = town();
+    state.settlements.get_mut(id).unwrap().radius = 256;
+    let centre_building = add(
+        &mut state,
+        id,
+        BuildingKind::House,
+        [8, 201, 8],
+        [10, 204, 10],
+    );
+    let west = add(
+        &mut state,
+        id,
+        BuildingKind::Tower,
+        [-247, 201, 8],
+        [-242, 207, 10],
+    );
+    let east = add(
+        &mut state,
+        id,
+        BuildingKind::Tower,
+        [258, 201, 8],
+        [263, 207, 10],
+    );
+    let record = state.settlements.get(id).unwrap();
+    let overview = grid(&ctx(id), &state, record, Some(ANCHOR));
+    assert_eq!(overview.scale, 40);
+    let marker = overview
+        .cells
+        .iter()
+        .find(|cell| cell.color == YOU)
+        .unwrap();
+    assert!(marker.click.contains(&Click::Building(centre_building)));
+    for building in [west, east] {
+        assert!(
+            overview
+                .cells
+                .iter()
+                .any(|cell| cell.click.contains(&Click::Building(building)))
+        );
+    }
+    let zoomed = grid_at(&ctx(id), &state, record, Some(ANCHOR), [8, 8], 1);
+    assert!(
+        !zoomed
+            .cells
+            .iter()
+            .any(|cell| cell.click.contains(&Click::Building(west)))
+    );
+    let panned = grid_at(&ctx(id), &state, record, None, [-245, 8], 1);
+    assert!(
+        panned
+            .cells
+            .iter()
+            .any(|cell| cell.click.contains(&Click::Building(west)))
+    );
+    assert!(
+        !panned
+            .cells
+            .iter()
+            .any(|cell| cell.click.contains(&Click::Building(east)))
+    );
+    let wire = cells_component(&panned, id);
+    for run in elements(field(&wire, "extra"))
+        .iter()
+        .filter(|run| field(run, "click_event").is_some())
+    {
+        let payload = field(field(run, "click_event").unwrap(), "payload").unwrap();
+        assert_eq!(string(field(payload, "mx")), "-245");
+        assert_eq!(string(field(payload, "mz")), "8");
+        assert_eq!(string(field(payload, "ms")), "1");
+        assert!(string(field(payload, "cell")).starts_with("X "));
+    }
+}
+
+#[test]
+fn empty_wrong_cell_does_not_open_a_nearby_building_or_start_work() {
+    let (mut state, id) = town();
+    add(
+        &mut state,
+        id,
+        BuildingKind::House,
+        [9, 201, 9],
+        [10, 204, 10],
+    );
+    let map = render(&state, id);
+    let wire = cells_component(&map, id);
+    let payload = elements(field(&wire, "extra"))
+        .iter()
+        .find_map(|run| {
+            let payload = field(field(run, "click_event")?, "payload")?;
+            (string(field(payload, "bids")).is_empty()
+                && string(field(payload, "site")).is_empty()
+                && string(field(payload, "streets")).is_empty())
+            .then(|| payload.clone())
+        })
+        .expect("a genuinely empty rendered cell");
+    let selected = pick_payload(&mut state, payload);
+    assert!(
+        actions(&selected)
+            .iter()
+            .all(|action| action == "solaris:settlement/map")
+    );
+    assert!(state.settlements.get(id).unwrap().project.is_none());
+    assert!(state.settlements.get(id).unwrap().pending_order.is_none());
 }

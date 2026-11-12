@@ -62,6 +62,78 @@ const BUILDING_PLACES: usize = 18;
 const MAX_CONTAINERS: usize = 64;
 const MAX_LORE: usize = 10;
 
+/// Display carriers cache immutable names, never registry-specific wire IDs.
+macro_rules! display_icons {
+    ($( $kind:ident => $id:expr ),+ $(,)?) => {
+        #[derive(Clone, Copy)]
+        enum Icon { $( $kind, )+ }
+
+        impl Icon {
+            fn identifier(self) -> &'static Identifier {
+                match self {
+                    $( Self::$kind => {
+                        static ID: std::sync::LazyLock<Identifier> = std::sync::LazyLock::new(|| {
+                            Identifier::parse($id).expect("valid display icon id")
+                        });
+                        &ID
+                    }, )+
+                }
+            }
+        }
+    };
+}
+
+display_icons! {
+    Anvil => "minecraft:anvil",
+    Arrow => "minecraft:arrow",
+    Barrel => mc_data::block_entity_kinds::BlockEntityKind::Barrel.vanilla_id(),
+    Barrier => "minecraft:barrier",
+    Bell => mc_data::block_entity_kinds::BlockEntityKind::Bell.vanilla_id(),
+    BlastFurnace => mc_data::block_entity_kinds::BlockEntityKind::BlastFurnace.vanilla_id(),
+    Book => "minecraft:book",
+    Bread => "minecraft:bread",
+    BrewingStand => mc_data::block_entity_kinds::BlockEntityKind::BrewingStand.vanilla_id(),
+    Bricks => "minecraft:bricks",
+    CartographyTable => "minecraft:cartography_table",
+    Cauldron => "minecraft:cauldron",
+    Chest => mc_data::block_entity_kinds::BlockEntityKind::Chest.vanilla_id(),
+    Clock => "minecraft:clock",
+    CobblestoneWall => "minecraft:cobblestone_wall",
+    Composter => "minecraft:composter",
+    CraftingTable => "minecraft:crafting_table",
+    ExperienceBottle => "minecraft:experience_bottle",
+    FilledMap => "minecraft:filled_map",
+    FletchingTable => "minecraft:fletching_table",
+    GrayStainedGlassPane => "minecraft:gray_stained_glass_pane",
+    Grindstone => "minecraft:grindstone",
+    IronAxe => "minecraft:iron_axe",
+    IronChestplate => "minecraft:iron_chestplate",
+    IronHelmet => "minecraft:iron_helmet",
+    IronIngot => "minecraft:iron_ingot",
+    IronPickaxe => "minecraft:iron_pickaxe",
+    IronSword => "minecraft:iron_sword",
+    Lectern => mc_data::block_entity_kinds::BlockEntityKind::Lectern.vanilla_id(),
+    LightGrayStainedGlassPane => "minecraft:light_gray_stained_glass_pane",
+    LimeDye => "minecraft:lime_dye",
+    LimeStainedGlassPane => "minecraft:lime_stained_glass_pane",
+    Loom => "minecraft:loom",
+    OakDoor => "minecraft:oak_door",
+    OakFenceGate => "minecraft:oak_fence_gate",
+    OakPlanks => "minecraft:oak_planks",
+    Paper => "minecraft:paper",
+    PlayerHead => "minecraft:player_head",
+    RedBed => "minecraft:red_bed",
+    Shield => "minecraft:shield",
+    SmithingTable => "minecraft:smithing_table",
+    Smoker => mc_data::block_entity_kinds::BlockEntityKind::Smoker.vanilla_id(),
+    Spyglass => "minecraft:spyglass",
+    Stonecutter => "minecraft:stonecutter",
+    VillagerSpawnEgg => "minecraft:villager_spawn_egg",
+    Wheat => "minecraft:wheat",
+    WhiteBanner => "minecraft:white_banner",
+    WritableBook => "minecraft:writable_book",
+}
+
 /// One open icon menu and what each of its slots showed at the last render.
 /// Clicks resolve against these targets, never against a re-derived order.
 pub(crate) struct Open {
@@ -81,29 +153,104 @@ impl Open {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum View {
-    Storage {
+    Dashboard,
+    Resources,
+    Resource {
+        group: u8,
         page: usize,
     },
-    Residents {
+    Projects {
+        page: usize,
+    },
+    Project {
+        page: usize,
+    },
+    Census {
+        filter: u8,
+        page: usize,
+    },
+    Resident {
+        worker: Uuid,
+    },
+    Households {
+        page: usize,
+    },
+    Household {
+        id: Option<(u64, u64)>,
+        page: usize,
+    },
+    Production {
+        page: usize,
+    },
+    Recipes {
+        building: BuildingId,
+        at: [i32; 3],
+        page: usize,
+    },
+    FilteredBuildings {
+        kind: Option<BuildingKind>,
+        page: usize,
+    },
+    BuildingContext {
+        building: BuildingId,
+        origin: Origin,
+    },
+    BuildingResidents {
+        building: BuildingId,
+        origin: Origin,
+        page: usize,
+    },
+    Storage {
         page: usize,
     },
     Buildings {
         page: usize,
     },
-    Building {
-        building: BuildingId,
-    },
-    /// Workplaces for one resident; `from` returns to that building's page.
+    /// Workplaces for one resident, preserving the opening building's origin.
     Assign {
         worker: Uuid,
-        from: Option<BuildingId>,
+        from: Option<(BuildingId, Origin)>,
         page: usize,
     },
     /// Residents who may take a job in `building`.
     Hire {
         building: BuildingId,
+        origin: Origin,
         page: usize,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Origin {
+    List {
+        kind: Option<BuildingKind>,
+        page: usize,
+    },
+    Map {
+        centre: [i32; 2],
+        scale: i32,
+    },
+}
+
+impl Origin {
+    fn fields(self) -> Vec<(String, Tag)> {
+        match self {
+            Self::List { kind, page } => vec![
+                ("from".to_owned(), Tag::String("list".to_owned())),
+                (
+                    "bk".to_owned(),
+                    Tag::String(kind.map_or("", BuildingKind::name).to_owned()),
+                ),
+                ("bp".to_owned(), Tag::String(page.to_string())),
+            ],
+            Self::Map { centre, scale } => vec![
+                ("from".to_owned(), Tag::String("map".to_owned())),
+                ("mx".to_owned(), Tag::String(centre[0].to_string())),
+                ("mz".to_owned(), Tag::String(centre[1].to_string())),
+                ("ms".to_owned(), Tag::String(scale.to_string())),
+            ],
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -117,13 +264,31 @@ enum Target {
     Dialog(&'static str),
     Pick {
         worker: Uuid,
-        from: Option<BuildingId>,
+        from: Option<(BuildingId, Origin)>,
     },
     Assign {
         worker: Uuid,
         building: BuildingId,
     },
-    Upgrade(BuildingId),
+    Blueprint(String),
+    Material(String),
+    StockDetail(ItemStack),
+    MapAt([i32; 3]),
+    Recipe {
+        building: BuildingId,
+        at: [i32; 3],
+        recipe: String,
+    },
+    Job(String),
+    MapView {
+        centre: [i32; 2],
+        scale: i32,
+    },
+    Review {
+        building: BuildingId,
+        origin: Origin,
+        certificate: bool,
+    },
 }
 
 /// One rendered window: 54 icons and what clicking each does.
@@ -150,6 +315,64 @@ impl Screen {
 
 // ---------------------------------------------------------------- entry points
 
+pub(super) fn dashboard(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
+    show(state, connection, ctx, View::Dashboard);
+}
+
+pub(super) fn resources(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
+    show(state, connection, ctx, View::Resources);
+}
+
+pub(super) fn projects(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
+    show(state, connection, ctx, View::Projects { page: 0 });
+}
+
+pub(super) fn project(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
+    show(state, connection, ctx, View::Project { page: 0 });
+}
+
+pub(super) fn production(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
+    show(state, connection, ctx, View::Production { page: 0 });
+}
+
+pub(super) fn recipes(
+    state: &mut TickState,
+    connection: ConnectionId,
+    ctx: &Ctx,
+    building: BuildingId,
+    at: [i32; 3],
+) {
+    show(
+        state,
+        connection,
+        ctx,
+        View::Recipes {
+            building,
+            at,
+            page: 0,
+        },
+    );
+}
+
+pub(super) fn production_workers(state: &TickState, id: SettlementId) -> Vec<(String, Tag)> {
+    let busy = super::busy_workers(state, id);
+    people(state, id)
+        .into_iter()
+        .filter(|person| {
+            person.adult
+                && person.soldier.is_none()
+                && !matches!(person.profession, Profession::Nitwit | Profession::Builder)
+                && !busy.contains(&person.uuid)
+        })
+        .map(|person| {
+            (
+                person.uuid.to_string(),
+                Tag::String(super::super::presentation::villager_name(person.uuid).to_owned()),
+            )
+        })
+        .collect()
+}
+
 /// The settlement's storage containers as one inventory.
 pub(super) fn storage(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
     show(state, connection, ctx, View::Storage { page: 0 });
@@ -157,7 +380,7 @@ pub(super) fn storage(state: &mut TickState, connection: ConnectionId, ctx: &Ctx
 
 /// Residents as icons; a click chooses the resident's workplace.
 pub(super) fn residents(state: &mut TickState, connection: ConnectionId, ctx: &Ctx) {
-    show(state, connection, ctx, View::Residents { page: 0 });
+    show(state, connection, ctx, View::Census { filter: 0, page: 0 });
 }
 
 /// Certified buildings as icons; a click opens the building's page.
@@ -165,26 +388,65 @@ pub(super) fn buildings(state: &mut TickState, connection: ConnectionId, ctx: &C
     show(state, connection, ctx, View::Buildings { page: 0 });
 }
 
-/// One building's page: upgrade, workers and free work places.
-pub(super) fn building(
+pub(super) fn building_from(
     state: &mut TickState,
     connection: ConnectionId,
     ctx: &Ctx,
     building: BuildingId,
+    payload: ClickPayload<'_>,
 ) {
-    show(state, connection, ctx, View::Building { building });
+    let origin = if payload.string("from") == Some("map") {
+        Origin::Map {
+            centre: ["mx", "mz"].map(|key| {
+                payload
+                    .string(key)
+                    .and_then(|value| value.parse().ok())
+                    .unwrap_or(0)
+            }),
+            scale: payload
+                .string("ms")
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(1),
+        }
+    } else {
+        Origin::List {
+            kind: payload.string("bk").and_then(BuildingKind::parse),
+            page: payload
+                .string("bp")
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(0),
+        }
+    };
+    show(
+        state,
+        connection,
+        ctx,
+        View::BuildingContext { building, origin },
+    );
+}
+
+pub(super) fn filtered_buildings(
+    state: &mut TickState,
+    connection: ConnectionId,
+    ctx: &Ctx,
+    payload: ClickPayload<'_>,
+) {
+    show(
+        state,
+        connection,
+        ctx,
+        View::FilteredBuildings {
+            kind: payload.string("bk").and_then(BuildingKind::parse),
+            page: payload
+                .string("bp")
+                .and_then(|value| value.parse().ok())
+                .unwrap_or(0),
+        },
+    );
 }
 
 pub(super) fn storage_label(ctx: &Ctx) -> &'static str {
     tr(ctx, "Storage", "Склад")
-}
-
-pub(super) fn assign_label(ctx: &Ctx) -> &'static str {
-    tr(ctx, "Assign crafts", "Ремёсла")
-}
-
-pub(super) fn icons_label(ctx: &Ctx) -> &'static str {
-    tr(ctx, "Icons", "Иконки")
 }
 
 /// Consume every packet for an open settlement icon menu before vanilla menu
@@ -490,6 +752,123 @@ fn click(
         return show(state, connection, &ctx, view);
     }
     match target {
+        Target::MapView { centre, scale } => {
+            close(state, connection, entity, true);
+            let payload = Tag::Compound(Origin::Map { centre, scale }.fields());
+            super::dispatch(state, connection, &ctx, "map", ClickPayload(Some(&payload)));
+        }
+        Target::Review {
+            building,
+            origin,
+            certificate,
+        } => {
+            close(state, connection, entity, true);
+            let mut fields = origin.fields();
+            fields.push(("b".to_owned(), Tag::String(building.0.to_string())));
+            let payload = Tag::Compound(fields);
+            super::dispatch(
+                state,
+                connection,
+                &ctx,
+                if certificate {
+                    "certificate_review"
+                } else {
+                    "project_upgrade_review"
+                },
+                ClickPayload(Some(&payload)),
+            );
+        }
+        Target::Recipe {
+            building,
+            at,
+            recipe,
+        } => {
+            close(state, connection, entity, true);
+            let payload = Tag::Compound(vec![
+                ("b".to_owned(), Tag::String(building.0.to_string())),
+                ("p".to_owned(), Tag::String(super::corner_text(at))),
+                ("r".to_owned(), Tag::String(recipe)),
+            ]);
+            super::dispatch(
+                state,
+                connection,
+                &ctx,
+                "recipe_review",
+                ClickPayload(Some(&payload)),
+            );
+        }
+        Target::Job(job) => {
+            close(state, connection, entity, true);
+            super::production_detail(state, connection, &ctx, &job, "");
+        }
+        Target::MapAt(at) => {
+            close(state, connection, entity, true);
+            let payload = Tag::Compound(vec![
+                ("mx".to_owned(), Tag::String(at[0].to_string())),
+                ("mz".to_owned(), Tag::String(at[2].to_string())),
+                ("ms".to_owned(), Tag::String("1".to_owned())),
+            ]);
+            super::dispatch(state, connection, &ctx, "map", ClickPayload(Some(&payload)));
+        }
+        Target::Blueprint(blueprint) => {
+            close(state, connection, entity, true);
+            let payload = Tag::Compound(vec![("blueprint".to_owned(), Tag::String(blueprint))]);
+            super::dispatch(
+                state,
+                connection,
+                &ctx,
+                "project_order_review",
+                ClickPayload(Some(&payload)),
+            );
+        }
+        Target::Material(item) => {
+            close(state, connection, entity, true);
+            super::material_detail(state, connection, &ctx, &item);
+        }
+        Target::StockDetail(template) => {
+            close(state, connection, entity, true);
+            let stores = stores(state, ctx.id);
+            let entry = stock(&stores)
+                .into_iter()
+                .find(|entry| can_stack(&entry.template, &template));
+            let text = entry.map_or_else(
+                || tr(&ctx, "Stack no longer present.", "Этого стака больше нет.").to_owned(),
+                |entry| {
+                    format!(
+                        "{} / {} / {}",
+                        entry.total,
+                        entry.total - entry.free,
+                        entry.free
+                    )
+                },
+            );
+            let text = if stores.unavailable {
+                format!(
+                    "{}\n{text}",
+                    tr(
+                        &ctx,
+                        "Incomplete — approach storage; totals unknown",
+                        "Неполные данные — подойдите к складу; итог неизвестен"
+                    )
+                )
+            } else {
+                text
+            };
+            let dialog = crate::dialog::Dialog::multi_action(
+                tr(
+                    &ctx,
+                    "Stored / reserved / free",
+                    "Запас / резерв / свободно",
+                ),
+                vec![
+                    super::button(storage_label(&ctx), "storage", ctx.id),
+                    super::button(ctx.t(Key::Back), "resources", ctx.id),
+                ],
+            )
+            .text(item_label(state, &template))
+            .text(text);
+            super::present(state, connection, dialog);
+        }
         Target::None | Target::Refresh | Target::Stock(_) => show(state, connection, &ctx, view),
         Target::Show(next) => show(state, connection, &ctx, next),
         Target::Dialog(action) => {
@@ -520,12 +899,14 @@ fn click(
                     let note = assigned_text(state, &ctx, worker, building);
                     super::say(state, connection, &note);
                     let next = match view {
-                        View::Hire { building, .. }
+                        View::Hire {
+                            building, origin, ..
+                        }
                         | View::Assign {
-                            from: Some(building),
+                            from: Some((building, origin)),
                             ..
-                        } => View::Building { building },
-                        _ => View::Residents { page: 0 },
+                        } => View::BuildingContext { building, origin },
+                        _ => View::Resident { worker },
                     };
                     show(state, connection, &ctx, next);
                 }
@@ -539,28 +920,6 @@ fn click(
                     show(state, connection, &ctx, view);
                 }
             }
-        }
-        Target::Upgrade(building) => {
-            if !ctx.manage {
-                return deny(state, connection, &ctx, view);
-            }
-            let id = super::short(building).to_string();
-            let note = match buildings::upgrade(state, building) {
-                Ok(()) => {
-                    let level = state
-                        .settlements
-                        .get(ctx.id)
-                        .and_then(|record| record.buildings.get(&building))
-                        .map_or(0, |building| building.level);
-                    ctx.f(Key::Upgraded, &[("id", &id), ("level", &level.to_string())])
-                }
-                Err(error) => ctx.f(
-                    Key::CannotUpgrade,
-                    &[("id", &id), ("missing", &super::missing_text(&error))],
-                ),
-            };
-            super::say(state, connection, &note);
-            show(state, connection, &ctx, View::Building { building });
         }
     }
 }
@@ -578,6 +937,7 @@ fn deny(state: &mut TickState, connection: ConnectionId, ctx: &Ctx, view: View) 
 struct Stores {
     images: Vec<inventory::Image>,
     free: Vec<BTreeMap<u32, u64>>,
+    unavailable: bool,
 }
 
 /// One kind of stored item: stacks that stack together, summed.
@@ -591,16 +951,17 @@ fn stores(state: &TickState, id: SettlementId) -> Stores {
     let mut stores = Stores {
         images: Vec::new(),
         free: Vec::new(),
+        unavailable: false,
     };
     let mut physical = BTreeSet::new();
-    for position in buildings::storage_points(state, id)
-        .into_iter()
-        .take(MAX_CONTAINERS)
-    {
+    let points = buildings::storage_points(state, id);
+    stores.unavailable = points.len() > MAX_CONTAINERS;
+    for position in points.into_iter().take(MAX_CONTAINERS) {
         let Ok(cells) = crate::plugin_inventories::container_cells(
             state,
             &mc_script::ScriptBlockPosition::new(position[0], position[1], position[2]),
         ) else {
+            stores.unavailable = true;
             continue;
         };
         if cells
@@ -614,13 +975,19 @@ fn stores(state: &TickState, id: SettlementId) -> Stores {
             position,
         };
         let Ok(image) = inventory::load(state, &endpoint) else {
+            stores.unavailable = true;
             continue;
         };
         physical.extend(cells.iter().map(|cell| [cell.x, cell.y, cell.z]));
         // Unreadable floors fail closed: nothing in that container is free.
-        stores
-            .free
-            .push(inventory::unreserved_stock(state, &image).unwrap_or_default());
+        let free = match inventory::unreserved_stock(state, &image) {
+            Ok(free) => free,
+            Err(_) => {
+                stores.unavailable = true;
+                BTreeMap::new()
+            }
+        };
+        stores.free.push(free);
         stores.images.push(image);
     }
     stores
@@ -953,6 +1320,8 @@ struct Person {
     /// Barracks of a soldier.
     soldier: Option<BuildingId>,
     traded: bool,
+    home: Option<BlockPos>,
+    household: Option<(u64, u64)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1001,6 +1370,13 @@ fn people(state: &TickState, id: SettlementId) -> Vec<Person> {
                 adult: villager.age >= 0,
                 soldier: villager.soldier.as_ref().map(|soldier| soldier.barracks),
                 traded: crate::settlements::allocator::traded(villager),
+                home: villager
+                    .home
+                    .filter(|_| villager.home_dimension == state.dimension.name()),
+                household: villager.household.as_deref().and_then(|id| {
+                    let (founder, sequence) = id.split_once('-')?;
+                    Some((founder.parse().ok()?, sequence.parse().ok()?))
+                }),
             });
         }
     }
@@ -1219,33 +1595,804 @@ fn render(state: &TickState, ctx: &Ctx, view: View) -> (View, Screen) {
         .map(|record| record.name.clone())
         .unwrap_or_default();
     match view {
+        View::Dashboard => (view, dashboard_screen(state, ctx)),
+        View::Resources => (view, resources_screen(state, ctx)),
+        View::Resource { group, page } => (view, resource_screen(state, ctx, group, page)),
+        View::Projects { page } => (view, projects_screen(state, ctx, page)),
+        View::Project { page } => (view, project_screen(state, ctx, page)),
+        View::Census { filter, page } => (view, census_screen(state, ctx, filter, page)),
+        View::Resident { worker } => (view, resident_screen(state, ctx, worker)),
+        View::Households { page } => (view, households_screen(state, ctx, page)),
+        View::Household { id, page } => (view, household_screen(state, ctx, id, page)),
+        View::Production { page } => (view, production_screen(state, ctx, page)),
+        View::Recipes { building, at, page } => {
+            (view, recipes_screen(state, ctx, building, at, page))
+        }
         View::Storage { page } => (view, storage_screen(state, ctx, &name, page)),
-        View::Residents { page } => (view, residents_screen(state, ctx, &name, page)),
         View::Buildings { page } => (view, buildings_screen(state, ctx, &name, page)),
-        View::Building { building } => match building_screen(state, ctx, building) {
-            Some(screen) => (view, screen),
-            None => (
-                View::Buildings { page: 0 },
-                buildings_screen(state, ctx, &name, 0),
-            ),
-        },
+        View::FilteredBuildings { kind, page } => (
+            view,
+            filtered_buildings_screen(state, ctx, &name, kind, page),
+        ),
+        View::BuildingContext { building, origin } => {
+            (view, building_context_screen(state, ctx, building, origin))
+        }
+        View::BuildingResidents {
+            building,
+            origin,
+            page,
+        } => (
+            view,
+            building_residents_screen(state, ctx, building, origin, page),
+        ),
         View::Assign { worker, from, page } => {
             match assign_screen(state, ctx, worker, from, page) {
                 Some(screen) => (view, screen),
                 None => (
-                    View::Residents { page: 0 },
-                    residents_screen(state, ctx, &name, 0),
+                    View::Census { filter: 0, page: 0 },
+                    census_screen(state, ctx, 0, 0),
                 ),
             }
         }
-        View::Hire { building, page } => match hire_screen(state, ctx, building, page) {
+        View::Hire {
+            building,
+            origin,
+            page,
+        } => match hire_screen(state, ctx, building, origin, page) {
             Some(screen) => (view, screen),
             None => (
-                View::Buildings { page: 0 },
-                buildings_screen(state, ctx, &name, 0),
+                View::BuildingContext { building, origin },
+                building_context_screen(state, ctx, building, origin),
             ),
         },
     }
+}
+
+fn building_context_screen(
+    state: &TickState,
+    ctx: &Ctx,
+    building: BuildingId,
+    origin: Origin,
+) -> Screen {
+    let back_target = match origin {
+        Origin::List { kind, page } => Target::Show(View::FilteredBuildings { kind, page }),
+        Origin::Map { centre, scale } => Target::MapView { centre, scale },
+    };
+    let Some(mut screen) = building_screen(state, ctx, building, origin) else {
+        let mut screen = Screen::new(ctx.t(Key::BuildingGone).to_owned());
+        screen.put(BACK, back(state, ctx), back_target);
+        return screen;
+    };
+    screen.targets[BACK] = back_target;
+    screen.put(
+        INFO,
+        icon(
+            state,
+            Icon::Book,
+            1,
+            text(ctx.t(Key::CertificateCheck)),
+            &ctx.t(Key::CertificatePolicy)
+                .lines()
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
+        ),
+        Target::Review {
+            building,
+            origin,
+            certificate: true,
+        },
+    );
+    screen
+}
+
+fn has_home_in(person: &Person, building: &Building) -> bool {
+    person.home.is_some_and(|home| {
+        [home.x, home.y, home.z]
+            .iter()
+            .enumerate()
+            .all(|(axis, value)| {
+                (building.bounds.min[axis]..=building.bounds.max[axis]).contains(value)
+            })
+    })
+}
+
+fn building_residents_screen(
+    state: &TickState,
+    ctx: &Ctx,
+    building: BuildingId,
+    origin: Origin,
+    page: usize,
+) -> Screen {
+    let Some(home) = state
+        .settlements
+        .get(ctx.id)
+        .and_then(|record| record.buildings.get(&building))
+    else {
+        return building_context_screen(state, ctx, building, origin);
+    };
+    let people = people(state, ctx.id);
+    let residents: Vec<_> = people
+        .iter()
+        .filter(|person| has_home_in(person, home))
+        .collect();
+    let pages = pages(residents.len());
+    let page = page.min(pages - 1);
+    let busy = super::busy_workers(state, ctx.id);
+    let mut screen = Screen::new(tr(ctx, "Home claims", "Назначенные дома").to_owned());
+    for (slot, person) in residents.iter().skip(page * PAGE).take(PAGE).enumerate() {
+        screen.put(
+            slot,
+            person_icon(state, ctx, person, &busy, ""),
+            Target::Show(View::Resident {
+                worker: person.uuid,
+            }),
+        );
+    }
+    screen.put(
+        INFO,
+        icon(
+            state,
+            Icon::RedBed,
+            1,
+            text(format!(
+                "{}: {}",
+                tr(ctx, "Home claims", "Назначенные дома"),
+                residents.len()
+            )),
+            &[tr(
+                ctx,
+                "Bed validity and free capacity unavailable.",
+                "Исправность кроватей и свободная вместимость недоступны.",
+            )
+            .to_owned()],
+        ),
+        Target::Refresh,
+    );
+    navigation(&mut screen, state, ctx, page, pages, |page| {
+        View::BuildingResidents {
+            building,
+            origin,
+            page,
+        }
+    });
+    screen.put(
+        BACK,
+        back(state, ctx),
+        Target::Show(View::BuildingContext { building, origin }),
+    );
+    screen
+}
+
+fn production_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
+    let mut screen = Screen::new(ctx.t(Key::ProductionOrders).to_owned());
+    let Some(record) = state.settlements.get(ctx.id) else {
+        return screen;
+    };
+    let mut jobs: Vec<_> = record.economy.production.jobs.values().collect();
+    jobs.sort_by_key(|job| (!job.unfinished(), job.accepted_tick, &job.id));
+    let pages = pages(jobs.len());
+    let page = page.min(pages - 1);
+    for (slot, job) in jobs.into_iter().skip(page * PAGE).take(PAGE).enumerate() {
+        let output = Identifier::parse(&job.recipe)
+            .ok()
+            .and_then(|id| state.registry.item_facts.work_recipe(&id))
+            .and_then(|recipe| recipe.outputs.first())
+            .and_then(|output| output.to_stack(&state.registry.items, &state.registry.item_facts))
+            .unwrap_or_else(|| icon(state, Icon::Barrier, 1, text(ctx.t(Key::StateChanged)), &[]));
+        screen.put(
+            slot,
+            decorate(
+                state,
+                output,
+                text(format!("{} · {}/{}", job.id, job.done, job.count)),
+                &[
+                    super::job_status(ctx, job),
+                    super::super::presentation::villager_name(job.worker).to_owned(),
+                ],
+            ),
+            Target::Job(job.id.clone()),
+        );
+    }
+    navigation(&mut screen, state, ctx, page, pages, |page| {
+        View::Production { page }
+    });
+    if ctx.manage {
+        screen.put(
+            ACTION,
+            icon(
+                state,
+                Icon::CraftingTable,
+                1,
+                text(ctx.t(Key::NewOrder)),
+                &[],
+            ),
+            Target::Dialog("order_start"),
+        );
+    }
+    screen.put(BACK, back(state, ctx), Target::Show(View::Dashboard));
+    screen
+}
+
+fn recipes_screen(
+    state: &TickState,
+    ctx: &Ctx,
+    building: BuildingId,
+    at: [i32; 3],
+    page: usize,
+) -> Screen {
+    let mut screen = Screen::new(ctx.t(Key::TitleNewOrder).to_owned());
+    let recipes: Vec<_> = state
+        .registry
+        .item_facts
+        .work_recipes()
+        .filter(|recipe| Some(recipe.station.as_str()) == super::block_name(state, at))
+        .collect();
+    let pages = pages(recipes.len());
+    let page = page.min(pages - 1);
+    for (slot, recipe) in recipes.into_iter().skip(page * PAGE).take(PAGE).enumerate() {
+        let Some(output) = recipe
+            .outputs
+            .first()
+            .and_then(|output| output.to_stack(&state.registry.items, &state.registry.item_facts))
+        else {
+            continue;
+        };
+        screen.put(
+            slot,
+            decorate(
+                state,
+                output,
+                text(recipe.id.path()),
+                &[super::corner_text(at)],
+            ),
+            Target::Recipe {
+                building,
+                at,
+                recipe: recipe.id.as_str().to_owned(),
+            },
+        );
+    }
+    navigation(&mut screen, state, ctx, page, pages, |page| View::Recipes {
+        building,
+        at,
+        page,
+    });
+    screen.put(
+        BACK,
+        back(state, ctx),
+        Target::Show(View::Production { page: 0 }),
+    );
+    screen
+}
+
+fn dashboard_screen(state: &TickState, ctx: &Ctx) -> Screen {
+    let mut screen = Screen::new(ctx.t(Key::Settlement).to_owned());
+    let Some(record) = state.settlements.get(ctx.id) else {
+        return screen;
+    };
+    screen.put(
+        4,
+        icon(
+            state,
+            Icon::Bell,
+            1,
+            text(&record.name),
+            &[record
+                .owner_name
+                .as_deref()
+                .or(record.owner.as_deref())
+                .unwrap_or(ctx.t(Key::Autonomous))
+                .to_owned()],
+        ),
+        Target::Dialog("settings"),
+    );
+    for (slot, item, key, route) in [
+        (10, Icon::FilledMap, Key::Map, "map"),
+        (12, Icon::OakDoor, Key::Buildings, "buildings"),
+        (14, Icon::PlayerHead, Key::ResidentsJobs, "residents"),
+        (16, Icon::Chest, Key::KindStorage, "resources"),
+        (28, Icon::CraftingTable, Key::ProductionOrders, "orders"),
+        (30, Icon::IronPickaxe, Key::Projects, "projects"),
+        (32, Icon::IronHelmet, Key::Army, "army"),
+        (34, Icon::WhiteBanner, Key::Neighbours, "neighbours"),
+        (49, Icon::Book, Key::Checklist, "checklist"),
+        (52, Icon::LimeDye, Key::NextStep, "next"),
+        (53, Icon::Book, Key::Help, "help"),
+    ] {
+        screen.put(
+            slot,
+            icon(state, item, 1, text(ctx.t(key)), &[]),
+            Target::Dialog(route),
+        );
+    }
+    screen.put(BACK, back(state, ctx), Target::Dialog("main"));
+    screen
+}
+
+fn resource_group(state: &TickState, stack: &ItemStack, group: u8) -> bool {
+    let Some(name) = state.registry.items.name_of(stack.item_id) else {
+        return false;
+    };
+    let name = name.path();
+    match group {
+        0 => matches!(
+            name,
+            "bread"
+                | "wheat"
+                | "carrot"
+                | "potato"
+                | "beetroot"
+                | "apple"
+                | "cooked_beef"
+                | "cooked_porkchop"
+                | "cooked_mutton"
+                | "cooked_chicken"
+                | "cooked_cod"
+                | "cooked_salmon"
+        ),
+        1 => {
+            name.ends_with("_planks")
+                || name.ends_with("_log")
+                || name.ends_with("_wood")
+                || name.ends_with("_stone")
+                || name.ends_with("_bricks")
+                || matches!(
+                    name,
+                    "stone" | "cobblestone" | "dirt" | "sand" | "glass" | "gravel"
+                )
+        }
+        2 => {
+            ["_pickaxe", "_axe", "_shovel", "_hoe"]
+                .iter()
+                .any(|suffix| name.ends_with(suffix))
+                || matches!(name, "shears" | "fishing_rod")
+        }
+        3 => {
+            name.ends_with("_ingot")
+                || name.ends_with("_nugget")
+                || matches!(name, "diamond" | "emerald" | "netherite_scrap")
+        }
+        4 => ["_helmet", "_chestplate", "_leggings", "_boots"]
+            .iter()
+            .any(|suffix| name.ends_with(suffix)),
+        5 => {
+            name.ends_with("_sword")
+                || name.ends_with("_spear")
+                || name.ends_with("_arrow")
+                || matches!(
+                    name,
+                    "bow" | "crossbow" | "trident" | "mace" | "arrow" | "shield"
+                )
+        }
+        _ => true,
+    }
+}
+
+fn resources_screen(state: &TickState, ctx: &Ctx) -> Screen {
+    let mut screen = Screen::new(tr(ctx, "Resources", "Ресурсы").to_owned());
+    let stores = stores(state, ctx.id);
+    let stock = stock(&stores);
+    for (slot, item, en, ru, group) in [
+        (10, Icon::Bread, "Food", "Еда", 0),
+        (
+            12,
+            Icon::OakPlanks,
+            "Building materials",
+            "Стройматериалы",
+            1,
+        ),
+        (14, Icon::IronPickaxe, "Tools", "Инструменты", 2),
+        (16, Icon::IronIngot, "Metals", "Металлы", 3),
+        (28, Icon::IronChestplate, "Armour", "Броня", 4),
+        (
+            30,
+            Icon::IronSword,
+            "Weapons / ammunition",
+            "Оружие / боезапас",
+            5,
+        ),
+        (32, Icon::Chest, "All stock", "Все запасы", 6),
+        (34, Icon::Clock, "Reservations", "Резервы", 7),
+    ] {
+        let entries: Vec<_> = stock
+            .iter()
+            .filter(|entry| {
+                resource_group(state, &entry.template, group)
+                    && (group != 7 || entry.free < entry.total)
+            })
+            .collect();
+        let total: u64 = entries.iter().map(|entry| entry.total).sum();
+        let free: u64 = entries.iter().map(|entry| entry.free).sum();
+        let lore = if stores.unavailable {
+            vec![
+                tr(
+                    ctx,
+                    "Unavailable — approach storage",
+                    "Недоступно — подойдите к складу",
+                )
+                .to_owned(),
+                tr(
+                    ctx,
+                    "Partial readable stock only; totals unknown.",
+                    "Только доступные запасы; итог неизвестен.",
+                )
+                .to_owned(),
+            ]
+        } else {
+            vec![
+                format!("{total} / {} / {free}", total - free),
+                tr(ctx, "Stored / reserved / free", "Запас / резерв / свободно").to_owned(),
+            ]
+        };
+        screen.put(
+            slot,
+            icon(state, item, 1, text(tr(ctx, en, ru)), &lore),
+            Target::Show(View::Resource { group, page: 0 }),
+        );
+    }
+    screen.put(
+        INFO,
+        icon(
+            state,
+            Icon::Book,
+            1,
+            text(storage_label(ctx)),
+            &[tr(
+                ctx,
+                "Open storage for real stack transfers.",
+                "Откройте склад для переноса настоящих стаков.",
+            )
+            .to_owned()],
+        ),
+        Target::Dialog("storage"),
+    );
+    screen.put(BACK, back(state, ctx), Target::Show(View::Dashboard));
+    screen.put(
+        ACTION,
+        icon(state, Icon::Chest, 1, text(storage_label(ctx)), &[]),
+        Target::Dialog("storage"),
+    );
+    screen
+}
+
+fn resource_screen(state: &TickState, ctx: &Ctx, group: u8, page: usize) -> Screen {
+    let stores = stores(state, ctx.id);
+    let stock: Vec<_> = stock(&stores)
+        .into_iter()
+        .filter(|entry| {
+            resource_group(state, &entry.template, group)
+                && (group != 7 || entry.free < entry.total)
+        })
+        .collect();
+    let pages = pages(stock.len());
+    let page = page.min(pages - 1);
+    let mut screen = Screen::new(tr(ctx, "Stock · details", "Запасы · детали").to_owned());
+    if stores.unavailable {
+        screen.put(
+            INFO,
+            icon(
+                state,
+                Icon::Barrier,
+                1,
+                text(tr(
+                    ctx,
+                    "Unavailable — approach storage",
+                    "Недоступно — подойдите к складу",
+                )),
+                &[tr(
+                    ctx,
+                    "Partial readable stock only; totals unknown.",
+                    "Только доступные запасы; итог неизвестен.",
+                )
+                .to_owned()],
+            ),
+            Target::Dialog("storage"),
+        );
+    }
+    for (slot, entry) in stock.iter().skip(page * PAGE).take(PAGE).enumerate() {
+        let mut shown = entry.template.clone();
+        shown.count = entry.total.min(99) as i32;
+        screen.put(
+            slot,
+            decorate(
+                state,
+                shown,
+                item_label(state, &entry.template),
+                &[
+                    format!(
+                        "{} / {} / {}",
+                        entry.total,
+                        entry.total - entry.free,
+                        entry.free
+                    ),
+                    tr(
+                        ctx,
+                        "Stored / reserved / free; click for exact detail",
+                        "Запас / резерв / свободно; клик — точные данные",
+                    )
+                    .to_owned(),
+                ],
+            ),
+            Target::StockDetail(entry.template.clone()),
+        );
+    }
+    navigation(&mut screen, state, ctx, page, pages, |page| {
+        View::Resource { group, page }
+    });
+    screen.put(BACK, back(state, ctx), Target::Show(View::Resources));
+    screen.put(
+        ACTION,
+        icon(state, Icon::Chest, 1, text(storage_label(ctx)), &[]),
+        Target::Dialog("storage"),
+    );
+    screen
+}
+
+fn projects_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
+    let blueprints = super::super::blueprints::all(&state.registry);
+    let pages = pages(blueprints.len());
+    let page = page.min(pages - 1);
+    let mut screen = Screen::new(ctx.t(Key::Projects).to_owned());
+    for (slot, blueprint) in blueprints.iter().skip(page * PAGE).take(PAGE).enumerate() {
+        screen.put(
+            slot,
+            icon(
+                state,
+                kind_item(blueprint.kind),
+                1,
+                text(format!("{} L1", super::blueprint_label(ctx, &blueprint.id))),
+                &ctx.t(Key::RequestPolicy)
+                    .lines()
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>(),
+            ),
+            Target::Blueprint(blueprint.id.clone()),
+        );
+    }
+    let access = (!ctx.manage).then(|| ctx.t(Key::ViewOnly).to_owned());
+    screen.put(
+        INFO,
+        icon(
+            state,
+            Icon::Book,
+            1,
+            text(ctx.t(Key::Status)),
+            access.as_slice(),
+        ),
+        Target::Show(View::Project { page: 0 }),
+    );
+    screen.put(
+        ACTION,
+        icon(state, Icon::IronPickaxe, 1, text(ctx.t(Key::Status)), &[]),
+        Target::Show(View::Project { page: 0 }),
+    );
+    screen.put(BACK, back(state, ctx), Target::Show(View::Dashboard));
+    navigation(&mut screen, state, ctx, page, pages, |page| {
+        View::Projects { page }
+    });
+    screen
+}
+
+fn project_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
+    let mut screen = Screen::new(tr(ctx, "Construction", "Строительство").to_owned());
+    let Some(record) = state.settlements.get(ctx.id) else {
+        return screen;
+    };
+    let mut status = super::pending_order_text(state, ctx).unwrap_or_else(|| {
+        if record.project.is_some() {
+            tr(ctx, "No queued order", "Нет заказа в очереди")
+        } else {
+            tr(
+                ctx,
+                "No active project; no queued order",
+                "Нет активной стройки и заказа в очереди",
+            )
+        }
+        .to_owned()
+    });
+    if let Some(project) = &record.project {
+        screen.put(
+            4,
+            icon(
+                state,
+                super::super::blueprints::get(&state.registry, &project.blueprint)
+                    .map_or(Icon::IronPickaxe, |bp| kind_item(bp.kind)),
+                1,
+                text(format!(
+                    "{} L{}",
+                    super::blueprint_label(ctx, &project.blueprint),
+                    project.level
+                )),
+                &[],
+            ),
+            Target::Refresh,
+        );
+        let builder = project
+            .borrowed_builder
+            .map(|(worker, _)| super::super::presentation::villager_name(worker).to_owned())
+            .unwrap_or_else(|| {
+                tr(
+                    ctx,
+                    "Builder cause unavailable",
+                    "Причина состояния строителя недоступна",
+                )
+                .to_owned()
+            });
+        screen.put(
+            12,
+            icon(state, Icon::IronPickaxe, 1, text(builder), &[]),
+            Target::Dialog("residents"),
+        );
+        screen.put(
+            14,
+            icon(
+                state,
+                Icon::FilledMap,
+                1,
+                text(ctx.t(Key::Map)),
+                &[super::corner_text(project.origin)],
+            ),
+            Target::MapAt(project.origin),
+        );
+        match crate::plugin_structures::settlement_builds::status(state, ctx.id, &project.structure)
+        {
+            Ok(snapshot) => {
+                let total: u64 = snapshot.stages.iter().map(|stage| stage.work_units).sum();
+                let done = snapshot
+                    .stages
+                    .iter()
+                    .take(snapshot.current_stage_index as usize)
+                    .map(|stage| stage.work_units)
+                    .sum::<u64>()
+                    .saturating_add(snapshot.completed_work_units);
+                let phase = super::project_phase(ctx, snapshot.state.as_str());
+                status = format!("{phase} · {done}/{total}\n{status}");
+                if let Some(reason) = &snapshot.pause_reason {
+                    status.push('\n');
+                    status.push_str(reason);
+                }
+                for segment in 0..9 {
+                    let full = total > 0
+                        && u128::from(done) * 9 >= u128::from(total) * (segment + 1) as u128;
+                    screen.put(
+                        18 + segment,
+                        icon(
+                            state,
+                            if full {
+                                Icon::LimeStainedGlassPane
+                            } else {
+                                Icon::GrayStainedGlassPane
+                            },
+                            1,
+                            text(format!("{done}/{total}")),
+                            &[],
+                        ),
+                        Target::Refresh,
+                    );
+                }
+            }
+            Err(_) => {
+                status = tr(
+                    ctx,
+                    "Project records unavailable; cause unknown.",
+                    "Данные стройки недоступны; причина неизвестна.",
+                )
+                .to_owned()
+            }
+        }
+    } else if let Some(order) = &record.pending_order {
+        screen.put(
+            4,
+            icon(
+                state,
+                super::super::blueprints::get(&state.registry, &order.blueprint)
+                    .map_or(Icon::IronPickaxe, |bp| kind_item(bp.kind)),
+                1,
+                text(format!(
+                    "{} L{}",
+                    super::blueprint_label(ctx, &order.blueprint),
+                    order.level
+                )),
+                &[],
+            ),
+            Target::Refresh,
+        );
+        status = format!(
+            "{}\n{}",
+            tr(
+                ctx,
+                "Queued — site not assigned",
+                "В очереди — место не назначено"
+            ),
+            status
+        );
+    }
+    screen.put(
+        10,
+        icon(state, Icon::Clock, 1, text(status), &[]),
+        Target::Dialog("project_status_details"),
+    );
+    screen.put(
+        16,
+        icon(state, Icon::Chest, 1, text(storage_label(ctx)), &[]),
+        Target::Dialog("storage"),
+    );
+    let mut known = true;
+    let needs = match super::project_needs(state, ctx) {
+        Ok(needs) => needs,
+        Err(error) => {
+            known = false;
+            screen.put(
+                27,
+                icon(
+                    state,
+                    Icon::Barrier,
+                    1,
+                    text(tr(ctx, "Supply unavailable", "Снабжение недоступно")),
+                    &[error],
+                ),
+                Target::Dialog("project_status_details"),
+            );
+            Vec::new()
+        }
+    };
+    let pages = needs.len().div_ceil(18).max(1);
+    let page = page.min(pages - 1);
+    for (slot, (item, missing, reason, _)) in (27..45).zip(needs.iter().skip(page * 18).take(18)) {
+        screen.put(
+            slot,
+            item_icon(
+                state,
+                item,
+                (*missing).min(99) as i32,
+                super::material_text(state, item, format!(" ×{missing}")),
+                std::slice::from_ref(reason),
+            ),
+            Target::Material(item.clone()),
+        );
+    }
+    navigation(&mut screen, state, ctx, page, pages, |page| View::Project {
+        page,
+    });
+    screen.put(
+        INFO,
+        icon(state, Icon::Book, 1, text(ctx.t(Key::Status)), &[]),
+        Target::Dialog("project_status_details"),
+    );
+    let funded = known && needs.is_empty() && record.project.is_some();
+    screen.put(
+        ACTION,
+        icon(
+            state,
+            if funded { Icon::FilledMap } else { Icon::Chest },
+            1,
+            text(if funded {
+                ctx.t(Key::Map)
+            } else {
+                storage_label(ctx)
+            }),
+            &[],
+        ),
+        if funded {
+            record
+                .project
+                .as_ref()
+                .map_or(Target::Refresh, |project| Target::MapAt(project.origin))
+        } else {
+            Target::Dialog("storage")
+        },
+    );
+    screen.put(
+        LIST,
+        icon(state, Icon::Book, 1, text(ctx.t(Key::Projects)), &[]),
+        Target::Show(View::Projects { page: 0 }),
+    );
+    screen.put(
+        BACK,
+        back(state, ctx),
+        Target::Show(View::Projects { page: 0 }),
+    );
+    screen
 }
 
 fn storage_screen(state: &TickState, ctx: &Ctx, name: &str, page: usize) -> Screen {
@@ -1307,7 +2454,24 @@ fn storage_screen(state: &TickState, ctx: &Ctx, name: &str, page: usize) -> Scre
         );
     }
     let total: u64 = stock.iter().map(|entry| entry.total).sum();
-    let (title, mut lore) = if stores.images.is_empty() {
+    let (title, mut lore) = if stores.unavailable {
+        (
+            tr(
+                ctx,
+                "Unavailable — approach storage",
+                "Недоступно — подойдите к складу",
+            )
+            .to_owned(),
+            vec![
+                tr(
+                    ctx,
+                    "Only loaded readable containers are shown; totals are incomplete.",
+                    "Показаны только доступные хранилища; итоги неполные.",
+                )
+                .to_owned(),
+            ],
+        )
+    } else if stores.images.is_empty() {
         (
             tr(ctx, "No certified storage", "Склад не сертифицирован").to_owned(),
             vec![
@@ -1356,7 +2520,7 @@ fn storage_screen(state: &TickState, ctx: &Ctx, name: &str, page: usize) -> Scre
     lore.push(tr(ctx, "Click: refresh", "Клик — обновить").to_owned());
     screen.put(
         INFO,
-        icon(state, "minecraft:chest", 1, text(title), &lore),
+        icon(state, Icon::Chest, 1, text(title), &lore),
         Target::Refresh,
     );
     screen.put(BACK, back(state, ctx), Target::Dialog("main"));
@@ -1366,103 +2530,433 @@ fn storage_screen(state: &TickState, ctx: &Ctx, name: &str, page: usize) -> Scre
     screen
 }
 
-fn residents_screen(state: &TickState, ctx: &Ctx, name: &str, page: usize) -> Screen {
+fn census_match(person: &Person, filter: u8, busy: &BTreeSet<Uuid>) -> bool {
+    match filter {
+        1 => person.adult,
+        2 => !person.adult,
+        3 => person.home.is_none() && person.soldier.is_none(),
+        4 => person.building.is_some(),
+        5 => {
+            person.adult
+                && person.soldier.is_none()
+                && person.building.is_none()
+                && !matches!(person.profession, Profession::Nitwit | Profession::Builder)
+                && !busy.contains(&person.uuid)
+        }
+        6 => person.soldier.is_some(),
+        _ => true,
+    }
+}
+
+fn census_screen(state: &TickState, ctx: &Ctx, filter: u8, page: usize) -> Screen {
     let people = people(state, ctx.id);
     let busy = super::busy_workers(state, ctx.id);
-    let pages = pages(people.len());
+    let selected: Vec<_> = people
+        .iter()
+        .filter(|person| census_match(person, filter, &busy))
+        .collect();
+    let pages = selected.len().div_ceil(36).max(1);
     let page = page.min(pages - 1);
-    let mut screen = Screen::new(format!("{} · {name}", tr(ctx, "Residents", "Жители")));
-    let hint = if ctx.manage {
-        tr(
-            ctx,
-            "Click: choose a workplace",
-            "Клик — выбрать место работы",
-        )
-    } else {
-        ""
-    };
-    for (slot, person) in people.iter().skip(page * PAGE).take(PAGE).enumerate() {
+    let mut screen =
+        Screen::new(tr(ctx, "Residents / households", "Жители / домохозяйства").to_owned());
+    for (slot, item, label, which) in [
+        (0, Icon::PlayerHead, tr(ctx, "Population", "Население"), 0),
+        (
+            2,
+            Icon::Wheat,
+            tr(ctx, "Adults / children", "Взрослые / дети"),
+            if filter == 1 { 2 } else { 1 },
+        ),
+        (
+            4,
+            Icon::RedBed,
+            tr(ctx, "Civilian beds", "Гражданские кровати"),
+            3,
+        ),
+        (
+            6,
+            Icon::CraftingTable,
+            tr(ctx, "Working / eligible idle", "Работают / свободны"),
+            if filter == 4 { 5 } else { 4 },
+        ),
+        (8, Icon::IronHelmet, ctx.t(Key::Army), 6),
+    ] {
+        let count = people
+            .iter()
+            .filter(|person| census_match(person, which, &busy))
+            .count();
+        let lore = if slot == 2 {
+            let adults = people.iter().filter(|person| person.adult).count();
+            vec![
+                format!("{adults} / {}", people.len() - adults),
+                tr(ctx, "Click: adults / children", "Клик — взрослые / дети").to_owned(),
+            ]
+        } else if slot == 6 {
+            let employed = people
+                .iter()
+                .filter(|person| census_match(person, 4, &busy))
+                .count();
+            let idle = people
+                .iter()
+                .filter(|person| census_match(person, 5, &busy))
+                .count();
+            vec![
+                format!("{employed} / {idle}"),
+                tr(
+                    ctx,
+                    "Click: working / eligible idle",
+                    "Клик — работают / свободны",
+                )
+                .to_owned(),
+            ]
+        } else if slot == 4 {
+            let claims = people
+                .iter()
+                .filter(|person| person.soldier.is_none() && person.home.is_some())
+                .count();
+            vec![
+                format!(
+                    "{}: {claims}",
+                    tr(ctx, "Known home claims", "Известных домашних мест")
+                ),
+                tr(
+                    ctx,
+                    "Bed validity / free capacity unavailable here; inspect the home.",
+                    "Проверка кроватей / свободные места здесь недоступны; осмотрите дом.",
+                )
+                .to_owned(),
+            ]
+        } else {
+            vec![
+                count.to_string(),
+                tr(ctx, "Click: filter", "Клик — фильтр").to_owned(),
+            ]
+        };
         screen.put(
             slot,
-            person_icon(state, ctx, person, &busy, hint),
-            Target::Pick {
-                worker: person.uuid,
-                from: None,
-            },
+            icon(state, item, 1, text(label), &lore),
+            Target::Show(View::Census {
+                filter: which,
+                page: 0,
+            }),
         );
     }
-    let working = people
-        .iter()
-        .filter(|person| person.building.is_some())
-        .count();
-    let free: usize = state
-        .settlements
-        .get(ctx.id)
-        .map(|record| {
-            record
-                .buildings
-                .values()
-                .filter(|building| building.kind.profession().is_some())
-                .map(|building| {
-                    let filled = people
-                        .iter()
-                        .filter(|person| person.building == Some(building.id))
-                        .count();
-                    buildings::job_slots(building.kind, building.level).saturating_sub(filled)
-                })
-                .sum::<usize>()
-        })
-        .unwrap_or(0);
-    let title = match ctx.lang {
-        Lang::En => format!(
-            "Residents {}, working {working}, free job places {free}",
-            people.len()
-        ),
-        Lang::Ru => format!(
-            "Жителей {}, работают {working}, свободных мест {free}",
-            people.len()
-        ),
-    };
-    let mut lore = vec![page_text(ctx, page, pages)];
-    if !ctx.manage {
-        lore.push(ctx.t(Key::ViewOnly).to_owned());
+    for (slot, person) in (9..45).zip(selected.into_iter().skip(page * 36).take(36)) {
+        screen.put(
+            slot,
+            person_icon(
+                state,
+                ctx,
+                person,
+                &busy,
+                tr(ctx, "Click: resident card", "Клик — карточка жителя"),
+            ),
+            Target::Show(View::Resident {
+                worker: person.uuid,
+            }),
+        );
     }
-    lore.push(tr(ctx, "Click: refresh", "Клик — обновить").to_owned());
-    screen.put(
-        INFO,
-        icon(state, "minecraft:bell", 1, text(title), &lore),
-        Target::Refresh,
-    );
-    screen.put(BACK, back(state, ctx), Target::Dialog("main"));
+    navigation(&mut screen, state, ctx, page, pages, |page| View::Census {
+        filter,
+        page,
+    });
+    screen.put(BACK, back(state, ctx), Target::Show(View::Dashboard));
     screen.put(
         LIST,
         icon(
             state,
-            "minecraft:paper",
+            Icon::RedBed,
             1,
-            text(tr(ctx, "Jobs list", "Список работ")),
+            text(tr(ctx, "Households", "Домохозяйства")),
             &[],
         ),
-        Target::Dialog("residents"),
+        Target::Show(View::Households { page: 0 }),
     );
+    screen
+}
+
+fn resident_screen(state: &TickState, ctx: &Ctx, worker: Uuid) -> Screen {
+    let mut screen = Screen::new(tr(ctx, "Resident · details", "Житель · сведения").to_owned());
+    let people = people(state, ctx.id);
+    let Some(person) = people.iter().find(|person| person.uuid == worker) else {
+        screen.put(
+            4,
+            icon(state, Icon::Barrier, 1, text(ctx.t(Key::StateChanged)), &[]),
+            Target::Show(View::Census { filter: 0, page: 0 }),
+        );
+        screen.put(
+            BACK,
+            back(state, ctx),
+            Target::Show(View::Census { filter: 0, page: 0 }),
+        );
+        return screen;
+    };
+    screen.title = format!(
+        "{} · {}",
+        tr(ctx, "Resident", "Житель"),
+        super::super::presentation::villager_name(worker)
+    );
+    let busy = super::busy_workers(state, ctx.id);
+    screen.put(
+        4,
+        person_icon(state, ctx, person, &busy, &worker.to_string()),
+        Target::Refresh,
+    );
+    screen.put(
+        10,
+        icon(
+            state,
+            Icon::CraftingTable,
+            1,
+            text(profession_name(ctx, person.profession)),
+            &[tr(
+                ctx,
+                "Assignment is not arrival; craft changes at the workstation.",
+                "Назначение не означает прибытие; ремесло меняется у рабочего места.",
+            )
+            .to_owned()],
+        ),
+        if ctx.manage {
+            Target::Pick { worker, from: None }
+        } else {
+            Target::Refresh
+        },
+    );
+    for (slot, item, label, position) in [
+        (
+            12,
+            Icon::RedBed,
+            tr(ctx, "Home / bed", "Дом / кровать"),
+            person.home,
+        ),
+        (
+            14,
+            Icon::FilledMap,
+            tr(ctx, "Workplace", "Место работы"),
+            person.job,
+        ),
+    ] {
+        let detail = position
+            .map(|at| super::corner_text([at.x, at.y, at.z]))
+            .unwrap_or_else(|| {
+                tr(
+                    ctx,
+                    "Not assigned in this dimension",
+                    "Не назначено в этом измерении",
+                )
+                .to_owned()
+            });
+        screen.put(
+            slot,
+            icon(state, item, 1, text(label), &[detail]),
+            position.map_or(Target::Refresh, |at| Target::MapAt([at.x, at.y, at.z])),
+        );
+    }
+    screen.put(
+        16,
+        icon(
+            state,
+            Icon::Book,
+            1,
+            text(tr(ctx, "Household", "Домохозяйство")),
+            &[tr(
+                ctx,
+                "Social home is not a bed claim; no family tree is inferred.",
+                "Социальный дом не является кроватью; родство не выводится.",
+            )
+            .to_owned()],
+        ),
+        Target::Show(View::Household {
+            id: person.household,
+            page: 0,
+        }),
+    );
+    screen.put(
+        BACK,
+        back(state, ctx),
+        Target::Show(View::Census { filter: 0, page: 0 }),
+    );
+    screen.put(
+        ACTION,
+        icon(
+            state,
+            Icon::CraftingTable,
+            1,
+            text(tr(ctx, "Assign craft", "Назначить ремесло")),
+            &[],
+        ),
+        if ctx.manage {
+            Target::Pick { worker, from: None }
+        } else {
+            Target::Refresh
+        },
+    );
+    screen
+}
+
+fn households_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
+    let mut screen = Screen::new(tr(ctx, "Households", "Домохозяйства").to_owned());
+    let Some(record) = state.settlements.get(ctx.id) else {
+        return screen;
+    };
+    let pages = pages(record.households.len() + 1);
+    let page = page.min(pages - 1);
+    let ids = std::iter::once(None).chain(record.households.keys().filter_map(|id| {
+        let (founder, sequence) = id.split_once('-')?;
+        Some(Some((founder.parse().ok()?, sequence.parse().ok()?)))
+    }));
+    for (slot, id) in ids.skip(page * PAGE).take(PAGE).enumerate() {
+        let name = id.map_or_else(
+            || tr(ctx, "No household", "Без домохозяйства").to_owned(),
+            |(a, b)| format!("{a}-{b}"),
+        );
+        screen.put(
+            slot,
+            icon(state, Icon::RedBed, 1, text(name), &[]),
+            Target::Show(View::Household { id, page: 0 }),
+        );
+    }
     navigation(&mut screen, state, ctx, page, pages, |page| {
-        View::Residents { page }
+        View::Households { page }
     });
+    screen.put(
+        BACK,
+        back(state, ctx),
+        Target::Show(View::Census { filter: 0, page: 0 }),
+    );
+    screen
+}
+
+fn household_screen(state: &TickState, ctx: &Ctx, id: Option<(u64, u64)>, page: usize) -> Screen {
+    let mut screen =
+        Screen::new(tr(ctx, "Household · members", "Домохозяйство · жители").to_owned());
+    let key = id.map(|(a, b)| format!("{a}-{b}"));
+    let household = key
+        .as_ref()
+        .and_then(|key| state.settlements.get(ctx.id)?.households.get(key));
+    let name = key
+        .clone()
+        .unwrap_or_else(|| tr(ctx, "No household", "Без домохозяйства").to_owned());
+    if key.is_some() && household.is_none() {
+        screen.put(
+            4,
+            icon(state, Icon::Barrier, 1, text(ctx.t(Key::StateChanged)), &[]),
+            Target::Show(View::Households { page: 0 }),
+        );
+    } else {
+        screen.put(
+            4,
+            icon(state, Icon::RedBed, 1, text(name), &[]),
+            Target::Refresh,
+        );
+    }
+    let unavailable = tr(ctx, "Not recorded", "Не записано");
+    screen.put(
+        10,
+        icon(
+            state,
+            Icon::Bread,
+            1,
+            text(tr(ctx, "Needs policy", "Политика потребностей")),
+            &[household
+                .and_then(|household| household.needs.as_deref())
+                .unwrap_or(unavailable)
+                .to_owned()],
+        ),
+        Target::Refresh,
+    );
+    screen.put(
+        14,
+        icon(
+            state,
+            Icon::Book,
+            1,
+            text(tr(ctx, "Origin / policy", "Происхождение / политика")),
+            &[
+                household
+                    .map_or(unavailable, |household| household.origin.as_str())
+                    .to_owned(),
+                household
+                    .and_then(|household| household.policy.as_deref())
+                    .unwrap_or(unavailable)
+                    .to_owned(),
+            ],
+        ),
+        Target::Refresh,
+    );
+    let home = household.and_then(|household| household.home);
+    screen.put(
+        12,
+        icon(
+            state,
+            Icon::OakDoor,
+            1,
+            text(tr(
+                ctx,
+                "Social home (not a bed)",
+                "Социальный дом (не кровать)",
+            )),
+            &[home
+                .map(super::corner_text)
+                .unwrap_or_else(|| unavailable.to_owned())],
+        ),
+        home.map_or(Target::Refresh, Target::MapAt),
+    );
+    let people = people(state, ctx.id);
+    let members: Vec<_> = people
+        .iter()
+        .filter(|person| person.household == id)
+        .collect();
+    let pages = members.len().div_ceil(27).max(1);
+    let page = page.min(pages - 1);
+    let busy = super::busy_workers(state, ctx.id);
+    for (slot, person) in (18..45).zip(members.into_iter().skip(page * 27).take(27)) {
+        screen.put(
+            slot,
+            person_icon(state, ctx, person, &busy, ""),
+            Target::Show(View::Resident {
+                worker: person.uuid,
+            }),
+        );
+    }
+    navigation(&mut screen, state, ctx, page, pages, |page| {
+        View::Household { id, page }
+    });
+    screen.put(
+        BACK,
+        back(state, ctx),
+        Target::Show(View::Households { page: 0 }),
+    );
     screen
 }
 
 fn buildings_screen(state: &TickState, ctx: &Ctx, name: &str, page: usize) -> Screen {
+    filtered_buildings_screen(state, ctx, name, None, page)
+}
+
+fn filtered_buildings_screen(
+    state: &TickState,
+    ctx: &Ctx,
+    name: &str,
+    kind: Option<BuildingKind>,
+    page: usize,
+) -> Screen {
     let mut screen = Screen::new(format!("{} · {name}", tr(ctx, "Buildings", "Постройки")));
     let Some(record) = state.settlements.get(ctx.id) else {
         return screen;
     };
     let people = people(state, ctx.id);
-    let count = record.buildings.len();
+    let count = record
+        .buildings
+        .values()
+        .filter(|building| kind.is_none_or(|kind| kind == building.kind))
+        .count();
     let pages = pages(count);
     let page = page.min(pages - 1);
     for (slot, building) in record
         .buildings
         .values()
+        .filter(|building| kind.is_none_or(|kind| kind == building.kind))
         .skip(page * PAGE)
         .take(PAGE)
         .enumerate()
@@ -1478,8 +2972,9 @@ fn buildings_screen(state: &TickState, ctx: &Ctx, name: &str, page: usize) -> Sc
         screen.put(
             slot,
             building_icon(state, ctx, building, &lore),
-            Target::Show(View::Building {
+            Target::Show(View::BuildingContext {
                 building: building.id,
+                origin: Origin::List { kind, page },
             }),
         );
     }
@@ -1500,16 +2995,16 @@ fn buildings_screen(state: &TickState, ctx: &Ctx, name: &str, page: usize) -> Sc
     };
     screen.put(
         INFO,
-        icon(state, "minecraft:bricks", 1, text(title), &lore),
+        icon(state, Icon::Bricks, 1, text(title), &lore),
         Target::Refresh,
     );
-    screen.put(BACK, back(state, ctx), Target::Dialog("main"));
+    screen.put(BACK, back(state, ctx), Target::Show(View::Dashboard));
     if ctx.manage {
         screen.put(
             ACTION,
             icon(
                 state,
-                "minecraft:writable_book",
+                Icon::WritableBook,
                 1,
                 text(ctx.t(Key::CertifyNew)),
                 &[],
@@ -1521,20 +3016,20 @@ fn buildings_screen(state: &TickState, ctx: &Ctx, name: &str, page: usize) -> Sc
         LIST,
         icon(
             state,
-            "minecraft:paper",
+            Icon::Paper,
             1,
-            text(tr(ctx, "List with requirements", "Список с требованиями")),
+            text(tr(ctx, "Filter by type", "Фильтр по типу")),
             &[],
         ),
-        Target::Dialog("buildings"),
+        Target::Dialog("building_filters"),
     );
     navigation(&mut screen, state, ctx, page, pages, |page| {
-        View::Buildings { page }
+        View::FilteredBuildings { kind, page }
     });
     screen
 }
 
-fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId) -> Option<Screen> {
+fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId, origin: Origin) -> Option<Screen> {
     let building = state.settlements.get(ctx.id)?.buildings.get(&id)?.clone();
     let people = people(state, ctx.id);
     let busy = super::busy_workers(state, ctx.id);
@@ -1576,28 +3071,69 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId) -> Option<Scree
         Target::Refresh,
     );
     if ctx.manage && building.level < 3 {
-        let label = match ctx.lang {
-            Lang::En => format!("Upgrade to level {next}"),
-            Lang::Ru => format!("Улучшить до уровня {next}"),
-        };
+        let label = ctx.f(Key::Certificate, &[("level", &next.to_string())]);
         screen.put(
             BUILDING_UPGRADE,
             icon(
                 state,
-                "minecraft:experience_bottle",
+                Icon::ExperienceBottle,
                 1,
                 text(label),
-                &upgrade,
+                &ctx.t(Key::CertificatePolicy)
+                    .lines()
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>(),
             ),
-            Target::Upgrade(id),
+            Target::Review {
+                building: id,
+                origin,
+                certificate: true,
+            },
         );
     }
+    let construction = super::super::construction::owner_upgrade_level(state, ctx.id, id);
+    screen.put(
+        ACTION,
+        icon(
+            state,
+            if construction.is_some() {
+                Icon::Anvil
+            } else {
+                Icon::Barrier
+            },
+            1,
+            text(construction.map_or_else(
+                || ctx.t(Key::NoBlueprintUpgrade).to_owned(),
+                |level| ctx.f(Key::ConstructionUpgrade, &[("level", &level.to_string())]),
+            )),
+            &ctx.t(Key::RequestPolicy)
+                .lines()
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
+        ),
+        if ctx.manage && construction.is_some() {
+            Target::Review {
+                building: id,
+                origin,
+                certificate: false,
+            }
+        } else {
+            Target::None
+        },
+    );
+    let centre =
+        std::array::from_fn(|axis| building.bounds.min[axis].midpoint(building.bounds.max[axis]));
+    screen.put(
+        8,
+        icon(state, Icon::FilledMap, 1, text(ctx.t(Key::Map)), &[]),
+        Target::MapAt(centre),
+    );
     if building.kind == BuildingKind::Storage {
         screen.put(
             BUILDING_STORAGE,
             icon(
                 state,
-                "minecraft:chest",
+                Icon::Chest,
                 1,
                 text(tr(ctx, "Open storage", "Открыть склад")),
                 &[],
@@ -1626,9 +3162,15 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId) -> Option<Scree
                 screen.put(
                     slot,
                     person_icon(state, ctx, person, &busy, hint),
-                    Target::Pick {
-                        worker: person.uuid,
-                        from: Some(id),
+                    if ctx.manage {
+                        Target::Pick {
+                            worker: person.uuid,
+                            from: Some((id, origin)),
+                        }
+                    } else {
+                        Target::Show(View::Resident {
+                            worker: person.uuid,
+                        })
                     },
                 );
             } else if live_station(state, &building, pos) {
@@ -1640,22 +3182,27 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId) -> Option<Scree
                     slot,
                     icon(
                         state,
-                        "minecraft:light_gray_stained_glass_pane",
+                        Icon::LightGrayStainedGlassPane,
                         1,
                         text(tr(ctx, "Free work place", "Свободное место")),
                         &lore,
                     ),
-                    Target::Show(View::Hire {
-                        building: id,
-                        page: 0,
-                    }),
+                    if ctx.manage {
+                        Target::Show(View::Hire {
+                            building: id,
+                            origin,
+                            page: 0,
+                        })
+                    } else {
+                        Target::Refresh
+                    },
                 );
             } else {
                 screen.put(
                     slot,
                     icon(
                         state,
-                        "minecraft:barrier",
+                        Icon::Barrier,
                         1,
                         text(tr(ctx, "Workstation missing", "Нет рабочего блока")),
                         &[format!("{x} {y} {z}")],
@@ -1670,9 +3217,39 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId) -> Option<Scree
             screen.put(
                 slot,
                 person_icon(state, ctx, person, &busy, ""),
-                Target::None,
+                Target::Show(View::Resident {
+                    worker: person.uuid,
+                }),
             );
         }
+    } else if building.kind == BuildingKind::House {
+        let claims = people
+            .iter()
+            .filter(|person| has_home_in(person, &building))
+            .count();
+        screen.put(
+            BUILDING_PLACES,
+            icon(
+                state,
+                Icon::PlayerHead,
+                1,
+                text(format!(
+                    "{}: {claims}",
+                    tr(ctx, "Home claims", "Назначенные дома")
+                )),
+                &[tr(
+                    ctx,
+                    "Bed validity and free capacity unavailable.",
+                    "Исправность кроватей и свободная вместимость недоступны.",
+                )
+                .to_owned()],
+            ),
+            Target::Show(View::BuildingResidents {
+                building: id,
+                origin,
+                page: 0,
+            }),
+        );
     }
     screen.put(
         BACK,
@@ -1681,13 +3258,7 @@ fn building_screen(state: &TickState, ctx: &Ctx, id: BuildingId) -> Option<Scree
     );
     screen.put(
         LIST,
-        icon(
-            state,
-            "minecraft:paper",
-            1,
-            text(tr(ctx, "List with requirements", "Список с требованиями")),
-            &[],
-        ),
+        icon(state, Icon::Paper, 1, text(ctx.t(Key::Buildings)), &[]),
         Target::Dialog("buildings"),
     );
     Some(screen)
@@ -1697,7 +3268,7 @@ fn assign_screen(
     state: &TickState,
     ctx: &Ctx,
     worker: Uuid,
-    from: Option<BuildingId>,
+    from: Option<(BuildingId, Origin)>,
     page: usize,
 ) -> Option<Screen> {
     let record = state.settlements.get(ctx.id)?;
@@ -1749,8 +3320,8 @@ fn assign_screen(
         );
     }
     screen.put(INFO, info, Target::Refresh);
-    let back_to = from.map_or(View::Residents { page: 0 }, |building| View::Building {
-        building,
+    let back_to = from.map_or(View::Resident { worker }, |(building, origin)| {
+        View::BuildingContext { building, origin }
     });
     screen.put(BACK, back(state, ctx), Target::Show(back_to));
     navigation(&mut screen, state, ctx, page, pages, |page| View::Assign {
@@ -1761,7 +3332,13 @@ fn assign_screen(
     Some(screen)
 }
 
-fn hire_screen(state: &TickState, ctx: &Ctx, id: BuildingId, page: usize) -> Option<Screen> {
+fn hire_screen(
+    state: &TickState,
+    ctx: &Ctx,
+    id: BuildingId,
+    origin: Origin,
+    page: usize,
+) -> Option<Screen> {
     let building = state.settlements.get(ctx.id)?.buildings.get(&id)?.clone();
     let people = people(state, ctx.id);
     let busy = super::busy_workers(state, ctx.id);
@@ -1802,10 +3379,14 @@ fn hire_screen(state: &TickState, ctx: &Ctx, id: BuildingId, page: usize) -> Opt
     screen.put(
         BACK,
         back(state, ctx),
-        Target::Show(View::Building { building: id }),
+        Target::Show(View::BuildingContext {
+            building: id,
+            origin,
+        }),
     );
     navigation(&mut screen, state, ctx, page, pages, |page| View::Hire {
         building: id,
+        origin,
         page,
     });
     Some(screen)
@@ -1890,7 +3471,7 @@ fn person_icon(
         lore.push(hint.to_owned());
     }
     let item = if person.soldier.is_some() {
-        "minecraft:iron_sword"
+        Icon::IronSword
     } else {
         profession_item(person.profession)
     };
@@ -1923,7 +3504,7 @@ fn building_name(ctx: &Ctx, building: &Building) -> String {
 }
 
 fn back(state: &TickState, ctx: &Ctx) -> ItemStack {
-    icon(state, "minecraft:oak_door", 1, text(ctx.t(Key::Back)), &[])
+    icon(state, Icon::Arrow, 1, text(ctx.t(Key::Back)), &[])
 }
 
 fn navigation(
@@ -1939,7 +3520,7 @@ fn navigation(
             PREVIOUS,
             icon(
                 state,
-                "minecraft:arrow",
+                Icon::Arrow,
                 1,
                 text(tr(ctx, "Previous page", "Предыдущая страница")),
                 &[],
@@ -1952,7 +3533,7 @@ fn navigation(
             NEXT,
             icon(
                 state,
-                "minecraft:arrow",
+                Icon::Arrow,
                 1,
                 text(tr(ctx, "Next page", "Следующая страница")),
                 &[],
@@ -1970,41 +3551,41 @@ fn page_text(ctx: &Ctx, page: usize, pages: usize) -> String {
     format!("{} {}/{pages}", tr(ctx, "Page", "Страница"), page + 1)
 }
 
-fn kind_item(kind: BuildingKind) -> &'static str {
+fn kind_item(kind: BuildingKind) -> Icon {
     match kind {
-        BuildingKind::House => "minecraft:red_bed",
-        BuildingKind::Storage => "minecraft:chest",
+        BuildingKind::House => Icon::RedBed,
+        BuildingKind::Storage => Icon::Chest,
         BuildingKind::Workshop(profession) => profession_item(profession),
-        BuildingKind::Mine => "minecraft:iron_pickaxe",
-        BuildingKind::LumberCamp => "minecraft:iron_axe",
-        BuildingKind::Barracks => "minecraft:shield",
-        BuildingKind::Wall => "minecraft:cobblestone_wall",
-        BuildingKind::Tower => "minecraft:spyglass",
-        BuildingKind::Gate => "minecraft:oak_fence_gate",
+        BuildingKind::Mine => Icon::IronPickaxe,
+        BuildingKind::LumberCamp => Icon::IronAxe,
+        BuildingKind::Barracks => Icon::Shield,
+        BuildingKind::Wall => Icon::CobblestoneWall,
+        BuildingKind::Tower => Icon::Spyglass,
+        BuildingKind::Gate => Icon::OakFenceGate,
     }
 }
 
 /// The profession's workstation (vanilla job site block), else its tool.
-fn profession_item(profession: Profession) -> &'static str {
+fn profession_item(profession: Profession) -> Icon {
     match profession {
-        Profession::None | Profession::Nitwit => "minecraft:villager_spawn_egg",
-        Profession::Armorer => "minecraft:blast_furnace",
-        Profession::Butcher => "minecraft:smoker",
-        Profession::Cartographer => "minecraft:cartography_table",
-        Profession::Cleric => "minecraft:brewing_stand",
-        Profession::Farmer => "minecraft:composter",
-        Profession::Fisherman => "minecraft:barrel",
-        Profession::Fletcher => "minecraft:fletching_table",
-        Profession::Leatherworker => "minecraft:cauldron",
-        Profession::Librarian => "minecraft:lectern",
-        Profession::Mason => "minecraft:stonecutter",
-        Profession::Shepherd => "minecraft:loom",
-        Profession::Toolsmith => "minecraft:smithing_table",
-        Profession::Weaponsmith => "minecraft:grindstone",
-        Profession::Miner => "minecraft:iron_pickaxe",
-        Profession::Lumberjack => "minecraft:iron_axe",
-        Profession::Builder => "minecraft:crafting_table",
-        Profession::Soldier => "minecraft:iron_sword",
+        Profession::None | Profession::Nitwit => Icon::VillagerSpawnEgg,
+        Profession::Armorer => Icon::BlastFurnace,
+        Profession::Butcher => Icon::Smoker,
+        Profession::Cartographer => Icon::CartographyTable,
+        Profession::Cleric => Icon::BrewingStand,
+        Profession::Farmer => Icon::Composter,
+        Profession::Fisherman => Icon::Barrel,
+        Profession::Fletcher => Icon::FletchingTable,
+        Profession::Leatherworker => Icon::Cauldron,
+        Profession::Librarian => Icon::Lectern,
+        Profession::Mason => Icon::Stonecutter,
+        Profession::Shepherd => Icon::Loom,
+        Profession::Toolsmith => Icon::SmithingTable,
+        Profession::Weaponsmith => Icon::Grindstone,
+        Profession::Miner => Icon::IronPickaxe,
+        Profession::Lumberjack => Icon::IronAxe,
+        Profession::Builder => Icon::CraftingTable,
+        Profession::Soldier => Icon::IronSword,
     }
 }
 
@@ -2061,8 +3642,21 @@ fn item_id(state: &TickState, name: &str) -> Option<u32> {
 }
 
 /// A display icon: `count` of `item` named `name` with `lore` lines.
-fn icon(state: &TickState, item: &str, count: i32, name: Tag, lore: &[String]) -> ItemStack {
-    let Some(id) = item_id(state, item).or_else(|| item_id(state, "minecraft:paper")) else {
+fn icon(state: &TickState, item: Icon, count: i32, name: Tag, lore: &[String]) -> ItemStack {
+    let id = state
+        .registry
+        .items
+        .id_of(item.identifier())
+        .or_else(|| state.registry.items.id_of(Icon::Paper.identifier()));
+    let Some(id) = id else {
+        return ItemStack::EMPTY;
+    };
+    decorate(state, ItemStack::new(id, count.clamp(1, 99)), name, lore)
+}
+
+fn item_icon(state: &TickState, item: &str, count: i32, name: Tag, lore: &[String]) -> ItemStack {
+    let id = item_id(state, item).or_else(|| state.registry.items.id_of(Icon::Paper.identifier()));
+    let Some(id) = id else {
         return ItemStack::EMPTY;
     };
     decorate(state, ItemStack::new(id, count.clamp(1, 99)), name, lore)
