@@ -4880,3 +4880,25 @@ regression = ["cargo:mc-core:tick::duplicate_login_tests::late_configuration_fin
 failing_first = "reported"
 fix_commit = "patch:e5aabfdfc59979f89e10a8dc6e6ee2f022e4a97be9bc06b3573bf065b46ab137"
 promotion = "docs/bugs/promotions/DUPLICATE-LOGIN-LATE-CONFIGURATION-REPLACES-PLAYING.json"
+
+[[bug]]
+id = "VILLAGER-PLAYER-OPENED-DOOR-STAYS-OPEN"
+title = "Villagers never close a wooden door a player left open, even after walking through it at night"
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "Breaker finding F1 (VillageBreak2, ISSUE-1-08 break-it pass, agent-run): in a certified house the player opens the spruce door by day; at time 18000 both residents walk home through it and fall asleep, and the door stays open=true all night (server truth via execute if block; native client d5f25569, server pin 4bfacdf6391f-3f0eb5d2 = main 71d1c127; scene-shot artifacts 20261112T012120-scene-shot-1449j9i8 and 20261112T012900-scene-shot-bbujr1zg, 2/2). Every door the villagers opened themselves was shut. Vanilla 26.3 InteractWithDoor opens the previous path node's door if closed and remembers it for closing either way (javap offsets 142-166), so closeDoorsThatIHaveOpenedOrPassedThrough closes doors a villager passed through. crates/mc-core/src/villager/doors.rs remembers only doors it opened, as docs/settlements/jobs.md documents (they leave player-opened doors alone): owner decision whether to keep the documented deviation."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "VILLAGER-WORKSTATION-IGNORED-AFTER-WORK-HOURS"
+title = "A jobless villager ignores a free reachable workstation from day tick 9000 until 2000 the next day, also outside any settlement"
+area = "gameplay"
+repro = "client"
+severity = "minor"
+status = "open"
+source = "Breaker finding F2 (VillageBreak2, ISSUE-1-10 break-it pass, agent-run): at time 10000 (awake, after work hours) an unbound jobless villager 51 blocks outside any settlement gets a lectern two blocks away, and a bound jobless resident's settlement certifies a librarian workshop; both stay jobless for 1200 ticks, and after time set 2500 both are librarians within 200 ticks, so the stations were valid and reachable (native client d5f25569, server pin 4bfacdf6391f-3f0eb5d2 = main 71d1c127; scene-shot artifacts 20261112T013249-scene-shot-qfcl2h4c, 20261112T013426-scene-shot-yc4y5ut8, 20261112T013520-scene-shot-dh5v6muo: unbound 3/3, bound 2/2). Vanilla 26.3 VillagerGoalPackages.getCorePackage holds AcquirePoi for POTENTIAL_JOB_SITE and AssignProfessionFromJobSite, which run whatever the schedule activity is, so an awake villager takes a free workstation at any time of day (the usual lectern reroll). crates/mc-core/src/settlements/allocator.rs acquire_pois searches jobs only while day_time is in 2000..9000, for bound and unbound villagers; docs/settlements/jobs.md documents that window: owner decision whether unbound villagers should follow vanilla."
+regression = []
+failing_first = "reported"
