@@ -25,8 +25,8 @@ const BUNDLE_BYTES: &[u8] = b"krasnokamen-client-fixture";
 /// Its size and SHA-256, which the manifest has to declare exactly: they are the
 /// bytes really written, so the package parser verifies the artifact the way it
 /// does for a deployed package.
-const BUNDLE_SIZE: u64 = 22;
-const BUNDLE_SHA256: &str = "9ceec9527c8a41887afc870b8d120967563862cb48a2b69cf4def113e27d3ee2";
+const BUNDLE_SIZE: u64 = 26;
+const BUNDLE_SHA256: &str = "bee98f4a50ec0dffa6f2795180db1bfaa4d1bc324ab5d8b9f366aed0056bc34c";
 
 /// The client declarations one package carries.
 ///
