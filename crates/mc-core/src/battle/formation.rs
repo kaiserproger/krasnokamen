@@ -888,7 +888,21 @@ impl FormationRuntime {
             && !m.wounded
             && let Some(enemy) = r.enemy
         {
-            return (enemy, 0.28);
+            // A pursuing regiment closes on the routed enemy as a block: each
+            // member aims at the enemy point shifted by its own slot's offset
+            // from the leader. One shared point for every member piled whole
+            // regiments into one cell wherever they caught up with no foe in
+            // reach (r10: 289 blue bodies within 0.4 block of each other in x
+            // on the north bound at (-174.2, 99, 316.7), from t 215 to the end).
+            let slot = position(&r.spec, m.file, m.rank, r.spec.frontage);
+            return (
+                [
+                    enemy[0] + slot[0] - r.spec.origin[0],
+                    enemy[1],
+                    enemy[2] + slot[2] - r.spec.origin[2],
+                ],
+                0.28,
+            );
         }
         let engaged = r.gap <= 6.0;
         let interval = if engaged { r.interval } else { r.spec.frontage };
