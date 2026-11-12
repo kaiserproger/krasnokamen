@@ -628,16 +628,34 @@ fn steer(
     let left = [-axis[1], axis[0]];
     // A side counts only while the body can walk along the obstacle to the
     // probe: a dead end (a canopy over a terrace edge, another trunk) closes
-    // it, so a body is not sent toward an end it cannot reach and back.
+    // it, so a body is not sent toward an end it cannot reach and back. The
+    // choice must hold while the body walks to it, or it rocks in place: the
+    // walk follows the ground it steps onto (probed at the body's own feet, an
+    // end one step up read two blocks high), and probes stand on column
+    // centres (stepped from the body's own offset, a one-block-wide end was
+    // seen from some positions in a column and missed from others). In r11
+    // both flipped the choice at the foot of a riser at (-174, 99, 316), where
+    // 143 blue foot and 22 horses ended between its open ends.
     let mut open = [true; 2];
+    let mut level = [pos[1]; 2];
+    let mut base = pos;
+    if left[0] == 0.0 {
+        base[2] = pos[2].floor() + 0.5;
+    } else {
+        base[0] = pos[0].floor() + 0.5;
+    }
     let side = (1..=AROUND)
         .find_map(|offset| {
             [side, -side].into_iter().enumerate().find_map(|(i, turn)| {
                 let lateral = [left[0] * turn, left[1] * turn];
                 let from = f64::from(offset - 1);
-                let at = [pos[0] + lateral[0] * from, pos[1], pos[2] + lateral[1] * from];
+                let at = [base[0] + lateral[0] * from, level[i], base[2] + lateral[1] * from];
                 open[i] = open[i] && crossable(world, registry, at, half_width, lateral);
-                let probe = [at[0] + lateral[0], pos[1], at[2] + lateral[1]];
+                let (x, z) = (at[0] + lateral[0], at[2] + lateral[1]);
+                if open[i] {
+                    level[i] = stand(world, registry, x, z, level[i]);
+                }
+                let probe = [x, level[i], z];
                 (open[i] && crossable(world, registry, probe, half_width, axis)).then_some(turn)
             })
         })
@@ -649,12 +667,33 @@ fn steer(
         for turn in [side, -side] {
             let s = sin * turn;
             let turned = [axis[0] * cos - axis[1] * s, axis[0] * s + axis[1] * cos];
-            if crossable(world, registry, pos, half_width, turned) {
-                return Ok(slide(world, registry, pos, half_width, turned.map(|v| v * speed)));
+            if !crossable(world, registry, pos, half_width, turned) {
+                continue;
             }
+            let out = slide(world, registry, pos, half_width, turned.map(|v| v * speed));
+            // A 45 degree turn away from the chosen side is taken for its way
+            // ahead; with that stripped by a wall at head height it only runs
+            // back along the obstacle, and the body rocked between the two
+            // (r11 riser, a body standing on the higher of two columns).
+            if turn != side && cos > 0.0 && out[0] * axis[0] + out[1] * axis[1] <= 0.0 {
+                continue;
+            }
+            return Ok(out);
         }
     }
     Err(drive)
+}
+
+/// Feet height of a body that walks onto the column under (x, z) from feet
+/// at `from`: the free cell over the ground within a step up or [`MAX_DROP`]
+/// down, else `from`.
+fn stand(world: &ChunkWorld, registry: &CoreRegistry, x: f64, z: f64, from: f64) -> f64 {
+    let (x, z) = (x.floor() as i32, z.floor() as i32);
+    let feet = (from + CONTACT).floor() as i32;
+    (feet - MAX_DROP as i32..=feet + 1)
+        .rev()
+        .find(|&y| !solid(world, registry, x, y, z) && solid(world, registry, x, y - 1, z))
+        .map_or(from, f64::from)
 }
 
 #[cfg(test)]

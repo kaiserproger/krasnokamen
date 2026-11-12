@@ -860,3 +860,87 @@ fn a_horse_rides_down_the_notch_staircase_to_its_foe() {
         );
     }
 }
+
+/// Ground heights (first air above the ground) round the r11 north-edge
+/// pile, where 143 blue foot and 22 blue horses ended at the foot of a riser
+/// at (-174, 99, 316): columns x -186..=-162 (left to right), rows z
+/// 304..=328 (top to bottom), from `receipts/BvReliefBattle/early-stack/probe.json`
+/// (no overhangs or trees in this patch). The riser between z 316 and 317 is
+/// two or three blocks high from x -182 to -169 and one block at x -168 and
+/// x -184/-183, where the hillside to the north is climbed.
+const EDGE: [[i32; 25]; 25] = [
+    [94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94],
+    [95, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94],
+    [95, 94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94],
+    [95, 95, 94, 94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94],
+    [95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 95, 95],
+    [96, 95, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95],
+    [96, 96, 96, 96, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95],
+    [98, 97, 97, 96, 96, 96, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 96, 96, 95],
+    [99, 99, 98, 97, 96, 96, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96],
+    [101, 100, 100, 100, 99, 97, 97, 96, 96, 96, 96, 96, 95, 95, 95, 95, 96, 96, 96, 96, 96, 97, 98, 97, 97],
+    [102, 102, 101, 100, 98, 98, 99, 98, 98, 97, 97, 96, 96, 96, 96, 96, 96, 96, 97, 98, 99, 99, 100, 99, 99],
+    [103, 102, 100, 98, 101, 101, 100, 100, 99, 99, 98, 98, 98, 97, 97, 97, 98, 98, 98, 99, 100, 101, 101, 101, 100],
+    [102, 100, 103, 103, 102, 102, 101, 101, 101, 100, 100, 99, 99, 99, 98, 99, 99, 99, 100, 100, 101, 101, 102, 102, 101],
+    [105, 105, 104, 104, 104, 103, 103, 103, 103, 102, 102, 102, 101, 101, 101, 101, 101, 101, 101, 102, 102, 102, 103, 102, 102],
+    [107, 107, 107, 106, 105, 105, 104, 104, 104, 104, 104, 103, 103, 102, 102, 102, 102, 102, 102, 103, 103, 103, 103, 103, 103],
+    [109, 108, 108, 108, 107, 107, 106, 106, 106, 105, 105, 104, 104, 103, 103, 103, 103, 103, 103, 103, 103, 104, 104, 103, 103],
+    [110, 109, 109, 109, 109, 108, 108, 107, 107, 107, 107, 106, 105, 104, 104, 104, 104, 104, 104, 104, 104, 104, 104, 104, 104],
+    [111, 111, 110, 110, 110, 109, 109, 109, 108, 108, 108, 108, 107, 106, 106, 106, 106, 106, 105, 106, 106, 106, 106, 105, 105],
+    [111, 111, 111, 111, 111, 110, 110, 110, 109, 109, 109, 109, 109, 108, 108, 108, 108, 108, 108, 108, 108, 108, 108, 107, 107],
+    [111, 111, 111, 111, 111, 111, 110, 110, 110, 110, 110, 110, 110, 110, 110, 109, 109, 109, 109, 109, 109, 109, 109, 109, 108],
+    [111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 109],
+    [111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 110, 110, 110, 110, 110],
+    [111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 110],
+    [111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111],
+    [111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111],
+];
+
+/// Real (x, y, z) to fixture for [`EDGE`].
+const EDGE_SHIFT: [i32; 3] = [180, -30, -220];
+
+fn edge(state: &mut TickState) {
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    for (dz, row) in EDGE.iter().enumerate() {
+        for (dx, &top) in row.iter().enumerate() {
+            let (x, z) = (-186 + dx as i32 + EDGE_SHIFT[0], 304 + dz as i32 + EDGE_SHIFT[2]);
+            let top = top + EDGE_SHIFT[1];
+            for y in 55..top + 12 {
+                state.world.set_block(x, y, z, if y < top { stone } else { air });
+            }
+        }
+    }
+    state.world.fold_overlay();
+}
+
+/// A body on foot heading north into the r11 riser walks along it to an open
+/// end (one block high, one wide: x -181 to the west, x -168 to the east) and
+/// climbs it, instead of rocking in place at its foot as its feet step up and
+/// down and its offset in the column changes.
+#[test]
+fn a_body_walks_along_a_riser_to_its_open_end() {
+    let mut state = relief_fixture();
+    edge(&mut state);
+    let (world, registry) = (&state.world, &state.registry);
+    let at = |real: [f64; 3]| [0, 1, 2].map(|axis| real[axis] + f64::from(EDGE_SHIFT[axis]));
+    for start in [[-174.3, 99.0, 316.7], [-173.0, 99.0, 316.7], [-175.2, 99.0, 316.7]] {
+        let mut pos = at(start);
+        for _ in 0..300 {
+            let drive = [0.0, 4.0];
+            let out = deflect_foot(world, registry, pos, 0.3, drive, [0.0, 20.0], 1.0);
+            let next = [
+                pos[0] + out[0] * mc_physics::TICK_SECONDS,
+                pos[1],
+                pos[2] + out[1] * mc_physics::TICK_SECONDS,
+            ];
+            if let Some(Ok(y)) = support(world, registry, next, 0.3)
+                && y <= pos[1] + 1.0
+                && clear(world, registry, [next[0], y, next[2]], 0.3, 1.95) == Some(true)
+            {
+                pos = [next[0], y, next[2]];
+            }
+        }
+        let real = [0, 1, 2].map(|axis| pos[axis] - f64::from(EDGE_SHIFT[axis]));
+        assert!(real[2] > 317.5, "from {start:?} the body stayed below the riser at {real:?}");
+    }
+}
