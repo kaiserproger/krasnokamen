@@ -294,10 +294,20 @@ index d8edce10..87685bf1 100644
          if let Some(packet) = movement {
              tracked.baseline = packet.next;
 diff --git a/crates/mc-edge/src/plan/entity_interest.rs b/crates/mc-edge/src/plan/entity_interest.rs
-index 443d79f4..10629cd5 100644
+index 443d79f4..efe08c7a 100644
 --- a/crates/mc-edge/src/plan/entity_interest.rs
 +++ b/crates/mc-edge/src/plan/entity_interest.rs
-@@ -362,6 +362,25 @@ impl EntityInterest {
+@@ -112,7 +112,8 @@ impl EntityInterest {
+                     if let Some(tracked) = viewer.tracked_entities.get(&id)
+                         && tracked.type_id == entity.type_id
+                     {
+-                        if !Arc::ptr_eq(&tracked.appearance, &entity.appearance)
++                        if tracked.resend
++                            || !Arc::ptr_eq(&tracked.appearance, &entity.appearance)
+                             || entity_movement(entity, tracked.baseline).is_some()
+                             || tracked.head_yaw != pack_degrees(entity.head_yaw)
+                         {
+@@ -362,6 +363,25 @@ impl EntityInterest {
          }
      }
  

@@ -112,7 +112,8 @@ impl EntityInterest {
                     if let Some(tracked) = viewer.tracked_entities.get(&id)
                         && tracked.type_id == entity.type_id
                     {
-                        if !Arc::ptr_eq(&tracked.appearance, &entity.appearance)
+                        if tracked.resend
+                            || !Arc::ptr_eq(&tracked.appearance, &entity.appearance)
                             || entity_movement(entity, tracked.baseline).is_some()
                             || tracked.head_yaw != pack_degrees(entity.head_yaw)
                         {
