@@ -4479,11 +4479,12 @@ title = "tellraw with a plain JSON string component (tellraw @s \"text\") shows 
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F3, 2/2, with send_command_feedback true and false). Vanilla 26.3 accepts a bare string as a text component. Cause: the SystemChat planner wrote the component with the compound-only mc_nbt::write_network and dropped a bare string or list silently; vanilla ComponentSerialization encodes plain text as a string tag (the codec is ByteBufCodecs.fromCodecTrusted, any root tag)."
-fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
-regression = ["cargo:mc-edge:plan::plan_tests::styled_chat_delivers_string_and_list_components", "harness:admin-commands:all"]
+fix_commit = "patch:67793e0ff44df09e569fb2aa01ed6b4e0f966eb1efa7af3d9e5b3351ca57db6f"
+regression = ["cargo:mc-edge:plan::plan_tests::styled_chat_delivers_string_and_list_components", "harness:entities:native-v2-command-rows"]
 failing_first = "reported"
+promotion = "docs/bugs/promotions/TELLRAW-PLAIN-STRING-COMPONENT-DROPPED.json"
 
 [[bug]]
 id = "COMMAND-BLOCK-SETBLOCK-AUTO-NEVER-RUNS"
@@ -4491,11 +4492,12 @@ title = "A command block placed by /setblock with {auto:1b} never runs; the same
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F6, 2/2; javap receipts/BreakJoinRows/javap/CommandBlockEntity.txt: loadAdditional -> setAutomatic -> scheduleTick). Cause: the neighbour update that wakes a command block runs before the block entity image is installed, and nothing scheduled the first tick after the install."
-fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
-regression = ["cargo:mc-core:command_blocks::tests::setblock_with_auto_runs_the_command_block_but_a_powered_or_chain_one_waits"]
+fix_commit = "patch:01110d16794914eb9e293df02bf4e3633c0df0f48118b80d38408859f4f98ea4"
+regression = ["cargo:mc-core:command_blocks::tests::setblock_with_auto_runs_the_command_block_but_a_powered_or_chain_one_waits", "harness:entities:native-v2-command-rows"]
 failing_first = "reported"
+promotion = "docs/bugs/promotions/COMMAND-BLOCK-SETBLOCK-AUTO-NEVER-RUNS.json"
 
 [[bug]]
 id = "SP-PLAYER-ROTATION-LOST-ON-REOPEN"
@@ -4525,11 +4527,12 @@ title = "defaultgamemode is an unknown command (vanilla DefaultGameModeCommands:
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md 'Noticed', single run). The command sets an in-memory default that players without a saved record join in; persisting it (level.dat GameType) is COMMAND-DEFAULTGAMEMODE-NOT-PERSISTED."
-fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
-regression = ["cargo:mc-core:command_context::tests::defaultgamemode_sets_the_mode_new_players_join_in", "cargo:mc-core:commands::tests::defaultgamemode_takes_exactly_one_mode_and_needs_operator"]
+fix_commit = "patch:0965bf5edd61ea165094fae17cb4a56b14b3c8dbfb95f036889fdbcc907f85ac"
+regression = ["cargo:mc-core:command_context::tests::defaultgamemode_sets_the_mode_new_players_join_in", "cargo:mc-core:commands::tests::defaultgamemode_takes_exactly_one_mode_and_needs_operator", "harness:entities:native-v2-command-rows"]
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/COMMAND-DEFAULTGAMEMODE-UNKNOWN.json"
 
 [[bug]]
 id = "COMMAND-DEFAULTGAMEMODE-NOT-PERSISTED"
@@ -4548,11 +4551,12 @@ title = "Global-command failures reached from the command context (kill/tp/effec
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (FINDINGS.md 'Noticed'; scene-shot 20261111T194930-scene-shot-13ikb1el, kill @e[type=minecraft:cow,distance=..0] and tp @s NobodyHere). Cause: command_context::run delivered Err(key) strings from dimensions::travel::execute as plain chat; now a vanilla lang key is sent as a translate component."
-fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
-regression = ["cargo:mc-core:command_context::tests::global_command_failure_reaches_the_player_as_a_translatable_key", "cargo:mc-core:command_feedback::tests::translation_keys_are_told_apart_from_english_errors"]
+fix_commit = "patch:40033192055f37f08900db10089a5ac4d01631d61c47972d5fc32fff6e251289"
+regression = ["cargo:mc-core:command_context::tests::global_command_failure_reaches_the_player_as_a_translatable_key", "cargo:mc-core:command_feedback::tests::translation_keys_are_told_apart_from_english_errors", "harness:entities:native-v2-command-rows"]
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/COMMAND-FAILURE-RAW-LANG-KEY.json"
 
 [[bug]]
 id = "COMMAND-BLOCK-SOURCE-NAME-AND-ADMIN-BROADCAST"
@@ -4560,11 +4564,12 @@ title = "A command block's say shows [Server] instead of [@], and operators get 
 area = "gameplay"
 repro = "client"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakJoinRows 2026-11-12 (FINDINGS.md F6 aside); javap CommandSourceStack.sendSuccess/broadcastToAdmins and BaseCommandBlock (default name @, shouldInformAdmins = COMMAND_BLOCK_OUTPUT). Admin broadcast is implemented for command-block sources only; player and console sources do not inform other operators yet."
-fix_commit = "8697fefd8c1222418c890cc7302373fced135070"
-regression = ["cargo:mc-core:command_blocks::tests::command_block_is_named_at_and_informs_operators_of_its_output"]
+fix_commit = "patch:4a450a9f261ef2fb286bced2b381fb5963ad1b53935274c12c3538a8f26a3149"
+regression = ["cargo:mc-core:command_blocks::tests::command_block_is_named_at_and_informs_operators_of_its_output", "harness:entities:native-v2-command-rows"]
 failing_first = "not recorded"
+promotion = "docs/bugs/promotions/COMMAND-BLOCK-SOURCE-NAME-AND-ADMIN-BROADCAST.json"
 
 [[bug]]
 id = "LOOT-GIVE-BLOCK-TABLES-UNSUPPORTED"
