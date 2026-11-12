@@ -45,6 +45,81 @@ class ProfilesTests(unittest.TestCase):
             self.assertEqual(plan[-1]["movement_hz"], movement)
             self.assertEqual(plan[-1]["edit_hz"], edits)
 
+    def test_items_layout_is_stationary_deterministic_and_inside_tracking_range(self):
+        for items in (0, 1, 7, 10000, 30000, profiles.ITEMS_MAX):
+            recipe = profiles.items_fixture(items)
+            self.assertEqual(recipe, profiles.items_fixture(items))
+            commands = [c for r in recipe["regions"] for c in r["commands"]]
+            summons = [c for c in commands if c.startswith("summon minecraft:item ")]
+            self.assertEqual(len(summons), items)
+            self.assertEqual(recipe["items"]["requested"], items)
+            self.assertEqual(sum(recipe["items"][k] for k in ("ground", "water", "pile_full", "pile_mixed")), items)
+            self.assertEqual(recipe["expected"], {})
+            self.assertEqual(recipe["observer_anchors"], [[0, 0]])
+            for command in summons:
+                x, y, z = (float(v) for v in command.split()[2:5])
+                self.assertLessEqual(max(abs(x), abs(z)), profiles.ITEMS_RANGE)
+                self.assertGreater(y, profiles.ITEMS_FLOOR_Y)
+            self.assertFalse(any(c.startswith("summon") for c in recipe["regions"][0]["commands"]))
+        with self.assertRaisesRegex(ValueError, "items must be within"):
+            profiles.items_fixture(profiles.ITEMS_MAX + 1)
+
+    def test_items_never_share_kind_with_an_overlapping_neighbour(self):
+        # Merging would shrink the population; positions closer than .75 on x (and same z) must differ in kind.
+        recipe = profiles.items_fixture(3000)
+        rows = {}
+        for command in recipe["regions"][1]["commands"]:
+            parts = command.split()
+            rows.setdefault((round(float(parts[4]), 3), round(float(parts[3]), 3) // 1 * 0), []).append(
+                (float(parts[2]), parts[5]))
+        for items in rows.values():
+            ordered = sorted(items)
+            for (xa, ka), (xb, kb) in zip(ordered, ordered[1:]):
+                if xb - xa < .75 and xb != xa:
+                    self.assertNotEqual(ka, kb)
+
+    def test_pile_classes_are_full_stacks_and_distinct_kinds(self):
+        recipe = profiles.items_fixture(1000)
+        spec = recipe["items"]["layout"]
+        summons = [c for c in recipe["regions"][1]["commands"]]
+        full = summons[spec["ground"]["count"] + spec["water"]["count"]:][:spec["pile_full"]["count"]]
+        mixed = summons[-spec["pile_mixed"]["count"]:]
+        self.assertTrue(all("count:64" in c for c in full))
+        self.assertTrue(all("count:1}" in c for c in mixed))
+        first_pile = mixed[:profiles.ITEMS_PILE]
+        self.assertEqual(len({c.split("id:")[1].split(",")[0] for c in first_pile}), profiles.ITEMS_PILE)
+
+    def test_items_profile_anchors_observers_without_edits_or_chat(self):
+        args = argparse.Namespace(profile="items-heavy", mobs=0, warmup_seconds=30, measure_seconds=120)
+        plan = profiles.schedule(args, profiles.items_fixture(10))["windows"]
+        self.assertEqual((plan[-1]["movement_hz"], plan[-1]["edit_hz"], plan[-1]["chat_hz"]), (20, 0, 0))
+
+    def test_items_population_is_checked_against_the_saved_snapshot(self):
+        recipe = profiles.items_fixture(100)
+        snapshot = {"entities": {"minecraft:item": {"active": 100}}}
+        self.assertEqual(profiles.validate_items_prepared(recipe, snapshot), 100)
+        with self.assertRaisesRegex(ValueError, "holds 99 item entities"):
+            profiles.validate_items_prepared(recipe, {"entities": {"minecraft:item": {"active": 99}}})
+        self.assertEqual(profiles.validate_items_prepared(profiles.items_fixture(0), {"entities": {}}), 0)
+
+    def test_kelp12k_names_one_preserved_world_and_the_native_100_recipe(self):
+        recipe = profiles.fixture(100000, 0)
+        self.assertEqual(profiles.load.digest(recipe),
+                         "92db3da297768ff28ba35e9e5d6da9513b8bed3dd2b3d397fe117bebe2984368")
+        self.assertEqual(profiles.PROFILES["native-100-kelp12k"], profiles.PROFILES["native-100"])
+        self.assertNotIn("native-100-kelp12k", profiles.CANONICAL_PROFILES)
+        good = {"fixture_cache": {"status": "hit"}, "fixture": {"sha256": profiles.KELP12K_WORLD_SHA256},
+                "snapshot": {"entities": {"minecraft:item": {"active": profiles.KELP12K_ITEMS}}}}
+        self.assertEqual(profiles.validate_kelp12k(profiles.KELP12K_KEY, good)["items"], profiles.KELP12K_ITEMS)
+        for broken, message in (
+                ({**good, "fixture_cache": {"status": "miss"}}, "must hit cache entry"),
+                ({**good, "fixture": {"sha256": "x"}}, "differs from the preserved"),
+                ({**good, "snapshot": {"entities": {}}}, "holds 0 item entities")):
+            with self.assertRaisesRegex(ValueError, message):
+                profiles.validate_kelp12k(profiles.KELP12K_KEY, broken)
+        with self.assertRaisesRegex(ValueError, "must hit cache entry"):
+            profiles.validate_kelp12k("other", good)
+
     def test_half_open_window_tps_and_server_only_memory(self):
         samples = [{"wall_start_unix_ns": at, "wall_us": wall} for at, wall in
                    ((999, 999999), (1000, 1000), (2000, 2000), (3000, 3000), (4000, 999999))]
@@ -848,6 +923,32 @@ class InitialMetricsTests(unittest.IsolatedAsyncioTestCase):
                     self.assertIn("saved fixture block count", result["error"])
                 if corrupt == "ammo":
                     self.assertIn("saved fixture ammunition", result["error"])
+
+
+    async def test_require_cache_hit_refuses_to_prepare_a_replacement_world(self):
+        manifest = {"head": "base", "diff_sha256": "diff", "binary_sha256": "sha"}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "cache").mkdir()
+            args = argparse.Namespace(out=root / "out", profile="native-100-kelp12k", productive_npcs=None,
+                server_bin=root / "server" / "solaris-v2", bots_bin=root / "bots" / "player-scale-bots",
+                build_receipt=root / "server" / "manifest.json", vanilla_data_dir=root, mobs=100000,
+                villagers=0, damage_victims=None, map_frames=None, churn_percent=None, daylight_zombies=None,
+                wool_sheep=None, reactive_pairs=None, xp_orbs=None, spawn_mobs=None, spawn_monsters=None,
+                xp_players=None, xp_locality=None, projectiles=None, containers=None, smoke=False,
+                prepare_only=True, readiness_seconds=1800, fixture_cache=root / "cache",
+                require_cache_hit=True, items=None, seed=42, view_distance=6)
+            async def never(*_args):
+                raise AssertionError("must not prepare")
+            with patch.object(profiles, "host_receipt", return_value={}), \
+                 patch.object(profiles, "pinned_binary", return_value=manifest), \
+                 patch.object(profiles.load, "tree_hash", return_value={"sha256": "registry"}), \
+                 patch.object(profiles.compare, "prepare", new=never):
+                self.assertEqual(await profiles.run(args), 1)
+            result = json.loads((args.out / "result.json").read_text())
+            self.assertEqual(result["status"], "failed")
+            self.assertIn("--require-cache-hit refuses to prepare", result["error"])
+            self.assertTrue(result["noncanonical"])
 
 
 if __name__ == "__main__":

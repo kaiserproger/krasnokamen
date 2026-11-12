@@ -9,6 +9,7 @@ import argparse
 import asyncio
 import copy
 import json
+import math
 import os
 from pathlib import Path
 import platform
@@ -25,7 +26,11 @@ from tools.coreperf import compare
 from tools.harness.backends import catalog_load as load
 
 PROFILES = {"idle": (0, 0, 0, 8), "explore-3": (3, 0, 0, 8), "explore-20": (20, 0, 0, 8),
-            "native-100": (100, 100000, 0, 6), "villager-heavy": (100, 100000, 20000, 6)}
+            "native-100": (100, 100000, 0, 6), "villager-heavy": (100, 100000, 20000, 6),
+            # Noncanonical many-items benchmarks (docs/performance/PROFILES.md#many-items-benchmarks):
+            # the preserved kelp-polluted native-100 world, and a synthetic sky platform with N items.
+            "native-100-kelp12k": (100, 100000, 0, 6), "items-heavy": (0, 0, 0, 8)}
+CANONICAL_PROFILES = frozenset(("idle", "explore-3", "explore-20", "native-100", "villager-heavy"))
 SCALE_PROFILES = {
     f"scale-{label}-{mix}": (count, mix)
     for label, count in (("100k", 100_000), ("500k", 500_000), ("1m", 1_000_000))
@@ -33,6 +38,23 @@ SCALE_PROFILES = {
 }
 
 PIN_ROOT = Path("/run/media/kaiserroman/games/solaris-work/pins")
+
+# native-100-kelp12k: the native-100 world as it stood after the kelp wash-out bug filled it with
+# item entities (2026-11-12, tree 931b1699 lineage). It is the native-100 recipe, so its cache key
+# equals native-100's key under the same registry; the profile only pins WHICH world that key must
+# resolve to, and refuses to prepare a fresh (clean) one in its place.
+KELP12K_CACHE = PIN_ROOT.parent / "targets/perf-fixture-cache-kelp12k"
+KELP12K_KEY = "e374422ddae0f4eb5d1b0411776207f944bb1c10b41e75d25d00b0b27f005534"
+KELP12K_WORLD_SHA256 = "f07d720e4e3d3858c28f82f70bf0e16a881b3009a99509782a87699cfecace6f"
+KELP12K_ITEMS = 12218
+
+# items-heavy geometry: a sky platform at y=199 so no natural terrain, cave or mob interferes.
+ITEMS_MAX = 36000
+ITEMS_FLOOR_Y = 199
+ITEMS_PILE = 16
+ITEMS_RANGE = 88  # items must stay inside the 6-chunk item tracking range of every observer
+ITEM_KINDS = ("cobblestone", "dirt", "sand", "gravel", "oak_planks", "spruce_planks", "birch_planks",
+              "stone", "andesite", "diorite", "granite", "coal", "iron_ingot", "gold_ingot", "stick", "apple")
 
 
 def pinned_binary(binary: Path, kind: str) -> dict[str, Any]:
@@ -136,6 +158,131 @@ def fixture(mobs: int, villagers: int) -> dict[str, Any]:
                          "weather clear", "time set 2000", "difficulty easy"]}]
         value["variant"] = "profiles-natural-terrain-no-summoned-cohort"
     return value
+
+
+def _ceil_sqrt(value: int) -> int:
+    return math.isqrt(value - 1) + 1 if value > 0 else 0
+
+
+def items_layout(items: int) -> dict[str, Any]:
+    """Class sizes and block rectangles of the items-heavy sky platform (pure arithmetic).
+
+    Four classes, 30/30/20/20 percent (the remainder joins the ground class):
+    `ground` and `water` hold two items per block cell of mutually non-mergeable kinds; the two pile
+    classes stack 16 items in one position per pile, either one kind in full stacks (stackable but
+    saturated, so the merge scan finds a same-kind candidate and moves nothing) or 16 distinct kinds
+    (never stackable). Piles sit two blocks apart. Nothing in the layout merges, so the resident
+    item count is stationary and the per-item cost is read from a constant population.
+    """
+    if not 0 <= items <= ITEMS_MAX:
+        raise ValueError(f"items must be within 0..{ITEMS_MAX}")
+    water = ground = items * 3 // 10
+    full = mixed = items // 5
+    ground += items - ground - water - full - mixed
+    side_g, side_w = _ceil_sqrt((ground + 1) // 2), _ceil_sqrt((water + 1) // 2)
+    side_f, side_m = _ceil_sqrt(-(-full // ITEMS_PILE)), _ceil_sqrt(-(-mixed // ITEMS_PILE))
+    # Quadrants around the 18x18 observer pad: ground +x/+z, pool -x/+z (plus a one-block wall ring),
+    # full piles +x/-z, mixed piles -x/-z. Piles use a two-block stride.
+    layout = {
+        "ground": {"count": ground, "x": 12, "z": 12, "side": side_g},
+        "water": {"count": water, "x": -12 - side_w, "z": 12, "side": side_w},
+        "pile_full": {"count": full, "x": 12, "z": -12 - 2 * side_f, "side": side_f},
+        "pile_mixed": {"count": mixed, "x": -12 - 2 * side_m, "z": -12 - 2 * side_m, "side": side_m},
+    }
+    reach = max(12 + side_g, 13 + side_w, 12 + 2 * side_f, 12 + 2 * side_m)
+    if reach > ITEMS_RANGE:
+        raise ValueError(f"{items} items reach {reach} blocks from the observers; the item tracking "
+                         f"range allows {ITEMS_RANGE}")
+    return layout
+
+
+def items_fixture(items: int) -> dict[str, Any]:
+    """`items` item entities on a sky platform, summoned by public commands in the last region.
+
+    Region `platform` writes the rules, a stone floor at y=199 (clearing y=200..204 above it), the
+    walled and roofed observer pad at the origin and the pool; region `items` only summons, so every
+    item ages from its summon to the end of preparation alone (an item despawns at age 6000 and
+    ages only while a player keeps its chunk active). Positions are deterministic functions of the
+    index: no randomness, no gameplay.
+    """
+    layout = items_layout(items)
+    floor = ITEMS_FLOOR_Y
+    rules = ["gamerule doMobSpawning false", "gamerule doWeatherCycle false",
+             "gamerule randomTickSpeed 3", "gamerule doDaylightCycle true",
+             "weather clear", "time set 2000", "difficulty easy", f"setworldspawn 0 {floor + 1} 0"]
+    rules += [f"kill @e[type=minecraft:{kind}]" for kind in (*compare.MOB_KINDS, "villager")]
+    platform = list(rules)
+    for x0, x1 in ((-90, -1), (0, 90)):
+        for z0, z1 in ((-90, -1), (0, 90)):
+            platform.append(f"fill {x0} {floor} {z0} {x1} {floor} {z1} minecraft:stone")
+            platform += [f"fill {x0} {y} {z0} {x1} {y} {z1} minecraft:air" for y in range(floor + 1, floor + 6)]
+    # Observer pad: 18x18 footprint, two-block walls, 14x14x7 interior, roof at floor+8.
+    platform += [f"fill -9 {floor + 1} -9 8 {floor + 8} 8 minecraft:stone",
+                 f"fill -7 {floor + 1} -7 6 {floor + 7} 6 minecraft:air"]
+    water = layout["water"]
+    if water["side"]:
+        x0, z0, side = water["x"], water["z"], water["side"]
+        platform += [f"fill {x0 - 1} {floor + 1} {z0 - 1} {x0 + side} {floor + 4} {z0 + side} minecraft:stone",
+                     f"fill {x0} {floor + 1} {z0} {x0 + side - 1} {floor + 4} {z0 + side - 1} minecraft:air",
+                     f"fill {x0} {floor + 1} {z0} {x0 + side - 1} {floor + 3} {z0 + side - 1} minecraft:water"]
+    kinds = [f"minecraft:{name}" for name in ITEM_KINDS]
+
+    def summon(x: float, y: float, z: float, kind: str, count: int) -> str:
+        return (f"summon minecraft:item {round(x, 3)} {round(y, 3)} {round(z, 3)} "
+                f"{{Item:{{id:'{kind}',count:{count}}}}}")
+
+    commands: list[str] = []
+    for name, y in (("ground", floor + 1.1), ("water", floor + 2.0)):
+        spec = layout[name]
+        for index in range(spec["count"]):
+            cell, half = divmod(index, 2)
+            cx, cz = cell % spec["side"], cell // spec["side"]
+            # Along x the items sit .5 apart with consecutive kind numbers: neighbours never share a kind.
+            commands.append(summon(spec["x"] + cx + .25 + .5 * half, y, spec["z"] + cz + .5,
+                                   kinds[(2 * cx + half) % len(kinds)], 1))
+    for name, full_stacks in (("pile_full", True), ("pile_mixed", False)):
+        spec = layout[name]
+        for index in range(spec["count"]):
+            pile, member = divmod(index, ITEMS_PILE)
+            px, pz = spec["x"] + 2 * (pile % spec["side"]) + .5, spec["z"] + 2 * (pile // spec["side"]) + .5
+            commands.append(summon(px, floor + 1.1, pz,
+                                   kinds[pile % len(kinds)] if full_stacks else kinds[member], 64 if full_stacks else 1))
+    return {"schema_version": 1, "kind": "native-v2-public-commands", "seed": 42,
+            "variant": f"items-heavy-sky-platform-{items}", "expected": {},
+            "items": {"requested": items, **{name: spec["count"] for name, spec in layout.items()},
+                      "layout": layout},
+            "observer_anchors": [[0, 0]],
+            "regions": [{"name": "platform", "anchor": [0, 0], "view_distance": 8, "commands": platform},
+                        {"name": "items", "anchor": [0, 0], "view_distance": 8, "commands": commands}],
+            "official_performance_evidence": False}
+
+
+def saved_items(snapshot: dict[str, Any]) -> int:
+    """Item entities in a native snapshot: the stationary population the benchmark is read against."""
+    return snapshot.get("entities", {}).get("minecraft:item", {}).get("active", 0)
+
+
+def validate_items_prepared(recipe: dict[str, Any], snapshot: dict[str, Any]) -> int:
+    saved = saved_items(snapshot)
+    if saved != recipe["items"]["requested"]:
+        raise ValueError(f"saved world holds {saved} item entities, recipe requested "
+                         f"{recipe['items']['requested']} (merged or despawned during preparation)")
+    return saved
+
+
+def validate_kelp12k(key: str, prepared: dict[str, Any]) -> dict[str, Any]:
+    """The named benchmark measures exactly the preserved polluted world, never a fresh one."""
+    cache = prepared.get("fixture_cache", {})
+    saved = saved_items(prepared["snapshot"])
+    world = prepared.get("fixture", {}).get("sha256")
+    if key != KELP12K_KEY or cache.get("status") != "hit":
+        raise ValueError(f"native-100-kelp12k must hit cache entry {KELP12K_KEY}, got key {key} "
+                         f"status {cache.get('status')}")
+    if world != KELP12K_WORLD_SHA256:
+        raise ValueError(f"kelp12k world hash {world} differs from the preserved {KELP12K_WORLD_SHA256}")
+    if saved != KELP12K_ITEMS:
+        raise ValueError(f"kelp12k world holds {saved} item entities, preserved world held {KELP12K_ITEMS}")
+    return {"key": key, "world_sha256": world, "items": saved}
 
 
 def scale_fixture(residents: int, mix: str, *, excluded_kinds: tuple[str, ...] = (),
@@ -1133,8 +1280,9 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             command = ["taskset", "-c", args.bot_cpus,
                        *load.bot_command(args, directory, game, args.clients, {"group_size": 1}),
                        "--open-loop", "--schedule-file", str(directory / "schedule.json")]
-            if args.mobs:
-                anchors = (recipe["stress"]["anchors"] if recipe.get("stress", {}).get("kind") == "xp-orbs" else
+            if args.mobs or recipe.get("observer_anchors"):
+                anchors = (recipe["observer_anchors"] if recipe.get("observer_anchors") else
+                           recipe["stress"]["anchors"] if recipe.get("stress", {}).get("kind") == "xp-orbs" else
                            [region["anchor"] for index, region in enumerate(recipe["regions"])
                             if "coverage" not in recipe or recipe["coverage"][index]["active"]])
                 load.scale.dump(directory / "anchors.json", [anchors[n % len(anchors)] for n in range(args.clients)])
@@ -1319,8 +1467,16 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
             raise ValueError("saved frame map identities changed during measurement")
         result["stress"] = {**recipe["stress"], "saved_filled_map_frames": len(maps_after)}
     result["cohort_counts"] = after["counts"]
+    if "items" in recipe:
+        # Items age 6000 ticks active before they despawn: a shrunken population is not the benchmark.
+        survived = saved_items(snapshot)
+        result["items_after"] = {"requested": recipe["items"]["requested"], "saved": survived}
+        if survived != recipe["items"]["requested"]:
+            raise ValueError(f"items-heavy population changed during the run: {survived} saved, "
+                             f"{recipe['items']['requested']} requested (despawn or merge); shorten the windows")
     result["status"] = "smoke" if args.smoke else "measured"
-    result["publication_evidence"] = not args.smoke and "coverage" not in recipe
+    result["publication_evidence"] = (not args.smoke and "coverage" not in recipe
+                                      and args.profile in CANONICAL_PROFILES)
     load.scale.dump(directory / "result.json", result)
     return result
 
@@ -1360,7 +1516,13 @@ async def run(args: argparse.Namespace) -> int:
         recipe = (scale_fixture(base_residents, SCALE_PROFILES[args.profile][1],
                                 excluded_kinds=excluded,
                                 active_override=0 if args.xp_orbs is not None else None)
-                  if args.profile in SCALE_PROFILES else fixture(args.mobs, args.villagers))
+                  if args.profile in SCALE_PROFILES else
+                  items_fixture(args.items) if args.profile == "items-heavy" else
+                  fixture(args.mobs, args.villagers))
+        if args.profile not in CANONICAL_PROFILES and args.profile not in SCALE_PROFILES:
+            result["noncanonical"] = True
+            result["variant"] = (recipe["variant"] if args.profile == "items-heavy"
+                                 else "native-100-kelp-polluted-world-cache")
         if args.projectiles is not None:
             add_projectile_fixture(recipe, args.projectiles, smoke=args.smoke)
         if args.xp_orbs is not None:
@@ -1403,8 +1565,16 @@ async def run(args: argparse.Namespace) -> int:
         result["conditions"]["readiness_seconds"] = args.readiness_seconds
         load.scale.dump(args.out / "fixture.json", recipe)
         key = compare.fixture_cache_key(args, recipe, result["registry"]["sha256"])
+        if getattr(args, "require_cache_hit", False) and not (args.fixture_cache / key / compare.CACHE_MARKER).is_file():
+            raise ValueError(f"fixture cache {args.fixture_cache} has no complete entry {key}; "
+                             "--require-cache-hit refuses to prepare a replacement world "
+                             "(recipe or registry content changed?)")
         world, prepared = await compare.prepare(args, args.out / "prepare", recipe, key, hashes)
         validate_prepared(recipe, prepared)
+        if args.profile == "native-100-kelp12k":
+            result["kelp12k_world"] = validate_kelp12k(key, prepared)
+        if args.profile == "items-heavy":
+            result["items_before"] = validate_items_prepared(recipe, prepared["snapshot"])
         if recipe.get("spawn_rules"):
             result["spawn_rules_before"] = validate_spawn_rules(prepared["snapshot"], recipe["spawn_rules"])
         if recipe.get("stress", {}).get("kind") == "reactive-damage":
@@ -1426,7 +1596,8 @@ async def run(args: argparse.Namespace) -> int:
         else:
             result["measurement"] = await measure(args, args.out / "run", world, recipe, prepared)
             result["status"] = "smoke" if args.smoke else "measured"
-            result["publication_evidence"] = not args.smoke and "coverage" not in recipe
+            result["publication_evidence"] = (not args.smoke and "coverage" not in recipe
+                                              and args.profile in CANONICAL_PROFILES)
     except ColdVisibilityUnavailable as error:
         result["status"] = "blocked"
         result["error"] = f"{type(error).__name__}: {error}"
@@ -1462,7 +1633,16 @@ def main() -> int:
     parser.add_argument("--bots-bin", type=Path, required=True)
     parser.add_argument("--build-receipt", type=Path, required=True)
     parser.add_argument("--out", type=Path)
-    parser.add_argument("--fixture-cache", type=Path, default=load.ROOT / ".analysis/profile-fixtures")
+    parser.add_argument("--fixture-cache", type=Path,
+                        help="shared pristine fixture cache (default: .analysis/profile-fixtures; "
+                             "native-100-kelp12k: the preserved kelp12k cache)")
+    parser.add_argument("--require-cache-hit", action="store_true",
+                        help="fail instead of preparing when the fixture cache lacks the entry "
+                             "(always on for native-100-kelp12k)")
+    parser.add_argument("--items", type=int,
+                        help=f"items-heavy only: item entities on the sky platform, 0..{ITEMS_MAX} (10000 and 30000 are the ladder)")
+    parser.add_argument("--items-bots", type=int, default=10,
+                        help="items-heavy only: observer bots on the walled pad (default 10)")
     parser.add_argument("--vanilla-data-dir", type=Path, default=load.ROOT / "data/vanilla")
     parser.add_argument("--server-cpus", default="0-7")
     parser.add_argument("--bot-cpus", default="8-11")
@@ -1513,6 +1693,10 @@ def main() -> int:
     args = parser.parse_args()
     if args.xp_orbs is None and (args.xp_players is not None or args.xp_locality is not None):
         parser.error("XP player options require --xp-orbs")
+    if args.items is not None and args.profile != "items-heavy":
+        parser.error("--items requires the items-heavy profile")
+    if args.items_bots < 1:
+        parser.error("--items-bots must be positive")
     if args.profile in SCALE_PROFILES:
         if args.remote_host:
             parser.error("scale telemetry requires a local server")
@@ -1556,6 +1740,8 @@ def main() -> int:
                 or not args.smoke and args.map_frames not in (0, 10000, 100000)):
             parser.error("map-frames must be 0, 10000 or 100000 and not exceed residents")
     else:
+        if args.profile == "items-heavy" and (args.items is None or not 0 <= args.items <= ITEMS_MAX):
+            parser.error(f"items-heavy requires --items within 0..{ITEMS_MAX}")
         if args.spawn_mobs is not None or args.spawn_monsters is not None:
             parser.error("spawn-rule controls require a scale profile")
         if args.smoke_residents is not None:
@@ -1566,6 +1752,14 @@ def main() -> int:
                                                 args.reactive_pairs)):
             parser.error("stress fixtures require a scale profile")
         args.clients, args.mobs, args.villagers, args.view_distance = PROFILES[args.profile]
+        if args.profile == "items-heavy":
+            args.clients = args.items_bots
+    if args.profile == "native-100-kelp12k":
+        args.require_cache_hit = True
+        if args.fixture_cache is None:
+            args.fixture_cache = KELP12K_CACHE
+    if args.fixture_cache is None:
+        args.fixture_cache = load.ROOT / ".analysis/profile-fixtures"
     args.seed, args.prepare_concurrency = 42, 3
     if min(args.warmup_seconds, args.measure_seconds, args.readiness_seconds, args.max_rss_mb) <= 0:
         parser.error("durations and RSS guard must be positive")

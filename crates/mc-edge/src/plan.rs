@@ -33,6 +33,7 @@ mod chunk_delta;
 mod entity_candidates;
 mod entity_interest;
 mod entity_type_flags;
+pub(crate) mod item_probe;
 mod scratch;
 mod shared_moves;
 mod tick_index;
@@ -1575,6 +1576,7 @@ fn plan_entities(
     credit: &mut usize,
 ) {
     let conn = viewer.connection;
+    let mut tally = item_probe::Tally::new();
     let previous_tick = viewer.entity_tick.replace(snapshot.tick);
     let mut interest = std::mem::take(&mut viewer.entity_interest);
     interest.prepare(snapshot, viewer, view_distance, index, scratch, *credit);
@@ -1685,6 +1687,7 @@ fn plan_entities(
             .get(&id)
             .filter(|_| repair)
             .map(|&(seat, _)| seat);
+        let introduced_from = out.len();
         let spawned = try_push(out, credit, |out| {
             if repair {
                 push_best_effort(
@@ -1730,6 +1733,7 @@ fn plan_entities(
         if !spawned {
             break;
         }
+        tally.spawned(entity.type_id, &out[introduced_from..]);
         if repair {
             viewer.untrack(id);
             interest.removed(id);
@@ -1752,6 +1756,7 @@ fn plan_entities(
             continue;
         };
         let entity = snapshot.entities.get(id).expect("visible entity");
+        let item = tally.visit(entity.type_id);
         let stale = !Arc::ptr_eq(&tracked.appearance, &entity.appearance);
         let due = interest.ready(id) || entity_movement_due(entity, snapshot.tick, previous_tick);
         let movement = if due {
@@ -1812,6 +1817,12 @@ fn plan_entities(
             interest.blocked(entity);
             viewer.entity_interest = interest;
             return;
+        }
+        if item {
+            tally.updated(
+                &out[update_start..],
+                movement.as_ref().map(|packet| packet.data.len()),
+            );
         }
         if out.len() > update_start {
             viewer.world_entities.push(id);

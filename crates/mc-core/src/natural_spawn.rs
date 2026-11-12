@@ -225,9 +225,19 @@ fn age_pass(
     if expired.is_empty() {
         return Some(slots);
     }
+    let removal_start = crate::item_perf::start();
     for &slot in expired.iter().rev() {
         changes.entities_removed.push(state.entities.body(slot).id);
         state.remove_entity(slot);
+    }
+    if let Some(started) = removal_start {
+        crate::item_perf::print_expiry(
+            state,
+            "age",
+            expired.len(),
+            expired.len(),
+            started.elapsed(),
+        );
     }
     slots.clear();
     state.serial_entity_slots = slots;
@@ -610,9 +620,28 @@ fn despawn(
     }
     // Removal swaps the last row into the hole: highest slots first.
     gone.sort_unstable_by_key(|slot| std::cmp::Reverse(slot.0));
+    let removal_start = (crate::item_perf::enabled() && !gone.is_empty()).then(|| {
+        (
+            std::time::Instant::now(),
+            gone.iter()
+                .filter(|slot| matches!(state.entities.body(**slot).kind, EntityKind::Item { .. }))
+                .count(),
+            gone.len(),
+        )
+    });
     for slot in gone {
         changes.entities_removed.push(state.entities.body(slot).id);
         state.remove_entity(slot);
+    }
+    if let Some((started, items, all)) = removal_start {
+        crate::item_perf::print_expiry(
+            state.tick,
+            state.dimension,
+            "despawn",
+            items,
+            all,
+            started.elapsed(),
+        );
     }
     slots.clear();
     state.serial_entity_slots = slots;

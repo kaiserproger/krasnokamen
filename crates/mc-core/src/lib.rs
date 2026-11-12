@@ -138,6 +138,7 @@ pub mod inventory;
 pub(crate) mod item_frame;
 pub(crate) mod item_hazards;
 pub(crate) mod item_motion;
+pub(crate) mod item_perf;
 pub mod journal;
 pub(crate) mod journal_budget;
 pub(crate) mod journal_touched;

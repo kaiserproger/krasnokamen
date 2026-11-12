@@ -115,6 +115,7 @@ pub fn publish_with_registries<'a>(
     registries: &PlanRegistries<'_>,
     chunk_cache: &mut crate::plan::ChunkPacketCache,
 ) -> Vec<AddressedPacket> {
+    let probe = crate::plan::item_probe::enabled().then(std::time::Instant::now);
     chunk_cache.retain_resident(output);
     chunk_cache.deltas.begin();
     // One delta per dimension, even if the root also lists its own projection.
@@ -130,6 +131,7 @@ pub fn publish_with_registries<'a>(
             });
     }
     let mut viewers: Vec<&mut ViewerState> = viewers.collect();
+    let index_start = probe.map(|_| std::time::Instant::now());
     let cache = &*chunk_cache;
     let indices: HashMap<_, _> = std::iter::once(output)
         .chain(output.snapshot.dimensions.values())
@@ -156,6 +158,7 @@ pub fn publish_with_registries<'a>(
             )
         })
         .collect();
+    let plan_start = probe.map(|_| std::time::Instant::now());
     let mut planned: Vec<(ConnectionId, Vec<PlannedPacket>)> = viewers
         .par_iter_mut()
         .map(|viewer| {
@@ -175,7 +178,9 @@ pub fn publish_with_registries<'a>(
             (viewer.connection, packets)
         })
         .collect();
+    let fill_start = probe.map(|_| std::time::Instant::now());
     let failed = crate::plan::fill_chunk_packets(output, &mut planned, registries, chunk_cache);
+    let fill_time = fill_start.map(|start| start.elapsed());
     for (connection, pos) in failed {
         if let Some(viewer) = viewers
             .iter_mut()
@@ -183,6 +188,35 @@ pub fn publish_with_registries<'a>(
         {
             viewer.chunk_unsent(pos);
         }
+    }
+    if let (Some(start), Some(index_start), Some(plan_start), Some(fill_start), Some(fill_time)) =
+        (probe, index_start, plan_start, fill_start, fill_time)
+    {
+        let (packets, bytes) = planned
+            .iter()
+            .fold((0u64, 0u64), |(count, bytes), (_, row)| {
+                (
+                    count + row.len() as u64,
+                    bytes
+                        + row
+                            .iter()
+                            .map(|packet| packet.data.len() as u64)
+                            .sum::<u64>(),
+                )
+            });
+        let (item_pairs, all_pairs) =
+            crate::plan::item_probe::tracked_item_pairs(viewers.iter().map(|viewer| &**viewer));
+        eprintln!(
+            "edge items: tick={} viewers={} packets={packets} bytes={bytes} item_pairs={item_pairs}              all_pairs={all_pairs} {} prelude_ms={:.3} index_ms={:.3} plan_ms={:.3} fill_ms={:.3}              total_ms={:.3}",
+            output.tick,
+            viewers.len(),
+            crate::plan::item_probe::take_line(),
+            index_start.duration_since(start).as_secs_f64() * 1000.0,
+            plan_start.duration_since(index_start).as_secs_f64() * 1000.0,
+            fill_start.duration_since(plan_start).as_secs_f64() * 1000.0,
+            fill_time.as_secs_f64() * 1000.0,
+            start.elapsed().as_secs_f64() * 1000.0,
+        );
     }
     let mut addressed = Vec::new();
     for (connection, packets) in planned {
