@@ -216,8 +216,10 @@ pub(crate) fn resolve_coords(coords: [Coord; 3], origin: [f64; 3], rotation: [f3
     })
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum GameMode {
+    #[default]
     Survival,
     Creative,
     Adventure,

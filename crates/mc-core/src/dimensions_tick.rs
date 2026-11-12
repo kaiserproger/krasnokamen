@@ -54,6 +54,11 @@ pub(crate) fn swap_globals(root: &mut TickState, world: &mut TickState) {
         &mut root.journaled_difficulty,
         &mut world.journaled_difficulty,
     );
+    std::mem::swap(&mut root.default_game_mode, &mut world.default_game_mode);
+    std::mem::swap(
+        &mut root.journaled_default_game_mode,
+        &mut world.journaled_default_game_mode,
+    );
     std::mem::swap(
         &mut root.dimension_globals.reserved_uuids,
         &mut world.dimension_globals.reserved_uuids,

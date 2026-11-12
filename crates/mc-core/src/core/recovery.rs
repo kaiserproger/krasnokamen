@@ -185,6 +185,8 @@ pub(super) fn load_dimension_state(
     replay.border.validate()?;
     tick_state.border = replay.border;
     tick_state.difficulty = replay.difficulty;
+    tick_state.default_game_mode = replay.default_game_mode;
+    tick_state.journaled_default_game_mode = Some(replay.default_game_mode);
     if let Some(climate) = replay.climate {
         climate.restore(&mut tick_state)?;
     }

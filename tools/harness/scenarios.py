@@ -314,6 +314,16 @@ SCENARIOS: dict[str, Scenario] = {
         proves="golem_detected_recently memory set at diagonal 15/15, golem heals 40->65 exactly, player melee drop strictly increases easy<normal<hard",
         limits="single golem per check; no persistence claim",
     ),
+    "native-v2-command-persist": _entry(
+        id="native-v2-command-persist", summary="/defaultgamemode survives a server restart for a fresh client; /loot give rolls a block loot table",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-command-persist",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/native_v2.py", "tools/harness/backends/native_command_persist.py",
+                 "tools/harness/backends/client_probes.py"),
+        fixture="operator player, clean server restart, one late non-operator headless client",
+        proves="after /defaultgamemode creative and a restart a client without a saved record joins in creative; /loot give @s loot minecraft:blocks/stone gives cobblestone",
+        limits="clean restart only (the WAL-only crash path is a cargo test); other loot tables (fishing, entity, trial) are not covered",
+    ),
     "native-v2-command-rows": _entry(
         id="native-v2-command-rows", summary="Command-block source name and admin broadcast, translated command failures, /defaultgamemode for a fresh client, tellraw with a bare string",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-command-rows",

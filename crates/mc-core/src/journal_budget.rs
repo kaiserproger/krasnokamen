@@ -465,6 +465,7 @@ fn entry_heap(entry: &JournalEntry) -> usize {
         | E::Climate { .. }
         | E::Border { .. }
         | E::Difficulty { .. }
+        | E::DefaultGameMode { .. }
         | E::RemoveBlockEntity { .. }
         | E::EntityVitals { .. }
         | E::RemoveEntity { .. } => 0,

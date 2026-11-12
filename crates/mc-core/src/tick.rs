@@ -466,6 +466,7 @@ pub struct TickState {
     /// World difficulty (commands).
     pub difficulty: crate::survival::Difficulty,
     pub(crate) journaled_difficulty: Option<crate::survival::Difficulty>,
+    pub(crate) journaled_default_game_mode: Option<crate::commands::GameMode>,
     /// Visible weather target and independent rain-clock duration.
     pub weather: (crate::commands::Weather, i64),
     pub(crate) thunder_remaining_ticks: i64,
@@ -714,6 +715,7 @@ impl TickState {
             // Vanilla dedicated-server default; the join sends it.
             difficulty: crate::survival::Difficulty::Easy,
             journaled_difficulty: None,
+            journaled_default_game_mode: None,
             weather: (crate::commands::Weather::Clear, 0),
             thunder_remaining_ticks: 0,
             clear_remaining_ticks: 0,
