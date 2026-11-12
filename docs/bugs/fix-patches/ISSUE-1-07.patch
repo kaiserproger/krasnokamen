@@ -1,0 +1,13 @@
+diff --git a/crates/mc-core/src/villager/brain.rs b/crates/mc-core/src/villager/brain.rs
+index 6ab551a6..2154f0ab 100644
+--- a/crates/mc-core/src/villager/brain.rs
++++ b/crates/mc-core/src/villager/brain.rs
+@@ -1108,6 +1108,8 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
+                     target
+                 } else {
+                     let target = match v.data.profession {
++                        Profession::Miner => super::mining::work(state, slot, &mut v, changes),
++                        Profession::Lumberjack => super::lumber::work(state, slot, &mut v, changes),
+                         Profession::Builder => super::building::work(state, slot, &mut v, changes)
+                             .map(|target| {
+                                 worker_exact = target.exact;
