@@ -1,52 +1,218 @@
-"""Settlement map dialog on a real client: native, or vanilla Java (`--client java`).
+"""Civil settlement UI through the real vanilla/native GUI.
 
-Reuses the scene-shot lifecycle (isolated seed-100 world, operator player, 1280x720
-window at GUI scale 3) with a scripted body and judges the client's own screenshots.
-Map cells are coloured `█` text glyphs (palette in
-`crates/mc-core/src/settlements/ui_map.rs`), so palette pixel counts show what the
-map draws on either client. Every check compares two shots of the same scene, so
-world pixels behind the dialog cancel out:
-
-1. found `mapqa` (radius 16) on a cleared stone pad and open the main page: baseline;
-2. the main page's Map button opens the map of the empty town: territory green and
-   the viewer's magenta appear;
-3. with the map still open, build a real Storage (stone floor + chest) and certify
-   it with `/settlement building certify`: the open map is a snapshot, so no storage
-   brown yet (stale shot, negative control);
-4. the map's Refresh button redraws it: the storage brown appears on its cells;
-5. Back opens the settlement main page;
-6. native only: Map again, then the real pointer path (`client_pointer`, window pixels
-   from `ui_nodes`): hovering the plain cell west of the storage shows the territory
-   tooltip, hovering a storage cell (a `link` run) shows `Storage #<seq> ...` (shot
-   `map-hover-storage`), and clicking it sends the cell's `custom` click; the server
-   answers with the Buildings page (or the building's own `#<seq> ...` page).
-
-The Loader MCP presses only buttons that are direct screen children, and vanilla
-keeps dialog grid buttons inside the body's scroll container, so on `--client java`
-steps 2, 4 and 5 send the equivalent `/settlement menu <page>` command (same server
-page) and the run is a rendering check; native presses the real buttons. The Loader
-MCP has no pointer tool, so step 6 does not run on Java; `ui_map_tests.rs` covers the
-wire payloads of hovers and clicks.
+The scene-shot lifecycle owns the server, observer, private Xvfb and pin. Fixture
+commands are recorded separately; navigation never substitutes a menu command
+for a failed click. Java's observer has no widget geometry, so dialog labels are
+located in the captured frame using the running vanilla version's bitmap font.
+Map targets are located by their rendered palette pixels, not server payloads.
 """
 from __future__ import annotations
 
+import argparse
+import ast
+import io
+import json
 import math
+import os
+import re
+import subprocess
+import sys
+import zipfile
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 from ..profiles import ProfileContext
 from . import scene_shot
 from .probe_steps import ProbeSteps
+from .native_settlement_storage import Input
+
+
+def _label_bitmap(label: str, client_jar: Path) -> Image.Image:
+    """Rasterize only the vanilla bitmap providers used by our button labels."""
+    glyphs: dict[str, tuple[Image.Image, int, int]] = {}
+    with zipfile.ZipFile(client_jar) as jar:
+        def providers(name: str) -> None:
+            namespace, path = name.split(":", 1)
+            definition = json.loads(jar.read(f"assets/{namespace}/font/{path}.json"))
+            for provider in definition["providers"]:
+                if provider["type"] == "reference":
+                    providers(provider["id"])
+                elif provider["type"] == "space":
+                    for char, advance in provider["advances"].items():
+                        glyphs.setdefault(char, (Image.new("L", (1, 1)), advance, 0))
+                elif provider["type"] == "bitmap":
+                    namespace, path = provider["file"].split(":", 1)
+                    atlas = Image.open(io.BytesIO(jar.read(f"assets/{namespace}/textures/{path}"))).convert("RGBA")
+                    rows = provider["chars"]
+                    cell_width, cell_height = atlas.width // len(rows[0]), atlas.height // len(rows)
+                    height = provider.get("height", 8)
+                    for y, row in enumerate(rows):
+                        for x, char in enumerate(row):
+                            if char in glyphs or char == "\0":
+                                continue
+                            alpha = atlas.crop((x * cell_width, y * cell_height,
+                                                (x + 1) * cell_width, (y + 1) * cell_height)).getchannel("A")
+                            box = alpha.getbbox()
+                            if box:
+                                advance = int(box[2] * height / cell_height + 0.5) + 1
+                                mask = alpha.resize((round(cell_width * height / cell_height), height),
+                                                    Image.Resampling.NEAREST).point(lambda value: 255 if value else 0)
+                                glyphs[char] = mask, advance, provider["ascent"]
+        providers("minecraft:default")
+    if any(char not in glyphs for char in label):
+        raise ValueError(f"button label has no vanilla bitmap glyph: {label!r}")
+    image = Image.new("L", (sum(glyphs[char][1] for char in label) + 2, 32))
+    x = 1
+    for char in label:
+        glyph, advance, ascent = glyphs[char]
+        image.paste(glyph, (x, 16 - ascent))
+        x += advance
+    box = image.getbbox()
+    if box is None:
+        raise ValueError("empty button label")
+    return image.crop(box)
+
+
+def _label_points(path: str, bitmap: Image.Image, scale: int) -> list[tuple[int, int]]:
+    """Find exact bright text masks; do not OCR a similar-looking label."""
+    with Image.open(path) as source:
+        source = source.convert("RGB")
+        bright = Image.new("L", source.size)
+        bright.putdata([255 if min(pixel) >= 200 and max(pixel) - min(pixel) <= 8 else 0
+                        for pixel in source.getdata()])
+    needle = bitmap.resize((bitmap.width * scale, bitmap.height * scale), Image.Resampling.NEAREST)
+    width, height = needle.size
+    row = needle.tobytes()[:width]
+    pixels = bright.tobytes()
+    points = []
+    for y in range(bright.height - height + 1):
+        line = pixels[y * bright.width:(y + 1) * bright.width]
+        x = line.find(row)
+        while x >= 0 and x + width <= bright.width:
+            crop = bright.crop((x, y, x + width, y + height))
+            if ImageChops.difference(crop, needle).getbbox() is None:
+                points.append((x + width // 2, y + height // 2))
+            x = line.find(row, x + 1)
+    return points
+
+
+def _slot_point(size: tuple[int, int], scale: int, rows: int, slot: int) -> tuple[int, int]:
+    """Vanilla ChestMenu/ContainerScreen geometry, in owned-window pixels."""
+    if rows not in range(1, 7) or not 0 <= slot < rows * 9 + 36:
+        raise ValueError(f"not a visible chest slot: rows={rows}, slot={slot}")
+    width, height = (math.ceil(side / scale) for side in size)
+    left, top = (width - 176) // 2, (height - (114 + rows * 18)) // 2
+    chest = rows * 9
+    if slot < chest:
+        x, y = 16 + slot % 9 * 18, 26 + slot // 9 * 18
+    else:
+        index = slot - chest
+        x = 16 + index % 9 * 18
+        y = rows * 18 + (39 + index // 9 * 18 if index < 27 else 97)
+    return (left + x) * scale, (top + y) * scale
+
+
+class Gui:
+    """Input into the lifecycle-owned window, with received-state postconditions."""
+
+    def __init__(self, probe: ProbeSteps, artifact: Path, client: str, scale: int = 3,
+                 size: tuple[int, int] = (1280, 720)):
+        self.probe, self.artifact, self.client, self.scale, self.size = probe, artifact, client, scale, size
+        owned = getattr(probe.client, "p4_window", None)
+        if not owned:
+            raise RuntimeError("civil GUI requires the lifecycle-owned Xvfb window")
+        self.input = Input(owned)
+        self.capture = scene_shot.capture_java if client == "java" else scene_shot.capture_native
+        home = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
+        version = os.environ.get("SOLARIS_JAVA_VERSION", "26.1.2")
+        metadata = Path(os.environ.get("SOLARIS_JAVA_VERSION_METADATA",
+                                      home / "caches/fabric-loom" / version / "mojang_minecraft_info.json"))
+        self.jar = Path(os.environ.get("SOLARIS_CLIENT_JAR", metadata.parent / "minecraft-client.jar"))
+        self.labels: dict[str, Image.Image] = {}
+        self.serial = 0
+
+    def button(self, label: str) -> None:
+        state = self.probe.observe()
+        self.serial += 1
+        frame = self.capture(self.probe, self.artifact, f"civil-click-{self.serial:03d}")
+        if scene_shot.png_size(frame) != self.size:
+            raise RuntimeError(f"GUI frame {frame} has wrong window size; expected {self.size}")
+        if self.client == "native":
+            found = [node for node in state.get("ui_nodes", [])
+                     if node.get("role") == "button" and node.get("label") == label and node.get("enabled")]
+            points = [(round(node["bounds"][0] + node["bounds"][2] / 2),
+                       round(node["bounds"][1] + node["bounds"][3] / 2)) for node in found]
+        else:
+            if label not in self.labels:
+                self.labels[label] = _label_bitmap(label, self.jar)
+            points = _label_points(frame, self.labels[label], self.scale)
+        if not points:
+            raise RuntimeError(f"visible GUI button {label!r} not found; frame={frame}")
+        # A dialog title/body may repeat the action label. Actions are below the
+        # body; duplicated Back/exit actions have the same destination.
+        point = max(points, key=lambda point: point[1])
+        self.probe.report.setdefault("gui_clicks", []).append(
+            {"label": label, "point": point, "frame": frame, "screen": state.get("screen")})
+        self.input.click(point)
+
+    def text_visible(self, label: str, frame: str) -> bool:
+        if self.client == "native":
+            for node in self.probe.observe().get("ui_nodes", []):
+                if node.get("role") == "text" and node.get("label") == label:
+                    x, y, width, height = node["bounds"]
+                    if (x >= 0 and y >= 0 and width > 0 and height > 0
+                            and x + width <= self.size[0] and y + height <= self.size[1]):
+                        return True
+            return False
+        return bool(_label_points(frame, _label_bitmap(label, self.jar), self.scale))
+
+    def slot(self, slot: int, *, shift: bool = False) -> None:
+        state = self.probe.observe()
+        container = state.get("container") or {}
+        if container.get("menu_class") != "net.minecraft.world.inventory.ChestMenu":
+            raise RuntimeError(f"not a visible ChestMenu: {state.get('screen')}")
+        if self.client == "native":
+            node = next((node for node in state.get("ui_nodes", []) if node.get("id") == f"slot/{slot}"), None)
+            if node is None:
+                raise RuntimeError(f"visible slot/{slot} not observed")
+            x, y, width, height = node["bounds"]
+            point = round(x + width / 2), round(y + height / 2)
+        else:
+            rows = (container["slot_count"] - 36) // 9
+            point = _slot_point(self.size, self.scale, rows, slot)
+        self.probe.report.setdefault("gui_clicks", []).append(
+            {"slot": slot, "shift": shift, "point": point, "screen": state.get("screen")})
+        if not shift:
+            self.input.click(point)
+            return
+        # SDL may pump the whole X event batch before invoking the mouse callback.
+        # Keep the physical modifier down until the received container acknowledges it.
+        self.input._key("Shift_L", True)
+        try:
+            self.input.click(point)
+            self.probe.wait(lambda received: received.get("container") != container,
+                            f"GUI shift slot/{slot} applied", timeout_seconds=30)
+        finally:
+            self.input._key("Shift_L", False)
+
+    def escape(self) -> None:
+        self.input.tap("Escape")
+        self.probe.wait(lambda state: not (state.get("screen") or {}).get("open"), "GUI closed")
+
+    def close(self) -> None:
+        self.input.close()
 
 DIALOG = "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen"
+CONTAINER = "net.minecraft.client.gui.screens.inventory.ContainerScreen"
 NAME = "mapqa"
-RADIUS = 16
+RADIUS = 64
 PALETTE = {
     "territory": (0x4C, 0x7A, 0x34),
     "you": (0xFF, 0x55, 0xFF),
     "storage": (0x9C, 0x6B, 0x30),
+    "house": (0xE3, 0xC0, 0x8D),
 }
 TOLERANCE = 12
 # Smallest plausible cell: one 8x8 glyph at GUI scale 1. The real cell size is
@@ -55,7 +221,22 @@ MIN_CELL = 8 * 8
 
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
-    return scene_shot.run(ctx, scenario={"steps": []}, script=_script)
+    parser = argparse.ArgumentParser(prog="settlement-map-qa")
+    parser.add_argument("--gui-scale", type=int, choices=(2, 3), default=3)
+    parser.add_argument("--language", choices=("en_us", "ru_ru"), default="en_us")
+    parser.add_argument("--size", choices=("1280x720", "1920x1080"), default="1280x720")
+    parser.add_argument("--wrong-click", action="store_true",
+                        help="negative control: click Help instead of Settlement")
+    extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
+    args = parser.parse_args(extra)
+    if ctx.client != "java" and (args.gui_scale != 3 or args.language != "en_us" or args.size != "1280x720"):
+        raise ValueError("civil display variants require --client java")
+    settings = {"gui_scale": args.gui_scale, "language": args.language,
+                "screen_size": list(map(int, args.size.split("x")))} if ctx.client == "java" else {}
+    def script(probe, artifact, steps, client):
+        return _script(probe, artifact, steps, client, args)
+    return scene_shot.run(ctx, scenario={"steps": [], "java_plain": ctx.client == "java",
+                                         "client_settings": settings}, script=script)
 
 
 def _near(pixel: tuple[int, ...], color: tuple[int, int, int]) -> bool:
@@ -108,120 +289,489 @@ def _command(probe: ProbeSteps, command: str, expect: str) -> None:
                f"chat {expect}", timeout_seconds=30)
 
 
-def _dialog(probe: ProbeSteps, title: str) -> None:
-    probe.wait(lambda state: bool((state.get("screen") or {}).get("open"))
-               and state["screen"].get("class") == DIALOG
-               and str(state["screen"].get("title", "")) == title,
-               f"dialog {title}", timeout_seconds=30)
+def _enter_hub(probe: ProbeSteps, gui: Gui, bell: list[int], title: str) -> None:
+    # Native villagers can push the standing survival player while a menu is open.
+    player = probe.observe()["player"]
+    dx, dz = bell[0] + .5 - player["x"], bell[2] + .5 - player["z"]
+    dy = bell[1] + .5 - (player["y"] + 1.62)
+    probe.call("minecraft_look", {
+        "yaw_deg": round(math.degrees(math.atan2(-dx, dz))),
+        "pitch_deg": round(-math.degrees(math.atan2(dy, math.hypot(dx, dz)))),
+    })
 
+    def on_bell(state: dict[str, Any]) -> bool:
+        target = state.get("target") or {}
+        return target.get("block_id") == "minecraft:bell" and [target.get(axis) for axis in ("x", "y", "z")] == bell
 
-def _go(probe: ProbeSteps, client: str, title: str, label: str, page: str, next_title: str) -> None:
-    """Press `label` on the open dialog (native), or send the command that opens
-    the same server page (Java, see the module note)."""
-    if client == "java":
-        probe.fixture(f"settlement menu {page}")
+    probe.wait(on_bell, "GUI bell target", timeout_seconds=30)
+    # The path re-enters the hub; the native client refuses to overwrite a retained frame.
+    gui.serial += 1
+    frame = gui.capture(probe, gui.artifact, f"civil-bell-target-{gui.serial:03d}")
+    # Java 26.1.2 observed no crosshair target right after a screenshot, and a click
+    # in that window used nothing. Press only on a target received after the frame.
+    state = probe.wait(on_bell, "GUI bell target before click", timeout_seconds=30)
+    point = (gui.size[0] // 2, gui.size[1] // 2)
+    probe.report.setdefault("gui_clicks", []).append(
+        {"bell_pixel": point, "target": state["target"], "time": state.get("time"), "frame": frame})
+    if gui.client == "native":
+        # World use is sampled by the Native client's tick, unlike GUI press edges.
+        gui.input.move(*point)
+        gui.input._button(3, True)
+        try:
+            _dialog(probe, title)
+        finally:
+            gui.input._button(3, False)
     else:
-        probe.call("minecraft_click_screen_button", {
-            "expected_screen_class": DIALOG, "expected_title": title, "button_label": label,
-        })
-    # A click closes the dialog on the client; the server answers with the next one.
-    probe.call("minecraft_wait_ticks", {"ticks": 20})
-    _dialog(probe, next_title)
+        gui.input.click(point, button=3)
+        _dialog(probe, title)
 
 
-def _opened_building(state: dict[str, Any], seq: str) -> bool:
-    """The server answered a building cell click: the Buildings page, or the per-building
-    page (title `#<seq> <kind> L<level>`) when that page handles `b`."""
-    screen = state.get("screen") or {}
-    title = str(screen.get("title", ""))
-    return bool(screen.get("open")) and (title == f"Buildings - {NAME}" or title.startswith(f"#{seq} "))
+def _dialog(probe: ProbeSteps, title: str) -> dict[str, Any]:
+    return probe.wait(lambda state: bool((state.get("screen") or {}).get("open"))
+                      and ".screens.dialog." in state["screen"].get("class", "")
+                      and state["screen"].get("title") == title,
+                      f"GUI dialog {title}", timeout_seconds=30)
 
 
-def _cells(probe: ProbeSteps, map_title: str, shot: Callable[[str], Any]) -> None:
-    """Native step 6: hover a territory cell and a storage cell, then click the storage."""
-    nodes = probe.observe().get("ui_nodes", [])
-    links = [node for node in nodes if node.get("role") == "link"
-             and str(node.get("id", "")).startswith("dialog/body/0/action/")]
-    probe.report["map_links"] = len(links)
-    probe.check("building_cells_clickable", bool(links))
-    left, top, width, height = links[0]["bounds"]
-    storage = (left + width / 2, top + height / 2)
-
-    def pointer(action: str, at: tuple[float, float]) -> str:
-        result = probe.call("client_pointer", {
-            "expected_screen_class": DIALOG, "expected_title": map_title,
-            "action": action, "x": at[0], "y": at[1],
-        })
-        return str(result.get("tooltip") or "")
-
-    # Cells are square, so a run's height is one cell: step one cell west of the storage.
-    territory = pointer("move", (left - height / 2, top + height / 2))
-    probe.report["territory_tooltip"] = territory
-    probe.check("territory_cell_tooltip", territory == f"Territory, radius {RADIUS}")
-    tooltip = pointer("move", storage)
-    probe.report["storage_tooltip"] = tooltip
-    probe.check("storage_cell_tooltip", tooltip.startswith("Storage #"))
-    shot("map-hover-storage")
-    seq = tooltip.split("#", 1)[1].split()[0]
-    pointer("click", storage)
-    probe.call("minecraft_wait_ticks", {"ticks": 20})
-    probe.wait(lambda state: _opened_building(state, seq), "storage_cell_click_opens_building",
-               timeout_seconds=30)
-    shot("map-cell-click")
+def _menu(probe: ProbeSteps, title: str) -> dict[str, Any]:
+    return probe.wait(lambda state: (state.get("screen") or {}).get("class") == CONTAINER
+                      and str(state["screen"].get("title", "")).startswith(title)
+                      and (state.get("container") or {}).get("slot_count") == 90,
+                      f"GUI menu {title}", timeout_seconds=30)
 
 
-def _script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str) -> list[str]:
-    capture = scene_shot.capture_java if client == "java" else scene_shot.capture_native
-    shots: list[str] = []
-    counts: dict[str, dict[str, int]] = probe.report.setdefault("map_pixels", {})
+def _enter_dashboard(probe: ProbeSteps, gui: Gui, label: str, title: str,
+                     wrong_click: bool = False, help_label: str = "Help") -> dict[str, Any]:
+    gui.button(help_label if wrong_click else label)
+    return _menu(probe, title)
 
-    def shot(name: str) -> dict[str, int]:
-        probe.call("minecraft_wait_ticks", {"ticks": 10})
-        path = capture(probe, artifact, name)
-        shots.append(path)
-        counts[name] = _pixels(path)
-        return counts[name]
 
-    for command in ("gamerule advance_time false", "gamerule spawn_mobs false",
-                    "time set 6000", "weather clear"):
+def _palette_point(path: str, color: tuple[int, int, int]) -> tuple[int, int]:
+    """A real pixel in the largest rendered map-colour component."""
+    with Image.open(path) as source:
+        width = source.width
+        left = {index for index, pixel in enumerate(source.convert("RGB").getdata()) if _near(pixel, color)}
+    best: list[int] = []
+    while left:
+        todo = [left.pop()]
+        component = []
+        while todo:
+            index = todo.pop()
+            component.append(index)
+            x = index % width
+            for neighbour in (index - width, index + width,
+                              index - 1 if x else -1, index + 1 if x + 1 < width else -1):
+                if neighbour in left:
+                    left.remove(neighbour)
+                    todo.append(neighbour)
+        if len(component) > len(best):
+            best = component
+    if not best:
+        raise RuntimeError(f"map colour {color} not rendered: {path}")
+    mean_x = sum(index % width for index in best) / len(best)
+    mean_y = sum(index // width for index in best) / len(best)
+    index = min(best, key=lambda index: (index % width - mean_x) ** 2 + (index // width - mean_y) ** 2)
+    return index % width, index // width
+
+
+def _needs(state: dict[str, Any]) -> dict[str, int]:
+    result = {}
+    for row in (state.get("container") or {}).get("slots", []):
+        if 27 <= row["slot"] < 45:
+            match = re.search(r" ×(\d+)$", str(row.get("name", "")))
+            item = row.get("item_id")
+            if match and int(match[1]) > 0 and isinstance(item, str) and re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", item):
+                result[item] = int(match[1])
+    return result
+
+
+def _held(state: dict[str, Any], item: str) -> int:
+    return sum(int(row["count"]) for row in state["container"]["slots"]
+               if row["slot"] >= 54 and row.get("item_id") == item)
+
+
+def _stored(state: dict[str, Any], item: str) -> int:
+    for row in state["container"]["slots"]:
+        if row["slot"] < 45 and row.get("item_id") == item:
+            count = re.search(r"×(\d+)$", str(row.get("name", "")))
+            if count:
+                return int(count[1])
+    return 0
+
+
+def _world(probe: ProbeSteps, bounds: list[int]) -> dict[tuple[int, int, int], str]:
+    """Observe every cell using the bounds API shared by vanilla Java and native."""
+    minimum = [bounds[0] - 4, bounds[1], bounds[2] - 4]
+    maximum = [bounds[3] + 4, bounds[4], bounds[5] + 4]
+    blocks = {}
+
+    def scan(lo: list[int], hi: list[int]) -> None:
+        arguments = {f"{edge}_{axis}": position[index]
+                     for edge, position in (("min", lo), ("max", hi))
+                     for index, axis in enumerate(("x", "y", "z"))}
+        page = probe.call("minecraft_scan_blocks", {**arguments, "max_blocks": 4096})
+        following = page.get("next_offset")
+        if following is not None:
+            if type(following) is not int or following <= 0:
+                raise RuntimeError("civil upgrade scan pagination did not advance")
+            # Native responses are byte-bounded. Java has no offset argument:
+            # split the spatial box instead, retaining the same complete oracle.
+            axis = max(range(3), key=lambda axis: hi[axis] - lo[axis])
+            if lo[axis] == hi[axis]:
+                raise RuntimeError("civil upgrade scan truncated a single cell")
+            middle = (lo[axis] + hi[axis]) // 2
+            lower, upper = hi.copy(), lo.copy()
+            lower[axis], upper[axis] = middle, middle + 1
+            scan(lo, lower)
+            scan(upper, hi)
+        else:
+            blocks.update(((row["x"], row["y"], row["z"]), row["block_id"])
+                          for row in page["blocks"])
+
+    scan(minimum, maximum)
+    volume = math.prod(hi - lo + 1 for lo, hi in zip(minimum, maximum))
+    if len(blocks) != volume:
+        raise RuntimeError(f"civil upgrade world scan incomplete: {len(blocks)}/{volume}")
+    return blocks
+
+
+def _house_cells(blueprint: dict[str, Any], level: int, origin: list[int], turns: int,
+                 bed: str) -> dict[tuple[int, int, int], str]:
+    from .village_autonomy_qa import _rotate_blueprint_xz
+    layers = blueprint["levels"][level - 1]["layers"]
+    width = max(len(candidate["layers"][0][0]) for candidate in blueprint["levels"])
+    depth = max(len(candidate["layers"][0]) for candidate in blueprint["levels"])
+    cells = {}
+    for y, layer in enumerate(layers):
+        for z, row in enumerate(layer):
+            for x, symbol in enumerate(row):
+                if symbol == ".":
+                    continue
+                block = blueprint["palette"][symbol].split("[", 1)[0]
+                block = block if ":" in block else f"minecraft:{block}"
+                if block.endswith("_bed"):
+                    block = bed
+                rx, rz = _rotate_blueprint_xz(x, z, width, depth, turns)
+                cells[(origin[0] + rx, origin[1] + y, origin[2] + rz)] = block
+    return cells
+
+
+def _progress_matches_world(progress: tuple[int, int] | None,
+                            before: dict[tuple[int, int, int], str],
+                            after: dict[tuple[int, int, int], str],
+                            expected: dict[tuple[int, int, int], str], ground: int) -> bool:
+    if progress is None or not 0 < progress[0] <= progress[1]:
+        return False
+    placed = any(at[1] > ground and before.get(at) != block and after.get(at) == block
+                 for at, block in expected.items())
+    complete = all(after.get(at) == block for at, block in expected.items())
+    return placed and (progress[0] < progress[1] or complete)
+
+
+def _progress(state: dict[str, Any]) -> tuple[int, int] | None:
+    for row in state["container"]["slots"]:
+        if 18 <= row["slot"] < 27:
+            match = re.fullmatch(r"(\d+)/(\d+)", row.get("name", ""))
+            if match:
+                return int(match[1]), int(match[2])
+    return None
+
+
+def _wait_for_world_progress(probe: ProbeSteps, gui: Gui, state: dict[str, Any],
+                             before: dict[tuple[int, int, int], str],
+                             expected: dict[tuple[int, int, int], str], scan_bounds: list[int],
+                             projects_title: str, construction_title: str) -> tuple[int, int]:
+    progress = None
+    world_matches = False
+    # Client ticks do not count native worker work; the scenario deadline bounds
+    # ProbeSteps.call, just as for the authored L1 prerequisite below.
+    while True:
+        progress = _progress(state)
+        if progress and progress[0] > 0:
+            after = _world(probe, scan_bounds)
+            world_matches = _progress_matches_world(progress, before, after, expected, scan_bounds[1])
+            probe.report.setdefault("world_progress_samples", []).append({
+                "counter": list(progress),
+                "changed_matching_cells": sum(before.get(at) != block and after.get(at) == block
+                                              for at, block in expected.items() if at[1] > scan_bounds[1]),
+                "complete": all(after.get(at) == block for at, block in expected.items()),
+            })
+            if world_matches or progress[0] >= progress[1]:
+                break
+        probe.call("minecraft_wait_ticks", {"ticks": 40})
+        gui.slot(45)
+        _menu(probe, projects_title)
+        gui.slot(52)
+        state = _menu(probe, construction_title)
+    probe.check("GUI_native_progress_advanced", bool(progress and progress[0] > 0))
+    probe.check("GUI_progress_matches_independent_placed_blocks", world_matches)
+    return progress
+
+
+def _setup(probe: ProbeSteps) -> tuple[list[int], int, list[int]]:
+    """Privileged prerequisites, explicitly not civil GUI behaviour evidence."""
+    from .buildings_qa import _chunked_fills
+
+    probe.report["setup_not_asserted"] = [
+        "creative-only private pad preparation, then survival before settlement/player actions",
+        "founded owned settlement, bell, certified physical funding chest",
+        "summoned/bound residents and command-requested/funded authored House L1",
+        "cleared fixture storage and inventory; later give commands supply test items",
+        "building-list commands below wait only for the authored L1 prerequisite",
+    ]
+    for command in ("gamemode creative @s", "gamerule advance_time false",
+                    "gamerule spawn_mobs false", "time set 6000", "weather clear", "clear @s"):
         probe.fixture(command)
     me = probe.observe(wait_for_play=True)["player"]
-    x, y, z = (math.floor(float(me[axis])) for axis in ("x", "y", "z"))
-    probe.report["anchor"] = [x, y, z]
-    probe.fixture(f"fill {x - 4} {y - 1} {z - 4} {x + 8} {y - 1} {z + 8} minecraft:stone")
-    probe.fixture(f"fill {x - 4} {y} {z - 4} {x + 8} {y + 5} {z + 8} minecraft:air")
+    x, z = (math.floor(float(me[axis])) for axis in ("x", "z"))
+    y = 201
+    probe.fixture(f"tp @s {x + .5} {y} {z - 2.0}")
+    for command in _chunked_fills(x - 64, y - 2, z - 64, x + 64, y - 2, z + 64, "minecraft:dirt"):
+        probe.fixture(command)
+    for command in _chunked_fills(x - 64, y - 1, z - 64, x + 64, y - 1, z + 64, "minecraft:grass_block"):
+        probe.fixture(command)
+    for command in _chunked_fills(x - 64, y, z - 64, x + 64, y + 24, z + 64, "minecraft:air"):
+        probe.fixture(command)
+    probe.fixture(f"tp @s {x + .5} {y} {z + .5}")
+    probe.wait(lambda state: all(state.get("player", {}).get(axis) == expected
+                                for axis, expected in (("x", x + .5), ("y", y), ("z", z + .5))),
+               "fixture_founder_at_anchor", timeout_seconds=30)
+    probe.fixture("gamemode survival @s")
     _command(probe, f"settlement create {NAME} {RADIUS}", f"Founded {NAME}")
-    main_title, map_title = f"Settlement {NAME}", f"Map - {NAME}"
-
-    probe.fixture("settlement menu main")
-    _dialog(probe, main_title)
-    baseline = shot("main-baseline")
-    baseline_shot = shots[-1]
-    _go(probe, client, main_title, "Map", "map", map_title)
-    empty = shot("map-empty")
-    # One glyph's area calibrates the rest: the largest new magenta patch is the viewer's cell.
-    # The whole-screen magenta delta would also count the "You" legend swatch (two glyphs).
-    cell = _largest_patch(shots[-1], PALETTE["you"], baseline_shot)
-    probe.report["cell_pixels"] = cell
-    probe.report["you_pixels_delta"] = empty["you"] - baseline["you"]
-    probe.check("viewer_drawn", cell >= MIN_CELL)
-    # Radius 16 at 2 blocks per cell: ~200 territory cells.
-    probe.check("territory_drawn", empty["territory"] - baseline["territory"] >= 50 * cell)
-
-    # Storage L1: solid 3x3 floor (the pad), 4 blocks high, one chest.
-    probe.fixture(f"setblock {x + 5} {y} {z + 5} minecraft:chest")
-    _command(probe, f"settlement building certify storage {x + 4} {y - 1} {z + 4} {x + 6} {y + 2} {z + 6}",
+    _command(probe, f"settlement info {NAME}", f"anchor=[{x}, {y}, {z}]")
+    probe.fixture(f"setblock {x} {y} {z} minecraft:bell")
+    chest = [x + 20, y, z + 20]
+    probe.fixture(f"setblock {chest[0]} {chest[1]} {chest[2]} minecraft:chest")
+    _command(probe, f"settlement building certify storage {x + 19} {y - 1} {z + 19} {x + 21} {y + 2} {z + 21}",
              "Certified storage #")
-    stale = shot("map-stale")
-    probe.check("open_map_is_a_snapshot", stale["storage"] - empty["storage"] < cell // 4)
-    _go(probe, client, map_title, "Refresh", "map", map_title)
-    refreshed = shot("map-refreshed")
-    # The 3x3 storage spans 2x2 cells of 2x2 blocks.
-    probe.check("storage_drawn_after_refresh", refreshed["storage"] - stale["storage"] >= 2 * cell)
-    probe.check("territory_kept_after_refresh", refreshed["territory"] - baseline["territory"] >= 50 * cell)
+    # Empty funding queues the owner request before residents can autonomously
+    # select another project; all fixture stock then serves that native request.
+    probe.fixture("settlement build house")
+    taken: set[str] = set()
+    candidates: list[dict[str, Any]] = []
 
-    _go(probe, client, map_title, "Back", "main", main_title)
-    if client != "java":
-        _go(probe, client, main_title, "Map", "map", map_title)
-        _cells(probe, map_title, shot)
-    return shots
+    def arrived(_state: dict[str, Any]) -> bool:
+        nonlocal candidates
+        entities = probe.call("minecraft_list_entities", {"radius": 64})
+        candidates = [entity for entity in entities.get("entities", entities.get("visible_entities", []))
+                      if "villager" in str(entity.get("entity_type", entity.get("type", "")))
+                      and entity.get("entity_uuid") not in taken]
+        return bool(candidates)
+
+    for index in range(6):
+        probe.fixture(f"summon minecraft:villager {x + 5.5 + index} {y} {z + 5.5}")
+        probe.wait(arrived, f"fixture_villager_{index}_received", timeout_seconds=30)
+        worker = str(candidates[0]["entity_uuid"])
+        taken.add(worker)
+        probe.fixture(f"settlement bind {NAME} {worker}")
+    materials = subprocess.run(
+        [sys.executable, str(scene_shot.runtime.REPO_ROOT / "tools/blueprints.py"), "materials", "house"],
+        check=True, capture_output=True, text=True, cwd=scene_shot.runtime.REPO_ROOT,
+    )
+    base = next(ast.literal_eval(line.split("base", 1)[1].strip())
+                for line in materials.stdout.splitlines() if "L1:" in line and "base" in line)
+    slot = 0
+    for item, count in sorted(base.items()):
+        remaining = math.ceil(count * 1.5) + 1
+        while remaining:
+            amount = min(64, remaining)
+            if slot >= 27:
+                raise RuntimeError("House L1 fixture exceeds physical funding chest")
+            probe.fixture(f"item replace block {' '.join(map(str, chest))} container.{slot} with minecraft:{item} {amount}")
+            remaining -= amount
+            slot += 1
+    building = None
+    # wait_ticks counts client ticks, not completed native construction work.
+    # ProbeSteps.call enforces the scenario deadline while certification is absent.
+    while True:
+        probe.call("minecraft_wait_ticks", {"ticks": 100})
+        probe.fixture("settlement building list")
+        probe.call("minecraft_wait_ticks", {"ticks": 5})
+        chat = "\n".join(map(str, probe.observe().get("recent_chat", [])))
+        match = re.search(
+            r"#(\d+)\s+house\s+level\s+1\s+\[(-?\d+),\s*(-?\d+),\s*(-?\d+)\]"
+            r"-\[(-?\d+),\s*(-?\d+),\s*(-?\d+)\]", chat, re.IGNORECASE)
+        if match:
+            building = int(match[1])
+            bounds = list(map(int, match.groups()[1:]))
+            break
+    for slot in range(27):
+        probe.fixture(f"item replace block {' '.join(map(str, chest))} container.{slot} with minecraft:air")
+    probe.fixture("clear @s")
+    probe.fixture(f"tp @s {x + .5} {y} {z - 2.0}")
+    # A late teleport packet also restores its camera angles. Receive it before
+    # aiming at the bell, rather than letting it overwrite the GUI approach look.
+    probe.wait(lambda state: all(state.get("player", {}).get(axis) == expected
+                                for axis, expected in (("x", x + .5), ("y", y), ("z", z - 2.0))),
+               "fixture_bell_approach_received", timeout_seconds=30)
+    probe.report["fixture"] = {"bell": [x, y, z], "funding_chest": chest,
+                               "authored_house": building, "house_bounds": bounds}
+    return [x, y, z], building & 0xFFFF_FFFF, bounds
+
+
+def _script(probe: ProbeSteps, artifact: Path, _steps: list[dict[str, Any]], client: str,
+            args: argparse.Namespace) -> list[str]:
+    size = tuple(map(int, args.size.split("x")))
+    scene_shot.resize_window(probe.client.p4_window, size)
+    gui = Gui(probe, artifact, client, args.gui_scale, size)
+    shots: list[str] = []
+    ru = args.language == "ru_ru"
+    label = lambda en, russian: russian if ru else en
+    probe.report["civil_display"] = {"size": size, "gui_scale": args.gui_scale, "language": args.language}
+    probe.report["negative_control"] = args.wrong_click
+
+    def shot(name: str) -> str:
+        probe.call("minecraft_wait_ticks", {"ticks": 2})
+        path = gui.capture(probe, artifact, name)
+        probe.check(f"{name}_dimensions", scene_shot.png_size(path) == size)
+        shots.append(path)
+        return path
+
+    def hub() -> None:
+        _enter_hub(probe, gui, _bell, f"Поселение {NAME}" if ru else f"Settlement {NAME}")
+
+    def dashboard() -> None:
+        _enter_dashboard(probe, gui, label("Settlement", "Поселение"), label("Settlement", "Поселение"),
+                         args.wrong_click, label("Help", "Помощь"))
+
+    def project() -> dict[str, Any]:
+        gui.slot(30)
+        _menu(probe, label("Projects", "Стройка"))
+        gui.slot(52)
+        return _menu(probe, label("Construction", "Строительство"))
+
+    try:
+        _bell, seq, bounds = _setup(probe)
+        from .buildings_qa import _load_blueprints
+        from .village_autonomy_qa import _blueprint_placements
+        blueprint = _load_blueprints()["house"]
+        scan_bounds = list(bounds)
+        scan_bounds[4] = bounds[1] + max(len(level["layers"]) for level in blueprint["levels"][:2]) - 1
+        before_world = _world(probe, scan_bounds)
+        beds = {block for at, block in before_world.items()
+                if bounds[0] <= at[0] <= bounds[3] and bounds[2] <= at[2] <= bounds[5]
+                and block.endswith("_bed")}
+        if len(beds) != 1:
+            raise RuntimeError(f"authored House fixture has no unique native bed variant: {beds}")
+        record = {"id": seq, "level": 1, "min": bounds[:3], "max": bounds[3:]}
+        placements = [placement for placement in _blueprint_placements(record, blueprint)
+                      if all(before_world.get(at) == block for at, block in
+                             _house_cells(blueprint, 1, placement["origin"],
+                                          placement["rotation"], next(iter(beds))).items())]
+        if len(placements) != 1:
+            raise RuntimeError(f"authored House L1 placement is not uniquely observed: {len(placements)}")
+        placement = placements[0]
+        expected = _house_cells(blueprint, 2, placement["origin"], placement["rotation"], next(iter(beds)))
+        probe.report["world_oracle"] = {"origin": placement["origin"], "rotation": placement["rotation"],
+                                         "bed": next(iter(beds)), "expected_cells": len(expected),
+                                         "scan_bounds": scan_bounds}
+        hub()
+        baseline = shot("civil-hub")
+        dashboard()
+        shot("civil-dashboard")
+        gui.slot(10)
+        state = probe.wait(lambda state: (state.get("screen") or {}).get("class") == DIALOG
+                           and str(state["screen"].get("title", "")).startswith(label("Map ·", "Карта ·")),
+                           "dashboard_map_GUI", timeout_seconds=30)
+        map_title = state["screen"]["title"]
+        map_frame = shot("civil-map")
+        cell = _largest_patch(map_frame, PALETTE["you"], baseline)
+        probe.check("map_viewer_rendered", cell >= MIN_CELL)
+        probe.check("map_territory_rendered", _pixels(map_frame)["territory"] >= cell * 30)
+        point = _palette_point(map_frame, PALETTE["house"])
+        gui.input.move(*point)
+        shot("civil-map-house-hover")
+        probe.report.setdefault("gui_clicks", []).append({"map_house_pixel": point, "frame": map_frame})
+        gui.input.click(point)
+        selected = probe.wait(lambda state: (state.get("screen") or {}).get("open")
+                              and state["screen"].get("title") != map_title, "map_cell_GUI", timeout_seconds=30)
+        if selected["screen"]["class"] == DIALOG:
+            shot("civil-map-overlaps")
+            gui.button(f"{label('House', 'Дом')} #{seq} L1")
+        _menu(probe, f"#{seq} ")
+        shot("civil-building")
+        gui.slot(52)
+        review = f"{label('Order construction L2', 'Заказать стройку L2')} #{seq}"
+        _dialog(probe, review)
+        shot("civil-upgrade-review")
+        gui.button(review)
+        _dialog(probe, label("Projects", "Стройка"))
+        shot("civil-request-receipt")
+        gui.button(label("Status", "Статус"))
+        state = _menu(probe, label("Construction", "Строительство"))
+        # Existing native street work can finish before the queued upgrade
+        # becomes the live shortage. Refresh the real card, never a command.
+        for _ in range(30):
+            needs = _needs(state)
+            if any(count > 1 for count in needs.values()):
+                break
+            probe.call("minecraft_wait_ticks", {"ticks": 100})
+            gui.slot(45)
+            _menu(probe, label("Projects", "Стройка"))
+            gui.slot(52)
+            state = _menu(probe, label("Construction", "Строительство"))
+        probe.check("upgrade_native_shortage_icons", any(count > 1 for count in needs.values()))
+        probe.report["native_shortage"] = needs
+        shot("civil-shortage")
+        item = next(item for item, count in needs.items() if count > 1)
+        material = next(row for row in state["container"]["slots"]
+                        if 27 <= row["slot"] < 45 and row.get("item_id") == item)
+        gui.slot(material["slot"])
+        _dialog(probe, label("waiting for materials", "не хватает материалов"))
+        detail = shot("civil-material-detail")
+        name = str(material["name"]).rsplit(" ×", 1)[0]
+        probe.check("exact_shortage_rendered", gui.text_visible(f"{name} ×{needs[item]}", detail))
+        gui.button(label("Storage", "Склад"))
+        state = _menu(probe, label("Storage", "Склад"))
+        shot("civil-storage-empty")
+        probe.fixture(f"give @s {item} 1")
+        state = probe.wait(lambda state: _held(state, item) == 1, "fixture_transfer_item_received")
+        before = _stored(state, item)
+        own = next(row["slot"] for row in state["container"]["slots"]
+                   if row["slot"] >= 54 and row.get("item_id") == item)
+        gui.slot(own, shift=True)
+        state = probe.wait(lambda state: _held(state, item) == 0 and _stored(state, item) == before + 1,
+                           "GUI_storage_transfer_conserves_one", timeout_seconds=30)
+        shot("civil-storage-transfer")
+        for material, count in needs.items():
+            remaining = count - int(material == item)
+            while remaining:
+                amount = min(64, remaining)
+                probe.fixture(f"give @s {material} {amount}")
+                state = probe.wait(lambda state: _held(state, material) >= amount, "fixture_supply_received")
+                own = next(row["slot"] for row in state["container"]["slots"]
+                           if row["slot"] >= 54 and row.get("item_id") == material)
+                held = _held(state, material)
+                gui.slot(own, shift=True)
+                probe.wait(lambda state: _held(state, material) < held, "GUI_supply_deposit", timeout_seconds=30)
+                remaining -= amount
+        gui.escape()
+        hub()
+        dashboard()
+        state = project()
+        progress = _wait_for_world_progress(probe, gui, state, before_world, expected, scan_bounds,
+                                           label("Projects", "Стройка"), label("Construction", "Строительство"))
+        probe.report["native_progress"] = list(progress)
+        shot("civil-project-progress")
+        gui.slot(45)
+        _menu(probe, label("Projects", "Стройка"))
+        gui.slot(45)
+        _menu(probe, label("Settlement", "Поселение"))
+        gui.slot(14)
+        _menu(probe, label("Residents", "Жители"))
+        shot("civil-census")
+        gui.slot(9)
+        _menu(probe, label("Resident ·", "Житель ·"))
+        shot("civil-resident")
+        gui.slot(16)
+        _menu(probe, label("Household", "Домохозяйство"))
+        shot("civil-household")
+        gui.escape()
+        hub()
+        dashboard()
+        gui.slot(16)
+        _menu(probe, label("Resources", "Ресурсы"))
+        shot("civil-resources")
+        return shots
+    finally:
+        gui.close()

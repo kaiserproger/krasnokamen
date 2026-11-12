@@ -507,7 +507,7 @@ def cmd_run(argv: list[str]) -> int:
                 and not (client == "java" and (profile in {"scene-shot", "settlement-map-qa"}
                                                or ctx.scenario_id == "java-v2-p5-shift-double-click"))):
             raise ValueError("--windowed requires native, a supported Java graphical profile, or java-v2-p5-shift-double-click")
-        if client == "native" and profile not in {"survival", "inventory", "entities", "core-client", "native-lifecycle", "logical-native", "native-scale", "native-matrix", "title-connect", "singleplayer-regressions", "weak-first-view", "dialogs", "admin-commands", "chisel", "anti-xray", "block-log", "composter-chance", "village-qa", "village-autonomy-qa", "civilization-seed-qa", "village-owner-order-qa", "scene-shot", "settlement-map-qa", "claim-only-qa", "buildings-qa", "army-qa", "autocraft-qa"}:
+        if client == "native" and profile not in {"survival", "inventory", "entities", "core-client", "native-lifecycle", "logical-native", "native-scale", "native-matrix", "title-connect", "singleplayer-regressions", "weak-first-view", "dialogs", "admin-commands", "chisel", "anti-xray", "block-log", "composter-chance", "chat-visibility", "screen-share", "datapack-reload", "village-qa", "village-autonomy-qa", "civilization-seed-qa", "village-owner-order-qa", "scene-shot", "settlement-map-qa", "claim-only-qa", "buildings-qa", "army-qa", "autocraft-qa"}:
             raise RuntimeError(
                 f"profile {profile!r} is not enabled for native; "
                 "supported shared Python minecraft_* profiles: survival, inventory, entities, core-client subset, native-lifecycle, logical-native, native-scale. "

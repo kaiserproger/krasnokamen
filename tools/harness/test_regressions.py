@@ -317,6 +317,20 @@ regression = []
         self.assertFalse(ledger._scenario_assertion_failed(
             {'status': 'failed', 'error': 'native-low-roof-house assertion failed: x', 'details': {}}, 'native-low-roof-house'))
 
+    def test_profile_all_and_blueprint_verdicts_are_red_on_their_own_assertion(self):
+        failed = lambda name, **more: {'status': 'failed', 'error': f'autocraft-qa-settlements assertion failed: {name}', **more}
+        # `all` of a profile that reports no verdict map: its own assertion failing is the red.
+        self.assertTrue(ledger._failing_verdict(failed('raw_material_refused'), 'autocraft-qa', 'all'))
+        self.assertTrue(ledger._failing_verdict(failed('viewer_drawn'), 'settlement-map-qa', 'all'))
+        # A connection assertion, a failure before the scenario body and a missing receipt error are not.
+        self.assertFalse(ledger._failing_verdict(failed('in_play'), 'autocraft-qa', 'all'))
+        self.assertFalse(ledger._failing_verdict(failed('x', details={'failure': {'phase': 'client_start'}}), 'autocraft-qa', 'all'))
+        self.assertFalse(ledger._failing_verdict({'status': 'failed', 'error': 'timed out'}, 'autocraft-qa', 'all'))
+        # A buildings-qa behaviour never recorded is red only when that blueprint's assertion aborted the run.
+        self.assertTrue(ledger._failing_verdict(failed('buildings_wall_L1_project'), 'buildings-qa', 'wall.L1_built'))
+        self.assertFalse(ledger._failing_verdict(failed('buildings_house_L1_built'), 'buildings-qa', 'wall.L1_built'))
+        self.assertFalse(ledger._failing_verdict(failed('in_play'), 'buildings-qa', 'wall.L1_built'))
+
     def test_scenario_ref_connection_assertions_and_argv_text_are_not_red(self):
         for name in ('in_play', 'restart_client_entered_play', 'reconnect_entered_play', 'client_joined'):
             receipt = {'status': 'failed', 'error': f'native-v2-craft-drag assertion failed: {name}',
@@ -775,6 +789,21 @@ class LedgerToolTests(unittest.TestCase):
         self.assertEqual(ledger._worktree_parent(Path('/work/wt/LedgerTriage')), Path('/work/wt'))
         self.assertIsNone(ledger._worktree_parent(Path('/home/user/solaris')))
 
+    def test_promote_without_a_held_build_token_is_refused_before_the_control_lock(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name) / 'wt' / 'Promoter'
+        root.mkdir(parents=True)
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('SOLARIS_BUILD_TOKEN', None)
+            with self.assertRaisesRegex(ledger.Refused, 'must run under mem-run'):
+                with ledger._control_lock(root):
+                    pass
+        self.assertFalse((root.parent / 'ledger-control.lock').exists())
+        with patch.dict(os.environ, {'SOLARIS_BUILD_TOKEN': '2'}):
+            with ledger._control_lock(root):
+                self.assertTrue((root.parent / 'ledger-control.lock').exists())
+
     def test_client_refs_are_classified_from_their_receipts(self):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
@@ -899,8 +928,9 @@ class LedgerToolTests(unittest.TestCase):
             trees.append(tree)
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
             return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
-        self.promote(root, runner, dry_run=True)
-        self.promote(root, runner, dry_run=True)
+        with patch.dict(os.environ, {'SOLARIS_BUILD_TOKEN': '1'}):  # under wt/ a promote needs a held token
+            self.promote(root, runner, dry_run=True)
+            self.promote(root, runner, dry_run=True)
         # Same path every run: cargo reuses the build artifacts instead of growing the target dir.
         self.assertEqual(len(set(trees)), 1)
         self.assertEqual(trees[0], root.parent / 'ledger-control-candidate')
@@ -924,7 +954,7 @@ class LedgerToolTests(unittest.TestCase):
         with patch.object(regressions, 'MEM_RUN', mem_run), patch.object(regressions, 'REPO_ROOT', tree_a), \
                 patch.dict('os.environ', {'CARGO_TARGET_DIR': str(base / 'targets/slot-a')}):
             argv, env = regressions.tree_build_command(tree_b, ['cargo', 'build'])
-            self.assertEqual(argv, [str(mem_run), '-m', '6G', 'cargo', 'build'])
+            self.assertEqual(argv, [str(mem_run), '-m', '12G', 'cargo', 'build'])
             self.assertNotIn('CARGO_TARGET_DIR', env)  # never the caller's slot, marked for tree A
             argv, env = regressions.tree_build_command(tree_a, ['cargo', 'build'])
             self.assertEqual((argv, env['CARGO_TARGET_DIR']), (['cargo', 'build'], str(base / 'targets/slot-a')))

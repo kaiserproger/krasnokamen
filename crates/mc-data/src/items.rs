@@ -44,7 +44,7 @@ pub fn load_items_report(path: impl AsRef<Path>) -> Result<Vec<ItemReport>, Item
     let raw: RawRegistries = serde_json::from_slice(&bytes)?;
     let items = raw
         .registries
-        .get("minecraft:item")
+        .get(crate::tags::ITEM_REGISTRY)
         .ok_or(ItemsReportError::MissingItemRegistry)?;
     items
         .entries
@@ -120,7 +120,7 @@ pub fn solaris_required_items() -> ItemRegistry {
         .expect("embedded required registries JSON is valid");
     let items = raw
         .registries
-        .get("minecraft:item")
+        .get(crate::tags::ITEM_REGISTRY)
         .expect("embedded required registries JSON contains minecraft:item");
     let report: Vec<_> = items
         .entries

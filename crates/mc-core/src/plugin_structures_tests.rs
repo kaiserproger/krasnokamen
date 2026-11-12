@@ -222,10 +222,10 @@ fn stored_structure(state: &mut TickState) -> String {
         worksites::planned_points(state, &instance).unwrap(),
     );
     let image = fingerprint(state, bounds(at, blueprint.size()).unwrap(), false).unwrap();
-    let mut ledger = Ledger {
+    let mut ledger = LedgerView(Arc::new(Ledger {
         revision: 1,
         ..Default::default()
-    };
+    }));
     ledger.structures.insert(
         snapshot.structure_id.clone(),
         Structure {
@@ -1793,4 +1793,195 @@ fn stored_generic_cells_without_quantity_keep_one_item_semantics() {
     }))
     .unwrap();
     assert_eq!(explicit.quantity, 2);
+}
+
+#[test]
+fn decoded_structure_ledger_observes_every_domain_write_without_stale_reads() {
+    let mut state = state();
+    stored_structure(&mut state);
+    let original = state.plugins.get_domain(OWNER, KEY).unwrap().clone();
+    let first = ledger(&state).unwrap();
+    assert_eq!(first.revision, 1);
+    reset_ledger_stats();
+    assert!(Arc::ptr_eq(&first.0, &ledger(&state).unwrap().0));
+    state
+        .plugins
+        .set_domain("other-owner", KEY, serde_json::json!({}));
+    assert!(Arc::ptr_eq(&first.0, &ledger(&state).unwrap().0));
+    assert_eq!(
+        ledger_stats().decodes,
+        0,
+        "unrelated domains retain the exact cached image"
+    );
+
+    let mut replacement = original.clone();
+    replacement["revision"] = serde_json::json!(2);
+    state.plugins.set_domain(OWNER, KEY, replacement);
+    assert_eq!(ledger(&state).unwrap().revision, 2);
+    assert_eq!(
+        first.revision, 1,
+        "a published read snapshot stays immutable"
+    );
+    state.plugins.get_domain_mut(OWNER, KEY).unwrap()["revision"] = serde_json::json!(3);
+    assert_eq!(ledger(&state).unwrap().revision, 3);
+    let mut pending = ledger(&state).unwrap();
+    pending.revision = 4;
+    assert_eq!(
+        ledger(&state).unwrap().revision,
+        3,
+        "unsaved mutations are not published"
+    );
+    save(&mut state, &pending);
+    assert_eq!(ledger(&state).unwrap().revision, 4);
+    state.plugins.delete_domain(OWNER, KEY);
+    assert_eq!(ledger(&state).unwrap().revision, 0);
+    state
+        .plugins
+        .set_domain(OWNER, KEY, serde_json::json!({"revision": "invalid"}));
+    assert_eq!(ledger(&state).err(), Some(Failure::RuntimeUnavailable));
+    state.plugins.set_domain(OWNER, KEY, original);
+    assert_eq!(
+        ledger(&state).unwrap().revision,
+        1,
+        "a replacement also invalidates cached errors"
+    );
+}
+
+#[test]
+fn decoded_structure_ledger_is_derived_from_checkpoint_and_wal_bytes() {
+    let mut original = state();
+    let id = stored_structure(&mut original);
+    let mut discarded = Vec::new();
+    crate::plugin::journal(&mut original, &mut discarded);
+    let checkpoint = serde_json::to_vec(&original.plugins).unwrap();
+    let keys = serde_json::to_value(&original.plugins).unwrap();
+    assert_eq!(
+        keys.as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect::<BTreeSet<_>>(),
+        BTreeSet::from(["storage", "receipts", "domains", "revision"]),
+        "decoded state and its local revision never enter persisted plugin bytes"
+    );
+    assert!(ledger(&original).unwrap().structures.contains_key(&id));
+    assert_eq!(serde_json::to_vec(&original.plugins).unwrap(), checkpoint);
+    original.plugins.get_domain_mut(OWNER, KEY).unwrap()["revision"] = serde_json::json!(2);
+    let mut entries = Vec::new();
+    crate::plugin::journal(&mut original, &mut entries);
+    assert!(matches!(
+        entries.as_slice(),
+        [crate::journal::JournalEntry::Plugins { .. }]
+    ));
+    let wal = serde_json::to_vec(&entries).unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::write(
+        directory.path().join("plugins-checkpoint.json"),
+        &checkpoint,
+    )
+    .unwrap();
+    std::fs::write(directory.path().join("plugins-wal.json"), &wal).unwrap();
+    let mut restored = state();
+    restored.plugins = serde_json::from_slice(
+        &std::fs::read(directory.path().join("plugins-checkpoint.json")).unwrap(),
+    )
+    .unwrap();
+    reset_ledger_stats();
+    assert_eq!(ledger(&restored).unwrap().revision, 1);
+    assert_eq!(
+        ledger_stats().decodes,
+        1,
+        "checkpoint recovery starts from persisted JSON"
+    );
+    let recovered_entries: Vec<crate::journal::JournalEntry> =
+        serde_json::from_slice(&std::fs::read(directory.path().join("plugins-wal.json")).unwrap())
+            .unwrap();
+    let replay = crate::journal::Replay {
+        plugins: restored.plugins,
+        ..Default::default()
+    };
+    let replay = crate::journal::replay_batches(replay, &[(1, 1, recovered_entries)]);
+    restored.plugins = replay.plugins;
+    assert_eq!(ledger(&restored).unwrap().revision, 2);
+    assert_eq!(
+        ledger_stats().decodes,
+        2,
+        "WAL replay invalidates the warmed checkpoint image"
+    );
+    assert_eq!(
+        serde_json::to_vec(&restored.plugins).unwrap(),
+        serde_json::to_vec(&original.plugins).unwrap(),
+        "the recovered authoritative bytes are unchanged by decoding"
+    );
+}
+
+#[test]
+fn cached_building_projection_keeps_duplicate_refusal_without_copying_the_ledger() {
+    let mut state = state();
+    let id = stored_structure(&mut state);
+    let mut local = ledger(&state).unwrap();
+    local.structures.get_mut(&id).unwrap().snapshot.state = ScriptStructureState::Committed;
+    save(&mut state, &local);
+    reset_ledger_stats();
+    assert_eq!(
+        building_facts(
+            &state,
+            "demo",
+            [(id.as_str(), false), (id.as_str(), false)].into_iter()
+        )
+        .err(),
+        Some(Failure::NotFound),
+    );
+    assert_eq!(
+        ledger_stats().copies,
+        0,
+        "read projections do not clone every stored cell and receipt"
+    );
+}
+
+#[test]
+fn exclusive_ledger_writer_reuses_decoded_allocation_and_publishes_exact_bytes() {
+    let mut state = state();
+    stored_structure(&mut state);
+    reset_ledger_stats();
+    let mut local = ledger_mut(&mut state).unwrap();
+    local.revision = 2;
+    save(&mut state, &local);
+    assert_eq!(ledger(&state).unwrap().revision, 2);
+    assert_eq!(ledger_stats().copies, 0);
+    assert_eq!(ledger_stats().decodes, 0);
+    assert_eq!(
+        state.plugins.get_domain(OWNER, KEY).unwrap(),
+        &serde_json::to_value(&*local.0).unwrap()
+    );
+}
+
+#[test]
+fn active_structure_recovery_is_a_cached_read_not_a_ledger_mutation() {
+    let mut state = state();
+    let handle = stored_structure(&mut state);
+    let settlement = crate::settlements::SettlementId(7);
+    let mut local = ledger_mut(&mut state).unwrap();
+    let record = local.structures.get_mut(&handle).unwrap();
+    record.owner = settlement_builds::owner(settlement);
+    record.settlement = Some(settlement);
+    record.snapshot.state = ScriptStructureState::Running;
+    save(&mut state, &local);
+    drop(local);
+    let mut initial = Vec::new();
+    crate::plugin::journal(&mut state, &mut initial);
+    let before = serde_json::to_vec(&state.plugins).unwrap();
+    reset_ledger_stats();
+    for _ in 0..4 {
+        assert!(!settlement_builds::recover(&mut state, settlement, &handle).unwrap());
+    }
+    assert_eq!(ledger_stats().decodes, 0);
+    assert_eq!(ledger_stats().copies, 0);
+    assert_eq!(serde_json::to_vec(&state.plugins).unwrap(), before);
+    let mut entries = Vec::new();
+    crate::plugin::journal(&mut state, &mut entries);
+    assert!(
+        entries.is_empty(),
+        "read-only recovery adds no WAL post-image"
+    );
 }

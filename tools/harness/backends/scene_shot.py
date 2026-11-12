@@ -129,13 +129,25 @@ class LatencyProxy:
         self.thread.join()
 
 
-def java_options(render_distance: int, fov: int) -> str:
+def _validate_java_display(gui_scale: int, language: str, screen_size: tuple[int, int] = WINDOW) -> None:
+    if type(gui_scale) is not int or gui_scale not in (1, 2, 3):
+        raise ValueError("gui_scale must be an integer in 1..3")
+    if language not in ("en_us", "ru_ru"):
+        raise ValueError("language must be en_us or ru_ru")
+    width, height = runtime.validate_screen_size(screen_size)
+    if width // 320 < gui_scale or height // 240 < gui_scale:
+        raise ValueError("gui_scale does not fit screen_size without vanilla clamping")
+
+
+def java_options(render_distance: int, fov: int, *, gui_scale: int = NATIVE_GUI_SCALE,
+                 language: str = "en_us", screen_size: tuple[int, int] = WINDOW) -> str:
     # Java stores fov normalized: 70 -> 0.0 and 110 -> 1.0.
+    _validate_java_display(gui_scale, language, screen_size)
     return (
         "version:4790\nonboardAccessibility:false\n"
         'graphicsPreset:"custom"\n'
-        f"overrideWidth:{WINDOW[0]}\noverrideHeight:{WINDOW[1]}\n"
-        f"fov:{(fov - 70) / 40}\nguiScale:{NATIVE_GUI_SCALE}\nrenderDistance:{render_distance}\n"
+        f"overrideWidth:{screen_size[0]}\noverrideHeight:{screen_size[1]}\n"
+        f"fov:{(fov - 70) / 40}\nguiScale:{gui_scale}\nlang:{language}\nrenderDistance:{render_distance}\n"
         f"simulationDistance:{min(render_distance, 12)}\nmaxFps:60\nenableVsync:false\n"
         "pauseOnLostFocus:false\ntutorialStep:none\nsoundCategory_master:0.0\n"
     )
@@ -199,8 +211,9 @@ def tool_wall_pixels(image: Path) -> tuple[int, int]:
 
 def capture_java(probe: ProbeSteps, artifact: Path, name: str) -> str:
     path = java_p5.capture(probe, name)
-    if png_size(path) != WINDOW:
-        raise RuntimeError(f"Java screenshot {path} is {png_size(path)}, expected {WINDOW}")
+    expected = getattr(probe.client, "scene_window_size", WINDOW)
+    if png_size(path) != expected:
+        raise RuntimeError(f"Java screenshot {path} is {png_size(path)}, expected {expected}")
     return path
 
 
@@ -244,7 +257,7 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
             yield SCENE_TOOLS[kind], value
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities", "wait_terrain"):
             yield SCENE_TOOLS[kind], value["args"]
-        elif kind in ("timed_entities", "require_entities"):
+        elif kind in ("timed_entities", "require_entities", "assert_entities"):
             yield "minecraft_list_entities", value["args"]
         elif kind == "wait_ticks":
             yield "minecraft_wait_ticks", {"ticks": min(value, 100)}
@@ -305,6 +318,12 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and bool(value["contains"]))
         elif kind == "cmd":
             valid = isinstance(value, str) and bool(value) and not value.startswith("/")
+        elif kind == "upgrade_certified":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"kind", "level"}
+                     and isinstance(value["kind"], str)
+                     and re.fullmatch(r"[a-z_]+", value["kind"])
+                     and type(value["level"]) is int and 2 <= value["level"] <= 3)
         elif kind == "tp":
             valid = (isinstance(value, list) and len(value) == 5
                      and all(type(n) in (int, float) and math.isfinite(n) for n in value))
@@ -364,6 +383,25 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and isinstance(value["samples"], list) and len(value["samples"]) == 3
                      and all(isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_-]+", item)
                              for item in value["samples"]))
+        elif kind == "assert_entities":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) <= {"name", "args", "entity_type", "box", "min", "max",
+                                        "max_height", "profession", "baby"}
+                     and {"name", "args", "entity_type", "min"} <= set(value)
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and isinstance(value["args"], dict)
+                     and isinstance(value["entity_type"], str)
+                     and re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", value["entity_type"])
+                     and type(value["min"]) is int and value["min"] >= 0
+                     and type(value.get("max", 0)) is int
+                     and type(value.get("max_height", 0)) in (int, float)
+                     and value.get("profession", "farmer") in PROFESSIONS
+                     and type(value.get("baby", True)) is bool
+                     and ("box" not in value
+                          or (isinstance(value["box"], list) and len(value["box"]) == 6
+                              and all(type(n) in (int, float) and math.isfinite(n)
+                                      for n in value["box"]))))
         elif kind == "require_entities":
             valid = (isinstance(value, dict) and set(value) == {"name", "args", "types"}
                      and isinstance(value["name"], str)
@@ -396,6 +434,41 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
             valid = False
         if not valid:
             raise ValueError(f"invalid scene step: {step!r}")
+
+
+# Villager profession order of the received VillagerData metadata (wire profession ids).
+PROFESSIONS = ("none", "armorer", "butcher", "cartographer", "cleric", "farmer", "fisherman",
+               "fletcher", "leatherworker", "librarian", "mason", "nitwit", "shepherd",
+               "toolsmith", "weaponsmith")
+
+
+def matching_entities(entities: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[str, Any]]:
+    """Received entities of `spec["entity_type"]` that satisfy every optional filter of an
+    assert_entities step: feet inside `box` (x0,y0,z0,x1,y1,z1), standing no taller than
+    `max_height` (a sleeping pose), showing the villager `profession`, and whose received
+    DATA_BABY_ID equals `baby` (a row that never received it matches neither value)."""
+    found = []
+    for row in entities:
+        if row.get("entity_type") != spec["entity_type"]:
+            continue
+        x, y, z = float(row["x"]), float(row["y"]), float(row["z"])
+        box = spec.get("box")
+        if box and not (box[0] <= x <= box[3] and box[1] <= y <= box[4] and box[2] <= z <= box[5]):
+            continue
+        if "max_height" in spec:
+            bounds = row.get("bounding_box") or {}
+            if float(bounds.get("max_y", 0)) - float(bounds.get("min_y", 0)) > spec["max_height"]:
+                continue
+        if "baby" in spec and row.get("received_baby") is not spec["baby"]:
+            continue
+        if "profession" in spec:
+            data = ((row.get("received_metadata") or {}).get("19") or {}).get("value")
+            if not (isinstance(data, list) and len(data) == 3 and isinstance(data[1], int)
+                    and 0 <= data[1] < len(PROFESSIONS)
+                    and PROFESSIONS[data[1]] == spec["profession"]):
+                continue
+        found.append(row)
+    return found
 
 
 def matching_walk(entities: dict[str, Any], spec: dict[str, Any]) -> dict[str, Any] | None:
@@ -642,6 +715,30 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
         elif kind == "cmd":
             wait_play(probe)
             probe.call("minecraft_send_chat", {"message": value, "command": True})
+        elif kind == "upgrade_certified":
+            # Upgrade the building the `Certified <kind> #<id>` reply named, then check the reply: the
+            # id is a settlement/sequence pair, so a fixed scenario cannot spell it. `recent_chat` is
+            # the client's last 20 lines, newest first: take the one distinct id, never an order.
+            wait_play(probe)
+            certified = re.compile(rf"Certified {value['kind']} #(\d+)")
+
+            def certified_ids(state: dict[str, Any]) -> set[str]:
+                return {match.group(1) for line in state.get("recent_chat") or []
+                        if isinstance(line, str) and (match := certified.search(line))}
+
+            probe.wait(lambda state: bool(certified_ids(state)),
+                       f"{value['kind']}_certification_reply", wait_for_play=True,
+                       timeout_seconds=30)
+            ids = certified_ids(probe.observe())
+            probe.check(f"{value['kind']}_one_certified_building", len(ids) == 1)
+            (building,) = ids
+            probe.call("minecraft_send_chat",
+                       {"message": f"settlement building upgrade {building}", "command": True})
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            reply = f"Upgraded building #{building} to level {value['level']}."
+            probe.check(f"{value['kind']}_upgraded_to_level_{value['level']}",
+                        any(isinstance(line, str) and reply in line
+                            for line in probe.observe().get("recent_chat") or []))
         elif kind == "tp":
             probe.call("minecraft_send_chat", {"message": "tp @s " + " ".join(map(str, value)), "command": True})
             probe.wait(
@@ -701,6 +798,20 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             receipt = artifact / f"{name}.json"
             receipt.write_text(json.dumps(result, indent=2) + "\n")
             probe.report.setdefault("terrain_waits", []).append({"receipt": str(receipt), "result": result})
+        elif kind == "assert_entities":
+            result = probe.call("minecraft_list_entities", value["args"])
+            entities = result.get("entities")
+            if not isinstance(entities, list) or any(not isinstance(row, dict) for row in entities):
+                raise RuntimeError("entity snapshot omitted entities")
+            if type(result.get("game_time")) is not int:
+                raise RuntimeError("entity snapshot omitted same-thread game_time")
+            found = matching_entities(entities, value)
+            (artifact / f"{value['name']}.json").write_text(json.dumps(
+                {"game_time": result["game_time"], "spec": value, "matched": found,
+                 "received": entities}, indent=2) + "\n")
+            probe.check(f"{value['name']}_min", len(found) >= value["min"])
+            if "max" in value:
+                probe.check(f"{value['name']}_max", len(found) <= value["max"])
         elif kind == "require_entities":
             result = probe.call("minecraft_list_entities", value["args"])
             (artifact / f"{value['name']}.json").write_text(json.dumps(result, indent=2) + "\n")
@@ -734,11 +845,13 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
 
 
 def start_java(ctx: ProfileContext, artifact: Path, address: str | None, username: str, timeout: float,
-               display: str, render_distance: int, fov: int, *, plain: bool = False) -> tuple[Any, Any, McpClient]:
+               display: str, render_distance: int, fov: int, *, plain: bool = False,
+               gui_scale: int = NATIVE_GUI_SCALE, language: str = "en_us",
+               screen_size: tuple[int, int] = WINDOW) -> tuple[Any, Any, McpClient]:
     """Launch the requested Java client, optionally connecting to a server."""
     game_dir = artifact / "game"
     game_dir.mkdir()
-    (game_dir / "options.txt").write_text(java_options(render_distance, fov))
+    (game_dir / "options.txt").write_text(java_options(render_distance, fov, gui_scale=gui_scale, language=language, screen_size=screen_size))
     token, mcp_port = secrets.token_urlsafe(32), runtime.reserve_port()
     log_path = artifact / "client.log"
     ctx.client_evidence["command_index"] = len(ctx.commands)
@@ -778,6 +891,13 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-low-roof-house": "low_roof_house_scene.json",
         "native-falling-block-prediction": "falling_block_scene.json",
         "native-frozen-game-age": "frozen_game_age_scene.json",
+        "native-village-idle-stroll": "village_idle_stroll_scene.json",
+        "native-village-night-door": "village_night_door_scene.json",
+        "native-village-late-job": "village_late_job_scene.json",
+        "native-village-distant-job": "village_distant_job_scene.json",
+        "native-village-breeding": "village_breeding_scene.json",
+        "native-settlement-radius-growth": "settlement_radius_scene.json",
+        "native-settlement-buildings-upgrade": "settlement_buildings_scene.json",
     }
     if ctx.scenario_id in named_fixtures:
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
@@ -825,8 +945,13 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     if type(client_latency_ms) is not int or not 0 <= client_latency_ms <= 5000:
         raise ValueError("client_latency_ms must be an integer in 0..5000")
     settings = scenario.get("client_settings", {})
-    if not isinstance(settings, dict) or set(settings) - {"graphics_preset", "render_distance", "fov"}:
+    if not isinstance(settings, dict) or set(settings) - {"graphics_preset", "render_distance", "fov", "gui_scale", "language", "screen_size"}:
         raise ValueError("unsupported client settings")
+    if {"gui_scale", "language", "screen_size"} & settings.keys():
+        if ctx.client != "java":
+            raise ValueError("gui_scale, language and screen_size are Java-only scene settings")
+        _validate_java_display(settings.get("gui_scale", NATIVE_GUI_SCALE), settings.get("language", "en_us"),
+                               settings.get("screen_size", WINDOW))
     if "fov" in settings and (type(settings["fov"]) is not int or not 30 <= settings["fov"] <= 110):
         raise ValueError("fov must be an integer in 30..110")
     if "graphics_preset" in settings:
@@ -928,7 +1053,7 @@ def run(
         if client_latency_ms or any(step.get("server_eof") is True for step in scenario["steps"]):
             proxy = LatencyProxy(port, client_latency_ms)
             client_port = proxy.start()
-        xvfb, display, _ = runtime.start_xvfb(artifact)
+        xvfb, display, _ = runtime.start_xvfb(artifact, tuple(settings.get("screen_size", WINDOW)))
         ctx.logs.append(str(artifact / "xvfb.log"))
         old_xdg = os.environ.get("XDG_DATA_HOME")
         old_settings = os.environ.get("SOLARIS_CLIENT_SETTINGS")
@@ -938,7 +1063,9 @@ def run(
             if ctx.client == "java":
                 client, client_log, mcp = start_java(
                     ctx, artifact, f"127.0.0.1:{client_port}", username, timeout, display,
-                    base.get("render_distance", 12), base["fov"], plain=scenario.get("java_plain", False))
+                    base.get("render_distance", 12), base["fov"], plain=scenario.get("java_plain", False),
+                    gui_scale=settings.get("gui_scale", NATIVE_GUI_SCALE), language=settings.get("language", "en_us"),
+                    screen_size=tuple(settings.get("screen_size", WINDOW)))
             else:
                 client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display)
         finally:
@@ -949,6 +1076,7 @@ def run(
                     os.environ[key] = old
         mcp.request_timeout_seconds = min(timeout + 10, 130.0)
         mcp.scene_address = f"127.0.0.1:{client_port}"
+        mcp.scene_window_size = tuple(settings.get("screen_size", WINDOW))
         mcp.scene_proxy = proxy
         with ProbeSteps(mcp, artifact / "scene-shot", timeout, "scene-shot") as probe:
             wait_play(probe)
@@ -957,7 +1085,7 @@ def run(
                 if window_id is None:
                     raise RuntimeError(f"Java client opened no window on the harness Xvfb {display}; refusing to run")
                 ctx.client_evidence["window_focus"] = mcp.p4_window = {"display": display, "window_id": window_id}
-                resize_window(mcp.p4_window, WINDOW)
+                resize_window(mcp.p4_window, mcp.scene_window_size)
                 probe.call("minecraft_wait_ticks", {"ticks": 10})
             else:
                 from . import native_focus

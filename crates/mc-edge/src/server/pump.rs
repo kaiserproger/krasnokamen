@@ -189,7 +189,9 @@ pub(super) fn configured_viewer(
         .get(&connection)
         .copied();
     viewer.dimension_type_ids = server.wire.dimension_type_ids;
-    viewer.advancements = Arc::clone(&server.recipes.advancements);
+    if let Some(packets) = crate::recipes::packets_for(&server.hub.current_registry()) {
+        viewer.advancements = Arc::clone(&packets.advancements);
+    }
     viewer
 }
 
@@ -324,7 +326,9 @@ pub(super) fn route_changes(
 ) -> bool {
     for planned in crate::plan::plan_routed_player_changes(changes, viewer) {
         if handles.reliable_tx.try_send(planned.data).is_err() {
-            server.connections.remove(viewer.connection);
+            server
+                .connections
+                .close(viewer.connection, "route-changes-reliable-full");
             server
                 .net_counters
                 .reliable_drops
@@ -346,8 +350,10 @@ pub(super) async fn publish_and_route(
     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
 ) {
     viewers.retain(|id, _| connections.contains_key(id));
-    // Only the pump sends world packets; available slots can only grow
-    // between this credit read and routing.
+    // Planning spends this credit, but it is not exclusive: an LOD tile
+    // (`lod.rs`) also takes world-queue slots, at any time from this read
+    // until the send, which is the whole planning time of every viewer, so a
+    // planned frame can still find the queue full below.
     {
         let registry = server.connections.inner.lock();
         for (id, viewer) in viewers.iter_mut() {
@@ -378,7 +384,7 @@ pub(super) async fn publish_and_route(
     });
     // Reliable overflow takes precedence: disconnect victims first.
     for victim in crate::fanout::reliable_overflow(&packets) {
-        server.connections.remove(victim);
+        server.connections.close(victim, "reliable-overflow");
         connections.remove(&victim);
         server
             .net_counters
@@ -395,7 +401,9 @@ pub(super) async fn publish_and_route(
                 // In-order, never dropped: a full reliable queue
                 // disconnects the connection.
                 if handles.reliable_tx.try_send(packet.data).is_err() {
-                    server.connections.remove(packet.connection);
+                    server
+                        .connections
+                        .close(packet.connection, "reliable-queue-full");
                     connections.remove(&packet.connection);
                     server
                         .net_counters
@@ -405,13 +413,12 @@ pub(super) async fn publish_and_route(
                 }
             }
             crate::fanout::Priority::BestEffort => {
-                // Another producer may consume the credit after planning.
                 if handles.world_tx.try_send(packet.data).is_err()
                     && let Some(viewer) = viewers.get_mut(&packet.connection)
                 {
-                    // Another producer can exhaust the credit after planning.
-                    // The failed frame may have contained geometry.
-                    viewer.geometry_unsent();
+                    // The viewer recorded this publication as delivered:
+                    // repair the geometry and entity state it carried.
+                    viewer.world_frame_unsent();
                 }
             }
         }
@@ -485,6 +492,7 @@ pub(super) async fn wait_for_join(
     _name: &str,
     client_view_distance: i8,
     client_language: &str,
+    chat_visibility: mc_core::boundary::ChatVisibility,
 ) -> anyhow::Result<JoinedSpawn> {
     {
         let mut inner = server.connections.inner.lock();
@@ -495,6 +503,7 @@ pub(super) async fn wait_for_join(
         // Already submitted before Join: remember it so the first Play
         // ClientInformation does not repeat the same locale.
         inner.locales.insert(id, client_language.to_owned());
+        inner.chat_visibilities.insert(id, chat_visibility);
     }
     // Fast path: Joined arrived before we registered interest.
     if let Some(joined) = server.connections.take_join(id) {

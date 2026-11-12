@@ -174,7 +174,7 @@ pub fn item_snapshot(state: &TickState, stack: &mc_data::ItemStack) -> Value {
         .tags
         .registries
         .iter()
-        .filter(|(registry, _)| registry.as_str() == "minecraft:item")
+        .filter(|(registry, _)| registry.as_str() == mc_data::tags::ITEM_REGISTRY)
         .flat_map(|(_, tags)| tags.iter())
         .filter(|(_, entries)| entries.contains(&(stack.item_id as i32)))
         .map(|(tag, _)| tag.as_str())
@@ -910,7 +910,7 @@ pub(crate) fn system_unix_seconds() -> i64 {
 }
 
 /// Vanilla-format criterion stamp for unix `seconds`.
-fn timestamp_from_unix(seconds: i64) -> String {
+pub(crate) fn timestamp_from_unix(seconds: i64) -> String {
     let days = seconds.div_euclid(86400) + 719468;
     let era = days.div_euclid(146097);
     let doe = days - era * 146097;

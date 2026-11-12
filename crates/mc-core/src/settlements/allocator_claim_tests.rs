@@ -73,6 +73,36 @@ fn breeding_spare_bed_of_a_resident_is_never_an_open_air_bed() {
 }
 
 #[test]
+fn breeding_spare_bed_needs_no_headroom_like_vanilla() {
+    // VillagerMakeLove.takeVacantBed takes any reachable home POI; a certified
+    // low-roof house must still provide a breeding bed.
+    let mut state = test_state();
+    state.day_time = 6000;
+    let home_bed = bed(&mut state, 12, 4);
+    let low = bed(&mut state, 12, 12);
+    let stone = state.registry.states.stone;
+    roof(&mut state, home_bed, stone);
+    state.world.set_block(low.x, low.y + 2, low.z, stone);
+    state.world.fold_overlay();
+    assert!(
+        !crate::settlements::allocator::bed_has_baby_space(&state, low),
+        "the fixture bed has no baby headroom"
+    );
+    let id = settlement(&mut state);
+    let resident = bound_villager(&mut state, id, [10.5, 201.0, 4.5]);
+    for _ in 0..60 {
+        step(&mut state);
+    }
+    assert_eq!(home(&state, resident), Some(home_bed));
+    state.tick_budget.reset(state.tick);
+    let mut cache = std::mem::take(&mut state.villager_pois);
+    let mut path = Vec::new();
+    let spare = super::free_bed(&mut state, &mut cache, resident, &mut path);
+    state.villager_pois = cache;
+    assert_eq!(spare, Some(low), "a low-roof bed is a valid breeding bed");
+}
+
+#[test]
 fn removing_the_roof_releases_a_residents_bed() {
     let mut state = test_state();
     state.day_time = 6000;

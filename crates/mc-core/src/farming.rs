@@ -96,8 +96,7 @@ fn kind_of(path: &str) -> Kind {
 }
 
 /// Farming meaning of every block state, built once at startup.
-#[derive(Debug)]
-#[cfg_attr(test, derive(Clone))]
+#[derive(Debug, Clone)]
 pub struct FarmStates {
     kinds: Vec<Kind>,
     /// Farmland by `moisture` 0..=7.

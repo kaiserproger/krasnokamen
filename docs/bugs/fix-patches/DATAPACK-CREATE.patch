@@ -1,0 +1,19 @@
+diff --git a/crates/mc-core/src/datapack_management.rs b/crates/mc-core/src/datapack_management.rs
+index 65f0d76e..c2dda6cc 100644
+--- a/crates/mc-core/src/datapack_management.rs
++++ b/crates/mc-core/src/datapack_management.rs
+@@ -125,6 +125,14 @@ fn dispatch(
+         }
+         ["datapack", "enable", name, order @ ..] => enable(state, connection, name, order),
+         ["datapack", "disable", name] => disable(state, connection, name),
++        ["datapack", "create", id, description] => {
++            if permission(state) < 4 {
++                return Err(Failure::Text(
++                    crate::commands::CommandError::Unknown.message(),
++                ));
++            }
++            create(state, connection, id, description)
++        }
+         _ => Err(usage()),
+     }
+ }

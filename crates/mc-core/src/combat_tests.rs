@@ -46,7 +46,10 @@ impl Data {
                     ..ItemFacts::default()
                 },
             )]),
-            tags: TagsData::from_registries(BTreeMap::from([(id("minecraft:item"), swords)])),
+            tags: TagsData::from_registries(BTreeMap::from([(
+                id(mc_data::tags::ITEM_REGISTRY),
+                swords,
+            )])),
         }
     }
 

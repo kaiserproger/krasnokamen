@@ -709,3 +709,80 @@ fn event_candidate_dispatch_is_bounded_by_matching_discriminators_and_rebuilds()
         "removed definitions must not retain dispatch entries"
     );
 }
+
+#[test]
+fn selector_predicates_evaluate_scores_time_weather_and_chance_from_facts() {
+    let event = json!({
+        "player": {"type": "minecraft:zombie", "scores": {"hits": 3}},
+        "time": 25_000,
+        "weather": {"raining": true, "thundering": false},
+        "random": 0.25,
+    });
+    let eval = |predicate: Value| evaluate_predicate(&predicate, &event);
+    let scores = |range: Value| json!({"condition":"minecraft:entity_scores","entity":"this","scores":{"hits":range}});
+    assert!(eval(scores(json!({"min": 3}))).matches);
+    assert!(!eval(scores(json!({"min": 4}))).matches);
+    assert!(eval(scores(json!(3))).matches);
+    // An unset score never satisfies a range, not even through `inverted`.
+    let unset =
+        json!({"condition":"minecraft:entity_scores","entity":"this","scores":{"other":{"min":0}}});
+    assert!(!eval(unset.clone()).matches);
+    assert!(eval(json!({"condition":"minecraft:inverted","term":unset})).matches);
+
+    let time = |value: Value, period: Option<i64>| {
+        let mut condition = json!({"condition":"minecraft:time_check","value":value});
+        if let Some(period) = period {
+            condition["period"] = json!(period);
+        }
+        eval(condition).matches
+    };
+    assert!(time(json!({"min": 24_000}), None));
+    assert!(
+        time(json!({"min": 0, "max": 1_500}), Some(24_000)),
+        "25000 mod 24000 = 1000"
+    );
+    assert!(!time(json!({"min": 2_000}), Some(24_000)));
+
+    let weather = |raining, thundering| {
+        eval(json!({"condition":"minecraft:weather_check","raining":raining,"thundering":thundering})).matches
+    };
+    assert!(weather(true, false));
+    assert!(!weather(false, false));
+    assert!(!weather(true, true));
+
+    assert!(eval(json!({"condition":"minecraft:random_chance","chance":0.5})).matches);
+    assert!(!eval(json!({"condition":"minecraft:random_chance","chance":0.1})).matches);
+    assert!(eval(json!({"condition":"minecraft:random_chance","chance":{"type":"minecraft:constant","value":0.3}})).matches);
+
+    // A list is an `all_of`; one failing condition fails it.
+    assert!(
+        !eval(json!([
+            scores(json!({"min": 3})),
+            scores(json!({"min": 9}))
+        ]))
+        .matches
+    );
+}
+
+#[test]
+fn predicate_support_reports_conditions_that_cannot_be_evaluated() {
+    assert!(predicate_unsupported(&json!({"condition":"minecraft:entity_properties","entity":"this","predicate":{"type":"minecraft:cow"}})).is_empty());
+    let unsupported = predicate_unsupported(&json!({"condition":"minecraft:any_of","terms":[
+        {"condition":"minecraft:value_check","value":1,"range":1},
+        {"condition":"minecraft:random_chance","chance":0.5, "extra": true}
+    ]}));
+    assert!(
+        unsupported.iter().any(|path| path.contains("value_check")),
+        "{unsupported:?}"
+    );
+    assert!(
+        unsupported.iter().any(|path| path.contains("extra")),
+        "{unsupported:?}"
+    );
+    // Unsupported inside an inverted condition still never matches.
+    let result = evaluate_predicate(
+        &json!({"condition":"minecraft:inverted","term":{"condition":"minecraft:value_check"}}),
+        &json!({}),
+    );
+    assert!(!result.matches && !result.unsupported.is_empty());
+}

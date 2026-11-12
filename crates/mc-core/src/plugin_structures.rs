@@ -23,6 +23,119 @@ const OWNER: &str = "@native-structures";
 const KEY: &str = "ledger";
 pub(crate) type Catalogs = BTreeMap<String, BlueprintCatalog>;
 
+/// Derived decoded state for one exact native domain image. PluginState owns
+/// invalidation at every domain write, including mutable access and WAL replay.
+#[derive(Default)]
+pub(crate) struct LedgerCache {
+    decoded: std::sync::OnceLock<Result<Arc<Ledger>, Failure>>,
+}
+
+impl Clone for LedgerCache {
+    fn clone(&self) -> Self {
+        Self::default()
+    }
+}
+
+impl std::fmt::Debug for LedgerCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LedgerCache")
+            .field("decoded", &self.decoded.get().is_some())
+            .finish()
+    }
+}
+
+// Cache temperature is not authoritative plugin state or persisted identity.
+impl PartialEq for LedgerCache {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+impl Eq for LedgerCache {}
+
+impl LedgerCache {
+    pub(crate) fn invalidate(&mut self, owner: &str, key: &str) {
+        if owner == OWNER && key == KEY {
+            self.decoded.take();
+        }
+    }
+
+    fn read(&self, value: Option<&serde_json::Value>) -> Result<LedgerView, Failure> {
+        self.decoded
+            .get_or_init(|| {
+                value.map_or_else(
+                    || Ok(Arc::new(Ledger::default())),
+                    |value| {
+                        #[cfg(test)]
+                        count_ledger(|stats| stats.decodes += 1);
+                        Ledger::deserialize(value)
+                            .map(Arc::new)
+                            .map_err(|_| Failure::RuntimeUnavailable)
+                    },
+                )
+            })
+            .clone()
+            .map(LedgerView)
+    }
+
+    fn install(&mut self, ledger: Arc<Ledger>) {
+        assert!(
+            self.decoded.set(Ok(ledger)).is_ok(),
+            "domain write invalidates its decoded ledger"
+        );
+    }
+}
+
+/// Reads share an immutable decoded image; a writer clones only on mutation.
+struct LedgerView(Arc<Ledger>);
+
+impl std::ops::Deref for LedgerView {
+    type Target = Ledger;
+    fn deref(&self) -> &Ledger {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for LedgerView {
+    fn deref_mut(&mut self) -> &mut Ledger {
+        #[cfg(test)]
+        if Arc::strong_count(&self.0) > 1 {
+            count_ledger(|stats| stats.copies += 1);
+        }
+        Arc::make_mut(&mut self.0)
+    }
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct LedgerStats {
+    pub(crate) decodes: usize,
+    pub(crate) copies: usize,
+}
+
+#[cfg(test)]
+std::thread_local! {
+    static LEDGER_STATS: std::cell::Cell<LedgerStats> = std::cell::Cell::new(LedgerStats::default());
+}
+
+#[cfg(test)]
+fn count_ledger(update: impl FnOnce(&mut LedgerStats)) {
+    LEDGER_STATS.with(|cell| {
+        let mut stats = cell.get();
+        update(&mut stats);
+        cell.set(stats);
+    });
+}
+
+#[cfg(test)]
+pub(crate) fn reset_ledger_stats() {
+    LEDGER_STATS.with(|cell| cell.set(LedgerStats::default()));
+}
+
+#[cfg(test)]
+pub(crate) fn ledger_stats() -> LedgerStats {
+    LEDGER_STATS.with(std::cell::Cell::get)
+}
+
 /// Only package roots discovered by the strict host loader reach this function.
 pub(crate) fn load_catalog(
     roots: &BTreeMap<String, PathBuf>,
@@ -129,7 +242,7 @@ fn catalog_namespace(files: &[(String, String)]) -> Option<String> {
     })
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 struct Ledger {
     revision: u64,
     surveys: BTreeMap<String, Survey>,
@@ -188,34 +301,38 @@ pub(crate) fn building_facts<'a>(
     owner: &str,
     references: impl Iterator<Item = (&'a str, bool)>,
 ) -> Result<Vec<BuildingFacts>, Failure> {
-    let mut ledger = ledger(state)?;
+    let ledger = ledger(state)?;
+    let mut seen = BTreeSet::new();
     references
         .map(|(id, worksite)| {
+            if !seen.insert((id, worksite)) {
+                return Err(Failure::NotFound);
+            }
             if worksite {
-                let record = ledger.worksites.remove(id).ok_or(Failure::NotFound)?;
+                let record = ledger.worksites.get(id).ok_or(Failure::NotFound)?;
                 if record.owner != owner {
                     return Err(Failure::Forbidden);
                 }
                 Ok(BuildingFacts {
-                    dimension: record.dimension,
+                    dimension: record.dimension.clone(),
                     footprint: record.snapshot.footprint,
-                    points: record.snapshot.interaction_points,
+                    points: record.snapshot.interaction_points.clone(),
                     blueprint: None,
                 })
             } else {
-                let record = ledger.structures.remove(id).ok_or(Failure::NotFound)?;
+                let record = ledger.structures.get(id).ok_or(Failure::NotFound)?;
                 if record.owner != owner {
                     return Err(Failure::Forbidden);
                 }
                 if record.snapshot.state != ScriptStructureState::Committed {
                     return Err(Failure::Blocked);
                 }
-                let footprint = bounds_of_structure(&record)?;
+                let footprint = bounds_of_structure(record)?;
                 Ok(BuildingFacts {
-                    dimension: record.snapshot.dimension,
+                    dimension: record.snapshot.dimension.clone(),
                     footprint,
-                    points: record.snapshot.interaction_points,
-                    blueprint: Some(record.snapshot.blueprint_id),
+                    points: record.snapshot.interaction_points.clone(),
+                    blueprint: Some(record.snapshot.blueprint_id.clone()),
                 })
             }
         })
@@ -228,19 +345,28 @@ pub(crate) fn check_building(
 ) -> Result<bool, Failure> {
     worksites::check(state, &facts.dimension, &facts.points).map(|blocked| blocked.is_empty())
 }
-fn ledger(state: &TickState) -> Result<Ledger, Failure> {
+fn ledger(state: &TickState) -> Result<LedgerView, Failure> {
     state
         .plugins
-        .get_domain(OWNER, KEY)
-        .map(|value| Ledger::deserialize(value).map_err(|_| Failure::RuntimeUnavailable))
-        .unwrap_or_else(|| Ok(Ledger::default()))
+        .structure_cache
+        .read(state.plugins.get_domain(OWNER, KEY))
 }
-fn save(state: &mut TickState, ledger: &Ledger) {
+
+fn ledger_mut(state: &mut TickState) -> Result<LedgerView, Failure> {
+    let ledger = ledger(state)?;
+    // The serialized image is still authoritative until save. Removing only its
+    // derived cache lets an exclusive writer reuse the decoded allocation.
+    state.plugins.structure_cache.decoded.take();
+    Ok(ledger)
+}
+
+fn save(state: &mut TickState, ledger: &LedgerView) {
     state.plugins.set_domain(
         OWNER,
         KEY,
-        serde_json::to_value(ledger).expect("native structure ledger serialization"),
+        serde_json::to_value(&*ledger.0).expect("native structure ledger serialization"),
     );
+    state.plugins.structure_cache.install(ledger.0.clone());
 }
 fn next(value: u64) -> Result<u64, Failure> {
     value
@@ -604,7 +730,7 @@ fn survey(
     dimension: &str,
     bounds: ScriptWorldBounds,
 ) -> Result<(u64, ScriptWorldStructureResult), Failure> {
-    let mut ledger = ledger(state)?;
+    let mut ledger = ledger_mut(state)?;
     let target = world(state, dimension)?;
     let image = fingerprint(target, bounds, false)?;
     let revision = next(ledger.revision)?;
@@ -768,7 +894,7 @@ fn execute_operation(
             expected_blueprint_hash,
             ..
         } => {
-            let mut ledger = ledger(state)?;
+            let mut ledger = ledger_mut(state)?;
             let blueprint = blueprint(state, owner, blueprint_id)?;
             if expected_blueprint_hash
                 .as_ref()
@@ -913,7 +1039,7 @@ fn execute_operation(
             work_units,
             ..
         } => {
-            let mut ledger = ledger(state)?;
+            let mut ledger = ledger_mut(state)?;
             let mut record = take_structure(&mut ledger, owner, structure_id)?;
             let portion = advance_cells(
                 &record,
@@ -1086,7 +1212,7 @@ fn execute_operation(
             expected_revision,
             ..
         } => {
-            let mut ledger = ledger(state)?;
+            let mut ledger = ledger_mut(state)?;
             let mut record = take_structure(&mut ledger, owner, structure_id)?;
             if record.snapshot.revision != *expected_revision {
                 return Err(Failure::StaleRevision);
@@ -1148,7 +1274,7 @@ fn execute_operation(
             ))
         }
         ScriptWorldStructureOperation::RegisterWorksite { request, .. } => {
-            let mut ledger = ledger(state)?;
+            let mut ledger = ledger_mut(state)?;
             let survey = ledger
                 .surveys
                 .get(&request.survey_token)

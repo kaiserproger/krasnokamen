@@ -13,7 +13,6 @@ pub(crate) fn fixture() -> (EdgeServer, std::path::PathBuf) {
     let data = Arc::new(mc_data::solaris_required_data());
     let cfg = EdgeConfig::default();
     let server = EdgeServer {
-        recipes: crate::recipes::RecipePackets::new(hub.registry()).unwrap(),
         loader_manifest: None,
         protocols: crate::translation::Catalog::default(),
         wire: WireRegistries {
@@ -167,8 +166,11 @@ async fn deop_reaches_rejoining_native_session() {
         uuid,
         "Alex".into(),
         "127.0.0.1".parse().unwrap(),
-        2,
-        "en_us".into(),
+        mc_core::boundary::ClientSettings {
+            view_distance: 2,
+            locale: "en_us".into(),
+            chat_visibility: mc_core::boundary::ChatVisibility::Full,
+        },
     )
     .await
     .unwrap();
@@ -204,8 +206,11 @@ async fn joining_session_and_deop_keep_native_permission_order() {
         uuid,
         "Alex".into(),
         "127.0.0.1".parse().unwrap(),
-        2,
-        "en_us".into(),
+        mc_core::boundary::ClientSettings {
+            view_distance: 2,
+            locale: "en_us".into(),
+            chat_visibility: mc_core::boundary::ChatVisibility::Full,
+        },
     );
     tokio::pin!(joining);
     let deop = server.handle_admin_command(operator, "deop Alex");
@@ -283,8 +288,11 @@ async fn deop_between_snapshot_and_registration_reaches_native_join() {
         uuid,
         "Alex".into(),
         "127.0.0.1".parse().unwrap(),
-        2,
-        "en_us".into(),
+        mc_core::boundary::ClientSettings {
+            view_distance: 2,
+            locale: "en_us".into(),
+            chat_visibility: mc_core::boundary::ChatVisibility::Full,
+        },
     )
     .await
     .unwrap();
@@ -883,3 +891,6 @@ mod clock_queue_tests;
 
 #[path = "shelf_update_queue_tests.rs"]
 mod shelf_update_queue_tests;
+
+#[path = "lost_entity_frames_tests.rs"]
+mod lost_entity_frames_tests;

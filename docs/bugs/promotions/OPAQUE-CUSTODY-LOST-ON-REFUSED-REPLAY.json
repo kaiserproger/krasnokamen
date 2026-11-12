@@ -1,0 +1,30 @@
+{
+  "id": "OPAQUE-CUSTODY-LOST-ON-REFUSED-REPLAY",
+  "verdict": "promoted",
+  "fix_commit": "patch:a8c4023144038f091465c416777c1890e91e55a1a0d3f9481299d2fc3b7bebf9",
+  "fix_commit_full": "patch:a8c4023144038f091465c416777c1890e91e55a1a0d3f9481299d2fc3b7bebf9",
+  "promoted_at": "2026-11-12T06:50:20+00:00",
+  "tree_head": "5975c798774b54f996f26bbcfa433cb4208b97a3",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "a8c4023144038f091465c416777c1890e91e55a1a0d3f9481299d2fc3b7bebf9",
+  "reversed_files": [
+    "crates/mc-core/src/core/recovery.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:core::checkpoint_custody_tests::opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:core::checkpoint_custody_tests::opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/CustodyPromote/.analysis/validation/20261112T064740-ledger-promote-189x388o"
+}

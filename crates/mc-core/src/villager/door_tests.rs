@@ -309,7 +309,8 @@ fn interrupted_route_closes_only_the_door_the_resident_opened() {
     assert!(!door_open(&state, door));
     assert!(v.opened_doors.is_empty());
 
-    // A pre-opened player door must remain untouched and unowned.
+    // A door a player left open is not toggled on the way in, but the villager
+    // remembers it like vanilla `InteractWithDoor` and closes it after passing.
     let cells = crate::placement::use_block(&state.registry.blocks, door, 0.0, &|p| {
         state.world.block_at(p.x, p.y, p.z)
     })
@@ -322,9 +323,15 @@ fn interrupted_route_closes_only_the_door_the_resident_opened() {
     v.navigation_path.push(door);
     changes.blocks.clear();
     crate::villager::doors::interact(&mut state, slot, &mut v, &mut changes);
-    assert!(v.opened_doors.is_empty());
+    assert_eq!(v.opened_doors, [door]);
     assert!(changes.blocks.is_empty());
     assert!(door_open(&state, door));
+    v.navigation_path.clear();
+    v.sleeping = true;
+    state.entities.set_pos(slot, [8.5, 201.0, 10.5]);
+    crate::villager::doors::interact(&mut state, slot, &mut v, &mut changes);
+    assert!(!door_open(&state, door), "the player-opened door is closed");
+    assert!(v.opened_doors.is_empty());
 }
 
 #[test]

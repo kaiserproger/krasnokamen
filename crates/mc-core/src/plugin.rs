@@ -150,6 +150,8 @@ pub struct PluginState {
     dirty_receipts: DirtyKeys,
     #[serde(skip)]
     dirty_domains: DirtyKeys,
+    #[serde(skip)]
+    pub(crate) structure_cache: crate::plugin_structures::LedgerCache,
 }
 
 impl PluginState {
@@ -163,6 +165,7 @@ impl PluginState {
         key: &str,
     ) -> Option<&mut serde_json::Value> {
         let value = self.domains.get_mut(owner)?.get_mut(key)?;
+        self.structure_cache.invalidate(owner, key);
         self.dirty = true;
         mark_key(&mut self.dirty_domains, owner, key);
         Some(value)
@@ -202,6 +205,7 @@ impl PluginState {
     }
 
     pub(crate) fn set_domain(&mut self, owner: &str, key: &str, value: serde_json::Value) {
+        self.structure_cache.invalidate(owner, key);
         self.domains
             .entry(owner.into())
             .or_default()
@@ -216,6 +220,7 @@ impl PluginState {
             .get_mut(owner)
             .is_some_and(|domain| domain.remove(key).is_some())
         {
+            self.structure_cache.invalidate(owner, key);
             self.dirty = true;
             mark_key(&mut self.dirty_domains, owner, key);
         }
@@ -383,6 +388,7 @@ impl PluginState {
         for (owner, records) in &delta.domains {
             let domain = self.domains.entry(owner.clone()).or_default();
             for (key, image) in records {
+                self.structure_cache.invalidate(owner, key);
                 match image {
                     DomainPostImage::Present(value) => {
                         domain.insert(key.clone(), value.clone());
@@ -1033,6 +1039,18 @@ pub(crate) fn route_command(
         .is_err()
     {
         return false;
+    }
+    // One host thread serves every plugin, so a stalled callback leaves durable
+    // events retained here. Past the limit a new command is refused, never
+    // queued: the backlog must stay under the capacity that halts the world.
+    if runtime.backlog_len() >= COMMAND_BACKLOG_LIMIT {
+        state.push_player(
+            connection,
+            crate::boundary::PlayerChange::Chat {
+                message: COMMAND_BACKLOG_REFUSAL.into(),
+            },
+        );
+        return true;
     }
     let Some(context) = player_context(state, connection, permission >= 2) else {
         state.push_player(

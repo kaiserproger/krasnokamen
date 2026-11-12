@@ -123,9 +123,9 @@ pub fn ingredient_accepts_item(
         .iter()
         .any(|alternative| match alternative {
             IngredientAlternative::Item(item) => items.id_of(item) == Some(item_id),
-            IngredientAlternative::Tag(tag) => i32::try_from(item_id)
-                .ok()
-                .is_some_and(|raw_id| tags.contains_raw_id("minecraft:item", tag.as_str(), raw_id)),
+            IngredientAlternative::Tag(tag) => i32::try_from(item_id).ok().is_some_and(|raw_id| {
+                tags.contains_raw_id(crate::tags::ITEM_REGISTRY, tag.as_str(), raw_id)
+            }),
         })
 }
 

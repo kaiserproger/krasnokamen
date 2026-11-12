@@ -10,7 +10,7 @@ use std::sync::Arc;
 fn tagged(rules: &ItemRules<'_>, stack: &ItemStack, tag: &str) -> bool {
     rules
         .tags
-        .contains_raw_id("minecraft:item", tag, stack.item_id as i32)
+        .contains_raw_id(mc_data::tags::ITEM_REGISTRY, tag, stack.item_id as i32)
 }
 
 fn item_name<'a>(rules: &ItemRules<'a>, stack: &ItemStack) -> &'a str {

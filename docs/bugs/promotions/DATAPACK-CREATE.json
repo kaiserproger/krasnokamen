@@ -1,0 +1,44 @@
+{
+  "id": "DATAPACK-CREATE",
+  "verdict": "promoted",
+  "fix_commit": "patch:6c685109e11e0daa60136fd4f8bfb0a436aba0fb05329897927e9f4ef779afe9",
+  "fix_commit_full": "patch:6c685109e11e0daa60136fd4f8bfb0a436aba0fb05329897927e9f4ef779afe9",
+  "promoted_at": "2026-11-12T01:17:38+00:00",
+  "tree_head": "a4710009c5713cacf5c729040953cf8c07df5e93",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "6c685109e11e0daa60136fd4f8bfb0a436aba0fb05329897927e9f4ef779afe9",
+  "reversed_files": [
+    "crates/mc-core/src/datapack_management.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:datapacks::command_tests::create_writes_an_empty_directory_pack_with_a_description": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:datapack-reload:native-datapack-reload": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-datapack-reload --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261112T004323-ledger-promote-m808qoqa/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:datapacks::command_tests::create_writes_an_empty_directory_pack_with_a_description": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261111T233235-native-datapack-reload-qp8gofeq/result.json",
+    "tree_head": "a4710009c5713cacf5c729040953cf8c07df5e93",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "080e86c32c92b2c3855914382eb16bfa83da4a9514eaaab237b98a2d594c10f7",
+    "covers": [
+      "harness:datapack-reload:native-datapack-reload"
+    ],
+    "profile": "datapack-reload"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/B10BreakFixes/.analysis/validation/20261112T004323-ledger-promote-m808qoqa"
+}

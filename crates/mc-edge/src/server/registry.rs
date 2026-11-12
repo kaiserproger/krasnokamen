@@ -14,7 +14,8 @@ pub(super) struct RegistryInner {
     // A Closing connection retains its slot until native/admin cleanup runs.
     pub(super) admitted: HashSet<ConnectionId>,
     pub(super) joining: HashSet<ConnectionId>,
-    pub(super) closers: HashMap<ConnectionId, tokio::sync::oneshot::Sender<()>>,
+    /// Wakes the connection owner with the reason the registry dropped it.
+    pub(super) closers: HashMap<ConnectionId, tokio::sync::oneshot::Sender<&'static str>>,
     pub(super) handles: HashMap<ConnectionId, ConnectionHandles>,
     pub(super) names: HashMap<ConnectionId, String>,
     pub(super) view_distances: HashMap<ConnectionId, i32>,
@@ -23,6 +24,9 @@ pub(super) struct RegistryInner {
     /// Client locale last admitted to the core (`ClientInformation.language`);
     /// deduplicates Play updates and is cleared on disconnect.
     pub(super) locales: HashMap<ConnectionId, String>,
+    /// Chat setting last admitted to the core (`ClientInformation.chat_visibility`);
+    /// deduplicates Play updates and is cleared on disconnect.
+    pub(super) chat_visibilities: HashMap<ConnectionId, mc_core::boundary::ChatVisibility>,
     pub(super) roster_dirty: bool,
     // Join state and its waiters share the queue registry's atomic removal.
     pub(super) pending_joins: HashMap<ConnectionId, JoinedSpawn>,
@@ -101,6 +105,16 @@ impl ConnectionRegistry {
         );
         inner.handles.insert(id, handles);
         Ok(inner.pending_reliable.remove(&id).unwrap_or_default())
+    }
+
+    /// The chat setting last admitted for this connection; Full while none is known.
+    pub(crate) fn chat_visibility(&self, id: ConnectionId) -> mc_core::boundary::ChatVisibility {
+        self.inner
+            .lock()
+            .chat_visibilities
+            .get(&id)
+            .copied()
+            .unwrap_or(mc_core::boundary::ChatVisibility::Full)
     }
 
     /// Read actual mpsc occupied-or-reserved slots only on telemetry requests.
@@ -246,6 +260,11 @@ impl ConnectionRegistry {
     /// reliable changes, any join waiters (their receivers fail closed), and
     /// the stashed disconnect reason.
     pub fn remove(&self, id: ConnectionId) {
+        self.close(id, "removed");
+    }
+
+    /// [`Self::remove`] naming why: the connection owner logs `cause`.
+    pub fn close(&self, id: ConnectionId, cause: &'static str) {
         crate::vanilla_items::unmark(id);
         let closer = {
             let mut inner = self.inner.lock();
@@ -264,10 +283,11 @@ impl ConnectionRegistry {
                 self.setup_fences_pending.store(false, Ordering::Release);
             }
             inner.locales.remove(&id);
+            inner.chat_visibilities.remove(&id);
             inner.closers.remove(&id)
         };
         if let Some(closer) = closer {
-            let _ = closer.send(());
+            let _ = closer.send(cause);
         }
     }
 

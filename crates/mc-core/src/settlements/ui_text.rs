@@ -57,31 +57,15 @@ pub(crate) enum Key {
 
     TitleSettlement,
     Autonomous,
-    UnclaimedBody,
-    Claim,
     Buildings,
     ResidentsJobs,
     Projects,
     ProductionOrders,
     Army,
-    Settings,
-    NoneYet,
-    MainBody,
-    Stranded,
-    ViewOnlyOwner,
-    StorageNone,
-    Empty,
-    StorageCount,
-    ItemCount,
 
-    TitleBuildings,
-    JobsRow,
     MaxLevel,
     ReadyFor,
-    NeedsNext,
-    UpgradeTo,
     More,
-    NoBuildings,
     CertifyNew,
 
     TitleCertify,
@@ -105,14 +89,6 @@ pub(crate) enum Key {
     CannotUpgrade,
     CornerSet,
 
-    SoldiersRow,
-    JobsFilledRow,
-    FreeSlots,
-    NoJob,
-    WorksAt,
-    SoldierDuty,
-    TitleResidents,
-
     JobCancelled,
     JobDone,
     JobPaused,
@@ -122,19 +98,17 @@ pub(crate) enum Key {
     Resume,
     Pause,
     Cancel,
-    NoOrders,
-    NewOrderHelp,
     NewOrder,
-    TitleOrders,
     NoStation,
     StationRow,
     ChooseStation,
     WhereWork,
     StationGone,
-    StationUnloaded,
     NoFreeResident,
     TitleNewOrder,
     PickProduct,
+    RecipeFacts,
+    ExactComponents,
     Quantity,
     Resident,
     FailureBusy,
@@ -182,8 +156,6 @@ pub(crate) enum Key {
     Ordered,
 
     OrderBlueprint,
-    UpgradeRow,
-    TitleProjects,
     ChooseBlueprint,
     PendingOrder,
     PendingBusy,
@@ -192,7 +164,6 @@ pub(crate) enum Key {
     CancelPending,
     PendingCancelled,
     Status,
-    TitleProjectStatus,
 
     SettingsBody,
     Rename,
@@ -202,13 +173,10 @@ pub(crate) enum Key {
     Renamed,
 
     Map,
-    TitleMap,
-    Refresh,
     MapTerritory,
     MapOutside,
     MapYou,
     MapYouAt,
-    MapSite,
     MapSiteAt,
     MapBuilding,
     MapWorkshops,
@@ -220,11 +188,139 @@ pub(crate) enum Key {
     MapLampSites,
     MapScale,
     MapEmpty,
+    Settlement,
+    NextStep,
+    Help,
+    CivilHelp,
+    HubBody,
+    ClaimReview,
+    ClaimPolicy,
+    Certificate,
+    CertificateCheck,
+    ConstructionUpgrade,
+    CertificatePolicy,
+    RequestPolicy,
+    StateChanged,
+    SupplyCauseUnavailable,
+    SourceMaterialHint,
+    NoBlueprintUpgrade,
+    Checklist,
+    ChecklistUnavailable,
+    Neighbours,
+    NeighboursUnavailable,
+    GuideClaim,
+    GuideChecklist,
+    GuideRecruit,
+    GuideArmour,
+    GuideWeapons,
+    GuideHousing,
+    GuideWar,
+    GuideBattle,
+    GuideSupply,
+    GuideConstruction,
+    MaterialsEstimate,
 }
 
 /// English and Russian text for one key.
 const fn pair(key: Key) -> (&'static str, &'static str) {
     match key {
+        Key::Settlement => ("Settlement", "Поселение"),
+        Key::NextStep => ("Next step", "Следующий шаг"),
+        Key::Help => ("Help", "Помощь"),
+        Key::MaterialsEstimate => ("Materials estimate", "Оценка материалов"),
+        Key::Neighbours => ("Neighbours & war", "Соседи и война"),
+        Key::NeighboursUnavailable => (
+            "Neighbour and war management is not available in this build.",
+            "Управление соседями и войной в этой сборке недоступно.",
+        ),
+        Key::GuideClaim => (
+            "Find the village bell → right-click → Claim charter. This is your management entrance.",
+            "Найдите колокол деревни → ПКМ → «Принять грамоту». Это вход в управление.",
+        ),
+        Key::GuideChecklist => (
+            "Fief checklist belongs to the native progression system. If unavailable, this UI does not invent readiness.",
+            "Список «До удела» принадлежит системе развития. Если он недоступен, интерфейс не выдумывает готовность.",
+        ),
+        Key::GuideRecruit => (
+            "Open Army for the available recruitment controls. Need barracks capacity? Open Projects → Barracks.",
+            "Откройте «Армия» для доступного найма. Не хватает мест? «Проекты» → «Казарма».",
+        ),
+        Key::GuideArmour => (
+            "The feudal preparation step is Armour: supply real armour through Storage, then issue it to the selected recruit when supported by Army.",
+            "Шаг подготовки — «Одеть»: внесите настоящую броню на склад, затем выдайте выбранному новобранцу через доступные действия армии.",
+        ),
+        Key::GuideWeapons => (
+            "Weapons: sword / spear / bow / crossbow. Archers need real arrows; a spear is two-handed. Use Army's supported controls.",
+            "Оружие: меч / копьё / лук / арбалет. Лучникам нужны настоящие стрелы; копьё двуручное. Доступные действия — в «Армия».",
+        ),
+        Key::GuideHousing => (
+            "Military housing is an actual free barracks bed, not just reserved capacity. Complete preparation before battle.",
+            "Военное жильё — настоящая свободная койка в казарме, а не только место в лимите. Завершите подготовку до боя.",
+        ),
+        Key::GuideWar => (
+            "Only the charter holder approves a war's cause, objectives and window. No damage is lawful during the grace period. Controls require native war support.",
+            "Причину, цели и окно войны утверждает держатель грамоты. До конца отсрочки урон запрещён. Действия требуют поддержки системы войны.",
+        ),
+        Key::GuideBattle => (
+            "Battle preparation: formation → advance / hold / retreat. A window ending is not victory; peace or surrender records the outcome.",
+            "В бою: строй → наступать / держать / отступить. Конец окна — не победа; мир или капитуляция записывают исход.",
+        ),
+        Key::GuideSupply => (
+            "Supply voluntarily through Storage. Shift-click your own stack to deposit. Victory grants no right to break or loot others' property.",
+            "Снабжение — добровольно через склад. Shift+клик по своему стаку вносит его. Победа не даёт права ломать и грабить чужое.",
+        ),
+        Key::GuideConstruction => (
+            "Building → Order construction: builders fetch materials and place blocks. Projects shows shortages and progress. Recheck certificate only checks blocks already built.",
+            "Здание → «Заказать стройку»: строители носят материалы и ставят блоки. «Проекты» показывают нехватку и прогресс. Сертификат проверяет уже построенное.",
+        ),
+        Key::CivilHelp => (
+            "Settlement dashboard: Map, Buildings, Residents and Resources above; Production and Projects below. Click an icon for its labelled page. Back returns without cancelling work.",
+            "Панель поселения: вверху Карта, Постройки, Жители и Ресурсы; ниже Производство и Проекты. Клик открывает подписанную страницу. Назад не отменяет работу.",
+        ),
+        Key::HubBody => (
+            "{owner}\nOpen Army to recruit, equip and house soldiers.",
+            "{owner}\nНажмите «Армия», чтобы нанять, одеть и поселить солдат",
+        ),
+        Key::ClaimReview => ("Claim charter", "Принять грамоту"),
+        Key::ClaimPolicy => (
+            "Claim {name}? You must stand inside this autonomous settlement. Claiming makes you its holder; opening this page changes nothing.",
+            "Принять грамоту {name}? Нужно стоять внутри этого автономного поселения. Вы станете его владельцем; открытие этой страницы ничего не меняет.",
+        ),
+        Key::Certificate => (
+            "Recheck certificate L{level}",
+            "Проверить сертификат L{level}",
+        ),
+        Key::CertificateCheck => ("Certificate check", "Проверка сертификата"),
+        Key::ConstructionUpgrade => ("Order construction L{level}", "Заказать стройку L{level}"),
+        Key::CertificatePolicy => (
+            "Check blocks already built.\nbuilders will not build.\nThese are geometry requirements,\nnot a shopping bill.",
+            "Проверка уже построенных блоков.\nстроители не будут строить.\nЭто требования к геометрии,\nне список покупок.",
+        ),
+        Key::RequestPolicy => (
+            "Request; queues if busy or short.\nBefore admission: estimated materials.\nNo blocks are placed\nand no stock debited by this click.",
+            "Если занято/нехватка — в очередь.\nДо приёма: материалы — оценка.\nЭтот клик не ставит блоки\nи не списывает запас.",
+        ),
+        Key::StateChanged => (
+            "The target or queued order changed. Review the current state before confirming again.",
+            "Цель или очередь изменились. Проверьте текущее состояние перед новым подтверждением.",
+        ),
+        Key::SupplyCauseUnavailable => (
+            "Native supply cause unavailable. Check storage and production; no source is inferred.",
+            "Причина снабжения недоступна. Проверьте склад и производство; источник не выводится.",
+        ),
+        Key::SourceMaterialHint => (
+            "Native production input, for example:",
+            "Материал для производства, например:",
+        ),
+        Key::NoBlueprintUpgrade => (
+            "No blueprint upgrade; build manually and recheck.",
+            "Нет улучшения по чертежу; постройте вручную и проверьте сертификат.",
+        ),
+        Key::Checklist => ("Fief checklist", "До удела"),
+        Key::ChecklistUnavailable => (
+            "Fief progression is not available in this server state. Civil counts are not a promotion test.",
+            "Развитие до удела недоступно в этом состоянии сервера. Гражданская статистика не является проверкой титула.",
+        ),
         Key::Close => ("Close", "Закрыть"),
         Key::Back => ("Back", "Назад"),
         Key::ViewOnly => ("View only.", "Только просмотр."),
@@ -267,52 +363,15 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
 
         Key::TitleSettlement => ("Settlement {name}", "Поселение {name}"),
         Key::Autonomous => ("Autonomous (unclaimed)", "Автономное (без владельца)"),
-        Key::UnclaimedBody => (
-            "Autonomous (unclaimed)\n{residents} residents · {buildings} buildings\nClaim while inside this village.",
-            "Автономное (без владельца)\nЖителей: {residents} · построек: {buildings}\nПрисвойте, стоя внутри деревни.",
-        ),
-        Key::Claim => ("Claim settlement", "Присвоить поселение"),
         Key::Buildings => ("Buildings", "Постройки"),
         Key::ResidentsJobs => ("Residents & jobs", "Жители и работа"),
         Key::Projects => ("Projects", "Стройка"),
         Key::ProductionOrders => ("Production orders", "Заказы производства"),
         Key::Army => ("Army", "Армия"),
-        Key::Settings => ("Settings", "Настройки"),
-        Key::NoneYet => ("none yet", "пока нет"),
-        Key::MainBody => (
-            "Owner: {owner}\nRadius: {radius} blocks around {x} {y} {z}\nResidents: {residents} ({working} working, {idle} idle)\nBuildings: {certified}\n{storage}",
-            "Владелец: {owner}\nРадиус: {radius} блоков вокруг {x} {y} {z}\nЖители: {residents} ({working} работают, {idle} без дела)\nПостройки: {certified}\n{storage}",
-        ),
-        Key::Stranded => (
-            "{stranded} workers need a certified workshop — open Buildings → Certify",
-            "{stranded} рабочим нужна сертифицированная мастерская — откройте «Постройки» → «Сертифицировать»",
-        ),
-        Key::ViewOnlyOwner => (
-            "View only: the owner or an operator manages this settlement.",
-            "Только просмотр: поселением управляет владелец или оператор.",
-        ),
-        Key::StorageNone => ("Storage: none certified", "Склад: нет сертифицированного"),
-        Key::Empty => ("empty", "пусто"),
-        Key::StorageCount => (
-            "Storage: {containers} containers; {items}",
-            "Склад: контейнеров {containers}; {items}",
-        ),
-        Key::ItemCount => ("{name} x{count}", "{name} ×{count}"),
 
-        Key::TitleBuildings => ("Buildings - {name}", "Постройки — {name}"),
-        Key::JobsRow => (" jobs {filled}/{slots}", " рабочие места {filled}/{slots}"),
         Key::MaxLevel => (" - max level", " — максимальный уровень"),
         Key::ReadyFor => (" - ready for L{next}", " — готово к L{next}"),
-        Key::NeedsNext => (
-            " - L{next} needs: {missing}",
-            " — для L{next} нужно: {missing}",
-        ),
-        Key::UpgradeTo => ("Upgrade #{seq} to L{next}", "Улучшить #{seq} до L{next}"),
         Key::More => ("(+{n} more)", "(ещё {n})"),
-        Key::NoBuildings => (
-            "No certified buildings yet. Build freely, then certify the finished building: the settlement checks its blocks and size.",
-            "Сертифицированных построек пока нет. Стройте свободно, затем сертифицируйте готовую постройку: поселение проверит её блоки и размер.",
-        ),
         Key::CertifyNew => ("Certify new building", "Сертифицировать постройку"),
 
         Key::TitleCertify => ("Certify building", "Сертификация постройки"),
@@ -363,23 +422,6 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         ),
         Key::CornerSet => ("Corner {n} = {at}.", "Угол {n} = {at}."),
 
-        Key::SoldiersRow => (
-            "#{id} {kind} L{level}: {filled}/{beds} soldiers",
-            "#{id} {kind} L{level}: солдат {filled}/{beds}",
-        ),
-        Key::JobsFilledRow => (
-            "#{id} {kind} L{level}: {filled}/{slots} jobs filled",
-            "#{id} {kind} L{level}: занято мест {filled}/{slots}",
-        ),
-        Key::FreeSlots => (
-            "Free job slots: {free}; unemployed residents: {people}",
-            "Свободных мест: {free}; безработных жителей: {people}",
-        ),
-        Key::NoJob => ("no job", "без работы"),
-        Key::WorksAt => ("works at #{id} {kind}", "работает в #{id} {kind}"),
-        Key::SoldierDuty => ("; soldier {order}", "; солдат {order}"),
-        Key::TitleResidents => ("Residents & jobs - {name}", "Жители и работа — {name}"),
-
         Key::JobCancelled => ("cancelled", "отменён"),
         Key::JobDone => ("done", "готово"),
         Key::JobPaused => ("paused", "пауза"),
@@ -392,16 +434,7 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::Resume => ("Resume {id}", "Продолжить {id}"),
         Key::Pause => ("Pause {id}", "Пауза {id}"),
         Key::Cancel => ("Cancel {id}", "Отменить {id}"),
-        Key::NoOrders => (
-            "No production orders yet.",
-            "Заказов производства пока нет.",
-        ),
-        Key::NewOrderHelp => (
-            "A new order sends one resident to a workstation inside a certified workshop. With \"craft missing ingredients\" on, the resident first crafts every missing intermediate from town storage, then the product; raw materials must already be in storage.",
-            "Новый заказ отправляет жителя к рабочему месту в сертифицированной мастерской. С флажком «крафтить недостающее» житель сначала крафтит из склада все недостающие промежуточные ингредиенты, затем сам продукт; сырьё должно уже лежать на складе.",
-        ),
         Key::NewOrder => ("New order", "Новый заказ"),
-        Key::TitleOrders => ("Production orders - {name}", "Заказы производства — {name}"),
         Key::NoStation => (
             "No crafting table inside a certified workshop. Place a crafting table in a workshop and try again.",
             "В сертифицированной мастерской нет верстака. Поставьте верстак и повторите.",
@@ -416,20 +449,24 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
             "Где должен работать житель?",
         ),
         Key::StationGone => ("That workstation is gone.", "Это рабочее место исчезло."),
-        Key::StationUnloaded => (
-            "That workstation is not loaded.",
-            "Это рабочее место не загружено.",
-        ),
         Key::NoFreeResident => (
             "No free resident: bind villagers with /settlement bind, or wait for current orders to finish.",
             "Нет свободных жителей: привяжите жителей через /settlement bind или дождитесь окончания текущих заказов.",
         ),
         Key::TitleNewOrder => ("New production order", "Новый заказ производства"),
         Key::PickProduct => (
-            "Pick the product, a quantity and the resident. Crafting table at {at}.",
-            "Выберите продукт, количество и жителя. Верстак в {at}.",
+            "Select a resident and craft count. Workstation at {at}.",
+            "Выберите жителя и число операций. Рабочее место в {at}.",
         ),
-        Key::Quantity => ("Quantity", "Количество"),
+        Key::RecipeFacts => (
+            "{recipe}\nPer craft — inputs: {inputs}\nOutputs: {outputs}\nDuration: {ticks} ticks",
+            "{recipe}\nНа операцию — сырьё: {inputs}\nВыход: {outputs}\nДлительность: {ticks} тактов",
+        ),
+        Key::ExactComponents => (
+            " [exact native components]",
+            " [точные нативные компоненты]",
+        ),
+        Key::Quantity => ("Craft count", "Число операций"),
         Key::Resident => ("Resident", "Житель"),
         Key::FailureBusy => (
             "That resident already has an active order.",
@@ -533,11 +570,6 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         ),
 
         Key::OrderBlueprint => ("Order: {blueprint}", "Заказ: {blueprint}"),
-        Key::UpgradeRow => (
-            "Upgrade #{id} ({kind} L{level}) to L{next}",
-            "Улучшить #{id} ({kind} L{level}) до L{next}",
-        ),
-        Key::TitleProjects => ("Projects - {name}", "Стройка — {name}"),
         Key::ChooseBlueprint => (
             "Choose a blueprint to order.",
             "Выберите чертёж для заказа.",
@@ -552,7 +584,6 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::CancelPending => ("Cancel pending order", "Отменить заказ в очереди"),
         Key::PendingCancelled => ("Pending order cancelled.", "Заказ в очереди отменён."),
         Key::Status => ("Status", "Статус"),
-        Key::TitleProjectStatus => ("Project status - {name}", "Статус стройки — {name}"),
 
         Key::SettingsBody => (
             "Name: {name}\nRadius: {radius} blocks (grows with population)\nRevision: {revision}",
@@ -568,13 +599,10 @@ const fn pair(key: Key) -> (&'static str, &'static str) {
         Key::Renamed => ("Renamed to {name}.", "Переименовано в {name}."),
 
         Key::Map => ("Map", "Карта"),
-        Key::TitleMap => ("Map - {name}", "Карта — {name}"),
-        Key::Refresh => ("Refresh", "Обновить"),
         Key::MapTerritory => ("Territory, radius {radius}", "Территория, радиус {radius}"),
         Key::MapOutside => ("Outside the settlement", "За пределами поселения"),
         Key::MapYou => ("You", "Вы"),
         Key::MapYouAt => ("You are here: {x} {z}", "Вы здесь: {x} {z}"),
-        Key::MapSite => ("Construction", "Стройка"),
         Key::MapSiteAt => (
             "Construction: {blueprint} L{level}\n{from} .. {to}",
             "Стройка: {blueprint} L{level}\n{from} .. {to}",
@@ -674,6 +702,6 @@ mod tests {
         assert_eq!(text(Lang::En, Key::Back), "Back");
         assert_eq!(text(Lang::Ru, Key::Back), "Назад");
         assert_eq!(text(Lang::Ru, Key::Army), "Армия");
-        assert_eq!(text(Lang::Ru, Key::Claim), "Присвоить поселение");
+        assert_eq!(text(Lang::Ru, Key::ClaimReview), "Принять грамоту");
     }
 }

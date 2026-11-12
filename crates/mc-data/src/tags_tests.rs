@@ -74,7 +74,7 @@ fn resolves_direct_and_transitive_references() {
     let tags = load(dir.path(), &ours).unwrap();
     let item_reg = tags
         .registries
-        .get(&Identifier::parse("minecraft:item").unwrap())
+        .get(&Identifier::parse(crate::tags::ITEM_REGISTRY).unwrap())
         .expect("item tags present");
     let snacks = item_reg
         .get(&Identifier::parse("minecraft:food/snacks").unwrap())
@@ -160,7 +160,7 @@ fn required_missing_nested_tag_fails_but_optional_missing_is_empty() {
     let tags = load(dir.path(), &empty_vanilla_data()).unwrap();
     let item_reg = tags
         .registries
-        .get(&Identifier::parse("minecraft:item").unwrap())
+        .get(&Identifier::parse(crate::tags::ITEM_REGISTRY).unwrap())
         .unwrap();
     assert!(
         item_reg
@@ -234,7 +234,7 @@ fn solaris_required_item_tags_cover_recipe_baseline() {
     let tags = solaris_required_item_tags(&items);
     let item_tags = tags
         .registries
-        .get(&Identifier::parse("minecraft:item").unwrap())
+        .get(&Identifier::parse(crate::tags::ITEM_REGISTRY).unwrap())
         .expect("item tag registry present");
 
     assert_eq!(
@@ -266,7 +266,7 @@ fn solaris_required_item_tags_cover_recipe_baseline() {
         .id_of(&Identifier::parse("minecraft:egg").unwrap())
         .expect("egg is in the required item registry");
     assert!(
-        tags.contains_raw_id("minecraft:item", "minecraft:eggs", egg_id as i32),
+        tags.contains_raw_id(crate::tags::ITEM_REGISTRY, "minecraft:eggs", egg_id as i32),
         "recipe tag membership must not depend on source ordering"
     );
 }
@@ -309,7 +309,7 @@ fn recipe_book_tag_references_resolve_in_required_item_tags() {
     let tags = solaris_required_item_tags(&items);
     let item_tags = tags
         .registries
-        .get(&Identifier::parse("minecraft:item").unwrap())
+        .get(&Identifier::parse(crate::tags::ITEM_REGISTRY).unwrap())
         .expect("item tag registry present");
     // Embedded baseline always resolves; the full sidecar set additionally
     // resolves whenever the local vanilla checkout is present. A missing
@@ -488,7 +488,7 @@ fn solaris_required_client_tags_bind_vanilla_261_configuration_dependencies() {
             &["minecraft:water", "minecraft:lava"][..],
         ),
         (
-            "minecraft:item",
+            crate::tags::ITEM_REGISTRY,
             &[
                 "minecraft:enchantable/armor",
                 "minecraft:enchantable/bow",

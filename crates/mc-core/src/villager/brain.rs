@@ -349,7 +349,7 @@ pub(crate) fn kick_out_of_bed(state: &mut TickState, head: BlockPos) -> bool {
 
 /// A roofed bottom stair beside the villager with body room above it (a stair
 /// under a low ceiling or inside a wall is not a seat).
-fn stair_seat(state: &TickState, slot: EntitySlot) -> Option<BlockPos> {
+fn stair_seat(state: &TickState, slot: EntitySlot) -> Option<(BlockPos, [f64; 3])> {
     let origin = at(state.entities.pos(slot));
     let body = state.entities.body(slot);
     for dx in -1..=1 {
@@ -373,7 +373,7 @@ fn stair_seat(state: &TickState, slot: EntitySlot) -> Option<BlockPos> {
                         .iter()
                         .any(|(key, value)| key == "half" && value == "bottom")
                     && roofed(state, seat)
-                    && standing(
+                    && let Some(position) = standing(
                         &state.world,
                         &state.registry,
                         BlockPos {
@@ -383,9 +383,8 @@ fn stair_seat(state: &TickState, slot: EntitySlot) -> Option<BlockPos> {
                         body.half_width,
                         body.height,
                     )
-                    .is_some()
                 {
-                    return Some(seat);
+                    return Some((seat, position));
                 }
             }
         }
@@ -568,6 +567,48 @@ fn clear_step(state: &TickState, begin: [f64; 3], end: [f64; 3], width: f64, hei
     )
 }
 
+/// Vanilla `VillageBoundRandomStroll`: inside the village (within one chunk
+/// section of a village POI section) a strolling resident steps at random;
+/// outside it walks back toward the village. The resident's own POIs (meeting
+/// point, home, job site) stand in for vanilla's POI-section village. Sections
+/// compare horizontally only, so a resident in a mine below them still
+/// strolls instead of standing still. `random` is the in-village step, at most
+/// 6 blocks (Manhattan); the step home is as long. Without any POI the stroll
+/// is random, as in vanilla away from villages.
+fn village_bound_stroll(
+    origin: BlockPos,
+    random: (i32, i32),
+    anchors: [Option<BlockPos>; 3],
+) -> BlockPos {
+    let section = |pos: BlockPos| (pos.x >> 4, pos.z >> 4);
+    let (sx, sz) = section(origin);
+    let mut nearest: Option<(BlockPos, u32)> = None;
+    for anchor in anchors.into_iter().flatten() {
+        let (ax, az) = section(anchor);
+        if sx.abs_diff(ax) <= 1 && sz.abs_diff(az) <= 1 {
+            nearest = None;
+            break;
+        }
+        let far = origin.x.abs_diff(anchor.x) + origin.z.abs_diff(anchor.z);
+        if nearest.is_none_or(|(_, best)| far < best) {
+            nearest = Some((anchor, far));
+        }
+    }
+    let (dx, dz) = match nearest {
+        // Outside the village: at least one section away, so `far` > 6.
+        Some((anchor, far)) => (
+            (i64::from(anchor.x - origin.x) * 6 / i64::from(far)) as i32,
+            (i64::from(anchor.z - origin.z) * 6 / i64::from(far)) as i32,
+        ),
+        None => random,
+    };
+    BlockPos {
+        x: origin.x + dx,
+        y: origin.y,
+        z: origin.z + dz,
+    }
+}
+
 fn wander_to(
     state: &mut TickState,
     slot: EntitySlot,
@@ -734,7 +775,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                         Activity::Rest | Activity::Idle
                     )
                     || distance(state.entities.pos(slot), centre(seat)) > 4.0
-                    || stair_seat(state, slot) != Some(seat)
+                    || stair_seat(state, slot).map(|(position, _)| position) != Some(seat)
             })
         });
         if clear_seat {
@@ -828,11 +869,11 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 )
                 && available_food(state, slot, &cache.food, v) < 12
         });
-        // Reuse the ordinary navigation refresh cadence; while walking to a
-        // storage point keep the destination without rescanning every decision.
+        // A ration trip owns its destination separately from worker hauling.
+        // Its admitted bed may be outside the local scan at the storage end.
         let resident = state.entities.row(slot).villager.as_ref().unwrap();
         let storage_route = if needs_ration {
-            resident.navigation_target.filter(|target| {
+            resident.ration_target.filter(|target| {
                 resident.settlement.is_some_and(|settlement| {
                     crate::settlements::buildings::storage_points(state, settlement)
                         .contains(&[target.x, target.y, target.z])
@@ -846,7 +887,9 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             && (storage_route.is_some_and(|target| {
                 resident.navigation_search_failed || super::mining::near(state, slot, target, 2.5)
             }) || (storage_route.is_none() && state.tick >= resident.navigation_repath_at));
-        let spare_bed = if ration_due {
+        let ration_admitted = if ration_due && storage_route.is_some() {
+            true
+        } else if ration_due {
             let mut path = std::mem::take(&mut cache.candidate_path);
             let found = free_bed(state, &mut cache, slot, &mut path).is_some();
             path.clear();
@@ -856,6 +899,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             false
         };
         let mut v = state.entities.row_mut(slot).villager.take().unwrap();
+        v.ration_target = storage_route;
         if ration_due {
             // The independent cadence leaves navigation budget on later ticks
             // even when an unreachable spare bed exhausts this search.
@@ -1008,13 +1052,14 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         if !can_sit
             || v.seat.is_some_and(|seat| {
                 distance(state.entities.pos(slot), centre(seat)) > 4.0
-                    || stair_seat(state, slot) != Some(seat)
+                    || stair_seat(state, slot).map(|(position, _)| position) != Some(seat)
             })
         {
             v.seat = None;
         }
-        if can_sit && v.seat.is_none() {
-            v.seat = stair_seat(state, slot).filter(|seat| {
+        if can_sit
+            && v.seat.is_none()
+            && let Some((seat, position)) = stair_seat(state, slot).filter(|(seat, _)| {
                 !cache.residents.iter().copied().any(|other| {
                     other != slot
                         && state
@@ -1024,19 +1069,12 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                             .as_ref()
                             .is_some_and(|resident| resident.seat == Some(*seat))
                 })
-            });
-            if let Some(seat) = v.seat {
-                state.entities.set_pos(
-                    slot,
-                    [
-                        f64::from(seat.x) + 0.5,
-                        f64::from(seat.y) + 0.5,
-                        f64::from(seat.z) + 0.5,
-                    ],
-                );
-                state.entities.set_vel(slot, [0.0; 3]);
-                v.navigation_target = None;
-            }
+            })
+        {
+            v.seat = Some(seat);
+            state.entities.set_pos(slot, position);
+            state.entities.set_vel(slot, [0.0; 3]);
+            v.navigation_target = None;
         }
         if v.sleeping {
             v.last_slept = Some(state.tick);
@@ -1100,9 +1138,10 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 };
             let food_target = if matches!(v.activity, Activity::Rest | Activity::Panic) {
                 None
-            } else if spare_bed {
+            } else if ration_admitted {
                 let food = std::mem::take(&mut cache.food);
                 let target = provision_food(state, &mut cache, slot, &food, &mut v);
+                v.ration_target = target;
                 cache.food = food;
                 target
             } else if !ration_due {
@@ -1212,19 +1251,20 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                             seed ^= seed >> 30;
                             seed = seed.wrapping_mul(0xBF58476D1CE4E5B9);
                             seed ^= seed >> 27;
-                            // Strolls remain bounded from the current cell,
-                            // including Work already within workstation reach.
+                            // Strolls step at most 6 blocks from the current
+                            // cell, including Work already within workstation
+                            // reach, and stay bound to the village.
                             let origin = at(pos);
                             let range = if v.activity == Activity::Work { 5 } else { 13 };
                             let dx = (seed % range) as i32 - range as i32 / 2;
                             let remaining = 6 - dx.abs();
                             let dz = (((seed >> 16) % range) as i32 - range as i32 / 2)
                                 .clamp(-remaining, remaining);
-                            Some(BlockPos {
-                                x: origin.x + dx,
-                                y: origin.y,
-                                z: origin.z + dz,
-                            })
+                            Some(village_bound_stroll(
+                                origin,
+                                (dx, dz),
+                                [meeting_point, home, job_site],
+                            ))
                         } else {
                             v.navigation_target
                         }

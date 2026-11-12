@@ -212,6 +212,11 @@ pub struct Connections {
     /// and cleared on leave/remove. Never persisted: unnegotiated callers read
     /// English.
     locales: HashMap<ConnectionId, String>,
+    /// Transient client chat settings, keyed by live connection. Recorded on
+    /// [`PlayerInput::SetChatVisibility`](crate::boundary::PlayerInput::SetChatVisibility)
+    /// (which precedes Join), moved with the connection across dimensions,
+    /// and cleared on leave/remove. Never persisted; absent means `Full`.
+    chat_visibilities: HashMap<ConnectionId, crate::boundary::ChatVisibility>,
 }
 
 impl Connections {
@@ -271,9 +276,27 @@ impl Connections {
         self.locales.insert(connection, locale);
     }
 
+    /// The connection's chat setting; `Full` until the edge admits one.
+    #[must_use]
+    pub fn chat_visibility_of(&self, connection: ConnectionId) -> crate::boundary::ChatVisibility {
+        self.chat_visibilities
+            .get(&connection)
+            .copied()
+            .unwrap_or_default()
+    }
+
+    pub(crate) fn set_chat_visibility(
+        &mut self,
+        connection: ConnectionId,
+        visibility: crate::boundary::ChatVisibility,
+    ) {
+        self.chat_visibilities.insert(connection, visibility);
+    }
+
     pub(crate) fn remove_by_connection(&mut self, connection: ConnectionId) -> Option<EntityId> {
         self.view_distances.remove(&connection);
         self.locales.remove(&connection);
+        self.chat_visibilities.remove(&connection);
         let entity = self.by_connection.remove(&connection)?;
         self.by_entity.remove(&entity);
         self.names.remove(&connection);
@@ -295,6 +318,9 @@ impl Connections {
         }
         if let Some(locale) = self.locales.remove(&connection) {
             destination.locales.insert(connection, locale);
+        }
+        if let Some(visibility) = self.chat_visibilities.remove(&connection) {
+            destination.chat_visibilities.insert(connection, visibility);
         }
     }
 
@@ -329,13 +355,17 @@ pub struct TickState {
     active_ticket_ranges: Vec<(ChunkPos, i32, i32)>,
     active_sim_radius: i32,
     pub registry: Arc<CoreRegistry>,
+    /// Where the core publishes the registry the tick runs on, so the edge
+    /// sees a datapack reload even when no one was online to be told.
+    pub(crate) published_registry: Option<Arc<std::sync::RwLock<Arc<CoreRegistry>>>>,
+    /// Where the core publishes `send_command_feedback`, so the edge's own command
+    /// replies (`/list`) obey the rule without reading tick state.
+    pub(crate) published_command_feedback: Option<Arc<std::sync::atomic::AtomicBool>>,
     pub(crate) datapacks: crate::datapacks::Runtime,
     pub(crate) command_context: crate::command_context::Runtime,
     pub(crate) debug_profiler: crate::DebugProfiler,
-    /// Whether a `/debug function` trace is executing (recursive traces refuse).
-    pub(crate) debug_tracing: bool,
-    /// Completed function-trace artifacts, oldest first.
-    pub(crate) debug_traces: Vec<crate::DebugTraceArtifact>,
+    /// The `/debug function` trace being recorded, if one is executing.
+    pub(crate) debug_trace: Option<crate::DebugTracer>,
     pub world: ChunkWorld,
     /// This world's dimension; other worlds share its tick owner and WAL.
     pub dimension: crate::dimensions::Dimension,
@@ -397,6 +427,8 @@ pub struct TickState {
     pub merge_block_writes: Vec<(BlockPos, u32)>,
     /// Reused block-phase projection; merge writes remain visible to commit.
     block_phase_writes: Vec<(BlockPos, u32)>,
+    /// Reused block cells of the item entities the twentieth-tick merge sorts.
+    pub(crate) item_merge_cells: Vec<(i32, i32, i32)>,
     /// Reused ordered admission for serial simulation passes.
     pub(crate) serial_entity_slots: Vec<EntitySlot>,
     /// Byte admission scratch, rebuilt for each caller after structural changes.
@@ -637,6 +669,8 @@ impl TickState {
             active_ticket_ranges: Vec::new(),
             active_sim_radius: -1,
             registry,
+            published_registry: None,
+            published_command_feedback: None,
             world,
             dimension: crate::dimensions::Dimension::Overworld,
             other_dimensions: Default::default(),
@@ -663,8 +697,7 @@ impl TickState {
             datapacks: Default::default(),
             command_context: Default::default(),
             debug_profiler: Default::default(),
-            debug_tracing: false,
-            debug_traces: Vec::new(),
+            debug_trace: None,
             plugins: Default::default(),
             plugin_runtime: None,
             build_queries: None,
@@ -682,6 +715,7 @@ impl TickState {
             day_time: 0,
             merge_block_writes: Vec::new(),
             block_phase_writes: Vec::new(),
+            item_merge_cells: Vec::new(),
             serial_entity_slots: Vec::new(),
             serial_entity_marks: Vec::new(),
             contact_hazards_scratch: Default::default(),
@@ -811,12 +845,58 @@ impl TickState {
         seq
     }
 
+    /// Vanilla `ServerPlayer.acceptsChatMessages`: only a client whose chat
+    /// setting is `Full` is sent other players' chat; `System` and `Hidden`
+    /// clients are not.
+    #[must_use]
+    pub(crate) fn accepts_chat(&self, connection: ConnectionId) -> bool {
+        self.connections.chat_visibility_of(connection) == crate::boundary::ChatVisibility::Full
+    }
+
     /// Reliable per-player push. On cap overflow the queue is sealed with a
     /// terminal `Disconnect` (always last) and the connection is scheduled
     /// for Leave-equivalent removal on a later tick; further pushes are
     /// dropped so nothing can land after `Disconnect`. Overflowing text lines
     /// compact into a `TextBurst` instead (see `PlayerChange::is_text`).
     pub fn push_player(&mut self, connection: ConnectionId, change: PlayerChange) {
+        if change.is_text()
+            && let Some(trace) = &mut self.debug_trace
+            && trace.connection == connection
+        {
+            // The traced source is the trace file, not the player.
+            trace.on_message(&match &change {
+                PlayerChange::Chat { message } => message.clone(),
+                PlayerChange::StyledChat { content } => crate::command_debug::plain(content),
+                _ => String::new(),
+            });
+            return;
+        }
+        self.push_to_recipient(connection, change);
+    }
+
+    /// Text a command delivers to a player as a target (`/tellraw`, `/say`,
+    /// `/msg`), not as its source's reply: a `/debug function` trace records
+    /// only what its source is sent, so this never lands in a trace.
+    pub(crate) fn push_to_recipient(&mut self, connection: ConnectionId, change: PlayerChange) {
+        // Vanilla `ServerPlayer.acceptsSystemMessages`: a client whose chat
+        // setting is hidden gets no text at all, neither chat nor command
+        // feedback. Titles and the action bar are not text lines here.
+        if change.is_text()
+            && self.connections.chat_visibility_of(connection)
+                == crate::boundary::ChatVisibility::Hidden
+        {
+            return;
+        }
+        self.push_player_unfiltered(connection, change);
+    }
+
+    /// Like [`Self::push_player`] without the chat setting's filter: the one
+    /// message a hidden client is still sent, `chat.disabled.options`, uses it.
+    pub(crate) fn push_player_unfiltered(
+        &mut self,
+        connection: ConnectionId,
+        change: PlayerChange,
+    ) {
         if self
             .disconnects
             .iter()
@@ -1419,8 +1499,10 @@ fn run_dimension_tick_inner<'a>(
 
     // 2. Entity phase (parallel by data over the fixed pool).
     let entity_start = std::time::Instant::now();
+    let mut entity_life_time = std::time::Duration::ZERO;
     if sim {
         crate::entity_life::advance(state);
+        entity_life_time = entity_start.elapsed();
         crate::brushing::run(state);
         crate::axolotl::run(state);
         crate::turtle::run(state);
@@ -1434,6 +1516,7 @@ fn run_dimension_tick_inner<'a>(
         crate::tnt::run(state, &mut intents);
         crate::mob_lanes::snowballs(state);
     }
+    let entity_species_time = entity_start.elapsed().saturating_sub(entity_life_time);
     let entity_intents = run_entity_phase(state, sim);
     let mut coreperf = state.entity_phase_scratch.coreperf.take();
     let entity_time = entity_start.elapsed();
@@ -1808,7 +1891,7 @@ fn run_dimension_tick_inner<'a>(
             + publish_tail_time;
         let log_start = std::time::Instant::now();
         eprintln!(
-            "phase ms: tick={} input={:.2} chunks={:.2} entity={:.2} merge={:.2} block={:.2} commit={:.2} snapshot={:.2} views={:.2} intents={} dimension={:?} entity_tail={:.2} block_prepare={:.2} publish_tail={:.2} boundary_gaps={:.2} before_return={:.2} allocator={:.2}",
+            "phase ms: tick={} input={:.2} chunks={:.2} entity={:.2} merge={:.2} block={:.2} commit={:.2} snapshot={:.2} views={:.2} intents={} dimension={:?} entity_tail={:.2} block_prepare={:.2} publish_tail={:.2} boundary_gaps={:.2} before_return={:.2} allocator={:.2} entity_life={:.2} entity_species={:.2}",
             state.tick,
             input_time.as_secs_f64() * 1000.0,
             chunk_time.as_secs_f64() * 1000.0,
@@ -1826,6 +1909,8 @@ fn run_dimension_tick_inner<'a>(
             log.before_return.saturating_sub(measured).as_secs_f64() * 1000.0,
             log.before_return.as_secs_f64() * 1000.0,
             log.allocator_us as f64 / 1000.0,
+            entity_life_time.as_secs_f64() * 1000.0,
+            entity_species_time.as_secs_f64() * 1000.0,
         );
         log.logging = log_start.elapsed();
     }
@@ -1971,7 +2056,7 @@ pub(crate) fn spawn_item_entity(
     stack: mc_data::ItemStack,
 ) -> EntityId {
     if !state.registry.tags.contains_raw_id(
-        "minecraft:item",
+        mc_data::tags::ITEM_REGISTRY,
         "minecraft:dampens_vibrations",
         stack.item_id as i32,
     ) {

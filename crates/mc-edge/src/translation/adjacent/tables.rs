@@ -568,14 +568,14 @@ impl Tables {
             block_states: block_states(canonical, legacy)?,
             legacy_block_bits: bits_for(legacy.blocks.values().map(|b| b.states.len()).sum()),
             blocks: registry("minecraft:block", &polyfill_block)?,
-            items: registry("minecraft:item", &polyfill_item)?,
+            items: registry(mc_data::tags::ITEM_REGISTRY, &polyfill_item)?,
             legacy_brick: legacy
-                .registry("minecraft:item")?
+                .registry(mc_data::tags::ITEM_REGISTRY)?
                 .get("minecraft:brick")
                 .context("legacy item registry has no brick")?
                 .protocol_id,
             legacy_pot_item: legacy
-                .registry("minecraft:item")?
+                .registry(mc_data::tags::ITEM_REGISTRY)?
                 .get("minecraft:decorated_pot")
                 .map(|entry| entry.protocol_id),
             entities,

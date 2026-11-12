@@ -1,0 +1,13 @@
+diff --git a/crates/mc-core/src/settlements/ui_map.rs b/crates/mc-core/src/settlements/ui_map.rs
+index d1abe382..fb9114ca 100644
+--- a/crates/mc-core/src/settlements/ui_map.rs
++++ b/crates/mc-core/src/settlements/ui_map.rs
+@@ -134,6 +134,8 @@ pub(super) fn screen(state: &mut TickState, connection: ConnectionId, ctx: &Ctx)
+     .map(|(key, action)| button(ctx.t(key), action, ctx.id).width(100));
+     let dialog = Dialog::multi_action(title, buttons.into())
+         .columns(3)
++        .text(cells_component(&grid, ctx.id))
++        .text_width(legend_component(ctx, &grid), LEGEND_WIDTH)
+         .exit(Button::plain(ctx.t(Key::Close)));
+     present(state, connection, dialog);
+ }

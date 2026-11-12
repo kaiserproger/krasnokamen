@@ -641,8 +641,11 @@ fn body_clear(
     let min = [pos[0] - width, pos[1] + 1e-6, pos[2] - width];
     let max = [pos[0] + width, pos[1] + height - 1e-6, pos[2] + width];
     let foot = min[1].floor() as i32;
+    // A body shorter than one block has its head in the foot row, so a ford
+    // also needs a dry row above the feet: a pond floor is not a ford.
+    let top = (max[1].floor() as i32).max(if wade { foot + 1 } else { foot });
     for x in min[0].floor() as i32..=max[0].floor() as i32 {
-        for y in (foot - 1)..=max[1].floor() as i32 {
+        for y in (foot - 1)..=top {
             for z in min[2].floor() as i32..=max[2].floor() as i32 {
                 let Some(id) = world.block_at(x, y, z) else {
                     return false;
@@ -1467,8 +1470,10 @@ fn acquire_pois(state: &mut TickState, cache: &mut PoiCache) {
                         }
                     }
                 }
+                // Vanilla AcquirePoi and AssignProfessionFromJobSite sit in the
+                // core package: a jobless adult claims a workstation at any
+                // hour. Only the WORK activity follows the shift.
                 1 if v.age >= 0
-                    && (2_000..9_000).contains(&state.day_time.rem_euclid(24_000))
                     && !matches!(v.data.profession, Profession::Nitwit | Profession::Soldier)
                     && v.job_site.is_none() =>
                 {
@@ -1558,7 +1563,11 @@ pub(crate) fn free_bed(
         .retain(|(_, poi)| scope_allows(scope, poi.pos) && bed_allowed(state, scope, *poi));
     for _ in 0..5 {
         let (_, poi) = cache.candidates.pop()?;
-        if !bed_has_baby_space(state, poi.pos) || claimed_home == Some(poi.pos) {
+        // Vanilla VillagerMakeLove.takeVacantBed takes any reachable home POI:
+        // no headroom check (the baby spawns at the parents, not on the bed).
+        if bed_pair(&state.world, &state.registry, poi.pos).is_none()
+            || claimed_home == Some(poi.pos)
+        {
             continue;
         }
         if !cache.spend_path(state, Consumer::Brain) {

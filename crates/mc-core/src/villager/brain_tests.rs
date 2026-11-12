@@ -21,6 +21,9 @@ mod job_memory_tests;
 #[path = "route_continuation_tests.rs"]
 mod route_continuation_tests;
 
+#[path = "stroll_swim_tests.rs"]
+mod stroll_swim_tests;
+
 fn test_state() -> TickState {
     let registry = Arc::new(CoreRegistry::load(None).expect("registry"));
     let generator: Arc<dyn mc_world::ChunkGenerator> = Arc::new(
@@ -992,6 +995,17 @@ fn resting_villager_moves_onto_nearby_indoor_stair() {
     step(&mut state);
     let position = state.entities.pos(slot);
     assert_eq!((position[0], position[2]), (9.5, 8.5));
+    let body = state.entities.body(slot);
+    assert!(
+        allocator::clear_body(
+            &state.world,
+            &state.registry,
+            position,
+            body.half_width,
+            body.height,
+        ),
+        "the physical seated body must not overlap its stair"
+    );
     let id = state.entities.body(slot).id;
     let seat = BlockPos { x: 9, y: 201, z: 8 };
     assert_eq!(

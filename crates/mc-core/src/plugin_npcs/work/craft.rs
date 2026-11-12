@@ -140,10 +140,11 @@ fn accepts(state: &TickState, stack: &ItemStack, input: &WorkRecipeInput) -> boo
         .as_ref()
         .is_some_and(|name| identity.as_deref() == Some(name.as_str()));
     let tag = input.tag.as_ref().is_some_and(|name| {
-        state
-            .registry
-            .tags
-            .contains_raw_id("minecraft:item", name.as_str(), stack.item_id as i32)
+        state.registry.tags.contains_raw_id(
+            mc_data::tags::ITEM_REGISTRY,
+            name.as_str(),
+            stack.item_id as i32,
+        )
     });
     item || tag
         || input
@@ -152,7 +153,7 @@ fn accepts(state: &TickState, stack: &ItemStack, input: &WorkRecipeInput) -> boo
             .any(|alternative| match alternative {
                 WorkRecipeAlternative::Item(name) => identity.as_deref() == Some(name.as_str()),
                 WorkRecipeAlternative::Tag(name) => state.registry.tags.contains_raw_id(
-                    "minecraft:item",
+                    mc_data::tags::ITEM_REGISTRY,
                     name.as_str(),
                     stack.item_id as i32,
                 ),

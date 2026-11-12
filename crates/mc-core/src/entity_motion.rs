@@ -39,7 +39,7 @@ pub(crate) struct MotionResult {
     pub wall_climbing: bool,
 }
 
-fn unit(id: i32, epoch: u64) -> f64 {
+pub(crate) fn unit(id: i32, epoch: u64) -> f64 {
     let mut hash = (id as u64)
         .wrapping_mul(0x9E37_79B9_7F4A_7C15)
         .wrapping_add(epoch.wrapping_mul(0xBF58_476D_1CE4_E5B9));

@@ -5,7 +5,7 @@ pub(super) struct ConnectionLifecycle<'a> {
     registry: &'a ConnectionRegistry,
     admin: &'a crate::admin::Admin,
     id: ConnectionId,
-    pub(super) cancelled: Option<tokio::sync::oneshot::Receiver<()>>,
+    pub(super) cancelled: Option<tokio::sync::oneshot::Receiver<&'static str>>,
     pub(super) native: Option<mc_core::core::PlayerSession>,
     pub(super) writer: Option<tokio::task::JoinHandle<(&'static str, Option<String>)>>,
 }

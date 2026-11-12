@@ -28,17 +28,20 @@ def _record(steps: ProbeSteps, name: str, ok: bool) -> bool:
     return ok
 
 
-def _seen(steps: ProbeSteps, needle: str, name: str, *, absent: str | None = None) -> bool:
-    """Wait (bounded) for a chat line containing `needle`; record the verdict under `name`.
+def _seen(steps: ProbeSteps, needle: str, name: str, *, absent: str | None = None, count: int = 1) -> bool:
+    """Wait (bounded) for `count` chat lines containing `needle`; record the verdict under `name`.
 
     `absent` additionally records `<name>_not_raw_key`: no line may contain that text (a raw lang key).
     """
+    def enough(lines: list[str]) -> bool:
+        return sum(needle in line for line in lines) >= count
+
     try:
-        steps.wait(lambda s: any(needle in line for line in _lines(s)), name, timeout_seconds=WAIT_SECONDS)
+        steps.wait(lambda s: enough(_lines(s)), name, timeout_seconds=WAIT_SECONDS)
     except TimeoutError:
         pass
     lines = _lines(steps.observe())
-    found = _record(steps, name, any(needle in line for line in lines))
+    found = _record(steps, name, enough(lines))
     if absent is not None:
         _record(steps, name + "_not_raw_key", not any(absent in line for line in lines))
     return found
@@ -83,9 +86,10 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.fixture("kill @e[type=minecraft:cow,distance=..0]")
     _seen(steps, "No entity was found", "kill_without_match_shows_translated_text",
           absent="argument.entity.notfound")
+    # The kill reply above is the first "No entity was found"; the tp reply must be the second.
     steps.fixture("tp @s NobodyHere")
-    _echo(steps, "tp_failure_ordered")
-    _absent(steps, "tp_to_unknown_name_shows_no_raw_key", _lines(steps.observe()), "argument.entity.notfound")
+    _seen(steps, "No entity was found", "tp_to_unknown_name_shows_translated_text",
+          absent="argument.entity.notfound", count=2)
 
     # --- /defaultgamemode, then a fresh client -----------------------------------------------
     steps.fixture("defaultgamemode creative")

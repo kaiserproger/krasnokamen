@@ -408,6 +408,13 @@ impl LootDrop {
 }
 
 impl LootTables {
+    /// Drop the loot of every block `hidden` selects (a datapack `filter` hides a
+    /// lower pack's table: the block then drops nothing).
+    pub fn remove_blocks(&mut self, mut hidden: impl FnMut(&Identifier) -> bool) {
+        self.block_drops.retain(|block, _| !hidden(block));
+        self.block_loot.retain(|block, _| !hidden(block));
+    }
+
     /// Replace one block table atomically; unsupported shapes never fall back
     /// to built-in drops under an authored resource's name.
     pub fn override_datapack_block(&mut self, block: Identifier, json: &str) -> Result<(), String> {

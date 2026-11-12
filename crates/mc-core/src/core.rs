@@ -345,8 +345,13 @@ struct CoreInner {
     worker_count: usize,
     /// World spawn fixed at open (manifest or spawn finder).
     world_spawn: [i32; 3],
-    /// Immutable game data the tick runs on (recipes, items, blocks).
+    /// Immutable game data the tick runs on (recipes, items, blocks), as the
+    /// world opened with it.
     registry: Arc<CoreRegistry>,
+    /// The registry the tick runs on now: a datapack reload replaces it.
+    live_registry: Arc<std::sync::RwLock<Arc<CoreRegistry>>>,
+    /// `send_command_feedback`, published by the tick for the edge's own replies.
+    command_feedback: Arc<std::sync::atomic::AtomicBool>,
     plugin_commands: Arc<[(String, u8)]>,
     plugin_packages: Vec<mc_script::PluginPackage>,
     plugin_stats: Arc<crate::plugin::PluginStats>,
@@ -614,12 +619,6 @@ impl Core {
             runtime.load_catalogs(&registry)?;
         }
         let datapack_root = config.world_dir.join("datapacks");
-        let datapacks =
-            crate::datapacks::PackSet::load(&datapack_root, crate::datapacks::Selection::default())
-                .map_err(CoreError::Registry)?;
-        datapacks
-            .install_content(&mut registry)
-            .map_err(CoreError::Registry)?;
         let registry = Arc::new(registry);
         let plugin_commands = plugin_runtime
             .as_ref()
@@ -683,7 +682,39 @@ impl Core {
             plugin_runtime,
             build_queries,
         )?;
-        tick_state.datapacks.install(datapacks, datapack_root);
+        // The enabled packs are the ones the world last saved: recovery has
+        // restored that selection, so load it, not the default.
+        let datapacks = crate::datapacks::PackSet::open(
+            &datapack_root,
+            tick_state.datapacks.selection().clone(),
+            &registry,
+        )
+        .map_err(CoreError::Registry)?;
+        for warning in datapacks.warnings(None) {
+            tracing::warn!("{warning}");
+        }
+        // The registry before any datapack: what every reload rebuilds on.
+        let base = Arc::clone(&registry);
+        let registry = if datapacks.has_registry_content() {
+            let mut content = (*registry).clone();
+            datapacks
+                .install_content(&mut content)
+                .map_err(CoreError::Registry)?;
+            let content = Arc::new(content);
+            tick_state.registry = Arc::clone(&content);
+            for world in tick_state.other_dimensions.values_mut() {
+                world.registry = Arc::clone(&content);
+            }
+            content
+        } else {
+            registry
+        };
+        tick_state.datapacks.install(datapacks, datapack_root, base);
+        let live_registry = Arc::new(std::sync::RwLock::new(Arc::clone(&registry)));
+        tick_state.published_registry = Some(Arc::clone(&live_registry));
+        let command_feedback = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        tick_state.published_command_feedback = Some(Arc::clone(&command_feedback));
+        crate::command_rules::publish_command_feedback(&tick_state);
         let world_spawn = tick_state.world.world_spawn();
         let terrain_epoch = crate::terrain::epoch_for_open(&tick_state)?;
         // Fresh epoch (minted when the stored record had none): stage it in
@@ -893,6 +924,8 @@ impl Core {
                 worker_count,
                 world_spawn,
                 registry,
+                live_registry,
+                command_feedback,
                 plugin_commands,
                 plugin_packages,
                 plugin_stats,
@@ -912,6 +945,28 @@ impl Core {
     #[must_use]
     pub fn registry(&self) -> &Arc<CoreRegistry> {
         &self.inner.registry
+    }
+
+    /// The registry the tick runs on now. Unlike [`Self::registry`], which is
+    /// the registry the world opened with, this follows datapack reloads, so a
+    /// player joining after one gets the recipes the world actually has.
+    #[must_use]
+    pub fn current_registry(&self) -> Arc<CoreRegistry> {
+        Arc::clone(
+            &self
+                .inner
+                .live_registry
+                .read()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
+    }
+
+    /// Whether player command success replies are shown (`send_command_feedback`).
+    #[must_use]
+    pub fn command_feedback_enabled(&self) -> bool {
+        self.inner
+            .command_feedback
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 
     /// Manifest-owned command roots and required permission (0 player, 2 operator).
@@ -959,7 +1014,7 @@ impl Core {
         })
     }
 
-    /// Admit the initial view, locale and Join together, reserving one FIFO Leave slot
+    /// Admit the initial view, locale, chat setting and Join together, reserving one FIFO Leave slot
     /// for every exit, including task cancellation before Play registration.
     pub fn join_session(
         &self,
@@ -967,8 +1022,7 @@ impl Core {
         uuid: uuid::Uuid,
         name: String,
         permission_level: u8,
-        view_distance: u8,
-        locale: String,
+        settings: crate::boundary::ClientSettings,
     ) -> Result<PlayerSession, CoreError> {
         PlayerSession::admit(
             &self.inner.input_tx,
@@ -976,8 +1030,7 @@ impl Core {
             uuid,
             name,
             permission_level,
-            view_distance,
-            locale,
+            settings,
         )
     }
 

@@ -546,7 +546,8 @@ fn production_factory_upgrades_776_to_777_through_login_configuration_and_play()
     let mut registries: serde_json::Value =
         serde_json::from_slice(&std::fs::read(upper.join("reports/registries.json")).unwrap())
             .unwrap();
-    registries["minecraft:item"]["entries"]["minecraft:cinnabar"] = json!({"protocol_id":2});
+    registries[mc_data::tags::ITEM_REGISTRY]["entries"]["minecraft:cinnabar"] =
+        json!({"protocol_id":2});
     write_json(&upper, "reports/registries.json", registries);
     let snapshot = dir.path().join("777-776");
     snapshots::install(&upper, &lower, &snapshot, SUPPORTED[2], SUPPORTED[1]).unwrap();

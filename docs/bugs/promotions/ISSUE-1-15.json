@@ -1,0 +1,41 @@
+{
+  "id": "ISSUE-1-15",
+  "verdict": "promoted",
+  "fix_commit": "patch:c998825110cb856759bb5928b0cb57978552dc3ba8cb9877b970b5589a993dff",
+  "fix_commit_full": "patch:c998825110cb856759bb5928b0cb57978552dc3ba8cb9877b970b5589a993dff",
+  "promoted_at": "2026-11-12T06:58:55+00:00",
+  "tree_head": "eef7959726bbc3c0104a71e57da30778523b8847",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "c998825110cb856759bb5928b0cb57978552dc3ba8cb9877b970b5589a993dff",
+  "reversed_files": [
+    "crates/mc-core/src/settlements/ui_map.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:settlement-map-qa:all": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run settlement-map-qa --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/Issue1Evidence/.analysis/validation/20261112T065505-ledger-promote-rqde4yai/regressions-client-1.log"
+    }
+  },
+  "restored": {
+    "harness:settlement-map-qa:all": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T065816-settlement-map-qa-2uckqy7o/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/Issue1Evidence/.analysis/validation/20261112T064308-settlement-map-qa-1zom07im/result.json",
+    "tree_head": "eef7959726bbc3c0104a71e57da30778523b8847",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "8a82abc3b6c3337bb90e93dbb51e7910d5e5abdba3c08b904518d92586b65afa",
+    "covers": [
+      "harness:settlement-map-qa:all"
+    ],
+    "profile": "settlement-map-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/Issue1Evidence/.analysis/validation/20261112T065505-ledger-promote-rqde4yai"
+}

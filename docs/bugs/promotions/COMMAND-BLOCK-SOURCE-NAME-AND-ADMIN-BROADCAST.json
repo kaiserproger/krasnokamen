@@ -1,0 +1,53 @@
+{
+  "id": "COMMAND-BLOCK-SOURCE-NAME-AND-ADMIN-BROADCAST",
+  "verdict": "promoted",
+  "fix_commit": "patch:4a450a9f261ef2fb286bced2b381fb5963ad1b53935274c12c3538a8f26a3149",
+  "fix_commit_full": "patch:4a450a9f261ef2fb286bced2b381fb5963ad1b53935274c12c3538a8f26a3149",
+  "promoted_at": "2026-11-12T06:09:55+00:00",
+  "tree_head": "e915b47bf975874f121b2f7b680a6879cd73aa86",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "4a450a9f261ef2fb286bced2b381fb5963ad1b53935274c12c3538a8f26a3149",
+  "reversed_files": [
+    "crates/mc-core/src/command_blocks.rs",
+    "crates/mc-core/src/command_context.rs",
+    "crates/mc-core/src/command_execution.rs",
+    "crates/mc-core/src/command_rules.rs",
+    "crates/mc-core/src/dimensions_globals.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:command_blocks::tests::command_block_is_named_at_and_informs_operators_of_its_output": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:entities:native-v2-command-rows": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-v2-command-rows --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/CommandRowsGate/.analysis/validation/20261112T060323-ledger-promote-tv1myfkl/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:command_blocks::tests::command_block_is_named_at_and_informs_operators_of_its_output": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:entities:native-v2-command-rows": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T060927-native-v2-command-rows-vd1qfbk1/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/CommandRowsGate/.analysis/validation/20261112T015654-native-v2-command-rows-b8fvyjkb/result.json",
+    "tree_head": "e915b47bf975874f121b2f7b680a6879cd73aa86",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "0922df1d5c981f7678c13b98cfa60f466c4386983d14aaa722be5c76b6a0adb5",
+    "covers": [
+      "harness:entities:native-v2-command-rows"
+    ],
+    "profile": "entities"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/CommandRowsGate/.analysis/validation/20261112T060323-ledger-promote-tv1myfkl"
+}

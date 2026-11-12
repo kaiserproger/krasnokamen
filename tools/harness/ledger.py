@@ -114,11 +114,20 @@ def _run_cargo(ctx, tests, tree):
 
 
 def _failing_verdict(receipt, profile, verdict):
+    """A failed profile run is red for `verdict` when the receipt reports it unmet, or, for a
+    verdict the profile cannot report on failure, when its own assertion failed:
+
+    - `all` of a profile without a verdict map (settlement-map-qa, autocraft-qa, village-autonomy-qa);
+    - a buildings-qa `<blueprint>.<behaviour>` that never got recorded because an assertion named
+      `buildings_<blueprint>_*` aborted the run (a probe check raises before the verdict is written)."""
     try:
         regressions._profile_verdict(receipt, profile, verdict)
     except regressions.VerdictNotMet as error:
-        return error.value is not None
-    return False
+        if error.value is not None:
+            return True
+        blueprint = verdict.partition('.')[0]
+        return profile == 'buildings-qa' and (_assertion_failure(receipt) or '').startswith(f'buildings_{blueprint}_')
+    return verdict == 'all' and _assertion_failure(receipt) is not None
 
 
 # Assertion names that report a lost or late connection, not the scenario's own check.
@@ -126,22 +135,30 @@ _CONNECTION_ASSERTION = re.compile(r'(^|_)(in_play|entered_play|join(ed)?)(_|$)'
 _PRE_SCENARIO_PHASES = frozenset({'preflight', 'server_start', 'client_start', 'join'})
 
 
+def _assertion_failure(receipt):
+    """The name of the scenario assertion a failed receipt tripped, or None. Read from the
+    receipt's `error` only, never from the command line that ran it. A connection assertion
+    (`in_play`, `*_entered_play`, join) or a failure tagged before the scenario body is a flake."""
+    if not isinstance(receipt, dict):
+        return None
+    details = receipt.get('details') if isinstance(receipt.get('details'), dict) else {}
+    failure = details.get('failure') if isinstance(details.get('failure'), dict) else {}
+    if failure.get('phase') in _PRE_SCENARIO_PHASES:
+        return None
+    match = re.search(r'\bassertion failed: (\S+)', str(receipt.get('error') or ''))
+    if match is None or _CONNECTION_ASSERTION.search(match.group(1)):
+        return None
+    return match.group(1)
+
+
 def _scenario_assertion_failed(receipt, check):
     """A named-scenario ref is red when its own receipt (`details.named_scenario.id` is the
-    ref) failed on one of the scenario's assertions. Read from the receipt's `error` only,
-    never from the command line that ran it. A connection assertion (`in_play`,
-    `*_entered_play`, join) or a failure tagged before the scenario body is a flake."""
+    ref) failed on one of the scenario's assertions."""
     if not isinstance(receipt, dict):
         return False
     details = receipt.get('details') if isinstance(receipt.get('details'), dict) else {}
     named = details.get('named_scenario')
-    if not (isinstance(named, dict) and named.get('id') == check):
-        return False
-    failure = details.get('failure') if isinstance(details.get('failure'), dict) else {}
-    if failure.get('phase') in _PRE_SCENARIO_PHASES:
-        return False
-    match = re.search(r'\bassertion failed: (\S+)', str(receipt.get('error') or ''))
-    return bool(match) and not _CONNECTION_ASSERTION.search(match.group(1))
+    return isinstance(named, dict) and named.get('id') == check and _assertion_failure(receipt) is not None
 
 
 def _loader_mc_version(loader_root: Path) -> str | None:
@@ -366,6 +383,8 @@ def _split_non_test(diff, source_of):
             continue
         lines = chunk.splitlines(keepends=True)
         match = re.match(r'diff --git a/(.+) b/(.+)$', lines[0].rstrip('\n'))
+        if match is None:
+            raise Refused(f'fix patch has an unparseable diff header (expected `diff --git a/<path> b/<path>`): {lines[0].rstrip()!r}')
         path = match.group(2)
         starts = [i for i, text in enumerate(lines) if text.startswith('@@ ')]
         if not starts:
@@ -424,11 +443,19 @@ def _worktree_parent(root):
 @contextlib.contextmanager
 def _control_lock(root):
     """One promotion at a time: the control worktrees have fixed paths (so cargo reuses their build
-    artifacts instead of growing the target dir by a new path per run) and the builds are heavy."""
+    artifacts instead of growing the target dir by a new path per run) and the builds are heavy.
+    Lock order is a build token, then this lock: the promote runs under mem-run (the owner host's
+    memory cap and token), and every build stage's own mem-run reuses that ancestor token. A promote
+    that took this lock without a token deadlocked with promotes holding tokens while they waited
+    here, because its next stage needed one of their tokens (2026-11-12, 1 h host-wide stall)."""
     parent = _worktree_parent(root)
     if parent is None:
         yield
         return
+    if not os.environ.get('SOLARIS_BUILD_TOKEN'):
+        raise Refused('ledger promote must run under mem-run (no build token held): it takes a build '
+                      'token first, then wt/ledger-control.lock, and its build stages reuse that token; '
+                      'run <work>/solaris/tools/dev/mem-run.sh -m 12G python3 -m tools.harness ledger promote ...')
     with (parent / 'ledger-control.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         yield

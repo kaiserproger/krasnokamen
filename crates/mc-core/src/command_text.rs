@@ -321,7 +321,7 @@ pub(crate) fn execute_tellraw(
         };
         let recipient = state.connections.entity_connection(target);
         if let Some(recipient) = recipient {
-            state.push_player(
+            state.push_to_recipient(
                 recipient,
                 crate::boundary::PlayerChange::StyledChat { content: resolved },
             );

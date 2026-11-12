@@ -348,6 +348,45 @@ bed. An ordered command fence and block predicates check the bed and roof before
 the native client asserts the certification reply. This checks certification,
 not whether a villager sleeps or breeds.
 
+`assert_entities` (native only) takes `name`, `args` (as `list_entities`), `entity_type`
+and `min`, plus optional `max`, `box` (`[x0,y0,z0,x1,y1,z1]` on the received feet
+position), `max_height` (a sleeping pose is 0.2 tall), `profession` (the received
+VillagerData) and `baby` (the received DATA_BABY_ID; a row that never received it matches
+neither `true` nor `false`). It counts the matching received entities and fails `<name>_min` or
+`<name>_max`; the artifact keeps the same-thread `game_time` and every received row.
+The village scenes judge settlement behaviour with it, in game ticks on a frozen clock:
+`native-village-idle-stroll` (six residents dropped 40 blocks from the bell walk back
+within 32 blocks in 3000 ticks; two villagers in a 4-deep pond float up),
+`native-village-night-door` (a door the player left open reads shut after both
+residents sleep behind it at night), `native-village-late-job` (at day tick 10000 an
+unbound villager and a bound resident take a free lectern) and
+`native-village-distant-job` (a resident claims a certified workshop 72 blocks away) and
+`native-village-breeding` (two bound adults ration bread from a certified storage and, in a
+house whose roof sits one block over its three beds, raise a baby villager the client receives
+within 3000 game ticks; the fix patch of `ISSUE-1-13` is the headroom-free spare-bed scan).
+Each runs on a sky platform with spawning and time frozen; none covers terrain routes.
+
+`upgrade_certified` (native only) takes `{"kind": "<building kind>", "level": 2|3}`:
+it waits for the newest `Certified <kind> #<id>` reply in `recent_chat`, sends
+`settlement building upgrade <id>` (a building id is a settlement and sequence
+pair, so a fixed scenario cannot spell it), waits 20 ticks and fails the named
+assertion `<kind>_upgraded_to_level_<level>` unless `Upgraded building #<id> to
+level <level>.` arrived.
+
+`native-settlement-buildings-upgrade` hand-builds a stone wall, a tower, a
+barracks with two beds and a farmer workshop with a composter inside a founded
+settlement and certifies each, expands the wall to the next level's size and
+adds a second composter, then upgrades both through `upgrade_certified`. It
+covers ISSUE-1-09 on the command path; it does not press the Buildings dialog's
+Upgrade button (`army-qa` does), build with Builders (`buildings-qa`), or cover
+gates, level 3 or the other workshop kinds.
+
+`native-settlement-radius-growth` founds a settlement of radius 8 around six
+villagers, then binds a seventh. `/settlement info` must show `radius=24
+members=6` after founding and `radius=28 members=7` after the bind (four blocks
+per resident, docs/settlements/construction.md). It reads the command reply, not
+the Settings dialog or the map territory.
+
 
 - `timed_entities` takes the same `name` and `args` as `list_entities` and retains
   its same-client-thread `game_time` and entity positions. Missing timestamps fail.
@@ -473,8 +512,11 @@ client-visible bug.
 
 Known causes: builders only come from residents that reach storage (a bridge exit
 over water once blocked them); builders and resource workers work only in day time
-2000..9000, so harness waits must span a game day; construction uses the
-settlement's wood species; natural zones must prove wild resources. A chat-reply
+2000..9000, so harness waits must span a game day; each project uses one wood
+species funded from stock, so an upgrade can differ from its base level; an
+autonomous upgrade clears the previous level's removed cells before it places
+anything, so a level-one building matches only until its upgrade starts and again
+once the upgrade completes; natural zones must prove wild resources. A chat-reply
 race (`mutations_refused_while_unowned`) fails on a CPU-contended host. Lumberjack
 latency varied between runs; only the final checkpoint persists, so diagnosing it
 needs a run that records state over time.

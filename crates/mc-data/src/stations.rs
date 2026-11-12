@@ -96,7 +96,7 @@ fn matches(
         serde_json::Value::String(value) => {
             if let Some(tag) = value.strip_prefix('#') {
                 tags.contains_raw_id(registry, tag, raw as i32)
-                    || (if registry == "minecraft:item" {
+                    || (if registry == crate::tags::ITEM_REGISTRY {
                         &catalogue().item_tags
                     } else {
                         &catalogue().enchantment_tags
@@ -120,9 +120,9 @@ fn input_matches(
     tags: &TagsData,
 ) -> bool {
     !stack.is_empty()
-        && items
-            .name_of(stack.item_id)
-            .is_some_and(|name| matches(value, name, stack.item_id, tags, "minecraft:item"))
+        && items.name_of(stack.item_id).is_some_and(|name| {
+            matches(value, name, stack.item_id, tags, crate::tags::ITEM_REGISTRY)
+        })
 }
 
 /// Item IDs admitted by the template, base and addition smithing slots.
@@ -152,7 +152,7 @@ fn collect_smithing_ids(
     match value {
         serde_json::Value::String(value) => {
             if let Some(tag) = value.strip_prefix('#') {
-                if let Some(members) = tags.raw_ids("minecraft:item", tag) {
+                if let Some(members) = tags.raw_ids(crate::tags::ITEM_REGISTRY, tag) {
                     ids.extend(members.iter().copied().filter(|&id| {
                         u32::try_from(id)
                             .ok()
@@ -420,7 +420,7 @@ pub fn anvil_result(
                         name,
                         left.item_id,
                         tags,
-                        "minecraft:item",
+                        crate::tags::ITEM_REGISTRY,
                     );
                 for existing in output_enchantments
                     .iter()
@@ -731,7 +731,13 @@ pub fn command_enchant_error(
     }
     let supported = item.path() == "book"
         || item.path() == "enchanted_book"
-        || matches(&def.supported_items, item, item_raw, tags, "minecraft:item");
+        || matches(
+            &def.supported_items,
+            item,
+            item_raw,
+            tags,
+            crate::tags::ITEM_REGISTRY,
+        );
     if !supported {
         return Some("That enchantment cannot be applied to the held item");
     }

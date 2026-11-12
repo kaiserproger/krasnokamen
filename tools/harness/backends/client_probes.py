@@ -577,6 +577,9 @@ seed = 81
 
                         convert_world(ctx, binary, config, evidence,
                                       corrupt=getattr(mcp, "corrupt_fixture", None))
+                    if getattr(mcp, "wal_forge", None):
+                        evidence.setdefault("forged_wal_batches", []).append(
+                            str(mcp.wal_forge(Path(evidence["world_dir"]))))
                     server_log = server_log_path.open("ab")
                     server = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
                                               cwd=runtime.REPO_ROOT, stdout=server_log,

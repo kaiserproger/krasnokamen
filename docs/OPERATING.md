@@ -548,11 +548,18 @@ authenticated reverse proxy; `allow_remote` is required for non-loopback binds.
 
 ### Datapacks and command blocks
 
-Solaris loads **directory** packs from `<world_dir>/datapacks/<pack>/` at
+Solaris loads **directory and ZIP** packs from `<world_dir>/datapacks/` at
 startup. Each needs `pack.mcmeta` with a `pack` object. Packs are ordered by
-directory name and the lexically later resource wins. ZIP files, symlinks,
-worldgen or custom-dimension resources and unimplemented resource kinds fail
-startup with an explicit error rather than falling back to built-in content.
+directory name and the lexically later resource wins. Symlinks, ZIP entries
+that escape the archive and unimplemented resource kinds fail startup with an
+explicit error rather than falling back to built-in content. Worldgen,
+`dimension` and `dimension_type` resources (and `tags/worldgen`) cannot be
+applied, because the generators are native code: the rest of the pack loads and
+the server logs one warning per pack naming the ignored resource paths (an
+operator who enables such a pack also sees it in chat). A pack the saved
+selection names that is gone from disk at startup is dropped from the selection
+with a warning, like vanilla; a corrupt or unknown saved selection refuses to open
+the world rather than guessing.
 
 Supported resources (singular 26.1.2 directory names):
 
@@ -572,14 +579,67 @@ Supported resources (singular 26.1.2 directory names):
 Level-2 commands: `/function <id|#tag>`, `/schedule function <id|#tag> <time>
 [append|replace]`, `/schedule clear <id|#tag>`, `/reload` and
 `/datapack list [available|enabled]`, `/datapack enable <pack> [first|last|before
-<pack>|after <pack>]`, `/datapack disable <pack>` (`create` is refused; the
-client command tree advertises only `list [enabled]`). Schedule times use ticks
+<pack>|after <pack>]`, `/datapack disable <pack>`. `/datapack create <id>
+<description>` (level 4) writes an empty directory pack (`pack.mcmeta` with the
+description as a JSON text component, plus `data/`); the pack starts disabled.
+`list` scans the pack folder on a worker thread, so a pack added or removed on
+disk shows at once without `/reload`; each entry is a clickable, shift-click
+insertable chat link whose hover shows the pack title and description
+(`file/<name>` packs are labelled as world packs). Schedule times use ticks
 or `t`/`s`/`d`; zero or negative delays are rejected. Schedules survive restart.
-`/reload`, `enable` and `disable` compile off the tick thread and swap
-functions and tags at a tick boundary. **Recipe and loot changes are
-startup-only:** a candidate that changes them is refused whole and the old set is
-kept, as is a candidate with load errors. Schedules and load/tick tags run from
-the overworld source; functions keep the source dimension they were invoked from.
+`/reload`, `enable` and `disable` compile off the tick thread. They swap
+functions and tags at a tick boundary and also **install the changed recipes,
+block loot and predicates**: the registry is rebuilt from the world's start
+content plus the enabled packs, every world adopts it, and each client receives
+the new recipe list and its recipe book again. A candidate with load errors, or
+with a recipe the server cannot encode, is refused whole and the old packs, selection
+and registry are kept. The enabled/disabled selection is saved with the world,
+so a restart loads the same packs, recipes and loot. A pack that appears on disk is
+enabled by `/reload` and at startup but never as a side effect of enabling another
+pack. At startup and on `/reload` a new pack that cannot be read or loaded (a corrupt ZIP,
+a missing or truncated `pack.mcmeta`, a bad file, an unsupported resource, a `filter`
+that does not parse) is skipped with a warning naming the pack and the file, and the
+rest applies, so a pack that a live `enable` refused cannot stop the next start or
+block a reload. This deliberately differs from vanilla, which enables a new pack and
+refuses to start when it fails to load (it offers `--safeMode`); Solaris has no safe
+mode. A pack the saved selection already holds that no longer loads still stops the
+start and refuses the reload (old state kept), with the same pack and file in the
+error: fix or remove the named pack and start again. A non-pack entry in the folder
+(a README, a stray file) is ignored with a warning. Every warning goes to the server log;
+a pack that stays skipped is named again by every `/reload`, and the operator's chat shows the first three and a count of the rest, as vanilla
+keeps such lines in the console. `/datapack list` keeps a selected pack whose files
+broke while it runs (its hover holds the error), and `/datapack disable` of a skipped
+pack answers "not enabled" as vanilla does for a pack the repository has. A pack's `pack.mcmeta` `filter` (`block` entries with
+optional `namespace` and `path` patterns) hides the matching functions, tags,
+recipes, block loot and predicates of every pack below it, the builtin recipes and
+block loot included. A `/datapack enable`, `disable` or
+`reload` issued while another pack job is still compiling is refused with
+"Datapack reload already in progress" (vanilla would apply it at once; the
+selection changes only when the compile finishes, and a rare back-to-back
+command is not worth a queue). Schedules and load/tick tags run from the overworld source; functions
+keep the source dimension they were invoked from.
+
+`/debug start|stop|function <id|#tag>` (level 3) follow vanilla: `start` and `stop`
+report the elapsed seconds, ticks and ticks per second; `function` runs the
+function (or every function of a tag) on the calling tick and writes the trace
+`debug/debug-trace-<yyyy-MM-dd_HH.mm.ss>.txt` (UTC; vanilla uses the host's zone) in the
+server directory, beside the world folder (`[C]` command, `[R]` result,
+`[F]` function, `[E]` error, `[M]` message); `[M]` lines are what the command
+source is sent, not text that commands deliver to players (`/tellraw`, `/say`,
+`/msg`). `/debug give`/`menu` keep their Solaris fixture grammar.
+
+`@e[predicate=<id>]` selects by a datapack loot predicate
+(`data/<ns>/predicate/<path>.json`) evaluated with the candidate as `this`;
+`entity_properties`, `inverted`, `all_of`, `any_of`, `random_chance`,
+`time_check`, `weather_check`, `entity_scores`, `location_check` and
+`block_state_property` (both read the candidate's location) are evaluated.
+`match_tool` is accepted at load, but a selector has no tool to test, so it
+sees nothing. A pack carrying any other condition, or a field these do not
+read, is refused at load. ZIP packs
+(`<pack>.zip` with `pack.mcmeta` at its root, at most 16 MiB and 16384 entries) load like
+directory packs. Datapack
+worldgen overrides are not applied (see above; tracked as
+`DATAPACK-WORLDGEN-OVERRIDES`).
 
 Execution is bounded: each root command or function invocation gets its own
 `minecraft:max_command_sequence_length` budget shared by nested functions and
@@ -603,15 +663,39 @@ packets, comparator result output and command minecarts are not implemented.
 Map-making command surface (full status in [COMPATIBILITY.md](COMPATIBILITY.md)):
 
 - `send_command_feedback false` suppresses player-source success replies for
-  the native command paths that honor it; failures remain visible and console
+  the native command paths that honor it and for the replies the connection layer
+  writes itself (`/list`, `/help`, `/stop`, `/save-all`, `/transfer`, `/whitelist`,
+  `/banlist`, kick, ban and pardon results); failures remain visible and console
   success remains enabled. Command execution and ordinary chat are unchanged.
+- A client's chat setting (`ClientInformation.chat_visibility`, admitted before
+  Join and on every change) filters what it is sent, as in vanilla: **Full**
+  receives everything; **Commands only** receives system text (command
+  feedback, announcements) but no player chat (`/say`, `/me`, `/msg`, team
+  messages, public chat, and the sender's own `/msg` copy); **Hidden**
+  receives no text lines at all, including the join tip and the `/help` and
+  unknown-command lines the connection layer writes itself (titles and
+  the action bar still arrive), and its own chat is refused with the red
+  `chat.disabled.options` message.
 
 - `/data get entity|block` (level 2) reads native owners, including live
   inventory and timers, without editing state; paths accept dotted keys, indices
-  and compound filters and must select one value. `/data merge block` writes only
-  command-block `Command` and `auto`. Namespaced storage supports `get`, `merge`,
-  `remove` and `modify` (world-global, journaled). Entity and block `/data modify`
-  are not supported.
+  and compound filters and must select one value. Namespaced storage supports `get`,
+  `merge`, `remove` and `modify` (world-global, journaled), and `from` accepts
+  storage, entity or block sources. `/data merge|modify|remove` also edits:
+  - **block entities** at a loaded position of the command's dimension: the edited
+    native NBT image is validated and installed through the same path `setblock`
+    NBT uses, so a container's slots, a furnace's clock, a sign, a brewing stand,
+    a spawner and every other kind with a native image keep their own owner
+    state, and viewers receive the new data. `id`, `x`, `y` and `z` stay the
+    block's own. Command blocks accept only `Command` and `auto`; any other
+    changed field refuses the whole edit.
+  - **one entity** in any loaded dimension (a selector or UUID from another
+    dimension edits the entity where it lives), by loading the edited NBT back
+    through the summon field set. Item entities take `Item`, `Age`,
+    `PickupDelay`, `Motion`, `NoGravity` and `Invulnerable`. A changed field
+    `/summon` cannot author, `Pos`, and players are refused with a message and
+    nothing changes; a removed field reverts to its default and the entity keeps
+    its UUID and place.
 - `/summon` accepts the vanilla string `variant` field for cows, pigs and chickens
   (`minecraft:temperate`, `minecraft:cold`, `minecraft:warm`) and zombie nautiluses
   (`minecraft:temperate`, `minecraft:warm`). For example,

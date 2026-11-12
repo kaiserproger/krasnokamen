@@ -424,6 +424,30 @@ fn missing_database_wrong_identity_and_imported_source_switch_fail_closed() {
     assert!(NativeStore::open(&path, [5; 32]).is_err());
 }
 
+/// A process forked while the store is open (a sibling's `Command::spawn` the
+/// scheduler has not yet run to exec) holds a copy of the database's open file
+/// description. Closing the store must still end its lease at once. The holder
+/// here is a child given that description as stderr, parked until its stdin
+/// closes.
+#[cfg(unix)]
+#[test]
+fn closed_store_releases_its_lease_while_a_forked_child_holds_the_descriptor() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("state.redb");
+    let store = NativeStore::create(&path, [6; 32]).unwrap();
+    let mut holder = std::process::Command::new("cat")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .stderr(store.file.try_clone().unwrap())
+        .spawn()
+        .unwrap();
+    drop(store);
+    let reopened = NativeStore::open(&path, [6; 32]);
+    drop(holder.stdin.take());
+    assert!(holder.wait().unwrap().success());
+    reopened.expect("a closed store leaves no lock behind in another process");
+}
+
 #[test]
 fn native_save_reopen_preserves_both_boundary_light_sections() {
     let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();

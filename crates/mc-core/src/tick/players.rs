@@ -180,6 +180,15 @@ pub(super) fn apply_inputs<'a>(
         }
         crate::plugin::observe_input(state, input);
         let (handled, event) = crate::plugin_player::menu_input(state, input);
+        // Menu clicks are durable plugin events too: past the backlog limit drop
+        // the click (the menu was redrawn above) so a stalled plugin cannot fill
+        // the queue and halt the world.
+        let event = event.filter(|_| {
+            state
+                .plugin_runtime
+                .as_ref()
+                .is_none_or(|runtime| runtime.backlog_len() < crate::plugin::COMMAND_BACKLOG_LIMIT)
+        });
         crate::plugin::enqueue_result(state, event);
         if handled {
             continue;
@@ -227,6 +236,10 @@ pub(super) fn apply_inputs<'a>(
             PlayerInput::SetLocale { connection, locale } => {
                 input::session::set_locale(state, (connection, locale))
             }
+            PlayerInput::SetChatVisibility {
+                connection,
+                visibility,
+            } => input::session::set_chat_visibility(state, (connection, visibility)),
             PlayerInput::Join {
                 connection,
                 uuid,

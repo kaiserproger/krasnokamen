@@ -153,6 +153,72 @@ pub(super) fn options_match(
             return false;
         }
     }
+    predicates_match(state, body.id, holder, selector)
+}
+
+/// `predicate=<id>` / `predicate=!<id>`: evaluate each named datapack loot
+/// predicate with the candidate as `this`. A predicate no datapack defines
+/// never matches the candidate (the command itself still runs).
+fn predicates_match(
+    state: &TickState,
+    entity: EntityId,
+    holder: Option<&str>,
+    selector: &Selector,
+) -> bool {
+    if selector.predicates.is_empty() {
+        return true;
+    }
+    let mut player = crate::advancements::entity_snapshot(state, entity);
+    let name = state.connections.name_of(entity).map(str::to_owned);
+    let holder = holder.map(str::to_owned).or(name).or_else(|| {
+        state
+            .entities
+            .slot_of(entity)
+            .map(|slot| state.entities.row(slot).uuid.hyphenated().to_string())
+    });
+    if let (serde_json::Value::Object(fields), Some(holder)) = (&mut player, holder) {
+        let scores = state.scoreboard.scores.get(&holder).map(|scores| {
+            scores
+                .iter()
+                .map(|(objective, score)| (objective.clone(), score.value.into()))
+                .collect::<serde_json::Map<String, serde_json::Value>>()
+        });
+        fields.insert(
+            "scores".into(),
+            serde_json::Value::Object(scores.unwrap_or_default()),
+        );
+    }
+    let draws = state.command_context.random_draws.get();
+    state
+        .command_context
+        .random_draws
+        .set(draws.wrapping_add(1));
+    let mut stream = draws
+        .wrapping_add(state.tick)
+        .wrapping_add((entity.0 as u32 as u64) << 32)
+        .wrapping_add(0x9e3779b97f4a7c15);
+    stream = (stream ^ (stream >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+    stream = (stream ^ (stream >> 27)).wrapping_mul(0x94d049bb133111eb);
+    let draw = ((stream ^ (stream >> 31)) >> 11) as f64 / (1u64 << 53) as f64;
+    let event = serde_json::json!({
+        "player": player,
+        "location": crate::advancements::location_snapshot(state, entity),
+        "time": state.day_time,
+        "weather": {
+            "raining": state.weather.0 != crate::commands::Weather::Clear,
+            "thundering": state.thundering,
+        },
+        "random": draw,
+    });
+    for (id, negated) in &selector.predicates {
+        let Some(predicate) = state.registry.predicates.get(id) else {
+            return false;
+        };
+        let matched = mc_data::advancements::evaluate_predicate(predicate, &event).matches;
+        if matched == *negated {
+            return false;
+        }
+    }
     true
 }
 
@@ -353,6 +419,7 @@ pub(crate) fn resolve_target(
                 yaw: None,
                 nbt: Vec::new(),
                 advancements: Vec::new(),
+                predicates: Vec::new(),
                 distance: None,
                 position: [None; 3],
                 extent: [None; 3],

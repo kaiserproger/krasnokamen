@@ -1,0 +1,222 @@
+{
+ "seed": 100,
+ "server_view_distance": 6,
+ "steps": [
+  {
+   "wait_play": true
+  },
+  {
+   "cmd": "gamemode creative"
+  },
+  {
+   "tp": [
+    1000.5,
+    205,
+    1000.5,
+    0,
+    0
+   ]
+  },
+  {
+   "wait_ticks": 100
+  },
+  {
+   "cmd": "gamerule advance_time false"
+  },
+  {
+   "cmd": "gamerule spawn_mobs false"
+  },
+  {
+   "cmd": "gamerule random_tick_speed 0"
+  },
+  {
+   "cmd": "time set 3000"
+  },
+  {
+   "cmd": "fill 936 199 936 1064 199 1064 minecraft:stone"
+  },
+  {
+   "cmd": "fill 936 198 936 1064 198 1064 minecraft:stone"
+  },
+  {
+   "cmd": "fill 936 200 936 1064 202 1064 minecraft:air"
+  },
+  {
+   "cmd": "setblock 1000 200 1000 minecraft:bell[attachment=floor,facing=north]"
+  },
+  {
+   "shot": "idle-stroll-fixture"
+  },
+  {
+   "cmd": "summon minecraft:villager 1040.5 200 994.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1040.5 200 996.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1040.5 200 998.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1040.5 200 1000.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1040.5 200 1002.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 1040.5 200 1004.5"
+  },
+  {
+   "tp": [
+    1000.5,
+    200,
+    1003.5,
+    0,
+    0
+   ]
+  },
+  {
+   "cmd": "settlement create idleqa 64"
+  },
+  {
+   "cmd": "say vcgfence_1_created"
+  },
+  {
+   "wait_chat": "vcgfence_1_created"
+  },
+  {
+   "cmd": "fill 957 200 997 963 204 1003 minecraft:stone"
+  },
+  {
+   "cmd": "fill 958 200 998 962 203 1002 minecraft:water"
+  },
+  {
+   "cmd": "fill 958 204 998 962 204 1002 minecraft:air"
+  },
+  {
+   "cmd": "say vcgfence_2_pond"
+  },
+  {
+   "wait_chat": "vcgfence_2_pond"
+  },
+  {
+   "cmd": "summon minecraft:villager 960.5 203 999.5"
+  },
+  {
+   "cmd": "summon minecraft:villager 960.5 203 1001.5"
+  },
+  {
+   "tp": [
+    1000.5,
+    207,
+    1000.5,
+    90,
+    20
+   ]
+  },
+  {
+   "list_entities": {
+    "name": "idle_t0",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "assert_entities": {
+    "name": "idle_start_outside",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 6,
+    "box": [
+     1030,
+     199,
+     980,
+     1060,
+     202,
+     1020
+    ]
+   }
+  },
+  {
+   "wait_ticks": 1000
+  },
+  {
+   "list_entities": {
+    "name": "idle_t1000",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 1000
+  },
+  {
+   "list_entities": {
+    "name": "idle_t2000",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "wait_ticks": 1000
+  },
+  {
+   "list_entities": {
+    "name": "idle_t3000",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    }
+   }
+  },
+  {
+   "shot": "idle-stroll-end"
+  },
+  {
+   "assert_entities": {
+    "name": "idle_residents_bound",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 6,
+    "box": [
+     968,
+     199,
+     968,
+     1032,
+     202,
+     1032
+    ]
+   }
+  },
+  {
+   "assert_entities": {
+    "name": "pond_swimmers_at_surface",
+    "args": {
+     "radius": 64,
+     "limit": 128
+    },
+    "entity_type": "minecraft:villager",
+    "min": 2,
+    "box": [
+     958,
+     202.0,
+     998,
+     963,
+     207,
+     1003
+    ]
+   }
+  }
+ ]
+}

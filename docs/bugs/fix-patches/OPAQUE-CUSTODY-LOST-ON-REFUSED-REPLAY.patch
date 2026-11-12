@@ -1,0 +1,14 @@
+diff --git a/crates/mc-core/src/core/recovery.rs b/crates/mc-core/src/core/recovery.rs
+index 504e1dc5..b9d69251 100644
+--- a/crates/mc-core/src/core/recovery.rs
++++ b/crates/mc-core/src/core/recovery.rs
+@@ -311,6 +311,9 @@ pub(super) fn load_dimension_state(
+     crate::conduit::validate_loaded(&tick_state).map_err(CoreError::Storage)?;
+     crate::sculk::validate(&tick_state).map_err(CoreError::Storage)?;
+     crate::shrieker::validate_loaded(&tick_state).map_err(CoreError::Storage)?;
++    if let Some(error) = tick_state.world.load_errors().next() {
++        return Err(CoreError::Storage(error.to_string()));
++    }
+     Ok(tick_state)
+ }
+ 

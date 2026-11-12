@@ -1,0 +1,13 @@
+diff --git a/crates/mc-core/src/datapack_management.rs b/crates/mc-core/src/datapack_management.rs
+index 97d6b9d7..c2dda6cc 100644
+--- a/crates/mc-core/src/datapack_management.rs
++++ b/crates/mc-core/src/datapack_management.rs
+@@ -247,7 +247,7 @@ fn present_group(
+     }
+     let links = entries
+         .iter()
+-        .map(|(id, _)| text(id))
++        .map(|(id, description)| chat_link(id, enabled, description))
+         .collect::<Vec<_>>();
+     crate::command_execution::success_feedback(
+         state,

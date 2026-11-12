@@ -783,7 +783,9 @@ fn cooling_sniffer_writes_nothing_and_scans_on_its_own_period() {
         "a cooling sniffer was rewritten while it waited"
     );
     let phase = state.entities.row(sniffer_slot).uuid.as_u128() as u64;
-    let expected = (500..).find(|tick| (tick + phase) % 20 == 0).unwrap();
+    let expected = (500..)
+        .find(|tick| (tick + phase).is_multiple_of(20))
+        .unwrap();
     let mut found = None;
     for tick in 500..540 {
         state.tick = tick;

@@ -1,0 +1,49 @@
+{
+  "id": "P4",
+  "verdict": "promoted",
+  "fix_commit": "patch:7afa8bad2c72e3fe31326a40d46950a3a0dd47321a515ffb95cad979cf12668d",
+  "fix_commit_full": "patch:7afa8bad2c72e3fe31326a40d46950a3a0dd47321a515ffb95cad979cf12668d",
+  "promoted_at": "2026-11-12T08:16:27+00:00",
+  "tree_head": "6ed4303359f55f661e3e2a503c9dc4f379321d28",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "7afa8bad2c72e3fe31326a40d46950a3a0dd47321a515ffb95cad979cf12668d",
+  "reversed_files": [
+    "crates/mc-edge/src/screen.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-edge:screen::tests::leave_cancels_an_unanswered_request": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:screen-share:native-screen-share-leave": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-screen-share-leave --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/ScreensVoiceP4/.analysis/validation/20261112T080754-ledger-promote-gg6alyme/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-edge:screen::tests::leave_cancels_an_unanswered_request": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:screen-share:native-screen-share-leave": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T081544-native-screen-share-leave-hfatdiic/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/ScreensVoiceP4/.analysis/validation/20261112T074231-native-screen-share-leave-jgrv7eo6/result.json",
+    "tree_head": "6ed4303359f55f661e3e2a503c9dc4f379321d28",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "c7fd6f6bc8083919320ca9790d4c6afd40ee02628669fc715e787b4a7bf95db6",
+    "covers": [
+      "harness:screen-share:native-screen-share-leave"
+    ],
+    "profile": "screen-share"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/ScreensVoiceP4/.analysis/validation/20261112T080754-ledger-promote-gg6alyme"
+}

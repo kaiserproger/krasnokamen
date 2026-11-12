@@ -36,13 +36,22 @@ def ensure_excluded(repo: Path, pattern: str) -> None:
 
 
 def provision_vanilla(wt: Path) -> None:
-    source = w.REPOS["core"] / "data/vanilla"
+    """Hard-link every local vanilla cache: data/vanilla plus the older-release caches and protocol steps
+    (data/vanilla-26.1.2, data/vanilla-steps) that Java 26.1.2/26.2 clients need to join. A top-level link
+    such as data/vanilla-steps -> vanilla/steps is copied as the same relative link into the worktree."""
     (wt / "data").mkdir(exist_ok=True)
-    subprocess.run(["cp", "-al", "--", str(source), str(wt / "data/vanilla")], check=True)
-    links = [p for p in (wt / "data/vanilla").rglob("*") if p.is_symlink()]
-    if links:
-        print(f"wt-new: warning: {len(links)} symlinks inside the main checkout's data/vanilla "
-              f"(the harness rejects sidecar symlinks), first: {links[0]}", file=sys.stderr)
+    for source in sorted((w.REPOS["core"] / "data").glob("vanilla*")):
+        dest = wt / "data" / source.name
+        if source.is_symlink():
+            os.symlink(os.readlink(source), dest)
+            continue
+        if not source.is_dir():
+            continue
+        subprocess.run(["cp", "-al", "--", str(source), str(dest)], check=True)
+        links = [p for p in dest.rglob("*") if p.is_symlink()]
+        if links:
+            print(f"wt-new: warning: {len(links)} symlinks inside the main checkout's data/{source.name} "
+                  f"(the harness rejects sidecar symlinks), first: {links[0]}", file=sys.stderr)
 
 
 def main() -> None:

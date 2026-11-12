@@ -402,7 +402,7 @@ fn valid_repair_material(rules: &ItemRules<'_>, left: &ItemStack, right: &ItemSt
         && let Some(members) = rules
             .tags
             .registries
-            .get("minecraft:item")
+            .get(mc_data::tags::ITEM_REGISTRY)
             .and_then(|tags| tags.get(tag))
     {
         return i32::try_from(right.item_id).is_ok_and(|raw| members.contains(&raw));
@@ -571,7 +571,7 @@ pub(super) mod tests {
         let mut data = Data::new();
         let raw = data.stack("stone").item_id as i32;
         data.tags = TagsData::from_registries(BTreeMap::from([(
-            id("minecraft:item"),
+            id(mc_data::tags::ITEM_REGISTRY),
             BTreeMap::from([(id("minecraft:diamond_tool_materials"), vec![raw])]),
         )]));
         let catalog = catalog();

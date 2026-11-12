@@ -10,7 +10,7 @@ fn smithing_advertised_inputs_match_server_slot_admission() {
     let mut tags = crate::tags::solaris_required_item_tags(&items);
     let custom = stack(&items, "minecraft:stick", 1);
     tags.registries
-        .entry(identifier("minecraft:item"))
+        .entry(identifier(crate::tags::ITEM_REGISTRY))
         .or_default()
         .entry(identifier("minecraft:netherite_tool_materials"))
         .or_default()
