@@ -5042,10 +5042,26 @@ fix_commit = "patch:85195e25eabb2e4a202ef619a549dfe7d3326abfb0045413fbf46e382934
 
 [[bug]]
 id = "PLUGIN-EVENT-BACKLOG-HALTS-WORLD"
-title = "A plugin whose durable-event backlog passes 1024 (a slow on_events callback while players keep sending its commands) halts the whole world without a final checkpoint instead of refusing that plugin's new commands"
+title = "A plugin whose durable-event backlog passes 1024 (a slow on_events callback while players keep sending its commands) halts the whole world without a final checkpoint instead of refusing new plugin commands"
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "CoreAuditFable CAF-01 (receipts/CoreAuditFable/REPORT.md, queue.yaml; static read at 21607d42): crates/mc-core/src/plugin/events.rs:23-34 returns Err when retained+pending exceeds MAX_SCRIPT_EVENT_QUEUE_CAPACITY (1024, crates/mc-script/src/lib.rs:239) or delivery_failed is set; crates/mc-core/src/core/tick_loop.rs:266-271 then calls halt_authority and leaves the loop without a final checkpoint (:628-672). One mc-plugin-host thread delivers to every plugin (host.rs:703-712) and one callback may run 50M fuel / 30 s (limits.rs:84-87). Not documented in docs/PLUGINS.md or ADR 0013. Reachability on the standard pack unproven. Proof: a real component that burns its fuel in on_events while two bots send its command at the maximum rate; today every player sees 'plugin callback backlog overflow: world halted'."
-regression = []
+failing_first = "reported"
+regression = ["cargo:mc-core:plugin_backlog_tests::a_stalled_plugin_refuses_new_commands_instead_of_halting_the_world"]
+fix_commit = "patch:68f37e19635593f8a0504b42fb63a2f08cb8c09387c7f595d4a44ff5d22fa026"
+promotion = "docs/bugs/promotions/PLUGIN-EVENT-BACKLOG-HALTS-WORLD.json"
+
+[[bug]]
+id = "PLUGIN-MENU-CLICK-FLOOD-HALTS-WORLD"
+title = "Repeated clicks on a plugin inventory menu, one durable event each, fill the plugin event queue past 1024 and halt the whole world without a final checkpoint, even with a healthy plugin host"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "fixed"
+source = "Rule-5 review of PluginBacklogHalt (receipts/PluginBacklogHalt/REVIEW.md, finding medium; static read at bd2c27a1): crates/mc-core/src/tick/players.rs:182-183 passed every InventoryMenuClicked from plugin_player::menu_input to enqueue_result with no backlog check. refresh_menu does not raise the native state_id, so a client repeating the same click on an open menu gets one event per click; with the optional basic-economy package (the only deployed one that calls open_inventory_menu) two or three hostile clients with a burst of 1000 ContainerClick per tick push pending_events to 1024, which sets delivery_failed and halts the world at seal_events. A stalled plugin host reaches the same state with fewer clicks. Not reachable in the standard pack, which opens no menu."
+failing_first = "reported"
+regression = ["cargo:mc-core:plugin_player::tests::a_stalled_plugin_drops_menu_clicks_instead_of_halting_the_world"]
+fix_commit = "patch:8aa0536fa9665224a4f38e0d364390e0b59f8f6e1ba0e84cb4a2d5c8dd4cf0d8"
+promotion = "docs/bugs/promotions/PLUGIN-MENU-CLICK-FLOOD-HALTS-WORLD.json"
