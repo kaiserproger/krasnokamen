@@ -359,6 +359,10 @@ pub(crate) struct TrackedEntity {
     head_yaw: u8,
     appearance: Arc<EntityAppearance>,
     seen: u64,
+    /// Frames of this entity were lost and it cannot be removed (it carries
+    /// the viewer): the next plan sends its whole state again, over the
+    /// client's copy.
+    resend: bool,
 }
 
 impl TrackedEntity {
@@ -369,6 +373,7 @@ impl TrackedEntity {
             head_yaw: pack_degrees(entity.head_yaw),
             appearance: Arc::clone(&entity.appearance),
             seen,
+            resend: false,
         }
     }
 
@@ -381,6 +386,7 @@ impl TrackedEntity {
             head_yaw: 0,
             appearance: Arc::default(),
             seen: 0,
+            resend: false,
         }
     }
 }
@@ -565,13 +571,19 @@ impl ViewerState {
     }
 
     /// The client may miss any frame planned for `id`. The own entity forgets
-    /// its baseline and resends its data. Another tracked entity no longer
-    /// matches its recorded identity, so the next plan removes and respawns
-    /// it, with its passengers and leash; one that left view meanwhile is
-    /// removed as usual.
+    /// its baseline and resends its data. The viewer's own vehicle keeps its
+    /// place (removing it dismounts the player) and resends its state.
+    /// Another tracked entity no longer matches its recorded identity, so the
+    /// next plan removes and respawns it, with its passengers and leash; one
+    /// that left view meanwhile is removed as usual.
     fn entity_unsent(&mut self, id: EntityId) {
         if id == self.entity_id {
             self.untrack(id);
+        } else if self.vehicles.get(&self.entity_id) == Some(&id) {
+            if let Some(tracked) = self.tracked_entities.get_mut(&id) {
+                tracked.resend = true;
+            }
+            self.entity_interest.revisit(id);
         } else if let Some(tracked) = self.tracked_entities.get_mut(&id) {
             tracked.type_id = UNDELIVERED_TYPE;
             self.entity_interest.respawn_tracked(id);
@@ -1545,6 +1557,14 @@ fn plan_seats(viewer: &mut ViewerState, out: &mut Vec<PlannedPacket>, credit: &m
     }
 }
 
+/// Whether the viewer's record of `id` was invalidated by lost frames.
+fn is_undelivered(viewer: &ViewerState, id: EntityId) -> bool {
+    viewer
+        .tracked_entities
+        .get(&id)
+        .is_some_and(|tracked| tracked.type_id == UNDELIVERED_TYPE)
+}
+
 fn plan_entities(
     snapshot: &WorldSnapshot,
     viewer: &mut ViewerState,
@@ -1570,6 +1590,18 @@ fn plan_entities(
         .boss_baseline
         .sync_raids(conn, viewer.position, &snapshot.raid_bars, out);
 
+    // The removal of a visible entity whose frames were lost rides with its
+    // spawn below: sent alone, it would hide the entity until the credit
+    // carries the spawn, for every entity at once.
+    if !scratch.removed.is_empty() && !scratch.spawns.is_empty() {
+        let repaired: HashSet<i32> = scratch
+            .spawns
+            .iter()
+            .filter(|(id, _)| is_undelivered(viewer, *id))
+            .map(|(id, _)| id.0)
+            .collect();
+        scratch.removed.retain(|id| !repaired.contains(id));
+    }
     if !scratch.removed.is_empty() && *credit > 0 {
         let packet = RemoveEntities {
             entity_ids: std::mem::take(&mut scratch.removed),
@@ -1645,7 +1677,24 @@ fn plan_entities(
                     .collect(),
             })
         });
+        // A respawn after lost frames removes the client's copy first, and
+        // seats a seated villager again (the removal drops its link).
+        let repair = is_undelivered(viewer, id);
+        let seat = viewer
+            .seats
+            .get(&id)
+            .filter(|_| repair)
+            .map(|&(seat, _)| seat);
         let spawned = try_push(out, credit, |out| {
+            if repair {
+                push_best_effort(
+                    out,
+                    conn,
+                    &RemoveEntities {
+                        entity_ids: vec![id.0],
+                    },
+                );
+            }
             push_best_effort(
                 out,
                 conn,
@@ -1667,9 +1716,23 @@ fn plan_entities(
             if let Some(link) = &vehicle {
                 push_best_effort(out, conn, link);
             }
+            if let Some(seat) = seat {
+                push_best_effort(
+                    out,
+                    conn,
+                    &mc_protocol::packets::play::ClientboundSetPassengers {
+                        vehicle_id: seat,
+                        passenger_ids: vec![id.0],
+                    },
+                );
+            }
         });
         if !spawned {
             break;
+        }
+        if repair {
+            viewer.untrack(id);
+            interest.removed(id);
         }
         viewer.track(entity);
         viewer.world_entities.push(id);
@@ -1702,14 +1765,26 @@ fn plan_entities(
             0
         };
         let turned = due && tracked.head_yaw != packed_head;
-        if !stale && movement.is_none() && !turned {
+        let resend = tracked.resend;
+        if !stale && !resend && movement.is_none() && !turned {
             interest.completed(entity, tracked, snapshot.tick, due);
             continue;
         }
         let update_start = out.len();
+        // Against an appearance that differs in every field, a resend carries
+        // the whole state, passengers included.
+        let resend_baseline = EntityAppearance {
+            passengers: vec![EntityId(i32::MIN)],
+            ..Default::default()
+        };
+        let baseline = if resend {
+            &resend_baseline
+        } else {
+            tracked.appearance.as_ref()
+        };
         let sent = try_push(out, credit, |out| {
-            if stale {
-                push_appearance(out, conn, entity, Some(tracked.appearance.as_ref()));
+            if stale || resend {
+                push_appearance(out, conn, entity, Some(baseline));
             }
             if let Some(packet) = &movement {
                 out.push(PlannedPacket {
@@ -1741,7 +1816,7 @@ fn plan_entities(
         if out.len() > update_start {
             viewer.world_entities.push(id);
         }
-        if stale {
+        if stale || resend {
             relink_passengers(
                 &mut viewer.vehicles,
                 id,
@@ -1749,6 +1824,7 @@ fn plan_entities(
                 &entity.appearance.passengers,
             );
             tracked.appearance = Arc::clone(&entity.appearance);
+            tracked.resend = false;
         }
         if let Some(packet) = movement {
             tracked.baseline = packet.next;

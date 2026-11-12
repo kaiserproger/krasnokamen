@@ -374,6 +374,13 @@ impl EntityInterest {
         self.clean(id);
     }
 
+    /// Visit `id` in the next plan though its snapshot row did not change.
+    pub(super) fn revisit(&mut self, id: EntityId) {
+        if self.visible.contains_key(&id) {
+            self.dirty.insert(id);
+        }
+    }
+
     pub(super) fn spawned(&mut self, id: EntityId) {
         self.spawns.remove(&id);
         self.clean(id);

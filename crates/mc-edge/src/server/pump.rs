@@ -351,8 +351,9 @@ pub(super) async fn publish_and_route(
 ) {
     viewers.retain(|id, _| connections.contains_key(id));
     // Planning spends this credit, but it is not exclusive: an LOD tile
-    // (`lod.rs`) also takes world-queue slots, so a planned frame can still
-    // find the queue full below.
+    // (`lod.rs`) also takes world-queue slots, at any time from this read
+    // until the send, which is the whole planning time of every viewer, so a
+    // planned frame can still find the queue full below.
     {
         let registry = server.connections.inner.lock();
         for (id, viewer) in viewers.iter_mut() {

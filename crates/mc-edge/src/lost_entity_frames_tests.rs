@@ -12,7 +12,9 @@ use mc_core::boundary::{
     ChangeSet, EntityAppearance, EntityId, EntityView, SnapshotChunk, TickOutput, WorldSnapshot,
 };
 use mc_protocol::frame::{Compression, try_decode_frame};
-use mc_protocol::packets::play::{AddEntity, ClientboundSetPassengers, RemoveEntities};
+use mc_protocol::packets::play::{
+    AddEntity, ClientboundSetEntityData, ClientboundSetPassengers, RemoveEntities,
+};
 
 const VIEWER: EntityId = EntityId(1);
 const HORSE: EntityId = EntityId(10);
@@ -23,17 +25,37 @@ const RIDER: EntityId = EntityId(11);
 static RIDER_APPEARANCE: std::sync::LazyLock<Arc<EntityAppearance>> =
     std::sync::LazyLock::new(Arc::default);
 
+fn horse_appearance(passengers: Vec<EntityId>, name: Option<&str>) -> Arc<EntityAppearance> {
+    Arc::new(EntityAppearance {
+        passengers,
+        custom_name: name.map(str::to_owned),
+        ..Default::default()
+    })
+}
+
 /// A horse and its rider (mounted or not) in the viewer's chunk.
 fn horse_and_rider(tick: u64, mounted: bool) -> TickOutput {
-    scene(tick, Some(mounted))
+    let passengers = if mounted { vec![RIDER] } else { vec![] };
+    scene(
+        tick,
+        Some(horse_appearance(passengers, None)),
+        Arc::clone(&RIDER_APPEARANCE),
+        None,
+    )
 }
 
 /// The rider alone: the horse left the viewer's range.
 fn rider_alone(tick: u64) -> TickOutput {
-    scene(tick, None)
+    scene(tick, None, Arc::clone(&RIDER_APPEARANCE), None)
 }
 
-fn scene(tick: u64, horse: Option<bool>) -> TickOutput {
+/// The tick's rows: an optional horse, the rider, and the viewer's own entity.
+fn scene(
+    tick: u64,
+    horse: Option<Arc<EntityAppearance>>,
+    rider: Arc<EntityAppearance>,
+    own: Option<Arc<EntityAppearance>>,
+) -> TickOutput {
     let types = mc_data::entity_types::solaris_required_entity_types();
     let type_id = |name: &str| {
         types
@@ -61,12 +83,6 @@ fn scene(tick: u64, horse: Option<bool>) -> TickOutput {
         on_ground: true,
         appearance,
     };
-    let horse_appearance = |mounted: bool| {
-        Arc::new(EntityAppearance {
-            passengers: if mounted { vec![RIDER] } else { vec![] },
-            ..Default::default()
-        })
-    };
     TickOutput {
         tick,
         snapshot: Arc::new(WorldSnapshot {
@@ -77,15 +93,11 @@ fn scene(tick: u64, horse: Option<bool>) -> TickOutput {
                 revision: 1,
                 chunk: Arc::new(chunk),
             }]),
-            entities: horse
-                .map(|mounted| row(HORSE, "minecraft:horse", 64.0, horse_appearance(mounted)))
+            entities: own
+                .map(|appearance| row(VIEWER, "minecraft:player", 64.05, appearance))
                 .into_iter()
-                .chain([row(
-                    RIDER,
-                    "minecraft:zombie",
-                    64.025,
-                    Arc::clone(&RIDER_APPEARANCE),
-                )])
+                .chain(horse.map(|appearance| row(HORSE, "minecraft:horse", 64.0, appearance)))
+                .chain([row(RIDER, "minecraft:zombie", 64.025, rider)])
                 .collect::<Vec<_>>()
                 .into(),
             ..Default::default()
@@ -117,6 +129,14 @@ fn entity_frames(world_rx: &mut mpsc::Receiver<bytes::Bytes>) -> Vec<String> {
                 frames.push(format!(
                     "passengers {} {:?}",
                     link.vehicle_id, link.passenger_ids
+                ));
+            }
+            ClientboundSetEntityData::ID => {
+                frames.push(format!(
+                    "data {}",
+                    ClientboundSetEntityData::decode(&mut body)
+                        .unwrap()
+                        .entity_id
                 ));
             }
             RemoveEntities::ID => {
@@ -189,7 +209,12 @@ impl Pump {
 
     /// Publish `output` into a healthy world queue; the entity frames queued.
     async fn publish_delivered(&mut self, output: &TickOutput) -> Vec<String> {
-        let (world_tx, mut world_rx) = mpsc::channel(512);
+        self.publish_delivered_into(output, 512).await
+    }
+
+    /// As [`Self::publish_delivered`], into a world queue of `slots`: the plan's credit.
+    async fn publish_delivered_into(&mut self, output: &TickOutput, slots: usize) -> Vec<String> {
+        let (world_tx, mut world_rx) = mpsc::channel(slots);
         self.publish(output, world_tx).await;
         entity_frames(&mut world_rx)
     }
@@ -249,8 +274,9 @@ async fn refused_dismount_is_repaired_by_respawning_the_vehicle() {
     let dismounted = horse_and_rider(2, false);
     pump.publish_refused(&dismounted).await;
     let frames = pump.publish_delivered(&dismounted).await;
-    assert!(frames.contains(&"remove [10]".into()), "{frames:?}");
-    assert!(frames.contains(&"add 10".into()), "{frames:?}");
+    let position = |frame: &str| frames.iter().position(|seen| seen == frame);
+    let (removed, added) = (position("remove [10]"), position("add 10"));
+    assert!(removed.is_some() && removed < added, "{frames:?}");
     assert!(
         !frames.contains(&"passengers 10 [11]".into()),
         "the respawned horse carries no rider: {frames:?}"
@@ -268,5 +294,87 @@ async fn refused_removal_is_sent_again_on_the_next_publication() {
     pump.publish_refused(&gone).await;
     let frames = pump.publish_delivered(&gone).await;
     assert!(frames.contains(&"remove [10]".into()), "{frames:?}");
+    pump.finish();
+}
+
+/// Lost frames of many entities must not hide more of them than the credit can
+/// spawn again: a removal rides with its own spawn.
+#[tokio::test]
+async fn refused_repairs_remove_only_what_the_credit_respawns() {
+    let mut pump = Pump::new();
+    pump.publish_delivered(&horse_and_rider(1, true)).await;
+    let changed = scene(
+        2,
+        Some(horse_appearance(vec![RIDER], Some("Epona"))),
+        horse_appearance(vec![], Some("Rider")),
+        None,
+    );
+    pump.publish_refused(&changed).await;
+    // One chunk resend and one entity group fit; two entities were refused.
+    let frames = pump.publish_delivered_into(&changed, 8).await;
+    let adds: Vec<_> = frames
+        .iter()
+        .filter(|frame| frame.starts_with("add"))
+        .collect();
+    assert!(!adds.is_empty(), "{frames:?}");
+    for (index, frame) in frames.iter().enumerate() {
+        if let Some(ids) = frame
+            .strip_prefix("remove [")
+            .and_then(|ids| ids.strip_suffix(']'))
+        {
+            assert!(!ids.contains(','), "one removal per spawn: {frames:?}");
+            assert_eq!(
+                frames.get(index + 1).map(String::as_str),
+                Some(format!("add {ids}").as_str()),
+                "a removal is followed by its own spawn: {frames:?}"
+            );
+        }
+    }
+    pump.finish();
+}
+
+/// The viewer's own vehicle is never removed (the client would dismount the
+/// player): its state is sent again over the client's copy.
+#[tokio::test]
+async fn refused_frames_of_the_own_vehicle_are_resent_without_removing_it() {
+    let mut pump = Pump::new();
+    let mounted = |name| {
+        scene(
+            if name { 2 } else { 1 },
+            Some(horse_appearance(vec![VIEWER], name.then_some("Epona"))),
+            Arc::clone(&RIDER_APPEARANCE),
+            None,
+        )
+    };
+    pump.publish_delivered(&mounted(false)).await;
+    let renamed = mounted(true);
+    pump.publish_refused(&renamed).await;
+    let frames = pump.publish_delivered(&renamed).await;
+    assert!(
+        frames.iter().all(|frame| !frame.starts_with("remove")),
+        "{frames:?}"
+    );
+    assert!(frames.contains(&"passengers 10 [1]".into()), "{frames:?}");
+    assert!(frames.contains(&"data 10".into()), "{frames:?}");
+    pump.finish();
+}
+
+/// A refused frame of the viewer's own entity (its data) is sent again.
+#[tokio::test]
+async fn refused_own_entity_data_is_sent_again() {
+    let mut pump = Pump::new();
+    let own = |health| {
+        Arc::new(EntityAppearance {
+            health,
+            ..Default::default()
+        })
+    };
+    let before = scene(1, None, Arc::clone(&RIDER_APPEARANCE), Some(own(20.0)));
+    let frames = pump.publish_delivered(&before).await;
+    assert!(frames.contains(&"data 1".into()), "{frames:?}");
+    let hurt = scene(2, None, Arc::clone(&RIDER_APPEARANCE), Some(own(5.0)));
+    pump.publish_refused(&hurt).await;
+    let frames = pump.publish_delivered(&hurt).await;
+    assert!(frames.contains(&"data 1".into()), "{frames:?}");
     pump.finish();
 }
