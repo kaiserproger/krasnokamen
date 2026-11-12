@@ -497,6 +497,7 @@ fn entry_heap(entry: &JournalEntry) -> usize {
         E::SavedMap { value, .. } => {
             value.colors.capacity()
                 + value.original_nbt.capacity()
+                + value.frame_markers.capacity() * std::mem::size_of::<(i32, i32, i32)>()
                 + value.banners.capacity() * std::mem::size_of::<crate::maps::Banner>()
                 + value
                     .banners
