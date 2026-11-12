@@ -809,7 +809,7 @@ area = "gameplay"
 repro = "manual"
 severity = "blocker"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LOADER-SOUND-MIXIN"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#LOADER-SOUND-MIXIN (ScreenSoundEngineMixin exists only on the unmerged loader branch monitor-fabric, where 432d29d removed it; loader main never had it)"
 regression = []
 
 [[bug]]
@@ -1969,6 +1969,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#JUKEBOX-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:6db29331caff9061527240767fba6fd5da3ba9fa7edc9d04d62bfbedf1efad71"
 
 [[bug]]
 id = "DISPENSER-MINECART-VARIANTS"
@@ -1991,6 +1992,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHELF-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:76ab6a600e8e315df18b8710efd3f019485b62430d80d795d49a042b9b67982e"
 
 [[bug]]
 id = "CRAFTER-HYDRATE-PANIC"
@@ -2002,6 +2004,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CRAFTER-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:fa0061ac6c30abdb5b093e99bb66ce012856f93f0f68edb6640b49c2d63393d6"
 
 [[bug]]
 id = "VILLAGER-CURE-SPEEDUP"
@@ -2081,6 +2084,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONDUIT-RUNTIME-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:6f19be18656653f07316721c01d4a22e18141504f6b8c2217281bc0270d903b1"
 
 [[bug]]
 id = "BEACON-RUNTIME-PANIC"
@@ -2092,6 +2096,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BEACON-RUNTIME-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:19ab1a1709043704d949d7528d2999cc206cd270a7cda6f72a72f42bf4a150a8"
 
 ingress_proof = [
   "mc-core/src/world.rs:841-888: the only writers of a resident chunk's opaque records (set_opaque_block_entity, install_command_block_entity; git grep 'chunk.block_entities.insert') both end in mark_block_entity_dirty -> bump_storage_revision -> hydration_pending (world.rs:679-687, 581-585), so the next hydration sync re-validates the chunk with beacon::validate_chunk (tick/hydration.rs:66) before any per-tick reader sees the record",
@@ -2109,6 +2114,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHRIEKER-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:34e03a31bb87400103032020267781c98c9ebb79740915acbe303611c27552b9"
 
 [[bug]]
 id = "GOAT-RAM-ABSENT"
