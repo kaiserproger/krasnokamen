@@ -23,13 +23,13 @@ from ..matrix_api import MatrixContext, MissingCapability, load_adapter
 from ..matrix_execution import copy_plugins, plugin_set_fingerprint, prepare_access, run_subject, select_plugin_profile
 from .protocol_lifecycle import Blocked, PortReservation, ProtocolServer, reserve_matrix_port
 
-JAVA_KINDS = frozenset({"vanilla_java_26_1_2", "fabric_solaris_loader", "fabric_svc",
-                        "fabric_distant_horizons", "neoforge_solaris_loader", "forge_solaris_loader"})
+JAVA_KINDS = frozenset({"vanilla_java_26_1_2", "fabric_krasnokamen_loader", "fabric_svc",
+                        "fabric_distant_horizons", "neoforge_krasnokamen_loader", "forge_krasnokamen_loader"})
 JAVA_CLIENT_LAUNCH = {"vanilla_java_26_1_2": (None, "vanilla"),
-            "fabric_solaris_loader": ("fabric", "loader"),
+            "fabric_krasnokamen_loader": ("fabric", "loader"),
             "fabric_svc": (None, "svc"), "fabric_distant_horizons": (None, "dh"),
-            "neoforge_solaris_loader": ("neoforge", "loader"),
-            "forge_solaris_loader": ("forge", "loader")}
+            "neoforge_krasnokamen_loader": ("neoforge", "loader"),
+            "forge_krasnokamen_loader": ("forge", "loader")}
 PORT_RANGE = (26200, 26299)
 
 
@@ -119,7 +119,7 @@ def group(args: argparse.Namespace, directory: Path, count: int, server: Protoco
     return client_group(directory / "clients", count, f"127.0.0.1:{server.port}",
                         platform=platform, client_profile=profile,
                         timeout_seconds=args.timeout_seconds,
-                        authenticate="solaris-auth" in server.enabled_plugins, prepare_launch=True)
+                        authenticate="krasnokamen-auth" in server.enabled_plugins, prepare_launch=True)
 
 
 def run_capabilities(args: argparse.Namespace, root: Path) -> dict[str, Any]:

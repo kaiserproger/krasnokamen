@@ -15,8 +15,8 @@ use tokio::sync::broadcast;
 const CONNECTION: ConnectionId = ConnectionId(41);
 const PLAYER: uuid::Uuid = uuid::Uuid::from_u128(0x504c_5547_494e_5632);
 const PURCHASE: &str = "v2|apples,minecraft:apple,2,3,minecraft:emerald,1";
-const CHILD_WORLD: &str = "SOLARIS_PLUGIN_V2_CRASH_WORLD";
-const CHILD_DEPLOY: &str = "SOLARIS_PLUGIN_V2_CRASH_DEPLOY";
+const CHILD_WORLD: &str = "KRASNOKAMEN_PLUGIN_V2_CRASH_WORLD";
+const CHILD_DEPLOY: &str = "KRASNOKAMEN_PLUGIN_V2_CRASH_DEPLOY";
 const READY: &str = "PLUGIN_V2_DURABLE_PURCHASE_READY";
 const DEADLINE: Duration = Duration::from_secs(90);
 
@@ -24,7 +24,7 @@ struct TestDirectory(PathBuf);
 
 impl TestDirectory {
     fn new() -> Self {
-        let path = std::env::temp_dir().join(format!("solaris-plugin-v2-{}", uuid::Uuid::new_v4()));
+        let path = std::env::temp_dir().join(format!("krasnokamen-plugin-v2-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&path).expect("create isolated acceptance directory");
         Self(path)
     }
@@ -67,7 +67,7 @@ fn configuration(world: &Path, deployment: &Path) -> CoreConfig {
 }
 
 fn real_economy_package() -> PathBuf {
-    let root = std::env::var_os("SOLARIS_DEFAULT_PLUGINS_ROOT")
+    let root = std::env::var_os("KRASNOKAMEN_DEFAULT_PLUGINS_ROOT")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../solaris-default-plugins")
@@ -76,7 +76,7 @@ fn real_economy_package() -> PathBuf {
     for file in ["plugin.toml", "config.toml", "plugin.wasm"] {
         assert!(
             package.join(file).is_file(),
-            "missing integration prerequisite: {}; deploy the real first-party basic-economy component or set SOLARIS_DEFAULT_PLUGINS_ROOT; no substitute guest is allowed",
+            "missing integration prerequisite: {}; deploy the real first-party basic-economy component or set KRASNOKAMEN_DEFAULT_PLUGINS_ROOT; no substitute guest is allowed",
             package.join(file).display()
         );
     }
@@ -361,7 +361,7 @@ fn click(core: &Core, menu: (u8, i32), button: i8) {
 
 fn native_image(world: &Path) -> mc_world::native::NativeCheckpointImage {
     let mut identity = [0; 32];
-    identity[..16].copy_from_slice(b"SolarisV2Native\0");
+    identity[..16].copy_from_slice(b"KrasnoV2Native\0\0");
     identity[16..24].copy_from_slice(&81_i64.to_be_bytes());
     identity[24..].copy_from_slice(&(mc_worldgen::WORLDGEN_REVISION as u64).to_be_bytes());
     // Authoritative open recovers redb after SIGKILL; the offline export reader
@@ -426,7 +426,7 @@ fn assert_wal_purchase(world: &Path, checkpoint_tick: u64) -> u64 {
                     _ => None,
                 })
                 .expect("inventory effect shares the KV WAL batch");
-            let items = mc_data::items::solaris_required_items();
+            let items = mc_data::items::krasnokamen_required_items();
             let emerald = items
                 .id_of(&Identifier::parse("minecraft:emerald").unwrap())
                 .unwrap();
@@ -702,11 +702,11 @@ async fn real_sibling_complete_deployment_admits_physical_items_and_work_recipes
     // come from the native catalog; the deployment carries six packages.
     const PACKAGES: [&str; 6] = [
         "basic-economy",
-        "solaris-audit",
-        "solaris-economy",
-        "solaris-essentials",
-        "solaris-permissions",
-        "solaris-towns",
+        "krasnokamen-audit",
+        "krasnokamen-economy",
+        "krasnokamen-essentials",
+        "krasnokamen-permissions",
+        "krasnokamen-towns",
     ];
     let economy = real_economy_package();
     let sibling = economy
@@ -822,7 +822,7 @@ async fn real_sibling_complete_deployment_admits_physical_items_and_work_recipes
         items,
         PHYSICAL_ITEMS
             .into_iter()
-            .map(|name| format!("solaris-settlements:{name}"))
+            .map(|name| format!("krasnokamen-settlements:{name}"))
             .collect(),
         "all six native settlement physical definitions are admitted",
     );
@@ -851,7 +851,7 @@ async fn real_sibling_complete_deployment_admits_physical_items_and_work_recipes
         "open_hay",
     ]
     .into_iter()
-    .map(|name| format!("solaris-settlements:{name}"))
+    .map(|name| format!("krasnokamen-settlements:{name}"))
     .collect();
     for name in [
         "wooden_pickaxe",
@@ -868,7 +868,7 @@ async fn real_sibling_complete_deployment_admits_physical_items_and_work_recipes
         "pavise",
     ] {
         for quality in ["rough", "ordinary", "good", "masterwork"] {
-            work_recipes.push(format!("solaris-settlements:{name}_{quality}"));
+            work_recipes.push(format!("krasnokamen-settlements:{name}_{quality}"));
         }
     }
     assert_eq!(work_recipes.len(), 56);

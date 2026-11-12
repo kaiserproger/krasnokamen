@@ -110,9 +110,9 @@ class BreadOracleTests(unittest.TestCase):
                   "slots": [{"stack": {"item_id": 1, "count": 3}}] + [None] * 7}
         after = {"worker": "w", "tick": 20, "fence": {"revision": 2},
                  "slots": [{"stack": {"item_id": 2, "count": 1}}] + [None] * 7}
-        job = {"id": "j", "worker": "w", "recipe": "solaris-settlements:bread",
+        job = {"id": "j", "worker": "w", "recipe": "krasnokamen-settlements:bread",
                "recipe_revision": "r", "count": 1, "done": 1, "cancelled": False,
-               "receipts": [{"job": "j", "sequence": 1, "recipe": "solaris-settlements:bread", "recipe_revision": "r",
+               "receipts": [{"job": "j", "sequence": 1, "recipe": "krasnokamen-settlements:bread", "recipe_revision": "r",
                              "inputs": [{"item_id": 1, "count": 3}], "outputs": [{"item_id": 2, "count": 1}]}]}
         self.assertEqual(check_bread_job(before, after, job, "w", "j", 1, 2), [])
         after["tick"] = 10

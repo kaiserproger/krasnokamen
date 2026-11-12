@@ -1,5 +1,5 @@
 id=configuration-phase
-title=Configuration phase Solaris-vs-vanilla parity
+title=Configuration phase Krasnokamen-vs-vanilla parity
 quality=stabilization
 rows=P1,Q1
 kind=cargo-ignored-test
@@ -15,4 +15,4 @@ consumes=data/vanilla/reports/registries.json
 consumes=data/vanilla/data/minecraft/tags
 consumes=data/vanilla/data/minecraft/worldgen/biome
 success_marker=M79_ORACLE_COMPARISON_OK configuration-phase
-description=Runs a focused vanilla-vs-Solaris parity scenario over KnownPacks, RegistryData, UpdateTags, and FinishConfiguration before Play-state packets begin.
+description=Runs a focused vanilla-vs-Krasnokamen parity scenario over KnownPacks, RegistryData, UpdateTags, and FinishConfiguration before Play-state packets begin.

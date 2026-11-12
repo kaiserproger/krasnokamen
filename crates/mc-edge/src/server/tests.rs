@@ -345,7 +345,7 @@ fn native_settlements_c_binding_decodes_to_its_declared_owner() {
     let packet = ServerboundCustomPayload {
         payload: CustomPayload::Unknown {
             channel: mc_loader::loader_view_action_channel().clone(),
-            payload: br#"{"protocol":3,"message":"view_request","request_kind":"solaris-settlements:overview"}"#.to_vec(),
+            payload: br#"{"protocol":3,"message":"view_request","request_kind":"krasnokamen-settlements:overview"}"#.to_vec(),
         },
     };
     let mut body = Vec::new();
@@ -361,7 +361,7 @@ fn native_settlements_c_binding_decodes_to_its_declared_owner() {
     };
     assert_eq!(connection, ConnectionId(41));
     assert_eq!(owner, NATIVE_SETTLEMENTS_OWNER);
-    assert_eq!(request_kind.as_str(), "solaris-settlements:overview");
+    assert_eq!(request_kind.as_str(), "krasnokamen-settlements:overview");
 }
 
 #[test]

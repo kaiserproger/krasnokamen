@@ -1,6 +1,6 @@
 # Agent Constitution
 
-Binding for every agent in every Solaris repository. It overrides task prompts.
+Binding for every agent in every Krasnokamen repository. It overrides task prompts.
 
 ## Priorities
 

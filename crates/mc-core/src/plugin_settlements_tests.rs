@@ -9,11 +9,11 @@ use std::sync::Arc;
 use crate::plugin_blueprint_tests::fixture as component_fixture;
 
 use component_fixture::component_bytes;
-use mc_plugin_host::bindings::exports::solaris::plugin::events::{
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::events::{
     CommandInvoked, Event, EventContext,
 };
-use mc_plugin_host::bindings::exports::solaris::plugin::lifecycle::InitContext;
-use mc_plugin_host::bindings::solaris::plugin::types::Position;
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::lifecycle::InitContext;
+use mc_plugin_host::bindings::krasnokamen::plugin::types::Position;
 use mc_plugin_host::{
     CommandBatch, CompiledPlugin, HostServices, LogLevel, NoSessions, PluginInstance, PluginLimits,
     PluginStartup, engine, linker,
@@ -566,7 +566,7 @@ fn district_plan_requires_real_native_building_authority() {
         "buildings": [{
             "kind": "worksite",
             "id": "missing-certificate",
-            "purpose": "solaris:warehouse"
+            "purpose": "krasnokamen:warehouse"
         }]
     }))
     .expect("native district action is part of the settlement contract");
@@ -635,7 +635,7 @@ fn district_consumer_plans_real_worksite_queries_and_replays_through_guest() {
     let ScriptWorldStructureResult::Worksite { worksite } = result.as_ref() else {
         panic!("native worksite result")
     };
-    let references = format!("worksite|{}|solaris:farm", worksite.worksite_id);
+    let references = format!("worksite|{}|krasnokamen:farm", worksite.worksite_id);
     let id = state
         .settlements
         .create(
@@ -697,7 +697,7 @@ fn district_consumer_plans_real_worksite_queries_and_replays_through_guest() {
     };
     let district = page.settlements[0].district.as_ref().unwrap();
     assert_eq!(district.buildings[0].kind, "worksite");
-    assert_eq!(district.buildings[0].purpose, "solaris:farm");
+    assert_eq!(district.buildings[0].purpose, "krasnokamen:farm");
     assert_eq!(district.population, 0);
     assert_eq!(district.stage, None);
     assert_eq!(

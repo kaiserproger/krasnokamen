@@ -28,7 +28,7 @@ fn chain(n: usize) -> (Vec<Option<usize>>, Vec<usize>) {
     )
 }
 fn profile(name: &str, grid: &Grid, dem: &[f64], plan: &ErosionPlan) {
-    let Some(directory) = std::env::var_os("SOLARIS_W2_ARTIFACT_DIR") else {
+    let Some(directory) = std::env::var_os("KRASNOKAMEN_W2_ARTIFACT_DIR") else {
         return;
     };
     let directory = std::path::PathBuf::from(directory);

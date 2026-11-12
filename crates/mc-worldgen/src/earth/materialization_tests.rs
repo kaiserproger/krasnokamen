@@ -4,7 +4,7 @@ use super::super::region_cache::RegionCache;
 use super::*;
 
 fn blocks() -> BlockRegistry {
-    BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap()
+    BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap()
 }
 fn state(blocks: &BlockRegistry, name: &str) -> BlockStateId {
     blocks
@@ -153,7 +153,7 @@ fn p08_real_region_cache_purge_regenerates_base_and_retains_offline_edit_read_on
     let directory = tempfile::tempdir().unwrap();
     let definition = plane_definition();
     let blocks = blocks();
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let world = prepare(
         directory.path(),
         &definition,
@@ -351,7 +351,7 @@ fn reviewer_p2_partial_physical_boundary_chunks_keep_valid_cells_and_deny_paddin
     )
     .unwrap();
     let blocks = blocks();
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let materializer = BaseMaterializer::new(
         world.definition(),
         world.identity(),

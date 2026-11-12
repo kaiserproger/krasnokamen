@@ -30,7 +30,7 @@ xtask -> (none)
 Sibling checkouts are external to the core map; local presence is
 reported on stdout only and never baked into this file.
 
-- solaris-default-plugins: external
-- solaris-loader: external
+- krasnokamen-default-plugins: external
+- krasnokamen-loader: external
 
 Generated artifacts never own semantics; see the owning manifests and ADRs 0013/0014.

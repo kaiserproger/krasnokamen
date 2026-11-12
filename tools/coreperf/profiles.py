@@ -1262,7 +1262,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
         args.metrics_bearer_token = secrets.token_urlsafe(32)
         args.server_wrapper = " ".join(filter(None, [
             args.server_wrapper,
-            "env", shlex.quote(f"SOLARIS_COREPERF_REGIONS={region_file}")]))
+            "env", shlex.quote(f"KRASNOKAMEN_COREPERF_REGIONS={region_file}")]))
     config, url, game = load.config(args, directory, world, args.clients, operators=True)
     # Idle measures simulation, not the default pause-when-empty policy.
     config.write_text(config.read_text().replace("[server]\n", "[server]\npause_when_empty_seconds = -1\n", 1))

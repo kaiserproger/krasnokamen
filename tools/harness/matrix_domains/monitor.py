@@ -1,4 +1,4 @@
-"""Solaris monitor extension, source scenarios/live-plugins/computer/README.md:3-19.
+"""Krasnokamen monitor extension, source scenarios/live-plugins/computer/README.md:3-19.
 Vanilla clients see the carrier; this is not a vanilla custom-block feature.
 """
 from tools.harness.matrix_api import Adapter
@@ -10,24 +10,24 @@ def monitor_give_place_break(ctx):
     deploy(ctx,'computer')
     x,y,z=p.arena(ctx)
     p.admin(ctx,f'clear {p.client(ctx).name}')
-    p.admin(ctx,f'give {p.client(ctx).name} solaris:monitor 65')
-    ctx.wait_until(lambda:p.inventory(ctx,'solaris:monitor')==65,
+    p.admin(ctx,f'give {p.client(ctx).name} krasnokamen:monitor 65')
+    ctx.wait_until(lambda:p.inventory(ctx,'krasnokamen:monitor')==65,
                    description='received monitor stack-limit fixture')
-    stacks=sorted(s['count'] for s in p.observe(ctx,'inventory') if s['item_id']=='solaris:monitor')
+    stacks=sorted(s['count'] for s in p.observe(ctx,'inventory') if s['item_id']=='krasnokamen:monitor')
     p.admin(ctx,f'clear {p.client(ctx).name}')
-    p.admin(ctx,f'give {p.client(ctx).name} solaris:monitor 2')
-    p.rich_action(ctx,'select_inventory_item','solaris:monitor')
+    p.admin(ctx,f'give {p.client(ctx).name} krasnokamen:monitor 2')
+    p.rich_action(ctx,'select_inventory_item','krasnokamen:monitor')
     p.client(ctx).teleport_to(x+.5,y,z-2.5)
     p.use(ctx,(x,y-1,z),'up')
     p.block_is(ctx,(x,y,z),'minecraft:black_glazed_terracotta',facing='north')
     p.check(ctx,'monitor stack limit is 64',stacks,[1,64])
-    p.check(ctx,'monitor debit follows selected mode',p.inventory(ctx,'solaris:monitor'),
+    p.check(ctx,'monitor debit follows selected mode',p.inventory(ctx,'krasnokamen:monitor'),
             2 if ctx.factors['game_mode']=='creative' else 1)
     p.rich_action(ctx,'break_block',(x,y,z))
     p.block_is(ctx,(x,y,z),'minecraft:air')
     p.client(ctx).teleport_to(x+.5,y,z+.5)
-    ctx.wait_until(lambda:p.inventory(ctx,'solaris:monitor')==2,description='one monitor drop collected')
-    p.check(ctx,'exact custom item custody',p.inventory(ctx,'solaris:monitor'),2)
+    ctx.wait_until(lambda:p.inventory(ctx,'krasnokamen:monitor')==2,description='one monitor drop collected')
+    p.check(ctx,'exact custom item custody',p.inventory(ctx,'krasnokamen:monitor'),2)
     p.check(ctx,'no carrier duplication',p.inventory(ctx,'minecraft:black_glazed_terracotta'),0)
 
 
@@ -35,10 +35,10 @@ def monitor_native_bundle_render(ctx):
     deploy(ctx,'computer')
     x,y,z=p.arena(ctx)
     p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:black_glazed_terracotta[facing=west]')
-    p.admin(ctx,f'give {p.client(ctx).name} solaris:monitor 1')
-    p.test(ctx,'computer bundle bound','solaris' in p.observe(ctx,'loader.active_packages'),p.observe(ctx,'loader.active_packages'))
-    p.check(ctx,'monitor display name',p.rich_action(ctx,'item_display_name','solaris:monitor'),'Monitor')
-    p.check(ctx,'monitor model',p.rich_action(ctx,'block_model',(x+2,y,z)),'solaris:monitor')
+    p.admin(ctx,f'give {p.client(ctx).name} krasnokamen:monitor 1')
+    p.test(ctx,'computer bundle bound','krasnokamen' in p.observe(ctx,'loader.active_packages'),p.observe(ctx,'loader.active_packages'))
+    p.check(ctx,'monitor display name',p.rich_action(ctx,'item_display_name','krasnokamen:monitor'),'Monitor')
+    p.check(ctx,'monitor model',p.rich_action(ctx,'block_model',(x+2,y,z)),'krasnokamen:monitor')
     p.check(ctx,'screen faces west',p.rich_action(ctx,'monitor_screen_face',(x+2,y,z)),'west')
 
 
@@ -47,7 +47,7 @@ def monitor_other_clients_fallback(ctx):
     x,y,z=p.arena(ctx)
     p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:black_glazed_terracotta[facing=west]')
     p.check(ctx,'optional bundle leaves play available',p.observe(ctx,'connection.phase'),'play')
-    p.check(ctx,'not bound to native bundle','solaris' in p.observe(ctx,'loader.active_packages'),False)
+    p.check(ctx,'not bound to native bundle','krasnokamen' in p.observe(ctx,'loader.active_packages'),False)
     p.check(ctx,'fallback model',p.rich_action(ctx,'block_model',(x+2,y,z)),'minecraft:black_glazed_terracotta')
     p.rich_action(ctx,'break_block',(x+2,y,z))
     p.block_is(ctx,(x+2,y,z),'minecraft:air')

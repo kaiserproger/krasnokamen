@@ -12,7 +12,7 @@ from tools.harness.matrix_execution import plugin_set_fingerprint
 REPO = Path(__file__).resolve().parents[2]
 GEN = REPO / "tools" / "harness" / "matrix_specs" / "gen_matrix.py"
 # gen_matrix requires every plugin a plugin-sensitive subject depends on.
-PLUGINS = ("graves", "solaris-essentials", "solaris-auth")
+PLUGINS = ("graves", "krasnokamen-essentials", "krasnokamen-auth")
 # Frozen wave-1 ids (MATRIX_FREEZE.json); both use the full live set.
 OUTDATED_ID = "bl:commands.msg/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0@live"
 CURRENT_ID = "bl:death_respawn.keep_inventory_false/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0@live"
@@ -38,7 +38,7 @@ class OutdatedPluginSetTests(unittest.TestCase):
         self.ledger.write_text(json.dumps(line(OUTDATED_ID, "f" * 64)) + "\n" + json.dumps(line(CURRENT_ID, current)) + "\n")
 
     def gen(self, *args):
-        env = dict(os.environ, SCENARIO_LEDGER=str(self.ledger), SOLARIS_MATRIX_DATA=str(self.data))
+        env = dict(os.environ, SCENARIO_LEDGER=str(self.ledger), KRASNOKAMEN_MATRIX_DATA=str(self.data))
         return subprocess.run([sys.executable, str(GEN), *args], cwd=REPO, env=env,
                               capture_output=True, text=True, timeout=300, check=True).stdout
 

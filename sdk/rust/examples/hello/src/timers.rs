@@ -13,8 +13,8 @@
 //! carries the one state machine every other host test drives, and a second one
 //! there would make both harder to read.
 
-use solaris_plugin_sdk::events::TimerFired;
-use solaris_plugin_sdk::{Command, Event, broadcast, cancel_timer, schedule_timer};
+use krasnokamen_plugin_sdk::events::TimerFired;
+use krasnokamen_plugin_sdk::{Command, Event, broadcast, cancel_timer, schedule_timer};
 
 /// The contract's bound on one callback's batch, and therefore the most timers
 /// one fill callback may schedule. The fixture stays inside it: answering more

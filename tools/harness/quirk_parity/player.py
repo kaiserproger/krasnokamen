@@ -79,11 +79,11 @@ def run_player_script(ctx, row, jar, vanilla_data):
         (directory/'result.json').write_text(json.dumps(evidence, indent=2)+'\n')
 
 
-def compare_player_states(solaris, vanilla, *, fault=False):
+def compare_player_states(krasnokamen, vanilla, *, fault=False):
     if fault:
         import copy
         vanilla = copy.deepcopy(vanilla)
         vanilla['container']['minecraft:dirt'] = vanilla['container'].get('minecraft:dirt', 0) + 1
-    return {'passed': solaris == vanilla, 'solaris': solaris, 'vanilla': vanilla,
+    return {'passed': krasnokamen == vanilla, 'krasnokamen': krasnokamen, 'vanilla': vanilla,
             'exclusions': ['RNG', 'AI', 'random loot', 'mounts', 'rejoin', 'kill9'],
             'normalization': 'item registry names and counts per holder; touched block registry names'}

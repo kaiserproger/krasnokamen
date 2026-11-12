@@ -69,7 +69,7 @@ pub const IMPACT_PROJECTILES: &str = "minecraft:impact_projectiles";
 /// `test_environment`, `test_instance`, `trade_set`,
 /// `villager_trade`, `worldgen/configured_feature`,
 /// `worldgen/flat_level_generator_preset`, `worldgen/structure`,
-/// `worldgen/world_preset`. Solaris does not currently advertise them
+/// `worldgen/world_preset`. Krasnokamen does not currently advertise them
 /// through `RegistryData`, and shipping tags for a registry the client
 /// never learned about trips the Configuration → Play transition.
 const TAG_ROOTS: &[(&str, &str)] = &[
@@ -1478,9 +1478,9 @@ mod lookup_tests {
     }
 }
 
-/// Repo-owned item tags required by [`crate::recipes::solaris_required_recipes`].
+/// Repo-owned item tags required by [`crate::recipes::krasnokamen_required_recipes`].
 #[must_use]
-pub fn solaris_required_item_tags(items: &ItemRegistry) -> TagsData {
+pub fn krasnokamen_required_item_tags(items: &ItemRegistry) -> TagsData {
     let tags: BTreeMap<String, Vec<String>> = serde_json::from_str(REQUIRED_ITEM_TAGS)
         .expect("embedded required item tags JSON is valid");
     let item_registry = Identifier::parse(ITEM_REGISTRY).expect("static registry id");
@@ -1512,11 +1512,11 @@ pub fn solaris_required_item_tags(items: &ItemRegistry) -> TagsData {
 /// Configuration-only tags are bound even when empty. Supported mining tags
 /// contain block raw ids so the client can calculate tool speed and tier.
 #[must_use]
-pub fn solaris_required_client_tags(
+pub fn krasnokamen_required_client_tags(
     items: &ItemRegistry,
     blocks: &[crate::blocks::BlockReport],
 ) -> TagsData {
-    let mut tags = solaris_required_item_tags(items);
+    let mut tags = krasnokamen_required_item_tags(items);
     add_required_client_fallback_tags(&mut tags);
     add_required_fluid_tags(&mut tags);
     add_required_block_tags(&mut tags, blocks);

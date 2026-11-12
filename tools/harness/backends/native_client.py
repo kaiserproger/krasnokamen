@@ -60,8 +60,8 @@ def resolve_binary(ctx: ProfileContext) -> Path:
     """Resolve an override or build the missing default debug executable once."""
     evidence = ctx.client_evidence
     root = runtime.sibling_root("client")
-    override = os.environ.get("SOLARIS_CLIENT_BINARY")
-    binary = Path(override).expanduser() if override else Path("target/debug/solaris-client")
+    override = os.environ.get("KRASNOKAMEN_CLIENT_BINARY")
+    binary = Path(override).expanduser() if override else Path("target/debug/krasnokamen-client")
     if not binary.is_absolute():
         binary = root / binary
     binary = binary.resolve()
@@ -70,7 +70,7 @@ def resolve_binary(ctx: ProfileContext) -> Path:
     evidence.update({"root": str(root), "binary_path": str(binary), "binary_status": "resolving"})
     try:
         if not root.is_dir():
-            raise RuntimeError(f"native client root is missing: {root}; set SOLARIS_CLIENT_ROOT")
+            raise RuntimeError(f"native client root is missing: {root}; set KRASNOKAMEN_CLIENT_ROOT")
         if not binary.exists() and not override:
             # The enclosing harness command owns its memory/CPU scope. Keep this
             # build in that scope and use debug=0 rather than a release build.
@@ -87,7 +87,7 @@ def resolve_binary(ctx: ProfileContext) -> Path:
                 }
             )
             profiles._run_command(
-                ["cargo", "build", "--locked", "-j", "4", "--bin", "solaris-client"],
+                ["cargo", "build", "--locked", "-j", "4", "--bin", "krasnokamen-client"],
                 ctx,
                 "native-client-build.log",
                 cwd=root,
@@ -215,7 +215,7 @@ def start(
         root = runtime.sibling_root("client")
         evidence["root"] = str(root)
         if not root.is_dir():
-            raise RuntimeError(f"native client root is missing: {root}; set SOLARIS_CLIENT_ROOT")
+            raise RuntimeError(f"native client root is missing: {root}; set KRASNOKAMEN_CLIENT_ROOT")
         binary = binary.expanduser().resolve()
         _record_binary(ctx, binary)
         env = os.environ.copy()
@@ -224,10 +224,10 @@ def start(
                 raise ValueError("windowed native launch requires an explicit display")
             env["DISPLAY"] = display
             env.pop("WAYLAND_DISPLAY", None)
-            resource_names = ("SOLARIS_CLIENT_DATA_DIR", "SOLARIS_CLIENT_RESOURCE_ROOT",
-                              "SOLARIS_CLIENT_ASSET_ROOT", "SOLARIS_CLIENT_ASSET_INDEX")
+            resource_names = ("KRASNOKAMEN_CLIENT_DATA_DIR", "KRASNOKAMEN_CLIENT_RESOURCE_ROOT",
+                              "KRASNOKAMEN_CLIENT_ASSET_ROOT", "KRASNOKAMEN_CLIENT_ASSET_INDEX")
         else:
-            resource_names = ("SOLARIS_CLIENT_DATA_DIR",)
+            resource_names = ("KRASNOKAMEN_CLIENT_DATA_DIR",)
         evidence["resource_paths"] = {
             name: env[name] for name in resource_names if env.get(name)
         }
@@ -238,7 +238,7 @@ def start(
             path = Path(value)
             if not path.is_absolute():
                 path = root / path
-            available = path.is_file() if name == "SOLARIS_CLIENT_ASSET_INDEX" else path.is_dir()
+            available = path.is_file() if name == "KRASNOKAMEN_CLIENT_ASSET_INDEX" else path.is_dir()
             if not available:
                 raise RuntimeError(f"native client content prerequisite {name} is missing: {path}")
         ctx.artifact_dir.mkdir(parents=True, exist_ok=True)

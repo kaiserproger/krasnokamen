@@ -19,10 +19,10 @@ class SoundCapture:
 
     def __init__(self, artifact_dir: Path):
         self.path = artifact_dir / "audio.f32le"
-        self.sink = f"solaris_loader_gate_{os.getpid()}"
+        self.sink = f"krasnokamen_loader_gate_{os.getpid()}"
         self.module = subprocess.check_output([
             "pactl", "load-module", "module-null-sink", f"sink_name={self.sink}",
-            "rate=48000", "channels=2", "sink_properties=device.description=SolarisLoaderGate",
+            "rate=48000", "channels=2", "sink_properties=device.description=KrasnokamenLoaderGate",
         ], text=True).strip()
         self.condition = threading.Condition()
         self.written = 0
@@ -188,7 +188,7 @@ def private_audio_preflight(artifact_dir: Path, *, require_source: bool = True,
     The ScreenAudio wrapper owns the graph. Forced Pulse-only OpenAL plus an
     explicit private Pulse socket prevents ALSA/default-server fallback.
     """
-    root_text = os.environ.get("SOLARIS_PW_ROOT")
+    root_text = os.environ.get("KRASNOKAMEN_PW_ROOT")
     if not root_text:
         raise MissingCapability("private_audio:screen_audio_graph_wrapper_required")
     root = Path(root_text).resolve()
@@ -235,15 +235,15 @@ def prepare_private_audio() -> None:
     """Create only silent input/output on the proven private graph."""
     from . import runtime
 
-    root = Path(os.environ["SOLARIS_PW_ROOT"])
+    root = Path(os.environ["KRASNOKAMEN_PW_ROOT"])
     pulse = root / "pulse/native"
     runtime.wait_for_path_condition(pulse, 30, lambda: (pulse.is_socket(), None))
-    receipt = Path(os.environ["SOLARIS_AUDIO_RECEIPT_DIR"])
+    receipt = Path(os.environ["KRASNOKAMEN_AUDIO_RECEIPT_DIR"])
     (root/"alsa.conf").write_text(private_alsa_config(root))
     private_audio_preflight(receipt / "before", require_source=False, require_alsa=True)
     commands = [
         ["pw-cli", "create-node", "adapter",
-         "{ factory.name=support.null-audio-sink node.name=agents-null node.description=SolarisAgentsNull media.class=Audio/Sink object.linger=true audio.position=[ FL FR ] }"],
+         "{ factory.name=support.null-audio-sink node.name=agents-null node.description=KrasnokamenAgentsNull media.class=Audio/Sink object.linger=true audio.position=[ FL FR ] }"],
         ["pw-cli", "create-node", "adapter",
          "{ factory.name=support.null-audio-sink node.name=agents-silent-input media.class=Audio/Source/Virtual object.linger=true audio.position=[ FL FR ] }"],
     ]

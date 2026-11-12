@@ -68,7 +68,7 @@ class SettlementStorageLegTests(unittest.TestCase):
             reports.mkdir()
             (reports / "registries.json").write_text(json.dumps({"minecraft:villager_profession": {
                 "entries": {"minecraft:none": {"protocol_id": 0}, "minecraft:farmer": {"protocol_id": 5}}}}))
-            with mock.patch.dict(os.environ, {"SOLARIS_SERVER_VANILLA_DATA_DIR": root}):
+            with mock.patch.dict(os.environ, {"KRASNOKAMEN_SERVER_VANILLA_DATA_DIR": root}):
                 self.assertEqual(storage.farmer_id(), 5)
 
     def test_workshop_refresh_waits_for_second_station(self) -> None:

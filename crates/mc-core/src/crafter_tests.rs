@@ -355,7 +355,7 @@ fn crafter_menu_toggles_empty_slots_and_preview_cannot_be_taken() {
 #[test]
 fn crafter_wal_checkpoint_restart_retains_slots_disabled_and_pulse_latch_once() {
     use crate::journal::{JournalWriter, Replay, read_complete_batches_after, replay_batches};
-    let dir = std::env::temp_dir().join(format!("solaris-crafter-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("krasnokamen-crafter-{}", uuid::Uuid::new_v4()));
     let (mut original, _) = fixture(Some(dir.clone()));
     install(&mut original, "north_up");
     let mut rich = stack(&original, "oak_log", 3);
@@ -390,7 +390,7 @@ fn crafter_wal_checkpoint_restart_retains_slots_disabled_and_pulse_latch_once() 
     let crafter = records.iter().find(|record| record.pos == POS).unwrap();
     assert_eq!(crafter.type_name.as_str(), "minecraft:crafter");
     assert_eq!(
-        mc_data::block_entity_types::solaris_required_block_entity_types()
+        mc_data::block_entity_types::krasnokamen_required_block_entity_types()
             .id_of(&crafter.type_name),
         Some(42)
     );

@@ -1,6 +1,6 @@
 [
   {
-    "id": "solaris-settlements:oak_planks",
+    "id": "krasnokamen-settlements:oak_planks",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 200,
@@ -37,7 +37,7 @@
     ]
   },
   {
-    "id": "solaris-settlements:stick",
+    "id": "krasnokamen-settlements:stick",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 80,
@@ -68,7 +68,7 @@
     "tools": []
   },
   {
-    "id": "solaris-settlements:wooden_pickaxe",
+    "id": "krasnokamen-settlements:wooden_pickaxe",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 240,
@@ -130,7 +130,7 @@
     "tools": []
   },
   {
-    "id": "solaris-settlements:wooden_hoe",
+    "id": "krasnokamen-settlements:wooden_hoe",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 240,
@@ -192,7 +192,7 @@
     "tools": []
   },
   {
-    "id": "solaris-settlements:wooden_axe",
+    "id": "krasnokamen-settlements:wooden_axe",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 240,
@@ -254,7 +254,7 @@
     "tools": []
   },
   {
-    "id": "solaris-settlements:stone_pickaxe",
+    "id": "krasnokamen-settlements:stone_pickaxe",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 320,
@@ -316,7 +316,7 @@
     "tools": []
   },
   {
-    "id": "solaris-settlements:bread",
+    "id": "krasnokamen-settlements:bread",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 120,
@@ -347,7 +347,7 @@
     "tools": []
   },
   {
-    "id": "solaris-settlements:sugar",
+    "id": "krasnokamen-settlements:sugar",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 80,
@@ -378,7 +378,7 @@
     "tools": []
   },
   {
-    "id": "solaris-settlements:cake",
+    "id": "krasnokamen-settlements:cake",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 320,
@@ -441,7 +441,7 @@
     "tools": []
   },
   {
-    "id": "solaris-settlements:repair_wooden_pickaxe",
+    "id": "krasnokamen-settlements:repair_wooden_pickaxe",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 240,
@@ -536,7 +536,7 @@
     "tools": []
   },
   {
-    "id": "solaris-settlements:salvage_wooden_pickaxe",
+    "id": "krasnokamen-settlements:salvage_wooden_pickaxe",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 120,
@@ -600,7 +600,7 @@
     "tools": []
   },
   {
-    "id": "solaris-settlements:saddle",
+    "id": "krasnokamen-settlements:saddle",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 240,
@@ -637,7 +637,7 @@
     "tools": []
   },
   {
-    "id": "solaris-settlements:hay_block",
+    "id": "krasnokamen-settlements:hay_block",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 80,
@@ -668,7 +668,7 @@
     "tools": []
   },
   {
-    "id": "solaris-settlements:open_hay",
+    "id": "krasnokamen-settlements:open_hay",
     "revision": "1",
     "station": "minecraft:crafting_table",
     "duration_ticks": 40,

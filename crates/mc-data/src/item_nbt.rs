@@ -493,7 +493,7 @@ mod tests {
     use crate::items::ItemRegistry;
 
     fn items() -> ItemRegistry {
-        crate::items::solaris_required_items()
+        crate::items::krasnokamen_required_items()
     }
 
     fn sword(items: &ItemRegistry) -> ItemStack {
@@ -540,7 +540,7 @@ mod tests {
     fn components_preserve_unknown_keys_and_reject_bad_shapes() {
         use crate::item_stack::{ExtendedItemComponents, FireworkExplosion, Fireworks};
         use mc_nbt::Tag;
-        let items = crate::items::solaris_required_items();
+        let items = crate::items::krasnokamen_required_items();
         let arrow = mc_data_item_id(&items, "minecraft:arrow");
         let components = ExtendedItemComponents {
             charged_projectiles: vec![ItemStack::new(arrow, 1)],

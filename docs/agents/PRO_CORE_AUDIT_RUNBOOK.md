@@ -1,4 +1,4 @@
-# Running the Solaris whole-core audit with a Pro planning model
+# Running the Krasnokamen whole-core audit with a Pro planning model
 
 Run this only after currently active implementation agents have reached terminal checkpoints, so the audit sees one coherent tree.
 

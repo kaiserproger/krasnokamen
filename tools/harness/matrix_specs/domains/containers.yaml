@@ -45,7 +45,7 @@ subjects:
     expected_value_source: https://minecraft.wiki/w/Chest#Container
     status: executable_adapter
     matrix_ids:
-      - pw:containers.chest/forge_solaris_loader/survival/the_nether/normal/N8/disconnect_during_menu/clean_restart_mid_action/non_op_0
+      - pw:containers.chest/forge_krasnokamen_loader/survival/the_nether/normal/N8/disconnect_during_menu/clean_restart_mid_action/non_op_0
       - tr.dupe.two_players_same_slot_same_tick:containers.chest/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
       - tr.dupe.break_container_while_open:containers.chest/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
       - tr.dupe.kill9_between_click_and_checkpoint:containers.chest/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
@@ -617,7 +617,7 @@ subjects:
     expected_value_source: https://minecraft.wiki/w/Anvil_mechanics
     status: executable_adapter
     matrix_ids:
-      - pw:containers.anvil/fabric_solaris_loader/survival/the_end/hard/N8/slow_reader_backpressure/clean_restart_mid_action/op_4
+      - pw:containers.anvil/fabric_krasnokamen_loader/survival/the_end/hard/N8/slow_reader_backpressure/clean_restart_mid_action/op_4
       - tr.dupe.two_players_same_slot_same_tick:containers.anvil/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
       - tr.dupe.break_container_while_open:containers.anvil/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
       - tr.dupe.kill9_between_click_and_checkpoint:containers.anvil/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
@@ -858,7 +858,7 @@ subjects:
     expected_value_source: https://minecraft.wiki/w/Boat_with_Chest#Usage
     status: executable_adapter
     matrix_ids:
-      - pw:containers.chest_boat/neoforge_solaris_loader/survival/the_nether/normal/N8/normal/clean_restart_mid_action/op_1
+      - pw:containers.chest_boat/neoforge_krasnokamen_loader/survival/the_nether/normal/N8/normal/clean_restart_mid_action/op_1
       - tr.dupe.two_players_same_slot_same_tick:containers.chest_boat/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
       - tr.dupe.break_container_while_open:containers.chest_boat/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
       - tr.dupe.kill9_between_click_and_checkpoint:containers.chest_boat/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0

@@ -1,6 +1,6 @@
 """Task leases (task-claim, task-release) and fleet-status: python3 tools/dev/test_task_claim.py
 
-The fleet dir is private (SOLARIS_FLEET_DIR) and the clock injected (SOLARIS_FLEET_NOW), so expiry needs
+The fleet dir is private (KRASNOKAMEN_FLEET_DIR) and the clock injected (KRASNOKAMEN_FLEET_NOW), so expiry needs
 no sleep. Claims run inside this test's own process, the way Main's subagents run inside Main's one
 omp process: one live PID claims for two logical agents, so only the lease can decide."""
 from __future__ import annotations
@@ -32,12 +32,12 @@ class LeaseTests(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.base = Path(tmp.name)
         self.fleet = self.base / "fleet"
-        patcher = mock.patch.dict(os.environ, {"SOLARIS_FLEET_DIR": str(self.fleet)})
+        patcher = mock.patch.dict(os.environ, {"KRASNOKAMEN_FLEET_DIR": str(self.fleet)})
         patcher.start()
         self.addCleanup(patcher.stop)
 
     def claim(self, *argv: str, at: int) -> str:
-        os.environ["SOLARIS_FLEET_NOW"] = str(at)
+        os.environ["KRASNOKAMEN_FLEET_NOW"] = str(at)
         out = io.StringIO()
         with redirect_stdout(out):
             claim_tool.main(list(argv))
@@ -56,7 +56,7 @@ class LeaseTests(unittest.TestCase):
         self.assertIn("held by AgentA", self.refused("T1", "--agent", "AgentB", "--timebox", "30", at=T0 + MIN))
         self.assertIn("held by AgentA, not AgentB", self.refused("--renew", "T1", "--agent", "AgentB", at=T0 + MIN))
         release = subprocess.run([str(HERE / "task-release"), "T1"], capture_output=True, text=True, check=True,
-                                 env=os.environ | {"SOLARIS_FLEET_NOW": str(T0 + 2 * MIN)})
+                                 env=os.environ | {"KRASNOKAMEN_FLEET_NOW": str(T0 + 2 * MIN)})
         self.assertIn("released T1 (held by AgentA", release.stdout)
         took = self.claim("T1", "--agent", "AgentB", "--timebox", "30", at=T0 + 3 * MIN)
         self.assertIn("took over T1 for AgentB from AgentA (released", took)
@@ -88,7 +88,7 @@ class LeaseTests(unittest.TestCase):
         # One build token held the way mem-run holds it, by slot-lock.py, until the holder reads EOF.
         holder = subprocess.Popen(
             [sys.executable, str(HERE / "slot-lock.py"), "--dir", str(mem / "tokens"), "--name", "token-%s.lock",
-             "--slots", "1,2,3", "--env", "SOLARIS_BUILD_TOKEN", "--fd", "9", "--",
+             "--slots", "1,2,3", "--env", "KRASNOKAMEN_BUILD_TOKEN", "--fd", "9", "--",
              sys.executable, "-c", "import sys; print('held', flush=True); sys.stdin.read()"],
             cwd=self.base, stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
         self.addCleanup(holder.wait, 30)
@@ -98,7 +98,7 @@ class LeaseTests(unittest.TestCase):
         self.assertEqual(holder.stdout.readline().strip(), "held")
         status = subprocess.run(
             [str(HERE / "fleet-status"), "--mem-dir", str(mem)], capture_output=True, text=True, check=True,
-            env=os.environ | {"SOLARIS_FLEET_NOW": str(T0 + 20 * MIN), "SOLARIS_SCENE_SLOT_DIR": str(self.base / "scenes")},
+            env=os.environ | {"KRASNOKAMEN_FLEET_NOW": str(T0 + 20 * MIN), "KRASNOKAMEN_SCENE_SLOT_DIR": str(self.base / "scenes")},
         ).stdout
         rows = {line.split()[0]: line for line in status.splitlines() if line.startswith("  ") and line.split()}
         self.assertIn("CLAIMS (2 live, 1 expired)", status)

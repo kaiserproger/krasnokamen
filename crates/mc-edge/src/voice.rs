@@ -1,4 +1,4 @@
-//! `solaris:voice` proximity relay (ADR 0019). Pure: no I/O and no clock;
+//! `krasnokamen:voice` proximity relay (ADR 0019). Pure: no I/O and no clock;
 //! callers pass `Instant`s and deliver the returned payloads. The server never
 //! decodes Opus: it bounds, rate-limits and forwards each packet to listeners in
 //! the same dimension within range of the speaker's published pose.
@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::screen::Pose;
 
-pub(crate) const CHANNEL: &str = "solaris:voice";
+pub(crate) const CHANNEL: &str = "krasnokamen:voice";
 const VERSION: u8 = 1;
 pub(crate) const MAX_OPUS_BYTES: usize = 1000;
 

@@ -15,7 +15,7 @@ use mc_script::{COMPONENT_PLUGIN_API_VERSION, ClientBundle, GameplayRules, scrip
 use std::num::NonZeroUsize;
 
 use crate::adapter::{AdapterError, NoSessions, to_script_batch};
-use crate::bindings::solaris::plugin::types::LogLevel;
+use crate::bindings::krasnokamen::plugin::types::LogLevel;
 use crate::discovery::{DeploymentConfig, DiscoveryError, SkippedPackage, discover};
 use crate::package::{LoadedPackage, compile_package};
 use crate::startup::{DeploymentSurface, aggregate_deployment, convert_startup_contribution};
@@ -240,7 +240,7 @@ fn check_package(
     let batch = instance
         .init(
             &config_text,
-            crate::bindings::exports::solaris::plugin::lifecycle::InitContext {
+            crate::bindings::exports::krasnokamen::plugin::lifecycle::InitContext {
                 plugin_id: id.clone(),
                 api_version: api_text(COMPONENT_PLUGIN_API_VERSION),
                 world_fingerprint: String::new(),

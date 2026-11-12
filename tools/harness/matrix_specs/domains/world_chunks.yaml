@@ -16,8 +16,8 @@ execution_contract:
     Received packets, exact console predicates, and pushed dashboard tick events only. No sleeps.
     Feedback fence proves only ordering.
   references:
-    Vanilla mechanics reference minecraft.wiki; Solaris extensions/SLOs explicitly separate. No claim
-    that Solaris WAL/hot backup/anti-xray are vanilla features.
+    Vanilla mechanics reference minecraft.wiki; Krasnokamen extensions/SLOs explicitly separate. No claim
+    that Krasnokamen WAL/hot backup/anti-xray are vanilla features.
   temporal_snapshots:
     Freeze or record exact simulation tick; compare timers relative to ticks, not literal after
     arbitrary elapsed time.
@@ -234,9 +234,9 @@ subjects:
       - crates/mc-core/src/chunk_tickets.rs
       - crates/mc-core/src/light.rs
     matrix_rows:
-      - id: pw:world_chunks.chunk_streaming_radius/fabric_solaris_loader/creative/the_end/normal/N8/normal/steady/op_4
+      - id: pw:world_chunks.chunk_streaming_radius/fabric_krasnokamen_loader/creative/the_end/normal/N8/normal/steady/op_4
         context:
-          client_kind: fabric_solaris_loader
+          client_kind: fabric_krasnokamen_loader
           game_mode: creative
           dimension: the_end
           difficulty: normal
@@ -309,7 +309,7 @@ subjects:
           - "vanilla 26.1.2 newcomer wins (owner requirement, BugTriage DUPLICATE-LOGIN): the existing session is disconnected
             ('You logged in from another location'), the new connection reaches Play with the same persisted player
             state; exactly one live player entity for the UUID, no inventory copy or loss, no join-wait timeout. Current
-            Solaris (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
+            Krasnokamen (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
             — expected to fail until ServerFixes lands"
           - "after SIGKILL + restart (no wait for a published WAL fence) the world equals a consistent prefix of the
             committed transactions: every transaction is all-or-nothing (no torn/split/half-moved stacks), no item duplication,
@@ -341,7 +341,7 @@ subjects:
         operator: equals
         expected: minecraft:diamond_ore
     reference:
-      scope: solaris_extension_no_vanilla_equivalent
+      scope: krasnokamen_extension_no_vanilla_equivalent
       source:
         - crates/mc-edge/src/anti_xray.rs
     missing_capabilities:
@@ -354,9 +354,9 @@ subjects:
       - crates/mc-core/src/chunk_tickets.rs
       - crates/mc-core/src/light.rs
     matrix_rows:
-      - id: pw:world_chunks.anti_xray/forge_solaris_loader/spectator/overworld/easy/2/malformed_or_stale_packet/clean_restart_mid_action/op_2
+      - id: pw:world_chunks.anti_xray/forge_krasnokamen_loader/spectator/overworld/easy/2/malformed_or_stale_packet/clean_restart_mid_action/op_2
         context:
-          client_kind: forge_solaris_loader
+          client_kind: forge_krasnokamen_loader
           game_mode: spectator
           dimension: overworld
           difficulty: easy
@@ -469,9 +469,9 @@ subjects:
       - crates/mc-core/src/chunk_tickets.rs
       - crates/mc-core/src/light.rs
     matrix_rows:
-      - id: pw:world_chunks.forceload_spawn_chunks/neoforge_solaris_loader/survival/the_nether/peaceful/N8/slow_reader_backpressure/save_all_checkpoint/op_3
+      - id: pw:world_chunks.forceload_spawn_chunks/neoforge_krasnokamen_loader/survival/the_nether/peaceful/N8/slow_reader_backpressure/save_all_checkpoint/op_3
         context:
-          client_kind: neoforge_solaris_loader
+          client_kind: neoforge_krasnokamen_loader
           game_mode: survival
           dimension: the_nether
           difficulty: peaceful
@@ -609,7 +609,7 @@ subjects:
         operator: greater_than
         expected: 0
     reference:
-      scope: solaris_operator_extension
+      scope: krasnokamen_operator_extension
       source:
         - crates/mc-world-tools/src/pregenerate.rs
     missing_capabilities:
@@ -720,7 +720,7 @@ subjects:
         operator: equals_capture
         expected: current build
     reference:
-      scope: solaris_revision_upgrade_not_vanilla_seam_guarantee
+      scope: krasnokamen_revision_upgrade_not_vanilla_seam_guarantee
       source:
         - crates/mc-world-tools/src/worldgen_upgrade.rs:1-7,35-40
     missing_capabilities:

@@ -177,7 +177,7 @@ pub enum EntityContactError {
 /// Computes the vanilla impulse for exactly one caller-selected recipient.
 ///
 /// Exact horizontal overlap returns zero through vanilla's distance threshold.
-/// Solaris-specific deterministic overlap handling, if needed, must remain a
+/// Krasnokamen-specific deterministic overlap handling, if needed, must remain a
 /// separately named opt-in policy outside this vanilla function.
 pub fn vanilla_push_impulse(input: EntityPushInput) -> Result<Vec3, EntityContactError> {
     if !input.caller_to_other_x.is_finite() || !input.caller_to_other_z.is_finite() {

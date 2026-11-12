@@ -6,8 +6,8 @@
 //! Each phase starts from init and logs success only after all typed answers
 //! match their request IDs, operation IDs, values, revisions and outcomes.
 
-use solaris_plugin_sdk::events::{OperationFailure, OperationOutcome, OperationPayload};
-use solaris_plugin_sdk::{
+use krasnokamen_plugin_sdk::events::{OperationFailure, OperationOutcome, OperationPayload};
+use krasnokamen_plugin_sdk::{
     Command, Event, Failure, LogLevel, StorageGetOutcome, commands, log, storage, storage_get,
 };
 

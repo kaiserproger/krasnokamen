@@ -70,7 +70,7 @@ pub fn load_blocks_report(path: impl AsRef<Path>) -> Result<Vec<BlockReport>, Bl
 
 /// Embedded derived block-state registry used when the local sidecar is absent.
 #[must_use]
-pub fn solaris_required_blocks_report() -> Vec<BlockReport> {
+pub fn krasnokamen_required_blocks_report() -> Vec<BlockReport> {
     let raw: BTreeMap<String, RawBlock> = serde_json::from_str(REQUIRED_BLOCKS)
         .expect("embedded required block registry JSON is valid");
     raw_blocks_to_report(raw).expect("embedded required block ids are valid")
@@ -171,7 +171,7 @@ mod tests {
 
     #[test]
     fn embedded_required_blocks_cover_dense_26_3_state_registry() {
-        let report = solaris_required_blocks_report();
+        let report = krasnokamen_required_blocks_report();
 
         assert_eq!(report.len(), 1286, "block count for 26.3");
         let total_states: usize = report.iter().map(|b| b.states.len()).sum();

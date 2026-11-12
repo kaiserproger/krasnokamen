@@ -9,8 +9,8 @@ pub(crate) fn fixture() -> (EdgeServer, std::path::PathBuf) {
         Some(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla"));
     config.checkpoint_every_ticks = u64::MAX;
     let hub = Arc::new(Core::open(config).unwrap());
-    let report = mc_data::blocks::solaris_required_blocks_report();
-    let data = Arc::new(mc_data::solaris_required_data());
+    let report = mc_data::blocks::krasnokamen_required_blocks_report();
+    let data = Arc::new(mc_data::krasnokamen_required_data());
     let cfg = EdgeConfig::default();
     let server = EdgeServer {
         loader_manifest: None,
@@ -19,8 +19,8 @@ pub(crate) fn fixture() -> (EdgeServer, std::path::PathBuf) {
             dimension_type_ids: crate::dimensions::registry_ids(&data).unwrap(),
             biomes: data.registry("worldgen/biome").unwrap().clone(),
             blocks: mc_world::BlockRegistry::from_report(&report).unwrap(),
-            items: mc_data::items::solaris_required_items(),
-            block_entity_types: mc_data::block_entity_types::solaris_required_block_entity_types(),
+            items: mc_data::items::krasnokamen_required_items(),
+            block_entity_types: mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
         },
         hub,
         data,
@@ -390,7 +390,7 @@ async fn suggestion_round_trip_and_permission_tree_refresh() {
 
 fn native_checkpoint_identity() -> [u8; 32] {
     let mut identity = [0; 32];
-    identity[..16].copy_from_slice(b"SolarisV2Native\0");
+    identity[..16].copy_from_slice(b"KrasnoV2Native\0\0");
     identity[16..24].copy_from_slice(&42_u64.to_be_bytes());
     identity[24..].copy_from_slice(&(mc_worldgen::WORLDGEN_REVISION as u64).to_be_bytes());
     identity

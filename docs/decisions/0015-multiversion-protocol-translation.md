@@ -253,7 +253,7 @@ Current focused gates are the `translation` unit tests and
 `translation::join_tests::protocol_{775,776,777}_login_configuration_play`.
 The ignored TCP cases require real imported caches/steps and exercise known
 packs, full RegistryData, chunks, block placement/breaking and chest opening.
-A missing cache fails; it is not a skipped/pass result. Set `SOLARIS_CONTENT_CACHE`
+A missing cache fails; it is not a skipped/pass result. Set `KRASNOKAMEN_CONTENT_CACHE`
 to the isolated canonical root for a fresh-install gate.
 
 `translation::join_tests::visibility::protocol_<first>_then_<second>_see_each_other`

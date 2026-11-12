@@ -3,8 +3,8 @@ package org.bukkit.plugin.java;
 import org.bukkit.Server;
 import org.bukkit.command.*;
 import org.bukkit.plugin.Plugin;
-import org.solaris.bukkit.PluginLogger;
-import org.solaris.bukkit.Runtime;
+import org.krasnokamen.bukkit.PluginLogger;
+import org.krasnokamen.bukkit.Runtime;
 
 public class JavaPlugin implements Plugin, CommandExecutor {
     public PluginLogger getLogger() { return PluginLogger.getLogger("Bukkit"); }

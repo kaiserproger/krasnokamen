@@ -35,8 +35,8 @@ failure diagnosis"; this page is the method and the causes seen so far.
 
 ## Stale or wrong binaries
 
-- `cargo test` does not rebuild the `solaris-v2` binary. Check
-  `server-build.log` or the receipt's commands for `--bin solaris-v2 -p mc-edge`
+- `cargo test` does not rebuild the `krasnokamen` binary. Check
+  `server-build.log` or the receipt's commands for `--bin krasnokamen -p mc-edge`
   and the binary's identity before trusting a run.
 - Pooled or shared target dirs can serve another tree's artifacts; see the
   2026-11-04 entry in [lessons](lessons.md). Symptoms: "unresolved import" for a

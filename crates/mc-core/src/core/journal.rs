@@ -288,7 +288,7 @@ pub(crate) fn checkpoint_tickets(
     state
         .tickets
         .iter()
-        .filter(|(owner, _)| !owner.starts_with("solaris:portal:"))
+        .filter(|(owner, _)| !owner.starts_with("krasnokamen:portal:"))
         .map(|(owner, (centre, radius))| (owner.clone(), ([centre.x, centre.z], (tick, *radius))))
         .collect()
 }

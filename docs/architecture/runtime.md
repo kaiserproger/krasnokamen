@@ -8,7 +8,7 @@ current runtime entrypoints.
 ## Entry points
 
 ```text
-crates/mc-edge/src/bin/solaris-v2.rs
+crates/mc-edge/src/bin/krasnokamen.rs
   operator_cli: parse --config (default server.toml), dispatch offline command
   server: resolve/validate content cache and immutable startup tables
   mc_core::Core::open: native world, recovery, gameplay and tick ownership

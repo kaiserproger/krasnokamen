@@ -1,21 +1,21 @@
 # Migrating a vanilla or Paper server
 
-Solaris 1.0 is a **release candidate (prerelease)**, not a drop-in Paper
+Krasnokamen 1.0 is a **release candidate (prerelease)**, not a drop-in Paper
 replacement. This guide moves a stopped, ordinary Minecraft Java world (26.1.2,
-or a native 26.3 world) into Solaris's native store and describes how to convert
+or a native 26.3 world) into Krasnokamen's native store and describes how to convert
 it back. Test on copies before changing the public endpoint. A successful
 conversion receipt proves conversion, not complete gameplay compatibility:
 consult [COMPATIBILITY.md](COMPATIBILITY.md). Everyday commands and
 configuration are in [OPERATING.md](OPERATING.md); this page owns the migration
 procedure and rollback.
 
-Recheck every command against the binary you deploy (`solaris-v2 --help`,
+Recheck every command against the binary you deploy (`krasnokamen --help`,
 `content import --help`, `world import-anvil --help`, `world export-anvil
---help`); release packaging may name it `solaris`.
+--help`); release packaging may name it `krasnokamen`.
 
 ## 1. Prerequisites and a recoverable source
 
-- Use one `solaris-v2` build throughout the rehearsal.
+- Use one `krasnokamen` build throughout the rehearsal.
 - Install **JDK 25** (`java` and `javac`) for the one-time content extraction.
   Have the licensed official **26.3 and 26.1.2 server bundles** (not a Paper
   launcher JAR), or let `content import` download them. For the vanilla rollback
@@ -35,7 +35,7 @@ Recheck every command against the binary you deploy (`solaris-v2 --help`,
   backup read-only, record checksums and rehearse restoring it.
 
 Examples use `/srv/migration/anvil-source` for a disposable stopped source copy,
-`/srv/solaris` for the new installation and seed `42`; substitute your paths and
+`/srv/krasnokamen` for the new installation and seed `42`; substitute your paths and
 **actual seed**. Do not pre-create the native or export destination (the
 converter requires that it not exist); create their parents and the receipts
 directory.
@@ -70,9 +70,9 @@ that both conversion and serving need. `--version` accepts only `26.3`; the cach
 pairs the 26.3 protocol identity with the 26.1.2 gameplay pack:
 
 ```sh
-solaris-v2 content import --version 26.3 --download --cache /srv/solaris/content/26.3
+krasnokamen content import --version 26.3 --download --cache /srv/krasnokamen/content/26.3
 # or: --from /path/to/26.3/server.jar --gameplay-from /path/to/26.1.2/server.jar
-solaris-v2 content verify --cache /srv/solaris/content/26.3
+krasnokamen content verify --cache /srv/krasnokamen/content/26.3
 ```
 
 Set the same absolute `[data].vanilla_data_dir` in the conversion and serving
@@ -82,14 +82,14 @@ behavior and the optional separate 26.1.2 cache for legacy clients are in
 
 ## 3. Translate configuration explicitly
 
-Solaris does **not** read `bukkit.yml`, `spigot.yml`, `paper-global.yml` or
+Krasnokamen does **not** read `bukkit.yml`, `spigot.yml`, `paper-global.yml` or
 per-world Paper configuration, and reads only a subset of `server.properties`
 ([import rules](OPERATING.md#importing-serverproperties)). Unknown TOML keys warn
 and are ignored; a successful start does not prove an invented mapping worked.
 Start from [example.toml](../example.toml), not a mechanical hyphen-to-underscore
 rewrite.
 
-A minimal isolated rehearsal configuration at `/srv/solaris/server.toml`:
+A minimal isolated rehearsal configuration at `/srv/krasnokamen/server.toml`:
 
 ```toml
 [server]
@@ -107,9 +107,9 @@ port = 25566
 online_mode = true
 
 [data]
-world_dir = "/srv/solaris/native-world"
+world_dir = "/srv/krasnokamen/native-world"
 seed = 42 # MUST equal the saved world's actual numeric seed
-vanilla_data_dir = "/srv/solaris/content/26.3"
+vanilla_data_dir = "/srv/krasnokamen/content/26.3"
 ```
 
 Preserve the source authentication/UUID scheme. Do not switch an online server to
@@ -130,7 +130,7 @@ Each row describes the **property**, not the corresponding game mechanic:
   the property itself is not read.
 - **ignored**: no equivalent operator setting; it warns by name and is dropped.
 
-| Vanilla key | Status | Solaris mapping / migration action |
+| Vanilla key | Status | Krasnokamen mapping / migration action |
 |---|---|---|
 | `accepts-transfers` | supported | `[server].accepts_transfers` |
 | `allow-flight` | different | No direct flag. `[anti_cheat].max_airtime_ticks = 0` disables the native airtime check, not all movement validation; test your flight use case. |
@@ -149,7 +149,7 @@ Each row describes the **property**, not the corresponding game mechanic:
 | `force-gamemode` | ignored | No forced-login gamemode. |
 | `function-permission-level` | ignored | Directory-datapack functions run with the invoking source's permission; no config knob. |
 | `gamemode` | different | No TOML key. A converted world's `level.dat` `Data.GameType` (0 to 3; absent means survival; any other value fails the conversion) becomes the mode a player without a saved record joins in. `/defaultgamemode` changes it, it persists (journal and checkpoint) and export writes it back to `GameType`. Worlds converted before this change have no stored value and export `GameType` 0. Saved players keep their own gamemode. |
-| `generate-structures` | ignored | No toggle; saved terrain is imported, future terrain uses Solaris generation. |
+| `generate-structures` | ignored | No toggle; saved terrain is imported, future terrain uses Krasnokamen generation. |
 | `generator-settings`, `level-type` | different | Import validates saved normal-world descriptors; custom or flat/amplified generators are rejected. |
 | `hardcore` | ignored | No hardcore deployment setting; retained metadata does not prove hardcore semantics. |
 | `hide-online-players` | ignored | No status-list privacy setting. |
@@ -181,14 +181,14 @@ Each row describes the **property**, not the corresponding game mechanic:
 | `enable-command-block` (older/Paper) | supported | `[server].enable_command_block`; see [command blocks](OPERATING.md#datapacks-and-command-blocks). |
 
 Paper-specific anti-xray, packet limiting and connection throttling must be
-translated intentionally: Solaris exposes `[anti_xray]`, `[anti_cheat]` and
+translated intentionally: Krasnokamen exposes `[anti_xray]`, `[anti_cheat]` and
 `[network].connection_throttle_ms` / `max_connections_per_ip`, not Paper YAML
 (see [OPERATING.md](OPERATING.md#configuration-network-and-security)).
 
 ## 4. Move access lists, not identity assumptions
 
-With Solaris stopped, copy these files from the old **server root** to
-`/srv/solaris/`, beside `server.toml` (not into `native-world`):
+With Krasnokamen stopped, copy these files from the old **server root** to
+`/srv/krasnokamen/`, beside `server.toml` (not into `native-world`):
 
 | File | Handling |
 |---|---|
@@ -196,9 +196,9 @@ With Solaris stopped, copy these files from the old **server root** to
 | `whitelist.json` | Vanilla UUID/name array, read directly. Copying it does **not** enable enforcement. |
 | `banned-players.json` | Vanilla player bans, including reasons and expiration, read directly. |
 | `banned-ips.json` | Vanilla IP bans, including expiration, read directly; verify forwarded-address policy behind a proxy. |
-| `usercache.json` | Not read. Keep it in the backup for rollback; it does not let Solaris resolve those names. |
+| `usercache.json` | Not read. Keep it in the backup for rollback; it does not let Krasnokamen resolve those names. |
 
-If the old server enforced a whitelist, create `/srv/solaris/whitelist.enabled`
+If the old server enforced a whitelist, create `/srv/krasnokamen/whitelist.enabled`
 containing `true` **before** first admission, or run console `whitelist on`
 before exposing the port. Operators bypass the whitelist, as in vanilla; bans
 still win. `whitelist reload` re-reads a hand-edited list; a missing list loads
@@ -210,9 +210,9 @@ UUIDs consistent with the source.
 ## 5. Convert the stopped world
 
 ```sh
-solaris-v2 --config /srv/solaris/server.toml world import-anvil \
+krasnokamen --config /srv/krasnokamen/server.toml world import-anvil \
   --source /srv/migration/anvil-source \
-  --destination /srv/solaris/native-world \
+  --destination /srv/krasnokamen/native-world \
   --receipt /srv/migration/receipts/import.json
 ```
 
@@ -243,7 +243,7 @@ lossless migration because an unknown field is kept in an opaque record.
 
 | Domain | Migration behavior and limits |
 |---|---|
-| Blocks, biomes, chunk metadata | Registry state identity; unknown states/properties refuse import and missing properties take the registered default. Every 4×4×4 biome cell is kept by identifier. Heightmaps and light arrays are kept, but native edits can recompute them. New terrain uses Solaris generation, not bit-identical vanilla; inspect explored-border seams. |
+| Blocks, biomes, chunk metadata | Registry state identity; unknown states/properties refuse import and missing properties take the registered default. Every 4×4×4 biome cell is kept by identifier. Heightmaps and light arrays are kept, but native edits can recompute them. New terrain uses Krasnokamen generation, not bit-identical vanilla; inspect explored-border seams. |
 | Protochunks | Non-full chunks with terrain or owned payload keep their status; all-air non-full chunks without owned payload are omitted and regenerate. Structure starts/references of empty protochunks may be discarded and recorded as a loss. |
 | Entities | Typed state and unowned fields are kept; villagers (offers/gossip), item frames, armor stands, paintings, minecarts and boats are decoded, species-specific forms that are unsupported fail with file/chunk/UUID context. Wire ids are reminted. Check villagers/trades, passengers, pets/owners, vehicles and named mobs individually. |
 | Containers and other block entities | Chest, barrel, furnace, hopper and brewing-stand inventories and timers are typed; unowned metadata (`CustomName`, `lock`, `components`) is retained alongside them, but a retained lock is **not enforced** by native gameplay. Signs, banners, spawners, shulkers, lecterns, beehives, campfires and jukeboxes keep their NBT by position unless a native mutation replaces it; validators may refuse unsupported forms. Verify each important block entity. |
@@ -258,7 +258,7 @@ lossless migration because an unknown field is kept in an opaque record.
 | Datapacks, custom dimensions | Not migrated. Copy directory datapacks to `<native-world>/datapacks/` yourself ([supported subset](OPERATING.md#datapacks-and-command-blocks)); ZIP packs, worldgen packs and custom dimensions are unsupported, so do not migrate a pack-dependent world unless losing that function is acceptable. |
 | Resource packs | The world's `resourcepacks/resources.zip` is retained; server-offered packs are configured through `[resource_pack]`. |
 | Bukkit/Paper plugin data | Not interpreted. External SQL stores, plugin folders, claims, economy, permissions and custom items need a separately validated migration; keep the originals for rollback. |
-| Solaris-native plugin, settlement and block-log state on export | Vanilla cannot run or interpret it, and Anvil is not a backup format for these domains. Keep a native backup. |
+| Krasnokamen-native plugin, settlement and block-log state on export | Vanilla cannot run or interpret it, and Anvil is not a backup format for these domains. Keep a native backup. |
 
 Implementation boundaries: [world conversion](../crates/mc-world-conversion/src/lib.rs),
 [import](../crates/mc-world-conversion/src/import.rs),
@@ -268,12 +268,12 @@ Implementation boundaries: [world conversion](../crates/mc-world-conversion/src/
 ## 6. Replace plugins deliberately
 
 **Bukkit/Spigot/Paper JARs are not supported natively.** Do not copy a Paper
-`plugins/` directory into Solaris's package root. The normal plugin surface is
-sandboxed Wasmtime components for `solaris:plugin@0.8.0`, deployed as
+`plugins/` directory into Krasnokamen's package root. The normal plugin surface is
+sandboxed Wasmtime components for `krasnokamen:plugin@0.9.0`, deployed as
 `plugin.toml` + `plugin.wasm` packages through `[plugins].directory`
 ([PLUGINS.md](PLUGINS.md); an experimental offline converter for a tiny Bukkit
 slice is described there with its limits). First-party packages live in
-[solaris-default-plugins](https://github.com/kaiserproger/solaris-default-plugins).
+[krasnokamen-default-plugins](https://github.com/kaiserproger/krasnokamen-default-plugins).
 Matching plugin names do not imply compatible configuration or databases.
 
 Rehearse world conversion without plugins first. Inventory every old plugin's
@@ -286,7 +286,7 @@ must pass before public login is enabled.
 ## 7. Start, verify, stop and prove rollback
 
 ```sh
-solaris-v2 --config /srv/solaris/server.toml
+krasnokamen --config /srv/krasnokamen/server.toml
 ```
 
 Wait for the listening message and successful content, world and plugin
@@ -298,9 +298,9 @@ to exit and write its final checkpoint. Serving writes the native
 `native/state.redb` and tick WAL, **not** the old Anvil files; keep the same
 config, content and deployment with the native world.
 
-### Downgrading the Solaris binary
+### Downgrading the Krasnokamen binary
 
-Do not run an older Solaris binary on a world that a build with cow, pig,
+Do not run an older Krasnokamen binary on a world that a build with cow, pig,
 chicken and zombie-nautilus variant persistence has served. The tick WAL refuses
 to recover (the older decoder does not know the variant records), and a
 checkpoint is rewritten without them: the older build ignores the `variant`
@@ -310,18 +310,18 @@ Restore a backup instead.
 
 ### Rollback option A: restore the untouched original
 
-Stop Solaris and restore the entire original vanilla/Paper installation from the
+Stop Krasnokamen and restore the entire original vanilla/Paper installation from the
 pre-migration backup. Reapply the old port/proxy routing only after verifying it
 starts. This is the most predictable rollback but **discards all progress made on
-Solaris**. Never mix the original player files with a newer world export.
+Krasnokamen**. Never mix the original player files with a newer world export.
 
-### Rollback option B: export Solaris progress to Anvil
+### Rollback option B: export Krasnokamen progress to Anvil
 
-While Solaris is stopped:
+While Krasnokamen is stopped:
 
 ```sh
-solaris-v2 --config /srv/solaris/server.toml world export-anvil \
-  --source /srv/solaris/native-world \
+krasnokamen --config /srv/krasnokamen/server.toml world export-anvil \
+  --source /srv/krasnokamen/native-world \
   --destination /srv/migration/anvil-export \
   --receipt /srv/migration/receipts/export.json
 ```
@@ -348,13 +348,13 @@ scoreboards and a real player. Run `save-all flush`, `stop` and verify a second
 start if the export will become the live world. A start alone is not a
 normalized-NBT comparison or gameplay proof.
 
-Access lists live outside the export: copy the **latest** Solaris `ops.json`,
+Access lists live outside the export: copy the **latest** Krasnokamen `ops.json`,
 `whitelist.json`, `banned-players.json` and `banned-ips.json` back beside
 vanilla's properties, restore `white-list=true` as appropriate, and keep the old
 usercache (a cache, not player state). Translate any changed configuration back
 explicitly. For Paper, use that version's supported vanilla-layout intake and
 restore the matching plugin and database backups. Export cannot recreate Bukkit
-state or Solaris-only plugin effects; validate this boundary before accepting
+state or Krasnokamen-only plugin effects; validate this boundary before accepting
 player progress.
 
 ## Verification checklist before cutover
@@ -377,7 +377,7 @@ player progress.
   bans and proxy identity/address behavior are tested before opening the firewall.
 - [ ] Replacement plugins load and protect claims, economy and permissions; no
   unsupported datapack or plugin behavior is being assumed.
-- [ ] Clean Solaris stop/restart succeeds without changed seed or content identity.
+- [ ] Clean Krasnokamen stop/restart succeeds without changed seed or content identity.
 - [ ] The export receipt passes, a vanilla server of the reported release opens
   the export and the same landmarks, containers and player state are verified;
   rollback losses are understood.

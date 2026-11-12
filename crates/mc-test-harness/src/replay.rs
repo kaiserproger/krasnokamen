@@ -8,11 +8,11 @@ use crate::parity::{
     CoreAction, ObservationSet, ScenarioContext, ServerKind, observe_core_action_sequence,
 };
 
-pub const REPLAY_SCENARIO_SCHEMA: &str = "solaris.core_replay.scenario.v1";
-pub const REPLAY_RESULT_SCHEMA: &str = "solaris.core_replay.result.v1";
-pub const CORE_GATE_MANIFEST_SCHEMA: &str = "solaris.core_gate.manifest.v1";
-pub const BLOCK_TRANSACTION_ORACLE_SCHEMA: &str = "solaris.block_transaction.oracle.v1";
-pub const CONTAINER_STATE_ORACLE_SCHEMA: &str = "solaris.container_state.oracle.v1";
+pub const REPLAY_SCENARIO_SCHEMA: &str = "krasnokamen.core_replay.scenario.v1";
+pub const REPLAY_RESULT_SCHEMA: &str = "krasnokamen.core_replay.result.v1";
+pub const CORE_GATE_MANIFEST_SCHEMA: &str = "krasnokamen.core_gate.manifest.v1";
+pub const BLOCK_TRANSACTION_ORACLE_SCHEMA: &str = "krasnokamen.block_transaction.oracle.v1";
+pub const CONTAINER_STATE_ORACLE_SCHEMA: &str = "krasnokamen.container_state.oracle.v1";
 
 const MAX_REPLAY_ACTIONS: usize = 10_000;
 const MAX_REPLAY_CHECKS: usize = 128;
@@ -403,7 +403,7 @@ impl ContainerStateOracleTrace {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReplayDriver {
-    SolarisProtocol,
+    KrasnokamenProtocol,
     VanillaOracle,
     RealClient,
 }
@@ -865,7 +865,7 @@ impl ReplayScenarioManifest {
                 required_gate_ids.insert(gate.id.as_str());
             }
             let primary_evidence = match lane.driver {
-                ReplayDriver::SolarisProtocol => ReplayEvidenceKind::Harness,
+                ReplayDriver::KrasnokamenProtocol => ReplayEvidenceKind::Harness,
                 ReplayDriver::VanillaOracle => ReplayEvidenceKind::Oracle,
                 ReplayDriver::RealClient => ReplayEvidenceKind::RealClient,
             };
@@ -1016,7 +1016,7 @@ pub async fn run_protocol_replay(
 ) -> Result<ObservationSet> {
     manifest.validate()?;
     let (driver, lane_name) = match context.kind {
-        ServerKind::Solaris => (ReplayDriver::SolarisProtocol, "solaris protocol lane"),
+        ServerKind::Krasnokamen => (ReplayDriver::KrasnokamenProtocol, "krasnokamen protocol lane"),
         ServerKind::Vanilla => (ReplayDriver::VanillaOracle, "vanilla oracle lane"),
     };
     ensure!(

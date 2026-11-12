@@ -236,7 +236,7 @@ def run(ctx, *, random_mode=False):
             for name in names:
                 clients.append(ProtocolMatrixClient(name,('127.0.0.1',args.port),ctx.artifact_dir,
                       args.vanilla_data,server.command,account_uuid=offline_uuid(name),
-                      require_auth=plugins is not None and (plugins/'solaris-auth').is_dir()))
+                      require_auth=plugins is not None and (plugins/'krasnokamen-auth').is_dir()))
         if random_mode:
             if row['context']['dimension'] != 'overworld':
                 raise ValueError('seeded player scripts require the deterministic overworld fixture')

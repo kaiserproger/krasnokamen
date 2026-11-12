@@ -99,14 +99,14 @@ fn decode(bytes: &[u8], tick: u64) -> Result<(Entry, Option<vibration::Pending>)
                 .transpose()?
                 .flatten();
             if let Some(p) = &mut pending
-                && field(&f, "solaris:event_arrival").is_some()
+                && field(&f, "krasnokamen:event_arrival").is_some()
             {
-                p.arrival = deadline(&f, "solaris:event_arrival")?;
+                p.arrival = deadline(&f, "krasnokamen:event_arrival")?;
             }
             Ok((
                 Entry::Sensor {
                     frequency,
-                    deadline: deadline(&f, "solaris:phase_until")?,
+                    deadline: deadline(&f, "krasnokamen:phase_until")?,
                 },
                 pending,
             ))
@@ -166,7 +166,7 @@ fn decode(bytes: &[u8], tick: u64) -> Result<(Entry, Option<vibration::Pending>)
             Ok((
                 Entry::Catalyst {
                     cursors,
-                    bloom_until: deadline(&f, "solaris:bloom_until")?,
+                    bloom_until: deadline(&f, "krasnokamen:bloom_until")?,
                 },
                 None,
             ))
@@ -193,10 +193,10 @@ fn encode(state: &TickState, pos: BlockPos, entry: &Entry) -> Vec<u8> {
                 vibration::listener_nbt(vibration::pending(state, pos), state.tick),
             ));
             if let Some(p) = vibration::pending(state, pos) {
-                f.push(("solaris:event_arrival".into(), Tag::Long(p.arrival as i64)));
+                f.push(("krasnokamen:event_arrival".into(), Tag::Long(p.arrival as i64)));
             }
             if *deadline != 0 {
-                f.push(("solaris:phase_until".into(), Tag::Long(*deadline as i64)));
+                f.push(("krasnokamen:phase_until".into(), Tag::Long(*deadline as i64)));
             }
         }
         Entry::Catalyst {
@@ -226,7 +226,7 @@ fn encode(state: &TickState, pos: BlockPos, entry: &Entry) -> Vec<u8> {
                 .collect();
             f.push(("cursors".into(), list(entries, mc_nbt::tag_type::COMPOUND)));
             if *bloom_until != 0 {
-                f.push(("solaris:bloom_until".into(), Tag::Long(*bloom_until as i64)));
+                f.push(("krasnokamen:bloom_until".into(), Tag::Long(*bloom_until as i64)));
             }
         }
     }

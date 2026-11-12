@@ -23,7 +23,7 @@ disk is short); everything else is kept:
   finalized session; `-working` ones are skipped, and so is a session whose
   `.lock` rustc holds (flock), exactly as rustc's own session GC does.
 * Capacity rotation (class 2): only when free space on the targets disk is still
-  below floor + 10 GiB (`--min-free-gb`, SOLARIS_SLOT_MIN_FREE_GB, default 80)
+  below floor + 10 GiB (`--min-free-gb`, KRASNOKAMEN_SLOT_MIN_FREE_GB, default 80)
   after the safe classes, evict idle slots least recently used first (last use:
   newest mtime under `<profile>/.fingerprint` or the pool lock file's mtime): first
   the slot's incremental dirs, then, if still short, everything except `tmp/`. A
@@ -689,14 +689,14 @@ def main() -> None:
     parser.add_argument("--delete", action="store_true", help="remove the artifacts (default: report only)")
     parser.add_argument("-v", "--verbose", action="store_true", help="list every dead unit and incremental dir")
     parser.add_argument("--no-rotate", action="store_true", help="skip class 2 (capacity rotation of idle slots)")
-    parser.add_argument("--min-free-gb", type=float, default=float(os.environ.get("SOLARIS_SLOT_MIN_FREE_GB") or 80),
-                        help="free-space floor; rotation runs while free space is below floor + 10 GiB (default 80, SOLARIS_SLOT_MIN_FREE_GB)")
+    parser.add_argument("--min-free-gb", type=float, default=float(os.environ.get("KRASNOKAMEN_SLOT_MIN_FREE_GB") or 80),
+                        help="free-space floor; rotation runs while free space is below floor + 10 GiB (default 80, KRASNOKAMEN_SLOT_MIN_FREE_GB)")
     parser.add_argument("--work", type=Path, default=w.WORK, help=argparse.SUPPRESS)
     parser.add_argument("--targets", type=Path, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--lock-dir", type=Path, default=LOCK_DIR, help=argparse.SUPPRESS)
     parser.add_argument("--tmp", type=Path, default=Path("/tmp"), help=argparse.SUPPRESS)
     args = parser.parse_args()
-    targets = args.targets or Path(os.environ.get("SOLARIS_SLOT_TARGETS") or args.work / "targets")
+    targets = args.targets or Path(os.environ.get("KRASNOKAMEN_SLOT_TARGETS") or args.work / "targets")
     roots = Roots(work=args.work, targets=targets, tmp=args.tmp)
     if args.slots:
         names = [s if s.startswith("slot-") else f"slot-{s}" for s in args.slots]

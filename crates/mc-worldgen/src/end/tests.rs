@@ -238,7 +238,7 @@ fn outer_end_has_land_and_void_without_filling_the_void_floor() {
 fn template_generator(seed: i64) -> EndGenerator {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
     let registry = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     EndGenerator::new(seed, Arc::clone(&registry))
         .with_vanilla_data(&root, &registry)

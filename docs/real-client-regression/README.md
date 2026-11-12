@@ -1,7 +1,7 @@
 # Real-client regression manifests
 
 A manifest specifies a scenario, not evidence that it passed. The server is
-`mc-edge`'s `solaris-v2` over native `mc-core`. See the
+`mc-edge`'s `krasnokamen` over native `mc-core`. See the
 [real-client gate playbook](../development/real-client-gates.md) for current
 prerequisites, lifecycle and acceptance; protocol bots, mocks and prepared
 artifacts are not real-client evidence.
@@ -26,9 +26,9 @@ The tracked backend is `tools/harness/backends/regression.sh`, reached through
 `python3 -m tools.harness run regression`. Its `--check`, `--prepare`, `--run`
 and `--validate-run DIR` modes are distinct: preparation is not a pass. The
 backend selects the sibling loader's Gradle `:fabric-agent:runClientAgent` and
-uses the in-client driver. `SOLARIS_LOADER_ROOT` selects the loader checkout;
-`SOLARIS_REAL_CLIENT_MANIFEST`, `SOLARIS_REAL_CLIENT_AGENT_SCENARIO`, and
-`SOLARIS_REAL_CLIENT_SERVER_CONFIG` select the manifest, scenario, and config.
+uses the in-client driver. `KRASNOKAMEN_LOADER_ROOT` selects the loader checkout;
+`KRASNOKAMEN_REAL_CLIENT_MANIFEST`, `KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO`, and
+`KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG` select the manifest, scenario, and config.
 The run requires a graphical display and rejects protocol bots and mocks.
 
 A run records the manifest, server/client logs, observations and required PNG

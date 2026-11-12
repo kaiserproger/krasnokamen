@@ -359,11 +359,11 @@ fn crash_recovers_enchanted_item_and_player_exactly() {
 
 /// Step 2: the checkpoint `.dat` is vanilla-readable — shared vanilla keys
 /// (`SelectedItemSlot`, `Inventory` list with `Slot`, component stacks) parse
-/// through the canonical codec; Solaris custody rides alongside.
+/// through the canonical codec; Krasnokamen custody rides alongside.
 #[test]
 fn checkpoint_dat_is_vanilla_readable() {
     use crate::journal::ReplayPlayer;
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let sword_id = items
         .id_of(&mc_data::Identifier::parse("minecraft:diamond_sword").expect("id"))
         .expect("sword");
@@ -576,7 +576,7 @@ fn remove_block_entity_deletes_checkpoint_base() {
 fn checkpoint_dat_uses_vanilla_slots_and_equipment() {
     use crate::journal::ReplayPlayer;
     use mc_data::player_nbt::{VanillaPlayer, player_from_fields};
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let boots_id = items
         .id_of(&mc_data::Identifier::parse("minecraft:diamond_boots").expect("id"))
         .expect("boots");
@@ -657,7 +657,7 @@ fn checkpoint_dat_uses_vanilla_slots_and_equipment() {
 #[test]
 fn effects_survive_checkpoint_and_journal_recovery() {
     use crate::effects::{ActiveEffect, ActiveEffects, EffectId};
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let uuid = "00000000-0000-0000-0000-00000000effe";
     let mut speed = ActiveEffect::new(EffectId::from_name("speed").expect("speed"), 1234, 255);
     speed.ambient = true;
@@ -761,7 +761,7 @@ fn effects_survive_checkpoint_and_journal_recovery() {
 #[test]
 fn fall_flying_survives_nbt_and_journal_replay() {
     use mc_nbt::Tag;
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let elytra_id = items
         .id_of(&mc_data::Identifier::parse("minecraft:elytra").expect("id"))
         .expect("elytra");
@@ -877,7 +877,7 @@ fn mob_effects_survive_entity_region_and_journal_recovery() {
         std::process::id(),
         std::thread::current().id()
     ));
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let effects = ActiveEffects {
         entries: vec![ActiveEffect::new(
             EffectId::from_name("regeneration").expect("effect"),
@@ -1077,7 +1077,7 @@ fn villager_fixture_uses_canonical_entity_types() {
 #[test]
 fn villager_checkpoint_and_wal_recover_absolute_conversion_custody_and_memories() {
     use crate::villager::persistence::{villager_from_fields, villager_to_fields};
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let dir = std::env::temp_dir().join(format!("mc-core-villager-{}", uuid::Uuid::new_v4()));
     let initial = villager_recovery_fixture(&items);
     let native = mc_data::entity_nbt::VanillaEntity {
@@ -1196,7 +1196,7 @@ fn villager_checkpoint_and_wal_recover_absolute_conversion_custody_and_memories(
 
 #[test]
 fn legacy_journal_and_manifest_decode_without_villager_or_generated_claim_fields() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let villager = villager_recovery_fixture(&items);
     let expected_villager = serde_json::to_value(&villager).unwrap();
     let mut json = serde_json::to_value(villager_entry(villager, 1)).unwrap();
@@ -1215,7 +1215,7 @@ fn legacy_journal_and_manifest_decode_without_villager_or_generated_claim_fields
 
 #[test]
 fn malformed_villager_image_cannot_replace_a_valid_journal_batch() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let dir =
         std::env::temp_dir().join(format!("mc-core-villager-invalid-{}", uuid::Uuid::new_v4()));
     let initial = villager_recovery_fixture(&items);
@@ -1247,7 +1247,7 @@ fn malformed_villager_image_cannot_replace_a_valid_journal_batch() {
 
 #[test]
 fn generated_villager_claim_survives_entity_tombstone_and_manifest_recovery() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let claim = "village/plains/0,0/resident/4,64,9".to_owned();
     let replay = replay_batches(
         Replay::default(),
@@ -1461,9 +1461,9 @@ fn journal_decode_corrupt_player_custody_item_fails_open_without_writes() {
         ("count".into(), Tag::Int(1)),
     ]);
     for (field, value, slot) in [
-        ("solaris:Carried", invalid.clone(), 0),
+        ("krasnokamen:Carried", invalid.clone(), 0),
         (
-            "solaris:CraftingGrid",
+            "krasnokamen:CraftingGrid",
             Tag::List(ListTag {
                 element_type: tag_type::COMPOUND,
                 elements: vec![Tag::Compound(Vec::new()), invalid],
@@ -1471,7 +1471,7 @@ fn journal_decode_corrupt_player_custody_item_fails_open_without_writes() {
             1,
         ),
     ] {
-        let items = mc_data::items::solaris_required_items();
+        let items = mc_data::items::krasnokamen_required_items();
         let error = player_from_tag(&Tag::Compound(vec![(field.into(), value)]), &items)
             .unwrap_err()
             .to_string();
@@ -1487,16 +1487,16 @@ fn journal_decode_corrupt_player_custody_item_fails_open_without_writes() {
 fn journal_decode_valid_empty_player_custody_preserves_grid_slots() {
     use mc_nbt::{ListTag, Tag, tag_type};
     let root = Tag::Compound(vec![
-        ("solaris:Carried".into(), Tag::Compound(Vec::new())),
+        ("krasnokamen:Carried".into(), Tag::Compound(Vec::new())),
         (
-            "solaris:CraftingGrid".into(),
+            "krasnokamen:CraftingGrid".into(),
             Tag::List(ListTag {
                 element_type: tag_type::COMPOUND,
                 elements: vec![Tag::Compound(Vec::new()), Tag::Compound(Vec::new())],
             }),
         ),
     ]);
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let record = player_from_tag(&root, &items).unwrap();
     assert!(record.carried.is_empty());
     assert_eq!(record.grid.len(), 2);
@@ -1505,7 +1505,7 @@ fn journal_decode_valid_empty_player_custody_preserves_grid_slots() {
 
 #[test]
 fn checkpoint_sparse_crafting_grid_preserves_all_cells_and_item_custody() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut record = player_from_tag(&mc_nbt::Tag::Compound(Vec::new()), &items).unwrap();
     let stone = items
         .id_of(&mc_data::Identifier::parse("minecraft:stone").unwrap())
@@ -1537,14 +1537,14 @@ fn checkpoint_sparse_crafting_grid_preserves_all_cells_and_item_custody() {
 
 #[test]
 fn player_codec_rejects_noncompound_and_invalid_native_timers() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     assert!(player_from_tag(&mc_nbt::Tag::Int(1), &items).is_err());
     for value in [
         mc_nbt::Tag::Long(-1),
         mc_nbt::Tag::Long(i64::from(u32::MAX) + 1),
         mc_nbt::Tag::Int(1),
     ] {
-        let root = mc_nbt::Tag::Compound(vec![("solaris:BurnTicks".into(), value)]);
+        let root = mc_nbt::Tag::Compound(vec![("krasnokamen:BurnTicks".into(), value)]);
         assert!(player_from_tag(&root, &items).is_err());
     }
 }
@@ -1577,7 +1577,7 @@ fn entity_state_image_retains_opaque_nbt_through_journal_serialization() {
 #[test]
 fn player_opaque_fields_survive_typed_edits_without_resurrecting_removed_keys() {
     use mc_nbt::Tag;
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let stone = items
         .id_of(&mc_data::Identifier::parse("minecraft:stone").unwrap())
         .unwrap();
@@ -1626,7 +1626,7 @@ fn player_opaque_fields_survive_typed_edits_without_resurrecting_removed_keys() 
         Tag::Float(9.0)
     );
     for key in [
-        "solaris:Carried",
+        "krasnokamen:Carried",
         "equipment",
         "respawn",
         "current_explosion_impact_pos",

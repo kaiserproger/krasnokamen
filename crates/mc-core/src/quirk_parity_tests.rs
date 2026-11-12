@@ -1,9 +1,9 @@
-//! Solaris side of the quirk/farm parity gate (`tools/harness/quirk_parity`).
+//! Krasnokamen side of the quirk/farm parity gate (`tools/harness/quirk_parity`).
 //!
-//! Replays the scenario JSON files named by `SOLARIS_QUIRK_SCENARIOS`
+//! Replays the scenario JSON files named by `KRASNOKAMEN_QUIRK_SCENARIOS`
 //! (colon-separated paths) against the real native tick in-process, using the
 //! same console command strings the vanilla oracle receives, and writes the
-//! observed snapshots to `SOLARIS_QUIRK_RECEIPT`. The test is `#[ignore]`d:
+//! observed snapshots to `KRASNOKAMEN_QUIRK_RECEIPT`. The test is `#[ignore]`d:
 //! the harness profile owns when it runs and compares it with vanilla.
 
 use std::sync::Arc;
@@ -235,7 +235,7 @@ fn run_scenario(scenario: &Value) -> Value {
     };
     let started = std::time::Instant::now();
     let mut state = fixture(&boxes, scenario["seed"].as_i64().unwrap_or(1));
-    // Solaris draws are a pure function of (entity id, tick, position), not of the world
+    // Krasnokamen draws are a pure function of (entity id, tick, position), not of the world
     // seed: without this every `seeds` variant would replay the identical sample, so a
     // rate scenario would compare vanilla's distribution against a single draw. Burning a
     // seed-dependent run of wire ids gives each variant an independent sample.
@@ -285,7 +285,7 @@ fn run_scenario(scenario: &Value) -> Value {
     }
     json!({
         "id": id,
-        "server": "solaris",
+        "server": "krasnokamen",
         "phases": phases,
         "command_log": log,
         "wall_ms": started.elapsed().as_millis() as u64,
@@ -293,10 +293,10 @@ fn run_scenario(scenario: &Value) -> Value {
 }
 
 #[test]
-#[ignore = "driven by tools/harness/quirk_parity via SOLARIS_QUIRK_SCENARIOS"]
-fn quirk_parity_solaris_replay() {
-    let scenarios = std::env::var("SOLARIS_QUIRK_SCENARIOS").expect("SOLARIS_QUIRK_SCENARIOS");
-    let receipt = std::env::var("SOLARIS_QUIRK_RECEIPT").expect("SOLARIS_QUIRK_RECEIPT");
+#[ignore = "driven by tools/harness/quirk_parity via KRASNOKAMEN_QUIRK_SCENARIOS"]
+fn quirk_parity_krasnokamen_replay() {
+    let scenarios = std::env::var("KRASNOKAMEN_QUIRK_SCENARIOS").expect("KRASNOKAMEN_QUIRK_SCENARIOS");
+    let receipt = std::env::var("KRASNOKAMEN_QUIRK_RECEIPT").expect("KRASNOKAMEN_QUIRK_RECEIPT");
     let mut results = Vec::new();
     for path in scenarios.split(':').filter(|p| !p.is_empty()) {
         let text = std::fs::read_to_string(path).unwrap_or_else(|e| panic!("{path}: {e}"));
@@ -304,5 +304,5 @@ fn quirk_parity_solaris_replay() {
         results.push(run_scenario(&scenario));
     }
     std::fs::write(&receipt, serde_json::to_vec_pretty(&results).unwrap()).unwrap();
-    println!("SOLARIS_QUIRK_REPLAY_OK {receipt}");
+    println!("KRASNOKAMEN_QUIRK_REPLAY_OK {receipt}");
 }

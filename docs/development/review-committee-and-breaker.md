@@ -162,11 +162,11 @@ replace the severe/moderate/mild scale used then.
    `packaging/stage-singleplayer.sh` output plus the release server) into one
    package dir; record each binary's SHA-256; never rebuild during the hunt.
 2. **Local CDN mirror** when the real one is unpublished: one
-   `solaris-content.json` listing both the facts bundle and the content bundle
+   `krasnokamen-content.json` listing both the facts bundle and the content bundle
    with the SHA and size from the launcher pins, served by
    `python3 -m http.server <port> --bind 127.0.0.1` as a named service. Canary
    with `env -i HOME=... XDG_DATA_HOME=<fresh> PATH=/usr/bin:/bin
-   solaris-launcher --headless-bootstrap --manifest <mirror>` (expect
+   krasnokamen-launcher --headless-bootstrap --manifest <mirror>` (expect
    `Game content ready`, about 650 MB). Copy that data dir as `template-data/`
    with a `launcher.json` naming the mirror (`--manifest` is not persisted);
    workers copy it instead of downloading.
@@ -176,7 +176,7 @@ replace the severe/moderate/mild scale used then.
    venv; the system Python has no pip); Xvfb has no window manager, so set input
    focus on the mapped top-level window first or clicks only hover. Take a fresh
    screenshot after acting.
-4. `solaris-launcher --play` defaults to the public test server: always pass
+4. `krasnokamen-launcher --play` defaults to the public test server: always pass
    `--server 127.0.0.1:<port>` or use Direct Connect/Singleplayer.
 5. **One brief file every worker reads first:** bug blindness
    (<https://danluu.com/bug-blind/>; the oracle is a normal player or admin plus
@@ -206,7 +206,7 @@ alone and does not ask the owner what the committee can decide.
 Member prompt (one definition per member, read-only tools: read, grep, glob,
 language server):
 
-> You are committee member `<m>` of the Solaris Core Committee (members: …;
+> You are committee member `<m>` of the Krasnokamen Core Committee (members: …;
 > Main orchestrates and records decisions; decisions are collective, no single
 > member decides). READ-ONLY: never edit, write or run mutating commands. Read
 > the repository AGENTS.md first. Answer the assigned question independently,
@@ -247,10 +247,10 @@ subagents.
 
 ## Worker role prompt
 
-All Solaris workers share this prompt; variants differ only in model, in a
+All Krasnokamen workers share this prompt; variants differ only in model, in a
 line on spawning, and in the extra lines below:
 
-> You are a Solaris worker. Read the repo AGENTS.md first and follow it; the
+> You are a Krasnokamen worker. Read the repo AGENTS.md first and follow it; the
 > brief overrides the defaults below.
 > - Paths: absolute paths only; work only in the worktree the brief names. A
 >   worktree you create comes from `tools/dev/wt-new` and ends with

@@ -1,7 +1,7 @@
-"""Run the quirk/farm parity gate: scenarios on real 26.1.2 vanilla and Solaris.
+"""Run the quirk/farm parity gate: scenarios on real 26.1.2 vanilla and Krasnokamen.
 
     python3 -m tools.harness.quirk_parity --out DIR [--family F] [--scenario ID ...]
-        [--vanilla-only | --solaris-only] [--jar PATH] [--java PATH]
+        [--vanilla-only | --krasnokamen-only] [--jar PATH] [--java PATH]
 
 Writes DIR/receipt.json (per-scenario verdicts, diffs, vanilla self-checks,
 wall times) and exits non-zero on any unexplained divergence, vanilla
@@ -23,7 +23,7 @@ from . import compare, fuzz
 from .vanilla import DEFAULT_JAR, MEM_RUN, REPO_ROOT, VanillaError, VanillaOracle
 
 SCENARIO_DIR = Path(__file__).with_name("scenarios")
-TEST_NAME = "quirk_parity_tests::quirk_parity_solaris_replay"
+TEST_NAME = "quirk_parity_tests::quirk_parity_krasnokamen_replay"
 
 # Same rules on both servers before any scenario command; scenarios opt out with
 # "prelude": false when they need spawning, random ticks or weather.
@@ -114,40 +114,40 @@ def run_vanilla(scenario: dict, out: Path, args) -> dict:
     return result
 
 
-def run_solaris(scenarios: list[dict], out: Path, args) -> dict[str, dict]:
-    solaris_dir = out / "solaris"
-    solaris_dir.mkdir(parents=True, exist_ok=True)
+def run_krasnokamen(scenarios: list[dict], out: Path, args) -> dict[str, dict]:
+    krasnokamen_dir = out / "krasnokamen"
+    krasnokamen_dir.mkdir(parents=True, exist_ok=True)
     paths = []
     for scenario in scenarios:
-        path = solaris_dir / f"{scenario['id']}.json"
+        path = krasnokamen_dir / f"{scenario['id']}.json"
         path.write_text(json.dumps(resolved(scenario), indent=1))
         paths.append(str(path))
-    receipt = solaris_dir / "receipt.json"
-    env = dict(os.environ, SOLARIS_QUIRK_SCENARIOS=":".join(paths), SOLARIS_QUIRK_RECEIPT=str(receipt))
+    receipt = krasnokamen_dir / "receipt.json"
+    env = dict(os.environ, KRASNOKAMEN_QUIRK_SCENARIOS=":".join(paths), KRASNOKAMEN_QUIRK_RECEIPT=str(receipt))
     command = [str(MEM_RUN), "-m", "4G", "cargo", "test", "-p", "mc-core", "--lib", TEST_NAME,
                "--", "--ignored", "--exact", "--nocapture"]
     if not MEM_RUN.is_file():
         command = command[1 + 2:]
-    log = solaris_dir / "solaris.log"
+    log = krasnokamen_dir / "krasnokamen.log"
     with log.open("w") as handle:
         proc = subprocess.run(command, cwd=REPO_ROOT, env=env, stdout=handle,
                               stderr=subprocess.STDOUT, check=False)
     if proc.returncode or not receipt.is_file():
-        raise RuntimeError(f"Solaris replay failed (exit {proc.returncode}); see {log}")
+        raise RuntimeError(f"Krasnokamen replay failed (exit {proc.returncode}); see {log}")
     return {row["id"]: row for row in json.loads(receipt.read_text())}
 
 
-# Solaris success/no-op feedback that carries no rejection (vanilla's "Could not set the block"
+# Krasnokamen success/no-op feedback that carries no rejection (vanilla's "Could not set the block"
 # no-op is likewise ignored by the vanilla driver).
-BENIGN_SOLARIS = ("Changed ", "No blocks were changed", "Successfully filled", "Summoned ")
+BENIGN_KRASNOKAMEN = ("Changed ", "No blocks were changed", "Successfully filled", "Summoned ")
 
 
-def solaris_rejections(run: dict) -> list[str]:
+def krasnokamen_rejections(run: dict) -> list[str]:
     return [row for row in run["command_log"]
-            if not row.split(" => ", 1)[-1].startswith(BENIGN_SOLARIS)]
+            if not row.split(" => ", 1)[-1].startswith(BENIGN_KRASNOKAMEN)]
 
 
-def verdict(scenario: dict, vanilla: dict | None, solaris: dict | None) -> dict:
+def verdict(scenario: dict, vanilla: dict | None, krasnokamen: dict | None) -> dict:
     entry: dict = {"id": scenario["id"], "family": scenario.get("family"), "status": "pass"}
     reasons = []
     if vanilla is not None:
@@ -159,15 +159,15 @@ def verdict(scenario: dict, vanilla: dict | None, solaris: dict | None) -> dict:
         if failures:
             reasons.append("vanilla does not show the quirk this scenario encodes")
             entry["vanilla_selfcheck_failures"] = failures
-    if solaris is not None:
-        entry["solaris_wall_ms"] = solaris.get("wall_ms")
-        if solaris_rejections(solaris) and not scenario.get("allow_solaris_command_errors"):
-            reasons.append("Solaris rejected commands vanilla accepted")
-            entry["solaris_command_errors"] = solaris_rejections(solaris)[:20]
-    if vanilla is not None and solaris is not None and scenario.get("fuzz"):
-        return fuzz_verdict(scenario, vanilla, solaris, entry, reasons)
-    if vanilla is not None and solaris is not None:
-        diff = compare.compare_scenario(scenario, vanilla, solaris)
+    if krasnokamen is not None:
+        entry["krasnokamen_wall_ms"] = krasnokamen.get("wall_ms")
+        if krasnokamen_rejections(krasnokamen) and not scenario.get("allow_krasnokamen_command_errors"):
+            reasons.append("Krasnokamen rejected commands vanilla accepted")
+            entry["krasnokamen_command_errors"] = krasnokamen_rejections(krasnokamen)[:20]
+    if vanilla is not None and krasnokamen is not None and scenario.get("fuzz"):
+        return fuzz_verdict(scenario, vanilla, krasnokamen, entry, reasons)
+    if vanilla is not None and krasnokamen is not None:
+        diff = compare.compare_scenario(scenario, vanilla, krasnokamen)
         if not diff["match"]:
             entry["diff"] = diff["phases"]
             known = scenario.get("known_divergence")
@@ -175,31 +175,31 @@ def verdict(scenario: dict, vanilla: dict | None, solaris: dict | None) -> dict:
                 entry["status"] = "known-divergence"
                 entry["known_divergence"] = known
             else:
-                reasons.append("Solaris diverges from vanilla")
+                reasons.append("Krasnokamen diverges from vanilla")
         elif scenario.get("known_divergence"):
-            reasons.append("known_divergence marker is stale: Solaris now matches vanilla")
+            reasons.append("known_divergence marker is stale: Krasnokamen now matches vanilla")
     if reasons:
         entry["status"] = "fail"
         entry["reasons"] = reasons
     return entry
 
 
-def rate_group_verdict(group: str, variants: list[dict], vanilla: dict, solaris: dict) -> dict:
+def rate_group_verdict(group: str, variants: list[dict], vanilla: dict, krasnokamen: dict) -> dict:
     scenario = variants[0]
     entry: dict = {"id": group, "family": scenario.get("family"), "status": "pass",
                    "seeds": [v["seed"] for v in variants]}
     reasons = []
     vruns = [vanilla[v["id"]] for v in variants if v["id"] in vanilla]
-    sruns = [solaris[v["id"]] for v in variants if v["id"] in solaris]
+    sruns = [krasnokamen[v["id"]] for v in variants if v["id"] in krasnokamen]
     for run in vruns:
         if run["command_log"]:
             reasons.append("vanilla rejected setup commands (scenario bug)")
             entry["vanilla_command_errors"] = run["command_log"]
             break
     for run in sruns:
-        if solaris_rejections(run) and not scenario.get("allow_solaris_command_errors"):
-            reasons.append("Solaris rejected commands vanilla accepted")
-            entry["solaris_command_errors"] = solaris_rejections(run)[:20]
+        if krasnokamen_rejections(run) and not scenario.get("allow_krasnokamen_command_errors"):
+            reasons.append("Krasnokamen rejected commands vanilla accepted")
+            entry["krasnokamen_command_errors"] = krasnokamen_rejections(run)[:20]
             break
     if vruns and sruns and len(vruns) == len(variants) == len(sruns):
         entry["rate"] = compare.rate_verdict(scenario, vruns, sruns)
@@ -208,9 +208,9 @@ def rate_group_verdict(group: str, variants: list[dict], vanilla: dict, solaris:
             if known:
                 entry["status"], entry["known_divergence"] = "known-divergence", known
             else:
-                reasons.append(entry["rate"].get("error") or "Solaris farm rate diverges from vanilla")
+                reasons.append(entry["rate"].get("error") or "Krasnokamen farm rate diverges from vanilla")
         elif scenario.get("known_divergence"):
-            reasons.append("known_divergence marker is stale: Solaris now matches vanilla")
+            reasons.append("known_divergence marker is stale: Krasnokamen now matches vanilla")
     elif vruns and not sruns:
         entry["rate"] = {"vanilla_only": compare.rate_verdict(scenario, vruns, vruns)["vanilla"]}
     if reasons:
@@ -218,9 +218,9 @@ def rate_group_verdict(group: str, variants: list[dict], vanilla: dict, solaris:
     return entry
 
 
-def fuzz_verdict(scenario: dict, vanilla: dict, solaris: dict, entry: dict, reasons: list) -> dict:
+def fuzz_verdict(scenario: dict, vanilla: dict, krasnokamen: dict, entry: dict, reasons: list) -> dict:
     """Fuzz gate: every vanilla duplication cell must match; other cell diffs are findings."""
-    diff = compare.compare_scenario(scenario, vanilla, solaris)
+    diff = compare.compare_scenario(scenario, vanilla, krasnokamen)
     dupes = fuzz.dupe_cells(scenario, vanilla)
     diverging: dict[int, list[str]] = {}
     for phase, cells in diff["phases"].items():
@@ -237,7 +237,7 @@ def fuzz_verdict(scenario: dict, vanilla: dict, solaris: dict, entry: dict, reas
                                     "detail": {ph: diff["phases"][ph]["cells"][str(i)] for ph in diverging[i]}}
                            for i in sorted(diverging)[:25]}
     if set(dupes) & set(diverging):
-        reasons.append("Solaris diverges from vanilla on a vanilla TNT-duplication cell")
+        reasons.append("Krasnokamen diverges from vanilla on a vanilla TNT-duplication cell")
     elif diverging:
         entry["status"] = "findings"
     if reasons:
@@ -258,7 +258,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--fuzz-style", choices=sorted(fuzz.PALETTES) + ["bud", "slime3d", "timing"], default="mixed")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--vanilla-only", action="store_true")
-    mode.add_argument("--solaris-only", action="store_true")
+    mode.add_argument("--krasnokamen-only", action="store_true")
     parser.add_argument(
         "--vanilla-results", type=Path, default=None,
         help="reuse vanilla-results.json from an earlier run for scenarios it already covers "
@@ -281,11 +281,11 @@ def main(argv: list[str] | None = None) -> int:
     vanilla_results: dict[str, dict] = {}
     cached_vanilla: dict[str, dict] = (
         json.loads(args.vanilla_results.read_text()) if args.vanilla_results else {})
-    solaris_results: dict[str, dict] = {}
+    krasnokamen_results: dict[str, dict] = {}
     try:
         if not args.vanilla_only:
-            solaris_results = run_solaris(scenarios, out, args)
-        if not args.solaris_only:
+            krasnokamen_results = run_krasnokamen(scenarios, out, args)
+        if not args.krasnokamen_only:
             for scenario in scenarios:
                 if scenario["id"] in cached_vanilla:
                     vanilla_results[scenario["id"]] = cached_vanilla[scenario["id"]]
@@ -303,10 +303,10 @@ def main(argv: list[str] | None = None) -> int:
             if any(row["id"] == scenario["id"] for row in receipt["scenarios"]):
                 continue
             receipt["scenarios"].append(verdict(
-                scenario, vanilla_results.get(scenario["id"]), solaris_results.get(scenario["id"])))
+                scenario, vanilla_results.get(scenario["id"]), krasnokamen_results.get(scenario["id"])))
         for group, variants in grouped.items():
             receipt["scenarios"].append(rate_group_verdict(
-                group, variants, vanilla_results, solaris_results))
+                group, variants, vanilla_results, krasnokamen_results))
         (out / "vanilla-results.json").write_text(json.dumps(vanilla_results, indent=1))
         failed = [row for row in receipt["scenarios"] if row["status"] == "fail"]
         receipt["status"] = "pass" if not failed else "fail"

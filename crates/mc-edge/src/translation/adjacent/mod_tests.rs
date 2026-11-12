@@ -36,10 +36,10 @@ fn assert_sound_report_mapping(t: &Tables, source: &std::path::Path, target: &st
 }
 
 #[test]
-#[ignore = "requires measured protocol snapshots in SOLARIS_PROTOCOL_CHAIN_FIXTURES"]
+#[ignore = "requires measured protocol snapshots in KRASNOKAMEN_PROTOCOL_CHAIN_FIXTURES"]
 fn death_protection_actual_adjacent_profiles_use_sound_ids_of_each_oriented_source() {
     let root = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_PROTOCOL_CHAIN_FIXTURES").expect("fixture root"),
+        std::env::var_os("KRASNOKAMEN_PROTOCOL_CHAIN_FIXTURES").expect("fixture root"),
     );
     for (upper, lower) in [(777, 776), (776, 775)] {
         let step = root.join("steps").join(format!("{upper}-{lower}"));
@@ -129,10 +129,10 @@ fn death_wire_fixture_depth(
 }
 
 #[test]
-#[ignore = "requires measured protocol snapshots in SOLARIS_PROTOCOL_CHAIN_FIXTURES"]
+#[ignore = "requires measured protocol snapshots in KRASNOKAMEN_PROTOCOL_CHAIN_FIXTURES"]
 fn measured_death_protection_wire_fixtures_translate_both_directions() {
     let root = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_PROTOCOL_CHAIN_FIXTURES").expect("fixture root"),
+        std::env::var_os("KRASNOKAMEN_PROTOCOL_CHAIN_FIXTURES").expect("fixture root"),
     );
     for (upper, lower) in [(777, 776), (776, 775)] {
         let step = root.join("steps").join(format!("{upper}-{lower}"));
@@ -360,8 +360,8 @@ fn legacy_creative_count_edit_preserves_canonical_player_inventory_item() {
     use mc_data::{Identifier, ItemStack};
     use mc_protocol::codec::WriteMc;
 
-    let items = mc_data::items::solaris_required_items();
-    let facts = mc_data::item_components::solaris_required_item_facts();
+    let items = mc_data::items::krasnokamen_required_items();
+    let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = mc_data::tags::TagsData::default();
     let rules = ItemRules {
         items: &items,

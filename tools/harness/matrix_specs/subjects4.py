@@ -35,26 +35,26 @@ domain("world_border", ["core:command_border.rs"], ["command_send", "read_world_
 ])
 
 domain("plugins", ["core:plugin.rs", "script:runtime.rs", "edge:plugin_loader.rs"], ["command_send", "plugin_deploy"], [
-    ("perm_groups_user_set", "/perm groups; /perm user <uuid|me> set <group>", "group assignment persisted; command gates follow nodes", {"plugins": ["solaris-permissions"], "op": 3}),
-    ("perm_check_node", "/perm check <node> [context]", "true/false per group; denies essentials sethome without solaris.essentials.use", {"plugins": ["solaris-permissions", "solaris-essentials"]}),
-    ("essentials_homes", "/sethome /home /delhome", "home saved per player; teleport", {"plugins": ["solaris-essentials"], "caps": ["walk_move"]}),
-    ("essentials_spawn_warps", "/setspawn /spawn /setwarp /warp /delwarp (manage node)", "warps/spawn teleports; manage gated", {"plugins": ["solaris-essentials"]}),
-    ("essentials_back", "/back after death/teleport", "returns to previous location (player.died event)", {"plugins": ["solaris-essentials"]}),
-    ("essentials_tpa", "/tpa target; target /tpaccept", "requester teleported after accept only", {"plugins": ["solaris-essentials"], "mp": True}),
-    ("essentials_msg_reply", "/msg (plugin root) and /reply", "plugin owns msg root; reply to last sender", {"plugins": ["solaris-essentials"], "mp": True}),
-    ("economy_money_pay", "/money; /pay <uuid> <amount> <token>; repeat same token", "balances move once; idempotent token", {"plugins": ["solaris-economy"], "mp": True, "custody": True}),
-    ("economy_admin", "/econadmin set|add <uuid> <amount>", "admin-only balance change", {"plugins": ["solaris-economy"], "op": 3}),
+    ("perm_groups_user_set", "/perm groups; /perm user <uuid|me> set <group>", "group assignment persisted; command gates follow nodes", {"plugins": ["krasnokamen-permissions"], "op": 3}),
+    ("perm_check_node", "/perm check <node> [context]", "true/false per group; denies essentials sethome without krasnokamen.essentials.use", {"plugins": ["krasnokamen-permissions", "krasnokamen-essentials"]}),
+    ("essentials_homes", "/sethome /home /delhome", "home saved per player; teleport", {"plugins": ["krasnokamen-essentials"], "caps": ["walk_move"]}),
+    ("essentials_spawn_warps", "/setspawn /spawn /setwarp /warp /delwarp (manage node)", "warps/spawn teleports; manage gated", {"plugins": ["krasnokamen-essentials"]}),
+    ("essentials_back", "/back after death/teleport", "returns to previous location (player.died event)", {"plugins": ["krasnokamen-essentials"]}),
+    ("essentials_tpa", "/tpa target; target /tpaccept", "requester teleported after accept only", {"plugins": ["krasnokamen-essentials"], "mp": True}),
+    ("essentials_msg_reply", "/msg (plugin root) and /reply", "plugin owns msg root; reply to last sender", {"plugins": ["krasnokamen-essentials"], "mp": True}),
+    ("economy_money_pay", "/money; /pay <uuid> <amount> <token>; repeat same token", "balances move once; idempotent token", {"plugins": ["krasnokamen-economy"], "mp": True, "custody": True}),
+    ("economy_admin", "/econadmin set|add <uuid> <amount>", "admin-only balance change", {"plugins": ["krasnokamen-economy"], "op": 3}),
     ("towns_create_info", "/town create <name>; /town info; stand in an unclaimed chunk and /town claim; /town info; /town create <other> again",
      "'Town <name> created.' with the creator as leader and 0 claims; info prints exactly '<name>: 1 members, 0 claims. 0 trusted guests, doors members-only.' (counts only, never an owner uuid); "
      "claim answers 'Chunk claimed for <name>.' and info then shows 1 claims; a second create by a town member answers 'Cannot create that town.' "
-     "(solaris-towns lib.rs create/info/claim; live wasm == monitor-plugins build)", {"plugins": ["solaris-towns"]}),
-    ("towns_protection", "guest builds/opens chest/ignites/hurts animals in claim; /town trust; /town flag use on|off", "guest refused w/o item loss; trusted allowed; flag toggles use", {"plugins": ["solaris-towns"], "mp": True}),
-    ("audit_queries", "/audit [count]; here <r>; since <ticks>; actor <uuid>", "records of break/place/craft/pickup/kill/interact/death", {"plugins": ["solaris-audit"]}),
+     "(krasnokamen-towns lib.rs create/info/claim; live wasm == monitor-plugins build)", {"plugins": ["krasnokamen-towns"]}),
+    ("towns_protection", "guest builds/opens chest/ignites/hurts animals in claim; /town trust; /town flag use on|off", "guest refused w/o item loss; trusted allowed; flag toggles use", {"plugins": ["krasnokamen-towns"], "mp": True}),
+    ("audit_queries", "/audit [count]; here <r>; since <ticks>; actor <uuid>", "records of break/place/craft/pickup/kill/interact/death", {"plugins": ["krasnokamen-audit"]}),
     ("basic_economy_shop", "/economy shop; buy/sell via menu; enter/leave market zone", "inventory-backed transaction exact; zone events", {"plugins": ["basic-economy"], "menu": True, "custody": True, "caps": ["open_container", "click_pickup_quickmove"]}),
-    ("auth_register_login", "/register pw pw; relog; wrong pw; /login; /changepassword", "locked until login (no build/damage); wrong pw refused; secrets never echoed", {"plugins": ["solaris-auth"]}),
-    ("auth_session_timeout", "stay unauthenticated past timeout", "kicked after timeout", {"plugins": ["solaris-auth"]}),
+    ("auth_register_login", "/register pw pw; relog; wrong pw; /login; /changepassword", "locked until login (no build/damage); wrong pw refused; secrets never echoed", {"plugins": ["krasnokamen-auth"]}),
+    ("auth_session_timeout", "stay unauthenticated past timeout", "kicked after timeout", {"plugins": ["krasnokamen-auth"]}),
     ("chisel_conversion", "chisel stone bricks/stairs to slab/stairs", "block converted; tool wear; slab grants", {"plugins": ["chisel"]}),
-    ("chisel_loader_bundle", "join the live set (chisel bundle required = false) with a Solaris client (native, Fabric/NeoForge/Forge Loader) and with vanilla", "Solaris client that consents gets the chisel item definition/model/texture; vanilla completes configuration without the bundle (edge configuration.rs: optional bundles are negotiated only after a Loader hello) and sees chisel:chisel as its minecraft:stick carrier; the chisel README sentence 'vanilla is refused' is stale vs plugin.toml required = false", {"plugins": ["chisel"], "caps": ["loader_bundle_handshake"]}),
+    ("chisel_loader_bundle", "join the live set (chisel bundle required = false) with a Krasnokamen client (native, Fabric/NeoForge/Forge Loader) and with vanilla", "Krasnokamen client that consents gets the chisel item definition/model/texture; vanilla completes configuration without the bundle (edge configuration.rs: optional bundles are negotiated only after a Loader hello) and sees chisel:chisel as its minecraft:stick carrier; the chisel README sentence 'vanilla is refused' is stale vs plugin.toml required = false", {"plugins": ["chisel"], "caps": ["loader_bundle_handshake"]}),
     ("graves_custody", "die with items (graves deployed)", "barrel grave at death spot holds exact drops; no ground copy", {"plugins": ["graves"], "custody": True}),
     ("graves_owner_protection", "other player breaks/opens grave before public_after_seconds", "refused until public; owner can loot", {"plugins": ["graves"], "mp": True}),
     ("plugin_startup_fail_closed", "deploy two death_graves packages / api 0.6 legacy (land-claims, online-roster, geological-mines)", "startup refuses with clear error", {"status": "not_deployable", "caps": ["server_clean_restart"]}),
@@ -135,7 +135,7 @@ domain("world_chunks", ["edge:chunks.rs", "core:chunk_loader.rs", "core:chunk_ti
     ("structures_loot", "generated ruin/structure loot chest first open", "loot table rolled once on first open", {"src": ["core:maps/loot.rs"], "menu": True, "custody": True}),
     ("pregenerate", "operator pregenerate radius", "chunks generated off-tick; server responsive", {"src": ["crates/mc-world-tools/src/pregenerate.rs"], "op": 4}),
     ("world_import_export_anvil", "import vanilla Anvil world; export back", "blocks/entities/players round-trip; vanilla opens export", {"src": ["crates/mc-world-conversion/src/lib.rs"], "caps": ["server_clean_restart"]}),
-    ("worldgen_upgrade", "open world generated by older Solaris worldgen", "upgrade path consistent; no seams", {"src": ["crates/mc-world-tools/src/worldgen_upgrade.rs"]}),
+    ("worldgen_upgrade", "open world generated by older Krasnokamen worldgen", "upgrade path consistent; no seams", {"src": ["crates/mc-world-tools/src/worldgen_upgrade.rs"]}),
 ])
 
 domain("persistence", ["core:native_checkpoint.rs", "core:journal.rs", "core:hot_backup.rs"], ["server_clean_restart", "read_world_state"], [
@@ -150,22 +150,22 @@ domain("persistence", ["core:native_checkpoint.rs", "core:journal.rs", "core:hot
 
 domain("loader_content", ["edge:plugin_loader.rs", "script:client_view.rs", "crates/mc-loader/src/lib.rs"], ["loader_bundle_handshake"], [
     ("bundle_handshake_cache", "Loader client joins with plugin bundle; rejoin", "manifest -> download -> sha256 verify -> cache hit on rejoin", {}),
-    ("optional_bundle_vanilla", "vanilla client joins the live set (every bundle is required = false: chisel, computer)", "configuration completes, no solaris:loader/manifest is sent, and the client plays without Loader content (edge configuration_tests vanilla_client_completes_configuration_with_only_optional_bundles)", {"plugins": ["chisel", "computer"]}),
+    ("optional_bundle_vanilla", "vanilla client joins the live set (every bundle is required = false: chisel, computer)", "configuration completes, no krasnokamen:loader/manifest is sent, and the client plays without Loader content (edge configuration_tests vanilla_client_completes_configuration_with_only_optional_bundles)", {"plugins": ["chisel", "computer"]}),
     ("required_bundle_vanilla_refused", "fixture: a copy of the chisel package with required = true; vanilla client joins", "refused during Configuration with a reason naming the Loader requirement; no play (edge server.rs: any required bundle forces Loader negotiation on every client)", {"plugins": ["chisel"]}),
     ("permission_prompt_cache", "Loader client's first join to the live set: prompt asks register_items/load_assets for chisel-content; deny; rejoin; reset the stored decision; allow; rejoin", "deny -> the Loader disconnects itself with 'permissions were denied for <server>' (loader-fabric handleManifest -> disconnect; applies to optional bundles too once the client said hello) and stores the denial, so the rejoin disconnects without a new prompt; allow -> bundle downloaded/verified and the decision cached, rejoin without prompt (loader-core LoaderPermissionController)", {"plugins": ["chisel"]}),
     ("loader_view_request", "press C (settlement overview) / plugin view", "server-declared view opens with plugin data", {"caps": ["loader_view_request"]}),
-    ("custom_items_render", "chisel:chisel in inventory, hand and dropped in the world on a Solaris client", "custom model/texture renders; the minecraft:stick carrier is never visible to a consenting Solaris client (the vanilla stick fallback is checked in plugins.chisel_loader_bundle)", {"plugins": ["chisel"], "visual": True}),
+    ("custom_items_render", "chisel:chisel in inventory, hand and dropped in the world on a Krasnokamen client", "custom model/texture renders; the minecraft:stick carrier is never visible to a consenting Krasnokamen client (the vanilla stick fallback is checked in plugins.chisel_loader_bundle)", {"plugins": ["chisel"], "visual": True}),
     ("stale_bundle_update", "plugin bundle version changes between joins", "new bundle fetched; stale not used", {}),
 ])
 
 domain("computer", ["edge:computer.rs", "edge:screen.rs", "edge:screen_service.rs (deploy-final ad53e139, 97d69e1e audio)", "docs/decisions/0018-in-game-computer.md 'Screen sharing'", "ldr:loader-fabric ComputerClient/ComputerScreen"], [], [
-    ("terminal_open_op4", "enabled computer; op4 right-clicks iron block", "terminal opens on solaris:computer; echo backend replies", {"op": 4, "clients": ["fabric_solaris_loader"], "menu": True, "caps": ["computer_channel"]}),
-    ("terminal_refusals", "non-op, locked, far, other dimension opens", "refused with closed reply; no process spawned", {"clients": ["fabric_solaris_loader"], "caps": ["computer_channel"]}),
-    ("terminal_session_close", "break block / leave reach / deop / disconnect during session", "session closed; child killed", {"op": 4, "clients": ["fabric_solaris_loader"], "caps": ["computer_channel"]}),
+    ("terminal_open_op4", "enabled computer; op4 right-clicks iron block", "terminal opens on krasnokamen:computer; echo backend replies", {"op": 4, "clients": ["fabric_krasnokamen_loader"], "menu": True, "caps": ["computer_channel"]}),
+    ("terminal_refusals", "non-op, locked, far, other dimension opens", "refused with closed reply; no process spawned", {"clients": ["fabric_krasnokamen_loader"], "caps": ["computer_channel"]}),
+    ("terminal_session_close", "break block / leave reach / deop / disconnect during session", "session closed; child killed", {"op": 4, "clients": ["fabric_krasnokamen_loader"], "caps": ["computer_channel"]}),
     ("terminal_disabled_vanilla_iron", "computer disabled; use iron block", "plain iron block behaviour", {}),
-    ("desktop_capture_local", "local desktop capture to in-game texture (X11 spike)", "client-local only; no bytes to server; explicit consent", {"clients": ["fabric_solaris_loader"], "visual": True, "caps": ["computer_channel"]}),
-    ("screen_share_to_others", "native owner OPENs a WxH solaris:monitor rectangle within 8 blocks; a second native viewer looks at it, REQUESTs, owner ANSWERs allow; viewer looks away/back; owner REVOKEs; viewer LEAVEs",
-     "solaris:screen protocol 1 (ADR 0018): everyone in the dimension gets ACTIVE(on) only, no frames, until granted; DEMAND turns on for the owner only while a granted viewer looks (32 blocks, published pose, no occlusion); FRAME relayed to granted looking viewers only; looking away -> STOP 0, revoke -> STOP 2, owner close -> STOP 1, owner leave -> STOP 3; viewers never send input",
+    ("desktop_capture_local", "local desktop capture to in-game texture (X11 spike)", "client-local only; no bytes to server; explicit consent", {"clients": ["fabric_krasnokamen_loader"], "visual": True, "caps": ["computer_channel"]}),
+    ("screen_share_to_others", "native owner OPENs a WxH krasnokamen:monitor rectangle within 8 blocks; a second native viewer looks at it, REQUESTs, owner ANSWERs allow; viewer looks away/back; owner REVOKEs; viewer LEAVEs",
+     "krasnokamen:screen protocol 1 (ADR 0018): everyone in the dimension gets ACTIVE(on) only, no frames, until granted; DEMAND turns on for the owner only while a granted viewer looks (32 blocks, published pose, no occlusion); FRAME relayed to granted looking viewers only; looking away -> STOP 0, revoke -> STOP 2, owner close -> STOP 1, owner leave -> STOP 3; viewers never send input",
      {"plugins": ["computer"], "clients": ["native_linux", "native_windows"], "mp": True, "visual": True, "caps": ["native_screen_share", "multi_client_2"]}),
     ("screen_share_refusals", "OPEN out of reach / on non-monitor blocks / 5th screen / taken rectangle; frames without DEMAND, oversized (>640 px, >131072 B, >5 parts), repeated unsolicited; break or unload a monitor block mid-show",
      "REFUSED with the matching reason (2 out of reach, 1 not a monitor, 3 too many, 4 taken, 5 bad frame, 7 repeat/rate limited); budget overflow frames dropped; malformed or repeated unsolicited frames close the screen; broken/unloaded monitor ends the show; connection never kicked",
@@ -174,28 +174,28 @@ domain("computer", ["edge:computer.rs", "edge:screen.rs", "edge:screen_service.r
      "AUDIO relayed with the same id/seq only to granted looking viewers; nothing within one tick of looking away/revoke; non-granted hears nothing; packet/byte token buckets bound it (ADR 0018 'Screen audio')",
      {"plugins": ["computer"], "clients": ["native_linux", "native_windows"], "mp": True, "caps": ["native_screen_share", "multi_client_2"]}),
     ("screen_share_non_native_clients", "vanilla / Fabric / NeoForge / Forge Loader client next to a native owner sharing a monitor",
-     "these clients never see solaris:screen (relay serves native-Loader clients only); they see the plain monitor/terracotta; no disconnect. Fabric not showing the share is the client lacking the channel, not a missing server feature",
-     {"plugins": ["computer"], "clients": ["vanilla_java_26_1_2", "fabric_solaris_loader", "neoforge_solaris_loader", "forge_solaris_loader"], "mp": True, "caps": ["multi_client_2"]}),
+     "these clients never see krasnokamen:screen (relay serves native-Loader clients only); they see the plain monitor/terracotta; no disconnect. Fabric not showing the share is the client lacking the channel, not a missing server feature",
+     {"plugins": ["computer"], "clients": ["vanilla_java_26_1_2", "fabric_krasnokamen_loader", "neoforge_krasnokamen_loader", "forge_krasnokamen_loader"], "mp": True, "caps": ["multi_client_2"]}),
 ])
 
-domain("monitor", ["scenarios/live-plugins/computer (plugin id solaris; README)", "edge:computer.rs"], ["command_send", "place_block", "read_world_state"], [
-    ("monitor_give_place_break", "/give @s solaris:monitor; place it facing the player; break it", "item carrier black_glazed_terracotta (stack 64); block stored as black_glazed_terracotta[facing=toward placer]; breaking drops solaris:monitor (not terracotta), exactly once",
+domain("monitor", ["scenarios/live-plugins/computer (plugin id krasnokamen; README)", "edge:computer.rs"], ["command_send", "place_block", "read_world_state"], [
+    ("monitor_give_place_break", "/give @s krasnokamen:monitor; place it facing the player; break it", "item carrier black_glazed_terracotta (stack 64); block stored as black_glazed_terracotta[facing=toward placer]; breaking drops krasnokamen:monitor (not terracotta), exactly once",
      {"op": 2, "custody": True, "plugins": ["computer"], "caps": ["break_block"]}),
     ("monitor_native_bundle_render", "native client with the computer-content bundle sees the placed monitor", "bundle bound (loaders=[native]); monitor model with screen on the facing side renders; item named Monitor", {"plugins": ["computer"], "clients": ["native_linux", "native_windows"], "visual": True, "caps": ["loader_bundle_handshake", "screenshot_visual"]}),
-    ("monitor_other_clients_fallback", "vanilla / Fabric clients join the server with the computer bundle and look at a monitor", "not bound to the optional bundle; see and break black glazed terracotta normally; no disconnect", {"plugins": ["computer"], "clients": ["vanilla_java_26_1_2", "fabric_solaris_loader", "neoforge_solaris_loader", "forge_solaris_loader", "fabric_svc", "fabric_distant_horizons", "protocol_bot"]}),
-    ("monitor_plain_terracotta_not_placeable", "try to place a plain minecraft:black_glazed_terracotta item", "refused (the block states are reserved for solaris:monitor per the plugin README); client resynced; item kept", {"plugins": ["computer"], "op": 2, "custody": True}),
+    ("monitor_other_clients_fallback", "vanilla / Fabric clients join the server with the computer bundle and look at a monitor", "not bound to the optional bundle; see and break black glazed terracotta normally; no disconnect", {"plugins": ["computer"], "clients": ["vanilla_java_26_1_2", "fabric_krasnokamen_loader", "neoforge_krasnokamen_loader", "forge_krasnokamen_loader", "fabric_svc", "fabric_distant_horizons", "protocol_bot"]}),
+    ("monitor_plain_terracotta_not_placeable", "try to place a plain minecraft:black_glazed_terracotta item", "refused (the block states are reserved for krasnokamen:monitor per the plugin README); client resynced; item kept", {"plugins": ["computer"], "op": 2, "custody": True}),
 ])
 
 domain("voice", ["edge:voice.rs", "edge:voice_service.rs (deploy-final 617b3091)", "docs/decisions/0019 proximity voice"], [], [
     ("native_proximity_voice", "two native clients with LISTEN(1); one pushes to talk at 10 and at 60 blocks, and from another dimension",
-     "solaris:voice protocol 1 (ADR 0019): AUDIO relayed with speaker uuid, eye position and seq to listening native clients in the same dimension within range_blocks (default 48), never to the speaker; nothing beyond range or across dimensions",
+     "krasnokamen:voice protocol 1 (ADR 0019): AUDIO relayed with speaker uuid, eye position and seq to listening native clients in the same dimension within range_blocks (default 48), never to the speaker; nothing beyond range or across dimensions",
      {"clients": ["native_linux", "native_windows"], "mp": True, "caps": ["native_voice", "multi_client_2"]}),
     ("native_voice_listen_and_state", "native client joins with [voice] enabled and disabled; LISTEN(0) vs LISTEN(1); malformed/oversized (>1000 B) AUDIO",
      "VOICE_STATE(enabled, range_blocks) sent once on join; no AUDIO before LISTEN(1) or after LISTEN(0); malformed or unknown payloads ignored, never a kick; disabled -> no relay",
      {"clients": ["native_linux", "native_windows"], "mp": True, "caps": ["native_voice", "multi_client_2"]}),
-    ("voice_non_native_invisible", "vanilla / Loader Java clients near a talking native player", "they never receive solaris:voice (no VOICE_STATE, no relay); play unaffected", {"clients": ["vanilla_java_26_1_2", "fabric_solaris_loader", "protocol_bot"], "mp": True, "caps": ["native_voice", "multi_client_2"]}),
-    ("svc_client_join_without_server", "Fabric+SVC client joins Solaris", "joins and plays; SVC reports voice unavailable; no disconnect", {"clients": ["fabric_svc"], "caps": ["svc_voice"]}),
-    ("proximity_voice", "two Simple Voice Chat clients talk at distance", "SVC proximity audio. Not served: Solaris has no SVC protocol bridge (its voice is native solaris:voice only)", {"clients": ["fabric_svc"], "mp": True, "status": "server_missing", "caps": ["svc_voice"]}),
+    ("voice_non_native_invisible", "vanilla / Loader Java clients near a talking native player", "they never receive krasnokamen:voice (no VOICE_STATE, no relay); play unaffected", {"clients": ["vanilla_java_26_1_2", "fabric_krasnokamen_loader", "protocol_bot"], "mp": True, "caps": ["native_voice", "multi_client_2"]}),
+    ("svc_client_join_without_server", "Fabric+SVC client joins Krasnokamen", "joins and plays; SVC reports voice unavailable; no disconnect", {"clients": ["fabric_svc"], "caps": ["svc_voice"]}),
+    ("proximity_voice", "two Simple Voice Chat clients talk at distance", "SVC proximity audio. Not served: Krasnokamen has no SVC protocol bridge (its voice is native krasnokamen:voice only)", {"clients": ["fabric_svc"], "mp": True, "status": "server_missing", "caps": ["svc_voice"]}),
     ("group_voice", "SVC groups", "SVC group audio. Not served: no SVC bridge", {"clients": ["fabric_svc"], "mp": True, "status": "server_missing", "caps": ["svc_voice"]}),
 ])
 

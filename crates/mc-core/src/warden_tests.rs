@@ -120,7 +120,7 @@ fn anger_checkpoint_and_replay_restore_uuid_and_pose() {
     let slot = state.entities.slot_of(mob).unwrap();
     let row = state.entities.row(slot);
     let expected = value(&state, mob).clone();
-    let root = std::env::temp_dir().join(format!("solaris-warden-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("krasnokamen-warden-{}", uuid::Uuid::new_v4()));
     let (_, regions, _) = crate::core::checkpoint_data_for(&state, state.tick);
     let checkpoint = regions
         .values()

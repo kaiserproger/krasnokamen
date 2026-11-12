@@ -1,7 +1,7 @@
 # Rust plugin SDK reference
 
 The authoritative contract is [`crates/mc-script/wit`](../../crates/mc-script/wit),
-world `solaris:plugin@0.8.0`; the [SDK](../../sdk/rust/solaris-plugin-sdk/src/lib.rs)
+world `krasnokamen:plugin@0.9.0`; the [SDK](../../sdk/rust/krasnokamen-plugin-sdk/src/lib.rs)
 generates its types from those files. The table is a map of API families, not an
 exhaustive list of every variant. Snippets are fragments in a plugin callback;
 `session`, `event`, etc. are values supplied by its caller. Return commands in a
@@ -43,7 +43,7 @@ Recipes and mob definitions are JSON strings, not arbitrary Rust callbacks.
 Queries and mutations return results in later typed events: do not mistake a
 returned command for a committed effect. The SDK exposes generated WIT records
 when no convenience wrapper exists. The
-[first-party packages](https://github.com/kaiserproger/solaris-default-plugins)
+[first-party packages](https://github.com/kaiserproger/krasnokamen-default-plugins)
 show production manifests and patterns; `chisel` is a recipe/block-tool example.
 
 ## Not available as a general Bukkit/Paper API

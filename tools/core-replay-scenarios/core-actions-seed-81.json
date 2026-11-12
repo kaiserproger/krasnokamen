@@ -1,5 +1,5 @@
 {
-  "schema": "solaris.core_replay.scenario.v1",
+  "schema": "krasnokamen.core_replay.scenario.v1",
   "id": "core-actions-seed-81",
   "seed": 81,
   "actions": [
@@ -24,7 +24,7 @@
   ],
   "lanes": [
     {
-      "driver": "solaris_protocol",
+      "driver": "krasnokamen_protocol",
       "required_gates": [
         {
           "id": "protocol-session",
@@ -58,7 +58,7 @@
     },
     {
       "id": "deterministic-normalized-state",
-      "description": "Repeated Solaris runs produce the same normalized observations."
+      "description": "Repeated Krasnokamen runs produce the same normalized observations."
     }
   ]
 }

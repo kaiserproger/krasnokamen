@@ -2,7 +2,7 @@
 //!
 //! Diff testing infrastructure.
 //!
-//! Part of the Solaris engine. The raw-TCP wire client and the vanilla-jar
+//! Part of the Krasnokamen engine. The raw-TCP wire client and the vanilla-jar
 //! content capture are production code owned by `mc_vanilla`; this crate
 //! consumes them.
 

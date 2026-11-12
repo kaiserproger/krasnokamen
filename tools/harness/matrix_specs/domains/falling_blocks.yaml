@@ -1,4 +1,4 @@
-schema: solaris-domain-adapter-index/1
+schema: krasnokamen-domain-adapter-index/1
 domain: falling_blocks
 subjects_specified: 6
 vanilla_provenance: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/version.json
@@ -23,7 +23,7 @@ subjects:
     expected: falls, lands as block; breaks on torch/slab and drops item
     vanilla_source:
       - https://minecraft.wiki/w/Falling_Block
-    solaris_sources: &id001
+    krasnokamen_sources: &id001
       - core:falling.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
@@ -60,7 +60,7 @@ subjects:
       - creative
   - subject: falling_blocks.suspicious_blocks
     matrix_ids:
-      - pw:falling_blocks.suspicious_blocks/forge_solaris_loader/adventure/the_nether/normal/2/slow_reader_backpressure/crash_kill9_wal_replay/non_op_0
+      - pw:falling_blocks.suspicious_blocks/forge_krasnokamen_loader/adventure/the_nether/normal/2/slow_reader_backpressure/crash_kill9_wal_replay/non_op_0
     status: server_gap
     server_gap:
       - FALL-002
@@ -68,7 +68,7 @@ subjects:
     expected: falls/breaks without loot; brushing yields loot
     vanilla_source:
       - https://minecraft.wiki/w/Suspicious_Sand
-    solaris_sources:
+    krasnokamen_sources:
       - core:plants.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
@@ -118,7 +118,7 @@ subjects:
     expected: falling_anvil damage by distance; anvil may chip
     vanilla_source:
       - https://minecraft.wiki/w/Anvil
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
       function: anvil_fall_damage
@@ -163,7 +163,7 @@ subjects:
   - subject: falling_blocks.dragon_egg
     matrix_ids:
       - pw:falling_blocks.dragon_egg/protocol_bot/creative/overworld/normal/1/reconnect_mid_action/hot_backup_during_action/op_2
-      - pw:falling_blocks.dragon_egg/fabric_solaris_loader/survival/the_end/easy/N8/normal/clean_restart_mid_action/non_op_0
+      - pw:falling_blocks.dragon_egg/fabric_krasnokamen_loader/survival/the_end/easy/N8/normal/clean_restart_mid_action/non_op_0
     status: server_gap
     server_gap:
       - FALL-001
@@ -171,7 +171,7 @@ subjects:
     expected: teleports on click; falls
     vanilla_source:
       - https://minecraft.wiki/w/Dragon_Egg
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
       function: dragon_egg
@@ -206,14 +206,14 @@ subjects:
       - creative
   - subject: falling_blocks.pointed_dripstone
     matrix_ids:
-      - pw:falling_blocks.pointed_dripstone/neoforge_solaris_loader/spectator/the_nether/peaceful/1/normal/steady/op_3
+      - pw:falling_blocks.pointed_dripstone/neoforge_krasnokamen_loader/spectator/the_nether/peaceful/1/normal/steady/op_3
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: falls and deals falling_stalactite damage
     vanilla_source:
       - https://minecraft.wiki/w/Pointed_Dripstone
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
       function: pointed_dripstone
@@ -260,7 +260,7 @@ subjects:
     expected: entity removed or persisted per vanilla; no ghost block
     vanilla_source:
       - https://minecraft.wiki/w/Falling_Block
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
       function: falling_into_void_or_unloaded

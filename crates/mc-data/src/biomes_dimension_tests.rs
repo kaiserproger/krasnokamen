@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn embedded_dimension_tables_and_costs_retain_canonical_values() {
-    let rules = solaris_required_biome_spawn_rules();
+    let rules = krasnokamen_required_biome_spawn_rules();
     for (biome, characteristic, weight, minimum, maximum) in [
         ("nether_wastes", "zombified_piglin", 100, 4, 4),
         ("soul_sand_valley", "skeleton", 20, 5, 5),

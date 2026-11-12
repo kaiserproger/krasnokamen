@@ -42,7 +42,7 @@ use mc_script::{
 };
 
 use crate::adapter::{AdapterError, PlayerSessions, to_script_batch};
-use crate::bindings::exports::solaris::plugin::events::{
+use crate::bindings::exports::krasnokamen::plugin::events::{
     ChatSent, CommandInvoked, Event, EventContext, InventoryClick, InventoryMenuClicked,
     InventoryStorageOutcome, InventoryStorageTransactionAnswered, OnlinePlayersAnswered,
     OperationAnswered, OperationCommitted, OperationOutcome, OperationPayload, OperationRefused,
@@ -50,12 +50,12 @@ use crate::bindings::exports::solaris::plugin::events::{
     PlayerTeleportOutcome, PlayerZoneTransition, StorageCasAnswered, StorageGetAnswered,
     TimerFired, ZoneCommandAnswered, ZoneCommandOutcome,
 };
-use crate::bindings::exports::solaris::plugin::lifecycle::InitContext;
-use crate::bindings::solaris::plugin::operation_types::OperationFailure;
-use crate::bindings::solaris::plugin::storage::{
+use crate::bindings::exports::krasnokamen::plugin::lifecycle::InitContext;
+use crate::bindings::krasnokamen::plugin::operation_types::OperationFailure;
+use crate::bindings::krasnokamen::plugin::storage::{
     StorageCasOutcome, StorageChange, StorageFailure, StorageGetOutcome, StorageRecord,
 };
-use crate::bindings::solaris::plugin::types::{LogLevel, Position};
+use crate::bindings::krasnokamen::plugin::types::{LogLevel, Position};
 use crate::discovery::DiscoveryError;
 use crate::package::LoadedPackage;
 use crate::startup::{DeploymentContribution, DeploymentSurface, aggregate_deployment};
@@ -1751,7 +1751,7 @@ fn contract_events(event: &ScriptEvent, tick: u64) -> Option<(EventContext, Vec<
             position,
             failure,
         } => {
-            use crate::bindings::exports::solaris::plugin::events::{
+            use crate::bindings::exports::krasnokamen::plugin::events::{
                 EntitySpawnAnswered, EntitySpawnFailure,
             };
             vec![Event::EntitySpawnAnswered(EntitySpawnAnswered {
@@ -2077,13 +2077,13 @@ mod tests {
     /// leaves the table command admission reads untouched.
     #[test]
     fn only_the_provider_handle_publishes_command_permissions() {
-        use crate::bindings::solaris::plugin::command_permissions::Host as HostImport;
+        use crate::bindings::krasnokamen::plugin::command_permissions::Host as HostImport;
 
         const PLAYER: &str = "069a79f4-44e9-4726-a5be-fca90e38aaf5";
         let (boundary, endpoint) =
             script_boundary_pair(NonZeroUsize::new(1).unwrap(), NonZeroUsize::new(1).unwrap());
         let provider = mc_script::ScriptPluginManifest::new(
-            "solaris-permissions",
+            "krasnokamen-permissions",
             "Permissions",
             "0.1.0",
             mc_script::COMPONENT_PLUGIN_API_VERSION,
@@ -2097,35 +2097,35 @@ mod tests {
         let limits = PluginLimits::default();
         let mut ordinary = crate::InstanceState::new(
             Tracing {
-                id: "solaris-essentials".into(),
+                id: "krasnokamen-essentials".into(),
             },
             &limits,
         );
         assert!(!HostImport::publish(
             &mut ordinary,
-            vec![format!("{PLAYER} solaris.essentials.use")]
+            vec![format!("{PLAYER} krasnokamen.essentials.use")]
         ));
         assert!(
             !boundary
                 .command_permissions()
-                .allows(PLAYER, "solaris.essentials.use")
+                .allows(PLAYER, "krasnokamen.essentials.use")
         );
 
         let mut published = crate::InstanceState::new(
             Tracing {
-                id: "solaris-permissions".into(),
+                id: "krasnokamen-permissions".into(),
             },
             &limits,
         );
         published.set_command_permissions(Some(boundary.command_permissions()));
         assert!(HostImport::publish(
             &mut published,
-            vec![format!("{PLAYER} solaris.essentials.use")]
+            vec![format!("{PLAYER} krasnokamen.essentials.use")]
         ));
         assert!(
             boundary
                 .command_permissions()
-                .allows(PLAYER, "solaris.essentials.use")
+                .allows(PLAYER, "krasnokamen.essentials.use")
         );
         assert!(!HostImport::publish(
             &mut published,
@@ -2134,7 +2134,7 @@ mod tests {
         assert!(
             boundary
                 .command_permissions()
-                .allows(PLAYER, "solaris.essentials.use")
+                .allows(PLAYER, "krasnokamen.essentials.use")
         );
     }
 

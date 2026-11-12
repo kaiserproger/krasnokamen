@@ -39,7 +39,7 @@ fn production_building(
     mc_script::ScriptSettlementBuildingRef::new(
         "building".into(),
         bid.0.to_string(),
-        format!("solaris:{}", kind.name()),
+        format!("krasnokamen:{}", kind.name()),
     )
 }
 
@@ -55,7 +55,7 @@ fn start(
         economy::Request::Production(production::Request::Start {
             job: "army-exclusive".into(),
             worker: uuid,
-            recipe: "solaris-settlements:bread".into(),
+            recipe: "krasnokamen-settlements:bread".into(),
             count: 1,
             station: [3, 201, 3],
             stand_at: [3, 201, 4],

@@ -227,7 +227,7 @@ phase2:
       - effects_snapshot
       - raid_members
       - raid_status
-    - subject: villagers.solaris_professions
+    - subject: villagers.krasnokamen_professions
       needed:
       - resident_job_query
     - subject: villagers.trade_level_restock
@@ -475,7 +475,7 @@ validation:
     server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
     run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T034131-protocol-matrix-uojqrs8v
     ts: '2026-10-24T03:42:16Z'
-    note: client:slow_reader_boundary; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+    note: client:slow_reader_boundary; enabled_plugins=basic-economy,chisel,krasnokamen,graves,krasnokamen-audit,krasnokamen-auth,krasnokamen-economy,krasnokamen-essentials,krasnokamen-permissions,krasnokamen-towns;
       excluded_plugins=
   - id: F:mobs.cow/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
     status: blocked
@@ -483,7 +483,7 @@ validation:
     server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
     run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T034449-protocol-matrix-sdwz5jgp
     ts: '2026-10-24T03:45:12Z'
-    note: snapshot:entities; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+    note: snapshot:entities; enabled_plugins=basic-economy,chisel,krasnokamen,graves,krasnokamen-audit,krasnokamen-auth,krasnokamen-economy,krasnokamen-essentials,krasnokamen-permissions,krasnokamen-towns;
       excluded_plugins=
   - id: F:spawning.peaceful_removal/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
     status: fail
@@ -494,7 +494,7 @@ validation:
     note: 'peaceful removes existing hostile controls; frames={10: 3, 64: 2, 105: 1, 16: 2, 72: 5, 43: 2, 113: 45,
       38: 8, 97: 1, 94: 6, 95: 6, 133: 1, 76: 1, 74: 4, 18: 3, 104: 3, 127: 1, 128: 1, 130: 6, 99: 77, 103: 2, 131:
       1, 121: 518, 45: 86, 48: 142, 1: 36, 54: 26, 83: 21, 6: 6, 8: 910, 77: 7, 53: 366, 44: 2, 70: 1, 37: 61, 102:
-      1, 34: 2, 25: 2}, menu_errors={}; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+      1, 34: 2, 25: 2}, menu_errors={}; enabled_plugins=basic-economy,chisel,krasnokamen,graves,krasnokamen-audit,krasnokamen-auth,krasnokamen-economy,krasnokamen-essentials,krasnokamen-permissions,krasnokamen-towns;
       excluded_plugins='
   - id: F:settlements.list/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
     status: fail
@@ -502,7 +502,7 @@ validation:
     server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
     run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T034449-protocol-matrix-sh7msa6z
     ts: '2026-10-24T03:45:13Z'
-    note: 'domain oracle failed: boundary_state_preserved; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+    note: 'domain oracle failed: boundary_state_preserved; enabled_plugins=basic-economy,chisel,krasnokamen,graves,krasnokamen-audit,krasnokamen-auth,krasnokamen-economy,krasnokamen-essentials,krasnokamen-permissions,krasnokamen-towns;
       excluded_plugins=; HARNESS_ORACLE_BUG: transport fence incorrectly compared as world state; corrected by70dkm2q8'
   - id: F:settlements.list/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
     status: pass
@@ -510,7 +510,7 @@ validation:
     server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
     run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T034642-protocol-matrix-70dkm2q8
     ts: '2026-10-24T03:47:07Z'
-    note: ; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+    note: ; enabled_plugins=basic-economy,chisel,krasnokamen,graves,krasnokamen-audit,krasnokamen-auth,krasnokamen-economy,krasnokamen-essentials,krasnokamen-permissions,krasnokamen-towns;
       excluded_plugins=
   - id: F:villagers.lightning_to_witch/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
     status: pass
@@ -518,7 +518,7 @@ validation:
     server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
     run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T040552-protocol-matrix-wy755vyl
     ts: '2026-10-24T04:06:16Z'
-    note: dom-mobs810bbce2; ; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+    note: dom-mobs810bbce2; ; enabled_plugins=basic-economy,chisel,krasnokamen,graves,krasnokamen-audit,krasnokamen-auth,krasnokamen-economy,krasnokamen-essentials,krasnokamen-permissions,krasnokamen-towns;
       excludes=
     plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
   - id: F:settlements.list/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
@@ -527,7 +527,7 @@ validation:
     server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
     run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T041117-protocol-matrix-iv3q183v
     ts: '2026-10-24T04:12:00Z'
-    note: dom-mobs810bbce2; ; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns;
+    note: dom-mobs810bbce2; ; enabled_plugins=basic-economy,chisel,krasnokamen,graves,krasnokamen-audit,krasnokamen-auth,krasnokamen-economy,krasnokamen-essentials,krasnokamen-permissions,krasnokamen-towns;
       excludes=
     plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
   - id: F:settlements.info/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
@@ -536,7 +536,7 @@ validation:
     server_sha: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
     run_dir: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomMobs/20261024T041239-protocol-matrix-mgh1nw8k
     ts: '2026-10-24T04:13:21Z'
-    note: dom-mobs810bbce2 explicit save/restart full oracle; enabled_plugins=basic-economy,chisel,solaris,graves,solaris-audit,solaris-auth,solaris-economy,solaris-essentials,solaris-permissions,solaris-towns
+    note: dom-mobs810bbce2 explicit save/restart full oracle; enabled_plugins=basic-economy,chisel,krasnokamen,graves,krasnokamen-audit,krasnokamen-auth,krasnokamen-economy,krasnokamen-essentials,krasnokamen-permissions,krasnokamen-towns
     plugin_set: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
   - id: F:settlements.list/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
     status: pass

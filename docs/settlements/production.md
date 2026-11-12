@@ -53,7 +53,7 @@ The core command handler also recognizes these operations, but the Minecraft cli
 
 These are the recipes defined in the startup settlement recipe catalog; all use a crafting table. Counts and durations are per craft. Tool outputs have authored components; the repair and salvage recipes require the specific component state in the catalog.
 
-| Recipe ID suffix (`solaris-settlements:`) | Inputs → output | Ticks |
+| Recipe ID suffix (`krasnokamen-settlements:`) | Inputs → output | Ticks |
 | --- | --- | ---: |
 | `oak_planks` | 1 oak log → 4 oak planks; requires a wooden axe, 1 wear | 200 |
 | `stick` | 2 oak planks → 4 sticks | 80 |

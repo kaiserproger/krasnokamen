@@ -942,7 +942,7 @@ fn real_vanilla_input_records_upgrade_and_decode_read_only() {
 #[test]
 #[ignore = "requires local original Falcon's Rock records"]
 fn original_saved_data_real_records_upgrade_and_decode_read_only() {
-    let root = std::env::var_os("SOLARIS_REAL_WORLD_PREFLIGHT_SOURCE")
+    let root = std::env::var_os("KRASNOKAMEN_REAL_WORLD_PREFLIGHT_SOURCE")
         .map(PathBuf::from)
         .unwrap_or_else(|| {
             Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -2299,7 +2299,7 @@ fn foreign_scheduled_ticks_follow_vanilla_chunk_ownership() {
 
 #[test]
 fn foreign_scheduled_ticks_staged_import_crash_before_final_commit_is_unpublished() {
-    const CHILD_ROOT: &str = "SOLARIS_TEST_STAGED_IMPORT_CRASH_ROOT";
+    const CHILD_ROOT: &str = "KRASNOKAMEN_TEST_STAGED_IMPORT_CRASH_ROOT";
     if let Some(root) = std::env::var_os(CHILD_ROOT) {
         let root = PathBuf::from(root);
         let destination = root.join("native");
@@ -2365,7 +2365,7 @@ fn foreign_scheduled_ticks_staged_import_crash_before_final_commit_is_unpublishe
             path.file_name()
                 .unwrap()
                 .to_string_lossy()
-                .starts_with(".solaris-conversion-")
+                .starts_with(".krasnokamen-conversion-")
         })
         .expect("abrupt exit must leave only unpublished staging");
     let staged_bytes = hashes(&stage).unwrap();
@@ -2791,7 +2791,7 @@ fn duplicate_entity_uuids_keep_first_and_archive_original_bodies() {
         .iter_mut()
         .find(|(name, _)| name == "Item")
         .unwrap()
-        .1 = legacy_item("minecraft:solaris_not_an_item", 1, None);
+        .1 = legacy_item("minecraft:krasnokamen_not_an_item", 1, None);
     let nether_identical_8 = keeper_8.clone();
     let nether_distinct_7 = duplicate_fixture_entity(7, [5.0, 65.0, 5.0], "dropped-7-nether", 55);
 

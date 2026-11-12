@@ -204,7 +204,7 @@ fn debug_menu_reports_authoritative_inventory_through_command_path() {
         .flat_map(|(connection, changes)| {
             changes.iter().filter_map(move |change| match change {
                 PlayerChange::Chat { message } if *connection == ConnectionId(1) => {
-                    message.strip_prefix("SOLARIS_MENU ")
+                    message.strip_prefix("KRASNOKAMEN_MENU ")
                 }
                 _ => None,
             })
@@ -233,7 +233,7 @@ fn debug_menu_reports_authoritative_inventory_through_command_path() {
         .flat_map(|(connection, changes)| {
             changes.iter().filter_map(move |change| match change {
                 PlayerChange::Chat { message } if *connection == ConnectionId(1) => {
-                    message.strip_prefix("SOLARIS_MENU ")
+                    message.strip_prefix("KRASNOKAMEN_MENU ")
                 }
                 _ => None,
             })

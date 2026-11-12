@@ -2,7 +2,7 @@
 //!
 //! Block physics, collisions, fluids.
 //!
-//! Part of the Solaris engine.
+//! Part of the Krasnokamen engine.
 
 use mth::{ceil_i32, floor_i32};
 use smallvec::SmallVec;

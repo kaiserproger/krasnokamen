@@ -17,7 +17,7 @@
 //! something else: `encode_result` answers `None` and the answer is dropped
 //! rather than delivered with an invented shape.
 
-use crate::bindings::solaris::plugin::inventories as wire;
+use crate::bindings::krasnokamen::plugin::inventories as wire;
 use mc_script::{
     ScriptDtoError, ScriptInventoryEndpoint, ScriptInventoryExpectedRevision, ScriptInventoryFence,
     ScriptInventoryMaterial, ScriptInventoryResourcePlan, ScriptInventoryWorkPortion,
@@ -289,7 +289,7 @@ pub(crate) fn contract_endpoint(
             position,
         } => wire::InventoryEndpoint::Container(wire::ContainerEndpoint {
             dimension: dimension.clone(),
-            position: crate::bindings::solaris::plugin::types::BlockPosition {
+            position: crate::bindings::krasnokamen::plugin::types::BlockPosition {
                 x: position.x,
                 y: position.y,
                 z: position.z,
@@ -461,7 +461,7 @@ pub(super) fn encode_npc_death_cargo_receipt(
         handle: value.handle.clone(),
         entity_uuid: value.entity_uuid.clone(),
         dimension: value.dimension.clone(),
-        position: crate::bindings::solaris::plugin::types::Position {
+        position: crate::bindings::krasnokamen::plugin::types::Position {
             x: value.position.x(),
             y: value.position.y(),
             z: value.position.z(),

@@ -742,7 +742,7 @@ fn retained_checkpoint_projection_and_corruption_fail_closed() {
     let mut corrupt = native.clone();
     corrupt
         .extra_fields
-        .retain(|(name, _)| name != "solaris:SpecialMob");
+        .retain(|(name, _)| name != "krasnokamen:SpecialMob");
     corrupt
         .extra_fields
         .push(("Invul".into(), mc_nbt::Tag::Int(221)));

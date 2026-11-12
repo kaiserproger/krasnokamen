@@ -1,4 +1,4 @@
-//! Solaris-computed chunk lighting. M4.c.
+//! Krasnokamen-computed chunk lighting. M4.c.
 //!
 //! Given a 3×3 chunk neighbourhood and a per-block-state light table
 //! (`mc_data::block_light::BlockLightTable`), produces sky-light and
@@ -66,7 +66,7 @@ pub enum LightKernelBackend {
 
 impl LightKernelBackend {
     fn configured() -> Self {
-        match std::env::var("SOLARIS_SIMD_BACKEND").as_deref() {
+        match std::env::var("KRASNOKAMEN_SIMD_BACKEND").as_deref() {
             Ok("portable") => Self::PortableSimd,
             _ => Self::Scalar,
         }

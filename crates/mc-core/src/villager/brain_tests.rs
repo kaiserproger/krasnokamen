@@ -3909,7 +3909,7 @@ fn numeric_food_table_matches_name_oracle_for_every_registered_item() {
         }),
     );
     for items in [
-        Arc::new(mc_data::items::solaris_required_items()),
+        Arc::new(mc_data::items::krasnokamen_required_items()),
         Arc::new(synthetic),
     ] {
         let mut food = FoodTable::default();
@@ -3986,7 +3986,7 @@ fn numeric_food_table_refreshes_after_registry_extension_and_replacement() {
 
 #[test]
 fn numeric_food_totals_and_birth_keep_inventory_order_and_unknown_items() {
-    let items = Arc::new(mc_data::items::solaris_required_items());
+    let items = Arc::new(mc_data::items::krasnokamen_required_items());
     let id = |name| {
         items
             .id_of(&mc_data::Identifier::parse(name).unwrap())
@@ -4089,7 +4089,7 @@ fn production_food_hold_preserves_inputs_during_social_actions_and_pause_release
         .registry
         .item_facts
         .work_recipes()
-        .find(|recipe| recipe.id.as_str() == "solaris-settlements:bread")
+        .find(|recipe| recipe.id.as_str() == "krasnokamen-settlements:bread")
         .unwrap()
         .clone();
     recipe.id = mc_data::Identifier::parse("test:reserved_food").unwrap();

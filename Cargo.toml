@@ -7,8 +7,8 @@ version = "1.0.0-rc.5"
 edition = "2024"
 rust-version = "1.99"
 license = "MIT OR Apache-2.0"
-authors = ["Solaris contributors"]
-repository = "https://github.com/kaiserproger/solaris"
+authors = ["Krasnokamen contributors"]
+repository = "https://github.com/kaiserproger/krasnokamen"
 
 [workspace.dependencies]
 workspace-features = { path = "crates/workspace-features" }
@@ -58,7 +58,7 @@ all = { level = "warn", priority = -1 }
 [profile.dev]
 debug = "line-tables-only"
 
-# The debug server compiles deployed Wasm components at startup. Keep Solaris
+# The debug server compiles deployed Wasm components at startup. Keep Krasnokamen
 # crates debuggable, but optimize every third-party dependency (Wasmtime,
 # wasmparser, serde_json, ...): with six deployed packages an unoptimized-deps
 # debug server took 64 s to listen, 28 s with `opt-level = 2` on all deps

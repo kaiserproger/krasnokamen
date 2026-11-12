@@ -52,11 +52,11 @@ Mount custody belongs to the vehicle's ordered, bounded rider UUID list. The
 first live rider alone controls motion; a passenger's reverse link and the
 published passenger entity IDs are derived, never separate authorities.
 Removing one passenger preserves the other seats. Native images retain the
-list; offline animal NBT uses `solaris:Riders`, validated for duplicates and
+list; offline animal NBT uses `krasnokamen:Riders`, validated for duplicates and
 the vehicle type's seat capacity by the one image reader that checkpoint load,
 `/summon` and WAL replay share, so a state the live server accepts can always be
 replayed. Only the camel (3, `Camel.canAddPassenger`) and happy ghast (4) seat
-more than one rider. The earlier scalar `solaris:Rider` NBT key and WAL `rider`
+more than one rider. The earlier scalar `krasnokamen:Rider` NBT key and WAL `rider`
 field are refused outright, so an old image fails the load instead of silently
 unseating its rider. Deploy this build after a clean stop: an unclean WAL tail
 written by an older build still carries `rider` and is refused at startup.
@@ -87,7 +87,7 @@ cannot refuse (graves, guest command results) pass the full capacity, and the
 halt log counts the backlog by event kind.
 
 Input-ordered chat proves native input handling, not geometry delivery: reliable
-traffic can overtake the world queue. The operator-only `solaris:setup_world_fence`
+traffic can overtake the world queue. The operator-only `krasnokamen:setup_world_fence`
 request keeps one transient nonce per connection. A later publication must have
 the viewer's current dimension and complete geometry window, with no block or
 chunk-repair debt, before the edge appends the nonce response to that same world
@@ -143,7 +143,7 @@ without creation or truncation: Windows
 
 ## Plugin admission
 
-Independently deployed `solaris:plugin@0.8.0` components execute outside the
+Independently deployed `krasnokamen:plugin@0.9.0` components execute outside the
 tick. Guests receive owned values and opaque handles, not native pointers,
 locks, slots or world ownership. The native owner validates current identities,
 revisions, complete custody and capabilities when applying operations. Plugin

@@ -46,7 +46,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         // resync, and recompute forever without ever routing. The cache
         // makes re-plans O(1) per chunk; block changes evict their chunk.
         let mut chunk_cache = crate::plan::ChunkPacketCache::with_anti_xray(anti_xray);
-        let coreperf = std::env::var_os("SOLARIS_COREPERF_REGIONS").is_some();
+        let coreperf = std::env::var_os("KRASNOKAMEN_COREPERF_REGIONS").is_some();
         loop {
             let out = match rx.recv().await {
                 Ok(out) => out,

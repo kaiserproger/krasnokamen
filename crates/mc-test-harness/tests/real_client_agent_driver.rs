@@ -147,7 +147,7 @@ fn real_client_gate_rejects_runs_without_gradle_runtime_classes_provenance() {
     std::fs::write(
         run_dir.path().join("observations.json"),
         r#"{
-  "schema": "solaris.real_client_observations.v1",
+  "schema": "krasnokamen.real_client_observations.v1",
   "client_gate": "agent-run-real-client",
   "quality_label": "stabilization",
   "result": "passed",
@@ -441,7 +441,7 @@ fn agent_driver_writes_passed_observation_from_loopback_bridge() {
 
     assert_eq!(
         observations["schema"],
-        "solaris.real_client_observations.v1"
+        "krasnokamen.real_client_observations.v1"
     );
     assert_eq!(observations["client_gate"], "agent-run-real-client");
     assert_eq!(observations["quality_label"], "draft");
@@ -763,14 +763,14 @@ import pathlib
 import sys
 
 driver_path = pathlib.Path(sys.argv[1])
-spec = importlib.util.spec_from_file_location("solaris_real_client_driver", driver_path)
+spec = importlib.util.spec_from_file_location("krasnokamen_real_client_driver", driver_path)
 driver = importlib.util.module_from_spec(spec)
-sys.modules["solaris_real_client_driver"] = driver
+sys.modules["krasnokamen_real_client_driver"] = driver
 spec.loader.exec_module(driver)
 client_path = driver_path.parent / "driver_client.py"
-client_spec = importlib.util.spec_from_file_location("solaris_real_client_client", client_path)
+client_spec = importlib.util.spec_from_file_location("krasnokamen_real_client_client", client_path)
 client_mod = importlib.util.module_from_spec(client_spec)
-sys.modules["solaris_real_client_client"] = client_mod
+sys.modules["krasnokamen_real_client_client"] = client_mod
 client_spec.loader.exec_module(client_mod)
 driver.time.monotonic = lambda: 0.0
 calls = []
@@ -994,7 +994,7 @@ fn agent_driver_appends_phase_observations_and_recomputes_blocked_result() {
     std::fs::write(
         &observations_path,
         serde_json::to_vec_pretty(&json!({
-            "schema": "solaris.real_client_observations.v1",
+            "schema": "krasnokamen.real_client_observations.v1",
             "client_gate": "agent-run-real-client",
             "quality_label": "draft",
             "result": "passed",
@@ -2214,7 +2214,7 @@ fn agent_driver_coordinates_two_client_shared_chest_across_restart_phases() {
             .expect("restart invariant snapshot exists"),
     )
     .expect("restart invariant snapshot is valid JSON");
-    assert_eq!(snapshot["schema"], "solaris.restart_invariants.v1");
+    assert_eq!(snapshot["schema"], "krasnokamen.restart_invariants.v1");
     assert_eq!(
         snapshot["producer_scenario"],
         "playable-45-two-client-shared-chest-save-restart-before"
@@ -2247,7 +2247,7 @@ fn agent_driver_rejects_restart_snapshot_missing_typed_field_before_bridge_calls
     std::fs::write(
         run_dir.path().join("restart-invariants.json"),
         serde_json::to_vec_pretty(&json!({
-            "schema": "solaris.restart_invariants.v1",
+            "schema": "krasnokamen.restart_invariants.v1",
             "producer_scenario": "playable-45-two-client-shared-chest-save-restart-before",
             "created_at": "2026-07-24T00:00:00Z",
             "invariants": [{

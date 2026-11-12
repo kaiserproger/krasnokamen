@@ -226,10 +226,10 @@ regression = ["harness:entities:native-v2-craft-drag"]
             receipt.mkdir()
             (receipt / 'result.json').write_text('{"status":"prepared"}')
             def run_child(argv, ctx, name, **kwargs):
-                self.assertNotIn('SOLARIS_FIRST_START_RECOVERY_BINARY', kwargs['env'])
+                self.assertNotIn('KRASNOKAMEN_FIRST_START_RECOVERY_BINARY', kwargs['env'])
                 (root / name).write_text(f'[harness] artifact={receipt}\n')
             ctx = profiles.ProfileContext(root, include_regression_client=True)
-            with patch.dict('os.environ', {'SOLARIS_FIRST_START_RECOVERY_BINARY': '/mutation'}), patch.object(regressions, 'REPO_ROOT', root), patch.object(profiles, '_run_command', run_child), patch.object(regressions, '_release_server', return_value=root / 'server'):
+            with patch.dict('os.environ', {'KRASNOKAMEN_FIRST_START_RECOVERY_BINARY': '/mutation'}), patch.object(regressions, 'REPO_ROOT', root), patch.object(profiles, '_run_command', run_child), patch.object(regressions, '_release_server', return_value=root / 'server'):
                 with self.assertRaisesRegex(RuntimeError, 'VISIBLE.*prepared'):
                     regressions.run(ctx)
             (receipt / 'result.json').write_text('{"status":"passed","details":{"server_binary_sha256":"wrong"}}')
@@ -415,7 +415,7 @@ regression = ["cargo:mc-core:module::other"]
     def test_release_server_is_pinned_outside_the_target(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            built = root / 'target/release/solaris-v2'
+            built = root / 'target/release/krasnokamen'
             built.parent.mkdir(parents=True)
             built.write_bytes(b'candidate')
             ctx = profiles.ProfileContext(root)
@@ -435,10 +435,10 @@ regression = ["cargo:mc-core:module::other"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             target = root / 'target'
-            binary = target / 'release/solaris-v2'
+            binary = target / 'release/krasnokamen'
             binary.parent.mkdir(parents=True)
             binary.write_bytes(b'candidate')
-            marker = target / '.solaris-tree'
+            marker = target / '.krasnokamen-tree'
             marker.write_text(str(root))
             original_link = os.link
             def switch_tree(src, dst):
@@ -568,7 +568,7 @@ class LedgerToolTests(unittest.TestCase):
             registry = root / '.analysis/ledger-builds'
             registry.mkdir(parents=True, exist_ok=True)
             (registry / 'abc.json').write_text(json.dumps({'sha256': 'abc', 'tree': {'head': tree['head'], 'sha256': tree['sha256']}}))
-        # The scenarios run whatever SOLARIS_SERVER_BINARY names: a binary the tooling did not build from
+        # The scenarios run whatever KRASNOKAMEN_SERVER_BINARY names: a binary the tooling did not build from
         # the candidate (pinned or foreign), or built from an older HEAD, proves nothing about this source.
         with self.assertRaisesRegex(ledger.Refused, 'names no server binary built from the candidate'):
             self.promote(root, runner, client_receipt=receipt(now))
@@ -821,12 +821,12 @@ class LedgerToolTests(unittest.TestCase):
         root = Path(directory.name) / 'wt' / 'Promoter'
         root.mkdir(parents=True)
         with patch.dict(os.environ, {}, clear=False):
-            os.environ.pop('SOLARIS_BUILD_TOKEN', None)
+            os.environ.pop('KRASNOKAMEN_BUILD_TOKEN', None)
             with self.assertRaisesRegex(ledger.Refused, 'must run under mem-run'):
                 with ledger._control_lock(root):
                     pass
         self.assertFalse((root.parent / 'ledger-control.lock').exists())
-        with patch.dict(os.environ, {'SOLARIS_BUILD_TOKEN': '2'}):
+        with patch.dict(os.environ, {'KRASNOKAMEN_BUILD_TOKEN': '2'}):
             with ledger._control_lock(root):
                 self.assertTrue((root.parent / 'ledger-control.lock').exists())
 
@@ -954,7 +954,7 @@ class LedgerToolTests(unittest.TestCase):
             trees.append(tree)
             buggy = 'buggy' in (tree / 'src/engine.rs').read_text()
             return {ref: {'state': ledger.RED if buggy else ledger.GREEN, 'detail': ''} for ref in refs}
-        with patch.dict(os.environ, {'SOLARIS_BUILD_TOKEN': '1'}):  # under wt/ a promote needs a held token
+        with patch.dict(os.environ, {'KRASNOKAMEN_BUILD_TOKEN': '1'}):  # under wt/ a promote needs a held token
             self.promote(root, runner, dry_run=True)
             self.promote(root, runner, dry_run=True)
         # Same path every run: cargo reuses the build artifacts instead of growing the target dir.
@@ -995,7 +995,7 @@ class LedgerToolTests(unittest.TestCase):
         tree_a.mkdir(parents=True)
         tree_b.mkdir(parents=True)
         slot = base / 'targets/slot-x'
-        binary = slot / 'release/solaris-v2'
+        binary = slot / 'release/krasnokamen'
         binary.parent.mkdir(parents=True)
         binary.write_bytes(b'candidate')
         calls = []
@@ -1008,10 +1008,10 @@ class LedgerToolTests(unittest.TestCase):
                 patch.object(profiles, '_run_command', run_command), \
                 patch.dict('os.environ', {'CARGO_TARGET_DIR': str(base / 'targets/slot-a')}):
             # A slot marked for tree A must not be accepted for a build of tree B.
-            (slot / '.solaris-tree').write_text(str(tree_a))
+            (slot / '.krasnokamen-tree').write_text(str(tree_a))
             with self.assertRaisesRegex(RuntimeError, 'does not belong'):
                 regressions._release_server(ctx, profiles, tree_b)
-            (slot / '.solaris-tree').write_text(str(tree_b.resolve()))
+            (slot / '.krasnokamen-tree').write_text(str(tree_b.resolve()))
             pinned = regressions._release_server(ctx, profiles, tree_b)
         self.assertEqual(pinned.read_bytes(), b'candidate')
         argv, cwd, env = calls[-1]

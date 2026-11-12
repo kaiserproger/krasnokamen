@@ -2,7 +2,7 @@ use super::odds;
 
 #[test]
 fn embedded_odds_match_all_207_measured_bootstrap_registrations() {
-    let report = crate::blocks::solaris_required_blocks_report();
+    let report = crate::blocks::krasnokamen_required_blocks_report();
     let mut registered: Vec<_> = report
         .iter()
         .filter(|b| odds(b.id.as_str()) != (0, 0))

@@ -10,9 +10,9 @@ HOST        load average, available memory, mem-run commands running.
 
 Read-only: a slot counts as held only while its flock is held (probed with a shared
 non-blocking lock), so records of finished holders never show. Paths: --mem-dir
-(default /tmp/solaris-mem-slots), $SOLARIS_SCENE_SLOT_DIR (default /tmp) and
-$SOLARIS_FLEET_DIR (default <work>/fleet), as the tools that write them use;
-SOLARIS_FLEET_NOW fixes the clock (tests only).
+(default /tmp/solaris-mem-slots), $KRASNOKAMEN_SCENE_SLOT_DIR (default /tmp) and
+$KRASNOKAMEN_FLEET_DIR (default <work>/fleet), as the tools that write them use;
+KRASNOKAMEN_FLEET_NOW fixes the clock (tests only).
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ import wtlib as w  # noqa: E402
 
 
 def now() -> int:
-    return int(os.environ.get("SOLARIS_FLEET_NOW") or time.time())
+    return int(os.environ.get("KRASNOKAMEN_FLEET_NOW") or time.time())
 
 
 def minutes(seconds: int) -> str:
@@ -157,8 +157,8 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="fleet-status", description=__doc__.split("\n\n")[0])
     parser.add_argument("--mem-dir", type=Path, default=Path("/tmp/solaris-mem-slots"))
     args = parser.parse_args(argv)
-    scene_dir = Path(os.environ.get("SOLARIS_SCENE_SLOT_DIR") or "/tmp")
-    fleet = Path(os.environ.get("SOLARIS_FLEET_DIR") or w.WORK / "fleet")
+    scene_dir = Path(os.environ.get("KRASNOKAMEN_SCENE_SLOT_DIR") or "/tmp")
+    fleet = Path(os.environ.get("KRASNOKAMEN_FLEET_DIR") or w.WORK / "fleet")
     lines = [f"fleet-status {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now()))}"]
     lines += claim_lines(fleet)
     lines += slot_lines("BUILD TOKENS", args.mem_dir / "tokens", "token-*.lock", args.mem_dir / "tokens" / "wait")

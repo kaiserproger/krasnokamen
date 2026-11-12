@@ -399,10 +399,10 @@ mod tests {
 
     #[test]
     fn join_campfire_property_set_admits_chicken_and_round_trips() {
-        let items = mc_data::items::solaris_required_items();
-        let facts = mc_data::item_components::solaris_required_item_facts();
-        let tags = mc_data::tags::solaris_required_item_tags(&items);
-        let recipes = mc_data::recipes::solaris_required_recipes();
+        let items = mc_data::items::krasnokamen_required_items();
+        let facts = mc_data::item_components::krasnokamen_required_item_facts();
+        let tags = mc_data::tags::krasnokamen_required_item_tags(&items);
+        let recipes = mc_data::recipes::krasnokamen_required_recipes();
         let update = initial_recipe_update(&recipes, &items, &facts, &tags);
         let inputs = update
             .item_sets
@@ -422,10 +422,10 @@ mod tests {
 
     #[test]
     fn join_smithing_property_sets_admit_recipe_inputs_by_slot() {
-        let items = mc_data::items::solaris_required_items();
-        let facts = mc_data::item_components::solaris_required_item_facts();
-        let tags = mc_data::tags::solaris_required_item_tags(&items);
-        let recipes = mc_data::recipes::solaris_required_recipes();
+        let items = mc_data::items::krasnokamen_required_items();
+        let facts = mc_data::item_components::krasnokamen_required_item_facts();
+        let tags = mc_data::tags::krasnokamen_required_item_tags(&items);
+        let recipes = mc_data::recipes::krasnokamen_required_recipes();
         let update = initial_recipe_update(&recipes, &items, &facts, &tags);
         let item = |name| items.id_of(&Identifier::parse(name).unwrap()).unwrap() as i32;
         for (key, accepted, rejected) in [
@@ -470,12 +470,12 @@ mod tests {
     #[test]
     fn campfire_property_set_expands_tags_and_deduplicates_alternatives() {
         use mc_data::recipes::{IngredientAlternative, RecipeKind};
-        let items = mc_data::items::solaris_required_items();
-        let mut tags = mc_data::tags::solaris_required_item_tags(&items);
-        let recipes = mc_data::recipes::solaris_required_recipes();
+        let items = mc_data::items::krasnokamen_required_items();
+        let mut tags = mc_data::tags::krasnokamen_required_item_tags(&items);
+        let recipes = mc_data::recipes::krasnokamen_required_recipes();
         let chicken = Identifier::parse("minecraft:chicken").unwrap();
         let cod = Identifier::parse("minecraft:cod").unwrap();
-        let tag = Identifier::parse("solaris:test_campfire_food").unwrap();
+        let tag = Identifier::parse("krasnokamen:test_campfire_food").unwrap();
         let chicken_id = items.id_of(&chicken).unwrap() as i32;
         let cod_id = items.id_of(&cod).unwrap() as i32;
         tags.registries

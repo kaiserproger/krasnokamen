@@ -2,29 +2,29 @@
 
 Build a server-only Rust component that logs when enabled, greets joining players
 and answers `/hello`. Allow extra time for the first Rust dependency download and
-server content installation. Use a Solaris checkout matching the server: SDK and
+server content installation. Use a Krasnokamen checkout matching the server: SDK and
 WIT are generated together and 0.8.0 components must match that server's WIT.
 
 ## Prerequisites
 
-Install Rust and Cargo with rustup, Git, and a built `solaris-v2` server with its
+Install Rust and Cargo with rustup, Git, and a built `krasnokamen` server with its
 vanilla content cache ([server setup](../OPERATING.md)). No `cargo-component` or
 `wasm-tools` is needed: the repository's `plugin_component` example encodes the
 component. The first encoder build compiles host dependencies; it is not the
-server. Commands below use a POSIX shell. Set `SOLARIS` to the **absolute path**
+server. Commands below use a POSIX shell. Set `KRASNOKAMEN` to the **absolute path**
 of your matching checkout and `SERVER` to your built server binary; keep both
 available throughout. Use an isolated test server and world, not production.
 
 ```sh
-export SOLARIS="$(pwd)"
-export SERVER="$SOLARIS/target/release/solaris-v2"
+export KRASNOKAMEN="$(pwd)"
+export SERVER="$KRASNOKAMEN/target/release/krasnokamen"
 rustup target add wasm32-unknown-unknown
 export TUTORIAL="$(mktemp -d /tmp/solaris-plugin-tutorial.XXXXXX)"
 cd "$TUTORIAL"
 cargo new --lib hello
 ```
 
-Run the first two exports from the Solaris checkout; if your server is elsewhere,
+Run the first two exports from the Krasnokamen checkout; if your server is elsewhere,
 set `SERVER` to its absolute path instead. `TUTORIAL` is a fresh directory each
 run, so the guide can be repeated. Keep this shell open: later steps use these
 variables. Replace `hello/Cargo.toml` with:
@@ -40,7 +40,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-solaris-plugin-sdk = { path = "$SOLARIS/sdk/rust/solaris-plugin-sdk" }
+krasnokamen-plugin-sdk = { path = "$KRASNOKAMEN/sdk/rust/krasnokamen-plugin-sdk" }
 wit-bindgen = "0.62"
 EOF
 ```
@@ -49,7 +49,7 @@ Write `hello/src/lib.rs`:
 
 ```sh
 cat > hello/src/lib.rs <<'EOF'
-use solaris_plugin_sdk::{
+use krasnokamen_plugin_sdk::{
     export_plugin, log, message_session, Command, Config, Event, EventContext,
     Failure, InitContext, LogLevel, Plugin,
 };
@@ -107,7 +107,7 @@ unencoded module):
 
 ```sh
 cargo build --manifest-path hello/Cargo.toml --target wasm32-unknown-unknown --release
-cargo run --manifest-path "$SOLARIS/crates/mc-plugin-host/Cargo.toml" --example plugin_component -- \
+cargo run --manifest-path "$KRASNOKAMEN/crates/mc-plugin-host/Cargo.toml" --example plugin_component -- \
   "$PWD/hello/target/wasm32-unknown-unknown/release/hello.wasm" "$PWD/plugins/hello/plugin.wasm"
 ```
 
@@ -129,7 +129,7 @@ online_mode = false
 directory = "$TUTORIAL/plugins"
 [data]
 world_dir = "$TUTORIAL/world"
-vanilla_data_dir = "$SOLARIS/data/vanilla"
+vanilla_data_dir = "$KRASNOKAMEN/data/vanilla"
 EOF
 ```
 

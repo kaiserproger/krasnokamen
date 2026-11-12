@@ -30,9 +30,9 @@
 
 use mc_script::{ScriptEventKind, ScriptPlayerId};
 
-use crate::bindings::exports::solaris::plugin::events::Event;
-use crate::bindings::solaris::plugin::types::Position;
-use crate::bindings::solaris::plugin::world_events::{
+use crate::bindings::exports::krasnokamen::plugin::events::Event;
+use crate::bindings::krasnokamen::plugin::types::Position;
+use crate::bindings::krasnokamen::plugin::world_events::{
     BlockPosition, PlayerBlockBroken, PlayerBlockPlaced, PlayerDied, PlayerEntityInteracted,
     PlayerEntityKilled, PlayerGraveCreated, PlayerItemCrafted, PlayerItemPickedUp,
 };

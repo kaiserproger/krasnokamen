@@ -211,7 +211,7 @@ def hover_target(labels: dict[str, str], short: int) -> str | None:
 
 def farmer_id() -> int:
     """26.1.2 protocol id of minecraft:farmer from the local vanilla reports."""
-    root = Path(os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR", "data/vanilla"))
+    root = Path(os.environ.get("KRASNOKAMEN_SERVER_VANILLA_DATA_DIR", "data/vanilla"))
     if not root.is_absolute():
         root = runtime.REPO_ROOT / root
     registries = json.loads((root / "reports" / "registries.json").read_text())

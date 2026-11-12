@@ -12,7 +12,7 @@ struct Case {
     input: PathBuf,
     output: PathBuf,
     from: i32,
-    solaris_output: PathBuf,
+    krasnokamen_output: PathBuf,
     /// Only Zombie502's approved random-profession branch has six exact
     /// vanilla post502 control outputs; no fields are masked for comparison.
     #[serde(default)]
@@ -48,10 +48,10 @@ fn canonical(tag: &mut Tag) {
 }
 
 #[test]
-#[ignore = "requires local official-jar DFU manifest in SOLARIS_LEGACY_ORACLE_MANIFEST"]
+#[ignore = "requires local official-jar DFU manifest in KRASNOKAMEN_LEGACY_ORACLE_MANIFEST"]
 fn legacy_player_map_local_dfu_oracle() {
     let manifest =
-        PathBuf::from(std::env::var_os("SOLARIS_LEGACY_ORACLE_MANIFEST").expect("oracle manifest"));
+        PathBuf::from(std::env::var_os("KRASNOKAMEN_LEGACY_ORACLE_MANIFEST").expect("oracle manifest"));
     let cases: Vec<Case> = serde_json::from_slice(&fs::read(&manifest).unwrap()).unwrap();
     assert!(!cases.is_empty(), "empty oracle manifest");
     let mut results = Vec::new();
@@ -81,7 +81,7 @@ fn legacy_player_map_local_dfu_oracle() {
                 );
                 let mut bytes = Vec::new();
                 mc_nbt::write_named(&mut bytes, "", &actual).unwrap();
-                fs::write(&case.solaris_output, bytes).unwrap();
+                fs::write(&case.krasnokamen_output, bytes).unwrap();
                 let mut expected = read(&case.output);
                 // DFU update does not own the storage layer's source-version stamp.
                 nbt::remove(&mut actual, "DataVersion");
@@ -103,18 +103,18 @@ fn legacy_player_map_local_dfu_oracle() {
                             "fix":"EntityZombieVillagerTypeFix",
                             "vanilla":case.output,
                             "matched_vanilla_control":path,
-                            "solaris":case.solaris_output
+                            "krasnokamen":case.krasnokamen_output
                         })
                     } else {
                         failures += 1;
-                        serde_json::json!({"status":"different","vanilla":case.output,"solaris":case.solaris_output})
+                        serde_json::json!({"status":"different","vanilla":case.output,"krasnokamen":case.krasnokamen_output})
                     }
                 }
             }
         };
         results.push(serde_json::json!({"kind":case.kind,"from":case.from,"input":case.input,"result":status}));
     }
-    let receipt = manifest.with_extension("solaris-result.json");
+    let receipt = manifest.with_extension("krasnokamen-result.json");
     fs::write(
         &receipt,
         serde_json::to_vec_pretty(

@@ -641,11 +641,11 @@ pub(crate) fn dragon_type(id: u32) -> bool {
 pub(crate) fn prepare(state: &mut TickState) {
     if state.dimension == crate::dimensions::Dimension::End && !state.players.is_empty() {
         state.tickets.insert(
-            "solaris:end_fight".into(),
+            "krasnokamen:end_fight".into(),
             (crate::boundary::ChunkPos { x: 0, z: 0 }, 8),
         );
     } else {
-        state.tickets.remove("solaris:end_fight");
+        state.tickets.remove("krasnokamen:end_fight");
     }
 }
 
@@ -887,7 +887,7 @@ pub(crate) fn restore(state: &mut TickState) -> Result<(), crate::config::CoreEr
         }
     }
     sync_crystals(state);
-    // Identify native spike crystals without a Solaris membership extension.
+    // Identify native spike crystals without a Krasnokamen membership extension.
     for index in 0..10 {
         let expected = pillars::position(state, index);
         for crystal in &mut state.end_fight.crystals {

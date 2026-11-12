@@ -1,7 +1,7 @@
 """Vanilla 26.1.2 command probes. No command acknowledgement is a state oracle.
 
 Reference: https://minecraft.wiki/w/Commands and the versioned command facts
-in scenarios/domains/evidence/DomCommands. Solaris extensions are labelled
+in scenarios/domains/evidence/DomCommands. Krasnokamen extensions are labelled
 explicitly; they must never be counted as vanilla parity.
 """
 from __future__ import annotations

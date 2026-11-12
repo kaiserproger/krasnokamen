@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Drive a Solaris real-client bridge and write fail-closed observations."""
+"""Drive a Krasnokamen real-client bridge and write fail-closed observations."""
 
 from __future__ import annotations
 
@@ -715,7 +715,7 @@ def write_observations(
     if scenario_report is not None:
         scenario["agent_report"] = scenario_report
     observations: dict[str, Any] = {
-        "schema": "solaris.real_client_observations.v1",
+        "schema": "krasnokamen.real_client_observations.v1",
         "client_gate": "agent-run-real-client",
         "quality_label": quality_label,
         "result": result,
@@ -777,7 +777,7 @@ def append_to_existing_observations(path: Path, next_observations: dict[str, Any
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Drive a loopback real-client bridge and write Solaris observations."
+        description="Drive a loopback real-client bridge and write Krasnokamen observations."
     )
     parser.add_argument("--bridge-url", required=True)
     parser.add_argument("--secret", required=True)
@@ -786,7 +786,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--replay-manifest",
         type=Path,
-        help="Checked solaris.core_replay.scenario.v1 manifest for the real-client lane.",
+        help="Checked krasnokamen.core_replay.scenario.v1 manifest for the real-client lane.",
     )
     parser.add_argument("--server-addr", required=True)
     parser.add_argument("--timeout-seconds", type=float, default=30.0)

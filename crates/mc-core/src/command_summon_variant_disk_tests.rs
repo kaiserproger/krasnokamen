@@ -23,7 +23,7 @@ fn variant_disk_checkpoint_and_wal_round_trip() {
         } else {
             EntityDataValue::ZombieNautilusVariant(variant_id)
         };
-        let root = std::env::temp_dir().join(format!("solaris-variant-{}", uuid::Uuid::new_v4()));
+        let root = std::env::temp_dir().join(format!("krasnokamen-variant-{}", uuid::Uuid::new_v4()));
         let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
         let native = crate::native_checkpoint::encode_entities(
             crate::dimensions::Dimension::Overworld,

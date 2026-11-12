@@ -248,21 +248,21 @@ fn within(record: &SettlementRecord, bounds: ScriptWorldBounds) -> bool {
         })
     })
 }
-/// Solaris job stations: builder huts, mines and lumber camps are staffed at crafting
+/// Krasnokamen job stations: builder huts, mines and lumber camps are staffed at crafting
 /// tables or barrels. Resolved by building kind, so vanilla fishermen keep their barrels.
-fn solaris_station(kind: BuildingKind, name: &str) -> bool {
+fn krasnokamen_station(kind: BuildingKind, name: &str) -> bool {
     matches!(
         kind,
         BuildingKind::Workshop(Profession::Builder) | BuildingKind::Mine | BuildingKind::LumberCamp
     ) && matches!(name, "crafting_table" | "barrel")
 }
 /// Whether `block` is a work station for a building of `kind`: the vanilla profession POI
-/// block, or a crafting table for the Solaris kinds above.
+/// block, or a crafting table for the Krasnokamen kinds above.
 pub(crate) fn workstation_matches(registry: &CoreRegistry, kind: BuildingKind, block: u32) -> bool {
     registry
         .blocks
         .by_id(mc_world::BlockStateId(block))
-        .is_some_and(|def| solaris_station(kind, def.block.id.path()))
+        .is_some_and(|def| krasnokamen_station(kind, def.block.id.path()))
         || matches!(
             super::allocator::poi_kind(registry, block),
             Some(super::allocator::PoiKind::Job(p)) if expected_station(kind, p)

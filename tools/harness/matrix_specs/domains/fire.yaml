@@ -1,4 +1,4 @@
-schema: solaris-domain-adapter-index/1
+schema: krasnokamen-domain-adapter-index/1
 domain: fire
 subjects_specified: 5
 vanilla_provenance: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/version.json
@@ -14,7 +14,7 @@ sync:
 subjects:
   - subject: fire.fire_spread
     matrix_ids:
-      - pw:fire.fire_spread/neoforge_solaris_loader/survival/the_nether/hard/N8/malformed_or_stale_packet/hot_backup_during_action/non_op_0
+      - pw:fire.fire_spread/neoforge_krasnokamen_loader/survival/the_nether/hard/N8/malformed_or_stale_packet/hot_backup_during_action/non_op_0
       - pw:fire.fire_spread/fabric_distant_horizons/survival/the_end/hard/2/slow_reader_backpressure/save_all_checkpoint/non_op_0
       - tr.restart_x_inflight.clean_restart_mid_action:fire.fire_spread/vanilla_java_26_1_2/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
       - tr.restart_x_inflight.crash_kill9_wal_replay:fire.fire_spread/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
@@ -26,7 +26,7 @@ subjects:
       restriction; flammable wood burns.
     vanilla_source:
       - https://minecraft.wiki/w/Fire
-    solaris_sources: &id001
+    krasnokamen_sources: &id001
       - core:fire.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/fire.py
@@ -68,7 +68,7 @@ subjects:
     expected: never burns out
     vanilla_source:
       - https://minecraft.wiki/w/Fire
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/fire.py
       function: eternal_fire
@@ -98,14 +98,14 @@ subjects:
     implemented_modes: see cited adapter branch
   - subject: fire.lava_ignites
     matrix_ids:
-      - pw:fire.lava_ignites/forge_solaris_loader/spectator/the_end/normal/2/duplicate_login/clean_restart_mid_action/op_1
+      - pw:fire.lava_ignites/forge_krasnokamen_loader/spectator/the_end/normal/2/duplicate_login/clean_restart_mid_action/op_1
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: nearby flammables ignite
     vanilla_source:
       - https://minecraft.wiki/w/Lava
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/fire.py
       function: lava_ignites
@@ -141,7 +141,7 @@ subjects:
     expected: on_fire ticks; extinguished by water/rain
     vanilla_source:
       - https://minecraft.wiki/w/Fire
-    solaris_sources:
+    krasnokamen_sources:
       - core:contact_hazards.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/fire.py
@@ -185,14 +185,14 @@ subjects:
   - subject: fire.candles_campfire_light
     matrix_ids:
       - pw:fire.candles_campfire_light/vanilla_java_26_1_2/adventure/overworld/normal/1/reconnect_mid_action/save_all_checkpoint/op_4
-      - pw:fire.candles_campfire_light/fabric_solaris_loader/adventure/the_nether/easy/N8/slow_reader_backpressure/pause_when_empty_resume/op_1
+      - pw:fire.candles_campfire_light/fabric_krasnokamen_loader/adventure/the_nether/easy/N8/slow_reader_backpressure/pause_when_empty_resume/op_1
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: lit state; light level
     vanilla_source:
       - https://minecraft.wiki/w/Candle
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/fire.py
       function: candles_campfire_light

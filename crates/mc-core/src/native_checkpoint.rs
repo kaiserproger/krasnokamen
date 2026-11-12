@@ -177,7 +177,7 @@ pub fn native_identity(config: &CoreConfig) -> [u8; 32] {
 pub fn native_identity_at(config: &CoreConfig, revision: u32) -> [u8; 32] {
     // Fixed 16-byte format tag, followed by seed and generator revision (BE).
     let mut identity = [0; 32];
-    const TAG: [u8; 16] = *b"SolarisV2Native\0";
+    const TAG: [u8; 16] = *b"KrasnoV2Native\0\0";
     identity[..16].copy_from_slice(&TAG);
     identity[16..24].copy_from_slice(&config.seed.to_be_bytes());
     identity[24..].copy_from_slice(&u64::from(revision).to_be_bytes());
@@ -377,7 +377,7 @@ pub fn validate_manifest(manifest: &CheckpointManifest) -> Result<(), CoreError>
             owner.is_empty()
                 || *tick > manifest.tick
                 || *radius < 0
-                || owner.starts_with("solaris:portal:")
+                || owner.starts_with("krasnokamen:portal:")
         }) {
             return Err(CoreError::Storage(
                 "native checkpoint: invalid durable ticket postimage".into(),
@@ -465,7 +465,7 @@ pub fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, CoreError>
 
 pub fn import_required(config: &CoreConfig) -> CoreError {
     CoreError::Storage(format!(
-        "{} has persisted history but no native checkpoint; use solaris-v2 world import-anvil --source ANVIL --destination NATIVE --receipt JSON",
+        "{} has persisted history but no native checkpoint; use krasnokamen world import-anvil --source ANVIL --destination NATIVE --receipt JSON",
         config.world_dir.display()
     ))
 }
@@ -499,7 +499,7 @@ pub fn open_refusal(
         }
         return CoreError::Storage(format!(
             "{error}: world was generated with worldgen revision {stored}, this build is \
-             revision {current}; to keep it, stop the server and run `solaris-v2 world \
+             revision {current}; to keep it, stop the server and run `krasnokamen world \
              upgrade-worldgen --config <server.toml>` (existing chunks stay as generated, only \
              not-yet-generated chunks use revision {current}), or use a fresh world_dir"
         ));
@@ -526,15 +526,15 @@ pub fn stored_state_readable(
 }
 
 /// Operator guidance for a world whose stored globals this build does not read: written
-/// by an older Solaris storage format, so the supported route is an Anvil round trip.
+/// by an older Krasnokamen storage format, so the supported route is an Anvil round trip.
 pub fn older_format_refusal(config: &CoreConfig) -> CoreError {
     let world = config.world_dir.display();
     CoreError::Storage(format!(
-        "world {world} was written by an older Solaris storage format that this build cannot \
+        "world {world} was written by an older Krasnokamen storage format that this build cannot \
          read (its native checkpoint lacks a domain this build requires); to keep it, with the \
-         Solaris binary that created it run `solaris world export-anvil --config <server.toml> \
+         Krasnokamen binary that created it run `krasnokamen world export-anvil --config <server.toml> \
          --source {world} --destination <ANVIL_DIR> --receipt export.json`, then with this \
-         binary run `solaris-v2 world import-anvil --config <server.toml> --source <ANVIL_DIR> \
+         binary run `krasnokamen world import-anvil --config <server.toml> --source <ANVIL_DIR> \
          --destination <NEW_WORLD_DIR> --receipt import.json`"
     ))
 }
@@ -593,7 +593,7 @@ pub fn hydrate_visited_entity(
             .and_then(|name| registry.entity_types.id_of(&name))
             .map(i64::from)
             .unwrap_or(-1);
-        let wire_id = match field("solaris:WireId") {
+        let wire_id = match field("krasnokamen:WireId") {
             Some(Tag::Int(id)) => id.to_string(),
             value => format!("{value:?}"),
         };

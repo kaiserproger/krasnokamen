@@ -1,6 +1,6 @@
 //! Settlement management dialogs (26.1.2 server-driven UI): `/settlement`,
 //! `/settlement menu [page]`, and every button click routed here as
-//! `solaris:settlement/<action>` by [`crate::dialog::route_click`].
+//! `krasnokamen:settlement/<action>` by [`crate::dialog::route_click`].
 //!
 //! Authority stays in the tick: a dialog is a view built from live state, and a
 //! click is an untrusted request. Every click re-resolves the settlement from the
@@ -154,7 +154,7 @@ pub(crate) fn open_for_settlement(
     dispatch(state, connection, &ctx, "main", ClickPayload(None));
 }
 
-/// One `solaris:settlement/<action>` click.
+/// One `krasnokamen:settlement/<action>` click.
 pub(crate) fn click(
     state: &mut TickState,
     connection: ConnectionId,
@@ -418,7 +418,7 @@ fn present(state: &mut TickState, connection: ConnectionId, dialog: Dialog) {
 }
 
 fn button(label: impl Into<String>, action: &str, id: SettlementId) -> Button {
-    Button::custom(label.into(), &format!("solaris:{OWNER}/{action}"))
+    Button::custom(label.into(), &format!("krasnokamen:{OWNER}/{action}"))
         .with("s", Tag::String(id.0.to_string()))
 }
 
@@ -1551,7 +1551,7 @@ fn order_create(
     let building = ScriptSettlementBuildingRef::new(
         "building".to_owned(),
         building.0.to_string(),
-        format!("solaris:{}", found.kind.name()),
+        format!("krasnokamen:{}", found.kind.name()),
     );
     // Checked "craft missing ingredients": plan and admit the whole chain.
     if payload.bool("auto") == Some(true) {

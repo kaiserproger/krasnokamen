@@ -580,7 +580,7 @@ fn native_nbt_keeps_size_attributes_equipment_credit_and_death_marker() {
     assert_eq!(native.saddle, expected.saddle);
     let fields: Vec<_> = fields
         .into_iter()
-        .filter(|(key, _)| key != "solaris:entity_loot")
+        .filter(|(key, _)| key != "krasnokamen:entity_loot")
         .collect();
     let vanilla = from_fields(&fields).unwrap();
     assert_eq!(vanilla.slime_size, Some(4));
@@ -1093,7 +1093,7 @@ fn slime_sizes_scale_health_attack_hitboxes_and_spawn_only_vanilla_sizes() {
     }
 }
 
-/// A cube saved by a 26.1.2 Solaris carries size as a VarInt at index 16;
+/// A cube saved by a 26.1.2 Krasnokamen carries size as a VarInt at index 16;
 /// restoring it on 26.3 must leave only the index-18 size.
 #[test]
 fn restored_cube_drops_its_26_1_2_size_index() {

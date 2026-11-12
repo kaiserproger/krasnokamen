@@ -751,13 +751,13 @@ pub(crate) fn plan_viewer(
     static BIOMES: LazyLock<mc_data::Registry> =
         LazyLock::new(|| crate::chunks::test_biome_registry(&["minecraft:plains"]));
     static BLOCKS: LazyLock<mc_world::BlockRegistry> = LazyLock::new(|| {
-        mc_world::BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+        mc_world::BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
             .expect("required blocks report builds")
     });
     static ITEMS: LazyLock<mc_data::items::ItemRegistry> =
-        LazyLock::new(mc_data::items::solaris_required_items);
+        LazyLock::new(mc_data::items::krasnokamen_required_items);
     static TYPES: LazyLock<mc_data::block_entity_types::BlockEntityTypeRegistry> =
-        LazyLock::new(mc_data::block_entity_types::solaris_required_block_entity_types);
+        LazyLock::new(mc_data::block_entity_types::krasnokamen_required_block_entity_types);
     let registries = PlanRegistries {
         biomes: &BIOMES,
         blocks: &BLOCKS,
@@ -2223,7 +2223,7 @@ fn baby_metadata_index(type_id: u32) -> Option<u8> {
 fn player_entity_type_id() -> u32 {
     use std::sync::LazyLock;
     static ID: LazyLock<u32> = LazyLock::new(|| {
-        mc_data::entity_types::solaris_required_entity_types()
+        mc_data::entity_types::krasnokamen_required_entity_types()
             .id_of(&mc_data::Identifier::parse("minecraft:player").expect("static id parses"))
             .expect("player entity type present")
     });

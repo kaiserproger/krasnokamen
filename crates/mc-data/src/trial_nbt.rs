@@ -134,26 +134,26 @@ impl SpawnerData {
             validate_spawn(spawn)?;
         }
         validate_loot_string(&fields, "ejecting_loot_table")?;
-        if let Some(pending) = compound(&fields, "solaris:ominous_item")? {
+        if let Some(pending) = compound(&fields, "krasnokamen:ominous_item")? {
             if uuids(pending, "uuid")?.len() != 1 {
-                return Err("solaris:ominous_item.uuid: expected exactly one UUID".into());
+                return Err("krasnokamen:ominous_item.uuid: expected exactly one UUID".into());
             }
             if field(pending, "eject_at").is_none() {
-                return Err("solaris:ominous_item.eject_at: missing Long".into());
+                return Err("krasnokamen:ominous_item.eject_at: missing Long".into());
             }
             long(pending, "eject_at", 0)?;
             let item =
-                compound(pending, "item")?.ok_or("solaris:ominous_item.item: missing Compound")?;
-            let items = crate::items::solaris_required_items();
+                compound(pending, "item")?.ok_or("krasnokamen:ominous_item.item: missing Compound")?;
+            let items = crate::items::krasnokamen_required_items();
             if crate::item_nbt::stack_from_fields(&items, item)
                 .map_err(|e| e.to_string())?
                 .is_none()
             {
-                return Err("solaris:ominous_item.item: empty item".into());
+                return Err("krasnokamen:ominous_item.item: empty item".into());
             }
             if !matches!(field(pending, "position"), Some(Tag::List(list)) if list.elements.len() == 3 && list.elements.iter().all(|v| matches!(v, Tag::Double(n) if n.is_finite())))
             {
-                return Err("solaris:ominous_item.position: expected finite Double[3]".into());
+                return Err("krasnokamen:ominous_item.position: expected finite Double[3]".into());
             }
         }
         for name in ["normal_config", "ominous_config"] {
@@ -394,7 +394,7 @@ fn validate_spawn(fields: &Fields) -> Result<(), String> {
         return Err("spawn_data.entity.id: missing String".into());
     };
     let id = crate::Identifier::parse(name).map_err(|e| format!("spawn_data.entity.id: {e}"))?;
-    if crate::entity_types::solaris_required_entity_types()
+    if crate::entity_types::krasnokamen_required_entity_types()
         .id_of(&id)
         .is_none()
     {
@@ -427,7 +427,7 @@ pub fn validate(fields: &[(String, Tag)], items: Option<&ItemRegistry>) -> Resul
             let items = match items {
                 Some(items) => items,
                 None => {
-                    embedded = crate::items::solaris_required_items();
+                    embedded = crate::items::krasnokamen_required_items();
                     &embedded
                 }
             };

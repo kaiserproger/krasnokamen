@@ -2,7 +2,7 @@ use super::VillagerProfession;
 
 #[test]
 fn builder_profession_has_native_identity_and_mason_appearance() {
-    let builder = VillagerProfession::from_name("solaris:builder")
+    let builder = VillagerProfession::from_name("krasnokamen:builder")
         .expect("settlement builders have a native persisted profession");
     assert_eq!(builder.name(), "builder");
     assert_eq!(
@@ -157,7 +157,7 @@ fn production_inputs_survive_farmer_work_and_deposit_until_completion_or_cancel(
                 "start".into(),
                 name.into(),
                 worker.to_string(),
-                "solaris-settlements:bread".into(),
+                "krasnokamen-settlements:bread".into(),
                 "1".into(),
                 building.to_string(),
                 "2,201,3".into(),

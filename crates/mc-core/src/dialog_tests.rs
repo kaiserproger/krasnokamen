@@ -68,7 +68,7 @@ fn click(id: &str, payload: Option<Tag>) -> PlayerInput {
 fn multi_action_with_every_input_kind_matches_the_vanilla_codec_shape() {
     let tag = Dialog::multi_action(
         "Found settlement",
-        vec![Button::custom("Found", "solaris:settlement/found").with("v", Tag::Int(2))],
+        vec![Button::custom("Found", "krasnokamen:settlement/found").with("v", Tag::Int(2))],
     )
     .text("Pick a name")
     .input(
@@ -114,7 +114,7 @@ fn multi_action_with_every_input_kind_matches_the_vanilla_codec_shape() {
     );
     assert_eq!(
         field(custom, "id"),
-        &Tag::String("solaris:settlement/found".into())
+        &Tag::String("krasnokamen:settlement/found".into())
     );
     assert_eq!(field(field(custom, "additions"), "v"), &Tag::Int(2));
     assert!(matches!(field(&tag, "exit_action"), Tag::Compound(_)));
@@ -164,7 +164,7 @@ fn notice_and_confirmation_use_their_vanilla_field_names() {
 
     let confirm = Dialog::confirmation(
         "Sure?",
-        Button::custom("Yes", "solaris:x/yes"),
+        Button::custom("Yes", "krasnokamen:x/yes"),
         Button::plain("No"),
     )
     .into_tag()
@@ -179,7 +179,7 @@ fn notice_and_confirmation_use_their_vanilla_field_names() {
 
 #[test]
 fn malformed_dialogs_are_rejected_before_reaching_a_client() {
-    let ok = || Button::custom("B", "solaris:x/y");
+    let ok = || Button::custom("B", "krasnokamen:x/y");
     let multi = || Dialog::multi_action("T", vec![ok()]);
     assert!(multi().into_tag().is_ok());
     assert!(Dialog::multi_action("T", vec![]).into_tag().is_err());
@@ -221,7 +221,7 @@ fn malformed_dialogs_are_rejected_before_reaching_a_client() {
             .is_err()
     );
     assert!(
-        Dialog::multi_action("T", vec![Button::custom("B", "solaris:x/y").width(0)])
+        Dialog::multi_action("T", vec![Button::custom("B", "krasnokamen:x/y").width(0)])
             .into_tag()
             .is_err()
     );
@@ -274,8 +274,8 @@ fn click_reaches_its_owner_with_typed_payload_and_unknown_ids_are_ignored() {
     let (_, outbox, _) = run_tick(
         &mut state,
         &[
-            click("solaris:dialog_probe/submit", Some(payload)),
-            click("solaris:nobody/home", None),
+            click("krasnokamen:dialog_probe/submit", Some(payload)),
+            click("krasnokamen:nobody/home", None),
             click("minecraft:other", None),
         ],
     );
@@ -320,7 +320,7 @@ fn locked_sessions_cannot_click_dialogs() {
     let (_, outbox, _) = run_tick(
         &mut state,
         &[click(
-            "solaris:dialog_probe/submit",
+            "krasnokamen:dialog_probe/submit",
             Some(Tag::Compound(vec![])),
         )],
     );

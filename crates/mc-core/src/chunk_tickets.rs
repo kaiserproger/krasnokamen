@@ -202,7 +202,7 @@ pub(crate) fn journal(state: &mut TickState, tick: u64, entries: &mut Vec<Journa
     }
     for (owner, &(centre, radius)) in &state.tickets {
         // Portal transfer tickets are transient and rebuilt by their owners.
-        if owner.starts_with("solaris:portal:")
+        if owner.starts_with("krasnokamen:portal:")
             || state.chunk_tickets.journaled.get(owner) == Some(&(centre, radius))
         {
             continue;

@@ -762,7 +762,7 @@ mod tests {
             expected_revision: 1,
             branch: branch.into(),
             level,
-            buildings: vec![district_ref("solaris:warehouse")],
+            buildings: vec![district_ref("krasnokamen:warehouse")],
         }
     }
 
@@ -785,8 +785,8 @@ mod tests {
             branch: "estate".into(),
             level: 1,
             buildings: vec![
-                district_ref("solaris:warehouse"),
-                district_ref("solaris:warehouse"),
+                district_ref("krasnokamen:warehouse"),
+                district_ref("krasnokamen:warehouse"),
             ],
         };
         assert!(duplicate.validate().is_err());
@@ -806,7 +806,7 @@ mod tests {
         let mut observation = ScriptSettlementDistrictSnapshot::new(
             "estate".into(),
             1,
-            vec![district_ref("solaris:warehouse")],
+            vec![district_ref("krasnokamen:warehouse")],
         );
         observation.stage = Some("hamlet".into());
         observation.branch = "estate".into();
@@ -814,7 +814,7 @@ mod tests {
         observation.population = 30;
         observation.housed = 24;
         observation.food = 40;
-        observation.working = vec!["solaris:warehouse".into()];
+        observation.working = vec!["krasnokamen:warehouse".into()];
         observation.observed_tick = 7;
         observation.world_revision = 9;
         observation.validate().unwrap();
@@ -824,7 +824,7 @@ mod tests {
         observation.housed = 31;
         assert!(observation.validate().is_err());
         observation.housed = 24;
-        observation.working = vec!["solaris:warehouse".into(), "solaris:warehouse".into()];
+        observation.working = vec!["krasnokamen:warehouse".into(), "krasnokamen:warehouse".into()];
         assert!(observation.validate().is_err());
         let mut snapshot = ScriptSettlementSnapshot::new(
             1,
@@ -840,7 +840,7 @@ mod tests {
         snapshot.district = Some(observation);
         assert!(snapshot.validate().is_err());
         if let Some(district) = snapshot.district.as_mut() {
-            district.working = vec!["solaris:warehouse".into()];
+            district.working = vec!["krasnokamen:warehouse".into()];
         }
         snapshot.validate().unwrap();
         snapshot.economy = Some(crate::ScriptSettlementEconomySnapshot::new());

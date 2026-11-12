@@ -7,7 +7,7 @@
 // guest reads them and answers with commands; it never observes a live world.
 //
 // The field set is the one the plugins that use these observations actually read
-// (`solaris-audit`, `solaris-essentials`), not a copy of every field the server's
+// (`krasnokamen-audit`, `krasnokamen-essentials`), not a copy of every field the server's
 // own DTO carries. Two native fields are deliberately absent:
 //
 // - the entity's runtime id: it is an unversioned simulation identifier that the

@@ -1,7 +1,7 @@
 """Shared ordinary Python operations for the seven block-domain adapters.
 
 No scenario interpreter. Optional observations/verbs fail closed. In particular
-Solaris /data only supports command blocks (command_blocks.rs:245-284), so these
+Krasnokamen /data only supports command blocks (command_blocks.rs:245-284), so these
 adapters never pretend /data entity or arbitrary block NBT is implemented.
 """
 import re

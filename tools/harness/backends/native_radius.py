@@ -58,7 +58,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
                              "client_render_distance": render_distance,
                              "client_render_distance_evidence": "minecraft_observe.client_settings.render_distance"}
     steps.report["wire_client_information"] = {
-        "view_distance": 4, "source": "solaris-client/src/protocol/network.rs:client_information",
+        "view_distance": 4, "source": "krasnokamen-client/src/protocol/network.rs:client_information",
         "note": "fixed wire bytes; server fanout sizes the square from its own view_distance=8",
     }
     cx, cz = ox // 16, oz // 16

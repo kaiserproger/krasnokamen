@@ -53,7 +53,7 @@ fn slot(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>, depth: usize) -> Result<()> 
         "minecraft:item_stack" => items::template(t, To::Legacy, r, w)?,
         "minecraft:tag" => {
             // Native 26.3 TagSlotDisplay uses HolderSet(ITEM); 26.1.2 uses
-            // a bare tag identifier. Solaris emits only named tag sets.
+            // a bare tag identifier. Krasnokamen emits only named tag sets.
             if t.formats.upper >= 777 {
                 ensure!(r.read_varint()? == 0, "direct recipe tag display");
             }
@@ -67,7 +67,7 @@ fn slot(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>, depth: usize) -> Result<()> 
                 slot(t, r, w, depth + 1)?;
             }
         }
-        _ => bail!("slot display {kind} is not emitted by Solaris"),
+        _ => bail!("slot display {kind} is not emitted by Krasnokamen"),
     }
     Ok(())
 }
@@ -97,7 +97,7 @@ fn recipe(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
             w.write_varint(r.read_varint()?);
             w.write_f32(r.read_f32()?);
         }
-        _ => bail!("recipe display {kind} is not emitted by Solaris"),
+        _ => bail!("recipe display {kind} is not emitted by Krasnokamen"),
     }
     Ok(())
 }
@@ -149,7 +149,7 @@ fn commands(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
                     | "minecraft:resource_or_tag_key"
                     | "minecraft:resource"
                     | "minecraft:resource_key" => string(r, w)?,
-                    _ => {} // all other Solaris argument codecs are singletons
+                    _ => {} // all other Krasnokamen argument codecs are singletons
                 }
                 if flags & 16 != 0 {
                     string(r, w)?;

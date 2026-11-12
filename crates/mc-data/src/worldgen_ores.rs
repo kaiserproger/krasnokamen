@@ -1,6 +1,6 @@
 //! Vanilla worldgen ore feature reader.
 //!
-//! This parses the data-pack JSON shape into plain Solaris data. It does
+//! This parses the data-pack JSON shape into plain Krasnokamen data. It does
 //! not imply vanilla terrain parity; `mc-worldgen` still decides how to
 //! translate these specs into its own generator rules.
 

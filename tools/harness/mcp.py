@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Protocol and real-client smoke for the embedded Solaris Minecraft MCP server."""
+"""Protocol and real-client smoke for the embedded Krasnokamen Minecraft MCP server."""
 
 from __future__ import annotations
 
@@ -64,7 +64,7 @@ class McpClient:
                 "params": {
                     "protocolVersion": PROTOCOL_VERSION,
                     "capabilities": {},
-                    "clientInfo": {"name": "solaris-minecraft-mcp-smoke", "version": "0.1.0"},
+                    "clientInfo": {"name": "krasnokamen-minecraft-mcp-smoke", "version": "0.1.0"},
                 },
             },
             include_session=False,
@@ -182,9 +182,9 @@ class McpClient:
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
-    token = os.environ.get("SOLARIS_CLIENT_MCP_TOKEN", "")
+    token = os.environ.get("KRASNOKAMEN_CLIENT_MCP_TOKEN", "")
     if not token:
-        raise RuntimeError("SOLARIS_CLIENT_MCP_TOKEN is required")
+        raise RuntimeError("KRASNOKAMEN_CLIENT_MCP_TOKEN is required")
     client = McpClient(args.endpoint, token, max(15.0, args.timeout_seconds + 5.0))
     initialized = client.initialize()
     connection_started = False
@@ -290,7 +290,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    default_port = os.environ.get("SOLARIS_CLIENT_MCP_PORT", "39095")
+    default_port = os.environ.get("KRASNOKAMEN_CLIENT_MCP_PORT", "39095")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--endpoint",

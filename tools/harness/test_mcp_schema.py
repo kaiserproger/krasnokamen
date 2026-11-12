@@ -17,8 +17,8 @@ class SchemaTests(unittest.TestCase):
 
     def test_release_predating_export_is_recorded_not_validated(self):
         with tempfile.TemporaryDirectory() as tmp:
-            old = Path(tmp) / 'solaris-client'
-            old.write_text('#!/bin/sh\necho "solaris-client: unknown_command: $1" >&2\nexit 1\n')
+            old = Path(tmp) / 'krasnokamen-client'
+            old.write_text('#!/bin/sh\necho "krasnokamen-client: unknown_command: $1" >&2\nexit 1\n')
             old.chmod(0o755)
             self.assertIsNone(mcp_schema.native_schema(old, True))
 
@@ -68,8 +68,8 @@ class SchemaTests(unittest.TestCase):
             self.assertIn('\"ticks\": 240', original)
             (sources / 'autocraft_qa.py').write_text(original.replace('\"ticks\": 240', '\"ticks\": 1200'))
             ctx = profiles.ProfileContext(root, client='native')
-            env = {'SOLARIS_CLIENT_BINARY': str(client), 'SOLARIS_SERVER_BINARY': '/bin/true',
-                   'SOLARIS_CLIENT_DATA_DIR': str(data)}
+            env = {'KRASNOKAMEN_CLIENT_BINARY': str(client), 'KRASNOKAMEN_SERVER_BINARY': '/bin/true',
+                   'KRASNOKAMEN_CLIENT_DATA_DIR': str(data)}
             with mock.patch.dict(os.environ, env), mock.patch.object(preflight, '__file__', str(root / 'preflight.py')):
                 with self.assertRaises(mcp_schema.SchemaError):
                     preflight.check('autocraft-qa', ctx, profiles.PROFILES['autocraft-qa'])

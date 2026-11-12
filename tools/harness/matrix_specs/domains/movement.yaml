@@ -1,4 +1,4 @@
-schema: solaris-world-adapter-index/1
+schema: krasnokamen-world-adapter-index/1
 domain: movement
 note:
   Documentation index only; execution is the shared Python Adapter interface, not a YAML DSL. Registration is
@@ -211,7 +211,7 @@ subjects:
     server_gap_evidence: []
   - id: movement.bubble_column
     matrix_ids:
-      - pw:movement.bubble_column/forge_solaris_loader/creative/the_nether/hard/1/slow_reader_backpressure/save_all_checkpoint/non_op_0
+      - pw:movement.bubble_column/forge_krasnokamen_loader/creative/the_nether/hard/1/slow_reader_backpressure/save_all_checkpoint/non_op_0
     status: adapter_authored_not_matrix_verified
     server_evidence:
       - crates/mc-core/src/fluids.rs
@@ -387,7 +387,7 @@ subjects:
     server_gap_evidence: []
   - id: movement.movement_enchantments
     matrix_ids:
-      - pw:movement.movement_enchantments/neoforge_solaris_loader/creative/overworld/hard/1/normal/steady/op_3
+      - pw:movement.movement_enchantments/neoforge_krasnokamen_loader/creative/overworld/hard/1/normal/steady/op_3
     status: adapter_authored_not_matrix_verified
     server_evidence:
       - crates/mc-core/src/enchantments.rs
@@ -414,7 +414,7 @@ subjects:
     server_gap_evidence: []
   - id: movement.collision_entities
     matrix_ids:
-      - pw:movement.collision_entities/fabric_solaris_loader/adventure/overworld/peaceful/2/duplicate_login/clean_restart_mid_action/op_2
+      - pw:movement.collision_entities/fabric_krasnokamen_loader/adventure/overworld/peaceful/2/duplicate_login/clean_restart_mid_action/op_2
     status: adapter_authored_not_matrix_verified
     server_evidence:
       - crates/mc-core/src/tick_collision_tests.rs

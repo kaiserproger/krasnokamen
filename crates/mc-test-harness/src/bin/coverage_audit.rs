@@ -180,7 +180,7 @@ fn count_reason(row: &LedgerRow) -> (bool, String) {
     if has_disqualifying_evidence(&evidence) || has_disqualifying_evidence(&gaps) {
         return (
             false,
-            "mentions unit-only, negated, Solaris-only, missing, blocked, or manual-pending evidence"
+            "mentions unit-only, negated, Krasnokamen-only, missing, blocked, or manual-pending evidence"
                 .to_owned(),
         );
     }
@@ -234,8 +234,8 @@ fn has_disqualifying_evidence(text: &str) -> bool {
         "unit tests only",
         "wire-probe-only",
         "wire-probe capture",
-        "solaris-only",
-        "solaris harness capture",
+        "krasnokamen-only",
+        "krasnokamen harness capture",
         "manual-pending",
         "not run",
         "missing",

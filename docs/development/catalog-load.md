@@ -26,7 +26,7 @@ explain` lists the scenario catalog. Resource admission and exclusive windows:
 ```sh
 python3 -m tools.harness run catalog-load -- \
   --scenario JOIN-01 \
-  --server-bin /absolute/prebuilt/solaris-v2 \
+  --server-bin /absolute/prebuilt/krasnokamen \
   --bots-bin /absolute/prebuilt/player-scale-bots \
   --clients 10 --smoke --out /absolute/new/catalog-load-smoke
 ```
@@ -99,7 +99,7 @@ catalog case.
 | `MIX-01` … `MIX-21`, `mixed-survival-long` | Separate MIX recipes/validators (tiny for `--smoke`, catalog scale otherwise); a control never silently replaces a compound crisis |
 
 `plugin-heavy` requires `--plugins-dir /absolute/current-WIT/deployment` with
-real `solaris-towns` and `solaris-economy` packages; only those packages are
+real `krasnokamen-towns` and `krasnokamen-economy` packages; only those packages are
 copied intact into the isolated preparation directory. Keep `RUST_LOG=info` (or
 at least `plugin.runtime_ready=info,plugin.command_result=info`): missing state
 readback, host evidence or ordinary tick/resource telemetry fails closed.

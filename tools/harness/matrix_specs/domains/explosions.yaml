@@ -1,4 +1,4 @@
-schema: solaris-domain-adapter-index/1
+schema: krasnokamen-domain-adapter-index/1
 domain: explosions
 subjects_specified: 11
 vanilla_provenance: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/version.json
@@ -25,7 +25,7 @@ subjects:
     expected: 80-tick fuse; chain primes with short random fuse; craters
     vanilla_source:
       - https://minecraft.wiki/w/TNT
-    solaris_sources: &id001
+    krasnokamen_sources: &id001
       - core:explosion.rs
       - core:tnt.rs
     adapter:
@@ -70,7 +70,7 @@ subjects:
     expected: damage + terrain per gamerule; charged drops heads
     vanilla_source:
       - https://minecraft.wiki/w/Creeper
-    solaris_sources:
+    krasnokamen_sources:
       - core:hostile.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/explosions.py
@@ -111,7 +111,7 @@ subjects:
     expected: intentional game design explosion, fire in nether
     vanilla_source:
       - https://minecraft.wiki/w/Respawn_Anchor
-    solaris_sources:
+    krasnokamen_sources:
       - core:dimensions_rules.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/explosions.py
@@ -152,7 +152,7 @@ subjects:
     expected: power-6 explosion
     vanilla_source:
       - https://minecraft.wiki/w/End_Crystal
-    solaris_sources:
+    krasnokamen_sources:
       - core:end_fight.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/explosions.py
@@ -197,7 +197,7 @@ subjects:
     expected: explodes by speed
     vanilla_source:
       - https://minecraft.wiki/w/Minecart_with_TNT
-    solaris_sources:
+    krasnokamen_sources:
       - core:vehicles/mod.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/explosions.py
@@ -237,7 +237,7 @@ subjects:
     expected: explosion power 1 / wither skull damage
     vanilla_source:
       - https://minecraft.wiki/w/Explosion
-    solaris_sources:
+    krasnokamen_sources:
       - core:special_mobs/wither.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/explosions.py
@@ -265,14 +265,14 @@ subjects:
     implemented_modes: see cited adapter branch
   - subject: explosions.blast_resistance
     matrix_ids:
-      - pw:explosions.blast_resistance/neoforge_solaris_loader/spectator/the_nether/normal/N8/normal/pause_when_empty_resume/op_4
+      - pw:explosions.blast_resistance/neoforge_krasnokamen_loader/spectator/the_nether/normal/N8/normal/pause_when_empty_resume/op_4
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: resistant blocks survive; water cancels terrain damage
     vanilla_source:
       - https://minecraft.wiki/w/Explosion
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/explosions.py
       function: blast_resistance
@@ -307,7 +307,7 @@ subjects:
     expected: drops 1/power vs all
     vanilla_source:
       - https://minecraft.wiki/w/Explosion
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/explosions.py
       function: explosion_drop_decay
@@ -345,14 +345,14 @@ subjects:
       - creative
   - subject: explosions.tnt_explodes_rule
     matrix_ids:
-      - pw:explosions.tnt_explodes_rule/forge_solaris_loader/spectator/the_nether/easy/N8/slow_reader_backpressure/crash_kill9_wal_replay/op_2
+      - pw:explosions.tnt_explodes_rule/forge_krasnokamen_loader/spectator/the_nether/easy/N8/slow_reader_backpressure/crash_kill9_wal_replay/op_2
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: TNT does not explode
     vanilla_source:
       - https://minecraft.wiki/w/TNT
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/explosions.py
       function: tnt_explodes_rule
@@ -380,14 +380,14 @@ subjects:
     implemented_modes: see cited adapter branch
   - subject: explosions.blast_protection_knockback
     matrix_ids:
-      - pw:explosions.blast_protection_knockback/fabric_solaris_loader/survival/the_end/easy/1/slow_reader_backpressure/crash_kill9_wal_replay/op_3
+      - pw:explosions.blast_protection_knockback/fabric_krasnokamen_loader/survival/the_end/easy/1/slow_reader_backpressure/crash_kill9_wal_replay/op_3
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: damage/knockback reduced
     vanilla_source:
       - https://minecraft.wiki/w/Blast_Protection
-    solaris_sources:
+    krasnokamen_sources:
       - core:enchantments.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/explosions.py
@@ -434,7 +434,7 @@ subjects:
     expected: knockback burst, no block damage; opens doors/activates buttons
     vanilla_source:
       - https://minecraft.wiki/w/Wind_Charge
-    solaris_sources:
+    krasnokamen_sources:
       - core:projectiles/weapons.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/explosions.py

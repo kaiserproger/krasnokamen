@@ -15,7 +15,7 @@ plugins/
 `plugin.toml` declares the package identity, API version, subscriptions,
 command roots, requested capabilities, and optional client, world-generation,
 or precommit declarations. `plugin.wasm` is a WebAssembly **component** for
-`solaris:plugin@0.8.0`, not an unencoded core Wasm module. `config.toml` is
+`krasnokamen:plugin@0.9.0`, not an unencoded core Wasm module. `config.toml` is
 optional opaque package configuration: the host passes its text to the guest,
 which defines and validates its own settings.
 The host opens configuration relative to the package directory, refuses symlinks
@@ -29,7 +29,7 @@ plugins.
 
 ### Native server
 
-`solaris-v2` uses the production component host with a directory-only deployment:
+`krasnokamen` uses the production component host with a directory-only deployment:
 
 ```toml
 [plugins]
@@ -37,7 +37,7 @@ directory = "plugins"
 ```
 
 ```sh
-solaris-v2 --config server.toml
+krasnokamen --config server.toml
 ```
 
 Every entry must be a valid package directory; malformed manifests or WASM,
@@ -83,7 +83,7 @@ an authentication plugin unlocks that session. Until then only `/register`,
 refused with a short Russian/English hint and nothing is broadcast. `UnlockSession`
 requires the explicit manifest capability `auth`; observing `player.joined`
 alone grants no unlock authority. Of the first-party packages only the optional
-`solaris-auth` (not part of the standard pack) declares `auth`. It does not
+`krasnokamen-auth` (not part of the standard pack) declares `auth`. It does not
 register a `before-build` hook: the native login gate is the single login-lock
 enforcement path.
 
@@ -168,7 +168,7 @@ existing hopper directly beneath it already pulls. A death in mid-air or over a
 fluid therefore moves the grave to the nearest grounded ring cell, and when no
 free grounded cell exists the drops stay ordinary items. Vanishing-curse stacks are destroyed by the
 death before custody, exactly as in vanilla, and experience stays with the
-player, because Solaris spawns no death XP orbs. The `keepInventory` gamerule wins
+player, because Krasnokamen spawns no death XP orbs. The `keepInventory` gamerule wins
 over the declaration: a retained inventory never reaches a grave.
 
 The server then publishes `player.grave_created` to the declaring package only

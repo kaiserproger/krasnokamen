@@ -15,22 +15,22 @@ fn vanilla_headless_world_roundtrip() {
     use std::sync::Arc;
 
     let root = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_WORLD").expect("round-trip world path"),
+        std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_WORLD").expect("round-trip world path"),
     );
-    let phase = std::env::var("SOLARIS_VANILLA_ROUNDTRIP_PHASE").expect("round-trip phase");
+    let phase = std::env::var("KRASNOKAMEN_VANILLA_ROUNDTRIP_PHASE").expect("round-trip phase");
     assert!(matches!(phase.as_str(), "create" | "verify"));
     let verified = phase == "verify";
     let anvil = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_ANVIL").expect("Anvil conversion path"),
+        std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_ANVIL").expect("Anvil conversion path"),
     );
     let receipt = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_RECEIPT").expect("conversion receipt path"),
+        std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_RECEIPT").expect("conversion receipt path"),
     );
     let export = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_EXPORT").expect("Anvil export destination"),
+        std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_EXPORT").expect("Anvil export destination"),
     );
     let export_receipt = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_EXPORT_RECEIPT").expect("export receipt path"),
+        std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_EXPORT_RECEIPT").expect("export receipt path"),
     );
     let mut config = crate::test_support::config(root.clone(), 42);
     config.view_distance = 1;
@@ -250,7 +250,7 @@ fn vanilla_headless_world_roundtrip() {
     drop(store);
     crate::export_anvil(&config, &root, &export, &export_receipt)
         .expect("offline native Anvil export");
-    println!("SOLARIS_VANILLA_ROUNDTRIP_{}_OK", phase.to_uppercase());
+    println!("KRASNOKAMEN_VANILLA_ROUNDTRIP_{}_OK", phase.to_uppercase());
 }
 
 fn save(root: &Path, path: &str, tag: &Tag) {
@@ -366,10 +366,10 @@ fn modern_fixture(root: &Path, config: &CoreConfig) {
             "OpaqueTerrain".into(),
             Tag::String(format!("dimension-{index}")),
         ));
-        // Java preserves unknown transport metadata from older Solaris exports.
+        // Java preserves unknown transport metadata from older Krasnokamen exports.
         chunk
             .extras
-            .push(("SolarisJournalLsn".into(), Tag::Long(73)));
+            .push(("KrasnokamenJournalLsn".into(), Tag::Long(73)));
         chunk
             .scheduled_block_ticks
             .push(mc_world::ScheduledBlockTick::new(
@@ -849,7 +849,7 @@ fn modern_all_domains_three_dimension_borders_roundtrip_and_unknown_entity_check
             };
             fields
                 .iter()
-                .find(|(name, _)| name == "solaris:WireId")
+                .find(|(name, _)| name == "krasnokamen:WireId")
                 .unwrap()
                 .1
                 .clone()
@@ -922,7 +922,7 @@ fn modern_all_domains_three_dimension_borders_roundtrip_and_unknown_entity_check
                 let (_, root) =
                     mc_nbt::read_named(&mut std::io::Cursor::new(&payload.uncompressed_nbt))
                         .unwrap();
-                assert!(!has_field(&root, "SolarisJournalLsn"));
+                assert!(!has_field(&root, "KrasnokamenJournalLsn"));
             },
         )
         .unwrap();
@@ -1532,7 +1532,7 @@ fn statistics_json_semantic_roundtrip_owns_legacy_and_offline_uuid_files() {
         assert_eq!(actual, expected);
         assert!(!output.join(format!("stats/{uuid}.json")).exists());
         let player = read_nbt(&output.join(format!("players/data/{uuid}.dat"))).unwrap();
-        assert!(!has_field(&player, "SolarisStatistics"));
+        assert!(!has_field(&player, "KrasnokamenStatistics"));
     }
 }
 
@@ -1764,8 +1764,8 @@ fn advancements_survive_native_checkpoint_wal_and_lossless_anvil_interchange() {
     );
     assert!(!sealed_output.join(&legacy_progress_path).exists());
     let tag = read_nbt(&sealed_output.join(&player_path)).unwrap();
-    assert!(!has_field(&tag, "SolarisAdvancements"));
-    assert!(!has_field(&tag, "SolarisUnlockedRecipes"));
+    assert!(!has_field(&tag, "KrasnokamenAdvancements"));
+    assert!(!has_field(&tag, "KrasnokamenUnlockedRecipes"));
     let Tag::Compound(fields) = &tag else {
         panic!("player compound")
     };

@@ -14,13 +14,13 @@ the launcher in `../solaris-client` (`launcher/src/pins.rs`,
 
 ## Problem
 
-Owner goal, 2026-11-07: running Solaris (dedicated server and singleplayer)
+Owner goal, 2026-11-07: running Krasnokamen (dedicated server and singleplayer)
 must not need a manually obtained Minecraft jar or a locally installed JDK, and
 must start and play adequately on weak hardware.
 
 Where that stands at RC5:
 
-- **Dedicated server.** `solaris-v2 content import` downloads both server
+- **Dedicated server.** `krasnokamen content import` downloads both server
   bundles from Mojang (size and SHA-1 checked), then needs JDK 25 for three
   steps: the bundle's datagen (`--reports`); the in-tree extractors compiled
   with `javac` against the bundle (`tools/extract-*`,
@@ -31,13 +31,13 @@ Where that stands at RC5:
   downloads, 8 s datagen, 34 s extractors and 11 s capture; 114 s CPU; 0.6 GB
   peak RSS.
 - **Singleplayer** (client `v1.0.0-rc.5`). The launcher pins two bundles on
-  the Solaris static server: the facts bundle `solaris-facts-26.3-r2`
-  (1.4 MB) and the content bundle `solaris-content-26.3-r5` (2.8 MB). The
+  the Krasnokamen static server: the facts bundle `krasnokamen-facts-26.3-r2`
+  (1.4 MB) and the content bundle `krasnokamen-content-26.3-r5` (2.8 MB). The
   content bundle is a complete derived cache, Mojang's data pack subset and
   language file and `registry_network_nbt` included, published by owner
   decision 2026-10-28 (`tools/publish_content.sh`). Singleplayer needs no JDK
   and no server jar, but Mojang bytes and payloads derived from them are served
-  from the Solaris static server, every release republishes the cache, and a
+  from the Krasnokamen static server, every release republishes the cache, and a
   dedicated server cannot use it.
 - **26.1.2 clients.** The importer accepts only `--version 26.3`, so nothing
   can create the legacy cache ADR 0015 needs; operators must keep an old one.
@@ -66,7 +66,7 @@ The 775 path reads only the 26.1.2 registry dirs, tags, `registry_network_nbt`,
 
 ## Decision (proposed)
 
-The user path runs no JDK and no Mojang code, and the Solaris static server
+The user path runs no JDK and no Mojang code, and the Krasnokamen static server
 serves no Mojang bytes. Each kind of content has one source:
 
 1. **Mojang bytes** come from Mojang on the user's machine, read natively as
@@ -79,17 +79,17 @@ serves no Mojang bytes. Each kind of content has one source:
    (8 282 of 8 282). The oracle's `noise_settings`, `density_function` and
    `noise` exports become plain jar copies.
 2. **Pure fact tables** come from the one pinned facts bundle the launcher
-   already installs (`solaris-facts-<version>-r<N>`, built by
+   already installs (`krasnokamen-facts-<version>-r<N>`, built by
    `tools/publish_facts.sh`, pinned by name and SHA-256 in
    `launcher/src/pins.rs`). It gains `block_explosion.json`,
    `block_map_colors.json`, `overworld_expanded.json` and, for the legacy
-   cache, the 26.1.2 `blocks.json` and `registries.json`. `solaris-v2` pins the
+   cache, the 26.1.2 `blocks.json` and `registries.json`. `krasnokamen` pins the
    same name and SHA-256 for its release.
-3. **RegistryData payloads** are encoded by Solaris from the release's data
+3. **RegistryData payloads** are encoded by Krasnokamen from the release's data
    pack: `mc_data::registry_network::encode_entry` (implemented, see the proof
    below).
 4. **Packet names by id**, the only use of `packets.json`
-   (`mc-edge/src/translation/adjacent/tables.rs`), would become Solaris tables
+   (`mc-edge/src/translation/adjacent/tables.rs`), would become Krasnokamen tables
    for every release in the support window, like the 26.3 packet ids already are.
 5. **Java stays only with maintainers**: datagen, the extractors and the oracle
    build the facts bundle; the vanilla capture and datagen's `packets.json`
@@ -130,7 +130,7 @@ Results on 2026-11-07 (logs `proof-*.log` beside the inventory receipt):
 | 26.3 | Main's `data/vanilla` | 32 | 432 | 421 | 11 | 0 |
 | 26.3 | fresh import 2026-11-07 | 32 | 432 | 424 | 8 | 0 |
 | 26.3 | `wt/release-vanilla-pre-tags263` | 32 | 432 | 427 | 5 | 0 |
-| 26.1.2 | legacy cache (`~/.local/share/solaris/content/26.1.2`) | 28 | 382 | 378 | 4 | 0 |
+| 26.1.2 | legacy cache (`~/.local/share/krasnokamen/content/26.1.2`) | 28 | 382 | 378 | 4 | 0 |
 
 Every registry matches, including the four only 26.3 synchronizes
 (`block_transformer`, `decorated_pot_pattern`, `sulfur_cube_archetype`,
@@ -143,7 +143,7 @@ parsing is not correctly rounded, so the encoder reads number text itself.
 Run it with the release's server jar (bundle or inner jar) and a capture:
 
 ```sh
-SOLARIS_REGISTRY_JAR=<server.jar> SOLARIS_REGISTRY_CAPTURE=<cache root> \
+KRASNOKAMEN_REGISTRY_JAR=<server.jar> KRASNOKAMEN_REGISTRY_CAPTURE=<cache root> \
   cargo nextest run -p mc-data --lib --run-ignored only --no-capture \
   native_payloads_match_the_vanilla_capture
 ```
@@ -162,16 +162,16 @@ mac-os-arm64. Each build is a jlinked JDK: its `release` file lists
 (`jre.bundle/Contents/Home/bin/javac` on macOS). So B needs no extractor
 rewrite: download that runtime and run the import unchanged.
 
-**C: the RC5 content bundle for dedicated servers too.** `solaris-v2` fetches
-the pinned `solaris-content-<version>-r<N>` on first start, as the launcher
+**C: the RC5 content bundle for dedicated servers too.** `krasnokamen` fetches
+the pinned `krasnokamen-content-<version>-r<N>` on first start, as the launcher
 does.
 
 | | A: native (this ADR) | B: Mojang runtime + Java import | C: content bundle everywhere |
 |---|---|---|---|
-| First-start download, dedicated | 26.3 bundle 59.4 MiB + 26.1.2 bundle 57.6 MiB from Mojang; facts 1.4 MB | the same bundles + runtime 75.5–78.3 MiB LZMA (100–110 MiB unpacked, 147–411 files, per-file SHA-1) | 2.8 MB from Solaris |
+| First-start download, dedicated | 26.3 bundle 59.4 MiB + 26.1.2 bundle 57.6 MiB from Mojang; facts 1.4 MB | the same bundles + runtime 75.5–78.3 MiB LZMA (100–110 MiB unpacked, 147–411 files, per-file SHA-1) | 2.8 MB from Krasnokamen |
 | First-start download, singleplayer | 26.1.2 `client.jar` 36 MiB from Mojang (26.3 data is in the client jar it has); facts as today | the same as dedicated, about 190 MiB | 2.8 MB (today) |
 | First-start work | zip reads, JSON to NBT for about 800 entries, facts unpack: seconds, no JVM | 53 s of Java work and 114 s CPU on a 12-core host, more on weak CPUs; 0.6 GB RSS | unpack: seconds |
-| Mojang bytes on the Solaris static server | none | none | data pack subset, lang, derived payloads |
+| Mojang bytes on the Krasnokamen static server | none | none | data pack subset, lang, derived payloads |
 | Maintenance per release | four encoder tables and the packet tables, each checked by an ignored test against the Java oracle; facts bundle rebuilt and re-pinned in client and server | a runtime installer (manifest, LZMA, exec bits, macOS bundle layout) in launcher and server; import, capture and extractors as today | full cache republished and re-pinned in client and server; the Java import stays for the maintainer who builds it |
 | Failure modes | facts bundle unreachable (one VPS, plain HTTP; the pin keeps integrity, not availability); a release needing a new table row fails the maintainer check, never a user | JVM fails to start (memory, antivirus, macOS quarantine); the temporary vanilla server binds a local port (Windows firewall prompt); 180 s readiness timeout on slow machines; datagen or bootstrap changes break the extractors | the same VPS dependency, for all content; a bundle the new server rejects breaks every fresh install (RC2) |
 | 26.1.2 legacy cache | built by the same producer from the 26.1.2 jar | still no producer | needs a second content bundle |
@@ -180,7 +180,7 @@ does.
 
 1. Native encoder: done (`mc_data::registry_network`), unwired.
 2. `tools/publish_facts.sh` gains the new fact files; a new bundle revision;
-   launcher and `solaris-v2` pin it.
+   launcher and `krasnokamen` pin it.
 3. `content import` builds the 26.3 cache from the Mojang jars, the facts
    bundle and the encoder, and builds the 26.1.2 legacy cache the same way.
 4. Packet-name tables for 777 and 775 in `mc-protocol`; `legacy/tables.rs`
@@ -198,8 +198,8 @@ listed there as an undecided proposal.
 
 ## Alternatives considered
 
-- **Compile the fact tables into `solaris-v2`** (246 KiB zstd for 26.3,
-  155 KiB for the 26.1.2 tables): no Solaris-hosted runtime dependency for
+- **Compile the fact tables into `krasnokamen`** (246 KiB zstd for 26.3,
+  155 KiB for the 26.1.2 tables): no Krasnokamen-hosted runtime dependency for
   dedicated servers. Not proposed because the facts would then live in Git and
   release binaries rather than the one published bundle the client already
   shares (`crates/mc-data/data/required_blocks.json` shows the repository
@@ -226,11 +226,11 @@ offline command (`--from` local jars and a local facts archive).*
 **(c)** Does the Java import stay as an operator path? *Recommendation: no.*
 The native path becomes the one way for users and operators; the Java steps
 move to the maintainer pipeline (`tools/publish_facts.sh` inputs and the
-ignored oracle tests) and are deleted from `solaris-v2`, so there is one
+ignored oracle tests) and are deleted from `krasnokamen`, so there is one
 importer and one cache producer.
 
 **(d)** Does the RC5 content bundle (owner decision 2026-10-28) retire once the
-native path ships, so that the Solaris static server serves no Mojang bytes?
+native path ships, so that the Krasnokamen static server serves no Mojang bytes?
 *Recommendation: yes.* It costs singleplayer one 36 MiB download from Mojang on
 first Play, and removes the per-release cache republishing and its RC2-style
 breakage.

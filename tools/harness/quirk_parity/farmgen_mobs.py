@@ -28,7 +28,7 @@ farms, dark-room/spawner-cage mob farms - all need natural spawning or a
 spawner within 16 blocks of a player, neither of which this oracle has.
 
 Both servers receive identical command strings; no SNBT anywhere (plain
-summons) so Solaris summon-NBT coverage is never the question. Night is
+summons) so Krasnokamen summon-NBT coverage is never the question. Night is
 frozen (`time set 18000` over the prelude's `advance_time false`) so burnable
 mobs never burn.
 
@@ -137,12 +137,12 @@ def kill_chamber(
             {"phase": "kill15", "check": "count", "key": mob_key, "min": 0, "max": 0}
         ],
         "known_divergence": (
-            "Mobs steer horizontally while airborne in Solaris (the idle-wander drive is applied "
+            "Mobs steer horizontally while airborne in Krasnokamen (the idle-wander drive is applied "
             "mid-fall; vanilla creates no new wander path in the air, so an idle mob drops "
             "straight). Trace of farm-mob-kill-chamber wave 0 (seed 22): one skeleton drifts "
             "x 2.45->1.95, z 2.54->2.95 during the 25-block fall, lands on the glass rim (y=67) "
             "instead of the hopper pad, and its drops never reach a hopper (items rest there "
-            "until the 6000-tick despawn): Solaris collects ~101 of ~128 bones (vanilla 123 "
+            "until the 6000-tick despawn): Krasnokamen collects ~101 of ~128 bones (vanilla 123 "
             "+- 6.4). Fall damage, loot tables and hopper pickup match (the same chamber with "
             "100-tick waves collects 123 bones / 114 arrows)."
         ),

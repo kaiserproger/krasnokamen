@@ -357,7 +357,7 @@ impl DashboardState {
             plugin_source: OnceLock::new(),
             metrics_bearer_token: OnceLock::new(),
             coreperf_visibility_requested: AtomicU8::new(
-                if std::env::var_os("SOLARIS_COREPERF_REGIONS").is_some() {
+                if std::env::var_os("KRASNOKAMEN_COREPERF_REGIONS").is_some() {
                     0
                 } else {
                     u8::MAX
@@ -1006,44 +1006,44 @@ fn prometheus_gauge(out: &mut String, name: &str, value: impl std::fmt::Display)
 fn prometheus(state: &DashboardState) -> String {
     let snapshot = state.snapshot();
     let mut out = String::new();
-    out.push_str("# TYPE solaris_tps gauge\n");
-    prometheus_gauge(&mut out, "solaris_tps", snapshot.tps);
-    out.push_str("# TYPE solaris_tick_duration_microseconds gauge\n");
+    out.push_str("# TYPE krasnokamen_tps gauge\n");
+    prometheus_gauge(&mut out, "krasnokamen_tps", snapshot.tps);
+    out.push_str("# TYPE krasnokamen_tick_duration_microseconds gauge\n");
     for (quantile, value) in [
         ("0.50", snapshot.tick.p50_us),
         ("0.95", snapshot.tick.p95_us),
         ("0.99", snapshot.tick.p99_us),
     ] {
-        out.push_str("solaris_tick_duration_microseconds{quantile=\"");
+        out.push_str("krasnokamen_tick_duration_microseconds{quantile=\"");
         out.push_str(quantile);
         out.push_str("\"} ");
         out.push_str(&value.to_string());
         out.push('\n');
     }
-    prometheus_gauge(&mut out, "solaris_players", snapshot.players.count);
+    prometheus_gauge(&mut out, "krasnokamen_players", snapshot.players.count);
     prometheus_gauge(
         &mut out,
-        "solaris_chunks_loaded",
+        "krasnokamen_chunks_loaded",
         snapshot.chunks.loaded_total,
     );
-    prometheus_gauge(&mut out, "solaris_entities", snapshot.entities.total);
+    prometheus_gauge(&mut out, "krasnokamen_entities", snapshot.entities.total);
     prometheus_gauge(
         &mut out,
-        "solaris_network_bytes_written_total",
+        "krasnokamen_network_bytes_written_total",
         snapshot.network.bytes_written,
     );
     prometheus_gauge(
         &mut out,
-        "solaris_network_reliable_drops_total",
+        "krasnokamen_network_reliable_drops_total",
         snapshot.network.reliable_drops,
     );
     prometheus_gauge(
         &mut out,
-        "solaris_pump_skipped_ticks_total",
+        "krasnokamen_pump_skipped_ticks_total",
         snapshot.pump_skipped_ticks,
     );
     if let Some(bytes) = resident_memory_bytes() {
-        prometheus_gauge(&mut out, "solaris_process_resident_memory_bytes", bytes);
+        prometheus_gauge(&mut out, "krasnokamen_process_resident_memory_bytes", bytes);
     }
     let load_metrics = state.load_snapshot(None);
     if let Some(sample) = load_metrics
@@ -1065,7 +1065,7 @@ fn prometheus(state: &DashboardState) -> String {
             ("journal_build", sample.phase_us.journal_build_us),
             ("journal_queue", sample.phase_us.journal_queue_us),
         ] {
-            out.push_str("solaris_tick_phase_microseconds{phase=\"");
+            out.push_str("krasnokamen_tick_phase_microseconds{phase=\"");
             out.push_str(phase);
             out.push_str("\"} ");
             out.push_str(&value.to_string());
@@ -1617,14 +1617,14 @@ mod tests {
         });
         let metrics = prometheus(&state);
         for name in [
-            "solaris_tps",
-            "solaris_tick_duration_microseconds{quantile=\"0.50\"}",
-            "solaris_tick_duration_microseconds{quantile=\"0.95\"}",
-            "solaris_tick_duration_microseconds{quantile=\"0.99\"}",
-            "solaris_players 2",
-            "solaris_chunks_loaded 3",
-            "solaris_entities 7",
-            "solaris_network_bytes_written_total 44",
+            "krasnokamen_tps",
+            "krasnokamen_tick_duration_microseconds{quantile=\"0.50\"}",
+            "krasnokamen_tick_duration_microseconds{quantile=\"0.95\"}",
+            "krasnokamen_tick_duration_microseconds{quantile=\"0.99\"}",
+            "krasnokamen_players 2",
+            "krasnokamen_chunks_loaded 3",
+            "krasnokamen_entities 7",
+            "krasnokamen_network_bytes_written_total 44",
         ] {
             assert!(metrics.contains(name), "missing {name}: {metrics}");
         }

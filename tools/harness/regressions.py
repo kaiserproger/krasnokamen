@@ -141,7 +141,7 @@ _PROFILE_VERDICTS = {
 _PROFILE_OVERRIDES = {
     'buildings-qa': ('BUILDINGS_QA_SELECT', 'BUILDINGS_QA_KEEP_WORLD',
                      'BUILDINGS_QA_STOP_AFTER_ORDER'),
-    'army-qa': ('SOLARIS_ARMY_QA_PHASE', 'SOLARIS_ARMY_QA_PLUGINS'),
+    'army-qa': ('KRASNOKAMEN_ARMY_QA_PHASE', 'KRASNOKAMEN_ARMY_QA_PLUGINS'),
     'village-autonomy-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE'),
     'civilization-seed-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE'),
 }
@@ -234,7 +234,7 @@ def _failed_ids(text, cargo):
 
 
 
-MEM_RUN = Path(os.environ.get('SOLARIS_MEM_RUN', '/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh'))
+MEM_RUN = Path(os.environ.get('KRASNOKAMEN_MEM_RUN', '/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh'))
 LOADER_LIVE_PLATFORM = 'fabric'
 
 
@@ -257,7 +257,7 @@ def tree_build_command(tree, argv):
 
 
 def _built_executable(log):
-    """The solaris-v2 executable path named by cargo's JSON messages in a build log."""
+    """The krasnokamen executable path named by cargo's JSON messages in a build log."""
     found = None
     for line in log.splitlines():
         if line.startswith('{'):
@@ -265,17 +265,17 @@ def _built_executable(log):
                 message = json.loads(line)
             except ValueError:
                 continue
-            if message.get('reason') == 'compiler-artifact' and message.get('executable') and Path(message['executable']).name == 'solaris-v2':
+            if message.get('reason') == 'compiler-artifact' and message.get('executable') and Path(message['executable']).name == 'krasnokamen':
                 found = Path(message['executable'])
     if found is None:
-        raise RuntimeError('cargo reported no solaris-v2 executable')
+        raise RuntimeError('cargo reported no krasnokamen executable')
     return found
 
 
 def _release_server(ctx, profiles, tree=None):
     other = is_other_tree(tree)
     built = Path(tree).resolve() if other else REPO_ROOT.resolve()
-    argv = ['cargo', 'build', '--release', '--locked', '-p', 'mc-edge', '--bin', 'solaris-v2']
+    argv = ['cargo', 'build', '--release', '--locked', '-p', 'mc-edge', '--bin', 'krasnokamen']
     if other:
         argv, env = tree_build_command(tree, argv + ['--message-format', 'json-render-diagnostics'])
         profiles._run_command(argv, ctx, 'regressions-client-server-build.log', cwd=tree, env=env)
@@ -288,8 +288,8 @@ def _release_server(ctx, profiles, tree=None):
         if not target.is_absolute():
             target = REPO_ROOT / target
         target = target.resolve()
-        binary = target / 'release' / 'solaris-v2'
-    marker = target / '.solaris-tree'
+        binary = target / 'release' / 'krasnokamen'
+    marker = target / '.krasnokamen-tree'
     pooled = target.parent.name == 'targets' and target.name.startswith('slot-')
     def check_tree():
         if pooled or marker.exists():
@@ -298,14 +298,14 @@ def _release_server(ctx, profiles, tree=None):
     check_tree()
     with binary.open('rb') as file:
         digest = hashlib.file_digest(file, 'sha256').hexdigest()
-    pin_dir = Path(os.environ.get('SOLARIS_REGRESSIONS_BIN_DIR', str(ctx.artifact_dir / 'bin'))).resolve()
+    pin_dir = Path(os.environ.get('KRASNOKAMEN_REGRESSIONS_BIN_DIR', str(ctx.artifact_dir / 'bin'))).resolve()
     if pin_dir.is_relative_to(target) or any(
         parent.name.startswith('slot-') and parent.parent.name == 'targets'
         for parent in (pin_dir, *pin_dir.parents)
     ):
         raise RuntimeError(f'pin directory {pin_dir} is inside a pooled target')
     pin_dir.mkdir(parents=True, exist_ok=True)
-    pinned = pin_dir / f'solaris-v2-{digest}'
+    pinned = pin_dir / f'krasnokamen-{digest}'
     if not pinned.exists():
         # Cargo replaces outputs with new files, so a hard link pins this build at no disk cost.
         try:
@@ -323,8 +323,8 @@ def _release_server(ctx, profiles, tree=None):
 def _client_env(binary):
     env = os.environ.copy()
     # A mutation control must never replace the binary in a ledger gate.
-    env.pop('SOLARIS_FIRST_START_RECOVERY_BINARY', None)
-    env['SOLARIS_SERVER_BINARY'] = str(binary)
+    env.pop('KRASNOKAMEN_FIRST_START_RECOVERY_BINARY', None)
+    env['KRASNOKAMEN_SERVER_BINARY'] = str(binary)
     return env
 
 

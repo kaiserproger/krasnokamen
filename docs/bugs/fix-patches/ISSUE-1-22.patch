@@ -4,7 +4,7 @@ index 56251ca8..5d137801 100644
 +++ b/crates/mc-core/src/settlements/ui.rs
 @@ -1356,6 +1356,30 @@ fn order_create(
          building.0.to_string(),
-         format!("solaris:{}", found.kind.name()),
+         format!("krasnokamen:{}", found.kind.name()),
      );
 +    // Checked "craft missing ingredients": plan and admit the whole chain.
 +    if payload.bool("auto") == Some(true) {

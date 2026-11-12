@@ -1,6 +1,6 @@
 //! # mc-nbt
 //!
-//! Solaris' own NBT codec. The Named Binary Tag format used by Minecraft
+//! Krasnokamen' own NBT codec. The Named Binary Tag format used by Minecraft
 //! comes in two flavours:
 //!
 //! - **Named NBT** (the original disk format): every tag carries its
