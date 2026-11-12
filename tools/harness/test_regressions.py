@@ -37,7 +37,11 @@ class RegressionLedgerTests(unittest.TestCase):
                 regressions._profile_command(profile, 'walk_to_village')
 
     def test_building_verdict_is_keyed_by_blueprint(self):
-        regressions._profile_command('buildings-qa', 'wall.L1_built')
+        command = regressions._profile_command('buildings-qa', 'wall.L1_built')
+        # Only the wall is built and checked; the other blueprints neither run nor decide this verdict.
+        self.assertEqual(command[:2], ['env', 'BUILDINGS_QA_SELECT=wall'])
+        self.assertIn('--timeout-seconds', command)
+        self.assertNotIn('BUILDINGS_QA_SELECT', ' '.join(regressions._profile_command('buildings-qa', 'all')))
         with self.assertRaises(ValueError):
             regressions._profile_command('buildings-qa', 'unknown.L1_built')
         receipt = {'details': {'scenario': {'buildings_acceptance': {'blueprints': {
@@ -334,6 +338,34 @@ regression = []
         self.assertTrue(ledger._failing_verdict(failed('buildings_wall_L1_project'), 'buildings-qa', 'wall.L1_built'))
         self.assertFalse(ledger._failing_verdict(failed('buildings_house_L1_built'), 'buildings-qa', 'wall.L1_built'))
         self.assertFalse(ledger._failing_verdict(failed('in_play'), 'buildings-qa', 'wall.L1_built'))
+
+    def test_failed_profile_run_is_red_for_the_verdict_its_scenario_report_records(self):
+        # village-qa records its six verdicts, then fails the aggregate `all_behaviours_pass`: the failed
+        # result.json has no `details.scenario`, the probe's scenario.json beside it does.
+        failed = {'status': 'failed', 'error': 'village-qa-settlements assertion failed: all_behaviours_pass',
+                  'details': {'artifact_dir': '/client/artifacts'}}
+        report = {'id': 'village-qa-settlements', 'passed': False,
+                  'settlement_acceptance': {'behaviour': {'door_walk': 'PASS', 'miner_deposit': 'FAIL',
+                                                          'lumberjack': 'FAIL'}}}
+        with tempfile.TemporaryDirectory() as directory:
+            probe = Path(directory) / 'village-qa'
+            probe.mkdir()
+            (probe / 'scenario.json').write_text(json.dumps(report))
+            regressions._attach_failed_scenario(failed, Path(directory))
+        self.assertTrue(ledger._failing_verdict(failed, 'village-qa', 'miner_deposit'))
+        self.assertTrue(ledger._failing_verdict(failed, 'village-qa', 'lumberjack'))
+        # A verdict that passed, or that was never recorded, is not red for an unrelated failure.
+        self.assertFalse(ledger._failing_verdict(failed, 'village-qa', 'door_walk'))
+        self.assertFalse(ledger._failing_verdict(failed, 'village-qa', 'night_door'))
+        # No report, or two of them, attaches nothing: the failure stays unrunnable.
+        bare = {'status': 'failed', 'error': failed['error'], 'details': {}}
+        with tempfile.TemporaryDirectory() as directory:
+            for name in ('village-qa', 'other'):
+                (Path(directory) / name).mkdir()
+                (Path(directory) / name / 'scenario.json').write_text(json.dumps(report))
+            regressions._attach_failed_scenario(bare, Path(directory))
+        self.assertNotIn('scenario', bare['details'])
+        self.assertFalse(ledger._failing_verdict(bare, 'village-qa', 'miner_deposit'))
 
     def test_scenario_ref_connection_assertions_and_argv_text_are_not_red(self):
         for name in ('in_play', 'restart_client_entered_play', 'reconnect_entered_play', 'client_joined'):

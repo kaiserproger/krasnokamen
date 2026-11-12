@@ -170,7 +170,10 @@ worker, runs the negative control.
    refuses promotion. A ref already passed by the supplied client receipt (same
    `HEAD`) is not rerun, unless it carried the red control. A client ref is red
    only when the failed receipt carries an explicitly failing verdict for that
-   profile check; a timeout, a client that never reached play (`in_play`), a
+   profile check (a failed run's `details.scenario` is read from the probe's own
+   `<artifact>/<probe>/scenario.json`, so a verdict recorded before the aggregate
+   assertion failed counts, e.g. village-qa `miner_deposit` before
+   `all_behaviours_pass`); a timeout, a client that never reached play (`in_play`), a
    missing prerequisite or any failure without a negative verdict is
    unrunnable and cannot be a control. A scenario ref has no verdict map; it is
    red only when the failed receipt's `details.named_scenario.id` is the ref and
@@ -184,6 +187,9 @@ worker, runs the negative control.
    `<id> assertion failed: <name>`, and a `buildings-qa` `<blueprint>.<behaviour>`
    that was never recorded is red when that assertion's name starts with
    `buildings_<blueprint>_` (a probe check raises before the verdict is written).
+   A buildings-qa `<blueprint>.<behaviour>` ref runs that one blueprint
+   (`BUILDINGS_QA_SELECT=<blueprint>` in the command's argv, 1800 s deadline): the
+   nine-blueprint default run has one 600 s deadline and cannot pass.
    Control worktrees
    are temporary `git worktree`s beside the other worktrees (`<work>/wt/`),
    one promotion at a time (a lock), at fixed paths (`ledger-control-candidate`,
