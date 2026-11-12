@@ -155,7 +155,9 @@ pub(super) fn convert(
                     )));
                 }
                 // Native journal decisions are not portable Anvil metadata.
-                chunk.extras.retain(|(key, _)| key != "KrasnokamenJournalLsn");
+                chunk
+                    .extras
+                    .retain(|(key, _)| key != "KrasnokamenJournalLsn");
                 if let Some(image) = replay.inhabited_time.get(&[x, z]) {
                     image.apply(&mut chunk, replay.tick);
                 }

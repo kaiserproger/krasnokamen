@@ -261,7 +261,11 @@ fn lazy_warning_decay_exports_the_replayed_clock_without_native_anchors() {
     let Tag::Compound(fields) = &tag else {
         panic!("exported player compound")
     };
-    assert!(!fields.iter().any(|(key, _)| key == "KrasnokamenWardenWarning"));
+    assert!(
+        !fields
+            .iter()
+            .any(|(key, _)| key == "KrasnokamenWardenWarning")
+    );
     let player = player_from_tag(&tag, &registry.items).unwrap();
     let warning = player.warden_warning;
     assert_eq!(

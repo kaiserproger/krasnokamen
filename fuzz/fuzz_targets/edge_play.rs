@@ -6,10 +6,10 @@
 //! is `Err`, never a panic or unbounded allocation.
 #![no_main]
 
+use krasnokamen_fuzz::PLAY_IDS;
 use libfuzzer_sys::fuzz_target;
 use mc_core::boundary::ConnectionId;
 use mc_edge::decode::{DecodeState, decode_play_frame};
-use krasnokamen_fuzz::PLAY_IDS;
 
 fuzz_target!(|data: &[u8]| {
     let Some((&selector, body)) = data.split_first() else {

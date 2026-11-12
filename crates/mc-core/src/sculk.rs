@@ -193,10 +193,16 @@ fn encode(state: &TickState, pos: BlockPos, entry: &Entry) -> Vec<u8> {
                 vibration::listener_nbt(vibration::pending(state, pos), state.tick),
             ));
             if let Some(p) = vibration::pending(state, pos) {
-                f.push(("krasnokamen:event_arrival".into(), Tag::Long(p.arrival as i64)));
+                f.push((
+                    "krasnokamen:event_arrival".into(),
+                    Tag::Long(p.arrival as i64),
+                ));
             }
             if *deadline != 0 {
-                f.push(("krasnokamen:phase_until".into(), Tag::Long(*deadline as i64)));
+                f.push((
+                    "krasnokamen:phase_until".into(),
+                    Tag::Long(*deadline as i64),
+                ));
             }
         }
         Entry::Catalyst {
@@ -226,7 +232,10 @@ fn encode(state: &TickState, pos: BlockPos, entry: &Entry) -> Vec<u8> {
                 .collect();
             f.push(("cursors".into(), list(entries, mc_nbt::tag_type::COMPOUND)));
             if *bloom_until != 0 {
-                f.push(("krasnokamen:bloom_until".into(), Tag::Long(*bloom_until as i64)));
+                f.push((
+                    "krasnokamen:bloom_until".into(),
+                    Tag::Long(*bloom_until as i64),
+                ));
             }
         }
     }

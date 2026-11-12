@@ -23,7 +23,8 @@ fn fixture() -> (EdgeServer, std::path::PathBuf) {
             biomes: data.registry("worldgen/biome").unwrap().clone(),
             blocks: mc_world::BlockRegistry::from_report(&report).unwrap(),
             items: mc_data::items::krasnokamen_required_items(),
-            block_entity_types: mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
+            block_entity_types:
+                mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
         },
         hub,
         data,

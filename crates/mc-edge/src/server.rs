@@ -373,7 +373,8 @@ impl EdgeServer {
             biomes,
             blocks,
             items: mc_data::items::krasnokamen_required_items(),
-            block_entity_types: mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
+            block_entity_types:
+                mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
         };
         crate::recipes::for_join(&hub.current_registry())?;
         let admin = crate::admin::Admin::open(&cfg.server_dir)?;

@@ -295,7 +295,8 @@ fn run_scenario(scenario: &Value) -> Value {
 #[test]
 #[ignore = "driven by tools/harness/quirk_parity via KRASNOKAMEN_QUIRK_SCENARIOS"]
 fn quirk_parity_krasnokamen_replay() {
-    let scenarios = std::env::var("KRASNOKAMEN_QUIRK_SCENARIOS").expect("KRASNOKAMEN_QUIRK_SCENARIOS");
+    let scenarios =
+        std::env::var("KRASNOKAMEN_QUIRK_SCENARIOS").expect("KRASNOKAMEN_QUIRK_SCENARIOS");
     let receipt = std::env::var("KRASNOKAMEN_QUIRK_RECEIPT").expect("KRASNOKAMEN_QUIRK_RECEIPT");
     let mut results = Vec::new();
     for path in scenarios.split(':').filter(|p| !p.is_empty()) {

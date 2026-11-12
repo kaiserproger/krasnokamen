@@ -40,7 +40,9 @@ fn custom_mob_export_uses_presentation_and_retains_native_marker() {
         Tag::String("sky-creeper:sky_creeper".into())
     )));
     assert!(
-        !entity.iter().any(|(key, _)| key == "krasnokamen:Presentation"),
+        !entity
+            .iter()
+            .any(|(key, _)| key == "krasnokamen:Presentation"),
         "internal export marker must not survive a vanilla Anvil round trip"
     );
 }

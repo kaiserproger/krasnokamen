@@ -691,11 +691,12 @@ fn native_projectile_projection_does_not_duplicate_or_resurrect_owned_fields() {
     assert_eq!(opaque, Tag::Compound(vec![unknown.clone()]));
     row.projectile.as_mut().unwrap().owner = None;
     let mut stale = vec![unknown.clone()];
-    stale.extend(
-        first.extra_fields.into_iter().filter(|(key, _)| {
-            matches!(key.as_str(), "Owner" | "life" | "krasnokamen:ProjectileRuntime")
-        }),
-    );
+    stale.extend(first.extra_fields.into_iter().filter(|(key, _)| {
+        matches!(
+            key.as_str(),
+            "Owner" | "life" | "krasnokamen:ProjectileRuntime"
+        )
+    }));
     row.opaque_entity_fields.clear();
     mc_nbt::write_named(&mut row.opaque_entity_fields, "", &Tag::Compound(stale)).unwrap();
     let second = roundtrip_native_entity(&mut state, id);

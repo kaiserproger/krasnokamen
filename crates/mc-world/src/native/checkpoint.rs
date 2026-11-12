@@ -524,7 +524,8 @@ fn write_entities<E: std::borrow::Borrow<NativeEntitySnapshot>>(
             continue;
         }
         if let Some(Tag::Compound(fields)) = &entity.payload
-            && let Some((_, Tag::Int(wire))) = fields.iter().find(|(k, _)| k == "krasnokamen:WireId")
+            && let Some((_, Tag::Int(wire))) =
+                fields.iter().find(|(k, _)| k == "krasnokamen:WireId")
             && (*wire <= 0 || !wires.insert(*wire))
         {
             return Err(failure("entities", "duplicate or invalid WireId"));

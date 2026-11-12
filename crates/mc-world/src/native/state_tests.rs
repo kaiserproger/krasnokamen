@@ -1,5 +1,7 @@
 use super::*;
-use mc_data::{Identifier, blocks::krasnokamen_required_blocks_report, items::krasnokamen_required_items};
+use mc_data::{
+    Identifier, blocks::krasnokamen_required_blocks_report, items::krasnokamen_required_items,
+};
 use mc_nbt::Tag;
 
 fn blocks() -> BlockRegistry {

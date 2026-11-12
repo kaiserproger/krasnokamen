@@ -6,7 +6,8 @@ fn generator() -> &'static NetherGenerator {
     static GENERATOR: LazyLock<NetherGenerator> = LazyLock::new(|| {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
         let blocks = Arc::new(
-            BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
+            BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
+                .unwrap(),
         );
         let data = Arc::new(
             mc_data::load(&root)

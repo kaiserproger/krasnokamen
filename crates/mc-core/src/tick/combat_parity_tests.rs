@@ -315,7 +315,7 @@ fn parity_special_mob_melee_death_names_the_mob_for_the_two_argument_template() 
 
 #[test]
 fn parity_death_message_keys_match_the_damage_type_registry_and_language_file() {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/vanilla/26.3");
+    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/vanilla");
     let lang: serde_json::Value = serde_json::from_str(
         &std::fs::read_to_string(format!("{root}/assets/minecraft/lang/en_us.json")).unwrap(),
     )

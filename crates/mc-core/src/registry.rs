@@ -336,7 +336,9 @@ impl CoreRegistry {
             }
             None => (
                 mc_data::item_components::krasnokamen_required_item_facts(),
-                Arc::new(mc_data::tags::krasnokamen_required_client_tags(&items, &report)),
+                Arc::new(mc_data::tags::krasnokamen_required_client_tags(
+                    &items, &report,
+                )),
                 mc_data::recipes::krasnokamen_required_recipes(),
                 mc_data::loot::load_builtin(root)
                     .map_err(|error| CoreError::Registry(error.to_string()))?,

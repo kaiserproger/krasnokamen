@@ -9,7 +9,7 @@ capabilities, or player commands:
 id = "hello"
 name = "Hello"
 version = "0.1.0"
-api = "0.8.0"
+api = "0.9.0"
 ```
 
 The optional `entry` names a component file inside the package and defaults to
@@ -73,7 +73,7 @@ internal host types into a guest or rely on a host implementation detail.
 
 The contract is `krasnokamen:plugin@0.9.0`: WIT record layout changes require
 regenerating host and guest bindings, and every guest must be rebuilt and
-re-encoded against it (the Rust SDK workspace is 0.8.0; add `mob_blueprints:
+re-encoded against it (the Rust SDK workspace is 0.9.0; add `mob_blueprints:
 None` to existing full `StartupContribution` literals and update the manifest
 `api`). This applies to the first-party `krasnokamen-default-plugins` packages too;
 no 0.7.0 component or old record-layout shim is accepted, and an older

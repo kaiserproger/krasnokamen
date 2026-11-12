@@ -53,8 +53,8 @@ use krasnokamen_plugin_sdk::inventories::{
 };
 use krasnokamen_plugin_sdk::operation_types::OperationFailure;
 use krasnokamen_plugin_sdk::{
-    Command, Config, Failure, LogLevel, log, message_session, query_owned_inventory,
-    reserve_inventory_items, transfer_owned_items,
+    log, message_session, query_owned_inventory, reserve_inventory_items, transfer_owned_items,
+    Command, Config, Failure, LogLevel,
 };
 
 /// The command root the package's manifest declares for this fixture.
@@ -375,10 +375,16 @@ impl Fixture {
             ),
             Action::AbsentContainer => query_owned_inventory(
                 QUERY_REQUEST,
-                InventoryEndpoint::Container(krasnokamen_plugin_sdk::inventories::ContainerEndpoint {
-                    dimension: "minecraft:overworld".to_owned(),
-                    position: krasnokamen_plugin_sdk::types::BlockPosition { x: 0, y: 64, z: 0 },
-                }),
+                InventoryEndpoint::Container(
+                    krasnokamen_plugin_sdk::inventories::ContainerEndpoint {
+                        dimension: "minecraft:overworld".to_owned(),
+                        position: krasnokamen_plugin_sdk::types::BlockPosition {
+                            x: 0,
+                            y: 64,
+                            z: 0,
+                        },
+                    },
+                ),
                 None,
             ),
             Action::Expired => {
@@ -634,7 +640,7 @@ impl Fixture {
                     return Err(self.unexpected("status returned a different committed revision"));
                 }
                 Ok(vec![
-                    self.report(&format!("status committed revision={revision}")),
+                    self.report(&format!("status committed revision={revision}"))
                 ])
             }
             Action::Reserve => {

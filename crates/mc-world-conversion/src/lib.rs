@@ -274,10 +274,10 @@ fn convert(
                 .file_name()
                 .ok_or_else(|| fail("destination has no filename"))?,
         );
-        if destination
-            .file_name()
-            .is_some_and(|name| name.to_string_lossy().starts_with(".krasnokamen-conversion-"))
-        {
+        if destination.file_name().is_some_and(|name| {
+            name.to_string_lossy()
+                .starts_with(".krasnokamen-conversion-")
+        }) {
             return Err(fail(
                 "destination uses reserved unpublished conversion staging name",
             ));

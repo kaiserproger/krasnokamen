@@ -301,10 +301,11 @@ impl<S: HostServices + 'static> PluginInstance<S> {
     /// applied: the caller decides whether they are admissible.
     pub fn init(&mut self, config: &str, context: InitContext) -> Result<CommandBatch, HostError> {
         let answer = self.guest.call("init", |guest| {
-            guest
-                .plugin
-                .krasnokamen_plugin_lifecycle()
-                .call_init(&mut guest.store, config, &context)
+            guest.plugin.krasnokamen_plugin_lifecycle().call_init(
+                &mut guest.store,
+                config,
+                &context,
+            )
         })?;
         self.guest.stage_answer("init", answer)
     }
@@ -348,10 +349,11 @@ impl<S: HostServices + 'static> PluginInstance<S> {
             )));
         }
         let answer = self.guest.call_armed("on-events", |guest| {
-            guest
-                .plugin
-                .krasnokamen_plugin_events()
-                .call_on_events(&mut guest.store, context, events)
+            guest.plugin.krasnokamen_plugin_events().call_on_events(
+                &mut guest.store,
+                context,
+                events,
+            )
         })?;
         self.guest.stage_answer("on-events", answer)
     }
@@ -559,7 +561,10 @@ impl<S: HostServices> crate::bindings::krasnokamen::plugin::domain_operations::H
 {
 }
 
-impl<S: HostServices> crate::bindings::krasnokamen::plugin::operation_types::Host for InstanceState<S> {}
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::operation_types::Host
+    for InstanceState<S>
+{
+}
 
 impl<S: HostServices> crate::bindings::krasnokamen::plugin::command_permissions::Host
     for InstanceState<S>
@@ -584,7 +589,10 @@ impl<S: HostServices> crate::bindings::krasnokamen::plugin::command_permissions:
     }
 }
 
-impl<S: HostServices> crate::bindings::krasnokamen::plugin::world_events::Host for InstanceState<S> {}
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::world_events::Host
+    for InstanceState<S>
+{
+}
 
 impl<S: HostServices + 'static> Host for InstanceState<S> {
     fn log(&mut self, level: LogLevel, message: String) {
