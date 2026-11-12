@@ -1492,10 +1492,11 @@ title = "Loot predicate selector arguments are explicitly rejected until a real 
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-OPTION-COVERAGE Fix patch: reversing it removes the `predicate` selector-option arm in commands.rs, so `@e[predicate=...]` is rejected as an unknown option again."
 regression = ["cargo:mc-core:datapacks::command_tests::selector_predicate_selects_and_negates_datapack_predicates", "cargo:mc-core:datapacks::command_tests::predicates_with_conditions_the_selector_cannot_evaluate_are_refused_at_load", "cargo:mc-data:advancements::tests::selector_predicates_evaluate_scores_time_weather_and_chance_from_facts", "cargo:mc-data:advancements::tests::predicate_support_reports_conditions_that_cannot_be_evaluated", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:57f423038d585e7d4ef178f508013b198add0ee60a4eb6976878f604e53811f0"
+promotion = "docs/bugs/promotions/SELECTOR-PREDICATE-UNSUPPORTED.json"
 
 [[bug]]
 id = "SELECTOR-DEAD-PLAYERS"
@@ -1614,10 +1615,11 @@ title = "debug start/stop rejected in favor of Solaris debug give fixture gramma
 area = "gameplay"
 repro = "manual"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-PROFILER Fix patch: reversing it turns the /debug start and /debug stop dispatch arms back into an unsupported-syntax result."
 regression = ["cargo:mc-core:command_debug::tests::profiler_reports_seconds_ticks_and_rate_and_refuses_double_start_and_stop", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:099e67237851fc2045b6895f76198518921e163ac5e0d90525e76149f73d6b3b"
+promotion = "docs/bugs/promotions/DEBUG-PROFILER.json"
 
 [[bug]]
 id = "DEBUG-FUNCTION-TRACE"
