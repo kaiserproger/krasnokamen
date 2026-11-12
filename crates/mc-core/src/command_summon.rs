@@ -237,13 +237,15 @@ pub(crate) fn supports(state: &TickState, type_id: u32, name: &str, key: &str) -
         _ => return None,
     })
 }
+/// Normalised summon fields and the validated typed `variant` appearance value, if any.
+type Authored = (Vec<(String, Tag)>, Option<(u8, EntityDataValue)>);
 /// Validate `authored` against the summon field set and normalise each value.
 fn authored_fields(
     state: &TickState,
     type_id: u32,
     name: &str,
     authored: &[(String, Tag)],
-) -> Result<(Vec<(String, Tag)>, Option<(u8, EntityDataValue)>), CommandError> {
+) -> Result<Authored, CommandError> {
     let horse = crate::taming::horse(name);
     let is_painting = name == "minecraft:painting";
     let mut fields = Vec::with_capacity(authored.len());
@@ -558,16 +560,17 @@ pub(crate) fn prepare(
         }
     }
     let equipment_authored = authored.iter().any(|(key, _)| key == "equipment");
-    decode(
+    let mut image = decode(
         state,
         type_id,
         name,
         pos,
         fields,
-        variant,
         equipment_authored,
         Summoned::Fresh,
-    )
+    )?;
+    image.variant = variant;
+    Ok(image)
 }
 
 /// The image of an existing entity after a `data` edit. `image` is the whole
@@ -600,10 +603,10 @@ pub(crate) fn prepare_edit(
         name,
         pos,
         image,
-        variant,
         equipment_authored,
         Summoned::Existing,
     )?;
+    edited.variant = variant;
     // An edit that leaves every villager field alone leaves the live villager
     // (and the transient brain state a reload would drop) alone too.
     edited.keep_villager = keep_villager;
@@ -623,7 +626,6 @@ fn decode(
     name: &str,
     pos: [f64; 3],
     fields: Vec<(String, Tag)>,
-    variant: Option<(u8, EntityDataValue)>,
     equipment_authored: bool,
     origin: Summoned,
 ) -> Result<Image, CommandError> {
@@ -685,7 +687,7 @@ fn decode(
         uuid_authored,
         painting,
         keep_villager: false,
-        variant,
+        variant: None,
     })
 }
 /// Allocate the canonical kind before indexing or publishing a summoned entity.
