@@ -20,6 +20,7 @@ pub(crate) struct Spawners {
 }
 
 impl Spawners {
+    #[cfg(test)]
     pub(crate) fn contains(&self, pos: BlockPos) -> bool {
         self.chunks
             .get(&(pos.x.div_euclid(16), pos.z.div_euclid(16)))

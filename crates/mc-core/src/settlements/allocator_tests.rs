@@ -548,10 +548,13 @@ fn admitted_brain_path_does_not_pay_a_second_decision() {
 /// A real village streets/bridge flooded by spring water left every resident
 /// without a single legal step: the route layer treated any water in the body
 /// as a wall. Vanilla ground navigation wades; only head-deep water and lava
-/// remain barriers.
+/// remain barriers. Seed-24 run llr1bc4e: a baby (0.975 tall, head in its foot
+/// row) stood on the floor of a two-deep pond at (73,61,-231) for 3000 ticks
+/// and was killed there by a zombie at night; head-deep water must stop a
+/// baby too.
 #[test]
 fn routes_wade_through_foot_deep_water_but_never_deeper_or_lava() {
-    let route = |fluid: &str, depth: i32| -> bool {
+    let route = |fluid: &str, depth: i32, (width, height): (f64, f64)| -> bool {
         let mut state = test_state();
         let id = block(&state, fluid, &[]);
         for z in 0..16 {
@@ -574,14 +577,25 @@ fn routes_wade_through_foot_deep_water_but_never_deeper_or_lava() {
                 y: 201,
                 z: 8,
             },
-            0.3,
-            1.95,
+            width,
+            height,
             &mut path,
         )
     };
-    assert!(route("minecraft:water", 1), "one-block ford is walkable");
-    assert!(!route("minecraft:water", 2), "head-deep water is a barrier");
-    assert!(!route("minecraft:lava", 1), "lava is never walkable");
+    for body in [(0.3, 1.95), (0.15, 0.975)] {
+        assert!(
+            route("minecraft:water", 1, body),
+            "one-block ford is walkable: {body:?}"
+        );
+        assert!(
+            !route("minecraft:water", 2, body),
+            "head-deep water is a barrier: {body:?}"
+        );
+        assert!(
+            !route("minecraft:lava", 1, body),
+            "lava is never walkable: {body:?}"
+        );
+    }
 }
 
 /// Seed 87122 replay: a farmer standing on the rim of an irrigation channel has

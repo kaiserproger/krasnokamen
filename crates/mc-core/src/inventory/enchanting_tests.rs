@@ -362,7 +362,7 @@ fn populated_item_tags_override_static_support_members() {
     let stone_id = data.stack("stone").item_id as i32;
     data.tags
         .registries
-        .entry(id("minecraft:item"))
+        .entry(id(mc_data::tags::ITEM_REGISTRY))
         .or_default()
         .insert(id("minecraft:enchantable/melee_weapon"), vec![stone_id]);
     let catalog = catalog();

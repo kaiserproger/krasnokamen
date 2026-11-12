@@ -385,7 +385,7 @@ fn give_lore_accepts_native_heterogeneous_snbt_text_list() {
 #[test]
 fn clear_item_tags_use_authoritative_registry_ids_and_unknown_tags_error() {
     let rules = registry().item_rules();
-    let registry_id = Identifier::parse("minecraft:item").unwrap();
+    let registry_id = Identifier::parse(mc_data::tags::ITEM_REGISTRY).unwrap();
     let (tag, item_id) = rules.tags.registries[&registry_id]
         .iter()
         .find_map(|(tag, ids)| ids.iter().find(|id| **id > 0).map(|id| (tag, *id as u32)))

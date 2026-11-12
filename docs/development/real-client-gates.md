@@ -473,8 +473,11 @@ client-visible bug.
 
 Known causes: builders only come from residents that reach storage (a bridge exit
 over water once blocked them); builders and resource workers work only in day time
-2000..9000, so harness waits must span a game day; construction uses the
-settlement's wood species; natural zones must prove wild resources. A chat-reply
+2000..9000, so harness waits must span a game day; each project uses one wood
+species funded from stock, so an upgrade can differ from its base level; an
+autonomous upgrade clears the previous level's removed cells before it places
+anything, so a level-one building matches only until its upgrade starts and again
+once the upgrade completes; natural zones must prove wild resources. A chat-reply
 race (`mutations_refused_while_unowned`) fails on a CPU-contended host. Lumberjack
 latency varied between runs; only the final checkpoint persists, so diagnosing it
 needs a run that records state over time.

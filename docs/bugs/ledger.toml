@@ -2104,6 +2104,7 @@ ingress_proof = [
   "mc-world/src/anvil/chunk_nbt.rs:367,512: the importer accepts only compound records, checked against the block that owns them",
   "mc-core/src/command_block_entity.rs:26-129 (prepare/install): command-supplied records must be compounds; every other writer encodes a fixed compound (block_entity_defaults.rs:221, beacon.rs:139, block_log.rs:1272, mc-worldgen overworld_structures.rs:530)",
 ]
+
 [[bug]]
 id = "SHRIEKER-HYDRATE-PANIC"
 title = "A corrupt sculk-shrieker block entity crashes the tick thread at hydration: `shrieker.rs:282` `decode(..).unwrap_or_else(panic!(\"sculk_shrieker at ...\"))` inside `changed()`/hydrate path over resident chunks. Same one-policy hydration root (load/hydrate path, not per-tick effect)."
@@ -3997,6 +3998,89 @@ failing_first = "reported"
 promotion = "docs/bugs/promotions/COMMAND-SUCCESS-FEEDBACK-GAMERULE.json"
 
 [[bug]]
+id = "CIV-SEED24-CROSS-VILLAGE-TREE-SWEEP"
+title = "Lumberjack radius sweep wastes the workday walking past nearby trees, starving house funding and births."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa 20261107T213213: no house or birth. Checkpoint tick 32405 has 62 carried logs, target [153,76,-260] 85 blocks away, and an eligible tree at [148,75,-172] only 5.5 blocks away. Planner trace 32420-33200 remains unfunded; the 158-node path consumes the remaining shift before a single cut."
+failing_first = "reported"
+regression = [
+  "cargo:mc-core:villager::lumber_tests::lumberjack_searches_near_worker_before_cross_village_sweep",
+  "cargo:mc-core:villager::lumber_tests::lumberjack_restarts_nearby_search_after_harvest",
+]
+
+[[bug]]
+id = "CIV-SEED24-HOUSE-BED-IRON-NEVER-SMELTED"
+title = "Seed-24 town never smelts the stocked raw iron for shears, so the House bed and every later birth wait forever."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa 20261111T200623-90d4lq2w on 5ae49587, 96,000 sprint ticks: wood was not the blocker (64 birch logs by sprint 1200, 148 at the end), the town furnace at [134,78,-217] stayed empty in all 41 reads while 8 raw iron and 7-13 coal sat in storage, and the House stayed 'White Bed 0/1 awaiting production' behind funded mason, lumber camp, mine and road projects. construction::iron_demand returned only the active project's bill (no iron), and only unemployed residents or shepherds loaded ore; the one unemployed adult died to a zombie at tick 7536, leaving a lumberjack, a miner, a builder and two nitwits."
+failing_first = "Both tests fail with only the fix hunks reverted (receipts/CivSimSeed24/fix-hunks.patch, sha256 434a04ce): the planner test gets iron demand 0 instead of 2 once the funded farm starts, and the miner never loads the furnace (receipts/CivSimSeed24/unit-negative-control.log); fixed tree 109/109 in receipts/CivSimSeed24/unit-fixed.log."
+regression = [
+  "cargo:mc-core:settlements::construction::planner_tests::funded_project_keeps_iron_demand_for_the_skipped_house_bed",
+  "cargo:mc-core:villager::smelting_tests::employed_miner_smelts_construction_iron_through_native_ticks",
+]
+
+[[bug]]
+id = "CIV-SEED24-STALLED-PROJECT-HOLDS-SLOT"
+title = "Seed-24 Lumber camp L1 builder parks out of felling reach of a clear cell and holds the only project slot, so the funded House never starts."
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa 20261111T214942-gh1mr776 on server pin a64a2dbe (house-bed iron fix): iron smelted at sprint 600, shears and 6 white wool in storage by 6000, birch logs 118 by 27000, yet Lumber camp L1 at site [113,72,-226] went 41/239 -> 47/239 between 42000 and 84000 (Mason L2 at 25/72 from 27000 to 39000 then finished); the House left the waiting list at 45000 (funded) but never started, and the gate stopped on its one-day stall oracle (60000-84000). Final checkpoint 102855 and a read-only world probe: structure settlement-1-411 in its clear stage at work unit 47/56, next cell [121,76,-225] = short grass over the cleared pit (footing [121,73,-225]); borrowed builder 63c408b1 at (121.5,76,-227.5) on the hill. villager/building.rs preparation_target chose the open stand nearest the builder (its own cell), while in_reach needs feet within 4.0 of the footing (here 4.24), so it never moved and never advanced. Run 90d4lq2w shows the same site at 0-29/239 for 33,000 sprint ticks."
+failing_first = "Fails with only the stand fix hunks reverted (receipts/CivSimSeed24/stand-fix-hunks.patch, sha256 2bc9e1ad): the builder keeps its own hill cell BlockPos {x:6,y:204,z:5} out of reach of footing {6,201,8}, the gate's stall (receipts/CivSimSeed24/stand-negative-control.log); at 107ddb91 settlements+villager 848 passed, 0 failed (receipts/CivSimSeed24/suite-107ddb91.log)."
+regression = ["cargo:mc-core:villager::building_preparation_tests::clearing_stand_on_a_hill_edge_is_within_felling_reach_of_the_pit_footing"]
+
+[[bug]]
+id = "CIV-IRON-CAPTURE-OUTPUT-COLLECTED"
+title = "civilization-seed-qa aborts when a resident collects the furnace ingot between the console read and the player's furnace menu"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T230450-civilization-seed-qa-o31rlnkb on server pin 107ddb91 (stand fix): after sprint 300 the read-only console read of furnace [134,78,-217] showed one iron ingot in its output slot (server.log line 33); the observer's furnace menu then opened (container 6, 111 transcript observations) with all three furnace slots empty for the whole 15 s wait, so the ingot had left the furnace in between (furnace output is collected by residents, docs/settlements/construction.md); the gate failed after 174 s on 'timed out waiting for furnace_iron_output_visible'. Iron was smelted; the failure is the harness observation race. tools/harness/backends/civilization_seed_qa.py capture_iron_menu now holds the simulation with tick freeze, re-reads the output, captures the menu, then unfreezes; output collected before the hold leaves the milestone to a later snapshot."
+failing_first = "python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/iron-hold-fix-hunks.patch, sha256 db052414) test_furnace_output_collected_before_the_menu_does_not_abort_the_run fails with the gate's TimeoutError on furnace_iron_output_visible (receipts/CivSimSeed24/iron-hold-negative-control.log); fixed tree 79/79 with test_village_autonomy_qa (receipts/CivSimSeed24/iron-hold-tests.log)."
+regression = []
+
+[[bug]]
+id = "VILLAGER-BABY-WADES-INTO-HEAD-DEEP-WATER"
+title = "Baby villagers route onto the floor of head-deep water, are stranded there and die"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T230749-civilization-seed-qa-llr1bc4e (server pin 107ddb91): the only newborn f7a21a80 (settlement_birth tick 50318, baby observed at sprint 42000) was seen in client censuses at (73.4,60.9,-229.9) at sprint 48000 and (73.4,60.9,-231.4) at 51000, 58 blocks from the meeting point, on the floor of a pond (world probe receipts/CivSimSeed24/snap3/probe-baby.json: dirt at y=60, water at y=61-62, banks to y=64). server.log line 638: 'resident received lethal damage tick=65504 ... activity=Panic position=[73.85, 61.0, -231.85] attacker_type=Some(\"minecraft:zombie\")'; the checkpoint (receipts/CivSimSeed24/snap3/report.json, tick 115347) holds a tombstone for it at chunk [4,-15], journal LSN 66000. Membership dropped 6 -> 5, so the gate's +2 growth never held. Not an entity-custody loss: the death is logged and the tombstone follows it. Cause: settlements/allocator.rs body_clear lets a route body wade when water is only in its foot row, but a baby (0.975 tall) has its head in that row too, so the floor of any pond passed as a ford."
+failing_first = "Fails with only the allocator.rs fix hunk reverted (receipts/CivSimSeed24/baby-wade-fix-hunks.patch, sha256 ea5ca185): 'head-deep water is a barrier: (0.15, 0.975)', the baby body routes over the floor of two-deep water while the adult body is refused (receipts/CivSimSeed24/baby-wade-negative-control.log); at 615ca404 settlements+villager 848 passed, 0 failed (receipts/CivSimSeed24/suite-615ca404.log)."
+regression = ["cargo:mc-core:settlements::allocator::tests::routes_wade_through_foot_deep_water_but_never_deeper_or_lava"]
+
+[[bug]]
+id = "CIV-STALL-ORACLE-WAITING-MATERIALS"
+title = "civilization-seed-qa's one-day stall oracle is reset by materials gathered for waiting projects while the active project stands still"
+area = "harness"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civilization-seed-qa-ufgbv77d (server pin 107ddb91, harness d7f98cd4): the active Road level 1 at [158,71,-257] showed 'Road · level 1 · 0/33' from sprint 45000 to the 96000 limit (51,000 ticks) and held the only project slot, but the oracle signature included the whole status dialog, whose waiting Farm line went 'Dirt 3/30' -> 'Dirt 16/30', so the run ended on the bounded limit instead of the stall. tools/harness/backends/civilization_seed_qa.py stall_signature now keeps only the active project's own dialog line (dialog/body/0) while a project holds the slot; without one the waiting lists still count as progress."
+failing_first = "python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/stall-oracle-fix-hunks.patch, sha256 959a3fb2) test_waiting_project_materials_do_not_hide_a_stalled_active_project fails with 'bounded observation limit reached', the gate's symptom (receipts/CivSimSeed24/stall-oracle-negative-control.log); fixed tree 81/81 with test_village_autonomy_qa (receipts/CivSimSeed24/stall-oracle-tests.log)."
+regression = []
+
+[[bug]]
+id = "CIV-SEED24-ROAD-CLEAR-STALL"
+title = "Seed-24 Road level 1 holds the only project slot at 0/33 for 51,000 ticks with one short-grass clear cell left"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civilization-seed-qa-ufgbv77d (server pin 107ddb91): project Road level 1, origin [158,71,-257], structure settlement-1-732, borrowed builder 63c408b1 (Miner), 0/33 from sprint 45000 to 96000; the funded House stayed waiting ('White Bed 0/1', 'Birch Planks 0/106 awaiting production'). Final checkpoint 116853 (bots snapshot receipts/CivSimSeed24/snap4/report.json): clear stage 0, one cell [158,73,-249] with 0 completed work units and no receipts; world probe (snap4/probe-road.json): short_grass on grass_block at y=72, open air above, standable grass at [158,73,-248]. Builder at checkpoint resting at (114.5,72.7,-277.5) with stale SolarisMiningProgress stalled_since 56076. Cause not yet established."
+failing_first = "not recorded"
+regression = []
+
+[[bug]]
 id = "TICK-FROZEN-GAME-AGE-WIRE"
 title = "SET_TIME advances client game age during tick freeze by sending the WAL frame counter"
 area = "gameplay"
@@ -4213,6 +4297,39 @@ status = "open"
 source = "SeatAttachmentQA reproduced the visible defect in two fresh two-client scenes on native 4f96c55b and Core5e, with actual SetPassengers receipts and mounted, movement and dismount frames. The shared first-passenger attachment agrees with the local reference source. The authored adult camel back was 0.625 blocks below the standing seat anchor; camel and camel_husk had the same low geometry. Fixed in the unintegrated client branch only: the authored camel, camel husk and saddle rigs now reach the two-block seat, and the adult sitting depth matches the sitting seat. The seat rule and core body are unchanged. Regression camel_back_and_saddle_carry_the_received_standing_and_sitting_seat fails on the old geometry. The unchanged two-client probe on native e5fd1c08 and Core5e showed the rider seated on the back in 2/2 fresh scenes. Evidence: receipts/SeatAttachmentQA/report.yaml, receipts/ClientSeatAttachment/camel-owner-diagnosis.json and receipts/ClientCamelGeometry/verification.json. Sitting is not constructible on core. No matched vanilla frame, independent QA, integration or promotion."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "CIV-ADOPTED-CLOSURE-ROOT-TICK-COST"
+title = "Adopted-village root-tick closure takes hours in villager decisions before proving stock and construction"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Initial CivSimLanding base 6b594d8f plus imported CivSim5: the native-root adopted-village closure ran for more than 6,000 seconds without completing. A bounded reproduction advanced about 800 ticks in two minutes, almost all of it in villager brain decisions; residents and mining progress advanced, so this was pathological per-tick decision cost, not an infinite loop or an unreachable goal. Counters and perf identified construction-funding recipe catalog and result scans, repeated slot counting, repeated identical funding proofs and structure-ledger decoding and copying. The landing adds an immutable recipe index, exact slot totals with an undo journal, a negative-only dependency admission, a 16-entry derived funding memo and a decoded structure-ledger cache. The closure is deterministic at tick 72901; the test bounds it at 80000 ticks and checks a deterministic work budget (full funding proofs and recipe candidates) on every tick, which disabling the recipe index, the dependency admission or the memo separately exceeds. Fixture proof only; promotion and real-client acceptance remain separate. Main's row CIV-ADOPTED-CLOSURE-SLOW-ON-MAIN (VillageBreakFixes slice 3, receipts/VillageBreakFixes/results.md: on main 5b4006df the debug test ran past a 600 s deadline, and at 263c7c9c it was killed at 40 minutes; both trees reached tick 4020 after about 945 s in the same state, no loop) is folded into this row at the CivSimLanding landing merge: it is the same per-tick cost, and this row's fix cures it."
+regression = ["cargo:mc-core:villager::building_autonomy_tests::adopted_village_with_resident_shears_produces_stock_and_builds", "cargo:mc-core:settlements::construction_crafting::tests::funding_reuses_loaded_index_without_resolving_recipe_results", "cargo:mc-core:settlements::construction_crafting::tests::unavailable_recipe_dependencies_reject_without_changing_the_canonical_answer", "cargo:mc-core:settlements::construction_crafting::tests::slot_totals_preserve_saturation_unknown_ids_and_nested_rollback", "cargo:mc-core:settlements::construction_crafting::tests::funding_memo_matches_every_input_class_by_value_and_retains_index_identity", "cargo:mc-core:plugin_structures::tests::decoded_structure_ledger_is_derived_from_checkpoint_and_wal_bytes"]
+failing_first = "reported"
+
+[[bug]]
+id = "WORLDGEN-RUINED-PORTAL-FLOATS-ON-SLOPE"
+title = "A generated ruined portal floats over a village farm: its netherrack platform hangs above two or more air layers"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Seed 100 (village-autonomy-qa world), seen in the native client approach frame. A fresh offline pregenerate of seed 100 around block (146,2) has the same blocks as the played world, so worldgen placed it, not a settlement build or the harness. Ruined portal origin (144,84,0): netherrack platform x144-149 z0-5 at y=84, stone/stone-slab ring at y=85, obsidian frame at x=147 y=86-90; below it y=82-83 are air and the village farm (farmland y=80, wheat y=81) lies under the platform. crates/mc-worldgen/src/overworld_structures.rs OverworldStructures::visit places every Height::Surface template (ruined portals included, catalog.rs) at the surface height of the start chunk's center (152,8) plus one, so a template on a slope floats wherever its own footprint is lower than that center sample. The vanilla placement rule must be taken from the local 26.3 jar before the fix; the fix changes generated chunks and needs a worldgen revision bump."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CIV-UPGRADE-STALLS-ON-STOCKED-CONTAINER"
+title = "An autonomous Storage upgrade stalls at 0/65 forever: level 2 replaces the level-one barrels that hold the village stock"
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "village-autonomy-qa run mgep0_gi (CivSimLanding .analysis/validation/20261111T140725-village-autonomy-qa-mgep0_gi, server pin 4e6874de): after Storage L1 the planner admitted the funded Storage L2 upgrade (site 121,69,-2, no missing materials) and its status stayed 'Storage · level 2 · 0/65' to the end. It held the single project slot, so builder_completes_autonomous_upgrade and builder_completes_further_building both failed. The final checkpoint (receipts/CivSimLanding/probe-mgep0-storage.json) has the stock in the level-one barrels: 126,70,-1 (acacia_log 59, birch_log 12) and 126,70,0 (cobblestone 205, coal 4, wheat_seeds 4). storage.json level 2 turned the first barrel into a chest and removed the second. The structure executor refuses any cell whose block entity holds items (plugin_structures.rs AdvanceStructure, Failure::Blocked), and villager/building.rs ignores that error, so the upgrade could never advance. mason level 2 (furnace, chest) and barracks level 2 (two barrels replaced by beds) had the same defect. Fix: the blueprint loader refuses a level that replaces or removes a previous-level container, and the three level-2 layouts keep their level-one containers."
+regression = ["cargo:mc-core:settlements::construction::tests::stocked_storage_upgrades_around_its_level_one_containers", "cargo:mc-core:settlements::blueprints::tests::upgrade_levels_keep_previous_containers"]
+failing_first = "Both tests fail with only the fix hunks reverted (receipts/CivSimLanding/negative-container-upgrade-fix-hunks.patch, sha256 b95def36): the storage test stops at 'Blocks: 0/65 · Prepared', the gate's symptom, and the loader test accepts a level that replaces the chest (receipts/CivSimLanding/negative-container-upgrade.log)."
 
 [[bug]]
 id = "RAIDER-TARGET-SCAN-EVERY-TICK-COLLAPSE"
@@ -4758,17 +4875,6 @@ source = "BreakIssue1x11 break-it pass on ISSUE-1-11, finding F4 (receipts/Break
 regression = ["cargo:mc-core:settlements::allocator::claim_tests::bound_resident_leaves_an_open_air_bed_to_a_villager_that_sleeps_in_it", "cargo:mc-core:settlements::allocator::claim_tests::breeding_spare_bed_of_a_resident_is_never_an_open_air_bed", "cargo:mc-core:settlements::allocator::claim_tests::removing_the_roof_releases_a_residents_bed", "cargo:mc-core:settlements::allocator::claim_tests::open_air_claim_recorded_before_the_rule_is_released_on_load", "cargo:mc-core:villager::brain::tests::breeding_tests::open_air_only_settlement_gives_residents_no_home_rations_or_births"]
 failing_first = "reported"
 fix_commit = "patch:493fa248dcd5e68c3e20fcf70bf81a055f92fabdfb2c0c8e981f2ec254d6be5a"
-
-[[bug]]
-id = "CIV-ADOPTED-CLOSURE-SLOW-ON-MAIN"
-title = "On main the adopted-village closure test adopted_village_with_resident_shears_produces_stock_and_builds does not finish in 10 minutes (killed at 40 minutes in a full lib run); its per-tick cost fix exists only on unmerged wt/CivSimLanding"
-area = "gameplay"
-repro = "source"
-severity = "major"
-status = "open"
-source = "VillageBreakFixes slice 3 (receipts/VillageBreakFixes/results.md 'Slice 3'): the debug test binary built at main 5b4006df runs the test past a 600 s deadline (hang/base-trace.log, exit 124); the same test at 263c7c9c was killed at Main's 40-minute deadline (adopted-village-263c7c9c.log). Traced side by side (hang/base-trace-3.log, hang/head-trace.log, same trace patch), both trees reach tick 4020 after 945 s and 948 s in an identical state: all four stock items seen, LumberCamp, Mine and farmer workshop certified, no Storage, no House, no bed anywhere, no resident home. So 400000 ticks take hours on main; it is not a loop. The fixture village has no beds until its first House is built, so the settlement roof-bed rule is not reached before that point. Same cause as CIV-ADOPTED-CLOSURE-ROOT-TICK-COST on wt/CivSimLanding (pathological construction-funding cost in villager decisions; that branch passes the test in about 115 s and carries the fix and its regression); merge that row into this one, or drop this row, when CivSimLanding lands."
-regression = ["cargo:mc-core:villager::building_autonomy_tests::adopted_village_with_resident_shears_produces_stock_and_builds"]
-failing_first = "receipts/VillageBreakFixes/hang/base-trace.log: tree 5b4006df, debug test binary run alone, exit 124 at 600 s"
 
 [[bug]]
 id = "DUPLICATE-LOGIN-LATE-CONFIGURATION-REPLACES-PLAYING"

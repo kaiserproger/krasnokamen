@@ -1,9 +1,9 @@
 use mc_data::Identifier;
-use mc_world::Chunk;
+use mc_world::{BlockPos, Chunk};
 
 use super::{
-    ColumnPlan, TerrainGenerator, TreeBlocks, TreeKind, TreeLeafOffset, checked_y_offset,
-    feature_hash, tree_canopy_radius,
+    ColumnPlan, TerrainGenerator, TreeBlocks, TreeKind, TreeLeafOffset, VillagePlanSet,
+    checked_y_offset, feature_hash, tree_canopy_radius,
 };
 
 impl TerrainGenerator {
@@ -14,6 +14,7 @@ impl TerrainGenerator {
         blocks: Option<TreeBlocks>,
         touched: &mut [Option<i32>; 256],
         leaves: &mut Vec<(u8, i32, u8)>,
+        village: Option<&VillagePlanSet>,
     ) -> bool {
         let lx = plan.lx;
         let lz = plan.lz;
@@ -83,7 +84,15 @@ impl TerrainGenerator {
         for y in base_y..=top_y {
             let state = chunk.get_block(lx, y, lz);
             let shallow_water = wet_site && y - base_y <= 1 && state == Some(self.water);
-            if state != Some(self.air) && !shallow_water {
+            if (state != Some(self.air) && !shallow_water)
+                || village.is_some_and(|plans| {
+                    plans.entrance_headroom(BlockPos {
+                        x: plan.wx,
+                        y,
+                        z: plan.wz,
+                    })
+                })
+            {
                 return false;
             }
         }
@@ -203,7 +212,15 @@ impl TerrainGenerator {
                     }
                     let x = lx.wrapping_add_signed(dx);
                     let z = lz.wrapping_add_signed(dz);
-                    if chunk.get_block(x, y, z) == Some(self.air) {
+                    if chunk.get_block(x, y, z) == Some(self.air)
+                        && !village.is_some_and(|plans| {
+                            plans.entrance_headroom(BlockPos {
+                                x: plan.wx + i32::from(dx),
+                                y,
+                                z: plan.wz + i32::from(dz),
+                            })
+                        })
+                    {
                         self.place_single(chunk, x, y, z, blocks.leaves, touched);
                         leaves.push((x, y, z));
                     }

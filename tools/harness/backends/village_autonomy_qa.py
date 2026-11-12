@@ -628,6 +628,9 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
         ('directory = "plugins"', f"directory = {json.dumps(str(artifact / 'plugins'))}"),
         ("seed = 0", f"seed = {SEED}"),
     )
+    if civilization:
+        # The village's mine must tick beyond the four-chunk presentation window.
+        replacements += (("simulation_distance = 4", "simulation_distance = 6"),)
     for old_tok, new_tok in replacements:
         if source.count(old_tok) != 1:
             raise RuntimeError(f"expected one autonomy-qa config token: {old_tok}")
@@ -1501,7 +1504,8 @@ def _gametime(probe: ProbeSteps) -> int:
     return 0
 
 
-def _probe_ecology(probe: ProbeSteps, detail: dict[str, Any], building_lines: list[str]) -> dict[str, Any]:
+def _probe_ecology(probe: ProbeSteps, detail: dict[str, Any], building_lines: list[str], *,
+                   entities: dict[str, Any] | None = None) -> dict[str, Any]:
     """Client-visible ecology: farm crop maturity, sheep count, mine-zone presence."""
     import re as _re
     ecology: dict[str, Any] = {"farms": [], "sheep": None, "mine_zone": None, "lumber_zone": None}
@@ -1533,7 +1537,8 @@ def _probe_ecology(probe: ProbeSteps, detail: dict[str, Any], building_lines: li
                                      "farmland": len(farmland), "crop_blocks": len(crops),
                                      "mature": len(mature), "sample": crops[:6]})
     try:
-        entities = probe.call("minecraft_list_entities", {"radius": 128})
+        if entities is None:
+            entities = probe.call("minecraft_list_entities", {"radius": 128})
         rows = entities.get("entities", [])
         ecology["sheep"] = sum(1 for r in rows if isinstance(r, dict) and r.get("entity_type") == "minecraft:sheep")
         ecology["villagers"] = sum(1 for r in rows if isinstance(r, dict) and r.get("entity_type") == "minecraft:villager")
@@ -1805,11 +1810,28 @@ def _rotate_blueprint_properties(block: str, properties: dict[str, str], turns: 
     return rotated
 
 
+def _authored_state(
+    blueprint: dict[str, Any], level: int, x: int, y: int, z: int,
+) -> tuple[str, dict[str, str]] | None:
+    """Unrotated authored block and properties of one level's cell; None is air."""
+    layers = blueprint["levels"][level - 1]["layers"]
+    if y >= len(layers) or z >= len(layers[y]) or x >= len(layers[y][z]) or layers[y][z][x] == ".":
+        return None
+    block, _, properties = blueprint["palette"][layers[y][z][x]].partition("[")
+    block = block if ":" in block else f"minecraft:{block}"
+    return block, dict(part.split("=") for part in properties.rstrip("]").split(",")) if properties else {}
+
+
 def _blueprint_placements(
     record: dict[str, Any], blueprint: dict[str, Any],
     origin: list[int] | None = None, rotation: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Derive legal origins from actual certificate bounds, not placed extents."""
+    """Derive legal origins from actual certificate bounds, not placed extents.
+
+    Each cell also names the level whose project placed it: an upgrade places
+    only cells that differ from the previous level (settlements/blueprints.rs
+    level diff), so an unchanged cell keeps the earlier project's wood species.
+    """
     levels = blueprint["levels"]
     level = levels[record["level"] - 1]
     width = max(len(candidate["layers"][0][0]) for candidate in levels)
@@ -1830,16 +1852,17 @@ def _blueprint_placements(
         cells = []
         for y, layer in enumerate(level["layers"]):
             for z, row in enumerate(layer):
-                for x, symbol in enumerate(row):
-                    if symbol == ".":
+                for x in range(len(row)):
+                    state = _authored_state(blueprint, record["level"], x, y, z)
+                    if state is None:
                         continue
+                    placed_by = record["level"]
+                    while placed_by > 1 and _authored_state(blueprint, placed_by - 1, x, y, z) == state:
+                        placed_by -= 1
                     rx, rz = _rotate_blueprint_xz(x, z, width, depth, turns)
-                    state = blueprint["palette"][symbol]
-                    block, _, properties = state.partition("[")
-                    block = block if ":" in block else f"minecraft:{block}"
-                    properties = dict(part.split("=") for part in properties.rstrip("]").split(",")) if properties else {}
+                    block, properties = state
                     cells.append(((at[0] + rx, at[1] + y, at[2] + rz), block,
-                                  _rotate_blueprint_properties(block, properties, turns)))
+                                  _rotate_blueprint_properties(block, properties, turns), placed_by))
         placements.append({"origin": at, "rotation": turns, "cells": cells})
     return placements
 
@@ -1856,7 +1879,7 @@ def _observe_blueprint(
             "mismatch": "certificate bounds do not match a legal blueprint placement",
         }
         return False
-    positions = [at for placement in placements for at, _, _ in placement["cells"]]
+    positions = [cell[0] for placement in placements for cell in placement["cells"]]
     if not positions:
         return False
     bounds = {f"{edge}_{axis}": select(at[index] for at in positions)
@@ -1876,9 +1899,10 @@ def _observe_blueprint(
     results = []
     for placement in placements:
         mismatches = []
-        # One species must match the whole building, not each oak cell separately.
-        species = None
-        for at, block, wanted in placement["cells"]:
+        # Each admitted project fixes one species for the cells it placed
+        # (docs/settlements/construction.md), not each oak cell separately.
+        species: dict[int, str] = {}
+        for at, block, wanted, placed_by in placement["cells"]:
             mutable = ()
             if block in ("minecraft:wheat", "minecraft:carrots", "minecraft:potatoes", "minecraft:beetroots"):
                 mutable = ("age",)
@@ -1892,9 +1916,9 @@ def _observe_blueprint(
             got = _block_id(cell)
             if block.startswith("minecraft:oak_"):
                 suffix = "_" + block.removeprefix("minecraft:oak_")
-                if species is None and got.startswith("minecraft:") and got.endswith(suffix):
-                    species = got.removeprefix("minecraft:").removesuffix(suffix)
-                block = f"minecraft:{species or 'oak'}{suffix}"
+                if placed_by not in species and got.startswith("minecraft:") and got.endswith(suffix):
+                    species[placed_by] = got.removeprefix("minecraft:").removesuffix(suffix)
+                block = f"minecraft:{species.get(placed_by, 'oak')}{suffix}"
             actual_properties = cell.get("properties") or {}
             if got != block or any(
                 key not in mutable and str(actual_properties.get(key)) != value
@@ -1904,7 +1928,9 @@ def _observe_blueprint(
         results.append({
             "building_id": record["id"], "blueprint": blueprint["id"], "level": record["level"],
             "origin": placement["origin"], "rotation": placement["rotation"],
-            "expected_non_air": len(placement["cells"]), "wood_species": species or "oak",
+            "expected_non_air": len(placement["cells"]),
+            "wood_species": (", ".join(f"L{level} {name}" for level, name in sorted(species.items()))
+                             if len(species) > 1 else next(iter(species.values()), "oak")),
             "comparison": "all non-air blocks and stable rotated authored properties; normal gameplay states allowed",
             "matched": len(placement["cells"]) - len(mismatches), "mismatch_count": len(mismatches),
             "mismatches": mismatches[:8],

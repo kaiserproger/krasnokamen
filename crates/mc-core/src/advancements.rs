@@ -174,7 +174,7 @@ pub fn item_snapshot(state: &TickState, stack: &mc_data::ItemStack) -> Value {
         .tags
         .registries
         .iter()
-        .filter(|(registry, _)| registry.as_str() == "minecraft:item")
+        .filter(|(registry, _)| registry.as_str() == mc_data::tags::ITEM_REGISTRY)
         .flat_map(|(_, tags)| tags.iter())
         .filter(|(_, entries)| entries.contains(&(stack.item_id as i32)))
         .map(|(tag, _)| tag.as_str())

@@ -14,6 +14,8 @@ use crate::tick::TickState;
 const MARGIN: i32 = 2;
 /// Placement reach from the builder's feet to the next cell.
 const REACH: f64 = 12.0;
+/// Felling and clearing reach from the builder's feet to the cell's footing.
+pub(super) const PREPARATION_REACH: f64 = 4.0;
 
 /// Containers are approached; a perimeter cell must actually be reached.
 pub(crate) struct WorkTarget {
@@ -71,6 +73,22 @@ fn preparation_target(
     project: &construction::Project,
     next: [i32; 3],
 ) -> Option<BlockPos> {
+    let base = preparation_footing(state, project, next)?;
+    preparation_stand(state, slot, project.settlement, next, base)
+}
+
+/// A dry, open footing near the cell `next` from which the builder, once
+/// arrived, is within felling reach of `base`, the cell's own footing.
+pub(super) fn preparation_stand(
+    state: &TickState,
+    slot: EntitySlot,
+    settlement: SettlementId,
+    next: [i32; 3],
+    base: BlockPos,
+) -> Option<BlockPos> {
+    // Seed 24 parked a builder for 42,000 ticks on a hill cell three blocks
+    // above and three rows from a cleared pit's footing: the nearest stand to
+    // itself, out of reach, so it never moved and never advanced the cell.
     let here = state.entities.pos(slot);
     let mut best: Option<(f64, BlockPos)> = None;
     for dx in -3_i32..=3 {
@@ -80,7 +98,7 @@ fn preparation_target(
             }
             let Some(at) = crate::settlements::forestry::footing(
                 state,
-                project.settlement,
+                settlement,
                 [next[0] + dx, next[1], next[2] + dz],
             ) else {
                 continue;
@@ -102,10 +120,17 @@ fn preparation_target(
                                 .is_some_and(|definition| !definition.has_fluid())
                     })
             });
+            // Arrival leaves the feet within 0.3 of the centre on each axis.
+            let reaches = (f64::from(at.x - base.x).powi(2)
+                + f64::from(at.y - base.y).powi(2)
+                + f64::from(at.z - base.z).powi(2))
+            .sqrt()
+                + 0.5
+                <= PREPARATION_REACH;
             let distance = (here[0] - f64::from(at.x) - 0.5).powi(2)
                 + (here[1] - f64::from(at.y)).powi(2)
                 + (here[2] - f64::from(at.z) - 0.5).powi(2);
-            if clear && best.as_ref().is_none_or(|(known, _)| distance < *known) {
+            if clear && reaches && best.as_ref().is_none_or(|(known, _)| distance < *known) {
                 best = Some((distance, at));
             }
         }
@@ -119,8 +144,12 @@ fn site_target(
     next: [i32; 3],
     slot: EntitySlot,
 ) -> Option<BlockPos> {
-    if preparation_footing(state, project, next).is_some() {
-        return preparation_target(state, slot, project, next);
+    // With no stand in felling reach, the cell is placed from the perimeter
+    // like any blueprint cell instead of holding the only project slot.
+    if preparation_footing(state, project, next).is_some()
+        && let Some(stand) = preparation_target(state, slot, project, next)
+    {
+        return Some(stand);
     }
     if project.blueprint == construction::furnace::NAME {
         return construction::furnace::stand(state, project, next).map(block_pos);
@@ -202,7 +231,14 @@ fn in_reach(
     if let Some(base) = preparation_footing(state, project, next) {
         // As with lumberjacks, felling is rooted at the trunk's footing; its
         // crown need not be reachable as an independently placed roof block.
-        return super::mining::near(state, slot, base, 4.0);
+        if super::mining::near(state, slot, base, PREPARATION_REACH) {
+            return true;
+        }
+        // Only a cell with no stand in felling reach falls back to the
+        // perimeter rule below, matching `site_target`.
+        if preparation_stand(state, slot, project.settlement, next, base).is_some() {
+            return false;
+        }
     }
     let pos = state.entities.pos(slot);
     let width = state.entities.body(slot).half_width;

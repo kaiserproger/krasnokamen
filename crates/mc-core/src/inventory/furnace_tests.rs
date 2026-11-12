@@ -226,11 +226,11 @@ fn full_data_furnace_accepts_acacia_planks_and_cooks_charcoal() {
     let log = item("minecraft:acacia_log");
     let planks = item("minecraft:acacia_planks");
     let charcoal = item("minecraft:charcoal");
-    assert!(
-        rules
-            .tags
-            .contains_raw_id("minecraft:item", "minecraft:planks", planks as i32)
-    );
+    assert!(rules.tags.contains_raw_id(
+        mc_data::tags::ITEM_REGISTRY,
+        "minecraft:planks",
+        planks as i32
+    ));
     assert_eq!(
         rules.tags.fuel_values().burn_duration(planks),
         Some(300),

@@ -1969,7 +1969,7 @@ pub(crate) fn spawn_item_entity(
     stack: mc_data::ItemStack,
 ) -> EntityId {
     if !state.registry.tags.contains_raw_id(
-        "minecraft:item",
+        mc_data::tags::ITEM_REGISTRY,
         "minecraft:dampens_vibrations",
         stack.item_id as i32,
     ) {

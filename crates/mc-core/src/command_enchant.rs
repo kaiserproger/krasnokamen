@@ -364,7 +364,7 @@ fn supports(rules: &ItemRules<'_>, raw_id: u32, item: &Identifier, tag: &str) ->
     // Reuse loaded enchantable tags when populated. Embedded client fallback
     // tags are intentionally empty, so use the exact vanilla tag definitions
     // below in that configuration rather than treating all items as supported.
-    if let Some(tags) = rules.tags.registries.get("minecraft:item") {
+    if let Some(tags) = rules.tags.registries.get(mc_data::tags::ITEM_REGISTRY) {
         let loaded = tags.get(tag);
         if let Some(members) = loaded.filter(|members| !members.is_empty()) {
             return i32::try_from(raw_id).is_ok_and(|raw_id| members.contains(&raw_id));
@@ -727,7 +727,7 @@ mod tests {
         let mut data = Data::new();
         let stone_id = data.items.id_of(&id("stone")).unwrap() as i32;
         data.tags = TagsData::from_registries(BTreeMap::from([(
-            id("minecraft:item"),
+            id(mc_data::tags::ITEM_REGISTRY),
             BTreeMap::from([(id("minecraft:enchantable/armor"), vec![stone_id])]),
         )]));
         let mut stone = data.holding("stone");
@@ -736,7 +736,7 @@ mod tests {
         assert!(apply(&data.rules(), &mut armor, &command("protection", 1)).is_err());
 
         data.tags = TagsData::from_registries(BTreeMap::from([(
-            id("minecraft:item"),
+            id(mc_data::tags::ITEM_REGISTRY),
             BTreeMap::from([(id("minecraft:enchantable/armor"), Vec::new())]),
         )]));
         apply(&data.rules(), &mut armor, &command("protection", 1)).unwrap();

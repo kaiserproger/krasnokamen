@@ -95,6 +95,9 @@ pub struct Registry {
     radius_pending: BTreeSet<SettlementId>,
     /// Immutable generated evidence, populated off-tick and never persisted.
     pub(crate) forest: std::sync::Mutex<super::forestry::Cache>,
+    /// Exact-input funding and wood-reservation proof results; derived,
+    /// bounded and never persisted (a hit re-checks the whole key).
+    pub(super) funding: std::sync::Mutex<super::construction_crafting::FundingMemo>,
 }
 
 impl SettlementRecord {

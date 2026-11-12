@@ -37,6 +37,12 @@ borrowed again until its remaining bill is funded. Lumber search for an active
 wood shortage follows the project's selected wood family. Partial loads return
 through the ordinary storage transaction when they can fund the remaining work.
 
+Breeding-ration provisioning retains its own transient storage destination once
+a resident finds a reachable spare bed. Arrival completes that food transfer
+even when the bed is outside storage's local POI scan; ordinary worker hauling
+does not become a ration trip. This intent is not persisted and grants neither
+a bed claim nor a birth: those still require the allocator and birth checks.
+
 ## Durability and plugin boundary
 
 Touched settlement post-images and deletions share the dimension-wrapped tick

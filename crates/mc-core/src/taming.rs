@@ -65,7 +65,7 @@ pub(crate) fn food(state: &TickState, food: Option<crate::blueprint::MobFood>, i
     static TAGS: std::sync::LazyLock<(mc_data::Identifier, [mc_data::Identifier; 8])> =
         std::sync::LazyLock::new(|| {
             (
-                mc_data::Identifier::parse("minecraft:item").expect("static registry"),
+                mc_data::Identifier::parse(mc_data::tags::ITEM_REGISTRY).expect("static registry"),
                 [
                     "wolf", "cat", "parrot", "horse", "llama", "pig", "strider", "camel",
                 ]

@@ -115,7 +115,8 @@ impl ItemPredicate {
                 return Err(format!("Unknown item {item}"));
             }
             ItemPredicateBase::Tag(tag) => {
-                let registry = Identifier::parse("minecraft:item").expect("built-in item registry");
+                let registry = Identifier::parse(mc_data::tags::ITEM_REGISTRY)
+                    .expect("built-in item registry");
                 if rules
                     .tags
                     .registries
@@ -152,11 +153,11 @@ impl ItemPredicate {
         let base = match &self.base {
             ItemPredicateBase::Any => true,
             ItemPredicateBase::Item(item) => rules.items.id_of(item) == Some(stack.item_id),
-            ItemPredicateBase::Tag(tag) => {
-                rules
-                    .tags
-                    .contains_raw_id("minecraft:item", tag.as_str(), stack.item_id as i32)
-            }
+            ItemPredicateBase::Tag(tag) => rules.tags.contains_raw_id(
+                mc_data::tags::ITEM_REGISTRY,
+                tag.as_str(),
+                stack.item_id as i32,
+            ),
         };
         if !base || self.conditions.is_empty() {
             return base;

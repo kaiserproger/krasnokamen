@@ -42,7 +42,7 @@ pub fn load_vanilla_lookups(root: &Path) -> Result<VanillaEntityLootLookups, Str
                 }
                 IngredientAlternative::Tag(tag) => {
                     let registry =
-                        Identifier::parse("minecraft:item").expect("registry identifier");
+                        Identifier::parse(crate::tags::ITEM_REGISTRY).expect("registry identifier");
                     for raw_id in tags
                         .registries
                         .get(&registry)

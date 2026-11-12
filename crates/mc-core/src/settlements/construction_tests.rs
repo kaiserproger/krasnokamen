@@ -812,6 +812,62 @@ fn upgrade_uses_diff_and_certifies_level_two() {
     assert_eq!(state.plugin_block_writes.len() - old_writes, planned.len());
 }
 
+/// The structure executor refuses to write over a stocked container. Storage
+/// is where deliveries land, so its upgrade must keep every level-one
+/// container and their stock instead of stalling on the first one.
+#[test]
+fn stocked_storage_upgrades_around_its_level_one_containers() {
+    let (mut state, id, slot) = fixture();
+    start(&mut state, id, "storage", 1, None);
+    fund(&mut state, "storage", 1);
+    complete(&mut state, id, slot);
+    let building = *state
+        .settlements
+        .get(id)
+        .unwrap()
+        .buildings
+        .keys()
+        .next()
+        .unwrap();
+    let seeds = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:wheat_seeds").unwrap())
+        .unwrap();
+    let level = blueprints::get(&state.registry, "storage")
+        .unwrap()
+        .level(1)
+        .unwrap()
+        .rotated(Rotation::from_quarter_turns(0));
+    let containers: Vec<_> = level
+        .blocks
+        .iter()
+        .map(|(offset, _)| {
+            let [x, y, z] = level.world([3, 200, 3], *offset);
+            (x, y, z)
+        })
+        .filter(|cell| state.block_entities.contains_key(cell))
+        .collect();
+    assert!(containers.len() >= 3, "{containers:?}");
+    for cell in &containers {
+        state.block_entities.get_mut(cell).unwrap().slots[0] = ItemStack::new(seeds, 1);
+    }
+    start(&mut state, id, "storage", 2, Some(building));
+    fund(&mut state, "storage", 2);
+    complete(&mut state, id, slot);
+    assert_eq!(
+        state.settlements.get(id).unwrap().buildings[&building].level,
+        2
+    );
+    for cell in &containers {
+        assert_eq!(
+            state.block_entities[cell].slots[0],
+            ItemStack::new(seeds, 1),
+            "{cell:?}"
+        );
+    }
+}
+
 #[test]
 fn mid_project_checkpoint_restores_handle_native_progress_carry_and_resumes() {
     let (mut state, id, slot) = fixture();

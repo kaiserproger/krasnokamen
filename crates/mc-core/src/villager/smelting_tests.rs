@@ -304,6 +304,57 @@ fn native_ticks_smelt_only_needed_iron_then_craft_shears_and_deliver_wool() {
     );
 }
 
+/// Seed-24 civilization run 90d4lq2w: every working adult held a job, the
+/// unemployed one died, and the stocked raw iron never reached the furnace.
+/// A miner already handles ore and must supply the construction iron itself.
+#[test]
+fn employed_miner_smelts_construction_iron_through_native_ticks() {
+    let (mut state, worker, _) = setup();
+    let slot = state.entities.slot_of(worker).unwrap();
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .data
+        .profession = VillagerProfession::Miner;
+    let raw = mining::item_id(&state, "raw_iron").unwrap();
+    let iron = mining::item_id(&state, "iron_ingot").unwrap();
+    let before = counts(&state);
+    let mut saw_cooking = false;
+    for _ in 0..4_000 {
+        crate::tick::run_tick(&mut state, &[]);
+        saw_cooking |= state.block_entities[&FURNACE]
+            .furnace
+            .as_ref()
+            .unwrap()
+            .cook_progress
+            > 0;
+        if counts(&state).get(&raw).copied().unwrap_or(0) == before[&raw] - 2 {
+            break;
+        }
+    }
+    assert!(
+        saw_cooking,
+        "the miner must load the owned furnace: worker={:?}, furnace={:?}",
+        state.entities.row(slot).villager,
+        state.block_entities[&FURNACE],
+    );
+    assert_eq!(
+        counts(&state).get(&raw).copied().unwrap_or(0),
+        before[&raw] - 2,
+        "only the shears' two raw iron are smelted"
+    );
+    let shears = mining::item_id(&state, "shears").unwrap();
+    let now = counts(&state);
+    assert_eq!(
+        now.get(&iron).copied().unwrap_or(0) + 2 * now.get(&shears).copied().unwrap_or(0),
+        2,
+        "both raw iron became real ingots (or the shears made from them)"
+    );
+}
+
 #[test]
 fn pending_wool_bill_bootstraps_furnace_and_delivers_entire_sheared_lot() {
     let (mut state, worker, sheep) = setup();

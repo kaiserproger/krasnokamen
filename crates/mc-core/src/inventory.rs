@@ -79,7 +79,7 @@ impl ItemRules<'_> {
             return false;
         }
         self.tags.contains_raw_id(
-            "minecraft:item",
+            mc_data::tags::ITEM_REGISTRY,
             "beacon_payment_items",
             stack.item_id as i32,
         ) || matches!(

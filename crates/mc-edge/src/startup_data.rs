@@ -56,7 +56,11 @@ pub fn load_effective_tags(
             vanilla_data_dir.display()
         );
     }
-    for registry in ["minecraft:block", "minecraft:item", "minecraft:entity_type"] {
+    for registry in [
+        "minecraft:block",
+        mc_data::tags::ITEM_REGISTRY,
+        "minecraft:entity_type",
+    ] {
         let registry_id = mc_data::Identifier::parse(registry).expect("static registry id");
         let missing = match tags.registries.get(&registry_id) {
             Some(entries) => !entries.values().any(|ids| !ids.is_empty()),

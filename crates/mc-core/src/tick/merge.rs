@@ -755,7 +755,7 @@ impl TickState {
                 crate::plugin::pickup_event(self, collector_id, stack.item_id, taken);
                 if taken > 0
                     && !self.registry.tags.contains_raw_id(
-                        "minecraft:item",
+                        mc_data::tags::ITEM_REGISTRY,
                         "minecraft:dampens_vibrations",
                         stack.item_id as i32,
                     )
