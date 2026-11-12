@@ -256,6 +256,7 @@ def items_fixture(items: int) -> dict[str, Any]:
             "items": {"requested": items, **{name: spec["count"] for name, spec in layout.items()},
                       "layout": layout},
             "observer_anchors": [[0, 0]],
+            "setup_server_toml": "[anti_cheat]\npacket_rate_per_second = 5000\npacket_burst = 20000\n",
             "regions": [{"name": "platform", "anchor": [0, 0], "view_distance": 8, "commands": platform},
                         {"name": "items", "anchor": [0, 0], "view_distance": 8, "commands": commands}],
             "official_performance_evidence": False}
@@ -1573,7 +1574,13 @@ async def run(args: argparse.Namespace) -> int:
             raise ValueError(f"fixture cache {args.fixture_cache} has no complete entry {key}; "
                              "--require-cache-hit refuses to prepare a replacement world "
                              "(recipe or registry content changed?)")
-        world, prepared = await compare.prepare(args, args.out / "prepare", recipe, key, hashes)
+        # The setup bot summons faster than the per-packet-type ingress budget (500/s, burst 1000) refills:
+        # preparation only, the measured server keeps the default budget.
+        args.server_toml_extra = recipe.get("setup_server_toml", "")
+        try:
+            world, prepared = await compare.prepare(args, args.out / "prepare", recipe, key, hashes)
+        finally:
+            args.server_toml_extra = ""
         validate_prepared(recipe, prepared)
         if args.profile == "native-100-kelp12k":
             result["kelp12k_world"] = validate_kelp12k(key, prepared)

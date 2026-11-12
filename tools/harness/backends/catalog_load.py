@@ -286,6 +286,10 @@ metrics_bearer_token = {json.dumps(getattr(args, "metrics_bearer_token", None) o
     if plugins_dir is not None:
         with path.open("a") as handle:
             handle.write(f"\n[plugins]\ndirectory = {json.dumps(str(plugins_dir))}\n")
+    extra = getattr(args, "server_toml_extra", "")
+    if extra:
+        with path.open("a") as handle:
+            handle.write("\n" + extra)
     if operators:
         ops = []
         for index in range(clients):

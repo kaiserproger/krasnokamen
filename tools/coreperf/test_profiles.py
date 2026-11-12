@@ -107,6 +107,14 @@ class ProfilesTests(unittest.TestCase):
         self.assertEqual(profiles.items_census(profiles.items_fixture(0), {"entities": {}}),
                          {"platform": 0, "off_platform": 0})
 
+    def test_items_heavy_setup_server_lifts_the_ingress_budget_for_preparation_only(self):
+        import tomllib
+        extra = tomllib.loads(profiles.items_fixture(10)["setup_server_toml"])["anti_cheat"]
+        # The summon stream is faster than the default 500/s refill and 1000 burst per packet type.
+        self.assertGreater(extra["packet_rate_per_second"], 500)
+        self.assertGreater(extra["packet_burst"], 10000)
+        self.assertNotIn("setup_server_toml", profiles.fixture(100000, 0))
+
     def test_items_heavy_runs_without_random_ticks(self):
         rules = profiles.items_fixture(0)["regions"][0]["commands"]
         self.assertIn("gamerule randomTickSpeed 0", rules)
