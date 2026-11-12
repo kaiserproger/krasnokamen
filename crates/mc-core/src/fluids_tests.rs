@@ -385,6 +385,8 @@ mod bottles;
 mod bubble_columns;
 #[path = "fluid_parity_tests.rs"]
 mod parity;
+#[path = "fluid_plants_tests.rs"]
+mod plants;
 #[path = "pov_ray_tests.rs"]
 mod pov_ray;
 
