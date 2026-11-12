@@ -5182,7 +5182,7 @@ title = "Flowing water washes kelp, kelp_plant, seagrass and sugar cane into loo
 area = "gameplay"
 repro = "cargo"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "Owner question about the native-100 item load (items are 98.5 % kelp), then code reading and a reproduction on ae0147a9 (crates/mc-core fluids.rs flow_into washed every state with an empty collision shape and no waterlogged property). Vanilla 26.3 FlowingFluid.canHoldAnyFluid/canHoldSpecificFluid: only the washed_away_by_fluids block tag gives way, and a LiquidBlockContainer (kelp, kelp_plant, seagrass, tall_seagrass: canPlaceLiquid false) refuses a flow; sugar cane is not in the tag. Fixed for vanilla parity; the native-100 item count is measured separately."
 regression = [
   "cargo:mc-core:fluids_tests::plants::flowing_water_leaves_kelp_seagrass_and_sugar_cane_standing",
@@ -5191,3 +5191,4 @@ regression = [
 ]
 failing_first = "reported"
 fix_commit = "af58aeb920b1403c294982c477f53e1ceabc66c1"
+promotion = "docs/bugs/promotions/FLUID-FLOW-WASHES-KELP-SEAGRASS-SUGAR-CANE.json"
