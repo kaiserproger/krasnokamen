@@ -350,14 +350,16 @@ fn first_solid(
 }
 /// `AbstractArrow.shouldFall`: `noCollision(AABB(pos, pos).inflate(0.06))`,
 /// a strict-overlap test against every block collision box. An unloaded or
-/// unknown cell keeps the arrow in place.
-fn should_fall(state: &TickState, pos: [f64; 3]) -> bool {
-    const REACH: f64 = 0.06;
+/// unknown cell keeps the arrow in place. An authored projectile with a
+/// collision radius sticks with its centre that radius further from the face
+/// (the swept sphere touches first), so its box grows by the same radius.
+fn should_fall(state: &TickState, pos: [f64; 3], collision_radius: f64) -> bool {
+    let reach = 0.06 + collision_radius;
     if pos.iter().any(|value| !value.is_finite()) {
         return false;
     }
-    let lower: [f64; 3] = std::array::from_fn(|axis| pos[axis] - REACH);
-    let upper: [f64; 3] = std::array::from_fn(|axis| pos[axis] + REACH);
+    let lower: [f64; 3] = std::array::from_fn(|axis| pos[axis] - reach);
+    let upper: [f64; 3] = std::array::from_fn(|axis| pos[axis] + reach);
     let below = i32::from(
         state
             .registry
@@ -708,7 +710,11 @@ fn step(
         // AbstractArrow.tick: an in-ground arrow whose box inflated by 0.06
         // no longer collides (`shouldFall`) starts falling: in-ground cleared,
         // its zero motion scaled, `life` reset, and no despawn tick.
-        if should_fall(state, pos) {
+        if should_fall(
+            state,
+            pos,
+            authored.map_or(0.0, |profile| profile.collision_radius),
+        ) {
             record.stuck = false;
             record.age = 0;
             state.entities.set_ground(slot, false);
