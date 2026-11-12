@@ -28,9 +28,11 @@ takes them, durable events (player commands, operation results, menu clicks,
 graves) wait in the core, bounded at 1024 entries (events, player changes and
 execution traces). While a quarter of that bound (256 entries) is waiting, the
 core refuses new plugin commands: the player is told the plugin is backed up and
-the command is not queued. A command refused this way is never delivered; the
-player retypes it. Commands are accepted again once the host catches up.
-Observations (joins, chat, block and kill events) are shed per plugin and never
-count toward this bound. If the bound itself is passed by events that cannot be
-refused (for example menu clicks), the core halts the world fail closed and
-logs the backlog by event kind under the `plugin.backlog` target.
+the command is not queued. A menu click in that state is dropped the same way
+(the menu is redrawn, the plugin never sees the click). A refused command or
+click is never delivered; the player retries. Both are accepted again once the
+host catches up. Observations (joins, chat, block and kill events) are shed per
+plugin and never count toward this bound. If the bound itself is passed by
+events that cannot be refused (graves, guest command results), the core halts
+the world fail closed and logs the backlog by event kind under the
+`plugin.backlog` target.
