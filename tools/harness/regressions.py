@@ -91,7 +91,7 @@ _WINDOWED_PROFILES = frozenset({
     'dialogs', 'admin-commands', 'chisel', 'anti-xray', 'block-log',
     'composter-chance', 'chat-visibility', 'datapack-reload', 'village-qa', 'village-autonomy-qa',
     'civilization-seed-qa', 'village-owner-order-qa', 'scene-shot',
-    'settlement-map-qa', 'claim-only-qa', 'buildings-qa', 'army-qa', 'autocraft-qa',
+    'settlement-map-qa', 'claim-only-qa', 'buildings-qa', 'army-qa', 'autocraft-qa', 'screen-share',
 })
 _AUTONOMY_VERDICTS = frozenset({
     'walk_to_village', 'ownerless_settlement', 'founding_chest_empty',
