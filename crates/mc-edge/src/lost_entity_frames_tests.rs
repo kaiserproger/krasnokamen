@@ -18,6 +18,11 @@ const VIEWER: EntityId = EntityId(1);
 const HORSE: EntityId = EntityId(10);
 const RIDER: EntityId = EntityId(11);
 
+/// The rider never changes: like the core's copy-on-write rows, its appearance
+/// keeps one allocation across ticks, so only the horse is stale on a dismount.
+static RIDER_APPEARANCE: std::sync::LazyLock<Arc<EntityAppearance>> =
+    std::sync::LazyLock::new(Arc::default);
+
 /// A horse and its rider (mounted or not) in the viewer's chunk.
 fn horse_and_rider(tick: u64, mounted: bool) -> TickOutput {
     scene(tick, Some(mounted))
@@ -44,7 +49,7 @@ fn scene(tick: u64, horse: Option<bool>) -> TickOutput {
         block: Some(mc_world::chunk::LightSection::uniform(0)),
         sky: Some(mc_world::chunk::LightSection::uniform(0xFF)),
     });
-    let row = |id: EntityId, name: &str, y: f64, passengers: Vec<EntityId>| EntityView {
+    let row = |id: EntityId, name: &str, y: f64, appearance: Arc<EntityAppearance>| EntityView {
         id,
         uuid: uuid::Uuid::from_u128(id.0 as u128),
         type_id: type_id(name),
@@ -54,10 +59,13 @@ fn scene(tick: u64, horse: Option<bool>) -> TickOutput {
         pitch: 0.0,
         head_yaw: 0.0,
         on_ground: true,
-        appearance: Arc::new(EntityAppearance {
-            passengers,
+        appearance,
+    };
+    let horse_appearance = |mounted: bool| {
+        Arc::new(EntityAppearance {
+            passengers: if mounted { vec![RIDER] } else { vec![] },
             ..Default::default()
-        }),
+        })
     };
     TickOutput {
         tick,
@@ -70,16 +78,14 @@ fn scene(tick: u64, horse: Option<bool>) -> TickOutput {
                 chunk: Arc::new(chunk),
             }]),
             entities: horse
-                .map(|mounted| {
-                    row(
-                        HORSE,
-                        "minecraft:horse",
-                        64.0,
-                        if mounted { vec![RIDER] } else { vec![] },
-                    )
-                })
+                .map(|mounted| row(HORSE, "minecraft:horse", 64.0, horse_appearance(mounted)))
                 .into_iter()
-                .chain([row(RIDER, "minecraft:zombie", 64.025, vec![])])
+                .chain([row(
+                    RIDER,
+                    "minecraft:zombie",
+                    64.025,
+                    Arc::clone(&RIDER_APPEARANCE),
+                )])
                 .collect::<Vec<_>>()
                 .into(),
             ..Default::default()
