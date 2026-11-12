@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/brand/krasnokamen-logo-on-dark.svg">
-    <img src="docs/brand/krasnokamen-logo-on-light.svg" alt="Krasnokamen" width="560">
+    <img src="docs/brand/krasnokamen-logo-on-light.svg" alt="Krasnokamen" width="420">
   </picture>
 </p>
 
@@ -16,7 +16,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/kaiserproger/krasnokamen/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/kaiserproger/krasnokamen?include_prereleases&display_name=tag&sort=semver&style=for-the-badge&color=C63A2E"></a>
+  <a href="https://github.com/kaiserproger/krasnokamen/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/kaiserproger/krasnokamen?include_prereleases&display_name=tag&sort=semver&style=for-the-badge&color=D51B13"></a>
   <a href="https://github.com/kaiserproger/krasnokamen/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/kaiserproger/krasnokamen/ci.yml?branch=main&label=CI&style=for-the-badge"></a>
   <img alt="Minecraft Java 26.3" src="https://img.shields.io/badge/Minecraft_Java-26.3-62B47A?style=for-the-badge">
   <img alt="Built with Rust" src="https://img.shields.io/badge/Built_with-Rust-CE422B?style=for-the-badge&logo=rust&logoColor=white">

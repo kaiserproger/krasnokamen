@@ -3,7 +3,7 @@
 <p>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="krasnokamen-logo-on-dark.svg">
-    <img src="krasnokamen-logo-on-light.svg" alt="Krasnokamen" width="420">
+    <img src="krasnokamen-logo-on-light.svg" alt="Krasnokamen" width="320">
   </picture>
 </p>
 
@@ -15,9 +15,10 @@ original art drawn for the project: no Mojang textures, no Minecraft imagery.
 
 - Write **Krasnokamen**: one word, capital K, the rest lower case. Not
   "KrasnoKamen", "Krasno Kamen", "Krasnokamen Engine" or "KK".
-- Meaning: from Russian «красный камень», "red stone". The stone is a rock,
-  not Minecraft's redstone, and the art never shows redstone dust, torches or
-  circuits.
+- Meaning: from Russian «красный камень», "red stone". The mark sets a red
+  stone, drawn as a pixel texture that glows like redstone under shader light,
+  into a pixel K. It is drawn for the project, never copied from a Mojang
+  texture, and never shows torches, wires or circuits.
 - English pronunciation: **kras-NO-ka-men**.
 - Components keep the name in front: Krasnokamen Client, Krasnokamen Loader,
   Krasnokamen Default Plugins.
@@ -48,11 +49,11 @@ a reader may know the old name; otherwise use Krasnokamen alone.
 
 | File | Use |
 | :-- | :-- |
-| [`krasnokamen-logo-on-light.svg`](krasnokamen-logo-on-light.svg) | Primary logo (mark and wordmark) for light backgrounds |
-| [`krasnokamen-logo-on-dark.svg`](krasnokamen-logo-on-dark.svg) | Primary logo for dark backgrounds: light wordmark, lower stone facets one step lighter |
+| [`krasnokamen-logo-on-light.svg`](krasnokamen-logo-on-light.svg) | Primary logo for light backgrounds: the mark, the wordmark centred below it |
+| [`krasnokamen-logo-on-dark.svg`](krasnokamen-logo-on-dark.svg) | Primary logo for dark backgrounds: light wordmark, stronger glow |
 | [`krasnokamen-wordmark-on-light.svg`](krasnokamen-wordmark-on-light.svg), [`krasnokamen-wordmark-on-dark.svg`](krasnokamen-wordmark-on-dark.svg) | Wordmark alone, where the mark already appears nearby |
-| [`krasnokamen-mark-on-light.svg`](krasnokamen-mark-on-light.svg), [`krasnokamen-mark-on-dark.svg`](krasnokamen-mark-on-dark.svg) | The faceted red stone alone, transparent |
-| [`krasnokamen-icon.svg`](krasnokamen-icon.svg) and `krasnokamen-icon-{16,32,64,256,512}.png` | Square app, launcher and favicon icon: the stone on a Stone 900 tile |
+| [`krasnokamen-mark-on-light.svg`](krasnokamen-mark-on-light.svg), [`krasnokamen-mark-on-dark.svg`](krasnokamen-mark-on-dark.svg) | The mark alone (the K and its stone), transparent |
+| [`krasnokamen-icon.svg`](krasnokamen-icon.svg) and `krasnokamen-icon-{16,32,64,256,512}.png` | Square app, launcher and favicon icon: the mark on a Stone 900 tile. The 32 px PNG is the 32 × 32 mark pixel for pixel; the 16 px PNG is the stone alone |
 
 The wordmark is drawn as outlined SVG paths, so no font is needed to show it.
 Never retype KRASNOKAMEN in a font to imitate it; use the files.
@@ -62,41 +63,50 @@ In a GitHub README, let the reader's theme pick the variant:
 ```html
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/kaiserproger/krasnokamen/main/docs/brand/krasnokamen-logo-on-dark.svg">
-  <img src="https://raw.githubusercontent.com/kaiserproger/krasnokamen/main/docs/brand/krasnokamen-logo-on-light.svg" alt="Krasnokamen" width="480">
+  <img src="https://raw.githubusercontent.com/kaiserproger/krasnokamen/main/docs/brand/krasnokamen-logo-on-light.svg" alt="Krasnokamen" width="420">
 </picture>
 ```
 
 ## Mark and wordmark
 
-The mark is a cut stone lit from the top left: eight flat facets in the red
-ramp below, lightest on the top facet, darkest at the lower right. The wordmark
-is a set of chiselled capitals: square stems, and every curve cut into straight
-45° facets (the O is an octagon), echoing the stone.
+The mark is a 32 × 32 pixel picture: the K of the wordmark, drawn in grey
+stone, with a red stone set into its heart where the arm and the leg meet the
+stem. The stone is a 16 × 16 texture, the size of a block texture: eight
+facets lit from the top left, light ridges where a facet meets a darker one,
+a dark outline on the shadow side and six glowing specks. A red bloom around
+the stone and each speck, and red light spilling onto the grey K, give it the
+look of an emissive block under shaders. The wordmark is a set of chiselled
+capitals: square stems, and every curve cut into straight 45° facets (the O is
+an octagon). In the logo the wordmark sits centred below the mark.
 
-- Clear space: keep free space of at least half the mark's height on every side
-  of the logo.
-- Minimum size: the logo at 160 px wide; the mark alone at 24 px. Below 32 px use
-  the icon PNGs, which are rendered for those sizes.
+- Clear space: keep free space of at least a quarter of the logo's width on
+  every side.
+- Minimum size: the logo at 160 px wide; the mark alone at 32 px. Below 64 px use
+  the icon PNGs, which are drawn at exact pixel sizes. Where you choose the size
+  of the mark, prefer whole multiples of 32 px.
 - Do not recolour, outline, rotate, stretch, shadow or animate the mark or the
-  wordmark, rearrange the lockup, place the logo on a busy picture, or combine
-  it with Minecraft or Mojang logos and textures.
+  wordmark, smooth or blur its pixels, add more glow, rearrange the logo, place
+  it on a busy picture, or combine it with Minecraft or Mojang logos and
+  textures.
 
 ## Colour
 
-Brand red is **`#C63A2E`**. The red ramp exists to shade the stone's facets;
+Brand red is **`#D51B13`**. The red ramp exists to draw the stone's texture;
 use brand red alone for accents, links and highlights. Stone greys carry text
 and surfaces.
 
 | Name | Hex | Use |
 | :-- | :-- | :-- |
-| Red 100 | `#F7907A` | Top facet |
-| Red 200 | `#EC6852` | Upper-left facet; red text on Stone 900 |
-| Red 300 | `#DB4A3A` | Left facet |
-| **Red 500 (brand red)** | **`#C63A2E`** | Front facet, accents, badges |
-| Red 600 | `#B33229` | Lower-left facet |
-| Red 700 | `#962827` | Right facet |
-| Red 800 | `#7A1E21` | Bottom facet |
-| Red 900 | `#5E161A` | Lower-right facet |
+| Red 50 | `#FFD3CA` | Hottest specks, in the light |
+| Red 100 | `#FF8C7C` | Glowing specks |
+| Red 200 | `#FF5241` | Lit pixels; red text on Stone 900 |
+| Red 300 | `#F22A1C` | Upper, lit face |
+| **Red 500 (brand red)** | **`#D51B13`** | Front face, accents, badges |
+| Red 600 | `#B2120E` | Middle face |
+| Red 700 | `#8E0C0B` | Lower face |
+| Red 800 | `#6B0808` | Shadow |
+| Red 900 | `#4A0406` | Deep shadow |
+| Red 950 | `#2A0103` | Outline on the shadow side |
 | Stone 50 | `#F5F3F1` | Wordmark and text on dark |
 | Stone 100 | `#E9E6E3` | Light surfaces, panels |
 | Stone 300 | `#C4BFBA` | Secondary text on dark, rules on light |
@@ -105,9 +115,11 @@ and surfaces.
 | Stone 800 | `#2F2C2A` | Raised dark surfaces |
 | Stone 900 | `#1D1B1A` | Wordmark on light, dark backgrounds, icon tile |
 
-On dark backgrounds (the `-on-dark` files, the icon and the social preview) the
-right and lower facets move one step lighter, Red 500 to Red 800, so the stone
-keeps its outline.
+The grey K uses Stone 300, Stone 500 and Stone 700 with in-between tones for its
+bevel and grain; near the stone those pixels are tinted towards red by the
+stone's light. On dark backgrounds (the `-on-dark` files, the icon and the
+social preview) the glow is stronger; on light backgrounds it is softer, so it
+does not muddy the page.
 
 ## Type
 
