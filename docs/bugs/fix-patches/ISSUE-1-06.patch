@@ -1,0 +1,24 @@
+diff --git a/crates/mc-core/src/settlements/ui_menus.rs b/crates/mc-core/src/settlements/ui_menus.rs
+index b66569d2..e6cfdf49 100644
+--- a/crates/mc-core/src/settlements/ui_menus.rs
++++ b/crates/mc-core/src/settlements/ui_menus.rs
+@@ -1796,6 +1796,19 @@ fn production_screen(state: &TickState, ctx: &Ctx, page: usize) -> Screen {
+     navigation(&mut screen, state, ctx, page, pages, |page| {
+         View::Production { page }
+     });
++    if ctx.manage {
++        screen.put(
++            ACTION,
++            icon(
++                state,
++                Icon::CraftingTable,
++                1,
++                text(ctx.t(Key::NewOrder)),
++                &[],
++            ),
++            Target::Dialog("order_start"),
++        );
++    }
+     screen.put(BACK, back(state, ctx), Target::Show(View::Dashboard));
+     screen
+ }
