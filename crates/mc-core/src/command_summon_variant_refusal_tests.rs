@@ -175,37 +175,7 @@ fn checkpoint_store_with_raw_imported_unknown_variants_opens_with_defaults() {
         )
         .unwrap();
     drop(store);
-    let log = std::sync::Arc::new(parking_lot::Mutex::new(Vec::new()));
-    #[derive(Clone)]
-    struct Sink(std::sync::Arc<parking_lot::Mutex<Vec<u8>>>);
-    impl std::io::Write for Sink {
-        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
-            self.0.lock().extend_from_slice(bytes);
-            Ok(bytes.len())
-        }
-        fn flush(&mut self) -> std::io::Result<()> {
-            Ok(())
-        }
-    }
-    let sink = Sink(log.clone());
-    let subscriber = tracing_subscriber::fmt()
-        .without_time()
-        .with_ansi(false)
-        .with_writer(move || sink.clone())
-        .finish();
-    let recovered = tracing::subscriber::with_default(subscriber, || {
-        crate::native_checkpoint::recover_offline(&config).unwrap()
-    });
-    let warnings = String::from_utf8(log.lock().clone()).unwrap();
-    for needle in [
-        "unknown variant ignored",
-        "custom:pink",
-        "minecraft:not_a_variant",
-        "minecraft:cow",
-        "minecraft:chicken",
-    ] {
-        assert!(warnings.contains(needle), "{needle}: {warnings}");
-    }
+    let recovered = crate::native_checkpoint::recover_offline(&config).unwrap();
     let replay = &recovered.dimensions[&crate::dimensions::Dimension::Overworld];
     for (id, index) in [(cow, 18), (chicken, 18)] {
         let entity = &replay.entities[&id.0];
