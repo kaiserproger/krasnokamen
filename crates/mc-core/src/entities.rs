@@ -1194,7 +1194,7 @@ impl EntityStore {
         #[cfg(test)]
         {
             static TRACE: std::sync::LazyLock<bool> =
-                std::sync::LazyLock::new(|| std::env::var_os("SOLARIS_TRACE_ROW_MUT").is_some());
+                std::sync::LazyLock::new(|| std::env::var_os("KRASNOKAMEN_TRACE_ROW_MUT").is_some());
             if *TRACE {
                 let caller = std::panic::Location::caller();
                 let counts = self
@@ -1954,7 +1954,7 @@ pub struct ColdFields {
 pub(crate) fn player_type_id() -> u32 {
     use std::sync::LazyLock;
     static ID: LazyLock<u32> = LazyLock::new(|| {
-        mc_data::entity_types::solaris_required_entity_types()
+        mc_data::entity_types::krasnokamen_required_entity_types()
             .id_of(&mc_data::Identifier::parse("minecraft:player").expect("static id parses"))
             .expect("player entity type present")
     });

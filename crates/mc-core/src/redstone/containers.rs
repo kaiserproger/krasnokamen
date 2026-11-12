@@ -307,7 +307,7 @@ fn decode(
             }
         }
     }
-    let cooldown = match field(&fields, "solaris:TransferCooldownUntil") {
+    let cooldown = match field(&fields, "krasnokamen:TransferCooldownUntil") {
         Some(Tag::Long(value)) => {
             let until = (*value).max(0) as u64;
             tick.saturating_add(until.saturating_sub(tick).min(8))
@@ -341,7 +341,7 @@ fn encode(state: &TickState, pos: BlockPos, name: &str, slots: &[ItemStack]) -> 
     fields.retain(|(name, _)| {
         !matches!(
             name.as_str(),
-            "id" | "x" | "y" | "z" | "Items" | "TransferCooldown" | "solaris:TransferCooldownUntil"
+            "id" | "x" | "y" | "z" | "Items" | "TransferCooldown" | "krasnokamen:TransferCooldownUntil"
         )
     });
     fields.extend([
@@ -380,7 +380,7 @@ fn encode(state: &TickState, pos: BlockPos, name: &str, slots: &[ItemStack]) -> 
             Tag::Int(state.redstone_containers.remaining(key(pos), state.tick)),
         ));
         fields.push((
-            "solaris:TransferCooldownUntil".into(),
+            "krasnokamen:TransferCooldownUntil".into(),
             Tag::Long(
                 state
                     .redstone_containers

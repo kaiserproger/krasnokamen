@@ -6,7 +6,7 @@
 //! `StructureTemplate.placeInWorld` (with `SinglePoolElement`/
 //! `LegacySinglePoolElement`'s settings) and `BlockState.rotate`/`mirror` from
 //! the bundled 26.1.2 server jar, and printed the tables below. The fixtures
-//! here are Solaris-authored synthetic templates in vanilla's NBT shape; only
+//! here are Krasnokamen-authored synthetic templates in vanilla's NBT shape; only
 //! the outcomes are vanilla's.
 //!
 //! Three reference facts back the placement layer:
@@ -655,12 +655,12 @@ fn render(blocks: &BlockRegistry, state: BlockStateId) -> String {
     }
 }
 
-/// `<SOLARIS_CONTENT_CACHE>`, else `/tmp/jdk-cold2`, else `<workspace>/data/vanilla`.
+/// `<KRASNOKAMEN_CONTENT_CACHE>`, else `/tmp/jdk-cold2`, else `<workspace>/data/vanilla`.
 ///
 /// The real-cache tests read the vanilla content cache from one of these and
 /// skip loudly when none is present.
 fn content_cache() -> Option<PathBuf> {
-    let env = std::env::var("SOLARIS_CONTENT_CACHE")
+    let env = std::env::var("KRASNOKAMEN_CONTENT_CACHE")
         .ok()
         .map(PathBuf::from);
     let scratch = Some(PathBuf::from("/tmp/jdk-cold2"));
@@ -761,7 +761,7 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        let blocks = BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+        let blocks = BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
             .expect("the embedded required-block report is well formed");
         Self {
             blocks,
@@ -1619,7 +1619,7 @@ fn real_cache_villager_templates_carry_their_entities() {
     let Some(cache) = content_cache() else {
         println!(
             "SKIP real_cache_villager_templates_carry_their_entities: no vanilla content cache at \
-             /tmp/jdk-cold2 or $SOLARIS_CONTENT_CACHE"
+             /tmp/jdk-cold2 or $KRASNOKAMEN_CONTENT_CACHE"
         );
         return;
     };
@@ -1688,7 +1688,7 @@ fn real_cache_places_the_desert_town_centre() {
     let Some(cache) = content_cache() else {
         println!(
             "SKIP real_cache_places_the_desert_town_centre: no vanilla content cache at \
-             /tmp/jdk-cold2 or $SOLARIS_CONTENT_CACHE"
+             /tmp/jdk-cold2 or $KRASNOKAMEN_CONTENT_CACHE"
         );
         return;
     };

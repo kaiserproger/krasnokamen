@@ -2,7 +2,7 @@
 //!
 //! This loader keeps the data sidecar boundary in `mc-data`: it parses
 //! shaped, shapeless, cooking, and bounded stonecutting recipe JSON into
-//! small Solaris data types without executing crafting or depending on Play
+//! small Krasnokamen data types without executing crafting or depending on Play
 //! inventory packets.
 
 mod armor_dye;
@@ -491,7 +491,7 @@ impl RecipeResult {
 ///
 /// Stonecutting is deliberately bounded to one ingredient plus an id/count
 /// result. Component-bearing outputs and unsupported recipe types are skipped,
-/// so Solaris never advertises an output it cannot reproduce. A missing
+/// so Krasnokamen never advertises an output it cannot reproduce. A missing
 /// directory is not an error: startup keeps working without sidecar recipe data.
 pub fn load_recipes(recipe_dir: impl AsRef<Path>) -> Result<Vec<Recipe>, RecipeDataError> {
     let recipe_dir = recipe_dir.as_ref();
@@ -519,9 +519,9 @@ pub fn load_recipes(recipe_dir: impl AsRef<Path>) -> Result<Vec<Recipe>, RecipeD
     Ok(recipes)
 }
 
-/// Repo-owned crafting baseline for running Solaris without a local recipe sidecar.
+/// Repo-owned crafting baseline for running Krasnokamen without a local recipe sidecar.
 #[must_use]
-pub fn solaris_required_recipes() -> Vec<Recipe> {
+pub fn krasnokamen_required_recipes() -> Vec<Recipe> {
     let path = Path::new("crates/mc-data/data/required_recipes.json");
     let mut raw: BTreeMap<String, serde_json::Value> =
         serde_json::from_str(REQUIRED_RECIPES).expect("embedded required recipe JSON is valid");

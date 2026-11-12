@@ -52,8 +52,8 @@ pub(super) fn globals(tick: u64) -> BTreeMap<String, NativeDomainRecord> {
 }
 pub(super) fn registries() -> (BlockRegistry, mc_data::items::ItemRegistry) {
     (
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
-        mc_data::items::solaris_required_items(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
+        mc_data::items::krasnokamen_required_items(),
     )
 }
 fn commit(
@@ -1225,7 +1225,7 @@ fn native_checkpoint_slot_migration_and_wire_conflicts_are_atomic() {
         position: ChunkPos { x: 1, z: 1 },
         generated_slot: Some([4; 32]),
         journal_lsn: 1,
-        payload: Some(Tag::Compound(vec![("solaris:WireId".into(), Tag::Int(9))])),
+        payload: Some(Tag::Compound(vec![("krasnokamen:WireId".into(), Tag::Int(9))])),
     };
     commit(
         &store,
@@ -1344,7 +1344,7 @@ fn commit_checkpoint_then_crash(path: &std::path::Path) -> ! {
         position: base.pos,
         generated_slot: Some([3; 32]),
         journal_lsn: 7,
-        payload: Some(Tag::Compound(vec![("solaris:WireId".into(), Tag::Int(9))])),
+        payload: Some(Tag::Compound(vec![("krasnokamen:WireId".into(), Tag::Int(9))])),
     };
     store
         .commit_checkpoint(
@@ -1383,7 +1383,7 @@ fn crash_checkpoint_child(path: &std::path::Path, test: &str, environment: &str)
 
 #[test]
 fn native_checkpoint_writer_reopen_after_crash_keeps_last_immediate_commit() {
-    const CHILD: &str = "SOLARIS_NATIVE_A_WRITER_CRASH_CHILD";
+    const CHILD: &str = "KRASNOKAMEN_NATIVE_A_WRITER_CRASH_CHILD";
     if let Some(path) = std::env::var_os(CHILD) {
         commit_checkpoint_then_crash(std::path::Path::new(&path));
     }
@@ -1427,7 +1427,7 @@ fn native_checkpoint_writer_reopen_after_crash_keeps_last_immediate_commit() {
 
 #[test]
 fn native_checkpoint_readonly_crash_refuses_export_without_repairing_source() {
-    const CHILD: &str = "SOLARIS_NATIVE_A_READONLY_CRASH_CHILD";
+    const CHILD: &str = "KRASNOKAMEN_NATIVE_A_READONLY_CRASH_CHILD";
     if let Some(path) = std::env::var_os(CHILD) {
         commit_checkpoint_then_crash(std::path::Path::new(&path));
     }

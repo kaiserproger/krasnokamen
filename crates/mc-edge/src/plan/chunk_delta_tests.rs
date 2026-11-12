@@ -22,11 +22,11 @@ impl Registries {
         Self {
             biomes: crate::chunks::test_biome_registry(&["minecraft:plains"]),
             blocks: mc_world::BlockRegistry::from_report(
-                &mc_data::blocks::solaris_required_blocks_report(),
+                &mc_data::blocks::krasnokamen_required_blocks_report(),
             )
             .expect("blocks build"),
-            items: mc_data::items::solaris_required_items(),
-            block_entity_types: mc_data::block_entity_types::solaris_required_block_entity_types(),
+            items: mc_data::items::krasnokamen_required_items(),
+            block_entity_types: mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
         }
     }
 

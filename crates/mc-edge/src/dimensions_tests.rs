@@ -3,7 +3,7 @@ use mc_core::dimensions::Dimension;
 
 #[test]
 fn dimension_wire_ids_match_the_announced_registry() {
-    let data = mc_data::solaris_required_data();
+    let data = mc_data::krasnokamen_required_data();
     let registry = data.registry("dimension_type").unwrap();
     let ids = registry_ids(&data).unwrap();
     for dimension in Dimension::ALL {
@@ -43,7 +43,7 @@ fn body(packet: &crate::plan::PlannedPacket) -> bytes::Bytes {
 #[test]
 fn travel_and_death_use_exact_registry_ids_and_distinct_data_retention() {
     use mc_protocol::packets::play::ClientboundRespawn;
-    let data = mc_data::solaris_required_data();
+    let data = mc_data::krasnokamen_required_data();
     let ids = registry_ids(&data).unwrap();
     for dimension in Dimension::ALL {
         for death in [false, true] {
@@ -138,10 +138,10 @@ fn packet_cache_keeps_equal_coordinates_and_revisions_in_distinct_dimensions() {
     use mc_core::boundary::{SnapshotChunk, TickOutput, WorldSnapshot};
     use mc_protocol::packets::play::LevelChunkWithLight;
     let blocks =
-        mc_world::BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+        mc_world::BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
             .unwrap();
-    let items = mc_data::items::solaris_required_items();
-    let block_entity_types = mc_data::block_entity_types::solaris_required_block_entity_types();
+    let items = mc_data::items::krasnokamen_required_items();
+    let block_entity_types = mc_data::block_entity_types::krasnokamen_required_block_entity_types();
     let biomes = crate::chunks::test_biome_registry(&[
         "minecraft:plains",
         "minecraft:nether_wastes",

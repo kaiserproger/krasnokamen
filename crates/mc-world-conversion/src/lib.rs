@@ -276,7 +276,7 @@ fn convert(
         );
         if destination
             .file_name()
-            .is_some_and(|name| name.to_string_lossy().starts_with(".solaris-conversion-"))
+            .is_some_and(|name| name.to_string_lossy().starts_with(".krasnokamen-conversion-"))
         {
             return Err(fail(
                 "destination uses reserved unpublished conversion staging name",
@@ -299,7 +299,7 @@ fn convert(
             return Err(fail("receipt must be outside source and destination"));
         }
         receipt.input_hashes = hashes(&source)?;
-        let stage = parent.join(format!(".solaris-conversion-{}", uuid::Uuid::new_v4()));
+        let stage = parent.join(format!(".krasnokamen-conversion-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&stage).map_err(fail)?;
         staging = Some(stage.clone());
         let stats = adapter(config, &source, &stage)?;
@@ -716,7 +716,7 @@ fn hashes(root: &Path) -> Result<BTreeMap<String, String>, CoreError> {
     for path in files(root)? {
         // Closing any descriptor for this inode releases a process POSIX lease.
         // Session lock bytes are owner coordination, not convertible world data;
-        // Solaris's own lease file is locked (unreadable) on Windows.
+        // Krasnokamen's own lease file is locked (unreadable) on Windows.
         if path == Path::new("session.lock")
             || path == Path::new(mc_world::storage::WORLD_LEASE_FILE_NAME)
         {

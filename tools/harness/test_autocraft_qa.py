@@ -9,11 +9,11 @@ from .backends import autocraft_qa
 
 class AutocraftReadbackTests(unittest.TestCase):
     def test_job_readback_reports_gate_and_receipts(self) -> None:
-        receipt = {"job": "ui-1-1", "sequence": 1, "recipe": "solaris-settlements:open_hay",
+        receipt = {"job": "ui-1-1", "sequence": 1, "recipe": "krasnokamen-settlements:open_hay",
                    "recipe_revision": "1", "inputs": [], "outputs": [], "tool_wear": []}
         line = json.dumps({"after": None, "cancelled": False, "count": 3, "done": 1,
                            "id": "ui-1-1", "next_due": 90, "order": "ui-1", "paused": None,
-                           "receipts": [receipt], "recipe": "solaris-settlements:open_hay",
+                           "receipts": [receipt], "recipe": "krasnokamen-settlements:open_hay",
                            "recipe_revision": "1", "worker": "w"}, separators=(",", ":"))
         state = autocraft_qa.job_state(line)
         self.assertEqual((state["done"], state["receipts"], state["order"], state["after"]),

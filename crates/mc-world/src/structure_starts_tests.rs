@@ -4,7 +4,7 @@ use crate::{
     chunk::GeneratedStructureSite,
     native::{NativeChunkSnapshot, NativeStore},
 };
-use mc_data::{Identifier, blocks::solaris_required_blocks_report, items::solaris_required_items};
+use mc_data::{Identifier, blocks::krasnokamen_required_blocks_report, items::krasnokamen_required_items};
 use mc_nbt::{ListTag, Tag};
 
 fn site() -> GeneratedStructureSite {
@@ -84,8 +84,8 @@ fn imported_structure_starts_use_child_bounds_without_native_anchor() {
 
 #[test]
 fn structure_starts_native_query_keeps_imported_empty_coverage_and_metadata_override() {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
-    let items = solaris_required_items();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
+    let items = krasnokamen_required_items();
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("world.redb");
     let store = NativeStore::create(&path, [9; 32]).unwrap();
@@ -129,8 +129,8 @@ fn structure_starts_native_query_keeps_imported_empty_coverage_and_metadata_over
 
 #[test]
 fn structure_starts_procedural_baseline_metadata_is_not_discarded() {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
-    let items = solaris_required_items();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
+    let items = krasnokamen_required_items();
     let dir = tempfile::tempdir().unwrap();
     let store = NativeStore::create(&dir.path().join("world.redb"), [8; 32]).unwrap();
     let mut base = chunk();

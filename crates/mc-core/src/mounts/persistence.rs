@@ -59,28 +59,28 @@ pub(crate) fn from_fields(
             }
         }
     }
-    if fields.iter().any(|(name, _)| name == "solaris:Rider") {
+    if fields.iter().any(|(name, _)| name == "krasnokamen:Rider") {
         // The scalar form predates the ordered rider list; reading it as an
         // opaque field would silently unseat the rider.
-        return Err(invalid("solaris:Rider is obsolete, use solaris:Riders"));
+        return Err(invalid("krasnokamen:Rider is obsolete, use krasnokamen:Riders"));
     }
-    if let Some(tag) = field(fields, "solaris:Riders")? {
+    if let Some(tag) = field(fields, "krasnokamen:Riders")? {
         let Tag::List(list) = tag else {
-            return Err(invalid("solaris:Riders"));
+            return Err(invalid("krasnokamen:Riders"));
         };
         if list.elements.len() > super::MAX_PASSENGERS
             || (!list.elements.is_empty() && list.element_type != tag_type::INT_ARRAY)
         {
-            return Err(invalid("solaris:Riders"));
+            return Err(invalid("krasnokamen:Riders"));
         }
         result.mount.riders = list
             .elements
             .iter()
-            .map(|tag| uuid(tag, "solaris:Riders"))
+            .map(|tag| uuid(tag, "krasnokamen:Riders"))
             .collect::<Result<_, _>>()?;
         let unique: std::collections::HashSet<_> = result.mount.riders.iter().collect();
         if unique.len() != result.mount.riders.len() {
-            return Err(invalid("solaris:Riders duplicate UUID"));
+            return Err(invalid("krasnokamen:Riders duplicate UUID"));
         }
         result.mounted = !result.mount.riders.is_empty();
     }
@@ -136,16 +136,16 @@ pub(crate) fn from_fields(
             _ => return Err(invalid("leash")),
         });
     }
-    if let Some(tag) = field(fields, "solaris:TameRolls")? {
+    if let Some(tag) = field(fields, "krasnokamen:TameRolls")? {
         let Tag::Long(rolls) = tag else {
-            return Err(invalid("solaris:TameRolls"));
+            return Err(invalid("krasnokamen:TameRolls"));
         };
         result.taming.rolls = *rolls as u64;
     }
-    if let Some(tag) = field(fields, "solaris:CamelDashCooldown")? {
-        let value = integer(tag, "solaris:CamelDashCooldown")?;
+    if let Some(tag) = field(fields, "krasnokamen:CamelDashCooldown")? {
+        let value = integer(tag, "krasnokamen:CamelDashCooldown")?;
         if !(0..=55).contains(&value) {
-            return Err(invalid("solaris:CamelDashCooldown"));
+            return Err(invalid("krasnokamen:CamelDashCooldown"));
         }
         result.mount.dash_cooldown = value as u8;
     }
@@ -240,7 +240,7 @@ pub(crate) fn to_fields(life: &EntityLifeState) -> Vec<(String, Tag)> {
     let mut fields = Vec::new();
     if life.mount.dash_cooldown != 0 {
         fields.push((
-            "solaris:CamelDashCooldown".into(),
+            "krasnokamen:CamelDashCooldown".into(),
             Tag::Int(i32::from(life.mount.dash_cooldown)),
         ));
     }
@@ -254,7 +254,7 @@ pub(crate) fn to_fields(life: &EntityLifeState) -> Vec<(String, Tag)> {
         fields.push(("Trusting".into(), Tag::Byte(1)));
     }
     if pet.rolls != 0 {
-        fields.push(("solaris:TameRolls".into(), Tag::Long(pet.rolls as i64)));
+        fields.push(("krasnokamen:TameRolls".into(), Tag::Long(pet.rolls as i64)));
     }
     for (key, uuid) in [("Owner", pet.owner), ("LoveCause", pet.love_cause)] {
         if let Some(uuid) = uuid {
@@ -263,7 +263,7 @@ pub(crate) fn to_fields(life: &EntityLifeState) -> Vec<(String, Tag)> {
     }
     if !life.mount.riders.is_empty() {
         fields.push((
-            "solaris:Riders".into(),
+            "krasnokamen:Riders".into(),
             Tag::List(ListTag {
                 element_type: tag_type::INT_ARRAY,
                 elements: life.mount.riders.iter().copied().map(uuid_tag).collect(),

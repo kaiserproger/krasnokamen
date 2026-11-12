@@ -32,7 +32,7 @@ struct Data {
 impl Data {
     fn new() -> Self {
         let blocks =
-            BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap();
+            BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap();
         let stone_state = blocks.block(&id("minecraft:stone")).unwrap().default.0;
         let states = blocks.len();
         let mut requires = vec![false; states];

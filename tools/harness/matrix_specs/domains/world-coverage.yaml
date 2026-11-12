@@ -1,4 +1,4 @@
-schema: solaris-world-coverage-audit/1
+schema: krasnokamen-world-coverage-audit/1
 scope: Subject actions and every explicit subject oracle clause; not proof of every context factor or live parity.
 classification:
   spec_only: No registered executable act and oracle.

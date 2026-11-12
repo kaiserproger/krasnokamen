@@ -1661,7 +1661,7 @@ mod tests {
         );
         let record = crate::core::player_record_for(&state, actor, state.tick).unwrap();
         let dir =
-            std::env::temp_dir().join(format!("solaris-command-spawn-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("krasnokamen-command-spawn-{}", uuid::Uuid::new_v4()));
         let uuid = uuid::Uuid::new_v4();
         let config = crate::CoreConfig::new(dir.clone(), 42);
         crate::native_checkpoint::tests::write_player(
@@ -1713,7 +1713,7 @@ mod tests {
         assert_eq!(state.world.world_spawn_rotation(), [-90.0, 25.0]);
         assert_eq!(crate::sleep::respawn_rotation(&state, actor), [-90.0, 25.0]);
         let dir = std::env::temp_dir().join(format!(
-            "solaris-command-worldspawn-{}",
+            "krasnokamen-command-worldspawn-{}",
             uuid::Uuid::new_v4()
         ));
         let mut config = crate::config::CoreConfig::new(dir.clone(), 42);

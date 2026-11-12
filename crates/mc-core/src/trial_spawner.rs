@@ -179,25 +179,25 @@ impl Spawner {
     ) -> Result<Self, String> {
         let fields = nbt::decode(bytes)?;
         let data = SpawnerData::from_fields(fields)?;
-        let pending = if let Some(fields) = nbt::compound(&data.fields, "solaris:ominous_item")? {
+        let pending = if let Some(fields) = nbt::compound(&data.fields, "krasnokamen:ominous_item")? {
             let uuids = nbt::uuids(fields, "uuid")?;
             let uuid = uuids
                 .into_iter()
                 .next()
-                .ok_or("solaris:ominous_item.uuid: missing UUID")?;
+                .ok_or("krasnokamen:ominous_item.uuid: missing UUID")?;
             let item = stack_from_fields(
                 items,
                 nbt::compound(fields, "item")?
-                    .ok_or("solaris:ominous_item.item: missing Compound")?,
+                    .ok_or("krasnokamen:ominous_item.item: missing Compound")?,
             )
             .map_err(|e| e.to_string())?
-            .ok_or("solaris:ominous_item.item: empty")?;
+            .ok_or("krasnokamen:ominous_item.item: empty")?;
             let deadline = nbt::long(fields, "eject_at", 0)?;
             let Some(Tag::List(list)) = field(fields, "position") else {
-                return Err("solaris:ominous_item.position: missing Double list".into());
+                return Err("krasnokamen:ominous_item.position: missing Double list".into());
             };
             let [Tag::Double(x), Tag::Double(y), Tag::Double(z)] = list.elements.as_slice() else {
-                return Err("solaris:ominous_item.position: expected Double[3]".into());
+                return Err("krasnokamen:ominous_item.position: expected Double[3]".into());
             };
             Some(Pending {
                 uuid,
@@ -212,10 +212,10 @@ impl Spawner {
     }
     fn fields(&self, items: &mc_data::items::ItemRegistry) -> Fields {
         let mut fields = self.data.to_fields();
-        fields.retain(|(name, _)| name != "solaris:ominous_item");
+        fields.retain(|(name, _)| name != "krasnokamen:ominous_item");
         if let Some(pending) = &self.pending {
             fields.push((
-                "solaris:ominous_item".into(),
+                "krasnokamen:ominous_item".into(),
                 Tag::Compound(vec![
                     (
                         "uuid".into(),

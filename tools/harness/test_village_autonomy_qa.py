@@ -364,7 +364,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
                 raise RuntimeError("second-player check failed")
 
             with (
-                patch.dict(qa.os.environ, {"SOLARIS_SERVER_BINARY": str(binary)}),
+                patch.dict(qa.os.environ, {"KRASNOKAMEN_SERVER_BINARY": str(binary)}),
                 patch.object(qa.subprocess, "Popen", side_effect=start_server),
                 patch.object(qa.runtime, "reserve_port", return_value=25566),
                 patch.object(qa.runtime, "wait_port"),
@@ -401,9 +401,9 @@ class VillageAutonomyQaTests(unittest.TestCase):
             binary.write_bytes(b"test server")
             ctx = SimpleNamespace(client="native", extra_args=[], platform=None, windowed=True,
                                   timeout_seconds=10, artifact_dir=Path(folder), client_evidence={})
-            with (patch.dict(qa.os.environ, {"SOLARIS_SERVER_BINARY": str(binary), "SOLARIS_SNAPSHOT_BINARY": ""}),
+            with (patch.dict(qa.os.environ, {"KRASNOKAMEN_SERVER_BINARY": str(binary), "KRASNOKAMEN_SNAPSHOT_BINARY": ""}),
                   patch.object(qa.subprocess, "Popen") as launch,
-                  self.assertRaisesRegex(RuntimeError, "absolute SOLARIS_SNAPSHOT_BINARY")):
+                  self.assertRaisesRegex(RuntimeError, "absolute KRASNOKAMEN_SNAPSHOT_BINARY")):
                 qa.run(ctx, civilization=True)
             launch.assert_not_called()
 
@@ -414,12 +414,12 @@ class VillageAutonomyQaTests(unittest.TestCase):
             pooled.parent.mkdir(parents=True)
             pooled.write_bytes(b"unit test")
             pooled.chmod(0o755)
-            with (patch.dict(qa.os.environ, {"SOLARIS_SNAPSHOT_BINARY": str(pooled)}),
+            with (patch.dict(qa.os.environ, {"KRASNOKAMEN_SNAPSHOT_BINARY": str(pooled)}),
                   self.assertRaisesRegex(RuntimeError, "outside pooled")):
                 qa._snapshot_binary()
             pinned = root / "snapshot"
             pinned.write_bytes(b"unit test")
-            with (patch.dict(qa.os.environ, {"SOLARIS_SNAPSHOT_BINARY": str(pinned)}),
+            with (patch.dict(qa.os.environ, {"KRASNOKAMEN_SNAPSHOT_BINARY": str(pinned)}),
                   self.assertRaisesRegex(RuntimeError, "not an executable")):
                 qa._snapshot_binary()
 
@@ -469,7 +469,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
                 raise RuntimeError("civilization stalled")
 
             with (
-                patch.dict(qa.os.environ, {"SOLARIS_SERVER_BINARY": str(binary), "SOLARIS_SNAPSHOT_BINARY": str(snapshot_binary)}),
+                patch.dict(qa.os.environ, {"KRASNOKAMEN_SERVER_BINARY": str(binary), "KRASNOKAMEN_SNAPSHOT_BINARY": str(snapshot_binary)}),
                 patch.object(qa.subprocess, "Popen", return_value=server),
                 patch.object(qa.runtime, "reserve_port", return_value=25566),
                 patch.object(qa.runtime, "wait_port"),
@@ -509,8 +509,8 @@ class VillageAutonomyQaTests(unittest.TestCase):
                 detail.update(settlement_name="Test", baseline_population=2, baseline_server_tick=20,
                               snapshots=[{"client_game_time": 100, "population": 4}],
                               baby_observation={"entity": {"entity_uuid": "baby"}})
-            with (patch.dict(qa.os.environ, {"SOLARIS_SERVER_BINARY": str(binary),
-                                           "SOLARIS_SNAPSHOT_BINARY": str(snapshot_binary)}),
+            with (patch.dict(qa.os.environ, {"KRASNOKAMEN_SERVER_BINARY": str(binary),
+                                           "KRASNOKAMEN_SNAPSHOT_BINARY": str(snapshot_binary)}),
                   patch.object(qa.subprocess, "Popen", return_value=server),
                   patch.object(qa.runtime, "reserve_port", return_value=25566),
                   patch.object(qa.runtime, "wait_port"),

@@ -40,12 +40,12 @@ def _flag_value(args: list[str], flag: str) -> str | None:
 
 
 def _check_server_candidate() -> dict[str, Any]:
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
         return {
             "present": False,
-            "detail": "SOLARIS_SERVER_BINARY is unset; build the worktree "
-            "solaris-v2 and export its absolute path (no implicit build here).",
+            "detail": "KRASNOKAMEN_SERVER_BINARY is unset; build the worktree "
+            "krasnokamen and export its absolute path (no implicit build here).",
         }
     binary = Path(override).expanduser()
     if not binary.is_file() or not os.access(binary, os.X_OK):
@@ -62,7 +62,7 @@ def collect_prerequisites(platform: str) -> dict[str, Any]:
     from .. import runtime
 
     repo_root = runtime.REPO_ROOT
-    jar_env = os.environ.get("SOLARIS_DH_JAR")
+    jar_env = os.environ.get("KRASNOKAMEN_DH_JAR")
     jar_path = Path(jar_env).expanduser() if jar_env else repo_root / DEFAULT_JAR_REL
     jar: dict[str, Any] = {
         "mc": MC_VERSION,
@@ -103,10 +103,10 @@ def collect_prerequisites(platform: str) -> dict[str, Any]:
         if not loader["dh_scenario_found"]:
             loader["detail"] = (
                 "sibling loader checkout present but no DH Java scenario entrypoint "
-                "found there; the Java driver belongs to solaris-loader, not here."
+                "found there; the Java driver belongs to krasnokamen-loader, not here."
             )
     else:
-        loader["detail"] = "sibling solaris-loader checkout missing"
+        loader["detail"] = "sibling krasnokamen-loader checkout missing"
 
     server = _check_server_candidate()
     java = shutil.which("java")
@@ -114,7 +114,7 @@ def collect_prerequisites(platform: str) -> dict[str, Any]:
     env = {
         "java25": bool(java),
         "xvfb": bool(xvfb),
-        "client_token_set": bool(os.environ.get("SOLARIS_CLIENT_MCP_TOKEN")),
+        "client_token_set": bool(os.environ.get("KRASNOKAMEN_CLIENT_MCP_TOKEN")),
         "client_token_source": "fresh per-client token minted locally by the canonical driver",
     }
     return {
@@ -159,7 +159,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         missing.append(f"sibling loader checkout missing at {loader['path']}")
     elif not loader.get("dh_scenario_found"):
         missing.append(
-            "DH Java scenario missing in sibling solaris-loader "
+            "DH Java scenario missing in sibling krasnokamen-loader "
             f"(checked {loader['path']}/tools/*dh*; sibling owns the driver)"
         )
     server = prereqs["server"]

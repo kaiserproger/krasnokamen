@@ -8,7 +8,7 @@
 //! same fixed block lists through the real
 //! `StructureTemplate.processBlockInfos` application surface, and printed the
 //! outcome table the constants below hold. The block states and tags here are
-//! synthetic Solaris fixtures built on the same vanilla ids; only the outcomes
+//! synthetic Krasnokamen fixtures built on the same vanilla ids; only the outcomes
 //! are vanilla's.
 //!
 //! The lists are the reachable village processor lists: `street_plains` (four
@@ -747,7 +747,7 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        let blocks = BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+        let blocks = BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
             .expect("the embedded required-block report is well formed");
         let air = state_of(&blocks, "minecraft:air", &[]);
         Self {

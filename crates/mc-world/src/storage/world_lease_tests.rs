@@ -4,8 +4,8 @@ use std::process::{Child, Command, Stdio};
 use super::{WORLD_LEASE_FILE_NAME, acquire_exclusive_world_root_lease};
 use crate::storage::WorldError;
 
-const HELPER_ROOT_ENV: &str = "SOLARIS_WORLD_LEASE_HELPER_ROOT";
-const READY_MARKER: &str = "SOLARIS_WORLD_LEASE_READY";
+const HELPER_ROOT_ENV: &str = "KRASNOKAMEN_WORLD_LEASE_HELPER_ROOT";
+const READY_MARKER: &str = "KRASNOKAMEN_WORLD_LEASE_READY";
 
 struct ChildGuard {
     child: Child,

@@ -12,12 +12,12 @@ pub const LOADER_PROTOCOL_VERSION: u16 = 3;
 pub const MAX_LOADER_MANIFEST_BYTES: usize = 32_767;
 pub const MAX_LOADER_VIEW_MESSAGE_BYTES: usize = 64 * 1024;
 pub const LOADER_ARTIFACT_CHUNK_BYTES: usize = 30 * 1024;
-const LOADER_ARTIFACT_INDEX_PATH: &str = "solaris-client.json";
+const LOADER_ARTIFACT_INDEX_PATH: &str = "krasnokamen-client.json";
 const MAX_LOADER_ARTIFACT_INDEX_BYTES: u64 = 64 * 1024;
 const MAX_LOADER_BLOCK_NAME_BYTES: usize = 128;
 const MAX_LOADER_BLOCKS: usize = 8;
-const LOADER_VIEW_CHANNEL: &str = "solaris:loader/view";
-const LOADER_VIEW_ACTION_CHANNEL: &str = "solaris:loader/view_action";
+const LOADER_VIEW_CHANNEL: &str = "krasnokamen:loader/view";
+const LOADER_VIEW_ACTION_CHANNEL: &str = "krasnokamen:loader/view_action";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -403,7 +403,7 @@ pub struct LoaderSession {
 
 /// One carrier-backed custom block a verified bundle index declares (ADR 0018).
 ///
-/// `carrier` is a vanilla block id naming Solaris' reserved carrier states and
+/// `carrier` is a vanilla block id naming Krasnokamen' reserved carrier states and
 /// `drop_item` the owner's custom item; core validates both against its
 /// registries. Clients read the same fields from the artifact index.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -956,13 +956,13 @@ pub enum LoaderHandshakeError {
 pub fn loader_manifest_channel() -> &'static Identifier {
     static CHANNEL: OnceLock<Identifier> = OnceLock::new();
     CHANNEL.get_or_init(|| {
-        Identifier::parse("solaris:loader/manifest").expect("static loader manifest channel")
+        Identifier::parse("krasnokamen:loader/manifest").expect("static loader manifest channel")
     })
 }
 
 pub fn loader_view_channel() -> &'static Identifier {
     static CHANNEL: LazyLock<Identifier> = LazyLock::new(|| {
-        Identifier::parse(LOADER_VIEW_CHANNEL).expect("static Solaris Loader view channel is valid")
+        Identifier::parse(LOADER_VIEW_CHANNEL).expect("static Krasnokamen Loader view channel is valid")
     });
     &CHANNEL
 }
@@ -970,7 +970,7 @@ pub fn loader_view_channel() -> &'static Identifier {
 pub fn loader_view_action_channel() -> &'static Identifier {
     static CHANNEL: LazyLock<Identifier> = LazyLock::new(|| {
         Identifier::parse(LOADER_VIEW_ACTION_CHANNEL)
-            .expect("static Solaris Loader view action channel is valid")
+            .expect("static Krasnokamen Loader view action channel is valid")
     });
     &CHANNEL
 }
@@ -1012,7 +1012,7 @@ impl LoaderManifest {
 pub fn loader_probe_channel() -> &'static Identifier {
     static CHANNEL: OnceLock<Identifier> = OnceLock::new();
     CHANNEL.get_or_init(|| {
-        Identifier::parse("solaris:loader/probe").expect("static loader probe channel")
+        Identifier::parse("krasnokamen:loader/probe").expect("static loader probe channel")
     })
 }
 
@@ -1023,7 +1023,7 @@ pub fn loader_probe_channel() -> &'static Identifier {
 pub fn loader_hello_channel() -> &'static Identifier {
     static CHANNEL: OnceLock<Identifier> = OnceLock::new();
     CHANNEL.get_or_init(|| {
-        Identifier::parse("solaris:loader/hello").expect("static loader hello channel")
+        Identifier::parse("krasnokamen:loader/hello").expect("static loader hello channel")
     })
 }
 
@@ -1031,14 +1031,14 @@ pub fn loader_hello_channel() -> &'static Identifier {
 pub fn loader_ack_channel() -> &'static Identifier {
     static CHANNEL: OnceLock<Identifier> = OnceLock::new();
     CHANNEL
-        .get_or_init(|| Identifier::parse("solaris:loader/ack").expect("static loader ack channel"))
+        .get_or_init(|| Identifier::parse("krasnokamen:loader/ack").expect("static loader ack channel"))
 }
 
 #[must_use]
 pub fn loader_request_channel() -> &'static Identifier {
     static CHANNEL: OnceLock<Identifier> = OnceLock::new();
     CHANNEL.get_or_init(|| {
-        Identifier::parse("solaris:loader/request").expect("static loader request channel")
+        Identifier::parse("krasnokamen:loader/request").expect("static loader request channel")
     })
 }
 
@@ -1046,7 +1046,7 @@ pub fn loader_request_channel() -> &'static Identifier {
 pub fn loader_artifact_channel() -> &'static Identifier {
     static CHANNEL: OnceLock<Identifier> = OnceLock::new();
     CHANNEL.get_or_init(|| {
-        Identifier::parse("solaris:loader/artifact").expect("static loader artifact channel")
+        Identifier::parse("krasnokamen:loader/artifact").expect("static loader artifact channel")
     })
 }
 
@@ -1074,7 +1074,7 @@ pub fn sound_payload(sound: &mc_script::ScriptClientSound) -> Vec<u8> {
 #[must_use]
 pub fn loader_sound_channel() -> &'static Identifier {
     static CHANNEL: LazyLock<Identifier> = LazyLock::new(|| {
-        Identifier::parse("solaris:loader/sound").expect("static Loader sound channel")
+        Identifier::parse("krasnokamen:loader/sound").expect("static Loader sound channel")
     });
     &CHANNEL
 }
@@ -1161,7 +1161,7 @@ mod tests {
         let native_ack = LoaderClientAck {
             protocol: LOADER_PROTOCOL_VERSION,
             platform: LoaderPlatform::Native,
-            loader_version: "solaris-client-0.0.8".to_owned(),
+            loader_version: "krasnokamen-client-0.0.8".to_owned(),
             accepted_permissions: Vec::new(),
             cached_bundles: Vec::new(),
             carrier_block_state_ids: BTreeMap::new(),
@@ -1200,7 +1200,7 @@ mod tests {
         let native_ack = LoaderClientAck {
             protocol: LOADER_PROTOCOL_VERSION,
             platform: LoaderPlatform::Native,
-            loader_version: "solaris-client-0.0.8".to_owned(),
+            loader_version: "krasnokamen-client-0.0.8".to_owned(),
             accepted_permissions: Vec::new(),
             cached_bundles: Vec::new(),
             carrier_block_state_ids: BTreeMap::new(),
@@ -1318,7 +1318,7 @@ mod tests {
             "pavise",
         ]
         .map(|name| mc_data::item_components::CustomItemDefinition {
-            id: Identifier::parse(format!("solaris-settlements:{name}")).unwrap(),
+            id: Identifier::parse(format!("krasnokamen-settlements:{name}")).unwrap(),
             carrier: Identifier::parse("minecraft:paper").unwrap(),
             name: name.to_owned(),
             crafting_ingredient: None,
@@ -1327,7 +1327,7 @@ mod tests {
         let is_native = |id: &Identifier| native.iter().any(|item| item.id == *id);
         manifest.validate_custom_items(&native, is_native).unwrap();
         let mut plugin = native[0].clone();
-        for id in ["example:ruby", "solaris-settlements:plugin_only"] {
+        for id in ["example:ruby", "krasnokamen-settlements:plugin_only"] {
             plugin.id = Identifier::parse(id).unwrap();
             assert!(matches!(
                 manifest.validate_custom_items(std::iter::once(&plugin), is_native),
@@ -1437,12 +1437,12 @@ mod tests {
 
     #[test]
     fn view_request_decoding_is_closed_and_protocol_fenced() {
-        let action = br#"{"protocol":3,"message":"view_action","view_instance_id":"solaris:view-1","view_revision":2,"action_id":"example:place","action_sequence":1,"fields":[{"id":"count","number":4}],"selection_token":"example:ctx-1"}"#;
+        let action = br#"{"protocol":3,"message":"view_action","view_instance_id":"krasnokamen:view-1","view_revision":2,"action_id":"example:place","action_sequence":1,"fields":[{"id":"count","number":4}],"selection_token":"example:ctx-1"}"#;
         let decoded = decode_loader_view_client_request(action).unwrap();
         let LoaderViewClientRequest::Action(action) = decoded else {
             panic!("expected a view action");
         };
-        assert_eq!(action.view_instance_id, "solaris:view-1");
+        assert_eq!(action.view_instance_id, "krasnokamen:view-1");
         assert_eq!(action.view_revision, 2);
         assert_eq!(action.action_sequence, 1);
         assert_eq!(action.selection_token.as_deref(), Some("example:ctx-1"));

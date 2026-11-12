@@ -1,9 +1,9 @@
 use super::*;
-use mc_data::{Identifier, blocks::solaris_required_blocks_report, items::solaris_required_items};
+use mc_data::{Identifier, blocks::krasnokamen_required_blocks_report, items::krasnokamen_required_items};
 use mc_nbt::Tag;
 
 fn blocks() -> BlockRegistry {
-    BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap()
+    BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap()
 }
 fn state(blocks: &BlockRegistry, name: &str) -> crate::BlockStateId {
     blocks
@@ -40,7 +40,7 @@ fn s05_s06_generated_entity_move_death_and_slot_survive_restart_and_replay() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("state.redb");
     let blocks = blocks();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     let store = NativeStore::create(&path, [8; 32]).unwrap();
     let first = entity(1);
     store
@@ -133,7 +133,7 @@ fn native_owner_checkpoint_moves_and_tombstones_generated_entities_atomically() 
 fn s10_entity_failure_aborts_blocks_metadata_and_watermarks_together() {
     let root = tempfile::tempdir().unwrap();
     let blocks = blocks();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     let store = NativeStore::create(&root.path().join("state.redb"), [3; 32]).unwrap();
     let base = base(&blocks);
     let mut effective = base.clone();
@@ -213,7 +213,7 @@ fn p09_corrupt_overlay_is_not_clean_base_and_readonly_never_repairs() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("state.redb");
     let blocks = blocks();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     let store = NativeStore::create(&path, [3; 32]).unwrap();
     let base = base(&blocks);
     let transaction = store.database.begin_write().unwrap();
@@ -255,7 +255,7 @@ fn p09_corrupt_overlay_is_not_clean_base_and_readonly_never_repairs() {
 
 #[test]
 fn s10_process_crash_inside_real_transaction_recovers_old_snapshot() {
-    const CHILD: &str = "SOLARIS_W4_CRASH_CHILD";
+    const CHILD: &str = "KRASNOKAMEN_W4_CRASH_CHILD";
     if let Ok(path) = std::env::var(CHILD) {
         let store = NativeStore::open(Path::new(&path), [5; 32]).unwrap();
         let transaction = store.database.begin_write().unwrap();
@@ -290,10 +290,10 @@ fn s10_process_crash_inside_real_transaction_recovers_old_snapshot() {
 #[cfg(target_os = "linux")]
 #[test]
 fn s10_real_file_growth_failure_aborts_entity_batch() {
-    const CHILD: &str = "SOLARIS_W4_FILE_LIMIT_CHILD";
+    const CHILD: &str = "KRASNOKAMEN_W4_FILE_LIMIT_CHILD";
     if let Ok(path) = std::env::var(CHILD) {
         let blocks = blocks();
-        let items = solaris_required_items();
+        let items = krasnokamen_required_items();
         let store = NativeStore::open(Path::new(&path), [6; 32]).unwrap();
         let entities = (1..=32)
             .map(|id| NativeEntitySnapshot {
@@ -327,7 +327,7 @@ fn s02_s07_reverted_chest_blocks_keep_consumed_inventory_and_runtime_history() {
     let root = tempfile::tempdir().unwrap();
     let path = root.path().join("state.redb");
     let blocks = blocks();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     let mut baseline = base(&blocks);
     let position = crate::BlockPos {
         x: baseline.pos.x * 16 + 1,

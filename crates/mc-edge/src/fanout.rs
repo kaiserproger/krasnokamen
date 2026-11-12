@@ -59,7 +59,7 @@ pub struct AddressedPacket {
 ///
 /// Chunk encoding needs block/biome registries; the 3-arg server call site
 /// carries none, so `publish` uses the process-wide required-reports
-/// fallback (`solaris_required_*`). Biomes not in the fallback (custom
+/// fallback (`krasnokamen_required_*`). Biomes not in the fallback (custom
 /// datapack biomes) skip that chunk rather than failing the tick.
 pub fn publish<'a>(
     output: &TickOutput,
@@ -81,14 +81,14 @@ pub fn publish<'a>(
             ],
         };
         let blocks = mc_world::BlockRegistry::from_report(
-            &mc_data::blocks::solaris_required_blocks_report(),
+            &mc_data::blocks::krasnokamen_required_blocks_report(),
         )
         .expect("required blocks report builds");
         Fallback {
             biomes,
             blocks,
-            items: mc_data::items::solaris_required_items(),
-            block_entity_types: mc_data::block_entity_types::solaris_required_block_entity_types(),
+            items: mc_data::items::krasnokamen_required_items(),
+            block_entity_types: mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
         }
     });
     let registries = PlanRegistries {

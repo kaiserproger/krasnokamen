@@ -21,15 +21,15 @@
 use std::time::Instant;
 
 use crate::bindings::Plugin;
-use crate::bindings::exports::solaris::plugin::events::{Event, EventContext};
-use crate::bindings::exports::solaris::plugin::lifecycle::{InitContext, StartupContribution};
-use crate::bindings::exports::solaris::plugin::precommit::{
+use crate::bindings::exports::krasnokamen::plugin::events::{Event, EventContext};
+use crate::bindings::exports::krasnokamen::plugin::lifecycle::{InitContext, StartupContribution};
+use crate::bindings::exports::krasnokamen::plugin::precommit::{
     BuildContext, BuildDecision, DamageContext, DamageDecision, DamageTarget, HookActor, HookPlayer,
 };
-use crate::bindings::solaris::plugin::commands::Command;
-use crate::bindings::solaris::plugin::host::Host;
-use crate::bindings::solaris::plugin::types::LogLevel;
-use crate::bindings::solaris::plugin::types::PluginError;
+use crate::bindings::krasnokamen::plugin::commands::Command;
+use crate::bindings::krasnokamen::plugin::host::Host;
+use crate::bindings::krasnokamen::plugin::types::LogLevel;
+use crate::bindings::krasnokamen::plugin::types::PluginError;
 use crate::{
     CommandBatch, HostError, HostServices, InstanceState, PluginLimits, StagingError,
     TRUNCATION_MARKER,
@@ -249,7 +249,7 @@ impl<S: HostServices + 'static> PluginStartup<S> {
             .call("configure", |guest| {
                 guest
                     .plugin
-                    .solaris_plugin_lifecycle()
+                    .krasnokamen_plugin_lifecycle()
                     .call_configure(&mut guest.store, config)
             })
             .and_then(|answer| match answer {
@@ -303,7 +303,7 @@ impl<S: HostServices + 'static> PluginInstance<S> {
         let answer = self.guest.call("init", |guest| {
             guest
                 .plugin
-                .solaris_plugin_lifecycle()
+                .krasnokamen_plugin_lifecycle()
                 .call_init(&mut guest.store, config, &context)
         })?;
         self.guest.stage_answer("init", answer)
@@ -350,7 +350,7 @@ impl<S: HostServices + 'static> PluginInstance<S> {
         let answer = self.guest.call_armed("on-events", |guest| {
             guest
                 .plugin
-                .solaris_plugin_events()
+                .krasnokamen_plugin_events()
                 .call_on_events(&mut guest.store, context, events)
         })?;
         self.guest.stage_answer("on-events", answer)
@@ -366,7 +366,7 @@ impl<S: HostServices + 'static> PluginInstance<S> {
         self.hook_call("before-build", deadline, |guest| {
             guest
                 .plugin
-                .solaris_plugin_precommit()
+                .krasnokamen_plugin_precommit()
                 .call_before_build(&mut guest.store, &context)
         })
         .and_then(|answer| {
@@ -392,7 +392,7 @@ impl<S: HostServices + 'static> PluginInstance<S> {
         self.hook_call("before-damage", deadline, |guest| {
             guest
                 .plugin
-                .solaris_plugin_precommit()
+                .krasnokamen_plugin_precommit()
                 .call_before_damage(&mut guest.store, &context)
         })
         .and_then(|answer| {
@@ -438,7 +438,7 @@ impl<S: HostServices + 'static> PluginInstance<S> {
         let answer = self.guest.call("shutdown", |guest| {
             guest
                 .plugin
-                .solaris_plugin_lifecycle()
+                .krasnokamen_plugin_lifecycle()
                 .call_shutdown(&mut guest.store)
         })?;
         match answer {
@@ -450,7 +450,7 @@ impl<S: HostServices + 'static> PluginInstance<S> {
 
 fn hook_handler_result(
     decision: HookDecision,
-    guards: Vec<crate::bindings::solaris::plugin::types::PluginStorageVersionGuard>,
+    guards: Vec<crate::bindings::krasnokamen::plugin::types::PluginStorageVersionGuard>,
 ) -> Result<HookHandlerResult, HostError> {
     let guards = guards
         .into_iter()
@@ -470,7 +470,7 @@ fn build_context(context: &NativeBuildContext) -> Result<BuildContext, HostError
             .edits()
             .iter()
             .map(
-                |edit| crate::bindings::exports::solaris::plugin::precommit::BuildEdit {
+                |edit| crate::bindings::exports::krasnokamen::plugin::precommit::BuildEdit {
                     x: edit.x,
                     y: edit.y,
                     z: edit.z,
@@ -499,7 +499,7 @@ fn damage_context(context: &NativeDamageContext) -> Result<DamageContext, HostEr
         },
         kind: context.kind().to_owned(),
         dimension: context.dimension().to_owned(),
-        position: crate::bindings::solaris::plugin::types::Position {
+        position: crate::bindings::krasnokamen::plugin::types::Position {
             x: context.position().x(),
             y: context.position().y(),
             z: context.position().z(),
@@ -530,38 +530,38 @@ type GuestAnswer = Result<Vec<Command>, PluginError>;
 /// The marker interfaces carry no functions of their own, but the contract's
 /// other interfaces use their types, so the generated bindings require them for
 /// the store's data.
-impl<S: HostServices> crate::bindings::solaris::plugin::types::Host for InstanceState<S> {}
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::types::Host for InstanceState<S> {}
 
-impl<S: HostServices> crate::bindings::solaris::plugin::client_presentation::Host
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::client_presentation::Host
     for InstanceState<S>
 {
 }
 
-impl<S: HostServices> crate::bindings::solaris::plugin::commands::Host for InstanceState<S> {}
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::commands::Host for InstanceState<S> {}
 
-impl<S: HostServices> crate::bindings::solaris::plugin::storage::Host for InstanceState<S> {}
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::storage::Host for InstanceState<S> {}
 
-impl<S: HostServices> crate::bindings::solaris::plugin::world_structures::Host
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::world_structures::Host
     for InstanceState<S>
 {
 }
 
-impl<S: HostServices> crate::bindings::solaris::plugin::inventories::Host for InstanceState<S> {}
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::inventories::Host for InstanceState<S> {}
 
-impl<S: HostServices> crate::bindings::solaris::plugin::npcs::Host for InstanceState<S> {}
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::npcs::Host for InstanceState<S> {}
 
-impl<S: HostServices> crate::bindings::solaris::plugin::npc_routes::Host for InstanceState<S> {}
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::npc_routes::Host for InstanceState<S> {}
 
-impl<S: HostServices> crate::bindings::solaris::plugin::settlements::Host for InstanceState<S> {}
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::settlements::Host for InstanceState<S> {}
 
-impl<S: HostServices> crate::bindings::solaris::plugin::domain_operations::Host
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::domain_operations::Host
     for InstanceState<S>
 {
 }
 
-impl<S: HostServices> crate::bindings::solaris::plugin::operation_types::Host for InstanceState<S> {}
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::operation_types::Host for InstanceState<S> {}
 
-impl<S: HostServices> crate::bindings::solaris::plugin::command_permissions::Host
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::command_permissions::Host
     for InstanceState<S>
 {
     /// The provider's publication. Only the instance the host handed a table can
@@ -584,7 +584,7 @@ impl<S: HostServices> crate::bindings::solaris::plugin::command_permissions::Hos
     }
 }
 
-impl<S: HostServices> crate::bindings::solaris::plugin::world_events::Host for InstanceState<S> {}
+impl<S: HostServices> crate::bindings::krasnokamen::plugin::world_events::Host for InstanceState<S> {}
 
 impl<S: HostServices + 'static> Host for InstanceState<S> {
     fn log(&mut self, level: LogLevel, message: String) {

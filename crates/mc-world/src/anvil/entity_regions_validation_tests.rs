@@ -2,7 +2,7 @@ use super::*;
 
 fn record() -> Tag {
     chunk_to_tag(
-        &mc_data::items::solaris_required_items(),
+        &mc_data::items::krasnokamen_required_items(),
         &EntityChunk {
             x: 1,
             z: -2,
@@ -43,14 +43,14 @@ fn malformed_import_health_and_wire_ids_fail_with_complete_record_context() {
         ("Health", Tag::Float(f32::NAN)),
         ("Health", Tag::Double(1e300)),
         ("Health", Tag::String("5".into())),
-        ("solaris:WireId", Tag::Int(-1)),
-        ("solaris:WireId", Tag::Long(5)),
+        ("krasnokamen:WireId", Tag::Int(-1)),
+        ("krasnokamen:WireId", Tag::Long(5)),
     ] {
         let mut tag = record();
         let entries = fields(&mut tag);
         entries.retain(|(name, _)| name != key);
         entries.push((key.into(), value));
-        let error = entity_chunk_from_nbt(&mc_data::items::solaris_required_items(), &tag, path)
+        let error = entity_chunk_from_nbt(&mc_data::items::krasnokamen_required_items(), &tag, path)
             .unwrap_err()
             .to_string();
         assert!(error.contains("world/DIM1/entities/r.0.-1.mca"));
@@ -68,7 +68,7 @@ fn missing_required_native_identity_or_position_is_never_defaulted() {
         let mut tag = record();
         fields(&mut tag).retain(|(name, _)| name != key);
         let error = entity_chunk_from_nbt(
-            &mc_data::items::solaris_required_items(),
+            &mc_data::items::krasnokamen_required_items(),
             &tag,
             Path::new("world/entities/r.0.-1.mca"),
         )

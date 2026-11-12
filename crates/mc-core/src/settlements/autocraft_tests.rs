@@ -65,7 +65,7 @@ fn village(stored: &[(&str, i32)]) -> Village {
     let building = ScriptSettlementBuildingRef::new(
         "building".into(),
         building.0.to_string(),
-        format!("solaris:{}", kind.name()),
+        format!("krasnokamen:{}", kind.name()),
     );
     let stand_at = production::stand_at(&state, TABLE, bounds).unwrap();
     let slot = villager(&mut state, [5.5, 201.0, 7.5]);
@@ -212,7 +212,7 @@ impl Village {
 #[test]
 fn missing_wheat_is_crafted_from_stored_hay_before_bread_and_survives_restart() {
     let mut town = village(&[("minecraft:hay_block", 1)]);
-    let steps = town.submit("bake", "solaris-settlements:bread", 3).unwrap();
+    let steps = town.submit("bake", "krasnokamen-settlements:bread", 3).unwrap();
     assert_eq!(describe(&steps), "open_hay x1 -> bread x3");
     assert_eq!(town.jobs()["bake-1"].after, None);
     assert_eq!(town.jobs()["bake"].after.as_deref(), Some("bake-1"));
@@ -249,7 +249,7 @@ fn missing_wheat_is_crafted_from_stored_hay_before_bread_and_survives_restart() 
 
     // A retried order id never re-plans or duplicates work.
     assert_eq!(
-        town.submit("bake", "solaris-settlements:bread", 3),
+        town.submit("bake", "krasnokamen-settlements:bread", 3),
         Err(Refusal::Exists("bake".into()))
     );
     assert_eq!(town.jobs().len(), 2);
@@ -267,7 +267,7 @@ fn pickaxe_chain_makes_planks_then_sticks_then_pickaxe_with_exact_stock() {
     let mut town = village(&[("minecraft:oak_log", 2), ("minecraft:wooden_pickaxe", 1)]);
     town.equip("minecraft:wooden_axe");
     let steps = town
-        .submit("pick", "solaris-settlements:wooden_pickaxe_ordinary", 1)
+        .submit("pick", "krasnokamen-settlements:wooden_pickaxe_ordinary", 1)
         .unwrap();
     // 3 planks for the pickaxe + 2 for one stick craft = 2 plank crafts; the
     // stored pickaxe is never salvaged for sticks.
@@ -301,13 +301,13 @@ fn missing_raw_material_cycle_and_tool_refuse_without_admitting_anything() {
     let mut town = village(&[("minecraft:oak_log", 1)]);
     let mut refused = |recipe: &str| town.submit("plan", recipe, 1).unwrap_err();
     assert_eq!(
-        refused("solaris-settlements:sugar"),
+        refused("krasnokamen-settlements:sugar"),
         Refusal::Missing {
             item: "minecraft:sugar_cane".into(),
             count: 1
         }
     );
-    let cycle = refused("solaris-settlements:hay_block");
+    let cycle = refused("krasnokamen-settlements:hay_block");
     assert_eq!(
         cycle,
         Refusal::Cycle {
@@ -321,15 +321,15 @@ fn missing_raw_material_cycle_and_tool_refuse_without_admitting_anything() {
         "missing 1 minecraft:hay_block: its recipes form a cycle (hay_block -> open_hay -> hay_block)"
     );
     assert_eq!(
-        refused("solaris-settlements:wooden_pickaxe_ordinary"),
+        refused("krasnokamen-settlements:wooden_pickaxe_ordinary"),
         Refusal::Tool {
             recipe: "oak_planks".into(),
             tool: "minecraft:wooden_axe".into()
         }
     );
     assert_eq!(
-        refused("solaris-settlements:nothing"),
-        Refusal::UnknownRecipe("solaris-settlements:nothing".into())
+        refused("krasnokamen-settlements:nothing"),
+        Refusal::UnknownRecipe("krasnokamen-settlements:nothing".into())
     );
     assert!(town.jobs().is_empty());
     assert_eq!(town.stored("minecraft:oak_log"), 1);
@@ -338,7 +338,7 @@ fn missing_raw_material_cycle_and_tool_refuse_without_admitting_anything() {
 #[test]
 fn cancelling_any_step_stops_the_whole_order_and_admission_is_idempotent() {
     let mut town = village(&[("minecraft:hay_block", 1)]);
-    let steps = town.submit("bake", "solaris-settlements:bread", 3).unwrap();
+    let steps = town.submit("bake", "krasnokamen-settlements:bread", 3).unwrap();
     let worker = town.worker;
     let again = move |steps: Vec<Step>| {
         economy::Request::Production(production::Request::Order {
@@ -385,7 +385,7 @@ fn cancelling_any_step_stops_the_whole_order_and_admission_is_idempotent() {
 #[test]
 fn a_gate_on_a_missing_or_foreign_step_is_a_corrupt_image() {
     let mut town = village(&[("minecraft:hay_block", 1)]);
-    town.submit("bake", "solaris-settlements:bread", 3).unwrap();
+    town.submit("bake", "krasnokamen-settlements:bread", 3).unwrap();
     let mut state = town
         .state
         .settlements
@@ -458,7 +458,7 @@ fn a_double_chest_is_one_inventory_so_the_missing_wheat_is_planned_from_hay() {
     );
     assert_eq!(inventory::town_storage(&town.state, town.id).len(), 1);
 
-    let steps = town.submit("bake", "solaris-settlements:bread", 2).unwrap();
+    let steps = town.submit("bake", "krasnokamen-settlements:bread", 2).unwrap();
     assert_eq!(describe(&steps), "open_hay x1 -> bread x2");
     town.run_until("bake");
     assert_eq!(
@@ -483,7 +483,7 @@ fn a_long_chain_puts_its_intermediate_away_when_the_carry_fills_and_finishes() {
     // wedging; the product then fetches it back portion by portion.
     let mut town = village(&[("minecraft:hay_block", 57)]);
     let steps = town
-        .submit("bake", "solaris-settlements:bread", 171)
+        .submit("bake", "krasnokamen-settlements:bread", 171)
         .unwrap();
     assert_eq!(describe(&steps), "open_hay x57 -> bread x171");
     let mut stored_peak = 0;
@@ -532,7 +532,7 @@ fn a_long_chain_puts_its_intermediate_away_when_the_carry_fills_and_finishes() {
 #[test]
 fn cancelling_a_finished_dependency_cancels_the_unfinished_rest_of_its_order() {
     let mut town = village(&[("minecraft:hay_block", 1)]);
-    town.submit("bake", "solaris-settlements:bread", 3).unwrap();
+    town.submit("bake", "krasnokamen-settlements:bread", 3).unwrap();
     town.run_until("bake-1");
     assert_eq!(town.jobs()["bake"].done, 0);
 

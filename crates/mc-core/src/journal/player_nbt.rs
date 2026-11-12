@@ -90,7 +90,7 @@ pub(super) fn player_image_to_tag(
         mc_nbt::Tag::Int(record.enchantment_offer_seed),
     ));
     fields.push((
-        "SolarisGameplaySeed".into(),
+        "KrasnokamenGameplaySeed".into(),
         mc_nbt::Tag::Int(record.enchantment_seed),
     ));
     let mut warning = record.warden_warning;
@@ -98,7 +98,7 @@ pub(super) fn player_image_to_tag(
     fields.push(("warden_spawn_tracker".into(), warning.nbt()));
     if persistent {
         fields.push((
-            "SolarisWardenWarning".into(),
+            "KrasnokamenWardenWarning".into(),
             mc_nbt::Tag::ByteArray(
                 serde_json::to_vec(&warning)
                     .map_err(|err| CoreError::Storage(format!("player warning: {err}")))?
@@ -133,7 +133,7 @@ pub(super) fn player_image_to_tag(
     ));
     if persistent {
         fields.push((
-            "SolarisStatistics".into(),
+            "KrasnokamenStatistics".into(),
             mc_nbt::Tag::ByteArray(
                 serde_json::to_vec(&record.statistics)
                     .map_err(|err| CoreError::Storage(format!("player statistics: {err}")))?
@@ -142,8 +142,8 @@ pub(super) fn player_image_to_tag(
                     .collect(),
             ),
         ));
-        // Solaris custody keys (vanilla ignores unknown keys).
-        for (key, value) in solaris_custody_fields(items, &player)
+        // Krasnokamen custody keys (vanilla ignores unknown keys).
+        for (key, value) in krasnokamen_custody_fields(items, &player)
             .map_err(|err| CoreError::Storage(err.to_string()))?
         {
             fields.push((key, value));
@@ -169,7 +169,7 @@ pub(super) fn player_image_to_tag(
     }
     if persistent && record.respawn.is_none() {
         fields.push((
-            "solaris:RespawnState".into(),
+            "krasnokamen:RespawnState".into(),
             mc_nbt::Tag::Compound(vec![
                 (
                     "dimension".into(),
@@ -185,13 +185,13 @@ pub(super) fn player_image_to_tag(
         ));
     }
     if persistent {
-        fields.push(("solaris:Tick".into(), mc_nbt::Tag::Long(record.tick as i64)));
+        fields.push(("krasnokamen:Tick".into(), mc_nbt::Tag::Long(record.tick as i64)));
         fields.push((
-            "solaris:BurnTicks".into(),
+            "krasnokamen:BurnTicks".into(),
             mc_nbt::Tag::Long(i64::from(record.burn_ticks)),
         ));
         fields.push((
-            "SolarisAdvancements".into(),
+            "KrasnokamenAdvancements".into(),
             // Vanilla's complete document can exceed NBT's 64 KiB string limit.
             mc_nbt::Tag::ByteArray(
                 serde_json::to_vec(&record.advancement_progress)
@@ -202,7 +202,7 @@ pub(super) fn player_image_to_tag(
             ),
         ));
         fields.push((
-            "SolarisUnlockedRecipes".into(),
+            "KrasnokamenUnlockedRecipes".into(),
             mc_nbt::Tag::List(mc_nbt::ListTag {
                 element_type: mc_nbt::tag_type::STRING,
                 elements: record
@@ -259,8 +259,8 @@ pub(super) fn equipment_to_v2_slot(name: &str) -> Option<usize> {
     }
 }
 
-/// Solaris custody keys: cursor + crafting grid as vanilla item compounds.
-pub(super) fn solaris_custody_fields(
+/// Krasnokamen custody keys: cursor + crafting grid as vanilla item compounds.
+pub(super) fn krasnokamen_custody_fields(
     items: &mc_data::items::ItemRegistry,
     player: &mc_data::player_nbt::VanillaPlayer,
 ) -> Result<Vec<(String, mc_nbt::Tag)>, mc_data::item_nbt::ItemNbtError> {
@@ -268,7 +268,7 @@ pub(super) fn solaris_custody_fields(
     let mut out = Vec::new();
     if !player.carried.is_empty() {
         out.push((
-            "solaris:Carried".to_owned(),
+            "krasnokamen:Carried".to_owned(),
             mc_nbt::Tag::Compound(stack_to_fields(items, &player.carried)?),
         ));
     }
@@ -286,7 +286,7 @@ pub(super) fn solaris_custody_fields(
         .collect::<Result<_, _>>()?;
     if !grid.is_empty() {
         out.push((
-            "solaris:CraftingGrid".to_owned(),
+            "krasnokamen:CraftingGrid".to_owned(),
             mc_nbt::Tag::List(mc_nbt::ListTag {
                 element_type: if grid.is_empty() {
                     mc_nbt::tag_type::END
@@ -330,25 +330,25 @@ pub fn player_from_tag(
             .find(|(key, _)| key == name)
             .map(|(_, tag)| tag)
     };
-    let advancement_progress = match find("SolarisAdvancements") {
+    let advancement_progress = match find("KrasnokamenAdvancements") {
         Some(mc_nbt::Tag::ByteArray(json)) => {
             let bytes: Vec<_> = json.iter().map(|byte| *byte as u8).collect();
             Arc::new(
                 serde_json::from_slice(&bytes)
-                    .map_err(|err| failure("SolarisAdvancements", err.to_string()))?,
+                    .map_err(|err| failure("KrasnokamenAdvancements", err.to_string()))?,
             )
         }
         None => empty_advancement_progress(),
         Some(_) => {
             return Err(failure(
-                "SolarisAdvancements",
+                "KrasnokamenAdvancements",
                 "expected JSON byte array".into(),
             ));
         }
     };
     // Native custody wins; vanilla imports project only the owned recipe set.
     // The rest of recipeBook remains in opaque_player_fields.
-    let recipe_list = match find("SolarisUnlockedRecipes") {
+    let recipe_list = match find("KrasnokamenUnlockedRecipes") {
         Some(tag) => Some(tag),
         None => match find("recipeBook") {
             Some(mc_nbt::Tag::Compound(book)) => book
@@ -374,31 +374,31 @@ pub fn player_from_tag(
         None => BTreeSet::new(),
         Some(_) => return Err(failure("unlocked recipes", "expected string list".into())),
     });
-    let carried = match find("solaris:Carried") {
+    let carried = match find("krasnokamen:Carried") {
         Some(mc_nbt::Tag::Compound(fields)) => mc_data::item_nbt::stack_from_fields(items, fields)
-            .map_err(|err| failure("solaris:Carried slot 0", err.to_string()))?
+            .map_err(|err| failure("krasnokamen:Carried slot 0", err.to_string()))?
             .unwrap_or(mc_data::ItemStack::EMPTY),
         Some(_) => {
             return Err(failure(
-                "solaris:Carried slot 0",
+                "krasnokamen:Carried slot 0",
                 "expected item compound".into(),
             ));
         }
         None => mc_data::ItemStack::EMPTY,
     };
-    let grid = match find("solaris:CraftingGrid") {
+    let grid = match find("krasnokamen:CraftingGrid") {
         Some(mc_nbt::Tag::List(list)) => {
             let mut grid = Vec::with_capacity(list.elements.len());
             for (slot, element) in list.elements.iter().enumerate() {
                 let mc_nbt::Tag::Compound(fields) = element else {
                     return Err(failure(
-                        &format!("solaris:CraftingGrid slot {slot}"),
+                        &format!("krasnokamen:CraftingGrid slot {slot}"),
                         "expected item compound".into(),
                     ));
                 };
                 let stack = mc_data::item_nbt::stack_from_fields(items, fields).map_err(|err| {
                     failure(
-                        &format!("solaris:CraftingGrid slot {slot}"),
+                        &format!("krasnokamen:CraftingGrid slot {slot}"),
                         err.to_string(),
                     )
                 })?;
@@ -406,14 +406,14 @@ pub fn player_from_tag(
             }
             grid
         }
-        Some(_) => return Err(failure("solaris:CraftingGrid", "expected item list".into())),
+        Some(_) => return Err(failure("krasnokamen:CraftingGrid", "expected item list".into())),
         None => Vec::new(),
     };
-    let respawn_fields = match find("respawn").or_else(|| find("solaris:RespawnState")) {
+    let respawn_fields = match find("respawn").or_else(|| find("krasnokamen:RespawnState")) {
         Some(mc_nbt::Tag::Compound(fields)) => Some(fields),
         Some(_) => return Err(failure("respawn", "expected compound".into())),
         None if [
-            "solaris:Respawn",
+            "krasnokamen:Respawn",
             "SpawnX",
             "SpawnY",
             "SpawnZ",
@@ -439,7 +439,7 @@ pub fn player_from_tag(
     };
     let respawn = match respawn_field("pos") {
         Some(mc_nbt::Tag::IntArray(cell)) if cell.len() == 3 => Some([cell[0], cell[1], cell[2]]),
-        None if respawn_fields.is_none() || find("solaris:RespawnState").is_some() => None,
+        None if respawn_fields.is_none() || find("krasnokamen:RespawnState").is_some() => None,
         _ => return Err(failure("respawn.pos", "expected three integers".into())),
     };
     let respawn_dimension = match respawn_field("dimension") {
@@ -493,14 +493,14 @@ pub fn player_from_tag(
     crate::ender_chest::contents(&opaque_player_fields, items)?;
     let mut record = ReplayPlayer {
         opaque_player_fields,
-        statistics: match find("SolarisStatistics") {
+        statistics: match find("KrasnokamenStatistics") {
             None => mc_data::statistics::PlayerStatistics::default(),
             Some(mc_nbt::Tag::ByteArray(bytes)) => {
                 let bytes: Vec<_> = bytes.iter().map(|byte| *byte as u8).collect();
                 serde_json::from_slice(&bytes)
-                    .map_err(|err| failure("SolarisStatistics", err.to_string()))?
+                    .map_err(|err| failure("KrasnokamenStatistics", err.to_string()))?
             }
-            Some(_) => return Err(failure("SolarisStatistics", "expected byte array".into())),
+            Some(_) => return Err(failure("KrasnokamenStatistics", "expected byte array".into())),
         },
         advancement_progress,
         unlocked_recipes,
@@ -533,10 +533,10 @@ pub fn player_from_tag(
         respawn_yaw: spawn_angle("yaw", 180.0)?,
         respawn_pitch: spawn_angle("pitch", 90.0)?,
         active_effects: active_effects_from_fields(entries),
-        enchantment_seed: match find("SolarisGameplaySeed") {
+        enchantment_seed: match find("KrasnokamenGameplaySeed") {
             None => 0,
             Some(mc_nbt::Tag::Int(seed)) => *seed,
-            Some(_) => return Err(failure("SolarisGameplaySeed", "expected integer".into())),
+            Some(_) => return Err(failure("KrasnokamenGameplaySeed", "expected integer".into())),
         },
         enchantment_offer_seed: match find("XpSeed") {
             None => 0,
@@ -551,27 +551,27 @@ pub fn player_from_tag(
             Some(mc_nbt::Tag::Byte(1)) => true,
             Some(_) => return Err(failure("FallFlying", "expected boolean byte".into())),
         },
-        warden_warning: match crate::warden::unique(entries, "SolarisWardenWarning")
-            .map_err(|error| failure("SolarisWardenWarning", error))?
+        warden_warning: match crate::warden::unique(entries, "KrasnokamenWardenWarning")
+            .map_err(|error| failure("KrasnokamenWardenWarning", error))?
         {
             Some(mc_nbt::Tag::ByteArray(json)) => {
                 let bytes: Vec<_> = json.iter().map(|byte| *byte as u8).collect();
                 serde_json::from_slice(&bytes)
-                    .map_err(|error| failure("SolarisWardenWarning", error.to_string()))?
+                    .map_err(|error| failure("KrasnokamenWardenWarning", error.to_string()))?
             }
             Some(_) => {
                 return Err(failure(
-                    "SolarisWardenWarning",
+                    "KrasnokamenWardenWarning",
                     "expected JSON byte array".into(),
                 ));
             }
             None => crate::shrieker::Warning::read(entries)
                 .map_err(|error| failure("warden_spawn_tracker", error))?,
         },
-        burn_ticks: match find("solaris:BurnTicks") {
+        burn_ticks: match find("krasnokamen:BurnTicks") {
             Some(mc_nbt::Tag::Long(ticks)) => u32::try_from(*ticks)
-                .map_err(|_| failure("solaris:BurnTicks", "expected u32".into()))?,
-            Some(_) => return Err(failure("solaris:BurnTicks", "expected long".into())),
+                .map_err(|_| failure("krasnokamen:BurnTicks", "expected u32".into()))?,
+            Some(_) => return Err(failure("krasnokamen:BurnTicks", "expected long".into())),
             None => entries
                 .iter()
                 .find_map(|(key, value)| match (key.as_str(), value) {
@@ -581,9 +581,9 @@ pub fn player_from_tag(
                 .unwrap_or(0),
         },
         portal: crate::portals::from_fields(entries)?,
-        tick: match find("solaris:Tick") {
+        tick: match find("krasnokamen:Tick") {
             Some(mc_nbt::Tag::Long(tick)) => *tick as u64,
-            Some(_) => return Err(failure("solaris:Tick", "expected long".into())),
+            Some(_) => return Err(failure("krasnokamen:Tick", "expected long".into())),
             None => 0,
         },
     };
@@ -614,25 +614,25 @@ pub(super) fn player_owned_field(key: &str) -> bool {
             | "active_effects"
             | "AbsorptionAmount"
             | "PortalCooldown"
-            | "solaris:PortalTime"
+            | "krasnokamen:PortalTime"
             | "XpSeed"
-            | "SolarisGameplaySeed"
+            | "KrasnokamenGameplaySeed"
             | "warden_spawn_tracker"
-            | "SolarisWardenWarning"
+            | "KrasnokamenWardenWarning"
             | "current_explosion_impact_pos"
             | "FallFlying"
             | "Fire"
             | "DataVersion"
-            | "SolarisStatistics"
-            | "solaris:Carried"
-            | "solaris:CraftingGrid"
+            | "KrasnokamenStatistics"
+            | "krasnokamen:Carried"
+            | "krasnokamen:CraftingGrid"
             | "respawn"
-            | "solaris:RespawnState"
-            | "solaris:Tick"
-            | "solaris:BurnTicks"
-            | "SolarisAdvancements"
-            | "SolarisUnlockedRecipes"
-            | "solaris:Respawn"
+            | "krasnokamen:RespawnState"
+            | "krasnokamen:Tick"
+            | "krasnokamen:BurnTicks"
+            | "KrasnokamenAdvancements"
+            | "KrasnokamenUnlockedRecipes"
+            | "krasnokamen:Respawn"
             | "SpawnX"
             | "SpawnY"
             | "SpawnZ"

@@ -568,7 +568,7 @@ fn assert_export(root: &Path, evidence: &Evidence, wal_tail: bool) {
             let Tag::Compound(fields) = &tag else {
                 panic!("player compound")
             };
-            assert!(!fields.iter().any(|(key, _)| key == "SolarisWardenWarning"));
+            assert!(!fields.iter().any(|(key, _)| key == "KrasnokamenWardenWarning"));
             let player = mc_core::journal::player_from_tag(&tag, &registry.items).unwrap();
             let warning = player.warden_warning;
             assert_eq!(

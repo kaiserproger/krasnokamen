@@ -8,7 +8,7 @@ use std::num::NonZeroUsize;
 use std::path::Path;
 
 use fixture::component_bytes;
-use mc_plugin_host::bindings::solaris::plugin::commands::{Command, MessageTarget, SendMessage};
+use mc_plugin_host::bindings::krasnokamen::plugin::commands::{Command, MessageTarget, SendMessage};
 use mc_plugin_host::{
     AdapterError, CommandBatch, DeploymentConfig, DiscoveryMode, NoSessions, PlayerSessions,
     PluginLimits, check_deployment, to_script_batch,
@@ -112,7 +112,7 @@ fn a_session_target_becomes_a_chat_command() {
 
 #[test]
 fn an_unlock_names_the_exact_session_without_a_lookup() {
-    use mc_plugin_host::bindings::solaris::plugin::commands::UnlockSession;
+    use mc_plugin_host::bindings::krasnokamen::plugin::commands::UnlockSession;
     let mut batch = CommandBatch::new();
     batch
         .push(

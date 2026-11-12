@@ -216,7 +216,7 @@ pub(super) fn react(
     }
 }
 
-/// `Projectile.isOnFire` as Solaris tracks it: a flame or burning arrow
+/// `Projectile.isOnFire` as Krasnokamen tracks it: a flame or burning arrow
 /// (tridents carry no fire here), and a small or large fireball, which
 /// `AbstractHurtingProjectile.tick` ignites before it resolves a hit
 /// (`shouldBurn`; neither type is fire immune, while dragon fireballs, wither

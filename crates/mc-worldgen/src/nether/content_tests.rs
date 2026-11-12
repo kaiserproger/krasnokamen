@@ -6,7 +6,7 @@ fn generator() -> &'static NetherGenerator {
     static GENERATOR: LazyLock<NetherGenerator> = LazyLock::new(|| {
         let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
         let blocks = Arc::new(
-            BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+            BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
         );
         let data = Arc::new(
             mc_data::load(&root)
@@ -292,7 +292,7 @@ fn bastion_jigsaw_fossils_and_ruined_portals_are_natural_starts() {
 #[test]
 fn coarse_density_matches_scalar_at_chunk_edges() {
     let blocks = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     let generator = NetherGenerator::new(3456, blocks);
     for cx in [-7, -1, 0, 8] {
@@ -321,7 +321,7 @@ fn coarse_density_matches_scalar_at_chunk_edges() {
 #[test]
 fn hanging_glowstone_is_generated() {
     let blocks = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     let generator = NetherGenerator::new(3456, blocks);
     let mut found = false;
@@ -469,7 +469,7 @@ fn generated_start_metadata_preserves_locate_anchor_and_bounds() {
         assert_eq!(
             start
                 .iter()
-                .find(|(key, _)| key == "SolarisLocatePos")
+                .find(|(key, _)| key == "KrasnokamenLocatePos")
                 .unwrap()
                 .1,
             Tag::IntArray(vec![site.position.x, site.position.y, site.position.z])

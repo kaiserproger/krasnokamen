@@ -1,5 +1,5 @@
 //! Per-block-state light metadata. When a vanilla sidecar is configured,
-//! Solaris loads `data/vanilla/reports/block_light.json` as a required
+//! Krasnokamen loads `data/vanilla/reports/block_light.json` as a required
 //! runtime oracle. Without a sidecar, local fallback mode builds a
 //! conservative table from the embedded blocks report.
 //!
@@ -491,7 +491,7 @@ fn parse_raw(raw: RawTable) -> Result<BlockLightTable, BlockLightError> {
 
     Ok(BlockLightTable {
         version: raw.version,
-        faces: shape_faces(&crate::blocks::solaris_required_blocks_report(), expected),
+        faces: shape_faces(&crate::blocks::krasnokamen_required_blocks_report(), expected),
         emission,
         opacity,
         propagates_sky,

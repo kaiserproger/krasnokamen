@@ -332,7 +332,7 @@ fn missing_native_database_with_history_points_to_offline_import() {
     std::fs::write(directory.path().join("journal/batch-1-1.bin"), b"history").unwrap();
     let config = CoreConfig::new(directory.path().to_path_buf(), 42);
     let error = crate::Core::open(config).unwrap_err().to_string();
-    assert!(error.contains("solaris-v2 world import-anvil"), "{error}");
+    assert!(error.contains("krasnokamen world import-anvil"), "{error}");
     assert!(!directory.path().join("native/state.redb").exists());
 }
 
@@ -351,7 +351,7 @@ fn empty_runtime_world_publishes_initial_three_dimension_native_checkpoint() {
     assert!(!directory.path().join("CHECKPOINT-MANIFEST.json").exists());
     assert!(!directory.path().join("level.dat").exists());
     assert!(!directory.path().join("dimensions").exists());
-    assert!(!directory.path().join("solaris/world.json").exists());
+    assert!(!directory.path().join("krasnokamen/world.json").exists());
 }
 
 #[test]
@@ -693,7 +693,7 @@ fn native_projectile_projection_does_not_duplicate_or_resurrect_owned_fields() {
     let mut stale = vec![unknown.clone()];
     stale.extend(
         first.extra_fields.into_iter().filter(|(key, _)| {
-            matches!(key.as_str(), "Owner" | "life" | "solaris:ProjectileRuntime")
+            matches!(key.as_str(), "Owner" | "life" | "krasnokamen:ProjectileRuntime")
         }),
     );
     row.opaque_entity_fields.clear();
