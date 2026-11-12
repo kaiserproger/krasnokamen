@@ -510,14 +510,40 @@ fn cart(state: &mut TickState, slot: EntitySlot) {
         }
     }
 }
-fn entity_collisions(state: &mut TickState, slot: EntitySlot) {
+/// Vehicle-versus-entity push.
+///
+/// Bottleneck: every vehicle walked all entity slots each tick (2.57 ms per
+/// tick for one vehicle among 100,000 mobs on native-100). Boundary: candidates
+/// come from the per-chunk membership index `EntityStore` keeps on every spawn,
+/// removal and chunk-crossing move (the redstone entity query uses the same
+/// index). Correctness fence: an entity passes the overlap test only when its
+/// feet lie within `width + max_half_width` of this vehicle on both horizontal
+/// axes, which the chunk range covers; candidates are visited in ascending slot
+/// order, so the velocity accumulation order of the former full slot scan is
+/// unchanged. Removal path: loop `0..state.entities.len()` again (identical
+/// result), as `entity_collisions_chunk_index_matches_full_scan` pins.
+pub(super) fn entity_collisions(state: &mut TickState, slot: EntitySlot) {
     let p = state.entities.pos(slot);
     let body = state.entities.body(slot);
     let width = body.half_width;
     let height = body.height;
     let rider = crate::mounts::rider(state, slot);
-    for i in 0..state.entities.len() {
-        let other = EntitySlot(i as u32);
+    let reach = width + state.entities.max_half_width();
+    let chunk = |coordinate: f64| mth::floor_i32(coordinate).div_euclid(16);
+    let mut candidates = Vec::new();
+    for z in chunk(p[2] - reach)..=chunk(p[2] + reach) {
+        for x in chunk(p[0] - reach)..=chunk(p[0] + reach) {
+            state
+                .entities
+                .for_each_slot_in_chunk(crate::boundary::ChunkPos { x, z }, |other| {
+                    candidates.push(other);
+                });
+        }
+    }
+    // An id whose kind changed can list under both membership maps of its chunk.
+    candidates.sort_unstable();
+    candidates.dedup();
+    for other in candidates {
         if other == slot || Some(other) == rider {
             continue;
         }
