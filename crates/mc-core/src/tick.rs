@@ -427,6 +427,8 @@ pub struct TickState {
     pub merge_block_writes: Vec<(BlockPos, u32)>,
     /// Reused block-phase projection; merge writes remain visible to commit.
     block_phase_writes: Vec<(BlockPos, u32)>,
+    /// Reused block cells of the item entities the twentieth-tick merge sorts.
+    pub(crate) item_merge_cells: Vec<(i32, i32, i32)>,
     /// Reused ordered admission for serial simulation passes.
     pub(crate) serial_entity_slots: Vec<EntitySlot>,
     /// Byte admission scratch, rebuilt for each caller after structural changes.
@@ -712,6 +714,7 @@ impl TickState {
             day_time: 0,
             merge_block_writes: Vec::new(),
             block_phase_writes: Vec::new(),
+            item_merge_cells: Vec::new(),
             serial_entity_slots: Vec::new(),
             serial_entity_marks: Vec::new(),
             contact_hazards_scratch: Default::default(),
