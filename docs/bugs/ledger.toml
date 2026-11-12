@@ -4075,17 +4075,6 @@ failing_first = "not recorded"
 regression = []
 
 [[bug]]
-id = "VILLAGER-IDLE-STROLL-UNBOUNDED-DRIFT"
-title = "Residents drift 60-70 blocks out of the village on untethered strolls, end up on the floor of open water and are killed by zombies at night"
-area = "gameplay"
-repro = "client"
-severity = "major"
-status = "open"
-source = "Seed-24 civilization-seed-qa, two fresh runs. llr1bc4e (server 107ddb91): newborn f7a21a80 on the floor of a two-deep pond at (73.4,60.9,-231.4), 58 blocks from the meeting point (131,78,-217), killed by a zombie at tick 65504 (server.log line 638; receipts/CivSimSeed24/snap3/probe-baby.json). fx4gdz87 (server 7ed4d504, baby wading fix): adult nitwit 49efa776 killed by a zombie at tick 43690, activity Panic, position (61.7,58.0,-252.3), 70 blocks west of the meeting point, on dirt at y=57 under water y=58-62 (receipts/CivSimSeed24/snap5/probe-nitwit.json); routes refuse that water for an adult, so it did not arrive by a planned route. Two source findings: villager/brain.rs short_wander picks each Idle/Play/Work stroll target within +-6 of the current cell (range 13, new target every 40 ticks) with no reference to the village, so position is an unbounded random walk (vanilla VillageBoundRandomStroll keeps to village sections and walks back from outside); and no caller gives terrestrial mobs the FloatGoal/Swim upward drive mc-physics expects (entity_motion.rs Walker path; mc-physics lib.rs step_entity), so a villager that enters deep water sinks to the floor and cannot climb out. No fix in this branch."
-failing_first = "not recorded"
-regression = []
-
-[[bug]]
 id = "TICK-FROZEN-GAME-AGE-WIRE"
 title = "SET_TIME advances client game age during tick freeze by sending the WAL frame counter"
 area = "gameplay"
