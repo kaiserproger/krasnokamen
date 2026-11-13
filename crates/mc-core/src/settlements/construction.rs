@@ -1587,10 +1587,11 @@ fn plan(state: &mut TickState, id: SettlementId) {
     if gathering {
         return;
     }
-    // Street work fills every pass that starts no building or upgrade; the
-    // wall, its gates and the well follow once the streets owe nothing.
-    if let Some(site) = street_site(state, record, &images)
-        .or_else(|| fortification_site(state, record, residents, &images))
+    // The wall, its gates and the well come before street work: the streets
+    // reach every standing building in the radius and owe work without end,
+    // the fortification is a bounded list that the world itself shortens.
+    if let Some(site) = fortification_site(state, record, residents, &images)
+        .or_else(|| street_site(state, record, &images))
     {
         begin_cells(state, site.project, site.bounds, site.cells);
     }

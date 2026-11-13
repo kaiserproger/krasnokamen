@@ -54,6 +54,7 @@ DOORS = 4
 COBBLE, DOOR, AIR, WATER = ("minecraft:cobblestone", "minecraft:oak_door", "minecraft:air",
                             "minecraft:water")
 PATH = "minecraft:dirt_path"
+SEEDS = "minecraft:wheat_seeds"
 # Seconds the Builders get to place the first block of the fortification, then to finish it.
 START_SECONDS = 600.0
 BUILD_SECONDS = 1500.0
@@ -223,9 +224,12 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     for _ in range(COBBLE_STACKS):
         probe.fixture(f"give @s {COBBLE} 64")
     probe.fixture(f"give @s {DOOR} {DOORS}")
+    # The first Farm's seeds are gathered before any fortification work: stock them, so the Builders
+    # owe no meadow clearing and the wall is the first work the plan can start.
+    probe.fixture(f"give @s {SEEDS} 64")
     probe.call("minecraft_wait_ticks", {"ticks": 20})
     stock_before = _chest_totals(_open_chest_at(probe, tuple(shell)))
-    sub["deposit"] = _deposit_all_at(probe, tuple(shell), [COBBLE, DOOR])
+    sub["deposit"] = _deposit_all_at(probe, tuple(shell), [COBBLE, DOOR, SEEDS])
     stock = _chest_totals(_open_chest_at(probe, tuple(shell)))
     sub["stock"] = stock
     funded = (stock.get(COBBLE, 0) - stock_before.get(COBBLE, 0) >= 64 * COBBLE_STACKS
