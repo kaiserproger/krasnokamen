@@ -81,10 +81,10 @@ regiment, index), so a retake with the same seed dresses every fighter the same:
 
 Weapon choice (`crates/mc-core/src/battle/weapons.rs`): a soldier draws the
 sword once his opponent is inside the spear's near bound (`attack_range`
-`min_reach * mob_factor`, 1.0 block for the iron spear; from the second rank or
-against a horseman only 0.5 block further in) and retakes the spear only once
-no enemy is within the spear's reach (`max_reach * mob_factor`, 2.25), so the
-surges of a melee never flip it. An archer draws the sword when an
+`min_reach * mob_factor`, 1.0 block for the iron spear), where the spear cannot
+strike, in every rank and against horsemen too, and retakes the spear only
+once no enemy is within the spear's reach (`max_reach * mob_factor`, 2.25), so
+the surges of a melee never flip it. An archer draws the sword when an
 enemy is within 6 blocks and the bow when none is within 10. A swap is an
 ordinary main-hand change (trackers get `SetEquipment`) with a main-hand whack
 swing lasting the pause before the drawn weapon may strike or loose: vanilla

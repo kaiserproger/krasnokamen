@@ -294,40 +294,38 @@ fn archer_draws_the_sword_when_an_enemy_closes_and_the_bow_when_he_is_far() {
 }
 
 #[test]
-fn second_rank_and_horsemen_keep_the_spear_until_the_enemy_is_well_inside() {
+fn second_rank_and_horsemen_draw_the_sword_inside_the_near_bound_too() {
     let at = |gap: f64| move |grow: f64| gap < grow;
     let spear = MeleeReach {
         min: 1.0,
         max: 2.25,
     };
-    // Front rank against foot: the sword inside the near bound, the spear
-    // again beyond its reach.
-    assert!(wants_sword(false, false, spear, at(0.9)));
-    assert!(!wants_sword(false, false, spear, at(1.1)));
-    assert!(wants_sword(true, false, spear, at(2.2)));
-    assert!(!wants_sword(true, false, spear, at(2.3)));
-    // Second rank or a horseman: the sword only `BAND` inside the bound.
-    assert!(!wants_sword(false, true, spear, at(0.9)));
-    assert!(wants_sword(false, true, spear, at(0.4)));
-    assert!(wants_sword(true, true, spear, at(2.2)));
-    assert!(!wants_sword(true, true, spear, at(2.3)));
+    // The sword inside the near bound, the spear again beyond its reach.
+    assert!(wants_sword(false, spear, at(0.75)));
+    assert!(!wants_sword(false, spear, at(1.1)));
+    assert!(wants_sword(true, spear, at(2.2)));
+    assert!(!wants_sword(true, spear, at(2.3)));
 
-    // A horseman at gap 0.9: the spear stays; at 0.4 the sword comes out.
+    // A horseman at gap 1.2: the spear stays (it strikes there); at gap 0.75,
+    // inside its 1.0 near bound where it cannot strike, the sword comes out.
     let (mut state, mut battle, actor, rider) = duel(SPEAR, SWORD, Pair::SpearSword, 4.0);
     let pos = state.entities.pos(slot(&state, rider));
     let horse = spawn(&mut state, "horse", pos);
     crate::battle::cavalry::mount(&mut state, rider, horse).unwrap();
     let mut tick = 0;
-    place(&mut state, rider, actor, 1.5);
+    place(&mut state, rider, actor, 1.8);
     assert_eq!(
         swap_within(&mut state, &mut battle, &mut tick, actor, 60),
         None,
-        "against a horseman the spear stays up inside its bound"
+        "against a horseman beyond the near bound the spear stays up"
     );
-    place(&mut state, rider, actor, 1.0);
-    assert!(swap_within(&mut state, &mut battle, &mut tick, actor, 60).is_some());
+    place(&mut state, rider, actor, 1.35);
+    assert!(
+        swap_within(&mut state, &mut battle, &mut tick, actor, 60).is_some(),
+        "a horseman inside the spear's near bound draws the sword"
+    );
 
-    // The second rank keeps the spear against foot inside the bound too.
+    // The second rank against foot: the same bound.
     let (mut state, _, pos) = fixture();
     let front = spawn(&mut state, "husk", pos);
     let rear = spawn(&mut state, "husk", [pos[0], pos[1], pos[2] - 2.0]);
@@ -352,15 +350,18 @@ fn second_rank_and_horsemen_keep_the_spear_until_the_enemy_is_well_inside() {
             &[front, rear],
         )
         .unwrap();
-    let enemy = dummy(&mut state, [pos[0] + 1.5, pos[1], pos[2] - 2.0]);
+    let enemy = dummy(&mut state, [pos[0] + 1.8, pos[1], pos[2] - 2.0]);
     let mut tick = 0;
     assert_eq!(
         swap_within(&mut state, &mut battle, &mut tick, rear, 60),
         None,
-        "the second rank reaches past the front man with the spear"
+        "the second rank keeps the spear beyond the near bound"
     );
-    place(&mut state, enemy, rear, 1.0);
-    assert!(swap_within(&mut state, &mut battle, &mut tick, rear, 60).is_some());
+    place(&mut state, enemy, rear, 1.35);
+    assert!(
+        swap_within(&mut state, &mut battle, &mut tick, rear, 60).is_some(),
+        "the second rank draws the sword inside the spear's near bound"
+    );
 }
 
 #[test]
