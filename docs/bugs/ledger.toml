@@ -2546,8 +2546,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "Owner expectation (issue 1, ISSUE-1-09): build separate buildings (walls, production, military, fortification) and upgrade them. docs/settlements/construction.md#blueprint-files: the embedded catalog is house 1-3; storage, farm, mason, lumber_camp, mine, barracks, wall and watch_tower 1-2; shepherd 1 (crates/mc-core/assets/blueprints/*.json, read 2026-11-12: kinds barracks, farmer, house, lumber_camp, builder, mine, shepherd, storage, wall, tower). Player-built gates and every workshop kind can be certified and upgraded to level 3 (`settlement building certify|upgrade`, docs/settlements/construction.md#certification-commands), so the gap is Builder-built coverage only. Remaining wish: blueprints for gate and the other workshop kinds, and level 3 where the certificate allows it"
-regression = []
+regression = ["harness:buildings-qa:gate.L1_built", "harness:buildings-qa:gate.L2_upgrade", "harness:buildings-qa:gate.L3_upgrade", "harness:buildings-qa:wall.L3_upgrade", "harness:buildings-qa:watch_tower.L3_upgrade", "harness:buildings-qa:barracks.L3_upgrade", "harness:buildings-qa:fisherman.L1_built", "harness:buildings-qa:fisherman.L2_upgrade"]
 failing_first = "not recorded"
+fix_commit = "patch:c08470d55c904b23b2efd8f2e9a3a4bfb28b3e93a19feef1dd46de63e8b972a7"
 
 [[bug]]
 id = "ISSUE-1-18"
