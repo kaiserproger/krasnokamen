@@ -11,13 +11,56 @@ fn film_nerve_keeps_a_rear_trickle_above_the_regiment_break_threshold() {
         let front = nerve(id, 0, 20);
         let rear = nerve(id, 19, 20);
         assert!((3.0..=18.0).contains(&front), "front={front}");
-        assert!((25.0..=40.0).contains(&rear), "rear={rear}");
-        assert_eq!(rear - front, 22.0);
+        assert!((13.0..=28.0).contains(&rear), "rear={rear}");
+        assert_eq!(rear - front, 10.0);
         rear_top = rear_top.max(rear);
     }
     // Sections stop pulsing below the floor, so losses stall there: a rear
     // top at or under it would leave a worn regiment unable to start flight.
     assert!(rear_top > PULSE_MORALE_FLOOR, "rear_top={rear_top}");
+}
+
+/// G2 fade: with a 25..40 rear nerve the regiment losing its exchange broke at
+/// 11-18 % removed, its rear half (which does not fight) running first. A
+/// regiment 13 % down in one exchange (morale 31) now keeps every man.
+#[test]
+fn a_regiment_thirteen_percent_down_keeps_its_rear_ranks() {
+    let mut runtime = FormationRuntime::default();
+    runtime
+        .add_regiment(
+            RegimentSpec {
+                frontage: 1.0,
+                id: 0,
+                faction: 1,
+                origin: [0.0, 64.0, 0.0],
+                facing: [0.0, 1.0],
+                files: 10,
+                order: Order::Hold,
+            },
+            &(1..=100).map(EntityId).collect::<Vec<_>>(),
+        )
+        .unwrap();
+    for i in 0..13 {
+        runtime.mark_wounded(EntityId(i + 1));
+    }
+    runtime.prepare(0, |id| {
+        Some(SoldierSample {
+            slot: None,
+            pos: [f64::from(id.0), 64.0, 0.0],
+            health: 20.0,
+            faction: 1,
+        })
+    });
+    runtime.update_morale(0);
+    let morale = &runtime.regiments[0].morale;
+    assert!(!morale.broken);
+    assert!((30.0..32.0).contains(&morale.value), "morale={}", morale.value);
+    let routing = runtime
+        .members
+        .iter()
+        .filter(|m| !m.wounded && m.routing)
+        .count();
+    assert_eq!(routing, 0);
 }
 
 #[test]

@@ -7,14 +7,17 @@
 use super::formation::PULSE_MORALE_FLOOR;
 use super::{BattleState, Frame, Output};
 
-// Film nerve: front 3..18, rear 25..40. The rear top must clear the pulse
-// morale floor, or a worn regiment stops fighting before anyone can flee: in
-// the native 20k film a 23 top never broke within three contact minutes; the
-// 40 top breaks the busiest front after ~70 removals, 77 s into contact.
+// Film nerve: front 3..18, rear 13..28 (the +10 rear bias of
+// research-combat-behavior.md §4.8). The rear top must clear the pulse morale
+// floor, or a worn regiment stops fighting before anyone can flee: in the
+// native 20k film a 23 top never broke within three contact minutes. A 40 top
+// (+22) broke the regiment losing its exchange at 11-18 % removed, its rear
+// half, which does not fight, panicking first: at 1 500 a side both foot
+// regiments of a side were gone within two minutes of contact.
 const FRONT_NERVE_BASE: f32 = 3.0;
 const NERVE_VARIATIONS: u32 = 16;
 const CASUALTY_RATE: f32 = 1.0;
-const REAR_NERVE_BONUS: f32 = 22.0;
+const REAR_NERVE_BONUS: f32 = 10.0;
 // A regiment worn near its pulse floor while still in contact gives way within
 // seconds instead of standing frozen with neither losses nor flight.
 const WORN_MARGIN: f32 = 10.0;

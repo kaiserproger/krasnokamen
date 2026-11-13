@@ -50,12 +50,14 @@ const TARGET_REMOVALS: f32 = 80.0;
 const PARRY_FRACTION: f32 = 2316.0 / 3873.0;
 // The meshed press keeps several times the calibration's 46 files within reach
 // of each other per regiment front, so a landed blow removes a man that many
-// times less often: losses per minute and time to rout are to stay those of
-// the G2 take (owner, 2026-11-13; peak 2 212 a minute, a side's quarter lost
-// after 194 s) while far more men trade blows, parries and blocks. At five
-// (rehearsal 7baa94d5: 5 500-6 400 fighting for a minute) the press alone
-// still cost 2 000-2 450 a minute and the rout 3 423.
-const PRESS_EXPOSURE: f32 = 10.0;
+// times less often. At ten (G2 take: peak 2 212 a minute, a side's quarter
+// lost after 194 s) a 1 500-a-side battle kept 1 000 men fighting for only
+// 61 s: a regiment losing its exchange reaches its ~12 % break within two
+// minutes. The owner wants the contact longer (2026-11-14: >= 1 000 fighting
+// for >= 4 min at 1 500 a side, losses a minute no higher than G2's). At fifty
+// a blow removes 0.8 % of the time, under the 1.3 % research-combat-behavior.md
+// §4.7 derives for a ten-minute contact; the action clocks are unchanged.
+const PRESS_EXPOSURE: f32 = 50.0;
 const REMOVAL_ROLLS: f32 = 10_000.0 * TARGET_REMOVALS
     / (FRONT_FILES
         * PRESS_EXPOSURE
