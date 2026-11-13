@@ -171,8 +171,10 @@ fn plan_sweeps(battle: &BattleState, plans: &mut Vec<Option<Sweep>>) {
 /// foe or riding a plan steer without the foot separation, and rode onto one
 /// block: six horses stood on one place at the foot line in the battle census.
 fn horse_push(formation: &super::formation::FormationRuntime, bi: usize) -> [f64; 2] {
+    let Some(me) = formation.members.get(bi) else {
+        return [0.0; 2];
+    };
     let (near, _) = formation.neighbours.nearest(bi, &formation.members);
-    let me = &formation.members[bi];
     let mut push = [0.0; 2];
     for (distance, other) in near {
         if other == usize::MAX || distance >= HORSE_SPACING * HORSE_SPACING {
@@ -359,17 +361,19 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
                     4.6
                 };
                 let formation = &battle.formation;
-                let regiment = &formation.regiments[formation.members[bi].regiment];
                 // A rider dressing his place keeps its pace: the leader's speed plus a
                 // catch-up that grows with the distance, never the full trot for a
                 // hand's breadth (which overshot the place every tick and left the
                 // block ragged). A sweeping rider heads for a plan point instead.
-                let sweeping = combat.sweeps.get(formation.members[bi].regiment).is_some_and(Option::is_some);
-                if !wounded && !routing && !sweeping {
+                if let Some(member) = formation.members.get(bi)
+                    && !wounded
+                    && !routing
+                    && !combat.sweeps.get(member.regiment).is_some_and(Option::is_some)
+                {
                     let slot = formation.heading_target(bi);
                     let away = mth::length2(slot[0] - position[0], slot[2] - position[2]);
-                    let pace = regiment.speed.abs() / mc_physics::TICK_SECONDS + away * SLOT_CATCH_UP;
-                    mounted_speed = mounted_speed.min(pace.max(speed));
+                    let leader = formation.regiments[member.regiment].speed.abs() / mc_physics::TICK_SECONDS;
+                    mounted_speed = mounted_speed.min((leader + away * SLOT_CATCH_UP).max(speed));
                 }
                 velocity[0] *= mounted_speed / speed;
                 velocity[2] *= mounted_speed / speed;
