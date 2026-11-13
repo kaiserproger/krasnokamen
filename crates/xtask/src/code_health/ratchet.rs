@@ -47,7 +47,10 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     // Kelp-wash fix a5a8a865 and villager doors b293281d, 2026-11-13: the
     // `washed_away_by_fluids` and `mob_interactable_doors` block tags resolve
     // once at registry load (the remedy this ratchet asks for): 2631.
-    vanilla_id_literals: 2_631,
+    // Drowned joins the `hunts_villagers` capability table next to zombie,
+    // zombie_villager and husk (vanilla Drowned targets AbstractVillager),
+    // 2026-11-13: 2632.
+    vanilla_id_literals: 2_632,
     // Measured 113 on 87c33206, 2026-11-13.
     path_equality: 113,
     panics: 5,
