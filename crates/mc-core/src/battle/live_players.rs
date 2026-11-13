@@ -159,15 +159,15 @@ pub(crate) fn update(state: &mut TickState) {
     }
 }
 
-/// The nearest living holder of the other side within `reach` of soldier
-/// `actor` (`only`: that holder alone): the extra candidate a ready soldier
-/// weighs against his soldier target before he starts a swing, and the reach
-/// check again at its impact.
+/// The nearest living holder of the other side within the melee range of
+/// soldier `actor` (`only`: that holder alone): the extra candidate a ready
+/// soldier weighs against his soldier target before he starts a swing, and the
+/// range check again at its impact.
 pub(super) fn in_reach(
     battle: &BattleState,
     entities: &EntityStore,
     actor: EntitySlot,
-    reach: f64,
+    range: super::faction::MeleeRange,
     only: Option<EntityId>,
 ) -> Option<EnemyTarget> {
     if battle.live.targets.is_empty() {
@@ -182,12 +182,12 @@ pub(super) fn in_reach(
             super::enemies(unit.faction, side) && only.is_none_or(|id| id == player)
         })
         .filter_map(|&(player, _)| {
-            let pos = entities.pos(entities.slot_of(player)?);
-            let distance = crate::target_grid::distance(unit.pos, pos);
-            (distance <= reach).then_some(EnemyTarget {
+            let slot = entities.slot_of(player)?;
+            let pos = entities.pos(slot);
+            super::faction::in_melee_range(entities, actor, slot, range).then_some(EnemyTarget {
                 id: player,
                 pos,
-                distance,
+                distance: crate::target_grid::distance(unit.pos, pos),
             })
         })
         .min_by(|a, b| a.distance.total_cmp(&b.distance))
@@ -206,12 +206,12 @@ pub(super) fn blow(
     out: &mut Output,
     actor: EntityId,
     target: EntityId,
-    reach: f64,
+    range: super::faction::MeleeRange,
 ) {
     let Some(slot) = frame.entities.slot_of(actor) else {
         return;
     };
-    if in_reach(battle, frame.entities, slot, reach, Some(target)).is_none() {
+    if in_reach(battle, frame.entities, slot, range, Some(target)).is_none() {
         return;
     }
     out.intents.push(BattleIntent {

@@ -2,6 +2,7 @@
 //! Calibration: BattleVideo/research-combat-behavior.md §§4.4–4.7 (Sabin/Ilerda).
 use rustc_hash::FxHashMap;
 
+use super::faction::{MeleeRange, in_melee_range};
 use super::formation::{DECISION_TICKS, EXHAUSTED_STAMINA, STANDING_RECOVERY, SURGE_FATIGUE};
 use super::{BattleIntent, BattleState, Frame, Output};
 use crate::boundary::{EntityEvent, EntityId, Hand};
@@ -98,10 +99,10 @@ pub(super) enum Action {
 pub(super) struct Fighter {
     pub(super) action: Action,
     pub(super) weapon: Weapon,
-    /// Strike reach (blocks, centre to centre): `max_reach` of the held item's
-    /// vanilla `minecraft:attack_range` component, else the vanilla default.
-    /// Classified with the weapon when the held item changes.
-    pub(super) reach: f64,
+    /// Melee range of the held item (`faction::MeleeRange`: its vanilla
+    /// `minecraft:attack_range` for a mob, or the mob default without it),
+    /// classified with the weapon when the held item changes.
+    pub(super) range: MeleeRange,
     equipment: Option<(Option<u32>, Option<u32>, u32)>,
     shield: bool,
     /// Last shield pose handed to presentation; `None` until first decided.
@@ -123,7 +124,7 @@ impl Default for Fighter {
         Self {
             action: Action::Guard { until: 0 },
             weapon: Weapon::Sword,
-            reach: f64::from(mc_data::item_components::DEFAULT_ATTACK_MAX_REACH),
+            range: MeleeRange::DEFAULT,
             equipment: None,
             shield: false,
             raised: None,
@@ -151,7 +152,7 @@ pub struct Work {
     pub arc_solves: u64,
     pub arc_iterations: u64,
     pub charge_checks: u64,
-    /// Melee fighters (no bows) whose retained opponent is within weapon reach.
+    /// Melee fighters (no bows) with an enemy within their melee range.
     pub in_weapon_reach: u64,
     /// Of those, the ones in the fight loop: the decision pass may let them
     /// strike and they stand guard, wind up or recover from a blow.
@@ -238,12 +239,9 @@ fn classify(frame: &Frame<'_>, slot: EntitySlot, fighter: &mut Fighter, ranged: 
     fighter.equipment = Some(key);
     let held = item.and_then(|id| frame.registry.items.name_of(id));
     let name = held.map_or("", |id| id.as_str());
-    fighter.reach = f64::from(
+    fighter.range = MeleeRange::of_item(
         held.and_then(|name| frame.registry.item_facts.get(name))
-            .and_then(|facts| facts.attack_range)
-            .map_or(mc_data::item_components::DEFAULT_ATTACK_MAX_REACH, |range| {
-                range.max_reach
-            }),
+            .and_then(|facts| facts.attack_range),
     );
     fighter.weapon = if ranged {
         Weapon::Bow
@@ -319,15 +317,15 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
     for &(actor, target, weapon, start) in &strikes {
         if super::live_players::is_holder(battle, target) {
             // As for a soldier target: wounded or parried since the windup, no blow.
-            let reach = frame
+            let range = frame
                 .entities
                 .slot_of(actor)
                 .and_then(|slot| battle.columns.index(slot))
                 .map(|bi| &combat.fighters[bi])
                 .filter(|f| !matches!(f.action, Action::Wounded | Action::Stagger { .. }))
-                .map(|f| f.reach);
-            if let Some(reach) = reach {
-                super::live_players::blow(frame, battle, out, actor, target, reach);
+                .map(|f| f.range);
+            if let Some(range) = range {
+                super::live_players::blow(frame, battle, out, actor, target, range);
             }
             continue;
         }
@@ -379,12 +377,18 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         if soldier.is_some() {
             combat.work.target_checks += 1;
         }
-        let reach = fighter.reach;
-        let soldier =
-            soldier.and_then(|target| super::retained_enemy(frame.entities, slot, target, reach));
+        let range = fighter.range;
+        let soldier = soldier
+            .and_then(|target| super::retained_enemy(frame.entities, slot, target, range.bound()))
+            .filter(|target| {
+                frame
+                    .entities
+                    .slot_of(target.id)
+                    .is_some_and(|enemy| in_melee_range(frame.entities, slot, enemy, range))
+            });
         // A living network player of the other side in reach is one more
         // candidate for this same swing; the nearer of the two is struck.
-        let holder = super::live_players::in_reach(battle, frame.entities, slot, reach, None);
+        let holder = super::live_players::in_reach(battle, frame.entities, slot, range, None);
         let target = match (soldier, holder) {
             (Some(soldier), Some(holder)) if holder.distance < soldier.distance => holder,
             (Some(soldier), _) => soldier,
@@ -459,6 +463,7 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
     use rayon::prelude::*;
     let tick = frame.tick;
     let (columns, formation, grid) = (&battle.columns, &battle.formation, &battle.grid);
+    let entities = frame.entities;
     let count = |(chunk, fighters): (usize, &mut [Fighter])| {
         let mut counts = (0_u64, 0_u64);
         for (offset, fighter) in fighters.iter_mut().enumerate() {
@@ -481,8 +486,14 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
             if fighter.weapon == Weapon::Bow {
                 continue;
             }
-            let reach = fighter.reach;
-            let in_reach = columns.targets[bi].is_some_and(|t| t.distance <= reach)
+            let range = fighter.range;
+            let actor = columns.slots[bi].expect("active column");
+            let reaches = |enemy: EntityId| {
+                entities
+                    .slot_of(enemy)
+                    .is_some_and(|enemy| in_melee_range(entities, actor, enemy, range))
+            };
+            let in_reach = columns.targets[bi].is_some_and(|t| reaches(t.id))
                 || grid
                     .nearest_enemy(
                         super::Unit {
@@ -490,10 +501,10 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
                             faction: columns.factions[bi],
                             pos: columns.positions[bi],
                         },
-                        reach,
+                        range.bound(),
                     )
                     .target
-                    .is_some();
+                    .is_some_and(|t| reaches(t.id));
             if !in_reach {
                 continue;
             }
@@ -656,7 +667,9 @@ fn strike(
         return;
     };
     combat.work.target_checks += 1;
-    if super::retained_enemy(frame.entities, slot, target, combat.fighters[actor_bi].reach).is_none()
+    let range = combat.fighters[actor_bi].range;
+    if super::retained_enemy(frame.entities, slot, target, range.bound()).is_none()
+        || !in_melee_range(frame.entities, slot, victim, range)
         || matches!(
             combat.fighters[actor_bi].action,
             Action::Wounded | Action::Stagger { .. }

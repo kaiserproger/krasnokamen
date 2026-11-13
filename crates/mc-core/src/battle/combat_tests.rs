@@ -35,7 +35,9 @@ pub(in crate::battle) fn index(state: &TickState, battle: &BattleState, id: Enti
 fn pair() -> (TickState, BattleState, EntityId, EntityId) {
     let (mut state, _, pos) = fixture();
     let actor = spawn(&mut state, "husk", pos);
-    let victim = spawn(&mut state, "husk", [pos[0] + 2.0, pos[1], pos[2]]);
+    // One block apart: inside the vanilla mob melee reach without an
+    // attack_range component (boxes grown by sqrt(2.04) - 0.6).
+    let victim = spawn(&mut state, "husk", [pos[0] + 1.0, pos[1], pos[2]]);
     let a = slot(&state, actor);
     let b = slot(&state, victim);
     state.entities.set_faction(a, 1);
@@ -46,7 +48,7 @@ fn pair() -> (TickState, BattleState, EntityId, EntityId) {
     battle.columns.targets[bi] = Some(super::super::EnemyTarget {
         id: victim,
         pos: state.entities.pos(b),
-        distance: 2.0,
+        distance: 1.0,
     });
     (state, battle, actor, victim)
 }

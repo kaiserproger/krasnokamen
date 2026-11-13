@@ -1473,8 +1473,9 @@ fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() 
             &red,
         )
         .unwrap();
-    // A lone enemy 1.5 blocks beside the last rank, over four from the front.
-    let blue = spawn(&mut state, 2, "minecraft:zombie", [6.5, 100.0, 0.0]);
+    // A lone enemy at the back of the last rank, half a block behind and
+    // between its two men, over four blocks from the front.
+    let blue = spawn(&mut state, 2, "minecraft:zombie", [4.5, 100.0, -0.5]);
     let rear = state.entities.slot_of(red[5]).unwrap();
     let mut out = Output::default();
     for tick in 0..RETARGET_TICKS {
@@ -1493,9 +1494,10 @@ fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() 
         battle.formation.finish_preparation();
         targeting::update(&frame, &mut battle);
         combat::step(&frame, &mut battle, &mut out);
-        // red[3] (2.5 diagonally), red[4] (2.5), red[5] (1.5) and blue are within
-        // the default 3-block reach on every tick, with or without a target yet.
-        assert_eq!(battle.combat.work.in_weapon_reach, 4, "tick {tick}");
+        // red[4], red[5] and blue are within the vanilla mob melee reach
+        // (boxes grown by sqrt(2.04) - 0.6) on every tick, with or without a
+        // target acquired yet; the rank in front (two blocks) is not.
+        assert_eq!(battle.combat.work.in_weapon_reach, 3, "tick {tick}");
     }
     assert_eq!(
         battle.formation.context(red[5]).map(|c| c.front_rank),
@@ -1507,7 +1509,7 @@ fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() 
         .expect("a rear-rank man searches for the enemy beside him");
     assert_eq!(target.id, blue);
     let work = battle.combat.work;
-    assert_eq!(work.fighting, 4, "{work:?}");
+    assert_eq!(work.fighting, 3, "{work:?}");
     // A wavering man standing guard (shield up) fights; a fugitive does not;
     // a parried stagger stays inside the fight window, a long one leaves it.
     let member = |id| {
@@ -1523,8 +1525,8 @@ fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() 
     battle.formation.members[fugitive].routing = true;
     let mut combat_state = std::mem::take(&mut battle.combat);
     for (tick, stagger, fighting) in [
-        (RETARGET_TICKS, false, 3),
-        (RETARGET_TICKS + 1, true, 3),
+        (RETARGET_TICKS, false, 2),
+        (RETARGET_TICKS + 1, true, 2),
         (RETARGET_TICKS + 40, true, 0),
     ] {
         if stagger {
@@ -1539,7 +1541,49 @@ fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() 
             tick,
         };
         combat::count_fighting(&frame, &battle, &mut combat_state);
-        assert_eq!(combat_state.work.in_weapon_reach, 4, "tick {tick}");
+        assert_eq!(combat_state.work.in_weapon_reach, 3, "tick {tick}");
         assert_eq!(combat_state.work.fighting, fighting, "tick {tick}");
+    }
+}
+
+/// Vanilla 26.3 mob melee reach (`Mob.isWithinMeleeAttackRange`, local javap):
+/// an iron spear (attack_range 2..4.5, mob factor 0.5) reaches a target whose
+/// box lies beyond the soldier's box grown by 1 and within it grown by 2.25; a
+/// sword, without the component, reaches within the box grown by the mob
+/// default sqrt(2.04) - 0.6. Decision, impact and telemetry share this test.
+#[test]
+fn melee_range_follows_the_held_items_attack_range_as_for_a_mob() {
+    let mut state = fixture();
+    let range_of = |state: &crate::tick::TickState, item: &str| {
+        faction::MeleeRange::of_item(
+            state
+                .registry
+                .item_facts
+                .get(&mc_data::Identifier::parse(item).unwrap())
+                .and_then(|facts| facts.attack_range),
+        )
+    };
+    let spear = range_of(&state, "minecraft:iron_spear");
+    assert_eq!(spear, faction::MeleeRange { reach: 2.25, min: 1.0 });
+    let sword = range_of(&state, "minecraft:iron_sword");
+    assert_eq!(sword, faction::MeleeRange::DEFAULT);
+    assert!((sword.reach - (2.04_f32.sqrt() as f64 - 0.6)).abs() < 1e-6);
+    let actor = spawn(&mut state, 1, "minecraft:zombie", [4.0, 100.0, 4.0]);
+    let target = spawn(&mut state, 2, "minecraft:zombie", [5.0, 100.0, 4.0]);
+    let (a, t) = (
+        state.entities.slot_of(actor).unwrap(),
+        state.entities.slot_of(target).unwrap(),
+    );
+    // Centre distance along x; 0.3-block half-widths on both sides.
+    for (dx, spear_hits, sword_hits) in [
+        (1.0, false, true),  // inside the spear's minimum, inside sword reach
+        (1.5, false, false), // 1.5 < 0.6 + 1.0: still inside the spear's minimum
+        (2.0, true, false),  // inside the spear window, past sword reach
+        (2.8, true, false),  // 2.8 < 0.6 + 2.25
+        (2.9, false, false), // past both
+    ] {
+        state.entities.set_pos(t, [4.0 + dx, 100.0, 4.0]);
+        assert_eq!(faction::in_melee_range(&state.entities, a, t, spear), spear_hits, "spear dx={dx}");
+        assert_eq!(faction::in_melee_range(&state.entities, a, t, sword), sword_hits, "sword dx={dx}");
     }
 }
