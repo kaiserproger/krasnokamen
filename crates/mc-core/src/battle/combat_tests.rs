@@ -184,6 +184,78 @@ fn shield_window_is_inclusive_and_parry_staggers_without_damage() {
     }
 }
 
+fn living_flags(state: &TickState, id: EntityId) -> Option<i8> {
+    state
+        .entities
+        .row(slot(state, id))
+        .appearance
+        .extra
+        .iter()
+        .find_map(|(index, value)| match (*index, value) {
+            (8, crate::boundary::EntityDataValue::Byte(flags)) => Some(*flags),
+            _ => None,
+        })
+}
+
+#[test]
+fn shield_bearer_raises_on_guard_and_lowers_to_swing_or_when_wounded() {
+    let (mut state, mut battle, actor, victim) = pair();
+    let item = |state: &TickState, name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+    };
+    let (sword, shield) = (
+        item(&state, "minecraft:iron_sword"),
+        item(&state, "minecraft:shield"),
+    );
+    let a = slot(&state, actor);
+    let equipment = &mut std::sync::Arc::make_mut(&mut state.entities.row_mut(a).appearance).equipment;
+    equipment[0] = Some(mc_data::ItemStack::new(sword, 1));
+    equipment[1] = Some(mc_data::ItemStack::new(shield, 1));
+    // First decision publishes every fighter once; only the bearer raises.
+    let out = step_at(&state, &mut battle, 0);
+    assert!(out.shields.contains(&(actor, true)), "{:?}", out.shields);
+    assert!(out.shields.contains(&(victim, false)), "{:?}", out.shields);
+    let mut swing = None;
+    for tick in 1..1000 {
+        let out = step_at(&state, &mut battle, tick);
+        if out.events.iter().any(|e| matches!(e, EntityEvent::Swing { entity, .. } if *entity == actor)) {
+            assert_eq!(out.shields, [(actor, false)], "the swing lowers the shield");
+            swing = Some(tick);
+            break;
+        }
+        assert!(out.shields.is_empty(), "steady guard republishes nothing at {tick}");
+    }
+    let start = swing.expect("deterministic attacker starts a swing");
+    let cycle = u64::from(Weapon::Sword.cycle());
+    for tick in start + 1..start + cycle {
+        assert!(step_at(&state, &mut battle, tick).shields.is_empty(), "lowered through {tick}");
+    }
+    // Recovery ends in guard: the shield goes back up.
+    assert_eq!(step_at(&state, &mut battle, start + cycle).shields, [(actor, true)]);
+    let bi = index(&state, &battle, actor);
+    battle.combat.fighters[bi].action = Action::Wounded;
+    assert_eq!(step_at(&state, &mut battle, start + cycle + 1).shields, [(actor, false)]);
+
+    // Native presentation: vanilla living flags byte (index 8), using + off hand.
+    state.appearance_changed.clear();
+    super::super::show_shield(&mut state, actor, true);
+    assert_eq!(living_flags(&state, actor), Some(0b11));
+    assert_eq!(state.appearance_changed, [actor]);
+    super::super::show_shield(&mut state, actor, true);
+    assert_eq!(state.appearance_changed, [actor], "an unchanged pose is not republished");
+    super::super::show_shield(&mut state, actor, false);
+    assert_eq!(living_flags(&state, actor), Some(0));
+    assert_eq!(state.appearance_changed, [actor, actor]);
+    // A fighter without a shield that never raised one costs no row write.
+    super::super::show_shield(&mut state, victim, false);
+    assert_eq!(living_flags(&state, victim), None);
+    assert_eq!(state.appearance_changed, [actor, actor]);
+}
+
 #[test]
 fn calibration_matches_wide_front_removals_and_seven_fatal_in_ten() {
     let mut counts = [0; 3];

@@ -105,6 +105,8 @@ pub(super) struct Fighter {
     pub(super) weapon: Weapon,
     equipment: Option<(Option<u32>, Option<u32>, u32)>,
     shield: bool,
+    /// Last shield pose handed to presentation; `None` until first decided.
+    raised: Option<bool>,
     block: Option<(EntityId, u64)>,
     reaction_checked: bool,
     pub(super) arrows: u16,
@@ -121,6 +123,7 @@ impl Default for Fighter {
             weapon: Weapon::Sword,
             equipment: None,
             shield: false,
+            raised: None,
             block: None,
             reaction_checked: false,
             arrows: 60,
@@ -388,7 +391,26 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         });
         combat.work.swings += 1;
     }
+    raise_shields(battle, &mut combat, out);
     battle.combat = combat;
+}
+
+/// A shield bearer standing guard in order holds the shield up; a swing, a
+/// parried stagger, a wound or a rout lowers it. Only transitions leave here.
+fn raise_shields(battle: &BattleState, combat: &mut CombatRuntime, out: &mut Output) {
+    for bi in 0..battle.columns.ids.len() {
+        if !battle.columns.active[bi] || battle.columns.carried[bi] {
+            continue;
+        }
+        let fighter = &mut combat.fighters[bi];
+        let raised = fighter.shield
+            && matches!(fighter.action, Action::Guard { .. })
+            && !context(battle, bi).is_some_and(|c| c.routing);
+        if fighter.raised != Some(raised) {
+            fighter.raised = Some(raised);
+            out.shields.push((battle.columns.ids[bi], raised));
+        }
+    }
 }
 
 fn react_blocks(
