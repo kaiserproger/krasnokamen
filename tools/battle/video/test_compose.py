@@ -123,10 +123,10 @@ class NoBacktrack(unittest.TestCase):
         return [compose.Shot(f's{i}', f'c{i}', a, b) for i, (a, b) in enumerate(spans)]
 
     @staticmethod
-    def cam(yaw_target, attach=None):
-        # position at origin, looking along (sin, cos) of the requested yaw
-        look = [math.sin(math.radians(yaw_target)), -0.5, math.cos(math.radians(yaw_target))]
-        key = {'position': [0, 0, 0], 'look_target': look}
+    def cam(yaw_target, attach=None, at=(0, 0, 0)):
+        # camera at `at`, looking along (sin, cos) of the requested yaw
+        look = [at[0] + math.sin(math.radians(yaw_target)), at[1] - 0.5, at[2] + math.cos(math.radians(yaw_target))]
+        key = {'position': list(at), 'look_target': look}
         return key, key, attach
 
     def ticks(self, shots):
@@ -134,7 +134,7 @@ class NoBacktrack(unittest.TestCase):
 
     def test_trims_head_to_previous_end_and_orders_by_start(self):
         shots = self.shots((10, 14), (8, 12), (13, 17))  # file order s0 s1 s2; by START: s1 s0 s2
-        kept, table = compose.plan_no_backtrack(shots, self.ticks(shots), [self.cam(0)] * 3, 90, 120)
+        kept, table = compose.plan_no_backtrack(shots, self.ticks(shots), [self.cam(0)] * 3, 60, 40, 120)
         self.assertEqual([shots[i].name for i, _ in kept], ['s1', 's0', 's2'])
         # s1 runs 8..12 s; s0 (10..14) is trimmed by 2 s = 120 frames, 2 s remain: kept (>= 120 frames).
         self.assertEqual(kept[1], (0, 120))
@@ -146,7 +146,7 @@ class NoBacktrack(unittest.TestCase):
     def test_no_backward_step_after_planning(self):
         shots = self.shots((10, 14), (11, 15), (12, 16), (30, 34))
         ticks = self.ticks(shots)
-        kept, _ = compose.plan_no_backtrack(shots, ticks, [self.cam(0)] * 4, 90, 120)
+        kept, _ = compose.plan_no_backtrack(shots, ticks, [self.cam(0)] * 4, 60, 40, 120)
         previous_last = None
         for i, trim in kept:
             visible = ticks[i][trim:]
@@ -156,21 +156,31 @@ class NoBacktrack(unittest.TestCase):
 
     def test_short_remainder_is_dropped(self):
         shots = self.shots((10, 14), (13, 15), (20, 24))  # s1 would keep 1 s
-        kept, table = compose.plan_no_backtrack(shots, self.ticks(shots), [self.cam(0)] * 3, 90, 120)
+        kept, table = compose.plan_no_backtrack(shots, self.ticks(shots), [self.cam(0)] * 3, 60, 40, 120)
         self.assertEqual([i for i, _ in kept], [0, 2])
         self.assertEqual(table[1]['status'], 'dropped')
         self.assertIsNone(table[1]['in_tick'])
 
     def test_sharp_angle_keeps_backtrack(self):
         shots = self.shots((10, 14), (11, 15), (12, 16))
-        # s1 turns 120 degrees from s0: exception, kept whole. s2 attached to an entity: class change, exception.
-        cams = [self.cam(0), self.cam(120), self.cam(130, attach=7)]
-        kept, table = compose.plan_no_backtrack(shots, self.ticks(shots), cams, 90, 120)
+        # s1 turns 120 degrees from s0: exception, kept whole. s2 is entity-attached (heading only), turns 80: exception.
+        cams = [self.cam(0), self.cam(120), self.cam(200, attach=7)]
+        kept, table = compose.plan_no_backtrack(shots, self.ticks(shots), cams, 60, 40, 120)
         self.assertEqual(kept, [(0, 0), (1, 0), (2, 0)])
         self.assertEqual([r['exception'] for r in table], [False, True, True])
         self.assertEqual(table[1]['delta_ticks'], -60)
-        # A turn below the threshold is trimmed instead.
-        kept, _ = compose.plan_no_backtrack(shots[:2], self.ticks(shots[:2]), [self.cam(0), self.cam(80)], 90, 60)
+
+    def test_below_thresholds_is_trimmed(self):
+        shots = self.shots((10, 14), (11, 15))
+        kept, _ = compose.plan_no_backtrack(shots, self.ticks(shots), [self.cam(0), self.cam(50)], 60, 40, 60)
+        self.assertEqual(kept[1], (1, 180))
+        # Same heading, 39 blocks away: still trimmed; 41 blocks away: sharp.
+        kept, _ = compose.plan_no_backtrack(shots, self.ticks(shots), [self.cam(0), self.cam(0, at=(39, 0, 0))], 60, 40, 60)
+        self.assertEqual(kept[1], (1, 180))
+        kept, _ = compose.plan_no_backtrack(shots, self.ticks(shots), [self.cam(0), self.cam(0, at=(41, 0, 0))], 60, 40, 60)
+        self.assertEqual(kept[1], (1, 0))
+        # Attached cameras: distances are not evaluated.
+        kept, _ = compose.plan_no_backtrack(shots, self.ticks(shots), [self.cam(0), self.cam(0, attach=3, at=(500, 0, 0))], 60, 40, 60)
         self.assertEqual(kept[1], (1, 180))
 
     def test_trim_in_filter_graph(self):

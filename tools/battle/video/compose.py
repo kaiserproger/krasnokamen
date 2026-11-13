@@ -72,16 +72,22 @@ def camera_ends(path):
     return keys[0], keys[-1], data.get('attach_entity')
 
 
-def sharp_cut(prev_camera, next_camera, sharp_yaw):
-    """A cut changes the angle sharply if the camera class changes (entity-attached close-up
-    vs free camera) or the horizontal look direction turns by `sharp_yaw` degrees or more."""
-    if (prev_camera[2] is None) != (next_camera[2] is None):
-        return True
+def sharp_cut(prev_camera, next_camera, sharp_yaw, sharp_distance):
+    """Same rule as tools/battle_shots.py: a cut changes the angle sharply when the camera positions
+    or the look targets are more than `sharp_distance` blocks apart, or the horizontal view
+    directions differ by more than `sharp_yaw` degrees. Entity-attached cameras have no world
+    position here, so only the heading decides when either side is attached."""
     turn = abs((look_yaw(next_camera[0]) - look_yaw(prev_camera[1]) + 180) % 360 - 180)
-    return turn >= sharp_yaw
+    if turn > sharp_yaw:
+        return True
+    if prev_camera[2] is not None or next_camera[2] is not None:
+        return False
+    a, b = prev_camera[1], next_camera[0]
+    return (math.dist(a['position'], b['position']) > sharp_distance
+            or math.dist(a['look_target'], b['look_target']) > sharp_distance)
 
 
-def plan_no_backtrack(shots, ticks, cameras, sharp_yaw, min_frames):
+def plan_no_backtrack(shots, ticks, cameras, sharp_yaw, sharp_distance, min_frames):
     """Order by START and make battle time never step back at a cut, except at sharp angle changes.
 
     A shot whose first tick is earlier than the tick after the previous kept shot's last frame
@@ -98,7 +104,7 @@ def plan_no_backtrack(shots, ticks, cameras, sharp_yaw, min_frames):
             bound = ticks[prev[0]][-1] + 1
             row['delta_ticks_original'] = first - bound
             if first < bound:
-                if sharp_cut(cameras[prev[0]], cameras[i], sharp_yaw):
+                if sharp_cut(cameras[prev[0]], cameras[i], sharp_yaw, sharp_distance):
                     exception = True
                 else:
                     trim = next((j for j, t in enumerate(ticks[i]) if t >= bound), length)
@@ -260,7 +266,8 @@ def add_common(p):
     p.add_argument('--crossfade-frames', type=int, default=0, help='frames of fade between shots; 0 = hard cut')
     p.add_argument('--no-backtrack', action='store_true',
                    help='order shots by START and trim heads so battle time never steps back at a cut, except at sharp angle changes; needs --frames-dir')
-    p.add_argument('--sharp-yaw', type=float, default=90, help='degrees of look-direction turn that count as a sharp angle change')
+    p.add_argument('--sharp-yaw', type=float, default=60, help='view-direction difference (degrees) above which a cut is a sharp angle change')
+    p.add_argument('--sharp-distance', type=float, default=40, help='camera or look-target distance (blocks) above which a cut is a sharp angle change')
     p.add_argument('--min-shot-seconds', type=float, default=2, help='a trimmed shot shorter than this is dropped')
 
 
@@ -288,7 +295,7 @@ def main():
             p.error('--no-backtrack needs --frames-dir (recorded ticks)')
         root = pathlib.Path(a.shots_file).parent
         cameras = [camera_ends(root / s.camera) for s in shots]
-        kept, table = plan_no_backtrack(shots, ticks, cameras, a.sharp_yaw, round(a.min_shot_seconds * FPS))
+        kept, table = plan_no_backtrack(shots, ticks, cameras, a.sharp_yaw, a.sharp_distance, round(a.min_shot_seconds * FPS))
         shots = [shots[i] for i, _ in kept]
         trims = [t for _, t in kept]
         full_lengths = [full_lengths[i] for i, _ in kept]
