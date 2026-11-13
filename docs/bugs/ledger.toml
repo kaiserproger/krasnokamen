@@ -2541,11 +2541,12 @@ title = "A drowned never targets villagers or other residents, though vanilla Dr
 area = "gameplay"
 repro = "source"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "Issue1Births (ISSUE-1-17 births investigation, 2026-11-13): javap of net.minecraft.world.entity.monster.zombie.Drowned.addBehaviourGoals in server-26.1.2.jar shows a NearestAttackableTargetGoal on net/minecraft/world/entity/npc/villager/AbstractVillager; crates/mc-core/src/blueprint.rs hunts_villagers listed zombie, zombie_villager and husk only, so a drowned walked up to residents unharmed."
 regression = ["cargo:mc-core:tick::entity_phase::entity_phase_tests::drowned_rest_acquires_a_resident"]
 failing_first = "reported"
 fix_commit = "00ad2a8d"
+promotion = "docs/bugs/promotions/DROWNED-IGNORE-VILLAGERS.json"
 
 [[bug]]
 id = "ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL"
