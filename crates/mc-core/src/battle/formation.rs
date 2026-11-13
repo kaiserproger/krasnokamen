@@ -116,8 +116,16 @@ fn presses(r: &Regiment) -> bool {
         && !r.morale.broken
 }
 
-/// Formation slot of (file, rank), at the pressed depth while the regiment presses.
-fn slot_target(r: &Regiment, file: usize, rank: u16, interval: f64) -> [f64; 3] {
+/// Formation slot of (file, rank) at the regiment's current file interval and
+/// rank depth: the fighting interval in contact, and always for a line staged
+/// to mesh, which opens its files on the approach rather than in contact; the
+/// pressed depth while the regiment presses.
+fn slot_target(r: &Regiment, file: usize, rank: u16) -> [f64; 3] {
+    let interval = if r.gap <= 6.0 || r.interval >= MESH_INTERVAL {
+        r.interval
+    } else {
+        r.spec.frontage
+    };
     let mut target = position(&r.spec, file, 0, interval);
     let spacing = if !presses(r) {
         2.0
@@ -984,9 +992,7 @@ impl FormationRuntime {
                 0.28,
             );
         }
-        let engaged = r.gap <= 6.0;
-        let interval = if engaged { r.interval } else { r.spec.frontage };
-        let mut target = slot_target(r, m.file, m.rank, interval);
+        let mut target = slot_target(r, m.file, m.rank);
         // The leader's height is meaningless on relief; a slot is on the
         // ground the soldier walks on.
         target[1] = m.pos[1];
@@ -1033,12 +1039,7 @@ impl FormationRuntime {
         if m.routing || m.wounded || (r.spec.order == Order::Pursue && r.enemy_routing) {
             return self.destination(index).0;
         }
-        let interval = if r.gap <= 6.0 {
-            r.interval
-        } else {
-            r.spec.frontage
-        };
-        slot_target(r, m.file, m.rank, interval)
+        slot_target(r, m.file, m.rank)
     }
 }
 

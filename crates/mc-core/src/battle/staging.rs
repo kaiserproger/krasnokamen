@@ -305,17 +305,18 @@ fn plan(seed: u64, count: usize, origin: [f64; 3], side: u16) -> Vec<(RegimentSp
         };
         result.push((spec, kind, size));
     };
-    // Seven 38-file foot regiments 50 blocks apart (27 ranks): marching at one
-    // block per file, fighting at the mesh interval (53 blocks, still inside
-    // the existing ticket); the second side stands half an interval to the
-    // side, so the two lines mesh file between file. Mounted files remain on
-    // the flanks, behind the deeper foot.
-    let flank = front.len().saturating_sub(1) as f64 * 25.0 + 4.0;
+    // Seven 36-file foot regiments (28 ranks) one fighting width apart: at the
+    // mesh interval the line is one uniform 252-file lattice (353 blocks,
+    // inside the existing ticket even at a chunk edge). The second side stands
+    // half an interval to the side, so the two lines mesh file between file.
+    // Mounted files remain on the flanks, behind the deeper foot.
+    let width = 36.0 * MESH_INTERVAL;
+    let flank = front.len().saturating_sub(1) as f64 * width / 2.0 + 4.0;
     let mesh = if side == 2 { MESH_INTERVAL / 2.0 } else { 0.0 };
     add(Kind::Cavalry, cavalry / 2, -flank, 96.0, 20);
     for (index, &(kind, size)) in front.iter().enumerate() {
-        let x = (index as f64 - (front.len() - 1) as f64 / 2.0) * 50.0 + mesh;
-        add(kind, size, x, 36.0, 38);
+        let x = (index as f64 - (front.len() - 1) as f64 / 2.0) * width + mesh;
+        add(kind, size, x, 36.0, 36);
     }
     let archer_regiments = archers.div_ceil(1000);
     for index in 0..archer_regiments {
