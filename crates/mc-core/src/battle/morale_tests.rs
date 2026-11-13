@@ -94,6 +94,55 @@ fn rear_rank_flight_precedes_front_and_then_whole_regiment_breaks() {
     assert!(runtime.members.iter().all(|m| m.routing));
 }
 
+/// Riders who fled to the edge of the field rally there and ride back until
+/// they fall, even when their regiment has broken: mounted regiments broke at
+/// 25-40 % losses in the G1 rehearsals and their fled riders (groups of
+/// 100-175) stood idle on the bounds from t 150 to the end. Riders short of
+/// the edge and foot fugitives at the edge keep fleeing.
+#[test]
+fn riders_who_fled_to_the_edge_rally_and_ride_back() {
+    let mut runtime = FormationRuntime::default();
+    runtime.set_bounds([-50.0, -50.0], [50.0, 50.0]).unwrap();
+    for (id, frontage, first) in [(0, 2.0, 1), (1, 1.0, 101)] {
+        runtime
+            .add_regiment(
+                RegimentSpec {
+                    frontage,
+                    id,
+                    faction: 1,
+                    origin: [0.0, 64.0, 0.0],
+                    facing: [0.0, 1.0],
+                    files: 10,
+                    order: Order::Hold,
+                },
+                &(first..first + 100).map(EntityId).collect::<Vec<_>>(),
+            )
+            .unwrap();
+    }
+    // Both regiments have broken: every soldier runs.
+    for r in &mut runtime.regiments {
+        r.morale.broken = true;
+    }
+    // Even ids have fled to the +x edge, odd ids are still on their way.
+    let sample = |id: EntityId| {
+        Some(SoldierSample {
+            slot: None,
+            pos: [if id.0 % 2 == 0 { 49.5 } else { 0.0 }, 64.0, 0.0],
+            health: 20.0,
+            faction: 1,
+        })
+    };
+    // Regiment `id` decides on ticks with tick % 10 == id.
+    for tick in [0, 1, 10, 11, 20, 21] {
+        runtime.prepare(tick, sample);
+        runtime.update_morale(tick);
+    }
+    for (i, m) in runtime.members.iter().enumerate() {
+        let rallied = i < 100 && m.id.0 % 2 == 0;
+        assert_eq!(!m.routing, rallied, "member {i} at x {}", m.pos[0]);
+    }
+}
+
 #[test]
 fn pressure_levels_do_not_accumulate_and_shields_reduce_missile_effect() {
     let mut plain = Morale::default();

@@ -18,9 +18,10 @@ pub(crate) const SEARCH_RADIUS: i32 = 8;
 const LOOKAHEAD: f64 = 0.45;
 /// Lateral reach, in blocks, of the search for an obstacle's nearer end.
 const AROUND: i32 = 8;
-/// Least drive, in blocks per tick, of a body walking out from under rock:
-/// the formation's walking step (`FormationRuntime::destination`).
-const WALK_OUT: f64 = 0.079;
+/// Least drive, in blocks per second (steering drives are physics
+/// velocities), of a body walking out from under rock: the formation's
+/// walking step of 0.079 blocks per tick (`FormationRuntime::destination`).
+const WALK_OUT: f64 = 0.079 / mc_physics::TICK_SECONDS;
 /// Deepest drop a body walks into, in blocks; deeper holes are steered around
 /// and never staged in (vanilla mobs avoid falls over about three blocks).
 const MAX_DROP: f64 = 2.0;
@@ -469,6 +470,112 @@ pub(crate) fn deflect(
     heading: [f64; 2],
     side: f64,
 ) -> [f64; 2] {
+    steer(world, registry, pos, half_width, drive, heading, side).unwrap_or_else(|boxed| boxed)
+}
+
+/// [`deflect`] for a body on foot. Boxed in (no way ahead and no turn of up
+/// to 90 degrees crossable) it stands instead of keeping its drive: physics
+/// walked that drive into the cave mouths and over the edges the rules had
+/// just refused (r7: a blue pile at a sinkhole's tunnel mouth stepped in and
+/// out across it to the end of the take). Under rock it keeps the way out.
+pub(crate) fn deflect_foot(
+    world: &ChunkWorld,
+    registry: &CoreRegistry,
+    pos: [f64; 3],
+    half_width: f64,
+    drive: [f64; 2],
+    heading: [f64; 2],
+    side: f64,
+) -> [f64; 2] {
+    match steer(world, registry, pos, half_width, drive, heading, side) {
+        Ok(out) => out,
+        Err(out) if exit(world, registry, pos).is_some() => out,
+        Err(_) => [0.0; 2],
+    }
+}
+
+/// Ticks a mounted body boxed in by terrain keeps its way back out.
+const ESCAPE_TICKS: u64 = 60;
+
+/// A mounted body's way back out of a terrain pocket and the tick it ends.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Escape {
+    way: [f64; 2],
+    until: u64,
+}
+
+/// [`deflect`] for a mounted body. A horse is boxed in where every way
+/// ahead and to the sides is refused: the dead end of a gully it ran up (in
+/// the G1 rehearsals 20-40 fleeing riders stood pressed into one gully end
+/// from t 90 to the end of the take). It then turns back (135 degrees, then
+/// 180) and keeps that way for [`ESCAPE_TICKS`], steered round obstacles as
+/// usual, so it climbs out instead of turning straight back in; boxed in
+/// again, it turns back again. `escape` holds the way between ticks.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn deflect_mounted(
+    world: &ChunkWorld,
+    registry: &CoreRegistry,
+    pos: [f64; 3],
+    half_width: f64,
+    drive: [f64; 2],
+    heading: [f64; 2],
+    side: f64,
+    escape: &mut Option<Escape>,
+    tick: u64,
+) -> [f64; 2] {
+    let speed = mc_physics::mth::length2(drive[0], drive[1]);
+    if let Some(Escape { way, until }) = *escape {
+        if tick < until
+            && speed >= 1e-9
+            && let Ok(out) = steer(world, registry, pos, half_width, way.map(|v| v * speed), way, side)
+        {
+            return out;
+        }
+        *escape = None;
+    }
+    let boxed = match steer(world, registry, pos, half_width, drive, heading, side) {
+        Ok(out) => return out,
+        Err(boxed) if speed < 1e-9 => return boxed,
+        Err(boxed) => boxed,
+    };
+    let length = mc_physics::mth::length2(heading[0], heading[1]);
+    let dir = if length < 1e-9 {
+        drive.map(|v| v / speed)
+    } else {
+        heading.map(|v| v / length)
+    };
+    let axis = if dir[0].abs() > dir[1].abs() {
+        [dir[0].signum(), 0.0]
+    } else {
+        [0.0, dir[1].signum()]
+    };
+    for (cos, sin) in [(-std::f64::consts::FRAC_1_SQRT_2, std::f64::consts::FRAC_1_SQRT_2), (-1.0, 0.0)] {
+        for turn in [side, -side] {
+            let s = sin * turn;
+            let way = [axis[0] * cos - axis[1] * s, axis[0] * s + axis[1] * cos];
+            if crossable(world, registry, pos, half_width, way) {
+                *escape = Some(Escape {
+                    way,
+                    until: tick + ESCAPE_TICKS,
+                });
+                return slide(world, registry, pos, half_width, way.map(|v| v * speed));
+            }
+        }
+    }
+    boxed
+}
+
+/// [`deflect`]'s turn, or `Err` with the drive to keep when the body is
+/// boxed in (no way ahead, no turn of up to 90 degrees crossable).
+fn steer(
+    world: &ChunkWorld,
+    registry: &CoreRegistry,
+    pos: [f64; 3],
+    half_width: f64,
+    drive: [f64; 2],
+    heading: [f64; 2],
+    side: f64,
+) -> Result<[f64; 2], [f64; 2]> {
     // A body under rock walks out toward open sky, at least at walking pace
     // (a body holding its slot has almost no drive), whatever its slot,
     // flight or crowd says; `crossable` never lets it under more rock.
@@ -479,7 +586,7 @@ pub(crate) fn deflect(
             let length = mc_physics::mth::length2(out[0], out[1]);
             (out.map(|v| v / length * walk), out, walk)
         }
-        None if speed < 1e-9 => return drive,
+        None if speed < 1e-9 => return Ok(drive),
         None => (drive, heading, speed),
     };
     let length = mc_physics::mth::length2(heading[0], heading[1]);
@@ -490,10 +597,10 @@ pub(crate) fn deflect(
     };
     if crossable(world, registry, pos, half_width, dir) {
         if crossable(world, registry, pos, half_width, drive.map(|v| v / speed)) {
-            return slide(world, registry, pos, half_width, drive);
+            return Ok(slide(world, registry, pos, half_width, drive));
         }
         // Crowd pushes into an obstacle: go the clear way instead.
-        return slide(world, registry, pos, half_width, dir.map(|v| v * speed));
+        return Ok(slide(world, registry, pos, half_width, dir.map(|v| v * speed)));
     }
     // A positive turn rotates toward the left of the heading. Blocks are
     // axis-aligned, so the search and the turns run on the grid axis nearest
@@ -531,11 +638,11 @@ pub(crate) fn deflect(
             let s = sin * turn;
             let turned = [axis[0] * cos - axis[1] * s, axis[0] * s + axis[1] * cos];
             if crossable(world, registry, pos, half_width, turned) {
-                return slide(world, registry, pos, half_width, turned.map(|v| v * speed));
+                return Ok(slide(world, registry, pos, half_width, turned.map(|v| v * speed)));
             }
         }
     }
-    drive
+    Err(drive)
 }
 
 #[cfg(test)]

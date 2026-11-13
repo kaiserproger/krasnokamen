@@ -253,9 +253,20 @@ fn sample_movement(
     {
         let target = runtime.heading_target(index);
         let heading = [target[0] - m.pos[0], target[2] - m.pos[2]];
-        drive = around_obstacles(frame, runtime, slot, drive, heading);
+        drive = around_obstacles(frame, runtime, slot, drive, heading, Mover::Foot);
     }
     (drive, examined, pushes)
+}
+
+/// Which terrain rules turn a body ([`around_obstacles`]).
+pub(crate) enum Mover<'a> {
+    /// On foot: boxed in, it stands ([`super::ground::deflect_foot`]).
+    Foot,
+    /// A horse with a target or a slot ([`super::ground::deflect`]).
+    Rider,
+    /// A fleeing horse and its way out of a pocket
+    /// ([`super::ground::deflect_mounted`]).
+    Fugitive(&'a mut Option<super::ground::Escape>),
 }
 
 /// Terrain turn for a final physics velocity; `heading` is where the body is
@@ -267,18 +278,27 @@ pub(crate) fn around_obstacles(
     slot: EntitySlot,
     velocity: [f64; 3],
     heading: [f64; 2],
+    mover: Mover<'_>,
 ) -> [f64; 3] {
     let pos = frame.entities.pos(slot);
     let drive = [velocity[0], velocity[2]];
-    let turned = super::ground::deflect(
-        frame.world,
-        frame.registry,
-        pos,
-        frame.entities.body(slot).half_width,
-        drive,
-        heading,
-        1.0,
-    );
+    let half_width = frame.entities.body(slot).half_width;
+    let (world, registry) = (frame.world, frame.registry);
+    let turned = match mover {
+        Mover::Foot => super::ground::deflect_foot(world, registry, pos, half_width, drive, heading, 1.0),
+        Mover::Rider => super::ground::deflect(world, registry, pos, half_width, drive, heading, 1.0),
+        Mover::Fugitive(escape) => super::ground::deflect_mounted(
+            world,
+            registry,
+            pos,
+            half_width,
+            drive,
+            heading,
+            1.0,
+            escape,
+            frame.tick,
+        ),
+    };
     if turned == drive {
         return velocity;
     }

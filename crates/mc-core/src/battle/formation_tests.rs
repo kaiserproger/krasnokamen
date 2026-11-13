@@ -416,3 +416,46 @@ fn fugitives_pinned_at_the_bounds_turn_at_bay() {
     runtime.members[0].wounded = true;
     assert!(!runtime.cornered_at(0), "the wounded only withdraw");
 }
+
+/// A fugitive that reaches an edge of the battle stays where it met it. It no
+/// longer runs on along the edge, which herded routed regiments into the
+/// corners (heaps of up to 50 riders on the bounds in the G1 rehearsals).
+#[test]
+fn fugitives_at_an_edge_stop_where_they_met_it() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 5, Order::Advance), 1, 10);
+    runtime.set_bounds([-10.0, -10.0], [10.0, 10.0]).unwrap();
+    simulate(&mut runtime, 0);
+    // The enemy stands diagonally ahead: flight runs toward the -x/-z corner.
+    runtime.regiments[0].enemy = Some([5.0, 64.0, 5.0]);
+    for (i, pos) in [
+        [-9.5, 64.0, 3.0],
+        [2.0, 64.0, -9.5],
+        [-9.5, 64.0, -9.5],
+        [0.0, 64.0, 0.0],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        runtime.members[i].routing = true;
+        runtime.members[i].pos = pos;
+    }
+    let (x_edge, speed) = runtime.destination(0);
+    assert_eq!(speed, 0.2);
+    assert!(
+        x_edge[2] == 3.0 && x_edge[0] < -9.5,
+        "ran on along the -x edge: {x_edge:?}"
+    );
+    let (z_edge, _) = runtime.destination(1);
+    assert!(
+        z_edge[0] == 2.0 && z_edge[2] < -9.5,
+        "ran on along the -z edge: {z_edge:?}"
+    );
+    let (corner, _) = runtime.destination(2);
+    assert_eq!([corner[0], corner[2]], [-9.5, -9.5]);
+    let (free, _) = runtime.destination(3);
+    assert!(
+        free[0] < -5.0 && free[2] < -5.0,
+        "a fugitive with room runs on: {free:?}"
+    );
+}
