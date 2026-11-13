@@ -491,23 +491,29 @@ fn reaction_latency_table() {
         v.sort_unstable();
         let mean = v.iter().map(|&x| f64::from(x)).sum::<f64>() / v.len().max(1) as f64;
         let p95 = v.get(((v.len().max(1) - 1) as f64 * 0.95) as usize).copied().unwrap_or(0);
-        (v.len(), mean, p95)
+        (v.len(), mean, p95, v.get((v.len().max(1) - 1) / 2).copied().unwrap_or(0))
     };
     {
         let stat = |v: &mut Vec<u64>| {
             v.sort_unstable();
             let mean = v.iter().sum::<u64>() as f64 / v.len().max(1) as f64;
-            (v.len(), mean, v.get(((v.len().max(1) - 1) as f64 * 0.95) as usize).copied().unwrap_or(0))
+            (v.len(), mean, v.get(((v.len().max(1) - 1) as f64 * 0.95) as usize).copied().unwrap_or(0), v.get((v.len().max(1) - 1) / 2).copied().unwrap_or(0))
         };
         let mut turns_l: Vec<u64> = direct.iter().filter_map(|d| d.0).collect();
         let mut steps_l: Vec<u64> = direct.iter().filter_map(|d| d.1).collect();
-        let (n, mean, p95) = stat(&mut turns_l);
-        eprintln!("REACT direct man-left-reach events={} turn_to_him: reacted {n} mean {mean:.2} p95 {p95} not within 40 ticks {}", direct.len(), direct.len() - n);
-        let (n, mean, p95) = stat(&mut steps_l);
-        eprintln!("REACT direct man-left-reach events={} step_toward_him: reacted {n} mean {mean:.2} p95 {p95} not within 40 ticks {}", direct.len(), direct.len() - n);
+        let mut turns_c: Vec<u64> = direct.iter().map(|d| d.0.unwrap_or(40)).collect();
+        let mut steps_c: Vec<u64> = direct.iter().map(|d| d.1.unwrap_or(40)).collect();
+        let (n, mean, p95, p50) = stat(&mut turns_c);
+        eprintln!("REACT censored(40) turn_to_him events={n} mean {mean:.2} p50 {p50} p95 {p95}");
+        let (n, mean, p95, p50) = stat(&mut steps_c);
+        eprintln!("REACT censored(40) step_toward_him events={n} mean {mean:.2} p50 {p50} p95 {p95}");
+        let (n, mean, p95, p50) = stat(&mut turns_l);
+        eprintln!("REACT direct man-left-reach events={} turn_to_him: reacted {n} mean {mean:.2} p50 {p50} p95 {p95} not within 40 ticks {}", direct.len(), direct.len() - n);
+        let (n, mean, p95, p50) = stat(&mut steps_l);
+        eprintln!("REACT direct man-left-reach events={} step_toward_him: reacted {n} mean {mean:.2} p50 {p50} p95 {p95} not within 40 ticks {}", direct.len(), direct.len() - n);
     }
-    let (n, mean, p95) = stat(&mut idle);
-    eprintln!("REACT idle_with_enemy_in_reach runs={n} mean_ticks={mean:.2} p95_ticks={p95}");
+    let (n, mean, p95, p50) = stat(&mut idle);
+    eprintln!("REACT idle_with_enemy_in_reach runs={n} mean_ticks={mean:.2} p50_ticks={p50} p95_ticks={p95}");
     for (name, c) in ["foot", "horse"].into_iter().zip(turns) {
         eprintln!(
             "REACT turns {name}: moving samples (3-tick vectors >0.25) {} reversals(>90deg) {} ({:.2}%) with target change {} target lost {}",
@@ -515,6 +521,6 @@ fn reaction_latency_table() {
         );
     }
     eprintln!("REACT horse reversals by state: targeted<3 {} targeted>=3 {} sweeping {} slot/other {} (of targeted>=3, charge refused: {})", horse_state[0], horse_state[1], horse_state[2], horse_state[3], refused_turns);
-    let (n, mean, p95) = stat(&mut swing);
-    eprintln!("REACT new_target_to_windup swings={n} of {fresh_targets} new targets mean_ticks={mean:.2} p95_ticks={p95}");
+    let (n, mean, p95, p50) = stat(&mut swing);
+    eprintln!("REACT new_target_to_windup swings={n} of {fresh_targets} new targets mean_ticks={mean:.2} p50_ticks={p50} p95_ticks={p95}");
 }
