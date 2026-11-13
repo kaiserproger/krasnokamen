@@ -2546,9 +2546,6 @@ regression = [
     "cargo:mc-core:settlements::construction::fortification_tests::a_column_over_water_stays_a_gap_and_the_rest_of_the_wall_stands",
     "cargo:mc-core:settlements::layout::tests::perimeter_closes_the_square_wall_line_with_a_gatehouse_on_each_road",
     "cargo:mc-core:settlements::layout::tests::well_corners_are_open_plaza_squares_without_a_lamp",
-    "harness:buildings-qa:perimeter.well_built",
-    "harness:buildings-qa:perimeter.gates_built",
-    "harness:buildings-qa:perimeter.wall_built",
     "harness:buildings-qa:perimeter.enclosed",
 ]
 failing_first = "not recorded"
