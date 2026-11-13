@@ -317,6 +317,20 @@ fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighte
         if kind == Kind::Archer {
             assert!(row.appearance.equipment[1].is_none());
         }
+        // Staged shield bearers already hold the shield up (vanilla living flags).
+        let flags = row
+            .appearance
+            .extra
+            .iter()
+            .find_map(|(index, value)| match (*index, value) {
+                (8, crate::boundary::EntityDataValue::Byte(flags)) => Some(*flags),
+                _ => None,
+            });
+        assert_eq!(
+            flags,
+            row.appearance.equipment[1].is_some().then_some(0b11),
+            "{kind:?} shield pose"
+        );
         seen.insert((
             "weapon",
             weapon.item_model.as_deref().unwrap().as_str().to_owned(),

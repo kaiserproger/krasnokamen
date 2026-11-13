@@ -553,6 +553,11 @@ fn setup(
                     let slot = state.entities.slot_of(id).expect("battle unit");
                     state.entities.set_faction(slot, side);
                     state.entities.set_rot(slot, yaw, 0.0);
+                    // Staged ranks already stand guard: shields go up with the
+                    // spawn, so `battle start` publishes no mass pose change.
+                    if unit.shield.is_some() {
+                        super::show_shield(state, id, true);
+                    }
                     // A horse carries its rider: settle the pair through the horse.
                     let mut grounded = id;
                     if kind == Kind::Cavalry {
