@@ -1,25 +1,21 @@
-"""Strict in-game QA of every authored Millenaire blueprint level (buildings slice).
+"""In-game QA of authored blueprint construction and upgrades.
 
-The active flow creates an isolated settlement, funds a storage chest through
-ordinary container transfers, orders each blueprint, and observes a real
-Builder constructing and upgrading it. The windowed house path orders through
-the Projects and Buildings menus and confirms the server's review dialogs.
+The sequential flow founds a settlement, stocks a real storage container,
+orders a build and observes its completion. The windowed house path uses the
+Projects and Buildings menus and their confirmation dialogs. A pending,
+unfundable owner order fences the planner while each level is examined.
 
-Per level verified with direct client-observed evidence only:
-  - block-by-block match vs the authored blueprint (MCP block reads),
-  - building certified (building list shows kind + level),
-  - entrance reachable (player walks to the entrance cell),
-  - lighting (block light >= 1 inside; no hostile spawns overnight inside),
-  - function: house villagers sleep in its beds; farm farmer harvests+replants;
-    lumber camp lumberjack cuts + deposits; mine miner digs + deposits;
-    mason/Builder works there; storage accepts deposits; barracks soldier slots;
-    wall/tower certified + walkable.
-Screenshots of each finished level. Product code untouched.
+Each level requires a new same-run building ID, that exact level's completed
+certificate and client-observed block IDs, an allowed entrance block after
+teleport, a sampled light value and an instantaneous hostile census. Block
+properties, traversal, door operation and hostile exclusion are not tested;
+natural mob spawning is disabled. House bed capacity is checked, while sleep
+is a non-gating observation. Farm, lumber, mine, mason, storage and barracks
+have separate function checks; other workshop kinds do not prove job use.
+Windowed runs retain an exterior frame per level for review, not an automatic
+visual-quality verdict.
 
-SELECT env: one blueprint per harness invocation (600s cap):
-  house|storage|farm|mason|lumber_camp|mine|barracks|wall|watch_tower
-(BASE omits storage: storage is the boot step, verified as the claim village's
-autonomous Storage L1 + funding target.)
+BUILDINGS_QA_SELECT chooses one member of BLUEPRINTS, or ALL (the default).
 """
 from __future__ import annotations
 
