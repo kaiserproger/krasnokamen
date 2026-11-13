@@ -54,6 +54,12 @@ LEVELS = {"house": 3, "storage": 2, "farm": 2, "mason": 2, "lumber_camp": 2,
           "fisherman": 2, "fletcher": 2, "leatherworker": 2, "librarian": 2,
           "toolsmith": 2, "weaponsmith": 2}
 
+# Only server/client-observed product outcomes can classify an unrecorded
+# building-level verdict as a negative control. Setup and races fail closed.
+NEGATIVE_CONTROL_STEPS = frozenset({
+    "order_available", "upgrade_available", "project", "built", "blocks",
+})
+
 FILL_LIMIT = 32768
 
 
@@ -693,24 +699,33 @@ def _at_settlement_anchor(probe: ProbeSteps, sub: dict[str, Any]) -> None:
 
 def _capture_level(probe: ProbeSteps, sub: dict[str, Any], artifact: Path, tag: str,
                    bp: str, level: int, origin: tuple[int, int, int]) -> None:
-    """Capture an exterior view; the exact block oracle remains authoritative."""
-    width, depth = _max_frame(bp)
-    _, _, height = _level_frame(bp, level)
-    x = origin[0] + width / 2
-    y = origin[1] + height + 7
-    z = origin[2] - 10.0
+    """Capture an elevated exterior view; the exact block oracle remains authoritative."""
+    turns = _fit_orientation(probe, bp, level, origin)
+    cells = oriented_cells(bp, level, origin, turns)
+    xs, ys, zs = zip(*cells)
+    cx, cy, cz = (min(xs) + max(xs) + 1) / 2, (min(ys) + max(ys) + 1) / 2, \
+                 (min(zs) + max(zs) + 1) / 2
+    x, y, z = min(xs) - 8, max(ys) + 8, min(zs) - 8
+    support = (x, y - 1, z)
+    probe.check(f"{tag}_L{level}_camera_space", _block_id(_read(probe, support)) == "minecraft:air")
     _close_any_screen(probe)
     probe.fixture("time set 3000")
-    probe.fixture(f"tp @s {x} {y} {z}")
-    probe.wait(lambda s: abs(float((s.get("player") or {}).get("x", -1e9)) - x) < 2
-               and abs(float((s.get("player") or {}).get("z", -1e9)) - z) < 2,
-               f"{tag}_L{level}_camera", timeout_seconds=60)
-    pitch = round(math.degrees(math.atan2(y + 1.62 - (origin[1] + height / 2),
-                                          10 + depth / 2)))
-    probe.call("minecraft_look", {"yaw_deg": 0, "pitch_deg": pitch})
-    probe.call("minecraft_wait_ticks", {"ticks": 6})
-    sub[f"L{level}_visual_capture"] = native_client.capture(probe.client, artifact, f"{tag}-L{level}")
-    _at_settlement_anchor(probe, sub)
+    probe.fixture(f"setblock {support[0]} {support[1]} {support[2]} minecraft:barrier")
+    try:
+        probe.fixture(f"tp @s {x + 0.5} {y} {z + 0.5}")
+        probe.wait(lambda s: abs(float((s.get("player") or {}).get("x", -1e9)) - (x + 0.5)) < 1
+                   and abs(float((s.get("player") or {}).get("z", -1e9)) - (z + 0.5)) < 1
+                   and float((s.get("player") or {}).get("y", -1e9)) >= y - 0.25,
+                   f"{tag}_L{level}_camera", timeout_seconds=60)
+        dx, dz = cx - (x + 0.5), cz - (z + 0.5)
+        yaw = round(math.degrees(math.atan2(-dx, dz)))
+        pitch = round(math.degrees(math.atan2(y + 1.62 - cy, math.hypot(dx, dz))))
+        probe.call("minecraft_look", {"yaw_deg": yaw, "pitch_deg": pitch})
+        probe.call("minecraft_wait_ticks", {"ticks": 6})
+        sub[f"L{level}_visual_capture"] = native_client.capture(probe.client, artifact, f"{tag}-L{level}")
+    finally:
+        probe.fixture(f"setblock {support[0]} {support[1]} {support[2]} minecraft:air")
+        _at_settlement_anchor(probe, sub)
 
 def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext,
                          artifact: Path, targets: tuple[str, ...],

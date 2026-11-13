@@ -301,6 +301,31 @@ class WorkerSettlementTest(unittest.TestCase):
         census.assert_called_once_with(probe, 2, "Mine", "Miner")
 
 
+class CameraCaptureTest(unittest.TestCase):
+    def test_elevated_support_is_removed_even_if_capture_fails(self):
+        for capture_error in (None, RuntimeError("capture failed")):
+            with self.subTest(capture_error=capture_error):
+                probe, sub = mock.Mock(), {}
+                with mock.patch.object(buildings_qa, "_fit_orientation", return_value=0), \
+                        mock.patch.object(buildings_qa, "oriented_cells",
+                                          return_value={(10, 70, 20): "stone", (12, 72, 24): "stone"}), \
+                        mock.patch.object(buildings_qa, "_read", return_value={"block_id": "minecraft:air"}), \
+                        mock.patch.object(buildings_qa, "_close_any_screen"), \
+                        mock.patch.object(buildings_qa, "_at_settlement_anchor") as anchor, \
+                        mock.patch.object(buildings_qa.native_client, "capture",
+                                          side_effect=capture_error, return_value={"retained_path": "image.png"}):
+                    if capture_error:
+                        with self.assertRaisesRegex(RuntimeError, "capture failed"):
+                            buildings_qa._capture_level(probe, sub, None, "buildings_gate", "gate", 2, (10, 70, 20))
+                    else:
+                        buildings_qa._capture_level(probe, sub, None, "buildings_gate", "gate", 2, (10, 70, 20))
+                        self.assertEqual(sub["L2_visual_capture"]["retained_path"], "image.png")
+                commands = [call.args[0] for call in probe.fixture.call_args_list]
+                self.assertIn("setblock 2 79 12 minecraft:barrier", commands)
+                self.assertEqual(commands[-1], "setblock 2 79 12 minecraft:air")
+                anchor.assert_called_once_with(probe, sub)
+
+
 class OrderEchoRetryTest(unittest.TestCase):
     def run_retry(self, lines, project_active=False, ctx=HEADLESS):
         probe, sub = FakeProbe(), {}
