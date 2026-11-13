@@ -53,14 +53,19 @@ The side mix is 50% sword/shield infantry, 20% spearmen, 20% archers and
 archers deploy behind the foot and mounted troops on the flanks, with two-block
 cavalry frontage. At 10,000 per side, seven foot regiments deploy 46 files each
 (322 front positions); cavalry deploys behind their flanks to fit the staging
-ticket. Units are husks with vanilla combat item identities (iron sword,
-trident, bow, shield, iron helmet, the arm's chestplate); only appearance
+ticket. Units are husks with vanilla combat item identities (iron spear, iron
+sword, bow, shield, iron helmet, the arm's chestplate); only appearance
 components vary. Each fighter's loadout is a fixed hash of (seed, side,
 regiment, index), so a retake with the same seed dresses every fighter the same:
 
-- weapon: infantry longsword 60% / flanged mace 40%; spearmen spear 60% /
-  halberd 40%; archers longbow 60% / heavy crossbow 40% (held in the bow pose:
-  the item stays `minecraft:bow`); cavalry always the lance;
+- two main weapons: foot and cavalry carry the vanilla iron spear and an iron
+  sword, archers a bow and an iron sword. The spear (archers: the bow) is in
+  hand at setup; the second weapon waits in battle state (mobs have no
+  inventory; it is not persisted and never drops). Models: infantry spear and
+  longsword 60% / flanged mace 40%; spearmen spear 60% / halberd 40% and the
+  longsword; archers longbow 60% / heavy crossbow 40% (held in the bow pose:
+  the item stays `minecraft:bow`) and the longsword; cavalry the lance and the
+  longsword;
 - shield (foot): side heater 50%, kite 30%, tower 20%; cavalry heater 60%,
   kite 40%; archers carry none;
 - helmet: iron plate 45%, crested helm 30%, holy 25%; every helmet carries the
@@ -73,6 +78,19 @@ regiment, index), so a retake with the same seed dresses every fighter the same:
   surcoat/leather);
 - legs: bare 35%, side-dyed leather 35%, holy 30%. Leggings ride on
   `minecraft:leather`, which has no armour modifier, so they never change damage.
+
+Weapon choice (`crates/mc-core/src/battle/weapons.rs`): a soldier draws the
+sword once his opponent is inside the spear's near bound (`attack_range`
+`min_reach * mob_factor`, 1.0 block for the iron spear) and retakes the spear
+once he is 0.5 block past it; from the second rank or against a horseman the
+0.5-block band lies inside the bound instead. An archer draws the sword when an
+enemy is within 6 blocks and the bow when none is within 10. A swap is an
+ordinary main-hand change (trackers get `SetEquipment`) with a main-hand whack
+swing lasting the pause before the drawn weapon may strike or loose: vanilla
+attack-strength recovery, 20 / attack speed ticks (sword 13, spear 19, bow 5).
+That swing is the only main-hand swing sent in the same tick as the entity's
+`SetEquipment`. Telemetry `battle` carries `weapon_swaps` and
+`holding_spear` / `holding_sword` / `holding_bow` per tick.
 
 Side rule: every fighter shows the side colour on the torso (red or blue
 surcoat, red- or blue-dyed leather) or carries the red or blue heater shield;

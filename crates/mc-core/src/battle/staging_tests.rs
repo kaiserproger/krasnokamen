@@ -310,13 +310,29 @@ fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighte
         );
         // Combat identities stay vanilla: only appearance components vary.
         let mounted = row.entity_life.mount.vehicle.is_some();
+        let chest = name(&state, row.appearance.equipment[4].as_ref().unwrap());
         let kind = match (name(&state, weapon).as_str(), mounted) {
-            ("minecraft:trident", _) => Kind::Spear,
             ("minecraft:bow", _) => Kind::Archer,
-            ("minecraft:iron_sword", true) => Kind::Cavalry,
-            ("minecraft:iron_sword", false) => Kind::Infantry,
+            ("minecraft:iron_spear", true) => Kind::Cavalry,
+            ("minecraft:iron_spear", false) if chest == "minecraft:chainmail_chestplate" => {
+                Kind::Spear
+            }
+            ("minecraft:iron_spear", false) => Kind::Infantry,
             (other, _) => panic!("unexpected battle weapon {other}"),
         };
+        // The second main weapon waits in battle state with its item model.
+        let (sidearm, pair) = state
+            .hostile
+            .battle
+            .combat
+            .arsenal
+            .get(id)
+            .expect("every fighter carries a second weapon");
+        assert_eq!(second_weapon(kind), (name(&state, sidearm).as_str(), *pair));
+        seen.insert((
+            "sidearm",
+            sidearm.item_model.as_deref().unwrap().as_str().to_owned(),
+        ));
         for (index, (slot_name, item)) in equipment(kind).iter().enumerate() {
             let stack = match *slot_name {
                 "mainhand" => weapon,
@@ -379,13 +395,13 @@ fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighte
         }
     }
     let expected: std::collections::BTreeSet<_> = [
-        ("weapon", "solaris_battle:iron_longsword"),
-        ("weapon", "solaris_battle:iron_flanged_mace"),
         ("weapon", "solaris_battle:iron_spear"),
         ("weapon", "solaris_battle:iron_halberd"),
         ("weapon", "solaris_battle:iron_longbow_standby"),
         ("weapon", "solaris_battle:iron_heavy_crossbow_standby"),
         ("weapon", "solaris_battle:iron_lance"),
+        ("sidearm", "solaris_battle:iron_longsword"),
+        ("sidearm", "solaris_battle:iron_flanged_mace"),
         ("shield", "solaris_battle:red_heater_shield"),
         ("shield", "solaris_battle:blue_heater_shield"),
         ("shield", "solaris_battle:iron_kite_shield"),
@@ -545,14 +561,26 @@ fn ten_thousand_side_spreads_every_variant_near_its_share_and_shows_side_colour(
                 of(Kind::Archer),
                 of(Kind::Cavalry),
             );
+            // Infantry carries the plain spear in, its rolled sword is second.
+            for (model, expected) in [
+                ("solaris_battle:iron_longsword", 60.0),
+                ("solaris_battle:iron_flanged_mace", 40.0),
+            ] {
+                near(share(&infantry, |l| l.sidearm, model), expected, model);
+            }
+            assert!(
+                infantry
+                    .iter()
+                    .all(|l| l.weapon == "solaris_battle:iron_spear")
+            );
+            assert!(
+                spears
+                    .iter()
+                    .chain(&archers)
+                    .chain(&cavalry)
+                    .all(|l| l.sidearm == "solaris_battle:iron_longsword")
+            );
             for (pool, variants) in [
-                (
-                    &infantry,
-                    [
-                        ("solaris_battle:iron_longsword", 60.0),
-                        ("solaris_battle:iron_flanged_mace", 40.0),
-                    ],
-                ),
                 (
                     &spears,
                     [

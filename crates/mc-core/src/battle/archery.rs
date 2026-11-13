@@ -143,6 +143,10 @@ pub(super) fn step(
         {
             continue;
         }
+        // Two main weapons (weapons.rs): no draw while the bow comes up.
+        if fighter.arms.swapping(frame.tick) {
+            continue;
+        }
         let context = super::combat::context(battle, bi);
         if context.is_some_and(|c| c.routing || c.wavering) {
             continue;

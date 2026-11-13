@@ -241,8 +241,9 @@ pub struct LoadTickSample {
     pub phase_us: LoadPhaseTimes,
     pub coreperf: Option<std::sync::Arc<mc_core::boundary::CorePerfTick>>,
     /// `{"units": n, "alive": {"<faction>": n}, "in_weapon_reach": n,
-    /// "fighting": n, "shields_raised": n, "shield_blocks": n}`; the key is
-    /// absent without battle units.
+    /// "fighting": n, "shields_raised": n, "shield_blocks": n,
+    /// "weapon_swaps": n, "holding_spear": n, "holding_sword": n,
+    /// "holding_bow": n}`; the key is absent without battle units.
     #[serde(
         skip_serializing_if = "Option::is_none",
         serialize_with = "serialize_battle"
@@ -270,13 +271,17 @@ fn serialize_battle<S: serde::Serializer>(
     let Some(battle) = battle else {
         return serializer.serialize_none();
     };
-    let mut out = serializer.serialize_struct("BattleCounts", 6)?;
+    let mut out = serializer.serialize_struct("BattleCounts", 10)?;
     out.serialize_field("units", &battle.units)?;
     out.serialize_field("alive", &Alive(&battle.alive))?;
     out.serialize_field("in_weapon_reach", &battle.in_weapon_reach)?;
     out.serialize_field("fighting", &battle.fighting)?;
     out.serialize_field("shields_raised", &battle.shields_raised)?;
     out.serialize_field("shield_blocks", &battle.shield_blocks)?;
+    out.serialize_field("weapon_swaps", &battle.weapon_swaps)?;
+    out.serialize_field("holding_spear", &battle.holding_spear)?;
+    out.serialize_field("holding_sword", &battle.holding_sword)?;
+    out.serialize_field("holding_bow", &battle.holding_bow)?;
     out.end()
 }
 
@@ -1701,6 +1706,10 @@ mod tests {
             fighting: 987,
             shields_raised: 654,
             shield_blocks: 32,
+            weapon_swaps: 21,
+            holding_spear: 4_000,
+            holding_sword: 3_000,
+            holding_bow: 2_000,
         });
         for tick in [19, 20, 21, 23] {
             state.record_load_tick(
@@ -1755,7 +1764,8 @@ mod tests {
             lines[1]["battle"],
             serde_json::json!({"units": 20_000, "alive": {"1": 9_870, "2": 0},
                 "in_weapon_reach": 1_234, "fighting": 987, "shields_raised": 654,
-                "shield_blocks": 32})
+                "shield_blocks": 32, "weapon_swaps": 21, "holding_spear": 4_000,
+                "holding_sword": 3_000, "holding_bow": 2_000})
         );
         assert!(lines[0].get("battle").is_none());
         assert_eq!(
