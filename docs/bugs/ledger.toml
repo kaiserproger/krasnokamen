@@ -5261,3 +5261,25 @@ regression = [
 failing_first = "reported"
 fix_commit = "af58aeb920b1403c294982c477f53e1ceabc66c1"
 promotion = "docs/bugs/promotions/FLUID-FLOW-WASHES-KELP-SEAGRASS-SUGAR-CANE.json"
+
+[[bug]]
+id = "CORE-DROP-LEAVES-WORLD-DIR-WRITER"
+title = "A file appears in the world directory after Core is dropped, so deleting the directory right after drop fails with DirectoryNotEmpty"
+area = "gameplay"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "CI run 43340344269 (main 3caeae5c, regressions stage): mc-edge advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book panicked at crates/mc-edge/src/advancements_tests.rs:233 on std::fs::remove_dir_all(dir).unwrap() directly after drop(core): Os code 39 DirectoryNotEmpty (artifact test-failure-receipts-1, receipts/FleetControl/ci-flakes-20261113/a). Reproduced on main ad93ee71 (after the forest-worker join fix fb4c1a52, so that fix does not cover it) by looping the exact test binary: 0 of 100 serial, 1 of 100 with four copies in parallel (receipts/CiFlakes/repro.sh, repro.out, A-par4-56.log). Classification: a timing race in the core, not in the test and not caused by the input/entity commits: remove_dir_all empties the directory and the final rmdir fails, so some core thread or deferred writer still creates a file after Core::drop returned (Core::drop does not wait for every writer of the world directory). Which thread and file is not yet identified (next step: list the leftover entry on failure)."
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "PLUGIN-ENGINE-CACHE-TEST-COUNTS-ASYNC-FILE"
+title = "The plugin engine cache test sometimes counts one new cache file on the second engine start under load"
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "CI run 43345985582 (main fa1f5382, cargo test shard 4/4): mc-plugin-host tests/engine_cache.rs:270 the_production_engine_reuses_its_cache_across_restarts: the second production engine child reported 1 new cache entry instead of 0 (artifact test-failure-receipts-4, receipts/FleetControl/ci-flakes-20261113/b). Reproduced on main ad93ee71 by looping the exact test binary: 0 of 100 serial, 1 of 100 with four copies in parallel (receipts/CiFlakes/repro.sh, repro.out, B-par4-49.log). Classification: a load-dependent race in the test oracle, not a cache regression (the commits of that run touched only mc-core tick phases): each run uses its own temporary cache home, the counter (engine_cache_child walk) already skips the asynchronously written *.stats sidecars, so under load another file the wasmtime cache writes outside the compile path (temporary or worker file, name not yet captured) is counted. [INFERENCE until the extra file name is recorded on failure.]"
+regression = []
+failing_first = "reported"
