@@ -872,3 +872,115 @@ fn riders_attacking_one_foe_fan_out_round_it() {
         "the pile rides at the foe as one body: drive angles {angles:?}"
     );
 }
+
+/// Twenty-four riders two blocks apart ride at one wavering foe. Their places
+/// round him (four rings 1.2..3.6 blocks out) lie closer together than a
+/// horse is wide, and the push of the nearest horses (at most 3 blocks per
+/// second) never held off the 6.4 blocks per second ride at the place: they
+/// stood half a block apart, inside each other, as in the G2 take's horse
+/// heaps. Kernel steps, horse positions integrated from the drives.
+#[test]
+fn riders_closing_on_one_foe_stay_a_horse_width_apart() {
+    use super::super::formation::{Order, RegimentSpec};
+    let (mut state, _, pos) = fixture();
+    let target_pos = [pos[0] + 8.0, pos[1], pos[2]];
+    let target = spawn(&mut state, "husk", target_pos);
+    state.entities.set_faction(slot(&state, target), 2);
+    let mut pairs = Vec::new();
+    for i in 0..24 {
+        let p = [pos[0], pos[1], pos[2] + 2.0 * (f64::from(i) - 11.5)];
+        let horse = spawn(&mut state, "horse", p);
+        let rider = spawn(&mut state, "husk", p);
+        state.entities.set_faction(slot(&state, rider), 1);
+        mount(&mut state, rider, horse).unwrap();
+        pairs.push((rider, horse));
+    }
+    let mut battle = BattleState::default();
+    battle
+        .formation
+        .add_regiment(
+            RegimentSpec {
+                id: 2,
+                faction: 2,
+                origin: target_pos,
+                facing: [-1.0, 0.0],
+                files: 1,
+                frontage: 1.0,
+                order: Order::Hold,
+            },
+            &[target],
+        )
+        .unwrap();
+    let riders: Vec<_> = pairs.iter().map(|&(rider, _)| rider).collect();
+    battle
+        .formation
+        .add_regiment(
+            RegimentSpec {
+                id: 1,
+                faction: 1,
+                origin: pos,
+                facing: [1.0, 0.0],
+                files: 24,
+                frontage: 2.0,
+                order: Order::Hold,
+            },
+            &riders,
+        )
+        .unwrap();
+    let mut combat = CombatRuntime::default();
+    for tick in 0..200 {
+        prepare(&state, &mut battle, tick);
+        // A wavering foe: the riders commit instead of refusing.
+        battle.formation.regiments[0].morale.value = 20.0;
+        battle.formation.members[0].wavering = true;
+        battle
+            .formation
+            .neighbours
+            .rebuild(&battle.formation.members);
+        for &rider in &riders {
+            let bi = index(&state, &battle, rider);
+            battle.columns.targets[bi] = Some(super::super::EnemyTarget {
+                id: target,
+                pos: target_pos,
+                distance: 5.0,
+            });
+        }
+        combat.prepare(&battle.columns.ids);
+        let frame = Frame {
+            entities: &state.entities,
+            registry: &state.registry,
+            world: &state.world,
+            tick,
+        };
+        step(&frame, &mut battle, &mut combat);
+        let t = mc_physics::TICK_SECONDS;
+        for &(rider, horse) in &pairs {
+            let d = battle.columns.drive[index(&state, &battle, horse)];
+            let (h, r) = (slot(&state, horse), slot(&state, rider));
+            let (p, seat) = (
+                state.entities.pos(h),
+                state.entities.pos(r)[1] - state.entities.pos(h)[1],
+            );
+            let next = [p[0] + d[0] * t, p[1], p[2] + d[2] * t];
+            state.entities.set_pos(h, next);
+            // The rider sits on the moved horse: its x and z are the horse's.
+            state
+                .entities
+                .set_pos(r, [next[0], next[1] + seat, next[2]]);
+        }
+    }
+    let horses: Vec<[f64; 3]> = pairs
+        .iter()
+        .map(|&(_, horse)| state.entities.pos(slot(&state, horse)))
+        .collect();
+    let near = horses
+        .iter()
+        .filter(|p| mth::length2(p[0] - target_pos[0], p[2] - target_pos[2]) < 5.0)
+        .count();
+    assert!(near >= 8, "the riders did not close on the foe: {horses:?}");
+    let (_, closest) = spread(&horses);
+    assert!(
+        closest >= 1.3,
+        "horses inside each other: closest pair {closest:.2}: {horses:?}"
+    );
+}

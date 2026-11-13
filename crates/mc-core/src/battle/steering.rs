@@ -109,7 +109,24 @@ impl SeparationGrid {
         }
     }
 
-    pub(super) fn nearest(&self, index: usize, members: &[Member]) -> ([(f64, usize); NEIGHBOURS], u64) {
+    pub(super) fn nearest(
+        &self,
+        index: usize,
+        members: &[Member],
+    ) -> ([(f64, usize); NEIGHBOURS], u64) {
+        self.nearest_where(index, members, SENSE, |_| true)
+    }
+
+    /// [`Self::nearest`] within `radius` (at most 2 blocks, the candidate
+    /// window) among the bodies `keep` accepts: the horses round a rider in a
+    /// melee, where the five nearest bodies are often all foot.
+    pub(super) fn nearest_where(
+        &self,
+        index: usize,
+        members: &[Member],
+        radius: f64,
+        keep: impl Fn(&Member) -> bool,
+    ) -> ([(f64, usize); NEIGHBOURS], u64) {
         let actor = &members[index];
         let mut best = [(f64::INFINITY, usize::MAX); NEIGHBOURS];
         let mut examined = 0;
@@ -140,7 +157,7 @@ impl SeparationGrid {
                     continue;
                 }
                 let d2 = (actor.pos[0] - m.pos[0]).powi(2) + (actor.pos[2] - m.pos[2]).powi(2);
-                if d2 > SENSE * SENSE {
+                if d2 > radius * radius || !keep(m) {
                     continue;
                 }
                 let Some(at) = best.iter().position(|&(distance, old)| {
@@ -253,7 +270,28 @@ fn sample_movement(
     {
         let target = runtime.heading_target(index);
         let heading = [target[0] - m.pos[0], target[2] - m.pos[2]];
-        drive = around_obstacles(frame, runtime, slot, drive, heading, Mover::Foot);
+        let turned = around_obstacles(frame, runtime, slot, drive, heading, Mover::Foot);
+        // A terrain turn (the clear way along a wall, at the drive's speed)
+        // replaces the drive the gap was kept for. Keep it again, or every body
+        // following one wall walks into the one ahead and the wall's end gathers
+        // them on one point: 87 fugitives stood within 0.22 blocks of a cliff
+        // notch in the G2 take. Under rock the walk out toward open sky comes
+        // first: a pile packed into a tunnel would never leave it.
+        drive = if turned == drive
+            || super::ground::under_rock(frame.world, frame.registry, frame.entities.pos(slot))
+        {
+            turned
+        } else {
+            let tick = mc_physics::TICK_SECONDS;
+            let step = keep_gap(
+                &runtime.members,
+                index,
+                &near,
+                MIN_SPACING,
+                [turned[0] * tick, turned[2] * tick],
+            );
+            runtime.constrain_velocity(m.pos, [step[0] / tick, turned[1], step[1] / tick])
+        };
     }
     (drive, examined, pushes)
 }
@@ -355,25 +393,7 @@ fn drive_with_neighbours(
     if speed > max_step {
         drive = drive.map(|v| v * max_step / speed);
     }
-    // Reserve half the free gap for each participant's simultaneous movement.
-    // This bounds closing even when the other row is steering towards us.
-    for &(distance, other) in &near {
-        if other == usize::MAX || distance < 1e-8 {
-            continue;
-        }
-        let contact = &runtime.members[other];
-        let dist = distance.sqrt();
-        let towards = [
-            (contact.pos[0] - m.pos[0]) / dist,
-            (contact.pos[2] - m.pos[2]) / dist,
-        ];
-        let closing = drive[0] * towards[0] + drive[1] * towards[1];
-        let allowed = ((dist - MIN_SPACING) * 0.5).max(0.0);
-        if closing > allowed {
-            drive[0] -= towards[0] * (closing - allowed);
-            drive[1] -= towards[1] * (closing - allowed);
-        }
-    }
+    let drive = keep_gap(&runtime.members, index, &near, MIN_SPACING, drive);
     // Physics drive is blocks/SECOND, whereas all battle tuning is blocks/tick.
     (
         runtime.constrain_velocity(
@@ -386,6 +406,38 @@ fn drive_with_neighbours(
         ),
         pushes,
     )
+}
+
+/// Reserve half the free gap to each of `near` for its simultaneous
+/// movement: `drive` (blocks per tick) never closes on a neighbour faster
+/// than that, and not at all inside `spacing`. This bounds closing even when
+/// the other row is steering towards us.
+pub(super) fn keep_gap(
+    members: &[Member],
+    index: usize,
+    near: &[(f64, usize); NEIGHBOURS],
+    spacing: f64,
+    mut drive: [f64; 2],
+) -> [f64; 2] {
+    let m = &members[index];
+    for &(distance, other) in near {
+        if other == usize::MAX || distance < 1e-8 {
+            continue;
+        }
+        let contact = &members[other];
+        let dist = distance.sqrt();
+        let towards = [
+            (contact.pos[0] - m.pos[0]) / dist,
+            (contact.pos[2] - m.pos[2]) / dist,
+        ];
+        let closing = drive[0] * towards[0] + drive[1] * towards[1];
+        let allowed = ((dist - spacing) * 0.5).max(0.0);
+        if closing > allowed {
+            drive[0] -= towards[0] * (closing - allowed);
+            drive[1] -= towards[1] * (closing - allowed);
+        }
+    }
+    drive
 }
 
 pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {
