@@ -1,13 +1,16 @@
 //! Live network players in a staged battle: a player who takes a front-rank
-//! slot with that rank's kit, and spectators placed behind a player.
+//! slot with that rank's kit, and spectators kept behind a player.
 //! Console only (`battle watch|live|spectate`).
 //!
 //! Invariant: a held slot is rank 0 of one file of a foot regiment. The file's
 //! soldiers stand from rank 1 back (`FormationRuntime::held`), so no soldier
 //! steps into the holder's place. The holder is an ordinary player: he takes
 //! damage and dies. The battle moves him only when he (re)enters the rank:
-//! `battle live` before start, and each respawn, which puts him back into a
-//! current front-rank slot of his side near its centre with the kit again.
+//! `battle live` before start, and each respawn, which puts him back into the
+//! fight with the kit again: at the file of his own line in contact nearest
+//! where he fell, else a current front-rank slot of his side near its centre.
+//! A spectator bound to him (`battle spectate`) is placed behind him again
+//! whenever he respawns or is re-armed.
 //!
 //! Battle-mode custody: a holder's inventory IS his kit (`equip`). Placement,
 //! re-arming and every respawn set his whole inventory to exactly the kit:
@@ -23,7 +26,8 @@
 //! swing; wounded, staggered and recovering soldiers do not swing. The blow
 //! lands through the ordinary player damage path (`blow`); battle targets
 //! stay soldiers.
-use super::{BattleIntent, BattleState, EnemyTarget, Frame, Output};
+use super::combat::Weapon;
+use super::{BattleIntent, BattleState, EnemyTarget, Frame, Output, Unit};
 use crate::battle::formation::{FormationRuntime, Order, Regiment, position, slot_position};
 use crate::battle::ground::{self, Placement};
 use crate::boundary::{ChangeSet, EntityId};
@@ -61,6 +65,8 @@ pub(crate) struct Hold {
     /// The holder was seen dead and is placed again when he respawns.
     pub dead: bool,
     pub deaths: u32,
+    /// Where he last stood alive; after a death, where he fell.
+    pub alive_at: [f64; 3],
 }
 
 #[derive(Debug, Default)]
@@ -69,6 +75,9 @@ pub(crate) struct LiveState {
     /// Entity last announced online for each watched name.
     announced: Vec<Option<EntityId>>,
     pub holds: Vec<Hold>,
+    /// (spectator, holder) of each `battle spectate`: the spectator goes
+    /// behind the holder again on each respawn and re-arm (`follow`).
+    spectators: Vec<(String, String)>,
     /// Living holders this tick (entity, side): candidates for enemy
     /// soldiers' swings (`in_reach`).
     targets: Vec<(EntityId, u16)>,
@@ -151,9 +160,16 @@ pub(crate) fn update(state: &mut TickState) {
                     tracing::warn!("Battle live respawn not placed (kit restored): {error}");
                 }
             }
+            let name = state.hostile.battle.live.holds[index].name.clone();
+            follow(state, &name);
         }
-        if !is_dead(state, player) {
-            let side = state.hostile.battle.live.holds[index].side;
+        if !is_dead(state, player)
+            && let Some(slot) = state.entities.slot_of(player)
+        {
+            let at = state.entities.pos(slot);
+            let hold = &mut state.hostile.battle.live.holds[index];
+            hold.alive_at = at;
+            let side = hold.side;
             state.hostile.battle.live.targets.push((player, side));
         }
     }
@@ -378,6 +394,82 @@ fn file_members(formation: &FormationRuntime, regiment: usize, file: usize) -> V
         .collect()
 }
 
+/// Where the file's front living, unwounded soldier stands now.
+fn front_soldier(state: &TickState, regiment: usize, file: usize) -> Option<[f64; 3]> {
+    let formation = &state.hostile.battle.formation;
+    file_members(formation, regiment, file)
+        .into_iter()
+        .map(|m| &formation.members[m])
+        .filter(|m| m.alive && !m.wounded)
+        .min_by_key(|m| m.rank)
+        .and_then(|m| state.entities.slot_of(m.id))
+        .map(|slot| state.entities.pos(slot))
+}
+
+/// Battle unit `bi` in contact as of the last battle tick: a melee fighter
+/// whose retained opponent, or any enemy, stands within his weapon reach
+/// (the `in_weapon_reach` census of `combat::count_fighting`).
+fn in_contact(battle: &BattleState, bi: usize) -> bool {
+    let columns = &battle.columns;
+    let Some(fighter) = battle.combat.fighters.get(bi) else {
+        return false;
+    };
+    if bi >= columns.ids.len()
+        || !columns.active[bi]
+        || columns.carried[bi]
+        || fighter.weapon == Weapon::Bow
+    {
+        return false;
+    }
+    let unit = Unit {
+        id: columns.ids[bi],
+        faction: columns.factions[bi],
+        pos: columns.positions[bi],
+    };
+    columns.targets[bi].is_some_and(|target| target.distance <= fighter.reach)
+        || battle
+            .grid
+            .nearest_enemy(unit, fighter.reach)
+            .target
+            .is_some()
+}
+
+/// The file of the holder's own line, while it still stands, that is in
+/// contact (a soldier of it has an enemy within his weapon reach) and whose
+/// front soldier stands nearest where the holder fell (trial-7: the centre
+/// rule put PovRed 230 blocks from the fight, with no enemy near for four
+/// minutes). Files another holder holds are skipped; `None` when no file of
+/// his line is in contact.
+fn contact_file(state: &TickState, hold: &Hold) -> Option<usize> {
+    let battle = &state.hostile.battle;
+    let formation = &battle.formation;
+    let r = &formation.regiments[hold.regiment];
+    if !eligible(state, r, hold.side, 1) {
+        return None;
+    }
+    let mut best: Option<(f64, usize)> = None;
+    for file in 0..usize::from(r.spec.files).min(r.len) {
+        if file != hold.file && formation.held.contains(&(hold.regiment, file)) {
+            continue;
+        }
+        if !file_members(formation, hold.regiment, file)
+            .into_iter()
+            .any(|bi| in_contact(battle, bi))
+        {
+            continue;
+        }
+        let Some(front) = front_soldier(state, hold.regiment, file) else {
+            continue;
+        };
+        let distance =
+            (front[0] - hold.alive_at[0]).powi(2) + (front[2] - hold.alive_at[2]).powi(2);
+        if best.is_none_or(|(d, _)| distance < d) {
+            best = Some((distance, file));
+        }
+    }
+    best.map(|(_, file)| file)
+}
+
 /// The equipment of the first soldier of the file whose body still exists,
 /// else of any soldier of the regiment.
 fn kit_of(
@@ -469,7 +561,8 @@ fn keep_inventory(state: &mut TickState) {
 /// front-rank file nearest the line centre (or the name's existing hold),
 /// give the player that file's kit and stand him in rank 0 facing the enemy;
 /// the file's soldiers move one rank back. After start a held name is only
-/// re-armed (a rejoin): the battle moves him only on respawn.
+/// re-armed (a rejoin): the battle moves him only on respawn. Either way a
+/// spectator bound to him goes behind him again.
 pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<String, String> {
     if state.hostile.battle.formation.regiments.is_empty() {
         return Err("no staged formation; setup required".into());
@@ -525,22 +618,26 @@ pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<Strin
                 kit_from: source,
                 dead: false,
                 deaths: 0,
+                alive_at: at,
             });
             (at, yaw, source, kit)
         }
     };
     let slots = equip(state, player, &kit);
-    if running {
-        return Ok(format!(
+    let reply = if running {
+        format!(
             "Battle live rearmed: {name} side={side} regiment={} file={file} kit_slots={slots} kit_from={source} moved=false",
             spec.id
-        ));
-    }
-    teleport(state, player, at, yaw, 0.0);
-    Ok(format!(
-        "Battle live placed: {name} side={side} regiment={} file={file} rank=0 at={:.2},{:.2},{:.2} yaw={yaw:.1} kit_slots={slots} kit_from={source}",
-        spec.id, at[0], at[1], at[2]
-    ))
+        )
+    } else {
+        teleport(state, player, at, yaw, 0.0);
+        format!(
+            "Battle live placed: {name} side={side} regiment={} file={file} rank=0 at={:.2},{:.2},{:.2} yaw={yaw:.1} kit_slots={slots} kit_from={source}",
+            spec.id, at[0], at[1], at[2]
+        )
+    };
+    follow(state, name);
+    Ok(reply)
 }
 
 /// Move every soldier of the file one rank back and return where its front
@@ -577,16 +674,22 @@ fn take_front(state: &mut TickState, regiment: usize, file: usize) -> Result<[f6
 }
 
 /// A respawned holder goes back into the rank with his kit again: before
-/// start to where he was placed; once running to the front of the men of a
-/// current file of his side near its centre (`choose_slot` tiers: standing
-/// infantry first).
+/// start to where he was placed; once running to the front of the men of the
+/// file of his own line in contact nearest where he fell (`contact_file`),
+/// else of a current file of his side near its centre (`choose_slot` tiers:
+/// standing infantry first).
 fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<String, String> {
     let hold = state.hostile.battle.live.holds[index].clone();
     let running = state.hostile.battle.running;
-    let (regiment, file) = if running {
-        choose_slot(state, hold.side, Some((hold.regiment, hold.file)))?
+    let contact = if running {
+        contact_file(state, &hold)
     } else {
-        (hold.regiment, hold.file)
+        None
+    };
+    let (regiment, file) = match contact {
+        Some(file) => (hold.regiment, file),
+        None if running => choose_slot(state, hold.side, Some((hold.regiment, hold.file)))?,
+        None => (hold.regiment, hold.file),
     };
     if (regiment, file) != (hold.regiment, hold.file) {
         let formation = &mut state.hostile.battle.formation;
@@ -611,17 +714,8 @@ fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<Stri
         // ahead of the file's front living soldier (on his centre neither is
         // pushed and the camera sits inside him), else the regiment's living
         // centroid, else the leader's slot.
-        let formation = &state.hostile.battle.formation;
-        let front = file_members(formation, regiment, file)
-            .into_iter()
-            .map(|m| &formation.members[m])
-            .filter(|m| m.alive && !m.wounded)
-            .min_by_key(|m| m.rank)
-            .and_then(|m| state.entities.slot_of(m.id))
-            .map(|slot| {
-                let pos = state.entities.pos(slot);
-                [pos[0] + r.spec.facing[0], pos[1], pos[2] + r.spec.facing[1]]
-            });
+        let front = front_soldier(state, regiment, file)
+            .map(|pos| [pos[0] + r.spec.facing[0], pos[1], pos[2] + r.spec.facing[1]]);
         let mut at = front.unwrap_or_else(|| {
             if r.live_count > 0 {
                 r.live_sum.map(|sum| sum / r.live_count as f64)
@@ -642,14 +736,20 @@ fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<Stri
     let slots = equip(state, player, &kit);
     teleport(state, player, at, yaw, 0.0);
     Ok(format!(
-        "Battle live respawned: {} side={} regiment={id} file={file} rank=0 at={:.2},{:.2},{:.2} yaw={yaw:.1} kit_slots={slots} kit_from={source} deaths={}",
-        hold.name, hold.side, at[0], at[1], at[2], hold.deaths
+        "Battle live respawned: {} side={} regiment={id} file={file} rank=0 at={:.2},{:.2},{:.2} yaw={yaw:.1} kit_slots={slots} kit_from={source} deaths={} contact={}",
+        hold.name,
+        hold.side,
+        at[0],
+        at[1],
+        at[2],
+        hold.deaths,
+        contact.is_some()
     ))
 }
 
 /// `battle spectate <name> <target>`: spectator mode, standing behind the
-/// target and looking his way (his rank's facing when he holds a slot).
-/// The core has no Set Camera packet, so the camera is the spectator's own.
+/// target (`place_behind`). The binding stays: he goes behind the target
+/// again whenever the target respawns or is re-armed (`follow`).
 pub(crate) fn spectate(
     state: &mut TickState,
     changes: &mut ChangeSet,
@@ -665,24 +765,6 @@ pub(crate) fn spectate(
     if is_dead(state, viewer) || is_dead(state, subject) {
         return Err(format!("{name} or {target} is dead; respawn first"));
     }
-    let subject_slot = state.entities.slot_of(subject).expect("live player");
-    let pos = state.entities.pos(subject_slot);
-    let yaw = state
-        .hostile
-        .battle
-        .live
-        .holds
-        .iter()
-        .find(|hold| hold.name == target)
-        .map_or_else(|| state.entities.rot(subject_slot)[0], |hold| hold.yaw);
-    let radians = f64::from(yaw).to_radians();
-    // Vanilla look vector of a yaw: (-sin, cos).
-    let forward = [-radians.sin(), radians.cos()];
-    let at = [
-        pos[0] - forward[0] * SPECTATOR_BACK,
-        pos[1] + SPECTATOR_UP,
-        pos[2] - forward[1] * SPECTATOR_BACK,
-    ];
     let command = Command::GameMode {
         target: Target::Entity(viewer),
         mode: GameMode::Spectator,
@@ -695,6 +777,71 @@ pub(crate) fn spectate(
     if let Some(connection) = state.connections.entity_connection(viewer) {
         crate::tick::apply_player_effects(state, connection, viewer, effects, changes);
     }
+    let spectators = &mut state.hostile.battle.live.spectators;
+    match spectators.iter_mut().find(|(bound, _)| bound == name) {
+        Some(binding) => binding.1 = target.to_owned(),
+        None => spectators.push((name.to_owned(), target.to_owned())),
+    }
+    place_behind(state, name, target)
+}
+
+/// Each spectator bound to `target` goes behind him again, wherever his
+/// respawn or re-arm put him, so the spectator's client gets the chunks and
+/// entities around him (trial-7: CamSpec stayed in the cave where PovRed
+/// died, 230 blocks from his respawn, for four minutes).
+fn follow(state: &mut TickState, target: &str) {
+    for index in 0..state.hostile.battle.live.spectators.len() {
+        let (name, bound) = &state.hostile.battle.live.spectators[index];
+        if bound != target {
+            continue;
+        }
+        let name = name.clone();
+        match place_behind(state, &name, target) {
+            Ok(line) => tracing::info!("{line}"),
+            Err(error) => tracing::warn!("Battle spectator not placed: {error}"),
+        }
+    }
+}
+
+/// Stand spectator `name` behind `target`, looking his way: his line's
+/// facing when he holds a slot. The core has no Set Camera packet, so the
+/// camera is the spectator's own. A spectator who left spectator mode is not
+/// moved.
+fn place_behind(state: &mut TickState, name: &str, target: &str) -> Result<String, String> {
+    let viewer = player_named(state, name).ok_or_else(|| format!("{name} is not online"))?;
+    let subject = player_named(state, target).ok_or_else(|| format!("{target} is not online"))?;
+    if is_dead(state, viewer) || is_dead(state, subject) {
+        return Err(format!("{name} or {target} is dead; respawn first"));
+    }
+    if !state.players[&viewer].spectator() {
+        return Err(format!("{name} left spectator mode"));
+    }
+    let subject_slot = state.entities.slot_of(subject).expect("live player");
+    let pos = state.entities.pos(subject_slot);
+    let battle = &state.hostile.battle;
+    let yaw = battle
+        .live
+        .holds
+        .iter()
+        .find(|hold| hold.name == target)
+        .map_or_else(
+            || state.entities.rot(subject_slot)[0],
+            |hold| {
+                battle
+                    .formation
+                    .regiments
+                    .get(hold.regiment)
+                    .map_or(hold.yaw, |r| yaw_of(r.spec.facing))
+            },
+        );
+    let radians = f64::from(yaw).to_radians();
+    // Vanilla look vector of a yaw: (-sin, cos).
+    let forward = [-radians.sin(), radians.cos()];
+    let at = [
+        pos[0] - forward[0] * SPECTATOR_BACK,
+        pos[1] + SPECTATOR_UP,
+        pos[2] - forward[1] * SPECTATOR_BACK,
+    ];
     teleport(state, viewer, at, yaw, SPECTATOR_PITCH);
     Ok(format!(
         "Battle spectator placed: {name} target={target} at={:.2},{:.2},{:.2} yaw={yaw:.1} gamemode=spectator camera=own",
