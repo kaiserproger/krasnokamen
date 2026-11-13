@@ -8,6 +8,8 @@ use std::sync::Arc;
 
 #[path = "boat_floating_tests.rs"]
 mod boat_floating;
+#[path = "vehicles_collision_tests.rs"]
+mod vehicles_collision;
 
 struct Empty(u32);
 impl mc_world::ChunkGenerator for Empty {

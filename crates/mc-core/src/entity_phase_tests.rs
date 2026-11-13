@@ -729,6 +729,7 @@ fn parallel_row_prep_matches_the_serial_prep_including_rare_fixups() {
         targets_empty: true,
         villagers_empty: resident_villager_targets(&state.entities).is_empty(),
         unchanged_since: state.entity_phase_revision,
+        rest_proofs: None,
     };
     let mut serial = PrepChunk::default();
     prepare_rows(&state, &periods, &env, false, &mut serial);
@@ -807,6 +808,7 @@ fn parallel_row_prep_algorithm_micro() {
         targets_empty: true,
         villagers_empty: true,
         unchanged_since: state.entity_phase_revision,
+        rest_proofs: None,
     };
     let mut out = PrepChunk::default();
     let mut expected = None;
@@ -1343,6 +1345,7 @@ fn phase_admitted(state: &mut TickState, slot: EntitySlot, period: u8) -> bool {
             targets_empty: !crate::hostile::has_live_targets(state),
             villagers_empty: resident_villager_targets(&state.entities).is_empty(),
             unchanged_since: state.entity_phase_revision,
+            rest_proofs: None,
         },
         &mut Vec::new(),
         &mut Vec::new(),
@@ -1556,6 +1559,7 @@ fn zombie_rest_release_probe_300_zombies_no_player() {
                 targets_empty: true,
                 villagers_empty: true,
                 unchanged_since: state.entity_phase_revision,
+                rest_proofs: None,
             },
             false,
             &mut out,
@@ -1774,4 +1778,180 @@ fn sensors_mob_revenge_does_not_rest_without_player_targets() {
     assert!(!can_early_rest(&mut state, mob));
     let _ = run_entity_phase(&mut state, true);
     assert_eq!(state.hostile.targets[&actor].0.0, attacker);
+}
+
+/// Negative control: dropping the footprint revision/pending check of a memo
+/// hit makes the removed-support and pending-write steps keep resting.
+#[test]
+fn rest_proof_memo_skips_repeats_and_yields_to_geometry_and_state_changes() {
+    let (mut state, slot) = resting_cow();
+    let id = state.entities.body(slot).id;
+    state.tick = (1..120)
+        .find(|&tick| {
+            crate::entity_motion::wander(state.entities.body(slot).movement, id.0, tick, 1.0)
+                == [0.0; 3]
+        })
+        .unwrap();
+    state.entities.prepare_motion_hints(&state.registry);
+    let mut proofs = RestProofs::default();
+    let runs = || REST_PHYSICS_PROOFS.with(std::cell::Cell::get);
+    // One phase: the memo begins at the world revision of its start.
+    let mut phase = |state: &TickState| {
+        proofs.begin(state.entities.len(), state.world.revision_now());
+        let mut view = PrepView::of(state);
+        view.rest_proofs = Some(&proofs);
+        early_entity_rest(
+            &view,
+            slot,
+            1,
+            state.entity_phase_revision,
+            true,
+            !crate::hostile::has_live_targets(state),
+        )
+    };
+    let before = runs();
+    assert!(phase(&state));
+    assert_eq!(runs(), before + 1, "the first decision tick proves");
+    assert!(phase(&state));
+    assert_eq!(runs(), before + 1, "an unchanged repeat is a memo hit");
+    let stone = state.world.block_at(8, 100, 8).unwrap();
+    state.world.set_block(12, 100, 8, state.registry.states.air);
+    state.world.fold_overlay();
+    assert!(phase(&state), "an unrelated edit still rests");
+    assert_eq!(runs(), before + 2, "a footprint-chunk edit re-proves");
+    state.world.set_block(8, 100, 8, state.registry.states.air);
+    state.world.fold_overlay();
+    assert!(!phase(&state), "removed support must execute");
+    state.world.set_block(8, 100, 8, stone);
+    state.world.fold_overlay();
+    assert!(phase(&state));
+    assert_eq!(runs(), before + 4);
+    state.entities.body_mut(slot).air_supply = 299;
+    assert!(!phase(&state), "air recovery must execute");
+    state.entities.body_mut(slot).air_supply = 300;
+    assert!(phase(&state));
+    assert_eq!(runs(), before + 5, "restoring the state hits the old stamp");
+    let (command, _ack) =
+        crate::command_console::ConsoleCommand::new("setblock 8 100 8 minecraft:air".to_owned());
+    command.execute(&mut state, &mut ChangeSet::default());
+    assert!(
+        state
+            .world
+            .pending_block_chunks()
+            .contains(&ChunkPos { x: 0, z: 0 })
+    );
+    assert!(!phase(&state), "a pending write defeats the memo");
+}
+
+/// Negative control: marking the ranges of the parallel split from a wrong
+/// base slot (or letting a range read another range's chunk cache) breaks the
+/// equality with the serial marks.
+#[test]
+fn parallel_dense_admission_marks_match_the_serial_marks_and_the_slot_oracle() {
+    let (mut state, player_slot) = resting_cow();
+    state.entities.set_kind(
+        player_slot,
+        EntityKind::Player {
+            connection: crate::boundary::ConnectionId(1),
+        },
+    );
+    state.world.set_active_chunks(
+        [(0, 0), (1, 0)]
+            .into_iter()
+            .map(|(x, z)| ChunkPos { x, z })
+            .collect(),
+        1,
+    );
+    let cow = state.registry.cow_type_id;
+    for index in 0..(6 * PREP_CHUNK + 777) as u32 {
+        let x = f64::from(index % 80) * 0.4;
+        let z = 8.5 + f64::from(index / 80 % 2) * 16.0;
+        state.spawn_mob(cow, [x, 101.0, z], 10.0);
+    }
+    state.entities.prepare_motion_hints(&state.registry);
+    let activation: HashMap<(i32, i32), u64> = [((0, 0), 1)].into_iter().collect();
+    let len = state.entities.len();
+    let mut expected = vec![0_u8; len];
+    for slot in state.entities.motion_slots(MOTION_OWNED) {
+        if state.entities.motion_flags(slot) & MOTION_PLAYER != 0 {
+            continue;
+        }
+        let chunk = state.entities.chunk_of(slot);
+        if state.world.is_active_position(chunk.x, chunk.z) {
+            expected[slot.0 as usize] = activation
+                .get(&(chunk.x, chunk.z))
+                .copied()
+                .unwrap_or(MOB_FAR_PERIOD) as u8;
+        }
+    }
+    let admitted = expected.iter().filter(|&&period| period != 0).count();
+    assert!(admitted > PREP_CHUNK, "{admitted}");
+    for period in [1, MOB_FAR_PERIOD as u8] {
+        assert!(expected.contains(&period), "period {period} is exercised");
+    }
+    for parallel in [false, true] {
+        let mut marks = vec![0_u8; len];
+        let count = mark_dense_admission(
+            &state.entities,
+            &state.world,
+            &activation,
+            &mut marks,
+            parallel,
+        );
+        assert_eq!(
+            (count, &marks),
+            (admitted, &expected),
+            "parallel={parallel}"
+        );
+    }
+}
+
+/// Negative control: filtering on the quiet-timer flag alone drops the zombies
+/// whose raised-arms bit is stale and this goes red.
+#[test]
+fn parallel_resting_writeback_keeps_exactly_the_rows_the_writeback_changes() {
+    let (mut state, _) = resting_cow();
+    let zombie = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap())
+        .unwrap();
+    let cow = state.registry.cow_type_id;
+    for index in 0..(PARALLEL_PREP_MIN + 500) as u32 {
+        let type_id = if index % 2 == 0 { zombie } else { cow };
+        let id = state.spawn_mob(type_id, [8.5 + f64::from(index % 8), 101.0, 8.5], 10.0);
+        let slot = state.entities.slot_of(id).unwrap();
+        if type_id == zombie && index % 3 == 0 {
+            crate::hostile::set_zombie_aggressive(&mut state, slot, true);
+        }
+        if type_id == cow && index % 5 == 1 {
+            state.entities.body_mut(slot).pickup_delay = 3;
+        }
+    }
+    state.entities.prepare_motion_hints(&state.registry);
+    let all: Vec<EntitySlot> = state.entities.slots().collect();
+    let mut rows = all.clone();
+    let capacity = rows.capacity();
+    retain_resting_writeback(&state, &mut rows);
+    assert_eq!(
+        rows.capacity(),
+        capacity,
+        "the resting scratch keeps its capacity"
+    );
+    let mut expected = Vec::new();
+    for &slot in &all {
+        let before = state.appearance_changed.len();
+        crate::hostile::set_zombie_aggressive(&mut state, slot, false);
+        let arms = state.appearance_changed.len() > before;
+        let timers = state.entities.motion_flags(slot) & crate::entities::MOTION_QUIET_TIMERS == 0;
+        if arms || timers {
+            expected.push(slot);
+        }
+    }
+    assert!(
+        rows.len() > 1000 && rows.len() < all.len() / 2,
+        "{}",
+        rows.len()
+    );
+    assert_eq!(rows, expected);
 }
