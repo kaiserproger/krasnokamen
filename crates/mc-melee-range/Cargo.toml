@@ -1,0 +1,14 @@
+[package]
+name = "mc-melee-range"
+description = "Vanilla mob melee reach geometry (Mob.isWithinMeleeAttackRange), shared by the server and the replay scanner."
+version.workspace = true
+edition.workspace = true
+rust-version = "1.85" # edition 2024; no dependencies, so the scanner client (older toolchain) can use it
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
