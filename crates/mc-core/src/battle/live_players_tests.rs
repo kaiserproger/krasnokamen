@@ -603,9 +603,14 @@ fn a_respawn_after_his_infantry_broke_takes_a_standing_line_with_the_same_kit() 
     run_tick(&mut state, &[]);
     kill(&mut state, 1);
     run_tick(&mut state, &[]);
-    // Every red infantry line breaks while he is dead.
-    let infantry = state.hostile.battle.live.holds[0].regiment;
-    state.hostile.battle.formation.regiments[infantry].morale.broken = true;
+    // Every red infantry line breaks while he is dead, out of contact: no
+    // soldier of his line has an enemy within reach.
+    let hold = state.hostile.battle.live.holds[0].clone();
+    let infantry = hold.regiment;
+    let line = &mut state.hostile.battle.formation.regiments[infantry];
+    line.morale.broken = true;
+    let keep = (hold.regiment, hold.file);
+    assert!(nearest_file(&state, infantry, keep, hold.alive_at, true).is_none());
     run_tick(
         &mut state,
         &[PlayerInput::Respawn {
@@ -683,4 +688,249 @@ fn spectator_goes_behind_the_holder_in_spectator_mode() {
         )
         .is_err()
     );
+}
+
+fn respawn(state: &mut TickState, connection: u64) {
+    run_tick(
+        state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(connection),
+        }],
+    );
+    run_tick(state, &[]);
+}
+
+/// As the last battle tick left it for the next respawn: the front soldier
+/// of `file` retains a soldier of the other side as his opponent, standing
+/// within his melee range or a block beyond it (box gap along +z).
+fn engage(state: &mut TickState, regiment: usize, file: usize, in_reach: bool) {
+    let battle = &mut state.hostile.battle;
+    let formation = &battle.formation;
+    let faction = formation.regiments[regiment].spec.faction;
+    let enemy = formation
+        .members
+        .iter()
+        .find(|m| formation.regiments[m.regiment].spec.faction != faction)
+        .unwrap()
+        .id;
+    let bi = file_members(formation, regiment, file)[0];
+    let reach = battle.combat.fighters[bi].range.max;
+    assert!(
+        battle.columns.active[bi],
+        "file {file}'s soldier stands in the battle"
+    );
+    let actor = battle.columns.slots[bi].unwrap();
+    battle.columns.targets[bi] = Some(EnemyTarget {
+        id: enemy,
+        pos: battle.columns.positions[bi],
+        distance: 1.0,
+    });
+    // Two 0.6-wide soldiers: centre distance = box gap + 0.6.
+    let gap = if in_reach { reach * 0.5 } else { reach + 1.0 };
+    let at = state.entities.pos(actor);
+    let body = state.entities.slot_of(enemy).unwrap();
+    state
+        .entities
+        .set_pos(body, [at[0], at[1], at[2] + 0.6 + gap]);
+}
+
+/// A started battle in which PovRed, holding the centre file, fell a block
+/// ahead of the front soldier of the middle file of his line and is dead;
+/// returns PovRed, his regiment, that file and the centre file the old rule
+/// takes.
+fn fallen() -> (TickState, EntityId, usize, usize, usize) {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let player = ids[0];
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(&mut state, &mut changes, BattleCommand::Start).unwrap();
+    run_tick(&mut state, &[]);
+    let hold = state.hostile.battle.live.holds[0].clone();
+    let line = &state.hostile.battle.formation.regiments[hold.regiment];
+    let files = usize::from(line.spec.files);
+    let centre = choose_slot(&state, 1, Some((hold.regiment, hold.file))).unwrap();
+    assert_eq!(centre, (hold.regiment, hold.file));
+    let fell = files / 2;
+    // Red faces +z: a block ahead of that file's front soldier.
+    let front = file_front(&state, hold.regiment, fell);
+    let body = state.entities.slot_of(player).unwrap();
+    state
+        .entities
+        .set_pos(body, [front[0], front[1], front[2] + 1.0]);
+    run_tick(&mut state, &[]);
+    kill(&mut state, 1);
+    run_tick(&mut state, &[]);
+    assert!(state.hostile.battle.live.holds[0].dead);
+    (state, player, hold.regiment, fell, hold.file)
+}
+
+/// Trial-7: PovRed died at the west end of the line and the centre rule put
+/// him 230 blocks away, with no enemy near for four minutes. A respawn goes
+/// to the file of his own line in contact nearest where he fell.
+#[test]
+fn a_respawn_goes_to_the_file_of_his_line_in_contact_nearest_where_he_fell() {
+    let (mut state, player, regiment, near, centre) = fallen();
+    // The centre file is at the seam with the spears, an end of his line;
+    // the far file is the other end.
+    let line = &state.hostile.battle.formation.regiments[regiment];
+    let files = usize::from(line.spec.files);
+    let far = if centre == 0 { files - 1 } else { 0 };
+    assert!(
+        near != centre && far != centre && near != far,
+        "{near} {far} {centre}"
+    );
+    engage(&mut state, regiment, far, true);
+    engage(&mut state, regiment, near, true);
+    respawn(&mut state, 1);
+    let hold = &state.hostile.battle.live.holds[0];
+    assert_eq!((hold.regiment, hold.file), (regiment, near));
+    assert_in_rank_with_kit(&state, player);
+}
+
+/// A standing red foot line other than `own`.
+fn other_line(state: &TickState, own: usize) -> usize {
+    let formation = &state.hostile.battle.formation;
+    (0..formation.regiments.len())
+        .find(|&i| i != own && eligible(state, &formation.regiments[i], 1, 1))
+        .expect("a second red foot line")
+}
+
+/// No file of his own regiment in contact (a retained opponent beyond weapon
+/// reach is none), while another red line and the blue side fight: he stays
+/// in his own regiment, at its living file nearest where he fell.
+#[test]
+fn a_respawn_with_no_contact_in_his_regiment_takes_its_file_nearest_where_he_fell() {
+    let (mut state, player, regiment, fell, centre) = fallen();
+    assert_ne!(fell, centre);
+    engage(&mut state, regiment, fell, false);
+    let spears = other_line(&state, regiment);
+    engage(&mut state, spears, 0, true);
+    let formation = &state.hostile.battle.formation;
+    let blue = (0..formation.regiments.len())
+        .find(|&i| formation.regiments[i].spec.faction == 2)
+        .unwrap();
+    engage(&mut state, blue, 0, true);
+    respawn(&mut state, 1);
+    let hold = &state.hostile.battle.live.holds[0];
+    assert_eq!((hold.regiment, hold.file), (regiment, fell));
+    assert_in_rank_with_kit(&state, player);
+}
+
+/// His regiment broke but a file of it is still in contact: he respawns at
+/// that file, though a standing red line fights too.
+#[test]
+fn a_respawn_goes_to_his_broken_regiments_file_in_contact() {
+    let (mut state, player, regiment, fell, centre) = fallen();
+    assert_ne!(fell, centre);
+    state.hostile.battle.formation.regiments[regiment]
+        .morale
+        .broken = true;
+    let spears = other_line(&state, regiment);
+    engage(&mut state, spears, 0, true);
+    engage(&mut state, regiment, fell, true);
+    respawn(&mut state, 1);
+    let hold = &state.hostile.battle.live.holds[0];
+    assert_eq!((hold.regiment, hold.file), (regiment, fell));
+    assert_in_rank_with_kit(&state, player);
+}
+
+/// His regiment has no living file left: he goes to the file of another
+/// standing red line in contact nearest where he fell, not to the centre file
+/// of the old rule.
+#[test]
+fn a_respawn_after_his_regiment_is_gone_takes_the_sides_contact_nearest_where_he_fell() {
+    let (mut state, player, regiment, _, _) = fallen();
+    let kit = state.hostile.battle.live.holds[0].kit.clone();
+    // Every man of his regiment fell while he was dead.
+    let formation = &mut state.hostile.battle.formation;
+    let line = &mut formation.regiments[regiment];
+    let (start, len) = (line.start, line.len);
+    line.live_count = 0;
+    for member in &mut formation.members[start..start + len] {
+        member.alive = false;
+    }
+    let spears = other_line(&state, regiment);
+    let keep = {
+        let hold = &state.hostile.battle.live.holds[0];
+        (hold.regiment, hold.file)
+    };
+    let centre = choose_slot(&state, 1, Some(keep)).unwrap();
+    let files = usize::from(state.hostile.battle.formation.regiments[spears].spec.files);
+    // The end of the spear line away from the old rule's file; he fell there.
+    let far = match centre {
+        (line, 0) if line == spears => files - 1,
+        _ => 0,
+    };
+    let mid = files / 2;
+    assert!(
+        far != mid && centre != (spears, far),
+        "{far} {mid} {centre:?}"
+    );
+    state.hostile.battle.live.holds[0].alive_at = file_front(&state, spears, far);
+    engage(&mut state, spears, mid, true);
+    engage(&mut state, spears, far, true);
+    respawn(&mut state, 1);
+    let hold = &state.hostile.battle.live.holds[0];
+    assert_eq!((hold.regiment, hold.file), (spears, far));
+    assert_eq!(hold.kit, kit, "his own kit, not the spear line's");
+    assert_in_rank_with_kit(&state, player);
+}
+
+fn assert_behind(state: &TickState, viewer: EntityId, player: EntityId) {
+    assert_eq!(state.players[&viewer].game_mode, GameMode::Spectator);
+    let hold = &state.hostile.battle.live.holds[0];
+    let facing = state.hostile.battle.formation.regiments[hold.regiment]
+        .spec
+        .facing;
+    let pos = state.entities.pos(state.entities.slot_of(player).unwrap());
+    let at = state.entities.pos(state.entities.slot_of(viewer).unwrap());
+    let behind = [
+        pos[0] - facing[0] * SPECTATOR_BACK,
+        pos[1] + SPECTATOR_UP,
+        pos[2] - facing[1] * SPECTATOR_BACK,
+    ];
+    assert!(
+        (0..3).all(|axis| (at[axis] - behind[axis]).abs() < 1e-3),
+        "spectator at {at:?}, not behind the holder at {pos:?}"
+    );
+}
+
+/// Trial-7: after PovRed's death and respawn CamSpec stayed in the cave where
+/// he died, 230 blocks away, and saw nothing for four minutes. The spectator
+/// bound by `battle spectate` goes behind him again on each respawn and
+/// re-arm.
+#[test]
+fn the_bound_spectator_goes_behind_the_holder_again_after_a_respawn_and_a_rearm() {
+    let (mut state, ids) = staged(&["PovRed", "CamSpec"]);
+    let (player, viewer) = (ids[0], ids[1]);
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(
+        &mut state,
+        &mut changes,
+        BattleCommand::Spectate {
+            name: "CamSpec".into(),
+            target: "PovRed".into(),
+        },
+    )
+    .unwrap();
+    command(&mut state, &mut changes, BattleCommand::Start).unwrap();
+    run_tick(&mut state, &[]);
+    // He flew down after the holder into a cave far from the line.
+    let away = |state: &mut TickState| {
+        let body = state.entities.slot_of(viewer).unwrap();
+        state
+            .entities
+            .set_pos(body, [ORIGIN[0] + 40.0, 20.0, ORIGIN[2] - 40.0]);
+    };
+    away(&mut state);
+    kill(&mut state, 1);
+    run_tick(&mut state, &[]);
+    respawn(&mut state, 1);
+    assert!(!state.hostile.battle.live.holds[0].dead);
+    assert_behind(&state, viewer, player);
+    away(&mut state);
+    let reply = command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    assert!(reply.starts_with("Battle live rearmed: PovRed "), "{reply}");
+    assert_behind(&state, viewer, player);
 }
