@@ -2155,8 +2155,6 @@ fn blueprint_label(ctx: &Ctx, blueprint: &str) -> &'static str {
         (Lang::Ru, "road") => "Дорога",
         (Lang::En, "lamp") => "Street lamp",
         (Lang::Ru, "lamp") => "Фонарь",
-        (Lang::En, "meadow") => "Meadow clearing",
-        (Lang::Ru, "meadow") => "Расчистка луга",
         (Lang::En, _) => "Building",
         (Lang::Ru, _) => "Здание",
     }
