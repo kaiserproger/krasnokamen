@@ -43,7 +43,7 @@ Builders approach a tree's footing within four blocks and clear its trunk and le
 
 ## Builders and supplies
 
-An eligible adult resident can become a Builder; the planner prefers unemployed residents and may borrow eligible miners or lumberjacks, restoring their profession afterwards. A Builder who cannot reach storage can be released for another candidate. Work requires the daytime work shift, ticks 2000–8999, and `mob_griefing` enabled.
+An eligible adult resident can become a Builder; the planner prefers unemployed residents and may borrow eligible miners or lumberjacks, restoring their profession afterwards. A Builder who cannot reach storage can be released for another candidate. A Builder whose project has not advanced a cell in 3000 shift ticks (a hostile mob that never closes in can keep a resident fleeing and returning on the only road to the lot) is released the same way; the replaced Builder is chosen last for the next 24,000 ticks. The watch is runtime only and is not saved. Work requires the daytime work shift, ticks 2000–8999, and `mob_griefing` enabled.
 
 Construction admissions select a settlement every four ticks. One admission performs either a real material transfer or one cell of construction, not both. The Builder batches materials into its real carry slots and walks to the site. For blueprint work, its entire body must be outside the full future footprint and the next cell within **12 blocks** of its feet; perimeter targets are two cells outside the footprint. Missing materials wait for replenishment. Completion checks the resulting certificate.
 
