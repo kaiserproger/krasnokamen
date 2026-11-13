@@ -907,7 +907,7 @@ impl<'a> Network<'a> {
             return None;
         }
         let fence = default_state(state, "minecraft:oak_fence")?;
-        let torch = default_state(state, "minecraft:torch")?;
+        let torch = state.registry.states.torch;
         let air = state.registry.states.air;
         let mut cells = Vec::new();
         for above in y + 1..=y + 3 {
@@ -1161,7 +1161,7 @@ fn column_cells(
 /// stands, `None` when part of it is not loaded.
 fn span_work(state: &TickState, record: &SettlementRecord, span: Span) -> Option<Option<Work>> {
     let anchor = record.anchor;
-    let cobble = default_state(state, "minecraft:cobblestone")?;
+    let cobble = state.registry.states.cobblestone;
     let x_fixed = span.min[0] == span.max[0];
     let facing = match (x_fixed, span.min[0] > anchor[0], span.min[1] > anchor[2]) {
         (true, true, _) => "east",
@@ -1206,8 +1206,8 @@ fn well_cells(state: &TickState, record: &SettlementRecord, span: Span) -> Optio
         .filter(|&column| column != [cx, cz])
         .collect();
     state.world.physics_block_at(cx, anchor_y, cz)?;
-    let cobble = default_state(state, "minecraft:cobblestone")?;
-    let water = default_state(state, "minecraft:water")?;
+    let cobble = state.registry.states.cobblestone;
+    let water = state.registry.states.water;
     let band = construction::SITE_BAND;
     let source = (anchor_y - band..=anchor_y + band)
         .find(|&y| state.world.physics_block_at(cx, y, cz) == Some(water));
@@ -1273,15 +1273,14 @@ fn well_work(state: &TickState, record: &SettlementRecord) -> Option<Work> {
     for span in well_spans(record.anchor) {
         match well_cells(state, record, span) {
             Some(None) => return None,
-            Some(Some(work)) => {
+            Some(Some(work))
                 if best
                     .as_ref()
-                    .is_none_or(|known| work.cells.len() < known.cells.len())
-                {
-                    best = Some(work);
-                }
+                    .is_none_or(|known| work.cells.len() < known.cells.len()) =>
+            {
+                best = Some(work);
             }
-            None => {}
+            Some(Some(_)) | None => {}
         }
     }
     best

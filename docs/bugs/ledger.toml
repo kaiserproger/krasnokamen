@@ -2535,7 +2535,19 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "Owner expectation (issue 1, ISSUE-1-17 infrastructure; ISSUE-1-09 fortification buildings). docs/settlements/construction.md#owner-build-requests: a wall order builds a wall section with Builders, and is neither certification of player blocks nor an automatically enclosed perimeter or gate system. docs/settlements/construction.md#planning-and-streets: the planner adds one wall from 10 residents and one tower from 8 (missing kinds only) and there is no automatic water placement for a well. crates/mc-core/assets/blueprints has barracks, farm, house, lumber_camp, mason, mine, shepherd, storage, wall (2 levels), watch_tower (2 levels) and no gate blueprint; BuildingKind::Gate (crates/mc-core/src/settlements/buildings.rs) is certification-only. Remaining wish: the settlement walls itself in with gated openings at the street grid (layout.rs roads), and builds a well"
-regression = []
+regression = [
+    "cargo:mc-core:settlements::construction::fortification_tests::ten_residents_wall_the_town_in_with_four_gates_and_one_well",
+    "cargo:mc-core:settlements::construction::fortification_tests::a_gatehouse_stands_on_a_road_that_was_paved_first",
+    "cargo:mc-core:settlements::construction::fortification_tests::the_free_water_source_and_door_halves_pass_ledger_validation",
+    "cargo:mc-core:settlements::construction::fortification_tests::fewer_than_ten_residents_or_no_stock_start_no_fortification",
+    "cargo:mc-core:settlements::construction::fortification_tests::a_column_over_water_stays_a_gap_and_the_rest_of_the_wall_stands",
+    "cargo:mc-core:settlements::layout::tests::perimeter_closes_the_square_wall_line_with_a_gatehouse_on_each_road",
+    "cargo:mc-core:settlements::layout::tests::well_corners_are_open_plaza_squares_without_a_lamp",
+    "harness:buildings-qa:perimeter.well_built",
+    "harness:buildings-qa:perimeter.gates_built",
+    "harness:buildings-qa:perimeter.wall_built",
+    "harness:buildings-qa:perimeter.enclosed",
+]
 failing_first = "not recorded"
 
 [[bug]]
