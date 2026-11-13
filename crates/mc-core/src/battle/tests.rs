@@ -1078,7 +1078,7 @@ fn melee_contact(battle: &BattleState) -> bool {
     })
 }
 
-fn native_battle_losses(state: &crate::tick::TickState) -> ([usize; 2], [usize; 2], usize) {
+pub(super) fn native_battle_losses(state: &crate::tick::TickState) -> ([usize; 2], [usize; 2], usize) {
     let mut dead = [0; 2];
     let mut removed = [0; 2];
     let mut native_wounds = 0;
