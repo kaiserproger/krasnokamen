@@ -1009,6 +1009,22 @@ class LedgerToolTests(unittest.TestCase):
         self.assertEqual([settings for _, _, settings in seen], [False, False])
         self.assertEqual((caller / 'client-settings.json').read_text(), '{"fov": 110}')
 
+    def test_a_caller_root_without_content_links_the_client_template(self):
+        # A worktree's own XDG root starts empty; the run must still get the client content.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        base = Path(directory.name)
+        template = base / 'template'
+        for name in ('facts', 'resources/assets', 'data/vanilla'):
+            (template / name).mkdir(parents=True)
+        (base / 'empty-xdg').mkdir()
+        (base / 'promote').mkdir()
+        ctx = profiles.ProfileContext(base / 'promote')
+        env = {'XDG_DATA_HOME': str(base / 'empty-xdg'), 'KRASNOKAMEN_CLIENT_DATA_DIR': str(template / 'data/vanilla')}
+        with patch.dict(os.environ, env):
+            root = regressions._fresh_client_data(ctx, env, 'regressions-client-0.log')
+        self.assertEqual((root / 'krasnokamen-client/facts').resolve(), (template / 'facts').resolve())
+
     def uncommitted_fix(self):
         """HEAD re-broken, then an uncommitted fix (its patch saved to a file) with an untracked test."""
         root = self.scratch(with_fix_commit=False)

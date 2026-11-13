@@ -395,10 +395,14 @@ def _fresh_client_data(ctx, env, log_name):
 
     Windowed runs inherit the caller's XDG root, so a ledger probe or promote running many client
     gates in a row would share `client-settings.json` between them
-    (docs/development/real-client-gates.md). The content directories are linked, never copied."""
-    from .preflight import CLIENT_CONTENT_DIRS
+    (docs/development/real-client-gates.md). The content directories are linked, never copied:
+    from the caller's root when it has them, otherwise from the KRASNOKAMEN_CLIENT_DATA_DIR
+    template that headless runs use."""
+    from .preflight import CLIENT_CONTENT_DIRS, client_template
 
     source = Path(env.get('XDG_DATA_HOME') or Path.home() / '.local/share') / 'krasnokamen-client'
+    if not (source / 'facts').is_dir() and env.get('KRASNOKAMEN_CLIENT_DATA_DIR'):
+        source = client_template()
     root = ctx.artifact_dir / f'xdg-{Path(log_name).stem}'
     (root / 'krasnokamen-client').mkdir(parents=True)
     for name in CLIENT_CONTENT_DIRS:
