@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import tomllib
@@ -927,6 +928,50 @@ class LedgerToolTests(unittest.TestCase):
         self.assertEqual(ledger.run_refs(ctx, [ref], root, False)[ref]['state'], ledger.NEEDS_CLIENT)
         with patch.object(regressions, '_release_server', side_effect=RuntimeError('no build')):
             self.assertEqual(ledger.run_refs(ctx, [ref], root, True)[ref]['state'], ledger.UNRUNNABLE)
+
+    def test_client_receipts_of_a_removed_control_tree_stay_readable(self):
+        # ledger promote runs its control and restore in a temporary worktree and removes it; the
+        # receipt each ref records must still be there afterwards, red or green.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        base = Path(directory.name)
+        tree = base / 'ledger-control-candidate'
+        receipts = {}
+        def run_command(argv, ctx, name, cwd=None, env=None):
+            artifact = tree / '.analysis/validation' / f'run-{len(ctx.logs)}'
+            (artifact / 'world/region').mkdir(parents=True)
+            (artifact / 'world/region/r.0.0.mca').write_bytes(b'region')
+            (artifact / 'screenshots').mkdir()
+            (artifact / 'screenshots/site.png').write_bytes(b'png')
+            (artifact / 'result.json').write_text(json.dumps(receipts['next']))
+            (ctx.artifact_dir / name).write_text(f'[harness] artifact={artifact}\n')
+            ctx.logs.append(name)
+            if receipts['next']['status'] != 'passed':
+                raise RuntimeError('exited 1')
+        def release_server(ctx, profiles_module, tree=None):
+            ctx.client_evidence['regressions_server'] = {'sha256': 'abc'}
+            return base / 'server'
+        ref = 'harness:village-qa:door_walk'
+        (base / 'promote').mkdir()
+        ctx = profiles.ProfileContext(base / 'promote')
+        passing = {'settlement_acceptance': {'behaviour': {'door_walk': 'PASS'}}}
+        failing = {'settlement_acceptance': {'behaviour': {'door_walk': 'FAIL'}}}
+        cases = [({'status': 'passed', 'details': {'server_binary_sha256': 'abc', 'scenario': passing}}, ledger.GREEN),
+                 ({'status': 'failed', 'details': {'scenario': failing}}, ledger.RED)]
+        with patch.object(profiles, '_run_command', run_command), patch.object(regressions, '_release_server', release_server), \
+                patch.object(ledger, 'tree_fingerprint', return_value={'head': 'h', 'sha256': 's'}), \
+                patch.object(ledger, '_register_server', lambda sha, tree: None):
+            for receipt, state in cases:
+                tree.mkdir()
+                receipts['next'] = receipt
+                entry = ledger.run_refs(ctx, [ref], tree, True)[ref]
+                shutil.rmtree(tree)
+                self.assertEqual(entry['state'], state)
+                kept = Path(entry['receipt'])
+                self.assertTrue(kept.is_relative_to(ctx.artifact_dir), kept)
+                self.assertEqual(json.loads(kept.read_text())['status'], receipt['status'])
+                self.assertTrue((kept.parent / 'screenshots/site.png').is_file())
+                self.assertFalse((kept.parent / 'world').exists())
 
     def uncommitted_fix(self):
         """HEAD re-broken, then an uncommitted fix (its patch saved to a file) with an untracked test."""
