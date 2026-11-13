@@ -97,6 +97,9 @@ pub(crate) struct Cache {
     misses: u64,
     denied: HashSet<ChunkPos>,
     worker: Option<(mpsc::SyncSender<ChunkPos>, mpsc::Receiver<Generated>)>,
+    /// The worker owns a clone of the world's chunk source and with it the
+    /// native store, so the cache joins it on drop rather than detaching it.
+    thread: Option<std::thread::JoinHandle<()>>,
     trusted: Option<bool>,
 }
 
@@ -107,6 +110,20 @@ impl std::fmt::Debug for Cache {
             .field("pending", &self.pending.len())
             .field("trusted", &self.trusted)
             .finish()
+    }
+}
+
+impl Drop for Cache {
+    fn drop(&mut self) {
+        // Closing both channels stops the worker at its next receive or send,
+        // after at most the chunk it is generating; only then is the store
+        // released, so a reopen right after a stop finds it closed.
+        self.worker = None;
+        if let Some(thread) = self.thread.take()
+            && thread.join().is_err()
+        {
+            tracing::error!("settlement forest evidence worker panicked");
+        }
     }
 }
 
@@ -146,12 +163,16 @@ impl Cache {
                         }
                     }
                 });
-            if let Err(error) = spawn {
-                tracing::error!(%error, "settlement forest evidence worker could not start");
-                self.trusted = Some(false);
-                return None;
-            }
+            let thread = match spawn {
+                Ok(thread) => thread,
+                Err(error) => {
+                    tracing::error!(%error, "settlement forest evidence worker could not start");
+                    self.trusted = Some(false);
+                    return None;
+                }
+            };
             self.worker = Some((send, receive));
+            self.thread = Some(thread);
         }
         let (send, receive) = self.worker.as_ref().expect("forest worker");
         while let Ok((pos, chunk, micros)) = receive.try_recv() {
@@ -371,6 +392,29 @@ pub(crate) fn drops(
     if !clearable(state, at) {
         return Err(mc_script::ScriptOperationFailure::Blocked);
     }
+    roll(state, at, block)
+}
+
+/// Vanilla loot of a surface plant cleared without a tool: short grass drops
+/// wheat seeds one time in eight. Before its first farm a settlement has no
+/// other seed source, and that farm's wheat cells cost seeds. Air and blocks
+/// outside the clearable plant veneer roll nothing.
+pub(crate) fn plant_drops(
+    state: &TickState,
+    at: [i32; 3],
+    block: u32,
+) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
+    if block == state.registry.states.air || !super::construction::clearable(state, block) {
+        return Ok(Vec::new());
+    }
+    roll(state, at, block)
+}
+
+fn roll(
+    state: &TickState,
+    at: [i32; 3],
+    block: u32,
+) -> Result<Vec<mc_data::ItemStack>, mc_script::ScriptOperationFailure> {
     let seed = at
         .into_iter()
         .fold(state.world.seed() as u64 ^ state.tick, |seed, value| {

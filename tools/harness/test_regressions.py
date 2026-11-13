@@ -36,6 +36,14 @@ class RegressionLedgerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 regressions._profile_command(profile, 'walk_to_village')
 
+    def test_civilization_ref_runs_the_default_seed_with_the_long_timeout(self):
+        command = regressions._profile_command('civilization-seed-qa', 'new_house')
+        self.assertEqual(command[-2:], ['--timeout-seconds', '7200'])
+        for name in ('VILLAGE_AUTONOMY_SEED', 'VILLAGE_AUTONOMY_CENTER'):
+            with patch.dict('os.environ', {name: '100'}):
+                with self.assertRaisesRegex(ValueError, name):
+                    regressions._profile_command('civilization-seed-qa', 'new_house')
+
     def test_building_verdict_is_keyed_by_blueprint(self):
         command = regressions._profile_command('buildings-qa', 'wall.L1_built')
         # Only the wall is built and checked; the other blueprints neither run nor decide this verdict.

@@ -1,0 +1,34 @@
+{
+  "id": "SETTLEMENT-FOREST-WORKER-DETACHED-HOLDS-STORE",
+  "verdict": "promoted",
+  "fix_commit": "fb4c1a52",
+  "fix_commit_full": "fb4c1a52278e70086a1f1343e431163deb33fa66",
+  "promoted_at": "2026-11-13T02:09:37+00:00",
+  "tree_head": "fa9c5c2bed29094da38c527249dbd9215fbaeef8",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/plugin_structures/settlement_builds.rs",
+    "crates/mc-core/src/settlements/forestry.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/settlements/construction_site_tests.rs",
+    "crates/mc-core/src/settlements/forestry_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:settlements::forestry::tests::dropping_the_world_joins_the_forest_worker_and_releases_the_native_store": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:settlements::forestry::tests::dropping_the_world_joins_the_forest_worker_and_releases_the_native_store": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/Issue1Housing/.analysis/validation/20261113T020647-ledger-promote-oqa0bhqk"
+}

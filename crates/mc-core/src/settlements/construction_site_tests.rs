@@ -230,6 +230,59 @@ fn trapped_builder_on_shift_is_replaced_by_a_resident_who_reaches_storage() {
     assert_eq!(profession(&state, free), Profession::Builder);
 }
 
+/// Seed 24 (CIV-SEED24-STALLED-PROJECT-HOLDS-SLOT): a stationary zombie eight
+/// blocks from the only road to the Lumber camp lot made its builder flee and
+/// return for 15,000 ticks at 35 of 239 cells, while the funded House waited
+/// for the single project slot. A builder that has not advanced the project in
+/// 3000 shift ticks is replaced by another resident, and a replaced builder is
+/// chosen last for a day.
+#[test]
+fn builder_that_cannot_advance_the_project_is_replaced_and_chosen_last() {
+    use crate::settlements::allocator::tests::villager;
+    let (mut state, id, stuck) = fixture();
+    fund(&mut state, "storage", 1);
+    super::tests::start(&mut state, id, "storage", 1, None);
+    let recruit = |state: &mut TickState, x: f64| {
+        let slot = villager(state, [x, 201.0, 4.5]);
+        let entity = state.entities.body(slot).id;
+        crate::settlements::bind(state, id, entity).unwrap();
+        slot
+    };
+    let second = recruit(&mut state, 4.5);
+    let third = recruit(&mut state, 6.5);
+    // The planning cadence: one pass every 20 ticks of shift (day time 3000).
+    let pass = |state: &mut TickState, ticks: u64| {
+        for _ in 0..ticks / 20 {
+            state.tick += 20;
+            assign_builder(state, id);
+        }
+    };
+    state.tick = 100;
+    assign_builder(&mut state, id);
+    assert_eq!(profession(&state, stuck), Profession::Builder);
+    assert_eq!(profession(&state, second), Profession::None);
+    pass(&mut state, BUILDER_STALL_SHIFT_TICKS - 40);
+    assert_eq!(
+        profession(&state, stuck),
+        Profession::Builder,
+        "less than the stall window without progress is not a stall"
+    );
+    // Night ticks are not shift ticks: nobody is expected to build.
+    state.day_time = 15_000;
+    pass(&mut state, 2 * BUILDER_STALL_SHIFT_TICKS);
+    assert_eq!(profession(&state, stuck), Profession::Builder);
+    state.day_time = 3000;
+    pass(&mut state, 60);
+    assert_eq!(profession(&state, stuck), Profession::None);
+    assert_eq!(profession(&state, second), Profession::Builder);
+    // The replacement stalls too: the resident not yet tried takes over, not
+    // the first builder again.
+    pass(&mut state, BUILDER_STALL_SHIFT_TICKS + 20);
+    assert_eq!(profession(&state, stuck), Profession::None);
+    assert_eq!(profession(&state, second), Profession::None);
+    assert_eq!(profession(&state, third), Profession::Builder);
+}
+
 /// The re-check never costs a working builder its slot, and an off-shift
 /// builder (asleep behind a closed door at night) is left alone.
 #[test]
@@ -852,6 +905,75 @@ fn street_work_releases_its_builder_after_completion() {
     assert_eq!(
         worker.inventory, before,
         "free paving cannot lose or mint carry"
+    );
+}
+
+/// Seed-24 civilization runs ufgbv77d and fx4gdz87: the Farm stayed unfunded
+/// on 'Wheat Seeds 0/12 — needs a farm' while the bread ran out, so no second
+/// birth. A farm's wheat cells cost seeds that only a farm produced. Builders
+/// clearing plants now get their vanilla loot, as felled trees do: short grass
+/// drops wheat seeds one time in eight into real storage.
+#[test]
+fn street_work_clearing_short_grass_stores_its_vanilla_wheat_seeds() {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    let anchor = state.settlements.get(id).unwrap().anchor;
+    let grass = crate::settlements::allocator::tests::block(&state, "minecraft:grass_block", &[]);
+    let plant = crate::settlements::allocator::tests::block(&state, "minecraft:short_grass", &[]);
+    for x in -16i32..32 {
+        for z in -16i32..32 {
+            if layout::cell(anchor, x, z) == layout::Cell::Road {
+                state.world.set_block(x, 200, z, grass);
+                state.world.set_block(x, 201, z, plant);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    fund(&mut state, "storage", 1);
+    request_build(&mut state, id, "storage").unwrap();
+    super::tests::complete(&mut state, id, slot);
+    plan(&mut state, id);
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .unwrap()
+            .blueprint,
+        layout::ROAD
+    );
+    let seeds = |state: &TickState| -> i32 {
+        let item = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:wheat_seeds").unwrap())
+            .unwrap();
+        state
+            .block_entities
+            .values()
+            .flat_map(|block| &block.slots)
+            .filter(|stack| stack.item_id == item)
+            .map(|stack| stack.count)
+            .sum()
+    };
+    let before = seeds(&state);
+    super::tests::complete(&mut state, id, slot);
+    let cleared = (-16i32..32)
+        .flat_map(|x| (-16i32..32).map(move |z| (x, z)))
+        .filter(|&(x, z)| {
+            layout::cell(anchor, x, z) == layout::Cell::Road
+                && state.world.block_at(x, 201, z) == Some(state.registry.states.air)
+        })
+        .count();
+    assert!(
+        cleared >= 16,
+        "the street cleared its short grass ({cleared} columns)"
+    );
+    assert!(
+        seeds(&state) > before,
+        "clearing {cleared} short grass stored no wheat seeds"
     );
 }
 

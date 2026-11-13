@@ -376,6 +376,7 @@ pub(super) fn debit(
         .and_then(|record| record.project.as_ref())
         .is_some_and(|project| project.building.is_none());
     let mut drops = Vec::new();
+    let mut loot = Vec::new();
     if preparing {
         for cell in cells
             .iter()
@@ -387,10 +388,16 @@ pub(super) fn debit(
                 .ok_or(Failure::Unloaded)?;
             if crate::settlements::forestry::tree(state, block) {
                 drops.extend(crate::settlements::forestry::drops(state, cell.at, block)?);
+            } else {
+                loot.extend(
+                    crate::settlements::forestry::plant_drops(state, cell.at, block)?
+                        .into_iter()
+                        .map(|stack| (cell.at, stack)),
+                );
             }
         }
     }
-    if required.is_empty() && drops.is_empty() {
+    if required.is_empty() && drops.is_empty() && loot.is_empty() {
         return Ok(());
     }
     let before = inventory::load(state, &inventory::Endpoint::VillagerCarry { uuid })?;
@@ -421,12 +428,24 @@ pub(super) fn debit(
     if before.slots != after {
         changes.push(inventory::Change { before, after });
     }
-    if !drops.is_empty() {
+    let mut spilled = Vec::new();
+    if !drops.is_empty() || !loot.is_empty() {
         let images = source_images(state, id);
         let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
         for stack in drops {
             if !crate::settlements::construction_crafting::add_stack(state, &mut post, &stack) {
                 return Err(Failure::InsufficientItems);
+            }
+        }
+        // Plant loot is new, not conserved stock: what storage cannot hold
+        // drops at the cleared cell as in vanilla, rather than stalling the
+        // clear (and the only project slot) on a full chest.
+        for (at, stack) in loot {
+            let mut fitted = post.clone();
+            if crate::settlements::construction_crafting::add_stack(state, &mut fitted, &stack) {
+                post = fitted;
+            } else {
+                spilled.push((at, stack));
             }
         }
         changes.extend(images.into_iter().zip(post).filter_map(|(before, after)| {
@@ -436,6 +455,17 @@ pub(super) fn debit(
     // Loot credit and material debit precede the infallible native block edit
     // in the same tick transaction. Full storage leaves the tree untouched.
     inventory::commit(state, changes)?;
+    for (at, stack) in spilled {
+        crate::tick::spawn_item_entity(
+            state,
+            [
+                f64::from(at[0]) + 0.5,
+                f64::from(at[1]) + 0.5,
+                f64::from(at[2]) + 0.5,
+            ],
+            stack,
+        );
+    }
     Ok(())
 }
 

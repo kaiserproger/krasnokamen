@@ -1694,6 +1694,17 @@ fn release_trapped_builder(state: &mut TickState, id: SettlementId) -> bool {
     {
         return true;
     }
+    !release_incumbent(state, id, slot)
+}
+
+/// Detach the builder in `slot` from the project, returning a borrowed gatherer
+/// to its profession. False when the builder carries project stock it must
+/// first deliver.
+fn release_incumbent(
+    state: &mut TickState,
+    id: SettlementId,
+    slot: crate::entities::EntitySlot,
+) -> bool {
     let borrowed = state
         .settlements
         .get(id)
@@ -1722,7 +1733,99 @@ fn release_trapped_builder(state: &mut TickState, id: SettlementId) -> bool {
         record.revision = record.revision.saturating_add(1);
     }
     crate::villager::sync_appearance(state, slot);
-    !released
+    released
+}
+
+/// Builders work only 2000..9000 of the day. A project whose work counter
+/// stands still for this many shift ticks (150 s of game time) has a builder
+/// that cannot make progress (seed 24: a stationary zombie within eight blocks
+/// of the only road to the lot kept the builder fleeing and returning for
+/// 15,000 ticks, 35 of 239 cells, and held the single project slot).
+const BUILDER_STALL_SHIFT_TICKS: u64 = 3_000;
+/// The replaced builder is chosen last for this long.
+const BUILDER_SHUN_TICKS: u64 = 24_000;
+/// Longest gap between two planning passes counted as shift time.
+const BUILDER_WATCH_STEP: u64 = 100;
+
+/// Runtime watch of the active project's work counter; derived, never persisted.
+#[derive(Debug)]
+pub(crate) struct BuilderWatch {
+    progress: (String, u32, u64),
+    seen: u64,
+    /// Shift ticks without progress.
+    idle: u64,
+    /// Replaced builders and the tick until which they are chosen last.
+    shunned: Vec<(uuid::Uuid, u64)>,
+}
+
+/// Replace the builder of a running project that has not advanced a cell for
+/// [`BUILDER_STALL_SHIFT_TICKS`] of shift: another resident takes it, whose
+/// route may not cross whatever stopped the first.
+fn release_stalled_builder(state: &mut TickState, id: SettlementId) {
+    let Some(project) = state
+        .settlements
+        .get(id)
+        .and_then(|record| record.project.clone())
+    else {
+        state.settlements.builder_watch.remove(&id);
+        return;
+    };
+    let Ok(snapshot) = executor::status(state, id, &project.structure) else {
+        return;
+    };
+    let progress = (
+        project.structure.clone(),
+        snapshot.current_stage_index,
+        snapshot.completed_work_units,
+    );
+    let tick = state.tick;
+    let on_shift = (2_000..9_000).contains(&state.day_time.rem_euclid(24_000));
+    let watch = state
+        .settlements
+        .builder_watch
+        .entry(id)
+        .or_insert_with(|| BuilderWatch {
+            progress: progress.clone(),
+            seen: tick,
+            idle: 0,
+            shunned: Vec::new(),
+        });
+    let elapsed = tick.saturating_sub(watch.seen).min(BUILDER_WATCH_STEP);
+    watch.seen = tick;
+    if watch.progress != progress {
+        watch.progress = progress;
+        watch.idle = 0;
+        return;
+    }
+    if snapshot.pause_reason.is_some() || !on_shift {
+        return;
+    }
+    watch.idle += elapsed;
+    if watch.idle < BUILDER_STALL_SHIFT_TICKS {
+        return;
+    }
+    watch.idle = 0;
+    let incumbent = residents(state, id).find(|&slot| {
+        state.entities.body(slot).alive
+            && state.entities.row(slot).villager.as_ref().is_some_and(|v| {
+                v.settlement == Some(id)
+                    && v.age >= 0
+                    && v.conversion_time.is_none()
+                    && v.data.profession == Profession::Builder
+            })
+    });
+    let Some(slot) = incumbent else {
+        return;
+    };
+    let uuid = state.entities.row(slot).uuid;
+    if release_incumbent(state, id, slot)
+        && let Some(watch) = state.settlements.builder_watch.get_mut(&id)
+    {
+        watch.shunned.retain(|&(_, until)| tick < until);
+        watch
+            .shunned
+            .push((uuid, tick.saturating_add(BUILDER_SHUN_TICKS)));
+    }
 }
 
 fn resident_simulated(state: &TickState, slot: crate::entities::EntitySlot) -> bool {
@@ -1781,6 +1884,7 @@ fn restore_borrowed_gatherer(state: &mut TickState, id: SettlementId, profession
 }
 
 fn assign_builder(state: &mut TickState, id: SettlementId) {
+    release_stalled_builder(state, id);
     if release_trapped_builder(state, id) {
         return;
     }
@@ -1847,7 +1951,16 @@ fn assign_builder(state: &mut TickState, id: SettlementId) {
                 _ => None,
             };
             if let Some(priority) = priority {
-                candidates.push((priority, slot));
+                let shunned = state
+                    .settlements
+                    .builder_watch
+                    .get(&id)
+                    .is_some_and(|watch| {
+                        watch.shunned.iter().any(|&(uuid, until)| {
+                            uuid == state.entities.row(slot).uuid && state.tick < until
+                        })
+                    });
+                candidates.push((priority + if shunned { 10 } else { 0 }, slot));
             }
         }
     }

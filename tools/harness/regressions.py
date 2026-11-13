@@ -119,6 +119,7 @@ _PROFILE_VERDICT_RUN = {
     ('settlement-map-qa', 'localized_text'): ('java', ['--', '--language', 'ru_ru']),
 }
 _PROFILE_RUN_OPTIONS = {
+    'civilization-seed-qa': ['--timeout-seconds', '7200'],
     'settlement-map-qa': ['--timeout-seconds', '3600'],
 }
 _PROFILE_VERDICTS = {
@@ -145,7 +146,8 @@ _PROFILE_OVERRIDES = {
                      'BUILDINGS_QA_STOP_AFTER_ORDER'),
     'army-qa': ('KRASNOKAMEN_ARMY_QA_PHASE', 'KRASNOKAMEN_ARMY_QA_PLUGINS'),
     'village-autonomy-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE'),
-    'civilization-seed-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE'),
+    'civilization-seed-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE',
+                             'VILLAGE_AUTONOMY_SEED', 'VILLAGE_AUTONOMY_CENTER'),
 }
 
 

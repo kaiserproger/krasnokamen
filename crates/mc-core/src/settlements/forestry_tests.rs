@@ -392,11 +392,9 @@ fn forest_evidence_evicts_before_exceeding_payload_budget() {
     };
     results.send((first, Some(evidence()), 0)).unwrap();
     results.send((second, Some(evidence()), 0)).unwrap();
-    let mut cache = Cache {
-        worker: Some((requests, received)),
-        trusted: Some(true),
-        ..Default::default()
-    };
+    let mut cache = Cache::default();
+    cache.worker = Some((requests, received));
+    cache.trusted = Some(true);
     assert_eq!(
         cache.block(&state, [16, 80, 0]),
         Some(state.registry.states.air)
@@ -600,6 +598,37 @@ fn real_core_reopen_trusts_native_contract_and_rejects_imported_chunk() {
         "mismatched generation contract fails closed"
     );
 }
+
+/// SETTLEMENT-FOREST-WORKER-DETACHED-HOLDS-STORE: the evidence worker owns a
+/// clone of the world's chunk source. Detached, it kept the native store open
+/// after its TickState dropped until it had generated every queued chunk, so a
+/// reopen in the same process right after a stop could find it still open.
+#[test]
+fn dropping_the_world_joins_the_forest_worker_and_releases_the_native_store() {
+    let directory = tempfile::tempdir().unwrap();
+    let config = crate::CoreConfig::new(directory.path().to_path_buf(), 24);
+    crate::Core::open(config.clone()).unwrap().shutdown();
+    let state =
+        crate::core::recover_dimension_state(&config, crate::dimensions::Dimension::Overworld)
+            .unwrap();
+    let store = Arc::downgrade(state.world.chunk_source().native.as_ref().unwrap());
+    {
+        let mut cache = state.settlements.forest.lock().unwrap();
+        for x in 7..11 {
+            for z in -15..-11 {
+                assert_eq!(cache.block(&state, [x * 16, 80, z * 16]), None);
+            }
+        }
+        assert_eq!(cache.pending.len(), 16, "real regenerations are queued");
+    }
+    drop(state);
+    assert!(
+        store.upgrade().is_none(),
+        "the forest worker still holds the native store after its world dropped"
+    );
+    crate::Core::open(config).unwrap().shutdown();
+}
+
 #[test]
 fn player_log_under_natural_canopy_is_protected_with_empty_or_expired_history() {
     let (mut state, _, _, _, root, _) = forest();

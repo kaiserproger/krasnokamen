@@ -63,6 +63,10 @@ OWNER_ORDER_BLUEPRINT = "storage"
 # ("x,y,z"); the assignment profile pins seed 87122, center (-461,~70,350).
 SPAWN = (128, 69, 0)
 VILLAGE_CENTER = _parse_center(QA_VILLAGE, (120, 70, 7))
+# civilization-seed-qa observes seed 24 (docs/settlements/acceptance-gates.md#civilization-observation)
+# unless the operator names another seed or center, so a ledger ref, which cannot carry env, reaches it.
+CIVILIZATION_SEED = 24
+CIVILIZATION_CENTER = (136, 70, -216)
 DIALOG_CLASS = "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen"
 
 # Storage L1 base needs (authored blueprint materials): these must arrive via
@@ -195,24 +199,34 @@ def _claim_via_dialog(
     return True
 
 
+CONTAINER_CLASS = "net.minecraft.client.gui.screens.inventory.ContainerScreen"
+# Civil settlement menu slots (crates/mc-core/src/settlements/ui_menus.rs: ACTION, and the Construction
+# page's clock icon that opens the project status dialog).
+PROJECTS_STATUS_SLOT = 52
+CONSTRUCTION_STATUS_SLOT = 10
+
+
+def _click_menu_slot(probe: ProbeSteps, slot: int, title: str) -> dict[str, Any]:
+    probe.call("minecraft_click_container_slot", {
+        "slot": slot, "button": "primary", "timeout_seconds": probe.remaining()})
+    return probe.wait(
+        lambda state: (state.get("screen") or {}).get("title") == title,
+        f"menu_slot_{slot}_opens_{title}", timeout_seconds=30.0)
+
+
 def _project_status(probe: ProbeSteps, capture: Callable[[], Any] | None = None) -> dict[str, Any]:
-    """Observe the Project status dialog (live progress lives there, not on the Projects grid)."""
-    grid = _send(probe, "settlement menu projects")
-    screen = grid.get("screen") or {}
-    if screen.get("class") != DIALOG_CLASS:
-        return grid
-    probe.call("minecraft_click_screen_button", {
-        "expected_screen_class": DIALOG_CLASS, "expected_title": screen.get("title", ""),
-        "button_label": "Status",
-    })
-    state = probe.observe()
-    for _ in range(10):
-        now = state.get("screen") or {}
-        # The old dialog closes before the Status dialog arrives; wait for the new one.
-        if now.get("class") == DIALOG_CLASS and now.get("title") != screen.get("title"):
-            break
-        probe.call("minecraft_wait_ticks", {"ticks": 20})
-        state = probe.observe()
+    """Observe the project status dialog: Projects menu, Status, Construction page, status icon."""
+    _send(probe, "settlement menu projects")
+    state = probe.wait(
+        lambda observed: (observed.get("screen") or {}).get("class") == CONTAINER_CLASS
+        and (observed.get("container") or {}).get("slot_count") == 90,
+        "projects_menu_open", timeout_seconds=30.0)
+    construction = _click_menu_slot(probe, PROJECTS_STATUS_SLOT, "Construction")
+    probe.call("minecraft_click_container_slot", {
+        "slot": CONSTRUCTION_STATUS_SLOT, "button": "primary", "timeout_seconds": probe.remaining()})
+    state = probe.wait(
+        lambda observed: (observed.get("screen") or {}).get("class") == DIALOG_CLASS,
+        "project_status_dialog_open", timeout_seconds=30.0)
     if capture is not None:
         capture()
     probe.call("minecraft_close_screen", {})
@@ -581,7 +595,10 @@ def _birth_snapshot(ctx: ProfileContext, binary: Path, expected_hash: str, artif
 
 
 def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = False) -> dict[str, Any]:
+    global SEED, VILLAGE_CENTER
     if civilization:
+        if not os.environ.get("VILLAGE_AUTONOMY_SEED") and not QA_VILLAGE:
+            SEED, VILLAGE_CENTER = CIVILIZATION_SEED, CIVILIZATION_CENTER
         from . import civilization_seed_qa
         ctx.client_evidence["verdicts"] = {**dict.fromkeys(civilization_seed_qa.STAGES, False), "all": False}
         ctx.client_evidence["verdict_limitations"] = {"births": civilization_seed_qa.BIRTHS_LIMITATION}
@@ -1718,8 +1735,8 @@ def _project_progress(observed: dict[str, Any]) -> dict[str, Any] | None:
         if node.get("id", "").startswith("dialog/body/")
     )
     match = re.search(
-        r"(?m)^(.+?) · (?:level|уровень) (\d+) · (\d+)/(\d+)\n"
-        r"(?:Site|Место): (-?\d+), (-?\d+), (-?\d+)(?:\n|$)", body,
+        r"(?m)^(.+?) L(\d+) · .+\n(\d+)/(\d+)\n"
+        r"(-?\d+) (-?\d+) (-?\d+)(?:\n|$)", body,
     )
     if match is None:
         return None

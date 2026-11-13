@@ -144,7 +144,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
     def test_project_progress_comes_from_live_projects_dialog(self) -> None:
         observed = {"ui_nodes": [{
             "id": "dialog/body/0",
-            "label": "Mason's workshop · level 1 · 5/100\nSite: -12, 70, 24",
+            "label": "Mason's workshop L1 · Building\n5/100\n-12 70 24",
         }]}
         self.assertEqual(qa._project_progress(observed), {
             "blueprint": "mason", "level": 1, "done": 5, "total": 100, "origin": [-12, 70, 24],
@@ -160,7 +160,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
             ("Street lamp", "lamp", "level", "Site"), ("Фонарь", "lamp", "уровень", "Место"),
         ):
             observed = {"ui_nodes": [{
-                "id": "dialog/body/0", "label": f"{label} · {level} 1 · 7/42\n{site}: 7, 200, 10",
+                "id": "dialog/body/0", "label": f"{label} L1 · Building\n7/42\n7 200 10",
             }]}
             with self.subTest(label=label):
                 self.assertEqual(qa._project_progress(observed), {
@@ -170,7 +170,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
         # retain it without guessing which blueprint it denotes.
         for label, level, site in (("Building", "level", "Site"), ("Здание", "уровень", "Место")):
             observed = {"ui_nodes": [{
-                "id": "dialog/body/0", "label": f"{label} · {level} 1 · 1/9\n{site}: 1, 2, 3",
+                "id": "dialog/body/0", "label": f"{label} L1 · Building\n1/9\n1 2 3",
             }]}
             self.assertEqual(qa._project_progress(observed), {
                 "blueprint": "unlabelled", "label": label, "level": 1,
@@ -178,11 +178,11 @@ class VillageAutonomyQaTests(unittest.TestCase):
             })
         with self.assertRaisesRegex(RuntimeError, "'Mystery'"):
             qa._project_progress({"ui_nodes": [{
-                "id": "dialog/body/0", "label": "Mystery · level 1 · 1/9\nSite: 1, 2, 3",
+                "id": "dialog/body/0", "label": "Mystery L1 · Building\n1/9\n1 2 3",
             }]})
 
     def test_road_restart_subject_records_the_street_plan_before_restart(self) -> None:
-        status = {"ui_nodes": [{"id": "dialog/body/0", "label": "Road · level 1 · 5/42\nSite: 7, 200, 10"}]}
+        status = {"ui_nodes": [{"id": "dialog/body/0", "label": "Road L1 · Building\n5/42\n7 200 10"}]}
         layout = ("Roads: 40/120 columns reachable on foot from the bell; 0/3 reachable stretches paved."
                   "\nNext street work: pave road x 7..9 z 10..23.")
         with patch.object(qa, "_project_status", return_value=status), patch.object(
@@ -242,7 +242,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
     def test_planner_diagnostic_reads_status_instead_of_stale_chat(self) -> None:
         observed = {"ui_nodes": [{
             "id": "dialog/body/0",
-            "label": "Mason's workshop · level 1 · 5/100\nSite: -12, 70, 24",
+            "label": "Mason's workshop L1 · Building\n5/100\n-12 70 24",
         }], "recent_chat": ["Buildings: stale list"]}
         with patch.object(qa, "_project_status", return_value=observed) as project, patch.object(
             qa, "_send", return_value={"recent_chat": ["Buildings: current list"]},
@@ -258,11 +258,11 @@ class VillageAutonomyQaTests(unittest.TestCase):
         probe = Mock()
         detail = {}
         other = {"ui_nodes": [{"id": "dialog/body/0", "label":
-                 "House · level 1 · 0/100\nSite: 12, 70, 24"}]}
+                 "House L1 · Building\n0/100\n12 70 24"}]}
         wrong_level = {"ui_nodes": [{"id": "dialog/body/0", "label":
-                       "Storage · level 2 · 0/100\nSite: 12, 70, 24"}]}
+                       "Storage L2 · Building\n0/100\n12 70 24"}]}
         target = {"ui_nodes": [{"id": "dialog/body/0", "label":
-                  "Storage · level 1 · 0/100\nSite: 12, 70, 24"}]}
+                  "Storage L1 · Building\n0/100\n12 70 24"}]}
         with patch.object(qa, "_send", return_value={
             "recent_chat": ["Started storage construction."],
         }) as send, patch.object(
@@ -280,7 +280,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
         old_chat = ["Queued storage: busy", "Started storage construction."]
         probe.observe.return_value = {"recent_chat": old_chat}
         target = {"ui_nodes": [{"id": "dialog/body/0", "label":
-                  "Storage · level 1 · 0/100\nSite: 12, 70, 24"}]}
+                  "Storage L1 · Building\n0/100\n12 70 24"}]}
         with patch.object(qa, "_send", return_value={"recent_chat": old_chat}) as send, patch.object(
             qa, "_project_status", return_value=target,
         ), patch.object(qa.time, "monotonic", side_effect=[0.0, 0.0, 1.0, 2.0]):
@@ -295,7 +295,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
                              "Started storage construction."]},
         ]
         target = {"ui_nodes": [{"id": "dialog/body/0", "label":
-                  "Storage · level 1 · 0/100\nSite: 12, 70, 24"}]}
+                  "Storage L1 · Building\n0/100\n12 70 24"}]}
         with patch.object(qa, "_send", return_value={
             "recent_chat": ["Queued storage: busy", "Started storage construction."],
         }) as send, patch.object(qa, "_project_status", return_value=target), patch.object(
@@ -318,7 +318,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
         probe = Mock()
         detail = {}
         wrong = {"ui_nodes": [{"id": "dialog/body/0", "label":
-                 "Storage · level 2 · 0/100\nSite: 12, 70, 24"}]}
+                 "Storage L2 · Building\n0/100\n12 70 24"}]}
         with patch.object(qa, "_send", return_value={
             "recent_chat": ["Started storage construction."],
         }) as send, patch.object(qa, "_project_status", return_value=wrong), patch.object(
@@ -579,32 +579,28 @@ class VillageAutonomyQaTests(unittest.TestCase):
         self.assertFalse(probe.wait.called)
 
 
-    def test_project_status_is_read_from_status_dialog_not_projects_grid(self) -> None:
-        # The Projects grid carries only order buttons; live progress is on the
-        # Status page reached by its button.
-        grid = {"screen": {"class": qa.DIALOG_CLASS, "title": "Projects - village_7"}, "ui_nodes": []}
+    def test_project_status_is_read_from_the_status_dialog_behind_the_construction_page(self) -> None:
+        # Projects menu (chest) -> Status slot -> Construction page (chest) -> clock slot -> status dialog.
+        menu = {"screen": {"class": qa.CONTAINER_CLASS, "title": "Projects"}, "container": {"slot_count": 90}}
+        page = {"screen": {"class": qa.CONTAINER_CLASS, "title": "Construction"}, "container": {"slot_count": 90}}
         status = {
-            "screen": {"class": qa.DIALOG_CLASS, "title": "Project status - village_7"},
-            "ui_nodes": [{"id": "dialog/body/0", "label": (
-                "Storage · level 1 · 3/25\nSite: 1, 70, 2")}],
+            "screen": {"class": qa.DIALOG_CLASS, "title": "Status"},
+            "ui_nodes": [{"id": "dialog/body/0", "label": "Storage L1 · Building\n3/25\n1 70 2"}],
         }
         probe = Mock()
         probe.call.return_value = {"status": "ok"}
-        # The Projects dialog closes first; the Status dialog arrives a beat later.
-        probe.observe.side_effect = [
-            {"screen": {"class": "none", "title": ""}, "ui_nodes": []}, status,
-        ]
-        with patch.object(qa, "_send", return_value=grid):
+        probe.remaining.return_value = 60.0
+        probe.wait.side_effect = [menu, page, status]
+        with patch.object(qa, "_send", return_value={}) as send:
             observed = qa._project_status(probe)
-        probe.call.assert_any_call("minecraft_click_screen_button", {
-            "expected_screen_class": qa.DIALOG_CLASS,
-            "expected_title": "Projects - village_7",
-            "button_label": "Status",
-        })
+        send.assert_called_once_with(probe, "settlement menu projects")
+        slots = [call.args[1]["slot"] for call in probe.call.call_args_list
+                 if call.args[0] == "minecraft_click_container_slot"]
+        self.assertEqual(slots, [qa.PROJECTS_STATUS_SLOT, qa.CONSTRUCTION_STATUS_SLOT])
         progress = qa._project_progress(observed)
         self.assertEqual(
-            (progress["blueprint"], progress["level"], progress["done"], progress["total"]),
-            ("storage", 1, 3, 25),
+            (progress["blueprint"], progress["level"], progress["done"], progress["total"], progress["origin"]),
+            ("storage", 1, 3, 25, [1, 70, 2]),
         )
         probe.call.assert_any_call("minecraft_close_screen", {})
 

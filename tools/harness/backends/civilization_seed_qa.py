@@ -211,20 +211,63 @@ def capture_house(probe: ProbeSteps, artifact: Path, label: str,
     return shot
 
 
-def capture_target(probe: ProbeSteps, artifact: Path, label: str,
-                   target: tuple[float, float, float], *,
-                   entity: dict[str, Any] | None = None,
-                   building: dict[str, Any] | None = None) -> dict[str, Any]:
-    probe.call("minecraft_close_screen", {})
-    initial = probe.observe()["player"]
-    if entity:
-        probe.call("minecraft_approach_entity", {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
+BABY_AIM_ATTEMPTS = 6
+
+
+def _aim(probe: ProbeSteps, target: tuple[float, float, float]) -> dict[str, Any]:
+    player = probe.observe()["player"]
+    dx, dy, dz = target[0] - player["x"], target[1] - (player["y"] + 1.62), target[2] - player["z"]
+    probe.call("minecraft_look", {
+        "yaw_deg": int(round(math.degrees(math.atan2(-dx, dz)))),
+        "pitch_deg": int(round(-math.degrees(math.atan2(dy, math.hypot(dx, dz))))),
+    })
+    return probe.observe().get("target") or {}
+
+
+Teleport = Callable[[float, float, float], None]
+
+
+def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any],
+                 teleport: Teleport | None) -> tuple[dict[str, Any], bool]:
+    """Aim the crosshair at the baby; True when the observer had to be teleported to it.
+
+    A baby walks on, and a wall can stand between it and the observer, so each
+    attempt approaches it again and re-reads where it is now. The newborn
+    stays in its parents' house, which the walking observer may not be able to
+    reach (seed 24: the house stands across a cliff from the village): an
+    approach that stops out of reach moves the creative observer to the baby
+    through the server console, as the fixture does for other unreachable
+    observation points."""
+    observed: dict[str, Any] = {}
+    teleported = False
+    for _ in range(BABY_AIM_ATTEMPTS):
+        reply = probe.call("minecraft_approach_entity", {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
         seen = entity_census(probe, "minecraft:villager")
         current = next((e for e in seen.get("entities", [])
                         if e.get("entity_uuid") == entity["entity_uuid"]), None)
         if current is None or current.get("received_baby") is not True:
             raise RuntimeError("baby no longer visible for milestone capture")
-        target = (current["x"], current["y"] + 0.5, current["z"])
+        if reply.get("in_reach") is False and teleport is not None:
+            teleport(current["x"], current["y"], current["z"])
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            teleported = True
+            continue
+        observed = _aim(probe, (current["x"], current["y"] + 0.5, current["z"]))
+        if observed.get("type") == "entity" and observed.get("entity_uuid") == entity["entity_uuid"]:
+            return observed, teleported
+    raise RuntimeError(f"milestone target is occluded or out of reach: baby {entity['entity_uuid']}: {observed}")
+
+
+def capture_target(probe: ProbeSteps, artifact: Path, label: str,
+                   target: tuple[float, float, float], *,
+                   entity: dict[str, Any] | None = None,
+                   building: dict[str, Any] | None = None,
+                   teleport: Teleport | None = None) -> dict[str, Any]:
+    probe.call("minecraft_close_screen", {})
+    initial = probe.observe()["player"]
+    teleported = False
+    if entity:
+        observed, teleported = _aim_at_baby(probe, entity, teleport)
     else:
         destination = [math.floor(value) for value in target]
         if building:
@@ -253,26 +296,23 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
             "x": destination[0], "y": destination[1], "z": destination[2],
             "timeout_seconds": 120.0,
         })
-    player = probe.observe()["player"]
-    dx, dy, dz = target[0] - player["x"], target[1] - (player["y"] + 1.62), target[2] - player["z"]
-    probe.call("minecraft_look", {
-        "yaw_deg": int(round(math.degrees(math.atan2(-dx, dz)))),
-        "pitch_deg": int(round(-math.degrees(math.atan2(dy, math.hypot(dx, dz))))),
-    })
-    observed = probe.observe().get("target") or {}
-    if entity:
-        visible = observed.get("type") == "entity" and observed.get("entity_uuid") == entity["entity_uuid"]
-    elif building:
-        visible = observed.get("type") == "block" and all(
-            building["min"][i] <= observed.get(axis, building["min"][i] - 1) <= building["max"][i]
-            for i, axis in enumerate(("x", "y", "z")))
-    else:
-        visible = observed.get("type") == "block" and all(
-            observed.get(axis) == math.floor(target[i]) for i, axis in enumerate(("x", "y", "z")))
-    if not visible:
-        raise RuntimeError(f"milestone target is occluded or out of reach: {label}: {observed}")
+        observed = _aim(probe, target)
+        if building:
+            visible = observed.get("type") == "block" and all(
+                building["min"][i] <= observed.get(axis, building["min"][i] - 1) <= building["max"][i]
+                for i, axis in enumerate(("x", "y", "z")))
+        else:
+            visible = observed.get("type") == "block" and all(
+                observed.get(axis) == math.floor(target[i]) for i, axis in enumerate(("x", "y", "z")))
+        if not visible:
+            raise RuntimeError(f"milestone target is occluded or out of reach: {label}: {observed}")
     shot = native_client.capture(probe.client, artifact, label)
     shot["observed_target"] = observed
+    shot["observer_teleported"] = teleported
+    if teleported and teleport is not None:
+        teleport(initial["x"], initial["y"], initial["z"])
+        probe.call("minecraft_wait_ticks", {"ticks": 20})
+        return shot
     probe.call("minecraft_navigate_to_block", {
         "x": math.floor(initial["x"]), "y": math.floor(initial["y"]), "z": math.floor(initial["z"]),
         "timeout_seconds": 120.0,
@@ -381,7 +421,9 @@ def building_blocks(probe: ProbeSteps, lines: list[str]) -> list[dict[str, Any]]
         })
         relevant = [block for block in scan.get("blocks", [])
                     if str(block.get("block_id", "")).endswith(("_bed", "_door", ":furnace", ":blast_furnace"))]
-        evidence.append({"building": building, "blocks": relevant, "truncated": scan.get("truncated", False)})
+        evidence.append({"building": building, "blocks": relevant, "truncated": scan.get("truncated", False),
+                         "solid": [block for block in scan.get("blocks", [])
+                                   if block.get("is_air") is False and block.get("collision_empty") is False]})
     return evidence
 
 
@@ -443,6 +485,18 @@ def standable_height(blocks: list[dict[str, Any]], player_y: float) -> int | Non
                and cells[y + 1].get("collision_empty", False)
                and (cells[y].get("fluid") or {}).get("empty", False)]
     return min(heights, key=lambda h: abs(h - player_y)) if heights else None
+
+
+def building_aim_point(building: dict[str, Any], solid: list[dict[str, Any]]) -> tuple[float, float, float]:
+    """The centre of the received solid block nearest the building's centre: a sparse
+    building (a Lumber camp is mostly fence, logs and a barrel) has air at its volume's
+    centre, where no crosshair raycast can land."""
+    centre = tuple((building["min"][i] + building["max"][i] + 1) / 2 for i in range(3))
+    if not solid:
+        return centre
+    nearest = min(solid, key=lambda b: sum((b[axis] + 0.5 - centre[i]) ** 2
+                                          for i, axis in enumerate(("x", "y", "z"))))
+    return tuple(nearest[axis] + 0.5 for axis in ("x", "y", "z"))
 
 
 def building_observer_stand(blocks: list[dict[str, Any]], building: dict[str, Any],
@@ -661,7 +715,10 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
             target = (baby["x"], baby["y"] + 0.5, baby["z"])
             detail["baby_observation"] = {
                 "sprint_ticks": advanced, "entity": baby,
-                "screenshot": capture_target(probe, artifact, f"civilization-births-{advanced:06d}", target, entity=baby),
+                "screenshot": capture_target(
+                    probe, artifact, f"civilization-births-{advanced:06d}", target, entity=baby,
+                    teleport=lambda x, y, z: item_merge._console(
+                        server, f"tp {village.USERNAME} {x:.2f} {y:.2f} {z:.2f}")),
             }
         if ("growth_observation" in detail and "baby_observation" in detail
                 and "births" not in detail["milestones"]):
@@ -687,7 +744,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                             target, evidence.get("blocks", [])),
                     }
             elif "second_building" not in detail["milestones"]:
-                target = tuple((building["min"][i] + building["max"][i] + 1) / 2 for i in range(3))
+                target = building_aim_point(building, evidence.get("solid", []))
                 detail["milestones"]["second_building"] = {
                     "sprint_ticks": advanced, "building": building, "project": project,
                     "screenshot": capture_target(probe, artifact, f"civilization-building-{advanced:06d}", target, building=building),
