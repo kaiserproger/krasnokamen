@@ -98,9 +98,21 @@ fn widened_front_preserves_population_bounds_and_distinct_spawn_slots() {
                                 .iter()
                                 .map(|(spec, _, _)| usize::from(spec.files))
                                 .sum::<usize>(),
-                            322
+                            252
                         );
-                        assert!(front.iter().all(|(spec, _, _)| spec.files == 46));
+                        assert!(front.iter().all(|(spec, _, _)| spec.files == 36));
+                        // At the mesh interval the line stays inside the ticket.
+                        for (spec, _, _) in &front {
+                            for file in [0, usize::from(spec.files) - 1] {
+                                let x = crate::battle::formation::position(
+                                    spec,
+                                    file,
+                                    0,
+                                    MESH_INTERVAL,
+                                )[0];
+                                assert!((-176.0..=192.0).contains(&x), "{x}");
+                            }
+                        }
                     }
                     for (spec, _, size) in planned {
                         for index in 0..size {
