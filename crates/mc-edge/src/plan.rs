@@ -378,6 +378,10 @@ const TIME_SYNC_INTERVAL_TICKS: u64 = 20;
 /// Smallest squared entity move sent to clients (vanilla `ServerEntity`).
 const MIN_MOVE_DISTANCE_SQ: f64 = 7.629_394_5e-6;
 
+/// Recorded type of an entity whose frames were lost: no entity has it, so
+/// the identity check fails and the plan removes and respawns the entity.
+const UNDELIVERED_TYPE: u32 = u32::MAX;
+
 /// One delivered entity baseline; retaining the appearance Arc makes pointer
 /// comparison a sound change detector until the next successful delivery.
 #[derive(Debug)]
@@ -402,6 +406,19 @@ impl TrackedEntity {
             appearance: Arc::clone(&entity.appearance),
             seen,
             updated: round,
+        }
+    }
+
+    /// Stand-in for an entity the client may still hold though the viewer
+    /// forgot it: its identity matches no entity, so the plan removes it.
+    fn undelivered() -> Self {
+        Self {
+            type_id: UNDELIVERED_TYPE,
+            baseline: ([0.0; 3], 0.0, 0.0, 0.0),
+            head_yaw: 0,
+            appearance: Arc::default(),
+            seen: 0,
+            updated: 0,
         }
     }
 }
@@ -491,6 +508,11 @@ pub struct ViewerState {
     pub deferred_updates: usize,
     /// Entity plans so far: the clock of [`TrackedEntity::updated`].
     entity_round: u64,
+    /// Entities whose frames the last plan queued; the pump reports a frame
+    /// of that plan that the world queue refused ([`Self::world_frame_unsent`]).
+    world_entities: Vec<EntityId>,
+    /// Entities whose removal the last plan queued.
+    world_removed: Vec<EntityId>,
     /// A same-dimension respawn is pending its forget pass: the vanilla
     /// client keeps its level across it (`ClientPacketListener.handleRespawn`
     /// builds a new `ClientLevel` only on a dimension change), so, like the
@@ -547,6 +569,8 @@ impl ViewerState {
             recorder: false,
             deferred_updates: 0,
             entity_round: 0,
+            world_entities: Vec::new(),
+            world_removed: Vec::new(),
             forget_all: false,
             labels: crate::settlement_labels::LabelBaseline::default(),
             seats: HashMap::default(),
@@ -572,6 +596,39 @@ impl ViewerState {
         self.chunk_repairs
             .extend(self.loaded_chunks.keys().copied());
         self.chunk_sync = None;
+    }
+
+    /// A planned world frame was not queued: the world queue filled after
+    /// the plan read its credit, because another producer (an LOD tile) took
+    /// a slot. The viewer recorded everything the last plan emitted as
+    /// delivered, so held geometry and the client state of every entity that
+    /// plan touched are repaired from the next plan.
+    pub(crate) fn world_frame_unsent(&mut self) {
+        self.geometry_unsent();
+        for id in std::mem::take(&mut self.world_removed) {
+            // The client may still hold it: track it again to have it removed.
+            self.tracked_entities
+                .entry(id)
+                .or_insert_with(TrackedEntity::undelivered);
+            self.entity_interest.respawn_tracked(id);
+        }
+        for id in std::mem::take(&mut self.world_entities) {
+            self.entity_unsent(id);
+        }
+    }
+
+    /// The client may miss any frame planned for `id`. The own entity forgets
+    /// its baseline and resends its data. Another tracked entity no longer
+    /// matches its recorded identity, so the next plan removes and respawns
+    /// it, with its passengers and leash; one that left view meanwhile is
+    /// removed as usual.
+    fn entity_unsent(&mut self, id: EntityId) {
+        if id == self.entity_id {
+            self.untrack(id);
+        } else if let Some(tracked) = self.tracked_entities.get_mut(&id) {
+            tracked.type_id = UNDELIVERED_TYPE;
+            self.entity_interest.respawn_tracked(id);
+        }
     }
 
     /// All geometry already planned for this viewer precedes a world-queue fence.
@@ -662,6 +719,9 @@ fn forget_everything(
             return false;
         }
     }
+    viewer
+        .world_removed
+        .extend(scratch.removed.iter().map(|&id| EntityId(id)));
     viewer.untrack_all();
     viewer.entity_tick = None;
     viewer.entity_interest = entity_interest::EntityInterest::default();
@@ -809,6 +869,8 @@ fn plan_viewer_inner(
         frames: viewer.world_credit,
         bytes: viewer.world_bytes,
     };
+    viewer.world_entities.clear();
+    viewer.world_removed.clear();
     // Resolve the authoritative anchor before range-checking one-shot effects.
     if let Some(own) = own_entity(snapshot, viewer) {
         viewer.position = own.position;
@@ -1618,6 +1680,7 @@ fn plan_entities(
                 let id = EntityId(id);
                 viewer.untrack(id);
                 interest.removed(id);
+                viewer.world_removed.push(id);
             }
         }
         scratch.removed = packet.entity_ids;
@@ -1626,6 +1689,7 @@ fn plan_entities(
     // The client's own entity gets no AddEntity but still needs its
     // SetEntityData (pose/flags/health), or the client player object never
     // resolves; resent whenever its appearance changes.
+    let own_start = out.len();
     if let Some(own) = own_entity(snapshot, viewer)
         && appearance_stale(viewer, own)
         && try_push(out, credit, |out| {
@@ -1646,6 +1710,9 @@ fn plan_entities(
         })
     {
         viewer.track(own);
+        if out.len() > own_start {
+            viewer.world_entities.push(own.id);
+        }
     }
     interest.spawned(viewer.entity_id);
 
@@ -1710,6 +1777,7 @@ fn plan_entities(
             break;
         }
         viewer.track(entity);
+        viewer.world_entities.push(id);
         interest.spawned(entity.id);
         spawns_sent += 1;
     }
@@ -1767,6 +1835,7 @@ fn plan_entities(
             .get_mut(&update.id)
             .expect("tracked update");
         let entity = snapshot.entities.get(update.id).expect("visible entity");
+        let update_start = out.len();
         let sent = try_push(out, credit, |out| {
             if update.stale {
                 push_appearance(out, conn, entity, Some(tracked.appearance.as_ref()));
@@ -1795,6 +1864,9 @@ fn plan_entities(
         });
         if !sent {
             break;
+        }
+        if out.len() > update_start {
+            viewer.world_entities.push(update.id);
         }
         if update.stale {
             relink_passengers(
