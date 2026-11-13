@@ -169,6 +169,30 @@ class ProjectMenuTest(unittest.TestCase):
         click.assert_called_once_with(probe, "Buildings", "#7 House L1")
         confirm.assert_called_once_with(probe, "Order construction L2 #7")
 
+    def test_queued_icon_is_not_reported_as_an_active_project(self):
+        class MenuProbe:
+            def call(self, *args):
+                return {}
+
+            def remaining(self):
+                return 60
+
+            def wait(self, predicate, label, **kwargs):
+                if label == "projects_menu_open":
+                    state = {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": "Projects"},
+                             "container": {"slots": [{"slot": 52, "name": "Status"}]}}
+                else:
+                    state = {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": "Construction"},
+                             "container": {"slots": [
+                                 {"slot": 4, "name": "Cleric's workshop L1"},
+                                 {"slot": 10, "name": "Queued — site not assigned\nPending: Cleric L1"}]}}
+                assert predicate(state)
+                return state
+
+        with mock.patch.object(buildings_qa, "_close_any_screen"):
+            self.assertEqual(buildings_qa._project_view(MenuProbe()), ("Cleric's workshop", 1, False))
+            self.assertIsNone(buildings_qa._project_status(MenuProbe()))
+
 
 class ResidentsMenuTest(unittest.TestCase):
     def test_resident_lore_carries_profession_and_specific_workplace(self):
@@ -242,6 +266,7 @@ class FakeProbe:
         self.waits = 0
         self.sent = 0
         self.deadline = 1e12
+        self.client = mock.sentinel.client
 
     def check(self, name, condition):
         self.report["assertions"][name] = bool(condition)
@@ -263,15 +288,28 @@ class FakeProbe:
 HEADLESS = SimpleNamespace(windowed=False)
 
 
+class WorkerSettlementTest(unittest.TestCase):
+    def test_miner_uses_tracked_building_and_own_settlement_menu(self):
+        probe = FakeProbe()
+        sub = {"site": [128, 70, 0], "building_id": (2 << 32) | 2}
+        with mock.patch.object(buildings_qa, "_at_settlement_anchor") as anchor, \
+                mock.patch.object(buildings_qa, "_building_seq", side_effect=AssertionError("stale lookup")), \
+                mock.patch.object(buildings_qa, "_await_assignment", side_effect=LookupError) as census:
+            with self.assertRaises(LookupError):
+                buildings_qa._function_mine(probe, sub, "buildings_mine", 2, (113, 69, -13), {})
+        anchor.assert_called_once_with(probe, sub)
+        census.assert_called_once_with(probe, 2, "Mine", "Miner")
+
+
 class OrderEchoRetryTest(unittest.TestCase):
     def run_retry(self, lines, project_active=False, ctx=HEADLESS):
         probe, sub = FakeProbe(), {}
 
-        def send(_probe, command, settle_ticks=40):
+        def send(_probe, command, prefixes=()):
             probe.sent += 1
             return {"recent_chat": list(lines)}
 
-        with mock.patch.object(buildings_qa, "_send", send), \
+        with mock.patch.object(buildings_qa, "_send_fresh", send), \
                 mock.patch.object(buildings_qa, "_project_active_quiet",
                                   return_value=project_active) as active:
             result = buildings_qa._order_echo_retry(
@@ -293,31 +331,31 @@ class OrderEchoRetryTest(unittest.TestCase):
         active.assert_called_once()
         self.assertIn("No blueprint upgrade available", sub["L3_order_attempt1"])
 
-    def test_no_blueprint_upgrade_without_a_project_is_retried_then_refused(self):
+    def test_refusal_without_target_project_is_not_admitted(self):
         result, probe, _, active = self.run_retry(
             ["No blueprint upgrade available for this building."], project_active=False)
         self.assertFalse(result)
-        self.assertEqual(probe.sent, 3)
-        self.assertEqual(active.call_count, 3)
+        self.assertEqual(probe.sent, 1)
+        active.assert_called_once()
 
-    def test_a_busy_refusal_still_reads_the_headless_echo(self):
-        result, probe, _, active = self.run_retry(["Busy."])
-        self.assertTrue(result)
-        active.assert_not_called()
+    def test_busy_does_not_prove_an_unrelated_project_is_ours(self):
+        result, _, _, active = self.run_retry(["Busy."])
+        self.assertFalse(result)
+        active.assert_called_once()
 
 
 class AdmissionTest(unittest.TestCase):
     def test_an_admitted_order_needs_no_cert(self):
         probe = FakeProbe()
-        with mock.patch.object(buildings_qa, "_building_bounds") as bounds:
+        with mock.patch.object(buildings_qa, "_current_certificate") as certificate:
             self.assertIsNone(buildings_qa._admitted_or_caught(
                 probe, {}, "buildings_gate", "gate", 3, True))
-        bounds.assert_not_called()
+        certificate.assert_not_called()
         self.assertTrue(probe.report["assertions"]["buildings_gate_L3_project"])
 
     def test_a_refused_order_is_fine_when_the_planner_already_certified_the_level(self):
         probe = FakeProbe()
-        with mock.patch.object(buildings_qa, "_building_bounds", return_value=(1, 2, 3)):
+        with mock.patch.object(buildings_qa, "_current_certificate", return_value=(7, (1, 2, 3))):
             caught = buildings_qa._admitted_or_caught(
                 probe, {}, "buildings_gate", "gate", 3, False)
         self.assertEqual(caught, (1, 2, 3))
@@ -325,9 +363,90 @@ class AdmissionTest(unittest.TestCase):
 
     def test_a_refused_order_without_a_cert_fails_the_project_check(self):
         probe = FakeProbe()
-        with mock.patch.object(buildings_qa, "_building_bounds", return_value=None):
+        with mock.patch.object(buildings_qa, "_current_certificate", return_value=None):
             with self.assertRaisesRegex(RuntimeError, "buildings_gate_L3_project"):
                 buildings_qa._admitted_or_caught(probe, {}, "buildings_gate", "gate", 3, False)
+
+
+class FreshCertificateTest(unittest.TestCase):
+    def test_old_started_reply_is_excluded_from_fresh_refusal(self):
+        class ChatProbe(FakeProbe):
+            def call(self, name, arguments=None):
+                if name == "minecraft_send_chat":
+                    message = arguments["message"]
+                    self.chat.insert(0, "No blueprint upgrade available for this building."
+                                     if arguments["command"] else f"<BuildQA> {message}")
+                return {}
+
+            def wait(self, predicate, label, **kwargs):
+                state = self.observe()
+                assert predicate(state), label
+                return state
+
+        probe = ChatProbe(["Started gate construction."])
+        state = buildings_qa._send_fresh(probe, "settlement build upgrade 7")
+        self.assertEqual(state["recent_chat"], ["No blueprint upgrade available for this building."])
+
+    def test_packed_fresh_listing_keeps_kind_id_level_and_origin_together(self):
+        state = {"recent_chat": ["Buildings: #10 storage level 1 [1, 2, 3]-[4, 5, 6], "
+                                 "#11 gate level 2 [-8, 9, 10]-[0, 12, 18]."]}
+        with mock.patch.object(buildings_qa, "_send_fresh", return_value=state):
+            self.assertEqual(buildings_qa._building_records(FakeProbe(), "gate"),
+                             {11: (2, (-8, 9, 10))})
+
+    def test_existing_or_wrong_id_cannot_prove_this_run(self):
+        probe = FakeProbe()
+        sub = {"baseline_building_ids": [11], "building_id": 12}
+        records = {11: (2, (1, 2, 3)), 13: (2, (4, 5, 6))}
+        with mock.patch.object(buildings_qa, "_building_records", return_value=records):
+            self.assertIsNone(buildings_qa._current_certificate(probe, sub, "buildings_gate", "gate", 2))
+
+    def test_new_building_is_selected_over_a_baseline_building(self):
+        probe = FakeProbe()
+        sub = {"baseline_building_ids": [11]}
+        records = {11: (1, (1, 2, 3)), 13: (1, (4, 5, 6))}
+        with mock.patch.object(buildings_qa, "_building_records", return_value=records):
+            self.assertEqual(buildings_qa._current_certificate(probe, sub, "buildings_gate", "gate", 1),
+                             (13, (4, 5, 6)))
+        self.assertEqual(sub["building_id"], 13)
+
+    def test_overtaken_level_is_an_explicit_failure_not_a_higher_level_pass(self):
+        probe = FakeProbe()
+        sub = {"baseline_building_ids": [], "building_id": 12}
+        with mock.patch.object(buildings_qa, "_building_records", return_value={12: (3, (1, 2, 3))}):
+            with self.assertRaisesRegex(RuntimeError, "buildings_gate_L2_not_overtaken"):
+                buildings_qa._current_certificate(probe, sub, "buildings_gate", "gate", 2)
+        self.assertIn("reached L3 before L2 verification", sub["L2_not_verified"])
+
+    def test_unfundable_fence_must_be_queued_not_started(self):
+        probe = FakeProbe()
+        with mock.patch.object(buildings_qa, "_send_fresh",
+                               return_value={"recent_chat": ["Started cleric construction."]}):
+            with self.assertRaisesRegex(RuntimeError, "buildings_gate_L2_planner_fenced"):
+                buildings_qa._queue_planner_fence(probe, {}, "buildings_gate", "gate", 2)
+
+    def test_air_from_a_next_level_clear_is_not_a_current_level_match(self):
+        data = {"gate": {"levels": [{}, {}]}}
+        with mock.patch.object(buildings_qa, "_load_blueprints", return_value=data), \
+                mock.patch.object(buildings_qa, "_fit_orientation", return_value=0), \
+                mock.patch.object(buildings_qa, "oriented_cells", return_value={(0, 0, 0): "minecraft:stone"}), \
+                mock.patch.object(buildings_qa, "_read", return_value={"block_id": "minecraft:air"}), \
+                mock.patch.object(buildings_qa, "_send", return_value={"recent_chat": []}):
+            with self.assertRaisesRegex(RuntimeError, "buildings_gate_L2_blocks"):
+                buildings_qa._verify_level(FakeProbe(), {}, HEADLESS, None, "gate", 2,
+                                           (0, 0, 0), "buildings_gate", "town", (0, 0, 0))
+
+    def test_wall_torch_does_not_satisfy_a_cobblestone_wall(self):
+        data = {"gate": {"levels": [{}, {}]}}
+        with mock.patch.object(buildings_qa, "_load_blueprints", return_value=data), \
+                mock.patch.object(buildings_qa, "_fit_orientation", return_value=0), \
+                mock.patch.object(buildings_qa, "oriented_cells",
+                                  return_value={(0, 0, 0): "minecraft:cobblestone_wall"}), \
+                mock.patch.object(buildings_qa, "_read", return_value={"block_id": "minecraft:wall_torch"}), \
+                mock.patch.object(buildings_qa, "_send", return_value={"recent_chat": []}):
+            with self.assertRaisesRegex(RuntimeError, "buildings_gate_L2_blocks"):
+                buildings_qa._verify_level(FakeProbe(), {}, HEADLESS, None, "gate", 2,
+                                           (0, 0, 0), "buildings_gate", "town", (0, 0, 0))
 
 
 class SequentialFlowTest(unittest.TestCase):
@@ -338,13 +457,18 @@ class SequentialFlowTest(unittest.TestCase):
         detail: dict = {}
         certs = {}
         events = []
+        stages = []
 
-        def building_bounds(_probe, _bp, level, exclude=None):
-            return certs.get(level)
+        def current(_probe, sub, tag, _bp, level):
+            if level not in certs:
+                return None
+            sub["building_id"] = 7
+            return 7, certs[level]
 
         def order(_probe, sub, tag, _bp, level, cmd, use_dialog, ctx, dialog_fn=None,
                   upgrade_bid=None):
             events.append(("order", level, use_dialog))
+            stages.append(("order", level))
             if use_dialog and level in menu_evidence:
                 sub[f"L{level}_dialog_{'order' if level == 1 else 'upgrade'}"] = "confirmed"
             if cert_after_order:
@@ -353,10 +477,12 @@ class SequentialFlowTest(unittest.TestCase):
 
         def wait_cert(_probe, sub, tag, _bp, level, ctx, artifact):
             certs[level] = (level, 70, level)
+            sub["building_id"] = 7
             sub[f"L{level}_origin"] = list(certs[level])
             return certs[level]
 
         def fund(_probe, sub, _bp, level, chest):
+            stages.append(("fund", level))
             sub.setdefault("behaviour", {})[f"L{level}_funded"] = "PASS"
 
         ctx = SimpleNamespace(windowed=windowed)
@@ -368,14 +494,29 @@ class SequentialFlowTest(unittest.TestCase):
             _summon_bind=lambda *a, **k: True,
             _fund_level=fund,
             _order_echo_retry=order,
-            _building_bounds=building_bounds,
-            _building_seq=lambda *a, **k: 7,
+            _building_records=lambda *a, **k: {},
+            _current_certificate=current,
+            _at_settlement_anchor=lambda *a, **k: None,
+            _queue_planner_fence=lambda _p, _s, _t, _b, level: stages.append(("fence", level)),
             _adversarial_break=lambda *a, **k: False,
             _wait_certified_origin_here=wait_cert,
-            _verify_level=lambda *a, **k: None,
+            _verify_level=lambda _p, _s, _c, _a, _b, level, *_args: stages.append(("verify", level)),
         )
-        with mock.patch.multiple(buildings_qa, **patches):
+        with mock.patch.multiple(buildings_qa, **patches), \
+                mock.patch.object(buildings_qa, "_capture_level",
+                                  side_effect=lambda _p, _s, _a, _t, _b, level, _o:
+                                  stages.append(("capture", level))) as capture:
             buildings_qa._scenario_sequential(probe, detail, ctx, None, (bp,), "", None, None)
+            if windowed:
+                self.assertEqual([call.args[5] for call in capture.call_args_list],
+                                 list(range(1, top + 1)))
+            expected = [("fence", 1)]
+            for level in range(1, top + 1):
+                expected.extend([("fund", level), ("order", level), ("fence", level)])
+                if windowed:
+                    expected.append(("capture", level))
+                expected.append(("verify", level))
+            self.assertEqual(stages, expected)
         return probe, detail["blueprints"][bp], events
 
     def test_a_passing_run_records_every_level_verdict(self):
@@ -412,7 +553,7 @@ class SequentialFlowTest(unittest.TestCase):
         # because the planner had already built L3; the failed project check ended the run.
         probe, sub, _ = self.run_flow("gate", 3, order_admitted=False, cert_after_order=True)
         self.assertEqual(sub["behaviour"].get("L3_upgrade"), "PASS")
-        self.assertEqual(sub.get("L3_admission"), "planner-admitted")
+        self.assertEqual(sub.get("L3_admission"), "same-run certificate")
         self.assertTrue(probe.report["assertions"]["buildings_gate_L3_project"])
 
     def test_an_order_nobody_admitted_still_fails(self):
