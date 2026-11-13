@@ -211,12 +211,12 @@ fn eligible(
     if bi >= formation.members.len() {
         return true;
     }
-    let context = formation.context_at(bi);
-    // Rear ranks do not pay for search, except loose order (riders and
-    // pursuers) and fugitives at bay against the battle bounds.
-    let cornered = formation.cornered_at(bi);
-    (!context.routing || cornered)
-        && (columns.ranged[bi] || context.front_rank || cornered || formation.loose_order_at(bi))
+    // Every steady soldier looks for an opponent within reach, whatever his
+    // rank: mixing, flanks and gaps bring enemies to rear ranks, and a man
+    // with an enemy at his shoulder who never strikes is no fighter (G2 had
+    // 0.13 melee swings/s per fighter in contact). Fugitives search only at
+    // bay against the battle bounds.
+    !formation.context_at(bi).routing || formation.cornered_at(bi)
 }
 
 fn retained(
@@ -241,7 +241,7 @@ fn retained(
 
 /// One immutable grid per tick; one tenth of eligible units reacquires.
 /// Retained opponents are O(1)-validated every tick and replaced only on the
-/// assigned phase. Rear ranks and carried mounts do not pay for search.
+/// assigned phase. Fugitives and carried mounts do not pay for search.
 pub(crate) fn update(frame: &super::Frame<'_>, battle: &mut super::BattleState) {
     battle
         .grid

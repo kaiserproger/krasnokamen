@@ -8,18 +8,25 @@ use crate::boundary::{EntityEvent, EntityId, Hand};
 use crate::entities::EntitySlot;
 use crate::intent::{DamageSource, Footprint, IntentKind};
 
-// The 21..25-tick action cycle skips one 20-tick decision after each attack.
-// Count that recovery before deriving odds; do not shorten the action clocks.
-const ATTACK_DECISION_TICKS: u64 = 20;
+// A fighter with an opponent in weapon reach decides as soon as his guard
+// lapses: he strikes at the given odds, otherwise he holds his guard for
+// GUARD_PAUSE_TICKS and decides again. The 21..25-tick action cycle itself is
+// unchanged; a 20-tick decision grid skipped every other decision after a blow
+// and left a fighter in reach one swing per 4..8 s (G2: 0.13 swings/s each).
+const GUARD_PAUSE_TICKS: u64 = 6;
 const AGGRESSIVE_FIGHTERS: u32 = 2500;
-const AGGRESSIVE_ATTEMPTS: u32 = 8000;
-const CAUTIOUS_ATTEMPTS: u32 = 2000;
+const AGGRESSIVE_ATTEMPTS: u32 = 9000;
+const CAUTIOUS_ATTEMPTS: u32 = 5000;
+/// Swings per second of a fighter who keeps an opponent in reach: one action
+/// cycle per blow plus the expected guard pauses of the declined decisions.
+const fn swings_per_second(attempts: u32) -> f32 {
+    let p = attempts as f32 / 10_000.0;
+    20.0 / (Weapon::Spear.cycle() as f32 + (1.0 - p) / p * GUARD_PAUSE_TICKS as f32)
+}
 const STRIKES_PER_SECOND: f32 = {
     let share = AGGRESSIVE_FIGHTERS as f32 / 10_000.0;
-    let aggressive = AGGRESSIVE_ATTEMPTS as f32 / 10_000.0;
-    let cautious = CAUTIOUS_ATTEMPTS as f32 / 10_000.0;
-    (share * aggressive / (1.0 + aggressive) + (1.0 - share) * cautious / (1.0 + cautious))
-        * (20.0 / ATTACK_DECISION_TICKS as f32)
+    share * swings_per_second(AGGRESSIVE_ATTEMPTS)
+        + (1.0 - share) * swings_per_second(CAUTIOUS_ATTEMPTS)
 };
 // Cinematic calibration: 80 removals per 46-file regiment in 120 s of contact.
 // Fatigue permits 65 fighting seconds, but the native three-minute run's
@@ -374,15 +381,12 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             (None, Some(holder)) => holder,
             (None, None) => continue,
         };
-        // Three cautious soldiers in four; decisions once/20t, not per frame.
-        if !(frame.tick + id.0 as u64).is_multiple_of(ATTACK_DECISION_TICKS) {
-            continue;
-        }
+        // Decide once the guard lapses; a declined blow holds the guard briefly.
         fighter.action = Action::Guard {
-            until: frame.tick + ATTACK_DECISION_TICKS,
+            until: frame.tick + GUARD_PAUSE_TICKS,
         };
-        // Anyone may cut at a fleeing back; the cautious majority only parries
-        // and probes a steady front.
+        // Anyone may cut at a fleeing back; the cautious majority probes a
+        // steady front at lower odds.
         let fleeing = frame
             .entities
             .slot_of(target.id)
@@ -394,7 +398,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         } else {
             CAUTIOUS_ATTEMPTS
         };
-        if roll(id, frame.tick / ATTACK_DECISION_TICKS, 2) >= probability {
+        if roll(id, frame.tick, 2) >= probability {
             continue;
         }
         fighter.action = Action::Windup {
