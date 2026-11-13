@@ -4068,10 +4068,10 @@ area = "gameplay"
 repro = "client"
 severity = "major"
 status = "open"
-source = "G2R calibration trial-7: after dying near (-197,8,23) PovRed respawned 'regiment=4 file=29 at=30.73,94.00,37.83' (placed at -152,108 before start), about 230 blocks from where he fell, and saw 0 enemies for four minutes. crates/mc-core/src/battle/live_players.rs reenter took the free front-rank file nearest the line centre (choose_slot) regardless of the fight. Now a respawn takes the file of his own standing line that is in contact (a soldier with an enemy within weapon reach, the in_weapon_reach census of combat::count_fighting) nearest where he fell, and keeps the centre rule only when none is in contact."
-regression = ["cargo:mc-core:battle::live_players::tests::a_respawn_goes_to_the_file_of_his_line_in_contact_nearest_where_he_fell", "cargo:mc-core:battle::live_players::tests::a_respawn_with_no_file_of_his_line_in_contact_takes_the_centre_file"]
+source = "G2R calibration trial-7: after dying near (-197,8,23) PovRed respawned 'regiment=4 file=29 at=30.73,94.00,37.83' (placed at -152,108 before start), about 230 blocks from where he fell, and saw 0 enemies for four minutes. crates/mc-core/src/battle/live_players.rs reenter took the free front-rank file nearest the line centre of any eligible line (choose_slot) regardless of the fight. Now respawn_slot keeps an explicit order, each nearest where he fell: a file of his own regiment in contact (a soldier with an enemy within weapon reach, the in_weapon_reach census of combat::count_fighting), broken or not; else, while it is not broken, any living file of it; else, when it is broken and out of contact or has no living file left, a file of his side's standing foot lines in contact; else the old centre rule. A regiment change is logged with regiment_changed=<from>-><to> and reason=regiment_broken|regiment_gone (and rule=centre for the old rule)."
+regression = ["cargo:mc-core:battle::live_players::tests::a_respawn_goes_to_the_file_of_his_line_in_contact_nearest_where_he_fell", "cargo:mc-core:battle::live_players::tests::a_respawn_goes_to_his_broken_regiments_file_in_contact", "cargo:mc-core:battle::live_players::tests::a_respawn_with_no_contact_in_his_regiment_takes_its_file_nearest_where_he_fell", "cargo:mc-core:battle::live_players::tests::a_respawn_after_his_regiment_is_gone_takes_the_sides_contact_nearest_where_he_fell", "cargo:mc-core:battle::live_players::tests::a_respawn_after_his_infantry_broke_takes_a_standing_line_with_the_same_kit"]
 failing_first = "reported"
-fix_commit = "c6fa94da3eb7d41830992e6e2a00818e2813e9f4"
+fix_commit = "f90997cc114b5cb125404b8d51d6a734d1eaa38c"
 
 [[bug]]
 id = "BATTLE-LIVE-SPECTATOR-LEFT-BEHIND"
