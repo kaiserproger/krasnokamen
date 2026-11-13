@@ -607,9 +607,10 @@ fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<Stri
         // Where his file's men stand, not the slot of the virtual leader:
         // `spec.origin` walks on along the facing while men stay in melee or
         // at the field bounds (trial-5: the holder respawned at z=1855.8, at
-        // least 1,500 blocks from every soldier the recorder saw). Front
-        // living soldier of the file, else the regiment's living centroid,
-        // else the leader's slot.
+        // least 1,500 blocks from every soldier the recorder saw). A block
+        // ahead of the file's front living soldier (on his centre neither is
+        // pushed and the camera sits inside him), else the regiment's living
+        // centroid, else the leader's slot.
         let formation = &state.hostile.battle.formation;
         let front = file_members(formation, regiment, file)
             .into_iter()
@@ -617,7 +618,10 @@ fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<Stri
             .filter(|m| m.alive && !m.wounded)
             .min_by_key(|m| m.rank)
             .and_then(|m| state.entities.slot_of(m.id))
-            .map(|slot| state.entities.pos(slot));
+            .map(|slot| {
+                let pos = state.entities.pos(slot);
+                [pos[0] + r.spec.facing[0], pos[1], pos[2] + r.spec.facing[1]]
+            });
         let mut at = front.unwrap_or_else(|| {
             if r.live_count > 0 {
                 r.live_sum.map(|sum| sum / r.live_count as f64)

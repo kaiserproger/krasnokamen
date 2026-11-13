@@ -233,10 +233,14 @@ fn assert_in_rank_with_kit(state: &TickState, player: EntityId) {
     let front = file_front(state, hold.regiment, hold.file);
     let body = state.entities.slot_of(player).unwrap();
     let at = state.entities.pos(body);
-    // Placed on the front soldier; one tick of the soldier's walk since.
+    // A block ahead of the front soldier, not on his centre; one tick of the
+    // soldier's walk since.
+    let offset = [at[0] - front[0], at[2] - front[2]];
+    let distance = offset[0].hypot(offset[1]);
+    let ahead = offset[0] * r.spec.facing[0] + offset[1] * r.spec.facing[1];
     assert!(
-        (at[0] - front[0]).hypot(at[2] - front[2]) < 1.0,
-        "{at:?} is not at the front of file {} ({front:?})",
+        (0.5..1.6).contains(&distance) && ahead > 0.0,
+        "{at:?} is not just ahead of file {}'s front soldier at {front:?}",
         hold.file
     );
     assert_eq!(state.entities.rot(body)[0], yaw_of(r.spec.facing));
