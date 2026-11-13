@@ -15,7 +15,8 @@
 use rustc_hash::FxHashMap;
 
 use super::combat::{Action, CombatRuntime, Weapon};
-use super::faction::{MeleeRange, in_melee_range};
+use super::faction::{in_melee_range, melee_reach, reach_bound};
+use mc_melee_range::MeleeReach;
 use super::{BattleState, Frame, Output, Unit};
 use crate::boundary::{EntityEvent, EntityId, Hand, SwingKind};
 use crate::tick::TickState;
@@ -67,9 +68,9 @@ pub(super) struct Arms {
     claimed: bool,
     /// The weapon not in hand, with the kit it forms with the held one.
     stowed: Option<Box<(ItemStack, Pair)>>,
-    /// The spear's melee range (`MeleeRange::of_item`) of a spear-and-sword
+    /// The spear's melee reach (`faction::melee_reach`) of a spear-and-sword
     /// kit: its near bound draws the sword, its reach puts the sword away.
-    spear: MeleeRange,
+    spear: MeleeReach,
     /// First tick the drawn weapon may strike or loose.
     ready: u64,
 }
@@ -79,7 +80,7 @@ impl Default for Arms {
         Self {
             claimed: false,
             stowed: None,
-            spear: MeleeRange::DEFAULT,
+            spear: MeleeReach::mob(None),
             ready: 0,
         }
     }
@@ -107,11 +108,11 @@ impl Arms {
 pub(super) fn wants_sword(
     holding_sword: bool,
     spear_first: bool,
-    spear: MeleeRange,
+    spear: MeleeReach,
     inside: impl Fn(f64) -> bool,
 ) -> bool {
     let bound = match (holding_sword, spear_first) {
-        (true, _) => spear.reach,
+        (true, _) => spear.max,
         (false, false) => spear.min,
         (false, true) => spear.min - BAND,
     };
@@ -161,7 +162,7 @@ pub(super) fn step(
                 fighter.arms.spear = if fighter.weapon == Weapon::Spear {
                     fighter.range
                 } else {
-                    MeleeRange::of_item(
+                    melee_reach(
                         frame
                             .registry
                             .items
@@ -202,11 +203,11 @@ pub(super) fn step(
                 let soldier = battle.columns.targets[bi].or_else(|| {
                     holding_sword
                         .then(|| {
-                            let reach = MeleeRange {
-                                reach: spear.reach,
+                            let reach = MeleeReach {
                                 min: 0.0,
+                                max: spear.max,
                             };
-                            battle.grid.nearest_enemy(unit, reach.bound()).target
+                            battle.grid.nearest_enemy(unit, reach_bound(reach)).target
                         })
                         .flatten()
                 });
@@ -214,9 +215,9 @@ pub(super) fn step(
                     battle,
                     frame.entities,
                     slot,
-                    MeleeRange {
-                        reach: spear.reach,
+                    MeleeReach {
                         min: 0.0,
+                        max: spear.max,
                     },
                     None,
                 )
@@ -237,9 +238,9 @@ pub(super) fn step(
                                 frame.entities,
                                 slot,
                                 enemy,
-                                MeleeRange {
-                                    reach: grow,
+                                MeleeReach {
                                     min: 0.0,
+                                    max: grow,
                                 },
                             )
                         })

@@ -24,7 +24,9 @@
 //! lands through the ordinary player damage path (`blow`); battle targets
 //! stay soldiers.
 use super::{BattleIntent, BattleState, EnemyTarget, Frame, Output};
-use crate::battle::formation::{FormationRuntime, Order, Regiment, position, slot_position};
+use crate::battle::formation::{
+    FormationRuntime, Order, Regiment, file_interval, position, slot_position,
+};
 use crate::battle::ground::{self, Placement};
 use crate::boundary::{ChangeSet, EntityId};
 use crate::commands::{Command, GameMode, Target};
@@ -167,7 +169,7 @@ pub(super) fn in_reach(
     battle: &BattleState,
     entities: &EntityStore,
     actor: EntitySlot,
-    range: super::faction::MeleeRange,
+    range: mc_melee_range::MeleeReach,
     only: Option<EntityId>,
 ) -> Option<EnemyTarget> {
     if battle.live.targets.is_empty() {
@@ -206,7 +208,7 @@ pub(super) fn blow(
     out: &mut Output,
     actor: EntityId,
     target: EntityId,
-    range: super::faction::MeleeRange,
+    range: mc_melee_range::MeleeReach,
 ) {
     let Some(slot) = frame.entities.slot_of(actor) else {
         return;
@@ -262,15 +264,6 @@ pub(crate) fn same_side(state: &TickState, attacker: EntityId, victim: EntityId)
         .entities
         .slot_of(victim)
         .is_some_and(|slot| state.entities.body(slot).faction == hold.side)
-}
-
-/// Interval the formation uses for a regiment's slots right now.
-fn interval(r: &Regiment) -> f64 {
-    if r.gap <= 6.0 {
-        r.interval
-    } else {
-        r.spec.frontage
-    }
 }
 
 /// A regiment that can take a holder in `tier`: 0 is `side`'s sword-and-shield
@@ -343,7 +336,7 @@ fn choose_slot(
                 if formation.held.contains(&(i, file)) && keep != Some((i, file)) {
                     continue;
                 }
-                let pos = position(&r.spec, file, 0, interval(r));
+                let pos = position(&r.spec, file, 0, file_interval(r));
                 let distance = (pos[0] - centre[0]).powi(2) + (pos[2] - centre[1]).powi(2);
                 if best.is_none_or(|(d, _, _)| distance < d) {
                     best = Some((distance, i, file));
@@ -626,7 +619,7 @@ fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<Stri
             if r.live_count > 0 {
                 r.live_sum.map(|sum| sum / r.live_count as f64)
             } else {
-                position(&r.spec, file, 0, interval(r))
+                position(&r.spec, file, 0, file_interval(r))
             }
         });
         if let Placement::At(ground) =

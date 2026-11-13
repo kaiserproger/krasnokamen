@@ -1730,6 +1730,7 @@ dependencies = [
  "mc-data",
  "mc-domain",
  "mc-loader",
+ "mc-melee-range",
  "mc-nbt",
  "mc-physics",
  "mc-plugin-host",
@@ -1834,6 +1835,10 @@ dependencies = [
  "thiserror 2.0.18",
  "zip",
 ]
+
+[[package]]
+name = "mc-melee-range"
+version = "1.0.0-rc.5"
 
 [[package]]
 name = "mc-nbt"

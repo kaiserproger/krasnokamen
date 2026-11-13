@@ -280,7 +280,7 @@ fn shield_bearer_raises_on_guard_and_lowers_to_swing_or_when_wounded() {
 }
 
 #[test]
-fn calibration_matches_wide_front_removals_and_seven_fatal_in_ten() {
+fn calibration_spreads_wide_front_removals_over_the_press_and_seven_fatal_in_ten() {
     let mut counts = [0; 3];
     for sample in 0..10_000 {
         counts[match outcome(sample, false, 0.0) {
@@ -294,10 +294,13 @@ fn calibration_matches_wide_front_removals_and_seven_fatal_in_ten() {
         assert!((21..=40).contains(&weapon.cycle()));
     }
     let rate = 0.25 * (0.8 / 1.8) + 0.75 * (0.2 / 1.2);
-    assert_eq!(counts, [6016, 1195, 2789]);
+    assert_eq!(counts, [9601, 120, 279]);
     let removal_probability = (counts[1] + counts[2]) as f64 / 10_000.0;
-    let expected = 46.0 * rate * 46.0 * (1.0 - 2316.0 / 3873.0) * removal_probability;
-    assert!((expected - 80.0).abs() < 0.1, "{expected}");
+    // 80 removals per regiment in 120 s of contact, over ten times the
+    // 46-file front within reach.
+    let expected = 46.0 * 10.0 * rate * 46.0 * (1.0 - 2316.0 / 3873.0) * removal_probability;
+    // Within one roll in 10 000 of the ~400 removal rolls.
+    assert!((expected - 80.0).abs() < 80.0 / 398.0, "{expected}");
     let fatal_share = counts[2] as f64 / f64::from(counts[1] + counts[2]);
     assert!((0.69..=0.71).contains(&fatal_share), "{fatal_share}");
     let lifetime = 1.0 / (rate * (1.0 - 2316.0 / 3873.0) * removal_probability);
@@ -306,7 +309,7 @@ fn calibration_matches_wide_front_removals_and_seven_fatal_in_ten() {
         (0..10_000)
             .filter(|r| outcome(*r, true, 0.0) == Outcome::Kill)
             .count(),
-        9000
+        1076
     );
 }
 
@@ -314,7 +317,7 @@ fn calibration_matches_wide_front_removals_and_seven_fatal_in_ten() {
 fn saturated_pursuit_kills_nine_casualties_in_ten() {
     let mut counts = [0; 3];
     for sample in 0..10_000 {
-        counts[match outcome(sample, true, 1.0) {
+        counts[match outcome(sample, true, 8.0) {
             Outcome::Glance => 0,
             Outcome::Wound => 1,
             Outcome::Kill => 2,

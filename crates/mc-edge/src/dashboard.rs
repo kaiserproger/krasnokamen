@@ -241,7 +241,7 @@ pub struct LoadTickSample {
     pub phase_us: LoadPhaseTimes,
     pub coreperf: Option<std::sync::Arc<mc_core::boundary::CorePerfTick>>,
     /// `{"units": n, "alive": {"<faction>": n}, "in_weapon_reach": n,
-    /// "fighting": n, "shields_raised": n, "shield_blocks": n,
+    /// "fighting": n, "acting": n, "shields_raised": n, "shield_blocks": n,
     /// "weapon_swaps": n, "holding_spear": n, "holding_sword": n,
     /// "holding_bow": n}`; the key is absent without battle units.
     #[serde(
@@ -271,11 +271,12 @@ fn serialize_battle<S: serde::Serializer>(
     let Some(battle) = battle else {
         return serializer.serialize_none();
     };
-    let mut out = serializer.serialize_struct("BattleCounts", 10)?;
+    let mut out = serializer.serialize_struct("BattleCounts", 11)?;
     out.serialize_field("units", &battle.units)?;
     out.serialize_field("alive", &Alive(&battle.alive))?;
     out.serialize_field("in_weapon_reach", &battle.in_weapon_reach)?;
     out.serialize_field("fighting", &battle.fighting)?;
+    out.serialize_field("acting", &battle.acting)?;
     out.serialize_field("shields_raised", &battle.shields_raised)?;
     out.serialize_field("shield_blocks", &battle.shield_blocks)?;
     out.serialize_field("weapon_swaps", &battle.weapon_swaps)?;
@@ -1704,6 +1705,7 @@ mod tests {
             alive: vec![(1, 9_870), (2, 0)],
             in_weapon_reach: 1_234,
             fighting: 987,
+            acting: 321,
             shields_raised: 654,
             shield_blocks: 32,
             weapon_swaps: 21,
@@ -1763,7 +1765,7 @@ mod tests {
         assert_eq!(
             lines[1]["battle"],
             serde_json::json!({"units": 20_000, "alive": {"1": 9_870, "2": 0},
-                "in_weapon_reach": 1_234, "fighting": 987, "shields_raised": 654,
+                "in_weapon_reach": 1_234, "fighting": 987, "acting": 321, "shields_raised": 654,
                 "shield_blocks": 32, "weapon_swaps": 21, "holding_spear": 4_000,
                 "holding_sword": 3_000, "holding_bow": 2_000})
         );

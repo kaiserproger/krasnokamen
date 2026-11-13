@@ -4,6 +4,7 @@ use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::TickState;
 use mc_data::ItemStack;
+use mc_data::entity_attachments_26_3::attachments;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -583,34 +584,54 @@ fn seat_rider(state: &mut TickState, slot: EntitySlot, rider: EntitySlot) {
         state.entities.row_mut(rider).entity_life.mount.vehicle = vehicle;
     }
     let pos = state.entities.pos(slot);
-    let (height, forward) =
-        if crate::vehicles::kind(state, slot) == Some(crate::vehicles::VehicleKind::Boat) {
-            // 26.3 Boat/ChestBoat.rideHeight and Raft/ChestRaft.rideHeight,
-            // minus the player's VEHICLE attachment (0.6). Only players ride here.
-            let kind = name(state, slot);
-            let body_height = state.entities.body(slot).height as f32;
-            let attachment = if kind.ends_with("_raft") {
-                body_height * 0.888_888_9_f32
-            } else {
-                body_height / 3.0
-            };
-            let forward = if kind.contains("_chest_") {
-                f64::from(0.15_f32)
-            } else {
-                0.0
-            };
-            (f64::from(attachment) - f64::from(0.6_f32), forward)
-        } else {
-            (state.entities.body(slot).height * 0.75, 0.0)
-        };
     let yaw = f64::from(state.entities.rot(slot)[0]).to_radians();
+    let (sin, cos) = (
+        f64::from(mc_physics::mth::sin(yaw)),
+        f64::from(mc_physics::mth::cos(yaw)),
+    );
+    let seat = if crate::vehicles::kind(state, slot) == Some(crate::vehicles::VehicleKind::Boat) {
+        // 26.3 Boat/ChestBoat.rideHeight and Raft/ChestRaft.rideHeight,
+        // minus the player's VEHICLE attachment (0.6). Only players ride here.
+        let kind = name(state, slot);
+        let body_height = state.entities.body(slot).height as f32;
+        let attachment = if kind.ends_with("_raft") {
+            body_height * 0.888_888_9_f32
+        } else {
+            body_height / 3.0
+        };
+        let forward = if kind.contains("_chest_") {
+            f64::from(0.15_f32)
+        } else {
+            0.0
+        };
+        [
+            -forward * sin,
+            f64::from(attachment) - f64::from(0.6_f32),
+            forward * cos,
+        ]
+    } else {
+        // 26.3 Entity.positionRider: the vehicle's first PASSENGER point,
+        // turned by its yaw (`Vec3.yRot(-yaw)`), minus the rider's VEHICLE
+        // point.
+        let height = state.entities.body(slot).height as f32;
+        let [x, y, z] = attachments(name(state, slot))
+            .passenger
+            .unwrap_or([0.0, height, 0.0])
+            .map(f64::from);
+        let rider_point = match state.entities.body(rider).kind {
+            EntityKind::Player { .. } => attachments("minecraft:player").vehicle,
+            _ => attachments(name(state, rider)).vehicle,
+        }
+        .map(f64::from);
+        [
+            x * cos - z * sin - rider_point[0],
+            y - rider_point[1],
+            z * cos + x * sin - rider_point[2],
+        ]
+    };
     state.entities.set_pos(
         rider,
-        [
-            pos[0] - forward * f64::from(mc_physics::mth::sin(yaw)),
-            pos[1] + height,
-            pos[2] + forward * f64::from(mc_physics::mth::cos(yaw)),
-        ],
+        [pos[0] + seat[0], pos[1] + seat[1], pos[2] + seat[2]],
     );
     state.entities.set_vel(rider, [0.0; 3]);
     if already_mounted {

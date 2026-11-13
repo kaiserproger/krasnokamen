@@ -137,9 +137,9 @@ fn spearman_draws_the_sword_inside_the_near_bound_and_retakes_the_spear_beyond_i
     let bi = index(&state, &battle, actor);
     assert_eq!(
         battle.combat.fighters[bi].arms.spear,
-        MeleeRange {
-            reach: 2.25,
-            min: 1.0
+        MeleeReach {
+            min: 1.0,
+            max: 2.25
         }
     );
     // Gap 0.9: inside the near bound.
@@ -296,9 +296,9 @@ fn archer_draws_the_sword_when_an_enemy_closes_and_the_bow_when_he_is_far() {
 #[test]
 fn second_rank_and_horsemen_keep_the_spear_until_the_enemy_is_well_inside() {
     let at = |gap: f64| move |grow: f64| gap < grow;
-    let spear = MeleeRange {
-        reach: 2.25,
+    let spear = MeleeReach {
         min: 1.0,
+        max: 2.25,
     };
     // Front rank against foot: the sword inside the near bound, the spear
     // again beyond its reach.
@@ -411,6 +411,6 @@ fn a_swap_reaches_the_published_appearance_and_reclassifies_the_fighter() {
     let bi = battle.columns.index(s).unwrap();
     let fighter = &battle.combat.fighters[bi];
     assert_eq!(fighter.weapon, Weapon::Sword);
-    assert_eq!(fighter.range, MeleeRange::DEFAULT);
+    assert_eq!(fighter.range, MeleeReach::mob(None));
     assert_eq!(fighter.arms.stowed(), Some(&stack(&state, SPEAR)));
 }
