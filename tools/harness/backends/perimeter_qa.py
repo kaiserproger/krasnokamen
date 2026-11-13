@@ -210,15 +210,13 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     shell = _hand_storage_at(probe, sub, FIXTURE, sname, (ax - 14, ay, az - 14))
     probe.check(f"{FIXTURE}_shell", shell is not None)
     sub["storage_chest"] = list(shell)
-    probe.check(f"{FIXTURE}_bound", _summon_bind(probe, sub, FIXTURE, sname, shell, RESIDENTS)
-                and sub.get("bound_members", 0) >= RESIDENTS)
     # Baseline before any stock exists: nothing stands on the line or the plaza corners.
     before = tally(scan_ring(probe, ax, ay, az), scan_wells(probe, ax, ay, az), ax, ay, az)
     sub["before"] = before
     empty = before["ring_blocks"] == 0 and before["well_blocks"] == 0
     _verdict(sub, "walls_absent_before", "PASS" if empty else "FAIL", str(before))
     probe.check(f"{FIXTURE}_empty_before", empty)
-    # Stock the chest through the ordinary menu: cobblestone for the whole fortification and one
+    # Stock the chest through the ordinary menu (before any resident exists): cobblestone for the whole fortification and one
     # oak door per gatehouse. No logs, so no building is funded and the wall is the planner's
     # only affordable work.
     for _ in range(COBBLE_STACKS):
@@ -235,6 +233,10 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
     funded = (stock.get(COBBLE, 0) - stock_before.get(COBBLE, 0) >= 64 * COBBLE_STACKS
               and stock.get(DOOR, 0) - stock_before.get(DOOR, 0) >= DOORS)
     probe.check(f"{FIXTURE}_funded", funded)
+    # Residents come last: the planner runs from the first resident, and with the stock already
+    # in storage the first project it starts is funded fortification work, not a meadow clearing.
+    probe.check(f"{FIXTURE}_bound", _summon_bind(probe, sub, FIXTURE, sname, shell, RESIDENTS)
+                and sub.get("bound_members", 0) >= RESIDENTS)
     probe.fixture(f"tp @s {ax + 0.5} {ay + 1.0} {az + 0.5}")
     # The Builders' time: first block, then completion, each bounded.
     started = time.monotonic()
