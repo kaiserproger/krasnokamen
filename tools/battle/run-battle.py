@@ -65,6 +65,7 @@ def arguments():
     p.add_argument('--live-player', action='append', default=[], metavar='NAME:SIDE', help='network player (offline-mode name) who takes a front-rank infantry slot of SIDE (red|blue) near the centre with its kit before start; repeatable. The runner waits until every live name is online before it launches the recorder')
     p.add_argument('--live-spectator', action='append', default=[], metavar='NAME[:TARGET]', help='network player put in spectator mode behind TARGET (default: the first --live-player) before start; repeatable')
     p.add_argument('--live-timeout', type=int, default=DEFAULT_LIVE_TIMEOUT, metavar='SECONDS', help=f'how long the online barrier waits for every live player and spectator (default {DEFAULT_LIVE_TIMEOUT})')
+    p.add_argument('--console-fifo', action='store_true', help='create RUN_DIR/console.fifo: each line written to it is sent to the server console (recorded in commands.txt), e.g. `echo "kill PovRed" > RUN_DIR/console.fifo`')
     p.add_argument('--dry-run', action='store_true')
     a = p.parse_args()
     if a.world_seed is None:
@@ -441,6 +442,17 @@ def telemetry_worker(port, output, stop, failures, on_batch, ticks, gaps=None):
         ticks.put(None)
 
 
+def console_fifo_worker(path, send):
+    """Forward each line written to the FIFO to the server console. Opening blocks until a writer
+    appears and reading blocks until it writes: no timer. Each writer's EOF reopens the FIFO."""
+    while True:
+        with open(path, encoding='utf-8', errors='replace') as fifo:
+            for line in fifo:
+                command = line.strip()
+                if command:
+                    send(command)
+
+
 def stream_log(pipe, file, messages, presence=None):
     try:
         with file.open('x') as output:
@@ -617,6 +629,9 @@ def run(a):
                 server.stdin.flush()
         log_thread = threading.Thread(target=stream_log, args=(server.stdout, root / 'server.log', messages, presence), daemon=True)
         log_thread.start()
+        if a.console_fifo:
+            os.mkfifo(root / 'console.fifo', 0o600)
+            threading.Thread(target=console_fifo_worker, args=(root / 'console.fifo', send), daemon=True).start()
         expect(messages, 'Solaris is listening (edge v2)')
         ignored = ignored_config_keys((root / 'server.log').read_text(errors='replace'))
         if a.take and any(key.endswith('checkpoint_every_ticks') for key in ignored):

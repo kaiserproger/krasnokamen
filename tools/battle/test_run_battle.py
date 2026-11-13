@@ -589,6 +589,19 @@ class BattleRunnerTests(unittest.TestCase):
             self.assertEqual((run / 'commands.txt').read_text().splitlines(), ['battle watch PovRed'])
             self.assertFalse((run / 'recorder.log').exists())
 
+    def test_console_fifo_forwards_each_written_line_to_the_console(self):
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as directory:
+            fifo = Path(directory) / 'console.fifo'
+            os.mkfifo(fifo)
+            sent = queue.Queue()
+            threading.Thread(target=runner.console_fifo_worker, args=(fifo, sent.put), daemon=True).start()
+            for text in ('kill PovRed\n\n', 'battle status\n'):
+                with open(fifo, 'w') as writer:
+                    writer.write(text)
+            self.assertEqual([sent.get(timeout=10), sent.get(timeout=10)], ['kill PovRed', 'battle status'])
+            self.assertTrue(sent.empty())
+
 
 if __name__ == '__main__':
     unittest.main()
