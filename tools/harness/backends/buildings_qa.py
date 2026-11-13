@@ -55,6 +55,11 @@ DIALOG_CLASS = "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen"
 CONTAINER_CLASS = "net.minecraft.client.gui.screens.inventory.ContainerScreen"
 # Civil Projects menu (ui_menus.rs): the Status icon, and the active project's icon on the Construction page.
 PROJECT_STATUS_SLOT, PROJECT_ICON_SLOT = 52, 4
+# The Construction page's map icon (slot 14) carries the project origin as its lore.
+PROJECT_MAP_SLOT = 14
+# House L1 at origin + [0,1,0] holds `oak_log[axis=y]` (a corner post) for every rotation; a
+# survival player breaks it mid-build (house.broken_cell_replaced).
+BROKEN_AUTHORED = "minecraft:oak_log"
 
 BLUEPRINTS = ("house", "storage", "farm", "mason", "lumber_camp", "mine",
               "barracks", "wall", "watch_tower", "gate", "armorer", "butcher",
@@ -724,6 +729,7 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
                          "order-by-UI admitted (phase-1 receipt); build monitored in phase 2")
                 sub["L1_order_phase1"] = True
                 continue
+            corner = _break_corner(probe, sub, tag, bp) if bp == "house" else None
             origin = _wait_certified_origin_here(probe, sub, tag, bp, 1, ctx, artifact)
             if origin is None:
                 probe.check(f"{tag}_L1_built", False)
@@ -731,6 +737,8 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
                 continue
             probe.check(f"{tag}_L1_built", True)
             sub["L1_origin"] = list(origin)
+            if corner is not None:
+                _broken_replaced(probe, sub, tag, corner)
             _verify_level(probe, sub, ctx, artifact, bp, 1, origin, tag,
                           sname, tuple(sub["storage_chest"]))
             _verdict(sub, "L1_built", "PASS", f"L1 cert at {list(origin)}; block-matched, entrance and light checked")
@@ -857,11 +865,9 @@ def _admitted_or_caught(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: st
     return caught
 
 
-def _project_status(probe: ProbeSteps) -> tuple[str, int] | None:
-    """(project label, level) of the settlement's active project, or None when there is none.
-
-    Read from the civil menus: Projects -> Status icon -> the Construction page, whose slot 4 is
-    the active project's `<label> L<level>` icon (ui_menus.rs project_screen)."""
+def _project_page(probe: ProbeSteps) -> dict[str, Any]:
+    """The open Construction page of the Projects menu (Projects -> Status icon). The caller
+    closes the screen."""
     _close_any_screen(probe)
     probe.call("minecraft_send_chat", {"message": "settlement menu projects", "command": True})
     projects = probe.wait(lambda s: _container_titled(s, "Projects"), "projects_menu_open",
@@ -871,12 +877,97 @@ def _project_status(probe: ProbeSteps) -> tuple[str, int] | None:
         raise RuntimeError(f"buildings-qa: Projects menu slot {PROJECT_STATUS_SLOT} is {action}, not Status")
     probe.call("minecraft_click_container_slot", {"slot": PROJECT_STATUS_SLOT, "button": "primary",
                                                   "timeout_seconds": probe.remaining()})
-    page = probe.wait(lambda s: _container_titled(s, "Construction"), "project_status_open",
+    return probe.wait(lambda s: _container_titled(s, "Construction"), "project_status_open",
                       timeout_seconds=60)
+
+
+def _project_status(probe: ProbeSteps) -> tuple[str, int] | None:
+    """(project label, level) of the settlement's active project, or None when there is none.
+
+    Read from the civil menus: Projects -> Status icon -> the Construction page, whose slot 4 is
+    the active project's `<label> L<level>` icon (ui_menus.rs project_screen)."""
+    page = _project_page(probe)
     icon = next((row for row in page["container"]["slots"] if row.get("slot") == PROJECT_ICON_SLOT), None)
     probe.call("minecraft_close_screen", {})
     match = re.fullmatch(r"(.+) L(\d+)", str((icon or {}).get("name") or ""))
     return (match.group(1), int(match.group(2))) if match else None
+
+
+def _project_origin(probe: ProbeSteps) -> tuple[int, int, int] | None:
+    """Origin of the active project, or None: the Construction page's map icon (slot 14) carries
+    it as the lore line `<x> <y> <z>` (ui_menus.rs project_screen, ui.rs corner_text)."""
+    page = _project_page(probe)
+    try:
+        if not any(row.get("slot") == PROJECT_MAP_SLOT for row in page["container"]["slots"]):
+            return None
+        lore = probe.call("minecraft_read_item_components",
+                          {"source": "container", "slot": PROJECT_MAP_SLOT})["components"].get("minecraft:lore", [])
+    finally:
+        probe.call("minecraft_close_screen", {})
+    for line in lore:
+        match = re.fullmatch(r"\s*(-?\d+) (-?\d+) (-?\d+)\s*", _text_plain(line))
+        if match:
+            return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+    return None
+
+
+def _break_corner(probe: ProbeSteps, sub: dict[str, Any], tag: str,
+                  bp: str) -> tuple[int, int, int] | None:
+    """SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN, first half: once the Builder
+    has placed the house's lower corner post (origin + [0,1,0] is `oak_log[axis=y]` for every
+    rotation), a survival-mode player breaks it with the real client. Returns the cell, or None
+    when the break could not be made while the project was still open."""
+    corner = None
+    deadline = _time.monotonic() + 900.0
+    while _time.monotonic() < deadline:
+        origin = _project_origin(probe)
+        if origin is not None:
+            candidate = (origin[0], origin[1] + 1, origin[2])
+            try:
+                if _block_id(_read(probe, candidate)) == BROKEN_AUTHORED:
+                    corner = candidate
+                    break
+            except Exception:
+                pass
+        probe.call("minecraft_wait_ticks", {"ticks": 100})
+    sub["broken_cell"] = {"cell": list(corner) if corner else None, "authored": BROKEN_AUTHORED}
+    if corner is None or _building_bounds(probe, bp, 1) is not None:
+        probe.check(f"{tag}_broken_cell_injected", False)
+        return None
+    x, y, z = corner
+    # Diagonally outside the footprint, within reach of the corner's north face.
+    probe.fixture(f"tp @s {x - 0.5} {y} {z - 0.5}")
+    probe.fixture("gamemode survival @s")
+    probe.call("minecraft_wait_ticks", {"ticks": 20})
+    broken = probe.call("minecraft_break_block", {
+        "x": x, "y": y, "z": z, "face": "north",
+        "expected_drop_item_id": BROKEN_AUTHORED, "expected_drop_count": 1,
+        "timeout_seconds": probe.remaining()})
+    probe.fixture("gamemode creative @s")
+    read_back = None
+    for _ in range(30):
+        read_back = _block_id(_read(probe, corner))
+        if read_back == "minecraft:air":
+            break
+        probe.call("minecraft_wait_ticks", {"ticks": 10})
+    sub["broken_cell"]["break_result"] = broken
+    sub["broken_cell"]["read_back_after_break"] = read_back
+    sub["broken_cell"]["project_open_at_break"] = _building_bounds(probe, bp, 1) is None
+    ok = read_back == "minecraft:air" and sub["broken_cell"]["project_open_at_break"]
+    probe.check(f"{tag}_broken_cell_injected", ok)
+    return corner if ok else None
+
+
+def _broken_replaced(probe: ProbeSteps, sub: dict[str, Any], tag: str,
+                     corner: tuple[int, int, int]) -> None:
+    """Second half, once the building list shows the certificate: the authored block is back in
+    the broken cell, so the project finished instead of stalling on the hole."""
+    final = _block_id(_read(probe, corner))
+    sub["broken_cell"]["at_certificate"] = final
+    ok = final == BROKEN_AUTHORED
+    probe.check(f"{tag}_broken_cell_replaced", ok)
+    _verdict(sub, "broken_cell_replaced", "PASS" if ok else "FAIL",
+             f"{list(corner)}: broken by a survival player mid-build, {final} at the certificate")
 
 
 def _container_titled(state: dict[str, Any], prefix: str) -> bool:
