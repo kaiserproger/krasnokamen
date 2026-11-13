@@ -702,15 +702,18 @@ fn respawn(state: &mut TickState, connection: u64) {
 
 /// As the last battle tick left it for the next respawn: the front soldier
 /// of `file` retains a soldier of the other side as his opponent, standing
-/// within his melee range or a block beyond it (box gap along +z).
+/// within his melee range or a block beyond it (box gap along +z). Each call
+/// takes an opponent no soldier retains yet, so several files can be in
+/// contact at once.
 fn engage(state: &mut TickState, regiment: usize, file: usize, in_reach: bool) {
     let battle = &mut state.hostile.battle;
     let formation = &battle.formation;
     let faction = formation.regiments[regiment].spec.faction;
+    let taken: Vec<EntityId> = battle.columns.targets.iter().flatten().map(|t| t.id).collect();
     let enemy = formation
         .members
         .iter()
-        .find(|m| formation.regiments[m.regiment].spec.faction != faction)
+        .find(|m| formation.regiments[m.regiment].spec.faction != faction && !taken.contains(&m.id))
         .unwrap()
         .id;
     let bi = file_members(formation, regiment, file)[0];
@@ -781,6 +784,15 @@ fn a_respawn_goes_to_the_file_of_his_line_in_contact_nearest_where_he_fell() {
     );
     engage(&mut state, regiment, far, true);
     engage(&mut state, regiment, near, true);
+    for file in [far, near] {
+        let battle = &state.hostile.battle;
+        assert!(
+            file_members(&battle.formation, regiment, file)
+                .into_iter()
+                .any(|bi| in_contact(&state.entities, battle, bi)),
+            "file {file} is in contact before the respawn"
+        );
+    }
     respawn(&mut state, 1);
     let hold = &state.hostile.battle.live.holds[0];
     assert_eq!((hold.regiment, hold.file), (regiment, near));
