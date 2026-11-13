@@ -20,11 +20,11 @@
           "pZZZZZp",
           "pZZZZZp",
           "ppppppp",
-          "gggpggg",
-          "gffpffg",
-          "gffpffg",
-          "gffpffg",
-          "gggpggg"
+          "...p...",
+          ".ffpff.",
+          ".ffpff.",
+          ".ffpff.",
+          "...p..."
         ],
         [
           "XpppppX",
@@ -118,11 +118,11 @@
           "pZZZZZZZp",
           "pZZZZZZZp",
           "ppppppppp",
-          "gggpggggg",
-          "gffpffffg",
-          "gffpffffg",
-          "gffpffffg",
-          "gggpggggg"
+          "...p.....",
+          ".ffpffff.",
+          ".ffpffff.",
+          ".ffpffff.",
+          "...p....."
         ],
         [
           "XpppppppX",
@@ -217,7 +217,6 @@
     "s": "oak_planks",
     "t": "torch",
     "x": "oak_stairs[facing=south,half=bottom]",
-    "W": "wheat[age=0]",
-    "g": "dirt"
+    "W": "wheat[age=0]"
   }
 }

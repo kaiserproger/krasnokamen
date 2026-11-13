@@ -339,12 +339,13 @@ fn attachment(path: &str) -> bool {
         || path.ends_with("vine")
 }
 
-/// Item (and count) one placed block costs; `None` = free half or air.
+/// Item (and count) one placed block costs; `None` = free half, air or farmland
+/// (the soil already in place, hoed as in vanilla, as a dirt path is shoveled).
 fn block_cost(registry: &CoreRegistry, id: BlockStateId) -> Result<Option<(ItemId, u32)>, String> {
     let def = registry.blocks.by_id(id).ok_or("unknown state")?;
     let path = def.block.id.path();
     let prop = |key: &str, value: &str| def.properties.iter().any(|(k, v)| k == key && v == value);
-    if matches!(path, "air" | "cave_air" | "void_air")
+    if matches!(path, "air" | "cave_air" | "void_air" | "farmland")
         || (prop("half", "upper")
             && (path.ends_with("_door")
                 || path.contains("tall")
@@ -362,7 +363,6 @@ fn block_cost(registry: &CoreRegistry, id: BlockStateId) -> Result<Option<(ItemI
         "carrots" => "carrot",
         "potatoes" => "potato",
         "beetroots" => "beetroot_seeds",
-        "farmland" => "dirt",
         "water" => "water_bucket",
         "lava" => "lava_bucket",
         "redstone_wire" => "redstone",
