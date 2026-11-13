@@ -113,7 +113,7 @@ to keep that from happening again without idling the machine.
   the switch, and Cargo (same unit hash for a workspace member in any checkout)
   runs the other tree's binary when that binary is newer than this tree's
   sources (a false test result, 2026-11-14). Run one runner command per tree, or
-  give each tree its own `CARGO_TARGET_DIR=<tree>/target`.
+  give each tree its own target directory under `<work>/targets/`.
 - **Incremental** compilation is forced on for debug/test builds and off for
   `--release`/`--profile`. Measured once: cold `mc-core --tests` 26m48s to 19m07s.
 - **Lanes.** `-p` is the perf lane: one at a time (perf lock), pinned to the
