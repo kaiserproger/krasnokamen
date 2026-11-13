@@ -274,6 +274,11 @@ pub struct ItemFacts {
     /// Complete equipment modifiers, retaining vanilla ids and operations.
     pub attribute_modifiers: Vec<ItemAttributeModifier>,
     pub attack_range: Option<AttackRangeFacts>,
+    /// `minecraft:piercing_weapon`: an attack with it is a jab along the
+    /// attack range (the client's STAB action), not an entity attack.
+    pub piercing_weapon: Option<PiercingWeaponFacts>,
+    /// `minecraft:minimum_attack_charge`: the attack charge an attack with it needs.
+    pub minimum_attack_charge: Option<f32>,
     pub armor: Option<ItemArmorFacts>,
     /// Provider-authored mechanics; only exact admitted model/carrier stacks use these.
     pub physical_profile: Option<Box<PhysicalItemProfile>>,
@@ -298,6 +303,11 @@ pub struct AttackRangeFacts {
     pub max_creative_reach: f32,
     pub hitbox_margin: f32,
     pub mob_factor: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PiercingWeaponFacts {
+    pub deals_knockback: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -429,6 +439,10 @@ struct RawComponents {
     blocks_attacks: Option<RawBlocksAttacks>,
     #[serde(rename = "minecraft:attack_range")]
     attack_range: Option<RawAttackRange>,
+    #[serde(rename = "minecraft:piercing_weapon")]
+    piercing_weapon: Option<RawPiercingWeapon>,
+    #[serde(rename = "minecraft:minimum_attack_charge")]
+    minimum_attack_charge: Option<f32>,
     #[serde(default, rename = "minecraft:attribute_modifiers")]
     attribute_modifiers: Vec<RawAttributeModifier>,
 }
@@ -448,6 +462,8 @@ impl RawItemComponents {
             weapon,
             blocks_attacks,
             attack_range,
+            piercing_weapon,
+            minimum_attack_charge,
             attribute_modifiers,
         } = self.components;
         let attack_damage_modifier =
@@ -515,6 +531,8 @@ impl RawItemComponents {
             attack_speed_modifier,
             attribute_modifiers,
             attack_range: attack_range.map(RawAttackRange::into_facts),
+            piercing_weapon: piercing_weapon.map(RawPiercingWeapon::into_facts),
+            minimum_attack_charge,
             armor,
             physical_profile: None,
         }
@@ -564,6 +582,8 @@ struct RawEmbeddedItemFacts {
     attack_damage_modifier: Option<f32>,
     attack_speed_modifier: Option<f32>,
     attack_range: Option<RawAttackRange>,
+    piercing_weapon: Option<RawPiercingWeapon>,
+    minimum_attack_charge: Option<f32>,
     tool: Option<RawTool>,
     equippable_slot: Option<String>,
     equippable_swappable: Option<bool>,
@@ -630,6 +650,8 @@ impl RawEmbeddedItemFacts {
             attack_speed_modifier: self.attack_speed_modifier,
             attribute_modifiers,
             attack_range: self.attack_range.map(RawAttackRange::into_facts),
+            piercing_weapon: self.piercing_weapon.map(RawPiercingWeapon::into_facts),
+            minimum_attack_charge: self.minimum_attack_charge,
             armor,
             physical_profile: None,
         }
@@ -757,6 +779,24 @@ impl RawAttackRange {
             mob_factor: self.mob_factor,
         }
     }
+}
+
+#[derive(Deserialize)]
+struct RawPiercingWeapon {
+    #[serde(default = "default_deals_knockback")]
+    deals_knockback: bool,
+}
+
+impl RawPiercingWeapon {
+    fn into_facts(self) -> PiercingWeaponFacts {
+        PiercingWeaponFacts {
+            deals_knockback: self.deals_knockback,
+        }
+    }
+}
+
+const fn default_deals_knockback() -> bool {
+    true
 }
 
 const fn default_attack_max_reach() -> f32 {

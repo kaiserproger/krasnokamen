@@ -513,7 +513,7 @@ fn shot_candidates(
     }
 }
 
-pub(super) fn segment_enters(
+pub(crate) fn segment_enters(
     origin: [f64; 3],
     delta: [f64; 3],
     min: [f64; 3],

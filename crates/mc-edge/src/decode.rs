@@ -154,8 +154,8 @@ pub fn decode_play_frame(
                 PlayerActionKind::SwapItemWithOffhand => {
                     PlayerInput::SwapHands { connection: conn }
                 }
-                // Used-while-sneaking marker: no gameplay mapping.
-                PlayerActionKind::Stab => return Ok(()),
+                // 26.3 attack with a `piercing_weapon` (spear) in the main hand.
+                PlayerActionKind::Stab => PlayerInput::Stab { connection: conn },
                 // 26.3 mining-face change while holding attack: no mapping.
                 PlayerActionKind::ChangeDestroyDirection => return Ok(()),
             });
