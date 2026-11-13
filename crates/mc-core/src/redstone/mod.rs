@@ -36,6 +36,9 @@ pub(crate) struct RedstoneState {
     signal_residents: HashSet<ChunkPos>,
     /// World residency stamp of the last completed hydration pass.
     hydrated: Option<(u64, usize)>,
+    /// Per block state id: whether the residency scan must visit it (reactive,
+    /// tnt or command block). Built from the registry at the first scan.
+    scan_states: Vec<bool>,
     signals: BTreeMap<(i32, i32, i32), u16>,
     wake: Vec<BlockPos>,
     dirty_signals: Vec<(i32, i32, i32)>,
@@ -563,9 +566,38 @@ fn hydrate(state: &mut TickState) {
             }
         });
     }
-    let mut resident = state.world.resident_positions();
-    resident.sort_unstable_by_key(|pos| (pos.x, pos.z));
-    for cp in resident {
+    // Bottleneck: collecting, sorting and visiting every resident chunk (about
+    // 5,400 on native-100) each tick, though a chunk with no vanilla block
+    // ticks and already registered here is a no-op. Boundary: the candidates
+    // are exactly the chunks that can do work (vanilla ticks to import; while
+    // residency moved, chunks missing from `signal_residents` or `loaded`),
+    // visited in the same (x, z) order with the same body. Effect: the settled
+    // pass reads one length per resident chunk and sorts only the candidates.
+    // Removal: iterate the sorted `resident_positions()` again.
+    let mut pending: Vec<ChunkPos> = state
+        .world
+        .chunks()
+        .filter(|chunk| {
+            !chunk.scheduled_block_ticks().is_empty()
+                || (!settled
+                    && !(state.redstone.signal_residents.contains(&chunk.pos)
+                        && state.redstone.loaded.contains(&chunk.pos)))
+        })
+        .map(|chunk| chunk.pos)
+        .collect();
+    pending.sort_unstable_by_key(|pos| (pos.x, pos.z));
+    if !pending.is_empty() && state.redstone.scan_states.is_empty() {
+        state.redstone.scan_states = state
+            .registry
+            .blocks
+            .states()
+            .map(|block| {
+                let path = block.block.id.path();
+                reactive(path) || path == "tnt" || crate::command_blocks::is_block(path)
+            })
+            .collect();
+    }
+    for cp in pending {
         let Some(chunk) = state.world.chunk(cp) else {
             continue;
         };
@@ -580,20 +612,31 @@ fn hydrate(state: &mut TickState) {
             continue;
         }
         // One initial scan at residency acquisition; steady-state is event driven.
+        //
+        // Bottleneck: about 4,000 cells per non-empty section, each resolved to
+        // its block path and matched against about forty names, for every chunk
+        // that turns resident (tail spikes of up to several ms per tick).
+        // Boundary: `scan_states` answers the same predicate per state id, so
+        // a section whose palette holds no wanted state cannot match any cell
+        // and is skipped, and the cells of the others are tested by table
+        // lookup; the visited cells and their order are unchanged. Effect: the
+        // scan reads one palette per section instead of every cell. Removal:
+        // resolve `by_id(id)` and match its path per cell again.
+        let scan = &state.redstone.scan_states;
+        let wanted = |id: BlockStateId| scan.get(id.0 as usize).copied().unwrap_or(false);
         let mut cells = Vec::new();
         for (index, section) in chunk.sections.iter().enumerate() {
-            if section.is_empty() {
+            let holds = match section.palette() {
+                Some(palette) => palette.iter().copied().any(wanted),
+                None => wanted(section.get(0, 0, 0)),
+            };
+            if section.is_empty() || !holds {
                 continue;
             }
             for y in 0..16 {
                 for z in 0..16 {
                     for x in 0..16 {
-                        let id = section.get(x, y, z);
-                        if state.registry.blocks.by_id(id).is_some_and(|b| {
-                            reactive(b.block.id.path())
-                                || b.block.id.path() == "tnt"
-                                || crate::command_blocks::is_block(b.block.id.path())
-                        }) {
+                        if wanted(section.get(x, y, z)) {
                             cells.push(BlockPos {
                                 x: cp.x * 16 + i32::from(x),
                                 y: chunk.geometry().min_y() + index as i32 * 16 + i32::from(y),

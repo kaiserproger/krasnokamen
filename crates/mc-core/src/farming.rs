@@ -174,6 +174,28 @@ impl FarmSections {
         self.active_revision = Some(revision);
     }
 
+    /// Eligibility of every section of `chunk`, bit per section index.
+    fn compute(farming: &FarmStates, chunk: &Chunk) -> u32 {
+        debug_assert_eq!(chunk.sections.len(), chunk.geometry().section_count());
+        chunk
+            .sections
+            .iter()
+            .enumerate()
+            .fold(0, |mask, (index, section)| {
+                mask | (u32::from(farming.section_ticks(section)) << index)
+            })
+    }
+
+    /// The cached eligibility of `pos` when it was computed at `revision`.
+    fn cached(&self, pos: ChunkPos, revision: u64) -> Option<u32> {
+        self.chunks
+            .get(&pos)
+            .filter(|(cached, _)| *cached == revision)
+            .map(|(_, mask)| *mask)
+    }
+
+    /// Serial reference lookup used by the cache and equivalence tests.
+    #[cfg(test)]
     fn mask(&mut self, farming: &FarmStates, chunk: &Chunk, revision: u64) -> u32 {
         let pos = ChunkPos {
             x: chunk.pos.x,
@@ -181,15 +203,7 @@ impl FarmSections {
         };
         let cached = self.chunks.entry(pos).or_insert((u64::MAX, 0));
         if cached.0 != revision {
-            debug_assert_eq!(chunk.sections.len(), chunk.geometry().section_count());
-            let mask = chunk
-                .sections
-                .iter()
-                .enumerate()
-                .fold(0, |mask, (index, section)| {
-                    mask | (u32::from(farming.section_ticks(section)) << index)
-                });
-            *cached = (revision, mask);
+            *cached = (revision, Self::compute(farming, chunk));
         }
         cached.1
     }
@@ -675,7 +689,7 @@ pub fn run(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>, spawned: &m
     }
 }
 
-/// Below this many ticking chunks the rayon hand-off costs more than the loop.
+/// Below this many active chunks the rayon hand-off costs more than the loop.
 /// Serial sampling costs ~0.5 us per ordinary chunk (~6 us when every section
 /// ticks; 625 such chunks: 3.7 ms serial, 1.2 ms on the pool). A release
 /// real-client run with 81 chunks spent ~42 ms waiting for woken pool workers
@@ -683,40 +697,42 @@ pub fn run(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>, spawned: &m
 const PARALLEL_MIN_CHUNKS: usize = 256;
 
 /// A sampled cell whose block can random tick, with the roll stream after the
-/// three coordinate draws.
+/// three coordinate draws. `settled` holds the outcome already decided on the
+/// pool for kinds whose tick reads only the world and the registry (grass and
+/// mycelium); `None` leaves the cell to `tick_cell`.
 struct Hit {
     at: BlockPos,
     id: u32,
     kind: Kind,
     roll: u64,
+    settled: Option<Option<Outcome>>,
 }
+
+/// One chunk's sampled hits and, when its eligibility cache entry was stale,
+/// the recomputed `(chunk, revision, mask)`.
+type Visit = (Vec<Hit>, Option<(ChunkPos, u64, u32)>);
 
 /// `speed` random cells of every section that can tick, and what each does.
 ///
-/// Drawing coordinates and classifying the sampled block are pure reads of the
-/// world, so they run per chunk on the pool; `tick_cell` then runs serially over
-/// the hits in the original chunk/section/sample order.
+/// Bottleneck: the serial pass that looked up every active chunk, its
+/// revision and its cached eligibility (three hash probes per chunk, about
+/// 5,400 chunks on native-100) before the parallel draw. Boundary: looking up
+/// the chunk and its eligibility, drawing coordinates and classifying the
+/// sampled block are pure reads of the world, so one pass per chunk does them
+/// on the pool; stale eligibility entries are computed there and written back
+/// serially, and `tick_cell` then runs serially over the hits in the original
+/// chunk/section/sample order. Effect: the per-chunk probes leave the tick
+/// thread. Removal: build the `(chunk, mask)` work list serially again.
 fn sample(state: &mut TickState, speed: u32, min_parallel: usize) -> Vec<Change> {
     let mut changes = Vec::new();
     if speed == 0 {
         return changes;
     }
     state.farm_sections.refresh_active(&state.world);
-    let farming = &state.registry.farming;
+    let registry: &crate::registry::CoreRegistry = &state.registry;
+    let farming = &registry.farming;
     let world = &state.world;
-    let mut work: Vec<(&Chunk, u32)> = Vec::with_capacity(state.farm_sections.active_chunks.len());
-    for active in 0..state.farm_sections.active_chunks.len() {
-        let pos = state.farm_sections.active_chunks[active];
-        let chunk = world.chunk(pos).expect("cached active resident chunk");
-        let ticking = state.farm_sections.mask(
-            farming,
-            chunk,
-            world.chunk_revision(chunk.pos.x, chunk.pos.z),
-        );
-        if ticking != 0 {
-            work.push((chunk, ticking));
-        }
-    }
+    let sections = &state.farm_sections;
     // Only chunks with pending overlay edits need the overlay-aware read;
     // elsewhere it returns exactly the committed section cell.
     let overlay_chunks: FxHashSet<(i32, i32)> = world
@@ -724,21 +740,53 @@ fn sample(state: &mut TickState, speed: u32, min_parallel: usize) -> Vec<Change>
         .map(|((x, _, z), _)| (x.div_euclid(16), z.div_euclid(16)))
         .collect();
     let (seed, tick) = (world.seed() as u64, state.tick);
-    let hits_of = |&(chunk, ticking): &(&Chunk, u32)| {
+    let visit = |pos: &ChunkPos| -> Visit {
+        let chunk = world.chunk(*pos).expect("cached active resident chunk");
+        let revision = world.chunk_revision(pos.x, pos.z);
+        let (ticking, fresh) = match sections.cached(*pos, revision) {
+            Some(mask) => (mask, None),
+            None => {
+                let mask = FarmSections::compute(farming, chunk);
+                (mask, Some((*pos, revision, mask)))
+            }
+        };
         let mut hits = Vec::new();
-        let overlay = overlay_chunks.contains(&(chunk.pos.x, chunk.pos.z));
-        sample_chunk(
-            world, farming, overlay, seed, tick, speed, chunk, ticking, &mut hits,
-        );
-        hits
+        if ticking != 0 {
+            let overlay = overlay_chunks.contains(&(pos.x, pos.z));
+            sample_chunk(
+                world, registry, overlay, seed, tick, speed, chunk, ticking, &mut hits,
+            );
+        }
+        (hits, fresh)
     };
-    let hits: Vec<Vec<Hit>> = if work.len() >= min_parallel {
-        work.par_iter().with_min_len(16).map(hits_of).collect()
+    let active = &sections.active_chunks;
+    let visited: Vec<Visit> = if active.len() >= min_parallel {
+        active.par_iter().with_min_len(16).map(visit).collect()
     } else {
-        work.iter().map(hits_of).collect()
+        active.iter().map(visit).collect()
     };
-    for Hit { at, id, kind, roll } in hits.into_iter().flatten() {
-        tick_cell(state, at, id, kind, &mut Roll::new(roll), &mut changes);
+    for (_, fresh) in &visited {
+        if let Some((pos, revision, mask)) = fresh {
+            state.farm_sections.chunks.insert(*pos, (*revision, *mask));
+        }
+    }
+    for Hit {
+        at,
+        id,
+        kind,
+        roll,
+        settled,
+    } in visited.into_iter().flat_map(|(hits, _)| hits)
+    {
+        match settled {
+            Some(Some(outcome)) => changes.push(Change {
+                at,
+                was: id,
+                outcome,
+            }),
+            Some(None) => {}
+            None => tick_cell(state, at, id, kind, &mut Roll::new(roll), &mut changes),
+        }
     }
     changes
 }
@@ -746,7 +794,7 @@ fn sample(state: &mut TickState, speed: u32, min_parallel: usize) -> Vec<Change>
 #[allow(clippy::too_many_arguments)]
 fn sample_chunk(
     world: &crate::world::ChunkWorld,
-    farming: &FarmStates,
+    registry: &crate::registry::CoreRegistry,
     overlay: bool,
     seed: u64,
     tick: u64,
@@ -785,13 +833,23 @@ fn sample_chunk(
             if overlay {
                 id = world.block_at(at.x, at.y, at.z).unwrap_or(id);
             }
-            let kind = farming.kind(id);
+            let kind = registry.farming.kind(id);
             if kind.ticks() {
+                // Bottleneck: grass hits (most random-tick hits on native-100) ran
+                // `grass` serially on the tick thread, ~0.9 us each. Boundary: it
+                // reads only the world and the registry, all of which are already
+                // final for this pass (writes apply after sampling), and uses the
+                // same roll stream, so the outcome and the hit order are those of
+                // `tick_cell`. Effect: the grass tick leaves the tick thread.
+                // Removal: leave `settled` as `None` for every kind.
+                let settled = matches!(kind, Kind::Grass | Kind::Mycelium)
+                    .then(|| grass(world, registry, at, &mut Roll::new(roll.0)));
                 hits.push(Hit {
                     at,
                     id,
                     kind,
                     roll: roll.0,
+                    settled,
                 });
             }
         }
@@ -884,7 +942,7 @@ fn tick_cell(
     let outcome = match kind {
         Kind::Crop => crop(state, at, id, roll),
         Kind::Farmland => farmland(state, at, id),
-        Kind::Grass | Kind::Mycelium => grass(state, at, roll),
+        Kind::Grass | Kind::Mycelium => grass(&state.world, &state.registry, at, roll),
         Kind::Ice | Kind::Snow => {
             let light = state
                 .world
@@ -968,10 +1026,19 @@ fn tick_cell(
 }
 
 fn kind_at(state: &TickState, x: i32, y: i32, z: i32) -> Kind {
-    state
-        .world
+    kind_in(&state.world, &state.registry, x, y, z)
+}
+
+fn kind_in(
+    world: &crate::world::ChunkWorld,
+    registry: &crate::registry::CoreRegistry,
+    x: i32,
+    y: i32,
+    z: i32,
+) -> Kind {
+    world
         .block_at(x, y, z)
-        .map_or(Kind::Inert, |id| state.registry.farming.kind(id))
+        .map_or(Kind::Inert, |id| registry.farming.kind(id))
 }
 
 /// Vanilla `CropBlock.randomTick`: a crop off farmland pops; otherwise it
@@ -1122,33 +1189,47 @@ pub(crate) fn covered_farmland(state: &TickState, at: BlockPos, id: u32) -> bool
         })
 }
 
-fn grass_survives(state: &TickState, at: BlockPos) -> bool {
-    let Some(above) = state.world.block_at(at.x, at.y + 1, at.z) else {
+fn grass_survives(
+    world: &crate::world::ChunkWorld,
+    registry: &crate::registry::CoreRegistry,
+    at: BlockPos,
+) -> bool {
+    let Some(above) = world.block_at(at.x, at.y + 1, at.z) else {
         return true;
     };
-    if is_block(&state.registry.blocks, above, "snow")
-        && prop(&state.registry.blocks, above, "layers") == Some("1")
+    if is_block(&registry.blocks, above, "snow")
+        && prop(&registry.blocks, above, "layers") == Some("1")
     {
         return true;
     }
-    !state.registry.states.water_levels.contains(&above)
-        && prop(&state.registry.blocks, above, "waterlogged") != Some("true")
-        && state
-            .registry
+    !registry.states.water_levels.contains(&above)
+        && prop(&registry.blocks, above, "waterlogged") != Some("true")
+        && registry
             .light
             .opacity(above)
             .is_none_or(|opacity| opacity < 15)
 }
 
 /// Grass and mycelium share survival/light rules, preserving their own family.
-fn grass(state: &TickState, at: BlockPos, roll: &mut Roll) -> Option<Outcome> {
-    if !grass_survives(state, at) {
-        return Some(Outcome::Set(vec![(at, state.registry.states.dirt)]));
+/// Reads only the world and the registry so the sampling pool can run it.
+fn grass(
+    world: &crate::world::ChunkWorld,
+    registry: &crate::registry::CoreRegistry,
+    at: BlockPos,
+    roll: &mut Roll,
+) -> Option<Outcome> {
+    if !grass_survives(world, registry, at) {
+        return Some(Outcome::Set(vec![(at, registry.states.dirt)]));
     }
-    if state.raw_brightness(at.x, at.y + 1, at.z) < 9 {
+    // Vanilla `getRawBrightness(pos, 0)`: sky and block light, no day darkening.
+    if world
+        .light_at(at.x, at.y + 1, at.z)
+        .map_or(0, |(sky, block)| sky.max(block))
+        < 9
+    {
         return None;
     }
-    let source = state.world.block_at(at.x, at.y, at.z)?;
+    let source = world.block_at(at.x, at.y, at.z)?;
     let mut cells = Vec::new();
     for _ in 0..4 {
         let target = BlockPos {
@@ -1156,16 +1237,16 @@ fn grass(state: &TickState, at: BlockPos, roll: &mut Roll) -> Option<Outcome> {
             y: at.y + roll.below(5) as i32 - 3,
             z: at.z + roll.below(3) as i32 - 1,
         };
-        if kind_at(state, target.x, target.y, target.z) == Kind::Dirt
-            && grass_survives(state, target)
+        if kind_in(world, registry, target.x, target.y, target.z) == Kind::Dirt
+            && grass_survives(world, registry, target)
         {
-            let above = state.world.block_at(target.x, target.y + 1, target.z)?;
-            let snowy = if is_block(&state.registry.blocks, above, "snow") {
+            let above = world.block_at(target.x, target.y + 1, target.z)?;
+            let snowy = if is_block(&registry.blocks, above, "snow") {
                 "true"
             } else {
                 "false"
             };
-            let grown = with_prop(&state.registry.blocks, source, "snowy", snowy)?;
+            let grown = with_prop(&registry.blocks, source, "snowy", snowy)?;
             cells.push((target, grown));
         }
     }

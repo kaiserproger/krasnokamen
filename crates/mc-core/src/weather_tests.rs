@@ -697,12 +697,72 @@ fn precipitation_respects_dry_biomes_roofs_and_clear_weather() {
     assert!(crate::conduit::rain_exposed(&state, [8.5, 65.0, 8.5]));
     state.world.set_block(8, 67, 8, state.registry.states.stone);
     assert!(!crate::conduit::rain_exposed(&state, [8.5, 65.0, 8.5]));
-    assert_eq!(surface::surface(&state, 8, 8).unwrap().y, 67);
+    let overlay = surface::overlay_columns(&state);
+    assert_eq!(surface::surface(&state, &overlay, 8, 8).unwrap().y, 67);
     state.weather = (Weather::Clear, 1000);
     state.tick = 16;
     let mut writes = Vec::new();
     settle(&mut state, &mut writes);
     assert!(writes.is_empty());
+}
+
+#[test]
+fn direct_surface_scan_matches_a_cell_by_cell_scan_with_and_without_overlay() {
+    let mut state = precipitation_fixture("minecraft:plains");
+    let stone = state.registry.states.stone;
+    let geometry = state.dimension.geometry();
+    let naive = |state: &TickState, x: i32, z: i32| {
+        (geometry.min_y()..geometry.max_y()).rev().find(|&y| {
+            state.world.block_at(x, y, z).is_some_and(|id| {
+                state.registry.materials.classify(id) != mc_physics::BlockMaterial::Air
+            })
+        })
+    };
+    state.world.set_block(3, 200, 3, stone);
+    state.world.fold_overlay();
+    // Folded edits: the section read must find them.
+    let overlay = surface::overlay_columns(&state);
+    assert!(overlay.is_empty());
+    for (x, z) in [(3, 3), (8, 8), (0, 15)] {
+        let fast = surface::surface(&state, &overlay, x, z).map(|pos| pos.y);
+        assert_eq!(fast, naive(&state, x, z), "folded column ({x}, {z})");
+    }
+    assert_eq!(surface::surface(&state, &overlay, 3, 3).unwrap().y, 200);
+    // Unfolded: only the overlay knows about this edit.
+    state.world.set_block(5, 150, 5, stone);
+    let overlay = surface::overlay_columns(&state);
+    for (x, z) in [(3, 3), (5, 5), (8, 8), (0, 15)] {
+        let fast = surface::surface(&state, &overlay, x, z).map(|pos| pos.y);
+        assert_eq!(fast, naive(&state, x, z), "overlay column ({x}, {z})");
+    }
+    assert_eq!(surface::surface(&state, &overlay, 5, 5).unwrap().y, 150);
+}
+
+#[test]
+fn settle_samples_every_active_chunk_once_per_interval_without_a_burst() {
+    let mut state = precipitation_fixture("minecraft:plains");
+    let grid: Vec<_> = (-4..4)
+        .flat_map(|x| (-4..4).map(move |z| crate::boundary::ChunkPos { x, z }))
+        .collect();
+    state
+        .world
+        .ensure_blocking(&grid.iter().map(|chunk| (*chunk, 0)).collect());
+    state
+        .world
+        .set_active_chunks(grid.iter().copied().collect(), 0);
+    let mut seen = std::collections::HashMap::new();
+    let mut busiest = 0;
+    for tick in 1000..1016 {
+        state.tick = tick;
+        settle(&mut state, &mut Vec::new());
+        busiest = busiest.max(state.weather_chunks.len());
+        for chunk in &state.weather_chunks {
+            *seen.entry(*chunk).or_insert(0) += 1;
+        }
+    }
+    assert_eq!(seen.len(), grid.len());
+    assert!(seen.values().all(|count| *count == 1));
+    assert!(busiest < grid.len() / 2, "burst of {busiest} chunks");
 }
 
 #[test]

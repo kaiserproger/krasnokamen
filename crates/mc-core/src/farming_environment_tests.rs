@@ -115,14 +115,14 @@ fn gap_opaque_cover_kills_grass_but_glass_does_not() {
     let stone = state.registry.states.stone;
     put(&mut state, -5, Y + 1, -5, stone);
     set_result(
-        grass(&state, at, &mut Roll::new(0)),
+        grass(&state.world, &state.registry, at, &mut Roll::new(0)),
         at,
         state.registry.states.dirt,
     );
     let glass = block(&state, "glass", &[]);
     put(&mut state, -5, Y + 1, -5, glass);
     assert!(
-        !matches!(grass(&state, at, &mut Roll::new(0)), Some(Outcome::Set(edits)) if edits.contains(&(at, state.registry.states.dirt)))
+        !matches!(grass(&state.world, &state.registry, at, &mut Roll::new(0)), Some(Outcome::Set(edits)) if edits.contains(&(at, state.registry.states.dirt)))
     );
 }
 
@@ -145,7 +145,7 @@ fn gap_dark_grass_does_not_spread() {
     state.world.fold_overlay();
     assert_eq!(state.raw_brightness(0, Y + 1, 0), 0);
     for seed in 0..100 {
-        assert!(grass(&state, at, &mut Roll::new(seed)).is_none());
+        assert!(grass(&state.world, &state.registry, at, &mut Roll::new(seed)).is_none());
     }
 }
 
@@ -214,7 +214,7 @@ fn gap_mycelium_spreads_its_own_family() {
     put(&mut state, at.x, at.y, at.z, id);
     assert!(kind_of("mycelium").ticks());
     let edits = (0..100)
-        .find_map(|seed| grass(&state, at, &mut Roll::new(seed)))
+        .find_map(|seed| grass(&state.world, &state.registry, at, &mut Roll::new(seed)))
         .expect("spread");
     assert!(matches!(edits, Outcome::Set(cells) if cells.iter().all(|(_, grown)| *grown == id)));
 }

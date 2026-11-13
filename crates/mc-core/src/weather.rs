@@ -258,21 +258,44 @@ pub(crate) fn rains_at(state: &TickState, pos: crate::boundary::BlockPos) -> boo
     surface::at(state, pos) == surface::Precipitation::Rain
 }
 
-/// One column per active chunk per sixteen ticks. Retain the worklist capacity;
-/// sorting fixes write/spawn order independent of the active hash-set layout.
+/// Ticks between two precipitation samples of one chunk.
+const SETTLE_PERIOD: u64 = 16;
+
+/// The tick within [`SETTLE_PERIOD`] on which `chunk` is sampled.
+///
+/// Bottleneck: sampling every active chunk on `tick % 16 == 0` ran the whole
+/// worklist (and its column scans) in one tick, a 12 ms spike every 16th tick
+/// on native-100 against a sub-millisecond mean. Boundary: only the tick a
+/// chunk is sampled on moves; each active chunk is still sampled exactly once
+/// per sixteen ticks with the same RNG seeding by (tick, chunk), so vanilla's
+/// one-column-per-chunk-per-interval cadence is unchanged. Chunk (0, 0) keeps
+/// phase 0. Effect: the per-tick cost is a sixteenth of the burst. Removal:
+/// restore the `tick % 16` gate in `settle` and drop this function.
+fn settle_phase(chunk: crate::boundary::ChunkPos) -> u64 {
+    let mix = (chunk.x as u64).wrapping_mul(0xFF51_AFD7_ED55_8CCD)
+        ^ (chunk.z as u64).wrapping_mul(0xC4CE_B9FE_1A85_EC53);
+    mix >> 60
+}
+
+/// One column per active chunk per sixteen ticks, spread over the interval by
+/// [`settle_phase`]. Retain the worklist capacity; sorting fixes write/spawn
+/// order independent of the active hash-set layout.
 pub(crate) fn settle(state: &mut TickState, writes: &mut Vec<(crate::boundary::BlockPos, u32)>) {
-    if !state.dimension.has_weather() || !state.tick.is_multiple_of(16) {
+    if !state.dimension.has_weather() {
         return;
     }
+    let phase = state.tick % SETTLE_PERIOD;
     let mut chunks = std::mem::take(&mut state.weather_chunks);
     chunks.clear();
     chunks.extend(
         state
             .world
             .active_positions()
-            .filter(|pos| state.world.is_block_active(pos.x, pos.z)),
+            .filter(|pos| settle_phase(*pos) == phase && state.world.is_block_active(pos.x, pos.z)),
     );
     chunks.sort_unstable_by_key(|pos| (pos.x, pos.z));
+    // Columns of chunks with pending overlay edits take the exact surface read.
+    let overlay = surface::overlay_columns(state);
     for chunk in &chunks {
         let mut rng = crate::natural_spawn::Rng(
             state.world.seed() as u64
@@ -282,7 +305,7 @@ pub(crate) fn settle(state: &mut TickState, writes: &mut Vec<(crate::boundary::B
         );
         let x = chunk.x * 16 + rng.below(16) as i32;
         let z = chunk.z * 16 + rng.below(16) as i32;
-        let Some(pos) = surface::surface(state, x, z) else {
+        let Some(pos) = surface::surface(state, &overlay, x, z) else {
             continue;
         };
         if state.weather.0 == Weather::Thunder && rng.below(100_000) < 16 && rains_at(state, pos) {
