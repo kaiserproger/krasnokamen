@@ -379,7 +379,7 @@ impl Cover {
 /// The entity store indexes feet, not bounds. Expand by its retained maximum
 /// body width before visiting chunks; callers retain their exact narrow phase.
 /// Slot order preserves the exhaustive pickup/riptide order, including swaps.
-pub(super) fn swept_slots(
+pub(crate) fn swept_slots(
     state: &TickState,
     start: [f64; 3],
     end: [f64; 3],

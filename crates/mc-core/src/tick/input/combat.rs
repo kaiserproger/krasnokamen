@@ -361,9 +361,16 @@ pub(in crate::tick) fn stab(
     let delta = look.map(|axis| axis * f64::from(far - near));
     let grow = f64::from(margin);
     let vehicle = crate::mounts::vehicle(state, entity);
+    let mut slots = Vec::new();
+    crate::projectiles::flight::swept_slots(
+        state,
+        start,
+        [0, 1, 2].map(|axis| start[axis] + delta[axis]),
+        grow,
+        &mut slots,
+    );
     let mut along = Vec::new();
-    for index in 0..state.entities.len() {
-        let slot = EntitySlot(index as u32);
+    for slot in slots {
         let body = state.entities.body(slot);
         if !body.alive
             || slot == actor_slot
