@@ -57,9 +57,14 @@ CONTAINER_CLASS = "net.minecraft.client.gui.screens.inventory.ContainerScreen"
 PROJECT_STATUS_SLOT, PROJECT_ICON_SLOT = 52, 4
 
 BLUEPRINTS = ("house", "storage", "farm", "mason", "lumber_camp", "mine",
-              "barracks", "wall", "watch_tower")
+              "barracks", "wall", "watch_tower", "gate", "armorer", "butcher",
+              "cartographer", "cleric", "fisherman", "fletcher", "leatherworker",
+              "librarian", "toolsmith", "weaponsmith")
 LEVELS = {"house": 3, "storage": 2, "farm": 2, "mason": 2, "lumber_camp": 2,
-          "mine": 2, "barracks": 2, "wall": 2, "watch_tower": 2}
+          "mine": 2, "barracks": 3, "wall": 3, "watch_tower": 3, "gate": 3,
+          "armorer": 2, "butcher": 2, "cartographer": 2, "cleric": 2,
+          "fisherman": 2, "fletcher": 2, "leatherworker": 2, "librarian": 2,
+          "toolsmith": 2, "weaponsmith": 2}
 
 FILL_LIMIT = 32768
 
@@ -104,6 +109,9 @@ PARALLEL_SITES = {
     "house": (0, 0), "storage": (1, 0), "farm": (2, 0),
     "mason": (0, 1), "lumber_camp": (1, 1), "mine": (2, 1),
     "barracks": (0, 2), "wall": (1, 2), "watch_tower": (2, 2),
+    "gate": (0, 3), "armorer": (1, 3), "butcher": (2, 3), "cartographer": (0, 4),
+    "cleric": (1, 4), "fisherman": (2, 4), "fletcher": (0, 5), "leatherworker": (1, 5),
+    "librarian": (2, 5), "toolsmith": (0, 6), "weaponsmith": (1, 6),
 }
 
 def _load_blueprints() -> dict[str, dict[str, Any]]:
@@ -130,21 +138,47 @@ def _level_frame(bp: str, level: int) -> tuple[int, int, int]:
     return len(layers[0][0]), len(layers[0]), len(layers)
 
 
-def oriented_cells(bp: str, level: int, origin: tuple[int, int, int],
-                   turns: int) -> dict[tuple[int, int, int], str]:
-    """The level's authored cells as the server places them after `turns` quarter turns, bounds
-    minimum at `origin` (settlements/blueprints.rs:rotate_xz in the level's own frame)."""
-    width, depth, _ = _level_frame(bp, level)
+def _max_frame(bp: str) -> tuple[int, int]:
+    """The (x, z) extent of the largest level: the frame the server rotates every level in."""
+    levels = _load_blueprints()[bp]["levels"]
+    return (max(len(l["layers"][0][0]) for l in levels), max(len(l["layers"][0]) for l in levels))
+
+
+def _cert_offset(bp: str, level: int, turns: int) -> tuple[int, int]:
+    """Where the level's certificate minimum sits from the placement origin after `turns`."""
+    width, depth = _max_frame(bp)
+    cx, _, cz = _load_blueprints()[bp]["levels"][level - 1]["cert"]
+    corners = [_rotate_blueprint_xz(x, z, width, depth, turns)
+               for x in (0, cx - 1) for z in (0, cz - 1)]
+    return min(c[0] for c in corners), min(c[1] for c in corners)
+
+
+def cells_true(bp: str, level: int, true: tuple[int, int, int],
+               turns: int) -> dict[tuple[int, int, int], str]:
+    """The level's authored cells as the server places them: every level rotates in the
+    maximum frame about the placement origin `true`."""
+    width, depth = _max_frame(bp)
     data = _load_blueprints()[bp]
-    ox, oy, oz = origin
     out: dict[tuple[int, int, int], str] = {}
     for y, layer in enumerate(data["levels"][level - 1]["layers"]):
         for z, row in enumerate(layer):
             for x, ch in enumerate(row):
                 if ch != ".":
                     rx, rz = _rotate_blueprint_xz(x, z, width, depth, turns)
-                    out[(ox + rx, oy + y, oz + rz)] = data["palette"][ch]
+                    out[(true[0] + rx, true[1] + y, true[2] + rz)] = data["palette"][ch]
     return out
+
+
+def true_origin(bp: str, level: int, origin: tuple[int, int, int],
+                turns: int) -> tuple[int, int, int]:
+    """Placement origin from a level's certificate minimum (the listed bounds)."""
+    dx, dz = _cert_offset(bp, level, turns)
+    return origin[0] - dx, origin[1], origin[2] - dz
+
+
+def oriented_cells(bp: str, level: int, origin: tuple[int, int, int],
+                   turns: int) -> dict[tuple[int, int, int], str]:
+    return cells_true(bp, level, true_origin(bp, level, origin, turns), turns)
 
 
 def best_turns(cells_by_turns: dict[int, dict[tuple[int, int, int], str]],
@@ -186,11 +220,12 @@ def _scan_box(probe: ProbeSteps, lo: tuple[int, int, int],
 
 def _fit_orientation(probe: ProbeSteps, bp: str, level: int,
                      origin: tuple[int, int, int]) -> int:
-    width, depth, height = _level_frame(bp, level)
-    extent = max(width, depth)
-    world = _scan_box(probe, origin, (origin[0] + extent - 1, origin[1] + height - 1,
-                                      origin[2] + extent - 1))
-    return best_turns({turns: oriented_cells(bp, level, origin, turns) for turns in range(4)}, world)
+    candidates = {turns: oriented_cells(bp, level, origin, turns) for turns in range(4)}
+    positions = [pos for cells in candidates.values() for pos in cells]
+    lo = tuple(min(p[i] for p in positions) for i in range(3))
+    hi = tuple(max(p[i] for p in positions) for i in range(3))
+    world = _scan_box(probe, lo, hi)
+    return best_turns(candidates, world)
 
 
 def _state_base(text: str) -> str:
@@ -643,7 +678,9 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             pass  # Chain resume: keep existing residents; no population pollution.
         elif not _summon_bind(probe, sub, tag, sname, shell, 6):
             continue
-        use_dialog = bp in ("house", "barracks")
+        # Projects is a container menu now (`_project_status` reads it as one); the dialog helpers
+        # wait for a dialog screen that never opens (barracks hung to its deadline, 2026-11-13).
+        use_dialog = False
         if f"L1_origin" not in sub:
             # Chain resume: probe first — Busy/Ordered means a project is
             # already admitted (ours from an earlier link); skip re-funding
@@ -677,22 +714,10 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
                     still_active = _order_echo_retry(
                         probe, sub, tag, bp, 1, f"settlement build {bp}",
                         False, ctx)
-                probe.check(f"{tag}_L1_project", still_active)
-                if not still_active:
-                    # Planner may have certified the target during our fund flow
-                    # (1.5x covers L+1): a present cert means the level stands.
-                    _caught = _building_bounds(probe, bp, 1)
-                    if _caught is not None:
-                        sub["L1_origin"] = list(_caught)
-                        probe.check(f"{tag}_L1_built", True)
-                        _verdict(sub, "L1_built", "PASS",
-                                 f"planner-admitted L1 cert at {list(_caught)}; verified")
-                        _verify_level(probe, sub, ctx, artifact, bp, 1, _caught, tag,
-                                      sname, tuple(sub["storage_chest"]))
-                    else:
-                        probe.check(f"{tag}_L1_built", False)
-                        _verdict(sub, "L1_built", "FAIL", "no active project after funded order")
-                        continue
+                if _admitted_or_caught(probe, sub, tag, bp, 1, still_active) is not None:
+                    # Planner certified the target during our fund flow (1.5x covers
+                    # L+1): the common wait below verifies that cert.
+                    sub["L1_admission"] = "planner-admitted"
             if os.environ.get("BUILDINGS_QA_STOP_AFTER_ORDER"):
                 probe.check(f"{tag}_L1_built", True)
                 _verdict(sub, "L1_built", "PASS",
@@ -750,23 +775,13 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
                 use_dialog, ctx,
                 dialog_fn=lambda: _upgrade_via_dialog(probe, sub, tag, bp, bid, level, sname),
                 upgrade_bid=bid)
-            probe.check(f"{tag}_L{level}_project", still_up)
-            if not still_up:
-                # Planner may have certified L{level} during our fund flow.
-                _caught_up = _building_bounds(probe, bp, level)
-                if _caught_up is not None:
-                    sub[f"L{level}_origin"] = list(_caught_up)
-                    probe.check(f"{tag}_L{level}_built", True)
-                    _verdict(sub, f"L{level}_upgrade", "PASS",
-                             f"planner-admitted L{level} cert at {list(_caught_up)}; verified")
-                    _verify_level(probe, sub, ctx, artifact, bp, level, _caught_up, tag,
-                                  sname, tuple(sub["storage_chest"]))
-                    continue
-                probe.check(f"{tag}_L{level}_built", False)
-                _verdict(sub, f"L{level}_upgrade", "FAIL", "no active upgrade project after funded order")
-                continue
+            _caught_up = _admitted_or_caught(probe, sub, tag, bp, level, still_up)
+            if _caught_up is not None:
+                # The planner started or finished this level before our order landed;
+                # follow its build instead of ordering a second one.
+                sub[f"L{level}_admission"] = "planner-admitted"
             adv = False
-            if level == 2:
+            if _caught_up is None and level == 2:
                 adv = _adversarial_break(probe, sub, tag, bp, level, bid)
                 _fund_level(probe, sub, bp, level, tuple(sub["storage_chest"]))
             origin_up = _wait_certified_origin_here(probe, sub, tag, bp, level, ctx, artifact)
@@ -780,6 +795,8 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
                 sub[f"L{level}_adversarial"] = "mid-build block break issued; build waited on site"
             _verify_level(probe, sub, ctx, artifact, bp, level, origin_up, tag,
                           sname, tuple(sub["storage_chest"]))
+            _verdict(sub, f"L{level}_upgrade", "PASS",
+                     f"L{level} cert at {list(origin_up)}; block-matched, entrance and light checked")
 
 def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str, level: int,
                       order_cmd: str, use_dialog: bool, ctx: ProfileContext,
@@ -804,7 +821,13 @@ def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
             except Exception as exc:
                 sub[f"L{level}_order_attempt{attempt}"] = f"echo failed: {exc}"[:200]
         probe.call("minecraft_wait_ticks", {"ticks": 20})
-        if ctx.windowed:
+        if "Started " in str(sub.get(f"L{level}_order_attempt{attempt}", "")):
+            return True
+        # "No blueprint upgrade available" is the planner's own project at this level (the
+        # order would target a level past the blueprint's last): follow that project.
+        refused_as_planned = "No blueprint upgrade available" in str(
+            sub.get(f"L{level}_order_attempt{attempt}", ""))
+        if ctx.windowed or refused_as_planned:
             if _project_active_quiet(probe, sub, tag, bp, level, upgrade_bid=upgrade_bid):
                 return True
         else:
@@ -820,6 +843,18 @@ def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
         for ticks in (255, 255, 255, 255, 180):
             probe.call("minecraft_wait_ticks", {"ticks": ticks})
     return False
+
+
+def _admitted_or_caught(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str, level: int,
+                        admitted: bool) -> tuple[int, int, int] | None:
+    """Admission verdict for a level's order. An order the server refused is still fine when
+    the planner already built the level in the fund window: that cert's origin is returned
+    (the build is then followed, not re-ordered). Neither an admitted project nor a cert
+    fails `<tag>_L<level>_project`; the check must come after the cert lookup, because a failed
+    check raises."""
+    caught = None if admitted else _building_bounds(probe, bp, level)
+    probe.check(f"{tag}_L{level}_project", admitted or caught is not None)
+    return caught
 
 
 def _project_status(probe: ProbeSteps) -> tuple[str, int] | None:
@@ -1649,6 +1684,19 @@ def _close_any_screen(probe: ProbeSteps) -> None:
         probe.call("minecraft_wait_ticks", {"ticks": 8})
 
 
+def _base_materials(listing: str, level: int) -> dict[str, int]:
+    """The `base {...}` of level `level` in `tools/blueprints.py materials` output; a station
+    kind appends `; stations [...]` after the dict."""
+    import ast
+    for line in listing.splitlines():
+        if f"L{level}:" in line and "base" in line:
+            try:
+                return dict(ast.literal_eval(line.split("base", 1)[1].split("; stations", 1)[0].strip()))
+            except (ValueError, SyntaxError):
+                return {}
+    return {}
+
+
 def _fund_level(probe: ProbeSteps, sub: dict[str, Any], bp: str, level: int,
                 chest: tuple[int, int, int]) -> None:
     """Give exact base materials + deposit into built storage (ordinary path).
@@ -1660,14 +1708,7 @@ def _fund_level(probe: ProbeSteps, sub: dict[str, Any], bp: str, level: int,
     import subprocess as _sp
     out = _sp.run(["python3", "tools/blueprints.py", "materials", bp],
                   capture_output=True, text=True, cwd=str(runtime.REPO_ROOT)).stdout
-    base: dict[str, int] = {}
-    for line in out.splitlines():
-        if f"L{level}:" in line and "base" in line:
-            try:
-                base = eval(line.split("base", 1)[1].strip())  # noqa: S307 - local tool output
-            except Exception:
-                base = {}
-            break
+    base = _base_materials(out, level)
     item_of = {"cobblestone": "minecraft:cobblestone", "oak_log": "minecraft:oak_log",
                "white_wool": "minecraft:white_wool", "dirt": "minecraft:dirt",
                "wheat_seeds": "minecraft:wheat_seeds", "coal": "minecraft:coal"}
@@ -1723,7 +1764,8 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
     # certifies (1.5x fund covers it) and clears removed cells before this
     # verify reads. Accept air-where-removed and already-upgraded cells;
     # L+1 verification itself stays strict.
-    cells_next = oriented_cells(bp, level + 1, origin, turns) if level < LEVELS[bp] else {}
+    cells_next = (cells_true(bp, level + 1, true_origin(bp, level, origin, turns), turns)
+                  if level < LEVELS[bp] else {})
     mismatches: list[str] = []
     checked = 0
     for pos, want in cells.items():
@@ -1779,6 +1821,13 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
                     still.append(f"{list(pos)}: got {_block_id(block)} want {_state_base(want)}")
         mismatches = still
         match_ok = not mismatches
+        oracle = []
+        for entry in still[:6]:
+            nums = [int(v) for v in entry.split("]")[0].strip("[").split(",")]
+            want_name = entry.rsplit("want ", 1)[1]
+            lines = _chat_lines(_send(probe, f"execute if block {nums[0]} {nums[1]} {nums[2]} {want_name}"), 4)
+            oracle.append(f"{nums}: {' | '.join(lines)[:120]}")
+        sub[f"L{level}_server_oracle"] = oracle
     sub[f"L{level}_blockmatch"] = {"checked": checked, "mismatches": mismatches[:12]}
     _verdict(sub, f"L{level}_blockmatch", "PASS" if match_ok else "FAIL",
              f"{checked} cells, {len(mismatches)} mismatches", f"origin {list(origin)} rot {turns}")
@@ -1786,9 +1835,12 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
     entrance = data["levels"][level - 1]["entrance"]
     width, depth, height = _level_frame(bp, level)
 
+    frame_w, frame_d = _max_frame(bp)
+    true = true_origin(bp, level, origin, turns)
+
     def world_xz(x: int, z: int) -> tuple[int, int]:
-        rx, rz = _rotate_blueprint_xz(x, z, width, depth, turns)
-        return origin[0] + rx, origin[2] + rz
+        rx, rz = _rotate_blueprint_xz(x, z, frame_w, frame_d, turns)
+        return true[0] + rx, true[2] + rz
 
     ex, ez = world_xz(entrance[0], entrance[2])
     ey = origin[1] + entrance[1]
@@ -1870,7 +1922,7 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
         _function_storage(probe, sub, tag, level, origin, cells, settlement)
     elif kind == "barracks":
         _function_barracks(probe, sub, tag, level, origin, cells, settlement)
-    elif kind in ("wall", "tower"):
+    elif kind in ("wall", "tower", "gate"):
         probe.check(f"{tag}_L{level}_fort", True)
         _verdict(sub, f"L{level}_function_fort", "PASS",
                  "certified + entrance walkable (physical fortification)")
@@ -2397,25 +2449,62 @@ def _function_storage(probe: ProbeSteps, sub: dict[str, Any], tag: str, level: i
              f"container {list(target)} holds {em} emerald; main summary lists stock={listed}")
 
 
+def _building_lore(probe: ProbeSteps, name: re.Pattern[str]) -> tuple[str, list[str]] | None:
+    """(icon name, lore lines) of the first Buildings-menu icon matching `name`, or None.
+
+    `settlement menu buildings` opens the container menu `Buildings · <settlement>` (ui_menus.rs
+    filtered_buildings_screen); an icon's lore (category, `Soldiers: f/n` or `Workers: f/n`,
+    bounds) is read with `minecraft_read_item_components`."""
+    _close_any_screen(probe)
+    probe.call("minecraft_send_chat", {"message": "settlement menu buildings", "command": True})
+    state = probe.wait(lambda s: _container_titled(s, "Buildings"), "buildings_menu_open",
+                       timeout_seconds=60)
+    found = None
+    for row in state["container"]["slots"]:
+        if name.fullmatch(str(row.get("name") or "")):
+            components = probe.call("minecraft_read_item_components",
+                                    {"source": "container", "slot": int(row["slot"])})["components"]
+            found = (str(row["name"]), [_text_plain(line) for line in components.get("minecraft:lore", [])])
+            break
+    probe.call("minecraft_close_screen", {})
+    return found
+
+
+def _text_plain(value: Any) -> str:
+    """Plain text of a JSON text component (string, list, or object with extra)."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "".join(_text_plain(part) for part in value)
+    if isinstance(value, dict):
+        return _text_plain(value.get("text", "")) + _text_plain(value.get("extra", []))
+    return ""
+
+
+def _soldier_beds(lore: list[str]) -> tuple[int, int] | None:
+    """(filled, beds) from a barracks icon's `Soldiers: f/n` lore line."""
+    for line in lore:
+        match = re.search(r"Soldiers:\s*(\d+)\s*/\s*(\d+)", line)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+    return None
+
+
 def _function_barracks(probe: ProbeSteps, sub: dict[str, Any], tag: str, level: int,
                        origin: tuple[int, int, int],
                        cells: dict[tuple[int, int, int], str], settlement: str) -> None:
-    """Capacity-gated barracks proof: Residents page
-    `#{id} Barracks L{level}: {filled}/{beds}` with beds == level*2.
-    PASS regardless of filled (recruit flow is army-qa territory)."""
-    import re as _re
-    residents = _residents_text(probe)
-    filled = beds = None
-    for line in residents:
-        m = _re.search(rf"Barracks L{level}:\s*(\d+)\s*/\s*(\d+)", line)
-        if m:
-            filled, beds = int(m.group(1)), int(m.group(2))
-            break
+    """Capacity-gated barracks proof: the Buildings menu icon `#<id> Barracks L<level>` reads
+    `Soldiers: <filled>/<beds>` with beds == level*2. PASS regardless of filled (the recruit flow
+    is army-qa territory)."""
+    found = _building_lore(probe, re.compile(rf"#\d+ Barracks L{level}"))
+    counted = _soldier_beds(found[1]) if found else None
+    filled, beds = counted if counted else (None, None)
     want = level * 2
-    ok = beds is not None and beds == want
+    ok = beds == want
+    sub[f"L{level}_barracks_icon"] = found
     probe.check(f"{tag}_L{level}_barracks", ok)
     _verdict(sub, f"L{level}_function_barracks", "PASS" if ok else "FAIL",
-             f"filled={filled} beds={beds} want_beds={want}", "settlement menu residents")
+             f"filled={filled} beds={beds} want_beds={want}", "settlement menu buildings")
 
 
 def _restart_resume(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
