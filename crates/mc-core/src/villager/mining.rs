@@ -42,6 +42,23 @@ pub struct Progress {
     pub stalled_since: u64,
 }
 
+/// One info line per mining lane transition: a mine that yields nothing must say
+/// which obstruction closed each lane (hostile, route, cave wall, no ground).
+fn note(state: &TickState, slot: EntitySlot, v: &VillagerState, event: &str) {
+    tracing::info!(
+        target: "krasnokamen::settlement",
+        tick = state.tick,
+        uuid = %state.entities.row(slot).uuid,
+        pass = v.mining_progress.pass,
+        level = v.mining_progress.level,
+        lane = v.mining_progress.lane,
+        cell = v.mining_progress.cell,
+        layer = v.mining_progress.layer,
+        event,
+        "miner lane"
+    );
+}
+
 pub(super) fn item_id(state: &TickState, name: &str) -> Option<u32> {
     state
         .registry
@@ -825,6 +842,9 @@ pub(super) fn work(
         v.mining_progress.stalled_since = 0;
     }
     if !working || heavy_load(v) {
+        if working && !v.mining_progress.returning {
+            note(state, slot, v, "heavy_load");
+        }
         v.mining_progress.returning = true;
     }
     if v.mining_progress.returning {
@@ -849,6 +869,7 @@ pub(super) fn work(
     if staircase(bounds, stair_base(bounds, base, pass), level).is_none() {
         // Every level of this flight is done: the next flight starts where this
         // one ended, deeper, so the quarry reaches the bottom of the zone.
+        note(state, slot, v, "flight_done");
         v.mining_progress.pass = pass.saturating_add(1);
         v.mining_progress.level = 0;
         v.mining_progress.lane = 0;
@@ -867,6 +888,7 @@ pub(super) fn work(
     let Some(column) = column else {
         // Every lane is closed at this level (no ground, caves, hostiles):
         // the next level lies higher, where the same lanes may be open.
+        note(state, slot, v, "level_closed");
         v.mining_progress.level = level.saturating_add(1);
         v.mining_progress.lane = 0;
         v.mining_progress.cell = 0;
@@ -882,6 +904,7 @@ pub(super) fn work(
         origin
     } else {
         // No ground at this column inside the zone: try the next one.
+        note(state, slot, v, "closed_no_ground");
         v.mining_progress.lane += 1;
         v.mining_progress.cell = 0;
         v.mining_progress.layer = 0;
@@ -927,6 +950,16 @@ pub(super) fn work(
             v.mining_progress.stalled_since = state.tick.max(1);
         }
         if state.tick.saturating_sub(v.mining_progress.stalled_since) >= STALL_PATIENCE {
+            note(
+                state,
+                slot,
+                v,
+                if hostile {
+                    "closed_hostile"
+                } else {
+                    "closed_route"
+                },
+            );
             v.mining_progress.stalled_since = 0;
             v.mining_progress.lane += 1;
             v.mining_progress.cell = 0;
@@ -975,6 +1008,7 @@ pub(super) fn work(
         Ok(()) => {}
         Err(Obstruction::Unloaded) => return Some(previous),
         Err(Obstruction::Permanent) => {
+            note(state, slot, v, "closed_obstruction");
             v.mining_progress.lane += 1;
             v.mining_progress.cell = 0;
             v.mining_progress.layer = 0;
