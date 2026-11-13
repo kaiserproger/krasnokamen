@@ -2,7 +2,9 @@
 //! Calibration: BattleVideo/research-combat-behavior.md §§4.4–4.7 (Sabin/Ilerda).
 use rustc_hash::FxHashMap;
 
-use super::faction::{MeleeRange, in_melee_range};
+use mc_melee_range::MeleeReach;
+
+use super::faction::{in_melee_range, melee_reach, reach_bound};
 use super::formation::{DECISION_TICKS, EXHAUSTED_STAMINA, STANDING_RECOVERY, SURGE_FATIGUE};
 use super::{BattleIntent, BattleState, Frame, Output};
 use crate::boundary::{EntityEvent, EntityId, Hand};
@@ -47,11 +49,13 @@ const ACTIVE_FIGHT_SECONDS: f32 = {
 const TARGET_REMOVALS: f32 = 80.0;
 const PARRY_FRACTION: f32 = 2316.0 / 3873.0;
 // The meshed press keeps several times the calibration's 46 files within reach
-// of each other per regiment front (V4 rehearsal: 4 426 fighting at peak), so a
-// landed blow removes a man that many times less often: losses per minute and
-// time to rout stay those of the G2 take (owner, 2026-11-13) while far more
-// men trade blows, parries and blocks.
-const PRESS_EXPOSURE: f32 = 5.0;
+// of each other per regiment front, so a landed blow removes a man that many
+// times less often: losses per minute and time to rout are to stay those of
+// the G2 take (owner, 2026-11-13; peak 2 212 a minute, a side's quarter lost
+// after 194 s) while far more men trade blows, parries and blocks. At five
+// (rehearsal 7baa94d5: 5 500-6 400 fighting for a minute) the press alone
+// still cost 2 000-2 450 a minute and the rout 3 423.
+const PRESS_EXPOSURE: f32 = 10.0;
 const REMOVAL_ROLLS: f32 = 10_000.0 * TARGET_REMOVALS
     / (FRONT_FILES
         * PRESS_EXPOSURE
@@ -113,10 +117,10 @@ pub(super) enum Action {
 pub(super) struct Fighter {
     pub(super) action: Action,
     pub(super) weapon: Weapon,
-    /// Melee range of the held item (`faction::MeleeRange`: its vanilla
-    /// `minecraft:attack_range` for a mob, or the mob default without it),
-    /// classified with the weapon when the held item changes.
-    pub(super) range: MeleeRange,
+    /// Melee reach of the held item (its vanilla `minecraft:attack_range`
+    /// for a mob, or the mob default without it), classified with the weapon
+    /// when the held item changes.
+    pub(super) range: MeleeReach,
     equipment: Option<(Option<u32>, Option<u32>, u32)>,
     shield: bool,
     /// Last shield pose handed to presentation; `None` until first decided.
@@ -141,7 +145,7 @@ impl Default for Fighter {
         Self {
             action: Action::Guard { until: 0 },
             weapon: Weapon::Sword,
-            range: MeleeRange::DEFAULT,
+            range: MeleeReach::mob(None),
             equipment: None,
             shield: false,
             raised: None,
@@ -175,6 +179,9 @@ pub struct Work {
     /// Of those, the ones in the fight loop: the decision pass may let them
     /// strike and they stand guard, wind up or recover from a blow.
     pub fighting: u64,
+    /// Of those, the ones in action rather than standing guard: winding up,
+    /// recovering from a blow, staggered by a parry or blocking one.
+    pub acting: u64,
     /// Shield bearers holding the shield up after this tick's actions.
     pub shields_raised: u64,
     /// Shield blocks (`ShieldBlock` events) this tick.
@@ -257,7 +264,7 @@ fn classify(frame: &Frame<'_>, slot: EntitySlot, fighter: &mut Fighter, ranged: 
     fighter.equipment = Some(key);
     let held = item.and_then(|id| frame.registry.items.name_of(id));
     let name = held.map_or("", |id| id.as_str());
-    fighter.range = MeleeRange::of_item(
+    fighter.range = melee_reach(
         held.and_then(|name| frame.registry.item_facts.get(name))
             .and_then(|facts| facts.attack_range),
     );
@@ -404,7 +411,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         };
         let decision_tick = (frame.tick + id.0 as u64).is_multiple_of(ATTACK_DECISION_TICKS);
         let soldier = soldier
-            .and_then(|target| super::retained_enemy(frame.entities, slot, target, range.bound()))
+            .and_then(|target| super::retained_enemy(frame.entities, slot, target, reach_bound(range)))
             .filter(|target| reaches(target.id))
             .or_else(|| {
                 // Any other enemy in range will do; searched only when a
@@ -417,8 +424,8 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
                     faction: battle.columns.factions[bi],
                     pos: battle.columns.positions[bi],
                 };
-                let found = battle.grid.any_enemy(unit, range.bound(), |u| reaches(u.id))?;
-                super::retained_enemy(frame.entities, slot, found.id, range.bound())
+                let found = battle.grid.any_enemy(unit, reach_bound(range), |u| reaches(u.id))?;
+                super::retained_enemy(frame.entities, slot, found.id, reach_bound(range))
             });
         // A living network player of the other side in reach is one more
         // candidate for this same swing; the nearer of the two is struck.
@@ -509,7 +516,7 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
     let (columns, formation, grid) = (&battle.columns, &battle.formation, &battle.grid);
     let entities = frame.entities;
     let count = |(chunk, fighters): (usize, &mut [Fighter])| {
-        let mut counts = (0_u64, 0_u64);
+        let mut counts = (0_u64, 0_u64, 0_u64);
         for (offset, fighter) in fighters.iter_mut().enumerate() {
             let bi = chunk * COUNT_CHUNK + offset;
             if !columns.active[bi] || columns.carried[bi] {
@@ -545,7 +552,7 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
                             faction: columns.factions[bi],
                             pos: columns.positions[bi],
                         },
-                        range.bound(),
+                        reach_bound(range),
                         |u| reaches(u.id),
                     )
                     .is_some();
@@ -559,27 +566,36 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
                     .in_fight
                     .is_some_and(|at| tick.saturating_sub(at) <= FIGHT_WINDOW_TICKS);
             counts.1 += u64::from(recent);
+            // In action rather than standing guard: winding up, recovering
+            // from his blow, staggered by a parry or blocking an incoming one.
+            let acting = recent
+                && (matches!(
+                    fighter.action,
+                    Action::Windup { .. } | Action::Recover { .. } | Action::Stagger { .. }
+                ) || fighter.block.is_some_and(|(_, impact)| tick <= impact));
+            counts.2 += u64::from(acting);
         }
         counts
     };
-    let add = |a: (u64, u64), b: (u64, u64)| (a.0 + b.0, a.1 + b.1);
+    let add = |a: (u64, u64, u64), b: (u64, u64, u64)| (a.0 + b.0, a.1 + b.1, a.2 + b.2);
     let fighters = &mut combat.fighters[..battle.columns.ids.len()];
-    let (in_reach, fighting) =
+    let (in_reach, fighting, acting) =
         if fighters.len() >= COUNT_CHUNK * 2 && rayon::current_num_threads() > 1 {
             fighters
                 .par_chunks_mut(COUNT_CHUNK)
                 .enumerate()
                 .map(count)
-                .reduce(|| (0, 0), add)
+                .reduce(|| (0, 0, 0), add)
         } else {
             fighters
                 .chunks_mut(COUNT_CHUNK)
                 .enumerate()
                 .map(count)
-                .fold((0, 0), add)
+                .fold((0, 0, 0), add)
         };
     combat.work.in_weapon_reach = in_reach;
     combat.work.fighting = fighting;
+    combat.work.acting = acting;
 }
 
 /// A shield bearer standing guard in order holds the shield up; a swing, a
@@ -712,7 +728,7 @@ fn strike(
     };
     combat.work.target_checks += 1;
     let range = combat.fighters[actor_bi].range;
-    if super::retained_enemy(frame.entities, slot, target, range.bound()).is_none()
+    if super::retained_enemy(frame.entities, slot, target, reach_bound(range)).is_none()
         || !in_melee_range(frame.entities, slot, victim, range)
         || matches!(
             combat.fighters[actor_bi].action,

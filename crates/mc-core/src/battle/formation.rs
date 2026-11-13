@@ -10,12 +10,11 @@ use rustc_hash::FxHashMap;
 
 pub(crate) const DECISION_TICKS: u64 = 10;
 pub(crate) const SECTION_SIZE: usize = 20;
-/// Foot fronts in contact stand this close (front to front): under the vanilla
-/// mob melee reach (0.6-wide boxes grown by sqrt(2.04) - 0.6 touch while the
-/// centres are under 2.03 apart along the front's normal), so with the press's
-/// 0.75-block ranks each front rank has the enemy's first two ranks in reach,
-/// and the lulls between pulses are a cautious exchange at close quarters,
-/// not a stand-off out of reach.
+/// Foot fronts in contact stand this close (front to front): every front-rank
+/// man has his opponent within the vanilla mob melee reach (0.6-wide boxes
+/// grown by sqrt(2.04) - 0.6, so centres under 1.43 apart), and the lulls
+/// between pulses are a cautious exchange at close quarters, not a stand-off
+/// out of reach.
 pub(crate) const STANDOFF: f64 = 1.2;
 /// A line closer than this gives ground.
 const GIVE_GROUND: f64 = 0.8;
@@ -119,17 +118,22 @@ fn presses(r: &Regiment) -> bool {
         && !r.morale.broken
 }
 
-/// Formation slot of (file, rank) at the regiment's current file interval and
-/// rank depth: the fighting interval in contact, and always for a line staged
-/// to mesh, which opens its files on the approach rather than in contact; the
-/// pressed depth while the regiment presses.
-fn slot_target(r: &Regiment, file: usize, rank: u16) -> [f64; 3] {
-    let interval = if r.gap <= 6.0 || r.interval >= MESH_INTERVAL {
+/// File interval a regiment's slots use right now: the fighting interval in
+/// contact, and always for a line staged to mesh, which opens its files on the
+/// approach rather than in contact; the staged frontage otherwise.
+pub(crate) fn file_interval(r: &Regiment) -> f64 {
+    if r.gap <= 6.0 || r.interval >= MESH_INTERVAL {
         r.interval
     } else {
         r.spec.frontage
-    };
-    let mut target = position(&r.spec, file, 0, interval);
+    }
+}
+
+/// Formation slot of (file, rank) at the regiment's current file interval
+/// ([`file_interval`]) and rank depth: the pressed depth while the regiment
+/// presses.
+fn slot_target(r: &Regiment, file: usize, rank: u16) -> [f64; 3] {
+    let mut target = position(&r.spec, file, 0, file_interval(r));
     let spacing = if !presses(r) {
         2.0
     } else if r.meshing {

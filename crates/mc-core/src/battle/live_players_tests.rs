@@ -184,10 +184,16 @@ fn live_player_takes_the_centre_infantry_slot_with_its_kit() {
     assert_eq!(state.entities.rot(body)[0], 0.0);
     let line = slot_position(&regiment.spec, hold.file);
     assert!((hold.at[0] - line[0]).abs() < 1e-9 && (hold.at[2] - line[2]).abs() < 1e-9);
-    // Nearest the centre of the red foot line: no foot front file is closer.
     // Nearest the centre of the red foot line (infantry left of the spears,
-    // their seam on the origin): the infantry file next to the seam.
-    assert!((hold.at[0] - ORIGIN[0]).abs() <= 1.0, "{:?}", hold.at);
+    // their seam on the origin): the infantry file next to the seam once the
+    // staged files open to the fighting interval.
+    let opened = crate::battle::formation::position(
+        &regiment.spec,
+        hold.file,
+        0,
+        crate::battle::formation::file_interval(regiment),
+    );
+    assert!((opened[0] - ORIGIN[0]).abs() <= 1.0, "{opened:?} {:?}", hold.at);
     for m in &formation.members {
         let Some(slot) = state.entities.slot_of(m.id) else {
             continue;
@@ -419,12 +425,13 @@ fn facing_blue() -> (TickState, EntityId, EntityId, [f64; 3]) {
 }
 
 /// Hold the two in contact, as at an engaged front: the soldier at `at`
-/// (his line would otherwise march on past), PovRed a pace in front of him.
+/// (his line would otherwise march on past), PovRed one block in front of
+/// him, inside the vanilla mob reach (centres under 1.43 apart).
 fn in_contact(state: &mut TickState, player: EntityId, blue: EntityId, at: [f64; 3]) {
     let body = state.entities.slot_of(blue).unwrap();
     state.entities.set_pos(body, at);
     let body = state.entities.slot_of(player).unwrap();
-    state.entities.set_pos(body, [at[0], at[1], at[2] - 1.5]);
+    state.entities.set_pos(body, [at[0], at[1], at[2] - 1.0]);
 }
 
 /// For the next tick every blue fighter but `except` is held in `blue`, and

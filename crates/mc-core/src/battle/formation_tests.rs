@@ -234,8 +234,11 @@ fn film_fatigue_leaves_contact_time_between_human_speed_bursts() {
     assert_eq!(runtime.regiments[0].sections[0].pulse_until, 20);
 }
 
+/// In a charge pulse only the front rank may strike; the line in contact
+/// presses its ranks up behind the front (PRESS_RANK_SPACING instead of the
+/// two-block marching depth) without passing it; a withdraw holds files.
 #[test]
-fn front_only_closes_during_charge_pulse_and_withdraw_holds_files() {
+fn front_only_strikes_during_charge_pulse_ranks_press_up_and_withdraw_holds_files() {
     let mut runtime = FormationRuntime::default();
     add(&mut runtime, spec(0, 1, 0.0, 5, Order::Charge), 1, 100);
     add(&mut runtime, spec(1, 2, 4.0, 5, Order::Hold), 101, 100);
@@ -244,8 +247,9 @@ fn front_only_closes_during_charge_pulse_and_withdraw_holds_files() {
     }
     assert!(runtime.can_attack(EntityId(1)));
     assert!(!runtime.can_attack(EntityId(6)));
-    assert!(runtime.members[0].pos[2] > 0.8);
-    assert!((runtime.members[5].pos[2] + 2.0).abs() < 0.1);
+    let (front, second) = (runtime.members[0].pos[2], runtime.members[5].pos[2]);
+    assert!(front > 0.8, "front {front}");
+    assert!(second > -1.5 && second < front - 0.5, "front {front} second rank {second}");
     runtime.set_order(0, Order::Withdraw);
     let origin = runtime.regiments[0].spec.origin;
     for tick in 30..80 {
