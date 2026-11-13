@@ -289,7 +289,8 @@ fn legacy_nearest(
                 }
                 examined += 1;
                 let m = &members[other];
-                if (actor.pos[1] - m.pos[1]).abs() >= 2.0 {
+                // The vertical window is the steering rule, not storage layout.
+                if (actor.pos[1] - m.pos[1]).abs() > super::super::ground::MAX_DROP {
                     continue;
                 }
                 let d2 = (actor.pos[0] - m.pos[0]).powi(2) + (actor.pos[2] - m.pos[2]).powi(2);

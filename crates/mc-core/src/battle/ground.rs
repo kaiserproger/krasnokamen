@@ -24,7 +24,7 @@ const AROUND: i32 = 8;
 const WALK_OUT: f64 = 0.079 / mc_physics::TICK_SECONDS;
 /// Deepest drop a body walks into, in blocks; deeper holes are steered around
 /// and never staged in (vanilla mobs avoid falls over about three blocks).
-const MAX_DROP: f64 = 2.0;
+pub(crate) const MAX_DROP: f64 = 2.0;
 /// Cells above head height always read for a terrain roof (cave mouths and
 /// overhangs on edited terrain, whose heightmaps are stale).
 const ROOF_BAND: i32 = 4;

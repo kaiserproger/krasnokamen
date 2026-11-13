@@ -153,7 +153,11 @@ impl SeparationGrid {
                 }
                 examined += 1;
                 let m = &members[other];
-                if (actor.pos[1] - m.pos[1]).abs() >= 2.0 {
+                // A body walks off a drop of up to MAX_DROP blocks, so one that
+                // far below stands where it may land: unseen, the fugitives
+                // stepping off a terrace ledge fell onto one point, 111 in a
+                // terrace corner of rehearsal-06198df4.
+                if (actor.pos[1] - m.pos[1]).abs() > super::ground::MAX_DROP {
                     continue;
                 }
                 let d2 = (actor.pos[0] - m.pos[0]).powi(2) + (actor.pos[2] - m.pos[2]).powi(2);

@@ -916,15 +916,110 @@ const G2_LEDGE: [[i32; 29]; 25] = [
 /// (6.7, 66, 100.3), behind the second side, which flees +z.
 const G2_LEDGE_SHIFT: [i32; 3] = [120, -28, -157];
 
-fn g2_ledge(state: &mut TickState) {
+const G2R_CORNER: [[i32; 21]; 21] = [
+    [
+        96, 96, 96, 96, 96, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 97, 98, 99, 99,
+    ],
+    [
+        96, 96, 96, 96, 96, 96, 95, 95, 95, 95, 96, 96, 96, 96, 96, 97, 97, 98, 99, 100, 100,
+    ],
+    [
+        97, 97, 96, 96, 96, 96, 95, 96, 96, 96, 96, 96, 96, 96, 97, 97, 98, 99, 100, 100, 101,
+    ],
+    [
+        99, 99, 98, 98, 97, 97, 96, 96, 96, 96, 96, 97, 97, 98, 98, 99, 99, 100, 100, 101, 101,
+    ],
+    [
+        100, 100, 100, 99, 99, 98, 98, 98, 98, 98, 98, 98, 99, 99, 99, 99, 100, 100, 100, 101, 102,
+    ],
+    [
+        101, 101, 101, 100, 100, 100, 99, 99, 99, 99, 99, 99, 100, 100, 100, 100, 100, 101, 101,
+        101, 102,
+    ],
+    [
+        102, 102, 101, 101, 101, 101, 100, 100, 100, 100, 100, 100, 100, 101, 101, 101, 101, 101,
+        101, 102, 102,
+    ],
+    [
+        102, 102, 102, 102, 102, 102, 102, 101, 101, 101, 101, 101, 101, 102, 102, 102, 102, 102,
+        102, 102, 103,
+    ],
+    [
+        103, 103, 103, 103, 103, 103, 102, 102, 102, 102, 102, 102, 102, 102, 102, 102, 102, 103,
+        103, 103, 103,
+    ],
+    [
+        103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103,
+        103, 103, 103,
+    ],
+    [
+        104, 104, 104, 104, 104, 104, 104, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103,
+        104, 104, 104,
+    ],
+    [
+        104, 104, 104, 104, 104, 104, 104, 104, 104, 104, 103, 103, 104, 104, 104, 104, 104, 104,
+        104, 104, 104,
+    ],
+    [
+        105, 105, 105, 106, 106, 106, 106, 106, 105, 104, 104, 104, 104, 104, 104, 104, 104, 104,
+        104, 104, 104,
+    ],
+    [
+        106, 106, 106, 107, 107, 108, 108, 107, 106, 104, 104, 104, 104, 104, 104, 104, 104, 104,
+        104, 105, 105,
+    ],
+    [
+        107, 107, 107, 108, 108, 109, 109, 108, 108, 106, 104, 104, 104, 104, 104, 104, 104, 105,
+        105, 106, 106,
+    ],
+    [
+        108, 108, 109, 109, 110, 110, 110, 110, 109, 109, 107, 107, 107, 107, 106, 107, 107, 107,
+        108, 108, 108,
+    ],
+    [
+        109, 109, 110, 110, 110, 111, 111, 111, 110, 110, 109, 109, 109, 108, 108, 108, 109, 109,
+        109, 109, 109,
+    ],
+    [
+        110, 110, 110, 111, 111, 111, 112, 111, 111, 111, 110, 110, 110, 109, 109, 109, 110, 110,
+        110, 110, 110,
+    ],
+    [
+        110, 111, 111, 111, 111, 112, 112, 112, 112, 111, 111, 111, 111, 110, 110, 110, 111, 111,
+        111, 111, 111,
+    ],
+    [
+        111, 111, 111, 112, 112, 112, 112, 112, 112, 112, 112, 112, 112, 111, 111, 111, 111, 112,
+        112, 112, 112,
+    ],
+    [
+        111, 111, 112, 112, 112, 113, 114, 114, 113, 113, 112, 112, 112, 112, 112, 112, 112, 112,
+        112, 112, 112,
+    ],
+];
+
+/// First air above the ground round the corner of two terrace faces at
+/// (-99.6, 104, 316.6) where 111 fleeing blue foot stood within one block
+/// in rehearsal-06198df4 (receipts/BvHorseStack): columns x -110..=-90,
+/// rows z 302..=322, from the site-935 scan. Real (x, y, z) + this shift.
+const G2R_CORNER_SHIFT: [i32; 3] = [120, -28, -157];
+
+/// Stone up to each column's first air of `rows` (real columns from
+/// `real`: x of the first column, z of the first row), air above.
+fn patch<const W: usize>(
+    state: &mut TickState,
+    rows: &[[i32; W]],
+    real: [i32; 2],
+    shift: [i32; 3],
+) {
     let (stone, air) = (state.registry.states.stone, state.registry.states.air);
-    for (dz, row) in G2_LEDGE.iter().enumerate() {
+    for (dz, row) in rows.iter().enumerate() {
         for (dx, &top) in row.iter().enumerate() {
             let (x, z) = (
-                -126 + dx as i32 + G2_LEDGE_SHIFT[0],
-                244 + dz as i32 + G2_LEDGE_SHIFT[2],
+                real[0] + dx as i32 + shift[0],
+                real[1] + dz as i32 + shift[2],
             );
-            let top = top + G2_LEDGE_SHIFT[1];
+            let top = top + shift[1];
             for y in 55..top + 10 {
                 state
                     .world
@@ -952,14 +1047,16 @@ fn densest(points: &[[f64; 3]]) -> usize {
         .unwrap_or(0)
 }
 
-/// Fugitives on foot that run into the G2 cliff and along it into the notch
-/// keep apart there: in the G2 take 87 stood on one point for the last
-/// 25 s, one body for the camera that was meant to film them.
-#[test]
-fn fugitives_pressed_into_a_cliff_notch_do_not_heap_on_one_point() {
-    let mut state = relief_fixture();
-    g2_ledge(&mut state);
-    stage(&mut state, 100);
+/// 48 foot of the second side, placed in rows of twelve from real (x, z)
+/// `from` (shifted by `shift`), break and flee for `ticks` real ticks.
+/// Returns the most bodies within 0.5 blocks of one (and its tick), the
+/// median distance fled toward +z and the end positions.
+fn rout_from(
+    state: &mut TickState,
+    from: [f64; 2],
+    shift: [i32; 3],
+    ticks: u64,
+) -> ((usize, u64), f64, Vec<[f64; 3]>) {
     let formation = &state.hostile.battle.formation;
     let regiments: Vec<usize> = formation
         .regiments
@@ -979,11 +1076,9 @@ fn fugitives_pressed_into_a_cliff_notch_do_not_heap_on_one_point() {
         .take(48)
         .collect();
     assert!(ids.len() >= 40, "too few foot: {}", ids.len());
-    // South-west of the notch, as the G2 fugitives came: real x -123..-112,
-    // z 246..250.
     for (k, &id) in ids.iter().enumerate() {
-        let x = -123.5 + f64::from(G2_LEDGE_SHIFT[0]) + (k % 12) as f64;
-        let z = 246.5 + f64::from(G2_LEDGE_SHIFT[2]) + (k / 12) as f64;
+        let x = from[0] + f64::from(shift[0]) + (k % 12) as f64;
+        let z = from[1] + f64::from(shift[2]) + (k / 12) as f64;
         let Some(Ok(y)) = support(&state.world, &state.registry, [x, 0.0, z], 0.3) else {
             panic!("no ground at {x} {z}");
         };
@@ -1008,20 +1103,57 @@ fn fugitives_pressed_into_a_cliff_notch_do_not_heap_on_one_point() {
             })
             .collect()
     };
-    let start: Vec<f64> = positions(&state).iter().map(|p| p[2]).collect();
+    let start: Vec<f64> = positions(state).iter().map(|p| p[2]).collect();
     let mut worst = (0, 0);
-    for tick in 1..=800 {
-        run_tick(&mut state, &[]);
+    for tick in 1..=ticks {
+        run_tick(state, &[]);
         if tick % 50 == 0 {
-            worst = worst.max((densest(&positions(&state)), tick));
+            worst = worst.max((densest(&positions(state)), tick));
         }
     }
-    let end = positions(&state);
+    let end = positions(state);
     let mut fled: Vec<f64> = end.iter().zip(&start).map(|(p, z)| p[2] - z).collect();
     fled.sort_by(f64::total_cmp);
+    (worst, fled[fled.len() / 2], end)
+}
+
+/// Fugitives on foot that run into the G2 cliff and along it into the notch
+/// keep apart there: in the G2 take 87 stood on one point for the last
+/// 25 s, one body for the camera that was meant to film them.
+#[test]
+fn fugitives_pressed_into_a_cliff_notch_do_not_heap_on_one_point() {
+    let mut state = relief_fixture();
+    patch(&mut state, &G2_LEDGE, [-126, 244], G2_LEDGE_SHIFT);
+    stage(&mut state, 100);
+    // South-west of the notch, as the G2 fugitives came: real x -123..-112,
+    // z 246..250.
+    let (worst, fled, end) = rout_from(&mut state, [-123.5, 246.5], G2_LEDGE_SHIFT, 800);
     assert!(
-        fled[fled.len() / 2] >= 5.0,
+        fled >= 5.0,
         "the fugitives did not run to the cliff: {end:?}"
+    );
+    assert!(
+        worst.0 <= 4,
+        "fugitives heaped: {} bodies within 0.5 blocks of one at tick {}: {end:?}",
+        worst.0,
+        worst.1
+    );
+}
+
+/// Fugitives that climb a slope and step off a two-block ledge into the
+/// corner of two terrace faces keep apart there: unseen from the ledge, the
+/// bodies below were landed on (rehearsal-06198df4: 111 within one block of
+/// (-99.6, 104, 316.6)).
+#[test]
+fn fugitives_in_a_terrace_corner_do_not_heap_on_one_point() {
+    let mut state = relief_fixture();
+    patch(&mut state, &G2R_CORNER, [-110, 302], G2R_CORNER_SHIFT);
+    stage(&mut state, 100);
+    // South-east of the corner, as the rehearsal's fugitives came.
+    let (worst, fled, end) = rout_from(&mut state, [-101.5, 303.5], G2R_CORNER_SHIFT, 800);
+    assert!(
+        fled >= 5.0,
+        "the fugitives did not run to the terraces: {end:?}"
     );
     assert!(
         worst.0 <= 4,
