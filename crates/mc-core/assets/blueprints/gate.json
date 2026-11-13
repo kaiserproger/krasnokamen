@@ -18,7 +18,7 @@
         ["CCC.CCC", "CCCDCCC", "CCC.CCC"],
         ["CCC.CCC", "CCCUCCC", "CCC.CCC"],
         ["CCCCCCC", "CCCCCCC", "CCCCCCC"],
-        ["C.C.C.C", "t.....t", "C.C.C.C"]
+        ["CCCCCCC", "t.....t", "C.C.C.C"]
       ]
     },
     {
@@ -29,7 +29,7 @@
         ["CCC..CCC", "CCCDECCC", "CCC..CCC"],
         ["CCC..CCC", "CCCUVCCC", "CCC..CCC"],
         ["CCCCCCCC", "CCCCCCCC", "CCCCCCCC"],
-        ["C.C.C.CC", "t......t", "C.C.C.CC"]
+        ["CCCCCCCC", "t......t", "C.C.C.CC"]
       ]
     },
     {
@@ -40,7 +40,7 @@
         ["CCC...CCC", "CCCDEDCCC", "CCC...CCC"],
         ["CCC...CCC", "CCCUVUCCC", "CCC...CCC"],
         ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
-        ["C.C.C.C.C", "t.......t", "C.C.C.C.C"]
+        ["CCCCCCCCC", "t.......t", "C.C.C.C.C"]
       ]
     }
   ]
