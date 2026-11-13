@@ -53,10 +53,11 @@ COBBLE_STACKS = 12
 DOORS = 4
 COBBLE, DOOR, AIR, WATER = ("minecraft:cobblestone", "minecraft:oak_door", "minecraft:air",
                             "minecraft:water")
+PATH = "minecraft:dirt_path"
 # Seconds the Builders get to place the first block of the fortification, then to finish it.
 START_SECONDS = 600.0
 BUILD_SECONDS = 1500.0
-SCAN_TICKS = 400
+SCAN_TICKS = 250  # minecraft_wait_ticks accepts at most 255
 
 
 def ring_columns(ax: int, az: int) -> list[tuple[int, int, int]]:
@@ -212,8 +213,11 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
         probe.call("minecraft_wait_ticks", {"ticks": SCAN_TICKS})
         counts = tally(scan_ring(probe, ax, ay, az), scan_wells(probe, ax, ay, az), ax, ay, az)
         elapsed = time.monotonic() - started
+        roads = _scan_box(probe, (ax - RING, ay - 1, az), (ax + RING, ay - 1, az))
+        roads.update(_scan_box(probe, (ax, ay - 1, az - RING), (ax, ay - 1, az + RING)))
         samples.append({"seconds": round(elapsed), "ring_blocks": counts["ring_blocks"],
-                        "well_blocks": counts["well_blocks"], "doors": counts["doors"]})
+                        "well_blocks": counts["well_blocks"], "doors": counts["doors"],
+                        "road_paths": sum(1 for block in roads.values() if block == PATH)})
         if first is None and counts["ring_blocks"] + counts["well_blocks"] > 0:
             first = elapsed
         if complete(counts):
