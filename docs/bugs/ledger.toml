@@ -5223,3 +5223,18 @@ regression = [
 failing_first = "reported"
 fix_commit = "af58aeb920b1403c294982c477f53e1ceabc66c1"
 promotion = "docs/bugs/promotions/FLUID-FLOW-WASHES-KELP-SEAGRASS-SUGAR-CANE.json"
+
+[[bug]]
+id = "ITEM-INFINITE-PICKUP-DELAY-AND-AGE-TICK"
+title = "An item entity with PickupDelay 32767 counts its delay down every tick (becoming pickable after 32,767 ticks and dirtying its row each tick), and Age -32768 is imported or summoned as 0 and the item despawns"
+area = "gameplay"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "Owner brief (PerfEntity2, 2026-11-13) from vanilla 26.3 ItemEntity.tick: pickupDelay is decremented only while it is above 0 and not INFINITE_PICKUP_DELAY (32767), age advances unless it is INFINITE_LIFETIME (-32768), and isMergable refuses both. Krasnokamen at 87b0981b decrements the pickup delay in apply_motion_state and the resting writeback (marking the row changed every tick), stores Age as an unsigned clock that cannot hold -32768 (Anvil import maps it to 0, summon clamps it to 0) and merges such items."
+regression = [
+  "cargo:mc-core:tick::entity_phase::entity_phase_tests::item_pickup_delay_32767_never_counts_down_or_marks_the_row_changed",
+  "cargo:mc-core:natural_spawn_tests::item_with_age_minus_32768_never_ages_or_expires",
+  "cargo:mc-core:command_summon::tests::item_summon_with_age_minus_32768_never_ages_and_survives_checkpoint",
+]
+failing_first = "not recorded"

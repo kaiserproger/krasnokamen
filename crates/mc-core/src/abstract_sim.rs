@@ -108,10 +108,12 @@ pub(crate) fn run(state: &mut TickState, writes: &mut Vec<(BlockPos, u32)>) {
                 row.age = row
                     .age
                     .saturating_add(elapsed.min(u64::from(u32::MAX)) as u32);
-                body.pickup_delay = body
-                    .pickup_delay
-                    .saturating_sub(elapsed.min(u64::from(u32::MAX)) as u32);
-                if row.age >= 6000 {
+                if body.pickup_delay != crate::entities::PICKUP_DELAY_NEVER {
+                    body.pickup_delay = body
+                        .pickup_delay
+                        .saturating_sub(elapsed.min(u64::from(u32::MAX)) as u32);
+                }
+                if row.age >= 6000 && row.age != crate::entities::ITEM_AGE_NEVER {
                     if let Some(item) = row.item.as_mut() {
                         item.count = 0;
                     }

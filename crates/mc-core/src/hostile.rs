@@ -499,10 +499,14 @@ pub(crate) fn zombie_arms_update(
 
 /// Publish the zombie chase pose without disturbing unrelated mob-flag bits.
 pub(crate) fn set_zombie_aggressive(state: &mut TickState, slot: EntitySlot, aggressive: bool) {
-    let Some((id, next)) = zombie_arms_update(&state.entities, &state.registry, slot, aggressive)
-    else {
-        return;
-    };
+    if let Some((id, next)) = zombie_arms_update(&state.entities, &state.registry, slot, aggressive)
+    {
+        set_zombie_arms(state, slot, id, next);
+    }
+}
+
+/// Write a [`zombie_arms_update`] result.
+pub(crate) fn set_zombie_arms(state: &mut TickState, slot: EntitySlot, id: EntityId, next: i8) {
     set_extra(
         state,
         slot,

@@ -932,11 +932,7 @@ pub fn advance(state: &mut TickState) {
                 || (!row.entity_life.age_lock.locked
                     && (row.entity_life.child_ticks > 0
                         || matches!(body.kind, EntityKind::Mob { type_id }
-                            if Some(type_id) == tadpole)))
-                || (matches!(body.kind, EntityKind::Mob { type_id }
-                        if Some(type_id) == chicken)
-                    && adult(row)
-                    && egg.is_some()));
+                            if Some(type_id) == tadpole))));
         if !life_clock && row.appearance.arrow_count <= 0 && row.appearance.stinger_count <= 0 {
             continue;
         }
@@ -1001,28 +997,6 @@ pub fn advance(state: &mut TickState) {
                 }
             }
         }
-        let body = state.entities.body(slot);
-        let row = state.entities.row(slot);
-        if let EntityKind::Mob { type_id } = body.kind
-            && Some(type_id) == chicken
-            && adult(row)
-            && let Some(egg) = egg
-        {
-            let id = body.id;
-            let remaining = row.entity_life.harvest_ticks;
-            let next = if remaining <= 1 {
-                egg_interval(id, state.tick)
-            } else {
-                remaining - 1
-            };
-            state.entities.set_harvest_ticks(slot, next);
-            if remaining <= 1 {
-                if remaining == 1 {
-                    state.merge_life_drops.push((pos, ItemStack::new(egg, 1)));
-                }
-                changed = true;
-            }
-        }
         if let Some(half_width) = half_width {
             state.entities.set_half_width(slot, half_width);
         }
@@ -1032,6 +1006,31 @@ pub fn advance(state: &mut TickState) {
     }
     slots.clear();
     state.serial_entity_slots = slots;
+    // Egg clocks (PerfEntity2). Bottleneck: 13,000 adult chickens at native-100
+    // each cost a serial body, cold-row and appearance read per tick (0.67 ms).
+    // Boundary: only the egg countdown, laying and reset. Fence: rows are
+    // independent, the pass runs after the loop over the same flag snapshot and
+    // applies the same tests (alive adult chicken in an active column, a baby
+    // that grew up in the loop counts), the cold row is written exactly as
+    // `set_harvest_ticks` did, and laid eggs are queued in slot order. Removal
+    // path: restore the chicken term of `life_clock` and the egg block here.
+    if let (Some(chicken), Some(egg)) = (chicken, egg) {
+        let tick = state.tick;
+        let world = &state.world;
+        let laid = state.entities.advance_egg_clocks(
+            chicken,
+            crate::contact_hazards::MIN_PARALLEL_ROWS,
+            |x, z| world.is_active(x, z),
+            |id| egg_interval(id, tick),
+        );
+        for (slot, lays) in laid {
+            if lays {
+                let pos = state.entities.pos(slot);
+                state.merge_life_drops.push((pos, ItemStack::new(egg, 1)));
+            }
+            let _ = state.entities.row_mut(slot);
+        }
+    }
 }
 
 pub fn commit_drops(state: &mut TickState, spawned: &mut Vec<EntityId>) {

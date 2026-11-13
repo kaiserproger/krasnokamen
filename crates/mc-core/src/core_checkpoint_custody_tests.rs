@@ -445,8 +445,18 @@ fn custody_paths_reach_the_next_checkpoint() {
             }),
         ),
         (
-            "set_harvest_ticks",
-            Box::new(move |state| state.entities.set_harvest_ticks(slot(state, chicken), 77)),
+            "advance_egg_clocks",
+            Box::new(move |state| {
+                state.entities.prepare_motion_hints(&state.registry);
+                let slot = slot(state, chicken);
+                let crate::entities::EntityKind::Mob { type_id } = state.entities.body(slot).kind
+                else {
+                    panic!("the chicken is a mob");
+                };
+                state
+                    .entities
+                    .advance_egg_clocks(type_id, usize::MAX, |_, _| true, |_| 77);
+            }),
         ),
         (
             "set_motion_state",

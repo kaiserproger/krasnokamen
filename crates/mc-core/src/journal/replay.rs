@@ -363,7 +363,15 @@ impl EntityStateImage {
             });
         let (entity_life, love) = crate::entity_life::from_record(record, ageable);
         let mut image = Self {
-            age: if ageable { 0 } else { record.age.max(0) as u32 },
+            age: if ageable {
+                0
+            } else if record.age == i32::from(i16::MIN)
+                && registry.entity_type_id(&record.id) == Some(registry.item_type_id)
+            {
+                crate::entities::ITEM_AGE_NEVER
+            } else {
+                record.age.max(0) as u32
+            },
             entity_life,
             love,
             breed_cooldown: record

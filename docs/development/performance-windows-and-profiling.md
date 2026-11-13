@@ -141,6 +141,20 @@ instead of 100,000 cold rows, and the despawn candidates are selected in the age
 roofed 100-player/104k-mob workload for these callees: build with `cargo test --release
 --no-run`, run the executable under `mem-run.sh -p` with `MC_CORE_PHASE_LOG=1`.
 
+The commit lap that was `merchant_mounts_allay` is now four laps (`merchant`, `mounts`,
+`allay`, `equipment_pickup`): in the micro with 3,000 mature ground items the whole
+lap was the mob equipment collector selection (1.2 to 1.5 ms), which now scans the hot
+`MOTION_ITEM_COLLECTOR` flag column instead of
+walking the type lists and reading cold rows. The adult chicken egg clock runs on the
+pool (`EntityStore::advance_egg_clocks`, selected by `MOTION_EGG`), and the serial
+entity writeback no longer reads a zombie's cold row and appearance to learn that its
+arms flag is unchanged (the decision is made on the pool, the writes stay serial). The
+`native100_like_entity_phase_micro` test (`entity_prephase_tests`) takes `N100_ITEMS`
+for a population of mature ground items, which the equipment collector needs to run at
+all. Item entities with `PickupDelay` 32767 or `Age` -32768 never tick those clocks
+(vanilla `INFINITE_PICKUP_DELAY`, `INFINITE_LIFETIME`; the unsigned age clock holds
+-32768 as `ITEM_AGE_NEVER`, mapped at the Anvil boundary).
+
 ## Load harness and the frozen old core
 
 - `tools/coreperf/compare.py` takes `--mobs`. Cohorts are identified by a

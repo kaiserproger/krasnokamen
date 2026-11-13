@@ -1089,6 +1089,43 @@ fn despawn_pass_only_resets_retained_idle_clocks_in_active_columns() {
     }
 }
 
+/// Vanilla `ItemEntity.tick` advances `age` unless it is -32768
+/// (`INFINITE_LIFETIME`), and despawns an item at 6000.
+#[test]
+fn item_with_age_minus_32768_never_ages_or_expires() {
+    let mut state = grass_state("minecraft:plains", "minecraft:plains");
+    let around = join(&mut state);
+    let forever = state.spawn_mob(state.registry.item_type_id, around, 1.0);
+    let mortal = state.spawn_mob(state.registry.item_type_id, around, 1.0);
+    let age = |state: &mut TickState, id, age| {
+        state
+            .entities
+            .row_mut(state.entities.slot_of(id).unwrap())
+            .age = age;
+    };
+    age(&mut state, forever, crate::entities::ITEM_AGE_NEVER);
+    age(&mut state, mortal, 5999);
+    simulate_fixture_chunks(&mut state);
+    state.world.set_active_chunks(
+        std::iter::once(crate::boundary::ChunkPos {
+            x: (around[0].floor() as i32).div_euclid(16),
+            z: (around[2].floor() as i32).div_euclid(16),
+        })
+        .collect(),
+        state.tick,
+    );
+    let mut changes = crate::boundary::ChangeSet::default();
+    for _ in 0..2 {
+        crate::natural_spawn::advance_ages(&mut state, &mut changes);
+    }
+    assert_eq!(changes.entities_removed, vec![mortal]);
+    let slot = state.entities.slot_of(forever).unwrap();
+    assert_eq!(
+        state.entities.row(slot).age,
+        crate::entities::ITEM_AGE_NEVER
+    );
+}
+
 #[test]
 fn age_admission_preserves_global_player_clock_and_reverse_item_removal() {
     let mut state = grass_state("minecraft:plains", "minecraft:plains");

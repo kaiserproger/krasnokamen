@@ -933,6 +933,30 @@ fn summon_equipment_rejects_the_same_unsupported_components_as_give() {
 }
 
 #[test]
+fn item_summon_with_age_minus_32768_never_ages_and_survives_checkpoint() {
+    let (state, id) = summon(
+        "item",
+        "{Item:{id:'minecraft:carrot',count:1},Age:-32768s,PickupDelay:32767s}",
+    );
+    let slot = state.entities.slot_of(id).unwrap();
+    assert_eq!(
+        state.entities.row(slot).age,
+        crate::entities::ITEM_AGE_NEVER
+    );
+    let uuid = state.entities.row(slot).uuid;
+    let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+    let record = chunks
+        .values()
+        .flat_map(|chunk| &chunk.entities)
+        .find(|entity| entity.uuid == uuid)
+        .unwrap();
+    assert_eq!(record.age, i32::from(i16::MIN));
+    assert_eq!(record.pickup_delay, 32767);
+    let restored = EntityStateImage::from_record(&state.registry, record).unwrap();
+    assert_eq!(restored.age, crate::entities::ITEM_AGE_NEVER);
+}
+
+#[test]
 fn item_entity_summon_carries_stack_pickup_delay_age_and_motion() {
     let (state, id) = summon(
         "item",
