@@ -13,6 +13,8 @@ pub const CHARGE_DECAY_TICKS: u64 = 260;
 const REFORM_TICKS: u64 = 400;
 /// Lateral clearance outside the enemy's end file while swinging round it.
 const FLANK_CLEARANCE: f64 = 14.0;
+/// Blocks per second of catch-up speed a rider gains for every block he stands from his place.
+const SLOT_CATCH_UP: f64 = 3.0;
 /// Golden angle: consecutive riders' attack places round one target never line up.
 const ATTACK_ANGLE: f64 = 2.399_963_229_728_653;
 /// Fugitives whose live centre is this close to the bounds have reached the
@@ -313,18 +315,31 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             // horse, never override a routing rider with an enemy pursuit.
             let mut velocity = battle.columns.drive[bi];
             let speed = mth::length2(velocity[0], velocity[2]);
+            let position = frame.entities.pos(horse);
             if speed > 0.001 {
-                let mounted_speed = if wounded {
+                let mut mounted_speed: f64 = if wounded {
                     0.8
                 } else if routing {
                     5.4
                 } else {
                     4.6
                 };
+                let formation = &battle.formation;
+                let regiment = &formation.regiments[formation.members[bi].regiment];
+                // A rider dressing his place keeps its pace: the leader's speed plus a
+                // catch-up that grows with the distance, never the full trot for a
+                // hand's breadth (which overshot the place every tick and left the
+                // block ragged). A sweeping rider heads for a plan point instead.
+                let sweeping = combat.sweeps.get(formation.members[bi].regiment).is_some_and(Option::is_some);
+                if !wounded && !routing && !sweeping {
+                    let slot = formation.heading_target(bi);
+                    let away = mth::length2(slot[0] - position[0], slot[2] - position[2]);
+                    let pace = regiment.speed.abs() / mc_physics::TICK_SECONDS + away * SLOT_CATCH_UP;
+                    mounted_speed = mounted_speed.min(pace.max(speed));
+                }
                 velocity[0] *= mounted_speed / speed;
                 velocity[2] *= mounted_speed / speed;
             }
-            let position = frame.entities.pos(horse);
             let velocity = battle.formation.constrain_velocity(position, velocity);
             // A rider in the formation heads for its slot; another keeps its drive.
             let formation = &battle.formation;

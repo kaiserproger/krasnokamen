@@ -26,6 +26,10 @@ pub(super) struct Census {
     pub densest: usize,
     /// Mean over marching foot regiments of the deviation of front rank depth from a line, blocks.
     pub front_wobble: f64,
+    /// The mounted share of `marching`, `off_slot` and `slot_error_sum`.
+    pub horse_marching: usize,
+    pub horse_off_slot: usize,
+    pub horse_error_sum: f64,
     pub engaged_regiments: usize,
 }
 
@@ -100,6 +104,11 @@ pub(super) fn census(battle: &BattleState) -> Census {
             let error = (slot[0] - m.pos[0]).hypot(slot[2] - m.pos[2]);
             c.slot_error_sum += error;
             c.off_slot += usize::from(error > OFF_SLOT);
+            if r.spec.frontage > 1.0 {
+                c.horse_marching += 1;
+                c.horse_off_slot += usize::from(error > OFF_SLOT);
+                c.horse_error_sum += error;
+            }
             if m.rank == 0 && r.spec.frontage <= 1.0 {
                 front.push((m.pos[0] - slot[0]) * r.spec.facing[0] + (m.pos[2] - slot[2]) * r.spec.facing[1]);
             }
@@ -136,7 +145,7 @@ fn rank_and_heap_table() {
     )
     .unwrap();
     eprintln!(
-        "RANKS tick marching off_slot% mean_err front_wobble heap_foot% heap_horse% densest engaged dead"
+        "RANKS tick marching foot_off% foot_err horse_off% horse_err front_wobble heap_foot% heap_horse% densest engaged dead"
     );
     let mut quiet_windows = 0;
     let mut windows = 0;
@@ -149,10 +158,12 @@ fn rank_and_heap_table() {
         if t % 100 == 0 {
             let c = census(battle);
             eprintln!(
-                "RANKS {t} {} {:.1} {:.2} {:.2} {:.2} {:.2} {} {} {}",
+                "RANKS {t} {} {:.1} {:.2} {:.1} {:.2} {:.2} {:.2} {:.2} {} {} {}",
                 c.marching,
-                100.0 * c.off_slot as f64 / c.marching.max(1) as f64,
-                c.slot_error_sum / c.marching.max(1) as f64,
+                100.0 * (c.off_slot - c.horse_off_slot) as f64 / (c.marching - c.horse_marching).max(1) as f64,
+                (c.slot_error_sum - c.horse_error_sum) / (c.marching - c.horse_marching).max(1) as f64,
+                100.0 * c.horse_off_slot as f64 / c.horse_marching.max(1) as f64,
+                c.horse_error_sum / c.horse_marching.max(1) as f64,
                 c.front_wobble,
                 100.0 * c.heaped_foot as f64 / c.foot.max(1) as f64,
                 100.0 * c.heaped_horse as f64 / c.horse.max(1) as f64,
@@ -160,6 +171,40 @@ fn rank_and_heap_table() {
                 c.engaged_regiments,
                 dead(&state)
             );
+        }
+        if let Some(dir) = std::env::var_os("BATTLE_RANKS_DUMP")
+            && [400, 560, 800, 1400].contains(&t)
+        {
+            let mut text = String::new();
+            for m in battle.formation.members.iter().filter(|m| m.alive) {
+                let r = &battle.formation.regiments[m.regiment];
+                let kind = if r.spec.frontage > 1.0 { "horse" } else { "foot" };
+                text += &format!("{} {kind} {:.2} {:.2}\n", r.spec.faction, m.pos[0], m.pos[2]);
+            }
+            std::fs::write(std::path::Path::new(&dir).join(format!("t{t}.csv")), text).unwrap();
+        }
+        if t % 200 == 0 && t <= 800 {
+            for r in &battle.formation.regiments {
+                let errors: Vec<f64> = (r.start..r.start + r.len)
+                    .filter(|&bi| battle.formation.members[bi].alive)
+                    .map(|bi| {
+                        let m = &battle.formation.members[bi];
+                        let slot = battle.formation.heading_target(bi);
+                        (slot[0] - m.pos[0]).hypot(slot[2] - m.pos[2])
+                    })
+                    .collect();
+                eprintln!(
+                    "REGIMENT t={t} id={} files={} frontage={} order={:?} gap={:.1} speed={:.3} mean_err={:.2} max_err={:.2}",
+                    r.spec.id,
+                    r.spec.files,
+                    r.spec.frontage,
+                    r.spec.order,
+                    r.gap,
+                    r.speed,
+                    errors.iter().sum::<f64>() / errors.len().max(1) as f64,
+                    errors.iter().copied().fold(0.0, f64::max)
+                );
+            }
         }
         if t % 400 == 0 {
             let now = dead(&state);

@@ -1294,12 +1294,22 @@ impl TickState {
             let angle = (seed as f64) * (std::f64::consts::TAU / u64::MAX as f64);
             direction = [f64::from(mth::sin(angle)), f64::from(mth::cos(angle))];
         }
-        let resistance = crate::entity_loot::effective_attribute(
+        let mut resistance = crate::entity_loot::effective_attribute(
             &self.registry.item_rules(),
             self.entities.row(slot),
             "knockback_resistance",
             0.0,
         );
+        // A staged soldier stands in his rank: vanilla knockback of every arrow and
+        // blow scattered whole regiments before contact. A fraction of it remains.
+        if self
+            .hostile
+            .battle
+            .formation
+            .has_member(self.entities.body(slot).id)
+        {
+            resistance = resistance.max(crate::battle::formation::SOLDIER_KNOCKBACK_RESISTANCE);
+        }
         let mut velocity = crate::combat::knockback_velocity(
             old.map(|v| v / 20.0),
             ground,

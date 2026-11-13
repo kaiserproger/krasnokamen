@@ -27,6 +27,10 @@ const AT_BAY_BLOCKS: f64 = 2.0;
 const MAX_SOLDIERS: usize = 20_000;
 /// Window of the operator's stall census: ten seconds of advancing.
 pub(crate) const STALL_TICKS: u64 = 200;
+/// Share of hit knockback a staged soldier shrugs off (vanilla knockback resistance 0..1).
+pub(crate) const SOLDIER_KNOCKBACK_RESISTANCE: f64 = 0.8;
+/// Pursuers close with ranks this share of the marching depth apart (a block, not two).
+const PURSUIT_RANK_SQUEEZE: f64 = 0.5;
 
 /// Whether `pos` lies within `margin` blocks of the battle bounds, or past them.
 pub(crate) fn near_bounds(
@@ -888,7 +892,21 @@ impl FormationRuntime {
             && !m.wounded
             && let Some(enemy) = r.enemy
         {
-            return (enemy, 0.28);
+            // The regiment closes as a block: each pursuer keeps its file and its
+            // place in the depth, ranks a block apart. One shared point piled every
+            // pursuer of a regiment onto the same few blocks.
+            let slot = position(&r.spec, m.file, m.rank, r.spec.frontage);
+            let behind = (slot[0] - r.spec.origin[0]) * r.spec.facing[0]
+                + (slot[2] - r.spec.origin[2]) * r.spec.facing[1];
+            let squeeze = behind * (1.0 - PURSUIT_RANK_SQUEEZE);
+            return (
+                [
+                    enemy[0] + slot[0] - r.spec.origin[0] - r.spec.facing[0] * squeeze,
+                    m.pos[1],
+                    enemy[2] + slot[2] - r.spec.origin[2] - r.spec.facing[1] * squeeze,
+                ],
+                0.28,
+            );
         }
         let engaged = r.gap <= 6.0;
         let interval = if engaged { r.interval } else { r.spec.frontage };
