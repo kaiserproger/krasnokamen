@@ -1,0 +1,51 @@
+{
+  "id": "ISSUE-1-07",
+  "verdict": "promoted",
+  "fix_commit": "patch:0424e7aa22b5d6e3947f2be4ad4d6542733a825c0bc566b1be60fad7c6a0cc3e",
+  "fix_commit_full": "patch:0424e7aa22b5d6e3947f2be4ad4d6542733a825c0bc566b1be60fad7c6a0cc3e",
+  "promoted_at": "2026-11-12T22:54:54+00:00",
+  "tree_head": "b155d5e1ca96bb24a09fbb196888cb3c847e0c68",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "0424e7aa22b5d6e3947f2be4ad4d6542733a825c0bc566b1be60fad7c6a0cc3e",
+  "reversed_files": [
+    "crates/mc-core/src/villager/brain.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "harness:village-qa:miner_deposit": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run village-qa --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/Issue1GatesLand/.analysis/validation/20261112T224200-ledger-promote-gmwaknyh/regressions-client-1.log"
+    },
+    "harness:village-qa:lumberjack": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run village-qa --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/Issue1GatesLand/.analysis/validation/20261112T224200-ledger-promote-gmwaknyh/regressions-client-1.log"
+    }
+  },
+  "restored": {
+    "harness:village-qa:miner_deposit": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T225334-village-qa-9lchaejq/result.json"
+    },
+    "harness:village-qa:lumberjack": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T225334-village-qa-9lchaejq/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/Issue1GatesLand/.analysis/validation/20261112T223926-village-qa-kpiyr0nh/result.json",
+    "tree_head": "b155d5e1ca96bb24a09fbb196888cb3c847e0c68",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "8cd5a24e38ea0e2e174f964a9b323c6e88687f32880bfdfe28ca7289e3f00cf4",
+    "covers": [
+      "harness:village-qa:miner_deposit",
+      "harness:village-qa:lumberjack"
+    ],
+    "profile": "village-qa"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/Issue1GatesLand/.analysis/validation/20261112T224200-ledger-promote-gmwaknyh"
+}

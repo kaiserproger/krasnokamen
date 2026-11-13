@@ -2384,10 +2384,11 @@ title = "Miner and lumberjack professions missing"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1 (miner and lumberjack work landed in 177a1205 (2026-10-19) with later fixes. Fix patch docs/bugs/fix-patches/ISSUE-1-07.patch is the dispatch of villager/brain.rs tick (Profession::Miner -> mining::work, Profession::Lumberjack -> lumber::work); reversing it leaves both professions idle at their station while the mining/lumber modules stay unused)"
 regression = ["harness:village-qa:miner_deposit", "harness:village-qa:lumberjack"]
 fix_commit = "patch:0424e7aa22b5d6e3947f2be4ad4d6542733a825c0bc566b1be60fad7c6a0cc3e"
+promotion = "docs/bugs/promotions/ISSUE-1-07.json"
 
 [[bug]]
 id = "ISSUE-1-08"
@@ -2499,10 +2500,11 @@ title = "Wall building missing"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1 (the wall blueprint landed in 177a1205 (2026-10-19), registered with the other blueprints. Fix patch docs/bugs/fix-patches/ISSUE-1-16.patch is its registration in settlements/blueprints.rs SOURCES; reversing it leaves no wall blueprint, so a wall cannot be ordered or built)"
 regression = ["harness:buildings-qa:wall.L1_built"]
 fix_commit = "patch:a3d1b2cdbe066d281a5250253906b702e92ee2c3a4fceb8a6b33f415f79c6fa2"
+promotion = "docs/bugs/promotions/ISSUE-1-16.json"
 
 [[bug]]
 id = "ISSUE-1-17"
@@ -2597,10 +2599,11 @@ title = "Recursive automatic crafting missing"
 area = "gameplay"
 repro = "manual"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "https://github.com/kaiserproger/solaris/issues/1 (recursive autocraft landed in 5013acff (2026-11-03). Fix patch docs/bugs/fix-patches/ISSUE-1-22.patch is the 'Craft missing ingredients' branch of settlements/ui.rs order_create (autocraft::order plans and admits the dependency chain, refuses raw-material and cycle orders); reversing it makes the checked box order a plain job with no chain)"
 regression = ["harness:autocraft-qa:all"]
-fix_commit = "patch:e2ade9910f894ef99f8d865d83adf9a7451484dedbcc1e0a5671ef49b6fbafc2"
+fix_commit = "patch:174ac79de53cb09fdff4c30cc96895565a4bb5246e42c1e5c3c47f91a4417566"
+promotion = "docs/bugs/promotions/ISSUE-1-22.json"
 
 [[bug]]
 id = "ISSUE-1-23"
