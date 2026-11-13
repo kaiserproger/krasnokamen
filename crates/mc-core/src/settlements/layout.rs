@@ -27,9 +27,11 @@ use super::construction::{self, Project};
 use crate::plugin_structures::settlement_builds::{self as executor, PlannedCell};
 use crate::tick::TickState;
 
-/// Street project kinds; neither is a blueprint nor a certified building.
+/// Street project kinds; none is a blueprint or a certified building.
 pub(crate) const ROAD: &str = "road";
 pub(crate) const LAMP: &str = "lamp";
+/// Free grass clearing that gathers wheat seeds for the first Farm.
+pub(crate) const MEADOW: &str = "meadow";
 /// Street feature kind of finished road: not work, so never a project.
 pub(crate) const PAVED: &str = "paved";
 
@@ -76,7 +78,7 @@ const SEED: usize = usize::MAX;
 
 #[must_use]
 pub(crate) fn infra(blueprint: &str) -> bool {
-    blueprint == ROAD || blueprint == LAMP
+    blueprint == ROAD || blueprint == LAMP || blueprint == MEADOW
 }
 
 /// Paving turns the soil already in place into a dirt path, as a shovel does:
@@ -89,6 +91,101 @@ pub(crate) fn free_paving(state: &TickState, blueprint: &str, block: u32) -> boo
             .blocks
             .by_id(mc_world::BlockStateId(block))
             .is_some_and(|definition| definition.block.id.path() == "dirt_path")
+}
+
+/// Square side of one meadow clearing window.
+const MEADOW_WINDOW: i32 = 16;
+/// Windows examined either side of the bell, in each axis (48 blocks).
+const MEADOW_REACH: i32 = 3;
+/// Fewest seed-bearing plants worth a Builder's trip: at one in eight each,
+/// a window of this size is expected to yield one wheat seed. Seed-24's
+/// savanna village holds about two plants per 8 x 8 block of ground.
+const MEADOW_MIN_PLANTS: usize = 8;
+
+/// Plants whose vanilla loot table drops wheat seeds when broken by hand.
+fn seed_plant(state: &TickState, block: u32) -> bool {
+    state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(block))
+        .is_some_and(|definition| {
+            matches!(
+                definition.block.id.path(),
+                "short_grass" | "tall_grass" | "fern" | "large_fern"
+            )
+        })
+}
+
+/// The nearest window around the bell holding enough seed-bearing grass,
+/// cleared at no material cost: its loot is credited to storage like any
+/// cleared plant. Buildings, containers and farmland are never touched.
+#[must_use]
+pub(crate) fn meadow_work(state: &TickState, record: &SettlementRecord) -> Option<Work> {
+    let anchor = record.anchor;
+    let air = state.registry.states.air;
+    let mut windows: Vec<[i32; 2]> = (-MEADOW_REACH..MEADOW_REACH)
+        .flat_map(|i| (-MEADOW_REACH..MEADOW_REACH).map(move |j| [i, j]))
+        .map(|[i, j]| [anchor[0] + i * MEADOW_WINDOW, anchor[2] + j * MEADOW_WINDOW])
+        .collect();
+    let centre = |[x, z]: [i32; 2]| {
+        i64::from(x + MEADOW_WINDOW / 2 - anchor[0]).pow(2)
+            + i64::from(z + MEADOW_WINDOW / 2 - anchor[2]).pow(2)
+    };
+    windows.sort_by_key(|&window| (centre(window), window));
+    for [wx, wz] in windows {
+        let mut cells = Vec::new();
+        let mut plants = 0;
+        let (mut low, mut high) = (i32::MAX, i32::MIN);
+        for x in wx..wx + MEADOW_WINDOW {
+            for z in wz..wz + MEADOW_WINDOW {
+                if !level_inside(record, x, z)
+                    || record.buildings.values().any(|building| {
+                        !building.natural_zone
+                            && (building.bounds.min[0]..=building.bounds.max[0]).contains(&x)
+                            && (building.bounds.min[2]..=building.bounds.max[2]).contains(&z)
+                    })
+                {
+                    continue;
+                }
+                let Some(y) = construction::surface_y(state, anchor[1], x, z) else {
+                    continue;
+                };
+                if state.block_entities.contains_key(&(x, y + 1, z)) {
+                    continue;
+                }
+                let Some(first) = state.world.physics_block_at(x, y + 1, z) else {
+                    continue;
+                };
+                if !seed_plant(state, first) {
+                    continue;
+                }
+                plants += 1;
+                for above in [y + 1, y + 2] {
+                    if let Some(block) = state.world.physics_block_at(x, above, z)
+                        && !vacant(state, block)
+                        && construction::clearable(state, block)
+                    {
+                        cells.push(free([x, above, z], air));
+                        low = low.min(above);
+                        high = high.max(above);
+                    }
+                }
+            }
+        }
+        if plants < MEADOW_MIN_PLANTS {
+            continue;
+        }
+        let bounds = ScriptWorldBounds::new(
+            [wx, low, wz],
+            [wx + MEADOW_WINDOW - 1, high, wz + MEADOW_WINDOW - 1],
+        )
+        .ok()?;
+        if executor::area_reserved(state, bounds) {
+            continue;
+        }
+        return Some(Work { bounds, cells });
+    }
+    None
 }
 
 /// Signed offset of `value` from the nearest grid line through `anchor`.

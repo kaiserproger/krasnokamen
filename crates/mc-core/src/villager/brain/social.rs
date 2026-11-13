@@ -805,6 +805,45 @@ pub(super) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
             let Some(second) = second else {
                 continue;
             };
+            // Vanilla spends a courtship's food even when no bed takes the
+            // baby. A settlement's stored rations are not wasted that way: a
+            // resident courts only while a spare bed is reachable, searched on
+            // the ration cadence.
+            if state
+                .entities
+                .row(first)
+                .villager
+                .as_ref()
+                .is_some_and(|v| v.settlement.is_some())
+            {
+                if state
+                    .entities
+                    .row(first)
+                    .villager
+                    .as_ref()
+                    .unwrap()
+                    .ration_at
+                    > state.tick
+                {
+                    continue;
+                }
+                let mut path = std::mem::take(&mut cache.candidate_path);
+                let found = free_bed(state, cache, first, &mut path).is_some();
+                path.clear();
+                cache.candidate_path = path;
+                if !found {
+                    if !allocator::nodes_exhausted(state) {
+                        state
+                            .entities
+                            .row_mut_unmarked(first)
+                            .villager
+                            .as_mut()
+                            .unwrap()
+                            .ration_at = state.tick.saturating_add(40);
+                    }
+                    continue;
+                }
+            }
             let second_id = state.entities.body(second).id;
             let until =
                 state.tick + 275 + ((first_id.0 as u64 ^ second_id.0 as u64 ^ state.tick) % 50);

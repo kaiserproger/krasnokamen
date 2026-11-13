@@ -20,6 +20,43 @@ fn certificate(record: &mut SettlementRecord, kind: BuildingKind, level: u8, nat
     );
 }
 
+/// Seed-24 civilization-seed-qa (ISSUE-1-17 births): the first Farm had its 12
+/// seeds and wood but never got its dirt and stone, because extraction demand
+/// followed only the first candidate, the House, whose bill waited on a bed's
+/// wool that no worker produces.
+#[test]
+fn a_house_short_of_unproducible_wool_does_not_hide_the_farms_extraction() {
+    let (mut state, id, _) = fixture();
+    open_plan(&mut state);
+    fund(&mut state, "house", 1);
+    let seeds = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:wheat_seeds").unwrap())
+        .unwrap();
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    for stack in slots.iter_mut() {
+        if state
+            .registry
+            .items
+            .name_of(stack.item_id)
+            .is_some_and(|name| name.path().ends_with("_wool"))
+        {
+            *stack = mc_data::ItemStack::EMPTY;
+        }
+    }
+    let last = slots.len() - 1;
+    slots[last] = mc_data::ItemStack::new(seeds, 12);
+    {
+        let record = state.settlements.get_mut(id).unwrap();
+        certificate(record, BuildingKind::Storage, 1, false);
+    }
+    assert!(
+        needed_gatherer(&state, id).is_some(),
+        "the Farm's dirt and stone need a miner while the House waits on wool"
+    );
+}
+
 #[test]
 fn active_stone_stairs_do_not_mask_the_project_wood_shortfall() {
     let (mut state, id, _) = fixture();

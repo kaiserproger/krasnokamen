@@ -1575,16 +1575,82 @@ fn plan(state: &mut TickState, id: SettlementId) {
     {
         return;
     }
+    // The first Farm's seeds are gathered even while a priority material
+    // worker is out: `assign_builder` keeps that worker out of this project,
+    // and another resident clears the meadow.
+    let Some(record) = state.settlements.get(id) else {
+        return;
+    };
+    if let Some(site) = meadow_site(state, record, residents, &images) {
+        begin_cells(state, site.project, site.bounds, site.cells);
+        return;
+    }
     if gathering {
         return;
     }
     // Free street work fills every pass that starts no building or upgrade.
-    let Some(record) = state.settlements.get(id) else {
-        return;
-    };
     if let Some(site) = street_site(state, record, &images) {
         begin_cells(state, site.project, site.bounds, site.cells);
     }
+}
+
+/// The first Farm's wheat cells cost seeds that only a farm produces. While
+/// the stock is short of them, Builders clear seed-bearing grass near the bell
+/// (vanilla: short grass drops a wheat seed one time in eight), the same way
+/// they clear any plant: free work, loot credited to storage.
+fn meadow_site(
+    state: &TickState,
+    record: &SettlementRecord,
+    residents: usize,
+    images: &[super::inventory::Image],
+) -> Option<FundedSite> {
+    let farmer = BuildingKind::Workshop(Profession::Farmer);
+    if !needed_kinds(record, residents).any(|kind| kind == farmer) {
+        return None;
+    }
+    let is_seed = |item: u32| {
+        state
+            .registry
+            .items
+            .name_of(item)
+            .is_some_and(|name| matches!(name.path(), "wheat_seeds"))
+    };
+    let catalog = blueprints::all(&state.registry);
+    let level = catalog
+        .iter()
+        .find(|blueprint| blueprint.kind == farmer)?
+        .level(1)?;
+    let need: u64 = level
+        .materials
+        .iter()
+        .filter(|(item, _)| is_seed(*item))
+        .map(|(_, count)| u64::from(*count))
+        .sum();
+    let have: u64 = images
+        .iter()
+        .flat_map(|image| &image.slots)
+        .filter(|stack| is_seed(stack.item_id))
+        .map(|stack| stack.count.max(0) as u64)
+        .sum();
+    if have >= need {
+        return None;
+    }
+    let work = layout::meadow_work(state, record)?;
+    Some(FundedSite {
+        project: Project {
+            settlement: record.id,
+            blueprint: layout::MEADOW.to_owned(),
+            level: 1,
+            origin: work.bounds.min,
+            rotation: 0,
+            building: None,
+            structure: String::new(),
+            ordered: false,
+            borrowed_builder: None,
+        },
+        bounds: work.bounds,
+        cells: work.cells,
+    })
 }
 
 /// Chunk-local resident index, with a hard admission cap. Other mob populations
@@ -2219,27 +2285,34 @@ pub(crate) fn active_project_wood(state: &TickState, id: SettlementId) -> Option
         .find_map(|(item, _)| wood_species(state, item))
 }
 
+/// The extraction worker the settlement's next bill needs: a pending owner
+/// order's, else the first autonomous candidate whose unfunded bill needs one.
+/// A priority bill short only of what no worker produces (a bed's wool with
+/// no sheep) must not leave the later Farm without its dirt and stone.
 fn gatherer_demand(
     state: &TickState,
     record: &SettlementRecord,
     images: &[super::inventory::Image],
 ) -> Option<Profession> {
-    let (name, level) = if let Some(order) = &record.pending_order {
-        (order.blueprint.as_str(), order.level)
-    } else {
-        let kind = candidate_kinds(state, record, images).next()?;
-        (
-            blueprints::all(&state.registry)
+    let demand = |name: &str, level: u8| {
+        let level = blueprints::get(&state.registry, name)?.level(level)?;
+        let bill = selected_bill(state, record.id, &level.materials, images)?;
+        super::construction_crafting::needed_gatherer(state, &bill, images)
+    };
+    if let Some(order) = &record.pending_order {
+        return demand(order.blueprint.as_str(), order.level);
+    }
+    let catalog = blueprints::all(&state.registry);
+    candidate_kinds(state, record, images).find_map(|kind| {
+        demand(
+            catalog
                 .iter()
                 .find(|blueprint| blueprint.kind == kind)?
                 .id
                 .as_str(),
             1,
         )
-    };
-    let level = blueprints::get(&state.registry, name)?.level(level)?;
-    let bill = selected_bill(state, record.id, &level.materials, images)?;
-    super::construction_crafting::needed_gatherer(state, &bill, images)
+    })
 }
 
 /// Current bounded construction target, before subtracting the iron pipeline.
