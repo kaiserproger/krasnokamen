@@ -9,6 +9,7 @@ pub(crate) mod combat;
 mod faction;
 pub(crate) mod formation;
 mod ground;
+pub(crate) mod live_players;
 pub(crate) mod morale;
 pub mod staging;
 pub(crate) mod steering;
@@ -53,6 +54,8 @@ pub(crate) struct BattleState {
     pub ground_pending: Vec<EntityId>,
     /// Staged bodies with no dry, clear ground near their slot: start refuses.
     pub ground_refused: Vec<EntityId>,
+    /// Network players watched, holding a front-rank slot or spectating.
+    pub live: live_players::LiveState,
     #[cfg(test)]
     trace: Option<trace_tests::FrameTrace>,
 }
@@ -306,6 +309,7 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     if !state.hostile.battle.ground_pending.is_empty() {
         staging::settle(state);
     }
+    live_players::update(state);
     let start = std::env::var_os("MC_CORE_PHASE_LOG").map(|_| std::time::Instant::now());
     let mut mark = start;
     let mut battle = std::mem::take(&mut state.hostile.battle);
@@ -354,6 +358,7 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     steering::step(&frame, &mut battle, &mut output);
     timings.steering_us = phase_us(&mut mark);
     combat::step(&frame, &mut battle, &mut output);
+    live_players::strike(&frame, &battle, &mut output);
     timings.combat_us = phase_us(&mut mark);
     morale::step(&frame, &mut battle, &mut output);
     timings.morale_us = phase_us(&mut mark);

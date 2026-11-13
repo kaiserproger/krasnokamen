@@ -949,6 +949,7 @@ impl TickState {
         {
             let target = self.entities.body(slot).id;
             if !crate::scoreboard::permits_player_damage(self, attacker, target)
+                || crate::battle::live_players::same_side(self, attacker, target)
                 || (attacker != target
                     && self.players.contains_key(&attacker)
                     && self.players.contains_key(&target)

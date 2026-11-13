@@ -79,7 +79,7 @@ pub(crate) fn slot_position(spec: &RegimentSpec, slot: usize) -> [f64; 3] {
     )
 }
 
-fn position(spec: &RegimentSpec, file: usize, rank: u16, interval: f64) -> [f64; 3] {
+pub(crate) fn position(spec: &RegimentSpec, file: usize, rank: u16, interval: f64) -> [f64; 3] {
     let lateral = (file as f64 - f64::from(spec.files - 1) * 0.5) * interval;
     [
         spec.origin[0] + spec.facing[1] * lateral - spec.facing[0] * f64::from(rank) * 2.0,
@@ -195,6 +195,9 @@ pub(crate) struct FormationRuntime {
     /// by terrain or crowd).
     pub advancing: usize,
     pub stalled: usize,
+    /// (regiment, file) whose rank 0 a live player holds: that file's
+    /// soldiers rank from 1 back (live_players.rs).
+    pub held: Vec<(usize, usize)>,
 }
 
 impl FormationRuntime {
@@ -615,7 +618,7 @@ impl FormationRuntime {
         r.evacuating.fill(false);
         self.work.rotated += r.len as u64;
         for file in 0..files {
-            let mut next_rank = 0;
+            let mut next_rank = u16::from(self.held.contains(&(i, file)));
             for index in (file..members.len()).step_by(files) {
                 let m = &mut members[index];
                 if m.alive && !m.wounded {

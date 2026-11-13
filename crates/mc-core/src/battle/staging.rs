@@ -1,6 +1,7 @@
 //! Operator-owned deterministic battle staging. No scenario file is read on the tick.
 use crate::battle::formation::{Order, RegimentSpec, slot_position};
 use crate::battle::ground::{self, Placement};
+use crate::battle::live_players;
 use crate::boundary::{ChangeSet, ChunkPos, EntityId};
 use crate::commands::CommandError;
 use crate::tick::TickState;
@@ -18,12 +19,16 @@ pub enum BattleCommand {
     Reset,
     Status,
     Roster,
+    /// Live network players (live_players.rs).
+    Watch { names: Vec<String> },
+    Live { name: String, side: u16 },
+    Spectate { name: String, target: String },
 }
 
 pub fn parse(args: &[&str]) -> Result<BattleCommand, CommandError> {
     let usage = || {
         CommandError::Usage(
-            "battle setup <seed> <field-100|field-1k|field-10k> [count] | battle start|pause|reset|status|roster",
+            "battle setup <seed> <field-100|field-1k|field-10k> [count] | battle start|pause|reset|status|roster | battle watch <player>... | battle live <player> <red|blue> | battle spectate <player> <target>",
         )
     };
     match args {
@@ -49,6 +54,27 @@ pub fn parse(args: &[&str]) -> Result<BattleCommand, CommandError> {
         ["reset"] => Ok(BattleCommand::Reset),
         ["status"] => Ok(BattleCommand::Status),
         ["roster"] => Ok(BattleCommand::Roster),
+        ["watch", names @ ..] => {
+            let names: Vec<String> = names.iter().map(|n| (*n).to_owned()).collect();
+            if !live_players::watch_count_ok(&names)
+                || !names.iter().all(|n| live_players::valid_name(n))
+            {
+                return Err(usage());
+            }
+            Ok(BattleCommand::Watch { names })
+        }
+        ["live", name, side] if live_players::valid_name(name) => Ok(BattleCommand::Live {
+            name: (*name).to_owned(),
+            side: live_players::parse_side(side).ok_or_else(usage)?,
+        }),
+        ["spectate", name, target]
+            if live_players::valid_name(name) && live_players::valid_name(target) =>
+        {
+            Ok(BattleCommand::Spectate {
+                name: (*name).to_owned(),
+                target: (*target).to_owned(),
+            })
+        }
         _ => Err(usage()),
     }
 }
@@ -843,6 +869,11 @@ pub(crate) fn execute(
                 battle.formation.advancing,
                 engaged
             ))
+        }
+        BattleCommand::Watch { names } => Ok(live_players::watch(state, names)),
+        BattleCommand::Live { name, side } => live_players::live(state, name, *side),
+        BattleCommand::Spectate { name, target } => {
+            live_players::spectate(state, changes, name, target)
         }
     }
 }
