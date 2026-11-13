@@ -353,8 +353,11 @@ regression = []
         self.assertFalse(ledger._failing_verdict(failed('in_play'), 'autocraft-qa', 'all'))
         self.assertFalse(ledger._failing_verdict(failed('x', details={'failure': {'phase': 'client_start'}}), 'autocraft-qa', 'all'))
         self.assertFalse(ledger._failing_verdict({'status': 'failed', 'error': 'timed out'}, 'autocraft-qa', 'all'))
-        # A buildings-qa behaviour never recorded is red only when that blueprint's assertion aborted the run.
+        # A buildings-qa behaviour never recorded is red only when that blueprint's assertion at the
+        # same level aborted the run: a level-1 funding abort says nothing about levels 2 and 3.
         self.assertTrue(ledger._failing_verdict(failed('buildings_wall_L1_project'), 'buildings-qa', 'wall.L1_built'))
+        self.assertTrue(ledger._failing_verdict(failed('buildings_wall_L3_level_exists'), 'buildings-qa', 'wall.L3_upgrade'))
+        self.assertFalse(ledger._failing_verdict(failed('buildings_gate_L1_funded'), 'buildings-qa', 'gate.L3_upgrade'))
         self.assertFalse(ledger._failing_verdict(failed('buildings_house_L1_built'), 'buildings-qa', 'wall.L1_built'))
         self.assertFalse(ledger._failing_verdict(failed('in_play'), 'buildings-qa', 'wall.L1_built'))
 
@@ -972,6 +975,58 @@ class LedgerToolTests(unittest.TestCase):
                 self.assertEqual(json.loads(kept.read_text())['status'], receipt['status'])
                 self.assertTrue((kept.parent / 'screenshots/site.png').is_file())
                 self.assertFalse((kept.parent / 'world').exists())
+
+    def test_each_client_run_gets_its_own_client_settings(self):
+        # Windowed gates inherit the caller's XDG root; a probe or promote runs many in a row and
+        # must not carry client-settings.json or caches from one into the next.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        base = Path(directory.name)
+        caller = base / 'caller-xdg/krasnokamen-client'
+        (caller / 'facts').mkdir(parents=True)
+        (caller / 'client-settings.json').write_text('{"fov": 110}')
+        seen = []
+        def run_command(argv, ctx, name, cwd=None, env=None):
+            client = Path(env['XDG_DATA_HOME']) / 'krasnokamen-client'
+            seen.append((client, (client / 'facts').resolve(), (client / 'client-settings.json').exists()))
+            (client / 'client-settings.json').write_text('{"fov": 30}')
+            artifact = base / f'run-{len(ctx.logs)}'
+            artifact.mkdir()
+            (artifact / 'result.json').write_text(json.dumps({'status': 'passed', 'details': {
+                'server_binary_sha256': 'abc', 'scenario': {'settlement_acceptance': {'behaviour': {'door_walk': 'PASS'}}}}}))
+            (ctx.artifact_dir / name).write_text(f'[harness] artifact={artifact}\n')
+            ctx.logs.append(name)
+        def release_server(ctx, profiles_module, tree=None):
+            ctx.client_evidence['regressions_server'] = {'sha256': 'abc'}
+            return base / 'server'
+        (base / 'promote').mkdir()
+        ctx = profiles.ProfileContext(base / 'promote')
+        with patch.dict(os.environ, {'XDG_DATA_HOME': str(caller.parent)}), \
+                patch.object(profiles, '_run_command', run_command), patch.object(regressions, '_release_server', release_server), \
+                patch.object(ledger, 'tree_fingerprint', return_value={'head': 'h', 'sha256': 's'}), \
+                patch.object(ledger, '_register_server', lambda sha, tree: None):
+            for _ in range(2):
+                self.assertEqual(ledger.run_refs(ctx, ['harness:village-qa:door_walk'], base, True)['harness:village-qa:door_walk']['state'], ledger.GREEN)
+        self.assertNotEqual(seen[0][0], seen[1][0])
+        self.assertEqual([facts for _, facts, _ in seen], [(caller / 'facts').resolve()] * 2)
+        self.assertEqual([settings for _, _, settings in seen], [False, False])
+        self.assertEqual((caller / 'client-settings.json').read_text(), '{"fov": 110}')
+
+    def test_a_caller_root_without_content_links_the_client_template(self):
+        # A worktree's own XDG root starts empty; the run must still get the client content.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        base = Path(directory.name)
+        template = base / 'template'
+        for name in ('facts', 'resources/assets', 'data/vanilla'):
+            (template / name).mkdir(parents=True)
+        (base / 'empty-xdg').mkdir()
+        (base / 'promote').mkdir()
+        ctx = profiles.ProfileContext(base / 'promote')
+        env = {'XDG_DATA_HOME': str(base / 'empty-xdg'), 'KRASNOKAMEN_CLIENT_DATA_DIR': str(template / 'data/vanilla')}
+        with patch.dict(os.environ, env):
+            root = regressions._fresh_client_data(ctx, env, 'regressions-client-0.log')
+        self.assertEqual((root / 'krasnokamen-client/facts').resolve(), (template / 'facts').resolve())
 
     def uncommitted_fix(self):
         """HEAD re-broken, then an uncommitted fix (its patch saved to a file) with an untracked test."""

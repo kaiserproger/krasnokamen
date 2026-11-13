@@ -57,11 +57,13 @@ memory slots and a GO after the runner dropped both; deleted 2026-11-07).
 # Commits    none (leave the diff and its SHA-256) | local commits on the branch
 # Limits     only what differs from the standing rules: wall budget, whether
 #            subagents are allowed
-# Waiting    after a command goes to the background (async, or automatic after
-#            60 s), never call `wait` again and never poll; with no other work,
-#            end the turn without a tool call: the result arrives by itself
-#            (owner, 2026-11-13: two workers burnt 38 and 41 empty wait turns,
-#            about 12 M tokens each, in one hour)
+# Waiting    waiting only for your own background job or another agent: end the
+#            turn without `wait` and without a tool call; the job result or the
+#            message wakes you. Call `wait` only for the answer to a question
+#            you sent another agent. Never poll. (owner, 2026-11-13: `wait`
+#            returns empty turns at 5 s/10 s/30 s/1 min/5 min steps; two workers
+#            burnt 38 and 41 empty turns, about 12 M tokens each, in one hour;
+#            an ended turn stays idle with zero turns until the wake-up)
 # Deliver    the result template below
 ```
 
