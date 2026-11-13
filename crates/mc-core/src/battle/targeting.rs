@@ -175,6 +175,46 @@ impl TargetGrid {
             examined: search.examined,
         }
     }
+
+    /// The first enemy within `reach` (3D, inclusive) that `accept` takes,
+    /// cells visited ring by ring outwards: a melee range test needs any enemy
+    /// in range, not only the nearest (inside a spear's minimum, or across a
+    /// height step, the nearest one can fail where another passes).
+    pub fn any_enemy(&self, actor: Unit, reach: f64, mut accept: impl FnMut(&Unit) -> bool) -> Option<Unit> {
+        if actor.faction == 0 || !reach.is_finite() || reach < 0.0 {
+            return None;
+        }
+        let limit = reach * reach;
+        let (cx, cz) = (cell(actor.pos[0]), cell(actor.pos[2]));
+        let radius = (reach / CELL_BLOCKS).ceil() as i32;
+        for &faction in &self.factions {
+            if faction == actor.faction {
+                continue;
+            }
+            for ring in 0..=radius {
+                for dx in -ring..=ring {
+                    for dz in -ring..=ring {
+                        if dx.abs() != ring && dz.abs() != ring {
+                            continue;
+                        }
+                        let (x, z) = (cx.saturating_add(dx), cz.saturating_add(dz));
+                        if cell_distance_squared(actor.pos, x, z) > limit {
+                            continue;
+                        }
+                        let Some(bucket) = self.cells.get(&(faction, x, z)) else {
+                            continue;
+                        };
+                        for unit in &self.members[bucket.start..bucket.start + bucket.len] {
+                            if distance_squared(actor.pos, unit.pos) <= limit && accept(unit) {
+                                return Some(*unit);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
 }
 
 pub const MELEE_ENGAGEMENT_REACH: f64 = 6.0;

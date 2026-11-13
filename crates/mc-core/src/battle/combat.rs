@@ -12,6 +12,10 @@ use crate::intent::{DamageSource, Footprint, IntentKind};
 // The 21..25-tick action cycle skips one 20-tick decision after each attack.
 // Count that recovery before deriving odds; do not shorten the action clocks.
 const ATTACK_DECISION_TICKS: u64 = 20;
+/// Human reaction: a man who first finds an enemy within his melee range
+/// stands guard 4..=8 ticks (seeded per man) before his first decision.
+const REACTION_TICKS_MIN: u64 = 4;
+const REACTION_TICKS_SPAN: u64 = 5;
 const AGGRESSIVE_FIGHTERS: u32 = 2500;
 const AGGRESSIVE_ATTEMPTS: u32 = 8000;
 const CAUTIOUS_ATTEMPTS: u32 = 2000;
@@ -42,8 +46,18 @@ const ACTIVE_FIGHT_SECONDS: f32 = {
 };
 const TARGET_REMOVALS: f32 = 80.0;
 const PARRY_FRACTION: f32 = 2316.0 / 3873.0;
+// The meshed press keeps several times the calibration's 46 files within reach
+// of each other per regiment front (V4 rehearsal: 4 426 fighting at peak), so a
+// landed blow removes a man that many times less often: losses per minute and
+// time to rout stay those of the G2 take (owner, 2026-11-13) while far more
+// men trade blows, parries and blocks.
+const PRESS_EXPOSURE: f32 = 1.0;
 const REMOVAL_ROLLS: f32 = 10_000.0 * TARGET_REMOVALS
-    / (FRONT_FILES * STRIKES_PER_SECOND * ACTIVE_FIGHT_SECONDS * (1.0 - PARRY_FRACTION));
+    / (FRONT_FILES
+        * PRESS_EXPOSURE
+        * STRIKES_PER_SECOND
+        * ACTIVE_FIGHT_SECONDS
+        * (1.0 - PARRY_FRACTION));
 // Film lethality: most removals fall on the spot; the wounded share withdraws
 // through the ranks. Pursuit cuts down nearly everyone it reaches.
 const FATAL_SHARE: f32 = 0.7;
@@ -117,6 +131,9 @@ pub(super) struct Fighter {
     /// Last battle tick he stood guard, wound up or recovered from a blow:
     /// the fight window of the `fighting` telemetry.
     in_fight: Option<u64>,
+    /// Tick he first found an enemy within his melee range in this
+    /// engagement; cleared when a decision finds none.
+    engaged_from: Option<u64>,
 }
 
 impl Default for Fighter {
@@ -134,6 +151,7 @@ impl Default for Fighter {
             charge: Default::default(),
             slain: None,
             in_fight: None,
+            engaged_from: None,
         }
     }
 }
@@ -378,13 +396,29 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             combat.work.target_checks += 1;
         }
         let range = fighter.range;
+        let reaches = |enemy: EntityId| {
+            frame
+                .entities
+                .slot_of(enemy)
+                .is_some_and(|enemy| in_melee_range(frame.entities, slot, enemy, range))
+        };
+        let decision_tick = (frame.tick + id.0 as u64).is_multiple_of(ATTACK_DECISION_TICKS);
         let soldier = soldier
             .and_then(|target| super::retained_enemy(frame.entities, slot, target, range.bound()))
-            .filter(|target| {
-                frame
-                    .entities
-                    .slot_of(target.id)
-                    .is_some_and(|enemy| in_melee_range(frame.entities, slot, enemy, range))
+            .filter(|target| reaches(target.id))
+            .or_else(|| {
+                // Any other enemy in range will do; searched only when a
+                // decision is due, never every tick.
+                if !decision_tick {
+                    return None;
+                }
+                let unit = super::Unit {
+                    id,
+                    faction: battle.columns.factions[bi],
+                    pos: battle.columns.positions[bi],
+                };
+                let found = battle.grid.any_enemy(unit, range.bound(), |u| reaches(u.id))?;
+                super::retained_enemy(frame.entities, slot, found.id, range.bound())
             });
         // A living network player of the other side in reach is one more
         // candidate for this same swing; the nearer of the two is struck.
@@ -393,10 +427,20 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             (Some(soldier), Some(holder)) if holder.distance < soldier.distance => holder,
             (Some(soldier), _) => soldier,
             (None, Some(holder)) => holder,
-            (None, None) => continue,
+            (None, None) => {
+                // Out of reach at a decision: the next enemy in reach is a new
+                // engagement with its own reaction.
+                if decision_tick {
+                    fighter.engaged_from = None;
+                }
+                continue;
+            }
         };
-        // Three cautious soldiers in four; decisions once/20t, not per frame.
-        if !(frame.tick + id.0 as u64).is_multiple_of(ATTACK_DECISION_TICKS) {
+        // A man who just found an enemy in reach stands guard through a human
+        // reaction (4..=8 ticks, seeded per man) before his first decision.
+        let engaged_from = *fighter.engaged_from.get_or_insert(frame.tick);
+        let reaction = REACTION_TICKS_MIN + u64::from(roll(id, 0, 3)) % REACTION_TICKS_SPAN;
+        if !decision_tick || frame.tick < engaged_from + reaction {
             continue;
         }
         fighter.action = Action::Guard {
@@ -495,16 +539,16 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
             };
             let in_reach = columns.targets[bi].is_some_and(|t| reaches(t.id))
                 || grid
-                    .nearest_enemy(
+                    .any_enemy(
                         super::Unit {
                             id: columns.ids[bi],
                             faction: columns.factions[bi],
                             pos: columns.positions[bi],
                         },
                         range.bound(),
+                        |u| reaches(u.id),
                     )
-                    .target
-                    .is_some_and(|t| reaches(t.id));
+                    .is_some();
             if !in_reach {
                 continue;
             }
