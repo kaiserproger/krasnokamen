@@ -1507,16 +1507,31 @@ fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() 
         .expect("a rear-rank man searches for the enemy beside him");
     assert_eq!(target.id, blue);
     let work = battle.combat.work;
-    assert!(
-        work.fighting >= 3 && work.fighting <= work.in_weapon_reach,
-        "{work:?}"
-    );
-    // A parried stagger stays inside the fight window; a long one leaves it.
+    assert_eq!(work.fighting, 4, "{work:?}");
+    // A wavering man standing guard (shield up) fights; a fugitive does not;
+    // a parried stagger stays inside the fight window, a long one leaves it.
+    let member = |id| {
+        battle
+            .formation
+            .members
+            .iter()
+            .position(|m| m.id == id)
+            .unwrap()
+    };
+    let (wavering, fugitive) = (member(red[5]), member(red[4]));
+    battle.formation.members[wavering].wavering = true;
+    battle.formation.members[fugitive].routing = true;
     let mut combat_state = std::mem::take(&mut battle.combat);
-    for fighter in &mut combat_state.fighters {
-        fighter.action = combat::Action::Stagger { until: u64::MAX };
-    }
-    for (tick, fighting) in [(RETARGET_TICKS, 4), (RETARGET_TICKS + 30, 0)] {
+    for (tick, stagger, fighting) in [
+        (RETARGET_TICKS, false, 3),
+        (RETARGET_TICKS + 1, true, 3),
+        (RETARGET_TICKS + 40, true, 0),
+    ] {
+        if stagger {
+            for fighter in &mut combat_state.fighters {
+                fighter.action = combat::Action::Stagger { until: u64::MAX };
+            }
+        }
         let frame = Frame {
             entities: &state.entities,
             registry: &state.registry,

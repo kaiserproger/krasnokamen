@@ -451,8 +451,10 @@ const COUNT_CHUNK: usize = 256;
 /// Telemetry of who is fighting this tick. In weapon reach: any enemy within
 /// the fighter's weapon reach, from his retained target or else one query of
 /// this tick's frozen target grid at weapon reach (no bows). Fighting: of
-/// those, the ones the decision pass lets strike whose fight loop ran within
-/// the window. Parallel over fighter chunks; no allocation.
+/// those, everyone not in flight (a wavering man standing guard with his
+/// shield up counts) whose guard/windup/recovery ran within the window; a
+/// fugitive's placeholder guard is not a fight. Parallel over fighter chunks;
+/// no allocation.
 pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &mut CombatRuntime) {
     use rayon::prelude::*;
     let tick = frame.tick;
@@ -464,10 +466,16 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
             if !columns.active[bi] || columns.carried[bi] {
                 continue;
             }
-            if matches!(
-                fighter.action,
-                Action::Guard { .. } | Action::Windup { .. } | Action::Recover { .. }
-            ) {
+            // A fugitive (unless at bay) is held in guard only as a placeholder.
+            let fleeing = bi < formation.members.len()
+                && formation.context_at(bi).routing
+                && !formation.cornered_at(bi);
+            if !fleeing
+                && matches!(
+                    fighter.action,
+                    Action::Guard { .. } | Action::Windup { .. } | Action::Recover { .. }
+                )
+            {
                 fighter.in_fight = Some(tick);
             }
             if fighter.weapon == Weapon::Bow {
@@ -490,18 +498,12 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
                 continue;
             }
             counts.0 += 1;
-            // The same gate as the decision pass above.
-            let decides = bi >= formation.members.len()
-                || formation.can_attack_at(bi)
-                || {
-                    let c = formation.context_at(bi);
-                    (!c.routing && !c.wavering) || formation.cornered_at(bi)
-                };
-            let recent = !matches!(fighter.action, Action::Wounded)
+            let recent = !fleeing
+                && !matches!(fighter.action, Action::Wounded)
                 && fighter
                     .in_fight
                     .is_some_and(|at| tick.saturating_sub(at) <= FIGHT_WINDOW_TICKS);
-            counts.1 += u64::from(decides && recent);
+            counts.1 += u64::from(recent);
         }
         counts
     };
