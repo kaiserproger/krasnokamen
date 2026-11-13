@@ -5299,3 +5299,14 @@ status = "open"
 source = "CI run 43345985582 (main fa1f5382, cargo test shard 4/4): mc-plugin-host tests/engine_cache.rs:270 the_production_engine_reuses_its_cache_across_restarts: the second production engine child reported 1 new cache entry instead of 0 (artifact test-failure-receipts-4, receipts/FleetControl/ci-flakes-20261113/b). Reproduced on main ad93ee71 by looping the exact test binary: 0 of 100 serial, 1 of 100 with four copies in parallel (receipts/CiFlakes/repro.sh, repro.out, B-par4-49.log). Classification: a load-dependent race in the test oracle, not a cache regression (the commits of that run touched only mc-core tick phases): each run uses its own temporary cache home, the counter (engine_cache_child walk) already skips the asynchronously written *.stats sidecars, so under load another file the wasmtime cache writes outside the compile path (temporary or worker file, name not yet captured) is counted. [INFERENCE until the extra file name is recorded on failure.]"
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-SERVER-RESOURCE-PACK-PUSH-DECLINED"
+title = "The native client declines every server resource-pack push, so a player joining a server that ships a pack (for example the battle armour and weapons pack) never gets it and sees plain vanilla items unless the pack was installed locally through SOLARIS_CLIENT_RESOURCE_PACKS. Vanilla accepts the push, downloads the pack from its URL, checks the hash, applies it and answers with the status sequence."
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "solaris-client src/session/packets.rs:96 (configuration RESOURCE_PACK_PUSH) and :657 (play RESOURCE_PACK_PUSH) both call decline_resource_pack; battle-video client line 6eac8021 lines 96 and 105 likewise; the client loads packs only from SOLARIS_CLIENT_RESOURCE_PACKS. Found while preparing live laptop clients for the G2 battle video (owner 2026-11-13: fix right after the video). Follow-up to P2, which only stopped optional offers from disconnecting the join. Gate: a live native client joins a server that pushes the battle pack, with no local pack folder, and shows the battle armour and weapons."
+regression = []
+failing_first = "reported"
