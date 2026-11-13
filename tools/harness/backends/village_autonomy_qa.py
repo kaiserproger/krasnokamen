@@ -1722,11 +1722,13 @@ PROJECT_LABELS = {
     "Watchtower": "watch_tower", "Сторожевая башня": "watch_tower",
     "Road": "road", "Дорога": "road",
     "Street lamp": "lamp", "Фонарь": "lamp",
+    "Meadow clearing": "meadow", "Расчистка луга": "meadow",
     "Building": "unlabelled", "Здание": "unlabelled",
 }
 # Street work: structure-ledger projects with no authored blueprint or
-# certificate. A road paves one stretch; a lamp is two fences and a torch.
-STREET_PROJECTS = frozenset({"road", "lamp"})
+# certificate. A road paves one stretch; a lamp is two fences and a torch;
+# a meadow clears seed-bearing grass for the first Farm.
+STREET_PROJECTS = frozenset({"road", "lamp", "meadow"})
 
 
 def _project_progress(observed: dict[str, Any]) -> dict[str, Any] | None:

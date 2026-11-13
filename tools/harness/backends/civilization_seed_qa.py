@@ -258,10 +258,22 @@ def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any],
     raise RuntimeError(f"milestone target is occluded or out of reach: baby {entity['entity_uuid']}: {observed}")
 
 
+BUILDING_AIM_CANDIDATES = 8
+
+
+def _solid_targets_by_distance(solid: list[dict[str, Any]],
+                               player: dict[str, Any]) -> list[tuple[float, float, float]]:
+    """Centres of the received solid blocks, nearest the observer's eye first."""
+    eye = (player["x"], player["y"] + 1.62, player["z"])
+    centres = [tuple(block[axis] + 0.5 for axis in ("x", "y", "z")) for block in solid]
+    return sorted(centres, key=lambda c: sum((c[i] - eye[i]) ** 2 for i in range(3)))
+
+
 def capture_target(probe: ProbeSteps, artifact: Path, label: str,
                    target: tuple[float, float, float], *,
                    entity: dict[str, Any] | None = None,
                    building: dict[str, Any] | None = None,
+                   solid: list[dict[str, Any]] | None = None,
                    teleport: Teleport | None = None) -> dict[str, Any]:
     probe.call("minecraft_close_screen", {})
     initial = probe.observe()["player"]
@@ -298,9 +310,21 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
         })
         observed = _aim(probe, target)
         if building:
-            visible = observed.get("type") == "block" and all(
-                building["min"][i] <= observed.get(axis, building["min"][i] - 1) <= building["max"][i]
-                for i, axis in enumerate(("x", "y", "z")))
+            def inside(seen: dict[str, Any]) -> bool:
+                return seen.get("type") == "block" and all(
+                    building["min"][i] <= seen.get(axis, building["min"][i] - 1) <= building["max"][i]
+                    for i, axis in enumerate(("x", "y", "z")))
+            visible = inside(observed)
+            if not visible and solid:
+                # A sparse building (a Lumber camp) can leave its solid block
+                # beyond the observer's reach or behind a fence: try the
+                # received solid blocks nearest the observer's eye in turn.
+                eye = probe.observe()["player"]
+                for candidate in _solid_targets_by_distance(solid, eye)[:BUILDING_AIM_CANDIDATES]:
+                    observed = _aim(probe, candidate)
+                    if inside(observed):
+                        visible = True
+                        break
         else:
             visible = observed.get("type") == "block" and all(
                 observed.get(axis) == math.floor(target[i]) for i, axis in enumerate(("x", "y", "z")))
@@ -747,7 +771,8 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                 target = building_aim_point(building, evidence.get("solid", []))
                 detail["milestones"]["second_building"] = {
                     "sprint_ticks": advanced, "building": building, "project": project,
-                    "screenshot": capture_target(probe, artifact, f"civilization-building-{advanced:06d}", target, building=building),
+                    "screenshot": capture_target(probe, artifact, f"civilization-building-{advanced:06d}", target, building=building,
+                                              solid=evidence.get("solid", [])),
                 }
         candidate = acceptance_verdict({name: name in detail["milestones"] for name in STAGES}, stalled=False)
         verdicts.update(candidate)
