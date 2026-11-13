@@ -354,6 +354,8 @@ regression = []
         self.assertFalse(ledger._failing_verdict({'status': 'failed', 'error': 'timed out'}, 'autocraft-qa', 'all'))
         # A buildings-qa behaviour never recorded is red only when that blueprint's assertion aborted the run.
         self.assertTrue(ledger._failing_verdict(failed('buildings_wall_L1_project'), 'buildings-qa', 'wall.L1_built'))
+        self.assertTrue(ledger._failing_verdict(failed('buildings_wall_L3_level_exists'), 'buildings-qa', 'wall.L3_upgrade'))
+        self.assertFalse(ledger._failing_verdict(failed('buildings_gate_L3_level_exists'), 'buildings-qa', 'wall.L3_upgrade'))
         self.assertFalse(ledger._failing_verdict(failed('buildings_house_L1_built'), 'buildings-qa', 'wall.L1_built'))
         self.assertFalse(ledger._failing_verdict(failed('in_play'), 'buildings-qa', 'wall.L1_built'))
 

@@ -1,17 +1,9 @@
 """Strict in-game QA of every authored Millenaire blueprint level (buildings slice).
 
-Flow (the ONLY unblocked in-game owner-build path, verified against
-construction.rs/autonomy.rs + the QaAutonomy backend):
-  seed-100 generated village -> walk to it -> ownerless settlement adopts ->
-  founding chest starts empty -> workers produce unfunded -> autonomous Builder
-  completes at least Storage L1 -> CLAIM via dialog Claim button -> owner orders
-  each blueprint via the Projects dialog page (Order buttons; house+barracks L1
-  MUST go through the dialog button per the assignment) or `/settlement build`
-  chat for the rest -> fund the built storage chest via /give + ordinary
-  container shift-click (the legit 'player funds settlement' path) -> a REAL
-  Builder villager builds it -> verify per level -> upgrade L(n)->L(n+1) via
-  the upgrade order -> bounded adversarial pass (break a block mid-build,
-  restart mid-project + verify resume).
+The active flow creates an isolated settlement, funds a storage chest through
+ordinary container transfers, orders each blueprint, and observes a real
+Builder constructing and upgrading it. The windowed house path orders through
+the Projects and Buildings menus and confirms the server's review dialogs.
 
 Per level verified with direct client-observed evidence only:
   - block-by-block match vs the authored blueprint (MCP block reads),
@@ -92,9 +84,13 @@ KIND_LABEL = {"house": "House", "storage": "Storage", "farm": "Farmer workshop",
               "mine": "Mine", "barracks": "Barracks", "wall": "Wall section",
               "watch_tower": "Tower"}
 # ui.rs blueprint_label (English): the `<label> L<level>` project icon.
-PROJECT_LABEL = {"house": "House", "storage": "Storage", "farm": "Farm", "mason": "Mason",
-                 "lumber_camp": "Lumber camp", "mine": "Mine", "barracks": "Barracks",
-                 "wall": "Wall", "watch_tower": "Watchtower"}
+PROJECT_LABEL = {"house": "House", "storage": "Storage", "farm": "Farm",
+                 "mason": "Mason's workshop", "lumber_camp": "Lumber camp", "mine": "Mine",
+                 "barracks": "Barracks", "wall": "Wall", "watch_tower": "Watchtower",
+                 "gate": "Gate",
+                 **{kind: f"{kind.capitalize()}'s workshop" for kind in
+                    ("armorer", "butcher", "cartographer", "cleric", "fisherman", "fletcher",
+                     "leatherworker", "librarian", "toolsmith", "weaponsmith")}}
 KIND_PROFESSION = {"farm": "Farmer", "mason": "Builder",
                     "lumber_camp": "Lumberjack", "mine": "Miner"}
 # Parallel layout: one founded settlement per blueprint, centers 400 apart on
@@ -608,6 +604,8 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
     for bp in targets:
         tag = f"buildings_{bp}"
         sub = sub_all.setdefault(bp, {})
+        probe.check(f"{tag}_L1_level_exists",
+                    len(_load_blueprints().get(bp, {}).get("levels", [])) >= 1)
         sname = f"bqa_{bp}"
         state = _send(probe, "settlement list")
         if sname in " ".join(_chat_lines(state)):
@@ -678,9 +676,8 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             pass  # Chain resume: keep existing residents; no population pollution.
         elif not _summon_bind(probe, sub, tag, sname, shell, 6):
             continue
-        # Projects is a container menu now (`_project_status` reads it as one); the dialog helpers
-        # wait for a dialog screen that never opens (barracks hung to its deadline, 2026-11-13).
-        use_dialog = False
+        # Exercise the Projects and building upgrade menus on the house path.
+        use_dialog = bp == "house" and ctx.windowed
         if f"L1_origin" not in sub:
             # Chain resume: probe first — Busy/Ordered means a project is
             # already admitted (ours from an earlier link); skip re-funding
@@ -710,6 +707,7 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
                         probe, sub, tag, bp, 1, f"settlement build {bp}",
                         True, ctx,
                         dialog_fn=lambda: _order_via_dialog(probe, sub, tag, bp, 1, sname))
+                    probe.check(f"{tag}_L1_order_menu", "L1_dialog_order" in sub)
                 else:
                     still_active = _order_echo_retry(
                         probe, sub, tag, bp, 1, f"settlement build {bp}",
@@ -740,6 +738,8 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             except Exception:
                 pass
         for level in range(2, LEVELS[bp] + 1):
+            probe.check(f"{tag}_L{level}_level_exists",
+                        len(_load_blueprints().get(bp, {}).get("levels", [])) >= level)
             if f"L{level}_origin" in sub:
                 _verify_level(probe, sub, ctx, artifact, bp, level, tuple(sub[f"L{level}_origin"]),
                               tag, sname, tuple(sub["storage_chest"]))
@@ -797,6 +797,9 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
                           sname, tuple(sub["storage_chest"]))
             _verdict(sub, f"L{level}_upgrade", "PASS",
                      f"L{level} cert at {list(origin_up)}; block-matched, entrance and light checked")
+        if use_dialog:
+            probe.check(f"{tag}_upgrade_menu",
+                        any(f"L{level}_dialog_upgrade" in sub for level in range(2, LEVELS[bp] + 1)))
 
 def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str, level: int,
                       order_cmd: str, use_dialog: bool, ctx: ProfileContext,
@@ -1508,97 +1511,62 @@ def _summon_bind(probe: ProbeSteps, sub: dict[str, Any], tag: str,
 
 
 
+def _menu_click_named(probe: ProbeSteps, title: str, name: str) -> None:
+    """Find an icon across container pages and click its exact name."""
+    page = probe.wait(lambda s: _container_titled(s, title), f"{title}_menu_open",
+                      timeout_seconds=60)
+    while True:
+        slots = page["container"]["slots"]
+        match = next((row for row in slots if row.get("name") == name), None)
+        if match is not None:
+            probe.call("minecraft_click_container_slot", {"slot": int(match["slot"]), "button": "primary",
+                                                          "timeout_seconds": probe.remaining()})
+            return
+        if not any(row.get("slot") == 50 and row.get("name") == "Next page" for row in slots):
+            raise RuntimeError(f"buildings-qa: {name!r} missing from {title} menu")
+        probe.call("minecraft_click_container_slot", {"slot": 50, "button": "primary",
+                                                      "timeout_seconds": probe.remaining()})
+        page = probe.wait(lambda s: _container_titled(s, title)
+                          and s["container"]["slots"] != slots,
+                          f"{title}_next_page", timeout_seconds=60)
+
+
+def _confirm_project(probe: ProbeSteps, label: str) -> None:
+    # The container icon opens a real server confirmation, not the retired
+    # Projects dialog. Do not bypass that confirmation with a chat command.
+    opened = probe.wait(lambda s: (s.get("screen") or {}).get("class") == DIALOG_CLASS
+                        and (s.get("screen") or {}).get("title") == label,
+                        "project_confirmation_open", timeout_seconds=60)
+    probe.call("minecraft_click_screen_button", {"expected_screen_class": DIALOG_CLASS,
+                                                "expected_title": opened["screen"]["title"],
+                                                "button_label": label})
+    probe.call("minecraft_wait_ticks", {"ticks": 40})
+
+
 def _order_via_dialog(probe: ProbeSteps, sub: dict[str, Any], tag: str,
                       bp: str, level: int, settlement: str) -> None:
-    state = _send(probe, "settlement menu projects")
-    opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
-                        and "Projects" in str(s["screen"].get("title", "")),
-                        f"{tag}_L{level}_projects_open")
-    title = opened["screen"].get("title")
-    probe.call("minecraft_click_screen_button", {
-        "expected_screen_class": DIALOG_CLASS, "expected_title": title,
-        "button_label": f"Order: {bp}"})
-    probe.call("minecraft_wait_ticks", {"ticks": 40})
-    after = probe.observe()
-    body = "\n".join(str(n.get("label", "")) for n in after.get("ui_nodes", [])
-                     if isinstance(n, dict) and str(n.get("id", "")).startswith("dialog/body"))
-    note = "\n".join(str(n.get("label", "")) for n in after.get("ui_nodes", [])
-                     if isinstance(n, dict) and str(n.get("id", "")) in ("dialog/title", "dialog/note", "dialog/body/0"))
-    sub[f"L{level}_dialog_order"] = f"clicked Order: {bp} in {title}"
-    sub[f"L{level}_order_note"] = (note + "\n" + body)[:500]
+    _send(probe, "settlement menu projects")
+    label = PROJECT_LABEL.get(bp, bp.capitalize())
+    _menu_click_named(probe, "Projects", f"{label} L1")
+    _confirm_project(probe, f"Order: {label}")
+    sub[f"L{level}_dialog_order"] = f"ordered {label} from Projects"
 
 
 def _upgrade_via_dialog(probe: ProbeSteps, sub: dict[str, Any], tag: str,
                         bp: str, bid: int, level: int, settlement: str) -> None:
-    state = _send(probe, "settlement menu projects")
-    opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
-                        and "Projects" in str(s["screen"].get("title", "")),
-                        f"{tag}_L{level}_projects_open")
-    title = opened["screen"].get("title")
-    # Deterministic label (ui_text Key::UpgradeRow); the scrollable dialog
-    # only exposes on-screen buttons in ui_nodes, so never scan for it —
-    # click by label directly (same as Order buttons).
+    _send(probe, "settlement menu buildings")
     kind = KIND_LABEL.get(bp, bp.capitalize())
-    label = f"Upgrade #{bid & 0xFFFFFFFF} ({kind} L{level - 1}) to L{level}"
-    _click_upgrade_label(probe, sub, tag, level, title, label, bid)
-
-
-def _click_upgrade_label(probe: ProbeSteps, sub: dict[str, Any], tag: str,
-                         level: int, title: str, label: str, bid: int) -> None:
-    try:
-        probe.call("minecraft_click_screen_button", {
-            "expected_screen_class": DIALOG_CLASS, "expected_title": title,
-            "button_label": label})
-    except Exception:
-        # Fallback: sweep visible buttons for any Upgrade-to-L{level} row
-        # (label drift across locales/templates).
-        found = _find_upgrade_button(probe.observe(), level)
-        if found is None:
-            for _ in range(6):
-                try:
-                    _wheel(probe, 3)
-                except Exception:
-                    break
-                probe.call("minecraft_wait_ticks", {"ticks": 10})
-                found = _find_upgrade_button(probe.observe(), level)
-                if found is not None:
-                    break
-        if found is None:
-            raise RuntimeError(f"buildings-qa {tag}: no Upgrade-to-L{level} button in Projects dialog")
-        label = found
-        probe.call("minecraft_click_screen_button", {
-            "expected_screen_class": DIALOG_CLASS, "expected_title": title,
-            "button_label": label})
-    probe.call("minecraft_wait_ticks", {"ticks": 40})
-    sub[f"L{level}_dialog_upgrade"] = f"clicked {label} (bid {bid})"
-
-def _wheel(probe: ProbeSteps, count: int) -> None:
-    """Real wheel events over our owned Xvfb window (scrollable dialogs)."""
-    import ctypes as _c
-    import ctypes.util as _cu
-    owned = probe.client.p4_window
-    x = _c.CDLL(_cu.find_library("X11"))
-    xt = _c.CDLL(_cu.find_library("Xtst"))
-    x.XOpenDisplay.restype = _c.c_void_p
-    x.XOpenDisplay.argtypes = [_c.c_char_p]
-    x.XWarpPointer.argtypes = [_c.c_void_p, _c.c_ulong, _c.c_ulong, _c.c_int, _c.c_int,
-                              _c.c_uint, _c.c_uint, _c.c_int, _c.c_int]
-    x.XSync.argtypes = [_c.c_void_p, _c.c_int]
-    x.XCloseDisplay.argtypes = [_c.c_void_p]
-    xt.XTestFakeButtonEvent.argtypes = [_c.c_void_p, _c.c_uint, _c.c_int, _c.c_ulong]
-    display = x.XOpenDisplay(owned["display"].encode())
-    if not display:
-        raise RuntimeError("cannot open owned Xvfb display for wheel scroll")
-    try:
-        x.XWarpPointer(display, 0, owned["window_id"], 0, 0, 0, 0, 80, 100)
-        for _ in range(abs(count)):
-            button = 5 if count > 0 else 4
-            if not xt.XTestFakeButtonEvent(display, button, 1, 0) or \
-                    not xt.XTestFakeButtonEvent(display, button, 0, 0):
-                raise RuntimeError("owned Xvfb display refused wheel input")
-        x.XSync(display, 0)
-    finally:
-        x.XCloseDisplay(display)
+    _menu_click_named(probe, "Buildings", f"#{bid & 0xFFFFFFFF} {kind} L{level - 1}")
+    screen = probe.wait(lambda s: _container_titled(s, f"#{bid & 0xFFFFFFFF} {kind}"),
+                        f"{tag}_building_open", timeout_seconds=60)
+    action = next((row for row in screen["container"]["slots"] if row.get("slot") == 52), None)
+    label = f"Order construction L{level}"
+    if not action or action.get("name") != label:
+        raise RuntimeError(f"buildings-qa: expected {label!r}, got {action}")
+    probe.call("minecraft_click_container_slot", {"slot": 52, "button": "primary",
+                                                  "timeout_seconds": probe.remaining()})
+    _confirm_project(probe, f"{label} #{bid & 0xFFFFFFFF}")
+    sub[f"L{level}_dialog_upgrade"] = f"ordered {label} for #{bid}"
 
 
 
@@ -1765,7 +1733,7 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
     # verify reads. Accept air-where-removed and already-upgraded cells;
     # L+1 verification itself stays strict.
     cells_next = (cells_true(bp, level + 1, true_origin(bp, level, origin, turns), turns)
-                  if level < LEVELS[bp] else {})
+                  if level < LEVELS[bp] and level < len(data["levels"]) else {})
     mismatches: list[str] = []
     checked = 0
     for pos, want in cells.items():
@@ -1984,13 +1952,30 @@ def _station_of(cells: dict[tuple[int, int, int], str],
 
 
 def _residents_text(probe: ProbeSteps) -> list[str]:
-    """Residents & jobs page BODY lines (job assignments per building)."""
-    state = _send(probe, "settlement menu residents")
-    opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
-                        and "Residents" in str(s["screen"].get("title", "")),
-                        "residents_page_open")
-    return [str(n.get("label", "")) for n in opened.get("ui_nodes", [])
-            if isinstance(n, dict) and str(n.get("id", "")).startswith("dialog/body")]
+    """Read each resident's profession and workplace from the census icon lore."""
+    _send(probe, "settlement menu residents")
+    opened = probe.wait(lambda s: _container_titled(s, "Residents"), "residents_page_open",
+                        timeout_seconds=60)
+    residents = []
+    while True:
+        for row in opened["container"]["slots"]:
+            slot = int(row.get("slot", -1))
+            if 9 <= slot < 45 and row.get("item_id"):
+                components = probe.call("minecraft_read_item_components",
+                                        {"source": "container", "slot": slot})["components"]
+                lore = [_text_plain(line) for line in components.get("minecraft:lore", [])]
+                residents.append(" ".join(lore).replace("Works at", "works at"))
+        if not any(row.get("slot") == 50 and row.get("name") == "Next page"
+                   for row in opened["container"]["slots"]):
+            break
+        previous = opened["container"]["slots"]
+        probe.call("minecraft_click_container_slot", {"slot": 50, "button": "primary",
+                                                      "timeout_seconds": probe.remaining()})
+        opened = probe.wait(lambda s: _container_titled(s, "Residents")
+                            and s["container"]["slots"] != previous,
+                            "residents_next_page", timeout_seconds=60)
+    probe.call("minecraft_close_screen", {})
+    return residents
 
 
 def _await_assignment(probe: ProbeSteps, short: int | None, label: str,
@@ -2001,10 +1986,7 @@ def _await_assignment(probe: ProbeSteps, short: int | None, label: str,
     deadline = _time.monotonic() + timeout_s
     residents: list[str] = []
     while True:
-        try:
-            residents = _residents_text(probe)
-        except Exception:
-            residents = []
+        residents = _residents_text(probe)
         if short and any(f"works at #{short} {label}" in line and profession in line
                          for line in residents):
             break
