@@ -608,15 +608,33 @@ def _current_certificate(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: s
 
 def _queue_planner_fence(probe: ProbeSteps, sub: dict[str, Any], tag: str,
                          bp: str, level: int) -> None:
-    # A pending owner order owns the planner turn. Its station is withheld:
-    # brewing stand for all targets except cleric, and lectern for cleric.
-    fence = "librarian" if bp == "cleric" else "cleric"
+    # Both fence blueprints also exist in the pre-fix catalog. Withhold wool
+    # for House, or wheat seeds for Farm when the target itself needs wool.
+    fence = "farm" if bp in ("house", "barracks") else "house"
     state = _send_fresh(probe, f"settlement build {fence}",
                         (f"Queued {fence}:", f"Started {fence} ", "Unknown blueprint."))
     lines = _chat_lines(state)
     acknowledgement = next((line for line in lines if line.startswith(f"Queued {fence}:")), None)
     sub[f"L{level}_planner_fence"] = acknowledgement or " | ".join(lines)
     probe.check(f"{tag}_L{level}_planner_fenced", acknowledgement is not None)
+
+
+def _missing_level_order(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
+                         level: int, bid: int | None) -> None:
+    """Ask the server before classifying a local catalog gap as a behavioural failure."""
+    command = f"settlement build {bp}" if level == 1 else f"settlement build upgrade {bid}"
+    state = _send_fresh(probe, command, (
+        "Unknown blueprint.", "Blueprint has no first level.", "No blueprint upgrade available",
+        "Started ", "Queued ", "not enough:", "Construction bed material is unavailable.",
+        "waiting for forest evidence", "Building not found.", "Only the owner"))
+    lines = _chat_lines(state)
+    sub[f"L{level}_missing_level_reply"] = lines
+    refused = any(line.startswith(("Unknown blueprint.", "Blueprint has no first level."))
+                  for line in lines) if level == 1 else any(
+                      line.startswith("No blueprint upgrade available") for line in lines)
+    if refused:
+        probe.check(f"{tag}_L{level}_{'order' if level == 1 else 'upgrade'}_available", False)
+    raise RuntimeError(f"{bp} L{level}: local blueprint unavailable; server reply {lines!r}; cannot verify")
 
 
 def _find_nearby_chest(probe: ProbeSteps, detail: dict[str, Any]) -> tuple[int, int, int] | None:
@@ -713,8 +731,6 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
     for bp in targets:
         tag = f"buildings_{bp}"
         sub = sub_all.setdefault(bp, {})
-        probe.check(f"{tag}_L1_level_exists",
-                    len(_load_blueprints().get(bp, {}).get("levels", [])) >= 1)
         sname = f"bqa_{bp}"
         state = _send(probe, "settlement list")
         if sname in " ".join(_chat_lines(state)):
@@ -777,6 +793,8 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
         # Capture a per-run baseline after the hand-built storage exists. A
         # pre-existing certificate, including that storage, is never our build.
         _at_settlement_anchor(probe, sub)
+        if not _load_blueprints().get(bp, {}).get("levels"):
+            _missing_level_order(probe, sub, tag, bp, 1, None)
         sub["baseline_building_ids"] = sorted(_building_records(probe, bp))
         _queue_planner_fence(probe, sub, tag, bp, 1)
         have = _bound_count(probe, sname) if sub.get("resumed_settlement") else 0
@@ -787,14 +805,14 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             continue
         use_dialog = bp == "house" and ctx.windowed
         for level in range(1, LEVELS[bp] + 1):
-            probe.check(f"{tag}_L{level}_level_exists",
-                        len(_load_blueprints().get(bp, {}).get("levels", [])) >= level)
             if level > 1:
                 previous = _current_certificate(probe, sub, tag, bp, level - 1)
                 probe.check(f"{tag}_L{level}_found", previous is not None)
                 bid = previous[0]
             else:
                 bid = None
+            if len(_load_blueprints().get(bp, {}).get("levels", [])) < level:
+                _missing_level_order(probe, sub, tag, bp, level, bid)
             _fund_level(probe, sub, bp, level, tuple(shell))
             if sub.get("behaviour", {}).get(f"L{level}_funded") != "PASS":
                 probe.check(f"{tag}_L{level}_built", False)
@@ -847,7 +865,7 @@ def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
     else:
         state = _send_fresh(
             probe, order_cmd,
-            (f"Started {bp} ", f"Queued {bp}:", "No blueprint upgrade available",
+            (f"Started {bp} ", f"Queued {bp}", "No blueprint upgrade available",
              "Unknown blueprint.", "Busy.", "not enough:"))
         message = " | ".join(_chat_lines(state, 12))
     sub[f"L{level}_order_attempt1"] = message[:300]
@@ -945,7 +963,7 @@ def _wait_certified_origin_here(probe: ProbeSteps, sub: dict[str, Any], tag: str
                                 artifact: Path) -> tuple[int, int, int] | None:
     """Poll the listing while the player STAYS on site (active chunks)."""
     budget = probe.deadline - _time.monotonic() - 60.0
-    fence = "librarian" if bp == "cleric" else "cleric"
+    fence = "farm" if bp in ("house", "barracks") else "house"
     deadline = _time.monotonic() + max(budget, 60.0)
     while _time.monotonic() < deadline:
         probe.call("minecraft_wait_ticks", {"ticks": 200})
@@ -1877,7 +1895,7 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
               and lo[2] <= float(e.get("z", -1e9)) <= hi[2]]
     probe.check(f"{tag}_L{level}_no_hostiles", not inside)
     _verdict(sub, f"L{level}_no_hostiles", "PASS" if not inside else "FAIL",
-             f"{len(inside)} hostiles inside")
+             f"{len(inside)} hostiles observed inside; mob spawning disabled, not an exclusion test")
     probe.fixture("time set 3000")
 
     kind = data["kind"]
@@ -1898,7 +1916,7 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
     elif kind in ("wall", "tower", "gate"):
         probe.check(f"{tag}_L{level}_fort", True)
         _verdict(sub, f"L{level}_function_fort", "PASS",
-                 "certified + entrance walkable (physical fortification)")
+                 "certificate and entrance block checked after teleport; no traversal or door interaction tested")
 
 
 def _function_house(probe: ProbeSteps, sub: dict[str, Any], tag: str, level: int,

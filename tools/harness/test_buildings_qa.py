@@ -421,9 +421,26 @@ class FreshCertificateTest(unittest.TestCase):
     def test_unfundable_fence_must_be_queued_not_started(self):
         probe = FakeProbe()
         with mock.patch.object(buildings_qa, "_send_fresh",
-                               return_value={"recent_chat": ["Started cleric construction."]}):
+                               return_value={"recent_chat": ["Started house construction."]}):
             with self.assertRaisesRegex(RuntimeError, "buildings_gate_L2_planner_fenced"):
                 buildings_qa._queue_planner_fence(probe, {}, "buildings_gate", "gate", 2)
+
+    def test_fence_uses_a_pre_fix_catalog_kind_with_withheld_material(self):
+        for target, fence in (("gate", "house"), ("cleric", "house"),
+                              ("house", "farm"), ("barracks", "farm")):
+            with self.subTest(target=target), mock.patch.object(
+                    buildings_qa, "_send_fresh",
+                    return_value={"recent_chat": [f"Queued {fence}: not enough: material"]}) as send:
+                buildings_qa._queue_planner_fence(FakeProbe(), {}, f"buildings_{target}", target, 1)
+                self.assertEqual(send.call_args.args[1], f"settlement build {fence}")
+
+    def test_missing_local_level_with_server_acceptance_is_unrunnable_not_red(self):
+        probe, sub = FakeProbe(), {}
+        with mock.patch.object(buildings_qa, "_send_fresh",
+                               return_value={"recent_chat": ["Started gate construction."]}):
+            with self.assertRaisesRegex(RuntimeError, "local blueprint unavailable"):
+                buildings_qa._missing_level_order(probe, sub, "buildings_gate", "gate", 3, 7)
+        self.assertNotIn("buildings_gate_L3_upgrade_available", probe.report["assertions"])
 
     def test_air_from_a_next_level_clear_is_not_a_current_level_match(self):
         data = {"gate": {"levels": [{}, {}]}}
@@ -560,16 +577,19 @@ class SequentialFlowTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "buildings_gate_L1_project"):
             self.run_flow("gate", 3, order_admitted=False, cert_after_order=False)
 
-    def test_missing_blueprint_level_is_an_explicit_failed_assertion(self):
+    def test_missing_level_is_red_only_after_the_server_refuses_the_upgrade(self):
         data = buildings_qa._load_blueprints()
         truncated = dict(data)
         truncated["gate"] = dict(data["gate"], levels=data["gate"]["levels"][:2])
         probe = FakeProbe()
         with mock.patch.object(buildings_qa, "_load_blueprints", return_value=truncated), \
-                mock.patch(f"{__name__}.FakeProbe", return_value=probe):
-            with self.assertRaisesRegex(RuntimeError, "buildings_gate_L3_level_exists"):
+                mock.patch(f"{__name__}.FakeProbe", return_value=probe), \
+                mock.patch.object(buildings_qa, "_send_fresh", return_value={
+                    "recent_chat": ["No blueprint upgrade available for this building."]}) as send:
+            with self.assertRaisesRegex(RuntimeError, "buildings_gate_L3_upgrade_available"):
                 self.run_flow("gate", 3, order_admitted=True, cert_after_order=False)
-        self.assertIs(probe.report["assertions"]["buildings_gate_L3_level_exists"], False)
+        self.assertEqual(send.call_args.args[1], "settlement build upgrade 7")
+        self.assertIs(probe.report["assertions"]["buildings_gate_L3_upgrade_available"], False)
 
     def test_verifying_previous_level_does_not_index_a_missing_next_level(self):
         data = {"gate": {"levels": [{}, {}]}}
@@ -585,12 +605,18 @@ class SequentialFlowTest(unittest.TestCase):
                                            (0, 0, 0), "buildings_gate", "town", (0, 0, 0))
         next_cells.assert_not_called()
 
-    def test_missing_blueprint_is_an_explicit_failed_assertion(self):
+    def test_missing_blueprint_is_red_only_after_the_server_refuses_the_order(self):
         data = dict(buildings_qa._load_blueprints())
         del data["gate"]
-        with mock.patch.object(buildings_qa, "_load_blueprints", return_value=data):
-            with self.assertRaisesRegex(RuntimeError, "buildings_gate_L1_level_exists"):
+        probe = FakeProbe()
+        with mock.patch.object(buildings_qa, "_load_blueprints", return_value=data), \
+                mock.patch(f"{__name__}.FakeProbe", return_value=probe), \
+                mock.patch.object(buildings_qa, "_send_fresh",
+                                  return_value={"recent_chat": ["Unknown blueprint."]}) as send:
+            with self.assertRaisesRegex(RuntimeError, "buildings_gate_L1_order_available"):
                 self.run_flow("gate", 3, order_admitted=True, cert_after_order=False)
+        self.assertEqual(send.call_args.args[1], "settlement build gate")
+        self.assertIs(probe.report["assertions"]["buildings_gate_L1_order_available"], False)
 
 
 if __name__ == "__main__":
