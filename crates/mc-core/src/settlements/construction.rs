@@ -1575,17 +1575,21 @@ fn plan(state: &mut TickState, id: SettlementId) {
     {
         return;
     }
-    if gathering {
-        return;
-    }
-    // Free work fills every pass that starts no building or upgrade: seed
-    // gathering while the first Farm waits on wheat seeds, then street work.
+    // The first Farm's seeds are gathered even while a priority material
+    // worker is out: `assign_builder` keeps that worker out of this project,
+    // and another resident clears the meadow.
     let Some(record) = state.settlements.get(id) else {
         return;
     };
-    if let Some(site) = meadow_site(state, record, residents, &images)
-        .or_else(|| street_site(state, record, &images))
-    {
+    if let Some(site) = meadow_site(state, record, residents, &images) {
+        begin_cells(state, site.project, site.bounds, site.cells);
+        return;
+    }
+    if gathering {
+        return;
+    }
+    // Free street work fills every pass that starts no building or upgrade.
+    if let Some(site) = street_site(state, record, &images) {
         begin_cells(state, site.project, site.bounds, site.cells);
     }
 }
