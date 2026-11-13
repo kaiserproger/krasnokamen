@@ -1,6 +1,7 @@
 use super::*;
+use crate::battle::combat::{Action, Weapon};
 use crate::battle::staging::{self, BattleCommand};
-use crate::boundary::{ConnectionId, PlayerInput};
+use crate::boundary::{ConnectionId, EntityDataValue, EntityEvent, Hand, PlayerInput};
 use crate::tick::run_tick;
 
 const ORIGIN: [f64; 3] = [8.5, 64.0, 8.5];
@@ -282,15 +283,111 @@ fn each_respawn_in_battle_puts_the_holder_back_into_the_front_rank_with_the_kit(
     }
 }
 
+/// His whole inventory, cursor and crafting grid hold exactly the kit, once.
+fn assert_exactly_the_kit(state: &TickState, player: EntityId) {
+    let kit = &state.hostile.battle.live.holds[0].kit;
+    let player_state = &state.players[&player];
+    let inventory = &player_state.inventory;
+    let selected = usize::from(inventory.selected);
+    let mut expected = vec![ItemStack::EMPTY; inventory.slots.len()];
+    for (equipment, stack) in kit.iter().enumerate() {
+        if let Some(stack) = stack {
+            expected[player_index(equipment, selected)] = stack.clone();
+        }
+    }
+    assert_eq!(inventory.slots, expected, "inventory is not exactly the kit");
+    let menu = &player_state.inventory_menu;
+    assert!(menu.carried.is_empty(), "cursor {:?}", menu.carried);
+    assert!(menu.grid.iter().all(ItemStack::is_empty), "grid {:?}", menu.grid);
+    let sword = kit[0].as_ref().unwrap().item_id;
+    let swords: i32 = inventory
+        .slots
+        .iter()
+        .filter(|stack| !stack.is_empty() && stack.item_id == sword)
+        .map(|stack| stack.count)
+        .sum();
+    assert_eq!(swords, 1, "exactly one sword");
+}
+
+/// Before dying he moves the sword out of his hand to `to` and picks up
+/// other things (a dirt stack, a stick in the crafting grid, an arrow on the
+/// cursor), then he dies and respawns.
+fn shuffle_die_and_respawn(state: &mut TickState, player: EntityId, to: usize) {
+    let item = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name.to_owned()).unwrap())
+            .unwrap()
+    };
+    let (dirt, stick, arrow) = (
+        item("minecraft:dirt"),
+        item("minecraft:stick"),
+        item("minecraft:arrow"),
+    );
+    let player_state = state.players.get_mut(&player).unwrap();
+    let selected = usize::from(player_state.inventory.selected);
+    player_state.inventory.slots.swap(selected, to);
+    player_state.inventory.slots[12] = ItemStack::new(dirt, 16);
+    player_state.inventory_menu.grid[0] = ItemStack::new(stick, 2);
+    player_state.inventory_menu.carried = ItemStack::new(arrow, 3);
+    let deaths = state.hostile.battle.live.holds[0].deaths;
+    kill(state, 1);
+    run_tick(state, &[]);
+    assert_eq!(state.hostile.battle.live.holds[0].deaths, deaths + 1);
+    run_tick(
+        state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(1),
+        }],
+    );
+    run_tick(state, &[]);
+    assert!(!state.hostile.battle.live.holds[0].dead);
+}
+
 #[test]
-fn enemy_soldiers_in_reach_swing_at_the_holder_and_his_health_drops() {
+fn a_respawn_gives_exactly_the_kit_after_he_moved_his_sword() {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let player = ids[0];
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    assert_exactly_the_kit(&state, player);
+    command(&mut state, &mut changes, BattleCommand::Start).unwrap();
+    run_tick(&mut state, &[]);
+    // Sword to another hotbar slot.
+    let selected = usize::from(state.players[&player].inventory.selected);
+    shuffle_die_and_respawn(&mut state, player, (selected + 3) % 9);
+    assert_exactly_the_kit(&state, player);
+    assert_in_rank_with_kit(&state, player);
+}
+
+#[test]
+fn two_respawns_in_a_row_give_no_duplicates() {
     let (mut state, ids) = staged(&["PovRed"]);
     let player = ids[0];
     let mut changes = ChangeSet::default();
     command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
     command(&mut state, &mut changes, BattleCommand::Start).unwrap();
     run_tick(&mut state, &[]);
-    // Stand him a pace in front of the blue foot line (blue faces -z).
+    // Sword to the main inventory, then to the hotbar.
+    for to in [20, 7] {
+        shuffle_die_and_respawn(&mut state, player, to);
+        assert_exactly_the_kit(&state, player);
+    }
+    // A rejoin's re-arm is the same custody.
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    assert_exactly_the_kit(&state, player);
+}
+
+/// A started battle with PovRed stood a pace in front of a blue front-rank
+/// foot soldier (blue faces -z); returns PovRed, that soldier and his place.
+fn facing_blue() -> (TickState, EntityId, EntityId, [f64; 3]) {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let player = ids[0];
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(&mut state, &mut changes, BattleCommand::Start).unwrap();
+    run_tick(&mut state, &[]);
     let formation = &state.hostile.battle.formation;
     let blue = formation
         .members
@@ -302,21 +399,111 @@ fn enemy_soldiers_in_reach_swing_at_the_holder_and_his_health_drops() {
         .unwrap()
         .id;
     let at = state.entities.pos(state.entities.slot_of(blue).unwrap());
+    (state, player, blue, at)
+}
+
+/// Hold the two in contact, as at an engaged front: the soldier at `at`
+/// (his line would otherwise march on past), PovRed a pace in front of him.
+fn in_contact(state: &mut TickState, player: EntityId, blue: EntityId, at: [f64; 3]) {
+    let body = state.entities.slot_of(blue).unwrap();
+    state.entities.set_pos(body, at);
     let body = state.entities.slot_of(player).unwrap();
     state.entities.set_pos(body, [at[0], at[1], at[2] - 1.5]);
-    let deaths_before = state.hostile.battle.live.holds[0].deaths;
-    for _ in 0..80 {
-        run_tick(&mut state, &[]);
-        let body = state.entities.slot_of(player);
-        if body.is_none() || state.players[&player].vitals.health < 20.0 {
+}
+
+/// For the next tick every blue fighter but `except` is held in `blue`, and
+/// every red one is out of action (red archers shoot at the blue line he
+/// stands in front of): only the soldier under test can hurt him.
+fn hold(state: &mut TickState, blue: Action, except: Option<EntityId>) {
+    let battle = &mut state.hostile.battle;
+    for bi in 0..battle.columns.ids.len() {
+        if Some(battle.columns.ids[bi]) == except {
+            continue;
+        }
+        battle.combat.fighters[bi].action = match battle.columns.factions[bi] {
+            2 => blue,
+            _ => Action::Wounded,
+        };
+    }
+}
+
+fn swung(output: &crate::boundary::TickOutput, soldier: EntityId) -> bool {
+    output.changes.entity_events.iter().any(|event| {
+        matches!(event, EntityEvent::Swing { entity, hand: Hand::Main, .. } if *entity == soldier)
+    })
+}
+
+#[test]
+fn wounded_staggered_or_recovering_soldiers_in_reach_never_hit_the_holder() {
+    for action in [
+        Action::Recover { until: u64::MAX },
+        Action::Stagger { until: u64::MAX },
+        Action::Wounded,
+    ] {
+        let (mut state, player, blue, at) = facing_blue();
+        for _ in 0..120 {
+            in_contact(&mut state, player, blue, at);
+            hold(&mut state, action, None);
+            let (output, ..) = run_tick(&mut state, &[]);
+            assert!(!swung(&output, blue), "{action:?} soldier swung");
+        }
+        assert_eq!(
+            state.players[&player].vitals.health,
+            20.0,
+            "{action:?} soldiers hit him"
+        );
+    }
+}
+
+#[test]
+fn a_ready_enemy_soldier_hits_the_holder_once_per_swing_cycle() {
+    let (mut state, player, blue, at) = facing_blue();
+    // (tick, windup) of each swing the ready soldier starts, and hit ticks.
+    let mut swings: Vec<(u64, u64)> = Vec::new();
+    let mut hits = Vec::new();
+    let mut health = state.players[&player].vitals.health;
+    for tick in 0..600_u64 {
+        in_contact(&mut state, player, blue, at);
+        // Every other blue man out of action too, archers included (Recover
+        // does not stop a bow).
+        hold(&mut state, Action::Wounded, Some(blue));
+        let (output, ..) = run_tick(&mut state, &[]);
+        if swung(&output, blue) {
+            let battle = &state.hostile.battle;
+            let slot = state.entities.slot_of(blue).unwrap();
+            let bi = battle.columns.index(slot).unwrap();
+            let Action::Windup { target, weapon, .. } = battle.combat.fighters[bi].action else {
+                panic!("swing without a windup: {:?}", battle.combat.fighters[bi].action);
+            };
+            assert_eq!(target, player, "his swing is at the holder");
+            assert_ne!(weapon, Weapon::Bow);
+            let raised = state.entities.row(slot).appearance.extra.iter().any(|(index, value)| {
+                *index == 8 && matches!(value, EntityDataValue::Byte(flags) if *flags != 0)
+            });
+            assert!(!raised, "the shield is lowered for the swing");
+            swings.push((tick, u64::from(weapon.windup())));
+        }
+        let now = state.players[&player].vitals.health;
+        if now < health {
+            hits.push(tick);
+        }
+        health = now;
+        if hits.len() >= 2 || now <= 0.0 {
             break;
         }
     }
-    let hurt = state.players[&player].vitals.health < 20.0
-        || state.hostile.battle.live.holds[0].deaths > deaths_before;
-    assert!(hurt, "blue soldiers in reach never hit him");
+    assert!(!hits.is_empty(), "the ready soldier never hit him; swings {swings:?}");
+    // Every blow is the impact of his own swing, one per cycle.
+    for &hit in &hits {
+        assert!(
+            swings.iter().any(|&(swing, windup)| swing + windup == hit),
+            "hit at {hit} is no swing's impact: hits {hits:?} swings {swings:?}"
+        );
+    }
+    assert!(hits.len() <= swings.len(), "hits {hits:?} swings {swings:?}");
     // His own side never swings: a red holder beside red soldiers only.
     let (mut state, ids) = staged(&["PovRed"]);
+    let mut changes = ChangeSet::default();
     command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
     command(&mut state, &mut changes, BattleCommand::Start).unwrap();
     for _ in 0..60 {

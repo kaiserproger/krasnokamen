@@ -297,6 +297,23 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
     // Take reusable strike scratch so resolution can mutate both opponents.
     let mut strikes = std::mem::take(&mut combat.strikes);
     for &(actor, target, weapon, start) in &strikes {
+        if super::live_players::is_holder(battle, target) {
+            // As for a soldier target: wounded or parried since the windup, no blow.
+            let able = frame
+                .entities
+                .slot_of(actor)
+                .and_then(|slot| battle.columns.index(slot))
+                .is_some_and(|bi| {
+                    !matches!(
+                        combat.fighters[bi].action,
+                        Action::Wounded | Action::Stagger { .. }
+                    )
+                });
+            if able {
+                super::live_players::blow(frame, battle, out, actor, target, weapon.reach());
+            }
+            continue;
+        }
         strike(
             frame,
             battle,
@@ -341,14 +358,22 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         {
             continue;
         }
-        let Some(target) = battle.columns.targets[bi].as_ref() else {
-            continue;
-        };
-        combat.work.target_checks += 1;
-        if super::retained_enemy(frame.entities, slot, target.id, fighter.weapon.reach()).is_none()
-        {
-            continue;
+        let soldier = battle.columns.targets[bi].as_ref().map(|target| target.id);
+        if soldier.is_some() {
+            combat.work.target_checks += 1;
         }
+        let reach = fighter.weapon.reach();
+        let soldier =
+            soldier.and_then(|target| super::retained_enemy(frame.entities, slot, target, reach));
+        // A living network player of the other side in reach is one more
+        // candidate for this same swing; the nearer of the two is struck.
+        let holder = super::live_players::in_reach(battle, frame.entities, slot, reach, None);
+        let target = match (soldier, holder) {
+            (Some(soldier), Some(holder)) if holder.distance < soldier.distance => holder,
+            (Some(soldier), _) => soldier,
+            (None, Some(holder)) => holder,
+            (None, None) => continue,
+        };
         // Three cautious soldiers in four; decisions once/20t, not per frame.
         if !(frame.tick + id.0 as u64).is_multiple_of(ATTACK_DECISION_TICKS) {
             continue;

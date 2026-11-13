@@ -8,14 +8,27 @@
 //! damage and dies. The battle moves him only when he (re)enters the rank:
 //! `battle live` before start, and each respawn, which puts him back into a
 //! current front-rank slot of his side near its centre with the kit again.
-//! `keep_inventory` keeps the kit from littering the field. Enemy soldiers in
-//! reach of a holder swing at him (`strike`) through the ordinary player
-//! damage path; the battle's own targets stay soldiers.
-use super::{BattleIntent, BattleState, Frame, Output};
+//!
+//! Battle-mode custody: a holder's inventory IS his kit (`equip`). Placement,
+//! re-arming and every respawn set his whole inventory to exactly the kit:
+//! his menus are closed first (cursor and crafting grid fold back, overflow is
+//! discarded, never dropped), then every inventory slot is set, the kit in its
+//! fixed slots and every other slot empty. Whatever he moved, picked up or
+//! kept, after a respawn he holds the kit once and nothing else.
+//! `keep_inventory` keeps the kit from littering the field when he dies.
+//!
+//! A living holder of the other side in weapon reach is one more candidate
+//! for a soldier's own swing (`combat`): the same ready state, cadence and
+//! Windup → impact → Recover cycle as a swing at a soldier, one target per
+//! swing; wounded, staggered and recovering soldiers do not swing. The blow
+//! lands through the ordinary player damage path (`blow`); battle targets
+//! stay soldiers.
+use super::{BattleIntent, BattleState, EnemyTarget, Frame, Output};
 use crate::battle::formation::{FormationRuntime, Order, Regiment, position, slot_position};
 use crate::battle::ground::{self, Placement};
-use crate::boundary::{ChangeSet, EntityEvent, EntityId, Hand};
+use crate::boundary::{ChangeSet, EntityId};
 use crate::commands::{Command, GameMode, Target};
+use crate::entities::{EntitySlot, EntityStore};
 use crate::intent::{DamageSource, Footprint, IntentKind};
 use crate::tick::TickState;
 use mc_data::ItemStack;
@@ -31,12 +44,6 @@ const PLAYER_HEIGHT: f64 = 1.8;
 /// One soldier's blow on a live player: an ordinary iron-weapon melee hit,
 /// reduced by his armour and blocked by his raised shield like any player's.
 const SOLDIER_HIT: f32 = 5.0;
-/// A soldier in sword reach of a live enemy player decides once a second
-/// (the battle's attack decision cadence) and swings half the time.
-const STRIKE_DECISION_TICKS: u64 = 20;
-const STRIKE_ROLLS: u32 = 5_000;
-const STRIKE_REACH: f64 = 2.5;
-const STRIKE_SALT: u64 = 0x4C49_5645;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Hold {
@@ -62,9 +69,9 @@ pub(crate) struct LiveState {
     /// Entity last announced online for each watched name.
     announced: Vec<Option<EntityId>>,
     pub holds: Vec<Hold>,
-    /// Living holders this tick (entity, side, position): what enemy soldiers
-    /// in reach swing at (`strike`).
-    targets: Vec<(EntityId, u16, [f64; 3])>,
+    /// Living holders this tick (entity, side): candidates for enemy
+    /// soldiers' swings (`in_reach`).
+    targets: Vec<(EntityId, u16)>,
 }
 
 pub(crate) fn valid_name(name: &str) -> bool {
@@ -146,84 +153,89 @@ pub(crate) fn update(state: &mut TickState) {
             }
         }
         if !is_dead(state, player) {
-            let pos = state
-                .entities
-                .pos(state.entities.slot_of(player).expect("living player"));
             let side = state.hostile.battle.live.holds[index].side;
-            state.hostile.battle.live.targets.push((player, side, pos));
+            state.hostile.battle.live.targets.push((player, side));
         }
     }
 }
 
-/// Enemy soldiers in sword reach of a living holder swing at him, at the
-/// battle's attack decision cadence: an ordinary melee hit through the player
-/// damage path (armour, shield block, knockback), never the battle's outcome
-/// roll. Additive: battle targets stay soldiers; mounted, archer and routing
-/// men do not swing.
-pub(super) fn strike(frame: &Frame<'_>, battle: &BattleState, out: &mut Output) {
-    let columns = &battle.columns;
-    for &(player, side, pos) in &battle.live.targets {
-        for bi in 0..columns.ids.len() {
-            if !columns.active[bi]
-                || columns.carried[bi]
-                || columns.ranged[bi]
-                || !super::enemies(columns.factions[bi], side)
-            {
-                continue;
-            }
-            let id = columns.ids[bi];
-            if !(frame.tick + id.0 as u64).is_multiple_of(STRIKE_DECISION_TICKS) {
-                continue;
-            }
-            let at = columns.positions[bi];
-            let reach = (at[0] - pos[0]).powi(2) + (at[2] - pos[2]).powi(2);
-            if reach > STRIKE_REACH * STRIKE_REACH || (at[1] - pos[1]).abs() > 2.0 {
-                continue;
-            }
-            let Some(slot) = columns.slots[bi] else {
-                continue;
-            };
-            if frame.entities.row(slot).entity_life.mount.vehicle.is_some()
-                || (bi < battle.formation.members.len()
-                    && battle.formation.context_at(bi).routing)
-            {
-                continue;
-            }
-            if super::combat::roll(id, frame.tick / STRIKE_DECISION_TICKS, STRIKE_SALT)
-                >= STRIKE_ROLLS
-            {
-                continue;
-            }
-            out.events.push(EntityEvent::Swing {
-                entity: id,
-                hand: Hand::Main,
-                animation: crate::boundary::SwingKind::Whack,
-                duration_ticks: 21,
-            });
-            out.intents.push(BattleIntent {
-                actor: id,
-                kind: IntentKind::DamageEntity {
-                    target: player,
-                    amount: SOLDIER_HIT,
-                    kind: crate::survival::DamageKind::Melee,
-                    source: Some(DamageSource::Melee {
-                        attacker: id,
-                        position: at,
-                        yaw: frame.entities.rot(slot)[0],
-                        bonus_knockback: 0.0,
-                        sweep: false,
-                        fire_ticks: 0,
-                        bane_ticks: 0,
-                    }),
-                },
-                footprint: Footprint {
-                    entity_reads: vec![id, player],
-                    entity_writes: vec![player],
-                    ..Default::default()
-                },
-            });
-        }
+/// The nearest living holder of the other side within `reach` of soldier
+/// `actor` (`only`: that holder alone): the extra candidate a ready soldier
+/// weighs against his soldier target before he starts a swing, and the reach
+/// check again at its impact.
+pub(super) fn in_reach(
+    battle: &BattleState,
+    entities: &EntityStore,
+    actor: EntitySlot,
+    reach: f64,
+    only: Option<EntityId>,
+) -> Option<EnemyTarget> {
+    if battle.live.targets.is_empty() {
+        return None;
     }
+    let unit = super::faction::live_unit(entities, actor)?;
+    battle
+        .live
+        .targets
+        .iter()
+        .filter(|&&(player, side)| {
+            super::enemies(unit.faction, side) && only.is_none_or(|id| id == player)
+        })
+        .filter_map(|&(player, _)| {
+            let pos = entities.pos(entities.slot_of(player)?);
+            let distance = crate::target_grid::distance(unit.pos, pos);
+            (distance <= reach).then_some(EnemyTarget {
+                id: player,
+                pos,
+                distance,
+            })
+        })
+        .min_by(|a, b| a.distance.total_cmp(&b.distance))
+}
+
+pub(super) fn is_holder(battle: &BattleState, id: EntityId) -> bool {
+    battle.live.targets.iter().any(|&(player, _)| player == id)
+}
+
+/// The impact of a soldier's swing at a holder (`combat`): an ordinary melee
+/// hit through the player damage path (armour, shield block, knockback),
+/// never the battle's outcome roll. A holder out of reach by now is missed.
+pub(super) fn blow(
+    frame: &Frame<'_>,
+    battle: &BattleState,
+    out: &mut Output,
+    actor: EntityId,
+    target: EntityId,
+    reach: f64,
+) {
+    let Some(slot) = frame.entities.slot_of(actor) else {
+        return;
+    };
+    if in_reach(battle, frame.entities, slot, reach, Some(target)).is_none() {
+        return;
+    }
+    out.intents.push(BattleIntent {
+        actor,
+        kind: IntentKind::DamageEntity {
+            target,
+            amount: SOLDIER_HIT,
+            kind: crate::survival::DamageKind::Melee,
+            source: Some(DamageSource::Melee {
+                attacker: actor,
+                position: frame.entities.pos(slot),
+                yaw: frame.entities.rot(slot)[0],
+                bonus_knockback: 0.0,
+                sweep: false,
+                fire_ticks: 0,
+                bane_ticks: 0,
+            }),
+        },
+        footprint: Footprint {
+            entity_reads: vec![actor, target],
+            entity_writes: vec![target],
+            ..Default::default()
+        },
+    });
 }
 
 pub(crate) fn watch(state: &mut TickState, names: &[String]) -> String {
@@ -411,16 +423,29 @@ fn player_index(equipment: usize, selected: usize) -> usize {
     [selected, 40, 36, 37, 38, 39][equipment]
 }
 
+/// Battle-mode custody (module doc): his whole inventory becomes exactly the
+/// kit. Menus close first so cursor and crafting grid fold into the inventory;
+/// what does not fit is discarded with the rest, never dropped on the field.
+/// Then every slot is set: the kit in its fixed slots, all others empty.
 fn equip(state: &mut TickState, id: EntityId, kit: &[Option<ItemStack>; 6]) -> usize {
+    let rules = state.registry.item_rules();
     let player = state.players.get_mut(&id).expect("online player");
+    let mut changes = player.close(&rules).changes;
     let selected = usize::from(player.inventory.selected.min(8));
-    let mut changed = 0_u64;
+    let mut image = vec![ItemStack::EMPTY; player.inventory.slots.len()];
     for (equipment, stack) in kit.iter().enumerate() {
-        let index = player_index(equipment, selected);
-        player.inventory.slots[index] = stack.clone().unwrap_or(ItemStack::EMPTY);
-        changed |= 1 << index;
+        if let Some(stack) = stack {
+            image[player_index(equipment, selected)] = stack.clone();
+        }
     }
-    let changes = player.pickup_changes(changed);
+    let mut changed = 0_u64;
+    for (index, stack) in image.into_iter().enumerate() {
+        if player.inventory.slots[index] != stack {
+            player.inventory.slots[index] = stack;
+            changed |= 1 << index;
+        }
+    }
+    changes.extend(player.pickup_changes(changed));
     if let Some(connection) = state.connections.entity_connection(id) {
         for change in changes {
             state.push_player(connection, change);
