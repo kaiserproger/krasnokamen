@@ -43,11 +43,23 @@ impl TickState {
                     active.insert(ChunkPos { x, z });
                 }
             }
-            for chunk in self.world.entity_active_positions() {
-                if (i64::from(chunk.x) - i64::from(center.x)).abs() <= i64::from(radius) + 1
-                    && (i64::from(chunk.z) - i64::from(center.z)).abs() <= i64::from(radius) + 1
-                {
-                    active.insert(chunk);
+            // Hysteresis: previously active chunks one chunk beyond the
+            // radius stay active. Probe only that outer ring (the inside is
+            // already in `active`) instead of walking every previously
+            // active chunk once per player, which cost players x set size.
+            let outer = i64::from(radius) + 1;
+            for dz in -outer..=outer {
+                let step = if dz.abs() == outer { 1 } else { 2 * outer };
+                let mut dx = -outer;
+                while dx <= outer {
+                    let chunk = ChunkPos {
+                        x: (i64::from(center.x) + dx) as i32,
+                        z: (i64::from(center.z) + dz) as i32,
+                    };
+                    if self.world.was_entity_active(chunk) {
+                        active.insert(chunk);
+                    }
+                    dx += step;
                 }
             }
         }
@@ -108,7 +120,12 @@ impl TickState {
     /// configured view. Load priorities prefer the nearest player/ticket
     /// centre; demands union across players.
     pub fn desired_chunks(&self) -> HashMap<ChunkPos, i32> {
-        let mut want: HashMap<ChunkPos, i32> = HashMap::default();
+        // Demand tracks residency closely: presize to it so the per-tick union
+        // of 100 view squares does not rehash its way up from empty.
+        let mut want: HashMap<ChunkPos, i32> = HashMap::with_capacity_and_hasher(
+            self.world.resident_count() + 256,
+            Default::default(),
+        );
         let mut add = |center: ChunkPos, radius: i32| {
             for z in center.z - radius..=center.z + radius {
                 for x in center.x - radius..=center.x + radius {

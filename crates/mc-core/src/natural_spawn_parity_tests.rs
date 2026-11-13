@@ -137,6 +137,164 @@ fn hostile_height_sampling_keeps_invalid_air_and_solid_attempts() {
     );
 }
 
+/// The block-by-block walk `hostile::height` used before its section skip.
+fn walked_top(state: &TickState, x: i32, z: i32, max_y: i32) -> Option<i32> {
+    let min_y = state.dimension.geometry().min_y();
+    let mut top = max_y - 1;
+    while state
+        .registry
+        .materials
+        .classify(state.world.block_at(x, top, z)?)
+        == BlockMaterial::Air
+    {
+        top -= 1;
+        if top < min_y {
+            return None;
+        }
+    }
+    Some(top)
+}
+
+#[test]
+fn hostile_column_top_matches_the_block_walk_with_floaters_overlay_and_missing_chunks() {
+    let mut state = flat("minecraft:plains", 65);
+    let stone = state.registry.states.stone;
+    let air = state.registry.states.air;
+    let max_y = state.dimension.geometry().max_y();
+    // Floaters in distinct sections, the world's top and bottom cells, a hole in
+    // the flat floor, and a column that is air all the way down.
+    for (x, y, z) in [(3, 200, 3), (17, max_y - 1, 5), (40, -64, 0), (-5, 100, 9)] {
+        state.world.set_block(x, y, z, stone);
+    }
+    for y in -64..65 {
+        state.world.set_block(8, y, 8, air);
+    }
+    state.world.fold_overlay();
+    let compare = |state: &TickState| {
+        for x in -70..80 {
+            for z in [-70, -17, -1, 0, 3, 5, 8, 9, 15, 16, 70, 79] {
+                assert_eq!(
+                    super::hostile::height(state, x, z, &mut Rng(7)),
+                    walked_top(state, x, z, max_y).map(|top| {
+                        let ceiling = (top + 1).min(max_y - 1);
+                        state.dimension.geometry().min_y()
+                            + Rng(7)
+                                .below((ceiling - state.dimension.geometry().min_y() + 1) as u64)
+                                as i32
+                    }),
+                    "column {x},{z}"
+                );
+            }
+        }
+        // Far outside the resident square: no chunk, no sample.
+        assert_eq!(super::hostile::height(state, 4000, 4000, &mut Rng(7)), None);
+    };
+    compare(&state);
+    // Unfolded edits take the exact per-block walk: lift the top floater and
+    // sink another beneath the existing one.
+    state.world.set_block(3, 200, 3, air);
+    state.world.set_block(3, 150, 3, stone);
+    assert!(!state.world.overlay_is_empty());
+    compare(&state);
+}
+
+/// The chunk walk `hostile::run` used before its visited set: every earlier
+/// observer is re-tested for every chunk of every observer's square.
+fn old_hostile_run(
+    state: &mut TickState,
+    players: &[[f64; 3]],
+    rng: &mut Rng,
+    changes: &mut ChangeSet,
+) {
+    let category = MobCategory::Monster;
+    let cap = category.max_instances_per_chunk() as usize;
+    let global_cap = cap * state.spawn_census.eligible.len() / 289;
+    for (observer, player) in players.iter().enumerate() {
+        let cell = chunk_of(*player);
+        for x in cell.0 - 8..=cell.0 + 8 {
+            for z in cell.1 - 8..=cell.1 + 8 {
+                let room = global_cap.saturating_sub(state.spawn_census.global[0]);
+                if room == 0 {
+                    return;
+                }
+                if !state.spawn_census.eligible.contains(&(x, z))
+                    || players[..observer]
+                        .iter()
+                        .any(|p| near_chunks(chunk_of(*p), (x, z)))
+                    || !players.iter().any(|p| {
+                        (p[0] - f64::from(x * 16 + 8)).powi(2)
+                            + (p[2] - f64::from(z * 16 + 8)).powi(2)
+                            < SPAWN_MAX * SPAWN_MAX
+                    })
+                {
+                    continue;
+                }
+                let column = [x * 16 + rng.below(16) as i32, z * 16 + rng.below(16) as i32];
+                spawn_group_in_column(state, players, column, category, room, rng, changes);
+            }
+        }
+    }
+}
+
+#[test]
+fn hostile_attempts_visit_each_shared_chunk_once_in_the_old_order() {
+    let outcome = |old: bool| {
+        let mut state = flat("minecraft:plains", 65);
+        for connection in 1..=5_u64 {
+            let _ = crate::tick::run_tick(
+                &mut state,
+                &[crate::boundary::PlayerInput::Join {
+                    connection: crate::boundary::ConnectionId(connection),
+                    uuid: uuid::Uuid::from_u128(u128::from(connection)),
+                    name: format!("observer{connection}"),
+                    permission_level: 0,
+                }],
+            );
+        }
+        // Overlapping squares, one far observer whose square only partly
+        // lies in the resident flat world, and two in the same chunk.
+        let spots = [
+            [0.5, 65.0, 0.5],
+            [40.5, 65.0, 0.5],
+            [44.5, 65.0, 60.5],
+            [3.5, 65.0, 2.5],
+            [-50.5, 65.0, 10.5],
+        ];
+        let mut observers: Vec<_> = state
+            .players
+            .keys()
+            .map(|id| (*id, state.entities.slot_of(*id).unwrap()))
+            .collect();
+        observers.sort_by_key(|(id, _)| id.0);
+        for ((_, slot), spot) in observers.iter().zip(spots) {
+            state.entities.set_pos(*slot, spot);
+        }
+        let positions: Vec<[f64; 3]> = observers
+            .iter()
+            .map(|(_, slot)| state.entities.pos(*slot))
+            .collect();
+        state.day_time = 18_000;
+        census(&mut state, &positions);
+        let mut rng = Rng(99);
+        let mut changes = ChangeSet::default();
+        if old {
+            old_hostile_run(&mut state, &positions, &mut rng, &mut changes);
+        } else {
+            hostile::run(&mut state, &positions, &mut rng, &mut changes);
+        }
+        let spawned: Vec<[f64; 3]> = changes
+            .entities_spawned
+            .iter()
+            .map(|id| state.entities.pos(state.entities.slot_of(*id).unwrap()))
+            .collect();
+        (rng.0, spawned)
+    };
+    let (old_rng, old_spawned) = outcome(true);
+    let (new_rng, new_spawned) = outcome(false);
+    assert!(old_rng != 99, "the walk drew random numbers");
+    assert_eq!((new_rng, new_spawned), (old_rng, old_spawned));
+}
+
 #[test]
 fn surface_slimes_require_swamp_habitat() {
     let state = flat("minecraft:plains", 65);

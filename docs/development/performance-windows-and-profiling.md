@@ -141,6 +141,21 @@ instead of 100,000 cold rows, and the despawn candidates are selected in the age
 roofed 100-player/104k-mob workload for these callees: build with `cargo test --release
 --no-run`, run the executable under `mem-run.sh -p` with `MC_CORE_PHASE_LOG=1`.
 
+Round 2 (2026-11-13) input-phase findings, all on the same micro and native-100 laps:
+`refresh_active_chunks` (timed inside the `physical_attacks` lap after inputs, and `tickets_active`) rebuilt the
+active set whenever any player crossed a chunk border, and kept the previous set's one-chunk exit band by walking
+the whole previous set once per player (100 players x about 30,000 chunks); it now probes only the band ring
+around each centre. The 20-tick daylight burn and graze passes of `natural_spawn` (the 7 ms `p99` of the lap)
+merged and sorted the per-type member sets on the tick thread and then read 40,000 rows serially; they now scan the
+dense body column on the pool (`mob_slots_where`) and leave only the exposed rows to the ordered serial body. Native-100
+runs with `spawn_mobs` off, so the census and hostile-attempt costs (parallel census jobs merged per cell; hostile
+chunk walk with a visited set and a section-skipping column scan) show only on servers that spawn naturally: use
+`N100_SPAWN=1` in `native100_input_phase_micro` for them, `N100_DAY=1` for the burn/graze cycle and `N100_WALK=1`
+for walking players. `input.inputs` in native-100 is dominated by chat: each bot chat is a deep `Tag` clone into
+100 recipient outboxes (`input::social::chat`), roughly 30 chats per second in that profile; sharing the component
+(an `Arc` in `PlayerChange::StyledChat`) is a protocol-boundary change owned outside the input path. The
+`real_terrain_admission_micro` ignored test (`world_tests`) measures `chunks.ensure` admission on real terrain.
+
 ## Load harness and the frozen old core
 
 - `tools/coreperf/compare.py` takes `--mobs`. Cohorts are identified by a

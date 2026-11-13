@@ -1798,3 +1798,51 @@ fn contact_proof_micro() {
         }
     }
 }
+
+/// Real-terrain chunk admission, the tail of `chunks.ensure`: a viewer walking
+/// east loads a new 21-chunk column per step (radius-10 square). Reports the
+/// tick-thread microseconds per admitted chunk (`ensure` calls that admit).
+/// Release micro: build with `cargo test --release --no-run`, run the
+/// executable under `mem-run.sh -p` with `--ignored --nocapture`; attribute
+/// with `perf record` (the measured thread is named after this test).
+#[test]
+#[ignore = "release micro: real-terrain chunk admission cost per chunk"]
+fn real_terrain_admission_micro() {
+    let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
+    let terrain = mc_worldgen::TerrainGenerator::new(42, Arc::clone(&registry.blocks));
+    let generator: Arc<dyn mc_world::ChunkGenerator> = Arc::new(terrain);
+    let mut world = ChunkWorld::new(
+        42,
+        generator,
+        &registry,
+        mc_world::BlockStateId(registry.states.air),
+        [0, 80, 0],
+        mc_world::OVERWORLD_GEOMETRY,
+    );
+    let square = |cx: i32| -> HashMap<mc_world::ChunkPos, i32> {
+        chunks_in_radius(mc_world::ChunkPos { x: cx, z: 0 }, 10)
+            .into_iter()
+            .map(|pos| (pos, (pos.x - cx).pow(2) + pos.z.pow(2)))
+            .collect()
+    };
+    world.ensure_blocking(&square(0));
+    let (mut spent, mut admitted) = (std::time::Duration::ZERO, 0usize);
+    for step in 1..=24 {
+        let want = square(step);
+        while want.keys().any(|pos| !world.has_chunk(pos.x, pos.z)) {
+            let started = std::time::Instant::now();
+            let loaded = world.ensure(&want);
+            if !loaded.is_empty() {
+                spent += started.elapsed();
+                admitted += loaded.len();
+            }
+            std::thread::yield_now();
+        }
+        world.evict_outside(&want);
+    }
+    println!(
+        "ADMISSION chunks={admitted} total_ms={:.1} us_per_chunk={:.0}",
+        spent.as_secs_f64() * 1e3,
+        spent.as_secs_f64() * 1e6 / admitted.max(1) as f64
+    );
+}

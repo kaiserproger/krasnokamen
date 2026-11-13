@@ -543,6 +543,39 @@ fn full_census_matches_exhaustive_across_lifecycle() {
     }
 }
 
+/// Seven-row pool jobs merge to the same census as the one-pass exhaustive
+/// observer: per-cell entity order, counts, charges and extents.
+#[test]
+fn pool_jobs_merge_to_the_exhaustive_census() {
+    let mut actual = fixture();
+    let mut expected = fixture();
+    let observers = [[0.5, 250.0, 0.5], [8.5, 250.0, 8.5], [-16.5, 250.0, -0.5]];
+    for state in [&mut actual, &mut expected] {
+        mixed(state);
+        for index in 0..60_i32 {
+            let name = ["cow", "zombie", "pig"][index as usize % 3];
+            mob(
+                state,
+                name,
+                [
+                    f64::from(index % 7) * 9.0 - 20.0,
+                    250.0,
+                    f64::from(index % 5) * 11.0 - 20.0,
+                ],
+            );
+        }
+        // A dead row and a row outside the resident area stay in the census
+        // rules (dead rows are skipped, unloaded cells are not categorized).
+        state.entities.body_mut(EntitySlot(2)).alive = false;
+        mob(state, "cow", [656.5, 250.0, 0.5]);
+    }
+    assert_eq!(
+        census_with(&mut actual, &observers, 0, 7),
+        old_census(&mut expected, &observers)
+    );
+    assert_census(&actual, &expected);
+}
+
 #[test]
 fn maintenance_matches_exhaustive_rng_wool_blocks_and_head_wear() {
     for (night, rain, grief) in [
@@ -582,6 +615,37 @@ fn maintenance_matches_exhaustive_rng_wool_blocks_and_head_wear() {
             assert!(actual.entities.body(broken_head).burn_ticks > 0);
         }
     }
+}
+
+/// A population past the pool threshold takes the dense parallel scan: burn,
+/// graze and the RNG stream still match the member-list exhaustive pass.
+#[test]
+fn maintenance_on_the_pool_matches_exhaustive_for_a_large_population() {
+    let mut actual = fixture();
+    let mut expected = fixture();
+    for state in [&mut actual, &mut expected] {
+        mixed(state);
+        for _ in 0..MIN_PARALLEL_ROWS + 500 {
+            mob(state, "cow", [656.5, 250.0, 0.5]);
+        }
+        state.mob_griefing.sheep_grazing = true;
+    }
+    assert!(actual.entities.len() >= MIN_PARALLEL_ROWS);
+    for seed in 0..64 {
+        actual.tick = 400 + seed * CYCLE;
+        expected.tick = actual.tick;
+        let mut a = ChangeSet::default();
+        let mut b = ChangeSet::default();
+        let mut ra = Rng(seed);
+        let mut rb = Rng(seed);
+        burn(&mut actual, false, &mut a);
+        old_burn(&mut expected, false, &mut b);
+        graze(&mut actual, &mut ra, &mut a);
+        old_graze(&mut expected, &mut rb, &mut b);
+        assert_eq!(ra.0, rb.0, "RNG consumption");
+        assert_state(&actual, &expected, &a, &b);
+    }
+    assert!(actual.appearance_changed.len() >= 4);
 }
 
 fn observer(state: &mut TickState) {

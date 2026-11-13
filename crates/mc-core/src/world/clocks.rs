@@ -316,8 +316,9 @@ impl ChunkWorld {
         }
     }
 
-    pub(crate) fn entity_active_positions(&self) -> impl Iterator<Item = ChunkPos> + '_ {
-        self.active_set.iter().copied()
+    /// Whether `pos` is in the stored entity-active set (the previous refresh).
+    pub(crate) fn was_entity_active(&self, pos: ChunkPos) -> bool {
+        self.active_set.contains(&pos)
     }
 
     /// All ticking demand (resident or not), without duplicates.
