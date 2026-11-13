@@ -114,6 +114,9 @@ pub(super) struct Fighter {
     /// Frozen-pass tick of a reserved kill: a second attacker must not credit
     /// the same casualty before native intent merge removes the body.
     slain: Option<u64>,
+    /// Last battle tick he stood guard, wound up or recovered from a blow:
+    /// the fight window of the `fighting` telemetry.
+    in_fight: Option<u64>,
 }
 
 impl Default for Fighter {
@@ -129,6 +132,7 @@ impl Default for Fighter {
             arrows: 60,
             charge: Default::default(),
             slain: None,
+            in_fight: None,
         }
     }
 }
@@ -421,41 +425,92 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         });
         combat.work.swings += 1;
     }
-    count_fighting(battle, &mut combat);
+    count_fighting(frame, battle, &mut combat);
     raise_shields(battle, &mut combat, out);
     battle.combat = combat;
 }
 
-/// Telemetry of who is fighting this tick, O(N) over the targets retained this
-/// tick (their distance is current): no neighbour search, no allocation.
-fn count_fighting(battle: &BattleState, combat: &mut CombatRuntime) {
-    for bi in 0..battle.columns.ids.len() {
-        if !battle.columns.active[bi] || battle.columns.carried[bi] {
-            continue;
-        }
-        let fighter = &combat.fighters[bi];
-        let Some(target) = battle.columns.targets[bi] else {
-            continue;
-        };
-        if fighter.weapon == Weapon::Bow || target.distance > fighter.weapon.reach() {
-            continue;
-        }
-        combat.work.in_weapon_reach += 1;
-        // The same gate as the decision pass above.
-        let decides = bi >= battle.formation.members.len()
-            || battle.formation.can_attack_at(bi)
-            || context(battle, bi).is_some_and(|c| {
-                (!c.routing && !c.wavering) || battle.formation.cornered_at(bi)
-            });
-        if decides
-            && matches!(
+/// A fighter counts as fighting while his fight loop (guard, windup, blow,
+/// recovery) ran within this many ticks: one 21..25-tick action cycle, so a
+/// stagger after a parried blow stays inside the window.
+const FIGHT_WINDOW_TICKS: u64 = 25;
+const COUNT_CHUNK: usize = 256;
+
+/// Telemetry of who is fighting this tick. In weapon reach: any enemy within
+/// the fighter's weapon reach, from his retained target or else one query of
+/// this tick's frozen target grid at weapon reach (no bows). Fighting: of
+/// those, the ones the decision pass lets strike whose fight loop ran within
+/// the window. Parallel over fighter chunks; no allocation.
+pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &mut CombatRuntime) {
+    use rayon::prelude::*;
+    let tick = frame.tick;
+    let (columns, formation, grid) = (&battle.columns, &battle.formation, &battle.grid);
+    let count = |(chunk, fighters): (usize, &mut [Fighter])| {
+        let mut counts = (0_u64, 0_u64);
+        for (offset, fighter) in fighters.iter_mut().enumerate() {
+            let bi = chunk * COUNT_CHUNK + offset;
+            if !columns.active[bi] || columns.carried[bi] {
+                continue;
+            }
+            if matches!(
                 fighter.action,
                 Action::Guard { .. } | Action::Windup { .. } | Action::Recover { .. }
-            )
-        {
-            combat.work.fighting += 1;
+            ) {
+                fighter.in_fight = Some(tick);
+            }
+            if fighter.weapon == Weapon::Bow {
+                continue;
+            }
+            let reach = fighter.weapon.reach();
+            let in_reach = columns.targets[bi].is_some_and(|t| t.distance <= reach)
+                || grid
+                    .nearest_enemy(
+                        super::Unit {
+                            id: columns.ids[bi],
+                            faction: columns.factions[bi],
+                            pos: columns.positions[bi],
+                        },
+                        reach,
+                    )
+                    .target
+                    .is_some();
+            if !in_reach {
+                continue;
+            }
+            counts.0 += 1;
+            // The same gate as the decision pass above.
+            let decides = bi >= formation.members.len()
+                || formation.can_attack_at(bi)
+                || {
+                    let c = formation.context_at(bi);
+                    (!c.routing && !c.wavering) || formation.cornered_at(bi)
+                };
+            let recent = !matches!(fighter.action, Action::Wounded)
+                && fighter
+                    .in_fight
+                    .is_some_and(|at| tick.saturating_sub(at) <= FIGHT_WINDOW_TICKS);
+            counts.1 += u64::from(decides && recent);
         }
-    }
+        counts
+    };
+    let add = |a: (u64, u64), b: (u64, u64)| (a.0 + b.0, a.1 + b.1);
+    let fighters = &mut combat.fighters[..battle.columns.ids.len()];
+    let (in_reach, fighting) =
+        if fighters.len() >= COUNT_CHUNK * 2 && rayon::current_num_threads() > 1 {
+            fighters
+                .par_chunks_mut(COUNT_CHUNK)
+                .enumerate()
+                .map(count)
+                .reduce(|| (0, 0), add)
+        } else {
+            fighters
+                .chunks_mut(COUNT_CHUNK)
+                .enumerate()
+                .map(count)
+                .fold((0, 0), add)
+        };
+    combat.work.in_weapon_reach = in_reach;
+    combat.work.fighting = fighting;
 }
 
 /// A shield bearer standing guard in order holds the shield up; a swing, a

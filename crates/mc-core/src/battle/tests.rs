@@ -1493,6 +1493,9 @@ fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() 
         battle.formation.finish_preparation();
         targeting::update(&frame, &mut battle);
         combat::step(&frame, &mut battle, &mut out);
+        // red[3] (2.5 diagonally), red[4] (2.5), red[5] (1.5) and blue are in
+        // sword reach on every tick, with or without a target acquired yet.
+        assert_eq!(battle.combat.work.in_weapon_reach, 4, "tick {tick}");
     }
     assert_eq!(
         battle.formation.context(red[5]).map(|c| c.front_rank),
@@ -1503,11 +1506,25 @@ fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() 
         .target(rear)
         .expect("a rear-rank man searches for the enemy beside him");
     assert_eq!(target.id, blue);
-    // red[5] (1.5 blocks), red[4] (2.5) and blue are within sword reach.
     let work = battle.combat.work;
-    assert!(work.in_weapon_reach >= 3, "{work:?}");
     assert!(
-        work.fighting >= 2 && work.fighting <= work.in_weapon_reach,
+        work.fighting >= 3 && work.fighting <= work.in_weapon_reach,
         "{work:?}"
     );
+    // A parried stagger stays inside the fight window; a long one leaves it.
+    let mut combat_state = std::mem::take(&mut battle.combat);
+    for fighter in &mut combat_state.fighters {
+        fighter.action = combat::Action::Stagger { until: u64::MAX };
+    }
+    for (tick, fighting) in [(RETARGET_TICKS, 4), (RETARGET_TICKS + 30, 0)] {
+        let frame = Frame {
+            entities: &state.entities,
+            registry: &state.registry,
+            world: &state.world,
+            tick,
+        };
+        combat::count_fighting(&frame, &battle, &mut combat_state);
+        assert_eq!(combat_state.work.in_weapon_reach, 4, "tick {tick}");
+        assert_eq!(combat_state.work.fighting, fighting, "tick {tick}");
+    }
 }
