@@ -1,0 +1,47 @@
+{
+  "id": "gate",
+  "kind": "gate",
+  "palette": {
+    "C": "cobblestone",
+    "D": "oak_door[facing=north,half=lower,hinge=left]",
+    "E": "oak_door[facing=north,half=lower,hinge=right]",
+    "U": "oak_door[facing=north,half=upper,hinge=left]",
+    "V": "oak_door[facing=north,half=upper,hinge=right]",
+    "t": "torch"
+  },
+  "levels": [
+    {
+      "cert": [7, 4, 3],
+      "entrance": [3, 1, 2],
+      "layers": [
+        ["CCCCCCC", "CCCCCCC", "CCCCCCC"],
+        ["CCC.CCC", "CCCDCCC", "CCC.CCC"],
+        ["CCC.CCC", "CCCUCCC", "CCC.CCC"],
+        ["CCCCCCC", "CCCCCCC", "CCCCCCC"],
+        ["CCCCCCC", "t.....t", "C.C.C.C"]
+      ]
+    },
+    {
+      "cert": [8, 4, 3],
+      "entrance": [3, 1, 2],
+      "layers": [
+        ["CCCCCCCC", "CCCCCCCC", "CCCCCCCC"],
+        ["CCC..CCC", "CCCDECCC", "CCC..CCC"],
+        ["CCC..CCC", "CCCUVCCC", "CCC..CCC"],
+        ["CCCCCCCC", "CCCCCCCC", "CCCCCCCC"],
+        ["CCCCCCCC", "t......t", "C.C.C.CC"]
+      ]
+    },
+    {
+      "cert": [9, 4, 3],
+      "entrance": [3, 1, 2],
+      "layers": [
+        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
+        ["CCC...CCC", "CCCDEDCCC", "CCC...CCC"],
+        ["CCC...CCC", "CCCUVUCCC", "CCC...CCC"],
+        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
+        ["CCCCCCCCC", "t.......t", "C.C.C.C.C"]
+      ]
+    }
+  ]
+}

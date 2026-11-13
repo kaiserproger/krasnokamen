@@ -19,15 +19,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 DIR = ROOT / "crates/mc-core/assets/blueprints"
 OUT = ROOT / ".analysis/codex-logs/millenaire/blueprints"
-MAX_SIZE = (11, 9, 11)
+MAX_SIZE = (13, 11, 11)
 WOODS = ("oak", "spruce", "birch", "dark_oak")
 WOOD_PARTS = ("planks", "log", "stairs", "slab", "fence", "fence_gate", "door", "trapdoor", "pressure_plate")
 PLAIN = {
     "chest", "barrel", "crafting_table", "composter", "ladder", "torch", "wall_torch", "cobblestone",
     "cobblestone_wall", "cobblestone_stairs", "cobblestone_slab", "furnace", "hay_block", "wheat",
     "farmland", "dirt", "stonecutter", "smithing_table", "fletching_table", "loom",
+    "blast_furnace", "smoker", "cartography_table", "brewing_stand", "cauldron", "lectern", "grindstone",
 }
-STATIONS = {"stonecutter", "smithing_table", "fletching_table", "loom"}
+STATIONS = {
+    "stonecutter", "smithing_table", "fletching_table", "loom", "blast_furnace", "smoker",
+    "cartography_table", "brewing_stand", "cauldron", "lectern", "grindstone",
+}
 FREE_HALVES = (("half", "upper"), ("part", "head"))
 
 

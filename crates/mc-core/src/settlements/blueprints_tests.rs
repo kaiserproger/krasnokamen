@@ -3,7 +3,7 @@ use crate::settlements::allocator::tests::test_state;
 use crate::settlements::buildings::{certify, upgrade};
 use crate::tick::TickState;
 
-const IDS: [(&str, usize); 10] = [
+const IDS: [(&str, usize); 21] = [
     ("house", 3),
     ("storage", 2),
     ("farm", 2),
@@ -11,9 +11,34 @@ const IDS: [(&str, usize); 10] = [
     ("shepherd", 1),
     ("lumber_camp", 2),
     ("mine", 2),
-    ("barracks", 2),
-    ("wall", 2),
-    ("watch_tower", 2),
+    ("barracks", 3),
+    ("wall", 3),
+    ("watch_tower", 3),
+    ("gate", 3),
+    ("armorer", 2),
+    ("butcher", 2),
+    ("cartographer", 2),
+    ("cleric", 2),
+    ("fisherman", 2),
+    ("fletcher", 2),
+    ("leatherworker", 2),
+    ("librarian", 2),
+    ("toolsmith", 2),
+    ("weaponsmith", 2),
+];
+
+/// The vanilla job-site block each new workshop is built around.
+const WORKSHOP_STATIONS: [(&str, &str); 10] = [
+    ("armorer", "blast_furnace"),
+    ("butcher", "smoker"),
+    ("cartographer", "cartography_table"),
+    ("cleric", "brewing_stand"),
+    ("fisherman", "barrel"),
+    ("fletcher", "fletching_table"),
+    ("leatherworker", "cauldron"),
+    ("librarian", "lectern"),
+    ("toolsmith", "smithing_table"),
+    ("weaponsmith", "grindstone"),
 ];
 
 fn state_name(state: &TickState, id: BlockStateId) -> (String, Vec<(String, String)>) {
@@ -41,6 +66,8 @@ fn catalog_has_every_blueprint_and_level_within_size_limits() {
 
 /// Most materials bottom out in worker-produced resources. The shepherd's
 /// loom also accepts real delivered string, which the planner reports when absent.
+/// A workshop's own job-site block (iron, flint, books or a blaze rod behind it)
+/// is delivered or crafted from delivered stock, never produced by a worker.
 #[test]
 fn materials_use_only_worker_producible_items() {
     let state = test_state();
@@ -82,6 +109,7 @@ fn materials_use_only_worker_producible_items() {
                     .path()
                     .to_owned();
                 let ok = plain.contains(&name.as_str())
+                    || WORKSHOP_STATIONS.contains(&(blueprint.id.as_str(), name.as_str()))
                     || name.ends_with("_bed")
                     || name
                         .strip_prefix("cobblestone_")
@@ -312,6 +340,7 @@ fn every_level_certifies_and_upgrades_in_every_rotation() {
                         || blueprint.kind == BuildingKind::House
                         || blueprint.kind == BuildingKind::Barracks
                         || blueprint.kind == BuildingKind::Wall
+                        || blueprint.kind == BuildingKind::Gate
                         || blueprint.kind == BuildingKind::Tower,
                     "{context}: work points"
                 );
@@ -362,4 +391,97 @@ pub(super) fn build(
         building = Some(id);
     }
     (settlement, building.unwrap())
+}
+
+/// Planner, menus and upgrade orders resolve a blueprint by building kind, so
+/// every kind may have only one.
+#[test]
+fn every_blueprint_owns_a_distinct_building_kind() {
+    let state = test_state();
+    let kinds: Vec<_> = all(&state.registry).iter().map(|b| b.kind).collect();
+    for (index, kind) in kinds.iter().enumerate() {
+        assert!(
+            !kinds[..index].contains(kind),
+            "two blueprints build {kind:?}"
+        );
+    }
+    assert!(kinds.contains(&BuildingKind::Gate));
+    for (id, _) in WORKSHOP_STATIONS {
+        let kind = BuildingKind::parse(id).unwrap();
+        assert!(kinds.contains(&kind), "{id} has no blueprint");
+        assert_eq!(get(&state.registry, id).unwrap().kind, kind);
+    }
+}
+
+/// Each new workshop places its profession's vanilla job-site block, one more
+/// per level, and the certificate registers exactly the level's job slots.
+#[test]
+fn workshops_place_their_job_site_and_gain_a_slot_per_level() {
+    let mut state = test_state();
+    for (id, station) in WORKSHOP_STATIONS {
+        let blueprint = get(&state.registry, id).unwrap();
+        let profession = BuildingKind::parse(id).unwrap().profession().unwrap();
+        for levels in 1..=blueprint.levels.len() {
+            let name = format!("{id}-{levels}");
+            let (settlement, building) = build(&mut state, &name, blueprint, levels);
+            let record = &state.settlements.get(settlement).unwrap().buildings[&building];
+            assert_eq!(usize::from(record.level), levels, "{id}");
+            assert_eq!(
+                record.work_points.len(),
+                levels,
+                "{id} level {levels} slots"
+            );
+            for point in &record.work_points {
+                let block = state.world.block_at(point[0], point[1], point[2]).unwrap();
+                assert_eq!(state_name(&state, BlockStateId(block)).0, station, "{id}");
+                assert!(
+                    matches!(
+                        crate::settlements::allocator::poi_kind(&state.registry, block),
+                        Some(crate::settlements::allocator::PoiKind::Job(p)) if p == profession
+                    ),
+                    "{id}: the work point is not a {profession:?} job site"
+                );
+            }
+        }
+    }
+}
+
+/// The gate, wall, tower and barracks have a third level with the certificate
+/// dimensions the level rules ask for (door count, length x height, tower
+/// height, beds).
+#[test]
+fn gate_and_fortifications_reach_level_three() {
+    let mut state = test_state();
+    for (id, cert) in [
+        ("gate", [9, 4, 3]),
+        ("wall", [13, 6, 3]),
+        ("watch_tower", [5, 10, 5]),
+        ("barracks", [11, 5, 7]),
+    ] {
+        let blueprint = get(&state.registry, id).unwrap();
+        assert_eq!(blueprint.levels.len(), 3, "{id}");
+        assert_eq!(blueprint.levels[2].cert, cert, "{id}");
+        let (settlement, building) = build(&mut state, id, blueprint, 3);
+        let record = &state.settlements.get(settlement).unwrap().buildings[&building];
+        assert_eq!(record.level, 3, "{id}");
+    }
+}
+
+/// Lots are `LOT_DEPTH` deep: the extent across the front a blueprint turns to
+/// the road may not exceed it (the wall's 13-block length runs along the road).
+#[test]
+fn every_blueprint_fits_the_street_lot_across_its_front() {
+    let state = test_state();
+    for blueprint in all(&state.registry) {
+        let [fx, _, fz] = blueprint.footprint(Rotation(0)).map(i32::from);
+        let depth = match crate::settlements::layout::front(blueprint).unwrap() {
+            0 | 2 => fz,
+            _ => fx,
+        };
+        assert!(
+            depth <= crate::settlements::layout::LOT_DEPTH,
+            "{} is {depth} deep across its front",
+            blueprint.id
+        );
+    }
 }

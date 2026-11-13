@@ -6,9 +6,21 @@ See [jobs](jobs.md), [menus](menus.md), [breeding](breeding.md), and the [settle
 
 ## Blueprint files
 
-Krasnokamen owns the JSON templates in `crates/mc-core/assets/blueprints/`. The embedded catalog contains `house` levels 1–3; `storage`, `farm`, `mason`, `lumber_camp`, `mine`, `barracks`, `wall`, and `watch_tower` levels 1–2; and `shepherd` level 1. A geometric certificate can reach level 3 even when its blueprint has no corresponding upgrade.
+Krasnokamen owns the JSON templates in `crates/mc-core/assets/blueprints/`. The embedded catalog has 21 blueprints, one per building kind (`id` is the `/settlement build` argument):
 
-Each file has an `id`, a building `kind`, a character-to-block-state `palette`, and `levels`. Each level contains `cert`, the certification box dimensions `[x, y, z]`; `entrance`, an `[x, y, z]` offset; and bottom-up `layers`, each made of Z rows of X characters. A dot is air. Palette states can include properties, for example `loom[facing=north]`. Each level is a complete picture, not an upgrade patch: the loader derives placements, removals, materials and rotations from it. A level must keep every container of the previous level (chest, barrel, furnace and other inventories) as the same block state; the loader refuses a level that replaces or removes one, because Builders never write over a stocked container and such an upgrade could not finish. The maximum placed dimensions are 11 × 9 × 11 blocks.
+| Category | Blueprints | Levels |
+|---|---|---|
+| Housing | `house` | 1–3 |
+| Storage | `storage` | 1–2 |
+| Production | `farm`, `mason` (the Builder hut), `lumber_camp`, `mine` | 1–2 |
+| Production, owner-ordered workshops | `armorer`, `butcher`, `cartographer`, `cleric`, `fisherman`, `fletcher`, `leatherworker`, `librarian`, `toolsmith`, `weaponsmith` | 1–2 |
+| Production, shepherd | `shepherd` | 1 |
+| Military | `barracks` | 1–3 |
+| Fortification | `wall`, `watch_tower`, `gate` | 1–3 |
+
+Each workshop is built around its profession's vanilla job-site block (blast furnace, smoker, cartography table, brewing stand, barrel, fletching table, cauldron, lectern, smithing table, grindstone), one more per level, so a resident of that profession claims it like any certified workshop. A workshop's bill includes that block, which workers do not produce (iron, flint, books, a blaze rod): stock the delivered item or its ingredients first. The gate opens one more door per level between four solid pillars; wall, tower and barracks level 3 meet the level-3 certificate dimensions below (13 × 6 wall, 10-high tower, 6 beds). A geometric certificate can reach level 3 even when its blueprint has no corresponding upgrade.
+
+Each file has an `id`, a building `kind`, a character-to-block-state `palette`, and `levels`. Each level contains `cert`, the certification box dimensions `[x, y, z]`; `entrance`, an `[x, y, z]` offset; and bottom-up `layers`, each made of Z rows of X characters. A dot is air. Palette states can include properties, for example `loom[facing=north]`. Each level is a complete picture, not an upgrade patch: the loader derives placements, removals, materials and rotations from it. A level must keep every container of the previous level (chest, barrel, furnace and other inventories) as the same block state; the loader refuses a level that replaces or removes one, because Builders never write over a stocked container and such an upgrade could not finish. The maximum placed dimensions are 13 × 11 × 11 blocks: 13 is the level-3 wall's length, which runs along its road, and a lot is at most 11 deep across the front a building turns to the road.
 
 The origin is the minimum corner of the rotated **maximum footprint across all levels**. Its Y is the ground-surface block, replaced by the floor layer. Certification bounds rotate in the same frame and may be smaller than the placed footprint. Upgrades retain the origin, prepared foundation and rotation. The farm's certificate includes its field as well as its shed.
 
@@ -18,7 +30,7 @@ For authoring, `tools/blueprints.py check` checks structure, `tools/blueprints.p
 
 Keep the anchor, storage and worksite chunks loaded. Construction uses real items in certified storage and the generated village's bootstrap container, not player inventories. A player-founded settlement has no free stock; certify storage and stock it.
 
-The planner selects one active settlement every 20 ticks. It considers missing kinds in this order: storage; houses when certified house capacity is below population; farm; lumber camp; mine; Builder hut (`mason`); barracks from 6 residents; tower from 8; wall from 10. Natural mine and lumber zones do not count as built blueprint kinds. Funded upgrades are considered for eligible blueprint-built certificates; workshops requiring iron or flint are not on this automatic list. A need without available stock or a capable local source does not conjure materials or have to block another funded kind.
+The planner selects one active settlement every 20 ticks. It considers missing kinds in this order: storage; houses when certified house capacity is below population; farm; lumber camp; mine; Builder hut (`mason`); barracks from 6 residents; tower from 8; wall from 10. Natural mine and lumber zones do not count as built blueprint kinds. The gate, the shepherd's hut and the ten profession workshops are never started autonomously; the owner orders them. Funded upgrades are considered for eligible blueprint-built certificates; workshops requiring iron or flint are not on this automatic list. A need without available stock or a capable local source does not conjure materials or have to block another funded kind.
 
 An unfunded priority bill does not stop the search for funded buildings or upgrades. Its staffed extraction worker is protected from Builder recruitment for autonomous work, leaving another resident free to build; explicit owner projects retain their active-bill gathering rules. Optional street projects still wait for that priority bill.
 

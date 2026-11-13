@@ -1434,3 +1434,47 @@ fn one_haul_trip_carries_several_item_types_for_the_next_cells() {
     let units: i32 = carry.iter().flatten().map(|stack| stack.count).sum();
     assert!(units >= 50, "one trip carries a real load, got {units}");
 }
+
+/// A Builder places every authored cell of a level in every rotation, not only
+/// enough of them to certify: the gate's pillars flank an open passage that a
+/// certificate never inspects.
+#[test]
+fn gate_level_one_is_built_cell_for_cell_in_every_rotation() {
+    for rotation in 0..4 {
+        let (mut state, id, slot) = fixture();
+        assert!(begin(
+            &mut state,
+            Project {
+                settlement: id,
+                blueprint: "gate".into(),
+                level: 1,
+                origin: [3, 200, 3],
+                rotation,
+                building: None,
+                structure: String::new(),
+                ordered: true,
+                borrowed_builder: None,
+            },
+            "oak",
+            0,
+        ));
+        fund(&mut state, "gate", 1);
+        complete(&mut state, id, slot);
+        let level = blueprints::get(&state.registry, "gate")
+            .unwrap()
+            .level(1)
+            .unwrap()
+            .rotated(Rotation::from_quarter_turns(rotation));
+        let mut missing = Vec::new();
+        for (offset, expected) in &level.blocks {
+            let [x, y, z] = level.world([3, 200, 3], *offset);
+            if state.world.block_at(x, y, z) != Some(expected.0) {
+                missing.push([x, y, z]);
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "rotation {rotation}: unplaced {missing:?}"
+        );
+    }
+}

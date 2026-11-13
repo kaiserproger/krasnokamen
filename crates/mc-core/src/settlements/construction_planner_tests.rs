@@ -460,11 +460,25 @@ fn autonomous_needs_cover_every_authored_kind_and_ignore_natural_zones() {
         .iter()
         .map(|blueprint| blueprint.kind)
         .collect();
-    assert_eq!(authored.len(), 10);
+    assert_eq!(authored.len(), 21);
+    // The shepherd's hut, the gate and the ten profession workshops are owner
+    // orders only: the planner never starts them on its own.
+    let owner_ordered = |kind: &BuildingKind| {
+        matches!(kind, BuildingKind::Gate)
+            || matches!(
+                kind,
+                BuildingKind::Workshop(profession)
+                    if !matches!(profession, Profession::Farmer | Profession::Builder)
+            )
+    };
+    assert_eq!(
+        authored.iter().filter(|kind| owner_ordered(kind)).count(),
+        12
+    );
     assert!(
         authored
             .into_iter()
-            .filter(|kind| *kind != BuildingKind::Workshop(Profession::Shepherd))
+            .filter(|kind| !owner_ordered(kind))
             .all(|kind| {
                 state
                     .settlements

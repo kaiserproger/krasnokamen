@@ -35,7 +35,8 @@ pub(crate) const PAVED: &str = "paved";
 
 /// First lot row, counted from a road centre line (road ±1, verge 2).
 const LOT_FRONT: i32 = 3;
-/// Deepest lot: the largest blueprint extent, on either axis.
+/// Deepest lot: the largest blueprint extent across its front (the wall's
+/// 13-block length runs along the road).
 pub(crate) const LOT_DEPTH: i32 = blueprints::MAX_SIZE[2] as i32;
 /// Street grid period: two lot rows back to back between two roads.
 pub(crate) const PERIOD: i32 = 2 * (LOT_FRONT + LOT_DEPTH);
@@ -342,7 +343,7 @@ const COMPASS: [[i32; 2]; 4] = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 /// The catalogue front of a blueprint, as a [`COMPASS`] index: the extent
 /// edge holding the level-one entrance; an entrance inside the extent (the
 /// farm's door between house and field) keeps the catalogue's south front.
-fn front(blueprint: &Blueprint) -> Option<usize> {
+pub(super) fn front(blueprint: &Blueprint) -> Option<usize> {
     let [fx, _, _] = blueprint.footprint(Rotation(0)).map(i32::from);
     let [ex, _, ez] = blueprint.level(1)?.entrance.map(i32::from);
     Some(if ez == 0 {

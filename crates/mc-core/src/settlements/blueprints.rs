@@ -25,11 +25,14 @@ use crate::registry::CoreRegistry;
 /// Protocol item id.
 pub type ItemId = u32;
 
-/// Placed size limit `[x, y, z]` for every blueprint. Villager builders place within
-/// reach of a ground-level stand point, so nothing may rise above y offset 8.
-pub const MAX_SIZE: [u8; 3] = [11, 9, 11];
+/// Placed size limit `[x, y, z]` for every blueprint. Builders place from a
+/// perimeter stand within 12 blocks of the next cell, so a ground-level stand
+/// reaches the crown of the tallest tower (y offset 10); the wall's third level
+/// is 13 blocks long. A blueprint's lot depth is its extent across its front,
+/// at most the street plan's `LOT_DEPTH` (11).
+pub const MAX_SIZE: [u8; 3] = [13, 11, 11];
 
-const SOURCES: [&str; 10] = [
+const SOURCES: [&str; 21] = [
     include_str!("../../assets/blueprints/house.json"),
     include_str!("../../assets/blueprints/storage.json"),
     include_str!("../../assets/blueprints/farm.json"),
@@ -40,6 +43,17 @@ const SOURCES: [&str; 10] = [
     include_str!("../../assets/blueprints/barracks.json"),
     include_str!("../../assets/blueprints/wall.json"),
     include_str!("../../assets/blueprints/watch_tower.json"),
+    include_str!("../../assets/blueprints/gate.json"),
+    include_str!("../../assets/blueprints/armorer.json"),
+    include_str!("../../assets/blueprints/butcher.json"),
+    include_str!("../../assets/blueprints/cartographer.json"),
+    include_str!("../../assets/blueprints/cleric.json"),
+    include_str!("../../assets/blueprints/fisherman.json"),
+    include_str!("../../assets/blueprints/fletcher.json"),
+    include_str!("../../assets/blueprints/leatherworker.json"),
+    include_str!("../../assets/blueprints/librarian.json"),
+    include_str!("../../assets/blueprints/toolsmith.json"),
+    include_str!("../../assets/blueprints/weaponsmith.json"),
 ];
 const DIRS: [&str; 4] = ["north", "east", "south", "west"];
 
