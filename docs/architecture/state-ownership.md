@@ -77,7 +77,8 @@ pursuit removes nearly every landed blow, nine in ten fatally. Front ranks
 surge in section pulses whose fatigue follows the share of the front pulsing;
 outside a pulse a front-rank man still trades blows at the cautious rate with
 an enemy already in weapon reach. Riders and pursuers fight from any rank, and
-fugitives pinned against the battle bounds turn at bay. A regiment worn near
+fugitives pinned against the battle bounds turn at bay; a fugitive stays where
+it met an edge instead of running on along it into a corner. A regiment worn near
 its pulse floor while in contact erodes until it breaks; one whose enemy broke
 steadies. Film pacing changes lulls, never swing speed. These are simulation
 choices based on
@@ -91,7 +92,16 @@ battle uses sustained cadence; there is no unused opening-burst control.
 Horses refuse steady frontal foot ranks and run out to a flank; accepted charge
 bonus decays over 260 ticks. Once their own foot closes, unengaged riders swing
 round the nearest enemy foot regiment into its rear, and ride down the
-fugitives of the nearest broken foot regiment. The work counters bound visits,
+fugitives of the nearest broken foot regiment until those reach the edge of
+the field. A rider who fled to the edge rallies there and rides back until he
+falls, even when his regiment has broken; foot fugitives stay at bay on the
+edge. A regiment rides these sweeps as
+a block, never toward one shared point: each rider follows the sweep from its
+own file/rank slot. Targets and swings are laid round the regiments' live
+centroids, not their virtual leaders, which march ahead of files lagging on
+relief. A rider attacking closes on its own
+place round its target (golden-angle rings 1.2-3.6 blocks out), so riders that
+chose the same foe do not pile onto one block. The work counters bound visits,
 target checks, reaction checks, strikes, arc iterations and charge decisions;
 they are not a 20-TPS performance measurement.
 
