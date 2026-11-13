@@ -7,8 +7,8 @@
 //! steps into the holder's place. The holder is an ordinary player: he takes
 //! damage and dies. The battle moves him only when he (re)enters the rank:
 //! `battle live` before start, and each respawn, which puts him back into the
-//! fight with the kit again: at the file of his own line in contact nearest
-//! where he fell, else a current front-rank slot of his side near its centre.
+//! fight with the kit again: near where he fell, in his own regiment while it
+//! stands, else in a standing line of his side in contact (`respawn_slot`).
 //! A spectator bound to him (`battle spectate`) is placed behind him again
 //! whenever he respawns or is re-armed.
 //!
@@ -434,40 +434,110 @@ fn in_contact(battle: &BattleState, bi: usize) -> bool {
             .is_some()
 }
 
-/// The file of the holder's own line, while it still stands, that is in
-/// contact (a soldier of it has an enemy within his weapon reach) and whose
-/// front soldier stands nearest where the holder fell (trial-7: the centre
-/// rule put PovRed 230 blocks from the fight, with no enemy near for four
-/// minutes). Files another holder holds are skipped; `None` when no file of
-/// his line is in contact.
-fn contact_file(state: &TickState, hold: &Hold) -> Option<usize> {
+/// Of `regiment`'s files nobody else holds (`keep` is the holder's own) that
+/// still have a living front soldier, and are in contact when `contact` (a
+/// soldier of the file has an enemy within his weapon reach), the one whose
+/// front soldier stands nearest `at`, horizontally, with that squared
+/// distance.
+fn nearest_file(
+    state: &TickState,
+    regiment: usize,
+    keep: (usize, usize),
+    at: [f64; 3],
+    contact: bool,
+) -> Option<(f64, usize)> {
     let battle = &state.hostile.battle;
     let formation = &battle.formation;
-    let r = &formation.regiments[hold.regiment];
-    if !eligible(state, r, hold.side, 1) {
-        return None;
-    }
+    let r = &formation.regiments[regiment];
     let mut best: Option<(f64, usize)> = None;
     for file in 0..usize::from(r.spec.files).min(r.len) {
-        if file != hold.file && formation.held.contains(&(hold.regiment, file)) {
+        if (regiment, file) != keep && formation.held.contains(&(regiment, file)) {
             continue;
         }
-        if !file_members(formation, hold.regiment, file)
-            .into_iter()
-            .any(|bi| in_contact(battle, bi))
+        if contact
+            && !file_members(formation, regiment, file)
+                .into_iter()
+                .any(|bi| in_contact(battle, bi))
         {
             continue;
         }
-        let Some(front) = front_soldier(state, hold.regiment, file) else {
+        let Some(front) = front_soldier(state, regiment, file) else {
             continue;
         };
-        let distance =
-            (front[0] - hold.alive_at[0]).powi(2) + (front[2] - hold.alive_at[2]).powi(2);
+        let distance = (front[0] - at[0]).powi(2) + (front[2] - at[2]).powi(2);
         if best.is_none_or(|(d, _)| distance < d) {
             best = Some((distance, file));
         }
     }
-    best.map(|(_, file)| file)
+    best
+}
+
+/// Where a respawn in a running battle puts the holder, and why (logged).
+struct Pick {
+    slot: (usize, usize),
+    contact: bool,
+    /// Why he left his own regiment, when he did.
+    reason: Option<&'static str>,
+    /// The old rule took the slot (`choose_slot`).
+    centre: bool,
+}
+
+/// Trial-7: the centre rule put PovRed 230 blocks from the fight, with no
+/// enemy near for four minutes. In this order, nearest where he fell: a file
+/// of his own regiment in contact, broken or not; else, while it is not
+/// broken, any living file of it; else (it is broken and out of contact,
+/// `regiment_broken`: a fleeing crowd is no fight to film, or has no living
+/// file left, `regiment_gone`) a file of his side's standing foot lines in
+/// contact; else the old rule (`choose_slot`). He never changes regiment
+/// without the reason in the log.
+fn respawn_slot(state: &TickState, hold: &Hold) -> Result<Pick, String> {
+    let keep = (hold.regiment, hold.file);
+    let own = &state.hostile.battle.formation.regiments[hold.regiment];
+    if let Some((_, file)) = nearest_file(state, hold.regiment, keep, hold.alive_at, true) {
+        return Ok(Pick {
+            slot: (hold.regiment, file),
+            contact: true,
+            reason: None,
+            centre: false,
+        });
+    }
+    let living = nearest_file(state, hold.regiment, keep, hold.alive_at, false);
+    if let Some((_, file)) = living
+        && eligible(state, own, hold.side, 1)
+    {
+        return Ok(Pick {
+            slot: (hold.regiment, file),
+            contact: false,
+            reason: None,
+            centre: false,
+        });
+    }
+    let reason = if living.is_some() {
+        "regiment_broken"
+    } else {
+        "regiment_gone"
+    };
+    let formation = &state.hostile.battle.formation;
+    let contact = (0..formation.regiments.len())
+        .filter(|&i| i != hold.regiment && eligible(state, &formation.regiments[i], hold.side, 1))
+        .filter_map(|i| {
+            nearest_file(state, i, keep, hold.alive_at, true).map(|(d, file)| (d, (i, file)))
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0));
+    Ok(match contact {
+        Some((_, slot)) => Pick {
+            slot,
+            contact: true,
+            reason: Some(reason),
+            centre: false,
+        },
+        None => Pick {
+            slot: choose_slot(state, hold.side, Some(keep))?,
+            contact: false,
+            reason: Some(reason),
+            centre: true,
+        },
+    })
 }
 
 /// The equipment of the first soldier of the file whose body still exists,
@@ -675,22 +745,21 @@ fn take_front(state: &mut TickState, regiment: usize, file: usize) -> Result<[f6
 
 /// A respawned holder goes back into the rank with his kit again: before
 /// start to where he was placed; once running to the front of the men of the
-/// file of his own line in contact nearest where he fell (`contact_file`),
-/// else of a current file of his side near its centre (`choose_slot` tiers:
-/// standing infantry first).
+/// file `respawn_slot` picks.
 fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<String, String> {
     let hold = state.hostile.battle.live.holds[index].clone();
     let running = state.hostile.battle.running;
-    let contact = if running {
-        contact_file(state, &hold)
+    let pick = if running {
+        respawn_slot(state, &hold)?
     } else {
-        None
+        Pick {
+            slot: (hold.regiment, hold.file),
+            contact: false,
+            reason: None,
+            centre: false,
+        }
     };
-    let (regiment, file) = match contact {
-        Some(file) => (hold.regiment, file),
-        None if running => choose_slot(state, hold.side, Some((hold.regiment, hold.file)))?,
-        None => (hold.regiment, hold.file),
-    };
+    let (regiment, file) = pick.slot;
     if (regiment, file) != (hold.regiment, hold.file) {
         let formation = &mut state.hostile.battle.formation;
         formation
@@ -733,17 +802,22 @@ fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<Stri
         (hold.at, hold.yaw)
     };
     let id = r.spec.id;
+    let formation = &state.hostile.battle.formation;
+    let from = formation.regiments[hold.regiment].spec.id;
+    let changed = if regiment == hold.regiment {
+        String::new()
+    } else {
+        format!(" regiment_changed={from}->{id}")
+    };
+    let reason = pick
+        .reason
+        .map_or(String::new(), |reason| format!(" reason={reason}"));
+    let rule = if pick.centre { " rule=centre" } else { "" };
     let slots = equip(state, player, &kit);
     teleport(state, player, at, yaw, 0.0);
     Ok(format!(
-        "Battle live respawned: {} side={} regiment={id} file={file} rank=0 at={:.2},{:.2},{:.2} yaw={yaw:.1} kit_slots={slots} kit_from={source} deaths={} contact={}",
-        hold.name,
-        hold.side,
-        at[0],
-        at[1],
-        at[2],
-        hold.deaths,
-        contact.is_some()
+        "Battle live respawned: {} side={} regiment={id} file={file} rank=0 at={:.2},{:.2},{:.2} yaw={yaw:.1} kit_slots={slots} kit_from={source} deaths={} contact={}{changed}{reason}{rule}",
+        hold.name, hold.side, at[0], at[1], at[2], hold.deaths, pick.contact
     ))
 }
 

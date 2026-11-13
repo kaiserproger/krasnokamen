@@ -603,9 +603,14 @@ fn a_respawn_after_his_infantry_broke_takes_a_standing_line_with_the_same_kit() 
     run_tick(&mut state, &[]);
     kill(&mut state, 1);
     run_tick(&mut state, &[]);
-    // Every red infantry line breaks while he is dead.
-    let infantry = state.hostile.battle.live.holds[0].regiment;
-    state.hostile.battle.formation.regiments[infantry].morale.broken = true;
+    // Every red infantry line breaks while he is dead, out of contact: no
+    // soldier of his line has an enemy within reach.
+    let hold = state.hostile.battle.live.holds[0].clone();
+    let infantry = hold.regiment;
+    let line = &mut state.hostile.battle.formation.regiments[infantry];
+    line.morale.broken = true;
+    let keep = (hold.regiment, hold.file);
+    assert!(nearest_file(&state, infantry, keep, hold.alive_at, true).is_none());
     run_tick(
         &mut state,
         &[PlayerInput::Respawn {
@@ -774,13 +779,24 @@ fn a_respawn_goes_to_the_file_of_his_line_in_contact_nearest_where_he_fell() {
     assert_in_rank_with_kit(&state, player);
 }
 
-/// No file of his line in contact: a retained opponent beyond weapon reach is
-/// none, and neither is the other side's fight. The respawn keeps the centre
-/// rule.
+/// A standing red foot line other than `own`.
+fn other_line(state: &TickState, own: usize) -> usize {
+    let formation = &state.hostile.battle.formation;
+    (0..formation.regiments.len())
+        .find(|&i| i != own && eligible(state, &formation.regiments[i], 1, 1))
+        .expect("a second red foot line")
+}
+
+/// No file of his own regiment in contact (a retained opponent beyond weapon
+/// reach is none), while another red line and the blue side fight: he stays
+/// in his own regiment, at its living file nearest where he fell.
 #[test]
-fn a_respawn_with_no_file_of_his_line_in_contact_takes_the_centre_file() {
+fn a_respawn_with_no_contact_in_his_regiment_takes_its_file_nearest_where_he_fell() {
     let (mut state, player, regiment, fell, centre) = fallen();
+    assert_ne!(fell, centre);
     engage(&mut state, regiment, fell, false);
+    let spears = other_line(&state, regiment);
+    engage(&mut state, spears, 0, true);
     let formation = &state.hostile.battle.formation;
     let blue = (0..formation.regiments.len())
         .find(|&i| formation.regiments[i].spec.faction == 2)
@@ -788,7 +804,67 @@ fn a_respawn_with_no_file_of_his_line_in_contact_takes_the_centre_file() {
     engage(&mut state, blue, 0, true);
     respawn(&mut state, 1);
     let hold = &state.hostile.battle.live.holds[0];
-    assert_eq!((hold.regiment, hold.file), (regiment, centre));
+    assert_eq!((hold.regiment, hold.file), (regiment, fell));
+    assert_in_rank_with_kit(&state, player);
+}
+
+/// His regiment broke but a file of it is still in contact: he respawns at
+/// that file, though a standing red line fights too.
+#[test]
+fn a_respawn_goes_to_his_broken_regiments_file_in_contact() {
+    let (mut state, player, regiment, fell, centre) = fallen();
+    assert_ne!(fell, centre);
+    state.hostile.battle.formation.regiments[regiment]
+        .morale
+        .broken = true;
+    let spears = other_line(&state, regiment);
+    engage(&mut state, spears, 0, true);
+    engage(&mut state, regiment, fell, true);
+    respawn(&mut state, 1);
+    let hold = &state.hostile.battle.live.holds[0];
+    assert_eq!((hold.regiment, hold.file), (regiment, fell));
+    assert_in_rank_with_kit(&state, player);
+}
+
+/// His regiment has no living file left: he goes to the file of another
+/// standing red line in contact nearest where he fell, not to the centre file
+/// of the old rule.
+#[test]
+fn a_respawn_after_his_regiment_is_gone_takes_the_sides_contact_nearest_where_he_fell() {
+    let (mut state, player, regiment, _, _) = fallen();
+    let kit = state.hostile.battle.live.holds[0].kit.clone();
+    // Every man of his regiment fell while he was dead.
+    let formation = &mut state.hostile.battle.formation;
+    let line = &mut formation.regiments[regiment];
+    let (start, len) = (line.start, line.len);
+    line.live_count = 0;
+    for member in &mut formation.members[start..start + len] {
+        member.alive = false;
+    }
+    let spears = other_line(&state, regiment);
+    let keep = {
+        let hold = &state.hostile.battle.live.holds[0];
+        (hold.regiment, hold.file)
+    };
+    let centre = choose_slot(&state, 1, Some(keep)).unwrap();
+    let files = usize::from(state.hostile.battle.formation.regiments[spears].spec.files);
+    // The end of the spear line away from the old rule's file; he fell there.
+    let far = match centre {
+        (line, 0) if line == spears => files - 1,
+        _ => 0,
+    };
+    let mid = files / 2;
+    assert!(
+        far != mid && centre != (spears, far),
+        "{far} {mid} {centre:?}"
+    );
+    state.hostile.battle.live.holds[0].alive_at = file_front(&state, spears, far);
+    engage(&mut state, spears, mid, true);
+    engage(&mut state, spears, far, true);
+    respawn(&mut state, 1);
+    let hold = &state.hostile.battle.live.holds[0];
+    assert_eq!((hold.regiment, hold.file), (spears, far));
+    assert_eq!(hold.kit, kit, "his own kit, not the spear line's");
     assert_in_rank_with_kit(&state, player);
 }
 
