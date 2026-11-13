@@ -22,6 +22,13 @@ fn samples() -> Vec<f64> {
         1.0e300,
         -1.0e300,
         f64::NAN,
+        f64::from(f32::from_bits(1)),
+        f64::from(f32::from_bits(1 << 23)),
+        16_777_216.0,
+        16_777_217.0,
+        2_147_483_520.0,
+        f64::from(1.0e37_f32),
+        -f64::from(1.0e37_f32),
         f64::INFINITY,
         f64::NEG_INFINITY,
     ];

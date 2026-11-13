@@ -245,7 +245,7 @@ impl EntityInterest {
             self.changed(snapshot, viewer, distance, id);
         } else if delta.appearance_changed {
             self.dirty.insert(id);
-        } else if delta.motion_changed && !self.scheduled.contains_key(&id) {
+        } else if delta.motion_changed {
             // Keep changed movement in canonical credit order even before
             // its due tick. Only completed rows may arm a deadline: arming
             // rows behind a blocked cursor would invent delivery debt.
@@ -255,7 +255,19 @@ impl EntityInterest {
             // and spares every moving row a hash insert and a visit per
             // tick (bottleneck: `delta`/`completed`/`entity_movement` and the
             // dirty set were 20 % of the fanout threads' self time, window c).
-            self.dirty.insert(id);
+            // The skipped visit would have found movement pending, so the deadline
+            // becomes delivery debt (`ready` when it fires) exactly then; a delta
+            // on the deadline tick itself must not, as its per-tick visit never did.
+            match self.scheduled.get_mut(&id) {
+                None => {
+                    self.dirty.insert(id);
+                }
+                Some((at, pending)) => {
+                    if snapshot.tick < *at {
+                        *pending = true;
+                    }
+                }
+            }
         }
     }
 
