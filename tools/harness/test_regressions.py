@@ -48,6 +48,16 @@ class RegressionLedgerTests(unittest.TestCase):
             'wall': {'behaviour': {'L1_built': 'PASS'}}}}}}}
         regressions._profile_verdict(receipt, 'buildings-qa', 'wall.L1_built')
 
+    def test_new_kinds_and_level_three_verdicts_are_registrable(self):
+        for verdict in ('gate.L1_built', 'gate.L2_upgrade', 'gate.L3_upgrade', 'wall.L3_upgrade',
+                        'watch_tower.L3_upgrade', 'barracks.L3_upgrade', 'armorer.L2_upgrade',
+                        'weaponsmith.L1_built'):
+            command = regressions._profile_command('buildings-qa', verdict)
+            self.assertEqual(command[:2], ['env', f"BUILDINGS_QA_SELECT={verdict.split('.')[0]}"])
+        for verdict in ('armorer.L3_upgrade', 'house.L4_upgrade', 'storage.L3_upgrade'):
+            with self.assertRaises(ValueError):
+                regressions._profile_command('buildings-qa', verdict)
+
     def test_profile_rejects_partial_building_run(self):
         with patch.dict('os.environ', {'BUILDINGS_QA_STOP_AFTER_ORDER': '1'}):
             with self.assertRaisesRegex(ValueError, 'BUILDINGS_QA_STOP_AFTER_ORDER'):
