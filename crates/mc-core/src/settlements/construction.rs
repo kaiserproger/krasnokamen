@@ -2285,27 +2285,34 @@ pub(crate) fn active_project_wood(state: &TickState, id: SettlementId) -> Option
         .find_map(|(item, _)| wood_species(state, item))
 }
 
+/// The extraction worker the settlement's next bill needs: a pending owner
+/// order's, else the first autonomous candidate whose unfunded bill needs one.
+/// A priority bill short only of what no worker produces (a bed's wool with
+/// no sheep) must not leave the later Farm without its dirt and stone.
 fn gatherer_demand(
     state: &TickState,
     record: &SettlementRecord,
     images: &[super::inventory::Image],
 ) -> Option<Profession> {
-    let (name, level) = if let Some(order) = &record.pending_order {
-        (order.blueprint.as_str(), order.level)
-    } else {
-        let kind = candidate_kinds(state, record, images).next()?;
-        (
-            blueprints::all(&state.registry)
+    let demand = |name: &str, level: u8| {
+        let level = blueprints::get(&state.registry, name)?.level(level)?;
+        let bill = selected_bill(state, record.id, &level.materials, images)?;
+        super::construction_crafting::needed_gatherer(state, &bill, images)
+    };
+    if let Some(order) = &record.pending_order {
+        return demand(order.blueprint.as_str(), order.level);
+    }
+    let catalog = blueprints::all(&state.registry);
+    candidate_kinds(state, record, images).find_map(|kind| {
+        demand(
+            catalog
                 .iter()
                 .find(|blueprint| blueprint.kind == kind)?
                 .id
                 .as_str(),
             1,
         )
-    };
-    let level = blueprints::get(&state.registry, name)?.level(level)?;
-    let bill = selected_bill(state, record.id, &level.materials, images)?;
-    super::construction_crafting::needed_gatherer(state, &bill, images)
+    })
 }
 
 /// Current bounded construction target, before subtracting the iron pipeline.
