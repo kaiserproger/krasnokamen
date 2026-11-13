@@ -281,6 +281,31 @@ class CivilizationEvidenceTests(unittest.TestCase):
         approaches = [c for c in probe.call.call_args_list if c.args[0] == "minecraft_approach_entity"]
         self.assertEqual(len(approaches), 3)
 
+    def test_baby_beyond_the_walking_observer_gets_the_observer_teleported_and_returned(self):
+        baby = {"entity_id": 17, "entity_uuid": "new", "entity_type": "minecraft:villager",
+                "received_baby": True, "x": 160.5, "y": 75.0, "z": -280.5}
+        replies = iter([{"in_reach": False}, {"in_reach": True}])
+
+        def call(name, args=None):
+            if name == "minecraft_list_entities":
+                return {"entities": [baby], "visible_count": 1, "truncated": False, "next_cursor": None}
+            if name == "minecraft_approach_entity":
+                return next(replies)
+            return {}
+
+        probe = Mock()
+        probe.call.side_effect = call
+        player = {"x": 131.0, "y": 77.0, "z": -215.0}
+        hit = {"type": "entity", "entity_uuid": "new"}
+        probe.observe.side_effect = [{"player": player}, {"player": player}, {"target": hit}]
+        teleport = Mock()
+        with patch.object(qa.native_client, "capture", return_value={"retained_path": "baby.png"}):
+            result = qa.capture_target(probe, "artifact", "baby", (160.5, 75.5, -280.5),
+                                       entity=baby, teleport=teleport)
+        self.assertTrue(result["observer_teleported"])
+        self.assertEqual([c.args for c in teleport.call_args_list],
+                         [(160.5, 75.0, -280.5), (131.0, 77.0, -215.0)])
+
     def test_simulation_wait_uses_scenario_deadline_not_mcp_request_cap(self):
         with patch("tools.harness.backends.probe_steps.time.monotonic", return_value=100.0):
             probe = qa.ProbeSteps(Mock(), None, 7200.0, "sprint")

@@ -224,31 +224,50 @@ def _aim(probe: ProbeSteps, target: tuple[float, float, float]) -> dict[str, Any
     return probe.observe().get("target") or {}
 
 
-def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any]) -> dict[str, Any]:
-    """Aim the crosshair at the baby. A baby walks on, and a wall can stand between it and the
-    observer, so each attempt approaches it again and re-reads where it is now."""
+Teleport = Callable[[float, float, float], None]
+
+
+def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any],
+                 teleport: Teleport | None) -> tuple[dict[str, Any], bool]:
+    """Aim the crosshair at the baby; True when the observer had to be teleported to it.
+
+    A baby walks on, and a wall can stand between it and the observer, so each
+    attempt approaches it again and re-reads where it is now. The newborn
+    stays in its parents' house, which the walking observer may not be able to
+    reach (seed 24: the house stands across a cliff from the village): an
+    approach that stops out of reach moves the creative observer to the baby
+    through the server console, as the fixture does for other unreachable
+    observation points."""
     observed: dict[str, Any] = {}
+    teleported = False
     for _ in range(BABY_AIM_ATTEMPTS):
-        probe.call("minecraft_approach_entity", {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
+        reply = probe.call("minecraft_approach_entity", {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
         seen = entity_census(probe, "minecraft:villager")
         current = next((e for e in seen.get("entities", [])
                         if e.get("entity_uuid") == entity["entity_uuid"]), None)
         if current is None or current.get("received_baby") is not True:
             raise RuntimeError("baby no longer visible for milestone capture")
+        if reply.get("in_reach") is False and teleport is not None:
+            teleport(current["x"], current["y"], current["z"])
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            teleported = True
+            continue
         observed = _aim(probe, (current["x"], current["y"] + 0.5, current["z"]))
         if observed.get("type") == "entity" and observed.get("entity_uuid") == entity["entity_uuid"]:
-            return observed
+            return observed, teleported
     raise RuntimeError(f"milestone target is occluded or out of reach: baby {entity['entity_uuid']}: {observed}")
 
 
 def capture_target(probe: ProbeSteps, artifact: Path, label: str,
                    target: tuple[float, float, float], *,
                    entity: dict[str, Any] | None = None,
-                   building: dict[str, Any] | None = None) -> dict[str, Any]:
+                   building: dict[str, Any] | None = None,
+                   teleport: Teleport | None = None) -> dict[str, Any]:
     probe.call("minecraft_close_screen", {})
     initial = probe.observe()["player"]
+    teleported = False
     if entity:
-        observed = _aim_at_baby(probe, entity)
+        observed, teleported = _aim_at_baby(probe, entity, teleport)
     else:
         destination = [math.floor(value) for value in target]
         if building:
@@ -289,6 +308,11 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
             raise RuntimeError(f"milestone target is occluded or out of reach: {label}: {observed}")
     shot = native_client.capture(probe.client, artifact, label)
     shot["observed_target"] = observed
+    shot["observer_teleported"] = teleported
+    if teleported and teleport is not None:
+        teleport(initial["x"], initial["y"], initial["z"])
+        probe.call("minecraft_wait_ticks", {"ticks": 20})
+        return shot
     probe.call("minecraft_navigate_to_block", {
         "x": math.floor(initial["x"]), "y": math.floor(initial["y"]), "z": math.floor(initial["z"]),
         "timeout_seconds": 120.0,
@@ -677,7 +701,10 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
             target = (baby["x"], baby["y"] + 0.5, baby["z"])
             detail["baby_observation"] = {
                 "sprint_ticks": advanced, "entity": baby,
-                "screenshot": capture_target(probe, artifact, f"civilization-births-{advanced:06d}", target, entity=baby),
+                "screenshot": capture_target(
+                    probe, artifact, f"civilization-births-{advanced:06d}", target, entity=baby,
+                    teleport=lambda x, y, z: item_merge._console(
+                        server, f"tp {village.USERNAME} {x:.2f} {y:.2f} {z:.2f}")),
             }
         if ("growth_observation" in detail and "baby_observation" in detail
                 and "births" not in detail["milestones"]):
