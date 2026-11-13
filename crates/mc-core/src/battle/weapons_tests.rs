@@ -124,8 +124,9 @@ fn swap_within(
 }
 
 #[test]
-fn spearman_draws_the_sword_inside_the_near_bound_and_retakes_the_spear_past_the_band() {
-    // Iron spear: near bound 2.0 * mob factor 0.5 = 1.0 block of box growth.
+fn spearman_draws_the_sword_inside_the_near_bound_and_retakes_the_spear_beyond_its_reach() {
+    // Iron spear: near bound 2.0 * mob factor 0.5 = 1.0, reach 4.5 * 0.5 = 2.25
+    // blocks of box growth.
     let (mut state, mut battle, actor, enemy) = duel(SPEAR, SWORD, Pair::SpearSword, 2.4);
     let mut tick = 0;
     assert_eq!(
@@ -134,7 +135,13 @@ fn spearman_draws_the_sword_inside_the_near_bound_and_retakes_the_spear_past_the
         "on the approach (gap 1.8) the spear stays up"
     );
     let bi = index(&state, &battle, actor);
-    assert_eq!(battle.combat.fighters[bi].arms.near, 1.0);
+    assert_eq!(
+        battle.combat.fighters[bi].arms.spear,
+        MeleeRange {
+            reach: 2.25,
+            min: 1.0
+        }
+    );
     // Gap 0.9: inside the near bound.
     place(&mut state, enemy, actor, 1.5);
     let (_, drawn) = swap_within(&mut state, &mut battle, &mut tick, actor, 60).expect("sword");
@@ -144,31 +151,60 @@ fn spearman_draws_the_sword_inside_the_near_bound_and_retakes_the_spear_past_the
         "the kit's sword, item model and all"
     );
     assert_eq!(held(&state, actor), "minecraft:iron_sword");
-    // Gap 1.4: back out past the bound but inside the band, the sword stays.
-    place(&mut state, enemy, actor, 2.0);
+    // Gap 2.0: back out past the bound but within the spear's reach.
+    place(&mut state, enemy, actor, 2.6);
     assert_eq!(
         swap_within(&mut state, &mut battle, &mut tick, actor, 80),
         None,
-        "inside the band the sword stays out"
+        "within the spear's reach the sword stays out"
     );
-    // Gap 1.6: past the band, the spear again.
-    place(&mut state, enemy, actor, 2.2);
+    // Gap 2.4: beyond the spear's reach, the spear again.
+    place(&mut state, enemy, actor, 3.0);
     let (_, drawn) = swap_within(&mut state, &mut battle, &mut tick, actor, 80).expect("spear");
     assert_eq!(drawn, stack(&state, SPEAR));
     assert_eq!(held(&state, actor), "minecraft:iron_spear");
 }
 
 #[test]
-fn an_enemy_oscillating_inside_the_band_does_not_flap_the_weapon() {
+fn the_sword_stays_out_when_his_man_falls_and_another_enemy_is_within_spear_reach() {
+    let (mut state, mut battle, actor, enemy) = duel(SPEAR, SWORD, Pair::SpearSword, 1.5);
+    let mut tick = 0;
+    let (swap, _) = swap_within(&mut state, &mut battle, &mut tick, actor, 60).expect("sword");
+    // A second enemy at gap 1.4, farther than his man (gap 0.9).
+    let pos = state.entities.pos(slot(&state, actor));
+    let second = dummy(&mut state, [pos[0], pos[1], pos[2] + 2.0]);
+    // Past the swap pause, and on a tick with no retarget due: his man leaves
+    // the fight and his retained target is gone until the next retarget.
+    while tick < swap + 20 || super::super::retarget_due(actor, tick) {
+        assert!(run(&mut state, &mut battle, tick).weapons.is_empty());
+        tick += 1;
+    }
+    let s = slot(&state, enemy);
+    state.entities.set_faction(s, 0);
+    assert_eq!(
+        swap_within(&mut state, &mut battle, &mut tick, actor, 80),
+        None,
+        "the sword stays out against the next man"
+    );
+    let bi = index(&state, &battle, actor);
+    assert_eq!(
+        battle.columns.targets[bi].map(|target| target.id),
+        Some(second)
+    );
+}
+
+#[test]
+fn an_enemy_pulsing_in_and_out_of_the_near_bound_does_not_flap_the_weapon() {
     let (mut state, mut battle, actor, enemy) = duel(SPEAR, SWORD, Pair::SpearSword, 3.0);
     let mut swaps = 0;
     for tick in 0..400 {
-        // Gap 0.9 and 1.45 by turns: across the near bound, inside the band.
+        // Gap 0.4 and 2.15 by turns (a 1.75-block surge): across the near
+        // bound, within the spear's reach.
         place(
             &mut state,
             enemy,
             actor,
-            if tick % 6 < 3 { 1.5 } else { 2.05 },
+            if tick % 40 < 20 { 1.0 } else { 2.75 },
         );
         swaps += run(&mut state, &mut battle, tick)
             .weapons
@@ -260,16 +296,21 @@ fn archer_draws_the_sword_when_an_enemy_closes_and_the_bow_when_he_is_far() {
 #[test]
 fn second_rank_and_horsemen_keep_the_spear_until_the_enemy_is_well_inside() {
     let at = |gap: f64| move |grow: f64| gap < grow;
-    // Front rank against foot: the sword at the bound, the spear past the band.
-    assert!(wants_sword(false, false, 1.0, at(0.9)));
-    assert!(!wants_sword(false, false, 1.0, at(1.1)));
-    assert!(wants_sword(true, false, 1.0, at(1.4)));
-    assert!(!wants_sword(true, false, 1.0, at(1.6)));
-    // Second rank or a horseman: the band lies inside the bound.
-    assert!(!wants_sword(false, true, 1.0, at(0.9)));
-    assert!(wants_sword(false, true, 1.0, at(0.4)));
-    assert!(wants_sword(true, true, 1.0, at(0.9)));
-    assert!(!wants_sword(true, true, 1.0, at(1.1)));
+    let spear = MeleeRange {
+        reach: 2.25,
+        min: 1.0,
+    };
+    // Front rank against foot: the sword inside the near bound, the spear
+    // again beyond its reach.
+    assert!(wants_sword(false, false, spear, at(0.9)));
+    assert!(!wants_sword(false, false, spear, at(1.1)));
+    assert!(wants_sword(true, false, spear, at(2.2)));
+    assert!(!wants_sword(true, false, spear, at(2.3)));
+    // Second rank or a horseman: the sword only `BAND` inside the bound.
+    assert!(!wants_sword(false, true, spear, at(0.9)));
+    assert!(wants_sword(false, true, spear, at(0.4)));
+    assert!(wants_sword(true, true, spear, at(2.2)));
+    assert!(!wants_sword(true, true, spear, at(2.3)));
 
     // A horseman at gap 0.9: the spear stays; at 0.4 the sword comes out.
     let (mut state, mut battle, actor, rider) = duel(SPEAR, SWORD, Pair::SpearSword, 4.0);

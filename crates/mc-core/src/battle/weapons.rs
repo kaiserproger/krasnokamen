@@ -21,11 +21,11 @@ use crate::boundary::{EntityEvent, EntityId, Hand, SwingKind};
 use crate::tick::TickState;
 use mc_data::ItemStack;
 
-/// Width of each hysteresis band about the spear's near bound (blocks of box
-/// growth, like `MeleeRange::min`): five ticks of a pulsing soldier's
-/// 0.10-block step, so a man standing at the bound does not cross back on one
-/// step of jitter, while a retaken spear (reach 2.25 for an iron spear) still
-/// strikes past the band.
+/// How far inside the spear's near bound (blocks of box growth) an enemy must
+/// come before a soldier who fights spear first (second rank, or against a
+/// horseman) draws the sword: five ticks of a pulsing soldier's 0.10-block
+/// step, so the iron spear's 1.0 bound becomes 0.5, inside the sword's own
+/// 0.83 reach.
 pub(super) const BAND: f64 = 0.5;
 
 /// An archer takes his sword once an enemy is this close (blocks, centre to
@@ -62,15 +62,27 @@ impl Arsenal {
 }
 
 /// One fighter's weapon not in hand and his swap clock.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(super) struct Arms {
     claimed: bool,
     /// The weapon not in hand, with the kit it forms with the held one.
     stowed: Option<Box<(ItemStack, Pair)>>,
-    /// The spear's near bound (`MeleeRange::min`) of a spear-and-sword kit.
-    near: f64,
+    /// The spear's melee range (`MeleeRange::of_item`) of a spear-and-sword
+    /// kit: its near bound draws the sword, its reach puts the sword away.
+    spear: MeleeRange,
     /// First tick the drawn weapon may strike or loose.
     ready: u64,
+}
+
+impl Default for Arms {
+    fn default() -> Self {
+        Self {
+            claimed: false,
+            stowed: None,
+            spear: MeleeRange::DEFAULT,
+            ready: 0,
+        }
+    }
 }
 
 impl Arms {
@@ -87,22 +99,21 @@ impl Arms {
 
 /// Whether a spear-and-sword soldier wants the sword, from what he holds and
 /// `inside(grow)`: his enemy's box is within `grow` of his (the combat melee
-/// range test). Each band is `BAND` wide, so an enemy moving to and fro
-/// inside it never flips the choice. Against foot in the front rank the band
-/// lies outside the near bound: the sword comes out at the bound and goes back
-/// past the band. From the second rank (reaching past the front man) or
-/// against a horseman the band lies inside: the spear stays up until the enemy
-/// is well inside its bound and comes back as soon as it can strike again.
+/// range test). The sword comes out once the enemy is inside the spear's near
+/// bound, where the spear cannot strike (spear first, from the second rank
+/// past the front man or against a horseman: only `BAND` further in). It goes
+/// back only once the enemy is beyond the spear's reach: the pulses of a melee
+/// (surges of 2.25 blocks) stay inside that hysteresis and never flip it.
 pub(super) fn wants_sword(
     holding_sword: bool,
     spear_first: bool,
-    near: f64,
+    spear: MeleeRange,
     inside: impl Fn(f64) -> bool,
 ) -> bool {
-    let bound = match (spear_first, holding_sword) {
-        (false, false) | (true, true) => near,
-        (false, true) => near + BAND,
-        (true, false) => near - BAND,
+    let bound = match (holding_sword, spear_first) {
+        (true, _) => spear.reach,
+        (false, false) => spear.min,
+        (false, true) => spear.min - BAND,
     };
     bound > 0.0 && inside(bound)
 }
@@ -147,8 +158,8 @@ pub(super) fn step(
         if !fighter.arms.claimed {
             fighter.arms.claimed = true;
             if let Some((stack, pair)) = combat.arsenal.0.remove(&id) {
-                fighter.arms.near = if fighter.weapon == Weapon::Spear {
-                    fighter.range.min
+                fighter.arms.spear = if fighter.weapon == Weapon::Spear {
+                    fighter.range
                 } else {
                     MeleeRange::of_item(
                         frame
@@ -158,7 +169,6 @@ pub(super) fn step(
                             .and_then(|name| frame.registry.item_facts.get(name))
                             .and_then(|facts| facts.attack_range),
                     )
-                    .min
                 };
                 fighter.arms.stowed = Some(Box::new((stack, pair)));
             }
@@ -179,15 +189,33 @@ pub(super) fn step(
                 let holding_sword = fighter.weapon != Weapon::Spear;
                 let second_rank =
                     context.is_some_and(|c| !c.front_rank) && !battle.formation.loose_order_at(bi);
+                let spear = fighter.arms.spear;
+                let unit = Unit {
+                    id,
+                    faction: battle.columns.factions[bi],
+                    pos: battle.columns.positions[bi],
+                };
                 // His opponent as in the strike decision: the retained soldier
-                // target, or a nearer live holder of the other side.
-                let soldier = battle.columns.targets[bi];
+                // target, or a nearer live holder of the other side. A sword in
+                // hand stays out while any enemy is within the spear's reach,
+                // also between retargets when his own man has just fallen.
+                let soldier = battle.columns.targets[bi].or_else(|| {
+                    holding_sword
+                        .then(|| {
+                            let reach = MeleeRange {
+                                reach: spear.reach,
+                                min: 0.0,
+                            };
+                            battle.grid.nearest_enemy(unit, reach.bound()).target
+                        })
+                        .flatten()
+                });
                 let holder = super::live_players::in_reach(
                     battle,
                     frame.entities,
                     slot,
                     MeleeRange {
-                        reach: fighter.arms.near + BAND,
+                        reach: spear.reach,
                         min: 0.0,
                     },
                     None,
@@ -204,22 +232,17 @@ pub(super) fn step(
                             .mount
                             .vehicle
                             .is_some();
-                        wants_sword(
-                            holding_sword,
-                            second_rank || mounted,
-                            fighter.arms.near,
-                            |grow| {
-                                in_melee_range(
-                                    frame.entities,
-                                    slot,
-                                    enemy,
-                                    MeleeRange {
-                                        reach: grow,
-                                        min: 0.0,
-                                    },
-                                )
-                            },
-                        )
+                        wants_sword(holding_sword, second_rank || mounted, spear, |grow| {
+                            in_melee_range(
+                                frame.entities,
+                                slot,
+                                enemy,
+                                MeleeRange {
+                                    reach: grow,
+                                    min: 0.0,
+                                },
+                            )
+                        })
                     });
                 wants != holding_sword
             }
