@@ -3561,7 +3561,11 @@ severity = "major"
 status = "open"
 source = "civilization-seed-qa seed 24, 20261104T052839-civilization-seed-qa-qd6z7egu; receipts/civ-stall"
 failing_first = "reported"
-regression = ["cargo:mc-core:settlements::allocator::tests::claimed_village_with_storage_assigns_its_free_adult_to_forestry_before_workshops"]
+regression = [
+  "cargo:mc-core:settlements::allocator::tests::claimed_village_with_storage_assigns_its_free_adult_to_forestry_before_workshops",
+  "harness:civilization-seed-qa:second_building",
+]
+fix_commit = "1c6f7b09"
 
 [[bug]]
 id = "CIVILIZATION-FUNDED-PLANNER-IDLE"
@@ -3630,7 +3634,13 @@ severity = "major"
 status = "open"
 source = "civilization-seed-qa seed 24, 20261104T052839-civilization-seed-qa-qd6z7egu; receipts/civ-stall"
 failing_first = "reported"
-regression = ["cargo:mc-core:villager::smelting_tests::employed_resident_delivers_owned_furnace_output_without_iron_demand", "cargo:mc-core:villager::smelting_tests::guards::lumberjack_collects_output_without_starting_smelting_work", "cargo:mc-core:villager::smelting_tests::guards::nitwit_does_not_collect_owned_furnace_output"]
+regression = [
+  "cargo:mc-core:villager::smelting_tests::employed_resident_delivers_owned_furnace_output_without_iron_demand",
+  "cargo:mc-core:villager::smelting_tests::guards::lumberjack_collects_output_without_starting_smelting_work",
+  "cargo:mc-core:villager::smelting_tests::guards::nitwit_does_not_collect_owned_furnace_output",
+  "harness:civilization-seed-qa:iron_smelted",
+]
+fix_commit = "1c6f7b09"
 
 [[bug]]
 id = "PLUGIN-PRECOMMIT-DEADLINE-RACE"
@@ -4137,7 +4147,9 @@ failing_first = "reported"
 regression = [
   "cargo:mc-core:settlements::construction::planner_tests::funded_project_keeps_iron_demand_for_the_skipped_house_bed",
   "cargo:mc-core:villager::smelting_tests::employed_miner_smelts_construction_iron_through_native_ticks",
+  "harness:civilization-seed-qa:new_house",
 ]
+fix_commit = "4a457567"
 
 [[bug]]
 id = "CIV-SEED24-STALLED-PROJECT-HOLDS-SLOT"
@@ -4148,7 +4160,12 @@ severity = "major"
 status = "open"
 source = "Seed-24 civilization-seed-qa 20261111T214942-gh1mr776 on server pin a64a2dbe (house-bed iron fix): iron smelted at sprint 600, shears and 6 white wool in storage by 6000, birch logs 118 by 27000, yet Lumber camp L1 at site [113,72,-226] went 41/239 -> 47/239 between 42000 and 84000 (Mason L2 at 25/72 from 27000 to 39000 then finished); the House left the waiting list at 45000 (funded) but never started, and the gate stopped on its one-day stall oracle (60000-84000). Final checkpoint 102855 and a read-only world probe: structure settlement-1-411 in its clear stage at work unit 47/56, next cell [121,76,-225] = short grass over the cleared pit (footing [121,73,-225]); borrowed builder 63c408b1 at (121.5,76,-227.5) on the hill. villager/building.rs preparation_target chose the open stand nearest the builder (its own cell), while in_reach needs feet within 4.0 of the footing (here 4.24), so it never moved and never advanced. Run 90d4lq2w shows the same site at 0-29/239 for 33,000 sprint ticks. Negative control: Fails with only the stand fix hunks reverted (receipts/CivSimSeed24/stand-fix-hunks.patch, sha256 2bc9e1ad): the builder keeps its own hill cell BlockPos {x:6,y:204,z:5} out of reach of footing {6,201,8}, the gate's stall (receipts/CivSimSeed24/stand-negative-control.log); at 107ddb91 settlements+villager 848 passed, 0 failed (receipts/CivSimSeed24/suite-107ddb91.log)."
 failing_first = "reported"
-regression = ["cargo:mc-core:villager::building_preparation_tests::clearing_stand_on_a_hill_edge_is_within_felling_reach_of_the_pit_footing"]
+regression = [
+  "cargo:mc-core:villager::building_preparation_tests::clearing_stand_on_a_hill_edge_is_within_felling_reach_of_the_pit_footing",
+  "cargo:mc-core:settlements::construction::site_tests::builder_that_cannot_advance_the_project_is_replaced_and_chosen_last",
+  "harness:civilization-seed-qa:new_house",
+]
+fix_commit = "671b5c41"
 
 [[bug]]
 id = "CIV-IRON-CAPTURE-OUTPUT-COLLECTED"
@@ -4192,7 +4209,11 @@ severity = "major"
 status = "open"
 source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civilization-seed-qa-ufgbv77d (server pin 107ddb91): project Road level 1, origin [158,71,-257], structure settlement-1-732, borrowed builder 63c408b1 (Miner), 0/33 from sprint 45000 to 96000; the funded House stayed waiting ('White Bed 0/1', 'Birch Planks 0/106 awaiting production'). Final checkpoint 116853 (bots snapshot receipts/CivSimSeed24/snap4/report.json): clear stage 0, one cell [158,73,-249] with 0 completed work units and no receipts; world probe (snap4/probe-road.json): short_grass on grass_block at y=72, open air above, standable grass at [158,73,-248]. Builder at checkpoint resting at (114.5,72.7,-277.5) with stale SolarisMiningProgress stalled_since 56076. Cause (world probe receipts/CivSeed24Road/probe-stand.json, 1331 blocks; builder positions from the run's client censuses in receipts/CivSeed24Road/builder-census.txt): in work hours the builder stood at (156.2,74.9,-252.7) at game time 77480 and (156.3,75.0,-252.5) at 98888 and 102576, on grass y=74 just north of a pen's corner fence post [156,74,-252], 5.0 blocks from the cell's footing [158,73,-249], out of the 4.0 felling reach. Pen fence posts stand at [156,74,-252..-248]. villager/building.rs preparation_stand took forestry::footing of each nearby column; construction::surface_y counts the 1.5-high fence as ground, so the top of the post [156,75,-251] (squared distance 4.04 from the builder, against 6.44 for the nearest grass stand [157,74,-251]) passed its two-cells-collision-free check and was chosen. No body can stand on a fence, so the builder never arrived, and in_reach kept refusing the perimeter fallback because a stand existed."
 failing_first = "not recorded"
-regression = ["cargo:mc-core:villager::building_preparation_tests::clearing_stand_is_never_the_top_of_a_fence_post"]
+regression = [
+  "cargo:mc-core:villager::building_preparation_tests::clearing_stand_is_never_the_top_of_a_fence_post",
+  "harness:civilization-seed-qa:new_house",
+]
+fix_commit = "2b8219d1"
 
 [[bug]]
 id = "CIV-SEED24-FARM-SEEDS-NEED-A-FARM"
@@ -4204,7 +4225,7 @@ status = "open"
 source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civilization-seed-qa-ufgbv77d (server pin 107ddb91, archived under receipts/CivSimLanding/analysis): every 'settlement building list' dialog shows 'Farm: ... Wheat Seeds 0/12 — needs a farm' from the first sprint to the last (transcript.json, 40 Farm entries; e.g. 'Dirt 0/30 — no miner' early and 'Dirt 16/30 — awaiting production' late, seeds 0/12 throughout). The final checkpoint (receipts/CivSimSeed24/snap4/report.json) holds six members (2 lumberjacks, 2 nitwits, builder, miner), no farmer, no Farmer workshop among seven certified buildings, and 4 bread in total; the run's bread fell 13 -> 4 by sprint 21000 and was gone by 27000 (receipts/CivSimSeed24/REPORT.md), so no second birth (missing milestone births; r5 fx4gdz87 the same: bread gone by 42000). Cause in source (21607d42): construction_availability.rs farmer_raw lists wheat_seeds, and missing_explanation reports SourceReason::Farm while caps.farm is false; the farm blueprint's wheat cells cost seeds (docs/settlements/construction.md 'wheat costs seeds'); settlement_builds.rs debit credited loot only for felled trees (forestry::tree), so short grass a builder cleared vanished without its vanilla loot (wheat seeds, 1 in 8). No other seed source exists for a settlement without a farm."
 # Negative control (d827661e): with only the settlement_builds.rs debit hunks reverted the regression fails with 'clearing 42 short grass stored no wheat seeds' (receipts/CivSimSeed24/b/seed-loot-negative-control.log; hunks sha256 3217aa68).
 failing_first = "reported"
-fix_commit = "d827661e"
+fix_commit = "fb4c1a52"
 regression = ["cargo:mc-core:settlements::construction::site_tests::street_work_clearing_short_grass_stores_its_vanilla_wheat_seeds"]
 
 [[bug]]
@@ -5076,7 +5097,7 @@ status = "open"
 source = "CrashTestLock 2026-11-12, code reading only (not the cause of the crash-test flake, whose fixture never starts this worker): settlements/forestry.rs:126 spawns `settlement-forest` with a clone of the world's Arc<ChunkSource> (which owns the Arc<NativeStore>) and keeps no JoinHandle. When the TickState drops, the worker exits only after its current chunk generation finishes and its next recv fails, so the store (and its lease) can outlive the world; a reopen in the same process right after a stop can refuse with \"Database already open\". Fix direction: keep the JoinHandle in forestry::Cache and on drop close the request channel and join."
 # Negative control (d827661e): with only the forestry.rs join hunks reverted the regression fails with 'the forest worker still holds the native store after its world dropped' at forestry_tests.rs:625 (receipts/CivSimSeed24/b/forest-negative-control.log; hunks sha256 a0599ba8).
 failing_first = "not recorded"
-fix_commit = "d827661e"
+fix_commit = "fb4c1a52"
 regression = ["cargo:mc-core:settlements::forestry::tests::dropping_the_world_joins_the_forest_worker_and_releases_the_native_store"]
 
 [[bug]]
