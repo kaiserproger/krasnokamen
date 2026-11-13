@@ -163,12 +163,23 @@ fn live_player_takes_the_centre_infantry_slot_with_its_kit() {
         .slot_of(formation.members[members[0]].id)
         .unwrap();
     let kit = state.entities.row(source).appearance.equipment.clone();
-    let sword = state
-        .registry
-        .items
-        .id_of(&mc_data::Identifier::parse("minecraft:iron_sword".to_owned()).unwrap())
-        .unwrap();
-    assert_eq!(kit[0].as_ref().unwrap().item_id, sword, "infantry, not spear");
+    let item = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name.to_owned()).unwrap())
+            .unwrap()
+    };
+    // Foot carries the spear in; the infantry arm wears the iron chestplate.
+    assert_eq!(
+        kit[0].as_ref().unwrap().item_id,
+        item("minecraft:iron_spear")
+    );
+    assert_eq!(
+        kit[4].as_ref().unwrap().item_id,
+        item("minecraft:iron_chestplate"),
+        "infantry, not spear"
+    );
     assert!(kit[1].is_some(), "off-hand shield");
     let inventory = &state.players[&player].inventory;
     let selected = usize::from(inventory.selected);
@@ -457,6 +468,33 @@ fn swung(output: &crate::boundary::TickOutput, soldier: EntityId) -> bool {
 }
 
 #[test]
+fn a_spearman_draws_his_sword_on_a_holder_inside_the_spear_bound() {
+    let (mut state, player, blue, at) = facing_blue();
+    let sword = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:iron_sword".to_owned()).unwrap())
+        .unwrap();
+    let mut drawn = None;
+    for tick in 0..60_u64 {
+        // PovRed a block in front: box gap 0.4, inside the spear's 1.0.
+        in_contact(&mut state, player, blue, at);
+        hold(&mut state, Action::Wounded, Some(blue));
+        run_tick(&mut state, &[]);
+        let slot = state.entities.slot_of(blue).unwrap();
+        let held = state.entities.row(slot).appearance.equipment[0].as_ref();
+        if held.is_some_and(|stack| stack.item_id == sword) {
+            drawn = Some(tick);
+            break;
+        }
+    }
+    assert!(
+        drawn.is_some(),
+        "the blue spearman never drew his sword on the holder"
+    );
+}
+
+#[test]
 fn wounded_staggered_or_recovering_soldiers_in_reach_never_hit_the_holder() {
     for action in [
         Action::Recover { until: u64::MAX },
@@ -485,13 +523,19 @@ fn a_ready_enemy_soldier_hits_the_holder_once_per_swing_cycle() {
     let mut swings: Vec<(u64, u64)> = Vec::new();
     let mut hits = Vec::new();
     let mut health = state.players[&player].vitals.health;
+    let main_hand = |state: &TickState| {
+        let slot = state.entities.slot_of(blue).unwrap();
+        state.entities.row(slot).appearance.equipment[0].clone()
+    };
     for tick in 0..600_u64 {
         in_contact(&mut state, player, blue, at);
         // Every other blue man out of action too, archers included (Recover
         // does not stop a bow).
         hold(&mut state, Action::Wounded, Some(blue));
+        let before = main_hand(&state);
         let (output, ..) = run_tick(&mut state, &[]);
-        if swung(&output, blue) {
+        // A weapon swap's main-hand swing comes with his main-hand change.
+        if swung(&output, blue) && main_hand(&state) == before {
             let battle = &state.hostile.battle;
             let slot = state.entities.slot_of(blue).unwrap();
             let bi = battle.columns.index(slot).unwrap();

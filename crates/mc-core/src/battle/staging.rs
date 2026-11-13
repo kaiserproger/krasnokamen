@@ -2,6 +2,7 @@
 use crate::battle::formation::{MESH_INTERVAL, Order, RegimentSpec, slot_position};
 use crate::battle::ground::{self, Placement};
 use crate::battle::live_players;
+use crate::battle::weapons::Pair;
 use crate::boundary::{ChangeSet, ChunkPos, EntityId};
 use crate::commands::CommandError;
 use crate::tick::TickState;
@@ -88,17 +89,22 @@ enum Kind {
 }
 
 // Vanilla item identities retain their combat behaviour (weapon class, shield
-// blocking, armour points); components select authored visuals.
+// blocking, armour points); components select authored visuals. The main hand
+// holds the weapon a soldier carries into the approach; `second_weapon` is the
+// other of his two main weapons (weapons.rs). Foot and horse carry the vanilla
+// spear: its `attack_range` near bound is where the sword comes out, and the
+// 26.x spear is the mounted charge weapon (`kinetic_weapon`), so riders couch
+// a lance and draw the sword in the melee.
 fn equipment(kind: Kind) -> &'static [(&'static str, &'static str)] {
     match kind {
         Kind::Infantry => &[
-            ("mainhand", "minecraft:iron_sword"),
+            ("mainhand", "minecraft:iron_spear"),
             ("offhand", "minecraft:shield"),
             ("head", "minecraft:iron_helmet"),
             ("chest", "minecraft:iron_chestplate"),
         ],
         Kind::Spear => &[
-            ("mainhand", "minecraft:trident"),
+            ("mainhand", "minecraft:iron_spear"),
             ("offhand", "minecraft:shield"),
             ("head", "minecraft:iron_helmet"),
             ("chest", "minecraft:chainmail_chestplate"),
@@ -109,11 +115,20 @@ fn equipment(kind: Kind) -> &'static [(&'static str, &'static str)] {
             ("chest", "minecraft:leather_chestplate"),
         ],
         Kind::Cavalry => &[
-            ("mainhand", "minecraft:iron_sword"),
+            ("mainhand", "minecraft:iron_spear"),
             ("offhand", "minecraft:shield"),
             ("head", "minecraft:iron_helmet"),
             ("chest", "minecraft:iron_chestplate"),
         ],
+    }
+}
+
+/// Every kind's second main weapon is a sword, stowed in battle state: mobs
+/// have no inventory.
+fn second_weapon(kind: Kind) -> (&'static str, Pair) {
+    match kind {
+        Kind::Archer => ("minecraft:iron_sword", Pair::BowSword),
+        Kind::Infantry | Kind::Spear | Kind::Cavalry => ("minecraft:iron_sword", Pair::SpearSword),
     }
 }
 
@@ -158,7 +173,10 @@ enum Legs {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Loadout {
     kind: Kind,
+    /// Item model of the main-hand weapon carried into the approach.
     weapon: &'static str,
+    /// Item model of the second weapon (`second_weapon`).
+    sidearm: &'static str,
     shield: Option<Shield>,
     helmet: &'static str,
     torso: Torso,
@@ -192,29 +210,39 @@ fn band<T: Copy>(roll: &mut u64, table: &[(u64, T)]) -> T {
 fn loadout(seed: u64, side: u16, regiment: u32, index: usize, kind: Kind) -> Loadout {
     let mut roll =
         mix(mix(seed) ^ (u64::from(side) << 56) ^ (u64::from(regiment) << 24) ^ index as u64);
-    let weapon = match kind {
-        Kind::Infantry => band(
-            &mut roll,
-            &[
-                (60, "solaris_battle:iron_longsword"),
-                (40, "solaris_battle:iron_flanged_mace"),
-            ],
+    // One band per kind as before, so the remaining draws are unchanged.
+    let (weapon, sidearm) = match kind {
+        Kind::Infantry => (
+            "solaris_battle:iron_spear",
+            band(
+                &mut roll,
+                &[
+                    (60, "solaris_battle:iron_longsword"),
+                    (40, "solaris_battle:iron_flanged_mace"),
+                ],
+            ),
         ),
-        Kind::Spear => band(
-            &mut roll,
-            &[
-                (60, "solaris_battle:iron_spear"),
-                (40, "solaris_battle:iron_halberd"),
-            ],
+        Kind::Spear => (
+            band(
+                &mut roll,
+                &[
+                    (60, "solaris_battle:iron_spear"),
+                    (40, "solaris_battle:iron_halberd"),
+                ],
+            ),
+            "solaris_battle:iron_longsword",
         ),
-        Kind::Archer => band(
-            &mut roll,
-            &[
-                (60, "solaris_battle:iron_longbow_standby"),
-                (40, "solaris_battle:iron_heavy_crossbow_standby"),
-            ],
+        Kind::Archer => (
+            band(
+                &mut roll,
+                &[
+                    (60, "solaris_battle:iron_longbow_standby"),
+                    (40, "solaris_battle:iron_heavy_crossbow_standby"),
+                ],
+            ),
+            "solaris_battle:iron_longsword",
         ),
-        Kind::Cavalry => "solaris_battle:iron_lance",
+        Kind::Cavalry => ("solaris_battle:iron_lance", "solaris_battle:iron_longsword"),
     };
     let shield = match kind {
         Kind::Archer => None,
@@ -256,6 +284,7 @@ fn loadout(seed: u64, side: u16, regiment: u32, index: usize, kind: Kind) -> Loa
     Loadout {
         kind,
         weapon,
+        sidearm,
         shield,
         helmet,
         torso,
@@ -589,6 +618,15 @@ fn setup(
                     if unit.shield.is_some() {
                         super::show_shield(state, id, true);
                     }
+                    // The second main weapon, with the kit's item model.
+                    let (item, pair) = second_weapon(kind);
+                    let sidearm = mc_data::item_nbt::stack_from_component_patch(
+                        &state.registry.items,
+                        &mc_data::Identifier::parse(item.to_owned()).map_err(|e| e.to_string())?,
+                        &[item_model(unit.sidearm)],
+                    )
+                    .map_err(|e| format!("battle second weapon {item}: {e}"))?;
+                    state.hostile.battle.combat.arsenal.stow(id, sidearm, pair);
                     // A horse carries its rider: settle the pair through the horse.
                     let mut grounded = id;
                     if kind == Kind::Cavalry {

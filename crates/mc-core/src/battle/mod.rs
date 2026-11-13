@@ -14,6 +14,8 @@ pub(crate) mod morale;
 pub mod staging;
 pub(crate) mod steering;
 mod targeting;
+// Two main weapons per soldier: swap decisions (combat.rs), kit (staging.rs).
+mod weapons;
 
 pub(crate) use faction::special;
 pub use faction::{enemies, retained_enemy};
@@ -286,6 +288,10 @@ pub(crate) fn publication_counts(
         acting: engaged(battle.combat.work.acting),
         shields_raised: engaged(battle.combat.work.shields_raised),
         shield_blocks: engaged(battle.combat.work.shield_blocks),
+        weapon_swaps: engaged(battle.combat.work.weapon_swaps),
+        holding_spear: engaged(battle.combat.work.holding_spear),
+        holding_sword: engaged(battle.combat.work.holding_sword),
+        holding_bow: engaged(battle.combat.work.holding_bow),
     }))
 }
 /// Every `EntityStore::views()` drain consumes the pending-wire feed: tick
@@ -310,6 +316,9 @@ pub(crate) struct Output {
     pub arrows: Vec<ArrowLaunch>,
     /// Shield pose transitions: (bearer, raised), applied after the frozen pass.
     pub shields: Vec<(EntityId, bool)>,
+    /// Drawn weapons (weapons.rs): the new main-hand stack, applied after the
+    /// frozen pass.
+    pub weapons: Vec<(EntityId, mc_data::ItemStack)>,
     pub counters: UnitCounters,
 }
 
@@ -383,6 +392,9 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     state.hostile.events.append(&mut output.events);
     for (id, raised) in output.shields.drain(..) {
         show_shield(state, id, raised);
+    }
+    for (id, stack) in output.weapons.drain(..) {
+        weapons::hold(state, id, stack);
     }
     for arrow in output.arrows.drain(..) {
         crate::hostile::launch_arrow(state, arrow.owner, arrow.from, arrow.velocity, arrow.damage);
