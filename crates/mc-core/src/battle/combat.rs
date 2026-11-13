@@ -51,7 +51,7 @@ const PARRY_FRACTION: f32 = 2316.0 / 3873.0;
 // landed blow removes a man that many times less often: losses per minute and
 // time to rout stay those of the G2 take (owner, 2026-11-13) while far more
 // men trade blows, parries and blocks.
-const PRESS_EXPOSURE: f32 = 1.0;
+const PRESS_EXPOSURE: f32 = 5.0;
 const REMOVAL_ROLLS: f32 = 10_000.0 * TARGET_REMOVALS
     / (FRONT_FILES
         * PRESS_EXPOSURE

@@ -10,12 +10,15 @@ use rustc_hash::FxHashMap;
 
 pub(crate) const DECISION_TICKS: u64 = 10;
 pub(crate) const SECTION_SIZE: usize = 20;
-/// Foot fronts in contact stand this close (front to front): every front-rank
-/// man has his opponent within sword reach, so the lulls between pulses are a
-/// cautious exchange at close quarters, not a stand-off out of reach.
-pub(crate) const STANDOFF: f64 = 1.6;
+/// Foot fronts in contact stand this close (front to front): under the vanilla
+/// mob melee reach (0.6-wide boxes grown by sqrt(2.04) - 0.6 touch while the
+/// centres are under 2.03 apart along the front's normal), so with the press's
+/// 0.75-block ranks each front rank has the enemy's first two ranks in reach,
+/// and the lulls between pulses are a cautious exchange at close quarters,
+/// not a stand-off out of reach.
+pub(crate) const STANDOFF: f64 = 1.2;
 /// A line closer than this gives ground.
-const GIVE_GROUND: f64 = 1.0;
+const GIVE_GROUND: f64 = 0.8;
 /// Foot in contact closes its ranks into a press: ranks behind the front stand
 /// this far apart instead of the two-block marching depth, so the second rank
 /// stands within striking distance of the enemy front.
