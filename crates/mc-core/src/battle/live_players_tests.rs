@@ -833,7 +833,7 @@ fn a_respawn_goes_to_the_file_of_his_line_in_contact_nearest_where_he_fell() {
         assert!(
             file_members(&battle.formation, regiment, file)
                 .into_iter()
-                .any(|bi| in_contact(&state.entities, battle, bi)),
+                .any(|bi| super::in_contact(&state.entities, battle, bi)),
             "file {file} is in contact before the respawn"
         );
     }
