@@ -11,10 +11,15 @@ use mc_physics::mth;
 
 pub const CHARGE_DECAY_TICKS: u64 = 260;
 const REFORM_TICKS: u64 = 400;
+/// A refusing rider keeps running out this many ticks after his man left reach: he rides clear of
+/// the line instead of turning back the tick the target drops out and flapping at the boundary.
+const RUN_OUT_TICKS: u64 = 20;
 /// Lateral clearance outside the enemy's end file while swinging round it.
 const FLANK_CLEARANCE: f64 = 14.0;
 /// Blocks per second of catch-up speed a rider gains for every block he stands from his place.
 const SLOT_CATCH_UP: f64 = 3.0;
+/// A sweeping rider's speed within reach of his plan point: blocks per second per block of distance.
+const SWEEP_ARRIVAL: f64 = 3.0;
 /// Horses closer than this push apart (a horse is 1.4 blocks wide), at most
 /// `HORSE_PUSH` blocks per second.
 const HORSE_SPACING: f64 = 1.5;
@@ -205,7 +210,7 @@ fn horse_push(formation: &super::formation::FormationRuntime, bi: usize) -> [f64
 /// if it were the leader shifted by its file/rank offset. One shared point for
 /// every rider piled a whole regiment onto one block wherever it arrived with
 /// no foe in reach, and the pile then rode as one body.
-fn sweep_drives(battle: &mut BattleState, combat: &mut CombatRuntime) {
+fn sweep_drives(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut CombatRuntime) {
     let mut plans = std::mem::take(&mut combat.sweeps);
     plan_sweeps(battle, &mut plans);
     for (r, plan) in battle.formation.regiments.iter().zip(&plans) {
@@ -218,6 +223,12 @@ fn sweep_drives(battle: &mut BattleState, combat: &mut CombatRuntime) {
                 || !battle.columns.active[bi]
                 || battle.columns.targets[bi].is_some()
                 || matches!(combat.fighters[bi].action, Action::Wounded)
+                // The plan heading is a vector in blocks that only the mounted pass
+                // below turns into a horse's speed. A rider whose horse is gone walks
+                // under the foot rules: read as blocks per second it flew at distance/20
+                // blocks per tick towards the plan point.
+                || battle.columns.slots[bi]
+                    .is_none_or(|slot| frame.entities.row(slot).entity_life.mount.vehicle.is_none())
             {
                 continue;
             }
@@ -267,8 +278,14 @@ pub fn impact_bonus(elapsed: u64) -> f32 {
 #[derive(Debug, Default)]
 pub(super) struct Charge {
     impact: Option<u64>,
-    refused: bool,
+    pub(super) refused: bool,
+    /// Flank a refusing rider runs out to (+1/-1), kept for the whole refusal: the nearer side
+    /// flipped as he passed the target's axis, and he turned back with it.
+    side: f64,
     reform_until: u64,
+    /// Last run-out drive and the tick until which an untargeted refuser keeps it.
+    run: [f64; 3],
+    run_until: u64,
 }
 
 impl Charge {
@@ -324,7 +341,7 @@ pub fn mount(state: &mut TickState, rider: EntityId, horse: EntityId) -> Result<
 }
 
 pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut CombatRuntime) {
-    sweep_drives(battle, combat);
+    sweep_drives(frame, battle, combat);
     for horse in frame.entities.rider_slots() {
         let row = frame.entities.row(horse);
         let Some(rider) = row
@@ -346,6 +363,26 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
         }
         let wounded = matches!(combat.fighters[bi].action, Action::Wounded);
         let routing = super::combat::context(battle, bi).is_some_and(|c| c.routing);
+        let running_out = !wounded && !routing && battle.columns.targets[bi].is_none() && {
+            let charge = &combat.fighters[bi].charge;
+            charge.refused && frame.tick < charge.run_until
+        };
+        if running_out {
+            let position = frame.entities.pos(horse);
+            let run = combat.fighters[bi].charge.run;
+            let velocity = battle.formation.constrain_velocity(position, run);
+            let velocity = super::steering::around_obstacles(
+                frame,
+                &battle.formation,
+                horse,
+                velocity,
+                [velocity[0], velocity[2]],
+                super::steering::Mover::Rider,
+            );
+            battle.columns.drive[horse_bi] = velocity;
+            battle.columns.drive[bi] = [0.0; 3];
+            continue;
+        }
         if wounded || routing || battle.columns.targets[bi].is_none() {
             // Carry the formation's approach/withdrawal/rout direction on the
             // horse, never override a routing rider with an enemy pursuit.
@@ -368,12 +405,19 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
                 if let Some(member) = formation.members.get(bi)
                     && !wounded
                     && !routing
-                    && !combat.sweeps.get(member.regiment).is_some_and(Option::is_some)
                 {
-                    let slot = formation.heading_target(bi);
-                    let away = mth::length2(slot[0] - position[0], slot[2] - position[2]);
-                    let leader = formation.regiments[member.regiment].speed.abs() / mc_physics::TICK_SECONDS;
-                    mounted_speed = mounted_speed.min((leader + away * SLOT_CATCH_UP).max(speed));
+                    if combat.sweeps.get(member.regiment).is_some_and(Option::is_some) {
+                        // `speed` is the distance to the plan point in blocks: a rider
+                        // that reaches it slows down instead of riding through it and
+                        // turning back every few ticks.
+                        mounted_speed = mounted_speed.min(speed * SWEEP_ARRIVAL);
+                    } else {
+                        let slot = formation.heading_target(bi);
+                        let away = mth::length2(slot[0] - position[0], slot[2] - position[2]);
+                        let leader = formation.regiments[member.regiment].speed.abs()
+                            / mc_physics::TICK_SECONDS;
+                        mounted_speed = mounted_speed.min((leader + away * SLOT_CATCH_UP).max(speed));
+                    }
                 }
                 velocity[0] *= mounted_speed / speed;
                 velocity[2] *= mounted_speed / speed;
@@ -440,6 +484,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
         if distance > 46.0 && frame.tick >= charge.reform_until {
             charge.impact = None;
             charge.refused = false;
+            charge.side = 0.0;
         }
         if distance <= 6.0 && charge.impact.is_none() && !charge.refused {
             combat.work.charge_checks += 1;
@@ -455,16 +500,22 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             // Run out toward the nearer flank; never steer through the steady line.
             let facing = context.map_or([-toward[0], -toward[1]], |c| c.facing);
             let right = [-facing[1], facing[0]];
-            let side = if -delta[0] * right[0] - delta[1] * right[1] >= 0.0 {
-                1.0
-            } else {
-                -1.0
-            };
-            [
+            if charge.side == 0.0 {
+                charge.side = if -delta[0] * right[0] - delta[1] * right[1] >= 0.0 {
+                    1.0
+                } else {
+                    -1.0
+                };
+            }
+            let side = charge.side;
+            let run = [
                 (right[0] * side - toward[0]) * 3.8,
                 0.0,
                 (right[1] * side - toward[1]) * 3.8,
-            ]
+            ];
+            charge.run = run;
+            charge.run_until = frame.tick + RUN_OUT_TICKS;
+            run
         } else {
             // Each rider closes on its own place round its target: angle from
             // its column index, four rings 1.2..3.6 blocks out. Riding at the
