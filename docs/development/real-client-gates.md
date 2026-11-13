@@ -123,7 +123,9 @@ into the run's artifact dir.
   [AGENT_TOOLING](../AGENT_TOOLING.md#harness-entrypoint).
   Headless native profiles create a temporary writable XDG root with links to
   the template containing `data/vanilla`, `facts` and `resources/assets`;
-  it is removed after the profile exits.
+  it is removed after the profile exits. Every client run of `ledger probe`,
+  `ledger promote` and `run regressions` gets the same kind of private root
+  (links to the caller's content directories, no settings or caches), windowed too.
 - A single wrong path (for example an item properties file under the wrong repo)
   leaves the client on a white "loading content" screen forever without naming
   the file; diff the env against the last green gate line by line.
