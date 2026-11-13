@@ -1,8 +1,9 @@
 //! Two main weapons. A staged soldier carries a spear and a sword, an archer a
 //! bow and a sword, and holds the one the distance to his enemy calls for: the
-//! spear on the approach, against horsemen and from the second rank; the sword
-//! in the press once his enemy is inside the spear's near bound; the bow at a
-//! distance and the sword once an enemy closes.
+//! spear on the approach and while his enemy is beyond the spear's near bound;
+//! the sword once his enemy is inside it, where the spear cannot strike (in
+//! every rank, against horsemen too); the bow at a distance and the sword once
+//! an enemy closes.
 //!
 //! Mobs have no inventory: the weapon not in hand stays in the fighter's battle
 //! state (staging hands it over with the item components of its kit), never a
@@ -16,18 +17,11 @@ use rustc_hash::FxHashMap;
 
 use super::combat::{Action, CombatRuntime, Weapon};
 use super::faction::{in_melee_range, melee_reach, reach_bound};
-use mc_melee_range::MeleeReach;
 use super::{BattleState, Frame, Output, Unit};
 use crate::boundary::{EntityEvent, EntityId, Hand, SwingKind};
 use crate::tick::TickState;
 use mc_data::ItemStack;
-
-/// How far inside the spear's near bound (blocks of box growth) an enemy must
-/// come before a soldier who fights spear first (second rank, or against a
-/// horseman) draws the sword: five ticks of a pulsing soldier's 0.10-block
-/// step, so the iron spear's 1.0 bound becomes 0.5, inside the sword's own
-/// 0.83 reach.
-pub(super) const BAND: f64 = 0.5;
+use mc_melee_range::MeleeReach;
 
 /// An archer takes his sword once an enemy is this close (blocks, centre to
 /// centre): the melee engagement reach, where a soldier acquires his man and
@@ -101,21 +95,16 @@ impl Arms {
 /// Whether a spear-and-sword soldier wants the sword, from what he holds and
 /// `inside(grow)`: his enemy's box is within `grow` of his (the combat melee
 /// range test). The sword comes out once the enemy is inside the spear's near
-/// bound, where the spear cannot strike (spear first, from the second rank
-/// past the front man or against a horseman: only `BAND` further in). It goes
-/// back only once the enemy is beyond the spear's reach: the pulses of a melee
-/// (surges of 2.25 blocks) stay inside that hysteresis and never flip it.
+/// bound, where the spear cannot strike, in every rank and against horsemen
+/// too. It goes back only once the enemy is beyond the spear's reach: the
+/// pulses of a melee (surges of 2.25 blocks) stay inside that hysteresis and
+/// never flip it.
 pub(super) fn wants_sword(
     holding_sword: bool,
-    spear_first: bool,
     spear: MeleeReach,
     inside: impl Fn(f64) -> bool,
 ) -> bool {
-    let bound = match (holding_sword, spear_first) {
-        (true, _) => spear.max,
-        (false, false) => spear.min,
-        (false, true) => spear.min - BAND,
-    };
+    let bound = if holding_sword { spear.max } else { spear.min };
     bound > 0.0 && inside(bound)
 }
 
@@ -188,8 +177,6 @@ pub(super) fn step(
         let swap = match pair {
             Pair::SpearSword => {
                 let holding_sword = fighter.weapon != Weapon::Spear;
-                let second_rank =
-                    context.is_some_and(|c| !c.front_rank) && !battle.formation.loose_order_at(bi);
                 let spear = fighter.arms.spear;
                 let unit = Unit {
                     id,
@@ -226,14 +213,7 @@ pub(super) fn step(
                     .or(soldier)
                     .and_then(|opponent| frame.entities.slot_of(opponent.id))
                     .is_some_and(|enemy| {
-                        let mounted = frame
-                            .entities
-                            .row(enemy)
-                            .entity_life
-                            .mount
-                            .vehicle
-                            .is_some();
-                        wants_sword(holding_sword, second_rank || mounted, spear, |grow| {
+                        wants_sword(holding_sword, spear, |grow| {
                             in_melee_range(
                                 frame.entities,
                                 slot,
