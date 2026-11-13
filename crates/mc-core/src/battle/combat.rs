@@ -8,25 +8,18 @@ use crate::boundary::{EntityEvent, EntityId, Hand};
 use crate::entities::EntitySlot;
 use crate::intent::{DamageSource, Footprint, IntentKind};
 
-// A fighter with an opponent in weapon reach decides as soon as his guard
-// lapses: he strikes at the given odds, otherwise he holds his guard for
-// GUARD_PAUSE_TICKS and decides again. The 21..25-tick action cycle itself is
-// unchanged; a 20-tick decision grid skipped every other decision after a blow
-// and left a fighter in reach one swing per 4..8 s (G2: 0.13 swings/s each).
-const GUARD_PAUSE_TICKS: u64 = 6;
+// The 21..25-tick action cycle skips one 20-tick decision after each attack.
+// Count that recovery before deriving odds; do not shorten the action clocks.
+const ATTACK_DECISION_TICKS: u64 = 20;
 const AGGRESSIVE_FIGHTERS: u32 = 2500;
-const AGGRESSIVE_ATTEMPTS: u32 = 9000;
-const CAUTIOUS_ATTEMPTS: u32 = 5000;
-/// Swings per second of a fighter who keeps an opponent in reach: one action
-/// cycle per blow plus the expected guard pauses of the declined decisions.
-const fn swings_per_second(attempts: u32) -> f32 {
-    let p = attempts as f32 / 10_000.0;
-    20.0 / (Weapon::Spear.cycle() as f32 + (1.0 - p) / p * GUARD_PAUSE_TICKS as f32)
-}
+const AGGRESSIVE_ATTEMPTS: u32 = 8000;
+const CAUTIOUS_ATTEMPTS: u32 = 2000;
 const STRIKES_PER_SECOND: f32 = {
     let share = AGGRESSIVE_FIGHTERS as f32 / 10_000.0;
-    share * swings_per_second(AGGRESSIVE_ATTEMPTS)
-        + (1.0 - share) * swings_per_second(CAUTIOUS_ATTEMPTS)
+    let aggressive = AGGRESSIVE_ATTEMPTS as f32 / 10_000.0;
+    let cautious = CAUTIOUS_ATTEMPTS as f32 / 10_000.0;
+    (share * aggressive / (1.0 + aggressive) + (1.0 - share) * cautious / (1.0 + cautious))
+        * (20.0 / ATTACK_DECISION_TICKS as f32)
 };
 // Cinematic calibration: 80 removals per 46-file regiment in 120 s of contact.
 // Fatigue permits 65 fighting seconds, but the native three-minute run's
@@ -154,6 +147,11 @@ pub struct Work {
     pub arc_solves: u64,
     pub arc_iterations: u64,
     pub charge_checks: u64,
+    /// Melee fighters (no bows) whose retained opponent is within weapon reach.
+    pub in_weapon_reach: u64,
+    /// Of those, the ones in the fight loop: the decision pass may let them
+    /// strike and they stand guard, wind up or recover from a blow.
+    pub fighting: u64,
 }
 
 #[derive(Debug, Default)]
@@ -381,12 +379,15 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             (None, Some(holder)) => holder,
             (None, None) => continue,
         };
-        // Decide once the guard lapses; a declined blow holds the guard briefly.
+        // Three cautious soldiers in four; decisions once/20t, not per frame.
+        if !(frame.tick + id.0 as u64).is_multiple_of(ATTACK_DECISION_TICKS) {
+            continue;
+        }
         fighter.action = Action::Guard {
-            until: frame.tick + GUARD_PAUSE_TICKS,
+            until: frame.tick + ATTACK_DECISION_TICKS,
         };
-        // Anyone may cut at a fleeing back; the cautious majority probes a
-        // steady front at lower odds.
+        // Anyone may cut at a fleeing back; the cautious majority only parries
+        // and probes a steady front.
         let fleeing = frame
             .entities
             .slot_of(target.id)
@@ -398,7 +399,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         } else {
             CAUTIOUS_ATTEMPTS
         };
-        if roll(id, frame.tick, 2) >= probability {
+        if roll(id, frame.tick / ATTACK_DECISION_TICKS, 2) >= probability {
             continue;
         }
         fighter.action = Action::Windup {
@@ -420,8 +421,41 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         });
         combat.work.swings += 1;
     }
+    count_fighting(battle, &mut combat);
     raise_shields(battle, &mut combat, out);
     battle.combat = combat;
+}
+
+/// Telemetry of who is fighting this tick, O(N) over the targets retained this
+/// tick (their distance is current): no neighbour search, no allocation.
+fn count_fighting(battle: &BattleState, combat: &mut CombatRuntime) {
+    for bi in 0..battle.columns.ids.len() {
+        if !battle.columns.active[bi] || battle.columns.carried[bi] {
+            continue;
+        }
+        let fighter = &combat.fighters[bi];
+        let Some(target) = battle.columns.targets[bi] else {
+            continue;
+        };
+        if fighter.weapon == Weapon::Bow || target.distance > fighter.weapon.reach() {
+            continue;
+        }
+        combat.work.in_weapon_reach += 1;
+        // The same gate as the decision pass above.
+        let decides = bi >= battle.formation.members.len()
+            || battle.formation.can_attack_at(bi)
+            || context(battle, bi).is_some_and(|c| {
+                (!c.routing && !c.wavering) || battle.formation.cornered_at(bi)
+            });
+        if decides
+            && matches!(
+                fighter.action,
+                Action::Guard { .. } | Action::Windup { .. } | Action::Recover { .. }
+            )
+        {
+            combat.work.fighting += 1;
+        }
+    }
 }
 
 /// A shield bearer standing guard in order holds the shield up; a swing, a

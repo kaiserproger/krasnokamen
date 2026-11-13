@@ -572,6 +572,12 @@ pub struct BattleCounts {
     /// Alive battle rows per faction, ascending faction; a faction with
     /// battle rows but none alive keeps a zero entry.
     pub alive: Vec<(u16, u32)>,
+    /// Melee fighters (no bows) with their opponent within weapon reach on the
+    /// last running battle tick; zero while staged or paused.
+    pub in_weapon_reach: u32,
+    /// Of those, the fighters in the fight loop (guard, windup or recovery
+    /// from a blow) whom the combat decision pass lets strike.
+    pub fighting: u32,
 }
 
 /// Immutable world state after a tick. Shared read-only; never mutated after

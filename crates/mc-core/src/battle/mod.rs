@@ -261,6 +261,13 @@ pub(crate) fn publication_counts(
     if counts.units == 0 {
         return None;
     }
+    let engaged = |count: u64| {
+        if battle.running {
+            u32::try_from(count).expect("battle fighters exceed native slot capacity")
+        } else {
+            0
+        }
+    };
     Some(std::sync::Arc::new(crate::boundary::BattleCounts {
         units: u32::try_from(counts.units).expect("battle population exceeds native slot capacity"),
         alive: counts
@@ -274,6 +281,8 @@ pub(crate) fn publication_counts(
                 )
             })
             .collect(),
+        in_weapon_reach: engaged(battle.combat.work.in_weapon_reach),
+        fighting: engaged(battle.combat.work.fighting),
     }))
 }
 /// Every `EntityStore::views()` drain consumes the pending-wire feed: tick
