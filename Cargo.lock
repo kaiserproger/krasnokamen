@@ -1838,6 +1838,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-melee-range"
+version = "1.0.0-rc.5"
+
+[[package]]
 name = "mc-nbt"
 version = "1.0.0-rc.5"
 dependencies = [
