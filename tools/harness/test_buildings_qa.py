@@ -257,6 +257,16 @@ class ForeignBlockTest(unittest.TestCase):
         with mock.patch.object(buildings_qa, "_project_page", return_value={"container": {"slots": []}}):
             self.assertIsNone(buildings_qa._project_origin(Probe()))
 
+    def test_the_corner_posts_follow_the_rotation_of_the_placement_frame(self):
+        posts = buildings_qa._corner_posts((100, 69, 200))
+        self.assertIn(((100, 70, 200), 0), posts)
+        for turns in range(4):
+            cells = [pos for pos, t in posts if t == turns]
+            self.assertEqual(len(cells), 4, turns)
+            self.assertTrue(all(pos[1] == 70 for pos in cells))
+        # The 7 x 7 first level does not fill the 11 x 7 frame: another rotation moves its posts.
+        self.assertNotEqual({pos for pos, t in posts if t == 0}, {pos for pos, t in posts if t == 1})
+
     def replaced(self, final):
         probe, sub = FakeProbe(), {"broken_cell": {}}
         with mock.patch.object(buildings_qa, "_read", return_value={"block": {"block_id": final}}):

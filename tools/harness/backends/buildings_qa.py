@@ -911,36 +911,55 @@ def _project_origin(probe: ProbeSteps) -> tuple[int, int, int] | None:
     return None
 
 
+def _corner_posts(origin: tuple[int, int, int]) -> list[tuple[tuple[int, int, int], int]]:
+    """House L1's lower-layer `oak_log[axis=y]` corner posts for each rotation about the project
+    origin, as (cell, quarter turns). The rotation is chosen by the layout planner and not shown
+    before the build, and L1 sits at a different offset of the maximum frame for each one."""
+    posts = []
+    for turns in range(4):
+        for pos, want in cells_true("house", 1, origin, turns).items():
+            if pos[1] == origin[1] + 1 and _state_base(want) == BROKEN_AUTHORED \
+                    and "axis=y" in want and (pos, turns) not in posts:
+                posts.append((pos, turns))
+    return posts
+
+
 def _break_corner(probe: ProbeSteps, sub: dict[str, Any], tag: str,
                   bp: str) -> tuple[int, int, int] | None:
     """SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN, first half: once the Builder
-    has placed the house's lower corner post (origin + [0,1,0] is `oak_log[axis=y]` for every
-    rotation), a survival-mode player breaks it with the real client. Returns the cell, or None
-    when the break could not be made while the project was still open."""
+    has placed one of the house's lower corner posts, a survival-mode player breaks it with the
+    real client. Returns the cell, or None when the break could not be made while the project was
+    still open."""
     corner = None
+    turned = 0
     deadline = _time.monotonic() + 900.0
-    while _time.monotonic() < deadline:
+    while corner is None and _time.monotonic() < deadline:
         origin = _project_origin(probe)
         if origin is not None:
-            candidate = (origin[0], origin[1] + 1, origin[2])
-            try:
-                if _block_id(_read(probe, candidate)) == BROKEN_AUTHORED:
-                    corner = candidate
+            for candidate, turns in _corner_posts(origin):
+                try:
+                    block = _read(probe, candidate)
+                except Exception:
+                    continue
+                if _block_id(block) == BROKEN_AUTHORED and _props(block).get("axis") == "y":
+                    corner, turned = candidate, turns
                     break
-            except Exception:
-                pass
-        probe.call("minecraft_wait_ticks", {"ticks": 100})
+        if corner is None:
+            probe.call("minecraft_wait_ticks", {"ticks": 100})
     sub["broken_cell"] = {"cell": list(corner) if corner else None, "authored": BROKEN_AUTHORED}
     if corner is None or _building_bounds(probe, bp, 1) is not None:
         probe.check(f"{tag}_broken_cell_injected", False)
         return None
     x, y, z = corner
-    # Diagonally outside the footprint, within reach of the corner's north face.
-    probe.fixture(f"tp @s {x - 0.5} {y} {z - 0.5}")
+    # Diagonally outside the footprint, within reach of the corner's outer face.
+    footprint = [pos for pos in cells_true("house", 1, origin, turned)]
+    sx = -1 if x == min(p[0] for p in footprint) else 1
+    sz = -1 if z == min(p[2] for p in footprint) else 1
+    probe.fixture(f"tp @s {x + sx + 0.5} {y} {z + sz + 0.5}")
     probe.fixture("gamemode survival @s")
     probe.call("minecraft_wait_ticks", {"ticks": 20})
     broken = probe.call("minecraft_break_block", {
-        "x": x, "y": y, "z": z, "face": "north",
+        "x": x, "y": y, "z": z, "face": "north" if sz < 0 else "south",
         "expected_drop_item_id": BROKEN_AUTHORED, "expected_drop_count": 1,
         "timeout_seconds": probe.remaining()})
     probe.fixture("gamemode creative @s")
