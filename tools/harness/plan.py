@@ -278,6 +278,7 @@ BACKEND_PROFILES: dict[str, tuple[str, ...]] = {
     "native_scale": ("native-scale",),
     "native_v2": ("entities",),
     "pause_empty": ("pause-empty",),
+    "perimeter_qa": ("buildings-qa",),
     "scene_shot": ("scene-shot",),
     "settlement_map_qa": ("settlement-map-qa",),
     "singleplayer_regressions": ("singleplayer-regressions",),

@@ -27,11 +27,17 @@ use super::construction::{self, Project};
 use crate::plugin_structures::settlement_builds::{self as executor, PlannedCell};
 use crate::tick::TickState;
 
-/// Street project kinds; none is a blueprint or a certified building.
+/// Street and fortification project kinds; none is a blueprint or a certified
+/// building.
 pub(crate) const ROAD: &str = "road";
 pub(crate) const LAMP: &str = "lamp";
 /// Free grass clearing that gathers wheat seeds for the first Farm.
 pub(crate) const MEADOW: &str = "meadow";
+/// One stretch of the perimeter wall, or one gatehouse where a street crosses it.
+pub(crate) const PERIMETER: &str = "perimeter";
+pub(crate) const GATE: &str = "perimeter_gate";
+/// The plaza well: a cobblestone rim around one water source.
+pub(crate) const WELL: &str = "well";
 /// Street feature kind of finished road: not work, so never a project.
 pub(crate) const PAVED: &str = "paved";
 
@@ -44,6 +50,10 @@ pub(crate) const LOT_DEPTH: i32 = blueprints::MAX_SIZE[2] as i32;
 pub(crate) const PERIOD: i32 = 2 * (LOT_FRONT + LOT_DEPTH);
 /// Chebyshev radius of the open square around the bell.
 pub(crate) const PLAZA: i32 = 4;
+/// Chebyshev distance of the perimeter wall from the bell: the last lot column
+/// of the four blocks around it, so the wall stands on the column beside the
+/// outer verge and no lot reaches it.
+pub(crate) const RING: i32 = PERIOD - LOT_FRONT;
 /// Street stretches along x per period as `(first, last, lamp)` offsets from
 /// an avenue centre. The first owns the crossing and its corner lamp.
 const STREET_TILES: [(i32, i32, i32); 3] = [(-1, 6, 2), (7, 16, 11), (17, 26, 20)];
@@ -78,19 +88,25 @@ const SEED: usize = usize::MAX;
 
 #[must_use]
 pub(crate) fn infra(blueprint: &str) -> bool {
-    blueprint == ROAD || blueprint == LAMP || blueprint == MEADOW
+    matches!(blueprint, ROAD | LAMP | MEADOW | PERIMETER | GATE | WELL)
 }
 
-/// Paving turns the soil already in place into a dirt path, as a shovel does:
-/// the one block a settlement structure places at no material cost.
+/// The blocks a settlement structure places at no material cost: paving turns
+/// the soil already in place into a dirt path, as a shovel does, and the well's
+/// one water source is the water table the shaft reaches (no storage holds a
+/// filled bucket, and a bucket is not craftable from the stock).
 #[must_use]
 pub(crate) fn free_paving(state: &TickState, blueprint: &str, block: u32) -> bool {
-    blueprint == ROAD
-        && state
-            .registry
-            .blocks
-            .by_id(mc_world::BlockStateId(block))
-            .is_some_and(|definition| definition.block.id.path() == "dirt_path")
+    let free = match blueprint {
+        ROAD => "dirt_path",
+        WELL => "water",
+        _ => return false,
+    };
+    state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(block))
+        .is_some_and(|definition| definition.block.id.path() == free)
 }
 
 /// Square side of one meadow clearing window.
@@ -204,7 +220,14 @@ pub(crate) enum Cell {
     Road,
     Plaza,
     Verge,
+    /// The perimeter wall line outside the lots: no building stands on it.
+    Wall,
     Lot,
+}
+
+/// Whether `(x, z)` is on the square wall line [`RING`] blocks from the bell.
+fn on_ring(anchor: [i32; 3], x: i32, z: i32) -> bool {
+    (x - anchor[0]).abs().max((z - anchor[2]).abs()) == RING
 }
 
 #[must_use]
@@ -216,6 +239,8 @@ pub(crate) fn cell(anchor: [i32; 3], x: i32, z: i32) -> Cell {
         Cell::Plaza
     } else if dx.abs() == 2 || dz.abs() == 2 {
         Cell::Verge
+    } else if on_ring(anchor, x, z) {
+        Cell::Wall
     } else {
         Cell::Lot
     }
@@ -908,18 +933,370 @@ fn stand_column(anchor: [i32; 3], x: i32, z: i32) -> [i32; 2] {
     }
 }
 
-/// Where a builder stands for the next street cell: on the road column itself
-/// while paving, or on the road beside a lamp post's column.
+/// Where a builder stands for the next street or fortification cell: on the
+/// road column itself while paving, on the road beside a lamp post's column,
+/// inside the wall beside a wall or gate column, and on the road beside the
+/// well's rim.
 #[must_use]
 pub(crate) fn stand(state: &TickState, project: &Project, next: [i32; 3]) -> Option<[i32; 3]> {
     let record = state.settlements.get(project.settlement)?;
-    let [x, z] = if project.blueprint == LAMP {
-        stand_column(record.anchor, next[0], next[2])
-    } else {
-        [next[0], next[2]]
+    let anchor = record.anchor;
+    let columns = match project.blueprint.as_str() {
+        LAMP => vec![stand_column(anchor, next[0], next[2])],
+        PERIMETER | GATE => (1..=2)
+            .map(|step| inward(anchor, next[0], next[2], step))
+            .collect(),
+        WELL => vec![[anchor[0] + (next[0] - anchor[0]).signum(), next[2]]],
+        _ => vec![[next[0], next[2]]],
     };
-    let y = construction::surface_y(state, record.anchor[1], x, z)?;
-    Some([x, y + 1, z])
+    columns.into_iter().find_map(|[x, z]| {
+        let y = construction::surface_y(state, anchor[1], x, z)?;
+        Some([x, y + 1, z])
+    })
+}
+
+/// Wall columns are cobblestone, this many blocks tall.
+const WALL_HEIGHT: usize = 3;
+/// A gatehouse stands one block above the wall it pierces.
+const GATE_HEIGHT: usize = 4;
+/// Half width of a gatehouse: the road's three columns, a pillar column each side.
+const GATE_HALF: i32 = 3;
+/// Longest wall stretch: one project, one Builder visit.
+const STRETCH: i32 = 11;
+
+/// One project of the fortification plan: a wall stretch, a gatehouse or the
+/// well, as an inclusive `[x, z]` extent in world columns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Span {
+    pub(crate) kind: &'static str,
+    pub(crate) min: [i32; 2],
+    pub(crate) max: [i32; 2],
+}
+
+/// The perimeter: the square wall line [`RING`] blocks from the bell, split
+/// into projects, with a gatehouse where each of the four roads through the bell
+/// crosses it. Sides run north, east, south, west; each is its gatehouse, then
+/// the wall outward from it. The north and south sides own the corner columns.
+/// A pure function of the anchor.
+#[must_use]
+pub(crate) fn perimeter_spans(anchor: [i32; 3]) -> Vec<Span> {
+    let mut spans = Vec::with_capacity(20);
+    for (fixed, side) in [(1_usize, -1), (0, 1), (1, 1), (0, -1)] {
+        let along = 1 - fixed;
+        let centre = [anchor[0], anchor[2]];
+        let reach = if fixed == 1 { RING } else { RING - 1 };
+        for (from, to, kind) in [
+            (-GATE_HALF, GATE_HALF, GATE),
+            (GATE_HALF + 1, GATE_HALF + STRETCH, PERIMETER),
+            (-GATE_HALF - STRETCH, -GATE_HALF - 1, PERIMETER),
+            (GATE_HALF + STRETCH + 1, reach, PERIMETER),
+            (-reach, -GATE_HALF - STRETCH - 1, PERIMETER),
+        ] {
+            let at = |offset: i32| {
+                let mut column = [0; 2];
+                column[fixed] = centre[fixed] + side * RING;
+                column[along] = centre[along] + offset;
+                column
+            };
+            spans.push(Span {
+                kind,
+                min: at(from),
+                max: at(to),
+            });
+        }
+    }
+    spans
+}
+
+/// The three plaza corners a well may stand on, each a 3 x 3 square between
+/// the plaza's two road bands. The fourth holds the crossing's corner lamp.
+fn well_spans(anchor: [i32; 3]) -> [Span; 3] {
+    let range = |side: i32, at: i32| if side < 0 { [at - 4, at - 2] } else { [at + 2, at + 4] };
+    [(-1, -1), (1, -1), (-1, 1)].map(|(sx, sz)| {
+        let [x0, x1] = range(sx, anchor[0]);
+        let [z0, z1] = range(sz, anchor[2]);
+        Span {
+            kind: WELL,
+            min: [x0, z0],
+            max: [x1, z1],
+        }
+    })
+}
+
+/// `(x, z)` moved `step` columns toward the bell off the wall line.
+fn inward(anchor: [i32; 3], x: i32, z: i32, step: i32) -> [i32; 2] {
+    let pull = |value: i32, at: i32| {
+        let offset = value - at;
+        if offset.abs() == RING {
+            value - step * offset.signum()
+        } else {
+            value
+        }
+    };
+    [pull(x, anchor[0]), pull(z, anchor[2])]
+}
+
+fn built_over(record: &SettlementRecord, x: i32, z: i32) -> bool {
+    record.buildings.values().any(|building| {
+        !building.natural_zone
+            && (building.bounds.min[0]..=building.bounds.max[0]).contains(&x)
+            && (building.bounds.min[2]..=building.bounds.max[2]).contains(&z)
+    })
+}
+
+fn block_path(state: &TickState, block: u32) -> Option<&str> {
+    state
+        .registry
+        .blocks
+        .by_id(mc_world::BlockStateId(block))
+        .map(|definition| definition.block.id.path())
+}
+
+fn is_door(state: &TickState, block: u32) -> bool {
+    block_path(state, block).is_some_and(|path| path.ends_with("_door"))
+}
+
+/// An oak door half in the wall line, facing out of the settlement.
+fn door(state: &TickState, facing: &str, upper: bool) -> Option<u32> {
+    let name = mc_data::Identifier::parse("minecraft:oak_door").ok()?;
+    let default = state.registry.blocks.block(&name)?.default;
+    let mut properties = state.registry.blocks.by_id(default)?.properties.clone();
+    for (key, value) in [
+        ("facing", facing),
+        ("half", if upper { "upper" } else { "lower" }),
+        ("hinge", "left"),
+        ("open", "false"),
+        ("powered", "false"),
+    ] {
+        if let Some(entry) = properties.iter_mut().find(|(known, _)| known == key) {
+            entry.1 = value.to_owned();
+        }
+    }
+    state
+        .registry
+        .blocks
+        .by_name_and_props(&name, &properties)
+        .map(|id| id.0)
+}
+
+/// A cell placed from stock, or free when the block has no item cost.
+fn placed(state: &TickState, at: [i32; 3], block: u32) -> PlannedCell {
+    paid(state, at, block).unwrap_or_else(|| free(at, block))
+}
+
+fn work_of(cells: Vec<PlannedCell>) -> Option<Work> {
+    let first = cells.first()?.at;
+    let (mut min, mut max) = (first, first);
+    for cell in &cells {
+        for axis in 0..3 {
+            min[axis] = min[axis].min(cell.at[axis]);
+            max[axis] = max[axis].max(cell.at[axis]);
+        }
+    }
+    Some(Work {
+        bounds: ScriptWorldBounds::new(min, max).ok()?,
+        cells,
+    })
+}
+
+/// What one wall column still owes to hold `profile`, bottom up from the
+/// ground. `None`: the column is not loaded, so nothing is known about it. A
+/// column the wall cannot stand on (water, a cliff, a tree, a building, ground
+/// outside the territory) owes nothing: terrain-blocked stays blocked.
+/// Cobblestone and doors already stacked on the ground count as built, so the
+/// plan is read from the world and never stored.
+fn column_cells(
+    state: &TickState,
+    record: &SettlementRecord,
+    [x, z]: [i32; 2],
+    cobble: u32,
+    profile: &[u32],
+) -> Option<Vec<PlannedCell>> {
+    let anchor_y = record.anchor[1];
+    state.world.physics_block_at(x, anchor_y, z)?;
+    let nothing = Some(Vec::new());
+    if !level_inside(record, x, z) || built_over(record, x, z) {
+        return nothing;
+    }
+    let Some(top) = construction::surface_y(state, anchor_y, x, z) else {
+        return nothing;
+    };
+    let mut ground = top;
+    while top - ground < profile.len() as i32 {
+        let block = state.world.physics_block_at(x, ground, z)?;
+        if block != cobble && !is_door(state, block) {
+            break;
+        }
+        ground -= 1;
+    }
+    let air = state.registry.states.air;
+    let mut cells = Vec::new();
+    for (index, &want) in profile.iter().enumerate() {
+        let y = ground + 1 + index as i32;
+        let have = state.world.physics_block_at(x, y, z)?;
+        if have == want || (is_door(state, have) && is_door(state, want)) {
+            continue;
+        }
+        if state.block_entities.contains_key(&(x, y, z)) {
+            return nothing;
+        }
+        if !vacant(state, have) {
+            if !construction::clearable(state, have) {
+                return nothing;
+            }
+            cells.push(free([x, y, z], air));
+        }
+        cells.push(placed(state, [x, y, z], want));
+    }
+    Some(cells)
+}
+
+/// The cells one wall stretch or gatehouse still owes: `Some(None)` when it
+/// stands, `None` when part of it is not loaded.
+fn span_work(state: &TickState, record: &SettlementRecord, span: Span) -> Option<Option<Work>> {
+    let anchor = record.anchor;
+    let cobble = default_state(state, "minecraft:cobblestone")?;
+    let x_fixed = span.min[0] == span.max[0];
+    let facing = match (x_fixed, span.min[0] > anchor[0], span.min[1] > anchor[2]) {
+        (true, true, _) => "east",
+        (true, false, _) => "west",
+        (false, _, true) => "south",
+        (false, _, false) => "north",
+    };
+    let mut cells = Vec::new();
+    for x in span.min[0]..=span.max[0] {
+        for z in span.min[1]..=span.max[1] {
+            let across = if x_fixed { z - anchor[2] } else { x - anchor[0] };
+            let profile: Vec<u32> = if span.kind != GATE {
+                vec![cobble; WALL_HEIGHT]
+            } else if across == 0 {
+                vec![
+                    door(state, facing, false)?,
+                    door(state, facing, true)?,
+                    cobble,
+                    cobble,
+                ]
+            } else {
+                vec![cobble; GATE_HEIGHT]
+            };
+            cells.extend(column_cells(state, record, [x, z], cobble, &profile)?);
+        }
+    }
+    Some(work_of(cells))
+}
+
+/// The cells one plaza corner still owes for the well: a cobblestone rim one
+/// block high around a single water source set into the ground. `Some(None)`
+/// when the well stands; `None` when the corner is not loaded or cannot hold one.
+fn well_cells(state: &TickState, record: &SettlementRecord, span: Span) -> Option<Option<Work>> {
+    let anchor_y = record.anchor[1];
+    let [cx, cz] = [span.min[0] + 1, span.min[1] + 1];
+    let rim: Vec<[i32; 2]> = (span.min[0]..=span.max[0])
+        .flat_map(|x| (span.min[1]..=span.max[1]).map(move |z| [x, z]))
+        .filter(|&column| column != [cx, cz])
+        .collect();
+    state.world.physics_block_at(cx, anchor_y, cz)?;
+    let cobble = default_state(state, "minecraft:cobblestone")?;
+    let water = default_state(state, "minecraft:water")?;
+    let band = construction::SITE_BAND;
+    let source = (anchor_y - band..=anchor_y + band).find(|&y| {
+        state.world.physics_block_at(cx, y, cz) == Some(water)
+    });
+    if let Some(y) = source
+        && rim
+            .iter()
+            .all(|&[x, z]| state.world.physics_block_at(x, y + 1, z) == Some(cobble))
+    {
+        return Some(None);
+    }
+    let centre = construction::surface_y(state, anchor_y, cx, cz)?;
+    let air = state.registry.states.air;
+    let mut cells = Vec::new();
+    for [x, z] in span_columns(span) {
+        if !level_inside(record, x, z)
+            || built_over(record, x, z)
+            || state.block_entities.contains_key(&(x, centre, z))
+        {
+            return None;
+        }
+    }
+    for [x, z] in rim {
+        let top = construction::surface_y(state, anchor_y, x, z)?;
+        let ground = if state.world.physics_block_at(x, top, z) == Some(cobble) {
+            top - 1
+        } else {
+            top
+        };
+        if (ground - centre).abs() > 1 {
+            return None;
+        }
+        let have = state.world.physics_block_at(x, ground + 1, z)?;
+        if have == cobble {
+            continue;
+        }
+        if !vacant(state, have) {
+            if !construction::clearable(state, have) {
+                return None;
+            }
+            cells.push(free([x, ground + 1, z], air));
+        }
+        cells.push(placed(state, [x, ground + 1, z], cobble));
+    }
+    let above = state.world.physics_block_at(cx, centre + 1, cz)?;
+    if !vacant(state, above) {
+        if !construction::clearable(state, above) {
+            return None;
+        }
+        cells.push(free([cx, centre + 1, cz], air));
+    }
+    cells.push(free([cx, centre, cz], water));
+    Some(work_of(cells))
+}
+
+fn span_columns(span: Span) -> impl Iterator<Item = [i32; 2]> {
+    (span.min[0]..=span.max[0]).flat_map(move |x| (span.min[1]..=span.max[1]).map(move |z| [x, z]))
+}
+
+/// The well still owed: none once any plaza corner holds one, else the corner
+/// closest to done, the first by compass order on a tie.
+fn well_work(state: &TickState, record: &SettlementRecord) -> Option<Work> {
+    let mut best: Option<Work> = None;
+    for span in well_spans(record.anchor) {
+        match well_cells(state, record, span) {
+            Some(None) => return None,
+            Some(Some(work)) => {
+                if best
+                    .as_ref()
+                    .is_none_or(|known| work.cells.len() < known.cells.len())
+                {
+                    best = Some(work);
+                }
+            }
+            None => {}
+        }
+    }
+    best
+}
+
+/// Fortification work the settlement still owes, in building order: the well,
+/// then each side's gatehouse and wall. Lazy: a pass looks only as far as the
+/// first project it can fund. Read-only; unloaded stretches are skipped.
+pub(crate) fn fortification<'a>(
+    state: &'a TickState,
+    record: &'a SettlementRecord,
+) -> impl Iterator<Item = (&'static str, Work)> + 'a {
+    well_work(state, record)
+        .map(|work| (WELL, work))
+        .into_iter()
+        .chain(
+            perimeter_spans(record.anchor)
+                .into_iter()
+                .filter_map(move |span| {
+                    span_work(state, record, span)
+                        .flatten()
+                        .map(|work| (span.kind, work))
+                }),
+        )
 }
 
 /// The structure-ledger box of any active project: blueprint footprint with

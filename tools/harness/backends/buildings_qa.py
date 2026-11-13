@@ -60,6 +60,8 @@ BLUEPRINTS = ("house", "storage", "farm", "mason", "lumber_camp", "mine",
               "barracks", "wall", "watch_tower")
 LEVELS = {"house": 3, "storage": 2, "farm": 2, "mason": 2, "lumber_camp": 2,
           "mine": 2, "barracks": 2, "wall": 2, "watch_tower": 2}
+# The settlement's own perimeter wall, gates and well: a select of its own, not a blueprint (perimeter_qa.py).
+PERIMETER = "perimeter"
 
 FILL_LIMIT = 32768
 
@@ -308,8 +310,8 @@ def validate_args(ctx: ProfileContext) -> tuple[float, tuple]:
     if not 0 < timeout <= 3600:
         raise RuntimeError("buildings-qa --timeout-seconds must be in (0, 3600]")
     select = os.environ.get("BUILDINGS_QA_SELECT", "ALL")
-    if select != "ALL" and select not in BLUEPRINTS:
-        raise ValueError(f"BUILDINGS_QA_SELECT must be one of {BLUEPRINTS} or ALL")
+    if select not in ("ALL", *BLUEPRINTS, PERIMETER):
+        raise ValueError(f"BUILDINGS_QA_SELECT must be one of {BLUEPRINTS}, {PERIMETER} or ALL")
     return timeout, (BLUEPRINTS if select == "ALL" else (select,))
 
 
@@ -382,8 +384,13 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             probe.report["buildings_acceptance"] = detail
             detail["mode"] = "sequential-founded-resumed"
             probe.server_proc = server  # type: ignore[attr-defined]
-            _scenario_sequential(probe, detail, ctx, artifact, targets,
-                                 address, config, server_log_path)
+            if targets == (PERIMETER,):
+                # The settlement's own wall, gates and well (settlements/layout.rs), not a blueprint.
+                from . import perimeter_qa
+                perimeter_qa.scenario(probe, detail, ctx, artifact)
+            else:
+                _scenario_sequential(probe, detail, ctx, artifact, targets,
+                                     address, config, server_log_path)
             server = getattr(probe, "server_proc", server)
             detail["matrix_19"] = _matrix_19(detail)
             if ctx.windowed:

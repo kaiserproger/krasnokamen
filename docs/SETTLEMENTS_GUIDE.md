@@ -15,6 +15,8 @@ Settlements are native to the core (`mc-core`), not a plugin, and tick with the 
 
 `/settlement layout` prints the street plan of the settlement you stand in.
 
+From 10 residents a settlement walls itself in: its Builders lay a cobblestone wall 25 blocks from the bell on every side, a gatehouse with an oak door where each of the four main roads crosses it, and a well on a plaza corner. Stock cobblestone (about 630) and four oak doors in storage; nothing needs ordering. See [perimeter, gates and well](settlements/construction.md#perimeter-gates-and-well).
+
 ## Permissions
 
 - Anyone can found a settlement and read lists, info, layout, certificates and dialogs.

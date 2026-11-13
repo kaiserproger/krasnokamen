@@ -41,7 +41,9 @@ failing_first = "not recorded"
   maps: `village-qa` has `door_walk`, `sleep_return`, `night_door`,
   `farmer_harvest`, `miner_deposit`, and `lumberjack`; autonomy, claim and
   army expose their named behaviours. `buildings-qa` uses `<blueprint>.<behaviour>`, for
-  example `wall.L1_built`. Partial or resumed profile overrides are rejected.
+  example `wall.L1_built`; `perimeter.<behaviour>` (`well_built`, `gates_built`, `wall_built`,
+  `enclosed`, ...) selects the settlement's own wall, gates and well, not a blueprint
+  (`BUILDINGS_QA_SELECT=perimeter`). Partial or resumed profile overrides are rejected.
   A passing profile is evidence only for symptoms its assertions actually cover.
 - `repro_check` is optional: a nonempty string or list of nonempty strings for
   known-red reproducers, kept out of the green regression gate.
