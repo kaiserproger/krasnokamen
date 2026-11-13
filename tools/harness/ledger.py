@@ -118,15 +118,19 @@ def _failing_verdict(receipt, profile, verdict):
     verdict the profile cannot report on failure, when its own assertion failed:
 
     - `all` of a profile without a verdict map (autocraft-qa, village-autonomy-qa);
-    - a buildings-qa `<blueprint>.<behaviour>` that never got recorded because an assertion named
-      `buildings_<blueprint>_*` aborted the run (a probe check raises before the verdict is written)."""
+    - a buildings-qa `<blueprint>.L<n>_<behaviour>` that never got recorded because an assertion
+      of that blueprint and level, `buildings_<blueprint>_L<n>_*`, aborted the run (a probe check
+      raises before the verdict is written). An abort at another level is not evidence about this
+      one: a level-1 funding failure says nothing about the level-3 upgrade."""
     try:
         regressions._profile_verdict(receipt, profile, verdict)
     except regressions.VerdictNotMet as error:
         if error.value is not None:
             return True
-        blueprint = verdict.partition('.')[0]
-        return profile == 'buildings-qa' and (_assertion_failure(receipt) or '').startswith(f'buildings_{blueprint}_')
+        blueprint, _, behaviour = verdict.partition('.')
+        level = re.match(r'L\d+_', behaviour)
+        prefix = f'buildings_{blueprint}_' + (level.group(0) if level else '')
+        return profile == 'buildings-qa' and (_assertion_failure(receipt) or '').startswith(prefix)
     return verdict == 'all' and _assertion_failure(receipt) is not None
 
 
