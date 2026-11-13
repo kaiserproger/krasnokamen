@@ -2551,6 +2551,17 @@ failing_first = "not recorded"
 fix_commit = "patch:c08470d55c904b23b2efd8f2e9a3a4bfb28b3e93a19feef1dd46de63e8b972a7"
 
 [[bug]]
+id = "SETTLEMENT-BUILDER-HOUSE-CERTIFIED-WITH-FOREIGN-BLOCK"
+title = "A Builder project finishes and certifies its building while a player-placed foreign block sits in an authored cell: House L1 certified with a diamond block where house.json requires oak_log"
+area = "gameplay"
+repro = "client"
+severity = "major"
+status = "open"
+source = "Issue1Breaker (qa-breaker) on main fa637b84, receipts/Issue1Breaker/REPORT.md 'Completed house with an edited corner' (P1, 1/2 attempts): during House L1 at [122,69,-5] (119/250 work) an operator set [122,70,-5] to minecraft:diamond_block, the real client read the edit back, progress continued to 219/250, and after a graceful restart the building list held `house level 1 [122,69,-5]-[128,73,1]` while minecraft_read_block still returned minecraft:diamond_block there (wt/Issue1Breaker/.analysis/validation/20261113T072947-scene-shot-qjg2z2kh, 20261113T073311-scene-shot-0tufstby, 20261113T074054-scene-shot-i56qrk9u). house.json level 1 requires oak_log[axis=y] at that corner for every rotation. Expected: the Builders replace the foreign block (or the project waits) so a Builder-certified building matches its authored picture."
+regression = []
+failing_first = "reported"
+
+[[bug]]
 id = "ISSUE-1-18"
 title = "Sheep and goat models wrong"
 area = "client"
