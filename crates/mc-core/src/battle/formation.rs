@@ -20,6 +20,16 @@ const GIVE_GROUND: f64 = 1.0;
 /// this far apart instead of the two-block marching depth, so the second rank
 /// stands within striking distance of the enemy front.
 pub(crate) const PRESS_RANK_SPACING: f64 = 0.75;
+/// Foot fighting interval of the staged battle. The two sides stand half an
+/// interval apart laterally (0.7 blocks, above the 0.65-block body spacing),
+/// so two lines meeting head-on mesh file between file: every man in the
+/// meshed band has an enemy at his shoulder instead of one front rank each.
+pub(crate) const MESH_INTERVAL: f64 = 1.4;
+/// How far each meshing front passes the enemy front (blocks).
+const MESH_DEPTH: f64 = 6.0;
+/// Rank spacing of a meshed press: one block keeps two bodies per side in a
+/// two-block steering cell well below its cap.
+const MESH_RANK_SPACING: f64 = 1.0;
 // Film lulls compress to a five-second base wait; action clocks stay human-speed.
 pub(crate) const SURGE_PROBABILITY: f64 = 0.1;
 pub(crate) const SURGE_TICKS: u64 = 200;
@@ -109,7 +119,14 @@ fn presses(r: &Regiment) -> bool {
 /// Formation slot of (file, rank), at the pressed depth while the regiment presses.
 fn slot_target(r: &Regiment, file: usize, rank: u16, interval: f64) -> [f64; 3] {
     let mut target = position(&r.spec, file, 0, interval);
-    let depth = f64::from(rank) * if presses(r) { PRESS_RANK_SPACING } else { 2.0 };
+    let spacing = if !presses(r) {
+        2.0
+    } else if r.meshing {
+        MESH_RANK_SPACING
+    } else {
+        PRESS_RANK_SPACING
+    };
+    let depth = f64::from(rank) * spacing;
     target[0] -= r.spec.facing[0] * depth;
     target[2] -= r.spec.facing[1] * depth;
     target
@@ -191,6 +208,9 @@ pub(crate) struct Regiment {
     pub live_members: Vec<usize>,
     /// Virtual leader at the start of the current stall window, (x, z).
     pub anchor: [f64; 2],
+    /// Meshing file between file with its enemy front (`meshes`), as of the
+    /// last leader move.
+    pub meshing: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -375,6 +395,7 @@ impl FormationRuntime {
             evacuating: vec![false; files],
             live_members: Vec::with_capacity(ids.len()),
             anchor: [spec.origin[0], spec.origin[2]],
+            meshing: false,
         });
         Ok(())
     }
@@ -401,7 +422,6 @@ impl FormationRuntime {
         true
     }
 
-    #[cfg(test)]
     /// Polybius fighting interval: 1..2 blocks per man. Staging must leave the
     /// corresponding regiment intervals; this never changes rank spacing.
     pub fn set_fighting_interval(
@@ -741,8 +761,25 @@ impl FormationRuntime {
         }
     }
 
+    /// Foot advancing head-on against enemy foot staged at the mesh interval
+    /// meshes with it file between file.
+    fn meshes(&self, i: usize) -> bool {
+        let r = &self.regiments[i];
+        let Some(e) = r.enemy_regiment.map(|e| &self.regiments[e]) else {
+            return false;
+        };
+        [r, e].iter().all(|x| {
+            x.spec.frontage <= 1.0
+                && x.interval >= MESH_INTERVAL
+                && matches!(x.spec.order, Order::Advance | Order::Charge)
+                && !x.morale.broken
+        }) && r.spec.facing[0] * e.spec.facing[0] + r.spec.facing[1] * e.spec.facing[1] < -0.5
+    }
+
     fn move_leader(&mut self, i: usize) {
+        let meshing = self.meshes(i);
         let r = &mut self.regiments[i];
+        r.meshing = meshing;
         // A virtual leader moves along its assigned facing: lateral convergence
         // on one enemy centroid must never collapse a line into a blob.
         r.gap = r.enemy.map_or(f64::INFINITY, |p| {
@@ -778,11 +815,16 @@ impl FormationRuntime {
                     }
                 }
                 Order::Advance | Order::Charge => {
+                    let (standoff, give) = if r.meshing {
+                        (-MESH_DEPTH, -MESH_DEPTH - 0.6)
+                    } else {
+                        (STANDOFF, GIVE_GROUND)
+                    };
                     if r.enemy.is_none() {
                         0.0
-                    } else if r.gap > STANDOFF {
-                        (r.gap - STANDOFF).min(0.066)
-                    } else if r.gap < GIVE_GROUND {
+                    } else if r.gap > standoff {
+                        (r.gap - standoff).min(0.066)
+                    } else if r.gap < give {
                         -0.04
                     } else {
                         0.0
@@ -807,7 +849,11 @@ impl FormationRuntime {
                 .charge_started
                 .is_some_and(|start| tick.saturating_sub(start) < 200)
                 && r.spec.order == Order::Charge;
-            if let Some(enemy) = r.enemy {
+            // A meshed enemy front lies behind our own front by design: it is
+            // neither a flank nor a rear attack.
+            if !r.meshing
+                && let Some(enemy) = r.enemy
+            {
                 let direction = super::steering::unit(
                     [enemy[0] - r.spec.origin[0], enemy[2] - r.spec.origin[2]],
                     r.spec.facing,

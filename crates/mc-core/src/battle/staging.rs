@@ -1,5 +1,5 @@
 //! Operator-owned deterministic battle staging. No scenario file is read on the tick.
-use crate::battle::formation::{Order, RegimentSpec, slot_position};
+use crate::battle::formation::{MESH_INTERVAL, Order, RegimentSpec, slot_position};
 use crate::battle::ground::{self, Placement};
 use crate::battle::live_players;
 use crate::boundary::{ChangeSet, ChunkPos, EntityId};
@@ -305,14 +305,17 @@ fn plan(seed: u64, count: usize, origin: [f64; 3], side: u16) -> Vec<(RegimentSp
         };
         result.push((spec, kind, size));
     };
-    // Fit 350 front files (seven 50-file regiments, 20 ranks) inside the
-    // existing ticket even at a chunk edge (176 blocks to the near bound);
-    // mounted files remain on the flanks, just behind the foot.
+    // Seven 38-file foot regiments 50 blocks apart (27 ranks): marching at one
+    // block per file, fighting at the mesh interval (53 blocks, still inside
+    // the existing ticket); the second side stands half an interval to the
+    // side, so the two lines mesh file between file. Mounted files remain on
+    // the flanks, behind the deeper foot.
     let flank = front.len().saturating_sub(1) as f64 * 25.0 + 4.0;
-    add(Kind::Cavalry, cavalry / 2, -flank, 84.0, 20);
+    let mesh = if side == 2 { MESH_INTERVAL / 2.0 } else { 0.0 };
+    add(Kind::Cavalry, cavalry / 2, -flank, 96.0, 20);
     for (index, &(kind, size)) in front.iter().enumerate() {
-        let x = (index as f64 - (front.len() - 1) as f64 / 2.0) * 50.0;
-        add(kind, size, x, 36.0, 50);
+        let x = (index as f64 - (front.len() - 1) as f64 / 2.0) * 50.0 + mesh;
+        add(kind, size, x, 36.0, 38);
     }
     let archer_regiments = archers.div_ceil(1000);
     for index in 0..archer_regiments {
@@ -320,7 +323,7 @@ fn plan(seed: u64, count: usize, origin: [f64; 3], side: u16) -> Vec<(RegimentSp
         let x = (index as f64 - (archer_regiments - 1) as f64 / 2.0) * 52.0;
         add(Kind::Archer, size, x, 120.0, 50);
     }
-    add(Kind::Cavalry, cavalry - cavalry / 2, flank, 84.0, 20);
+    add(Kind::Cavalry, cavalry - cavalry / 2, flank, 96.0, 20);
     result
 }
 
@@ -606,12 +609,16 @@ fn setup(
                     state.hostile.battle.ground_pending.push(grounded);
                     members.push(id);
                 }
-                state
-                    .hostile
-                    .battle
-                    .formation
+                let foot = matches!(kind, Kind::Infantry | Kind::Spear);
+                let formation = &mut state.hostile.battle.formation;
+                formation
                     .add_regiment(spec, &members)
                     .map_err(str::to_owned)?;
+                if foot {
+                    formation
+                        .set_fighting_interval(spec.id, MESH_INTERVAL)
+                        .map_err(str::to_owned)?;
+                }
             }
         }
         state
