@@ -58,8 +58,16 @@ pub const DEFAULT_ATTACK_REACH: f64 = 1.428_285_672_354_458_4 - 0.600_000_023_84
 pub fn attack_box(own: Aabb, mount: Option<Aabb>) -> Aabb {
     let Some(mount) = mount else { return own };
     Aabb {
-        min: [own.min[0].min(mount.min[0]), own.min[1], own.min[2].min(mount.min[2])],
-        max: [own.max[0].max(mount.max[0]), own.max[1], own.max[2].max(mount.max[2])],
+        min: [
+            own.min[0].min(mount.min[0]),
+            own.min[1],
+            own.min[2].min(mount.min[2]),
+        ],
+        max: [
+            own.max[0].max(mount.max[0]),
+            own.max[1],
+            own.max[2].max(mount.max[2]),
+        ],
     }
 }
 
@@ -80,7 +88,10 @@ impl MeleeReach {
                 min: f64::from(min_reach * mob_factor),
                 max: f64::from(max_reach * mob_factor),
             },
-            None => Self { min: 0.0, max: DEFAULT_ATTACK_REACH },
+            None => Self {
+                min: 0.0,
+                max: DEFAULT_ATTACK_REACH,
+            },
         }
     }
 }
@@ -103,23 +114,44 @@ mod tests {
     #[test]
     fn default_reach_is_the_javap_constant() {
         let expected = 2.039_999_961_853_027_3_f64.sqrt() - 0.600_000_023_841_857_9_f64;
-        assert!((DEFAULT_ATTACK_REACH - expected).abs() < 1e-15, "{DEFAULT_ATTACK_REACH} vs {expected}");
-        assert_eq!(MeleeReach::mob(None), MeleeReach { min: 0.0, max: DEFAULT_ATTACK_REACH });
+        assert!(
+            (DEFAULT_ATTACK_REACH - expected).abs() < 1e-15,
+            "{DEFAULT_ATTACK_REACH} vs {expected}"
+        );
+        assert_eq!(
+            MeleeReach::mob(None),
+            MeleeReach {
+                min: 0.0,
+                max: DEFAULT_ATTACK_REACH
+            }
+        );
     }
 
     #[test]
     fn reach_is_the_attack_range_times_mob_factor_in_f32() {
         // Iron spear: min 2, max 4.5, mob factor 0.5.
-        assert_eq!(MeleeReach::mob(Some((2.0, 4.5, 0.5))), MeleeReach { min: 1.0, max: 2.25 });
+        assert_eq!(
+            MeleeReach::mob(Some((2.0, 4.5, 0.5))),
+            MeleeReach {
+                min: 1.0,
+                max: 2.25
+            }
+        );
         // A float product, widened afterwards (not a double product).
-        assert_eq!(MeleeReach::mob(Some((0.0, 0.1, 3.0))).max, f64::from(0.1_f32 * 3.0_f32));
+        assert_eq!(
+            MeleeReach::mob(Some((0.0, 0.1, 3.0))).max,
+            f64::from(0.1_f32 * 3.0_f32)
+        );
     }
 
     #[test]
     fn gap_between_the_boxes_decides_the_bare_hand_reach() {
         let reach = MeleeReach::mob(None);
         let me = body(0.0, 0.0);
-        assert!(in_melee_range(me, body(1.4, 0.0), reach), "gap 0.8 <= 0.828");
+        assert!(
+            in_melee_range(me, body(1.4, 0.0), reach),
+            "gap 0.8 <= 0.828"
+        );
         assert!(!in_melee_range(me, body(1.5, 0.0), reach), "gap 0.9");
     }
 
@@ -128,8 +160,14 @@ mod tests {
         let reach = MeleeReach::mob(None);
         let me = body(0.0, 0.0);
         assert!(in_melee_range(me, body(1.4, 1.9), reach), "overlap 0.05");
-        assert!(!in_melee_range(me, body(1.4, 2.0), reach), "target starts above the head");
-        assert!(!in_melee_range(me, body(1.4, -1.95), reach), "target ends at the feet");
+        assert!(
+            !in_melee_range(me, body(1.4, 2.0), reach),
+            "target starts above the head"
+        );
+        assert!(
+            !in_melee_range(me, body(1.4, -1.95), reach),
+            "target ends at the feet"
+        );
     }
 
     #[test]
@@ -138,7 +176,10 @@ mod tests {
         let me = body(0.0, 0.0);
         assert!(in_melee_range(me, body(2.6, 0.0), spear), "gap 2.0");
         assert!(!in_melee_range(me, body(3.0, 0.0), spear), "gap 2.4");
-        assert!(!in_melee_range(me, body(1.1, 0.0), spear), "gap 0.5 is inside the minimum 1.0");
+        assert!(
+            !in_melee_range(me, body(1.1, 0.0), spear),
+            "gap 0.5 is inside the minimum 1.0"
+        );
     }
 
     #[test]
@@ -146,8 +187,14 @@ mod tests {
         let reach = MeleeReach::mob(None);
         let me = body(0.0, 0.0);
         let horse = Aabb::at([0.0, 0.0, 0.0], 1.4, 1.6);
-        assert!(!in_melee_range(attack_box(me, None), body(1.8, 0.0), reach), "gap 1.2 on foot");
-        assert!(in_melee_range(attack_box(me, Some(horse)), body(1.8, 0.0), reach), "gap 0.8 from the flank");
+        assert!(
+            !in_melee_range(attack_box(me, None), body(1.8, 0.0), reach),
+            "gap 1.2 on foot"
+        );
+        assert!(
+            in_melee_range(attack_box(me, Some(horse)), body(1.8, 0.0), reach),
+            "gap 0.8 from the flank"
+        );
         // The target is judged by its own box, never joined with its horse.
         assert!(!in_melee_range(attack_box(body(1.8, 0.0), None), me, reach));
     }
@@ -157,7 +204,10 @@ mod tests {
         let rider = Aabb::at([0.0, 1.2, 0.0], 0.6, 1.95);
         let horse = Aabb::at([0.0, 0.0, 0.0], 1.4, 1.6);
         let attack = attack_box(rider, Some(horse));
-        assert_eq!((attack.min, attack.max), ([-0.7, 1.2, -0.7], [0.7, 3.15, 0.7]));
+        assert_eq!(
+            (attack.min, attack.max),
+            ([-0.7, 1.2, -0.7], [0.7, 3.15, 0.7])
+        );
         // A target on ground 0.8 lower (top 1.15) is beside a rider on foot but under a mounted one.
         let low = body(1.4, -0.8);
         assert!(in_melee_range(body(0.0, 0.0), low, MeleeReach::mob(None)));
