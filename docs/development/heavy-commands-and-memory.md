@@ -107,7 +107,13 @@ to keep that from happening again without idling the machine.
   several commands in parallel created 12 slots and filled the disk, so run one
   heavy command at a time per agent. On a tree switch every tracked file of the
   new tree is touched so its workspace crates rebuild (see the 2026-11-04 entry
-  in [lessons](lessons.md)).
+  in [lessons](lessons.md)). The tree is the git toplevel of the cwd when the
+  runner starts, so one runner command builds one tree: a script that `cd`s into
+  a second worktree inside the same command reuses the first tree's slot without
+  the switch, and Cargo (same unit hash for a workspace member in any checkout)
+  runs the other tree's binary when that binary is newer than this tree's
+  sources (a false test result, 2026-11-14). Run one runner command per tree, or
+  give each tree its own `CARGO_TARGET_DIR=<tree>/target`.
 - **Incremental** compilation is forced on for debug/test builds and off for
   `--release`/`--profile`. Measured once: cold `mc-core --tests` 26m48s to 19m07s.
 - **Lanes.** `-p` is the perf lane: one at a time (perf lock), pinned to the
