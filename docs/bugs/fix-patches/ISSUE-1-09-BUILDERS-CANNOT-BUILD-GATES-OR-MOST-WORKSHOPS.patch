@@ -1,0 +1,1404 @@
+diff --git a/crates/mc-core/assets/blueprints/armorer.json b/crates/mc-core/assets/blueprints/armorer.json
+new file mode 100644
+index 00000000..50ecd45d
+--- /dev/null
++++ b/crates/mc-core/assets/blueprints/armorer.json
+@@ -0,0 +1,45 @@
++{
++  "id": "armorer",
++  "kind": "armorer",
++  "palette": {
++    "C": "cobblestone",
++    "L": "oak_log[axis=y]",
++    "N": "oak_stairs[facing=north,half=bottom]",
++    "O": "oak_door[facing=north,half=upper]",
++    "S": "blast_furnace[facing=south,lit=false]",
++    "X": "oak_planks",
++    "Z": "oak_slab[type=top]",
++    "c": "chest[facing=south]",
++    "d": "oak_fence",
++    "o": "oak_door[facing=north,half=lower]",
++    "t": "torch",
++    "w": "wall_torch[facing=east]",
++    "x": "oak_stairs[facing=south,half=bottom]"
++  },
++  "levels": [
++    {
++      "cert": [7, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC"],
++        ["LCCCCCL", "CS...cC", "C.....C", "C.....C", "LCCoCCL"],
++        ["LCdCdCL", "C.....C", "Cw....C", "C.....C", "LdCOCdL"],
++        ["xxxxxxx", "XZZZZZX", "XZZZZZX", "XZZZZZX", "NNNNNNN"],
++        [".......", "xxxxxxx", "X.....X", "NNNNNNN", "......."],
++        [".......", ".......", "XXXXXXX", ".......", "......."]
++      ]
++    },
++    {
++      "cert": [9, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
++        ["LCCCCCCCL", "CS.S.c..C", "C.......C", "C.......C", "LCCoCCCCL"],
++        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL"],
++        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "NNNNNNNNN"],
++        [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
++        [".........", ".........", "XXXXXXXXX", ".........", "........."]
++      ]
++    }
++  ]
++}
+diff --git a/crates/mc-core/assets/blueprints/barracks.json b/crates/mc-core/assets/blueprints/barracks.json
+index ec351a85..4237eb5f 100644
+--- a/crates/mc-core/assets/blueprints/barracks.json
++++ b/crates/mc-core/assets/blueprints/barracks.json
+@@ -256,6 +256,137 @@
+           "..........."
+         ]
+       ]
++    },
++    {
++      "cert": [
++        11,
++        5,
++        7
++      ],
++      "entrance": [
++        0,
++        1,
++        3
++      ],
++      "layers": [
++        [
++          "ccccccccccc",
++          "ccccccccccc",
++          "ccccccccccc",
++          "ccccccccccc",
++          "ccccccccccc",
++          "ccccccccccc",
++          "ccccccccccc",
++          ".....c.....",
++          ".....c.....",
++          ".....c.....",
++          "..........."
++        ],
++        [
++          "LcccLcccLcL",
++          "cBCBCBCK.Bc",
++          "cb.b.b.K.bc",
++          "D......BB.c",
++          "c.wffe.bb.c",
++          "c..vv..T.Ac",
++          "LcccLGccLcL",
++          "f.........f",
++          "f.L.....L.f",
++          "f.........f",
++          "fffffFfffff"
++        ],
++        [
++          "LcfcLcfcLfL",
++          "c.........c",
++          "c.........c",
++          "d.........f",
++          "c..PP.....c",
++          "c.........c",
++          "LcfcLgfcLfL",
++          "...........",
++          ".fLf...fLf.",
++          "...........",
++          "t...t.t...t"
++        ],
++        [
++          "LcccLcccLcL",
++          "c...S...S.c",
++          "c.........c",
++          "c.........c",
++          "c.........c",
++          "c...N...N.c",
++          "LcccLcccLcL",
++          "...........",
++          "..k.....k..",
++          "...........",
++          "..........."
++        ],
++        [
++          "LXXXXXXXLXL",
++          "ZpppppppZpZ",
++          "ZpppppppZpZ",
++          "ZpppppppZpZ",
++          "ZpppppppZpZ",
++          "ZpppppppZpZ",
++          "LXXXXXXXLXL",
++          "...........",
++          "...........",
++          "...........",
++          "..........."
++        ],
++        [
++          "sssssssssss",
++          "p.........p",
++          "p.........p",
++          "p...t.....p",
++          "p.........p",
++          "p.........p",
++          "nnnnnnnnnnn",
++          "...........",
++          "...........",
++          "...........",
++          "..........."
++        ],
++        [
++          "...........",
++          "sssssssssss",
++          "p.........p",
++          "f.........f",
++          "p.........p",
++          "nnnnnnnnnnn",
++          "...........",
++          "...........",
++          "...........",
++          "...........",
++          "..........."
++        ],
++        [
++          "...........",
++          "...........",
++          "sssssssssss",
++          "p.........p",
++          "nnnnnnnnnnn",
++          "...........",
++          "...........",
++          "...........",
++          "...........",
++          "...........",
++          "..........."
++        ],
++        [
++          "...........",
++          "...........",
++          "...........",
++          "ccccccccccc",
++          "...........",
++          "...........",
++          "...........",
++          "...........",
++          "...........",
++          "...........",
++          "..........."
++        ]
++      ]
+     }
+   ]
+ }
+diff --git a/crates/mc-core/assets/blueprints/butcher.json b/crates/mc-core/assets/blueprints/butcher.json
+new file mode 100644
+index 00000000..4340cefc
+--- /dev/null
++++ b/crates/mc-core/assets/blueprints/butcher.json
+@@ -0,0 +1,45 @@
++{
++  "id": "butcher",
++  "kind": "butcher",
++  "palette": {
++    "C": "cobblestone",
++    "L": "oak_log[axis=y]",
++    "N": "oak_stairs[facing=north,half=bottom]",
++    "O": "oak_door[facing=north,half=upper]",
++    "S": "smoker[facing=south,lit=false]",
++    "X": "oak_planks",
++    "Z": "oak_slab[type=top]",
++    "c": "chest[facing=south]",
++    "d": "oak_fence",
++    "o": "oak_door[facing=north,half=lower]",
++    "t": "torch",
++    "w": "wall_torch[facing=east]",
++    "x": "oak_stairs[facing=south,half=bottom]"
++  },
++  "levels": [
++    {
++      "cert": [7, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC"],
++        ["LCCCCCL", "CS...cC", "C.....C", "C.....C", "LCCoCCL"],
++        ["LCdCdCL", "C.....C", "Cw....C", "C.....C", "LdCOCdL"],
++        ["xxxxxxx", "XZZZZZX", "XZZZZZX", "XZZZZZX", "NNNNNNN"],
++        [".......", "xxxxxxx", "X.....X", "NNNNNNN", "......."],
++        [".......", ".......", "XXXXXXX", ".......", "......."]
++      ]
++    },
++    {
++      "cert": [9, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
++        ["LCCCCCCCL", "CS.S.c..C", "C.......C", "C.......C", "LCCoCCCCL"],
++        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL"],
++        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "NNNNNNNNN"],
++        [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
++        [".........", ".........", "XXXXXXXXX", ".........", "........."]
++      ]
++    }
++  ]
++}
+diff --git a/crates/mc-core/assets/blueprints/cartographer.json b/crates/mc-core/assets/blueprints/cartographer.json
+new file mode 100644
+index 00000000..6b88c2d1
+--- /dev/null
++++ b/crates/mc-core/assets/blueprints/cartographer.json
+@@ -0,0 +1,45 @@
++{
++  "id": "cartographer",
++  "kind": "cartographer",
++  "palette": {
++    "C": "cobblestone",
++    "L": "oak_log[axis=y]",
++    "N": "oak_stairs[facing=north,half=bottom]",
++    "O": "oak_door[facing=north,half=upper]",
++    "S": "cartography_table",
++    "X": "oak_planks",
++    "Z": "oak_slab[type=top]",
++    "c": "chest[facing=south]",
++    "d": "oak_fence",
++    "o": "oak_door[facing=north,half=lower]",
++    "t": "torch",
++    "w": "wall_torch[facing=east]",
++    "x": "oak_stairs[facing=south,half=bottom]"
++  },
++  "levels": [
++    {
++      "cert": [7, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC"],
++        ["LCCCCCL", "CS...cC", "C.....C", "C.....C", "LCCoCCL"],
++        ["LCdCdCL", "C.....C", "Cw....C", "C.....C", "LdCOCdL"],
++        ["xxxxxxx", "XZZZZZX", "XZZZZZX", "XZZZZZX", "NNNNNNN"],
++        [".......", "xxxxxxx", "X.....X", "NNNNNNN", "......."],
++        [".......", ".......", "XXXXXXX", ".......", "......."]
++      ]
++    },
++    {
++      "cert": [9, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
++        ["LCCCCCCCL", "CS.S.c..C", "C.......C", "C.......C", "LCCoCCCCL"],
++        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL"],
++        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "NNNNNNNNN"],
++        [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
++        [".........", ".........", "XXXXXXXXX", ".........", "........."]
++      ]
++    }
++  ]
++}
+diff --git a/crates/mc-core/assets/blueprints/cleric.json b/crates/mc-core/assets/blueprints/cleric.json
+new file mode 100644
+index 00000000..c32808c1
+--- /dev/null
++++ b/crates/mc-core/assets/blueprints/cleric.json
+@@ -0,0 +1,45 @@
++{
++  "id": "cleric",
++  "kind": "cleric",
++  "palette": {
++    "C": "cobblestone",
++    "L": "oak_log[axis=y]",
++    "N": "oak_stairs[facing=north,half=bottom]",
++    "O": "oak_door[facing=north,half=upper]",
++    "S": "brewing_stand",
++    "X": "oak_planks",
++    "Z": "oak_slab[type=top]",
++    "c": "chest[facing=south]",
++    "d": "oak_fence",
++    "o": "oak_door[facing=north,half=lower]",
++    "t": "torch",
++    "w": "wall_torch[facing=east]",
++    "x": "oak_stairs[facing=south,half=bottom]"
++  },
++  "levels": [
++    {
++      "cert": [7, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC"],
++        ["LCCCCCL", "CS...cC", "C.....C", "C.....C", "LCCoCCL"],
++        ["LCdCdCL", "C.....C", "Cw....C", "C.....C", "LdCOCdL"],
++        ["xxxxxxx", "XZZZZZX", "XZZZZZX", "XZZZZZX", "NNNNNNN"],
++        [".......", "xxxxxxx", "X.....X", "NNNNNNN", "......."],
++        [".......", ".......", "XXXXXXX", ".......", "......."]
++      ]
++    },
++    {
++      "cert": [9, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
++        ["LCCCCCCCL", "CS.S.c..C", "C.......C", "C.......C", "LCCoCCCCL"],
++        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL"],
++        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "NNNNNNNNN"],
++        [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
++        [".........", ".........", "XXXXXXXXX", ".........", "........."]
++      ]
++    }
++  ]
++}
+diff --git a/crates/mc-core/assets/blueprints/fisherman.json b/crates/mc-core/assets/blueprints/fisherman.json
+new file mode 100644
+index 00000000..b3faa77d
+--- /dev/null
++++ b/crates/mc-core/assets/blueprints/fisherman.json
+@@ -0,0 +1,45 @@
++{
++  "id": "fisherman",
++  "kind": "fisherman",
++  "palette": {
++    "C": "cobblestone",
++    "L": "oak_log[axis=y]",
++    "N": "oak_stairs[facing=north,half=bottom]",
++    "O": "oak_door[facing=north,half=upper]",
++    "S": "barrel[facing=up]",
++    "X": "oak_planks",
++    "Z": "oak_slab[type=top]",
++    "c": "chest[facing=south]",
++    "d": "oak_fence",
++    "o": "oak_door[facing=north,half=lower]",
++    "t": "torch",
++    "w": "wall_torch[facing=east]",
++    "x": "oak_stairs[facing=south,half=bottom]"
++  },
++  "levels": [
++    {
++      "cert": [7, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC"],
++        ["LCCCCCL", "CS...cC", "C.....C", "C.....C", "LCCoCCL"],
++        ["LCdCdCL", "C.....C", "Cw....C", "C.....C", "LdCOCdL"],
++        ["xxxxxxx", "XZZZZZX", "XZZZZZX", "XZZZZZX", "NNNNNNN"],
++        [".......", "xxxxxxx", "X.....X", "NNNNNNN", "......."],
++        [".......", ".......", "XXXXXXX", ".......", "......."]
++      ]
++    },
++    {
++      "cert": [9, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
++        ["LCCCCCCCL", "CS.S.c..C", "C.......C", "C.......C", "LCCoCCCCL"],
++        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL"],
++        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "NNNNNNNNN"],
++        [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
++        [".........", ".........", "XXXXXXXXX", ".........", "........."]
++      ]
++    }
++  ]
++}
+diff --git a/crates/mc-core/assets/blueprints/fletcher.json b/crates/mc-core/assets/blueprints/fletcher.json
+new file mode 100644
+index 00000000..55da1381
+--- /dev/null
++++ b/crates/mc-core/assets/blueprints/fletcher.json
+@@ -0,0 +1,45 @@
++{
++  "id": "fletcher",
++  "kind": "fletcher",
++  "palette": {
++    "C": "cobblestone",
++    "L": "oak_log[axis=y]",
++    "N": "oak_stairs[facing=north,half=bottom]",
++    "O": "oak_door[facing=north,half=upper]",
++    "S": "fletching_table",
++    "X": "oak_planks",
++    "Z": "oak_slab[type=top]",
++    "c": "chest[facing=south]",
++    "d": "oak_fence",
++    "o": "oak_door[facing=north,half=lower]",
++    "t": "torch",
++    "w": "wall_torch[facing=east]",
++    "x": "oak_stairs[facing=south,half=bottom]"
++  },
++  "levels": [
++    {
++      "cert": [7, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC"],
++        ["LCCCCCL", "CS...cC", "C.....C", "C.....C", "LCCoCCL"],
++        ["LCdCdCL", "C.....C", "Cw....C", "C.....C", "LdCOCdL"],
++        ["xxxxxxx", "XZZZZZX", "XZZZZZX", "XZZZZZX", "NNNNNNN"],
++        [".......", "xxxxxxx", "X.....X", "NNNNNNN", "......."],
++        [".......", ".......", "XXXXXXX", ".......", "......."]
++      ]
++    },
++    {
++      "cert": [9, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
++        ["LCCCCCCCL", "CS.S.c..C", "C.......C", "C.......C", "LCCoCCCCL"],
++        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL"],
++        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "NNNNNNNNN"],
++        [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
++        [".........", ".........", "XXXXXXXXX", ".........", "........."]
++      ]
++    }
++  ]
++}
+diff --git a/crates/mc-core/assets/blueprints/gate.json b/crates/mc-core/assets/blueprints/gate.json
+new file mode 100644
+index 00000000..e342c71f
+--- /dev/null
++++ b/crates/mc-core/assets/blueprints/gate.json
+@@ -0,0 +1,47 @@
++{
++  "id": "gate",
++  "kind": "gate",
++  "palette": {
++    "C": "cobblestone",
++    "D": "oak_door[facing=north,half=lower,hinge=left]",
++    "E": "oak_door[facing=north,half=lower,hinge=right]",
++    "U": "oak_door[facing=north,half=upper,hinge=left]",
++    "V": "oak_door[facing=north,half=upper,hinge=right]",
++    "t": "torch"
++  },
++  "levels": [
++    {
++      "cert": [7, 4, 3],
++      "entrance": [3, 1, 2],
++      "layers": [
++        ["CCCCCCC", "CCCCCCC", "CCCCCCC"],
++        ["CCC.CCC", "CCCDCCC", "CCC.CCC"],
++        ["CCC.CCC", "CCCUCCC", "CCC.CCC"],
++        ["CCCCCCC", "CCCCCCC", "CCCCCCC"],
++        ["CCCCCCC", "t.....t", "C.C.C.C"]
++      ]
++    },
++    {
++      "cert": [8, 4, 3],
++      "entrance": [3, 1, 2],
++      "layers": [
++        ["CCCCCCCC", "CCCCCCCC", "CCCCCCCC"],
++        ["CCC..CCC", "CCCDECCC", "CCC..CCC"],
++        ["CCC..CCC", "CCCUVCCC", "CCC..CCC"],
++        ["CCCCCCCC", "CCCCCCCC", "CCCCCCCC"],
++        ["CCCCCCCC", "t......t", "C.C.C.CC"]
++      ]
++    },
++    {
++      "cert": [9, 4, 3],
++      "entrance": [3, 1, 2],
++      "layers": [
++        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
++        ["CCC...CCC", "CCCDEDCCC", "CCC...CCC"],
++        ["CCC...CCC", "CCCUVUCCC", "CCC...CCC"],
++        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
++        ["CCCCCCCCC", "t.......t", "C.C.C.C.C"]
++      ]
++    }
++  ]
++}
+diff --git a/crates/mc-core/assets/blueprints/leatherworker.json b/crates/mc-core/assets/blueprints/leatherworker.json
+new file mode 100644
+index 00000000..68f8b634
+--- /dev/null
++++ b/crates/mc-core/assets/blueprints/leatherworker.json
+@@ -0,0 +1,45 @@
++{
++  "id": "leatherworker",
++  "kind": "leatherworker",
++  "palette": {
++    "C": "cobblestone",
++    "L": "oak_log[axis=y]",
++    "N": "oak_stairs[facing=north,half=bottom]",
++    "O": "oak_door[facing=north,half=upper]",
++    "S": "cauldron",
++    "X": "oak_planks",
++    "Z": "oak_slab[type=top]",
++    "c": "chest[facing=south]",
++    "d": "oak_fence",
++    "o": "oak_door[facing=north,half=lower]",
++    "t": "torch",
++    "w": "wall_torch[facing=east]",
++    "x": "oak_stairs[facing=south,half=bottom]"
++  },
++  "levels": [
++    {
++      "cert": [7, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC"],
++        ["LCCCCCL", "CS...cC", "C.....C", "C.....C", "LCCoCCL"],
++        ["LCdCdCL", "C.....C", "Cw....C", "C.....C", "LdCOCdL"],
++        ["xxxxxxx", "XZZZZZX", "XZZZZZX", "XZZZZZX", "NNNNNNN"],
++        [".......", "xxxxxxx", "X.....X", "NNNNNNN", "......."],
++        [".......", ".......", "XXXXXXX", ".......", "......."]
++      ]
++    },
++    {
++      "cert": [9, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
++        ["LCCCCCCCL", "CS.S.c..C", "C.......C", "C.......C", "LCCoCCCCL"],
++        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL"],
++        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "NNNNNNNNN"],
++        [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
++        [".........", ".........", "XXXXXXXXX", ".........", "........."]
++      ]
++    }
++  ]
++}
+diff --git a/crates/mc-core/assets/blueprints/librarian.json b/crates/mc-core/assets/blueprints/librarian.json
+new file mode 100644
+index 00000000..bf9fa5fb
+--- /dev/null
++++ b/crates/mc-core/assets/blueprints/librarian.json
+@@ -0,0 +1,45 @@
++{
++  "id": "librarian",
++  "kind": "librarian",
++  "palette": {
++    "C": "cobblestone",
++    "L": "oak_log[axis=y]",
++    "N": "oak_stairs[facing=north,half=bottom]",
++    "O": "oak_door[facing=north,half=upper]",
++    "S": "lectern[facing=south]",
++    "X": "oak_planks",
++    "Z": "oak_slab[type=top]",
++    "c": "chest[facing=south]",
++    "d": "oak_fence",
++    "o": "oak_door[facing=north,half=lower]",
++    "t": "torch",
++    "w": "wall_torch[facing=east]",
++    "x": "oak_stairs[facing=south,half=bottom]"
++  },
++  "levels": [
++    {
++      "cert": [7, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC"],
++        ["LCCCCCL", "CS...cC", "C.....C", "C.....C", "LCCoCCL"],
++        ["LCdCdCL", "C.....C", "Cw....C", "C.....C", "LdCOCdL"],
++        ["xxxxxxx", "XZZZZZX", "XZZZZZX", "XZZZZZX", "NNNNNNN"],
++        [".......", "xxxxxxx", "X.....X", "NNNNNNN", "......."],
++        [".......", ".......", "XXXXXXX", ".......", "......."]
++      ]
++    },
++    {
++      "cert": [9, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
++        ["LCCCCCCCL", "CS.S.c..C", "C.......C", "C.......C", "LCCoCCCCL"],
++        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL"],
++        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "NNNNNNNNN"],
++        [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
++        [".........", ".........", "XXXXXXXXX", ".........", "........."]
++      ]
++    }
++  ]
++}
+diff --git a/crates/mc-core/assets/blueprints/toolsmith.json b/crates/mc-core/assets/blueprints/toolsmith.json
+new file mode 100644
+index 00000000..b3f61cf6
+--- /dev/null
++++ b/crates/mc-core/assets/blueprints/toolsmith.json
+@@ -0,0 +1,45 @@
++{
++  "id": "toolsmith",
++  "kind": "toolsmith",
++  "palette": {
++    "C": "cobblestone",
++    "L": "oak_log[axis=y]",
++    "N": "oak_stairs[facing=north,half=bottom]",
++    "O": "oak_door[facing=north,half=upper]",
++    "S": "smithing_table",
++    "X": "oak_planks",
++    "Z": "oak_slab[type=top]",
++    "c": "chest[facing=south]",
++    "d": "oak_fence",
++    "o": "oak_door[facing=north,half=lower]",
++    "t": "torch",
++    "w": "wall_torch[facing=east]",
++    "x": "oak_stairs[facing=south,half=bottom]"
++  },
++  "levels": [
++    {
++      "cert": [7, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC"],
++        ["LCCCCCL", "CS...cC", "C.....C", "C.....C", "LCCoCCL"],
++        ["LCdCdCL", "C.....C", "Cw....C", "C.....C", "LdCOCdL"],
++        ["xxxxxxx", "XZZZZZX", "XZZZZZX", "XZZZZZX", "NNNNNNN"],
++        [".......", "xxxxxxx", "X.....X", "NNNNNNN", "......."],
++        [".......", ".......", "XXXXXXX", ".......", "......."]
++      ]
++    },
++    {
++      "cert": [9, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
++        ["LCCCCCCCL", "CS.S.c..C", "C.......C", "C.......C", "LCCoCCCCL"],
++        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL"],
++        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "NNNNNNNNN"],
++        [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
++        [".........", ".........", "XXXXXXXXX", ".........", "........."]
++      ]
++    }
++  ]
++}
+diff --git a/crates/mc-core/assets/blueprints/wall.json b/crates/mc-core/assets/blueprints/wall.json
+index d3b77412..a48e6fb6 100644
+--- a/crates/mc-core/assets/blueprints/wall.json
++++ b/crates/mc-core/assets/blueprints/wall.json
+@@ -32,6 +32,20 @@
+         ["cpcpcpcpcpc", "...........", ".ppp.ppppp.", "..........."],
+         ["c.c.c.c.c.c", "...........", "t....t....t", "..........."]
+       ]
++    },
++    {
++      "cert": [13, 6, 3],
++      "entrance": [1, 1, 3],
++      "layers": [
++        ["ccccccccccccc", "ccccccccccccc", "ccccccccccccc", "............."],
++        ["ccccccccccccc", "ccccccccccccc", "ccccccccccccc", ".Ccccc......."],
++        ["ccccccccccccc", "ccccccccccccc", "ccccccccccccc", "..Cccc......."],
++        ["ccccccccccccc", "ccccccccccccc", "ccccccccccccc", "...Ccc......."],
++        ["ccccccccccccc", "ccccccccccccc", "ccccccccccccc", "....Cc......."],
++        ["ccccccccccccc", "ccccccccccccc", "ccccccccccccc", ".....C......."],
++        ["cpcpcpcpcpcpc", ".............", "ppppp.ppppppp", "............."],
++        ["c.c.c.c.c.c.c", ".............", "t.....t.....t", "............."]
++      ]
+     }
+   ]
+ }
+diff --git a/crates/mc-core/assets/blueprints/watch_tower.json b/crates/mc-core/assets/blueprints/watch_tower.json
+index 5a2732de..f53eae2d 100644
+--- a/crates/mc-core/assets/blueprints/watch_tower.json
++++ b/crates/mc-core/assets/blueprints/watch_tower.json
+@@ -172,6 +172,108 @@
+           "....."
+         ]
+       ]
++    },
++    {
++      "cert": [
++        5,
++        10,
++        5
++      ],
++      "entrance": [
++        2,
++        1,
++        4
++      ],
++      "layers": [
++        [
++          "ccccc",
++          "ccccc",
++          "ccccc",
++          "ccccc",
++          "ccccc",
++          "..c.."
++        ],
++        [
++          "LcccL",
++          "cKl.c",
++          "c...c",
++          "c...c",
++          "LcDcL",
++          "....."
++        ],
++        [
++          "LcccL",
++          "cEl.c",
++          "c...c",
++          "c...c",
++          "LcdcL",
++          ".S.S."
++        ],
++        [
++          "LcccL",
++          "c.l.c",
++          "f...f",
++          "c...c",
++          "LcfcL",
++          "....."
++        ],
++        [
++          "LcccL",
++          "c.l.c",
++          "c...c",
++          "c..Wc",
++          "LcccL",
++          "....."
++        ],
++        [
++          "ccccc",
++          "c.l.c",
++          "c...c",
++          "c...c",
++          "ccccc",
++          "....."
++        ],
++        [
++          "ccccc",
++          "c.l.c",
++          "f...f",
++          "cE..c",
++          "ccfcc",
++          "....."
++        ],
++        [
++          "ccccc",
++          "c.l.c",
++          "c...c",
++          "c...c",
++          "ccccc",
++          "....."
++        ],
++        [
++          "ccccc",
++          "c.l.c",
++          "f...f",
++          "cE..c",
++          "ccfcc",
++          "....."
++        ],
++        [
++          "ccccc",
++          "cphpc",
++          "cpppc",
++          "cpppc",
++          "ccccc",
++          "....."
++        ],
++        [
++          "cfcfc",
++          "f...f",
++          "c...c",
++          "ft.tf",
++          "cfcfc",
++          "....."
++        ]
++      ]
+     }
+   ]
+ }
+diff --git a/crates/mc-core/assets/blueprints/weaponsmith.json b/crates/mc-core/assets/blueprints/weaponsmith.json
+new file mode 100644
+index 00000000..849c2895
+--- /dev/null
++++ b/crates/mc-core/assets/blueprints/weaponsmith.json
+@@ -0,0 +1,45 @@
++{
++  "id": "weaponsmith",
++  "kind": "weaponsmith",
++  "palette": {
++    "C": "cobblestone",
++    "L": "oak_log[axis=y]",
++    "N": "oak_stairs[facing=north,half=bottom]",
++    "O": "oak_door[facing=north,half=upper]",
++    "S": "grindstone[face=floor,facing=south]",
++    "X": "oak_planks",
++    "Z": "oak_slab[type=top]",
++    "c": "chest[facing=south]",
++    "d": "oak_fence",
++    "o": "oak_door[facing=north,half=lower]",
++    "t": "torch",
++    "w": "wall_torch[facing=east]",
++    "x": "oak_stairs[facing=south,half=bottom]"
++  },
++  "levels": [
++    {
++      "cert": [7, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC", "CCCCCCC"],
++        ["LCCCCCL", "CS...cC", "C.....C", "C.....C", "LCCoCCL"],
++        ["LCdCdCL", "C.....C", "Cw....C", "C.....C", "LdCOCdL"],
++        ["xxxxxxx", "XZZZZZX", "XZZZZZX", "XZZZZZX", "NNNNNNN"],
++        [".......", "xxxxxxx", "X.....X", "NNNNNNN", "......."],
++        [".......", ".......", "XXXXXXX", ".......", "......."]
++      ]
++    },
++    {
++      "cert": [9, 4, 5],
++      "entrance": [3, 1, 4],
++      "layers": [
++        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
++        ["LCCCCCCCL", "CS.S.c..C", "C.......C", "C.......C", "LCCoCCCCL"],
++        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL"],
++        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "NNNNNNNNN"],
++        [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
++        [".........", ".........", "XXXXXXXXX", ".........", "........."]
++      ]
++    }
++  ]
++}
+diff --git a/crates/mc-core/src/settlements/blueprints.rs b/crates/mc-core/src/settlements/blueprints.rs
+index 7eda181e..9e3fad41 100644
+--- a/crates/mc-core/src/settlements/blueprints.rs
++++ b/crates/mc-core/src/settlements/blueprints.rs
+@@ -25,11 +25,14 @@ use crate::registry::CoreRegistry;
+ /// Protocol item id.
+ pub type ItemId = u32;
+ 
+-/// Placed size limit `[x, y, z]` for every blueprint. Villager builders place within
+-/// reach of a ground-level stand point, so nothing may rise above y offset 8.
+-pub const MAX_SIZE: [u8; 3] = [11, 9, 11];
++/// Placed size limit `[x, y, z]` for every blueprint. Builders place from a
++/// perimeter stand within 12 blocks of the next cell, so a ground-level stand
++/// reaches the crown of the tallest tower (y offset 10); the wall's third level
++/// is 13 blocks long. A blueprint's lot depth is its extent across its front,
++/// at most the street plan's `LOT_DEPTH` (11).
++pub const MAX_SIZE: [u8; 3] = [13, 11, 11];
+ 
+-const SOURCES: [&str; 10] = [
++const SOURCES: [&str; 21] = [
+     include_str!("../../assets/blueprints/house.json"),
+     include_str!("../../assets/blueprints/storage.json"),
+     include_str!("../../assets/blueprints/farm.json"),
+@@ -40,6 +43,17 @@ const SOURCES: [&str; 10] = [
+     include_str!("../../assets/blueprints/barracks.json"),
+     include_str!("../../assets/blueprints/wall.json"),
+     include_str!("../../assets/blueprints/watch_tower.json"),
++    include_str!("../../assets/blueprints/gate.json"),
++    include_str!("../../assets/blueprints/armorer.json"),
++    include_str!("../../assets/blueprints/butcher.json"),
++    include_str!("../../assets/blueprints/cartographer.json"),
++    include_str!("../../assets/blueprints/cleric.json"),
++    include_str!("../../assets/blueprints/fisherman.json"),
++    include_str!("../../assets/blueprints/fletcher.json"),
++    include_str!("../../assets/blueprints/leatherworker.json"),
++    include_str!("../../assets/blueprints/librarian.json"),
++    include_str!("../../assets/blueprints/toolsmith.json"),
++    include_str!("../../assets/blueprints/weaponsmith.json"),
+ ];
+ const DIRS: [&str; 4] = ["north", "east", "south", "west"];
+ 
+diff --git a/crates/mc-core/src/settlements/blueprints_tests.rs b/crates/mc-core/src/settlements/blueprints_tests.rs
+index db263789..59a6387a 100644
+--- a/crates/mc-core/src/settlements/blueprints_tests.rs
++++ b/crates/mc-core/src/settlements/blueprints_tests.rs
+@@ -3,7 +3,7 @@ use crate::settlements::allocator::tests::test_state;
+ use crate::settlements::buildings::{certify, upgrade};
+ use crate::tick::TickState;
+ 
+-const IDS: [(&str, usize); 10] = [
++const IDS: [(&str, usize); 21] = [
+     ("house", 3),
+     ("storage", 2),
+     ("farm", 2),
+@@ -11,9 +11,34 @@ const IDS: [(&str, usize); 10] = [
+     ("shepherd", 1),
+     ("lumber_camp", 2),
+     ("mine", 2),
+-    ("barracks", 2),
+-    ("wall", 2),
+-    ("watch_tower", 2),
++    ("barracks", 3),
++    ("wall", 3),
++    ("watch_tower", 3),
++    ("gate", 3),
++    ("armorer", 2),
++    ("butcher", 2),
++    ("cartographer", 2),
++    ("cleric", 2),
++    ("fisherman", 2),
++    ("fletcher", 2),
++    ("leatherworker", 2),
++    ("librarian", 2),
++    ("toolsmith", 2),
++    ("weaponsmith", 2),
++];
++
++/// The vanilla job-site block each new workshop is built around.
++const WORKSHOP_STATIONS: [(&str, &str); 10] = [
++    ("armorer", "blast_furnace"),
++    ("butcher", "smoker"),
++    ("cartographer", "cartography_table"),
++    ("cleric", "brewing_stand"),
++    ("fisherman", "barrel"),
++    ("fletcher", "fletching_table"),
++    ("leatherworker", "cauldron"),
++    ("librarian", "lectern"),
++    ("toolsmith", "smithing_table"),
++    ("weaponsmith", "grindstone"),
+ ];
+ 
+ fn state_name(state: &TickState, id: BlockStateId) -> (String, Vec<(String, String)>) {
+@@ -41,6 +66,8 @@ fn catalog_has_every_blueprint_and_level_within_size_limits() {
+ 
+ /// Most materials bottom out in worker-produced resources. The shepherd's
+ /// loom also accepts real delivered string, which the planner reports when absent.
++/// A workshop's own job-site block (iron, flint, books or a blaze rod behind it)
++/// is delivered or crafted from delivered stock, never produced by a worker.
+ #[test]
+ fn materials_use_only_worker_producible_items() {
+     let state = test_state();
+@@ -82,6 +109,7 @@ fn materials_use_only_worker_producible_items() {
+                     .path()
+                     .to_owned();
+                 let ok = plain.contains(&name.as_str())
++                    || WORKSHOP_STATIONS.contains(&(blueprint.id.as_str(), name.as_str()))
+                     || name.ends_with("_bed")
+                     || name
+                         .strip_prefix("cobblestone_")
+@@ -312,6 +340,7 @@ fn every_level_certifies_and_upgrades_in_every_rotation() {
+                         || blueprint.kind == BuildingKind::House
+                         || blueprint.kind == BuildingKind::Barracks
+                         || blueprint.kind == BuildingKind::Wall
++                        || blueprint.kind == BuildingKind::Gate
+                         || blueprint.kind == BuildingKind::Tower,
+                     "{context}: work points"
+                 );
+@@ -363,3 +392,96 @@ pub(super) fn build(
+     }
+     (settlement, building.unwrap())
+ }
++
++/// Planner, menus and upgrade orders resolve a blueprint by building kind, so
++/// every kind may have only one.
++#[test]
++fn every_blueprint_owns_a_distinct_building_kind() {
++    let state = test_state();
++    let kinds: Vec<_> = all(&state.registry).iter().map(|b| b.kind).collect();
++    for (index, kind) in kinds.iter().enumerate() {
++        assert!(
++            !kinds[..index].contains(kind),
++            "two blueprints build {kind:?}"
++        );
++    }
++    assert!(kinds.contains(&BuildingKind::Gate));
++    for (id, _) in WORKSHOP_STATIONS {
++        let kind = BuildingKind::parse(id).unwrap();
++        assert!(kinds.contains(&kind), "{id} has no blueprint");
++        assert_eq!(get(&state.registry, id).unwrap().kind, kind);
++    }
++}
++
++/// Each new workshop places its profession's vanilla job-site block, one more
++/// per level, and the certificate registers exactly the level's job slots.
++#[test]
++fn workshops_place_their_job_site_and_gain_a_slot_per_level() {
++    let mut state = test_state();
++    for (id, station) in WORKSHOP_STATIONS {
++        let blueprint = get(&state.registry, id).unwrap();
++        let profession = BuildingKind::parse(id).unwrap().profession().unwrap();
++        for levels in 1..=blueprint.levels.len() {
++            let name = format!("{id}-{levels}");
++            let (settlement, building) = build(&mut state, &name, blueprint, levels);
++            let record = &state.settlements.get(settlement).unwrap().buildings[&building];
++            assert_eq!(usize::from(record.level), levels, "{id}");
++            assert_eq!(
++                record.work_points.len(),
++                levels,
++                "{id} level {levels} slots"
++            );
++            for point in &record.work_points {
++                let block = state.world.block_at(point[0], point[1], point[2]).unwrap();
++                assert_eq!(state_name(&state, BlockStateId(block)).0, station, "{id}");
++                assert!(
++                    matches!(
++                        crate::settlements::allocator::poi_kind(&state.registry, block),
++                        Some(crate::settlements::allocator::PoiKind::Job(p)) if p == profession
++                    ),
++                    "{id}: the work point is not a {profession:?} job site"
++                );
++            }
++        }
++    }
++}
++
++/// The gate, wall, tower and barracks have a third level with the certificate
++/// dimensions the level rules ask for (door count, length x height, tower
++/// height, beds).
++#[test]
++fn gate_and_fortifications_reach_level_three() {
++    let mut state = test_state();
++    for (id, cert) in [
++        ("gate", [9, 4, 3]),
++        ("wall", [13, 6, 3]),
++        ("watch_tower", [5, 10, 5]),
++        ("barracks", [11, 5, 7]),
++    ] {
++        let blueprint = get(&state.registry, id).unwrap();
++        assert_eq!(blueprint.levels.len(), 3, "{id}");
++        assert_eq!(blueprint.levels[2].cert, cert, "{id}");
++        let (settlement, building) = build(&mut state, id, blueprint, 3);
++        let record = &state.settlements.get(settlement).unwrap().buildings[&building];
++        assert_eq!(record.level, 3, "{id}");
++    }
++}
++
++/// Lots are `LOT_DEPTH` deep: the extent across the front a blueprint turns to
++/// the road may not exceed it (the wall's 13-block length runs along the road).
++#[test]
++fn every_blueprint_fits_the_street_lot_across_its_front() {
++    let state = test_state();
++    for blueprint in all(&state.registry) {
++        let [fx, _, fz] = blueprint.footprint(Rotation(0)).map(i32::from);
++        let depth = match crate::settlements::layout::front(blueprint).unwrap() {
++            0 | 2 => fz,
++            _ => fx,
++        };
++        assert!(
++            depth <= crate::settlements::layout::LOT_DEPTH,
++            "{} is {depth} deep across its front",
++            blueprint.id
++        );
++    }
++}
+diff --git a/crates/mc-core/src/settlements/construction_planner_tests.rs b/crates/mc-core/src/settlements/construction_planner_tests.rs
+index 74c6c052..1beec153 100644
+--- a/crates/mc-core/src/settlements/construction_planner_tests.rs
++++ b/crates/mc-core/src/settlements/construction_planner_tests.rs
+@@ -460,11 +460,25 @@ fn autonomous_needs_cover_every_authored_kind_and_ignore_natural_zones() {
+         .iter()
+         .map(|blueprint| blueprint.kind)
+         .collect();
+-    assert_eq!(authored.len(), 10);
++    assert_eq!(authored.len(), 21);
++    // The shepherd's hut, the gate and the ten profession workshops are owner
++    // orders only: the planner never starts them on its own.
++    let owner_ordered = |kind: &BuildingKind| {
++        matches!(kind, BuildingKind::Gate)
++            || matches!(
++                kind,
++                BuildingKind::Workshop(profession)
++                    if !matches!(profession, Profession::Farmer | Profession::Builder)
++            )
++    };
++    assert_eq!(
++        authored.iter().filter(|kind| owner_ordered(kind)).count(),
++        12
++    );
+     assert!(
+         authored
+             .into_iter()
+-            .filter(|kind| *kind != BuildingKind::Workshop(Profession::Shepherd))
++            .filter(|kind| !owner_ordered(kind))
+             .all(|kind| {
+                 state
+                     .settlements
+diff --git a/crates/mc-core/src/settlements/construction_tests.rs b/crates/mc-core/src/settlements/construction_tests.rs
+index 393dd07b..c8254781 100644
+--- a/crates/mc-core/src/settlements/construction_tests.rs
++++ b/crates/mc-core/src/settlements/construction_tests.rs
+@@ -1434,3 +1434,47 @@ fn one_haul_trip_carries_several_item_types_for_the_next_cells() {
+     let units: i32 = carry.iter().flatten().map(|stack| stack.count).sum();
+     assert!(units >= 50, "one trip carries a real load, got {units}");
+ }
++
++/// A Builder places every authored cell of a level in every rotation, not only
++/// enough of them to certify: the gate's pillars flank an open passage that a
++/// certificate never inspects.
++#[test]
++fn gate_level_one_is_built_cell_for_cell_in_every_rotation() {
++    for rotation in 0..4 {
++        let (mut state, id, slot) = fixture();
++        assert!(begin(
++            &mut state,
++            Project {
++                settlement: id,
++                blueprint: "gate".into(),
++                level: 1,
++                origin: [3, 200, 3],
++                rotation,
++                building: None,
++                structure: String::new(),
++                ordered: true,
++                borrowed_builder: None,
++            },
++            "oak",
++            0,
++        ));
++        fund(&mut state, "gate", 1);
++        complete(&mut state, id, slot);
++        let level = blueprints::get(&state.registry, "gate")
++            .unwrap()
++            .level(1)
++            .unwrap()
++            .rotated(Rotation::from_quarter_turns(rotation));
++        let mut missing = Vec::new();
++        for (offset, expected) in &level.blocks {
++            let [x, y, z] = level.world([3, 200, 3], *offset);
++            if state.world.block_at(x, y, z) != Some(expected.0) {
++                missing.push([x, y, z]);
++            }
++        }
++        assert!(
++            missing.is_empty(),
++            "rotation {rotation}: unplaced {missing:?}"
++        );
++    }
++}
+diff --git a/crates/mc-core/src/settlements/layout.rs b/crates/mc-core/src/settlements/layout.rs
+index b6af4eb1..d5804989 100644
+--- a/crates/mc-core/src/settlements/layout.rs
++++ b/crates/mc-core/src/settlements/layout.rs
+@@ -35,7 +35,8 @@ pub(crate) const PAVED: &str = "paved";
+ 
+ /// First lot row, counted from a road centre line (road ±1, verge 2).
+ const LOT_FRONT: i32 = 3;
+-/// Deepest lot: the largest blueprint extent, on either axis.
++/// Deepest lot: the largest blueprint extent across its front (the wall's
++/// 13-block length runs along the road).
+ pub(crate) const LOT_DEPTH: i32 = blueprints::MAX_SIZE[2] as i32;
+ /// Street grid period: two lot rows back to back between two roads.
+ pub(crate) const PERIOD: i32 = 2 * (LOT_FRONT + LOT_DEPTH);
+@@ -342,7 +343,7 @@ const COMPASS: [[i32; 2]; 4] = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+ /// The catalogue front of a blueprint, as a [`COMPASS`] index: the extent
+ /// edge holding the level-one entrance; an entrance inside the extent (the
+ /// farm's door between house and field) keeps the catalogue's south front.
+-fn front(blueprint: &Blueprint) -> Option<usize> {
++pub(super) fn front(blueprint: &Blueprint) -> Option<usize> {
+     let [fx, _, _] = blueprint.footprint(Rotation(0)).map(i32::from);
+     let [ex, _, ez] = blueprint.level(1)?.entrance.map(i32::from);
+     Some(if ez == 0 {
+diff --git a/crates/mc-core/src/settlements/ui.rs b/crates/mc-core/src/settlements/ui.rs
+index 7b4facf7..284902d8 100644
+--- a/crates/mc-core/src/settlements/ui.rs
++++ b/crates/mc-core/src/settlements/ui.rs
+@@ -2129,6 +2129,28 @@ fn blueprint_label(ctx: &Ctx, blueprint: &str) -> &'static str {
+         (Lang::Ru, "wall") => "Стена",
+         (Lang::En, "watch_tower") => "Watchtower",
+         (Lang::Ru, "watch_tower") => "Сторожевая башня",
++        (Lang::En, "gate") => "Gate",
++        (Lang::Ru, "gate") => "Ворота",
++        (Lang::En, "armorer") => "Armorer's workshop",
++        (Lang::Ru, "armorer") => "Мастерская бронника",
++        (Lang::En, "butcher") => "Butcher's workshop",
++        (Lang::Ru, "butcher") => "Мастерская мясника",
++        (Lang::En, "cartographer") => "Cartographer's workshop",
++        (Lang::Ru, "cartographer") => "Мастерская картографа",
++        (Lang::En, "cleric") => "Cleric's workshop",
++        (Lang::Ru, "cleric") => "Мастерская священника",
++        (Lang::En, "fisherman") => "Fisherman's workshop",
++        (Lang::Ru, "fisherman") => "Мастерская рыбака",
++        (Lang::En, "fletcher") => "Fletcher's workshop",
++        (Lang::Ru, "fletcher") => "Мастерская лучника",
++        (Lang::En, "leatherworker") => "Leatherworker's workshop",
++        (Lang::Ru, "leatherworker") => "Мастерская кожевника",
++        (Lang::En, "librarian") => "Librarian's workshop",
++        (Lang::Ru, "librarian") => "Мастерская библиотекаря",
++        (Lang::En, "toolsmith") => "Toolsmith's workshop",
++        (Lang::Ru, "toolsmith") => "Мастерская инструментальщика",
++        (Lang::En, "weaponsmith") => "Weaponsmith's workshop",
++        (Lang::Ru, "weaponsmith") => "Мастерская оружейника",
+         (Lang::En, "road") => "Road",
+         (Lang::Ru, "road") => "Дорога",
+         (Lang::En, "lamp") => "Street lamp",
+diff --git a/crates/mc-core/src/villager/building_worksite_tests.rs b/crates/mc-core/src/villager/building_worksite_tests.rs
+index c84068b1..69969da1 100644
+--- a/crates/mc-core/src/villager/building_worksite_tests.rs
++++ b/crates/mc-core/src/villager/building_worksite_tests.rs
+@@ -9,7 +9,7 @@
+ //!   outside their built camps. Both prove real carry and block journaling.
+ //! * Storage: the certificate's container points are usable settlement stock:
+ //!   a real native container endpoint load succeeds at certified points.
+-//! * Wall / Tower: defensive certificate with intentionally zero worker
++//! * Wall / Tower / Gate: defensive certificate with intentionally zero worker
+ //!   slots; no invented worker type is ever assigned or claimed.
+ //! * Every level runs prepared and completed `plugin_structures::validate`
+ //!   boundaries; upgrades keep the BuildingId.
+@@ -574,25 +574,19 @@ fn farm_levels_build_claim_farmer_and_certify_bounds() {
+     }
+ }
+ 
+-#[test]
+-fn mason_levels_are_claimable_by_builder_despite_planner_role() {
++/// Every level of `blueprint` is built by the real Builder, certifies at the
++/// intended level with exactly its worker slots, and an unemployed resident
++/// organically claims one of its job sites as `profession`.
++fn workshop_levels_are_built_and_claimed(blueprint: &str, profession: VillagerProfession) {
+     let (mut state, id, builder) = site::fixture();
+-    let levels = blueprint_levels(
+-        &state,
+-        "mason",
+-        &BuildingKind::Workshop(VillagerProfession::Builder),
+-    );
++    let levels = blueprint_levels(&state, blueprint, &BuildingKind::Workshop(profession));
+     let mut bid: Option<BuildingId> = None;
+     for level in 1..=levels {
+-        build_level(&mut state, id, builder, "mason", level, bid);
+-        let (found, building) = building_of(
+-            &state,
+-            id,
+-            BuildingKind::Workshop(VillagerProfession::Builder),
+-        );
++        build_level(&mut state, id, builder, blueprint, level, bid);
++        let (found, building) = building_of(&state, id, BuildingKind::Workshop(profession));
+         assert_eq!(
+             building.level, level,
+-            "builder hut certifies at the intended level"
++            "{blueprint} certifies at the intended level"
+         );
+         if let Some(expected) = bid {
+             assert_eq!(found, expected, "the upgrade retains the BuildingId");
+@@ -601,13 +595,13 @@ fn mason_levels_are_claimable_by_builder_despite_planner_role() {
+         }
+         assert_eq!(
+             building.bounds,
+-            expected_bounds(&state, "mason", level),
++            expected_bounds(&state, blueprint, level),
+             "the certificate matches the blueprint level geometry"
+         );
+         assert_eq!(
+             building.work_points.len(),
+             job_slots(building.kind, level),
+-            "mason level {level} exposes exactly its worker slots"
++            "{blueprint} level {level} exposes exactly its worker slots"
+         );
+         delay_builder(&mut state, builder);
+         let spawn = adjacent_spawn(&state, &building.work_points);
+@@ -617,20 +611,52 @@ fn mason_levels_are_claimable_by_builder_despite_planner_role() {
+             &mut state,
+             candidate,
+             &building.work_points,
+-            VillagerProfession::Builder,
++            profession,
+             level,
+         );
+         assert!(
+             (building.bounds.min[0]..=building.bounds.max[0]).contains(&job.x)
+                 && (building.bounds.min[1]..=building.bounds.max[1]).contains(&job.y)
+                 && (building.bounds.min[2]..=building.bounds.max[2]).contains(&job.z),
+-            "the claimed builder job lies inside this level's certificate"
++            "the claimed {blueprint} job lies inside this level's certificate"
+         );
+         release_builder(&mut state, builder);
+         assert_builder_role(&state, builder);
+     }
+ }
+ 
++#[test]
++fn mason_levels_are_claimable_by_builder_despite_planner_role() {
++    workshop_levels_are_built_and_claimed("mason", VillagerProfession::Builder);
++}
++
++/// The ten workshops Builders can build for the owner: each one's job-site
++/// block is claimed by its vanilla profession at every level.
++macro_rules! workshop_claim_tests {
++    ($($name:ident => $profession:ident),+ $(,)?) => {$(
++        #[test]
++        fn $name() {
++            workshop_levels_are_built_and_claimed(
++                stringify!($name),
++                VillagerProfession::$profession,
++            );
++        }
++    )+};
++}
++
++workshop_claim_tests! {
++    armorer => Armorer,
++    butcher => Butcher,
++    cartographer => Cartographer,
++    cleric => Cleric,
++    fisherman => Fisherman,
++    fletcher => Fletcher,
++    leatherworker => Leatherworker,
++    librarian => Librarian,
++    toolsmith => Toolsmith,
++    weaponsmith => Weaponsmith,
++}
++
+ #[test]
+ fn mine_levels_build_claim_miner_and_extract_real_stone() {
+     let (mut state, id, builder) = site::fixture();
+@@ -816,10 +842,11 @@ fn storage_levels_expose_usable_native_container_load() {
+ }
+ 
+ #[test]
+-fn wall_and_tower_certify_with_intentionally_zero_worker_slots() {
++fn wall_tower_and_gate_certify_with_intentionally_zero_worker_slots() {
+     for (blueprint, kind) in [
+         ("wall", BuildingKind::Wall),
+         ("watch_tower", BuildingKind::Tower),
++        ("gate", BuildingKind::Gate),
+     ] {
+         let (mut state, id, builder) = site::fixture();
+         let levels = blueprint_levels(&state, blueprint, &kind);
+diff --git a/docs/SETTLEMENTS_GUIDE.md b/docs/SETTLEMENTS_GUIDE.md
+index 1f58e04c..cd39c8d7 100644
+--- a/docs/SETTLEMENTS_GUIDE.md
++++ b/docs/SETTLEMENTS_GUIDE.md
+@@ -10,7 +10,7 @@ Settlements are native to the core (`mc-core`), not a plugin, and tick with the
+ 2. Generated vanilla villages become ownerless settlements when their meeting bell loads. Stand inside the village and run `/settlement claim`, or press **Claim settlement** in `/settlement`. The first claim saves your UUID as owner; nobody else can claim it afterwards. Until claimed, an autonomous settlement refuses all management, even from operators. See [villages and jobs](settlements/jobs.md#autonomous-villages).
+ 3. To found your own, run `/settlement create <name> [radius]` (radius 1 to 256, default 48).
+ 4. Put real materials in settlement storage. A founded settlement starts with no stock: certify a storage building first. Generated villages start with a saved bootstrap chest. See [construction](settlements/construction.md#planning-and-streets).
+-5. Certify buildings you built (`/settlement building certify ...`), or order blueprint buildings with `/settlement build <blueprint>` or the **Projects** screen. See [construction](settlements/construction.md).
++5. Certify buildings you built (`/settlement building certify ...`), or order blueprint buildings with `/settlement build <blueprint>` or the **Projects** screen: housing, storage, production (farm, mine, lumber camp and the profession workshops), military (barracks) and fortification (wall, watchtower, gate), each upgradeable through its levels. See [construction](settlements/construction.md#blueprint-files).
+ 6. Founding or claiming automatically binds eligible unbound villagers already inside the settlement's radius. For later unbound arrivals, use `/settlement bind <name>` next to one. Open **Residents**, choose a resident, then choose an eligible workplace. Assignment records the native job; it does not mean the resident has arrived there. See [jobs](settlements/jobs.md#allocating-jobs).
+ 
+ `/settlement layout` prints the street plan of the settlement you stand in.
+diff --git a/docs/settlements/construction.md b/docs/settlements/construction.md
+index 4aa84754..b3dd73aa 100644
+--- a/docs/settlements/construction.md
++++ b/docs/settlements/construction.md
+@@ -6,9 +6,21 @@ See [jobs](jobs.md), [menus](menus.md), [breeding](breeding.md), and the [settle
+ 
+ ## Blueprint files
+ 
+-Krasnokamen owns the JSON templates in `crates/mc-core/assets/blueprints/`. The embedded catalog contains `house` levels 1–3; `storage`, `farm`, `mason`, `lumber_camp`, `mine`, `barracks`, `wall`, and `watch_tower` levels 1–2; and `shepherd` level 1. A geometric certificate can reach level 3 even when its blueprint has no corresponding upgrade.
++Krasnokamen owns the JSON templates in `crates/mc-core/assets/blueprints/`. The embedded catalog has 21 blueprints, one per building kind (`id` is the `/settlement build` argument):
+ 
+-Each file has an `id`, a building `kind`, a character-to-block-state `palette`, and `levels`. Each level contains `cert`, the certification box dimensions `[x, y, z]`; `entrance`, an `[x, y, z]` offset; and bottom-up `layers`, each made of Z rows of X characters. A dot is air. Palette states can include properties, for example `loom[facing=north]`. Each level is a complete picture, not an upgrade patch: the loader derives placements, removals, materials and rotations from it. A level must keep every container of the previous level (chest, barrel, furnace and other inventories) as the same block state; the loader refuses a level that replaces or removes one, because Builders never write over a stocked container and such an upgrade could not finish. The maximum placed dimensions are 11 × 9 × 11 blocks.
++| Category | Blueprints | Levels |
++|---|---|---|
++| Housing | `house` | 1–3 |
++| Storage | `storage` | 1–2 |
++| Production | `farm`, `mason` (the Builder hut), `lumber_camp`, `mine` | 1–2 |
++| Production, owner-ordered workshops | `armorer`, `butcher`, `cartographer`, `cleric`, `fisherman`, `fletcher`, `leatherworker`, `librarian`, `toolsmith`, `weaponsmith` | 1–2 |
++| Production, shepherd | `shepherd` | 1 |
++| Military | `barracks` | 1–3 |
++| Fortification | `wall`, `watch_tower`, `gate` | 1–3 |
++
++Each workshop is built around its profession's vanilla job-site block (blast furnace, smoker, cartography table, brewing stand, barrel, fletching table, cauldron, lectern, smithing table, grindstone), one more per level, so a resident of that profession claims it like any certified workshop. A workshop's bill includes that block, which workers do not produce (iron, flint, books, a blaze rod): stock the delivered item or its ingredients first. The gate opens one more door per level between four solid pillars; wall, tower and barracks level 3 meet the level-3 certificate dimensions below (13 × 6 wall, 10-high tower, 6 beds). A geometric certificate can reach level 3 even when its blueprint has no corresponding upgrade.
++
++Each file has an `id`, a building `kind`, a character-to-block-state `palette`, and `levels`. Each level contains `cert`, the certification box dimensions `[x, y, z]`; `entrance`, an `[x, y, z]` offset; and bottom-up `layers`, each made of Z rows of X characters. A dot is air. Palette states can include properties, for example `loom[facing=north]`. Each level is a complete picture, not an upgrade patch: the loader derives placements, removals, materials and rotations from it. A level must keep every container of the previous level (chest, barrel, furnace and other inventories) as the same block state; the loader refuses a level that replaces or removes one, because Builders never write over a stocked container and such an upgrade could not finish. The maximum placed dimensions are 13 × 11 × 11 blocks: 13 is the level-3 wall's length, which runs along its road, and a lot is at most 11 deep across the front a building turns to the road.
+ 
+ The origin is the minimum corner of the rotated **maximum footprint across all levels**. Its Y is the ground-surface block, replaced by the floor layer. Certification bounds rotate in the same frame and may be smaller than the placed footprint. Upgrades retain the origin, prepared foundation and rotation. The farm's certificate includes its field as well as its shed.
+ 
+@@ -18,7 +30,7 @@ For authoring, `tools/blueprints.py check` checks structure, `tools/blueprints.p
+ 
+ Keep the anchor, storage and worksite chunks loaded. Construction uses real items in certified storage and the generated village's bootstrap container, not player inventories. A player-founded settlement has no free stock; certify storage and stock it.
+ 
+-The planner selects one active settlement every 20 ticks. It considers missing kinds in this order: storage; houses when certified house capacity is below population; farm; lumber camp; mine; Builder hut (`mason`); barracks from 6 residents; tower from 8; wall from 10. Natural mine and lumber zones do not count as built blueprint kinds. Funded upgrades are considered for eligible blueprint-built certificates; workshops requiring iron or flint are not on this automatic list. A need without available stock or a capable local source does not conjure materials or have to block another funded kind.
++The planner selects one active settlement every 20 ticks. It considers missing kinds in this order: storage; houses when certified house capacity is below population; farm; lumber camp; mine; Builder hut (`mason`); barracks from 6 residents; tower from 8; wall from 10. Natural mine and lumber zones do not count as built blueprint kinds. The gate, the shepherd's hut and the ten profession workshops are never started autonomously; the owner orders them. Funded upgrades are considered for eligible blueprint-built certificates; workshops requiring iron or flint are not on this automatic list. A need without available stock or a capable local source does not conjure materials or have to block another funded kind.
+ 
+ An unfunded priority bill does not stop the search for funded buildings or upgrades. Its staffed extraction worker is protected from Builder recruitment for autonomous work, leaving another resident free to build; explicit owner projects retain their active-bill gathering rules. Optional street projects still wait for that priority bill.
+ 
+diff --git a/tools/blueprints.py b/tools/blueprints.py
+index f69b12ed..91d82fdc 100755
+--- a/tools/blueprints.py
++++ b/tools/blueprints.py
+@@ -19,15 +19,19 @@ from pathlib import Path
+ ROOT = Path(__file__).resolve().parent.parent
+ DIR = ROOT / "crates/mc-core/assets/blueprints"
+ OUT = ROOT / ".analysis/codex-logs/millenaire/blueprints"
+-MAX_SIZE = (11, 9, 11)
++MAX_SIZE = (13, 11, 11)
+ WOODS = ("oak", "spruce", "birch", "dark_oak")
+ WOOD_PARTS = ("planks", "log", "stairs", "slab", "fence", "fence_gate", "door", "trapdoor", "pressure_plate")
+ PLAIN = {
+     "chest", "barrel", "crafting_table", "composter", "ladder", "torch", "wall_torch", "cobblestone",
+     "cobblestone_wall", "cobblestone_stairs", "cobblestone_slab", "furnace", "hay_block", "wheat",
+     "farmland", "dirt", "stonecutter", "smithing_table", "fletching_table", "loom",
++    "blast_furnace", "smoker", "cartography_table", "brewing_stand", "cauldron", "lectern", "grindstone",
++}
++STATIONS = {
++    "stonecutter", "smithing_table", "fletching_table", "loom", "blast_furnace", "smoker",
++    "cartography_table", "brewing_stand", "cauldron", "lectern", "grindstone",
+ }
+-STATIONS = {"stonecutter", "smithing_table", "fletching_table", "loom"}
+ FREE_HALVES = (("half", "upper"), ("part", "head"))
+ 
+ 

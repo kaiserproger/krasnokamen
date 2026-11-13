@@ -291,8 +291,9 @@ python3 -m tools.harness list
 - *Owner host:* worktrees are created with `tools/dev/wt-new` under `<work>/wt/`
   and ended with `tools/dev/wt-done`; gate binaries come from
   `tools/dev/pin-release`. Heavy outputs go under
-  `<work>/targets/`, nothing new on the root disk. Keep 80-100 GB free on the
-  games disk: a finished run keeps only its reports, logs and `result.json`
+  `<work>/targets/`, nothing new on the root disk. Keep at least 250 GB free on
+  the games disk (below it `slot-gc` evicts idle slots in LRU order): a finished
+  run keeps only its reports, logs and `result.json`
   ([disk rules](docs/development/heavy-commands-and-memory.md#disk)). Use
   absolute paths in worktree commands (a relative path once corrupted the main
   checkout); never assume the cwd.

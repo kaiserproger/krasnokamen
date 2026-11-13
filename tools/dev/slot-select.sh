@@ -14,7 +14,7 @@
 # a-e are the old slot locks, so commands of the previous runner version never
 # share a dir with new ones. Existing dirs are reused before a new one is created;
 # a new dir is created only if `df` (whole GiB, rounded up) shows at least
-# KRASNOKAMEN_SLOT_MIN_FREE_GB (default 80, the owner's free-space floor) free at
+# KRASNOKAMEN_SLOT_MIN_FREE_GB (default 250, the owner's free-space floor) free at
 # selection time (after mem-run's disk-floor slot-gc, if it ran). This only stops
 # slot proliferation (12 parallel slots filled the disk on 2026-11-07); it reserves
 # nothing, and existing dirs keep growing unchecked, so it is no protection against
@@ -57,7 +57,7 @@ select_slot() {
   tree=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
   mkdir -p "$dir"
   if [ -z "$target" ]; then
-    min_free=${KRASNOKAMEN_SLOT_MIN_FREE_GB:-80}
+    min_free=${KRASNOKAMEN_SLOT_MIN_FREE_GB:-250}
     free_gb=$(df --output=avail -BG "$slots" 2>/dev/null | tail -1 | tr -dc 0-9)
     for pass in own existing new; do
       [ "$pass" = new ] && [ "${free_gb:-0}" -lt "$min_free" ] && break
