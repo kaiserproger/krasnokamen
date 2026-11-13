@@ -10,7 +10,16 @@ use rustc_hash::FxHashMap;
 
 pub(crate) const DECISION_TICKS: u64 = 10;
 pub(crate) const SECTION_SIZE: usize = 20;
-pub(crate) const STANDOFF: f64 = 4.0;
+/// Foot fronts in contact stand this close (front to front): every front-rank
+/// man has his opponent within sword reach, so the lulls between pulses are a
+/// cautious exchange at close quarters, not a stand-off out of reach.
+pub(crate) const STANDOFF: f64 = 1.6;
+/// A line closer than this gives ground.
+const GIVE_GROUND: f64 = 1.0;
+/// Foot in contact closes its ranks into a press: ranks behind the front stand
+/// this far apart instead of the two-block marching depth, so the second rank
+/// stands within striking distance of the enemy front.
+pub(crate) const PRESS_RANK_SPACING: f64 = 0.75;
 // Film lulls compress to a five-second base wait; action clocks stay human-speed.
 pub(crate) const SURGE_PROBABILITY: f64 = 0.1;
 pub(crate) const SURGE_TICKS: u64 = 200;
@@ -86,6 +95,24 @@ pub(crate) fn position(spec: &RegimentSpec, file: usize, rank: u16, interval: f6
         spec.origin[1],
         spec.origin[2] - spec.facing[0] * lateral - spec.facing[1] * f64::from(rank) * 2.0,
     ]
+}
+
+/// Foot that advances into contact presses: closed ranks, whole-file surges.
+fn presses(r: &Regiment) -> bool {
+    r.gap <= 6.0
+        && r.enemy.is_some()
+        && r.spec.frontage <= 1.0
+        && matches!(r.spec.order, Order::Advance | Order::Charge)
+        && !r.morale.broken
+}
+
+/// Formation slot of (file, rank), at the pressed depth while the regiment presses.
+fn slot_target(r: &Regiment, file: usize, rank: u16, interval: f64) -> [f64; 3] {
+    let mut target = position(&r.spec, file, 0, interval);
+    let depth = f64::from(rank) * if presses(r) { PRESS_RANK_SPACING } else { 2.0 };
+    target[0] -= r.spec.facing[0] * depth;
+    target[2] -= r.spec.facing[1] * depth;
+    target
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -755,7 +782,7 @@ impl FormationRuntime {
                         0.0
                     } else if r.gap > STANDOFF {
                         (r.gap - STANDOFF).min(0.066)
-                    } else if r.gap < 3.0 {
+                    } else if r.gap < GIVE_GROUND {
                         -0.04
                     } else {
                         0.0
@@ -913,7 +940,7 @@ impl FormationRuntime {
         }
         let engaged = r.gap <= 6.0;
         let interval = if engaged { r.interval } else { r.spec.frontage };
-        let mut target = position(&r.spec, m.file, m.rank, interval);
+        let mut target = slot_target(r, m.file, m.rank, interval);
         // The leader's height is meaningless on relief; a slot is on the
         // ground the soldier walks on.
         target[1] = m.pos[1];
@@ -927,14 +954,28 @@ impl FormationRuntime {
             target = passing_lane(m, &r.spec, target, -0.35);
         }
         let context = self.context_at(index);
-        if context.front_rank && context.pulsing && !context.wavering {
+        // A pressing file surges as one: the men behind follow their front
+        // man's pulse at the pressed depth instead of waiting in place.
+        let file_surging = presses(r)
+            && r
+                .sections
+                .get(m.file / SECTION_SIZE)
+                .is_some_and(|s| s.pulse_until > self.tick);
+        if !context.wavering && ((context.front_rank && context.pulsing) || file_surging) {
             target[0] += r.spec.facing[0] * 2.25;
             target[2] += r.spec.facing[1] * 2.25;
         } else if m.wavering {
             target[0] -= r.spec.facing[0];
             target[2] -= r.spec.facing[1];
         }
-        (target, if context.pulsing { 0.10 } else { 0.079 })
+        (
+            target,
+            if context.pulsing || file_surging {
+                0.10
+            } else {
+                0.079
+            },
+        )
     }
 
     /// Where terrain detours aim: the formation slot without lanes, pulses or
@@ -951,7 +992,7 @@ impl FormationRuntime {
         } else {
             r.spec.frontage
         };
-        position(&r.spec, m.file, m.rank, interval)
+        slot_target(r, m.file, m.rank, interval)
     }
 }
 

@@ -305,13 +305,14 @@ fn plan(seed: u64, count: usize, origin: [f64; 3], side: u16) -> Vec<(RegimentSp
         };
         result.push((spec, kind, size));
     };
-    // Fit 322 front files inside the existing ticket even at a chunk edge;
-    // mounted files remain on the flanks, just behind the shallower foot.
-    let flank = front.len().saturating_sub(1) as f64 * 23.0 + 4.0;
+    // Fit 350 front files (seven 50-file regiments, 20 ranks) inside the
+    // existing ticket even at a chunk edge (176 blocks to the near bound);
+    // mounted files remain on the flanks, just behind the foot.
+    let flank = front.len().saturating_sub(1) as f64 * 25.0 + 4.0;
     add(Kind::Cavalry, cavalry / 2, -flank, 84.0, 20);
     for (index, &(kind, size)) in front.iter().enumerate() {
-        let x = (index as f64 - (front.len() - 1) as f64 / 2.0) * 46.0;
-        add(kind, size, x, 36.0, 46);
+        let x = (index as f64 - (front.len() - 1) as f64 / 2.0) * 50.0;
+        add(kind, size, x, 36.0, 50);
     }
     let archer_regiments = archers.div_ceil(1000);
     for index in 0..archer_regiments {
