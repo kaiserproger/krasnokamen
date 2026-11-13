@@ -125,20 +125,27 @@ def load(telemetry):
         previous = s
     return result
 
+def write_overlay(telemetry_path, frames_path, out):
+    """One overlay-%06d.png per row of the frames file; `out` must not exist."""
+    telemetry = load(telemetry_path)
+    out = pathlib.Path(out)
+    out.mkdir(parents=True, exist_ok=False)
+    cached_tick = cached = None
+    for expected, frame in enumerate(rows(frames_path)):
+        if frame['frame'] != expected: raise ValueError(f'expected frame {expected}, got {frame["frame"]}')
+        tick = frame['last_applied_tick']
+        if tick not in telemetry: raise ValueError(f'frame {expected}: tick {tick} missing from telemetry')
+        if tick != cached_tick:  # consecutive frames of one tick share one image
+            cached_tick, cached = tick, render(*telemetry[tick])
+        (out / f'overlay-{expected:06d}.png').write_bytes(cached)
+
 def main():
     a = argparse.ArgumentParser(description=__doc__)
     a.add_argument('--telemetry', required=True)
     a.add_argument('--frames', required=True)
     a.add_argument('--out', required=True, help='new output directory of overlay-%%06d.png')
     args = a.parse_args()
-    telemetry = load(args.telemetry)
-    out = pathlib.Path(args.out)
-    out.mkdir(parents=True, exist_ok=False)
-    for expected, frame in enumerate(rows(args.frames)):
-        if frame['frame'] != expected: raise ValueError(f'expected frame {expected}, got {frame["frame"]}')
-        tick = frame['last_applied_tick']
-        if tick not in telemetry: raise ValueError(f'frame {expected}: tick {tick} missing from telemetry')
-        (out / f'overlay-{expected:06d}.png').write_bytes(render(*telemetry[tick]))
+    write_overlay(args.telemetry, args.frames, args.out)
 
 if __name__ == '__main__':
     main()
