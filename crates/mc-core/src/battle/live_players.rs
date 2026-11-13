@@ -577,8 +577,9 @@ fn take_front(state: &mut TickState, regiment: usize, file: usize) -> Result<[f6
 }
 
 /// A respawned holder goes back into the rank with his kit again: before
-/// start to where he was placed; once running to rank 0 of a current file of
-/// his side near its centre (`choose_slot` tiers: standing infantry first).
+/// start to where he was placed; once running to the front of the men of a
+/// current file of his side near its centre (`choose_slot` tiers: standing
+/// infantry first).
 fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<String, String> {
     let hold = state.hostile.battle.live.holds[index].clone();
     let running = state.hostile.battle.running;
@@ -603,15 +604,27 @@ fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<Stri
     let (source, kit) = (hold.kit_from, hold.kit.clone());
     let r = &state.hostile.battle.formation.regiments[regiment];
     let (at, yaw) = if running {
-        let mut at = position(&r.spec, file, 0, interval(r));
-        // Stand on the ground the file walks on.
-        at[1] = file_members(&state.hostile.battle.formation, regiment, file)
+        // Where his file's men stand, not the slot of the virtual leader:
+        // `spec.origin` walks on along the facing while men stay in melee or
+        // at the field bounds (trial-5: the holder respawned at z=1855.8, at
+        // least 1,500 blocks from every soldier the recorder saw). Front
+        // living soldier of the file, else the regiment's living centroid,
+        // else the leader's slot.
+        let formation = &state.hostile.battle.formation;
+        let front = file_members(formation, regiment, file)
             .into_iter()
-            .find_map(|m| {
-                let id = state.hostile.battle.formation.members[m].id;
-                state.entities.slot_of(id).map(|slot| state.entities.pos(slot)[1])
-            })
-            .unwrap_or(hold.at[1]);
+            .map(|m| &formation.members[m])
+            .filter(|m| m.alive && !m.wounded)
+            .min_by_key(|m| m.rank)
+            .and_then(|m| state.entities.slot_of(m.id))
+            .map(|slot| state.entities.pos(slot));
+        let mut at = front.unwrap_or_else(|| {
+            if r.live_count > 0 {
+                r.live_sum.map(|sum| sum / r.live_count as f64)
+            } else {
+                position(&r.spec, file, 0, interval(r))
+            }
+        });
         if let Placement::At(ground) =
             ground::place(&state.world, &state.registry, at, PLAYER_HALF_WIDTH, PLAYER_HEIGHT)
         {

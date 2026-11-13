@@ -214,17 +214,29 @@ fn kill(state: &mut TickState, connection: u64) {
     );
 }
 
+/// Where his file's front living soldier stands now.
+fn file_front(state: &TickState, regiment: usize, file: usize) -> [f64; 3] {
+    let formation = &state.hostile.battle.formation;
+    let front = file_members(formation, regiment, file)
+        .into_iter()
+        .map(|m| &formation.members[m])
+        .filter(|m| m.alive && !m.wounded)
+        .min_by_key(|m| m.rank)
+        .expect("a living soldier in his file");
+    state.entities.pos(state.entities.slot_of(front.id).unwrap())
+}
+
 fn assert_in_rank_with_kit(state: &TickState, player: EntityId) {
     let hold = &state.hostile.battle.live.holds[0];
     let formation = &state.hostile.battle.formation;
     let r = &formation.regiments[hold.regiment];
-    let slot = position(&r.spec, hold.file, 0, interval(r));
+    let front = file_front(state, hold.regiment, hold.file);
     let body = state.entities.slot_of(player).unwrap();
     let at = state.entities.pos(body);
-    // The leader walks at most 0.066 a tick after the placing tick.
+    // Placed on the front soldier; one tick of the soldier's walk since.
     assert!(
-        (at[0] - slot[0]).abs() < 0.25 && (at[2] - slot[2]).abs() < 0.25,
-        "{at:?} is not rank 0 of file {} at {slot:?}",
+        (at[0] - front[0]).hypot(at[2] - front[2]) < 1.0,
+        "{at:?} is not at the front of file {} ({front:?})",
         hold.file
     );
     assert_eq!(state.entities.rot(body)[0], yaw_of(r.spec.facing));
@@ -596,6 +608,34 @@ fn a_respawn_after_his_infantry_broke_takes_a_standing_line_with_the_same_kit() 
     assert_eq!((r.spec.faction, r.spec.frontage), (1, 1.0));
     assert!(!r.morale.broken);
     assert_eq!(hold.kit, kit, "the same infantry kit, not the spear line's");
+    assert_in_rank_with_kit(&state, player);
+}
+
+/// The virtual leader (`spec.origin`) walks on along the facing while men
+/// stay in melee or at the field bounds (trial-5: the holder respawned at
+/// least 1,500 blocks from every soldier the recorder saw): a respawn goes
+/// to his file's men, not to the leader's slot.
+#[test]
+fn a_respawn_goes_to_his_files_men_when_the_leader_walked_far_ahead() {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let player = ids[0];
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(&mut state, &mut changes, BattleCommand::Start).unwrap();
+    run_tick(&mut state, &[]);
+    kill(&mut state, 1);
+    run_tick(&mut state, &[]);
+    for r in &mut state.hostile.battle.formation.regiments {
+        r.spec.origin[0] += r.spec.facing[0] * 150.0;
+        r.spec.origin[2] += r.spec.facing[1] * 150.0;
+    }
+    run_tick(
+        &mut state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(1),
+        }],
+    );
+    run_tick(&mut state, &[]);
     assert_in_rank_with_kit(&state, player);
 }
 
