@@ -678,7 +678,9 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             pass  # Chain resume: keep existing residents; no population pollution.
         elif not _summon_bind(probe, sub, tag, sname, shell, 6):
             continue
-        use_dialog = bp in ("house", "barracks")
+        # Projects is a container menu now (`_project_status` reads it as one); the dialog helpers
+        # wait for a dialog screen that never opens (barracks hung to its deadline, 2026-11-13).
+        use_dialog = False
         if f"L1_origin" not in sub:
             # Chain resume: probe first — Busy/Ordered means a project is
             # already admitted (ours from an earlier link); skip re-funding
@@ -2447,25 +2449,62 @@ def _function_storage(probe: ProbeSteps, sub: dict[str, Any], tag: str, level: i
              f"container {list(target)} holds {em} emerald; main summary lists stock={listed}")
 
 
+def _building_lore(probe: ProbeSteps, name: re.Pattern[str]) -> tuple[str, list[str]] | None:
+    """(icon name, lore lines) of the first Buildings-menu icon matching `name`, or None.
+
+    `settlement menu buildings` opens the container menu `Buildings · <settlement>` (ui_menus.rs
+    filtered_buildings_screen); an icon's lore (category, `Soldiers: f/n` or `Workers: f/n`,
+    bounds) is read with `minecraft_read_item_components`."""
+    _close_any_screen(probe)
+    probe.call("minecraft_send_chat", {"message": "settlement menu buildings", "command": True})
+    state = probe.wait(lambda s: _container_titled(s, "Buildings"), "buildings_menu_open",
+                       timeout_seconds=60)
+    found = None
+    for row in state["container"]["slots"]:
+        if name.fullmatch(str(row.get("name") or "")):
+            components = probe.call("minecraft_read_item_components",
+                                    {"source": "container", "slot": int(row["slot"])})["components"]
+            found = (str(row["name"]), [_text_plain(line) for line in components.get("minecraft:lore", [])])
+            break
+    probe.call("minecraft_close_screen", {})
+    return found
+
+
+def _text_plain(value: Any) -> str:
+    """Plain text of a JSON text component (string, list, or object with extra)."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list):
+        return "".join(_text_plain(part) for part in value)
+    if isinstance(value, dict):
+        return _text_plain(value.get("text", "")) + _text_plain(value.get("extra", []))
+    return ""
+
+
+def _soldier_beds(lore: list[str]) -> tuple[int, int] | None:
+    """(filled, beds) from a barracks icon's `Soldiers: f/n` lore line."""
+    for line in lore:
+        match = re.search(r"Soldiers:\s*(\d+)\s*/\s*(\d+)", line)
+        if match:
+            return int(match.group(1)), int(match.group(2))
+    return None
+
+
 def _function_barracks(probe: ProbeSteps, sub: dict[str, Any], tag: str, level: int,
                        origin: tuple[int, int, int],
                        cells: dict[tuple[int, int, int], str], settlement: str) -> None:
-    """Capacity-gated barracks proof: Residents page
-    `#{id} Barracks L{level}: {filled}/{beds}` with beds == level*2.
-    PASS regardless of filled (recruit flow is army-qa territory)."""
-    import re as _re
-    residents = _residents_text(probe)
-    filled = beds = None
-    for line in residents:
-        m = _re.search(rf"Barracks L{level}:\s*(\d+)\s*/\s*(\d+)", line)
-        if m:
-            filled, beds = int(m.group(1)), int(m.group(2))
-            break
+    """Capacity-gated barracks proof: the Buildings menu icon `#<id> Barracks L<level>` reads
+    `Soldiers: <filled>/<beds>` with beds == level*2. PASS regardless of filled (the recruit flow
+    is army-qa territory)."""
+    found = _building_lore(probe, re.compile(rf"#\d+ Barracks L{level}"))
+    counted = _soldier_beds(found[1]) if found else None
+    filled, beds = counted if counted else (None, None)
     want = level * 2
-    ok = beds is not None and beds == want
+    ok = beds == want
+    sub[f"L{level}_barracks_icon"] = found
     probe.check(f"{tag}_L{level}_barracks", ok)
     _verdict(sub, f"L{level}_function_barracks", "PASS" if ok else "FAIL",
-             f"filled={filled} beds={beds} want_beds={want}", "settlement menu residents")
+             f"filled={filled} beds={beds} want_beds={want}", "settlement menu buildings")
 
 
 def _restart_resume(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,

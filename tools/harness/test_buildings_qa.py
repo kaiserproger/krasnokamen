@@ -93,6 +93,59 @@ class BaseMaterialsTest(unittest.TestCase):
         self.assertEqual(buildings_qa._base_materials(self.LISTING, 9), {})
 
 
+class BarracksFunctionTest(unittest.TestCase):
+    """buildings-qa 2026-11-13: the Residents dialog the old check waited for is a container menu
+    now; the soldier beds are the `Soldiers: f/n` lore of the Buildings menu icon."""
+
+    class MenuProbe:
+        def __init__(self, slots, lore):
+            self.slots, self.lore, self.calls = slots, lore, []
+            self.report = {"id": "buildings-qa", "assertions": {}}
+
+        def call(self, name, arguments=None):
+            self.calls.append((name, arguments))
+            if name == "minecraft_read_item_components":
+                return {"components": {"minecraft:lore": self.lore[arguments["slot"]]}}
+            return {}
+
+        def wait(self, predicate, label, **_):
+            state = {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": "Buildings \u00b7 bqa"},
+                     "container": {"slots": self.slots}}
+            assert predicate(state)
+            return state
+
+        def check(self, name, condition):
+            self.report["assertions"][name] = bool(condition)
+            if not condition:
+                raise RuntimeError(f"assertion failed: {name}")
+
+    def probe(self, beds):
+        slots = [{"slot": 0, "name": "#8589934593 Storage L1"},
+                 {"slot": 1, "name": "#8589934594 Barracks L2"}]
+        lore = {0: [{"text": "Storage"}],
+                1: [[{"text": "Soldiers: 0/"}, {"text": str(beds)}], {"text": "[1, 2, 3] .. [4, 5, 6]"}]}
+        return self.MenuProbe(slots, lore)
+
+    def test_the_icon_lore_gives_the_soldier_beds(self):
+        probe, sub = self.probe(4), {}
+        with mock.patch.object(buildings_qa, "_close_any_screen"):
+            buildings_qa._function_barracks(probe, sub, "buildings_barracks", 2, (0, 0, 0), {}, "bqa")
+        self.assertEqual(sub["behaviour"]["L2_function_barracks"], "PASS")
+        self.assertIn("beds=4", sub["evidence"]["L2_function_barracks"])
+
+    def test_a_wrong_bed_count_fails(self):
+        probe, sub = self.probe(2), {}
+        with mock.patch.object(buildings_qa, "_close_any_screen"):
+            with self.assertRaisesRegex(RuntimeError, "buildings_barracks_L2_barracks"):
+                buildings_qa._function_barracks(probe, sub, "buildings_barracks", 2, (0, 0, 0), {}, "bqa")
+
+    def test_a_missing_icon_reads_no_beds(self):
+        probe = self.probe(4)
+        probe.slots = probe.slots[:1]
+        with mock.patch.object(buildings_qa, "_close_any_screen"):
+            self.assertIsNone(buildings_qa._building_lore(probe, buildings_qa.re.compile(r"#\d+ Barracks L2")))
+
+
 class FakeProbe:
     """Enough of ProbeSteps for the order and admission helpers; check raises like the real one."""
 
@@ -204,7 +257,7 @@ class SequentialFlowTest(unittest.TestCase):
 
         def order(_probe, sub, tag, _bp, level, cmd, use_dialog, ctx, dialog_fn=None,
                   upgrade_bid=None):
-            events.append(("order", level))
+            events.append(("order", level, use_dialog))
             if cert_after_order:
                 certs[level] = (level, 70, level)
             return order_admitted
@@ -240,8 +293,15 @@ class SequentialFlowTest(unittest.TestCase):
         probe, sub, events = self.run_flow("gate", 3, order_admitted=True, cert_after_order=False)
         for name in ("L1_built", "L2_upgrade", "L3_upgrade"):
             self.assertEqual(sub["behaviour"].get(name), "PASS", name)
-        self.assertEqual([level for _, level in events], [1, 2, 3])
+        self.assertEqual([level for _, level, _ in events], [1, 2, 3])
         self.assertTrue(probe.report["assertions"]["buildings_gate_L3_project"])
+
+    def test_barracks_and_house_orders_never_wait_for_the_retired_projects_dialog(self):
+        # buildings-qa 2026-11-13, barracks: the dialog path waited for a screen class that the
+        # container Projects menu never opens, and ran into the 1800 s deadline.
+        for bp, top in (("barracks", 3), ("house", 3)):
+            _, _, events = self.run_flow(bp, top, order_admitted=True, cert_after_order=False)
+            self.assertEqual({dialog for _, _, dialog in events}, {False})
 
     def test_a_workshop_records_its_level_two_verdict(self):
         _, sub, _ = self.run_flow("armorer", 2, order_admitted=True, cert_after_order=False)
