@@ -152,6 +152,34 @@ fn whole_chunk_step_cooks_items_ages_items_and_spends_debt_once() {
 }
 
 #[test]
+fn whole_chunk_step_leaves_infinite_item_clocks_alone() {
+    let mut state = fixture(&[CHUNK]);
+    furnace(&mut state, CELL, 8);
+    let item_id = item(&state, "minecraft:stone");
+    let mut spawned = Vec::new();
+    state.spawn_block_loot(
+        BlockPos { x: 9, y: 100, z: 8 },
+        vec![ItemStack::new(item_id, 1)],
+        1,
+        &mut spawned,
+    );
+    let slot = state.entities.slot_of(spawned[0]).unwrap();
+    state.entities.row_mut(slot).age = crate::entities::ITEM_AGE_NEVER;
+    state.entities.body_mut(slot).pickup_delay = crate::entities::PICKUP_DELAY_NEVER;
+    owe(&mut state, &[CHUNK], 600);
+    step(&mut state);
+    assert_eq!(
+        state.entities.row(slot).age,
+        crate::entities::ITEM_AGE_NEVER
+    );
+    assert_eq!(
+        state.entities.body(slot).pickup_delay,
+        crate::entities::PICKUP_DELAY_NEVER
+    );
+    assert!(!state.merge_consumed_items.contains(&slot));
+}
+
+#[test]
 fn empty_loaded_furnace_post_load_insert_never_spends_old_debt() {
     let mut state = fixture(&[CHUNK]);
     furnace(&mut state, CELL, 0);

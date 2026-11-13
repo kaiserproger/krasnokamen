@@ -281,6 +281,16 @@ pub(crate) const PICKUP_DELAY_NEVER: u32 = 32767;
 /// vanilla short to and from it, and no lifetime step touches it.
 pub(crate) const ITEM_AGE_NEVER: u32 = u32::MAX;
 
+/// A lifetime age advanced by `elapsed` record ticks (WAL replay projection):
+/// [`ITEM_AGE_NEVER`] stays.
+pub(crate) fn advance_lifetime_age(age: u32, elapsed: u32) -> u32 {
+    if age == ITEM_AGE_NEVER {
+        age
+    } else {
+        age.wrapping_add(elapsed)
+    }
+}
+
 /// One tick of a pickup delay: it counts down to zero, except 32767, which stays.
 pub(crate) fn tick_pickup_delay(delay: u32) -> u32 {
     if delay == PICKUP_DELAY_NEVER {

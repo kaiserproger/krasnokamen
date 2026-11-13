@@ -295,6 +295,30 @@ fn built_base_downward_drop_stocks_nonfull_hopper_pair() {
 }
 
 #[test]
+fn items_with_infinite_pickup_delay_or_lifetime_do_not_merge() {
+    let (mut state, _, _) = flat_player_fixture();
+    let item = stack(&state, "dirt", 1);
+    let spawn = |state: &mut TickState, x: f64| {
+        let id = crate::tick::spawn_item_entity(state, [x, 70.0, 4.5], item.clone());
+        state.entities.slot_of(id).unwrap()
+    };
+    // The frozen items hold the lowest slots: they would be the receivers.
+    let never_pickup = spawn(&mut state, 4.5);
+    let never_age = spawn(&mut state, 4.55);
+    let first = spawn(&mut state, 4.6);
+    let second = spawn(&mut state, 4.65);
+    state.entities.body_mut(never_pickup).pickup_delay = crate::entities::PICKUP_DELAY_NEVER;
+    state.entities.row_mut(never_age).age = crate::entities::ITEM_AGE_NEVER;
+    state.tick = 20;
+    crate::item_motion::merge_neighbours(&mut state);
+    let count = |slot| state.entities.row(slot).item.as_ref().unwrap().count;
+    assert_eq!((count(never_pickup), count(never_age)), (1, 1));
+    assert!(state.entities.body(never_pickup).alive && state.entities.body(never_age).alive);
+    assert_eq!(count(first), 2, "ordinary items still merge");
+    assert!(!state.entities.body(second).alive);
+}
+
+#[test]
 fn frozen_item_merge_keeps_both_stacks() {
     let (mut state, _, _) = flat_player_fixture();
     state.gamerules.insert("spawn_mobs".into(), "false".into());

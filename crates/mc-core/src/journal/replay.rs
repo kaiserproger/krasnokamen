@@ -975,7 +975,8 @@ pub(crate) fn apply_batch_images(
                                 clock.advance_villager(villager, record.tick, *tick);
                             }
                             record.breed_cooldown = record.state.breed_cooldown;
-                            record.age = record.age.wrapping_add(elapsed as u32);
+                            record.age =
+                                crate::entities::advance_lifetime_age(record.age, elapsed as u32);
                             record.state.age = record.age;
                             record.health = *health;
                             record.appearance.health = *health;
@@ -1058,7 +1059,7 @@ pub(crate) fn advance_replay_clocks(replay: &mut Replay) {
                 villager_advanced = clock.advance_villager(villager, record.tick, replay.tick);
             }
             record.breed_cooldown = record.state.breed_cooldown;
-            record.age = record.age.wrapping_add(elapsed as u32);
+            record.age = crate::entities::advance_lifetime_age(record.age, elapsed as u32);
             record.tick = replay.tick;
             // A frozen row projects nothing and still equals its stored row.
             if elapsed != 0 || villager_advanced {

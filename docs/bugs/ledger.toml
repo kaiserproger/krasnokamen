@@ -5235,6 +5235,11 @@ source = "Owner brief (PerfEntity2, 2026-11-13) from vanilla 26.3 ItemEntity.tic
 regression = [
   "cargo:mc-core:tick::entity_phase::entity_phase_tests::item_pickup_delay_32767_never_counts_down_or_marks_the_row_changed",
   "cargo:mc-core:natural_spawn_tests::item_with_age_minus_32768_never_ages_or_expires",
-  "cargo:mc-core:command_summon::tests::item_summon_with_age_minus_32768_never_ages_and_survives_checkpoint",
+  "cargo:mc-core:command_summon::tests::item_summon_with_age_minus_32768_sets_the_never_clock",
+  "cargo:mc-core:command_summon::tests::item_never_clock_exports_as_minus_32768_in_the_checkpoint_record",
+  "cargo:mc-core:command_summon::tests::vanilla_item_age_minus_32768_imports_as_the_never_clock",
+  "cargo:mc-core:core::entity_state_persistence_tests::infinite_item_clocks_survive_anvil_import_wal_replay_and_restore",
+  "cargo:mc-core:tick_tests::item_motion_tests::items_with_infinite_pickup_delay_or_lifetime_do_not_merge",
+  "cargo:mc-core:abstract_sim_tests::whole_chunk_step_leaves_infinite_item_clocks_alone",
 ]
 failing_first = "not recorded"

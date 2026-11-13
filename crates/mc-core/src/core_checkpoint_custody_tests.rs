@@ -618,6 +618,47 @@ fn capture_failures_and_stale_acks_keep_full_custody() {
     world.checkpoint();
 }
 
+/// An item with `Age: -32768` and `PickupDelay: 32767` in an active chunk keeps both
+/// across checkpoint, WAL ticks that advance the chunk clock, and crash recovery.
+#[test]
+fn infinite_item_clocks_survive_wal_ticks_in_an_active_chunk_and_crash_recovery() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let at = [40.5, 90.0, 40.5];
+    let chunk = mc_world::ChunkPos { x: 2, z: 2 };
+    let mut item = None;
+    world.tick(|state| {
+        state.tickets.insert("custody".into(), (chunk, 0));
+        state.refresh_active_chunks(state.tick);
+        state
+            .world
+            .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+        let stone = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:stone").unwrap())
+            .unwrap();
+        let id = crate::tick::spawn_item_entity(state, at, mc_data::ItemStack::new(stone, 1));
+        let slot = slot(state, id);
+        state.entities.row_mut(slot).age = crate::entities::ITEM_AGE_NEVER;
+        state.entities.body_mut(slot).pickup_delay = crate::entities::PICKUP_DELAY_NEVER;
+        item = Some(id);
+    });
+    let uuid = uuid_of(&mut world.state, item.unwrap());
+    world.checkpoint();
+    for _ in 0..5 {
+        world.tick(|_| {});
+    }
+    let world = world.crash();
+    let slot = world.state.entities.slot_of_uuid(uuid).unwrap();
+    assert_eq!(
+        world.state.entities.row(slot).age,
+        crate::entities::ITEM_AGE_NEVER
+    );
+    assert_eq!(world.state.entities.body(slot).pickup_delay, 32767);
+}
+
 #[test]
 fn crash_after_commit_before_ack_reopens_at_the_fence() {
     let directory = tempfile::tempdir().unwrap();

@@ -101,6 +101,8 @@ pub(super) struct EntityPhaseScratch {
     pub(super) resting: Vec<EntitySlot>,
     pub(super) coreperf: Option<std::sync::Arc<crate::boundary::CorePerfTick>>,
     pub(super) rest_proofs: RestProofs,
+    /// Zombie-arms decisions of the serial writeback (capacity reused tick to tick).
+    pub(super) arms: Vec<Option<(EntityId, i8)>>,
 }
 
 /// Memo of the idle-rest physics proof ([`idle_wander_motion_unchanged`]).
@@ -1389,6 +1391,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         mut resting,
         coreperf: _,
         mut rest_proofs,
+        mut arms,
     } = std::mem::take(&mut state.entity_phase_scratch);
     periods.resize(state.entities.len(), 0);
     rest_proofs.begin(state.entities.len(), state.entity_phase_revision);
@@ -1585,6 +1588,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             resting,
             coreperf,
             rest_proofs,
+            arms,
         };
         return Vec::new();
     }
@@ -1794,7 +1798,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     // and no other row's writeback touches this row's appearance or id, so the
     // decision equals the in-loop one. Removal path: call `set_zombie_aggressive`
     // per row as the small-population path below does.
-    let arms: Vec<Option<(EntityId, i8)>> = if ordered.len() >= PARALLEL_PREP_MIN {
+    if ordered.len() >= PARALLEL_PREP_MIN {
         use rayon::prelude::*;
         let (entities, registry, targets) =
             (&state.entities, &*state.registry, &state.hostile.targets);
@@ -1810,10 +1814,10 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
                         || targets.contains_key(&entities.body(write.slot).id),
                 )
             })
-            .collect()
+            .collect_into_vec(&mut arms);
     } else {
-        Vec::new()
-    };
+        arms.clear();
+    }
     for (index, entry) in ordered.drain(..).enumerate() {
         let Some((write, mut raw)) = entry else {
             continue;
@@ -1976,6 +1980,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         resting,
         coreperf,
         rest_proofs,
+        arms,
     };
     let _ = tick;
     intents
