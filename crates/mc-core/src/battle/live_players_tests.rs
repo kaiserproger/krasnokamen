@@ -228,7 +228,7 @@ fn assert_in_rank_with_kit(state: &TickState, player: EntityId) {
     );
     assert_eq!(state.entities.rot(body)[0], yaw_of(r.spec.facing));
     assert!(state.entities.body(body).alive);
-    let (_, kit) = kit_of(state, hold.regiment, hold.file).unwrap();
+    let kit = hold.kit.clone();
     let inventory = &state.players[&player].inventory;
     let selected = usize::from(inventory.selected);
     for (equipment, stack) in kit.iter().enumerate() {
@@ -337,6 +337,36 @@ fn a_rejoin_after_start_only_rearms() {
     let reply = command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
     assert!(reply.starts_with("Battle live rearmed: PovRed "), "{reply}");
     assert_eq!(state.entities.pos(body), before);
+}
+
+#[test]
+fn a_respawn_after_his_infantry_broke_takes_a_standing_line_with_the_same_kit() {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let player = ids[0];
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    let kit = state.hostile.battle.live.holds[0].kit.clone();
+    command(&mut state, &mut changes, BattleCommand::Start).unwrap();
+    run_tick(&mut state, &[]);
+    kill(&mut state, 1);
+    run_tick(&mut state, &[]);
+    // Every red infantry line breaks while he is dead.
+    let infantry = state.hostile.battle.live.holds[0].regiment;
+    state.hostile.battle.formation.regiments[infantry].morale.broken = true;
+    run_tick(
+        &mut state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(1),
+        }],
+    );
+    run_tick(&mut state, &[]);
+    let hold = state.hostile.battle.live.holds[0].clone();
+    assert_ne!(hold.regiment, infantry, "a standing line, not the broken one");
+    let r = &state.hostile.battle.formation.regiments[hold.regiment];
+    assert_eq!((r.spec.faction, r.spec.frontage), (1, 1.0));
+    assert!(!r.morale.broken);
+    assert_eq!(hold.kit, kit, "the same infantry kit, not the spear line's");
+    assert_in_rank_with_kit(&state, player);
 }
 
 #[test]

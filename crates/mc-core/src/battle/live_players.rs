@@ -34,6 +34,10 @@ pub(crate) struct Hold {
     /// Where the holder was placed before start, and his yaw.
     pub at: [f64; 3],
     pub yaw: f32,
+    /// The kit taken from his file's soldier at placement, given again on
+    /// every respawn and rejoin wherever the rank puts him.
+    pub kit: [Option<ItemStack>; 6],
+    pub kit_from: uuid::Uuid,
     /// The holder was seen dead and is placed again when he respawns.
     pub dead: bool,
     pub deaths: u32,
@@ -116,7 +120,12 @@ pub(crate) fn update(state: &mut TickState) {
             state.hostile.battle.live.holds[index].dead = false;
             match reenter(state, index, player) {
                 Ok(line) => tracing::info!("{line}"),
-                Err(error) => tracing::warn!("Battle live respawn not placed: {error}"),
+                Err(error) => {
+                    // Not left bare: the kit again where the respawn put him.
+                    let kit = state.hostile.battle.live.holds[index].kit.clone();
+                    equip(state, player, &kit);
+                    tracing::warn!("Battle live respawn not placed (kit restored): {error}");
+                }
             }
         }
     }
@@ -157,15 +166,22 @@ fn interval(r: &Regiment) -> f64 {
     }
 }
 
-/// A regiment that can take a holder: `side`'s sword-and-shield foot line
-/// (not spear, archer or mounted), and once running still standing.
-fn infantry(state: &TickState, regiment: &Regiment, side: u16, running: bool) -> bool {
+/// A regiment that can take a holder in `tier`: 0 is `side`'s sword-and-shield
+/// foot line (not spear, archer or mounted); 1 any foot line; 2 a broken foot
+/// line that still has men. Before start only tier 0 exists; once running a
+/// line must still have men, and tiers 0 and 1 must not be broken.
+fn eligible(state: &TickState, regiment: &Regiment, side: u16, tier: u8) -> bool {
     let spec = &regiment.spec;
     if spec.faction != side || spec.order == Order::Hold || spec.frontage != 1.0 {
         return false;
     }
-    if running && (regiment.live_count == 0 || regiment.morale.broken) {
+    if state.hostile.battle.running
+        && (regiment.live_count == 0 || (tier < 2 && regiment.morale.broken))
+    {
         return false;
+    }
+    if tier > 0 {
+        return true;
     }
     let formation = &state.hostile.battle.formation;
     let trident = mc_data::Identifier::parse("minecraft:trident".to_owned())
@@ -184,16 +200,16 @@ fn infantry(state: &TickState, regiment: &Regiment, side: u16, running: bool) ->
     })
 }
 
-/// The front-rank file nearest the centre of `side`'s foot line, among
-/// infantry files nobody else holds (`keep` is the caller's own hold, which
-/// stays eligible).
+/// The front-rank file nearest the centre of `side`'s foot line, among files
+/// nobody else holds (`keep` is the caller's own hold, which stays eligible),
+/// in the first tier that has one: standing infantry, then (once running) any
+/// standing foot line, then any foot line with men left.
 fn choose_slot(
     state: &TickState,
     side: u16,
     keep: Option<(usize, usize)>,
 ) -> Result<(usize, usize), String> {
     let formation = &state.hostile.battle.formation;
-    let running = state.hostile.battle.running;
     let foot: Vec<usize> = (0..formation.regiments.len())
         .filter(|&i| {
             let spec = &formation.regiments[i].spec;
@@ -208,25 +224,43 @@ fn choose_slot(
         [sum[0] + origin[0], sum[1] + origin[2]]
     });
     let centre = [centre[0] / foot.len() as f64, centre[1] / foot.len() as f64];
-    let mut best: Option<(f64, usize, usize)> = None;
-    for &i in &foot {
-        let r = &formation.regiments[i];
-        if !infantry(state, r, side, running) {
-            continue;
-        }
-        for file in 0..usize::from(r.spec.files).min(r.len) {
-            if formation.held.contains(&(i, file)) && keep != Some((i, file)) {
+    let tiers = if state.hostile.battle.running { 0..3 } else { 0..1 };
+    for tier in tiers {
+        let mut best: Option<(f64, usize, usize)> = None;
+        for &i in &foot {
+            let r = &formation.regiments[i];
+            if !eligible(state, r, side, tier) {
                 continue;
             }
-            let pos = position(&r.spec, file, 0, interval(r));
-            let distance = (pos[0] - centre[0]).powi(2) + (pos[2] - centre[1]).powi(2);
-            if best.is_none_or(|(d, _, _)| distance < d) {
-                best = Some((distance, i, file));
+            for file in 0..usize::from(r.spec.files).min(r.len) {
+                if formation.held.contains(&(i, file)) && keep != Some((i, file)) {
+                    continue;
+                }
+                let pos = position(&r.spec, file, 0, interval(r));
+                let distance = (pos[0] - centre[0]).powi(2) + (pos[2] - centre[1]).powi(2);
+                if best.is_none_or(|(d, _, _)| distance < d) {
+                    best = Some((distance, i, file));
+                }
             }
         }
+        if let Some((_, i, file)) = best {
+            return Ok((i, file));
+        }
     }
-    best.map(|(_, i, file)| (i, file))
-        .ok_or_else(|| format!("no free infantry front-rank file on side {side}"))
+    let lines: Vec<String> = foot
+        .iter()
+        .map(|&i| {
+            let r = &formation.regiments[i];
+            format!(
+                "{}:live={},broken={}",
+                r.spec.id, r.live_count, r.morale.broken
+            )
+        })
+        .collect();
+    Err(format!(
+        "no free front-rank file on side {side} (foot lines {})",
+        lines.join(" ")
+    ))
 }
 
 /// Members of one file, front to back in staging order.
@@ -348,15 +382,15 @@ pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<Strin
         None => choose_slot(state, side, None)?,
     };
     let spec = state.hostile.battle.formation.regiments[regiment].spec;
-    let (source, kit) =
-        kit_of(state, regiment, file).ok_or("held regiment has no soldier left to copy")?;
     keep_inventory(state);
-    let (at, yaw) = match existing {
+    let (at, yaw, source, kit) = match existing {
         Some(index) => {
             let hold = &state.hostile.battle.live.holds[index];
-            (hold.at, hold.yaw)
+            (hold.at, hold.yaw, hold.kit_from, hold.kit.clone())
         }
         None => {
+            let (source, kit) =
+                kit_of(state, regiment, file).ok_or("held regiment has no soldier left to copy")?;
             let at = take_front(state, regiment, file)?;
             let yaw = yaw_of(spec.facing);
             state.hostile.battle.formation.held.push((regiment, file));
@@ -367,10 +401,12 @@ pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<Strin
                 file,
                 at,
                 yaw,
+                kit: kit.clone(),
+                kit_from: source,
                 dead: false,
                 deaths: 0,
             });
-            (at, yaw)
+            (at, yaw, source, kit)
         }
     };
     let slots = equip(state, player, &kit);
@@ -420,10 +456,9 @@ fn take_front(state: &mut TickState, regiment: usize, file: usize) -> Result<[f6
     Ok(at)
 }
 
-/// A respawned holder goes back into the rank: before start to where he was
-/// placed; once running to rank 0 of a current infantry file of his side
-/// near its centre (his own file while its regiment still stands), with the
-/// kit again.
+/// A respawned holder goes back into the rank with his kit again: before
+/// start to where he was placed; once running to rank 0 of a current file of
+/// his side near its centre (`choose_slot` tiers: standing infantry first).
 fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<String, String> {
     let hold = state.hostile.battle.live.holds[index].clone();
     let running = state.hostile.battle.running;
@@ -445,8 +480,7 @@ fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<Stri
         moved.regiment = regiment;
         moved.file = file;
     }
-    let (source, kit) =
-        kit_of(state, regiment, file).ok_or("held regiment has no soldier left to copy")?;
+    let (source, kit) = (hold.kit_from, hold.kit.clone());
     let r = &state.hostile.battle.formation.regiments[regiment];
     let (at, yaw) = if running {
         let mut at = position(&r.spec, file, 0, interval(r));
