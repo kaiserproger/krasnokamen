@@ -184,10 +184,17 @@ fn live_player_takes_the_centre_infantry_slot_with_its_kit() {
     assert_eq!(state.entities.rot(body)[0], 0.0);
     let line = slot_position(&regiment.spec, hold.file);
     assert!((hold.at[0] - line[0]).abs() < 1e-9 && (hold.at[2] - line[2]).abs() < 1e-9);
-    // Nearest the centre of the red foot line: no foot front file is closer.
     // Nearest the centre of the red foot line (infantry left of the spears,
-    // their seam on the origin): the infantry file next to the seam.
-    assert!((hold.at[0] - ORIGIN[0]).abs() <= 1.0, "{:?}", hold.at);
+    // their seam on the origin): the infantry file nearest the seam. The
+    // regiments stand one fighting width apart (staging), so that file need
+    // not be within a block of it.
+    let from_seam = |file| (slot_position(&regiment.spec, file)[0] - ORIGIN[0]).abs();
+    for file in 0..usize::from(regiment.spec.files) {
+        assert!(
+            from_seam(file) >= from_seam(hold.file),
+            "file {file} is nearer the seam"
+        );
+    }
     for m in &formation.members {
         let Some(slot) = state.entities.slot_of(m.id) else {
             continue;
