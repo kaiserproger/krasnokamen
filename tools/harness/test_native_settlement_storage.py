@@ -13,6 +13,30 @@ from .backends import native_settlement_storage as storage
 
 
 class SettlementStorageLegTests(unittest.TestCase):
+    def test_storage_route_uses_physical_dashboard_controls(self) -> None:
+        leg = mock.Mock()
+        result = storage._open_storage_from_dashboard(leg)
+        self.assertEqual(leg.mock_calls, [
+            mock.call.main("main_dialog_storage"),
+            mock.call.button("Settlement", "main_settlement"),
+            mock.call.menu("Settlement", "settlement_dashboard_open"),
+            mock.call.slot(16, "dashboard_resources"),
+            mock.call.menu("Resources", "resources_open"),
+            mock.call.slot(52, "resources_storage"),
+            mock.call.menu("Storage · storeqa", "storage_menu_open"),
+        ])
+        self.assertEqual(result, leg.menu.return_value)
+
+    def test_resident_card_requires_named_chest_screen(self) -> None:
+        state = {"screen": {"class": storage.CONTAINER, "title": "Resident · Anna"},
+                 "container": {"menu_class": "net.minecraft.world.inventory.ChestMenu", "slot_count": 90}}
+        self.assertTrue(storage.in_resident_card(state))
+        state["screen"]["title"] = "Residents / households"
+        self.assertFalse(storage.in_resident_card(state))
+        state["screen"]["title"] = "Resident · Anna"
+        state["container"]["slot_count"] = 63
+        self.assertFalse(storage.in_resident_card(state))
+
     def test_lore_flattens_text_components(self) -> None:
         components = {"minecraft:lore": [
             {"text": "In storage: 70", "italic": False, "color": "gray"},
@@ -77,7 +101,10 @@ class SettlementStorageLegTests(unittest.TestCase):
         steps = leg.steps
         leg.menu.return_value = {"container": {"slots": [{"slot": 0, "name": "#2 Farmer workshop"}]}}
         leg.components.return_value = {}
-        leg.wait.side_effect = RuntimeError("stop after refresh")
+        def wait(_predicate: object, label: str, *args: object, **kwargs: object) -> None:
+            if label == "ready_for_level_2":
+                raise RuntimeError("stop after refresh")
+        leg.wait.side_effect = wait
         with self.assertRaisesRegex(RuntimeError, "stop after refresh"):
             storage._building(leg, 2, ["a", "b"], (196, 77, -445))
         calls = leg.mock_calls

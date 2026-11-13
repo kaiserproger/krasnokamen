@@ -8,8 +8,8 @@ and the windowed non-operator peer `StorageGuest` (`steps.client.storage_guest`)
 
 Evidence classes:
 - fixture, recorded in `fixture_commands` and never counted as behaviour:
-  settlement create, setblock, certify, give/clear, summon/bind, tp, time and
-  gamerules, and stocking the chests through the vanilla chest menu;
+  settlement create, fill/setblock, certify, give/clear, summon/bind, tp, time and
+  gamerules, temporary resident cages, and stocking the chests through the vanilla chest menu;
 - owner behaviour: physical XTest pointer and keyboard input into the owned Xvfb
   window (left, right and Shift click, Escape, wheel) on dialog buttons and menu
   slots located by the client's own `ui_nodes` bounds; dialogs are entered by
@@ -22,19 +22,18 @@ Evidence classes:
   received by the client, and lore through `minecraft_read_item_components`.
 
 Scenario (counts are asserted against received state after every move):
-1. storage: 70 cobblestone in two chests and 5 bread show one icon per kind.
+1. storage, reached physically through Settlement → Resources: 70 cobblestone in two chests and 5 bread show one icon per kind.
    Shift withdraws a stack, a left click takes the rest onto the cursor, a grid
    click stores it, Shift on the own stack stores 64, a right click takes half
    the bread and Escape returns it to the inventory. The real chests,
    inventory and cursor always hold exactly 70 + 5; the bread is stored back.
 2. negative controls: a full inventory refuses Shift-withdraw with a chat line
-   and moves nothing; the non-owner guest sees a view-only menu and its
-   withdraw, Shift and assignment clicks are refused with the owner/operator
-   message while nothing moves.
+   and moves nothing; the non-owner guest sees a view-only menu, receives refusal
+   messages on both withdrawals, and cannot open assignment or change the job.
 3. Assign crafts: resident -> farmer workshop assigns the first resident; the
    second is refused with "No free work place".
-4. building page (Buildings -> Icons -> workshop): the worker fills place 1 and
-   the icon lists next-level needs; Upgrade is refused while a workstation is
+4. building page (Settlement → Buildings → workshop): the worker fills place 1 and
+   the icon lists next-level needs; certificate recheck is refused while a workstation is
    missing; after a second composter (fixture) it upgrades to L2 and the free
    place hires the second resident.
 5. map click, only when the VillageMap Map button and dialog link nodes exist:
@@ -272,6 +271,12 @@ def in_menu(state: dict[str, Any], title: str) -> bool:
             and state["container"]["slot_count"] == MENU_SLOTS)
 
 
+def in_resident_card(state: dict[str, Any]) -> bool:
+    return (screen(state)[0] == CONTAINER and screen(state)[1].startswith("Resident · ")
+            and state["container"]["menu_class"] == "net.minecraft.world.inventory.ChestMenu"
+            and state["container"]["slot_count"] == MENU_SLOTS)
+
+
 class Leg:
     """One owner session: physical input, ordered chat markers and receipts."""
 
@@ -358,11 +363,22 @@ class Leg:
         self.input.click(center(found))
 
     def dialog(self, title: str, label: str) -> dict[str, Any]:
-        return self.wait(lambda s: screen(s)[0] == DIALOG and screen(s)[1].startswith(title), label)
+        return self.wait(lambda s: screen(s)[0] in (DIALOG, "net.minecraft.client.gui.screens.dialog.SimpleDialogScreen")
+                         and screen(s)[1].startswith(title), label)
 
     def main(self, label: str) -> dict[str, Any]:
         self.steps.call("minecraft_send_chat", {"message": "settlement", "command": True})
         return self.dialog(f"Settlement {NAME}", label)
+
+    def dashboard(self, label: str) -> dict[str, Any]:
+        self.main(f"{label}_hub")
+        self.button("Settlement", f"{label}_settlement")
+        return self.menu("Settlement", f"{label}_dashboard")
+
+    def residents(self, label: str) -> dict[str, Any]:
+        self.dashboard(label)
+        self.slot(14, f"{label}_residents")
+        return self.menu("Residents / households", f"{label}_census")
 
     def escape(self, label: str) -> dict[str, Any]:
         self.input.tap("Escape")
@@ -422,8 +438,6 @@ def _scenario(leg: Leg, guest: Any, origin: tuple[int, int, int]) -> None:
     home = (ox + 0.5, float(y0), oz + 0.5)
     for rule in ("gamerule advance_time false", "gamerule spawn_mobs false",
                  "gamerule random_tick_speed 0", "time set 10000"):
-        # Day time 10000 is outside the 2000..9000 window in which residents
-        # claim job sites on their own: only the menu assigns them.
         steps.fixture(rule)
     # No soil around the town: free street work (planner) needs grass/dirt road
     # columns and may make an unemployed resident a Builder, which this gate's
@@ -481,8 +495,20 @@ def _scenario(leg: Leg, guest: Any, origin: tuple[int, int, int]) -> None:
     _guest_assign(leg, guest)
     _building(leg, short, residents, station_2)
     _map(leg, short)
+    steps.fixture(f"fill {ox - 1} {y0} {oz - 10} {ox + 3} {y0 + 3} {oz - 8} minecraft:air")
+    _block(steps, {"x": ox - 1, "y": y0, "z": oz - 10}, "minecraft:air")
     _jobs(leg, residents, (station_1, station_2))
     leg.shot("final")
+
+
+def _open_storage_from_dashboard(leg: Leg) -> dict[str, Any]:
+    leg.main("main_dialog_storage")
+    leg.button("Settlement", "main_settlement")
+    leg.menu("Settlement", "settlement_dashboard_open")
+    leg.slot(16, "dashboard_resources")
+    leg.menu("Resources", "resources_open")
+    leg.slot(52, "resources_storage")
+    return leg.menu(f"Storage · {NAME}", "storage_menu_open")
 
 
 def _storage(leg: Leg, chest_a: tuple[int, int, int], chest_b: tuple[int, int, int],
@@ -495,9 +521,7 @@ def _storage(leg: Leg, chest_a: tuple[int, int, int], chest_b: tuple[int, int, i
             here = stocked(state, item) + own(state, item) + carried(state, item)
             steps.check(f"{label}_{item.split(':')[1]}_conserved", here == total)
 
-    leg.main("main_dialog_storage")
-    leg.button("Storage", "main_storage")
-    state = leg.menu(title, "storage_menu_open")
+    state = _open_storage_from_dashboard(leg)
     cobble, bread = icon(state, COBBLE), icon(state, BREAD)
     steps.check("storage_icons_one_per_kind", cobble is not None and bread is not None
                 and icon_total(cobble) == 70 and cobble["count"] == 70
@@ -639,6 +663,12 @@ def _assign(leg: Leg, origin: tuple[int, int, int],
                             "Certified farmer", "farmer_certified")
     short = short_id(int(re.search(r"#(\d+)", certified).group(1)))
     detail["workshop"] = {"certificate": certified, "short": short}
+    # Natural POI acquisition runs at any hour. Enclose the residents until the
+    # physical assignment and hire checks finish, then release them for work.
+    steps.fixture(f"fill {ox - 1} {y0} {oz - 10} {ox + 3} {y0 + 3} {oz - 8} minecraft:obsidian")
+    for x in (ox, ox + 2):
+        steps.fixture(f"fill {x} {y0} {oz - 9} {x} {y0 + 1} {oz - 9} minecraft:air")
+    _block(steps, {"x": ox, "y": y0, "z": oz - 9}, "minecraft:air")
     known = {str(row.get("entity_uuid")) for row in _villagers(steps)}
     for x in (ox + 0.5, ox + 2.5):
         steps.fixture(f"summon minecraft:villager {x:.1f} {y0:.1f} {oz - 8.5:.1f}")
@@ -649,11 +679,9 @@ def _assign(leg: Leg, origin: tuple[int, int, int],
         leg.command(f"settlement bind {NAME} {resident}", f"Bound {resident}", f"bound_{resident[:8]}")
     workshop = f"#{short} Farmer workshop L1"
 
-    leg.main("main_dialog_assign")
-    leg.button("Assign crafts", "main_assign_crafts")
-    state = leg.menu(f"Residents · {NAME}", "residents_menu_open")
+    state = leg.residents("assign")
     order: list[str] = []
-    for slot in range(2):
+    for slot in range(9, 11):
         text = lore(leg.components(slot))
         match = next((line[3:] for line in text if line.startswith("id ")), None)
         order.append(next(resident for resident in fresh if match and resident.replace("-", "").startswith(match)))
@@ -662,7 +690,9 @@ def _assign(leg: Leg, origin: tuple[int, int, int],
     detail["residents"] = order
     leg.shot("residents")
 
-    leg.slot(0, "pick_first_resident")
+    leg.slot(9, "pick_first_resident")
+    leg.wait(in_resident_card, "first_resident_card")
+    leg.slot(52, "assign_first_craft")
     state = leg.wait(lambda s: screen(s)[0] == CONTAINER and screen(s)[1].startswith("Workplace for "),
                      "workplaces_for_first")
     steps.check("workshop_offered", slot_row(state, 0).get("name") == workshop
@@ -670,9 +700,13 @@ def _assign(leg: Leg, origin: tuple[int, int, int],
     marker = leg.mark("assign_first")
     leg.slot(0, "assign_first")
     leg.said(marker, f"is assigned to {workshop}", "first_assigned")
-    leg.menu(f"Residents · {NAME}", "back_to_residents")
+    leg.wait(in_resident_card, "first_resident_after_assignment")
+    leg.slot(BACK, "first_back_to_census")
+    leg.menu("Residents / households", "back_to_residents")
 
-    leg.slot(1, "pick_second_resident")
+    leg.slot(10, "pick_second_resident")
+    leg.wait(in_resident_card, "second_resident_card")
+    leg.slot(52, "assign_second_craft")
     state = leg.wait(lambda s: screen(s)[1].startswith("Workplace for "), "workplaces_for_second")
     steps.check("second_sees_full_workshop",
                 "No free work place with a workstation here." in lore(leg.components(0)))
@@ -680,14 +714,13 @@ def _assign(leg: Leg, origin: tuple[int, int, int],
     leg.slot(0, "assign_second_refused")
     leg.said(marker, "No free work place with a workstation here.", "second_refused_full")
     leg.slot(BACK, "back_from_workplaces")
-    leg.menu(f"Residents · {NAME}", "residents_again")
-    text = lore(leg.components(0))
+    leg.wait(in_resident_card, "second_resident_after_refusal")
+    leg.slot(BACK, "second_back_to_census")
+    leg.menu("Residents / households", "residents_again")
+    text = lore(leg.components(9))
     steps.check("first_resident_works_at_workshop", f"Works at {workshop}" in text)
-    steps.check("second_resident_still_free", "No workplace" in lore(leg.components(1)))
-    leg.slot(BACK, "back_to_main_dialog")
-    leg.dialog(f"Settlement {NAME}", "back_closed_menu_opened_main")
-    leg.input.tap("Escape")
-    leg.wait(lambda s: not (s.get("screen") or {}).get("open"), "main_dialog_closed")
+    steps.check("second_resident_still_free", "No workplace" in lore(leg.components(10)))
+    leg.escape("census_closed")
     return short, order
 
 
@@ -697,15 +730,20 @@ def _guest_assign(leg: Leg, guest: Any) -> None:
         state = peer.wait(lambda s: screen(s)[0] == DIALOG and screen(s)[1].startswith(f"Settlement {NAME}"),
                           "guest_main_dialog", timeout_seconds=UI_WAIT)
         peer.call("minecraft_click_screen_button", {
-            "expected_screen_class": DIALOG, "expected_title": screen(state)[1], "button_label": "Assign crafts"})
-        peer.wait(lambda s: in_menu(s, f"Residents · {NAME}"), "guest_residents_open", timeout_seconds=UI_WAIT)
-        before = peer.observe()["recent_chat"]
-        peer.call("minecraft_click_container_slot", {"slot": 1, "button": "primary",
+            "expected_screen_class": DIALOG, "expected_title": screen(state)[1], "button_label": "Settlement"})
+        peer.wait(lambda s: in_menu(s, "Settlement"), "guest_dashboard", timeout_seconds=UI_WAIT)
+        peer.call("minecraft_click_container_slot", {"slot": 14, "button": "primary",
                                                      "timeout_seconds": peer.remaining()})
-        peer.wait(lambda s: sum(DENIED in line for line in s["recent_chat"])
-                  > sum(DENIED in line for line in before), "guest_assign_denied", timeout_seconds=UI_WAIT)
+        peer.wait(lambda s: in_menu(s, "Residents / households"), "guest_residents_open", timeout_seconds=UI_WAIT)
+        peer.call("minecraft_click_container_slot", {"slot": 10, "button": "primary",
+                                                     "timeout_seconds": peer.remaining()})
+        peer.wait(in_resident_card, "guest_resident_card", timeout_seconds=UI_WAIT)
+        peer.call("minecraft_click_container_slot", {"slot": 52, "button": "primary",
+                                                     "timeout_seconds": peer.remaining()})
         state = peer.observe()
-        peer.check("guest_stays_on_residents", in_menu(state, f"Residents · {NAME}"))
+        peer.check("guest_cannot_open_assignment", in_resident_card(state))
+        components = peer.call("minecraft_read_item_components", {"source": "container", "slot": 4})["components"]
+        peer.check("guest_did_not_assign_resident", "No workplace" in lore(components))
         peer.call("minecraft_close_screen")
         peer.wait(lambda s: s["container"]["container_id"] == 0, "guest_residents_closed", timeout_seconds=UI_WAIT)
 
@@ -713,10 +751,8 @@ def _guest_assign(leg: Leg, guest: Any) -> None:
 def _building(leg: Leg, short: int, residents: list[str], station: tuple[int, int, int]) -> None:
     steps, detail = leg.steps, leg.detail
     first, second = (resident.replace("-", "")[:8] for resident in residents)
-    leg.main("main_dialog_buildings")
-    leg.button("Buildings", "main_buildings")
-    leg.dialog(f"Buildings - {NAME}", "buildings_dialog")
-    leg.button("Icons", "buildings_icons")
+    leg.dashboard("buildings")
+    leg.slot(12, "dashboard_buildings")
     state = leg.menu(f"Buildings · {NAME}", "buildings_menu_open")
     workshop = next(row for row in state["container"]["slots"]
                     if row.get("slot", PAGE) < PAGE and str(row.get("name", "")).startswith(f"#{short} Farmer workshop"))
@@ -727,13 +763,17 @@ def _building(leg: Leg, short: int, residents: list[str], station: tuple[int, in
     detail["workshop_l1_lore"] = needs
     steps.check("next_level_needs_listed", "Level 2 needs:" in needs and "- workstations 1/2" in needs)
     steps.check("first_worker_in_place_one", f"id {first}" in lore(leg.components(BUILDING_PLACES)))
-    steps.check("upgrade_button_offered", slot_row(state, BUILDING_UPGRADE).get("name") == "Upgrade to level 2")
+    steps.check("upgrade_button_offered", slot_row(state, BUILDING_UPGRADE).get("name") == "Recheck certificate L2")
     leg.shot("workshop-l1")
 
-    marker = leg.mark("upgrade_refused")
     leg.slot(BUILDING_UPGRADE, "upgrade_while_missing")
-    leg.said(marker, f"Cannot upgrade #{short}. Missing: workstations 1/2.", "upgrade_refused")
-    steps.check("refused_upgrade_keeps_level", in_menu(steps.observe(), page))
+    leg.dialog("Buildings", "upgrade_review_missing")
+    leg.button("Recheck certificate L2", "confirm_upgrade_missing")
+    leg.wait(lambda s: screen(s)[1] == "Buildings" and any(
+        f"Cannot upgrade #{short}. Missing: workstations 1/2." in str(node.get("label", ""))
+        for node in nodes(s).values()), "upgrade_refused_missing_workstation")
+    leg.button("Back", "back_after_refusal")
+    leg.menu(page, "refused_upgrade_keeps_level")
 
     steps.fixture(f"setblock {station[0]} {station[1]} {station[2]} minecraft:composter")
     steps.call("minecraft_wait_for_block_state", {
@@ -743,9 +783,13 @@ def _building(leg: Leg, short: int, residents: list[str], station: tuple[int, in
     leg.slot(BUILDING_ICON, "refresh_workshop")
     leg.wait(lambda s: in_menu(s, page) and "Ready for level 2" in lore(leg.components(BUILDING_ICON)),
              "ready_for_level_2")
-    marker = leg.mark("upgrade")
     leg.slot(BUILDING_UPGRADE, "upgrade_to_2")
-    leg.said(marker, f"Building #{short} upgraded to level 2.", "upgraded")
+    leg.dialog("Buildings", "upgrade_review_ready")
+    leg.button("Recheck certificate L2", "confirm_upgrade")
+    leg.wait(lambda s: screen(s)[1] == "Buildings" and any(
+        f"Building #{short} upgraded to level 2." in str(node.get("label", ""))
+        for node in nodes(s).values()), "upgrade_confirmed")
+    leg.button("Back", "back_after_upgrade")
     page = f"#{short} Farmer workshop L2"
     state = leg.menu(page, "workshop_l2_page")
     steps.check("free_place_after_upgrade", slot_row(state, BUILDING_PLACES + 1).get("name") == "Free work place")
@@ -832,10 +876,8 @@ def _jobs(leg: Leg, residents: list[str], stations: tuple[tuple[int, int, int], 
     for pos in stations:
         _block(steps, dict(zip("xyz", pos)), "minecraft:composter")
     steps.check("composters_kept", True)
-    leg.main("main_dialog_jobs")
-    leg.button("Assign crafts", "main_assign_after_work")
-    leg.menu(f"Residents · {NAME}", "residents_after_work")
-    for slot in range(2):
+    leg.residents("jobs")
+    for slot in range(9, 11):
         steps.check(f"resident_{slot}_shown_as_farmer", "Farmer" in lore(leg.components(slot)))
     leg.shot("farmers")
     leg.escape("residents_after_work_closed")

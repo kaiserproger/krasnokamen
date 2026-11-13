@@ -661,10 +661,10 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
             _shutil.rmtree(_dst)
         _shutil.copytree(_src, _dst)
     (artifact / "plugins").mkdir(parents=True, exist_ok=True)
-    # The second player is an operator only so it can teleport into the village;
-    # the claim itself stays the ordinary player command.
+    # The second player uses teleport; the owner-order fixture also teleports
+    # its primary player. Claims still use the ordinary player command.
     if not civilization:
-        prepare_operator_fixture(ctx, [SECOND_USERNAME])
+        prepare_operator_fixture(ctx, [SECOND_USERNAME, *([USERNAME] if owner_order else [])])
     evidence = ctx.client_evidence
     with binary.open("rb") as server_executable:
         server_hash = hashlib.file_digest(server_executable, "sha256").hexdigest()
@@ -864,11 +864,9 @@ def _pending_dialog(state: dict[str, Any]) -> dict[str, Any]:
 
 
 def _owner_projects(probe: ProbeSteps, detail: dict[str, Any], key: str, artifact: Path) -> dict[str, Any]:
-    state = _send(probe, "settlement menu projects")
-    probe.check(f"{key}_projects_open", (state.get("screen") or {}).get("class") == DIALOG_CLASS)
+    state = _project_status(probe, lambda: native_client.capture(probe.client, artifact, key))
     observed = _pending_dialog(state)
     detail[key] = observed
-    native_client.capture(probe.client, artifact, key)
     return observed
 
 
@@ -921,7 +919,12 @@ def _owner_order_before_restart(probe: ProbeSteps, detail: dict[str, Any], artif
         r"anchor=\[(-?\d+),\s*(-?\d+),\s*(-?\d+)\]", line))), None)
     probe.check("settlement_anchor", match is not None)
     anchor = tuple(int(match.group(i)) for i in range(1, 4))
-    probe.call("minecraft_navigate_to_block", {"x": anchor[0], "y": anchor[1], "z": anchor[2]})
+    # The reported anchor is not guaranteed to be a standable path target.
+    # Navigation is not under test in this operator-assisted order fixture.
+    probe.fixture(f"tp @s {anchor[0] + 2.5} {anchor[1] + 1} {anchor[2] + 0.5}")
+    probe.wait(lambda s: abs(float(s["player"]["x"]) - (anchor[0] + 2.5)) < 0.6
+               and abs(float(s["player"]["z"]) - (anchor[2] + 0.5)) < 0.6,
+               "owner_at_anchor", timeout_seconds=30.0)
     probe.call("minecraft_wait_ticks", {"ticks": 100})
     detail["founding_chest"] = list(_founding_storage(probe, anchor))
     claim = _recent_chat(_send(probe, "settlement claim"), 20)
@@ -931,8 +934,7 @@ def _owner_order_before_restart(probe: ProbeSteps, detail: dict[str, Any], artif
     detail["queued_chat"] = queued
     probe.check("house_queued_unfunded", bool(queued) and queued[0].startswith("Queued house: not enough:"))
     pending = _owner_projects(probe, detail, "pending_before_restart", artifact)
-    probe.check("pending_before_restart", "Pending: House L1" in pending["body"] and bool(pending["missing"]))
-    probe.call("minecraft_close_screen", {})
+    probe.check("pending_before_restart", "Pending: House L1 — waiting for materials" in pending["body"])
 
 
 def _new_chat_lines(previous: list[str], current: list[str]) -> list[str]:
@@ -948,8 +950,7 @@ def _owner_order_after_restart(
     server: subprocess.Popen[Any], log_path: Path,
 ) -> None:
     pending = _owner_projects(probe, detail, "pending_after_restart", artifact)
-    probe.check("pending_survives_restart", "Pending: House L1" in pending["body"] and bool(pending["missing"]))
-    probe.call("minecraft_close_screen", {})
+    probe.check("pending_survives_restart", "Pending: House L1 — waiting for materials" in pending["body"])
     previous = _recent_chat(probe.observe(), 20)
     chest = tuple(detail["founding_chest"])
     # Exact authored L1 base bill plus bounded dirt for real site preparation.
@@ -1001,16 +1002,14 @@ def _owner_order_after_restart(
     native_client.capture(probe.client, artifact, "owner-order-started")
     queued = _recent_chat(_send(probe, "settlement build farm"), 20)
     detail["second_queued_chat"] = queued
-    probe.check("second_order_queued", bool(queued) and queued[0].startswith("Queued farm:"))
+    probe.check("second_order_queued_busy", bool(queued) and queued[0].startswith("Queued farm: busy"))
     pending = _owner_projects(probe, detail, "second_pending", artifact)
-    probe.check("second_pending_unfunded", "Pending: Farm L1" in pending["body"] and bool(pending["missing"]))
-    probe.call("minecraft_close_screen", {})
+    probe.check("second_pending_busy", "Pending: Farm L1" in pending["body"] and "busy" in pending["body"])
     cancelled = _recent_chat(_send(probe, "settlement build cancel"), 20)
     detail["cancel_chat"] = cancelled
     probe.check("order_cancelled", bool(cancelled) and cancelled[0] == "Cancelled pending construction order.")
     pending = _owner_projects(probe, detail, "after_cancel", artifact)
     probe.check("pending_gone_after_cancel", not pending["pending"])
-    probe.call("minecraft_close_screen", {})
 
 
 def _nearest_loaded_waypoint(probe: ProbeSteps, target: tuple[float, float, float]) -> tuple[int, int, int] | None:

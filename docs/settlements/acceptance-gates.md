@@ -12,7 +12,7 @@ The primary player is not an operator. In the isolated QA world, spawn protectio
 
 ## Owner order
 
-`village-owner-order-qa` uses a fresh seed-100 world. It claims the village and checks an unfunded House L1 order and its missing-material dialog before and after restart. The harness then uses bounded console `item replace block` fixtures in the founding chest to fund construction, checks the new start notification and project status, and checks cancellation of a second queued order. This supplied-material scenario is not proof of autonomous material production.
+`village-owner-order-qa` uses a fresh seed-100 world and an operator teleport fixture near the generated anchor; it does not prove navigation to the bell. It claims the village and checks an unfunded House L1 order and its waiting-for-materials status before and after restart. The harness then uses bounded console `item replace block` fixtures in the founding chest to fund construction, checks the new start notification and project status, and checks the busy reason and cancellation of a second queued order. This supplied-material scenario is not proof of autonomous material production.
 
 ## Civilization observation
 

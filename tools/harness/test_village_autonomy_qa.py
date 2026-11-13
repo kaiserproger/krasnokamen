@@ -843,6 +843,17 @@ class OwnerOrderScenarioTests(unittest.TestCase):
         ])
         self.assertFalse(qa._pending_dialog({"ui_nodes": []})["pending"])
 
+    def test_owner_projects_observes_current_status_dialog(self) -> None:
+        probe, detail = Mock(), {}
+        state = {"ui_nodes": [{"id": "dialog/body/0", "label": "Pending: Farm L1 — busy"}]}
+        with patch.object(qa, "_project_status", return_value=state) as status, \
+             patch.object(qa, "_send", return_value=state), \
+             patch.object(qa.native_client, "capture"):
+            observed = qa._owner_projects(probe, detail, "farm", Path("/receipt"))
+        status.assert_called_once()
+        self.assertEqual(observed["body"], "Pending: Farm L1 — busy")
+        self.assertEqual(detail["farm"], observed)
+
     def test_only_fresh_started_chat_can_certify_admission(self) -> None:
         old = ["Queued house: not enough: wool", "Started house construction."]
         self.assertEqual(qa._new_chat_lines(old, old), [])
