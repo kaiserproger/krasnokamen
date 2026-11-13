@@ -578,6 +578,10 @@ pub struct BattleCounts {
     /// Of those, the fighters in the fight loop (guard, windup or recovery
     /// from a blow) whom the combat decision pass lets strike.
     pub fighting: u32,
+    /// Shield bearers holding the shield up after the last running tick.
+    pub shields_raised: u32,
+    /// Shield blocks (`ShieldBlock` events) on the last running tick.
+    pub shield_blocks: u32,
 }
 
 /// Immutable world state after a tick. Shared read-only; never mutated after

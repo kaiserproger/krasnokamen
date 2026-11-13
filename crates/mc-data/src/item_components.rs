@@ -759,8 +759,12 @@ impl RawAttackRange {
     }
 }
 
+/// Vanilla `minecraft:attack_range` default `max_reach` (blocks): the value of
+/// a component that omits it, and the reach of an item without the component.
+pub const DEFAULT_ATTACK_MAX_REACH: f32 = 3.0;
+
 const fn default_attack_max_reach() -> f32 {
-    3.0
+    DEFAULT_ATTACK_MAX_REACH
 }
 
 const fn default_attack_creative_max_reach() -> f32 {

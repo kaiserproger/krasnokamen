@@ -69,12 +69,7 @@ impl Weapon {
     pub const fn cycle(self) -> u16 {
         2 * self.windup() + 1
     }
-    pub const fn reach(self) -> f64 {
-        match self {
-            Self::Spear => 3.5,
-            _ => 2.5,
-        }
-    }
+    /// Mace and axe blows stagger a parrying shield less than a sword or a spear.
     const fn stagger(self) -> u64 {
         if matches!(self, Self::Mace) { 12 } else { 18 }
     }
@@ -103,6 +98,10 @@ pub(super) enum Action {
 pub(super) struct Fighter {
     pub(super) action: Action,
     pub(super) weapon: Weapon,
+    /// Strike reach (blocks, centre to centre): `max_reach` of the held item's
+    /// vanilla `minecraft:attack_range` component, else the vanilla default.
+    /// Classified with the weapon when the held item changes.
+    pub(super) reach: f64,
     equipment: Option<(Option<u32>, Option<u32>, u32)>,
     shield: bool,
     /// Last shield pose handed to presentation; `None` until first decided.
@@ -124,6 +123,7 @@ impl Default for Fighter {
         Self {
             action: Action::Guard { until: 0 },
             weapon: Weapon::Sword,
+            reach: f64::from(mc_data::item_components::DEFAULT_ATTACK_MAX_REACH),
             equipment: None,
             shield: false,
             raised: None,
@@ -156,6 +156,10 @@ pub struct Work {
     /// Of those, the ones in the fight loop: the decision pass may let them
     /// strike and they stand guard, wind up or recover from a blow.
     pub fighting: u64,
+    /// Shield bearers holding the shield up after this tick's actions.
+    pub shields_raised: u64,
+    /// Shield blocks (`ShieldBlock` events) this tick.
+    pub shield_blocks: u64,
 }
 
 #[derive(Debug, Default)]
@@ -232,9 +236,15 @@ fn classify(frame: &Frame<'_>, slot: EntitySlot, fighter: &mut Fighter, ranged: 
         return;
     }
     fighter.equipment = Some(key);
-    let name = item
-        .and_then(|id| frame.registry.items.name_of(id))
-        .map_or("", |id| id.as_str());
+    let held = item.and_then(|id| frame.registry.items.name_of(id));
+    let name = held.map_or("", |id| id.as_str());
+    fighter.reach = f64::from(
+        held.and_then(|name| frame.registry.item_facts.get(name))
+            .and_then(|facts| facts.attack_range)
+            .map_or(mc_data::item_components::DEFAULT_ATTACK_MAX_REACH, |range| {
+                range.max_reach
+            }),
+    );
     fighter.weapon = if ranged {
         Weapon::Bow
     } else if name.ends_with("spear") || name.ends_with("trident") {
@@ -254,6 +264,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
     let mut combat = std::mem::take(&mut battle.combat);
     combat.work = Work::default();
     combat.strikes.clear();
+    let events_before = out.events.len();
     combat.prepare(&battle.columns.ids);
     // Ordered execution columns avoid per-fighter hash lookups.
     for bi in 0..battle.columns.ids.len() {
@@ -308,18 +319,15 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
     for &(actor, target, weapon, start) in &strikes {
         if super::live_players::is_holder(battle, target) {
             // As for a soldier target: wounded or parried since the windup, no blow.
-            let able = frame
+            let reach = frame
                 .entities
                 .slot_of(actor)
                 .and_then(|slot| battle.columns.index(slot))
-                .is_some_and(|bi| {
-                    !matches!(
-                        combat.fighters[bi].action,
-                        Action::Wounded | Action::Stagger { .. }
-                    )
-                });
-            if able {
-                super::live_players::blow(frame, battle, out, actor, target, weapon.reach());
+                .map(|bi| &combat.fighters[bi])
+                .filter(|f| !matches!(f.action, Action::Wounded | Action::Stagger { .. }))
+                .map(|f| f.reach);
+            if let Some(reach) = reach {
+                super::live_players::blow(frame, battle, out, actor, target, reach);
             }
             continue;
         }
@@ -371,7 +379,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         if soldier.is_some() {
             combat.work.target_checks += 1;
         }
-        let reach = fighter.weapon.reach();
+        let reach = fighter.reach;
         let soldier =
             soldier.and_then(|target| super::retained_enemy(frame.entities, slot, target, reach));
         // A living network player of the other side in reach is one more
@@ -427,6 +435,10 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
     }
     count_fighting(frame, battle, &mut combat);
     raise_shields(battle, &mut combat, out);
+    combat.work.shield_blocks = out.events[events_before..]
+        .iter()
+        .filter(|event| matches!(event, EntityEvent::ShieldBlock { .. }))
+        .count() as u64;
     battle.combat = combat;
 }
 
@@ -461,7 +473,7 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
             if fighter.weapon == Weapon::Bow {
                 continue;
             }
-            let reach = fighter.weapon.reach();
+            let reach = fighter.reach;
             let in_reach = columns.targets[bi].is_some_and(|t| t.distance <= reach)
                 || grid
                     .nearest_enemy(
@@ -514,8 +526,10 @@ pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &m
 }
 
 /// A shield bearer standing guard in order holds the shield up; a swing, a
-/// parried stagger, a wound or a rout lowers it. Only transitions leave here.
+/// parried stagger, a wound or a rout lowers it. Only transitions leave here;
+/// the raised count is telemetry.
 fn raise_shields(battle: &BattleState, combat: &mut CombatRuntime, out: &mut Output) {
+    let mut shields_raised = 0;
     for bi in 0..battle.columns.ids.len() {
         if !battle.columns.active[bi] || battle.columns.carried[bi] {
             continue;
@@ -524,11 +538,13 @@ fn raise_shields(battle: &BattleState, combat: &mut CombatRuntime, out: &mut Out
         let raised = fighter.shield
             && matches!(fighter.action, Action::Guard { .. })
             && !context(battle, bi).is_some_and(|c| c.routing);
+        shields_raised += u64::from(raised);
         if fighter.raised != Some(raised) {
             fighter.raised = Some(raised);
             out.shields.push((battle.columns.ids[bi], raised));
         }
     }
+    combat.work.shields_raised = shields_raised;
 }
 
 fn react_blocks(
@@ -638,7 +654,7 @@ fn strike(
         return;
     };
     combat.work.target_checks += 1;
-    if super::retained_enemy(frame.entities, slot, target, weapon.reach()).is_none()
+    if super::retained_enemy(frame.entities, slot, target, combat.fighters[actor_bi].reach).is_none()
         || matches!(
             combat.fighters[actor_bi].action,
             Action::Wounded | Action::Stagger { .. }

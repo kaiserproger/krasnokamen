@@ -1493,8 +1493,8 @@ fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() 
         battle.formation.finish_preparation();
         targeting::update(&frame, &mut battle);
         combat::step(&frame, &mut battle, &mut out);
-        // red[3] (2.5 diagonally), red[4] (2.5), red[5] (1.5) and blue are in
-        // sword reach on every tick, with or without a target acquired yet.
+        // red[3] (2.5 diagonally), red[4] (2.5), red[5] (1.5) and blue are within
+        // the default 3-block reach on every tick, with or without a target yet.
         assert_eq!(battle.combat.work.in_weapon_reach, 4, "tick {tick}");
     }
     assert_eq!(
