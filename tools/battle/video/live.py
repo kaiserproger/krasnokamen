@@ -104,17 +104,20 @@ def marker_shift(walls, anchors, telemetry_clock):
 
 
 def grid_ticks(walls, frames60, anchors, telemetry_clock, shift):
-    """Tick of every frame of the clip after `fps=60`: slot i is i/60 s after the first captured frame."""
+    """Tick of every frame of the clip after `fps=60`: slot i is i/60 s after the first captured frame.
+
+    Frames the telemetry does not cover (a recorder that outlives the take) get None; the caller refuses an
+    excerpt that contains one, so no tick is ever invented.
+    """
+    known = set(telemetry_clock[1])
     out = []
     for i in range(frames60):
         wall = walls[0] + i * 10**9 // FPS
         tick = tick_at(telemetry_clock, wall + host_minus_laptop(anchors['clock'], wall))
         shifted = None if tick is None else tick + shift
-        out.append(shifted)
-    ticks = set(telemetry_clock[1])
-    for i, t in enumerate(out):
-        if t is None or t not in ticks:
-            raise ValueError(f'clip frame {i}: tick {t} is not in the telemetry')
+        out.append(shifted if shifted in known else None)
+    if all(t is None for t in out):
+        raise ValueError('no frame of the clip is covered by the telemetry')
     return out
 
 

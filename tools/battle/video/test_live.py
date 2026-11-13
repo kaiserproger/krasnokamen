@@ -83,6 +83,24 @@ class LiveMap(unittest.TestCase):
             self.assertFalse(report['anchored'])
             self.assertIn(why, report['reason'])
 
+    def test_frames_past_the_end_of_the_telemetry_have_no_tick(self):
+        # 20 s of telemetry (400 ticks), clip frame 0 at tick 1020: frame 1140 (19 s) is the last covered one.
+        (self.dir / 'c.anchors.json').write_text(json.dumps(anchors(markers=[{'event': 'e', 'server_tick': 1030, 'captured_frame': 30}])))
+        ticks, report = live.anchor(self.dir / 'c.anchors.json', self.dir / 'c.ffmpeg.log', 1500, telemetry_clock())
+        self.assertTrue(report['anchored'], report)
+        covered = [i for i, t in enumerate(ticks) if t is not None]
+        self.assertEqual(covered[0], 0)
+        self.assertTrue(all(t is None for t in ticks[covered[-1] + 1:]))
+        self.assertLess(covered[-1], 1500 - 100)
+        self.assertEqual(covered, list(range(covered[-1] + 1)))
+
+    def test_panel_label_is_a_parameter(self):
+        sample = {'tick': 5, 'wall_us': 1000, 'host': None}
+        default = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None)
+        live_label = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, label='LIVE SERVER TELEMETRY')
+        self.assertNotEqual(default, live_label)
+        self.assertEqual(default, overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, label='REPLAY TELEMETRY'))
+
     def test_uncovered_clip_is_unanchored_not_estimated(self):
         # Offset puts the clip 20 s before the first telemetry tick.
         ticks, report = self.write(anchors(offset=-LAPTOP_AHEAD_NS - 21 * 10**9,
@@ -122,6 +140,14 @@ class LiveInEdit(unittest.TestCase):
         g = compose.build_filter([120, 60], 0, '1080p', '/tmp/t.txt', None, trims=[30, 0], ends=[150, None])
         self.assertIn('[0:v]fps=60,trim=start_frame=30:end_frame=150,setpts=PTS-STARTPTS,scale', g)
         self.assertIn('[1:v]fps=60,scale', g)
+
+    def test_caption_is_drawn_for_the_whole_video_when_given(self):
+        plain = compose.build_filter([120, 60], 0, '1080p', '/tmp/t.txt', None)
+        captioned = compose.build_filter([120, 60], 0, '1080p', '/tmp/t.txt', None, caption_file='/tmp/c.txt')
+        self.assertEqual(plain.count('drawtext'), 1)
+        self.assertEqual(captioned.count('drawtext'), 2)
+        self.assertIn("textfile='/tmp/c.txt'", captioned)
+        self.assertNotIn("between(t,0,3)", captioned.split('/tmp/c.txt')[1].split('drawtext')[0])
 
 
 if __name__ == '__main__':

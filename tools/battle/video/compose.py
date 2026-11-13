@@ -175,7 +175,7 @@ def escape_filter_path(path):
     return path.replace('\\', '\\\\').replace(':', '\\:').replace("'", "'\\\\\\''").replace(',', '\\,').replace('[', '\\[').replace(']', '\\]')
 
 
-def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5, fade_out=1.0, trims=None, ends=None):
+def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5, fade_out=1.0, trims=None, ends=None, caption_file=None):
     """Filter graph for inputs: shots 0..N-1, overlay PNG sequence N, music N+1 (optional).
 
     `lengths` are the visible frames per shot; `trims[i]` frames are cut off the head of input i and,
@@ -217,7 +217,11 @@ def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5,
         video += f'fade=t=out:st={seconds-fade_out:.6f}:d={fade_out},'
     parts.append(f'{video.rstrip(",")}[faded]')
     parts.append(f'[{n}:v]format=rgba,scale=iw*{panel}:ih*{panel}:flags=neighbor[panel]')
-    parts.append('[faded][panel]overlay=x=W-w-32:y=32:alpha=straight:eof_action=endall,'
+    caption = ''
+    if caption_file:  # persistent honest label, e.g. what the footage is and how many soldiers it shows
+        caption = (f"drawtext=fontfile={FONT}:textfile='{escape_filter_path(caption_file)}':expansion=none:"
+                   f"fontcolor=white:fontsize={26*panel}:box=1:boxcolor=black@0.55:boxborderw={8*panel}:x={32*panel}:y=h-th-{32*panel},")
+    parts.append('[faded][panel]overlay=x=W-w-32:y=32:alpha=straight:eof_action=endall,' + caption +
                  f"drawtext=fontfile={FONT}:textfile='{title}':expansion=none:"
                  f"fontcolor=white:fontsize={48*panel}:x=(w-text_w)/2:y=h*0.78:enable='between(t,0,3)',"
                  'scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,'
@@ -227,7 +231,7 @@ def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5,
     return ';'.join(parts)
 
 
-def encode_command(shot_files, overlay_pattern, music, lengths, crossfade, resolution, title_file, output, trims=None, ends=None):
+def encode_command(shot_files, overlay_pattern, music, lengths, crossfade, resolution, title_file, output, trims=None, ends=None, caption_file=None):
     total = sum(lengths) - (len(lengths) - 1) * crossfade
     cmd = ['ffmpeg', '-hide_banner', '-nostdin', '-n', '-filter_complex_threads', '1']
     for path in shot_files:
@@ -235,7 +239,7 @@ def encode_command(shot_files, overlay_pattern, music, lengths, crossfade, resol
     cmd += ['-framerate', str(FPS), '-i', overlay_pattern]
     if music:
         cmd += ['-stream_loop', '-1', '-i', music]
-    cmd += ['-filter_complex', build_filter(lengths, crossfade, resolution, title_file, music, trims=trims, ends=ends), '-map', '[v]']
+    cmd += ['-filter_complex', build_filter(lengths, crossfade, resolution, title_file, music, trims=trims, ends=ends, caption_file=caption_file), '-map', '[v]']
     if music:
         cmd += ['-map', '[audio]']
     # Half a frame of slack: -t drops packets at pts >= t, so exactly `total` frames survive.
@@ -255,36 +259,49 @@ def probe_frames(path):
     return int(out)
 
 
+_PROBE60 = {}
+_ANCHORS = {}
+
+
 def probe_frames60(path):
-    """Frames of a clip after `fps=60`, as the montage filter graph sees it."""
-    err = subprocess.run(['ffmpeg', '-hide_banner', '-nostdin', '-i', str(path), '-vf', f'fps={FPS}', '-an', '-f', 'null', '-'],
-                         check=True, capture_output=True, text=True).stderr
-    counts = re.findall(r'frame=\s*(\d+)', err)
-    if not counts:
-        raise ValueError(f'{path}: could not count frames')
-    return int(counts[-1])
+    """Frames of a clip after `fps=60`, as the montage filter graph sees it (cached per file: aliases share a recording)."""
+    key = str(pathlib.Path(path).resolve())
+    if key not in _PROBE60:
+        err = subprocess.run(['ffmpeg', '-hide_banner', '-nostdin', '-i', str(path), '-vf', f'fps={FPS}', '-an', '-f', 'null', '-'],
+                             check=True, capture_output=True, text=True).stderr
+        counts = re.findall(r'frame=\s*(\d+)', err)
+        if not counts:
+            raise ValueError(f'{path}: could not count frames')
+        _PROBE60[key] = int(counts[-1])
+    return _PROBE60[key]
 
 
 def load_live(shot, args, telemetry_clock):
     """(ticks of the excerpt, head, end, full frames, report) of a live clip on the 60 fps grid.
 
     Anchored: START/END are take seconds, the excerpt is the frames whose tick is in
-    [first_tick + START*20, first_tick + END*20). Unanchored: the whole clip, no ticks (START/END only order it).
+    [first_tick + START*20, first_tick + END*20) and every frame of it must have a tick. Unanchored: the whole
+    clip, no ticks (START/END only order it).
     """
     if not args.frames_dir or not args.shots_dir:
         raise ValueError(f'{shot.name}: live shots need --frames-dir (NAME.anchors.json, NAME.ffmpeg.log) and --shots-dir (NAME.mp4)')
     full = probe_frames60(pathlib.Path(args.shots_dir) / f'{shot.name}.mp4')
-    ticks, report = live.anchor(pathlib.Path(args.frames_dir) / f'{shot.name}.anchors.json',
-                                pathlib.Path(args.frames_dir) / f'{shot.name}.ffmpeg.log', full, telemetry_clock)
+    anchors_path = (pathlib.Path(args.frames_dir) / f'{shot.name}.anchors.json').resolve()
+    log_path = (pathlib.Path(args.frames_dir) / f'{shot.name}.ffmpeg.log').resolve()
+    if (anchors_path, log_path, full) not in _ANCHORS:  # aliases of one recording share the (slow) tick grid
+        _ANCHORS[(anchors_path, log_path, full)] = live.anchor(anchors_path, log_path, full, telemetry_clock)
+    ticks, report = _ANCHORS[(anchors_path, log_path, full)]
     if ticks is None:
         return [None] * full, 0, full, full, report
     lo = args.first_tick + round(shot.start * TICKS_PER_SECOND)
     hi = args.first_tick + round(shot.end * TICKS_PER_SECOND)
-    head = next((i for i, t in enumerate(ticks) if t >= lo), full)
-    end = next((i for i, t in enumerate(ticks) if t >= hi), full)
-    if end - head < 1 or ticks[0] > lo or ticks[-1] < hi - 1:
-        raise ValueError(f'{shot.name}: clip covers ticks {ticks[0]}..{ticks[-1]}, shots.txt wants {lo}..{hi}')
-    return ticks[head:end], head, end, full, report
+    head = next((i for i, t in enumerate(ticks) if t is not None and t >= lo), full)
+    end = next((i for i, t in enumerate(ticks) if t is not None and t >= hi), full)
+    excerpt = ticks[head:end]
+    if end - head < 1 or None in excerpt or ticks[head] > lo + 1 or excerpt[-1] < hi - 2:
+        raise ValueError(f'{shot.name}: excerpt of ticks {excerpt[0] if excerpt else None}..{excerpt[-1] if excerpt else None} '
+                         f'does not cover shots.txt {lo}..{hi} with telemetry ticks')
+    return excerpt, head, end, full, report
 
 
 def load_shots(args):
@@ -350,6 +367,8 @@ def main():
     b.add_argument('--music', help='licensed audio file; without it the video has no audio track')
     b.add_argument('--resolution', choices=('1080p', '4k'), required=True)
     b.add_argument('--output', required=True)
+    b.add_argument('--caption-file', help='UTF-8 text file drawn bottom-left for the whole video (what the footage is)')
+    b.add_argument('--panel-label', default='REPLAY TELEMETRY', help='panel header after the tick, e.g. "LIVE SERVER TELEMETRY" (max ~22 characters)')
     a = p.parse_args()
     shots, ticks, sources, reports = load_shots(a)
     for name, report in reports.items():
@@ -387,11 +406,11 @@ def main():
     write_map(rows, work / 'edit.frames.jsonl')
     (work / 'live-anchors.json').write_text(json.dumps(reports, indent=1) + '\n')
     import overlay
-    overlay.write_overlay(a.telemetry, work / 'edit.frames.jsonl', work / 'overlay')
+    overlay.write_overlay(a.telemetry, work / 'edit.frames.jsonl', work / 'overlay', label=a.panel_label)
     subprocess.run(encode_command(shot_files, str(work / 'overlay' / 'overlay-%06d.png'), a.music,
                                   [len(t) for t in ticks], a.crossfade_frames, a.resolution, a.title_file, a.output,
                                   trims=[s['head'] for s in sources],
-                                  ends=[s['end'] for s in sources]),
+                                  ends=[s['end'] for s in sources], caption_file=a.caption_file),
                    check=True)
 
 

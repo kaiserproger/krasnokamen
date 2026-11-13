@@ -63,10 +63,10 @@ def line(p, x0, y0, x1, y1, color):
 def graph_y(value, maximum):
     return 172-round(min(max(value, 0), maximum)*100/maximum)
 
-def render(sample, history, cpu, steal, memory):
+def render(sample, history, cpu, steal, memory, label='REPLAY TELEMETRY'):
     p = bytearray(W*H*4)
     rect(p, 0, 0, W, H, (7, 16, 28, 205))
-    text(p, 12, 10, f"TICK #{sample['tick']}  REPLAY TELEMETRY", scale=2)
+    text(p, 12, 10, f"TICK #{sample['tick']}  {label}", scale=2)
     ms = sample['wall_us']/1000
     tps = history[-1][1]
     text(p, 12, 32, f"MSPT {ms:.1f}  TPS {tps:.1f}" if tps is not None else f"MSPT {ms:.1f}  TPS N/A")
@@ -134,7 +134,7 @@ def render_unanchored():
     return png(p)
 
 
-def write_overlay(telemetry_path, frames_path, out):
+def write_overlay(telemetry_path, frames_path, out, label='REPLAY TELEMETRY'):
     """One overlay-%06d.png per row of the frames file; `out` must not exist."""
     telemetry = load(telemetry_path)
     out = pathlib.Path(out)
@@ -147,7 +147,7 @@ def write_overlay(telemetry_path, frames_path, out):
             if not frame.get('unanchored'): raise ValueError(f'frame {expected}: no tick and not marked unanchored')
         elif tick not in telemetry: raise ValueError(f'frame {expected}: tick {tick} missing from telemetry')
         if tick != cached_key:  # consecutive frames of one tick share one image
-            cached_key, cached = tick, render_unanchored() if tick is None else render(*telemetry[tick])
+            cached_key, cached = tick, render_unanchored() if tick is None else render(*telemetry[tick], label=label)
         (out / f'overlay-{expected:06d}.png').write_bytes(cached)
 
 def main():
@@ -155,8 +155,9 @@ def main():
     a.add_argument('--telemetry', required=True)
     a.add_argument('--frames', required=True)
     a.add_argument('--out', required=True, help='new output directory of overlay-%%06d.png')
+    a.add_argument('--label', default='REPLAY TELEMETRY', help='panel header after the tick')
     args = a.parse_args()
-    write_overlay(args.telemetry, args.frames, args.out)
+    write_overlay(args.telemetry, args.frames, args.out, label=args.label)
 
 if __name__ == '__main__':
     main()
