@@ -138,6 +138,8 @@ _PROFILE_VERDICTS = {
     # Building verdicts use "<blueprint>.<behaviour>" below.
     'buildings-qa': ('buildings_acceptance', frozenset()),
 }
+# One blueprint's real-builder run: L1..LN built, block-matched and exercised (buildings-qa `--timeout-seconds`).
+BLUEPRINT_RUN_SECONDS = 1800
 _PROFILE_OVERRIDES = {
     'buildings-qa': ('BUILDINGS_QA_SELECT', 'BUILDINGS_QA_KEEP_WORLD',
                      'BUILDINGS_QA_STOP_AFTER_ORDER'),
@@ -174,8 +176,15 @@ def _profile_command(profile, verdict):
     if not valid:
         raise ValueError(f'unknown verdict {profile}:{verdict}')
     client, tail = _PROFILE_VERDICT_RUN.get((profile, verdict), ('native', []))
-    return [sys.executable, '-m', 'tools.harness', 'run', profile,
-            '--client', client, '--windowed', *_PROFILE_RUN_OPTIONS.get(profile, []), *tail]
+    command = [sys.executable, '-m', 'tools.harness', 'run', profile,
+               '--client', client, '--windowed', *_PROFILE_RUN_OPTIONS.get(profile, []), *tail]
+    if profile == 'buildings-qa' and verdict != 'all':
+        # A blueprint verdict is one blueprint's run: the default `ALL` run builds nine blueprints under one
+        # 600 s deadline and can never pass. The select reaches the child through argv, never the caller's
+        # environment (partial-profile overrides there stay forbidden).
+        blueprint = verdict.partition('.')[0]
+        return ['env', f'BUILDINGS_QA_SELECT={blueprint}', *command, '--timeout-seconds', str(BLUEPRINT_RUN_SECONDS)]
+    return command
 
 
 def _check_command(profile, check):
@@ -335,6 +344,26 @@ class ReceiptNotPassed(RuntimeError):
         self.receipt = receipt
 
 
+def _attach_failed_scenario(receipt, artifact):
+    """A failed profile run leaves `details.scenario` out of result.json, but its probe wrote the
+    same report to `<artifact>/<probe>/scenario.json` on the way out. The verdicts recorded before
+    the failing assertion (village-qa writes `miner_deposit` before its aggregate `all_behaviours_pass`)
+    are what name a failed run red for one verdict. The run's own artifact only; nothing is guessed
+    when the probe wrote no single report."""
+    details = receipt.get('details')
+    if not isinstance(details, dict) or 'scenario' in details:
+        return
+    reports = list(Path(artifact).glob('*/scenario.json'))
+    if len(reports) != 1:
+        return
+    try:
+        report = json.loads(reports[0].read_text())
+    except ValueError:
+        return
+    if isinstance(report, dict):
+        details['scenario'] = report
+
+
 def _client_receipt(ctx, profiles, command, env, profile, check, is_profile, cwd=None):
     """Run one real-client command; return its passed receipt and path, or raise."""
     from . import scenarios
@@ -352,6 +381,7 @@ def _client_receipt(ctx, profiles, command, env, profile, check, is_profile, cwd
     path = Path(paths[-1]) / 'result.json'
     receipt = json.loads(path.read_text())
     if receipt.get('status') != 'passed':
+        _attach_failed_scenario(receipt, path.parent)
         raise ReceiptNotPassed(receipt.get('status'), f'; {failure}' if failure else '', receipt)
     if failure:
         raise failure

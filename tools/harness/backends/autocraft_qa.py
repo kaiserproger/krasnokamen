@@ -3,10 +3,12 @@
 Native client, isolated world, server from KRASNOKAMEN_SERVER_BINARY (release build).
 The operator player levels a pad and certifies a storage hut (one chest) and a
 cartographer workshop (cartography table + crafting table; a cartographer never
-bakes or deposits). It binds one summoned villager and puts 3 hay blocks into
-the chest through the chest menu. Then, only through the server-driven
-/settlement dialogs (production page -> New order -> recipe button, with the
-default quantity 8 and "Craft missing ingredients: ON"):
+bakes or deposits). It binds two summoned villagers (the planner's free street
+work makes one a Builder, which is busy for orders; the order dialog offers the
+other) and puts 3 hay blocks into the chest through the chest menu. Then, only through the server-driven
+/settlement menus (Production orders menu -> New order -> recipe icon -> order
+dialog, with the default craft count 8 and "Craft missing ingredients" set ON
+explicitly: the box is unchecked by default, so the gate clicks it):
 
 - saddle x8 is refused: missing 24 leather, a raw material. No job is created.
 - hay_block x8 is refused: recipe cycle hay_block -> open_hay -> hay_block.
@@ -17,8 +19,9 @@ default quantity 8 and "Craft missing ingredients: ON"):
 The real villager then walks to storage and to the table. Owner readbacks
 (`/settlement production autocraft job|carry`) prove ui-1-1 makes its 3 crafts
 first. The server restarts between the steps, and the chain resumes without
-duplicate receipts. The carry ends with exactly 8 bread and 3 wheat, and the
-chest holds no hay. Re-ordering id ui-1 by command is refused.
+duplicate receipts. Crafting counts before delivery, so the gate waits for the order's
+output delivery: the carry then holds only the 3 leftover wheat, the chest holds exactly
+8 bread and no hay. Re-ordering id ui-1 by command is refused.
 
 Then, by owner command with one more stored hay block, order qa-cancel
 (bread x4) plans "open_hay x1 -> bread x4". Once its dependency qa-cancel-1
@@ -45,6 +48,7 @@ from .. import runtime
 from ..profiles import ProfileContext
 from . import native_client
 from .army_qa import (
+    DIALOG,
     _body,
     _bwait,
     _chest_totals,
@@ -56,8 +60,8 @@ from .army_qa import (
     _open_chest,
     _pad_commands,
     _press,
+    _screen_args,
     _villagers,
-    _wait_title,
 )
 from .gameplay import peak_rss_kib, prepare_operator_fixture
 from .probe_steps import ProbeSteps
@@ -66,7 +70,12 @@ USERNAME = "AutoCraftQA"
 SETTLEMENT = "autocraft"
 TIMEOUT = 900.0
 HAY = 3
-COUNT = 8  # the New order slider's initial quantity
+COUNT = 8  # the order dialog's initial craft count
+CONTAINER = "net.minecraft.client.gui.screens.inventory.ContainerScreen"
+ACTION_SLOT, RECIPE_SLOTS = 52, 45  # server icon menu layout (ui_menus.rs): New order icon; recipe icons per page
+AUTO_LABEL = "Craft missing ingredients"
+RESIDENTS = 2
+BUILDER_TAG = "строитель"  # presentation.rs: the nametag profession of a Builder
 CANCEL = "qa-cancel"
 CANCEL_COUNT = 4  # carry's 3 wheat + one opened hay block (9) = 12 wheat
 
@@ -111,6 +120,7 @@ def job_state(line: str) -> dict[str, Any]:
     return {"id": job["id"], "recipe": job["recipe"], "count": job["count"], "done": job["done"],
             "order": job.get("order"), "after": job.get("after"),
             "cancelled": job["cancelled"], "paused": job.get("paused"),
+            "delivery_complete": job.get("delivery_complete"),
             "receipts": len(job.get("receipts", []))}
 
 
@@ -245,6 +255,18 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
             # ticks, not wall-clock sleeps.
             probe.call("minecraft_wait_ticks", {"ticks": 40})
 
+    def wait_delivered(name: str, limit: float) -> dict[str, Any]:
+        """Crafting is counted before delivery (production.md): the last portion's output is still owed
+        until the worker walks to storage and the transfer commits."""
+        deadline = time.monotonic() + limit
+        while True:
+            state = job(name)
+            if state["delivery_complete"] or state["cancelled"]:
+                return state
+            if time.monotonic() >= deadline:
+                raise RuntimeError(f"autocraft-qa WEDGED: {name} output not delivered, {state}")
+            probe.call("minecraft_wait_ticks", {"ticks": 40})
+
     rooted = _bwait(probe, lambda s: isinstance((s.get("player") or {}).get("x"), float),
                     "player_present")
     ox, y0, oz = (int(rooted["player"][axis] // 1) for axis in ("x", "y", "z"))
@@ -285,53 +307,113 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     detail["chest_before"] = stocked
     probe.check("chest_holds_hay", stocked.get("minecraft:hay_block") == HAY)
 
+    # Two residents: the planner's free street work turns one resident into a Builder, and a Builder
+    # is busy for production orders (production.rs worker_slot). The order goes to the other one.
     before = {str(row.get("entity_uuid")) for row in _villagers(probe)}
     player = probe.observe()["player"]
-    probe.fixture(f"summon minecraft:villager {player['x']:.1f} {player['y']:.1f} {player['z']:.1f}")
-    _bwait(probe, lambda s: any(str(row.get("entity_uuid")) not in before
-                                for row in _villagers(probe)), "villager_summoned")
-    worker = next(str(row["entity_uuid"]) for row in _villagers(probe)
-                  if str(row.get("entity_uuid")) not in before)
-    probe.fixture(f"settlement bind {SETTLEMENT} {worker}")
+    for _ in range(RESIDENTS):
+        probe.fixture(f"summon minecraft:villager {player['x']:.1f} {player['y']:.1f} {player['z']:.1f}")
+    _bwait(probe, lambda s: sum(str(row.get("entity_uuid")) not in before
+                                for row in _villagers(probe)) >= RESIDENTS, "villagers_summoned")
+    residents = [str(row["entity_uuid"]) for row in _villagers(probe)
+                 if str(row.get("entity_uuid")) not in before]
+    for resident in residents:
+        probe.fixture(f"settlement bind {SETTLEMENT} {resident}")
+    detail["residents"] = residents
+
+    def nametags() -> dict[str, str]:
+        """uuid -> `<name> · <profession> · <activity>` of each summoned villager."""
+        return {str(row["entity_uuid"]): str((row.get("received_metadata") or {}).get("2", {}).get("value"))
+                for row in _villagers(probe) if str(row.get("entity_uuid")) in residents}
+
+    # The planner's street work picks its Builder within a few seconds; order only after it has, so the
+    # resident the dialog offers cannot turn into the Builder between the dialog and its submit.
+    try:
+        _bwait(probe, lambda _s: any(BUILDER_TAG in tag for tag in nametags().values()),
+               "street_builder_assigned", timeout=60.0)
+    except RuntimeError as error:
+        detail["street_builder"] = str(error)
+    detail["nametags_before_order"] = nametags()
+
+    def resident_for(form: dict[str, Any]) -> str:
+        """The uuid of the form's `Resident: <name>` option. Villager names are random, so two summoned
+        residents can share one; the dialog only offers a resident that is not a Builder (production.rs
+        worker_slot), so the match is the non-Builder whose nametag starts with that name."""
+        label = next(label for label in _labels(form) if label.startswith("Resident: "))
+        name = label.removeprefix("Resident: ")
+        tags = nametags()
+        detail["resident_nametags"] = tags
+        matching = [uuid for uuid, tag in tags.items()
+                    if tag.split(" · ")[0] == name and BUILDER_TAG not in tag]
+        if len(matching) != 1:
+            raise RuntimeError(f"autocraft-qa: Resident {name!r} matches {matching} in {tags}")
+        return matching[0]
+
+    # --- settlement menus and the order dialog only from here on ---
+    def menu(title: str, label: str) -> dict[str, Any]:
+        return _bwait(probe, lambda s: (s.get("screen") or {}).get("class") == CONTAINER
+                      and str((s["screen"]).get("title") or "").startswith(title), label)
+
+    def order_form(recipe: str) -> dict[str, Any]:
+        """Production menu -> New order icon -> recipe icon -> the order dialog, box set ON."""
+        probe.call("minecraft_send_chat", {"message": "settlement menu production", "command": True})
+        orders = menu("Production orders", f"orders_open_{recipe}")
+        action = next((row for row in orders["container"]["slots"] if row.get("slot") == ACTION_SLOT), {})
+        probe.check(f"new_order_icon_{recipe}", action.get("name") == "New order")
+        probe.call("minecraft_click_container_slot",
+                   {"slot": ACTION_SLOT, "button": "primary", "timeout_seconds": probe.remaining()})
+        recipes = menu("New production order", f"recipes_open_{recipe}")
+        icon = next((row["slot"] for row in recipes["container"]["slots"]
+                     if row.get("slot", RECIPE_SLOTS) < RECIPE_SLOTS and row.get("name") == recipe), None)
+        probe.check(f"recipe_icon_{recipe}", icon is not None)
+        probe.call("minecraft_click_container_slot",
+                   {"slot": icon, "button": "primary", "timeout_seconds": probe.remaining()})
+        form = _bwait(probe, lambda s: (s.get("screen") or {}).get("class") == DIALOG
+                      and (s["screen"].get("title") or "") == "New production order",
+                      f"order_dialog_{recipe}")
+        if "worker" in detail:
+            probe.check(f"same_resident_{recipe}", resident_for(form) == detail["worker"])
+        auto = next((label for label in _labels(form) if label.startswith(AUTO_LABEL)), None)
+        probe.check(f"autocraft_checkbox_present_{recipe}", auto is not None)
+        detail.setdefault("form_labels", _labels(form))
+        detail.setdefault("checkbox_initial", auto)
+        if auto.endswith(": OFF"):
+            probe.call("minecraft_click_screen_button", {**_screen_args(form), "button_label": auto})
+        return _bwait(probe, lambda s: f"{AUTO_LABEL}: ON" in _labels(s), f"autocraft_checkbox_on_{recipe}")
+
+    def submit(_form: dict[str, Any]) -> str:
+        return _flat(_body(_press(probe, "New order")))
+
+    def admitted() -> str:
+        return _readback(probe, f"settlement production {SETTLEMENT} status", "Production: jobs=")
+
+    form = order_form("saddle")
+    worker = resident_for(form)
     detail["worker"] = worker
-
-    # --- dialogs only from here on ---
-    entry = probe.observe()
-    probe.call("minecraft_send_chat", {"message": "settlement menu production", "command": True})
-    _wait_title(probe, "Production orders", "orders_open", entry=entry)
-
-    def new_order() -> dict[str, Any]:
-        form = _press(probe, "New order")
-        probe.check("new_order_form", (form["screen"].get("title") or "") == "New production order")
-        return form
-
-    form = new_order()
     labels = _labels(form)
-    detail["form_labels"] = labels
-    probe.check("autocraft_checkbox_on", "Craft missing ingredients: ON" in labels)
-    probe.check(f"quantity_defaults_to_{COUNT}", f"Quantity: {COUNT}" in labels)
+    probe.check("autocraft_checkbox_on", f"{AUTO_LABEL}: ON" in labels)
+    probe.check(f"quantity_defaults_to_{COUNT}", f"Craft count: {COUNT}" in labels)
     shot("form")
 
-    raw = _flat(_body(_press(probe, "saddle -> saddle x1")))
+    raw = submit(form)
     detail["refused_raw"] = raw
     probe.check("raw_material_refused",
                 "Refused: missing 24 minecraft:leather: not in storage and no recipe makes it." in raw)
-    probe.check("raw_refusal_admits_nothing", "No production orders yet." in raw)
+    _press(probe, "Close")
+    probe.check("raw_refusal_admits_nothing", "jobs=0" in admitted())
 
-    new_order()
-    cycle = _flat(_body(_press(probe, "hay_block -> hay_block x1")))
+    cycle = submit(order_form("hay_block"))
     detail["refused_cycle"] = cycle
     probe.check("cycle_refused",
                 "missing 5 minecraft:hay_block: its recipes form a cycle "
                 "(hay_block -> open_hay -> hay_block)" in cycle)
-    probe.check("cycle_refusal_admits_nothing", "No production orders yet." in cycle)
     shot("refused")
+    _press(probe, "Close")
+    probe.check("cycle_refusal_admits_nothing", "jobs=0" in admitted())
 
-    new_order()
-    planned = _flat(_body(_press(probe, "bread -> bread x1")))
+    planned = submit(order_form("bread"))
     detail["planned"] = planned
     probe.check("chain_planned", "Order ui-1 planned: open_hay x3 -> bread x8." in planned)
-    probe.check("product_waits_for_dependency", "waiting for ui-1-1" in planned)
     shot("planned")
     _press(probe, "Close")
 
@@ -359,15 +441,20 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     product = wait_done("ui-1", COUNT, 600.0)
     detail["product_done"] = product
     probe.check("product_crafted_exactly", product["done"] == COUNT and product["receipts"] == COUNT)
+    delivered = wait_delivered("ui-1", 300.0)
+    detail["product_delivered"] = delivered
+    probe.check("product_output_delivered", delivered["delivery_complete"] is True)
     carried = carry_counts(_readback(probe, f"settlement production {SETTLEMENT} carry {worker}",
                                      '"worker"'))
     detail["carry_after"] = carried
-    probe.check("carry_holds_exact_output",
-                carried.get("minecraft:bread") == COUNT
-                and carried.get("minecraft:wheat") == HAY * 9 - COUNT * 3
+    # Each portion's bread went to storage; the carry keeps only the unconsumed wheat.
+    probe.check("carry_holds_leftover_wheat_only",
+                carried.get("minecraft:wheat") == HAY * 9 - COUNT * 3
+                and "minecraft:bread" not in carried
                 and "minecraft:hay_block" not in carried)
     after = _chest_totals(_open_chest(probe, chest))
     detail["chest_after"] = after
+    probe.check("storage_holds_exact_output", after.get("minecraft:bread") == COUNT)
     probe.check("storage_hay_consumed_once", "minecraft:hay_block" not in after)
 
     again = _readback(probe, f"settlement production {SETTLEMENT} order ui-1 {worker} "
