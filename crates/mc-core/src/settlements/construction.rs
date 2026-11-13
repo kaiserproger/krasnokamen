@@ -868,7 +868,7 @@ pub(crate) fn sources(state: &TickState, id: SettlementId) -> Vec<[i32; 3]> {
     buildings::storage_points(state, id)
 }
 
-pub(super) fn clearable(state: &TickState, block: u32) -> bool {
+pub(crate) fn clearable(state: &TickState, block: u32) -> bool {
     // Clearing is a native-flora veneer only: air plus the vanilla placement-
     // replaceable surface plants below. Fluids, paths, buildings, torches,
     // flowers and paid farm crops stay blocking so a wider clear can never
@@ -2177,6 +2177,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
         record.project = None;
         record.revision = record.revision.saturating_add(1);
         return true;
+    }
+    // A placed cell that a foreign edit emptied is queued for re-placement and
+    // the project stays open; the hole would otherwise block the certificate.
+    if executor::reopen_emptied(state, id, &project.structure) != Ok(false) {
+        return false;
     }
     let Some(blueprint) = blueprints::get(&state.registry, &project.blueprint) else {
         return false;
