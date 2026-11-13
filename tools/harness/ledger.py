@@ -253,7 +253,7 @@ def _run_harness(ctx, refs, tree):
                     (is_profile and _failing_verdict(error.receipt, profile, check))
                     or (not is_profile and _scenario_assertion_failed(error.receipt, check))
                 )
-                results[ref] = (RED if red else UNRUNNABLE, str(error), None)
+                results[ref] = (RED if red else UNRUNNABLE, str(error), str(error.path) if error.path else None)
             continue
         except Exception as error:
             results.update({ref: (UNRUNNABLE, str(error), None) for ref, *_ in group})

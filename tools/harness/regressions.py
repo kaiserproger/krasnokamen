@@ -340,10 +340,34 @@ def _client_env(binary):
 
 
 class ReceiptNotPassed(RuntimeError):
-    def __init__(self, status, detail='', receipt=None):
+    def __init__(self, status, detail='', receipt=None, path=None):
         super().__init__(f"client receipt is {status!r}, not passed{detail}")
         self.status = status
         self.receipt = receipt
+        self.path = path
+
+
+# What a kept client artifact holds: reports, logs, receipts and screenshots. Worlds, caches and
+# binaries stay behind (the disk rule in docs/development/heavy-commands-and-memory.md#disk).
+EVIDENCE_SUFFIXES = frozenset((
+    '.json', '.jsonl', '.log', '.md', '.txt', '.yaml', '.toml', '.tsv', '.csv', '.sha256', '.html',
+    '.png', '.jpg', '.webp', '.svg',
+))
+
+
+def _keep_artifact(ctx, artifact):
+    """Copy a client run's evidence into this run's artifact dir -> the copy.
+
+    `ledger promote` runs its control and restore in a temporary worktree that it removes afterwards,
+    so a receipt path into that tree would dangle in promote.json."""
+    kept = ctx.artifact_dir / 'client-artifacts' / artifact.name
+    for source in artifact.rglob('*'):
+        relative = source.relative_to(artifact)
+        if source.is_file() and source.suffix in EVIDENCE_SUFFIXES and 'world' not in relative.parts:
+            target = kept / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+    return kept
 
 
 def _attach_failed_scenario(receipt, artifact):
@@ -381,10 +405,12 @@ def _client_receipt(ctx, profiles, command, env, profile, check, is_profile, cwd
     if not paths:
         raise failure or RuntimeError('client run produced no receipt')
     path = Path(paths[-1]) / 'result.json'
+    if is_other_tree(cwd):
+        path = _keep_artifact(ctx, path.parent) / 'result.json'
     receipt = json.loads(path.read_text())
     if receipt.get('status') != 'passed':
         _attach_failed_scenario(receipt, path.parent)
-        raise ReceiptNotPassed(receipt.get('status'), f'; {failure}' if failure else '', receipt)
+        raise ReceiptNotPassed(receipt.get('status'), f'; {failure}' if failure else '', receipt, path)
     if failure:
         raise failure
     server_hash = ctx.client_evidence['regressions_server']['sha256']

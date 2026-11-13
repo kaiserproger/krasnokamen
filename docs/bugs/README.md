@@ -200,7 +200,10 @@ worker, runs the negative control.
    server build checks the slot marker against the tree actually built. No
    incremental cache.
    Each has its own copy of `data/vanilla` (never links into the source tree)
-   and is removed afterwards.
+   and is removed afterwards. A real-client run in such a tree first copies its
+   evidence (reports, logs, `result.json`, screenshots; no worlds or binaries)
+   to `client-artifacts/<run>/` in the promote artifact dir, and the per-ref
+   `receipt` in `promote.json` points there, for red and unrunnable runs too.
 
 On success it writes `docs/bugs/promotions/<ID>.json` (commit, files reversed,
 per-ref control and restore results, client receipt) and sets
