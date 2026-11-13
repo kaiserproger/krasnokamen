@@ -15,6 +15,10 @@ const REFORM_TICKS: u64 = 400;
 const FLANK_CLEARANCE: f64 = 14.0;
 /// Blocks per second of catch-up speed a rider gains for every block he stands from his place.
 const SLOT_CATCH_UP: f64 = 3.0;
+/// Horses closer than this push apart (a horse is 1.4 blocks wide), at most
+/// `HORSE_PUSH` blocks per second.
+const HORSE_SPACING: f64 = 1.5;
+const HORSE_PUSH: f64 = 3.0;
 /// Golden angle: consecutive riders' attack places round one target never line up.
 const ATTACK_ANGLE: f64 = 2.399_963_229_728_653;
 /// Fugitives whose live centre is this close to the bounds have reached the
@@ -161,6 +165,36 @@ fn plan_sweeps(battle: &BattleState, plans: &mut Vec<Option<Sweep>>) {
         };
         plans.push(plan);
     }
+}
+
+/// Push of the nearest horses on a rider, blocks per second. Riders closing on a
+/// foe or riding a plan steer without the foot separation, and rode onto one
+/// block: six horses stood on one place at the foot line in the battle census.
+fn horse_push(formation: &super::formation::FormationRuntime, bi: usize) -> [f64; 2] {
+    let (near, _) = formation.neighbours.nearest(bi, &formation.members);
+    let me = &formation.members[bi];
+    let mut push = [0.0; 2];
+    for (distance, other) in near {
+        if other == usize::MAX || distance >= HORSE_SPACING * HORSE_SPACING {
+            continue;
+        }
+        let contact = &formation.members[other];
+        if formation.regiments[contact.regiment].spec.frontage <= 1.0 {
+            continue;
+        }
+        let away = [me.pos[0] - contact.pos[0], me.pos[2] - contact.pos[2]];
+        let length = distance.sqrt();
+        let way = if length < 1e-8 {
+            // Coincident horses part symmetrically by id.
+            if me.id < contact.id { [-1.0, 0.0] } else { [1.0, 0.0] }
+        } else {
+            away.map(|v| v / length)
+        };
+        let strength = (1.0 - length / HORSE_SPACING) * HORSE_PUSH;
+        push[0] += way[0] * strength;
+        push[1] += way[1] * strength;
+    }
+    push
 }
 
 /// Unengaged steady riders of a regiment with a plan take its heading as their
@@ -340,6 +374,11 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
                 velocity[0] *= mounted_speed / speed;
                 velocity[2] *= mounted_speed / speed;
             }
+            if !wounded && !routing {
+                let push = horse_push(&battle.formation, bi);
+                velocity[0] += push[0];
+                velocity[2] += push[1];
+            }
             let velocity = battle.formation.constrain_velocity(position, velocity);
             // A rider in the formation heads for its slot; another keeps its drive.
             let formation = &battle.formation;
@@ -438,6 +477,8 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             let speed = (if distance <= 46.0 { 6.4 } else { 4.6 }) * (gap / 0.5).min(1.0);
             [way[0] * speed, 0.0, way[1] * speed]
         };
+        let push = horse_push(&battle.formation, bi);
+        let velocity = [velocity[0] + push[0], velocity[1], velocity[2] + push[1]];
         let velocity = battle.formation.constrain_velocity(position, velocity);
         let velocity = super::steering::around_obstacles(
             frame,

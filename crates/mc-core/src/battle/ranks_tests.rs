@@ -124,6 +124,37 @@ pub(super) fn census(battle: &BattleState) -> Census {
     c
 }
 
+fn started(side: usize) -> crate::tick::TickState {
+    let mut state = staged_flat_fixture(side);
+    staging::execute(
+        &mut state,
+        &mut crate::boundary::ChangeSet::default(),
+        [8.5, 64.0, 8.5],
+        &staging::BattleCommand::Start,
+    )
+    .unwrap();
+    state
+}
+
+/// Arrows land on the foot long before contact (vanilla hit knockback threw every
+/// struck soldier up to three blocks from his slot, so the whole front regiment
+/// stood as a scatter, not ranks and files). Every soldier of a regiment still
+/// marching must hold his slot.
+#[test]
+fn marching_soldiers_hold_rank_and_file_under_arrow_fire() {
+    let mut state = started(1000);
+    for _ in 0..300 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    let c = census(&state.hostile.battle);
+    assert!(c.marching > 1900, "{c:?}");
+    assert_eq!(c.off_slot, 0, "{c:?}");
+    assert!(c.slot_error_sum / (c.marching as f64) < 0.15, "{c:?}");
+    assert!(c.front_wobble < 0.1, "{c:?}");
+    let (dead, _, _) = super::tests::native_battle_losses(&state);
+    assert!(dead[0] + dead[1] > 0, "the arrows must still kill");
+}
+
 fn dead(state: &crate::tick::TickState) -> usize {
     let (dead, _, _) = super::tests::native_battle_losses(state);
     dead[0] + dead[1]
@@ -136,14 +167,7 @@ fn dead(state: &crate::tick::TickState) -> usize {
 fn rank_and_heap_table() {
     let side = std::env::var("BATTLE_UNITS_PER_SIDE").map_or(1000, |v| v.parse().unwrap());
     let ticks = std::env::var("BATTLE_RANKS_TICKS").map_or(4000, |v| v.parse::<usize>().unwrap());
-    let mut state = staged_flat_fixture(side);
-    staging::execute(
-        &mut state,
-        &mut crate::boundary::ChangeSet::default(),
-        [8.5, 64.0, 8.5],
-        &staging::BattleCommand::Start,
-    )
-    .unwrap();
+    let mut state = started(side);
     eprintln!(
         "RANKS tick marching foot_off% foot_err horse_off% horse_err front_wobble heap_foot% heap_horse% densest engaged dead"
     );
@@ -217,4 +241,24 @@ fn rank_and_heap_table() {
         }
     }
     eprintln!("RANKS contact_windows={windows} contact_windows_without_deaths={quiet_windows}");
+}
+
+/// Heaps through the first clash and the pursuit that follows. Run explicitly.
+#[test]
+#[ignore = "1000 a side, 2200 ticks; run explicitly"]
+fn foot_and_horse_do_not_heap_through_contact_and_pursuit() {
+    let mut state = started(1000);
+    let (mut foot, mut horse) = (0.0_f64, 0.0_f64);
+    for t in 1..=2200 {
+        crate::tick::run_tick(&mut state, &[]);
+        if t % 100 == 0 {
+            let c = census(&state.hostile.battle);
+            foot = foot.max(100.0 * c.heaped_foot as f64 / c.foot.max(1) as f64);
+            horse = horse.max(100.0 * c.heaped_horse as f64 / c.horse.max(1) as f64);
+        }
+    }
+    eprintln!("RANKS max heap foot {foot:.2}% horse {horse:.2}%");
+    assert!(foot < 3.0, "foot heap {foot}%");
+    assert!(horse < 15.0, "horse heap {horse}%");
+    assert!(dead(&state) > 300, "contact must still kill");
 }
