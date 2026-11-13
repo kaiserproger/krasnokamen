@@ -184,9 +184,10 @@ worker, runs the negative control.
    ref whose run cannot name a failing verdict follows the same assertion rule:
    `all` of a profile without a verdict map (`autocraft-qa`,
    `village-autonomy-qa`) is red when the failed receipt's `error` reads
-   `<id> assertion failed: <name>`, and a `buildings-qa` `<blueprint>.<behaviour>`
+   `<id> assertion failed: <name>`, and a `buildings-qa` `<blueprint>.L<n>_<behaviour>`
    that was never recorded is red when that assertion's name starts with
-   `buildings_<blueprint>_` (a probe check raises before the verdict is written).
+   `buildings_<blueprint>_L<n>_` (a probe check raises before the verdict is
+   written); an abort at another level of the same blueprint leaves it unrunnable.
    A buildings-qa `<blueprint>.<behaviour>` ref runs that one blueprint
    (`BUILDINGS_QA_SELECT=<blueprint>` in the command's argv, 1800 s deadline): the
    nine-blueprint default run has one 600 s deadline and cannot pass.
