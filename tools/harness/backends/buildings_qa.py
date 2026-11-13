@@ -951,6 +951,10 @@ def _break_corner(probe: ProbeSteps, sub: dict[str, Any], tag: str,
         probe.check(f"{tag}_broken_cell_injected", False)
         return None
     x, y, z = corner
+    # The listing and menus address the settlement that contains the player, and the generated
+    # village here overlaps this one: go back to where the player stood once the cell is broken.
+    me = probe.observe().get("player") or {}
+    home = (float(me.get("x", x)), float(me.get("y", y)), float(me.get("z", z)))
     # Diagonally outside the footprint, within reach of the corner's outer face.
     footprint = [pos for pos in cells_true("house", 1, origin, turned)]
     sx = -1 if x == min(p[0] for p in footprint) else 1
@@ -963,6 +967,7 @@ def _break_corner(probe: ProbeSteps, sub: dict[str, Any], tag: str,
         "expected_drop_item_id": BROKEN_AUTHORED, "expected_drop_count": 1,
         "timeout_seconds": probe.remaining()})
     probe.fixture("gamemode creative @s")
+    probe.fixture(f"tp @s {home[0]} {home[1]} {home[2]}")
     read_back = None
     for _ in range(30):
         read_back = _block_id(_read(probe, corner))
