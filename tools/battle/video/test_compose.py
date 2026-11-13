@@ -185,7 +185,7 @@ class NoBacktrack(unittest.TestCase):
 
     def test_trim_in_filter_graph(self):
         g = compose.build_filter([240, 120], 12, '1080p', '/tmp/t.txt', None, trims=[0, 60])
-        self.assertIn('[1:v]trim=start_frame=60,setpts=PTS-STARTPTS,fps=60', g)
+        self.assertIn('[1:v]fps=60,trim=start_frame=60,setpts=PTS-STARTPTS,scale', g)
         self.assertIn('[0:v]fps=60', g)
 
 

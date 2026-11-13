@@ -125,18 +125,29 @@ def load(telemetry):
         previous = s
     return result
 
+def render_unanchored():
+    """Panel of a live clip with no verified frame-to-tick map: a label, no graph, no numbers."""
+    p = bytearray(W*H*4)
+    rect(p, 0, 0, W, 64, (7, 16, 28, 205))
+    text(p, 12, 10, 'NO TELEMETRY', scale=2)
+    text(p, 12, 34, 'UNANCHORED LIVE', scale=2)
+    return png(p)
+
+
 def write_overlay(telemetry_path, frames_path, out):
     """One overlay-%06d.png per row of the frames file; `out` must not exist."""
     telemetry = load(telemetry_path)
     out = pathlib.Path(out)
     out.mkdir(parents=True, exist_ok=False)
-    cached_tick = cached = None
+    cached_key, cached = object(), None
     for expected, frame in enumerate(rows(frames_path)):
         if frame['frame'] != expected: raise ValueError(f'expected frame {expected}, got {frame["frame"]}')
         tick = frame['last_applied_tick']
-        if tick not in telemetry: raise ValueError(f'frame {expected}: tick {tick} missing from telemetry')
-        if tick != cached_tick:  # consecutive frames of one tick share one image
-            cached_tick, cached = tick, render(*telemetry[tick])
+        if tick is None:
+            if not frame.get('unanchored'): raise ValueError(f'frame {expected}: no tick and not marked unanchored')
+        elif tick not in telemetry: raise ValueError(f'frame {expected}: tick {tick} missing from telemetry')
+        if tick != cached_key:  # consecutive frames of one tick share one image
+            cached_key, cached = tick, render_unanchored() if tick is None else render(*telemetry[tick])
         (out / f'overlay-{expected:06d}.png').write_bytes(cached)
 
 def main():

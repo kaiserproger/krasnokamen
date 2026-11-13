@@ -8,8 +8,11 @@ import argparse
 import json
 import math
 import pathlib
+import re
 import subprocess
 import sys
+
+import live
 from collections import namedtuple
 
 FPS = 60
@@ -77,6 +80,8 @@ def sharp_cut(prev_camera, next_camera, sharp_yaw, sharp_distance):
     or the look targets are more than `sharp_distance` blocks apart, or the horizontal view
     directions differ by more than `sharp_yaw` degrees. Entity-attached cameras have no world
     position here, so only the heading decides when either side is attached."""
+    if prev_camera is None or next_camera is None:  # a live window recording has no camera file
+        return True
     turn = abs((look_yaw(next_camera[0]) - look_yaw(prev_camera[1]) + 180) % 360 - 180)
     if turn > sharp_yaw:
         return True
@@ -97,6 +102,12 @@ def plan_no_backtrack(shots, ticks, cameras, sharp_yaw, sharp_distance, min_fram
     kept, table = [], []
     prev = None
     for i in sorted(range(len(shots)), key=lambda i: shots[i].start):
+        if ticks[i][0] is None:  # unanchored live clip: no ticks, no ordering constraint
+            row = {'shot': shots[i].name, 'start_s': shots[i].start, 'end_s': shots[i].end, 'frames': len(ticks[i]),
+                   'trim_frames': 0, 'status': 'unanchored', 'exception': False, 'in_tick': None, 'out_tick': None, 'delta_ticks': None}
+            kept.append((i, 0))
+            table.append(row)
+            continue
         first, last, length = ticks[i][0], ticks[i][-1], len(ticks[i])
         row = {'shot': shots[i].name, 'start_s': shots[i].start, 'end_s': shots[i].end, 'frames': length}
         trim, exception, status = 0, False, 'kept'
@@ -153,7 +164,8 @@ def edit_frames(ticks_per_shot, crossfade):
         k = max(i for i, s in enumerate(starts) if s <= out)
         if k > 0 and out - starts[k] < crossfade // 2:
             k -= 1
-        rows.append({'frame': out, 'last_applied_tick': ticks_per_shot[k][out - starts[k]],
+        tick = ticks_per_shot[k][out - starts[k]]
+        rows.append({'frame': out, 'last_applied_tick': tick, 'unanchored': tick is None,
                      'shot': k, 'shot_frame': out - starts[k]})
     return rows, total
 
@@ -163,17 +175,25 @@ def escape_filter_path(path):
     return path.replace('\\', '\\\\').replace(':', '\\:').replace("'", "'\\\\\\''").replace(',', '\\,').replace('[', '\\[').replace(']', '\\]')
 
 
-def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5, fade_out=1.0, trims=None):
+def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5, fade_out=1.0, trims=None, ends=None):
     """Filter graph for inputs: shots 0..N-1, overlay PNG sequence N, music N+1 (optional).
 
-    `lengths` are the visible frames per shot; `trims[i]` frames are cut off the head of input i.
+    `lengths` are the visible frames per shot; `trims[i]` frames are cut off the head of input i and,
+    if `ends[i]` is set, the clip ends at its frame `ends[i]`. The clip is resampled to 60 fps first,
+    so frame numbers are on the 60 fps grid (what the tick map describes).
     """
     n = len(lengths)
     width, height = (1920, 1080) if resolution == '1080p' else (3840, 2160)
     panel = 1 if resolution == '1080p' else 2  # overlay is rendered at native 480x260
     trims = trims or [0] * n
-    parts = [f'[{i}:v]' + (f'trim=start_frame={trims[i]},setpts=PTS-STARTPTS,' if trims[i] else '')
-             + f'fps={FPS},scale={width}:{height}:flags=lanczos,setsar=1,settb=AVTB,setpts=PTS-STARTPTS[s{i}]'
+    ends = ends or [None] * n
+
+    def source(i):
+        if not trims[i] and ends[i] is None:
+            return f'fps={FPS},'
+        end = '' if ends[i] is None else f':end_frame={ends[i]}'
+        return f'fps={FPS},trim=start_frame={trims[i]}{end},setpts=PTS-STARTPTS,'
+    parts = [f'[{i}:v]{source(i)}scale={width}:{height}:flags=lanczos,setsar=1,settb=AVTB,setpts=PTS-STARTPTS[s{i}]'
              for i in range(n)]
     if n == 1:
         cut = 's0'
@@ -207,7 +227,7 @@ def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5,
     return ';'.join(parts)
 
 
-def encode_command(shot_files, overlay_pattern, music, lengths, crossfade, resolution, title_file, output, trims=None):
+def encode_command(shot_files, overlay_pattern, music, lengths, crossfade, resolution, title_file, output, trims=None, ends=None):
     total = sum(lengths) - (len(lengths) - 1) * crossfade
     cmd = ['ffmpeg', '-hide_banner', '-nostdin', '-n', '-filter_complex_threads', '1']
     for path in shot_files:
@@ -215,7 +235,7 @@ def encode_command(shot_files, overlay_pattern, music, lengths, crossfade, resol
     cmd += ['-framerate', str(FPS), '-i', overlay_pattern]
     if music:
         cmd += ['-stream_loop', '-1', '-i', music]
-    cmd += ['-filter_complex', build_filter(lengths, crossfade, resolution, title_file, music, trims=trims), '-map', '[v]']
+    cmd += ['-filter_complex', build_filter(lengths, crossfade, resolution, title_file, music, trims=trims, ends=ends), '-map', '[v]']
     if music:
         cmd += ['-map', '[audio]']
     # Half a frame of slack: -t drops packets at pts >= t, so exactly `total` frames survive.
@@ -235,14 +255,57 @@ def probe_frames(path):
     return int(out)
 
 
+def probe_frames60(path):
+    """Frames of a clip after `fps=60`, as the montage filter graph sees it."""
+    err = subprocess.run(['ffmpeg', '-hide_banner', '-nostdin', '-i', str(path), '-vf', f'fps={FPS}', '-an', '-f', 'null', '-'],
+                         check=True, capture_output=True, text=True).stderr
+    counts = re.findall(r'frame=\s*(\d+)', err)
+    if not counts:
+        raise ValueError(f'{path}: could not count frames')
+    return int(counts[-1])
+
+
+def load_live(shot, args, telemetry_clock):
+    """(ticks of the excerpt, head, end, full frames, report) of a live clip on the 60 fps grid.
+
+    Anchored: START/END are take seconds, the excerpt is the frames whose tick is in
+    [first_tick + START*20, first_tick + END*20). Unanchored: the whole clip, no ticks (START/END only order it).
+    """
+    if not args.frames_dir or not args.shots_dir:
+        raise ValueError(f'{shot.name}: live shots need --frames-dir (NAME.anchors.json, NAME.ffmpeg.log) and --shots-dir (NAME.mp4)')
+    full = probe_frames60(pathlib.Path(args.shots_dir) / f'{shot.name}.mp4')
+    ticks, report = live.anchor(pathlib.Path(args.frames_dir) / f'{shot.name}.anchors.json',
+                                pathlib.Path(args.frames_dir) / f'{shot.name}.ffmpeg.log', full, telemetry_clock)
+    if ticks is None:
+        return [None] * full, 0, full, full, report
+    lo = args.first_tick + round(shot.start * TICKS_PER_SECOND)
+    hi = args.first_tick + round(shot.end * TICKS_PER_SECOND)
+    head = next((i for i, t in enumerate(ticks) if t >= lo), full)
+    end = next((i for i, t in enumerate(ticks) if t >= hi), full)
+    if end - head < 1 or ticks[0] > lo or ticks[-1] < hi - 1:
+        raise ValueError(f'{shot.name}: clip covers ticks {ticks[0]}..{ticks[-1]}, shots.txt wants {lo}..{hi}')
+    return ticks[head:end], head, end, full, report
+
+
 def load_shots(args):
-    """Return (shots, per-shot tick lists) from the shots file and frames dir."""
+    """Return (shots, per-shot tick lists, per-shot source dicts {head, end, full}, live reports)."""
     shots = parse_shots(args.shots_file)
-    ticks = []
+    ticks, sources, reports = [], [], {}
+    telemetry_clock = None
     for shot in shots:
+        if shot.camera == 'live':
+            if telemetry_clock is None:
+                if not args.telemetry:
+                    raise ValueError('live shots need --telemetry')
+                telemetry_clock = live.read_telemetry_clock(args.telemetry)
+            t, head, end, full, reports[shot.name] = load_live(shot, args, telemetry_clock)
+            ticks.append(t)
+            sources.append({'head': head, 'end': end, 'full': full})
+            continue
         frames = pathlib.Path(args.frames_dir) / f'{shot.name}.frames.jsonl' if args.frames_dir else None
         if frames is None:
             ticks.append(predicted_ticks(shot, args.first_tick))
+            sources.append({'head': 0, 'end': None, 'full': len(ticks[-1])})
             continue
         recorded = recorded_ticks(frames)
         expected = args.first_tick + round(shot.start * TICKS_PER_SECOND)
@@ -250,7 +313,8 @@ def load_shots(args):
             raise ValueError(f'{frames}: first tick {recorded[0]} but shots.txt START {shot.start} s '
                              f'is tick {expected} (wrong take or first_tick?)')
         ticks.append(recorded)
-    return shots, ticks
+        sources.append({'head': 0, 'end': None, 'full': len(recorded)})
+    return shots, ticks, sources, reports
 
 
 def write_map(rows, path):
@@ -260,6 +324,8 @@ def write_map(rows, path):
 
 
 def add_common(p):
+    p.add_argument('--telemetry', help='telemetry.jsonl; required for live shots (and by build)')
+    p.add_argument('--shots-dir', help='directory with NAME.mp4 per shot; required for live shots (and by build)')
     p.add_argument('--shots-file', required=True, help='shots.txt: NAME CAMERA START END [RADIUS]')
     p.add_argument('--first-tick', required=True, type=int, help='first_tick of take.solrec.result.json')
     p.add_argument('--frames-dir', help='directory with NAME.frames.jsonl from bv-render; without it ticks are predicted from shots.txt')
@@ -279,26 +345,25 @@ def main():
     m.add_argument('--out', required=True, help='new edit.frames.jsonl')
     b = sub.add_parser('build', help='tick map + overlay + encode')
     add_common(b)
-    b.add_argument('--shots-dir', required=True, help='directory with NAME.mp4 per shot')
-    b.add_argument('--telemetry', required=True)
     b.add_argument('--work', required=True, help='new directory for edit.frames.jsonl and overlay/')
     b.add_argument('--title-file', required=True, help='UTF-8 text file, avoids drawtext expression injection')
     b.add_argument('--music', help='licensed audio file; without it the video has no audio track')
     b.add_argument('--resolution', choices=('1080p', '4k'), required=True)
     b.add_argument('--output', required=True)
     a = p.parse_args()
-    shots, ticks = load_shots(a)
-    full_lengths = [len(t) for t in ticks]
-    trims, table = [0] * len(shots), None
+    shots, ticks, sources, reports = load_shots(a)
+    for name, report in reports.items():
+        print(f"live {name}: " + (f"anchored (marker shift {report['marker_shift_ticks']} ticks {report['marker_shifts']}, rtt ms {report['rtt_ms']})"
+                                  if report['anchored'] else f"UNANCHORED, no telemetry: {report['reason']}"))
+    table = None
     if a.no_backtrack:
         if not a.frames_dir:
             p.error('--no-backtrack needs --frames-dir (recorded ticks)')
         root = pathlib.Path(a.shots_file).parent
-        cameras = [camera_ends(root / s.camera) for s in shots]
+        cameras = [None if s.camera == 'live' else camera_ends(root / s.camera) for s in shots]
         kept, table = plan_no_backtrack(shots, ticks, cameras, a.sharp_yaw, a.sharp_distance, round(a.min_shot_seconds * FPS))
         shots = [shots[i] for i, _ in kept]
-        trims = [t for _, t in kept]
-        full_lengths = [full_lengths[i] for i, _ in kept]
+        sources = [dict(sources[i], head=sources[i]['head'] + t) for i, t in kept]
         ticks = [ticks[i][t:] for i, t in kept]
     rows, total = edit_frames(ticks, a.crossfade_frames)
     if table:
@@ -307,21 +372,26 @@ def main():
         write_map(rows, a.out)
         print(f'{total} frames, {total / FPS:.3f} s')
         return
+    if not a.telemetry or not a.shots_dir:
+        p.error('build needs --telemetry and --shots-dir')
     shot_files = [pathlib.Path(a.shots_dir) / f'{s.name}.mp4' for s in shots]
-    for path, full in zip(shot_files, full_lengths):
-        got = probe_frames(path)
-        if got != full:
-            sys.exit(f'{path}: {got} frames but its frames file has {full}')
+    for shot, path, source in zip(shots, shot_files, sources):
+        got = probe_frames60(path) if shot.camera == 'live' else probe_frames(path)
+        if got != source['full']:
+            sys.exit(f'{path}: {got} frames but its frames file has {source["full"]}')
     work = pathlib.Path(a.work)
     work.mkdir(parents=True, exist_ok=False)
     if table:
         (work / 'cut-table.json').write_text(json.dumps(table, indent=1) + '\n')
         (work / 'cut-table.md').write_text(cut_table_markdown(table))
     write_map(rows, work / 'edit.frames.jsonl')
+    (work / 'live-anchors.json').write_text(json.dumps(reports, indent=1) + '\n')
     import overlay
     overlay.write_overlay(a.telemetry, work / 'edit.frames.jsonl', work / 'overlay')
     subprocess.run(encode_command(shot_files, str(work / 'overlay' / 'overlay-%06d.png'), a.music,
-                                  [len(t) for t in ticks], a.crossfade_frames, a.resolution, a.title_file, a.output, trims=trims),
+                                  [len(t) for t in ticks], a.crossfade_frames, a.resolution, a.title_file, a.output,
+                                  trims=[s['head'] for s in sources],
+                                  ends=[s['end'] for s in sources]),
                    check=True)
 
 
