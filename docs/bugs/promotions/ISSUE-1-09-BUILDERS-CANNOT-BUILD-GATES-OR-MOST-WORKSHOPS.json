@@ -1,0 +1,116 @@
+{
+  "id": "ISSUE-1-09-BUILDERS-CANNOT-BUILD-GATES-OR-MOST-WORKSHOPS",
+  "verdict": "promoted",
+  "fix_commit": "patch:c08470d55c904b23b2efd8f2e9a3a4bfb28b3e93a19feef1dd46de63e8b972a7",
+  "fix_commit_full": "patch:c08470d55c904b23b2efd8f2e9a3a4bfb28b3e93a19feef1dd46de63e8b972a7",
+  "promoted_at": "2026-11-13T06:44:48+00:00",
+  "tree_head": "14672df332cb3acc0f2daefd25f3589f64725932",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "c08470d55c904b23b2efd8f2e9a3a4bfb28b3e93a19feef1dd46de63e8b972a7",
+  "reversed_files": [
+    "crates/mc-core/assets/blueprints/armorer.json",
+    "crates/mc-core/assets/blueprints/barracks.json",
+    "crates/mc-core/assets/blueprints/butcher.json",
+    "crates/mc-core/assets/blueprints/cartographer.json",
+    "crates/mc-core/assets/blueprints/cleric.json",
+    "crates/mc-core/assets/blueprints/fisherman.json",
+    "crates/mc-core/assets/blueprints/fletcher.json",
+    "crates/mc-core/assets/blueprints/gate.json",
+    "crates/mc-core/assets/blueprints/leatherworker.json",
+    "crates/mc-core/assets/blueprints/librarian.json",
+    "crates/mc-core/assets/blueprints/toolsmith.json",
+    "crates/mc-core/assets/blueprints/wall.json",
+    "crates/mc-core/assets/blueprints/watch_tower.json",
+    "crates/mc-core/assets/blueprints/weaponsmith.json",
+    "crates/mc-core/src/settlements/blueprints.rs",
+    "crates/mc-core/src/settlements/layout.rs",
+    "crates/mc-core/src/settlements/ui.rs",
+    "tools/blueprints.py"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/settlements/blueprints_tests.rs",
+    "crates/mc-core/src/settlements/construction_planner_tests.rs",
+    "crates/mc-core/src/settlements/construction_tests.rs",
+    "crates/mc-core/src/villager/building_worksite_tests.rs"
+  ],
+  "negative_control": {
+    "harness:buildings-qa:gate.L1_built": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; env BUILDINGS_QA_SELECT=gate /usr/bin/python3 -m tools.harness run buildings-qa --client native --windowed --timeout-seconds 1800 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/Issue1BuildersGates/.analysis/validation/20261113T053340-ledger-promote-1hqil8ok/regressions-client-1.log"
+    },
+    "harness:buildings-qa:gate.L2_upgrade": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; env BUILDINGS_QA_SELECT=gate /usr/bin/python3 -m tools.harness run buildings-qa --client native --windowed --timeout-seconds 1800 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/Issue1BuildersGates/.analysis/validation/20261113T053340-ledger-promote-1hqil8ok/regressions-client-1.log"
+    },
+    "harness:buildings-qa:gate.L3_upgrade": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; env BUILDINGS_QA_SELECT=gate /usr/bin/python3 -m tools.harness run buildings-qa --client native --windowed --timeout-seconds 1800 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/Issue1BuildersGates/.analysis/validation/20261113T053340-ledger-promote-1hqil8ok/regressions-client-1.log"
+    },
+    "harness:buildings-qa:wall.L3_upgrade": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; env BUILDINGS_QA_SELECT=wall /usr/bin/python3 -m tools.harness run buildings-qa --client native --windowed --timeout-seconds 1800 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/Issue1BuildersGates/.analysis/validation/20261113T053340-ledger-promote-1hqil8ok/regressions-client-2.log"
+    },
+    "harness:buildings-qa:watch_tower.L3_upgrade": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; env BUILDINGS_QA_SELECT=watch_tower /usr/bin/python3 -m tools.harness run buildings-qa --client native --windowed --timeout-seconds 1800 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/Issue1BuildersGates/.analysis/validation/20261113T053340-ledger-promote-1hqil8ok/regressions-client-3.log"
+    },
+    "harness:buildings-qa:barracks.L3_upgrade": {
+      "state": "unrunnable",
+      "detail": "client receipt is 'failed', not passed; env BUILDINGS_QA_SELECT=barracks /usr/bin/python3 -m tools.harness run buildings-qa --client native --windowed --timeout-seconds 1800 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/Issue1BuildersGates/.analysis/validation/20261113T053340-ledger-promote-1hqil8ok/regressions-client-4.log"
+    },
+    "harness:buildings-qa:fisherman.L1_built": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; env BUILDINGS_QA_SELECT=fisherman /usr/bin/python3 -m tools.harness run buildings-qa --client native --windowed --timeout-seconds 1800 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/Issue1BuildersGates/.analysis/validation/20261113T053340-ledger-promote-1hqil8ok/regressions-client-5.log"
+    },
+    "harness:buildings-qa:fisherman.L2_upgrade": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; env BUILDINGS_QA_SELECT=fisherman /usr/bin/python3 -m tools.harness run buildings-qa --client native --windowed --timeout-seconds 1800 exited 1; see /run/media/kaiserroman/games/solaris-work/wt/Issue1BuildersGates/.analysis/validation/20261113T053340-ledger-promote-1hqil8ok/regressions-client-5.log"
+    }
+  },
+  "restored": {
+    "harness:buildings-qa:gate.L1_built": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261113T060401-buildings-qa-_sdnnqdp/result.json"
+    },
+    "harness:buildings-qa:gate.L2_upgrade": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261113T060401-buildings-qa-_sdnnqdp/result.json"
+    },
+    "harness:buildings-qa:gate.L3_upgrade": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261113T060401-buildings-qa-_sdnnqdp/result.json"
+    },
+    "harness:buildings-qa:wall.L3_upgrade": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261113T060830-buildings-qa-xz2h4b4f/result.json"
+    },
+    "harness:buildings-qa:watch_tower.L3_upgrade": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261113T061447-buildings-qa-l5qo8ba5/result.json"
+    },
+    "harness:buildings-qa:barracks.L3_upgrade": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261113T062452-buildings-qa-2qcgn7mt/result.json"
+    },
+    "harness:buildings-qa:fisherman.L1_built": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261113T064006-buildings-qa-fzgh7915/result.json"
+    },
+    "harness:buildings-qa:fisherman.L2_upgrade": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261113T064006-buildings-qa-fzgh7915/result.json"
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/Issue1BuildersGates/.analysis/validation/20261113T053340-ledger-promote-1hqil8ok"
+}
