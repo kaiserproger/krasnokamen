@@ -1442,3 +1442,72 @@ fn log_regiment_activity(
         previous_losses[ri] = (dead, removed);
     }
 }
+
+/// G2 contact rework: a steady rear-rank man with an enemy at his shoulder
+/// (mixing, flanks, gaps) takes that enemy as his target and counts as
+/// fighting; before it only the front rank searched and rear ranks stood idle
+/// next to the enemy.
+#[test]
+fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() {
+    let mut state = fixture();
+    let mut battle = BattleState::default();
+    // Two files, three ranks two blocks apart: z 4 (front), 2, 0.
+    let red: Vec<_> = (0..6)
+        .map(|i| {
+            let pos = [4.0 + (i % 2) as f64, 100.0, 4.0 - 2.0 * (i / 2) as f64];
+            spawn(&mut state, 1, "minecraft:zombie", pos)
+        })
+        .collect();
+    battle
+        .formation
+        .add_regiment(
+            formation::RegimentSpec {
+                id: 1,
+                faction: 1,
+                origin: [4.5, 100.0, 4.0],
+                facing: [0.0, 1.0],
+                files: 2,
+                frontage: 1.0,
+                order: formation::Order::Advance,
+            },
+            &red,
+        )
+        .unwrap();
+    // A lone enemy 1.5 blocks beside the last rank, over four from the front.
+    let blue = spawn(&mut state, 2, "minecraft:zombie", [6.5, 100.0, 0.0]);
+    let rear = state.entities.slot_of(red[5]).unwrap();
+    let mut out = Output::default();
+    for tick in 0..RETARGET_TICKS {
+        let frame = Frame {
+            entities: &state.entities,
+            registry: &state.registry,
+            world: &state.world,
+            tick,
+        };
+        battle.columns.prepare(
+            &frame,
+            &mut battle.formation,
+            &mut battle.output.counters,
+            &mut battle.population,
+        );
+        battle.formation.finish_preparation();
+        targeting::update(&frame, &mut battle);
+        combat::step(&frame, &mut battle, &mut out);
+    }
+    assert_eq!(
+        battle.formation.context(red[5]).map(|c| c.front_rank),
+        Some(false)
+    );
+    let target = battle
+        .columns
+        .target(rear)
+        .expect("a rear-rank man searches for the enemy beside him");
+    assert_eq!(target.id, blue);
+    // red[5] (1.5 blocks), red[4] (2.5) and blue are within sword reach.
+    let work = battle.combat.work;
+    assert!(work.in_weapon_reach >= 3, "{work:?}");
+    assert!(
+        work.fighting >= 2 && work.fighting <= work.in_weapon_reach,
+        "{work:?}"
+    );
+}
