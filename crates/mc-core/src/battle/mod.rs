@@ -356,6 +356,7 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     steering::step(&frame, &mut battle, &mut output);
     timings.steering_us = phase_us(&mut mark);
     combat::step(&frame, &mut battle, &mut output);
+    live_players::strike(&frame, &battle, &mut output);
     timings.combat_us = phase_us(&mut mark);
     morale::step(&frame, &mut battle, &mut output);
     timings.morale_us = phase_us(&mut mark);

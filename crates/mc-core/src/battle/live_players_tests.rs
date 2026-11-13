@@ -283,6 +283,49 @@ fn each_respawn_in_battle_puts_the_holder_back_into_the_front_rank_with_the_kit(
 }
 
 #[test]
+fn enemy_soldiers_in_reach_swing_at_the_holder_and_his_health_drops() {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let player = ids[0];
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(&mut state, &mut changes, BattleCommand::Start).unwrap();
+    run_tick(&mut state, &[]);
+    // Stand him a pace in front of the blue foot line (blue faces -z).
+    let formation = &state.hostile.battle.formation;
+    let blue = formation
+        .members
+        .iter()
+        .find(|m| {
+            let spec = &formation.regiments[m.regiment].spec;
+            spec.faction == 2 && spec.frontage == 1.0 && spec.order != Order::Hold && m.rank == 0
+        })
+        .unwrap()
+        .id;
+    let at = state.entities.pos(state.entities.slot_of(blue).unwrap());
+    let body = state.entities.slot_of(player).unwrap();
+    state.entities.set_pos(body, [at[0], at[1], at[2] - 1.5]);
+    let deaths_before = state.hostile.battle.live.holds[0].deaths;
+    for _ in 0..80 {
+        run_tick(&mut state, &[]);
+        let body = state.entities.slot_of(player);
+        if body.is_none() || state.players[&player].vitals.health < 20.0 {
+            break;
+        }
+    }
+    let hurt = state.players[&player].vitals.health < 20.0
+        || state.hostile.battle.live.holds[0].deaths > deaths_before;
+    assert!(hurt, "blue soldiers in reach never hit him");
+    // His own side never swings: a red holder beside red soldiers only.
+    let (mut state, ids) = staged(&["PovRed"]);
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(&mut state, &mut changes, BattleCommand::Start).unwrap();
+    for _ in 0..60 {
+        run_tick(&mut state, &[]);
+    }
+    assert_eq!(state.players[&ids[0]].vitals.health, 20.0, "red soldiers swung at him");
+}
+
+#[test]
 fn holder_hits_hurt_enemy_soldiers_and_spare_his_own_side() {
     let (mut state, ids) = staged(&["PovRed"]);
     let player = ids[0];

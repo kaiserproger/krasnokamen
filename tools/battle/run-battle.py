@@ -11,6 +11,7 @@ import queue
 import re
 import select
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -775,6 +776,9 @@ def run(a):
 
 if __name__ == '__main__':
     args = arguments()
+    # A stop request (a long trial ended by `kill`) unwinds through run()'s finally: the recorder and
+    # server are stopped and the live-player receipt is written.
+    signal.signal(signal.SIGTERM, lambda signum, frame: sys.exit(128 + signum))
     try:
         run(args)
     except Exception as error:

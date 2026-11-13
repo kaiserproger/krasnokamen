@@ -8,11 +8,15 @@
 //! damage and dies. The battle moves him only when he (re)enters the rank:
 //! `battle live` before start, and each respawn, which puts him back into a
 //! current front-rank slot of his side near its centre with the kit again.
-//! `keep_inventory` keeps the kit from littering the field.
+//! `keep_inventory` keeps the kit from littering the field. Enemy soldiers in
+//! reach of a holder swing at him (`strike`) through the ordinary player
+//! damage path; the battle's own targets stay soldiers.
+use super::{BattleIntent, BattleState, Frame, Output};
 use crate::battle::formation::{FormationRuntime, Order, Regiment, position, slot_position};
 use crate::battle::ground::{self, Placement};
-use crate::boundary::{ChangeSet, EntityId};
+use crate::boundary::{ChangeSet, EntityEvent, EntityId, Hand};
 use crate::commands::{Command, GameMode, Target};
+use crate::intent::{DamageSource, Footprint, IntentKind};
 use crate::tick::TickState;
 use mc_data::ItemStack;
 
@@ -24,6 +28,15 @@ const SPECTATOR_PITCH: f32 = 20.0;
 /// Player body for grounding a placement.
 const PLAYER_HALF_WIDTH: f64 = 0.3;
 const PLAYER_HEIGHT: f64 = 1.8;
+/// One soldier's blow on a live player: an ordinary iron-weapon melee hit,
+/// reduced by his armour and blocked by his raised shield like any player's.
+const SOLDIER_HIT: f32 = 5.0;
+/// A soldier in sword reach of a live enemy player decides once a second
+/// (the battle's attack decision cadence) and swings half the time.
+const STRIKE_DECISION_TICKS: u64 = 20;
+const STRIKE_ROLLS: u32 = 5_000;
+const STRIKE_REACH: f64 = 2.5;
+const STRIKE_SALT: u64 = 0x4C49_5645;
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Hold {
@@ -49,6 +62,9 @@ pub(crate) struct LiveState {
     /// Entity last announced online for each watched name.
     announced: Vec<Option<EntityId>>,
     pub holds: Vec<Hold>,
+    /// Living holders this tick (entity, side, position): what enemy soldiers
+    /// in reach swing at (`strike`).
+    targets: Vec<(EntityId, u16, [f64; 3])>,
 }
 
 pub(crate) fn valid_name(name: &str) -> bool {
@@ -105,6 +121,7 @@ pub(crate) fn update(state: &mut TickState) {
             None => tracing::info!("Battle player offline: {name}"),
         }
     }
+    state.hostile.battle.live.targets.clear();
     for index in 0..state.hostile.battle.live.holds.len() {
         let hold = &state.hostile.battle.live.holds[index];
         let Some(player) = player_named(state, &hold.name) else {
@@ -127,6 +144,84 @@ pub(crate) fn update(state: &mut TickState) {
                     tracing::warn!("Battle live respawn not placed (kit restored): {error}");
                 }
             }
+        }
+        if !is_dead(state, player) {
+            let pos = state
+                .entities
+                .pos(state.entities.slot_of(player).expect("living player"));
+            let side = state.hostile.battle.live.holds[index].side;
+            state.hostile.battle.live.targets.push((player, side, pos));
+        }
+    }
+}
+
+/// Enemy soldiers in sword reach of a living holder swing at him, at the
+/// battle's attack decision cadence: an ordinary melee hit through the player
+/// damage path (armour, shield block, knockback), never the battle's outcome
+/// roll. Additive: battle targets stay soldiers; mounted, archer and routing
+/// men do not swing.
+pub(super) fn strike(frame: &Frame<'_>, battle: &BattleState, out: &mut Output) {
+    let columns = &battle.columns;
+    for &(player, side, pos) in &battle.live.targets {
+        for bi in 0..columns.ids.len() {
+            if !columns.active[bi]
+                || columns.carried[bi]
+                || columns.ranged[bi]
+                || !super::enemies(columns.factions[bi], side)
+            {
+                continue;
+            }
+            let id = columns.ids[bi];
+            if !(frame.tick + id.0 as u64).is_multiple_of(STRIKE_DECISION_TICKS) {
+                continue;
+            }
+            let at = columns.positions[bi];
+            let reach = (at[0] - pos[0]).powi(2) + (at[2] - pos[2]).powi(2);
+            if reach > STRIKE_REACH * STRIKE_REACH || (at[1] - pos[1]).abs() > 2.0 {
+                continue;
+            }
+            let Some(slot) = columns.slots[bi] else {
+                continue;
+            };
+            if frame.entities.row(slot).entity_life.mount.vehicle.is_some()
+                || (bi < battle.formation.members.len()
+                    && battle.formation.context_at(bi).routing)
+            {
+                continue;
+            }
+            if super::combat::roll(id, frame.tick / STRIKE_DECISION_TICKS, STRIKE_SALT)
+                >= STRIKE_ROLLS
+            {
+                continue;
+            }
+            out.events.push(EntityEvent::Swing {
+                entity: id,
+                hand: Hand::Main,
+                animation: crate::boundary::SwingKind::Whack,
+                duration_ticks: 21,
+            });
+            out.intents.push(BattleIntent {
+                actor: id,
+                kind: IntentKind::DamageEntity {
+                    target: player,
+                    amount: SOLDIER_HIT,
+                    kind: crate::survival::DamageKind::Melee,
+                    source: Some(DamageSource::Melee {
+                        attacker: id,
+                        position: at,
+                        yaw: frame.entities.rot(slot)[0],
+                        bonus_knockback: 0.0,
+                        sweep: false,
+                        fire_ticks: 0,
+                        bane_ticks: 0,
+                    }),
+                },
+                footprint: Footprint {
+                    entity_reads: vec![id, player],
+                    entity_writes: vec![player],
+                    ..Default::default()
+                },
+            });
         }
     }
 }
