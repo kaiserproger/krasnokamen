@@ -94,12 +94,13 @@ pub(crate) fn free_paving(state: &TickState, blueprint: &str, block: u32) -> boo
 }
 
 /// Square side of one meadow clearing window.
-const MEADOW_WINDOW: i32 = 8;
-/// Windows examined either side of the bell, in each axis.
+const MEADOW_WINDOW: i32 = 16;
+/// Windows examined either side of the bell, in each axis (48 blocks).
 const MEADOW_REACH: i32 = 3;
 /// Fewest seed-bearing plants worth a Builder's trip: at one in eight each,
-/// a window of this size is expected to yield two wheat seeds.
-const MEADOW_MIN_PLANTS: usize = 16;
+/// a window of this size is expected to yield one wheat seed. Seed-24's
+/// savanna village holds about two plants per 8 x 8 block of ground.
+const MEADOW_MIN_PLANTS: usize = 8;
 
 /// Plants whose vanilla loot table drops wheat seeds when broken by hand.
 fn seed_plant(state: &TickState, block: u32) -> bool {
@@ -122,8 +123,8 @@ fn seed_plant(state: &TickState, block: u32) -> bool {
 pub(crate) fn meadow_work(state: &TickState, record: &SettlementRecord) -> Option<Work> {
     let anchor = record.anchor;
     let air = state.registry.states.air;
-    let mut windows: Vec<[i32; 2]> = (-MEADOW_REACH - 1..=MEADOW_REACH)
-        .flat_map(|i| (-MEADOW_REACH - 1..=MEADOW_REACH).map(move |j| [i, j]))
+    let mut windows: Vec<[i32; 2]> = (-MEADOW_REACH..MEADOW_REACH)
+        .flat_map(|i| (-MEADOW_REACH..MEADOW_REACH).map(move |j| [i, j]))
         .map(|[i, j]| [anchor[0] + i * MEADOW_WINDOW, anchor[2] + j * MEADOW_WINDOW])
         .collect();
     let centre = |[x, z]: [i32; 2]| {
