@@ -29,7 +29,7 @@ from ..profiles import ProfileContext
 from . import native_client
 from .buildings_qa import (
     _block_id, _chat_lines, _chest_totals, _deposit_all_at, _echo, _hand_storage_at,
-    _open_chest_at, _project_status, _props, _read, _scan_box, _summon_bind, _verdict,
+    _close_any_screen, _container_titled, _open_chest_at, _project_status, _text_plain, _props, _read, _scan_box, _summon_bind, _verdict, _villagers,
 )
 from .probe_steps import ProbeSteps
 
@@ -149,6 +149,34 @@ def complete(counts: dict[str, Any]) -> bool:
             and counts["open_columns"] == 0 and counts["doors"] == 4 and len(counts["wells"]) == 1)
 
 
+def _menu_dump(probe: ProbeSteps, page: str, title: str, click: int | None = None,
+               follow: str | None = None) -> list[str]:
+    """Name and lore of every filled slot of one civil menu page (evidence for a stalled build)."""
+    _close_any_screen(probe)
+    probe.call("minecraft_send_chat", {"message": f"settlement menu {page}", "command": True})
+    state = probe.wait(lambda s: _container_titled(s, title), f"{FIXTURE}_{page}_open",
+                       timeout_seconds=60)
+    if click is not None and follow is not None:
+        probe.call("minecraft_click_container_slot", {"slot": click, "button": "primary",
+                                                      "timeout_seconds": probe.remaining()})
+        state = probe.wait(lambda s: _container_titled(s, follow), f"{FIXTURE}_{page}_follow",
+                           timeout_seconds=60)
+    rows = []
+    for row in state["container"]["slots"]:
+        name = str(row.get("name") or "")
+        if not name or int(row.get("slot", 99)) >= 54:
+            continue
+        try:
+            lore = probe.call("minecraft_read_item_components",
+                              {"source": "container", "slot": int(row["slot"])})["components"]
+            text = " | ".join(_text_plain(line) for line in lore.get("minecraft:lore", []))
+        except Exception:
+            text = ""
+        rows.append(f"{row['slot']}: {name} :: {text}"[:300])
+    probe.call("minecraft_close_screen", {})
+    return rows
+
+
 def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, artifact: Path) -> None:
     sub = detail.setdefault("blueprints", {}).setdefault(NAME, {})
     sname = f"bqa_{NAME}"
@@ -219,6 +247,14 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
                         "well_blocks": counts["well_blocks"], "doors": counts["doors"],
                         "road_paths": sum(1 for block in roads.values() if block == PATH),
                         "project": _project_status(probe)})
+        if len(samples) in (1, 4, 12, 30):
+            sub.setdefault("villagers", {})[str(len(samples))] = [
+                [round(float(v["x"]), 1), round(float(v["y"]), 1), round(float(v["z"]), 1)]
+                for v in _villagers(probe)]
+        if len(samples) in (3, 25):
+            sub.setdefault("pages", {})[str(len(samples))] = {
+                "construction": _menu_dump(probe, "projects", "Projects", 52, "Construction"),
+                "residents": _menu_dump(probe, "residents", "Residents")}
         if first is None and counts["ring_blocks"] + counts["well_blocks"] > 0:
             first = elapsed
         if complete(counts):
