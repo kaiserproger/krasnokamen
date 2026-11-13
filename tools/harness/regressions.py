@@ -390,16 +390,36 @@ def _attach_failed_scenario(receipt, artifact):
         details['scenario'] = report
 
 
+def _fresh_client_data(ctx, env, log_name):
+    """A private XDG_DATA_HOME for one client run -> its path.
+
+    Windowed runs inherit the caller's XDG root, so a ledger probe or promote running many client
+    gates in a row would share `client-settings.json` between them
+    (docs/development/real-client-gates.md). The content directories are linked, never copied."""
+    from .preflight import CLIENT_CONTENT_DIRS
+
+    source = Path(env.get('XDG_DATA_HOME') or Path.home() / '.local/share') / 'krasnokamen-client'
+    root = ctx.artifact_dir / f'xdg-{Path(log_name).stem}'
+    (root / 'krasnokamen-client').mkdir(parents=True)
+    for name in CLIENT_CONTENT_DIRS:
+        if (source / name).exists():
+            (root / 'krasnokamen-client' / name).symlink_to((source / name).resolve(), target_is_directory=(source / name).is_dir())
+    return root
+
+
 def _client_receipt(ctx, profiles, command, env, profile, check, is_profile, cwd=None):
     """Run one real-client command; return its passed receipt and path, or raise."""
     from . import scenarios
 
     log_name = f'regressions-client-{len(ctx.logs)}.log'
     failure = None
+    xdg = _fresh_client_data(ctx, env, log_name)
     try:
-        profiles._run_command(list(command), ctx, log_name, env=env, cwd=cwd)
+        profiles._run_command(list(command), ctx, log_name, env={**env, 'XDG_DATA_HOME': str(xdg)}, cwd=cwd)
     except RuntimeError as error:
         failure = error
+    finally:
+        shutil.rmtree(xdg, ignore_errors=True)
     log = ctx.artifact_dir / log_name
     paths = re.findall(r'artifact=(\S+)', log.read_text()) if log.exists() else []
     if not paths:

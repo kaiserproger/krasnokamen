@@ -973,6 +973,42 @@ class LedgerToolTests(unittest.TestCase):
                 self.assertTrue((kept.parent / 'screenshots/site.png').is_file())
                 self.assertFalse((kept.parent / 'world').exists())
 
+    def test_each_client_run_gets_its_own_client_settings(self):
+        # Windowed gates inherit the caller's XDG root; a probe or promote runs many in a row and
+        # must not carry client-settings.json or caches from one into the next.
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        base = Path(directory.name)
+        caller = base / 'caller-xdg/krasnokamen-client'
+        (caller / 'facts').mkdir(parents=True)
+        (caller / 'client-settings.json').write_text('{"fov": 110}')
+        seen = []
+        def run_command(argv, ctx, name, cwd=None, env=None):
+            client = Path(env['XDG_DATA_HOME']) / 'krasnokamen-client'
+            seen.append((client, (client / 'facts').resolve(), (client / 'client-settings.json').exists()))
+            (client / 'client-settings.json').write_text('{"fov": 30}')
+            artifact = base / f'run-{len(ctx.logs)}'
+            artifact.mkdir()
+            (artifact / 'result.json').write_text(json.dumps({'status': 'passed', 'details': {
+                'server_binary_sha256': 'abc', 'scenario': {'settlement_acceptance': {'behaviour': {'door_walk': 'PASS'}}}}}))
+            (ctx.artifact_dir / name).write_text(f'[harness] artifact={artifact}\n')
+            ctx.logs.append(name)
+        def release_server(ctx, profiles_module, tree=None):
+            ctx.client_evidence['regressions_server'] = {'sha256': 'abc'}
+            return base / 'server'
+        (base / 'promote').mkdir()
+        ctx = profiles.ProfileContext(base / 'promote')
+        with patch.dict(os.environ, {'XDG_DATA_HOME': str(caller.parent)}), \
+                patch.object(profiles, '_run_command', run_command), patch.object(regressions, '_release_server', release_server), \
+                patch.object(ledger, 'tree_fingerprint', return_value={'head': 'h', 'sha256': 's'}), \
+                patch.object(ledger, '_register_server', lambda sha, tree: None):
+            for _ in range(2):
+                self.assertEqual(ledger.run_refs(ctx, ['harness:village-qa:door_walk'], base, True)['harness:village-qa:door_walk']['state'], ledger.GREEN)
+        self.assertNotEqual(seen[0][0], seen[1][0])
+        self.assertEqual([facts for _, facts, _ in seen], [(caller / 'facts').resolve()] * 2)
+        self.assertEqual([settings for _, _, settings in seen], [False, False])
+        self.assertEqual((caller / 'client-settings.json').read_text(), '{"fov": 110}')
+
     def uncommitted_fix(self):
         """HEAD re-broken, then an uncommitted fix (its patch saved to a file) with an untracked test."""
         root = self.scratch(with_fix_commit=False)
