@@ -259,6 +259,28 @@ class CivilizationEvidenceTests(unittest.TestCase):
                 qa.capture_target(probe, "artifact", "baby", (0, 65.62, 4), entity=baby)
         capture.assert_not_called()
 
+    def test_baby_aim_retries_while_a_wall_stands_between_observer_and_baby(self):
+        probe = Mock()
+        baby = {"entity_id": 17, "entity_uuid": "new", "entity_type": "minecraft:villager",
+                "received_baby": True, "x": 0, "y": 65.12, "z": 4}
+        probe.call.side_effect = lambda name, args=None: {
+            "entities": [baby], "visible_count": 1, "truncated": False, "next_cursor": None
+        } if name == "minecraft_list_entities" else {}
+        wall = {"type": "block", "x": 1, "y": 65, "z": 2}
+        hit = {"type": "entity", "entity_uuid": "new"}
+        player = {"x": 0, "y": 64, "z": 0}
+        probe.observe.side_effect = [
+            {"player": player},                              # initial position
+            {"player": player}, {"target": wall},            # attempt 1: occluded
+            {"player": player}, {"target": wall},            # attempt 2: occluded
+            {"player": player}, {"target": hit},             # attempt 3: seen
+        ]
+        with patch.object(qa.native_client, "capture", return_value={"retained_path": "baby.png"}):
+            result = qa.capture_target(probe, "artifact", "baby", (0, 65.62, 4), entity=baby)
+        self.assertEqual(result["observed_target"], hit)
+        approaches = [c for c in probe.call.call_args_list if c.args[0] == "minecraft_approach_entity"]
+        self.assertEqual(len(approaches), 3)
+
     def test_simulation_wait_uses_scenario_deadline_not_mcp_request_cap(self):
         with patch("tools.harness.backends.probe_steps.time.monotonic", return_value=100.0):
             probe = qa.ProbeSteps(Mock(), None, 7200.0, "sprint")

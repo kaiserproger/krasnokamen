@@ -211,6 +211,36 @@ def capture_house(probe: ProbeSteps, artifact: Path, label: str,
     return shot
 
 
+BABY_AIM_ATTEMPTS = 6
+
+
+def _aim(probe: ProbeSteps, target: tuple[float, float, float]) -> dict[str, Any]:
+    player = probe.observe()["player"]
+    dx, dy, dz = target[0] - player["x"], target[1] - (player["y"] + 1.62), target[2] - player["z"]
+    probe.call("minecraft_look", {
+        "yaw_deg": int(round(math.degrees(math.atan2(-dx, dz)))),
+        "pitch_deg": int(round(-math.degrees(math.atan2(dy, math.hypot(dx, dz))))),
+    })
+    return probe.observe().get("target") or {}
+
+
+def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any]) -> dict[str, Any]:
+    """Aim the crosshair at the baby. A baby walks on, and a wall can stand between it and the
+    observer, so each attempt approaches it again and re-reads where it is now."""
+    observed: dict[str, Any] = {}
+    for _ in range(BABY_AIM_ATTEMPTS):
+        probe.call("minecraft_approach_entity", {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
+        seen = entity_census(probe, "minecraft:villager")
+        current = next((e for e in seen.get("entities", [])
+                        if e.get("entity_uuid") == entity["entity_uuid"]), None)
+        if current is None or current.get("received_baby") is not True:
+            raise RuntimeError("baby no longer visible for milestone capture")
+        observed = _aim(probe, (current["x"], current["y"] + 0.5, current["z"]))
+        if observed.get("type") == "entity" and observed.get("entity_uuid") == entity["entity_uuid"]:
+            return observed
+    raise RuntimeError(f"milestone target is occluded or out of reach: baby {entity['entity_uuid']}: {observed}")
+
+
 def capture_target(probe: ProbeSteps, artifact: Path, label: str,
                    target: tuple[float, float, float], *,
                    entity: dict[str, Any] | None = None,
@@ -218,13 +248,7 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
     probe.call("minecraft_close_screen", {})
     initial = probe.observe()["player"]
     if entity:
-        probe.call("minecraft_approach_entity", {"entity_id": entity["entity_id"], "timeout_seconds": 120.0})
-        seen = entity_census(probe, "minecraft:villager")
-        current = next((e for e in seen.get("entities", [])
-                        if e.get("entity_uuid") == entity["entity_uuid"]), None)
-        if current is None or current.get("received_baby") is not True:
-            raise RuntimeError("baby no longer visible for milestone capture")
-        target = (current["x"], current["y"] + 0.5, current["z"])
+        observed = _aim_at_baby(probe, entity)
     else:
         destination = [math.floor(value) for value in target]
         if building:
@@ -253,24 +277,16 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
             "x": destination[0], "y": destination[1], "z": destination[2],
             "timeout_seconds": 120.0,
         })
-    player = probe.observe()["player"]
-    dx, dy, dz = target[0] - player["x"], target[1] - (player["y"] + 1.62), target[2] - player["z"]
-    probe.call("minecraft_look", {
-        "yaw_deg": int(round(math.degrees(math.atan2(-dx, dz)))),
-        "pitch_deg": int(round(-math.degrees(math.atan2(dy, math.hypot(dx, dz))))),
-    })
-    observed = probe.observe().get("target") or {}
-    if entity:
-        visible = observed.get("type") == "entity" and observed.get("entity_uuid") == entity["entity_uuid"]
-    elif building:
-        visible = observed.get("type") == "block" and all(
-            building["min"][i] <= observed.get(axis, building["min"][i] - 1) <= building["max"][i]
-            for i, axis in enumerate(("x", "y", "z")))
-    else:
-        visible = observed.get("type") == "block" and all(
-            observed.get(axis) == math.floor(target[i]) for i, axis in enumerate(("x", "y", "z")))
-    if not visible:
-        raise RuntimeError(f"milestone target is occluded or out of reach: {label}: {observed}")
+        observed = _aim(probe, target)
+        if building:
+            visible = observed.get("type") == "block" and all(
+                building["min"][i] <= observed.get(axis, building["min"][i] - 1) <= building["max"][i]
+                for i, axis in enumerate(("x", "y", "z")))
+        else:
+            visible = observed.get("type") == "block" and all(
+                observed.get(axis) == math.floor(target[i]) for i, axis in enumerate(("x", "y", "z")))
+        if not visible:
+            raise RuntimeError(f"milestone target is occluded or out of reach: {label}: {observed}")
     shot = native_client.capture(probe.client, artifact, label)
     shot["observed_target"] = observed
     probe.call("minecraft_navigate_to_block", {
