@@ -101,7 +101,7 @@ to keep that from happening again without idling the machine.
   Otherwise it gets a free shared dir `<work>/targets/slot-a..slot-z`
   (`KRASNOKAMEN_SLOT_TARGETS` overrides the root): the slot its source tree used
   last, else any existing free slot, else a new one if `df` reports at least
-  `KRASNOKAMEN_SLOT_MIN_FREE_GB` (default 80 GiB, the free-space floor below; rounded up) free. This check does
+  `KRASNOKAMEN_SLOT_MIN_FREE_GB` (default 250 GiB, the free-space floor below; rounded up) free. This check does
   not reserve space or limit growth of existing slots. Each running command
   holds its own slot (15-40 GB once built): on 2026-11-07 agents running
   several commands in parallel created 12 slots and filled the disk, so run one
@@ -252,16 +252,17 @@ cwd to the agent.
   target dirs in `<work>/targets/`, sccache on the games disk. `/tmp` is on the
   root disk. `git worktree move` fails across devices; use rsync.
 - `/dev/shm` has a per-user quota: `df` free space is not usable headroom.
-- **Keep 80-100 GB free on the games disk** (owner, 2026-11-07; it is a
-  DRAM-less Samsung 980 whose fast write cache shrinks as it fills: at 92%
-  full writes took over a second each). Below 80 GB, thin finished runs before
-  starting more work. The disk filled to 100% several times: 12 parallel
+- **Keep at least 250 GB free on the games disk** (owner, 2026-11-13; raised
+  from 80-100 GB set 2026-11-07; it is a DRAM-less Samsung 980 whose fast write
+  cache shrinks as it fills: at 92% full writes took over a second each). Below
+  the floor, `slot-gc` evicts idle slots in least-recently-used order (below);
+  thin finished runs before starting more work. The disk filled to 100% several times: 12 parallel
   target slots (2026-11-07), per-run plugin `.wasm` copies in scenario runs (7
   of 11 GB on 2026-10-28), 650 MB of client content copied into every
   scene-shot receipt (now symlinked), nested `sdk/rust/target` in rsync'd
   worktrees, 66 GB of stale debug targets.
 - **Slot cleanup and rotation.** Below `KRASNOKAMEN_SLOT_MIN_FREE_GB` + 10 GiB free
-  (90 GiB by default), the runner (except `-x`/`-p`) invokes `slot-gc --delete`;
+  (260 GiB by default), the runner (except `-x`/`-p`) invokes `slot-gc --delete`;
   failures are logged and do not stop the command. Each pass removes attributable
   dead artifacts and superseded finalized incremental sessions. If space remains
   below the threshold, idle slots are rotated least recently used first: their

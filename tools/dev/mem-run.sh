@@ -247,7 +247,7 @@ else
     flock 6
   fi
 fi
-# Disk floor: below KRASNOKAMEN_SLOT_MIN_FREE_GB + 10 GiB free on the targets disk, run
+# Disk floor (owner, 2026-11-13: 250 GiB): below KRASNOKAMEN_SLOT_MIN_FREE_GB + 10 GiB free on the targets disk, run
 # slot-gc --delete first. It takes each slot's pool lock itself (busy slots are
 # skipped), removes artifacts of removed trees and superseded incremental sessions,
 # then rotates idle slots in LRU order while still short. It never delays the command
@@ -256,7 +256,7 @@ fi
 # windows are quiet measurements.
 if [ "$exclusive" = 0 ] && [ "$perf" = 0 ]; then
   gc_root=${KRASNOKAMEN_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
-  gc_floor=$(( ${KRASNOKAMEN_SLOT_MIN_FREE_GB:-80} + 10 ))
+  gc_floor=$(( ${KRASNOKAMEN_SLOT_MIN_FREE_GB:-250} + 10 ))
   gc_free=$(df --output=avail -BG "$gc_root" 2>/dev/null | tail -1 | tr -dc 0-9 || true)
   if [ -n "$gc_free" ] && [ "$gc_free" -lt "$gc_floor" ]; then
     echo "mem-run: ${gc_free}G free, below ${gc_floor}G (floor + 10G): running slot-gc --delete on idle slots" >&2
