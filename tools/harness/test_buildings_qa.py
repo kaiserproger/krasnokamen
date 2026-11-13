@@ -323,6 +323,7 @@ class CameraCaptureTest(unittest.TestCase):
                 commands = [call.args[0] for call in probe.fixture.call_args_list]
                 self.assertIn("setblock 2 79 12 minecraft:barrier", commands)
                 self.assertEqual(commands[-1], "setblock 2 79 12 minecraft:air")
+                probe.call.assert_any_call("minecraft_wait_ticks", {"ticks": 240})
                 anchor.assert_called_once_with(probe, sub)
 
 

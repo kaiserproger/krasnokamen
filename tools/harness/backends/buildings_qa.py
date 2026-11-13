@@ -721,7 +721,8 @@ def _capture_level(probe: ProbeSteps, sub: dict[str, Any], artifact: Path, tag: 
         yaw = round(math.degrees(math.atan2(-dx, dz)))
         pitch = round(math.degrees(math.atan2(y + 1.62 - cy, math.hypot(dx, dz))))
         probe.call("minecraft_look", {"yaw_deg": yaw, "pitch_deg": pitch})
-        probe.call("minecraft_wait_ticks", {"ticks": 6})
+        # Let the HUD chat from the setup and listing commands fade before capture.
+        probe.call("minecraft_wait_ticks", {"ticks": 240})
         sub[f"L{level}_visual_capture"] = native_client.capture(probe.client, artifact, f"{tag}-L{level}")
     finally:
         probe.fixture(f"setblock {support[0]} {support[1]} {support[2]} minecraft:air")
