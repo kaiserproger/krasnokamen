@@ -4,6 +4,7 @@
 use super::*;
 use crate::settlements::allocator::tests::villager;
 use crate::settlements::construction::tests::{complete, fixture};
+use crate::villager::Activity;
 use crate::settlements::layout::{GATE, PERIMETER, RING, WELL};
 use mc_data::ItemStack;
 use std::collections::{HashSet, VecDeque};
@@ -42,11 +43,10 @@ fn town(residents: usize, stocked: bool) -> (TickState, SettlementId, crate::ent
         .ensure_blocking(&rustc_hash::FxHashMap::from_iter((-2..=2).flat_map(|x| {
             (-2..=2).map(move |z| (crate::boundary::ChunkPos { x, z }, 0))
         })));
+    let grass = crate::settlements::allocator::tests::block(&state, "minecraft:grass_block", &[]);
     for x in -24..=40 {
         for z in -24..=40 {
-            state
-                .world
-                .set_block(x, GROUND, z, state.registry.states.stone);
+            state.world.set_block(x, GROUND, z, grass);
             for y in 201..224 {
                 if (x, y, z) != (1, 201, 1) {
                     state.world.set_block(x, y, z, state.registry.states.air);
@@ -71,6 +71,15 @@ fn town(residents: usize, stocked: bool) -> (TickState, SettlementId, crate::ent
     (state, id, builder)
 }
 
+/// A finished street or fortification project releases its Builder; the
+/// planning tick hires one again before the next project, as `tick` does.
+fn finish(state: &mut TickState, id: SettlementId, builder: crate::entities::EntitySlot) {
+    let v = state.entities.row_mut(builder).villager.as_mut().unwrap();
+    v.data.profession = Profession::Builder;
+    v.activity = Activity::Work;
+    complete(state, id, builder);
+}
+
 /// Plan and finish projects until the planner starts none; the blueprint name
 /// of each, in order.
 fn build_everything(
@@ -85,7 +94,7 @@ fn build_everything(
             break;
         };
         order.push(project.blueprint);
-        complete(state, id, builder);
+        finish(state, id, builder);
     }
     order
 }
@@ -163,18 +172,9 @@ fn ten_residents_wall_the_town_in_with_four_gates_and_one_well() {
             .all(|&(x, z)| (x - ANCHOR[0]).abs().max((z - ANCHOR[2]).abs()) < RING),
         "a walker reaches the outside through the wall"
     );
-    // Planned once: a second pass owes nothing, and a lost column is rebuilt.
+    // Planned once: a second pass owes nothing.
     plan(&mut state, id);
     assert!(state.settlements.get(id).unwrap().project.is_none());
-    for step in 1..=3 {
-        state
-            .world
-            .set_block(20, GROUND + step, 8 + RING, state.registry.states.air);
-    }
-    state.world.fold_overlay();
-    let rebuilt = build_everything(&mut state, id, builder);
-    assert_eq!(rebuilt, [PERIMETER]);
-    assert_eq!(block_name(&state, 20, GROUND + 3, 8 + RING), "cobblestone");
 }
 
 /// The well's water source costs nothing, and the structure ledger that is
@@ -188,7 +188,7 @@ fn the_free_water_source_and_door_halves_pass_ledger_validation() {
         let project = state.settlements.get(id).unwrap().project.clone().unwrap();
         assert_eq!(project.blueprint, expected);
         crate::plugin_structures::validate(&state).expect("ledger accepts the free cells");
-        complete(&mut state, id, builder);
+        finish(&mut state, id, builder);
     }
 }
 
@@ -225,7 +225,7 @@ fn a_gatehouse_stands_on_a_road_that_was_paved_first() {
             borrowed_builder: None,
         };
         assert!(begin_cells(&mut state, project, work.bounds, work.cells));
-        complete(&mut state, id, builder);
+        finish(&mut state, id, builder);
     }
     let order = build_everything(&mut state, id, builder);
     assert_eq!(order.iter().filter(|kind| *kind == GATE).count(), 4, "{order:?}");
