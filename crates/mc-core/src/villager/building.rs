@@ -253,9 +253,9 @@ fn in_reach(
     let pos = state.entities.pos(slot);
     let width = state.entities.body(slot).half_width;
     if layout::infra(&project.blueprint) || project.blueprint == construction::furnace::NAME {
-        // Roads are walked on while paved; a lamp or furnace column must
-        // stay clear of the builder's whole body.
-        let clear = project.blueprint == layout::ROAD
+        // Roads and meadows are walked on while worked; a lamp or furnace
+        // column must stay clear of the builder's whole body.
+        let clear = matches!(project.blueprint.as_str(), layout::ROAD | layout::MEADOW)
             || [0, 2].into_iter().any(|axis| {
                 let min = f64::from(next[axis]);
                 pos[axis] + width <= min || pos[axis] - width >= min + 1.0

@@ -428,6 +428,51 @@ fn stored_breeding_food_respects_spare_beds_and_stock_reservations() {
         3
     );
 }
+
+/// Seed-24 civilization-seed-qa (ISSUE-1-17 births): the founding bread ran
+/// out on courtships that found no bed, because a courtship spends its food
+/// even when no baby follows, so the town had no food left for the birth its
+/// new house allowed. Two fed residents whose beds are both taken keep their
+/// bread instead of courting.
+#[test]
+fn fed_residents_with_no_spare_bed_keep_their_bread() {
+    let (mut state, parents, bread) = stored_food_village(2);
+    let settlement = state
+        .entities
+        .row(parents[0])
+        .villager
+        .as_ref()
+        .unwrap()
+        .settlement
+        .unwrap();
+    state
+        .settlements
+        .get_mut(settlement)
+        .unwrap()
+        .bootstrap_storage = None;
+    for _ in 0..200 {
+        step(&mut state);
+    }
+    for slot in parents {
+        let parent = state.entities.row_mut(slot).villager.as_mut().unwrap();
+        assert!(
+            parent.home.is_some(),
+            "each parent holds one of the two beds"
+        );
+        parent.inventory[0] = Some(ItemStack::new(bread, 3));
+    }
+    for _ in 0..3_000 {
+        step(&mut state);
+    }
+    assert_eq!(population(&state), 2);
+    for slot in parents {
+        assert_eq!(
+            food_count(&state, slot, bread),
+            3,
+            "a courtship without a bed must not spend the bread"
+        );
+    }
+}
 #[test]
 fn bound_miner_keeps_chest_ration_through_deposit_and_breeds() {
     let (mut state, parents, bread) = stored_food_village(3);

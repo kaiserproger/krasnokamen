@@ -1578,13 +1578,75 @@ fn plan(state: &mut TickState, id: SettlementId) {
     if gathering {
         return;
     }
-    // Free street work fills every pass that starts no building or upgrade.
+    // Free work fills every pass that starts no building or upgrade: seed
+    // gathering while the first Farm waits on wheat seeds, then street work.
     let Some(record) = state.settlements.get(id) else {
         return;
     };
-    if let Some(site) = street_site(state, record, &images) {
+    if let Some(site) = meadow_site(state, record, residents, &images)
+        .or_else(|| street_site(state, record, &images))
+    {
         begin_cells(state, site.project, site.bounds, site.cells);
     }
+}
+
+/// The first Farm's wheat cells cost seeds that only a farm produces. While
+/// the stock is short of them, Builders clear seed-bearing grass near the bell
+/// (vanilla: short grass drops a wheat seed one time in eight), the same way
+/// they clear any plant: free work, loot credited to storage.
+fn meadow_site(
+    state: &TickState,
+    record: &SettlementRecord,
+    residents: usize,
+    images: &[super::inventory::Image],
+) -> Option<FundedSite> {
+    let farmer = BuildingKind::Workshop(Profession::Farmer);
+    if !needed_kinds(record, residents).any(|kind| kind == farmer) {
+        return None;
+    }
+    let is_seed = |item: u32| {
+        state
+            .registry
+            .items
+            .name_of(item)
+            .is_some_and(|name| matches!(name.path(), "wheat_seeds"))
+    };
+    let catalog = blueprints::all(&state.registry);
+    let level = catalog
+        .iter()
+        .find(|blueprint| blueprint.kind == farmer)?
+        .level(1)?;
+    let need: u64 = level
+        .materials
+        .iter()
+        .filter(|(item, _)| is_seed(*item))
+        .map(|(_, count)| u64::from(*count))
+        .sum();
+    let have: u64 = images
+        .iter()
+        .flat_map(|image| &image.slots)
+        .filter(|stack| is_seed(stack.item_id))
+        .map(|stack| stack.count.max(0) as u64)
+        .sum();
+    if have >= need {
+        return None;
+    }
+    let work = layout::meadow_work(state, record)?;
+    Some(FundedSite {
+        project: Project {
+            settlement: record.id,
+            blueprint: layout::MEADOW.to_owned(),
+            level: 1,
+            origin: work.bounds.min,
+            rotation: 0,
+            building: None,
+            structure: String::new(),
+            ordered: false,
+            borrowed_builder: None,
+        },
+        bounds: work.bounds,
+        cells: work.cells,
+    })
 }
 
 /// Chunk-local resident index, with a hard admission cap. Other mob populations

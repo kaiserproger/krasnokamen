@@ -930,6 +930,7 @@ fn street_work_clearing_short_grass_stores_its_vanilla_wheat_seeds() {
     }
     state.world.fold_overlay();
     fund(&mut state, "storage", 1);
+    stock_seeds(&mut state, 12);
     request_build(&mut state, id, "storage").unwrap();
     super::tests::complete(&mut state, id, slot);
     plan(&mut state, id);
@@ -977,6 +978,107 @@ fn street_work_clearing_short_grass_stores_its_vanilla_wheat_seeds() {
     );
 }
 
+/// Grass and short grass on every fixture column but the stocked chest's.
+fn meadow_fixture() -> (TickState, SettlementId, crate::entities::EntitySlot) {
+    let (mut state, id, slot) = fixture();
+    open_plan(&mut state);
+    let grass = crate::settlements::allocator::tests::block(&state, "minecraft:grass_block", &[]);
+    let plant = crate::settlements::allocator::tests::block(&state, "minecraft:short_grass", &[]);
+    for x in -16i32..32 {
+        for z in -16i32..32 {
+            if (x, z) != (1, 1) {
+                state.world.set_block(x, 200, z, grass);
+                state.world.set_block(x, 201, z, plant);
+            }
+        }
+    }
+    state.world.fold_overlay();
+    fund(&mut state, "storage", 1);
+    request_build(&mut state, id, "storage").unwrap();
+    super::tests::complete(&mut state, id, slot);
+    (state, id, slot)
+}
+
+/// Seed-24 civilization-seed-qa (ISSUE-1-17 births): the first Farm needs 12
+/// wheat seeds and nothing but a farm produced them; the few seeds that
+/// street and site clearing happened to drop never reached the bill. A town
+/// short of the seeds now spends its free Builder time clearing seed-bearing
+/// grass near the bell, and the vanilla drops fill the stock.
+#[test]
+fn a_town_short_of_wheat_seeds_clears_a_meadow_for_its_first_farm() {
+    let (mut state, id, slot) = meadow_fixture();
+    plan(&mut state, id);
+    assert_eq!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .map(|project| project.blueprint.as_str()),
+        Some(layout::MEADOW),
+        "no building is funded, so the free time gathers seeds"
+    );
+    let before = stored_seeds(&state);
+    let mut cleared = 0;
+    for _ in 0..16 {
+        super::tests::complete(&mut state, id, slot);
+        plan(&mut state, id);
+        cleared += 1;
+        if stored_seeds(&state) >= 12 {
+            break;
+        }
+    }
+    assert!(
+        stored_seeds(&state) > before,
+        "{cleared} meadow clearings stored no wheat seeds"
+    );
+}
+
+#[test]
+fn a_town_with_the_farms_wheat_seeds_in_stock_clears_no_meadow() {
+    let (mut state, id, _) = meadow_fixture();
+    stock_seeds(&mut state, 12);
+    plan(&mut state, id);
+    assert_ne!(
+        state
+            .settlements
+            .get(id)
+            .unwrap()
+            .project
+            .as_ref()
+            .map(|project| project.blueprint.as_str()),
+        Some(layout::MEADOW)
+    );
+}
+
+fn wheat_seeds(state: &TickState) -> u32 {
+    state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:wheat_seeds").unwrap())
+        .unwrap()
+}
+
+/// Wheat seeds in every block-entity inventory.
+fn stored_seeds(state: &TickState) -> i32 {
+    let item = wheat_seeds(state);
+    state
+        .block_entities
+        .values()
+        .flat_map(|block| &block.slots)
+        .filter(|stack| stack.item_id == item)
+        .map(|stack| stack.count)
+        .sum()
+}
+
+/// Put `count` seeds in the fixture chest's last slot.
+fn stock_seeds(state: &mut TickState, count: i32) {
+    let item = wheat_seeds(state);
+    let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
+    let last = slots.len() - 1;
+    slots[last] = mc_data::ItemStack::new(item, count);
+}
 #[test]
 fn waiting_house_wool_demand_survives_an_active_street_project() {
     let (state, id, _) = active_street_fixture();
