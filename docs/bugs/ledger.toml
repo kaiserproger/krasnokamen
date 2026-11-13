@@ -2551,13 +2551,13 @@ failing_first = "not recorded"
 fix_commit = "patch:c08470d55c904b23b2efd8f2e9a3a4bfb28b3e93a19feef1dd46de63e8b972a7"
 
 [[bug]]
-id = "SETTLEMENT-BUILDER-HOUSE-CERTIFIED-WITH-FOREIGN-BLOCK"
-title = "A Builder project finishes and certifies its building while a player-placed foreign block sits in an authored cell: House L1 certified with a diamond block where house.json requires oak_log"
+id = "SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN"
+title = "A player breaking an already-placed cell of an active Builder project leaves a hole that is never re-placed: House L1 stays active at 250/250 and holds the settlement's project slot"
 area = "gameplay"
 repro = "client"
 severity = "major"
 status = "open"
-source = "Issue1Breaker (qa-breaker) on main fa637b84, receipts/Issue1Breaker/REPORT.md 'Completed house with an edited corner' (P1, 1/2 attempts): during House L1 at [122,69,-5] (119/250 work) an operator set [122,70,-5] to minecraft:diamond_block, the real client read the edit back, progress continued to 219/250, and after a graceful restart the building list held `house level 1 [122,69,-5]-[128,73,1]` while minecraft_read_block still returned minecraft:diamond_block there (wt/Issue1Breaker/.analysis/validation/20261113T072947-scene-shot-qjg2z2kh, 20261113T073311-scene-shot-0tufstby, 20261113T074054-scene-shot-i56qrk9u). house.json level 1 requires oak_log[axis=y] at that corner for every rotation. Expected: the Builders replace the foreign block (or the project waits) so a Builder-certified building matches its authored picture."
+source = "Issue1Breaker (qa-breaker) on main fa637b84, receipts/Issue1Breaker/REPORT.md 'Actual player site interference' (1/1): on a copy of an active House L1 world at [122,69,-5], a survival-mode real native client broke the already-placed corner [122,70,-5] (oak_log[axis=y]) at 88/250; the block read air, work continued to 160/250 with the corner still air, and after a copied-world restart the project stayed active at 250/250 with the cell air across eight 200-tick observations (wt/Issue1Breaker/.analysis/validation/20261113T075452-scene-shot-o4m1dbb1, 20261113T075614-scene-shot-ca1o3e5m; retained under receipts/Issue1Breaker retained/player-site-break and retained/player-break-followup). docs/settlements/construction.md#builders-and-supplies says already placed cells are not re-planned after a foreign edit, so the project can never pass its geometric certificate and blocks further construction. A foreign SOLID block in a placed cell (operator diamond at the same corner) still certifies, which that rule documents and is not this defect. Expected: Builders re-place an authored cell that a foreign edit emptied, and the project finishes."
 regression = []
 failing_first = "reported"
 
