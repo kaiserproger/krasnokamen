@@ -949,10 +949,21 @@ impl FormationRuntime {
                 m.pos[1],
                 m.pos[2] + r.spec.facing[1],
             ]);
-            let away = super::steering::unit(
+            let mut away = super::steering::unit(
                 [m.pos[0] - source[0], m.pos[2] - source[2]],
                 [-r.spec.facing[0], -r.spec.facing[1]],
             );
+            // Inside a meshed enemy line a fugitive is past its front point,
+            // and fleeing from that point would take him deeper into the enemy
+            // army: the way out runs along the enemy's facing.
+            if let Some(e) = r.enemy_regiment {
+                let f = self.regiments[e].spec.facing;
+                let along = away[0] * f[0] + away[1] * f[1];
+                if along < 0.0 {
+                    away[0] -= 2.0 * along * f[0];
+                    away[1] -= 2.0 * along * f[1];
+                }
+            }
             let mut target = [
                 m.pos[0] + away[0] * 20.0,
                 m.pos[1],

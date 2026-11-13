@@ -76,7 +76,7 @@ fn advancing_keeps_one_block_files_and_two_block_ranks() {
 }
 
 #[test]
-fn opposing_fronts_keep_three_to_five_block_standoff_without_blob_collapse() {
+fn opposing_fronts_keep_close_quarters_standoff_without_blob_collapse() {
     let mut runtime = FormationRuntime::default();
     add(&mut runtime, spec(0, 1, 0.0, 20, Order::Advance), 1, 200);
     add(&mut runtime, spec(1, 2, 30.0, 20, Order::Advance), 201, 200);
@@ -92,7 +92,8 @@ fn opposing_fronts_keep_three_to_five_block_standoff_without_blob_collapse() {
         }
     }
     let gap = runtime.regiments[1].spec.origin[2] - runtime.regiments[0].spec.origin[2];
-    assert!((3.0..=5.0).contains(&gap), "gap={gap}");
+    // Within sword reach of each other (STANDOFF 1.6, giving ground below 1).
+    assert!((GIVE_GROUND..=STANDOFF + 0.1).contains(&gap), "gap={gap}");
     for r in &runtime.regiments {
         let front = &runtime.members[r.start..r.start + 20];
         assert!((front[0].pos[0] - front[19].pos[0]).abs() > 18.9);
@@ -100,6 +101,56 @@ fn opposing_fronts_keep_three_to_five_block_standoff_without_blob_collapse() {
             assert!((pair[0].pos[0] - pair[1].pos[0]).abs() >= steering::MIN_SPACING);
         }
     }
+}
+
+/// G2 contact rework: two foot lines at the mesh interval, staged half an
+/// interval to the side of each other, pass through each other file between
+/// file to MESH_DEPTH: no two bodies come closer than the body spacing, and
+/// the meshed ranks of both sides have an enemy within sword reach.
+#[test]
+fn head_on_lines_at_the_mesh_interval_mesh_file_between_file() {
+    let mut runtime = FormationRuntime::default();
+    let red = spec(0, 1, 0.0, 10, Order::Advance);
+    let mut blue = spec(1, 2, 20.0, 10, Order::Advance);
+    blue.origin[0] += MESH_INTERVAL / 2.0;
+    add(&mut runtime, red, 1, 100);
+    add(&mut runtime, blue, 101, 100);
+    runtime.set_fighting_interval(0, MESH_INTERVAL).unwrap();
+    runtime.set_fighting_interval(1, MESH_INTERVAL).unwrap();
+    for tick in 0..600 {
+        simulate(&mut runtime, tick);
+        // Pulses have their own oracles; this one checks the mesh geometry.
+        for r in &mut runtime.regiments {
+            for s in &mut r.sections {
+                s.pulse_until = 0;
+                s.cooldown_until = u64::MAX;
+            }
+        }
+    }
+    assert!(runtime.regiments.iter().all(|r| r.meshing));
+    let gap = runtime.regiments[1].spec.origin[2] - runtime.regiments[0].spec.origin[2];
+    assert!(
+        (-MESH_DEPTH - 0.7..=-MESH_DEPTH + 0.1).contains(&gap),
+        "gap={gap}"
+    );
+    let distance = |a: &Member, b: &Member| mth::length2(a.pos[0] - b.pos[0], a.pos[2] - b.pos[2]);
+    let mut closest = f64::INFINITY;
+    let mut in_reach = 0;
+    for a in &runtime.members {
+        let mut enemy_near = false;
+        for b in &runtime.members {
+            if a.id == b.id {
+                continue;
+            }
+            closest = closest.min(distance(a, b));
+            enemy_near |= a.regiment != b.regiment && distance(a, b) <= 2.5;
+        }
+        in_reach += usize::from(enemy_near);
+    }
+    assert!(closest >= steering::MIN_SPACING - 0.05, "closest={closest}");
+    // Seven meshed ranks and two behind them per side, ten files each; a
+    // straight front with one-rank contact gives 40 at most.
+    assert!(in_reach >= 150, "in_reach={in_reach}");
 }
 
 #[test]
