@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import math
 import pathlib
 import subprocess
 import sys
@@ -114,6 +115,68 @@ class FilterGraph(unittest.TestCase):
             self.assertIn(want, joined)
         self.assertNotIn('-c:a', joined)
         self.assertEqual(cmd[cmd.index('-t') + 1], f'{(230 - 0.5) / 60:.6f}')
+
+
+class NoBacktrack(unittest.TestCase):
+    @staticmethod
+    def shots(*spans):
+        return [compose.Shot(f's{i}', f'c{i}', a, b) for i, (a, b) in enumerate(spans)]
+
+    @staticmethod
+    def cam(yaw_target, attach=None):
+        # position at origin, looking along (sin, cos) of the requested yaw
+        look = [math.sin(math.radians(yaw_target)), -0.5, math.cos(math.radians(yaw_target))]
+        key = {'position': [0, 0, 0], 'look_target': look}
+        return key, key, attach
+
+    def ticks(self, shots):
+        return [compose.predicted_ticks(s, 0) for s in shots]
+
+    def test_trims_head_to_previous_end_and_orders_by_start(self):
+        shots = self.shots((10, 14), (8, 12), (13, 17))  # file order s0 s1 s2; by START: s1 s0 s2
+        kept, table = compose.plan_no_backtrack(shots, self.ticks(shots), [self.cam(0)] * 3, 90, 120)
+        self.assertEqual([shots[i].name for i, _ in kept], ['s1', 's0', 's2'])
+        # s1 runs 8..12 s; s0 (10..14) is trimmed by 2 s = 120 frames, 2 s remain: kept (>= 120 frames).
+        self.assertEqual(kept[1], (0, 120))
+        # s2 starts at 13 s, before s0's end (14 s): trimmed to 14 s, 3 s remain.
+        self.assertEqual(kept[2], (2, 60))
+        self.assertEqual([r['delta_ticks'] for r in table], [None, 0, 0])
+        self.assertEqual([r['delta_ticks_original'] for r in table[1:]], [-40, -20])
+
+    def test_no_backward_step_after_planning(self):
+        shots = self.shots((10, 14), (11, 15), (12, 16), (30, 34))
+        ticks = self.ticks(shots)
+        kept, _ = compose.plan_no_backtrack(shots, ticks, [self.cam(0)] * 4, 90, 120)
+        previous_last = None
+        for i, trim in kept:
+            visible = ticks[i][trim:]
+            if previous_last is not None:
+                self.assertGreaterEqual(visible[0], previous_last + 1)
+            previous_last = visible[-1]
+
+    def test_short_remainder_is_dropped(self):
+        shots = self.shots((10, 14), (13, 15), (20, 24))  # s1 would keep 1 s
+        kept, table = compose.plan_no_backtrack(shots, self.ticks(shots), [self.cam(0)] * 3, 90, 120)
+        self.assertEqual([i for i, _ in kept], [0, 2])
+        self.assertEqual(table[1]['status'], 'dropped')
+        self.assertIsNone(table[1]['in_tick'])
+
+    def test_sharp_angle_keeps_backtrack(self):
+        shots = self.shots((10, 14), (11, 15), (12, 16))
+        # s1 turns 120 degrees from s0: exception, kept whole. s2 attached to an entity: class change, exception.
+        cams = [self.cam(0), self.cam(120), self.cam(130, attach=7)]
+        kept, table = compose.plan_no_backtrack(shots, self.ticks(shots), cams, 90, 120)
+        self.assertEqual(kept, [(0, 0), (1, 0), (2, 0)])
+        self.assertEqual([r['exception'] for r in table], [False, True, True])
+        self.assertEqual(table[1]['delta_ticks'], -60)
+        # A turn below the threshold is trimmed instead.
+        kept, _ = compose.plan_no_backtrack(shots[:2], self.ticks(shots[:2]), [self.cam(0), self.cam(80)], 90, 60)
+        self.assertEqual(kept[1], (1, 180))
+
+    def test_trim_in_filter_graph(self):
+        g = compose.build_filter([240, 120], 12, '1080p', '/tmp/t.txt', None, trims=[0, 60])
+        self.assertIn('[1:v]trim=start_frame=60,setpts=PTS-STARTPTS,fps=60', g)
+        self.assertIn('[0:v]fps=60', g)
 
 
 class MapCommand(unittest.TestCase):

@@ -6,6 +6,7 @@
 """
 import argparse
 import json
+import math
 import pathlib
 import subprocess
 import sys
@@ -59,6 +60,71 @@ def recorded_ticks(path):
     return ticks
 
 
+def look_yaw(key):
+    v = [key['look_target'][i] - key['position'][i] for i in range(3)]
+    return math.degrees(math.atan2(v[0], v[2]))
+
+
+def camera_ends(path):
+    """(first key, last key, attach_entity) of a camera JSON."""
+    data = json.loads(pathlib.Path(path).read_text(encoding='utf-8'))
+    keys = data['keyframes']
+    return keys[0], keys[-1], data.get('attach_entity')
+
+
+def sharp_cut(prev_camera, next_camera, sharp_yaw):
+    """A cut changes the angle sharply if the camera class changes (entity-attached close-up
+    vs free camera) or the horizontal look direction turns by `sharp_yaw` degrees or more."""
+    if (prev_camera[2] is None) != (next_camera[2] is None):
+        return True
+    turn = abs((look_yaw(next_camera[0]) - look_yaw(prev_camera[1]) + 180) % 360 - 180)
+    return turn >= sharp_yaw
+
+
+def plan_no_backtrack(shots, ticks, cameras, sharp_yaw, min_frames):
+    """Order by START and make battle time never step back at a cut, except at sharp angle changes.
+
+    A shot whose first tick is earlier than the tick after the previous kept shot's last frame
+    has its head trimmed to that tick; a shot left with fewer than `min_frames` frames is dropped.
+    Returns (kept [(shot index, trim frames)], cut-table rows in play order incl. dropped shots).
+    """
+    kept, table = [], []
+    prev = None
+    for i in sorted(range(len(shots)), key=lambda i: shots[i].start):
+        first, last, length = ticks[i][0], ticks[i][-1], len(ticks[i])
+        row = {'shot': shots[i].name, 'start_s': shots[i].start, 'end_s': shots[i].end, 'frames': length}
+        trim, exception, status = 0, False, 'kept'
+        if prev is not None:
+            bound = ticks[prev[0]][-1] + 1
+            row['delta_ticks_original'] = first - bound
+            if first < bound:
+                if sharp_cut(cameras[prev[0]], cameras[i], sharp_yaw):
+                    exception = True
+                else:
+                    trim = next((j for j, t in enumerate(ticks[i]) if t >= bound), length)
+                    if length - trim < min_frames:
+                        status = 'dropped'
+        if status == 'dropped':
+            row.update(trim_frames=trim, status=status, exception=False, in_tick=None, out_tick=None, delta_ticks=None)
+        else:
+            row.update(trim_frames=trim, status=status, exception=exception, in_tick=ticks[i][trim], out_tick=last,
+                       delta_ticks=None if prev is None else ticks[i][trim] - (ticks[prev[0]][-1] + 1))
+            kept.append((i, trim))
+            prev = (i,)
+        table.append(row)
+    return kept, table
+
+
+def cut_table_markdown(table):
+    lines = ['| shot | in tick | out tick | delta vs previous (s) | original delta (s) | trimmed frames | sharp-angle exception | status |',
+             '|---|---|---|---|---|---|---|---|']
+    fmt = lambda ticks: '-' if ticks is None else f'{ticks / TICKS_PER_SECOND:+.2f}'
+    for r in table:
+        lines.append(f"| {r['shot']} | {r['in_tick'] if r['in_tick'] is not None else '-'} | {r['out_tick'] if r['out_tick'] is not None else '-'} | "
+                     f"{fmt(r['delta_ticks'])} | {fmt(r.get('delta_ticks_original'))} | {r['trim_frames']} | {'yes' if r['exception'] else 'no'} | {r['status']} |")
+    return '\n'.join(lines) + '\n'
+
+
 def edit_frames(ticks_per_shot, crossfade):
     """Output-frame order rows {frame, last_applied_tick, shot, shot_frame}.
 
@@ -91,12 +157,17 @@ def escape_filter_path(path):
     return path.replace('\\', '\\\\').replace(':', '\\:').replace("'", "'\\\\\\''").replace(',', '\\,').replace('[', '\\[').replace(']', '\\]')
 
 
-def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5, fade_out=1.0):
-    """Filter graph for inputs: shots 0..N-1, overlay PNG sequence N, music N+1 (optional)."""
+def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5, fade_out=1.0, trims=None):
+    """Filter graph for inputs: shots 0..N-1, overlay PNG sequence N, music N+1 (optional).
+
+    `lengths` are the visible frames per shot; `trims[i]` frames are cut off the head of input i.
+    """
     n = len(lengths)
     width, height = (1920, 1080) if resolution == '1080p' else (3840, 2160)
     panel = 1 if resolution == '1080p' else 2  # overlay is rendered at native 480x260
-    parts = [f'[{i}:v]fps={FPS},scale={width}:{height}:flags=lanczos,setsar=1,settb=AVTB,setpts=PTS-STARTPTS[s{i}]'
+    trims = trims or [0] * n
+    parts = [f'[{i}:v]' + (f'trim=start_frame={trims[i]},setpts=PTS-STARTPTS,' if trims[i] else '')
+             + f'fps={FPS},scale={width}:{height}:flags=lanczos,setsar=1,settb=AVTB,setpts=PTS-STARTPTS[s{i}]'
              for i in range(n)]
     if n == 1:
         cut = 's0'
@@ -130,7 +201,7 @@ def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5,
     return ';'.join(parts)
 
 
-def encode_command(shot_files, overlay_pattern, music, lengths, crossfade, resolution, title_file, output):
+def encode_command(shot_files, overlay_pattern, music, lengths, crossfade, resolution, title_file, output, trims=None):
     total = sum(lengths) - (len(lengths) - 1) * crossfade
     cmd = ['ffmpeg', '-hide_banner', '-nostdin', '-n', '-filter_complex_threads', '1']
     for path in shot_files:
@@ -138,7 +209,7 @@ def encode_command(shot_files, overlay_pattern, music, lengths, crossfade, resol
     cmd += ['-framerate', str(FPS), '-i', overlay_pattern]
     if music:
         cmd += ['-stream_loop', '-1', '-i', music]
-    cmd += ['-filter_complex', build_filter(lengths, crossfade, resolution, title_file, music), '-map', '[v]']
+    cmd += ['-filter_complex', build_filter(lengths, crossfade, resolution, title_file, music, trims=trims), '-map', '[v]']
     if music:
         cmd += ['-map', '[audio]']
     # Half a frame of slack: -t drops packets at pts >= t, so exactly `total` frames survive.
@@ -187,6 +258,10 @@ def add_common(p):
     p.add_argument('--first-tick', required=True, type=int, help='first_tick of take.solrec.result.json')
     p.add_argument('--frames-dir', help='directory with NAME.frames.jsonl from bv-render; without it ticks are predicted from shots.txt')
     p.add_argument('--crossfade-frames', type=int, default=0, help='frames of fade between shots; 0 = hard cut')
+    p.add_argument('--no-backtrack', action='store_true',
+                   help='order shots by START and trim heads so battle time never steps back at a cut, except at sharp angle changes; needs --frames-dir')
+    p.add_argument('--sharp-yaw', type=float, default=90, help='degrees of look-direction turn that count as a sharp angle change')
+    p.add_argument('--min-shot-seconds', type=float, default=2, help='a trimmed shot shorter than this is dropped')
 
 
 def main():
@@ -206,23 +281,40 @@ def main():
     b.add_argument('--output', required=True)
     a = p.parse_args()
     shots, ticks = load_shots(a)
+    full_lengths = [len(t) for t in ticks]
+    trims, table = [0] * len(shots), None
+    if a.no_backtrack:
+        if not a.frames_dir:
+            p.error('--no-backtrack needs --frames-dir (recorded ticks)')
+        root = pathlib.Path(a.shots_file).parent
+        cameras = [camera_ends(root / s.camera) for s in shots]
+        kept, table = plan_no_backtrack(shots, ticks, cameras, a.sharp_yaw, round(a.min_shot_seconds * FPS))
+        shots = [shots[i] for i, _ in kept]
+        trims = [t for _, t in kept]
+        full_lengths = [full_lengths[i] for i, _ in kept]
+        ticks = [ticks[i][t:] for i, t in kept]
     rows, total = edit_frames(ticks, a.crossfade_frames)
+    if table:
+        print(cut_table_markdown(table))
     if a.command == 'map':
         write_map(rows, a.out)
         print(f'{total} frames, {total / FPS:.3f} s')
         return
     shot_files = [pathlib.Path(a.shots_dir) / f'{s.name}.mp4' for s in shots]
-    for shot, path, expected in zip(shots, shot_files, ticks):
+    for path, full in zip(shot_files, full_lengths):
         got = probe_frames(path)
-        if got != len(expected):
-            sys.exit(f'{path}: {got} frames but the tick map has {len(expected)}')
+        if got != full:
+            sys.exit(f'{path}: {got} frames but its frames file has {full}')
     work = pathlib.Path(a.work)
     work.mkdir(parents=True, exist_ok=False)
+    if table:
+        (work / 'cut-table.json').write_text(json.dumps(table, indent=1) + '\n')
+        (work / 'cut-table.md').write_text(cut_table_markdown(table))
     write_map(rows, work / 'edit.frames.jsonl')
     import overlay
     overlay.write_overlay(a.telemetry, work / 'edit.frames.jsonl', work / 'overlay')
     subprocess.run(encode_command(shot_files, str(work / 'overlay' / 'overlay-%06d.png'), a.music,
-                                  [len(t) for t in ticks], a.crossfade_frames, a.resolution, a.title_file, a.output),
+                                  [len(t) for t in ticks], a.crossfade_frames, a.resolution, a.title_file, a.output, trims=trims),
                    check=True)
 
 
