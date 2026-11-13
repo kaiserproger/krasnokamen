@@ -28,8 +28,8 @@ from typing import Any
 from ..profiles import ProfileContext
 from . import native_client
 from .buildings_qa import (
-    _block_id, _chat_lines, _chest_totals, _deposit_all_at, _echo, _hand_storage_at,
-    _open_chest_at, _props, _read, _scan_box, _summon_bind, _verdict,
+    DIALOG_CLASS, _block_id, _chat_lines, _chest_totals, _deposit_all_at, _echo,
+    _hand_storage_at, _open_chest_at, _props, _read, _scan_box, _send, _summon_bind, _verdict,
 )
 from .probe_steps import ProbeSteps
 
@@ -149,6 +149,17 @@ def complete(counts: dict[str, Any]) -> bool:
             and counts["open_columns"] == 0 and counts["doors"] == 4 and len(counts["wells"]) == 1)
 
 
+def _page(probe: ProbeSteps, page: str, title: str) -> list[str]:
+    """Body lines of one settlement menu page, the dialog closed again so the client clock runs."""
+    _send(probe, f"settlement menu {page}")
+    opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
+                        and title in str(s["screen"].get("title", "")), f"{FIXTURE}_{page}_open")
+    lines = [str(n.get("label", "")) for n in opened.get("ui_nodes", [])
+             if isinstance(n, dict) and str(n.get("id", "")).startswith("dialog/body")]
+    probe.call("minecraft_close_screen", {})
+    return lines
+
+
 def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, artifact: Path) -> None:
     sub = detail.setdefault("blueprints", {}).setdefault(NAME, {})
     sname = f"bqa_{NAME}"
@@ -218,6 +229,8 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
         samples.append({"seconds": round(elapsed), "ring_blocks": counts["ring_blocks"],
                         "well_blocks": counts["well_blocks"], "doors": counts["doors"],
                         "road_paths": sum(1 for block in roads.values() if block == PATH)})
+        if len(samples) == 3:
+            sub["projects_early"] = _page(probe, "projects", "Projects")
         if first is None and counts["ring_blocks"] + counts["well_blocks"] > 0:
             first = elapsed
         if complete(counts):
@@ -228,6 +241,8 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, art
             break
         if probe.deadline - time.monotonic() < 240.0:
             break
+    sub["projects_page"] = _page(probe, "projects", "Projects")
+    sub["residents_page"] = _page(probe, "residents", "Residents")
     sub["progress"] = samples[-40:]
     sub["after"] = counts
     wall, gate = counts["wall_columns"], counts["gate_columns"]
