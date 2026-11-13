@@ -113,6 +113,19 @@ for line in sys.stdin:
         print(f'Battle started tick={tick}', flush=True)
     elif words[:2] == ['battle', 'pause']:
         print(f'Battle paused tick={tick}', flush=True)
+    elif words[:2] == ['battle', 'watch']:
+        print('Battle watching: ' + ','.join(words[2:]), flush=True)
+        def join(names=words[2:]):
+            # Joins arrive after the watch, as from the network.
+            time.sleep(0.05)
+            if not os.environ.get('FAKE_NO_JOIN'):
+                for index, who in enumerate(names):
+                    print(f'2026-11-13T00:00:00Z  INFO mc_core::battle::live_players: Battle player online: {who} entity={index + 1}', flush=True)
+        threading.Thread(target=join, daemon=True).start()
+    elif words[:2] == ['battle', 'live']:
+        print(f'Battle live placed: {words[2]} side=1 regiment=1 file=22 rank=0 at=0.50,64.00,-27.50 yaw=0.0 kit_slots=5 kit_from=x', flush=True)
+    elif words[:2] == ['battle', 'spectate']:
+        print(f'Battle spectator placed: {words[2]} target={words[3]} at=0.50,66.50,-31.50 yaw=0.0 gamemode=spectator camera=own', flush=True)
     elif words == ['stop']:
         break
 '''
@@ -512,6 +525,69 @@ class BattleRunnerTests(unittest.TestCase):
             self.assertEqual((run / 'env.txt').read_text(), '1')
             self.assertIn('checkpoint_every_ticks = 1200', (run / 'server.toml').read_text())
             self.assertFalse((run / 'take.json').exists())
+            self.assertFalse((run / 'live-players.json').exists())
+            self.assertFalse(any(command.startswith(('battle watch', 'battle live', 'battle spectate')) for command in commands))
+
+    def test_live_roles_parse_flags_and_reject_bad_names(self):
+        runner = load_runner()
+        self.assertEqual(runner.live_roles(['PovRed:red'], ['CamSpec']), ([('PovRed', 'red')], [('CamSpec', 'PovRed')]))
+        self.assertEqual(runner.live_roles(['A:2', 'B:1'], ['C:B']), ([('A', 'blue'), ('B', 'red')], [('C', 'B')]))
+        for players, spectators in ((['PovRed'], []), (['PovRed:green'], []), (['Pov-Red:red'], []), ([], ['CamSpec']),
+                                    (['PovRed:red', 'PovRed:blue'], []), (['BattleRecorder:red'], []),
+                                    (['PovRed:red'], ['CamSpec:Nobody']), (['ThisNameIsSeventeen:red'], [])):
+            with self.assertRaises(ValueError, msg=(players, spectators)):
+                runner.live_roles(players, spectators)
+        base = ['--pin', '/p', '--client', '/c', '--client-data', '/d', '--cache', '/k', '--run-dir', '/r']
+        with unittest.mock.patch('sys.argv', ['run-battle.py', *base]):
+            plain = runner.arguments()
+        self.assertEqual((plain.live_players, plain.live_spectators, plain.live_timeout), ([], [], 900))
+        self.assertEqual(runner.live_commands(plain), (None, []))
+        with unittest.mock.patch('sys.argv', ['run-battle.py', *base, '--take', '--live-player', 'PovRed:red', '--live-spectator', 'CamSpec', '--live-timeout', '60']):
+            live = runner.arguments()
+        self.assertEqual(runner.live_commands(live), ('battle watch PovRed CamSpec', ['battle live PovRed red', 'battle spectate CamSpec PovRed']))
+        self.assertEqual(live.live_timeout, 60)
+
+    def test_dry_run_waits_for_live_players_before_the_recorder_and_places_them_before_start(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            out = subprocess.run([str(Path(__file__).with_name('run-battle.sh')), '--dry-run', '--take', '--pin', str(root / 'pin'),
+                                  '--client', str(root / 'client'), '--client-data', str(root / 'client-data'), '--cache', str(root / 'cache'),
+                                  '--run-dir', str(root / 'run'), '--live-player', 'PovRed:red', '--live-spectator', 'CamSpec'],
+                                 text=True, capture_output=True, check=True).stdout
+            self.assertLess(out.index('battle watch PovRed CamSpec'), out.index('live barrier'))
+            self.assertLess(out.index('live barrier'), out.index('recorder record'))
+            self.assertLess(out.index('battle roster'), out.index('battle live PovRed red'))
+            self.assertLess(out.index('battle live PovRed red'), out.index('battle spectate CamSpec PovRed'))
+            self.assertLess(out.index('battle spectate CamSpec PovRed'), out.index('save-all'))
+            self.assertLess(out.index('save-all'), out.index('battle start'))
+
+    def test_take_waits_for_live_players_then_places_them_before_the_checkpoint_and_start(self):
+        with tempfile.TemporaryDirectory() as directory:
+            commands, run = self.run_fake_battle(Path(directory), '--take', '--checkpoint-every-ticks', '1000',
+                                                 '--live-player', 'PovRed:red', '--live-spectator', 'CamSpec')
+            self.assertEqual(commands[0], 'battle watch PovRed CamSpec')
+            self.assertEqual(commands[1], 'battle setup 9 field-100 10')
+            live, spectate = commands.index('battle live PovRed red'), commands.index('battle spectate CamSpec PovRed')
+            self.assertLess(commands.index('battle roster'), live)
+            self.assertLess(live, spectate)
+            self.assertLess(spectate, commands.index('save-all'))
+            self.assertEqual(commands[commands.index('battle start') - 1], 'save-all')
+            receipt = json.loads((run / 'live-players.json').read_text())
+            self.assertEqual((receipt['players'], receipt['spectators']), ([['PovRed', 'red']], [['CamSpec', 'PovRed']]))
+            events = [(event['event'], event['name']) for event in receipt['events']]
+            for event in (('player_online', 'PovRed'), ('player_online', 'CamSpec'), ('live_placed', 'PovRed'), ('spectator_placed', 'CamSpec')):
+                self.assertIn(event, events)
+            self.assertIsNotNone(receipt['barrier_passed'])
+            self.assertEqual(json.loads((run / 'result.json').read_text())['take_clean'], True)
+
+    def test_live_barrier_times_out_before_the_recorder_starts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, run = self.run_fake_battle(Path(directory), '--live-player', 'PovRed:red', '--live-timeout', '1',
+                                               expect_success=False, FAKE_NO_JOIN='1')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('not online after 1 s: PovRed', json.loads((run / 'result.json').read_text())['error'])
+            self.assertEqual((run / 'commands.txt').read_text().splitlines(), ['battle watch PovRed'])
+            self.assertFalse((run / 'recorder.log').exists())
 
 
 if __name__ == '__main__':

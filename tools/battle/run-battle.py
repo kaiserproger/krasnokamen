@@ -32,6 +32,10 @@ CHECKPOINT_SPIKE_US = 50_000
 STATUS_FIELDS = ('tick', 'side1', 'side2', 'resident', 'active', 'nonzero_velocity', 'horses', 'regiments', 'dead')
 STATUS_PATTERN = re.compile(r"Battle (?:paused|running) tick=(\d+) side1=(\d+) side2=(\d+) resident=(\d+) active=(\d+)"
                             r"(?: nonzero_velocity=(\d+))? horses=(\d+)(?: regiments=(\d+))?(?: dead=(\d+))?")
+PLAYER_NAME = re.compile(r'[A-Za-z0-9_]{1,16}')
+SIDES = {'red': 'red', '1': 'red', 'blue': 'blue', '2': 'blue'}
+RECORDER_NAME = 'BattleRecorder'
+DEFAULT_LIVE_TIMEOUT = 900
 
 
 def arguments():
@@ -58,6 +62,9 @@ def arguments():
     p.add_argument('--view-distance', type=int, default=12, metavar='CHUNKS', help='server and recorder view distance, 2..32')
     p.add_argument('--allow-marker-gaps', action='store_true', help='record recorder marker and telemetry tick gaps instead of failing the run; implied by --take')
     p.add_argument('--server-scope', nargs='?', const='', default=None, metavar='SLICE', help='run the server in its own transient systemd user scope (optionally under SLICE) so the cgroup memory/CPU telemetry is the server alone')
+    p.add_argument('--live-player', action='append', default=[], metavar='NAME:SIDE', help='network player (offline-mode name) who takes a front-rank infantry slot of SIDE (red|blue) near the centre with its kit before start; repeatable. The runner waits until every live name is online before it launches the recorder')
+    p.add_argument('--live-spectator', action='append', default=[], metavar='NAME[:TARGET]', help='network player put in spectator mode behind TARGET (default: the first --live-player) before start; repeatable')
+    p.add_argument('--live-timeout', type=int, default=DEFAULT_LIVE_TIMEOUT, metavar='SECONDS', help=f'how long the online barrier waits for every live player and spectator (default {DEFAULT_LIVE_TIMEOUT})')
     p.add_argument('--dry-run', action='store_true')
     a = p.parse_args()
     if a.world_seed is None:
@@ -82,7 +89,118 @@ def arguments():
         a.checkpoint_every_ticks = take_checkpoint_ticks(a.duration) if a.take else DEFAULT_CHECKPOINT_EVERY_TICKS
     elif a.take and a.checkpoint_every_ticks <= a.duration * TICKS_PER_SECOND:
         p.error(f'take mode needs a checkpoint cadence above the {a.duration * TICKS_PER_SECOND} ticks of the take, or a checkpoint lands in the shot window')
+    if a.live_timeout < 1:
+        p.error('live timeout must be at least one second')
+    try:
+        a.live_players, a.live_spectators = live_roles(a.live_player, a.live_spectator)
+    except ValueError as error:
+        p.error(str(error))
     return a
+
+
+def live_roles(players, spectators):
+    """(name, side) live players and (name, target) spectators from the flag values."""
+    roles = []
+    for value in players:
+        name, _, side = value.partition(':')
+        if not PLAYER_NAME.fullmatch(name) or side not in SIDES:
+            raise ValueError(f'--live-player {value!r}: expected NAME:red|blue with a 1..16 character [A-Za-z0-9_] name')
+        roles.append((name, SIDES[side]))
+    watchers = []
+    for value in spectators:
+        name, _, target = value.partition(':')
+        if not target:
+            if not roles:
+                raise ValueError(f'--live-spectator {value!r} needs a TARGET or a --live-player to follow')
+            target = roles[0][0]
+        if not PLAYER_NAME.fullmatch(name) or not PLAYER_NAME.fullmatch(target):
+            raise ValueError(f'--live-spectator {value!r}: expected NAME[:TARGET] with 1..16 character [A-Za-z0-9_] names')
+        watchers.append((name, target))
+    names = [name for name, _ in roles] + [name for name, _ in watchers]
+    if len(names) != len(set(names)):
+        raise ValueError('live player and spectator names must be distinct')
+    if RECORDER_NAME in names:
+        raise ValueError(f'{RECORDER_NAME} is the recorder; pick another live name')
+    if len(names) > 8:
+        raise ValueError('at most 8 live players and spectators')
+    for name, target in watchers:
+        if target not in names:
+            raise ValueError(f'spectator {name} follows {target}, who is neither a live player nor a spectator')
+    return roles, watchers
+
+
+def live_names(a):
+    return [name for name, _ in a.live_players] + [name for name, _ in a.live_spectators]
+
+
+def live_commands(a):
+    """Console commands, in order: the watch that makes the server log joins (before the barrier), then
+    each placement (after the population barrier, before start)."""
+    names = live_names(a)
+    if not names:
+        return None, []
+    placements = [f'battle live {name} {side}' for name, side in a.live_players]
+    placements += [f'battle spectate {name} {target}' for name, target in a.live_spectators]
+    return f'battle watch {" ".join(names)}', placements
+
+
+def utc_now():
+    import datetime
+    return datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='milliseconds')
+
+
+class LivePresence:
+    """Online state of watched names from the server's `Battle player online|offline: NAME` lines
+    (battle/live_players.rs), fed by the log reader thread, plus every death, respawn and placement line
+    for the receipt. Waiting is on a condition the log reader notifies, never a timer."""
+    PATTERN = re.compile(r'Battle (player online|player offline|live placed|live respawned|live died|live rearmed|spectator placed): (\w+)')
+
+    def __init__(self, names):
+        self.names = set(names)
+        self.online = {}
+        self.events = []
+        self.closed = False
+        self.barrier_passed = None
+        self.condition = threading.Condition()
+
+    def feed(self, line):
+        match = self.PATTERN.search(line)
+        if match is None or match.group(2) not in self.names:
+            return
+        kind, name = match.groups()
+        with self.condition:
+            self.events.append({'event': kind.replace(' ', '_'), 'name': name, 'utc': utc_now(), 'line': line.strip()})
+            if kind == 'player online':
+                self.online[name] = True
+            elif kind == 'player offline':
+                self.online[name] = False
+            self.condition.notify_all()
+
+    def close(self):
+        with self.condition:
+            self.closed = True
+            self.condition.notify_all()
+
+    def wait_online(self, names, timeout):
+        with self.condition:
+            done = self.condition.wait_for(lambda: self.closed or all(self.online.get(name) for name in names), timeout)
+            if self.closed and not all(self.online.get(name) for name in names):
+                raise RuntimeError('server exited before every live player was online')
+            if not done:
+                missing = [name for name in names if not self.online.get(name)]
+                raise TimeoutError(f'live players not online after {timeout} s: {", ".join(missing)}')
+
+    def first_online(self):
+        with self.condition:
+            first = {}
+            for event in self.events:
+                if event['event'] == 'player_online':
+                    first.setdefault(event['name'], event['utc'])
+            return first
+
+    def receipt(self):
+        with self.condition:
+            return {'names': sorted(self.names), 'barrier_passed': self.barrier_passed, 'events': list(self.events)}
 
 
 def command_list(a):
@@ -323,14 +441,20 @@ def telemetry_worker(port, output, stop, failures, on_batch, ticks, gaps=None):
         ticks.put(None)
 
 
-def stream_log(pipe, file, messages):
-    with file.open('x') as output:
-        for line in pipe:
-            output.write(line)
-            output.flush()
-            if any(marker in line for marker in ('Solaris is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Saved the game', 'Failed to save the game', 'Command failed:', 'Battle error:')):
-                messages.put(line)
-    messages.put(None)
+def stream_log(pipe, file, messages, presence=None):
+    try:
+        with file.open('x') as output:
+            for line in pipe:
+                output.write(line)
+                output.flush()
+                if presence is not None:
+                    presence.feed(line)
+                if any(marker in line for marker in ('Solaris is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Saved the game', 'Failed to save the game', 'Command failed:', 'Battle error:', 'Battle watching:', 'Battle live placed:', 'Battle spectator placed:')):
+                    messages.put(line)
+    finally:
+        if presence is not None:
+            presence.close()
+        messages.put(None)
 
 
 def expect(messages, phrase, timeout=600):
@@ -429,6 +553,7 @@ def wait_telemetry_through(ticks, failures, required):
 
 def run(a):
     commands = command_list(a)
+    live_watch, live_placements = live_commands(a)
     if a.dry_run:
         shown_config = server_config_text(a, 'battle-<random>', a.run_dir / 'world', a.cache)
         status_after = 'never' if a.status_every == 0 else f'about every {a.status_every} ticks'
@@ -436,6 +561,7 @@ def run(a):
                          'server argv: ' + ' '.join(server_argv(a, f'{a.pin}/<binary>', a.run_dir / 'server.toml', 'battle-<random>')),
                          f'server environment: MC_CORE_PHASE_LOG={"1" if a.phase_log else "unset"}',
                          f'server.toml:\n{shown_config.rstrip()}',
+                         *([live_watch, f'live barrier: wait up to {a.live_timeout} s until {", ".join(live_names(a))} are online ("Battle player online: NAME"); log each join time to live-players.json'] if live_watch else []),
                          f'recorder record --server 127.0.0.1:{a.port} --username BattleRecorder --output {a.run_dir}/take.solrec --header {a.run_dir}/header.json --duration {a.duration} --ready-file {a.run_dir}/take.ready --roster-file {a.run_dir}/roster.txt --roster-ready-file {a.run_dir}/roster.ready --roster-timeout 900 --data-dir {a.client_data}',
                          'wait for recorder initial readiness',
                          f'export GET http://127.0.0.1:{a.dashboard_port}/telemetry.jsonl; before start each telemetry batch requests battle status (population barrier), after start {status_after}',
@@ -443,6 +569,8 @@ def run(a):
                          'publish exact UUID roster and wait for recorder roster readiness',
                          'wait for fresh exact side counts and fully resident, active soldiers',
                          f'wait at least {a.paused_ticks} paused ticks',
+                         *[f'{placement} (wait for "Battle {"live" if placement.startswith("battle live") else "spectator"} placed: {placement.split()[2]}")' for placement in live_placements],
+                         *(['recount: exact side counts, fully resident and active'] if live_placements else []),
                          *([f'save-all (forced checkpoint right before start, restarts the {a.checkpoint_every_ticks}-tick cadence); wait for "Saved the game"'] if a.take else []),
                          commands[1],
                          f'require at least {a.minimum_battle_ticks} continuously recorded battle ticks',
@@ -471,6 +599,7 @@ def run(a):
             subprocess.run(cmd, stdout=host, stderr=subprocess.STDOUT, check=True, text=True)
     messages, failures, ticks, stop = queue.Queue(), queue.Queue(), queue.Queue(), threading.Event()
     status_policy = StatusPolicy(a.status_every)
+    presence = LivePresence(live_names(a)) if live_watch else None
     telemetry_gaps = []
     server = None
     recorder = None
@@ -486,7 +615,7 @@ def run(a):
                     record.write(command + '\n')
                 server.stdin.write(command + '\n')
                 server.stdin.flush()
-        log_thread = threading.Thread(target=stream_log, args=(server.stdout, root / 'server.log', messages), daemon=True)
+        log_thread = threading.Thread(target=stream_log, args=(server.stdout, root / 'server.log', messages, presence), daemon=True)
         log_thread.start()
         expect(messages, 'Solaris is listening (edge v2)')
         ignored = ignored_config_keys((root / 'server.log').read_text(errors='replace'))
@@ -494,6 +623,16 @@ def run(a):
             raise RuntimeError('server pin ignores data.checkpoint_every_ticks (it predates the key, 95c4bc59): a take cannot control its checkpoint cadence; pin a newer server')
         if a.server_scope is not None:
             (root / 'server-scope.json').write_text(json.dumps({'unit': f'{server_name}.scope', 'pid': server.pid, 'cgroup': Path(f'/proc/{server.pid}/cgroup').read_text().strip()}, indent=2) + '\n')
+        if presence is not None:
+            # Before the recorder: its take duration and roster timeout start when it launches.
+            send(live_watch)
+            expect(messages, 'Battle watching:')
+            print(f'{utc_now()} live barrier: waiting up to {a.live_timeout} s for {", ".join(live_names(a))}', flush=True)
+            presence.wait_online(live_names(a), a.live_timeout)
+            for name, at in presence.first_online().items():
+                print(f'live barrier: {name} online at {at}', flush=True)
+            presence.barrier_passed = utc_now()
+            (root / 'live-players.json').write_text(json.dumps({'players': a.live_players, 'spectators': a.live_spectators, **presence.receipt()}, indent=2) + '\n')
         header = root / 'header.json'
         header.write_text(json.dumps({'protocol_version': 777, 'server_build': manifest['head'], 'seed': a.seed, 'start_tick': 0, 'wall_time': 0}) + '\n')
         with (root / 'recorder.log').open('x') as recorder_log:
@@ -539,6 +678,13 @@ def run(a):
             send('battle status')
             population_tick = await_population(messages, per_side, ready['tick'], recorder)
             paused_start, paused_end = wait_paused_ticks(ticks, failures, recorder, a.paused_ticks, population_tick)
+            # Live players enter the rank once every soldier stands on its ground: the slot's
+            # soldier gives his ground and the file steps one rank back (battle/live_players.rs).
+            for placement in live_placements:
+                _, verb, name, other = placement.split()
+                presence.wait_online([name] if verb == 'live' else [name, other], a.live_timeout)
+                send(placement)
+                expect(messages, f'Battle {"live" if verb == "live" else "spectator"} placed: {name} ')
             # The paused window can be long; census again right before start.
             send('battle status')
             census = {}
@@ -607,6 +753,9 @@ def run(a):
             telemetry.join(timeout=20)
         if log_thread is not None:
             log_thread.join(timeout=5)
+        if presence is not None:
+            # Every join, leave, placement, death and respawn of the live names, with wall time.
+            (root / 'live-players.json').write_text(json.dumps({'players': a.live_players, 'spectators': a.live_spectators, **presence.receipt()}, indent=2) + '\n')
 
 
 if __name__ == '__main__':
