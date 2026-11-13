@@ -1730,6 +1730,7 @@ dependencies = [
  "mc-data",
  "mc-domain",
  "mc-loader",
+ "mc-melee-range",
  "mc-nbt",
  "mc-physics",
  "mc-plugin-host",

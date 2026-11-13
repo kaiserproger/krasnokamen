@@ -576,7 +576,9 @@ fn steady_mob_rider_takes_no_row_custody_per_tick() {
         state.entities.row(horse_slot).appearance.passengers,
         vec![husk]
     );
-    let seat_y = pos[1] + state.entities.body(horse_slot).height * 0.75;
+    // 26.3 Entity.positionRider: the horse's PASSENGER point (1.44375) less
+    // the husk's VEHICLE point (ridingOffset -0.7).
+    let seat_y = pos[1] + (f64::from(1.443_75_f32) - f64::from(0.7_f32));
     assert_eq!(state.entities.pos(husk_slot), [pos[0], seat_y, pos[2]]);
     state.entities.take_touched();
     state.entities.prepare_motion_hints(&state.registry);

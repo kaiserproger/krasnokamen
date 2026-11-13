@@ -1473,9 +1473,10 @@ fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() 
             &red,
         )
         .unwrap();
-    // A lone enemy at the back of the last rank, half a block behind and
-    // between its two men, over four blocks from the front.
-    let blue = spawn(&mut state, 2, "minecraft:zombie", [4.5, 100.0, -0.5]);
+    // A lone enemy among the last rank, half a block ahead of it and between
+    // its two men (inside the fixture's active chunk), 3.5 blocks from the
+    // front; the rank ahead stands 1.5 blocks from him, out of reach.
+    let blue = spawn(&mut state, 2, "minecraft:zombie", [4.5, 100.0, 0.5]);
     let rear = state.entities.slot_of(red[5]).unwrap();
     let mut out = Output::default();
     for tick in 0..RETARGET_TICKS {
@@ -1555,7 +1556,7 @@ fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() 
 fn melee_range_follows_the_held_items_attack_range_as_for_a_mob() {
     let mut state = fixture();
     let range_of = |state: &crate::tick::TickState, item: &str| {
-        faction::MeleeRange::of_item(
+        faction::melee_reach(
             state
                 .registry
                 .item_facts
@@ -1564,10 +1565,10 @@ fn melee_range_follows_the_held_items_attack_range_as_for_a_mob() {
         )
     };
     let spear = range_of(&state, "minecraft:iron_spear");
-    assert_eq!(spear, faction::MeleeRange { reach: 2.25, min: 1.0 });
+    assert_eq!(spear, mc_melee_range::MeleeReach { min: 1.0, max: 2.25 });
     let sword = range_of(&state, "minecraft:iron_sword");
-    assert_eq!(sword, faction::MeleeRange::DEFAULT);
-    assert!((sword.reach - (2.04_f32.sqrt() as f64 - 0.6)).abs() < 1e-6);
+    assert_eq!(sword, mc_melee_range::MeleeReach::mob(None));
+    assert!((sword.max - (2.04_f32.sqrt() as f64 - 0.6)).abs() < 1e-6);
     let actor = spawn(&mut state, 1, "minecraft:zombie", [4.0, 100.0, 4.0]);
     let target = spawn(&mut state, 2, "minecraft:zombie", [5.0, 100.0, 4.0]);
     let (a, t) = (
@@ -1586,4 +1587,124 @@ fn melee_range_follows_the_held_items_attack_range_as_for_a_mob() {
         assert_eq!(faction::in_melee_range(&state.entities, a, t, spear), spear_hits, "spear dx={dx}");
         assert_eq!(faction::in_melee_range(&state.entities, a, t, sword), sword_hits, "sword dx={dx}");
     }
+}
+
+/// One battle tick of the decision pipeline at `tick`, as the tick owner runs it.
+fn battle_tick(state: &crate::tick::TickState, battle: &mut BattleState, out: &mut Output, tick: u64) {
+    let frame = Frame {
+        entities: &state.entities,
+        registry: &state.registry,
+        world: &state.world,
+        tick,
+    };
+    battle.columns.prepare(
+        &frame,
+        &mut battle.formation,
+        &mut battle.output.counters,
+        &mut battle.population,
+    );
+    battle.formation.finish_preparation();
+    targeting::update(&frame, battle);
+    combat::step(&frame, battle, out);
+}
+
+/// The in-reach counter takes any enemy within the melee range, not only the
+/// nearest: a spearman whose nearest enemy stands inside his minimum still
+/// reaches a farther one in his window.
+#[test]
+fn spearman_with_the_nearest_enemy_inside_his_minimum_reaches_a_farther_one() {
+    let mut state = fixture();
+    let mut battle = BattleState::default();
+    let red = spawn(&mut state, 1, "minecraft:zombie", [4.0, 100.0, 4.0]);
+    // Nearest: one block beside him, inside the spear's minimum (0.6 + 1.0).
+    spawn(&mut state, 2, "minecraft:zombie", [5.0, 100.0, 4.0]);
+    // Farther: two blocks ahead, inside the spear window (0.6 + 2.25), past
+    // the sword default (0.6 + 0.83).
+    spawn(&mut state, 2, "minecraft:zombie", [4.0, 100.0, 6.0]);
+    let mut out = Output::default();
+    battle_tick(&state, &mut battle, &mut out, 0);
+    let bi = battle
+        .columns
+        .index(state.entities.slot_of(red).unwrap())
+        .unwrap();
+    battle.combat.fighters[bi].range = mc_melee_range::MeleeReach { min: 1.0, max: 2.25 };
+    let mut combat_state = std::mem::take(&mut battle.combat);
+    let frame = Frame {
+        entities: &state.entities,
+        registry: &state.registry,
+        world: &state.world,
+        tick: 1,
+    };
+    combat::count_fighting(&frame, &battle, &mut combat_state);
+    // The spearman and the near enemy (sword reach); the far one reaches no one.
+    assert_eq!(combat_state.work.in_weapon_reach, 2);
+}
+
+/// Human reaction: a man who first finds an enemy within reach stands guard at
+/// least four ticks before his first decision, whatever his decision phase.
+#[test]
+fn first_blow_waits_for_a_human_reaction() {
+    let mut state = fixture();
+    let mut battle = BattleState::default();
+    // Forty pairs one block apart inside the fixture's active chunk (pairs two
+    // blocks apart sideways, three between rows, out of each other's reach):
+    // every decision phase of the 20-tick cadence is held by some man.
+    let men: Vec<_> = (0..40)
+        .flat_map(|i| {
+            let (x, z) = (1.0 + 2.0 * f64::from(i % 8), 1.0 + 3.0 * f64::from(i / 8));
+            [
+                spawn(&mut state, 1, "minecraft:zombie", [x, 100.0, z]),
+                spawn(&mut state, 2, "minecraft:zombie", [x, 100.0, z + 1.0]),
+            ]
+        })
+        .collect();
+    let mut out = Output::default();
+    let mut first_windup = vec![None; men.len()];
+    for tick in 0..60 {
+        battle_tick(&state, &mut battle, &mut out, tick);
+        for (i, id) in men.iter().enumerate() {
+            let bi = battle
+                .columns
+                .index(state.entities.slot_of(*id).unwrap())
+                .unwrap();
+            if matches!(battle.combat.fighters[bi].action, combat::Action::Windup { .. }) {
+                first_windup[i].get_or_insert(tick);
+            }
+        }
+    }
+    let swung: Vec<u64> = first_windup.iter().flatten().copied().collect();
+    assert!(swung.len() >= 10, "{first_windup:?}");
+    assert!(swung.iter().all(|&tick| tick >= 4), "{first_windup:?}");
+}
+
+/// Vanilla 26.3 `Entity.positionRider`: a husk on a horse sits at the horse's
+/// PASSENGER point (1.44375) less his VEHICLE point (`ridingOffset(-0.7)`),
+/// 0.74375 above the horse's feet. His strike box joins the horse's sideways
+/// at his own height: an enemy whose box ends below his seat is out of reach
+/// however close, one level with him is in reach from the horse's flank.
+#[test]
+fn husk_rides_at_the_vanilla_seat_and_strikes_from_it() {
+    let mut state = fixture();
+    let rider = spawn(&mut state, 1, "minecraft:husk", [4.5, 100.0, 4.5]);
+    let horse = spawn(&mut state, 1, "minecraft:horse", [6.5, 100.0, 6.5]);
+    cavalry::mount(&mut state, rider, horse).unwrap();
+    let (r, h) = (
+        state.entities.slot_of(rider).unwrap(),
+        state.entities.slot_of(horse).unwrap(),
+    );
+    let seat = f64::from(1.443_75_f32) - f64::from(0.7_f32);
+    let (rp, hp) = (state.entities.pos(r), state.entities.pos(h));
+    assert_eq!([rp[0], rp[2]], [hp[0], hp[2]]);
+    assert!((rp[1] - hp[1] - seat).abs() < 1e-12, "seat {}", rp[1] - hp[1]);
+    let reach = mc_melee_range::MeleeReach::mob(None);
+    // 1.6 blocks from the horse's centre: past the husk's own box grown by
+    // the reach (0.3 + 0.83), within the horse's (0.7 + 0.83).
+    let level = spawn(&mut state, 2, "minecraft:zombie", [6.5 + 1.6, hp[1] + seat, 6.5]);
+    let level = state.entities.slot_of(level).unwrap();
+    assert!(faction::in_melee_range(&state.entities, r, level, reach));
+    // A man 1.96 lower: his box (1.95 tall) ends under the rider's seat.
+    state.entities.set_pos(level, [6.5 + 1.0, hp[1] + seat - 1.96, 6.5]);
+    assert!(!faction::in_melee_range(&state.entities, r, level, reach));
+    state.entities.set_pos(level, [6.5 + 1.0, hp[1] + seat - 1.9, 6.5]);
+    assert!(faction::in_melee_range(&state.entities, r, level, reach));
 }

@@ -578,10 +578,20 @@ pub struct BattleCounts {
     /// Of those, the fighters in the fight loop (guard, windup or recovery
     /// from a blow) whom the combat decision pass lets strike.
     pub fighting: u32,
+    /// Of those, the fighters in action rather than standing guard: winding
+    /// up, recovering from a blow, staggered by a parry or blocking one.
+    pub acting: u32,
     /// Shield bearers holding the shield up after the last running tick.
     pub shields_raised: u32,
     /// Shield blocks (`ShieldBlock` events) on the last running tick.
     pub shield_blocks: u32,
+    /// Weapon swaps started on the last running tick (two main weapons).
+    pub weapon_swaps: u32,
+    /// Active fighters holding a spear, a sword (or mace) and a bow after the
+    /// last running tick's classification.
+    pub holding_spear: u32,
+    pub holding_sword: u32,
+    pub holding_bow: u32,
 }
 
 /// Immutable world state after a tick. Shared read-only; never mutated after
