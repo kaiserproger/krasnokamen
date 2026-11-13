@@ -4,8 +4,8 @@
 use super::*;
 use crate::settlements::allocator::tests::villager;
 use crate::settlements::construction::tests::{complete, fixture};
-use crate::villager::Activity;
 use crate::settlements::layout::{GATE, PERIMETER, RING, WELL};
+use crate::villager::Activity;
 use mc_data::ItemStack;
 use std::collections::{HashSet, VecDeque};
 
@@ -146,7 +146,16 @@ fn ten_residents_wall_the_town_in_with_four_gates_and_one_well() {
     // A well on the north-west plaza corner: a water source ringed by eight
     // cobblestone blocks.
     assert_eq!(block_name(&state, 5, GROUND, 5), "water");
-    for (x, z) in [(4, 4), (5, 4), (6, 4), (4, 5), (6, 5), (4, 6), (5, 6), (6, 6)] {
+    for (x, z) in [
+        (4, 4),
+        (5, 4),
+        (6, 4),
+        (4, 5),
+        (6, 5),
+        (4, 6),
+        (5, 6),
+        (6, 6),
+    ] {
         assert_eq!(block_name(&state, x, GROUND + 1, z), "cobblestone");
     }
     // Enclosure, proven by walking: from the bell no open column at foot
@@ -156,9 +165,7 @@ fn ten_residents_wall_the_town_in_with_four_gates_and_one_well() {
     while let Some((x, z)) = queue.pop_front() {
         for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
             let next = (x + dx, z + dz);
-            if reached.contains(&next)
-                || block_name(&state, next.0, GROUND + 1, next.1) != "air"
-            {
+            if reached.contains(&next) || block_name(&state, next.0, GROUND + 1, next.1) != "air" {
                 continue;
             }
             reached.insert(next);
@@ -228,7 +235,11 @@ fn a_gatehouse_stands_on_a_road_that_was_paved_first() {
         finish(&mut state, id, builder);
     }
     let order = build_everything(&mut state, id, builder);
-    assert_eq!(order.iter().filter(|kind| *kind == GATE).count(), 4, "{order:?}");
+    assert_eq!(
+        order.iter().filter(|kind| *kind == GATE).count(),
+        4,
+        "{order:?}"
+    );
     for (x, z) in [(33, 8), (-17, 8), (8, 33), (8, -17)] {
         assert_eq!(block_name(&state, x, GROUND + 1, z), "oak_door", "{x} {z}");
     }

@@ -166,7 +166,12 @@ fn spent_free_work(record: &Structure) -> bool {
             .snapshot
             .blueprint_id
             .strip_prefix("krasnokamen-settlements:")
-            .is_some_and(|name| matches!(name, crate::settlements::layout::ROAD | crate::settlements::layout::MEADOW))
+            .is_some_and(|name| {
+                matches!(
+                    name,
+                    crate::settlements::layout::ROAD | crate::settlements::layout::MEADOW
+                )
+            })
 }
 
 /// [`area_reserved`] without the spent free work of [`spent_free_work`].

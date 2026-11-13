@@ -376,7 +376,11 @@ fn perimeter_closes_the_square_wall_line_with_a_gatehouse_on_each_road() {
                 assert!(!on_line, "{x} {z}");
             }
             if cell(ANCHOR, x, z) == Cell::Road && on_line {
-                assert_eq!(owner[&(x, z)], GATE, "road crossing {x} {z} has no gatehouse");
+                assert_eq!(
+                    owner[&(x, z)],
+                    GATE,
+                    "road crossing {x} {z} has no gatehouse"
+                );
             }
         }
     }
@@ -385,7 +389,11 @@ fn perimeter_closes_the_square_wall_line_with_a_gatehouse_on_each_road() {
     assert_eq!(spans.iter().filter(|span| span.kind == GATE).count(), 4);
     for gate in spans.iter().filter(|span| span.kind == GATE) {
         // Seven columns, centred on the road through the bell.
-        let (along, across) = if gate.min[0] == gate.max[0] { (1, 0) } else { (0, 1) };
+        let (along, across) = if gate.min[0] == gate.max[0] {
+            (1, 0)
+        } else {
+            (0, 1)
+        };
         assert_eq!(gate.max[along] - gate.min[along], 6, "{gate:?}");
         assert_eq!(gate.min[along] + 3, ANCHOR[2 * along]);
         assert_eq!(gate.min[across].abs_diff(ANCHOR[2 * across]), RING as u32);

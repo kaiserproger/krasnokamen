@@ -1011,7 +1011,13 @@ pub(crate) fn perimeter_spans(anchor: [i32; 3]) -> Vec<Span> {
 /// The three plaza corners a well may stand on, each a 3 x 3 square between
 /// the plaza's two road bands. The fourth holds the crossing's corner lamp.
 fn well_spans(anchor: [i32; 3]) -> [Span; 3] {
-    let range = |side: i32, at: i32| if side < 0 { [at - 4, at - 2] } else { [at + 2, at + 4] };
+    let range = |side: i32, at: i32| {
+        if side < 0 {
+            [at - 4, at - 2]
+        } else {
+            [at + 2, at + 4]
+        }
+    };
     [(-1, -1), (1, -1), (-1, 1)].map(|(sx, sz)| {
         let [x0, x1] = range(sx, anchor[0]);
         let [z0, z1] = range(sz, anchor[2]);
@@ -1166,7 +1172,11 @@ fn span_work(state: &TickState, record: &SettlementRecord, span: Span) -> Option
     let mut cells = Vec::new();
     for x in span.min[0]..=span.max[0] {
         for z in span.min[1]..=span.max[1] {
-            let across = if x_fixed { z - anchor[2] } else { x - anchor[0] };
+            let across = if x_fixed {
+                z - anchor[2]
+            } else {
+                x - anchor[0]
+            };
             let profile: Vec<u32> = if span.kind != GATE {
                 vec![cobble; WALL_HEIGHT]
             } else if across == 0 {
@@ -1199,9 +1209,8 @@ fn well_cells(state: &TickState, record: &SettlementRecord, span: Span) -> Optio
     let cobble = default_state(state, "minecraft:cobblestone")?;
     let water = default_state(state, "minecraft:water")?;
     let band = construction::SITE_BAND;
-    let source = (anchor_y - band..=anchor_y + band).find(|&y| {
-        state.world.physics_block_at(cx, y, cz) == Some(water)
-    });
+    let source = (anchor_y - band..=anchor_y + band)
+        .find(|&y| state.world.physics_block_at(cx, y, cz) == Some(water));
     if let Some(y) = source
         && rim
             .iter()
