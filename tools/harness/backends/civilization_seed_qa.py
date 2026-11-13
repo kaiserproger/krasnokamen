@@ -421,7 +421,9 @@ def building_blocks(probe: ProbeSteps, lines: list[str]) -> list[dict[str, Any]]
         })
         relevant = [block for block in scan.get("blocks", [])
                     if str(block.get("block_id", "")).endswith(("_bed", "_door", ":furnace", ":blast_furnace"))]
-        evidence.append({"building": building, "blocks": relevant, "truncated": scan.get("truncated", False)})
+        evidence.append({"building": building, "blocks": relevant, "truncated": scan.get("truncated", False),
+                         "solid": [block for block in scan.get("blocks", [])
+                                   if block.get("is_air") is False and block.get("collision_empty") is False]})
     return evidence
 
 
@@ -483,6 +485,18 @@ def standable_height(blocks: list[dict[str, Any]], player_y: float) -> int | Non
                and cells[y + 1].get("collision_empty", False)
                and (cells[y].get("fluid") or {}).get("empty", False)]
     return min(heights, key=lambda h: abs(h - player_y)) if heights else None
+
+
+def building_aim_point(building: dict[str, Any], solid: list[dict[str, Any]]) -> tuple[float, float, float]:
+    """The centre of the received solid block nearest the building's centre: a sparse
+    building (a Lumber camp is mostly fence, logs and a barrel) has air at its volume's
+    centre, where no crosshair raycast can land."""
+    centre = tuple((building["min"][i] + building["max"][i] + 1) / 2 for i in range(3))
+    if not solid:
+        return centre
+    nearest = min(solid, key=lambda b: sum((b[axis] + 0.5 - centre[i]) ** 2
+                                          for i, axis in enumerate(("x", "y", "z"))))
+    return tuple(nearest[axis] + 0.5 for axis in ("x", "y", "z"))
 
 
 def building_observer_stand(blocks: list[dict[str, Any]], building: dict[str, Any],
@@ -730,7 +744,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                             target, evidence.get("blocks", [])),
                     }
             elif "second_building" not in detail["milestones"]:
-                target = tuple((building["min"][i] + building["max"][i] + 1) / 2 for i in range(3))
+                target = building_aim_point(building, evidence.get("solid", []))
                 detail["milestones"]["second_building"] = {
                     "sprint_ticks": advanced, "building": building, "project": project,
                     "screenshot": capture_target(probe, artifact, f"civilization-building-{advanced:06d}", target, building=building),

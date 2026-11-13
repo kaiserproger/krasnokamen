@@ -306,6 +306,12 @@ class CivilizationEvidenceTests(unittest.TestCase):
         self.assertEqual([c.args for c in teleport.call_args_list],
                          [(160.5, 75.0, -280.5), (131.0, 77.0, -215.0)])
 
+    def test_sparse_building_is_aimed_at_a_solid_block_not_its_air_centre(self):
+        building = {"min": [113, 72, -226], "max": [119, 76, -220]}
+        solid = [{"x": 113, "y": 72, "z": -226}, {"x": 116, "y": 73, "z": -223}, {"x": 119, "y": 76, "z": -220}]
+        self.assertEqual(qa.building_aim_point(building, solid), (116.5, 73.5, -222.5))
+        self.assertEqual(qa.building_aim_point(building, []), (116.5, 74.5, -222.5))
+
     def test_simulation_wait_uses_scenario_deadline_not_mcp_request_cap(self):
         with patch("tools.harness.backends.probe_steps.time.monotonic", return_value=100.0):
             probe = qa.ProbeSteps(Mock(), None, 7200.0, "sprint")
@@ -430,7 +436,7 @@ class CivilizationEvidenceTests(unittest.TestCase):
         blocks = [{"block_id": name} for name in (
             "minecraft:red_bed", "minecraft:furnace", "minecraft:blast_furnace", "minecraft:stone")]
         probe, evidence = self.scan([building], {"blocks": blocks, "truncated": True})
-        self.assertEqual(evidence, [{"building": building, "blocks": blocks[:3], "truncated": True}])
+        self.assertEqual(evidence, [{"building": building, "blocks": blocks[:3], "truncated": True, "solid": []}])
         probe.call.assert_called_once_with("minecraft_scan_blocks", {
             "min_x": 0, "min_y": 64, "min_z": 0, "max_x": 2, "max_y": 67, "max_z": 2})
 
