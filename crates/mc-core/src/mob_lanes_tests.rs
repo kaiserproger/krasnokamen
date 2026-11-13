@@ -463,19 +463,33 @@ fn due_trader_candidates_match_the_dense_scan_in_a_large_population() {
     state
         .gamerules
         .insert("spawn_wandering_traders".into(), "false".into());
-    // Enough bodies that the due-trader filter splits across the pool, with
-    // due-active, due-inactive and not-yet-due carriers scattered among them.
+    // Enough bodies that a dense scan would matter, with due-active,
+    // due-inactive and not-yet-due carriers (traders) scattered among cows.
     let cow = state.registry.cow_type_id;
+    let crate::entities::EntityKind::Mob {
+        type_id: trader_type,
+    } = state.entities.body(trader).kind
+    else {
+        panic!("the visit trader is a mob");
+    };
     let far = [around[0] + 4_000.0, around[1], around[2]];
     let mut carriers = Vec::new();
     for index in 0..9_000 {
         let at = if index == 7_000 { far } else { around };
-        let id = state.spawn_mob(cow, at, 10.0);
         let despawn_at = match index {
             100 | 5_000 | 7_000 => Some(deadline),
             8_000 => Some(deadline + 10),
             _ => None,
         };
+        let id = state.spawn_mob(
+            if despawn_at.is_some() {
+                trader_type
+            } else {
+                cow
+            },
+            at,
+            10.0,
+        );
         if despawn_at.is_some() {
             let row = state.entities.row_mut(state.entities.slot_of(id).unwrap());
             let mut carried = village.clone();
@@ -485,14 +499,12 @@ fn due_trader_candidates_match_the_dense_scan_in_a_large_population() {
         }
     }
     state.tick = deadline;
-    for min_parallel in [0, usize::MAX] {
-        let (owners, slots) = super::due_traders(&state, min_parallel);
-        let (expected_owners, expected_slots) = super::due_traders_by_scan(&state);
-        assert_eq!((owners, slots), (expected_owners, expected_slots.clone()));
-        // The visit trader plus the two active due carriers; the inactive and
-        // the not-yet-due carrier are not candidates.
-        assert_eq!(expected_slots.len(), 3);
-    }
+    let (owners, slots) = super::due_traders(&state);
+    let (expected_owners, expected_slots) = super::due_traders_by_scan(&state);
+    assert_eq!((owners, slots), (expected_owners, expected_slots.clone()));
+    // The visit trader plus the two active due carriers; the inactive and
+    // the not-yet-due carrier are not candidates.
+    assert_eq!(expected_slots.len(), 3);
     let mut changes = ChangeSet::default();
     traders(&mut state, &mut changes);
     // Trader and its two llamas, plus the two active due carriers.

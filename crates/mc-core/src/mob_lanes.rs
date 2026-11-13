@@ -22,6 +22,23 @@ static SNOW_GOLEM_TYPE: std::sync::LazyLock<Option<u32>> = std::sync::LazyLock::
         .map(|contract| contract.protocol_id)
 });
 
+/// Protocol ids of the kinds that carry villager state (`EntityStore`'s
+/// resident kinds): villager, zombie villager and wandering trader.
+static VILLAGER_KIND_TYPES: std::sync::LazyLock<Vec<u32>> = std::sync::LazyLock::new(|| {
+    (0..mc_data::entity_types::ENTITY_TYPE_COUNT as u32)
+        .filter(|&id| {
+            mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(id).is_some_and(
+                |contract| {
+                    matches!(
+                        contract.name.rsplit(':').next(),
+                        Some("villager" | "zombie_villager" | "wandering_trader")
+                    )
+                },
+            )
+        })
+        .collect()
+});
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TraderSpawner {
     /// Vanilla saved-data Codec.INT values, preserved without clamping at load.
@@ -163,33 +180,26 @@ fn visit(state: &mut TickState, rng: &mut Rng, changes: &mut ChangeSet) -> bool 
 }
 
 /// Due, resident-active wandering traders in slot order: owners and slots.
-/// Almost no body is a due trader, so a read-only filter (on the pool once
-/// `rows >= min_parallel`) drops the rest before the serial activity check.
-fn due_traders(
-    state: &TickState,
-    min_parallel: usize,
-) -> (Vec<uuid::Uuid>, Vec<crate::entities::EntitySlot>) {
+///
+/// Villager state lives only on the resident villager kinds (`wandering` is
+/// set from the wandering-trader type), so the candidates are the members of
+/// those three type lists, not a read of every row's cold villager pointer:
+/// at 100,000 mobs that scan cost 0.5 ms a tick (p95 2.9 ms) to find none.
+/// The dense scan [`due_traders_by_scan`] is the oracle.
+fn due_traders(state: &TickState) -> (Vec<uuid::Uuid>, Vec<crate::entities::EntitySlot>) {
     let tick = state.tick;
-    let entities = &state.entities;
-    let due = |slot: &crate::entities::EntitySlot| {
-        entities
-            .row(*slot)
-            .villager
-            .as_ref()
-            .is_some_and(|v| v.wandering && v.despawn_at.is_some_and(|at| at <= tick))
-    };
-    let rows = state.entities.len();
-    let due_slots: Vec<crate::entities::EntitySlot> = if rows < min_parallel {
-        state.entities.slots().filter(|slot| due(slot)).collect()
-    } else {
-        use rayon::prelude::*;
-        (0..rows as u32)
-            .into_par_iter()
-            .with_min_len(2048)
-            .map(crate::entities::EntitySlot)
-            .filter(|slot| due(slot))
-            .collect()
-    };
+    let due_slots = state
+        .entities
+        .mob_slots_matching(|type_id| VILLAGER_KIND_TYPES.contains(&type_id))
+        .into_iter()
+        .filter(|slot| {
+            state
+                .entities
+                .row(*slot)
+                .villager
+                .as_ref()
+                .is_some_and(|v| v.wandering && v.despawn_at.is_some_and(|at| at <= tick))
+        });
     let (mut removed_owners, mut gone) = (Vec::new(), Vec::new());
     for slot in due_slots {
         // Expiry is live simulation: skip resident-inactive bodies.
@@ -236,7 +246,7 @@ pub(crate) fn due_traders_by_scan(
 
 /// Despawn precedes the entity phase, so removals cannot invalidate intent slots.
 pub(crate) fn traders(state: &mut TickState, changes: &mut ChangeSet) {
-    let (removed_owners, mut gone) = due_traders(state, crate::contact_hazards::MIN_PARALLEL_ROWS);
+    let (removed_owners, mut gone) = due_traders(state);
     if !removed_owners.is_empty() {
         for slot in state.entities.slots() {
             // Linked-llama removal follows the same simulation freeze.

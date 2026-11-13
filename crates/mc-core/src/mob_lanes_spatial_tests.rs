@@ -137,10 +137,7 @@ fn snowball_and_trader_focused_cost() {
         }
         let started = std::time::Instant::now();
         for _ in 0..32 {
-            std::hint::black_box(due_traders(
-                &state,
-                crate::contact_hazards::MIN_PARALLEL_ROWS,
-            ));
+            std::hint::black_box(due_traders(&state));
         }
         eprintln!(
             "S05 N=50000 T=0 round={round} current ns/tick={}",

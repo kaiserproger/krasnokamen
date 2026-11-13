@@ -130,6 +130,16 @@ visits every row: the contact pass (2026-11-12) classifies on the pool, banks
 the proof for moved mobs from section palettes, and hands the serial owner only
 rows with a live burn clock, a cauldron under the feet or a real hazard
 (`contact detail ms:` under `MC_CORE_PHASE_LOG` splits pool and serial time).
+A section-palette gate only says some state in the 16-high section matches (a pen roof,
+a wall): the pool therefore reads the exact eye, body and support cells itself, so a mob
+crossing a cell in a roofed section no longer reaches the serial scan (5,300 rows a tick
+at native-100 before, the 100 players after); the portal classifier banks palette-clear
+proofs the same way, the due-trader scan reads the three villager-kind type lists
+instead of 100,000 cold rows, and the despawn candidates are selected in the age sweep
+(`EntityStore::advance_admitted_ages` takes a probe) instead of a second sweep. The
+`native100_input_phase_micro` ignored test (`tick_tests::contact_hazards_tests`) is the
+roofed 100-player/104k-mob workload for these callees: build with `cargo test --release
+--no-run`, run the executable under `mem-run.sh -p` with `MC_CORE_PHASE_LOG=1`.
 
 ## Load harness and the frozen old core
 

@@ -22,7 +22,7 @@ fn visits() -> [usize; 3] {
 fn old_run_with(
     state: &mut TickState,
     changes: &mut ChangeSet,
-    admitted: Option<Vec<EntitySlot>>,
+    admitted: Option<Admitted>,
     min_parallel: usize,
 ) {
     // Reuse the census-owned observer scratch across ticks: the only
