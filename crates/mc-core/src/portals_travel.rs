@@ -340,7 +340,7 @@ fn loaded(state: &mut TickState, id: EntityId, center: [f64; 3], radius: i32) ->
     };
     state
         .tickets
-        .insert(format!("solaris:portal:{}", id.0), (center, radius));
+        .insert(format!("krasnokamen:portal:{}", id.0), (center, radius));
     (-radius..=radius)
         .all(|dx| (-radius..=radius).all(|dz| state.world.has_chunk(center.x + dx, center.z + dz)))
 }
@@ -446,11 +446,11 @@ pub(crate) fn finish_with(
 ) {
     state
         .tickets
-        .retain(|key, _| !key.starts_with("solaris:portal:"));
+        .retain(|key, _| !key.starts_with("krasnokamen:portal:"));
     for world in state.other_dimensions.values_mut() {
         world
             .tickets
-            .retain(|key, _| !key.starts_with("solaris:portal:"));
+            .retain(|key, _| !key.starts_with("krasnokamen:portal:"));
     }
     let registry = std::sync::Arc::clone(&state.registry);
     let filter = Filter::resolve(&registry);

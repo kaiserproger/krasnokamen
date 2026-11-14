@@ -7,7 +7,7 @@
 //! `show_dialog` is `ByteBufCodecs.holder(Registries.DIALOG, fromCodecWithRegistriesTrusted(..))`:
 //! VarInt `0` for a direct (inline) dialog followed by its anonymous network NBT
 //! (the `Dialog.DIRECT_CODEC` result); `id + 1` selects a registry entry, which
-//! Solaris never sends and rejects on decode.
+//! Krasnokamen never sends and rejects on decode.
 use bytes::{Buf, BufMut};
 use mc_nbt::Tag;
 
@@ -46,7 +46,7 @@ impl Packet for ClientboundShowDialog {
                 dialog: mc_nbt::read_network_value(buf)?,
             }),
             _ => Err(CodecError::NotSupported(
-                "registry dialog reference (Solaris sends inline dialogs only)",
+                "registry dialog reference (Krasnokamen sends inline dialogs only)",
             )),
         }
     }
