@@ -97,7 +97,7 @@ def _preflight(meta, rows, jar):
             raise ValueError("inventory class evidence does not match JAR contents")
     for name in classes:
         _name(name)
-        if name.startswith(("net.minecraft.", "net.minecraftforge.", "net.neoforged.", "org.solaris.", "java.", "org.teavm.")):
+        if name.startswith(("net.minecraft.", "net.minecraftforge.", "net.neoforged.", "org.krasnokamen.", "java.", "org.teavm.")):
             raise ValueError(f"mod bundles a reserved runtime/API class: {name}")
     subscribers = {}
     for owner, identity, bus, sides in rows["subscriber"]:
@@ -261,7 +261,7 @@ def _states(report):
         else:
             ranges.append([ident, ident])
     checks = "\n".join(f"if (id >= {lo} && id <= {hi}) return;" for lo, hi in ranges)
-    return """package org.solaris.forge;
+    return """package org.krasnokamen.forge;
 final class States {
     static void validate(int id) {
         CHECKS
@@ -290,7 +290,7 @@ def generate(jar, inventory, blocks_report, generated_dir, *, api):
         raise ValueError("Forge version must be resolved in mods.toml before conversion")
     if not isinstance(api, str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", api):
         raise ValueError("api must be the deployment's numeric WIT package version")
-    source = """package org.solaris.forge;
+    source = """package org.krasnokamen.forge;
 import org.teavm.interop.Export;
 import net.minecraft.core.BlockPos;
 import net.minecraftforge.event.level.BlockEvent.BreakEvent;
@@ -338,7 +338,7 @@ public final class EntryPoint {
         target.write_text(text, encoding="utf-8")
         sources.append(target)
     return {
-        "main_class": "org.solaris.forge.EntryPoint",
+        "main_class": "org.krasnokamen.forge.EntryPoint",
         "shim_sources": sorted((ROOT / "shim").rglob("*.java")),
         "generated_sources": sources,
         "manifest": manifest,
