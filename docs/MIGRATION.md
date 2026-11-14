@@ -251,6 +251,10 @@ the carried cursor and crafting grid. The owned `HiveEntity` JSON image also
 migrates RC5's scalar mount `rider` to `riders`, so native bees survive placement
 and release. Conflicting rider forms refuse import; current native schema checks
 remain strict. Unrelated components and JSON strings stay opaque.
+Regression coverage uses an RC5-serialized synthetic fixture: a bee built in a
+test running RC5 code, embedded in a current player export with the old outer
+NBT key. This is not a real RC5 save/world import. That remains a stage-3
+validation gap pending a representative RC5 save/export.
 A player rider stored on a vehicle as `solaris:Rider` becomes
 `krasnokamen:Riders`. A field present under both names refuses the import.
 String values in the old `solaris:` namespace stay as they are and are listed under `known_gaps`. Plugin
