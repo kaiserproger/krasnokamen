@@ -405,17 +405,6 @@ pub(crate) fn category_of(state: &TickState, slot: EntitySlot) -> MobCategory {
     }
 }
 
-/// Vanilla `isSunBurnTick` mobs: the blueprint says whether it ignites by day.
-fn burns_in_daylight(state: &TickState, slot: EntitySlot) -> bool {
-    match state.entities.body(slot).kind {
-        EntityKind::Mob { type_id } => state
-            .registry
-            .blueprint(type_id)
-            .is_some_and(|blueprint| blueprint.capabilities.burns_in_daylight),
-        _ => false,
-    }
-}
-
 pub(crate) fn persistent(row: &crate::entities::ColdRow) -> bool {
     row.persistent
         || row.appearance.custom_name.is_some()
@@ -476,6 +465,8 @@ pub(crate) fn census(state: &mut TickState, players: &[[f64; 3]]) -> [usize; 7] 
     state.spawn_census.begin();
     // Build chunk totals first; do not multiply the population scan by players.
     for index in 0..state.entities.len() {
+        #[cfg(test)]
+        audit_s12_tests::visit(0);
         observe_slot(state, EntitySlot(index as u32));
     }
     state.spawn_census.chunks.retain(|_, chunk| chunk.active);
@@ -1160,8 +1151,21 @@ fn burn(state: &mut TickState, night: bool, changes: &mut ChangeSet) {
     if night || state.rain_level > 0.0 {
         return;
     }
-    for index in 0..state.entities.len() as u32 {
-        let slot = EntitySlot(index);
+    // The census still needs every alive body. Periodic maintenance only
+    // needs capability members, in the same dense-slot order as the old scan.
+    let mut slots = std::mem::take(&mut state.serial_entity_slots);
+    state.entities.mob_slots_matching_into(
+        |type_id| {
+            state
+                .registry
+                .blueprint(type_id)
+                .is_some_and(|blueprint| blueprint.capabilities.burns_in_daylight)
+        },
+        &mut slots,
+    );
+    for &slot in &slots {
+        #[cfg(test)]
+        audit_s12_tests::visit(1);
         // Daylight burn is live simulation: freeze resident-inactive.
         let bpos = state.entities.pos(slot);
         if !state.world.is_active(
@@ -1172,7 +1176,6 @@ fn burn(state: &mut TickState, night: bool, changes: &mut ChangeSet) {
         }
         let row = state.entities.row(slot);
         if state.entities.body(slot).alive
-            && burns_in_daylight(state, slot)
             && open_sky(
                 state,
                 state.entities.pos(slot),
@@ -1218,6 +1221,8 @@ fn burn(state: &mut TickState, night: bool, changes: &mut ChangeSet) {
             crate::contact_hazards::ignite(state, id, 160);
         }
     }
+    slots.clear();
+    state.serial_entity_slots = slots;
 }
 
 /// Sheared sheep graze (vanilla `EatBlockGoal`, about once per 1000 ticks):
@@ -1225,8 +1230,21 @@ fn burn(state: &mut TickState, night: bool, changes: &mut ChangeSet) {
 fn graze(state: &mut TickState, rng: &mut Rng, changes: &mut ChangeSet) {
     let mob_griefing =
         crate::command_rules::mob_griefing(state, crate::command_rules::MobGrief::SheepGrazing);
-    for index in 0..state.entities.len() as u32 {
-        let slot = EntitySlot(index);
+    let mut slots = std::mem::take(&mut state.serial_entity_slots);
+    state.entities.mob_slots_matching_into(
+        |type_id| {
+            state
+                .registry
+                .blueprint(type_id)
+                .is_some_and(|blueprint| blueprint.wool)
+        },
+        &mut slots,
+    );
+    // Sorting the type memberships by slot preserves eligible grazers' RNG
+    // consumption even after compaction or an entity type change.
+    for &slot in &slots {
+        #[cfg(test)]
+        audit_s12_tests::visit(2);
         // Graze/block-grief is live simulation: freeze resident-inactive.
         let gpos = state.entities.pos(slot);
         if !state.world.is_active(
@@ -1237,17 +1255,7 @@ fn graze(state: &mut TickState, rng: &mut Rng, changes: &mut ChangeSet) {
         }
         let row = state.entities.row(slot);
         let wool = crate::tick::wool_of(&row.appearance);
-        let EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
-            continue;
-        };
-        if !state.entities.body(slot).alive
-            || wool & 0x10 == 0
-            || !state
-                .registry
-                .blueprint(type_id)
-                .is_some_and(|blueprint| blueprint.wool)
-            || rng.below(1000 / CYCLE) != 0
-        {
+        if !state.entities.body(slot).alive || wool & 0x10 == 0 || rng.below(1000 / CYCLE) != 0 {
             continue;
         }
         let id = state.entities.body(slot).id;
@@ -1274,6 +1282,8 @@ fn graze(state: &mut TickState, rng: &mut Rng, changes: &mut ChangeSet) {
         crate::tick::set_wool(std::sync::Arc::make_mut(&mut row.appearance), wool & 0x0F);
         state.appearance_changed.push(id);
     }
+    slots.clear();
+    state.serial_entity_slots = slots;
 }
 
 /// Sunlight at the head, with no water at the feet.
@@ -1320,6 +1330,10 @@ impl Rng {
 #[cfg(test)]
 #[path = "natural_spawn_parity_tests.rs"]
 mod parity_tests;
+
+#[cfg(test)]
+#[path = "natural_spawn_audit_s12_tests.rs"]
+mod audit_s12_tests;
 
 fn explicitly_retained(row: &crate::entities::ColdRow) -> bool {
     persistent(row)
