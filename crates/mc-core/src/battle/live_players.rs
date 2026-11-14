@@ -24,8 +24,9 @@
 //! for a soldier's own swing (`combat`): the same ready state, cadence and
 //! Windup → impact → Recover cycle as a swing at a soldier, one target per
 //! swing; wounded, staggered and recovering soldiers do not swing. The blow
-//! lands through the ordinary player damage path (`blow`); battle targets
-//! stay soldiers.
+//! lands through the ordinary player damage path (`blow`). A soldier the
+//! holder hurt, or a friend handed the holder, takes him as his target for a
+//! while and answers him first (`retaliation`).
 use super::combat::Weapon;
 use super::{BattleIntent, BattleState, EnemyTarget, Frame, Output, Unit};
 use crate::battle::formation::{
@@ -212,7 +213,15 @@ pub(super) fn in_reach(
 }
 
 pub(super) fn is_holder(battle: &BattleState, id: EntityId) -> bool {
-    battle.live.targets.iter().any(|&(player, _)| player == id)
+    holder_side(&battle.live, id).is_some()
+}
+
+/// The side of `id` while he is a living holder.
+pub(super) fn holder_side(live: &LiveState, id: EntityId) -> Option<u16> {
+    live.targets
+        .iter()
+        .find(|&&(player, _)| player == id)
+        .map(|&(_, side)| side)
 }
 
 /// The impact of a soldier's swing at a holder (`combat`): an ordinary melee
@@ -926,4 +935,4 @@ fn place_behind(state: &mut TickState, name: &str, target: &str) -> Result<Strin
 
 #[cfg(test)]
 #[path = "live_players_tests.rs"]
-mod tests;
+pub(super) mod tests;

@@ -11,6 +11,7 @@ pub(crate) mod formation;
 mod ground;
 pub(crate) mod live_players;
 pub(crate) mod morale;
+pub(crate) mod retaliation;
 pub mod staging;
 pub(crate) mod steering;
 mod targeting;
@@ -58,6 +59,8 @@ pub(crate) struct BattleState {
     pub ground_refused: Vec<EntityId>,
     /// Network players watched, holding a front-rank slot or spectating.
     pub live: live_players::LiveState,
+    /// Soldiers answering an enemy who hurt them or a friend (retaliation.rs).
+    pub retaliation: retaliation::Retaliation,
     #[cfg(test)]
     trace: Option<trace_tests::FrameTrace>,
 }
@@ -69,6 +72,7 @@ pub(crate) struct Timings {
     pub formation_us: u64,
     pub columns_us: u64,
     pub targeting_us: u64,
+    pub retaliation_us: u64,
     pub steering_us: u64,
     pub combat_us: u64,
     pub morale_us: u64,
@@ -376,6 +380,8 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     timings.formation_us = phase_us(&mut mark);
     targeting::update(&frame, &mut battle);
     timings.targeting_us = phase_us(&mut mark);
+    retaliation::step(&frame, &mut battle);
+    timings.retaliation_us = phase_us(&mut mark);
     steering::step(&frame, &mut battle, &mut output);
     timings.steering_us = phase_us(&mut mark);
     combat::step(&frame, &mut battle, &mut output);

@@ -8,7 +8,7 @@ const ORIGIN: [f64; 3] = [8.5, 64.0, 8.5];
 
 /// The flat fixture with every chunk of the staging ticket resident, a staged
 /// 100-per-side battle on its ground, and `names` online.
-fn staged(names: &[&str]) -> (TickState, Vec<EntityId>) {
+pub(in crate::battle) fn staged(names: &[&str]) -> (TickState, Vec<EntityId>) {
     let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
     let world = crate::horde_bench::flat_world(&registry);
     let mut state = TickState::new(registry, world, 2, 512);
@@ -51,7 +51,7 @@ fn staged(names: &[&str]) -> (TickState, Vec<EntityId>) {
     (state, ids)
 }
 
-fn command(
+pub(in crate::battle) fn command(
     state: &mut TickState,
     changes: &mut ChangeSet,
     command: BattleCommand,
@@ -64,7 +64,7 @@ fn parse(text: &str) -> Result<BattleCommand, crate::commands::CommandError> {
     staging::parse(&words)
 }
 
-fn live_cmd(name: &str) -> BattleCommand {
+pub(in crate::battle) fn live_cmd(name: &str) -> BattleCommand {
     BattleCommand::Live {
         name: name.into(),
         side: 1,
@@ -414,7 +414,7 @@ fn two_respawns_in_a_row_give_no_duplicates() {
 
 /// A started battle with PovRed stood a pace in front of a blue front-rank
 /// foot soldier (blue faces -z); returns PovRed, that soldier and his place.
-fn facing_blue() -> (TickState, EntityId, EntityId, [f64; 3]) {
+pub(in crate::battle) fn facing_blue() -> (TickState, EntityId, EntityId, [f64; 3]) {
     let (mut state, ids) = staged(&["PovRed"]);
     let player = ids[0];
     let mut changes = ChangeSet::default();
@@ -448,7 +448,7 @@ fn in_contact(state: &mut TickState, player: EntityId, blue: EntityId, at: [f64;
 /// For the next tick every blue fighter but `except` is held in `blue`, and
 /// every red one is out of action (red archers shoot at the blue line he
 /// stands in front of): only the soldier under test can hurt him.
-fn hold(state: &mut TickState, blue: Action, except: Option<EntityId>) {
+pub(in crate::battle) fn hold(state: &mut TickState, blue: Action, except: Option<EntityId>) {
     let battle = &mut state.hostile.battle;
     for bi in 0..battle.columns.ids.len() {
         if Some(battle.columns.ids[bi]) == except {
@@ -461,7 +461,7 @@ fn hold(state: &mut TickState, blue: Action, except: Option<EntityId>) {
     }
 }
 
-fn swung(output: &crate::boundary::TickOutput, soldier: EntityId) -> bool {
+pub(in crate::battle) fn swung(output: &crate::boundary::TickOutput, soldier: EntityId) -> bool {
     output.changes.entity_events.iter().any(|event| {
         matches!(event, EntityEvent::Swing { entity, hand: Hand::Main, .. } if *entity == soldier)
     })
@@ -598,20 +598,22 @@ fn holder_hits_hurt_enemy_soldiers_and_spare_his_own_side() {
             .unwrap()
             .id
     };
+    // The kit spear attacks only with its jab (STAB): three blocks out,
+    // facing the soldier (+z).
     for (side, hurt) in [(1_u16, false), (2, true)] {
         let victim = first_of(&state, side);
         let at = state.entities.pos(state.entities.slot_of(victim).unwrap());
         let body = state.entities.slot_of(player).unwrap();
-        state.entities.set_pos(body, [at[0], at[1], at[2] - 1.5]);
+        state.entities.set_pos(body, [at[0], at[1], at[2] - 3.0]);
+        state.entities.set_rot(body, 0.0, 0.0);
         for _ in 0..20 {
             run_tick(&mut state, &[]);
         }
         let before = state.entities.row(state.entities.slot_of(victim).unwrap()).health;
         run_tick(
             &mut state,
-            &[PlayerInput::Attack {
+            &[PlayerInput::Stab {
                 connection: ConnectionId(1),
-                target: victim,
             }],
         );
         let after = state

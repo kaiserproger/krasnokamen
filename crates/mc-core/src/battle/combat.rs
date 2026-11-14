@@ -417,11 +417,18 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         {
             continue;
         }
-        let soldier = battle.columns.targets[bi].as_ref().map(|target| target.id);
-        if soldier.is_some() {
+        let targeted = battle.columns.targets[bi].as_ref().map(|target| target.id);
+        if targeted.is_some() {
             combat.work.target_checks += 1;
         }
         let range = fighter.range;
+        // A live player he answers (retaliation.rs) is his target: struck
+        // whenever he is in reach, before any nearer enemy.
+        let answered = targeted
+            .filter(|&target| super::live_players::is_holder(battle, target))
+            .and_then(|target| {
+                super::live_players::in_reach(battle, frame.entities, slot, range, Some(target))
+            });
         let reaches = |enemy: EntityId| {
             frame
                 .entities
@@ -429,13 +436,13 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
                 .is_some_and(|enemy| in_melee_range(frame.entities, slot, enemy, range))
         };
         let decision_tick = (frame.tick + id.0 as u64).is_multiple_of(ATTACK_DECISION_TICKS);
-        let soldier = soldier
+        let soldier = targeted
             .and_then(|target| super::retained_enemy(frame.entities, slot, target, reach_bound(range)))
             .filter(|target| reaches(target.id))
             .or_else(|| {
                 // Any other enemy in range will do; searched only when a
                 // decision is due, never every tick.
-                if !decision_tick {
+                if !decision_tick || answered.is_some() {
                     return None;
                 }
                 let unit = super::Unit {
@@ -449,11 +456,12 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         // A living network player of the other side in reach is one more
         // candidate for this same swing; the nearer of the two is struck.
         let holder = super::live_players::in_reach(battle, frame.entities, slot, range, None);
-        let target = match (soldier, holder) {
-            (Some(soldier), Some(holder)) if holder.distance < soldier.distance => holder,
-            (Some(soldier), _) => soldier,
-            (None, Some(holder)) => holder,
-            (None, None) => {
+        let target = match (answered, soldier, holder) {
+            (Some(answered), ..) => answered,
+            (None, Some(soldier), Some(holder)) if holder.distance < soldier.distance => holder,
+            (None, Some(soldier), _) => soldier,
+            (None, None, Some(holder)) => holder,
+            (None, None, None) => {
                 // Out of reach at a decision: the next enemy in reach is a new
                 // engagement with its own reaction.
                 if decision_tick {
@@ -472,15 +480,18 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         fighter.action = Action::Guard {
             until: frame.tick + ATTACK_DECISION_TICKS,
         };
-        // Anyone may cut at a fleeing back; the cautious majority only parries
-        // and probes a steady front.
+        // Anyone may cut at a fleeing back or at a player who hurt him; the
+        // cautious majority only parries and probes a steady front.
         let fleeing = frame
             .entities
             .slot_of(target.id)
             .and_then(|slot| battle.columns.index(slot))
             .and_then(|target_bi| context(battle, target_bi))
             .is_some_and(|c| c.routing);
-        let probability = if fleeing || (in_order && roll(id, 0, 1) < AGGRESSIVE_FIGHTERS) {
+        let probability = if fleeing
+            || answered.is_some()
+            || (in_order && roll(id, 0, 1) < AGGRESSIVE_FIGHTERS)
+        {
             AGGRESSIVE_ATTEMPTS
         } else {
             CAUTIOUS_ATTEMPTS
@@ -505,6 +516,17 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             },
             duration_ticks: fighter.weapon.cycle(),
         });
+        if answered.is_some() || holder.is_some_and(|holder| holder.id == target.id) {
+            // Rare (a live player in reach): the server's record of whom a
+            // soldier swung at, for take analysis.
+            tracing::info!(
+                "Battle holder swing: soldier={} holder={} tick={} answered={}",
+                id.0,
+                target.id.0,
+                frame.tick,
+                answered.is_some()
+            );
+        }
         combat.work.swings += 1;
     }
     count_fighting(frame, battle, &mut combat);

@@ -439,6 +439,60 @@ fn sword_sweep_damages_an_adjacent_zombie_only_on_a_charged_grounded_hit() {
     }
 }
 
+/// Vanilla 26.3 refuses the ordinary entity attack with a piercing weapon in
+/// the main hand: a spear only jabs (STAB). The refused attack spends no
+/// swing, wear or exhaustion; the same attack with a sword lands.
+#[test]
+fn a_plain_attack_with_a_spear_is_refused_without_spending_the_swing() {
+    for (item, lands) in [("iron_spear", false), ("iron_sword", true)] {
+        let (mut state, player, pos) = flat_player_fixture();
+        state.tick = 20;
+        state.last_swing.insert(player, 0);
+        let item_id = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(format!("minecraft:{item}")).unwrap())
+            .unwrap();
+        state.players.get_mut(&player).unwrap().inventory.slots[0] =
+            mc_data::ItemStack::new(item_id, 1);
+        let zombie = state
+            .registry
+            .entity_types
+            .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap())
+            .unwrap();
+        let target = state.spawn_mob(zombie, [pos[0], pos[1], pos[2] + 1.5], 20.0);
+        state.day_time = 14_000;
+        let wear = state.players[&player].inventory.slots[0].damage;
+        let exhaustion = state.players[&player].vitals.exhaustion;
+        let (output, _, _) = run_tick(
+            &mut state,
+            &[PlayerInput::Attack {
+                connection: ConnectionId(1),
+                target,
+            }],
+        );
+        let hurt = output.changes.entity_events.iter().any(|event| {
+            matches!(event,
+                crate::boundary::EntityEvent::Damage { entity, cause, .. }
+                    if *entity == target && *cause == Some(player))
+        });
+        assert_eq!(hurt, lands, "{item}");
+        let health = state
+            .entities
+            .row(state.entities.slot_of(target).unwrap())
+            .health;
+        assert_eq!(health < 20.0, lands, "{item}: health {health}");
+        if !lands {
+            assert_eq!(
+                state.last_swing[&player], 0,
+                "{item}: the refusal spent the swing"
+            );
+            assert_eq!(state.players[&player].inventory.slots[0].damage, wear);
+            assert_eq!(state.players[&player].vitals.exhaustion, exhaustion);
+        }
+    }
+}
+
 #[test]
 fn sword_sweep_uses_target_box_and_strict_unbuffered_reach_and_requires_primary_damage() {
     for (blocked, movement_squared) in [(false, 0.0), (true, 0.0), (false, 0.0625)] {
