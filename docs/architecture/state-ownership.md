@@ -309,6 +309,35 @@ Native regressions include checkpoint/WAL mount custody, real mounted movement,
 Protocol and persistence changes require Main's independent review.
 
 
+### Staged battle actions
+
+`battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
+regiment volley clocks, and `cavalry.rs` owns charge/refusal timers. These are
+runtime battle state: pause holds their clock; restart restores bodies and
+mount custody, not an in-progress battle. The native projectile owner alone
+moves arrows and resolves hits through its chunk index.
+
+Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
+Unblocked contact attempts remove 1.3% on the authored deterministic roll,
+nine wounded per death; shield parries reduce actual removals. Wounded soldiers
+withdraw via formation membership rather than being killed. Pursuit increases
+fatality; film pacing changes lulls, never swing speed. These are simulation
+choices based on [Sabin](https://gwern.net/doc/history/2000-sabin.pdf), not
+measured historical per-swing probabilities. Volleys use 220 ticks sustained,
+110 in an opening burst capped at 1,200 ticks, and 60 arrows per archer.
+Horses refuse steady frontal ranks and run out to a flank; accepted charge
+bonus decays over 260 ticks. The work counters bound visits, target checks,
+reaction checks, strikes, arc iterations and charge decisions; they are not a
+20-TPS performance measurement.
+
+Mob riders use the same horse-owned UUID relation as player riders. Staging
+uses `battle::cavalry::mount`; recovery allows a live mob passenger rather than
+requiring a player UUID, and the mount tick rebuilds reverse links/appearance.
+Native checkpoint/WAL regression:
+`mob_rider_survives_native_checkpoint_restart_and_rejects_duplicate_or_nested_links`.
+Protocol and persistence changes require Main's independent review.
+
+
 ## Rules
 
 1. Only native gameplay writes authoritative world/player/entity state. The edge
