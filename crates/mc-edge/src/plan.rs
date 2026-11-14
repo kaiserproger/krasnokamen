@@ -465,6 +465,26 @@ fn relink_passengers(
     }
 }
 
+/// Point the passengers of tracked `vehicle` at it, replacing the entries of
+/// its `old` passengers. Every change to a tracked appearance goes through
+/// here, so the map holds exactly the passengers of the vehicles a viewer
+/// tracks ([`ViewerState::vehicles`]).
+fn relink_passengers(
+    vehicles: &mut HashMap<EntityId, EntityId>,
+    vehicle: EntityId,
+    old: &[EntityId],
+    new: &[EntityId],
+) {
+    for passenger in old {
+        if vehicles.get(passenger) == Some(&vehicle) {
+            vehicles.remove(passenger);
+        }
+    }
+    for &passenger in new {
+        vehicles.insert(passenger, vehicle);
+    }
+}
+
 /// Per-viewer cached world view. Tracks what this connection already has so
 /// planning emits only deltas. Teleport ids are allocated by the core.
 #[derive(Debug)]
