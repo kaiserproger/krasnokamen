@@ -15,11 +15,8 @@ receipt remains evidence only for the exact path and artifact it exercised.
 
 The reviewer is independent of the implementing agent. The owner chooses the
 model; no vendor or model names belong in repo docs. Every agent-launched
-Java/Minecraft client uses `ALSOFT_DRIVERS=null`, `ALSOFT_DRIVERS=wave` writing
-to a file on the games disk, or, where the harness records audio, its private
-PipeWire graph (`tools/harness/screen_audio_graph.sh`, `tools/harness/audio.py`:
-a private runtime with a null sink and a silent source, `ALSOFT_DRIVERS=pulse`
-pointed only at that runtime, aborting when any ALSA or BlueZ node is visible).
+Java/Minecraft client uses `ALSOFT_DRIVERS=null` (or `ALSOFT_DRIVERS=wave`
+writing to a file on the games disk when audio must be recorded).
 
 ## Roles
 

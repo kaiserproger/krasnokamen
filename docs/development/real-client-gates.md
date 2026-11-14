@@ -192,9 +192,8 @@ proofs need a physical XTest click (pattern: `_scroll` in
   `video driver: wayland`. Browser/noVNC viewers need their own proven headless
   isolation (QA protocol, breaker procedure).
 - **Never the owner's microphone or speakers** (he is often in a call). Minimum:
-  `ALSOFT_DRIVERS=null` for every agent-launched Java/Minecraft client, or the
-  harness private PipeWire graph where audio is recorded (QA protocol).
-  Stronger isolation used for bot fleets and QA hunts: a private null
+  `ALSOFT_DRIVERS=null` for every agent-launched Java/Minecraft client (QA
+  protocol). Stronger isolation used for bot fleets and QA hunts: a private null
   ALSA config (`pcm.!default { type null }`, `ctl.!default { type null }`) via
   `ALSA_CONFIG_PATH`, `PIPEWIRE_REMOTE=/nonexistent`,
   `PULSE_SERVER=unix:/nonexistent`, private `XDG_RUNTIME_DIR`; verify with
