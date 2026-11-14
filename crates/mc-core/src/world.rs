@@ -1441,6 +1441,15 @@ impl std::fmt::Display for RefusedChunk {
     }
 }
 
+/// Actual healthy-resident container work; absent from production and release benches.
+#[cfg(all(test, debug_assertions))]
+#[derive(Debug, Default)]
+struct ContainerCaptureWork {
+    key_visits: usize,
+    chunk_lookups: usize,
+    projected: usize,
+}
+
 /// Dirty chunks captured for one checkpoint: immutable, written off the
 /// tick thread (the journal thread, after the WAL gate).
 pub struct ChunkCapture {
@@ -1452,6 +1461,8 @@ pub struct ChunkCapture {
     /// byte-identical and they are never loaded or rewritten.
     refused: Vec<RefusedChunk>,
     generated_bases: bool,
+    #[cfg(all(test, debug_assertions))]
+    container_work: ContainerCaptureWork,
 }
 
 impl ChunkCapture {
@@ -1607,3 +1618,7 @@ pub(crate) mod world_tests;
 #[cfg(test)]
 #[path = "world_section_dirty_tests.rs"]
 mod world_section_dirty_tests;
+
+#[cfg(test)]
+#[path = "world_capture_tests.rs"]
+mod world_capture_tests;

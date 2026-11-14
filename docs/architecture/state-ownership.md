@@ -259,6 +259,57 @@ an entry gets a faction only while it is in no `/team` team
 live`), and `/team join` refuses battle-faction UUIDs and holders.
 
 
+## Container checkpoint capture
+
+The native checkpoint preflight materializes and hydrates container custody
+before freezing live slots. Each dimension's chunk capture then builds one
+borrowed chunk index from **all** frozen live owners, including clean neighbours
+in a dirty chunk. Euclidean division on both horizontal coordinates preserves
+negative chunk boundaries. Buckets retain the ordered input's record order;
+they neither clone inventories nor become another authoritative owner.
+
+Healthy resident selection/projection visits the live keys once, looks up each
+dirty resident chunk once, and projects only matching owners: `O(B + D + M)`,
+not one full live-map walk per dirty chunk. Empty buckets still remove stale
+typed chest/furnace images; unopened loot without a live owner is retained.
+Opaque native owners keep their bytes and are never retyped by slot count.
+The conservative quarantined-chunk refusal path is unchanged.
+
+Capture still uses native copy-on-write chunks and the existing revision ACK.
+Only the writer's WAL-gated commit may advance the manifest and prune covered
+frames; stale ACKs cannot erase newer inventory custody. Player and container
+post-images retain that same durable fence in Overworld, Nether and End.
+
+### CAF-04 capture ladder
+
+One BASE run followed by one AFTER run in the same Main-authorized exclusive
+window, release-test pins `53e3a2cae5f7-d3518158` and
+`53e3a2cae5f7-3ecc759c`, with phase logging disabled. The unchanged audit fixture
+loads 2,000 empty native chunks and places live owners outside the dirty chunks.
+Cells below are medians of three capture samples, in milliseconds.
+
+| Dirty chunks | Disjoint live owners | BASE | Grouped |
+| ---: | ---: | ---: | ---: |
+| 100 | 0 | 0.003 | 0.002 |
+| 100 | 100 | 0.013 | 0.003 |
+| 100 | 1,000 | 0.114 | 0.012 |
+| 100 | 10,000 | 1.089 | 0.107 |
+| 500 | 0 | 0.008 | 0.008 |
+| 500 | 100 | 0.059 | 0.009 |
+| 500 | 1,000 | 0.556 | 0.018 |
+| 500 | 10,000 | 5.497 | 0.109 |
+| 2,000 | 0 | 0.034 | 0.042 |
+| 2,000 | 100 | 0.247 | 0.037 |
+| 2,000 | 1,000 | 2.205 | 0.042 |
+| 2,000 | 10,000 | 21.759 | 0.130 |
+
+The largest cell is 167.38 times faster in this pair. The empty-owner
+2,000-chunk cell is 0.008 ms slower; this single pair does not establish
+statistical significance. These numbers isolate chunk capture, not the writer,
+fsync, end-to-end checkpoint latency or battle TPS. CAF-05/06/08 are unchanged.
+Raw command, pin provenance and logs are retained in the executor's
+`.analysis/codex-logs/stage2core/caf04-result.json` receipt.
+
 ## Rules
 
 1. Only native gameplay writes authoritative world/player/entity state. The edge

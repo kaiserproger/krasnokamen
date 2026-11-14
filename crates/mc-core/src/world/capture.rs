@@ -1,7 +1,8 @@
 //! Dirty-chunk capture for checkpoints and block-entity injection.
-//! Moved verbatim from `world.rs`.
 
 use super::*;
+
+type ContainerRecord<'a> = (&'a (i32, i32, i32), &'a crate::journal::ReplayBlockEntity);
 
 impl ChunkWorld {
     /// Load dirty container custody before the caller freezes its live slots.
@@ -83,8 +84,10 @@ impl ChunkWorld {
     pub(super) fn inject_block_entities(
         chunk: &mut mc_world::Chunk,
         pos: ChunkPos,
+        records: &[ContainerRecord<'_>],
         block_entities: &crate::core::CheckpointBlockEntities,
         registry: &BlockRegistry,
+        #[cfg(all(test, debug_assertions))] work: &mut ContainerCaptureWork,
     ) {
         chunk.chests.retain(|block, chest| {
             !Self::in_chunk(*block, pos)
@@ -100,16 +103,10 @@ impl ChunkWorld {
         chunk
             .brewing_stands
             .retain(|block, _| !Self::in_chunk(*block, pos));
-        for ((x, y, z), record) in block_entities {
-            if !Self::in_chunk(
-                mc_world::BlockPos {
-                    x: *x,
-                    y: *y,
-                    z: *z,
-                },
-                pos,
-            ) {
-                continue;
+        for &((x, y, z), record) in records {
+            #[cfg(all(test, debug_assertions))]
+            {
+                work.projected += 1;
             }
             let block = mc_world::BlockPos {
                 x: *x,
@@ -246,6 +243,8 @@ impl ChunkWorld {
             load_error: declined,
             refused,
             generated_bases: false,
+            #[cfg(all(test, debug_assertions))]
+            container_work: ContainerCaptureWork::default(),
         };
         // Fold resident intervals only at checkpoint; absent images are frozen
         // below without loading or admitting their chunks. WAL stores boundaries.
@@ -369,6 +368,23 @@ impl ChunkWorld {
                 debt.dirty = false;
             }
         }
+        // Freeze one dimension-local index after materialization. Include every
+        // live owner: a clean neighbour shares the dirty chunk's native image.
+        // Buckets preserve the checkpoint BTreeMap's order without cloning slots.
+        let mut by_chunk: HashMap<ChunkPos, Vec<ContainerRecord<'_>>> = HashMap::default();
+        for (block, record) in block_entities {
+            #[cfg(all(test, debug_assertions))]
+            {
+                capture.container_work.key_visits += 1;
+            }
+            by_chunk
+                .entry(ChunkPos {
+                    x: block.0.div_euclid(16),
+                    z: block.2.div_euclid(16),
+                })
+                .or_default()
+                .push((block, record));
+        }
         let dirty: Vec<ChunkPos> = self.dirty.iter().copied().collect();
         for pos in dirty {
             if !self.chunks.contains_key(&pos) {
@@ -400,24 +416,22 @@ impl ChunkWorld {
             }
             // Typed inventory/progress projection is durable-only. It must
             // not invalidate a client's already delivered chunk image.
-            let has_block_entities = !chunk.chests.is_empty()
-                || !chunk.furnaces.is_empty()
-                || block_entities.keys().any(|(x, y, z)| {
-                    Self::in_chunk(
-                        mc_world::BlockPos {
-                            x: *x,
-                            y: *y,
-                            z: *z,
-                        },
-                        pos,
-                    )
-                });
+            let records = by_chunk.get(&pos).map_or(&[][..], Vec::as_slice);
+            #[cfg(all(test, debug_assertions))]
+            {
+                capture.container_work.chunk_lookups += 1;
+            }
+            let has_block_entities =
+                !chunk.chests.is_empty() || !chunk.furnaces.is_empty() || !records.is_empty();
             if has_block_entities {
                 Self::inject_block_entities(
                     Arc::make_mut(chunk),
                     pos,
+                    records,
                     block_entities,
                     &self.source.registry,
+                    #[cfg(all(test, debug_assertions))]
+                    &mut capture.container_work,
                 );
                 self.bump_storage_revision(pos);
             }
