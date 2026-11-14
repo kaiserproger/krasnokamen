@@ -4,8 +4,11 @@
 //! Called from the serial movement writeback with the pre/post positions, so
 //! walkers on level ground (no drop, no ground transition) never touch the
 //! cold row. The accumulated distance lives in `Controls::fall_distance`
-//! (already persisted as `FallDistance`); it is written without a durable
+//! (already persisted as `FallDistance`); growth is written without a durable
 //! mark because a transient mid-air value is not worth a WAL image per tick.
+//! Clearing a non-zero distance takes journal custody: an image emitted
+//! mid-air holds the distance, and replay must not keep it after a landing
+//! (`Controls::journal_eq`).
 
 use crate::blueprint::MovementClass;
 use crate::effects::EffectId;
@@ -39,13 +42,12 @@ pub(crate) fn after_move(
     // Vanilla LivingEntity.handleOnClimbable resets fall distance. A clipped
     // climb still counts: otherwise tiny ceiling drops accumulate across rises.
     if wall_climbing {
-        if state.entities.row(slot).controls.fall_distance != 0.0 {
-            state
-                .entities
-                .row_mut_projected(slot)
-                .controls
-                .fall_distance = 0.0;
-        }
+        reset(state, slot);
+        return (0.0, false);
+    }
+    // Vanilla LivingEntity.rideTick clears fall distance even without a drop.
+    if state.entities.row(slot).entity_life.mount.vehicle.is_some() {
+        reset(state, slot);
         return (0.0, false);
     }
     let dy = new[1] - old[1];
@@ -83,21 +85,27 @@ pub(crate) fn after_move(
                     .is_some_and(|block| crate::statistics::climbable(state, block.block.raw_id))
         });
     let stalagmite = ground && stalagmite_at(state, new);
-    let row = state.entities.row_mut_projected(slot);
+    let row = state.entities.row(slot);
     if cushioned
         || row.active_effects.has(EffectId::SlowFalling)
         || row.active_effects.has(EffectId::Levitation)
     {
-        row.controls.fall_distance = 0.0;
+        reset(state, slot);
         return (0.0, false);
     }
-    if dy < 0.0 {
-        row.controls.fall_distance -= f64::from(dy as f32);
-    }
+    let drop = if dy < 0.0 { f64::from(dy as f32) } else { 0.0 };
     if !ground {
+        if drop != 0.0 {
+            state
+                .entities
+                .row_mut_projected(slot)
+                .controls
+                .fall_distance -= drop;
+        }
         return (0.0, false);
     }
-    let distance = std::mem::take(&mut row.controls.fall_distance);
+    // The landing move's own drop counts, then the distance is spent.
+    let distance = reset(state, slot) - drop;
     (
         if stalagmite {
             crate::survival::stalagmite_damage(distance)
@@ -106,4 +114,14 @@ pub(crate) fn after_move(
         },
         stalagmite,
     )
+}
+
+/// Clear the fall distance; returns the distance it held. Only a non-zero
+/// distance is written, through journaled custody (see the module docs).
+fn reset(state: &mut TickState, slot: EntitySlot) -> f64 {
+    let distance = state.entities.row(slot).controls.fall_distance;
+    if distance != 0.0 {
+        state.entities.row_mut(slot).controls.fall_distance = 0.0;
+    }
+    distance
 }

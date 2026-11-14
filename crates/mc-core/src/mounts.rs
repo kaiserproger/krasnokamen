@@ -4,6 +4,7 @@ use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{Footprint, Intent, IntentKind, InvClaim};
 use crate::tick::TickState;
 use mc_data::ItemStack;
+use mc_data::entity_attachments_26_3::attachments;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -690,7 +691,14 @@ pub(crate) fn sync_rider(state: &mut TickState, slot: EntitySlot) {
         }
         let old = state.entities.pos(rider);
         let already_mounted = state.entities.row(slot).appearance.passengers.contains(&id);
-        state.entities.row_mut(rider).entity_life.mount.vehicle = Some(vehicle);
+        if state.entities.row(rider).entity_life.mount.vehicle != Some(vehicle) {
+            state.entities.row_mut(rider).entity_life.mount.vehicle = Some(vehicle);
+        }
+        if matches!(state.entities.body(rider).kind, EntityKind::Mob { .. })
+            && state.entities.row(rider).controls.fall_distance != 0.0
+        {
+            state.entities.row_mut(rider).controls.fall_distance = 0.0;
+        }
         let kind = name(state, slot);
         let (height, forward, side) =
             if crate::vehicles::kind(state, slot) == Some(crate::vehicles::VehicleKind::Boat) {
@@ -714,15 +722,26 @@ pub(crate) fn sync_rider(state: &mut TickState, slot: EntitySlot) {
                 // x lateral and z forward, so index 0 is 1.7 ahead and index 1 is x = -1.7.
                 let (forward, side) = [(1.7, 0.0), (0.0, -1.7), (-1.7, 0.0), (0.0, 1.7)][index];
                 (state.entities.body(slot).height, forward, side)
-            } else {
+            } else if kind == "minecraft:camel" {
                 (
                     state.entities.body(slot).height * 0.75,
-                    if name(state, slot) == "minecraft:camel" {
-                        if index == 0 { 0.5 } else { -0.7 }
-                    } else {
-                        0.0
-                    },
+                    if index == 0 { 0.5 } else { -0.7 },
                     0.0,
+                )
+            } else {
+                let point = attachments(kind).passenger.unwrap_or([
+                    0.0,
+                    state.entities.body(slot).height as f32,
+                    0.0,
+                ]);
+                let rider_point = match state.entities.body(rider).kind {
+                    EntityKind::Player { .. } => attachments("minecraft:player").vehicle,
+                    _ => attachments(name(state, rider)).vehicle,
+                };
+                (
+                    f64::from(point[1]) - f64::from(rider_point[1]),
+                    f64::from(point[2]) - f64::from(rider_point[2]),
+                    f64::from(point[0]) - f64::from(rider_point[0]),
                 )
             };
         let yaw = f64::from(state.entities.rot(slot)[0]).to_radians();
@@ -745,8 +764,8 @@ pub(crate) fn sync_rider(state: &mut TickState, slot: EntitySlot) {
         passengers[passenger_count] = id;
         passenger_count += 1;
     }
-    let (body, row) = state.entities.parts_mut(slot);
-    if row.appearance.passengers != passengers[..passenger_count] {
+    if state.entities.row(slot).appearance.passengers != passengers[..passenger_count] {
+        let (body, row) = state.entities.parts_mut(slot);
         let appearance = Arc::make_mut(&mut row.appearance);
         appearance.passengers.clear();
         appearance
@@ -1019,10 +1038,15 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             let uuid = state.entities.row(slot).entity_life.mount.riders[index];
             let live = state.entities.slot_of_uuid(uuid).is_some_and(|r| {
                 let body = state.entities.body(r);
-                state
-                    .players
-                    .get(&body.id)
-                    .is_some_and(|p| !p.spectator() && !p.vitals.is_dead())
+                body.alive
+                    && match body.kind {
+                        EntityKind::Player { .. } => state
+                            .players
+                            .get(&body.id)
+                            .is_some_and(|p| !p.spectator() && !p.vitals.is_dead()),
+                        EntityKind::Mob { .. } => state.entities.row(r).health > 0.0,
+                        _ => false,
+                    }
             });
             if !state.entities.body(slot).alive || !live {
                 clear_rider(state, slot, uuid);
@@ -1034,10 +1058,17 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             continue;
         }
         let uuid = state.entities.row(slot).entity_life.mount.riders[0];
-        let equine = capabilities(state, slot).taming.equine();
-        let row = state.entities.row_mut(slot);
-        row.entity_life.mounted = true;
-        if equine && !row.entity_life.tamed && crate::taming::roll(row, 50) == 0 {
+        let equine = capabilities(state, slot).taming.equine()
+            && rider(state, slot)
+                .is_some_and(|r| matches!(state.entities.body(r).kind, EntityKind::Player { .. }));
+        if !state.entities.row(slot).entity_life.mounted {
+            state.entities.row_mut(slot).entity_life.mounted = true;
+        }
+        if equine
+            && !state.entities.row(slot).entity_life.tamed
+            && crate::taming::roll(state.entities.row_mut(slot), 50) == 0
+        {
+            let row = state.entities.row_mut(slot);
             let success = crate::taming::roll(row, 100) < u32::from(row.entity_life.taming.temper);
             if success {
                 row.entity_life.tamed = true;
