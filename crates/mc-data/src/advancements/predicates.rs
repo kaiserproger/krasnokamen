@@ -136,7 +136,7 @@ pub fn evaluate_predicate(predicate: &Value, event: &Value) -> Evaluation {
         missing: 0,
     };
     let matches = match predicate {
-        Value::Array(_) => evaluator.conditions(predicate, "predicate"),
+        Value::Array(_) => evaluator.condition_list(predicate, None, "predicate"),
         single => evaluator.condition(single, None, "predicate"),
     };
     Evaluation {
