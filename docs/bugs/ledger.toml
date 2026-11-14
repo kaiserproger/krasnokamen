@@ -1715,9 +1715,9 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SVC-BRIDGE"
-regression = ["cargo:mc-edge:svc_service::tests::svc_group_audio_stays_inside_the_password_protected_group", "harness:screens-voice-qa:svc_proximity_fabric_to_fabric", "harness:screens-voice-qa:svc_group_fabric_to_fabric", "harness:screens-voice-qa:native_outsider_hears_no_group_audio"]
+regression = ["cargo:mc-edge:svc_service::tests::svc_group_audio_stays_inside_the_password_protected_group", "harness:screens-voice-qa:svc_proximity_fabric_to_fabric", "harness:screens-voice-qa:svc_group_fabric_to_fabric", "harness:screens-voice-qa:native_outsider_hears_no_group_audio", "cargo:mc-edge:svc_service::tests::svc_players_and_native_players_hear_each_other_through_the_bridge"]
 fix_commit = "20bfb62a"
-
+repro_check = "candidate: the implementation is in tree (crates/mc-edge/src/svc.rs + svc_service.rs, fix 20bfb62a is an ancestor) and both refs are green, but the real Fabric+SVC gate needs graphical Fabric clients plus the SVC jar and .analysis/SVCCompat/artifacts is absent on this host (receipts/XHarnessInfra/edge-rows-verify.log); stage 3; the screens-voice-qa verdicts svc_proximity_fabric_to_fabric, svc_group_fabric_to_fabric and native_outsider_hears_no_group_audio exist and are unrunnable for the same reason"
 [[bug]]
 id = "NATIVE-FREEZE-CAMERA"
 title = "Under server tick freeze, tp updates observed position while native camera frames remain stale; minecraft_wait_ticks times out30s. Original source returned before player.tick when server_frozen and no step budget."
@@ -1771,15 +1771,9 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHUTDOWN-ERROR-LOG"
-regression = [
-  "cargo:mc-core:core::stop_tests::native_writer_explicit_shutdown_logs_info_without_waiting_for_channel_close",
-  "cargo:mc-core:core::stop_tests::native_writer_channel_close_logs_stop_cause",
-  "cargo:mc-core:core::stop_tests::journal_io_failure_still_logs_error_and_never_acknowledges",
-  "cargo:mc-edge:console::tests::console_stop_has_no_error_logs_and_keeps_checkpoint",
-  "harness:entities:native-v2-console-shutdown",
-]
-fix_commit = "3acf6374f2e67c0e413dff79b2c1049edee14904"
-
+regression = ["cargo:mc-core:core::stop_tests::native_writer_explicit_shutdown_logs_info_without_waiting_for_channel_close", "cargo:mc-core:core::stop_tests::native_writer_channel_close_logs_stop_cause", "cargo:mc-core:core::stop_tests::journal_io_failure_still_logs_error_and_never_acknowledges", "cargo:mc-edge:console::tests::console_stop_has_no_error_logs_and_keeps_checkpoint", "harness:entities:native-v2-console-shutdown"]
+fix_commit = "3acf6374"
+repro_check = "candidate: fix 3acf6374's non-test hunks no longer reverse (core.rs moved to core/journal.rs + core/tick_loop.rs by the stage-0 merges; crates/mc-edge/src/bin/solaris-v2.rs no longer exists; `git apply -3 -R --check` conflicts), so no real control; a hand-made level flip would be synthetic. Refs green incl. the 47 s real-core console stop (receipts/XHarnessInfra/edge-rows-verify.log); harness:entities:native-v2-console-shutdown is stage 3; repro=manual, real-client check required"
 [[bug]]
 id = "DEATH-PROTECTION-ACTIONS"
 title = "Valid nonempty custom death_protection consume actions are rejected at admission, so custom protection cannot apply its specified effects when saving the holder. This is the explicit residual of the approved B07 empty/omitted-action subset, not a second count for item-independent protection."
@@ -3050,7 +3044,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DOC-CHISEL"
 regression = []
-
+repro_check = "doc-only fix in the plugins repository, branch wt/XInfraPlugins 2ed597a1 (not merged until M3): chisel/README.md now says the bundle is optional (required = false) and documents the probe/hello rule, the vanilla carrier fallback and the required-bundle refusal. Checked against the deployed manifest and the core behaviour in configuration_tests::vanilla_client_completes_configuration_with_only_optional_bundles, loader_hello_before_known_packs_starts_negotiation_of_optional_bundles, mc-protocol with_vanilla_item_models, mc-edge server/connection.rs:353-359 and mc-core carrier_blocks custom_stack. No revertable hunk (a doc), repro=manual so a real-client check would still be required for promotion; the evidence wait for the plugins merge"
 [[bug]]
 id = "CODE-CLIENT-CLIPPY"
 title = "Existing strict lint gate fails: `refactor/SplitClientLoader-client-final-1.log:6580,6701` reports436 library/459 lib-test errors. Combined native strict `artifact://64976:6915,7005` now reports435 library/458 lib-test errors; concrete:ui_hotfix_tests.rs:967 uses an always-true fov assertion. No runtime conclusion inferred."
@@ -3060,7 +3054,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CODE-CLIENT-CLIPPY"
 regression = []
-
+repro_check = "candidate: the gate was re-measured green on client 9a645aa9 (workspace and the root crate explicitly, `cargo clippy --workspace --all-targets -- -D warnings` rc=0 plus `-p krasnokamen-client`, receipts/XHarnessInfra/client-clippy-9a645aa9*.log); the cited always-true assertion is gone (src/ui_hotfix_tests.rs has real assert_eq!/assert_ne! FOV assertions). No fix hunks exist to revert, and the --workspace run never printed 'Checking krasnokamen-client', which is why the root crate was checked explicitly"
 [[bug]]
 id = "TEST-JAVA-CAPABILITIES"
 title = "Exact submitted prediction tokens/ACK sequence and cumulative chat unavailable; raw GUI recent_chat is bounded/newest-first. Final transformer pickup/shield/tick/QA receipt corrections9bdf33d unbuilt/unretested; old47unit passes do not prove a client. Fabric SVC/DH profiles include SolarisLoader, not pure target-mod lanes."
@@ -3930,19 +3924,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "WinFixReview (history://WinFixReview) on RC5 hotfix a76e1e80: mc-edge backup.rs ExclusiveLease, mc-core hot_backup.rs:123-127, world_conversion.rs:673-679, import.rs session.lock skip"
-regression = [
-  "cargo:mc-core:hot_backup_tests::copy_reads_the_owned_database_snapshot_not_a_second_path_handle",
-  "cargo:mc-core:hot_backup_tests::backup_of_a_running_core_restores_the_state_at_its_tick",
-  "cargo:mc-core:core::stop_tests::shutdown_releases_database_while_backup_admission_is_paused",
-  "cargo:mc-edge:backup::tests::offline_backup_restore_copies_database_under_real_file_leases",
-  "cargo:mc-edge:backup::tests::hot_backup_of_a_running_core_is_a_verified_restorable_backup",
-  "cargo:mc-world-conversion:path_tests::walked_paths_are_portable_metadata_keys_and_exclude_world_lease",
-  "cargo:mc-world-conversion:path_tests::syncing_staged_nested_files_preserves_every_byte",
-  "cargo:mc-world-conversion:roundtrip_tests::nested_paths_import_export_and_census_under_world_leases",
-  "cargo:mc-world:native::backup_tests::snapshot_reads_lease_holding_handle_without_releasing_database_custody",
-]
+regression = ["cargo:mc-core:hot_backup_tests::copy_reads_the_owned_database_snapshot_not_a_second_path_handle", "cargo:mc-core:hot_backup_tests::backup_of_a_running_core_restores_the_state_at_its_tick", "cargo:mc-core:core::stop_tests::shutdown_releases_database_while_backup_admission_is_paused", "cargo:mc-edge:backup::tests::offline_backup_restore_copies_database_under_real_file_leases", "cargo:mc-edge:backup::tests::hot_backup_of_a_running_core_is_a_verified_restorable_backup", "cargo:mc-world-conversion:path_tests::walked_paths_are_portable_metadata_keys_and_exclude_world_lease", "cargo:mc-world-conversion:path_tests::syncing_staged_nested_files_preserves_every_byte", "cargo:mc-world-conversion:roundtrip_tests::nested_paths_import_export_and_census_under_world_leases", "cargo:mc-world:native::backup_tests::snapshot_reads_lease_holding_handle_without_releasing_database_custody"]
 fix_commit = "c1f387bbcb3c1f09d61c9e04c6d114b1b1e3cf0c"
-
+repro_check = "candidate: all nine refs green (receipts/XHarnessInfra/rows-verify.log; the mc-world one needs the stage2/integration 7c7a5dc16 mc-world E0063 fix), but no real-hunk control exists - c1f387bb's native.rs/lib.rs/core.rs hunks conflict on reverse and the two that reverse (backup.rs, import.rs) change nothing on Linux - and the Windows-only symptom (LockFileEx second-handle sharing violation, error 33) needs a Windows host"
 [[bug]]
 id = "SP-RELAUNCH-LEASE-RACE"
 title = "After Save & Quit, the native client's process can end while its singleplayer server is still checkpointing (old server alive 1.6 s after RC4 client exit, 3.8 s after RC5); relaunching the client and pressing Play on the same world at once was refused once with 'world ... is already leased' (Server exited during startup). Not reproduced on RC4; Play after the refusal was not exercised."
