@@ -67,7 +67,7 @@ pub(crate) fn source_entity(state: &TickState, connection: ConnectionId) -> Opti
     })
 }
 
-pub(super) fn suspend(
+pub(crate) fn suspend(
     state: &mut TickState,
     id: CompletionId,
     context: Context,

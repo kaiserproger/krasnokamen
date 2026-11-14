@@ -41,12 +41,36 @@ fn execute(state: &mut TickState, line: &str, permission: u8) -> CommandResult {
     );
     crate::command_context::begin_sequence(state);
     state.command_context.current = Some(context);
-    crate::command_context::native(state, line, context, &mut ChangeSet::default(), false)
-        .unwrap_or(Failed)
+    let result =
+        crate::command_context::native(state, line, context, &mut ChangeSet::default(), false)
+            .unwrap_or(Failed);
+    // `native` hands a worker job back as `Deferred`; the production entry point
+    // (`command_context::run`) suspends the continuation so the worker's answer is
+    // claimed by `command_context::resume`. A bare `native` call must do the same,
+    // or the datapack listing and reload output is dropped on the floor.
+    if let CommandResult::Deferred(id) = result {
+        crate::command_context::suspend(state, id, context, Vec::new())
+            .expect("fresh command suspension");
+    }
+    result
 }
 
 fn run(state: &mut TickState, line: &str) -> CommandResult {
     execute(state, line, 4)
+}
+
+/// Run one console command through the native pipeline, including `/execute`
+/// chains and their `execute store` callbacks. `native` owns neither, so
+/// `/execute ...` must enter through the same orchestrator production uses.
+fn pipeline(state: &mut TickState, line: &str) -> i32 {
+    state.command_context.current = None;
+    let context = crate::command_context::Context::source(
+        state,
+        crate::command_console::CONNECTION,
+        crate::command_console::EXECUTOR,
+        4,
+    );
+    crate::command_context::run(state, line, context, &mut ChangeSet::default())
 }
 
 /// Everything the console was told since the last call, as components.
@@ -134,8 +158,20 @@ fn list_entries_are_chat_links_with_title_and_description_hover() {
     settle(&mut state);
     messages(&mut state);
 
-    assert_eq!(run(&mut state, "datapack list"), Success(3));
+    // The worker answers on a later tick, so the count is claimed by
+    // `execute store result` when the suspension resumes; the chat links are
+    // the listing's own output. Three packs listed: two enabled, one available.
+    run(&mut state, "scoreboard objectives add packs dummy");
+    messages(&mut state);
+    pipeline(
+        &mut state,
+        "execute store result score packs packs run datapack list",
+    );
     settle(&mut state);
+    assert_eq!(
+        state.scoreboard.scores["packs"]["packs"].value, 3,
+        "the listing reports every pack it listed"
+    );
     let shown = messages(&mut state);
     assert_eq!(
         shown.len(),
@@ -180,7 +216,7 @@ fn list_entries_are_chat_links_with_title_and_description_hover() {
     run(&mut state, "datapack enable file/beta");
     settle(&mut state);
     messages(&mut state);
-    assert_eq!(run(&mut state, "datapack list available"), Success(0));
+    run(&mut state, "datapack list available");
     settle(&mut state);
     let shown = messages(&mut state);
     assert_eq!(key(&shown[0]), "commands.datapack.list.available.none");
