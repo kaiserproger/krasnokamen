@@ -51,6 +51,36 @@ def failure_status(oracle_started: bool) -> str:
     return 'fail' if oracle_started else 'blocked'
 
 
+def frozen_native_rows() -> list[dict[str, Any]]:
+    """Load the checked-in frozen matrix, refusing a mismatched definition."""
+    import yaml
+
+    root = runtime.REPO_ROOT / 'tools/harness/matrix_specs'
+    matrix_bytes = (root / 'matrix.yaml').read_bytes()
+    freeze = json.loads((root / 'MATRIX_FREEZE.json').read_text())
+    matrix = yaml.safe_load(matrix_bytes)
+    ids = sorted(row['id'] for row in matrix['scenarios'])
+    if (hashlib.sha256(matrix_bytes).hexdigest() != freeze['matrix_yaml_sha256']
+            or ids != sorted(freeze['wave1_ids'])):
+        raise ValueError('native matrix differs from checked-in freeze')
+    return select(matrix['scenarios'])
+
+
+def verdict_key(row_id: str) -> str:
+    return '26.3.' + row_id
+
+
+def record_outcome(details: dict[str, Any], row: dict[str, Any], declared: dict[str, str | None]) -> None:
+    """Key every row's verdict; a declared blocker stays blocked, anything else is a failure."""
+    details['verdicts'][verdict_key(row['id'])] = row['status'] == 'pass'
+    if row['status'] != 'pass':
+        entry = {'id': row['id'], 'reason': row['note']}
+        if row['status'] == 'blocked' and declared.get(row['id']) == row['note']:
+            details['blocked_rows'].append(entry)
+        else:
+            details['failed_rows'].append(entry)
+
+
 def _wait_client_tick(client: Any, steps: ProbeSteps) -> None:
     remaining = steps.remaining()
     previous = getattr(client, 'request_timeout_seconds', None)
@@ -177,6 +207,84 @@ def _write_summary(matrix: dict[str,Any]) -> None:
 
 
 VIEW_DISTANCE = 3
+
+
+class HealthInterval:
+    """Lossless per-tick health evidence between native action boundaries."""
+
+    def __init__(self, host: Any) -> None:
+        self.host = host
+        self.segments: list[dict[str, Any]] = []
+        self.restart_boundaries: list[dict[str, Any]] = []
+        self.begin()
+
+    def _snapshot(self, after: int | None = None) -> dict[str, Any]:
+        from ..matrix_api import MissingCapability
+
+        if not self.host.running:
+            raise RuntimeError('always_oracle:server_not_alive')
+        suffix = '' if after is None else f'?after_tick={after}'
+        try:
+            with urllib.request.urlopen(
+                f'http://127.0.0.1:{self.host.dashboard_port}/load-metrics{suffix}', timeout=10
+            ) as response:
+                data = json.load(response)
+        except (OSError, ValueError) as error:
+            raise MissingCapability('always_oracle:load_metrics_unavailable') from error
+        if not isinstance(data, dict) or data.get('schema_version') != 1:
+            raise MissingCapability('always_oracle:invalid_load_metrics')
+        return data
+
+    def begin(self) -> None:
+        from ..matrix_api import MissingCapability
+
+        data = self._snapshot()
+        tick = data.get('latest_tick')
+        skipped = data.get('source_skipped_ticks_total')
+        instance = data.get('instance_started_unix_ns')
+        if any(type(value) is not int or value < 0 for value in (tick, skipped, instance)):
+            raise MissingCapability('always_oracle:missing_load_metrics_baseline')
+        self.process = self.host._process
+        self.baseline = (tick, skipped, instance)
+
+    def finish(self) -> None:
+        from ..matrix_api import MissingCapability
+
+        if not self.host.running or self.host._process is not self.process:
+            raise RuntimeError('always_oracle:server_not_alive')
+        tick, skipped, instance = self.baseline
+        data = self._snapshot(tick)
+        samples = data.get('samples')
+        if (data.get('instance_started_unix_ns') != instance or data.get('after_tick') != tick
+                or type(data.get('source_skipped_ticks_total')) is not int
+                or data['source_skipped_ticks_total'] != skipped
+                or data.get('overrun') is not False or not isinstance(samples, list) or not samples):
+            raise MissingCapability('always_oracle:incomplete_load_metrics')
+        expected = tick + 1
+        for sample in samples:
+            if (not isinstance(sample, dict) or type(sample.get('tick')) is not int
+                    or sample['tick'] != expected or type(sample.get('wall_us')) is not int
+                    or sample['wall_us'] < 0):
+                raise MissingCapability('always_oracle:gapped_load_metrics')
+            if sample['wall_us'] >= 50_000:
+                raise RuntimeError(f"always_oracle:tick_mspt_at_least_50:{sample['tick']}:{sample['wall_us']}")
+            expected += 1
+        if data.get('latest_tick') != expected - 1:
+            raise MissingCapability('always_oracle:incomplete_load_metrics')
+        self.segments.append({'first_tick': tick + 1, 'last_tick': expected - 1,
+                              'samples': [{'tick': sample['tick'], 'wall_us': sample['wall_us']} for sample in samples],
+                              'source_skipped_ticks_total': skipped})
+
+    def verify_log(self) -> None:
+        text = self.host.log_path.read_text(errors='replace')
+        match = re.search(r'(?im)^.*(?:\bERROR\b|\bpanic(?:ked)?\b).*$', text)
+        if match:
+            raise RuntimeError('always_oracle:server_log_error:' + match.group(0))
+
+    def require_complete(self) -> None:
+        if self.restart_boundaries:
+            from ..matrix_api import MissingCapability
+            raise MissingCapability('always_oracle:final_tick_to_server_stop_unobservable')
 
 
 class Lane:
@@ -318,8 +426,12 @@ class Lane:
         deadline=time.monotonic()+self.timeout
         for client,name in zip(self.clients,self.names):
             state=client.call_tool('minecraft_observe')
-            while state.get('in_play'):
-                client.call_tool('minecraft_wait_for_state_change',{'observed_version':state['state_version'],'timeout_seconds':min(self.timeout,120)})
+            while state.get('in_play') is True:
+                remaining=deadline-time.monotonic()
+                if remaining < 0.1:
+                    raise TimeoutError('clients did not leave Play after restart')
+                client.call_tool('minecraft_wait_for_state_change',
+                                 {'observed_version':state['state_version'],'timeout_seconds':remaining})
                 state=client.call_tool('minecraft_observe')
             if state.get('in_play') is not False:
                 raise RuntimeError('client restart observation omitted in_play')
@@ -706,6 +818,11 @@ def run(ctx: Any) -> dict[str, Any]:
                     with ProbeSteps(lane.clients[0],directory/'probe',timeout,scenario['id']) as steps:
                         lane.steps=steps
                         oracle_started=True
+                        lane.health = HealthInterval(lane.host)
+                        row['always_oracle'] = {'segments': lane.health.segments,
+                                                'restart_boundaries': lane.health.restart_boundaries,
+                                                'server_log': str(lane.host.log_path)}
+                        steps.report['always_oracle'] = row['always_oracle']
                         if storage_primitive:
                             storage(lane,scenario)
                         elif handler is not None:
@@ -736,6 +853,7 @@ def run(ctx: Any) -> dict[str, Any]:
             except Exception as error:
                 row['status']=failure_status(oracle_started)
                 row['note']=f'{type(error).__name__}: {error}; evidence={directory}'
+        record_outcome(details, row, declared)
         (directory/'outcome.json').write_text(json.dumps(row,indent=2))
         print('[native-matrix]',row['status'],scenario['id'],row['note'][:180],flush=True)
     counts={status:sum(row['status']==status for row in outcomes) for status in ('pass','fail','blocked','skipped')}

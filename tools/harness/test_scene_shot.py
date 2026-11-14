@@ -319,19 +319,19 @@ class SceneShotTests(unittest.TestCase):
                     self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
                     evidence = json.loads((root / "walk-walk.json").read_text())
                     self.assertEqual(evidence["after"]["entities"][0]["walk_position"], 1.6)
-                    # A frame that lagged one tick step below the bracket still
-                    # matches the triggering observation and is accepted.
-                    write_frame(1.2)
-                    self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
-                    if client == "java":
-                        # Java render-state frames carry no entity uuid; a single
-                        # typed frame entity is matched by type.
-                        items = [{key: value for key, value in entity.items() if key != "entity_uuid"}
-                                 | {"walk_position": 1.2}]
-                        frame_path.write_text(json.dumps(items))
+                    # A frame that lags below the bracket is resampled instead of
+                    # waited out: the next rendered frame inside it is accepted.
+                    frames = iter((1.2, 1.5))
+                    def capture_next(*_args):
+                        write_frame(next(frames))
+                        return image
+                    with patch.object(scene_shot, f"capture_{client}", side_effect=capture_next):
                         self.assertEqual(scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client), [image])
-                    # A frame outside the bracket and further from the observation
-                    # than one tick of walk advance is rejected.
+                    evidence = json.loads((root / "walk-walk.json").read_text())
+                    self.assertEqual([attempt["frame"]["entities"][0]["walk_position"]
+                                      for attempt in evidence["attempts"]], [1.2, 1.5])
+                    # A frame already past the bracket is a terminal miss: resampling
+                    # cannot land inside it, so no tick is waited either.
                     write_frame(2.5)
                     with self.assertRaisesRegex(RuntimeError, "walk phase not reached"):
                         scene_shot.execute(Probe(), root, [{"walk_capture": spec}], client)

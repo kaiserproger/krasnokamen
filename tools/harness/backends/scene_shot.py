@@ -152,7 +152,8 @@ def _validate_java_display(gui_scale: int, language: str, screen_size: tuple[int
 
 
 def java_options(render_distance: int, fov: int, *, gui_scale: int = NATIVE_GUI_SCALE,
-                 language: str = "en_us", screen_size: tuple[int, int] = WINDOW) -> str:
+                 language: str = "en_us", screen_size: tuple[int, int] = WINDOW,
+                 hide_chat: bool = False) -> str:
     # Java stores fov normalized: 70 -> 0.0 and 110 -> 1.0.
     _validate_java_display(gui_scale, language, screen_size)
     return (
@@ -627,14 +628,40 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             attempts = []
             before = after = frame = None
             image = frame_path = first = None
+            same_entity: list[dict[str, Any]] = []
             for _ in range(value["max_ticks"]):
-                before = probe.call("minecraft_list_entities", args)
-                candidate = matching_walk(before, value)
-                # Start as soon as the observation enters the bracket. Capture
-                # is asynchronous and can cross several client ticks.
-                if candidate:
+                if first is None:
+                    before = probe.call("minecraft_list_entities", args)
+                    first = matching_walk(before, value)
+                    # Start as soon as the observation enters the bracket.
+                    if first is None:
+                        probe.call("minecraft_wait_ticks", {"ticks": 1})
+                        continue
+                # The image is the last presented render, interpolated from the
+                # previous tick: resample it instead of waiting a whole tick,
+                # which under load can skip the requested phase entirely.
+                image = capture(probe, artifact, value["name"])
+                after = probe.call("minecraft_list_entities", args)
+                frame_path = Path(image + ".gait.json") if client == "java" else Path(image).with_suffix(".json")
+                frame_data = json.loads(frame_path.read_text())
+                frame_entities = frame_data if client == "java" else frame_data["gait_frame"]
+                frame = {"entities": frame_entities}
+                same_entity = [entity for entity in after.get("entities", [])
+                               if first.get("entity_uuid")
+                               and entity.get("entity_uuid") == first["entity_uuid"]]
+                attempts.append({"before": before, "after": after, "frame": frame})
+                if matching_walk(frame, value) is not None and len(same_entity) == 1:
                     break
-                probe.call("minecraft_wait_ticks", {"ticks": 1})
+                rendered = [entity for entity in frame_entities
+                            if entity.get("entity_type") == value["entity_type"]]
+                rendered_position = rendered[0].get("walk_position") if len(rendered) == 1 else None
+                if (type(rendered_position) in (int, float) and math.isfinite(rendered_position)
+                        and rendered_position > value["phase"] + value["tolerance"]):
+                    # The render already passed the requested phase: no resample can
+                    # land inside it, so report the miss instead of looping to the deadline.
+                    (artifact / f"{value['name']}-walk.json").write_text(
+                        json.dumps({"attempts": attempts, "spec": value}, indent=2) + "\n")
+                    raise RuntimeError(f"walk phase not reached: {value['name']}")
             else:
                 (artifact / f"{value['name']}-walk.json").write_text(
                     json.dumps({"attempts": attempts, "spec": value}, indent=2) + "\n")
@@ -644,30 +671,7 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                             "frame_path": str(frame_path), "spec": value,
                             "attempts": attempts}, indent=2) + "\n")
             probe.check(f"{value['name']}_same_entity", first is not None and len(same_entity) == 1)
-            # The captured frame is the last presented render: it is sampled
-            # with partial-tick interpolation and can lag the triggering
-            # observation by up to one game tick of walk advance (about the
-            # observed walk speed). Accept a frame that still matches that
-            # observation within that allowance, even if it fell just below
-            # the bracket; a frame further off still fails.
-            frame_entity = None
-            lag_ok = False
-            if first is not None:
-                typed = [entity for entity in frame["entities"]
-                         if entity.get("entity_type") == value["entity_type"]]
-                if first.get("entity_uuid"):
-                    frame_entity = next((entity for entity in typed
-                                         if entity.get("entity_uuid") == first["entity_uuid"]), None)
-                if frame_entity is None and len(typed) == 1:
-                    # Java render-state frames carry no entity uuid.
-                    frame_entity = typed[0]
-                if frame_entity is not None and same_entity:
-                    step = max(0.0, float(same_entity[0]["walk_position"]) - float(first["walk_position"]))
-                    allowance = max(step, float(first.get("walk_speed") or 0.0),
-                                    float(frame_entity.get("walk_speed") or 0.0))
-                    lag_ok = abs(float(frame_entity["walk_position"]) - float(first["walk_position"])) <= allowance + 1e-9
-            probe.check(f"{value['name']}_render_phase",
-                        matching_walk(frame, value) is not None or lag_ok)
+            probe.check(f"{value['name']}_render_phase", matching_walk(frame, value) is not None)
             shots.append(image)
         elif kind == "falling_block_capture":
             from . import falling_block_oracle
@@ -903,14 +907,293 @@ def wait_java_bootstrap(mcp: McpClient, process: Any, timeout: float) -> dict[st
                 raise
 
 
+def check_263_entity_rigs(probe: ProbeSteps, artifact: Path) -> None:
+    kinds = ("minecraft:sulfur_cube", "minecraft:cushion",
+             "minecraft:poplar_boat", "minecraft:poplar_chest_boat")
+    received = json.loads((artifact / "entities.json").read_text())
+    for kind in kinds:
+        probe.check(f"received_{kind}", sum(row.get("entity_type") == kind
+                                            for row in received["entities"]) == 1)
+    frame = json.loads((artifact / "screenshots/entity-rigs.json").read_text())
+    before_frame = json.loads((artifact / "screenshots/before-rigs.json").read_text())
+    probe.check("rig_frames_gpu_complete", before_frame["gpu_completion"] is True and frame["gpu_completion"] is True)
+    probe.check("rig_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(before_frame["camera_position"], frame["camera_position"])
+    ) and abs(before_frame["yaw"] - frame["yaw"]) < 0.01
+      and abs(before_frame["pitch"] - frame["pitch"]) < 0.01)
+    unrendered = frame["entity_extraction"]["unrendered"]
+    for kind in kinds:
+        probe.check(f"rendered_{kind}", kind not in unrendered)
+        row = next(row for row in received["entities"] if row.get("entity_type") == kind)
+        probe.check(f"resolved_{kind}", row.get("cached_rig_status") == "resolved")
+    probe.check("four_entities_submitted", frame["entity_extraction"]["submitted"] >= 4)
+    from PIL import Image
+    with Image.open(artifact / "screenshots/before-rigs.png") as before_image, \
+            Image.open(artifact / "screenshots/entity-rigs.png") as after_image:
+        before, after = before_image.convert("RGB"), after_image.convert("RGB")
+        probe.check("matched_rig_frames", before.size == after.size == (1280, 720))
+        # Fixed camera, flat platform and separate boxes isolate each received entity.
+        # The two pale foreground models must brighten the platform, not merely cast a shadow.
+        regions = {
+            "cushion": ((430, 520, 580, 560), True),
+            "sulfur_cube": ((740, 495, 805, 545), True),
+            "poplar_chest_boat": ((410, 415, 550, 480), False),
+            "poplar_boat": ((720, 415, 860, 480), False),
+        }
+        for name, (box, bright) in regions.items():
+            old = before.crop(box).getdata()
+            new = after.crop(box).getdata()
+            pixels = sum(
+                all(y > x + 25 for x, y in zip(a, b)) if bright
+                else max(abs(x - y) for x, y in zip(a, b)) > 25
+                for a, b in zip(old, new)
+            )
+            probe.report[f"{name}_changed_pixels"] = pixels
+            probe.check(f"visible_pixels_{name}", pixels >= 200)
+    probe.report["visual_review_required"] = ["Inspect all four models in entity-rigs.png; pixel changes alone do not prove model parity."]
+
+def check_shelf_clock(probe: ProbeSteps, artifact: Path) -> None:
+    frames = [
+        json.loads((artifact / f"screenshots/clocks-{phase}.json").read_text())
+        for phase in ("day", "night")
+    ]
+    day, night = frames
+    probe.check("clock_frames_gpu_complete", all(frame["gpu_completion"] is True for frame in frames))
+    probe.check("clock_camera_at_fixture", all(
+        abs(a - b) < 0.01 for a, b in zip(day["camera_position"], (1000.5, 161.62, 1000.5))
+    ) and abs(day["yaw"]) < 0.01 and abs(day["pitch"]) < 0.01)
+    probe.check("clock_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(day["camera_position"], night["camera_position"])
+    ) and abs(day["yaw"] - night["yaw"]) < 0.01 and abs(day["pitch"] - night["pitch"]) < 0.01)
+    probe.check("clock_received_time_changed",
+                day["environment"]["time_of_day"] == "1000"
+                and night["environment"]["time_of_day"] == "13000")
+    from PIL import Image
+    masks = []
+    for phase in ("day", "night"):
+        with Image.open(artifact / f"screenshots/clocks-{phase}.png") as image:
+            probe.check(f"clock_{phase}_image_size", image.size == (1280, 720))
+            pixels = image.convert("RGB").crop((435, 457, 453, 481)).getdata()
+            masks.append([b > r * 1.35 and b > g * 1.15 and b > 15 for r, g, b in pixels])
+    probe.report["clock_blue_pixels"] = [sum(mask) for mask in masks]
+    changes = sum(a != b for a, b in zip(*masks))
+    probe.report["clock_changed_blue_pixels"] = changes
+    probe.check("clock_face_visible", all(sum(mask) >= 20 for mask in masks))
+    probe.check("clock_face_changed", changes >= 20)
+
+def _load_shots(probe: ProbeSteps, artifact: Path, names: tuple[str, ...]) -> dict:
+    from PIL import Image
+    shots = {}
+    for name in names:
+        frame = json.loads((artifact / f"screenshots/{name}.json").read_text())
+        probe.check(f"{name}_gpu_complete", frame.get("gpu_completion") is True)
+        with Image.open(artifact / f"screenshots/{name}.png") as image:
+            probe.check(f"{name}_image_size", image.size == (1280, 720))
+            shots[name] = (frame, image.convert("RGB"))
+    return shots
+
+
+def _changed(a, b, box) -> int:
+    return sum(
+        max(abs(x - y) for x, y in zip(p, q)) > 25
+        for p, q in zip(a.crop(box).getdata(), b.crop(box).getdata())
+    )
+
+
+def _count(image, box, pred) -> int:
+    return sum(1 for p in image.crop(box).getdata() if pred(*p))
+
+
+def check_entity_visuals(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-12, MODEL-OPUS-16, MODEL-ENTITY-FIRE, MODEL-ENTITY-LEASH."""
+    names = ("empty", "vindicator", "ghastling", "burning", "plain", "leashed")
+    shots = _load_shots(probe, artifact, names)
+    ref = shots["empty"][0]
+    for name in names[1:]:
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    maroon = lambda r, g, b: r > g + 25 and r > b + 25
+    teal = lambda r, g, b: g > r + 15 and b > r + 15
+    pink = lambda r, g, b: r - b > 40 and r > 120
+    white = lambda r, g, b: r > 170 and g > 170 and b > 170 and max(r, g, b) - min(r, g, b) < 35
+    orange = lambda r, g, b: r > 150 and 60 < g < 210 and b < 110
+    rope = lambda r, g, b: 60 < r < 140 and 40 < g < 100 and b < 70 and r > g > b
+    vindicator = shots["vindicator"][1]
+    probe.check("vindicator_visible", _changed(shots["vindicator"][1], shots["empty"][1], (560, 280, 780, 560)) > 500)
+    probe.check("vindicator_torso_not_maroon", _count(vindicator, (600, 380, 680, 450), maroon) < 50)
+    arm_pixels = sum(_count(vindicator, box, teal) for box in ((590, 390, 615, 470), (665, 390, 700, 470)))
+    probe.report["vindicator_teal_arm_pixels"] = arm_pixels
+    probe.check("vindicator_arms_not_teal", arm_pixels < 50)
+    leg_teal = _count(vindicator, (600, 460, 680, 540), teal)
+    probe.report["vindicator_teal_leg_pixels"] = leg_teal
+    probe.check("vindicator_legs_teal", leg_teal > 150)
+    ghast_box = (560, 260, 780, 470)
+    pink_n = _count(shots["ghastling"][1], ghast_box, pink)
+    white_excess = _count(shots["ghastling"][1], ghast_box, white) - _count(shots["empty"][1], ghast_box, white)
+    probe.report["ghastling_pink_pixels"] = pink_n
+    probe.report["ghastling_white_excess"] = white_excess
+    probe.check("ghastling_not_pink", pink_n < 500)
+    probe.check("ghastling_body_white", white_excess > 3000)
+    fire_box = (560, 300, 760, 520)
+    burning_orange = _count(shots["burning"][1], fire_box, orange)
+    plain_orange = _count(shots["plain"][1], fire_box, orange)
+    probe.report["fire_orange_pixels"] = [plain_orange, burning_orange]
+    probe.check("fire_overlay_only_when_burning", burning_orange - plain_orange > 4000)
+    probe.check("fire_overlay_present", burning_orange > 5000)
+    rope_n = _count(shots["leashed"][1], (560, 400, 760, 500), rope)
+    probe.report["leash_rope_pixels"] = rope_n
+    probe.check("leash_rope_drawn", rope_n > 300)
+    probe.report["visual_review_required"] = [
+        "Inspect vindicator/ghastling/burning/plain/leashed frames; pixel predicates do not prove full model parity."
+    ]
+
+
+def check_item_bars(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-ITEM-BARS: durability bar and bundle fullness bar in the GUI hotbar."""
+    shots = _load_shots(probe, artifact, ("bars-damaged", "bars-clean"))
+    ref = shots["bars-damaged"][0]
+    frame = shots["bars-clean"][0]
+    probe.check("bars_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+    ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    yellow = lambda r, g, b: r > 70 and g > 70 and b < r - 20 and b < g - 10
+    blue = lambda r, g, b: b > r + 25 and b > g + 10 and b > 70
+    damaged, clean = shots["bars-damaged"][1], shots["bars-clean"][1]
+    slot0, slot2 = (376, 664, 420, 712), (420, 664, 464, 712)
+    probe.report["pickaxe_slot_changed_pixels"] = _changed(damaged, clean, slot0)
+    probe.report["bundle_slot_changed_pixels"] = _changed(damaged, clean, slot2)
+    probe.check("pickaxe_slot_bar_changes", _changed(damaged, clean, slot0) > 50)
+    probe.check("bundle_slot_bar_changes", _changed(damaged, clean, slot2) > 50)
+    probe.report["durability_bar_pixels"] = _count(damaged, (376, 698, 420, 710), yellow)
+    probe.report["fullness_bar_pixels"] = _count(damaged, (420, 698, 464, 710), blue)
+    probe.check("durability_bar_drawn", _count(damaged, (376, 698, 420, 710), yellow) > 20)
+    probe.check("fullness_bar_drawn", _count(damaged, (420, 698, 464, 710), blue) > 15)
+
+
+def check_shade_override(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-SHADE-OVERRIDE: cross plants get no directional face shading in 26.3."""
+    shots = _load_shots(probe, artifact, ("shade-north", "shade-east"))
+    north_f, east_f = shots["shade-north"][0], shots["shade-east"][0]
+    probe.check("shade_north_camera", all(
+        abs(a - b) < 0.01 for a, b in zip(north_f["camera_position"], (1000.5, 161.62, 1000.5))
+    ) and abs(north_f["yaw"]) < 0.01)
+    probe.check("shade_east_camera", all(
+        abs(a - b) < 0.01 for a, b in zip(east_f["camera_position"], (1004.5, 161.62, 1004.5))
+    ) and abs(east_f["yaw"] - 90.0) < 0.01)
+    plant = lambda r, g, b: (r > 120 and g < 100 and b < 100) or (g > 90 and r < 120 and b < 120)
+    box = (560, 440, 720, 580)
+    lums = []
+    counts = []
+    for name in ("shade-north", "shade-east"):
+        image = shots[name][1]
+        pixels = [p for p in image.crop(box).getdata() if plant(*p)]
+        counts.append(len(pixels))
+        lums.append(sum(sum(p) for p in pixels) / len(pixels) / 3 if pixels else 0.0)
+    probe.report["poppy_plant_pixels"] = counts
+    probe.report["poppy_mean_luminance"] = [round(v, 2) for v in lums]
+    probe.check("poppy_visible_both_views", all(c > 3000 for c in counts))
+    probe.check("poppy_no_directional_shading", abs(lums[0] - lums[1]) < 8.0)
+
+
+def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-OPUS-N3: placed and worn player heads render (hat layer needs an online skin)."""
+    shots = _load_shots(probe, artifact, ("head-empty", "head-block", "head-worn", "head-none"))
+    empty_f, block_f = shots["head-empty"][0], shots["head-block"][0]
+    probe.check("head_front_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(empty_f["camera_position"], block_f["camera_position"])
+    ) and abs(empty_f["yaw"] - block_f["yaw"]) < 0.01 and abs(empty_f["pitch"] - block_f["pitch"]) < 0.01)
+    worn_f, none_f = shots["head-worn"][0], shots["head-none"][0]
+    probe.check("head_back_camera_unchanged", all(
+        abs(a - b) < 0.01 for a, b in zip(worn_f["camera_position"], none_f["camera_position"])
+    ) and abs(worn_f["yaw"] - none_f["yaw"]) < 0.01 and abs(worn_f["pitch"] - none_f["pitch"]) < 0.01)
+    placed = _changed(shots["head-block"][1], shots["head-empty"][1], (880, 520, 1080, 680))
+    worn = _changed(shots["head-worn"][1], shots["head-none"][1], (560, 280, 760, 420))
+    probe.report["placed_head_changed_pixels"] = placed
+    probe.report["worn_head_changed_pixels"] = worn
+    probe.check("placed_head_renders", placed > 100)
+    probe.check("worn_head_renders", worn > 500)
+
+def check_dynamic_context(probe: ProbeSteps, artifact: Path) -> None:
+    """MODEL-DYNAMIC-CONTEXT: shelf, dropped and held clocks plus two shelf
+    compasses at different positions all receive world context."""
+    import math
+    shots = _load_shots(probe, artifact, ("ctx-day", "ctx-night", "compass-day"))
+    ref = shots["ctx-day"][0]
+    for name in ("ctx-night", "compass-day"):
+        frame = shots[name][0]
+        probe.check(f"{name}_camera_unchanged", all(
+            abs(a - b) < 0.01 for a, b in zip(ref["camera_position"], frame["camera_position"])
+        ) and abs(ref["yaw"] - frame["yaw"]) < 0.01 and abs(ref["pitch"] - frame["pitch"]) < 0.01)
+    probe.check("ctx_received_time_changed",
+                shots["ctx-day"][0]["environment"]["time_of_day"] == "1000"
+                and shots["ctx-night"][0]["environment"]["time_of_day"] == "13000"
+                and shots["compass-day"][0]["environment"]["time_of_day"] == "1000")
+    def axis_angle(points):
+        cx = sum(p[0] for p in points) / len(points)
+        cy = sum(p[1] for p in points) / len(points)
+        sxx = sum((x - cx) ** 2 for x, _ in points) / len(points)
+        syy = sum((y - cy) ** 2 for _, y in points) / len(points)
+        sxy = sum((x - cx) * (y - cy) for x, y in points) / len(points)
+        return math.degrees(0.5 * math.atan2(2 * sxy, sxx - syy))
+
+    def axis_diff(a, b):
+        d = abs(a - b) % 180.0
+        return min(d, 180.0 - d)
+
+    blue = lambda r, g, b: b > r * 1.35 and b > g * 1.15 and b > 15
+    day, night = shots["ctx-day"][1], shots["ctx-night"][1]
+    for name, box, threshold in (
+        ("shelf_clock_left", (385, 480, 410, 505), 20),
+        ("shelf_clock_right", (975, 470, 1005, 500), 20),
+        ("held_clock", (660, 390, 705, 435), 50),
+    ):
+        m1 = [blue(*p) for p in day.crop(box).getdata()]
+        m2 = [blue(*p) for p in night.crop(box).getdata()]
+        changed = sum(a != b for a, b in zip(m1, m2))
+        probe.report[f"{name}_blue_pixels"] = [sum(m1), sum(m2)]
+        probe.report[f"{name}_changed"] = changed
+        probe.check(f"{name}_face_changed", changed >= threshold)
+    # Dropped clock: the dark needle angle must change between received day and night.
+    dark = lambda r, g, b: max(r, g, b) < 95 and max(r, g, b) - min(r, g, b) < 25
+    drop_box = (335, 640, 395, 700)
+    drop_angles = []
+    for name, image in (("day", day), ("night", night)):
+        crop = image.crop(drop_box)
+        w, h = crop.size
+        px = [(x, y) for y in range(h) for x in range(w) if dark(*crop.getpixel((x, y)))]
+        probe.report[f"dropped_clock_dark_pixels_{name}"] = len(px)
+        probe.check(f"dropped_clock_face_{name}", len(px) >= 100)
+        drop_angles.append(axis_angle(px))
+    probe.report["dropped_clock_axis_angles"] = [round(a, 1) for a in drop_angles]
+    probe.check("dropped_clock_face_changed", axis_diff(drop_angles[0], drop_angles[1]) > 30.0)
+    red = lambda r, g, b: r > g * 1.25 and r > b * 1.25 and r > 50
+    comp = shots["compass-day"][1]
+    angles = []
+    for name, box in (("compass_left", (425, 485, 450, 510)), ("compass_right", (1000, 480, 1025, 505))):
+        crop = comp.crop(box)
+        w, h = crop.size
+        px = [(x, y) for y in range(h) for x in range(w) if red(*crop.getpixel((x, y)))]
+        probe.report[f"{name}_needle_pixels"] = len(px)
+        probe.check(f"{name}_needle_visible", len(px) >= 50)
+        angles.append(axis_angle(px))
+    probe.report["compass_needle_axis_angles"] = [round(a, 1) for a in angles]
+    probe.check("compass_needle_follows_position", axis_diff(angles[0], angles[1]) > 30.0)
+    probe.report["visual_review_required"] = [
+        "Inspect ctx-day/ctx-night/compass-day frames; mask predicates do not prove vanilla needle parity."
+    ]
+
 def start_java(ctx: ProfileContext, artifact: Path, address: str | None, username: str, timeout: float,
                display: str, render_distance: int, fov: int, *, plain: bool = False,
                gui_scale: int = NATIVE_GUI_SCALE, language: str = "en_us",
-               screen_size: tuple[int, int] = WINDOW) -> tuple[Any, Any, McpClient]:
+               screen_size: tuple[int, int] = WINDOW, hide_chat: bool = False) -> tuple[Any, Any, McpClient]:
     """Launch the requested Java client, optionally connecting to a server."""
     game_dir = artifact / "game"
     game_dir.mkdir()
-    (game_dir / "options.txt").write_text(java_options(render_distance, fov, gui_scale=gui_scale, language=language, screen_size=screen_size))
+    (game_dir / "options.txt").write_text(java_options(render_distance, fov, gui_scale=gui_scale,
+                                                       language=language, screen_size=screen_size,
+                                                       hide_chat=hide_chat))
     token, mcp_port = secrets.token_urlsafe(32), runtime.reserve_port()
     log_path = artifact / "client.log"
     ctx.client_evidence["command_index"] = len(ctx.commands)
@@ -946,6 +1229,14 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     if ctx.client not in ("native", "java") or not ctx.windowed or ctx.platform is not None:
         raise ValueError("scene-shot requires --client native|java --windowed")
     named_fixtures = {
+        "native-263-entity-rigs": "entity_263_rigs_scene.json",
+        "native-shelf-clock": "shelf_clock_scene.json",
+        "native-entity-visuals": "entity_visuals_scene.json",
+        "native-item-bars": "item_bars_scene.json",
+        "native-shade-override": "shade_override_scene.json",
+        "native-player-head": "player_head_scene.json",
+        "native-dynamic-context": "dynamic_context_scene.json",
+        "native-death-tilt": "death_tilt_scene.json",
         "native-command-feedback": "command_feedback_scene.json",
         "native-low-roof-house": "low_roof_house_scene.json",
         "native-falling-block-prediction": "falling_block_scene.json",
@@ -1137,7 +1428,8 @@ def run(
                     ctx, artifact, f"127.0.0.1:{client_port}", username, timeout, display,
                     base.get("render_distance", 12), base["fov"], plain=scenario.get("java_plain", False),
                     gui_scale=settings.get("gui_scale", NATIVE_GUI_SCALE), language=settings.get("language", "en_us"),
-                    screen_size=tuple(settings.get("screen_size", WINDOW)))
+                    screen_size=tuple(settings.get("screen_size", WINDOW)),
+                    hide_chat=scenario.get("java_hide_chat", False))
             else:
                 client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display)
         finally:

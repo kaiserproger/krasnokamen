@@ -73,8 +73,9 @@ def validate_args(ctx: ProfileContext) -> float:
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 1500.0
     if not 0 < timeout <= 3600:
         raise ValueError("screens-voice-qa --timeout-seconds must be in (0, 3600]")
-    if not (runtime.AGENT_ROOT / "gradlew").is_file():
-        raise ValueError(f"screens-voice-qa needs the Krasnokamen Loader checkout (KRASNOKAMEN_LOADER_ROOT): {runtime.AGENT_ROOT}")
+    if not (runtime.sibling_root("loader") / "gradlew").is_file():
+        raise ValueError("screens-voice-qa needs the Krasnokamen Loader checkout "
+                             f"(KRASNOKAMEN_LOADER_ROOT): {runtime.sibling_root('loader')}")
     return timeout
 
 
@@ -97,7 +98,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     native_client.resolve_binary(ctx)
     verdicts: dict[str, bool] = {}
     evidence: dict[str, Any] = {"legs": list(legs), "plugins_source": str(plugins_source(ctx)),
-                                "loader_root": str(runtime.AGENT_ROOT)}
+                                "loader_root": str(runtime.sibling_root("loader"))}
     ctx.client_evidence["screens_voice"] = evidence
     try:
         for leg in legs:
@@ -388,7 +389,7 @@ class Run:
         display = self.display(name)
         token, port = secrets.token_urlsafe(32), runtime.reserve_port()
         log_path = base / "client.log"
-        index = self._track([str(runtime.AGENT_ROOT / "gradlew"), ":loader-fabric:runClientMcp", f"profile={profile}"],
+        index = self._track([str(runtime.sibling_root("loader") / "gradlew"), ":loader-fabric:runClientMcp", f"profile={profile}"],
                             log_path, runtime.REPO_ROOT)
         process, log = runtime.start_client(game_dir=game, log_path=log_path, token=token, mcp_port=port,
                                             username=name, display=display, platform="fabric",

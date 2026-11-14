@@ -908,7 +908,7 @@ def run_java_battle(ctx: ProfileContext) -> dict[str, Any]:
     """Delegate Java battle observations to the sibling that owns Java scenarios."""
     if ctx.client != "java" or ctx.platform not in ("fabric", "neoforge"):
         raise ValueError("java-battle-functional requires --client java --platform fabric|neoforge")
-    driver = AGENT_ROOT / "tools" / "battle_scenario.py"
+    driver = sibling_root("loader") / "tools" / "battle_scenario.py"
     _run_command([sys.executable, str(driver), "--repo-root", str(REPO_ROOT),
                   "--artifact-dir", str(ctx.artifact_dir), "--platform", ctx.platform,
                   *ctx.extra_args], ctx, "java-battle-driver.log")

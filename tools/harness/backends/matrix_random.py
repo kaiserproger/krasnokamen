@@ -32,6 +32,11 @@ def replay(ctx, row, directory):
     if ctx.plugins_dir is not None:
         argv += ['--plugins-dir', str(ctx.plugins_dir)]
     env = dict(os.environ, KRASNOKAMEN_VALIDATION_ROOT=str(directory / 'receipts'))
+    mem_run = env.pop('KRASNOKAMEN_RANDOM_REPLAY_MEM_RUN', None)
+    timeout = ctx.timeout_seconds or 600
+    if mem_run:
+        argv = [mem_run, '-m', '6G', 'timeout', str(timeout),
+                'nice', '-n', '19', 'ionice', '-c', '3', *argv]
     log = directory / 'replay.log'
     ctx.commands.append(argv)
     ctx.cwds.append(str(runtime.REPO_ROOT))

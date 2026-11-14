@@ -971,7 +971,6 @@ class ReadinessCleanupTests(unittest.TestCase):
 def load_tests(loader, tests, pattern):
     tests.addTests(loader.loadTestsFromNames([
         "tools.harness.test_protocol_lifecycle.LifecycleGuardTests.test_command_fence_uses_private_read_only_query",
-        "tools.harness.test_native_matrix.NativeMatrixTests.test_native_launch_provides_matrix_scenario_id",
         "tools.harness.test_native_matrix.NativeMatrixTests.test_health_interval_requires_live_complete_below_budget_samples_and_clean_log",
         "tools.harness.test_native_matrix.NativeMatrixTests.test_health_checks_before_and_after_restart_and_discloses_gap",
         "tools.harness.test_native_matrix.NativeMatrixTests.test_row_verdicts_distinguish_declared_blockers_and_failures",

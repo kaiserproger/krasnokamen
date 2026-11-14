@@ -221,7 +221,7 @@ def rate_group_verdict(group: str, variants: list[dict], vanilla: dict, krasnoka
 def fuzz_verdict(scenario: dict, vanilla: dict, krasnokamen: dict, entry: dict, reasons: list) -> dict:
     """Fuzz gate: every vanilla duplication cell must match; other cell diffs are findings."""
     diff = compare.compare_scenario(scenario, vanilla, krasnokamen)
-    dupes = fuzz.dupe_cells(scenario, vanilla)
+    dupes = seeded.dupe_cells(scenario, vanilla)
     diverging: dict[int, list[str]] = {}
     for phase, cells in diff["phases"].items():
         for index in cells.get("cells", {}):

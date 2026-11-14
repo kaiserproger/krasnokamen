@@ -43,6 +43,8 @@ DIALOG_CLASS = "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen"
 CONTAINER_CLASS = "net.minecraft.client.gui.screens.inventory.ContainerScreen"
 # Civil Projects menu (ui_menus.rs): the Status icon, and the active project's icon on the Construction page.
 PROJECT_STATUS_SLOT, PROJECT_ICON_SLOT = 52, 4
+# The Construction page's status line (slot 10) says whether the project is active or queued.
+PROJECT_STATUS_LINE_SLOT = 10
 # The Construction page's map icon (slot 14) carries the project origin as its lore.
 PROJECT_MAP_SLOT = 14
 # House L1 at origin + [0,1,0] holds `oak_log[axis=y]` (a corner post) for every rotation; a
@@ -834,25 +836,26 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
                 probe.check(f"{tag}_L{level}_found", previous is not None)
                 bid = previous[0]
             else:
-                # FUNDED-FIRST: stock the chest, assert the delta, THEN order.
-                _fund_level(probe, sub, bp, 1, tuple(shell))
-                if sub.get("behaviour", {}).get("L1_funded") != "PASS":
-                    probe.check(f"{tag}_L1_built", False)
-                    _verdict(sub, "L1_built", "FAIL", "funding delta absent; order refused by rule")
-                    continue
-                if use_dialog and ctx.windowed:
-                    probe.fixture(f"tp @s {site[0] + 0.5} {site[1] + 1.0} {site[2] + 0.5}")
-                # Confirm an active Project exists before waiting (3 attempts:
-                # transient planner contention can refuse the first order).
-                if use_dialog and ctx.windowed:
-                    still_active = _order_echo_retry(
-                        probe, sub, tag, bp, 1, f"settlement build {bp}",
-                        True, ctx,
-                        dialog_fn=lambda: _order_via_dialog(probe, sub, tag, bp, 1, sname))
-                else:
-                    still_active = _order_echo_retry(
-                        probe, sub, tag, bp, 1, f"settlement build {bp}",
-                        False, ctx)
+                bid = None
+            if len(_load_blueprints().get(bp, {}).get("levels", [])) < level:
+                _missing_level_order(probe, sub, tag, bp, level, bid)
+            # FUNDED-FIRST: stock the chest, assert the delta, THEN order.
+            _fund_level(probe, sub, bp, level, tuple(shell))
+            if sub.get("behaviour", {}).get(f"L{level}_funded") != "PASS":
+                probe.check(f"{tag}_L{level}_built", False)
+                _verdict(sub, f"L{level}_upgrade", "FAIL",
+                         "funding delta absent; order refused by rule")
+                continue
+            # All project commands and menus select the nearest settlement.
+            _at_settlement_anchor(probe, sub)
+            if level == 1 and use_dialog and ctx.windowed:
+                probe.fixture(f"tp @s {site[0] + 0.5} {site[1] + 1.0} {site[2] + 0.5}")
+            command = f"settlement build {bp}" if level == 1 else f"settlement build upgrade {bid}"
+            dialog = (lambda: _order_via_dialog(probe, sub, tag, bp, level, sname)) if level == 1 else \
+                (lambda: _upgrade_via_dialog(probe, sub, tag, bp, bid, level, sname))
+            admitted = _order_echo_retry(probe, sub, tag, bp, level, command, use_dialog, ctx,
+                                         dialog_fn=dialog, upgrade_bid=bid)
+            if level == 1:
                 refusal = _order_refusal(sub, 1)
                 if refusal is not None:
                     # A terminal server refusal (blueprint not registered: "Unknown
@@ -862,73 +865,6 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
                     _verdict(sub, "L1_built", "FAIL", f"server refused the order: {refusal}")
                     probe.check(f"{tag}_L1_built", False)
                     continue
-                if _admitted_or_caught(probe, sub, tag, bp, 1, still_active) is not None:
-                    # Planner certified the target during our fund flow (1.5x covers
-                    # L+1): the common wait below verifies that cert.
-                    sub["L1_admission"] = "planner-admitted"
-            if os.environ.get("BUILDINGS_QA_STOP_AFTER_ORDER"):
-                probe.check(f"{tag}_L1_built", True)
-                _verdict(sub, "L1_built", "PASS",
-                         "order-by-UI admitted (phase-1 receipt); build monitored in phase 2")
-                sub["L1_order_phase1"] = True
-                continue
-            corner = _break_corner(probe, sub, tag, bp) if bp == "house" else None
-            origin = _wait_certified_origin_here(probe, sub, tag, bp, 1, ctx, artifact)
-            if origin is None:
-                if bp == "house":
-                    probe.check(f"{tag}_L1_broken_cell_repaired", False)
-                probe.check(f"{tag}_L1_built", False)
-                _verdict(sub, "L1_built", "FAIL", "L1 cert never appeared while on site")
-                continue
-            probe.check(f"{tag}_L1_built", True)
-            sub["L1_origin"] = list(origin)
-            if corner is not None:
-                _broken_replaced(probe, sub, tag, corner)
-            _verify_level(probe, sub, ctx, artifact, bp, 1, origin, tag,
-                          sname, tuple(sub["storage_chest"]))
-            _verdict(sub, "L1_built", "PASS", f"L1 cert at {list(origin)}; block-matched, entrance and light checked")
-        if ctx.windowed:
-            try:
-                native_client.capture(probe.client, artifact, f"{tag}-L1")
-            except Exception:
-                pass
-        for level in range(2, LEVELS[bp] + 1):
-            if f"L{level}_origin" in sub:
-                _verify_level(probe, sub, ctx, artifact, bp, level, tuple(sub[f"L{level}_origin"]),
-                              tag, sname, tuple(sub["storage_chest"]))
-                # Resume with pre-existing cert: cert verified = built.
-                probe.check(f"{tag}_L{level}_built", True)
-                _verdict(sub, f"L{level}_upgrade", "PASS",
-                         f"pre-existing L{level} cert re-verified at {sub[f'L{level}_origin']}")
-                continue
-            # Planner race: 1.5x funding lets the autonomous planner upgrade
-            # to this level before our order lands (proven: farm L1→L2 in the
-            # fund window). If already certified, verify instead of ordering.
-            _already = _building_bounds(probe, bp, level)
-            if _already is not None:
-                sub[f"L{level}_origin"] = list(_already)
-                probe.check(f"{tag}_L{level}_built", True)
-                _verdict(sub, f"L{level}_upgrade", "PASS",
-                         f"planner-admitted L{level} cert at {list(_already)}; verified, no order needed")
-                _verify_level(probe, sub, ctx, artifact, bp, level, _already, tag,
-                              sname, tuple(sub["storage_chest"]))
-                continue
-            bid = _building_seq(probe, bp, level - 1)
-            if bid is None:
-                probe.check(f"{tag}_L{level}_found", False)
-                _verdict(sub, f"L{level}_upgrade", "FAIL", "no building id in listing")
-                continue
-            _fund_level(probe, sub, bp, level, tuple(sub["storage_chest"]))
-            if sub.get("behaviour", {}).get(f"L{level}_funded") != "PASS":
-                probe.check(f"{tag}_L{level}_built", False)
-                continue
-            # All project commands and menus select the nearest settlement.
-            _at_settlement_anchor(probe, sub)
-            command = f"settlement build {bp}" if level == 1 else f"settlement build upgrade {bid}"
-            dialog = (lambda: _order_via_dialog(probe, sub, tag, bp, level, sname)) if level == 1 else \
-                (lambda: _upgrade_via_dialog(probe, sub, tag, bp, bid, level, sname))
-            admitted = _order_echo_retry(probe, sub, tag, bp, level, command, use_dialog, ctx,
-                                         dialog_fn=dialog, upgrade_bid=bid)
             # Re-establish the deliberately unfundable pending order immediately
             # after admission, before even the shortest upgrade can complete.
             _queue_planner_fence(probe, sub, tag, bp, level)
@@ -938,16 +874,28 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             if level == 1 and use_dialog:
                 probe.check(f"{tag}_L1_order_menu", "L1_dialog_order" in sub)
             if os.environ.get("BUILDINGS_QA_STOP_AFTER_ORDER"):
+                probe.check(f"{tag}_L{level}_built", True)
+                _verdict(sub, f"L{level}_upgrade", "PASS",
+                         "order-by-UI admitted (phase-1 receipt); build monitored in phase 2")
                 sub[f"L{level}_order_phase1"] = True
-                break
+                continue
             if level == 2 and caught is None and _adversarial_break(probe, sub, tag, bp, level, bid):
                 sub[f"L{level}_adversarial"] = "mid-build block break issued; build waited on site"
                 _fund_level(probe, sub, bp, level, tuple(shell))
                 _at_settlement_anchor(probe, sub)
+            corner = _break_corner(probe, sub, tag, bp) if level == 1 and bp == "house" else None
             origin = _wait_certified_origin_here(probe, sub, tag, bp, level, ctx, artifact)
             if origin is None:
+                if bp == "house" and level == 1:
+                    probe.check(f"{tag}_L1_broken_cell_repaired", False)
                 probe.check(f"{tag}_L{level}_built", False)
+                _verdict(sub, f"L{level}_upgrade", "FAIL",
+                         f"L{level} cert never appeared while on site")
                 continue
+            if level == 1:
+                sub["L1_origin"] = list(origin)
+                if corner is not None:
+                    _broken_replaced(probe, sub, tag, corner)
             if ctx.windowed:
                 _capture_level(probe, sub, artifact, tag, bp, level, origin)
             _verify_level(probe, sub, ctx, artifact, bp, level, origin, tag, sname, tuple(shell))
@@ -1071,13 +1019,28 @@ def _project_page(probe: ProbeSteps) -> dict[str, Any]:
                       timeout_seconds=60)
 
 
-def _project_status(probe: ProbeSteps) -> tuple[str, int] | None:
-    """(project label, level) of the settlement's active project, or None when there is none.
+def _order_refusal(sub: dict[str, Any], level: int) -> str | None:
+    """The server's terminal refusal of the level's order attempts, if there is one.
+
+    "Unknown blueprint." (the blueprint is not registered on the server) never
+    admits on retry; report it as the failure reason instead of looping to the
+    deadline."""
+    for attempt in (3, 2, 1):
+        echo = str(sub.get(f"L{level}_order_attempt{attempt}", ""))
+        if "Unknown blueprint." in echo:
+            return echo
+    return None
+
+
+def _project_view(probe: ProbeSteps) -> tuple[str, int, bool] | None:
+    """Return the project label, level and whether it is active rather than queued.
 
     Read from the civil menus: Projects -> Status icon -> the Construction page, whose slot 4 is
-    the active project's `<label> L<level>` icon (ui_menus.rs project_screen)."""
+    the project's `<label> L<level>` icon and slot 10 its status line (ui_menus.rs project_screen)."""
     page = _project_page(probe)
-    icon = next((row for row in page["container"]["slots"] if row.get("slot") == PROJECT_ICON_SLOT), None)
+    slots = page["container"]["slots"]
+    icon = next((row for row in slots if row.get("slot") == PROJECT_ICON_SLOT), None)
+    status = next((row for row in slots if row.get("slot") == PROJECT_STATUS_LINE_SLOT), None)
     probe.call("minecraft_close_screen", {})
     match = re.fullmatch(r"(.+) L(\d+)", str((icon or {}).get("name") or ""))
     if not match:
