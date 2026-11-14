@@ -100,13 +100,25 @@ A killed living mob keeps its body for 20 ticks (vanilla `deathTime`) so
 clients play the death tilt, but its death is the durable removal. A corpse is
 a row on the dying clock (`EntityStore::is_dying`), not every `alive = false`
 row. WAL images of the corpse carry `alive = false`, which replay folds as a
-removal; a checkpoint writes no record for it and tombstones its UUID. Other
-dead non-player rows, such as a retired deployed stand, keep their checkpoint
-record, so a later checkpoint rewrites the stored image instead of leaving a
-stale one. Vanilla saves `DeathTime`; after a restart Solaris shows no
+removal; a checkpoint writes no record for it and tombstones its UUID. A
+retired deployed stand (`plugin_npcs/orders/deployment.rs` `retire`) is not a
+corpse: retirement marks the row dead and defers the removal to the commit
+tail, which removes it through the ordinary removal path — the UUID enters
+the removal log with the removal, the next capture tombstones it and the
+retirement tick's WAL batch publishes `RemoveEntity` — a checkpoint
+and a crash-before-checkpoint replay agree the stand is gone. Broken deployed
+wear intentionally drops nothing — deployed stands carry `drop_chances = 0`
+and a vanilla shield breaking drops nothing — unlike a survival armor-stand
+break, which drops all equipment. Vanilla saves
+`DeathTime`; after a restart Solaris shows no
 remaining corpse, and the loot journaled at death exists once. Regressions:
 `corpse_is_a_durable_removal_across_checkpoint_crash_and_reopen`,
-`retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart`;
+`retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart`,
+`retired_stand_checkpoint_restart_removes_the_row_and_keeps_one_item`,
+`retired_stand_crash_before_checkpoint_matches_the_checkpoint_outcome`,
+`broken_deployed_wear_removes_the_stand_across_checkpoint_and_crash`,
+`breaking_wear_through_commit_damage_with_last_row_stand_keeps_other_piece_target`,
+`unblocked_arrow_wear_break_removes_the_stand_without_stale_arrow_slot`;
 ADR 0020 "Corpse extension".
 
 ### Battle allegiance

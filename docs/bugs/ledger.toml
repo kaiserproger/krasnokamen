@@ -4047,5 +4047,5 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "crates/mc-core/src/plugin_npcs/orders/deployment.rs retire (RetractItem and broken wear) empties the stand, sets health 0 and alive = false, but never removes the row or logs its UUID removal. The dead row stays in the store, so every later checkpoint stores it with Health 0, and native_checkpoint.rs restores checkpoint records with alive = true: after a checkpoint and restart the empty stand is live again. A crash before the next checkpoint instead replays the retirement's alive = false WAL image as a removal, so the restart outcome depends on checkpoint timing. Found by the DeathLifetime persistence review; pre-existing at 0e558c76 and independent of corpses."
-regression = []
-failing_first = "not recorded"
+regression = ["cargo:mc-core:core::checkpoint_custody_tests::retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart", "cargo:mc-core:core::checkpoint_custody_tests::retired_stand_checkpoint_restart_removes_the_row_and_keeps_one_item", "cargo:mc-core:core::checkpoint_custody_tests::retired_stand_crash_before_checkpoint_matches_the_checkpoint_outcome", "cargo:mc-core:core::checkpoint_custody_tests::broken_deployed_wear_removes_the_stand_across_checkpoint_and_crash", "cargo:mc-core:core::checkpoint_custody_tests::breaking_wear_through_commit_damage_with_last_row_stand_keeps_other_piece_target", "cargo:mc-core:core::checkpoint_custody_tests::unblocked_arrow_wear_break_removes_the_stand_without_stale_arrow_slot"]
+failing_first = "reported"

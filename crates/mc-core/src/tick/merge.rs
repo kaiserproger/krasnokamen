@@ -824,6 +824,17 @@ impl TickState {
             }
             dead_slots.push(slot);
         }
+        // Rows retired mid-tick (`retire`): already dead, removed here at this
+        // quiescent point with each id re-resolved to its slot. Never players or
+        // corpses.
+        for id in std::mem::take(&mut self.pending_removals) {
+            if let Some(slot) = self.entities.slot_of_any(id)
+                && !matches!(self.entities.body(slot).kind, EntityKind::Player { .. })
+                && !super::dying::keeps_corpse(self, slot)
+            {
+                dead_slots.push(slot);
+            }
+        }
         dead_slots.sort_by_key(|slot| std::cmp::Reverse(slot.0));
         dead_slots.dedup();
         let mut removed: Vec<EntityId> = Vec::with_capacity(dead_slots.len());

@@ -274,12 +274,20 @@ fn deployed_item_keeps_exact_custody_across_permit_and_capacity_refusals() {
             .revision,
         *retracted_revision
     );
+    let slot = owned_slot(&state, "owner", &npc.handle).unwrap();
     assert_eq!(
         state.entities.row(slot).appearance.equipment[0],
         Some(stack)
     );
-    assert!(state.entities.row(stand).appearance.equipment[0].is_none());
-    assert!(!state.entities.body(stand).alive);
+    // Retirement defers the row removal to the commit tail; one tick drains it.
+    crate::tick::run_tick(&mut state, &[]);
+    assert!(
+        state
+            .entities
+            .slot_of_uuid_any(uuid::Uuid::parse_str(&entity_uuid).unwrap())
+            .is_none(),
+        "the retired stand left the store through the commit-tail removal"
+    );
     validate_permit(&state, "owner", &npc.handle, Some(&permit)).unwrap();
     validate(&state).unwrap();
 }

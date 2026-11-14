@@ -160,13 +160,24 @@ but its death is the durable removal. `EntityStore::begin_dying` logs the UUID
 and starts the dying clock. `entity_capture_record` builds no record for a
 corpse (a row on the dying clock, `EntityStore::is_dying`), and the tombstone
 filter treats it as not live, so a checkpoint taken while the body lies there
-deletes the stored row. Other dead non-player rows, such as a retired deployed
-stand (`plugin_npcs/orders/deployment.rs` `retire`), are not corpses and keep
-their record, so a checkpoint rewrites them. WAL images of a corpse carry
-`alive = false`, which replay already folds as a removal. Vanilla saves
+deletes the stored row. A retired deployed stand
+(`plugin_npcs/orders/deployment.rs` `retire`) is not a corpse: retirement
+removes the row through the ordinary removal path, so its UUID enters the
+removal log at retirement, the next capture tombstones it and the retirement
+tick's WAL batch publishes `RemoveEntity`; checkpoint and crash replay agree.
+Broken deployed wear intentionally drops nothing — deployed stands carry
+`drop_chances = 0` and a vanilla shield breaking drops nothing — unlike a
+survival armor-stand break, which drops all equipment.
+WAL images of a corpse carry `alive = false`, which replay already folds as a
+removal. Vanilla saves
 `DeathTime`; Solaris does not resume a corpse after restart. Regressions:
 `corpse_is_a_durable_removal_across_checkpoint_crash_and_reopen`,
-`retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart`.
+`retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart`,
+`retired_stand_checkpoint_restart_removes_the_row_and_keeps_one_item`,
+`retired_stand_crash_before_checkpoint_matches_the_checkpoint_outcome`,
+`broken_deployed_wear_removes_the_stand_across_checkpoint_and_crash`,
+`breaking_wear_through_commit_damage_with_last_row_stand_keeps_other_piece_target`,
+`unblocked_arrow_wear_break_removes_the_stand_without_stale_arrow_slot`.
 
 **Reopen seeding.** The WAL fold drops a row, and its UUID, on `RemoveEntity`
 and on `Entity`/`EntityVitals` with `alive = false` (`journal/replay.rs`

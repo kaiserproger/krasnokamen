@@ -294,12 +294,20 @@ pub(super) fn execute(
     Ok(order_result(revision, result))
 }
 fn retire(state: &mut TickState, slot: EntitySlot) {
+    let id = state.entities.body(slot).id;
     let (body, row) = state.entities.parts_mut(slot);
     std::sync::Arc::make_mut(&mut row.appearance).equipment[0] = None;
     row.health = 0.0;
     body.alive = false;
     row.loot.death_handled = true;
-    state.appearance_changed.push(body.id);
+    state.appearance_changed.push(id);
+    // Deferred removal: the row stays (dead) for the rest of this tick, so no
+    // staged slot goes stale mid-merge or mid-projectile-step. The commit tail
+    // drains `pending_removals` through `remove_entity` at a quiescent point,
+    // which journals the UUID removal (checkpoint tombstone) and publishes the
+    // WAL `RemoveEntity`. Callers must not remove this row themselves, and no
+    // slot captured before that drain may be used after the tick.
+    state.pending_removals.push(id);
 }
 
 pub(crate) fn projectile_hit(
