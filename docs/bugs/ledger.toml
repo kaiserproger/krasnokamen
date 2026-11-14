@@ -1158,6 +1158,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-NOTIFY"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_death_notification_ignores_broadcast_rule", "harness:entities:native-v2-death-messages"]
 fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
+repro_check = "candidate: reverse of 7fe4905's non-test hunks is refused (tick/damage.rs, survival.rs, command_execution.rs, command_damage.rs rewritten later) and the ref needs the DamageSource::Command API that commit adds - receipts/XCoreCommands/control-blockers.log"
 
 [[bug]]
 id = "SCORE-FOOD"
@@ -1169,6 +1170,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-FOOD"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_auto_criteria_accept_authoritative_values", "harness:entities:native-v2-score-food"]
 fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
+repro_check = "candidate: same SHA 7fe4905, same refused hunks (scoreboard.rs rewritten by 0c6f68d8) - receipts/XCoreCommands/control-blockers.log"
 
 [[bug]]
 id = "SCORE-CRITERIA-WRITABLE"
@@ -1269,6 +1271,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SETBLOCK-SNBT"
 regression = ["cargo:mc-core:command_world::tests::setblock_snbt_installs_native_chest_contents_and_replaces_same_block", "harness:entities:native-v2-ledger-setblock-snbt"]
 fix_commit = "2ccf8cc1a397481928c7ac575cf6df177de66fb2"
+repro_check = "candidate: reverse refused on command_world.rs and command_block_entity.rs (rewritten later) - receipts/XCoreCommands/control-blockers.log"
 
 [[bug]]
 id = "FORCELOAD-RING"
@@ -1279,6 +1282,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FORCELOAD-RING"
 regression = ["cargo:mc-core:forceload::tests::forced_neighbour_ticks_blocks_but_freezes_entity_motion_and_age"]
+fix_commit = "5d86de8479676b431c79dcf09251a07f3721ef8b"
+repro_check = "candidate: reversing 5d86de847 reverses forceload.rs/chunk_tickets.rs but its tick.rs hunk no longer applies and the later split tick/residency.rs destructures the 4-tuple, so the reversed tree cannot compile - receipts/XCoreCommands/control-blockers-forceload.log; fix_commit recorded from that commit per XCoreCommands"
 
 [[bug]]
 id = "DATA-QUERY"
@@ -1290,6 +1295,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-QUERY"
 regression = ["cargo:mc-core:command_data::tests::data_player_queries_read_live_inventory_vitals_and_absent_paths", "cargo:mc-core:command_data::tests::data_block_accepts_every_registered_block_entity_kind", "harness:entities:native-v2-data-query"]
 fix_commit = "0c6f68d84c1d2500bdd5ab7f016ae12887006730"
+repro_check = "candidate: reverse refused on command_data.rs, command_nbt_path.rs, command_execution.rs, scoreboard.rs - receipts/XCoreCommands/control-blockers.log"
 
 [[bug]]
 id = "EXECUTE-STORE"
@@ -1301,6 +1307,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#EXECUTE-STORE"
 regression = ["cargo:mc-core:command_data::tests::execute_store_give_and_clear_execute_once_and_return_real_counts", "harness:entities:native-v2-command-score-store"]
 fix_commit = "0c6f68d84c1d2500bdd5ab7f016ae12887006730"
+repro_check = "candidate: same SHA 0c6f68d8, same refused hunks - receipts/XCoreCommands/control-blockers.log"
 
 [[bug]]
 id = "P1"
@@ -1513,6 +1520,7 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-OPTION-COVE
 regression = ["cargo:mc-core:datapacks::command_tests::selector_predicate_selects_and_negates_datapack_predicates", "cargo:mc-core:datapacks::command_tests::predicates_with_conditions_the_selector_cannot_evaluate_are_refused_at_load", "cargo:mc-data:advancements::tests::selector_predicates_evaluate_scores_time_weather_and_chance_from_facts", "cargo:mc-data:advancements::tests::predicate_support_reports_conditions_that_cannot_be_evaluated", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:57f423038d585e7d4ef178f508013b198add0ee60a4eb6976878f604e53811f0"
 promotion = "docs/bugs/promotions/SELECTOR-PREDICATE-UNSUPPORTED.json"
+repro_check = "stage-2 regression note: its registered ref selector_predicate_selects_and_negates_datapack_predicates is RED on b620e3333 (0 predicate matches, 2 expected, datapack_commands_tests.rs:674); status deliberately unchanged, Main routes the fix"
 
 [[bug]]
 id = "SELECTOR-DEAD-PLAYERS"
@@ -1723,6 +1731,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-AGE"
 regression = ["cargo:mc-core:command_summon::age_tests::summon_age_water_families", "cargo:mc-core:command_summon::age_tests::summon_age_horse_families", "harness:entities:native-v2-summon-age"]
 fix_commit = "69650602b181121c5d47b1cf082d91654505612d"
+repro_check = "candidate: reverse refused on command_summon.rs, entity_life.rs, core.rs; the age_tests module itself is added by that commit - receipts/XCoreCommands/control-blockers.log"
 
 [[bug]]
 id = "SUMMON-ISBABY"
@@ -1734,6 +1743,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-ISBABY"
 regression = ["cargo:mc-core:command_summon::age_tests::summon_is_baby_zombie_family", "cargo:mc-core:command_summon::age_tests::summon_is_baby_piglin_and_zoglin", "harness:entities:native-v2-summon-age"]
 fix_commit = "69650602b181121c5d47b1cf082d91654505612d"
+repro_check = "candidate: same SHA 69650602, same refused hunks - receipts/XCoreCommands/control-blockers.log"
 
 [[bug]]
 id = "DEATH-PROTECTION-COMPONENT"
@@ -1852,6 +1862,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-HOVER Fix patch: reversing it makes the list print plain pack names instead of hover chat links."
 regression = ["cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover"]
 fix_commit = "patch:61916b68f2759fa892f3eedc6158c06aa19d47274e877ab607e220a850d0593a"
+repro_check = "control receipts/XCoreCommands/negative-control.log (reverse of the recorded patch -> red at datapack_commands_tests.rs:185: plain text(id) names carry no link/hover, the symptom); the ref needs test helper df2766ffb on wt/XCoreCommands"
 
 [[bug]]
 id = "BEE-FLOWER-TABLE"
@@ -2948,8 +2959,8 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-MATRIX-CONSOLE-FENCE-CHAT"
-regression = []
-repro_check = "matrix-random random:4 with two protocol clients; observe exact console command completion and received chat for MatrixConsoleFence"
+regression = ["python:tools.harness.matrix_domains.test_commands:DomainContractTests.test_console_acknowledgment_is_never_received_player_chat"]
+repro_check = "matrix-random random:4 with two protocol clients; observe exact console command completion and received chat for MatrixConsoleFence; candidate: the row's fix_commit is a patch hash with no patch file in docs/bugs/fix-patches/ and no committed non-test hunks, so no control from the real fix exists; a hand-made removal of the MatrixConsoleFence filter is synthetic and kept as evidence only; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "reported"
 fix_commit = "patch:df70fb9dc2c94a992826305d4854355aca7352c0289e941e535ba1c69830711c"
 
@@ -2994,10 +3005,10 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-INVENTORY-FRESHNESS"
-regression = []
-repro_check = "python3 -m unittest tools.harness.test_protocol_wire.ProtocolWireTests.test_original_bow_packet_replays_through_wire_and_snapshot"
+regression = ["python:tools.harness.test_protocol_wire:ProtocolWireTests.test_original_bow_packet_replays_through_wire_and_snapshot", "python:tools.harness.test_protocol_wire:ProtocolWireTests.test_newer_window_zero_updates_override_stale_open_menu"]
+repro_check = "python3 -m unittest tools.harness.test_protocol_wire.ProtocolWireTests.test_original_bow_packet_replays_through_wire_and_snapshot; candidate: no control from the real fix - that SHA's wire.py hunks do not reverse on HEAD (apply -R/-C1/-C0/--3way all fail; wire.py rewritten by 0a54b273d/0b5923451), and a hand revert of _cache_player_suffix is synthetic; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "not recorded"
-fix_commit = "patch:ed194baecd9d3c829c5e2c9c725bc0c47aa6a72a2011bac62ddf416120b58fad"
+fix_commit = "ef67d139e"
 
 [[bug]]
 id = "AUDIT-CHAT-VISIBILITY"
@@ -3049,8 +3060,9 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-JAVA-CAPABILITIES"
-regression = []
-repro_check = "python3 -m unittest tools.harness.test_java_matrix_client.JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts; gradlew :java-agent:test --tests '*VanillaEventTransformerTest' --tests '*ClientStateEventsTest' in the loader worktree. Remaining: exact prediction ACK sequence and pure-target-mod lanes are not exposed; the frozen 604b plugin set cannot run the Java lane (the Java lane postdates the 2026-10-24 freeze and the 604b packages no longer instantiate on any retained server pin), so the real Java run 20261111T122429-java-matrix-m7hk88z8 used plugin set 5efb and blocked on client:respawn."
+regression = ["python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_events_use_applied_system_chat_not_gui_history", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_incomplete_system_chat_journal_fails_closed", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts"]
+repro_check = "python3 -m unittest tools.harness.test_java_matrix_client.JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts; gradlew :java-agent:test --tests '*VanillaEventTransformerTest' --tests '*ClientStateEventsTest' in the loader worktree. Remaining: exact prediction ACK sequence and pure-target-mod lanes are not exposed; the frozen 604b plugin set cannot run the Java lane (the Java lane postdates the 2026-10-24 freeze and the 604b packages no longer instantiate on any retained server pin), so the real Java run 20261111T122429-java-matrix-m7hk88z8 used plugin set 5efb and blocked on client:respawn.; candidate: only the cumulative-chat half (same control, receipts/XHarnessJava/NC-R2-reverse-e99902e71.log); the prediction-token/ACK sequence and the pure-target-mod SVC/DH lanes need tools/harness/java_matrix_client.py plus a transformer-enabled agent jar from solaris-loader; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
+fix_commit = "e99902e71"
 failing_first = "reported"
 
 [[bug]]
@@ -3106,8 +3118,9 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-END-RESTART-OBSERVER"
-regression = []
-repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/scene-slot.sh /run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/krasnokamen --plugins-dir /run/media/kaiserroman/games/solaris-work/wt/LedgerMatrixB15/.analysis/end-plugins --timeout-seconds 240 --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --capability peaceful_end_restart --port 26741 --dashboard-port 26742. Passed live with eight protocol clients (receipt wt/LedgerMatrixB15/.analysis/validation/20261111T123432-protocol-matrix-ty2uwwtr/result.json) on plugin set 060d (current krasnokamen-essentials+krasnokamen-permissions), not the original b52 packages: the preserved b52 packages (scenarios/live-plugins.stale-20261024) no longer instantiate on any retained server pin ('failed to convert function to given type', receipt .analysis/validation/20261111T132836-protocol-matrix-0x8arzc7), and the original server binary 7e7ba958 is not retained."
+regression = ["python:tools.harness.test_end_restart:EndRestartObserverTests.test_restart_moves_observers_beside_the_dragon_and_never_the_dragon", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_dragon_beyond_tracking_range_after_restart_is_a_failure", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_different_dragon_identity_after_recovery_is_a_failure", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_restart_capability_requires_eight_real_joined_clients", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_new_error_record_fails_the_capability", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_missing_info_level_writer_shutdown_receipt_fails_the_capability"]
+repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/scene-slot.sh /run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/krasnokamen --plugins-dir /run/media/kaiserroman/games/solaris-work/wt/LedgerMatrixB15/.analysis/end-plugins --timeout-seconds 240 --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --capability peaceful_end_restart --port 26741 --dashboard-port 26742. Passed live with eight protocol clients (receipt wt/LedgerMatrixB15/.analysis/validation/20261111T123432-protocol-matrix-ty2uwwtr/result.json) on plugin set 060d (current krasnokamen-essentials+krasnokamen-permissions), not the original b52 packages: the preserved b52 packages (scenarios/live-plugins.stale-20261024) no longer instantiate on any retained server pin ('failed to convert function to given type', receipt .analysis/validation/20261111T132836-protocol-matrix-0x8arzc7), and the original server binary 7e7ba958 is not retained.; candidate: receipts/XHarnessJava/NC-R8-reverse-ef67d139e.log reverses the protocol_end_restart.py hunk and the module disappears (a proxy, not the symptom); a symptom-level control would be synthetic and is not counted; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
+fix_commit = "ef67d139e"
 failing_first = "reported"
 
 [[bug]]
@@ -4144,8 +4157,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T170731-matrix-random-4x_c80x4/result.json; regression: tools/harness/test_protocol_input_verbs.py EncodingTests.test_break_block_sends_start_then_stop_with_sequence"
-regression = ["harness:matrix-random:protocol-random-break-seed-4"]
-fix_commit = "5cbed1e33e4184fe8858bbdd93383a8e35d515cf"
+regression = ["harness:matrix-random:protocol-random-break-seed-4", "python:tools.harness.test_protocol_input_verbs:EncodingTests.test_break_block_sends_start_then_stop_with_sequence", "python:tools.harness.test_protocol_input_verbs:EncodingTests.test_break_block_phases_send_exact_actions", "python:tools.harness.test_matrix_random:RandomMatrixTests.test_mining_waits_for_exact_ack_including_sequence_zero"]
+fix_commit = "5cbed1e33"
+repro_check = "control receipts/XHarnessJava/NC-R6-reverse-5cbed1e33.log (both non-test files reversed -> 3 red: stop/abort codes and the drop code); live twin in receipts/CheckInvalid3; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "reported"
 
 [[bug]]
@@ -4156,7 +4170,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T163619-protocol-matrix-3xalnot6/result.json"
-regression = ["harness:protocol-matrix:protocol-mob-attack-cow"]
+regression = ["harness:protocol-matrix:protocol-mob-attack-cow", "python:tools.harness.matrix_domains.test_combat:MobTargetsBaselineTests.test_baseline_is_taken_before_the_mob_can_hit", "python:tools.harness.matrix_domains.test_combat:MobTargetsBaselineTests.test_a_probe_without_any_hit_still_times_out"]
+fix_commit = "1721ec147"
+repro_check = "blocked on a core targeting bug: a summoned zombie ignores a protocol-bot player 8 blocks away on b620e3333 (no health change over 800+ ticks, the zombie walks away) while the core unit test asserts acquisition; routed to Area A. Two harness defects in this row are closed and controlled: 6410b213 (fixture block resolution, receipts/XHarnessJava/NC-R7-reverse-6410b213.log) and the owner fix 1721ec147 (receipts/XHarnessJava/NC-OWN-1721ec147-reverse.log; the live probe then passed with hostile_damage_received 17.0)"
 failing_first = "reported"
 
 [[bug]]
@@ -4167,9 +4183,10 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/FuzzE2E/analysis/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json"
-regression = []
+regression = ["python:tools.harness.test_matrix_random:RandomMatrixTests.test_seed19_adapter_consumes_received_packet_transitions"]
+repro_check = "control receipts/XHarnessJava/NC-R5-reverse-09c0d0d7.log (matrix_domains/random.py + quirk_parity/player.py reversed -> TimeoutError: received crafting input, the row symptom); that commit's wire.py hunk does not reverse on HEAD (rewritten by ef67d139e); the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "reported"
-fix_commit = "09c0d0d7d0c81a2a5ec25387cc22cea2124ad50e"
+fix_commit = "09c0d0d7d"
 
 [[bug]]
 id = "CHISELED-BOOKSHELF-RESTART-DATA-LOSS"
@@ -4631,9 +4648,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "java-matrix row tr.dupe.destroy_during_interaction:death_respawn.keep_inventory_false/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0@live; deterministic repro: a foreign solaris-v2 on 26200, then the row on the base code. Unit checks: tools.harness.test_harness ReadinessCleanupTests.test_wait_port_does_not_accept_a_foreign_listener (red with the fix reverted), test_wait_port_child_exit_wins_over_foreign_listener, tools.harness.test_java_matrix MatrixTest.test_server_instance_reserves_its_own_ports_instead_of_hardcoding."
-regression = []
+regression = ["python:tools.harness.test_harness:ReadinessCleanupTests.test_wait_port_does_not_accept_a_foreign_listener", "python:tools.harness.test_harness:ReadinessCleanupTests.test_wait_port_child_exit_wins_over_foreign_listener", "python:tools.harness.test_java_matrix:MatrixTest.test_server_instance_leases_both_ports_under_flock"]
+repro_check = "candidate: receipts/XHarnessJava/NC-R1-reverse-ef508fc78.log reverses the runtime.py hunks (readiness must not be a bare accept, the ref fails); the java_matrix.py lease hunks do not reverse on HEAD so the lease ref is candidate-only; client row, real-client gate pending (stage 3); the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "reported"
-fix_commit = "ef508fc7858eb80dffaa4be9ba48f24fff335080"
+fix_commit = "ef508fc78"
 
 [[bug]]
 id = "HARNESS-JAVA-MATRIX-26-1-2-EVENTS-NONE-ADAPTER-TYPEERROR"
@@ -4643,9 +4661,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "JavaAuthAck acceptance: 8/8 runs authenticated, then the adapter TypeError (receipts/JavaAuthAck/report.md)."
-regression = []
+regression = ["python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_events_use_applied_system_chat_not_gui_history", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_incomplete_system_chat_journal_fails_closed", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts"]
+repro_check = "candidate; receipts/XHarnessJava/NC-R2-reverse-e99902e71.log (both non-test files reversed -> 14 red incl. all three refs: a lossy journal raises MissingCapability instead of handing events=None to the TypeError); client row, real-client gate pending (stage 3); the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "reported"
-fix_commit = "e99902e718e0fd710f325169025d67e168ebd901"
+fix_commit = "e99902e71"
 
 [[bug]]
 id = "CLIENT-ZOMBIE-BABY-HELMET-HEIGHT"
@@ -4766,6 +4785,7 @@ severity = "major"
 status = "open"
 source = "VisualWorldM scene runs 2026-11-11 (receipts/VisualWorldClient/rows.yaml, batch-fx2 scene uojfjhnq/wh9f5dcu): the server refused the fields identically for native and Java clients."
 regression = ["cargo:mc-core:command_summon::tests::summon_tnt_accepts_fuse_and_explosion_power_and_applies_them", "cargo:mc-core:command_summon::tests::summon_falling_block_accepts_block_state_and_time_and_defaults_to_sand", "cargo:mc-core:command_summon::tests::summon_rejects_tnt_and_falling_block_fields_on_wrong_entities_and_bad_values", "harness:entities:native-v2-summon-nbt"]
+repro_check = "candidate: no patch file for this row exists in docs/bugs/fix-patches/ or docs/bugs/promotions/, so there is no recorded non-test diff to reverse; the code is present in command_summon.rs (field acceptance and normalisation)"
 failing_first = "reported"
 fix_commit = "patch:39fc05d0cdfc4522b94663dfc4d755f126328424e1594e136a8e90c002ce147c"
 
@@ -4830,6 +4850,7 @@ severity = "minor"
 status = "open"
 source = "Probe of every DamageKind through the real death path (HarnessRows): death_message.rs maps message ids to camelCase keys but omits outside_border; en_us.json has no death.attack.outside_border."
 regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_death_message_keys_match_the_damage_type_registry_and_language_file"]
+repro_check = "control receipts/XCoreCommands/negative-control.log (non-test hunks of da9bca08 reversed -> red at combat_parity_tests.rs:382: raw death.attack.outside_border instead of the language key)"
 failing_first = "reported"
 fix_commit = "da9bca085da0c0c542cac42f95f38b373849bd99"
 
@@ -5262,6 +5283,7 @@ status = "open"
 source = "BreakB10Commands round 3 H3 (REBREAK3.md). The listing now keeps a selected pack that failed to scan, with the load error as its hover."
 regression = ["cargo:mc-core:datapacks::command_tests::the_list_keeps_a_selected_pack_whose_pack_mcmeta_broke", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:4b74ef2fefca7443e10acdf6e42eb5d4a52250cb4d7b4674b0c54b97dc5246fb"
+repro_check = "control receipts/XCoreCommands/negative-control.log (recorded patch reversed -> red at datapack_commands_tests.rs:1747, the still-selected pack is dropped); needs df2766ffb"
 
 [[bug]]
 id = "DATAPACK-DISABLE-SKIPPED-PACK-UNKNOWN"
@@ -5285,6 +5307,7 @@ status = "open"
 source = "BreakB10Commands round 3 H5 (REBREAK3.md). The log gets every warning; the operator's chat gets three and a count."
 regression = ["cargo:mc-core:datapacks::command_tests::many_pack_warnings_are_a_few_chat_lines_and_a_count", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:0b5f5cb44123d114ea150df190a015bc68d8f63abe579c9c789338cb2c8e19e4"
+repro_check = "candidate: the recorded patch's finish hunk no longer reverses (datapacks.rs wrapped delivery in `if deliver {}` later) - receipts/XCoreCommands/control-blockers.log; the ref is green on head after df2766ffb"
 
 [[bug]]
 id = "VILLAGER-IDLE-STROLL-UNBOUNDED-DRIFT"
