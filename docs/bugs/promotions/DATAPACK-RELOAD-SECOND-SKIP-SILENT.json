@@ -1,0 +1,49 @@
+{
+  "id": "DATAPACK-RELOAD-SECOND-SKIP-SILENT",
+  "verdict": "promoted",
+  "fix_commit": "patch:01eb44ed0a8ee00a1ffa90b014f4d2a3c99ca9fd75c8894d1078416caa7190e1",
+  "fix_commit_full": "patch:01eb44ed0a8ee00a1ffa90b014f4d2a3c99ca9fd75c8894d1078416caa7190e1",
+  "promoted_at": "2026-11-12T07:14:53+00:00",
+  "tree_head": "0bae74039fdf5b47b1e373bc1106e5597c34b043",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": "01eb44ed0a8ee00a1ffa90b014f4d2a3c99ca9fd75c8894d1078416caa7190e1",
+  "reversed_files": [
+    "crates/mc-core/src/datapacks.rs"
+  ],
+  "kept_test_files": [],
+  "negative_control": {
+    "cargo:mc-core:datapacks::command_tests::a_second_reload_still_names_a_new_pack_that_stays_skipped": {
+      "state": "red",
+      "detail": "FAIL"
+    },
+    "harness:datapack-reload:native-datapack-reload": {
+      "state": "red",
+      "detail": "client receipt is 'failed', not passed; /usr/bin/python3 -m tools.harness run scenario native-datapack-reload --client native --windowed exited 1; see /run/media/kaiserroman/games/solaris-work/wt/B10P3Gates/.analysis/validation/20261112T071057-ledger-promote-omhvs1w4/regressions-client-3.log"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:datapacks::command_tests::a_second_reload_still_names_a_new_pack_that_stays_skipped": {
+      "state": "green",
+      "detail": ""
+    },
+    "harness:datapack-reload:native-datapack-reload": {
+      "state": "green",
+      "detail": "",
+      "receipt": "/run/media/kaiserroman/games/solaris-work/wt/ledger-control-candidate/.analysis/validation/20261112T071412-native-datapack-reload-bfbk42h5/result.json"
+    }
+  },
+  "client_receipt": {
+    "path": "/run/media/kaiserroman/games/solaris-work/wt/B10P3Gates/.analysis/validation/20261112T065245-native-datapack-reload-8_9am8ss/result.json",
+    "tree_head": "0bae74039fdf5b47b1e373bc1106e5597c34b043",
+    "tree_dirty": false,
+    "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "server_binary_sha256": "c7fd6f6bc8083919320ca9790d4c6afd40ee02628669fc715e787b4a7bf95db6",
+    "covers": [
+      "harness:datapack-reload:native-datapack-reload"
+    ],
+    "profile": "datapack-reload"
+  },
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/B10P3Gates/.analysis/validation/20261112T071057-ledger-promote-omhvs1w4"
+}

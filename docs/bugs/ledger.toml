@@ -4996,10 +4996,11 @@ title = "A second /reload with the same still-broken new pack answered only `Rel
 area = "gameplay"
 repro = "manual"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakB10Commands round 3 H2 (REBREAK3.md). A /reload now states every warning it finds; enable/disable still report only new ones."
 regression = ["cargo:mc-core:datapacks::command_tests::a_second_reload_still_names_a_new_pack_that_stays_skipped", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:01eb44ed0a8ee00a1ffa90b014f4d2a3c99ca9fd75c8894d1078416caa7190e1"
+promotion = "docs/bugs/promotions/DATAPACK-RELOAD-SECOND-SKIP-SILENT.json"
 
 [[bug]]
 id = "DATAPACK-LIST-HIDES-BROKEN-SELECTED-PACK"
@@ -5018,10 +5019,11 @@ title = "/datapack disable on a pack skipped at /reload answered `Unknown data p
 area = "gameplay"
 repro = "manual"
 severity = "minor"
-status = "open"
+status = "fixed"
 source = "BreakB10Commands round 3 H4 (REBREAK3.md); vanilla 26.1.2 DataPackCommand.getPack javap (getPack null -> unknown; selected.contains(pack) == enabling -> failed)."
 regression = ["cargo:mc-core:datapacks::command_tests::disabling_a_skipped_pack_says_it_is_not_enabled", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:66e66c89e001d20f24ede3fb3e32e719cb587286bf4cee7cb95fb72fbf90bf5b"
+promotion = "docs/bugs/promotions/DATAPACK-DISABLE-SKIPPED-PACK-UNKNOWN.json"
 
 [[bug]]
 id = "DATAPACK-WARNINGS-CHAT-FLOOD"
