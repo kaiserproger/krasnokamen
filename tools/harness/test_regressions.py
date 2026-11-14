@@ -26,6 +26,22 @@ class RegressionLedgerTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     regressions._profile_command(profile, verdict)
 
+    def test_chisel_optional_admission_routes_only_that_verdict_to_java(self):
+        command = regressions._profile_command('chisel', 'vanilla_optional_admission')
+        self.assertEqual(command[-3:], ['--client', 'java', '--windowed'])
+        self.assertEqual(regressions._profile_command('chisel', 'all')[-3:],
+                         ['--client', 'native', '--windowed'])
+        self.assertEqual(regressions._profile_command('village-qa', 'all')[-3:],
+                         ['--client', 'native', '--windowed'])
+        for value in (None, False, 'true'):
+            with self.assertRaises(RuntimeError):
+                regressions._profile_verdict(
+                    {'details': {'verdicts': {'vanilla_optional_admission': value}}},
+                    'chisel', 'vanilla_optional_admission')
+        regressions._profile_verdict(
+            {'details': {'verdicts': {'vanilla_optional_admission': True}}},
+            'chisel', 'vanilla_optional_admission')
+
     def test_autonomy_profile_uses_named_verdict(self):
         regressions._profile_command('village-autonomy-qa', 'walk_to_village')
         regressions._profile_command('village-autonomy-qa', 'all')

@@ -123,6 +123,7 @@ _PROFILE_RUN_OPTIONS = {
     'settlement-map-qa': ['--timeout-seconds', '3600'],
 }
 _PROFILE_VERDICTS = {
+    'chisel': ('chisel_admission', frozenset({'vanilla_optional_admission'})),
     'village-qa': ('settlement_acceptance', frozenset({
         'door_walk', 'sleep_return', 'night_door', 'farmer_harvest', 'miner_deposit', 'lumberjack',
     })),

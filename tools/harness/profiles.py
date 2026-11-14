@@ -459,7 +459,7 @@ def run_block_log(ctx: ProfileContext) -> dict[str, Any]:
     return block_log.run(ctx)
 
 def run_chisel(ctx: ProfileContext) -> dict[str, Any]:
-    """Chisel addon gate: plugin block-tool conversions on the native client."""
+    """Chisel native block tools or plain Java optional-bundle admission."""
     from .backends import chisel
 
     return chisel.run(ctx)
@@ -1080,7 +1080,7 @@ PROFILES: dict[str, dict[str, Any]] = {
     },
     "chisel": {
         "scope": "real-client",
-        "description": "Chisel addon gate: plugin block-tool conversions of stone_bricks/stairs to slab/stairs with wear and slab grants (--client native, windowed for screenshots)",
+        "description": "Chisel native block-tool conversions (--client native), or plain Java optional-bundle admission (--client java --windowed)",
         "run": run_chisel,
     },
     "core-client": {
@@ -1270,7 +1270,7 @@ PROFILE_PREREQUISITES = {
     "screen-share": _NATIVE,
     "datapack-reload": _NATIVE,
     "block-log": _NATIVE,
-    "chisel": _NATIVE,
+    "chisel": _SHARED,
     "core-client": _SHARED_BUILD,
     "inventory": _SHARED_BUILD,
     "entities": _SHARED_BUILD,

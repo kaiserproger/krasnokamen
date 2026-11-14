@@ -4057,7 +4057,7 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "CoreBlockers: native-v2-corrupt-block-entities fixtures had to stay two chunks from the player; with the fixture in the player's own chunk the client stays at 'session startup: play' while the server keeps ticking (scenario native-v2-corrupt-chunk-near-camera, restart_client_entered_play fails); a refused chunk two chunks away does not block it (play_world_presentation_ready, spawn_meshes_presented)."
-regression = []
+regression = ["cargo:mc-core:chunk_loader::tests::refused_chunk_never_blocks_other_chunks_and_stays_refused"]
 repro_check = "harness:entities:native-v2-corrupt-chunk-near-camera"
 
 [[bug]]

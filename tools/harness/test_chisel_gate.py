@@ -5,11 +5,20 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from .backends import chisel
 
 
 class ChiselHelperTests(unittest.TestCase):
+    def test_java_admission_requires_a_real_window(self) -> None:
+        context = SimpleNamespace(client="java", windowed=True, extra_args=(),
+                                  platform=None, timeout_seconds=120)
+        self.assertEqual(chisel.validate_args(context), 120)
+        context.windowed = False
+        with self.assertRaisesRegex(ValueError, "--windowed"):
+            chisel.validate_args(context)
+
     def test_rewrite_config_substitutes_each_token_once(self) -> None:
         source = ('port = 25565\nworld_dir = ".analysis/test-world-v12"\n'
                   'directory = "plugins"\nseed = 0\n')
