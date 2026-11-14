@@ -1,0 +1,22 @@
+diff --git a/crates/mc-core/src/entity_life.rs b/crates/mc-core/src/entity_life.rs
+index 307c49f91..ba37dee48 100644
+--- a/crates/mc-core/src/entity_life.rs
++++ b/crates/mc-core/src/entity_life.rs
+@@ -1136,6 +1136,8 @@ pub(crate) fn ageable(name: &str) -> bool {
+             | "minecraft:horse"
+             | "minecraft:donkey"
+             | "minecraft:mule"
++            | "minecraft:skeleton_horse"
++            | "minecraft:zombie_horse"
+             | "minecraft:llama"
+             | "minecraft:trader_llama"
+             | "minecraft:ocelot"
+@@ -1143,6 +1145,8 @@ pub(crate) fn ageable(name: &str) -> bool {
+             | "minecraft:hoglin"
+             | "minecraft:strider"
+             | "minecraft:dolphin"
++            | "minecraft:squid"
++            | "minecraft:glow_squid"
+             | "minecraft:nautilus"
+             | "minecraft:zombie_nautilus"
+             | "minecraft:happy_ghast"

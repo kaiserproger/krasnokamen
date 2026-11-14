@@ -1,0 +1,30 @@
+diff --git a/crates/mc-core/src/scoreboard.rs b/crates/mc-core/src/scoreboard.rs
+index 42876e9dc..c011b1418 100644
+--- a/crates/mc-core/src/scoreboard.rs
++++ b/crates/mc-core/src/scoreboard.rs
+@@ -913,7 +913,12 @@ fn execute_players(
+             if definition.criteria != "trigger" {
+                 return Err("That objective is not a trigger".into());
+             }
+-        } else if a[1] != "reset" && !matches!(definition.criteria.as_str(), "dummy" | "trigger") {
++        } else if a[1] != "reset"
++            && matches!(
++                definition.criteria.as_str(),
++                "health" | "food" | "air" | "armor" | "xp" | "level"
++            )
++        {
+             return Err("That objective is read-only".to_owned());
+         }
+     }
+@@ -926,9 +931,9 @@ fn execute_players(
+             return Err("Unknown source objective".to_owned());
+         }
+         if a[4] == "><"
+-            && !matches!(
++            && matches!(
+                 state.scoreboard.objectives[&a[6]].criteria.as_str(),
+-                "dummy" | "trigger"
++                "health" | "food" | "air" | "armor" | "xp" | "level"
+             )
+         {
+             return Err("Source objective is read-only".to_owned());

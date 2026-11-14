@@ -1,8 +1,8 @@
 diff --git a/crates/mc-core/src/datapacks.rs b/crates/mc-core/src/datapacks.rs
-index f7a2a039..37725f0a 100644
+index a2a2d8723..03ea9b4dc 100644
 --- a/crates/mc-core/src/datapacks.rs
 +++ b/crates/mc-core/src/datapacks.rs
-@@ -1097,6 +1097,8 @@ pub(crate) enum ListScope {
+@@ -1187,6 +1187,8 @@ pub(crate) enum ListScope {
      Enabled,
      Available,
  }
@@ -11,27 +11,22 @@ index f7a2a039..37725f0a 100644
  /// A fresh pack listing: `(pack id, description component)` in vanilla order.
  pub(crate) struct Listing {
      pub(crate) enabled: Vec<(String, Tag)>,
-@@ -1695,10 +1697,22 @@ fn finish(state: &mut TickState, reload: Reload, result: Result<Completed, Failu
-                     Vec::new(),
-                 ),
-             }
--            for warning in warnings {
-+            // Every warning goes to the server log, as vanilla logs them to the console;
-+            // the operator's chat gets the first few and a count, never one line per entry.
-+            for warning in &warnings {
+@@ -1866,9 +1868,17 @@ fn finish(
                  tracing::warn!("{warning}");
-+            }
-+            let hidden = warnings.len().saturating_sub(CHAT_WARNINGS);
-+            for warning in warnings.into_iter().take(CHAT_WARNINGS) {
-                 feedback(state, connection, warning);
              }
-+            if hidden > 0 {
-+                feedback(
-+                    state,
-+                    connection,
-+                    format!("{hidden} more datapack warning(s), see the server log"),
-+                );
-+            }
+             if deliver {
+-                for warning in warnings {
++                let hidden = warnings.len().saturating_sub(CHAT_WARNINGS);
++                for warning in warnings.into_iter().take(CHAT_WARNINGS) {
+                     feedback(state, connection, warning);
+                 }
++                if hidden > 0 {
++                    feedback(
++                        state,
++                        connection,
++                        format!("{hidden} more datapack warning(s), see the server log"),
++                    );
++                }
+             }
+             (true, count)
          }
-         (Job::List(scope), Completed::Listing(listing)) => {
-             management::listed(state, connection, *scope, &listing);

@@ -539,7 +539,7 @@ severity = "major"
 status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#RESPAWN-PARTIAL-COLLISION"
 regression = ["cargo:mc-core:sleep::tests::respawn_on_carpet_uses_its_collision_height", "cargo:mc-core:dimensions::tests::anchor_respawn_uses_carpet_collision_height"]
-
+repro_check = "round 2: green with the child-sender routing fix and no test edit; with the routing reversed the ref reports [8.0,150.0,8.0] and 150.0 instead of [8.5,151.0,8.5] and 150.0625. The row's own fix is untouched and its status stays fixed"
 [[bug]]
 id = "ANCHOR-TOP-RESPAWN"
 title = "A charged anchor is falsely rejected when the only valid spawn position is directly on top of it; the candidate only searches eight neighboring columns, omitting the center-top fallback."
@@ -550,7 +550,7 @@ status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ANCHOR-TOP-RESPAWN"
 regression = ["cargo:mc-core:dimensions::tests::anchor_respawn_can_stand_on_top_when_surrounded"]
 failing_first = "not recorded"
-
+repro_check = "round 2: green with the child-sender routing fix and no test edit - the command ran on the root world and the /kill never landed, so the respawn height was read from a stale world. The row's own sleep.rs fix is untouched and its status stays fixed"
 [[bug]]
 id = "ANCHOR-OFFHAND-CHARGE"
 title = "Using a partially charged anchor with a non-glowstone main hand and glowstone offhand produces a main-hand SetRespawn or explosion intent instead of deferring to the offhand charge. In the Overworld/End this can explode an anchor the player is trying to recharge."
@@ -1161,8 +1161,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-NOTIFY"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_death_notification_ignores_broadcast_rule", "harness:entities:native-v2-death-messages"]
-fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
-repro_check = "candidate: reverse of 7fe4905's non-test hunks is refused (tick/damage.rs, survival.rs, command_execution.rs, command_damage.rs rewritten later) and the ref needs the DamageSource::Command API that commit adds - receipts/XCoreCommands/control-blockers.log"
+fix_commit = "patch:616679e6694db5ccffffe249b463d53949cc4b2857aee832b51deca82550db57"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> the dying player's outbox has no PlayerChange::Died with show_death_messages=false"
 
 [[bug]]
 id = "SCORE-FOOD"
@@ -1173,8 +1173,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-FOOD"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_auto_criteria_accept_authoritative_values", "harness:entities:native-v2-score-food"]
-fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
-repro_check = "candidate: same SHA 7fe4905, same refused hunks (scoreboard.rs rewritten by 0c6f68d8) - receipts/XCoreCommands/control-blockers.log"
+fix_commit = "patch:73a2d42c2f1c0e6287e457bb9fa61fd7b3058ef35dc810c889c6e0d7e8cda669"
+repro_check = "round 2: patch digest verified. Control control-C.log: reversed -> red at `objectives add hunger food` (command usage)"
 
 [[bug]]
 id = "SCORE-CRITERIA-WRITABLE"
@@ -1185,8 +1185,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-CRITERIA-WRITABLE"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_counter_criteria_allow_writes_and_swap_sources", "harness:entities:native-v2-command-score-store"]
-fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
-
+fix_commit = "patch:49684fbf13f63f651932adb59ed33616b0f7178faac54b7af4ccc8182c5f7bf5"
+repro_check = "round 2: patch digest verified. Control control-B.log: reversed -> red `no entry found for key`, the `deaths` write was refused as read-only"
 [[bug]]
 id = "SCORE-TOTAL-KILLS"
 title = "totalKillCount was unsupported; native mob kill credit updated statistics but not this scoreboard objective."
@@ -1196,8 +1196,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-TOTAL-KILLS"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_actual_mob_and_player_deaths_credit_distinct_kill_counters_once", "harness:entities:native-v2-command-score-store"]
-fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
-
+fix_commit = "patch:f8dd23107df8d86196bd9f2eb2526329eb997ef64e6e3a82573f2dc6d3c1ac0b"
+repro_check = "round 2: patch digest verified. Control control-B.log: reversed -> red `objectives add kills totalKillCount` refused (usage)"
 [[bug]]
 id = "TEAM-DEATH-VISIBILITY"
 title = "team modify deathMessageVisibility never was rejected before broadcast filtering."
@@ -1274,8 +1274,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SETBLOCK-SNBT"
 regression = ["cargo:mc-core:command_world::tests::setblock_snbt_installs_native_chest_contents_and_replaces_same_block", "harness:entities:native-v2-ledger-setblock-snbt"]
-fix_commit = "2ccf8cc1a397481928c7ac575cf6df177de66fb2"
-repro_check = "candidate: reverse refused on command_world.rs and command_block_entity.rs (rewritten later) - receipts/XCoreCommands/control-blockers.log"
+fix_commit = "patch:43dcf616a9d89ec5444b0e93311f364ea0d3b0efa9f89339236702c1de6dd054"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> red at command_world.rs:994 (`Block entity SNBT is not supported`)"
 
 [[bug]]
 id = "FORCELOAD-RING"
@@ -1287,7 +1287,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FORCELOAD-RING"
 regression = ["cargo:mc-core:forceload::tests::forced_neighbour_ticks_blocks_but_freezes_entity_motion_and_age"]
 fix_commit = "5d86de8479676b431c79dcf09251a07f3721ef8b"
-repro_check = "candidate: reversing 5d86de847 reverses forceload.rs/chunk_tickets.rs but its tick.rs hunk no longer applies and the later split tick/residency.rs destructures the 4-tuple, so the reversed tree cannot compile - receipts/XCoreCommands/control-blockers-forceload.log; fix_commit recorded from that commit per XCoreCommands"
+repro_check = "round 2: the original fix 5d86de847 stays the fix_commit and docs/bugs/fix-patches/FORCELOAD-RING.patch (patch:6e94d3ac57d00f97) is the forward-ported reversal vehicle. Control control-A.log: reversed -> red with the neighbour at [184.53,199.23,168.46] instead of [184.5,200.0,168.5] (the ring ticks entities). Needs a graphical harness ref before promote"
 
 [[bug]]
 id = "DATA-QUERY"
@@ -1298,8 +1298,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-QUERY"
 regression = ["cargo:mc-core:command_data::tests::data_player_queries_read_live_inventory_vitals_and_absent_paths", "cargo:mc-core:command_data::tests::data_block_accepts_every_registered_block_entity_kind", "harness:entities:native-v2-data-query"]
-fix_commit = "0c6f68d84c1d2500bdd5ab7f016ae12887006730"
-repro_check = "candidate: reverse refused on command_data.rs, command_nbt_path.rs, command_execution.rs, scoreboard.rs - receipts/XCoreCommands/control-blockers.log"
+fix_commit = "patch:3ac02a62ea68203b76871560682ec62146c9828bbde7cfed8b4763d0c1c69c4c"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> both refs red (path/scale queries refused)"
 
 [[bug]]
 id = "EXECUTE-STORE"
@@ -1310,8 +1310,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#EXECUTE-STORE"
 regression = ["cargo:mc-core:command_data::tests::execute_store_give_and_clear_execute_once_and_return_real_counts", "harness:entities:native-v2-command-score-store"]
-fix_commit = "0c6f68d84c1d2500bdd5ab7f016ae12887006730"
-repro_check = "candidate: same SHA 0c6f68d8, same refused hunks - receipts/XCoreCommands/control-blockers.log"
+fix_commit = "patch:ddb8f835cbaeb31923bef075d0c9fa05d057fb858c6628eaee1828d278ef94bd"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> red, `give @s stone 7` reports 0 (mutator refused)"
 
 [[bug]]
 id = "P1"
@@ -1357,9 +1357,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "The launcher wrote the resource pack into the game directory incrementally and treated an existing manifest as proof the pack was current, so upgrading the client left a 26.1.2 pack in place: 26.3 content the client needs (template_sign_* block models, entity/cushion and entity/sulfur_cube textures) never appeared, and the client's model-texture walk fails on the missing files."
-regression = ["client:krasnokamen-launcher:bootstrap::tests::a_manifest_claim_does_not_make_a_stale_pack_current", "client:krasnokamen-launcher:bootstrap::tests::a_stale_resource_pack_is_replaced_instead_of_merged", "client:krasnokamen-launcher:bootstrap::tests::an_installation_whose_pack_lost_its_marker_is_not_ready", "client:krasnokamen-launcher:ui::tests::ordinary_play_repairs_an_installation_whose_pack_lost_its_marker", "client:krasnokamen-launcher:bootstrap::tests::a_failed_pack_swap_keeps_the_previous_pack", "client:krasnokamen-launcher:bootstrap::tests::a_jar_with_the_same_paths_and_other_bytes_invalidates_the_pack", "client:krasnokamen-launcher:bootstrap::tests::pack_entry_digest_is_the_shared_known_answer"]
+regression = ["client:krasnokamen-launcher:bootstrap::tests::a_manifest_claim_does_not_make_a_stale_pack_current", "client:krasnokamen-launcher:bootstrap::tests::a_stale_resource_pack_is_replaced_instead_of_merged", "client:krasnokamen-launcher:bootstrap::tests::an_installation_whose_pack_lost_its_marker_is_not_ready", "client:krasnokamen-launcher:bootstrap::tests::a_failed_pack_swap_keeps_the_previous_pack", "client:krasnokamen-launcher:bootstrap::tests::a_jar_with_the_same_paths_and_other_bytes_invalidates_the_pack", "client:krasnokamen-launcher:bootstrap::tests::pack_entry_digest_is_the_shared_known_answer", "client:krasnokamen-launcher:ui::tests::ordinary_play_runs_the_install_stage_for_a_stale_pack"]
 fix_commit = "client:8f8e07e9"
-repro_check = "candidate: area=client. fix client:3fa63044 (which contains 1ea6d127) makes readiness require the pack marker to match the local jar, so ordinary Play on an existing install repairs a stale pack, and a failed swap restores the old pack. Control receipts/XClientBlocks/27-ready-negative-control.log: an_installation_whose_pack_lost_its_marker_is_not_ready and ordinary_play_repairs_an_installation_whose_pack_lost_its_marker are red with the fix reverted (94 passed, 2 failed); a_failed_pack_swap_keeps_the_previous_pack stayed green in that same run, so for the swap claim the control is not yet shown and it must not be cited as proof. Real-client check required: the gate is a client install upgraded across a pack change Later round: client:8f8e07e9 makes the marker the jar's measured SHA-1 plus a per-entry crc32/size digest, and stage 5 refuses a jar whose SHA-1 differs from the release; the two new refs are red in receipts/XClientBlocks/31-jar-identity-negative-control.log (96 passed, 2 failed)."
+repro_check = "candidate: area=client. fix client:3fa63044 (which contains 1ea6d127) makes readiness require the pack marker to match the local jar, so ordinary Play on an existing install repairs a stale pack, and a failed swap restores the old pack. Control receipts/XClientBlocks/27-ready-negative-control.log: an_installation_whose_pack_lost_its_marker_is_not_ready and ordinary_play_repairs_an_installation_whose_pack_lost_its_marker are red with the fix reverted (94 passed, 2 failed); a_failed_pack_swap_keeps_the_previous_pack stayed green in that same run, so for the swap claim the control is not yet shown and it must not be cited as proof. Real-client check required: the gate is a client install upgraded across a pack change Later round: client:8f8e07e9 makes the marker the jar's measured SHA-1 plus a per-entry crc32/size digest, and stage 5 refuses a jar whose SHA-1 differs from the release; the two new refs are red in receipts/XClientBlocks/31-jar-identity-negative-control.log (96 passed, 2 failed). Later round: test commit client:9629a519 replaces the earlier ui ref (that test no longer exists) with one that drives the real start_play, which enters Phase::Installing for a stale pack and takes the direct branch when the marker is fresh; the ref is red in receipts/XClientBlocks/36-play-negative-control.log with the readiness hunk reverted (95 passed, 3 failed: the marker readiness, the jar identity and the play refs). a_failed_pack_swap_keeps_the_previous_pack is 'ok' in both 27 and 36, so it still has no control of its own."
 
 [[bug]]
 id = "STORAGE-L3-SEALED-CORNER-CHEST"
@@ -1399,6 +1399,19 @@ regression = ["cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced
 failing_first = "reported"
 fix_commit = "patch:8b8ac42337fbd5b2de83f105991a134dc367b2a1bc00aa46908815ce676f2973"
 repro_check = "candidate: receipt patch docs/bugs/fix-patches/EDGE-RECIPE-RELOAD-CATALOG-SENT-TWICE.patch (patch:8b8ac42337fbd5b2) for commit 3c2124c08, digest verified and reverse-ok on this tree; control: the ref is red with it reversed (control4-EDGE-RECIPE-RELOAD-*.log). reliable_recipe_reload_uses_each_event_catalog_and_reuses_wire_projection stays green when reversed, so it does not catch this bug and is not a ref for the row. gameplay row, repro cargo: no real-client receipt needed"
+
+[[bug]]
+id = "COMMAND-CHILD-SENDER-DROPPED"
+title = "A command sent by a player standing in the Nether or the End ran on the root world: /kill did nothing, /summon put the entity in the wrong world and gamerule feedback never reached the edge"
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "Found while auditing the command path for the XCoreCommands slice (wt/XCoreCommands 349208af8): command_execution_deferred.rs ran the queued job against the job's root context, not job.context.dimension, so every queued command from a child dimension executed on the overworld. XCoreItems' bisect left b2b442ded6 among the candidates for the same symptom (candidate, not proven causal)."
+regression = ["cargo:mc-core:dimensions::tests::data_edits_an_entity_for_senders_in_the_nether_and_the_end", "cargo:mc-core:dimensions::tests::send_command_feedback_set_from_the_nether_is_published_for_the_edge", "cargo:mc-core:dimensions::tests::anchor_respawn_can_stand_on_top_when_surrounded", "cargo:mc-core:dimensions::tests::anchor_respawn_uses_carpet_collision_height"]
+failing_first = "reported"
+fix_commit = "patch:d761f6961cdf70c1ed7c475b70c76ccb48144f2715f6b851163f0dfc79ea4cc9"
+repro_check = "round 2: docs/bugs/fix-patches/COMMAND-CHILD-SENDER-DROPPED.patch (digest verified here). Control control-D.log: reversed -> all four refs red - the gamerule feedback is not shown, the cow is not in the sender's world, and the respawn position reads [8.0,150.0,8.0] and 150.0 instead of [8.5,151.0,8.5] and 150.0625 because the dropped /kill never killed the player. One cause, four refs; the anchor rows' own sleep.rs fix is untouched"
 
 [[bug]]
 id = "CLIENT-HELD-DROP-KEY-DOUBLE-DROP"
@@ -1607,8 +1620,7 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-OPTION-COVE
 regression = ["cargo:mc-core:datapacks::command_tests::selector_predicate_selects_and_negates_datapack_predicates", "cargo:mc-core:datapacks::command_tests::predicates_with_conditions_the_selector_cannot_evaluate_are_refused_at_load", "cargo:mc-data:advancements::tests::selector_predicates_evaluate_scores_time_weather_and_chance_from_facts", "cargo:mc-data:advancements::tests::predicate_support_reports_conditions_that_cannot_be_evaluated", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:57f423038d585e7d4ef178f508013b198add0ee60a4eb6976878f604e53811f0"
 promotion = "docs/bugs/promotions/SELECTOR-PREDICATE-UNSUPPORTED.json"
-repro_check = "stage-2 regression note: its registered ref selector_predicate_selects_and_negates_datapack_predicates is RED on b620e3333 (0 predicate matches, 2 expected, datapack_commands_tests.rs:674); status deliberately unchanged, Main routes the fix"
-
+repro_check = "round 2: the cause was the selector evaluating `predicate=` twice, so the second pass handed the bare entity snapshot to evaluate_predicate and `entity_properties entity:'this'` read event['player'] as null; fixed in command_execution/selectors.rs (predicate_event), duplicate pass removed. Unknown predicates stay a command error, which is vanilla (lang key predicate.unknown). Status untouched"
 [[bug]]
 id = "SELECTOR-DEAD-PLAYERS"
 title = "@a and @s omit retained dead players, so commands directed at players on the death screen incorrectly get no matching target. Shared selector admission also imposes alive-only behavior on other player selectors."
@@ -1731,7 +1743,7 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-PROFILER Fix p
 regression = ["cargo:mc-core:command_debug::tests::profiler_reports_seconds_ticks_and_rate_and_refuses_double_start_and_stop", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:099e67237851fc2045b6895f76198518921e163ac5e0d90525e76149f73d6b3b"
 promotion = "docs/bugs/promotions/DEBUG-PROFILER.json"
-
+repro_check = "round 2 restore: the refs went red again before the test-helper commit 1e0dccd4b, same cause as DEBUG-FUNCTION-TRACE (helper claimed Deferred and sent no refusals). Status untouched: promotion reverses this row's own original fix (patch:099e67237851fc20), not 1e0dccd4b"
 [[bug]]
 id = "DEBUG-FUNCTION-TRACE"
 title = "`/debug function <id>` and function-tag tracing are rejected because debug parsing only accepts Solaris debug give; operators cannot obtain vanilla command/message/result/function traces."
@@ -1743,7 +1755,7 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-FUNCTION-TRACE
 regression = ["cargo:mc-core:command_debug::tests::function_trace_records_commands_results_messages_errors_and_nested_calls", "cargo:mc-core:command_debug::tests::function_tag_trace_counts_every_function_and_reports_the_multiple_key", "cargo:mc-core:command_debug::tests::function_trace_refuses_unknown_functions_low_permission_and_recursion", "cargo:mc-core:command_debug::tests::function_trace_write_failure_is_reported_not_hidden", "cargo:mc-core:command_debug::tests::function_trace_records_only_what_the_source_is_sent", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:40a6af5157a6fdb37ce21e147f3178511d2897ace09ec46fafd2a03fe92a37b3"
 promotion = "docs/bugs/promotions/DEBUG-FUNCTION-TRACE.json"
-
+repro_check = "round 2 restore: this row's 6 command_debug::tests::* refs went red again before the test-helper commit 1e0dccd4b (they claimed Deferred wrong and sent no refusals). Status is untouched: promotion must reverse this row's own original fix (patch:40a6af5157a6fdb3), never the test commit"
 [[bug]]
 id = "DATAPACK-LIST-LIVE-DISCOVERY"
 title = "After packs are added/removed on disk, a cached-only `/datapack list` cannot immediately discover the repository change without a separate reload. This remains the explicit residual of Main-approved snapshot listing, not an assumed full vanilla list implementation."
@@ -1765,8 +1777,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DAMAGE-COMMAND"
 regression = ["cargo:mc-core:command_damage::tests::damage_command_commits_default_damage_and_reports_actual_rejection", "harness:entities:native-v2-command-score-store"]
-fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
-
+fix_commit = "patch:ff8339d548af2b08289112d15575ac1aeff71dd04da4dfd85585245b9a18c6f5"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> `/damage` is an unknown command again"
 [[bug]]
 id = "HC-4"
 title = "Native app does not enable/consume IME; CJK composition cannot commit in chat/editors. Main sets minor priority."
@@ -1820,8 +1832,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-AGE"
 regression = ["cargo:mc-core:command_summon::age_tests::summon_age_water_families", "cargo:mc-core:command_summon::age_tests::summon_age_horse_families", "harness:entities:native-v2-summon-age"]
-fix_commit = "69650602b181121c5d47b1cf082d91654505612d"
-repro_check = "candidate: reverse refused on command_summon.rs, entity_life.rs, core.rs; the age_tests module itself is added by that commit - receipts/XCoreCommands/control-blockers.log"
+fix_commit = "patch:c9e6a2f3467c0e78076dea00299c9d6e1693d5eed3a065324d36e1bb3d60636f"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> red `squid {Age:-1234}` / `skeleton_horse {Age:-1234}`: `Entity does not support summon NBT field Age`"
 
 [[bug]]
 id = "SUMMON-ISBABY"
@@ -1832,8 +1844,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-ISBABY"
 regression = ["cargo:mc-core:command_summon::age_tests::summon_is_baby_zombie_family", "cargo:mc-core:command_summon::age_tests::summon_is_baby_piglin_and_zoglin", "harness:entities:native-v2-summon-age"]
-fix_commit = "69650602b181121c5d47b1cf082d91654505612d"
-repro_check = "candidate: same SHA 69650602, same refused hunks - receipts/XCoreCommands/control-blockers.log"
+fix_commit = "patch:1d24d42295a3d1140a14a4109683c73aea94df4fe083c22efe1669c4f4cf88ac"
+repro_check = "round 2: patch digest verified. Control control-C.log: reversed -> red `piglin/zombie {IsBaby:0b}`: `Entity does not support summon NBT field IsBaby`"
 
 [[bug]]
 id = "DEATH-PROTECTION-COMPONENT"
@@ -1914,7 +1926,7 @@ source = "/run/media/kaiserroman/games/solaris-work/receipts/BreakJoinRows/FINDI
 regression = ["cargo:mc-edge:server::view_distance_tests::list_obeys_the_send_command_feedback_rule", "harness:chat-visibility:native-chat-visibility", "cargo:mc-core:dimensions::tests::send_command_feedback_set_from_the_nether_is_published_for_the_edge"]
 fix_commit = "patch:0eb05a69067379a145703ad813222c14d28930a0dde1529bb37252b395d7116d"
 promotion = "docs/bugs/promotions/COMMAND-FEEDBACK-LIST-IGNORES-GAMERULE.json"
-
+repro_check = "round 2: green with the child-sender routing fix and no test edit; this row's own fix (patch:0eb05a69) is untouched and its status stays fixed"
 [[bug]]
 id = "DATAPACK-CREATE"
 title = "`/datapack create <id> <description>` always falls through to unsupported syntax, preventing creation of the vanilla empty directory pack from the command interface."
@@ -1948,7 +1960,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-HOVER Fix patch: reversing it makes the list print plain pack names instead of hover chat links."
 regression = ["cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover"]
 fix_commit = "patch:61916b68f2759fa892f3eedc6158c06aa19d47274e877ab607e220a850d0593a"
-repro_check = "control receipts/XCoreCommands/negative-control.log (reverse of the recorded patch -> red at datapack_commands_tests.rs:185: plain text(id) names carry no link/hover, the symptom); the ref needs test helper df2766ffb on wt/XCoreCommands; candidate: real-client check required (repro=manual)"
+repro_check = "round 2: patch docs/bugs/fix-patches/DATAPACK-LIST-HOVER.patch (digest verified here). Control negative-control.log: reversed -> red `left: [] right: [vanilla, file/alpha]` (plain names, no link or hover). Needs a graphical harness ref before it can be promoted"
 
 [[bug]]
 id = "BEE-FLOWER-TABLE"
@@ -2401,7 +2413,7 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-MUTATION-STORAG
 regression = ["cargo:mc-core:command_data::tests::data_storage_modify_reports_results_and_survives_reads", "cargo:mc-core:command_data::tests::data_merge_modify_and_remove_edit_a_mobs_data_and_keep_its_identity", "cargo:mc-core:command_data::tests::data_entity_edits_refuse_players_unsupported_fields_and_position_without_changing_anything", "cargo:mc-core:command_data::tests::data_entity_edit_of_a_villager_keeps_its_profession_level_and_age", "cargo:mc-core:command_data::tests::data_edits_an_item_entitys_stack_delay_age_and_gravity", "cargo:mc-core:command_data::tests::data_modify_and_merge_edit_any_block_entity_through_its_native_owner", "cargo:mc-core:command_data::tests::data_block_edits_are_refused_without_changing_anything", "cargo:mc-core:command_data::tests::data_edits_a_command_block_through_the_same_command_path", "cargo:mc-core:command_data::tests::data_edit_of_a_baby_keeps_its_hitbox_and_growing_up_restores_it", "cargo:mc-core:command_data::tests::data_edit_of_an_experience_orb_changes_its_value_and_count", "cargo:mc-core:command_data::tests::data_edit_keeps_a_zombie_villagers_cure_and_a_name_removal_clears_it", "cargo:mc-core:dimensions::tests::data_merge_entity_edits_an_entity_in_another_loaded_dimension", "cargo:mc-core:dimensions::tests::data_edits_a_block_entity_in_another_loaded_dimension", "cargo:mc-core:dimensions::tests::data_edits_an_entity_for_senders_in_the_nether_and_the_end", "cargo:mc-core:dimensions::tests::data_edit_of_a_villager_keeps_trades_gossip_inventory_and_replays_from_the_wal", "cargo:mc-core:command_data::tests::data_edit_of_one_field_keeps_love_and_persistence_the_entity_already_had", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:f3ee0db6f2ab384acbb5302aa2202e5a64216714f8e89b77ac32c859b97f65cb"
 promotion = "docs/bugs/promotions/DATA-MUTATION-STORAGE.json"
-
+repro_check = "round 2: the ref went green with the child-sender routing fix and no test edit, which confirms XCoreItems' reattribution - the dropped sender was one cause. This row's own fix (patch:f3ee0db6) is untouched and its status stays fixed"
 [[bug]]
 id = "HAPPY-GHAST-HARNESS"
 title = "No harness equipment or four-rider admission; current mount owner has single rider. Species itself exists."
@@ -3463,8 +3475,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:143"
-regression = []
-repro_check = "round 7 note only: still a partial fix, so there is no scoped revert to control and no ref; the remaining delta is in the Stage2Edge/XHarnessGates audit, not in this row"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::left_side_mirror_flags_follow_the_26_3_layers", "client:krasnokamen-client:entities::asset_model_regression_tests::species_layer_scales_preserve_the_feet_and_distinguish_related_mobs", "client:krasnokamen-client:entities::presentation::tests::received_pet_sitting_flag_poses_and_restores_adult_and_baby_rigs"]
+repro_check = "round 8 (client:b40b8d63): 19 rigs now carry the exact 26.3 mirror flags and the ref is red with the fix reverted - receipts/XHarnessGates/client-r8-revert-red.log (25 passed, 1 failed). candidate: area=client, real-client check required"
+fix_commit = "client:b40b8d63"
 [[bug]]
 id = "MODEL-OPUS-N9"
 title = "The shulker box base reuses the lid's UV origin."
@@ -3594,7 +3607,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:86"
 regression = ["harness:scene-shot:native-entity-visuals"]
-repro_check = "parked after stage 2 with vanilla evidence: 26.3 FlameFeatureRenderer needs a block-atlas sprite lookup in the emit path (renderer owner)"
+repro_check = "parked after stage 2. Round 8 corrects the earlier 'no producer' line: presentation.rs already has a burning-entity block, so this is not a missing producer - the re-check is queued for round 9 and no ref is recorded yet. Renderer owner after stage 2"
 [[bug]]
 id = "MODEL-ENTITY-TNT-FALLING-LIGHTNING"
 title = "TNT, falling blocks and lightning bolts have simulation state but no draw call"
@@ -4752,7 +4765,7 @@ regression = ["cargo:mc-core:command_summon::tests::experience_orb_summon_preser
 fix_commit = "1bf193720f99740448be7fc290f33b1b97e312b5"
 failing_first = "reported"
 promotion = "docs/bugs/promotions/SUMMON-EXPERIENCE-ORB-NOT-ORB.json"
-
+repro_check = "round 2: the admission regression came back from c9401c3e5 and is fixed again by patch:a0e50c6d63e64f16 (docs/bugs/fix-patches/SUMMON-EXPERIENCE-ORB-NOT-ORB.patch, digest verified); control-D.log - reversed -> red `Unsupported or duplicate orb summon NBT field Count` for {Value:5s,Count:4,Motion:[...]}. Status untouched: the recorded fix_commit stays the one the promotion receipt carries"
 [[bug]]
 id = "HARNESS-JAVA-MATRIX-FOREIGN-PORT-AUTH-ACK"
 title = "java-matrix hardcoded game port 26200 and wait_port accepted any listener, so on the shared host a colliding run's server died with 'Address already in use' while its clients joined the foreign server: the solaris-auth acknowledgement never arrived and the foreign server later kicked the client with 'logged in from another location'."
@@ -4904,9 +4917,9 @@ severity = "major"
 status = "open"
 source = "VisualWorldM scene runs 2026-11-11 (receipts/VisualWorldClient/rows.yaml, batch-fx2 scene uojfjhnq/wh9f5dcu): the server refused the fields identically for native and Java clients."
 regression = ["cargo:mc-core:command_summon::tests::summon_tnt_accepts_fuse_and_explosion_power_and_applies_them", "cargo:mc-core:command_summon::tests::summon_falling_block_accepts_block_state_and_time_and_defaults_to_sand", "cargo:mc-core:command_summon::tests::summon_rejects_tnt_and_falling_block_fields_on_wrong_entities_and_bad_values", "harness:entities:native-v2-summon-nbt"]
-repro_check = "candidate: no patch file for this row exists in docs/bugs/fix-patches/ or docs/bugs/promotions/, so there is no recorded non-test diff to reverse; the code is present in command_summon.rs (field acceptance and normalisation)"
+repro_check = "round 2: patch digest verified. Control control-C.log: reversed -> red `Unknown or unsupported summon NBT field fuse` / `field BlockState`; the third ref asserts the refusals and stays green, as it should"
 failing_first = "reported"
-fix_commit = "patch:39fc05d0cdfc4522b94663dfc4d755f126328424e1594e136a8e90c002ce147c"
+fix_commit = "patch:5e828ea5732c81cc0c14cabb4347c919e27c2a9391d65cfd358d7ac61ee1fba4"
 
 [[bug]]
 id = "KELP-ITEMS-SPAWN-ON-OCEAN-FLOOR"
@@ -4969,7 +4982,7 @@ severity = "minor"
 status = "open"
 source = "Probe of every DamageKind through the real death path (HarnessRows): death_message.rs maps message ids to camelCase keys but omits outside_border; en_us.json has no death.attack.outside_border."
 regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_death_message_keys_match_the_damage_type_registry_and_language_file"]
-repro_check = "control receipts/XCoreCommands/negative-control.log (non-test hunks of da9bca08 reversed -> red at combat_parity_tests.rs:382: raw death.attack.outside_border instead of the language key)"
+repro_check = "round 2, complete: fix da9bca085, control negative-control.log - all non-test hunks of da9bca08 (contact_hazards.rs, tick/death_message.rs) reversed -> red at the key parity assertion (`want death.attack.outsideBorder, got death.attack.outside_border`)"
 failing_first = "reported"
 fix_commit = "da9bca085da0c0c542cac42f95f38b373849bd99"
 
@@ -5404,7 +5417,7 @@ status = "open"
 source = "BreakB10Commands round 3 H3 (REBREAK3.md). The listing now keeps a selected pack that failed to scan, with the load error as its hover."
 regression = ["cargo:mc-core:datapacks::command_tests::the_list_keeps_a_selected_pack_whose_pack_mcmeta_broke", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:4b74ef2fefca7443e10acdf6e42eb5d4a52250cb4d7b4674b0c54b97dc5246fb"
-repro_check = "control receipts/XCoreCommands/negative-control.log (recorded patch reversed -> red at datapack_commands_tests.rs:1747, the still-selected pack is dropped); needs df2766ffb; candidate: real-client check required (repro=manual)"
+repro_check = "round 2: patch docs/bugs/fix-patches/DATAPACK-LIST-HIDES-BROKEN-SELECTED-PACK.patch (digest verified). Control negative-control.log: reversed -> red `commands.datapack.list.enabled.success[1, vanilla]` (file/gems dropped)"
 
 [[bug]]
 id = "DATAPACK-DISABLE-SKIPPED-PACK-UNKNOWN"
@@ -5427,8 +5440,8 @@ severity = "minor"
 status = "open"
 source = "BreakB10Commands round 3 H5 (REBREAK3.md). The log gets every warning; the operator's chat gets three and a count."
 regression = ["cargo:mc-core:datapacks::command_tests::many_pack_warnings_are_a_few_chat_lines_and_a_count", "harness:datapack-reload:native-datapack-reload"]
-fix_commit = "patch:0b5f5cb44123d114ea150df190a015bc68d8f63abe579c9c789338cb2c8e19e4"
-repro_check = "candidate: the recorded patch's finish hunk no longer reverses (datapacks.rs wrapped delivery in `if deliver {}` later) - receipts/XCoreCommands/control-blockers.log; the ref is green on head after df2766ffb"
+fix_commit = "patch:7b0fdad349e409f18ff3f8c5bfd69f20a84bb80e79befdebf55e98e59ca7c485"
+repro_check = "round 2: docs/bugs/fix-patches/DATAPACK-WARNINGS-CHAT-FLOOD.patch was replaced - the previous text is recoverable at b620e3333 - and the new digest is verified. Control control-A.log: reversed -> red with 8 `Found non-pack entry` lines and no `5 more` line (8 vs 3)"
 
 [[bug]]
 id = "VILLAGER-IDLE-STROLL-UNBOUNDED-DRIFT"
