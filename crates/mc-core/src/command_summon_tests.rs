@@ -126,9 +126,13 @@ fn summon_faction_is_native() {
         assert!(image.opaque_entity_fields.is_empty());
         let json = serde_json::to_value(&image).unwrap();
         assert!(json.get("faction").is_none(), "zero adds no WAL bytes");
+        // Armor baselines are derived on recovery, not serialized in the WAL image.
+        let mut expected = image.clone();
+        expected.loot.base_armor = 0.0;
+        expected.loot.base_knockback_resistance = 0.0;
         assert_eq!(
             serde_json::from_value::<crate::journal::EntityStateImage>(json).unwrap(),
-            image
+            expected
         );
         assert!(
             image
