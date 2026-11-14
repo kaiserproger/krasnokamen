@@ -52,23 +52,85 @@ class PinReleaseTests(unittest.TestCase):
         directory.mkdir()
         binary = directory / "krasnokamen-client.exe"
         binary.write_bytes(b"test pin")
-        manifest = {"repo": "client", "kind": "client", "target": WINDOWS,
+        manifest = {"repo": "client", "kind": "client", "target": WINDOWS, "inputs_sha256": "C",
                     "binary": str(binary), "binary_sha256": pin.w.sha256_file(binary)}
         (directory / "manifest.json").write_text(json.dumps(manifest))
-        self.assertEqual(pin.existing_pin(directory, "client", WINDOWS, False), binary)
+        self.assertEqual(pin.existing_pin(directory, "client", WINDOWS, False, "C"), binary)
         with self.assertRaises(pin.w.ToolError):
-            pin.existing_pin(directory, "client", LINUX, False)
+            pin.existing_pin(directory, "client", LINUX, False, "C")
         with self.assertRaises(pin.w.ToolError):  # a pin without the field predates incremental builds
-            pin.existing_pin(directory, "client", WINDOWS, True)
+            pin.existing_pin(directory, "client", WINDOWS, True, "C")
         manifest.update(repo="core", kind="server")
         (directory / "manifest.json").write_text(json.dumps(manifest))
         with self.assertRaises(pin.w.ToolError):
             pin.existing_pin(directory, "bots", WINDOWS, False)
         manifest.update(repo="client", kind="client", incremental=True)
         (directory / "manifest.json").write_text(json.dumps(manifest))
-        self.assertEqual(pin.existing_pin(directory, "client", WINDOWS, True), binary)
+        self.assertEqual(pin.existing_pin(directory, "client", WINDOWS, True, "C"), binary)
         with self.assertRaises(pin.w.ToolError):
-            pin.existing_pin(directory, "client", WINDOWS, False)
+            pin.existing_pin(directory, "client", WINDOWS, False, "C")
+
+    def test_a_pin_of_another_working_state_is_refused_not_reused(self):
+        directory = self.root / "pin"
+        directory.mkdir()
+        binary = directory / "krasnokamen"
+        binary.write_bytes(b"another tree's server")
+        before = {"head": "9" * 40, "diff_sha256": "8" * 64, "dirty": False, "untracked_files": 0}
+        manifest = {"repo": "core", "kind": "server", "target": LINUX, "incremental": True,
+                    "head": "1" * 40, "diff_sha256": "2" * 64, "binary": str(binary),
+                    "binary_sha256": pin.w.sha256_file(binary), "inputs_sha256": "K"}
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        # the pre-fix cross-tree reuse wrote exactly this: another HEAD under this tree's pin name
+        with self.assertRaisesRegex(pin.w.ToolError, "another tree's binary is never reused"):
+            pin.existing_pin(directory, "server", LINUX, True, "K", before)
+        manifest.update(head=before["head"], diff_sha256=before["diff_sha256"])
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        self.assertEqual(pin.existing_pin(directory, "server", LINUX, True, "K", before), binary)
+
+    def test_a_client_pin_fails_closed_without_inputs_or_with_other_codegen_parameters(self):
+        directory = self.root / "pin"
+        directory.mkdir()
+        binary = directory / "krasnokamen-client"
+        binary.write_bytes(b"client")
+        manifest = {"repo": "client", "kind": "client", "target": LINUX, "incremental": False,
+                    "binary": str(binary), "binary_sha256": pin.w.sha256_file(binary)}
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(pin.w.ToolError, "records no build inputs"):
+            pin.existing_pin(directory, "client", LINUX, False, "C")
+        manifest["inputs_sha256"] = "C"
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        self.assertEqual(pin.existing_pin(directory, "client", LINUX, False, "C"), binary)
+        # another codegen environment yields another input digest: never this binary
+        with self.assertRaisesRegex(pin.w.ToolError, "other build inputs"):
+            pin.existing_pin(directory, "client", LINUX, False, "C-with-force-frame-pointers")
+
+    def test_a_relabelled_pin_is_refused_and_never_registered(self):
+        # the installed 04af6cc1f could relabel another tree's binary with this tree's provenance
+        pins = self.root / "pins"
+        pins.mkdir()
+        source = pins / "3497c143-old"
+        source.mkdir()
+        foreign = source / "krasnokamen"
+        foreign.write_bytes(b"other tree's server")
+        (source / "manifest.json").write_text(json.dumps({
+            "repo": "core", "kind": "server", "target": LINUX, "incremental": True,
+            "head": "1" * 40, "diff_sha256": "2" * 64, "binary": str(foreign),
+            "binary_sha256": pin.w.sha256_file(foreign), "inputs_sha256": "K"}))
+        relabelled = pins / "fa637b84c392-server-x86_64-unknown-linux-gnu-incr"
+        relabelled.mkdir()
+        copied = relabelled / "krasnokamen"
+        shutil.copyfile(foreign, copied)
+        before = {"head": "b" * 40, "diff_sha256": "c" * 64, "dirty": False, "untracked_files": 0}
+        (relabelled / "manifest.json").write_text(json.dumps({
+            "repo": "core", "kind": "server", "target": LINUX, "incremental": True,
+            "head": before["head"], "diff_sha256": before["diff_sha256"], "binary": str(copied),
+            "binary_sha256": pin.w.sha256_file(copied), "inputs_sha256": "K", "reused_from": source.name}))
+        with self.assertRaisesRegex(pin.w.ToolError, "relabelled pin"):
+            pin.existing_pin(relabelled, "server", LINUX, True, "K", before)
+        # a source that is missing or damaged is equally refused
+        shutil.rmtree(source)
+        with self.assertRaisesRegex(pin.w.ToolError, "missing or unreadable"):
+            pin.existing_pin(relabelled, "server", LINUX, True, "K", before)
 
     def test_target_is_explicit_and_inherited_target_is_removed(self):
         artifact = self.slot / WINDOWS / "release/krasnokamen-client.exe"
@@ -158,9 +220,10 @@ class PinReleaseTests(unittest.TestCase):
             self.assertEqual(output.getvalue().splitlines(), [f"{pin.KINDS[kind]['env']}={final}"] * 2)
             manifest = json.loads((directory / "manifest.json").read_text())
             self.assertEqual((manifest["kind"], manifest["target"], manifest["incremental"]), (kind, target, incremental))
-            self.assertEqual("inputs_sha256" in manifest, kind != "client")  # the client's pin is unchanged
-            self.assertEqual("build_tree" in manifest, kind != "client")
-            self.assertEqual(manifest.get("env_deps"), None if kind == "client" else {"ZSTD_SYS_USE_PKG_CONFIG": None})
+            # every kind records its input list, its build tree and the env deps of its build
+            self.assertIn("inputs_sha256", manifest)
+            self.assertEqual(manifest["build_tree"], str(tree))
+            self.assertEqual(manifest.get("env_deps"), {"ZSTD_SYS_USE_PKG_CONFIG": None})
             self.assertEqual(final.read_bytes(), artifact.read_bytes())
         self.assertEqual(len(set(paths)), 5)
 
@@ -699,11 +762,20 @@ class LedgerRegistrationTests(unittest.TestCase):
         self.assertNotEqual(refused.returncode, 0)
         self.assertIn("different tree", refused.stderr)
 
-    def test_core_tests_pins_register_the_same_way(self):
+    def test_a_test_executable_is_never_registered_as_the_server_evidence(self):
+        # ledger-builds is the server binary registry: core-tests must never be certified there
+        self.assertTrue(pin.registers_for_ledger("server"))
+        for kind in ("core-tests", "bots", "client"):
+            self.assertFalse(pin.registers_for_ledger(kind), kind)
         candidate = self.tree("candidate", "candidate")
         binary = self.binary("mc_core-0123456789abcdef")
-        pin.ledger_register(candidate, binary)
-        self.assertEqual(self.probe(candidate, pin.w.sha256_file(binary)).stdout.strip(), pin.w.sha256_file(binary))
+        # ledger_register itself is kind-agnostic; main() calls it for server pins only, and the
+        # registry has no entry for a test executable, so a row cannot cite one as its server.
+        registry = candidate / ".analysis" / "ledger-builds"
+        self.assertFalse(registry.exists())
+        refused = self.probe(candidate, pin.w.sha256_file(binary))
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("no server binary built from the candidate", refused.stderr)
 
 
 if __name__ == "__main__":

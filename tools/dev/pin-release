@@ -43,6 +43,11 @@ INPUT_PATHS = (
     "tools/extract-block-map-colors", "tools/extract-block-light", "tools/extract-block-mining",
     "tools/extract-block-explosion", "tools/VanillaWorldgenOracle.java",
 )
+# What a client release build reads: its own workspace (patched winit is a path dependency).
+CLIENT_INPUT_PATHS = (
+    "src", "launcher", "paths", "vendor", "build.rs", "Cargo.toml", "Cargo.lock", ".cargo",
+    "rust-toolchain.toml",
+)
 # Environment that changes what cargo/rustc produce (build() pops the target variables itself).
 BUILD_ENV = re.compile(
     r"^(RUSTFLAGS|RUSTDOCFLAGS|CARGO_ENCODED_RUSTFLAGS|RUSTC.*|CARGO_PROFILE_.*|CARGO_BUILD_.*|"
@@ -98,20 +103,27 @@ def cargo_config_files(top: Path) -> list[Path]:
     return found
 
 
-def inputs_sha256(top: Path, tree: str, kind: str, rust_target: str, incremental: bool) -> str:
+def inputs_sha256(top: Path, tree: str, kind: str, rust_target: str, incremental: bool,
+                  paths: tuple[str, ...] = INPUT_PATHS) -> str:
     """Digest of everything the build reads, from the tree object of the working state.
 
     `tree` is wtlib.working_state's tree (HEAD plus uncommitted and untracked non-ignored files), so a
     tracked, dirty or untracked change inside INPUT_PATHS changes the key and one outside does not.
     Ignored files are not part of it (nothing in the audited includes reads one)."""
     parts = [f"{path}={w.git(top, 'rev-parse', '--verify', '--quiet', f'{tree}:{path}', check=False) or 'absent'}"
-             for path in INPUT_PATHS]
+             for path in paths]
     parts.append("rustc=" + str(subprocess.check_output(["rustc", "-vV"], cwd=top, text=True)).strip())
     parts += [f"env.{name}={value}" for name, value in sorted(os.environ.items())
               if BUILD_ENV.match(name) and name not in BUILD_ENV_IGNORED]
     parts += [f"cargo_config.{path}={w.sha256_file(path)}" for path in cargo_config_files(top)]
     parts += [f"target={rust_target}", f"kind={kind}", f"incremental={int(incremental)}"]
     return w.sha256_bytes("\n".join(parts).encode())
+
+
+def kind_inputs(top: Path, before: dict, kind: str, rust_target: str, incremental: bool) -> str | None:
+    """The build-input digest of this tree for `kind` (None for a kind with no input list)."""
+    paths = CLIENT_INPUT_PATHS if kind == "client" else INPUT_PATHS
+    return inputs_sha256(top, before["tree"], kind, rust_target, incremental, paths)
 
 
 def build_env(incremental: bool) -> dict[str, str]:
@@ -220,8 +232,13 @@ def reuse_pin(pin_dir: Path, top: Path, kind: str, rust_target: str, incremental
 
 
 def existing_pin(pin_dir: Path, kind: str, rust_target: str, incremental: bool,
-                 inputs: str | None = None) -> Path | None:
-    """The binary of a valid existing pin, or None; a damaged pin is an error (pins are never overwritten)."""
+                 inputs: str | None = None, before: dict | None = None) -> Path | None:
+    """The binary of a valid existing pin, or None; a damaged or foreign pin is an error.
+
+    `before` is this run's provenance: with it the pin must describe the same working state
+    (HEAD and uncommitted-state hash), because a pin of another tree is never this tree's binary
+    (owner 2026-11-15) — an old pin written by the pre-fix cross-tree reuse is refused, not
+    relabelled. Pins are immutable, so the owner removes such a pin deliberately."""
     manifest = pin_dir / "manifest.json"
     if not manifest.is_file():
         return None
@@ -234,6 +251,40 @@ def existing_pin(pin_dir: Path, kind: str, rust_target: str, incremental: bool,
     # Pins from before the field existed were all built without incremental.
     if bool(info.get("incremental", False)) != incremental:
         raise w.ToolError(f"{pin_dir} records incremental={info.get('incremental', False)}, not {incremental}; refusing a different binary")
+    # A pin of another tree that was relabelled with this tree's provenance (the pre-fix
+    # cross-tree reuse wrote `reused_from`): its source must be this same working state.
+    source = info.get("reused_from")
+    if source:
+        origin = pin_dir.parent / str(source) / "manifest.json"
+        try:
+            origin_info = json.loads(origin.read_text())
+        except (OSError, ValueError):
+            raise w.ToolError(
+                f"{pin_dir} says it reused {source}, whose manifest is missing or unreadable: a pin is used only when "
+                "its source is the same tree; the owner must remove this pin deliberately") from None
+        if (origin_info.get("head"), origin_info.get("diff_sha256")) != (info.get("head"), info.get("diff_sha256")):
+            raise w.ToolError(
+                f"{pin_dir} is a relabelled pin: it reused {source} built from tree "
+                f"{str(origin_info.get('head'))[:12]}/diff {str(origin_info.get('diff_sha256'))[:8]}, while its manifest "
+                f"claims {str(info.get('head'))[:12]}/diff {str(info.get('diff_sha256'))[:8]}; it is never used or "
+                "registered — the owner must remove it deliberately")
+    # Another working state means another tree, even under the same pin name.
+    if before is not None and (info.get("head") is None or info.get("diff_sha256") is None):
+        raise w.ToolError(f"{pin_dir} records no tree provenance (head/diff_sha256): pins without it are never used; "
+                          "the owner must remove it deliberately")
+    if before is not None and (info.get("head") != before["head"]
+                               or info.get("diff_sha256") != before["diff_sha256"]):
+        raise w.ToolError(
+            f"{pin_dir} pins tree {str(info.get('head'))[:12]}/diff {str(info.get('diff_sha256'))[:8]}, not this tree "
+            f"{before['head'][:12]}/diff {before['diff_sha256'][:8]}: pins are immutable and another tree's binary is "
+            "never reused or relabelled; the owner must remove that pin deliberately")
+    # Kinds without an input list (the client) record their build parameters separately; a pin
+    # from before that record cannot be proven to match this environment, so it fails closed.
+    # A client pin records its own input list too (CLIENT_INPUT_PATHS, which includes the codegen
+    # environment): a pin from before that record cannot be proven to match this build.
+    if kind == "client" and info.get("inputs_sha256") is None:
+        raise w.ToolError(f"{pin_dir} records no build inputs (inputs_sha256): it predates the client input record, so it "
+                          "is not reused — re-pin this tree, or the owner removes the pin deliberately")
     # Same head and diff but other build inputs (toolchain, RUSTFLAGS, ...): not this tree's binary.
     # Pins from before `inputs_sha256` existed carry no key and stay accepted.
     if inputs and info.get("inputs_sha256") and info["inputs_sha256"] != inputs:
@@ -353,6 +404,14 @@ def ledger_fingerprint(top: Path) -> dict:
     return json.loads(done.stdout.strip().splitlines()[-1])
 
 
+def registers_for_ledger(kind: str) -> bool:
+    """Whether a pin of `kind` belongs in ledger-builds. That registry is the *server* binary
+    registry: tools/harness/ledger.py's `_server_built_from` accepts a release server for a
+    candidate's real-client receipt, so a test executable's sha256 must never be registered there
+    (a row could cite it as its evidence binary)."""
+    return kind == "server"
+
+
 def ledger_register(top: Path, binary: Path) -> None:
     """Register a server or core-tests pin where tools/harness/ledger.py looks for it.
 
@@ -402,12 +461,10 @@ def main() -> None:
     incremental = not args.no_incremental
     pin_id = f"{before['id']}-{kind}-{rust_target}" + ("-incr" if incremental else "")
     pin_dir = w.PINS / pin_id
-    inputs = (inputs_sha256(top, before["tree"], kind, rust_target, incremental)
-              if kind in ("server", "bots", "core-tests") else None)
+    inputs = kind_inputs(top, before, kind, rust_target, incremental)
 
     def done(binary: Path, how: str) -> None:
-        if kind in ("server", "core-tests"):
-            # A row may cite this binary: ledger.py accepts it only for its own tree fingerprint.
+        if registers_for_ledger(kind):
             ledger_register(top, binary)
         w.in_use_add(pin_dir, top.name, "pin")  # owner: the tree that asked for the pin
         say(f"{how}: {pin_dir.name}")
@@ -416,7 +473,7 @@ def main() -> None:
     w.PINS.mkdir(parents=True, exist_ok=True)
     with open(w.PINS / f".lock-{pin_id}", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)  # a concurrent build of the same tree is waited for, not repeated
-        binary = existing_pin(pin_dir, kind, rust_target, incremental, inputs)
+        binary = existing_pin(pin_dir, kind, rust_target, incremental, inputs, before)
         if binary:
             return done(binary, "already pinned, not building")
         if pin_dir.exists():
