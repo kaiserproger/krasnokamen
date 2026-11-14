@@ -17,7 +17,7 @@
 //! BanIpCommands.java:26-38, PardonIpCommand.java:22-31.
 //! KillCommand.java:17-23, SayCommand.java:15-28, SeedCommand.java:12-21,
 //! OpCommand.java:23-38, DeOpCommands.java:21-31, PardonCommand.java:21-31,
-//! StopCommand.java:11-18. Debug give is a retained Solaris fixture.
+//! StopCommand.java:11-18. Debug give is a retained Krasnokamen fixture.
 //! EffectCommands.java:32-151.
 //! AdvancementCommands.java:33-229 (resource-key advancement and greedy criterion).
 //! LocateCommand.java:56-87, TickCommand.java:20-55,
@@ -957,7 +957,15 @@ pub(crate) fn tree(op_level: u8, plugins: &[(String, u8)]) -> ClientboundCommand
     if let Some(root) = t.root("battle", false) {
         t.literals(root, &["start", "pause", "reset", "status"]);
         let setup = t.literal(root, "setup", false);
-        let seed = t.argument(setup, "seed", Parser::Long { min: Some(0), max: None }, false);
+        let seed = t.argument(
+            setup,
+            "seed",
+            Parser::Long {
+                min: Some(0),
+                max: None,
+            },
+            false,
+        );
         for preset in ["field-100", "field-1k", "field-10k"] {
             let scenario = t.literal(seed, preset, true);
             t.argument(scenario, "count", integer(Some(1), Some(10_000)), true);
@@ -1133,7 +1141,7 @@ pub(crate) fn tree(op_level: u8, plugins: &[(String, u8)]) -> ClientboundCommand
         }
     }
     if let Some(root) = t.root("debug", false) {
-        // Solaris's retained fixture, not vanilla DebugCommand's profiling tree.
+        // Krasnokamen's retained fixture, not vanilla DebugCommand's profiling tree.
         let give = t.literal(root, "give", false);
         let item = t.argument(give, "item", Parser::ItemStack, true);
         let count = t.argument(item, "count", integer(None, None), true);
@@ -1174,7 +1182,7 @@ pub(crate) fn tree(op_level: u8, plugins: &[(String, u8)]) -> ClientboundCommand
                 _ => t.suggested(root, "targets", Parser::GameProfile, true, "ask_server"),
             };
             match name {
-                // Solaris extends vanilla `/ban` with an optional duration, so
+                // Krasnokamen extends vanilla `/ban` with an optional duration, so
                 // the reason starts one argument later when one is present.
                 "ban" | "mute" => {
                     let duration = t.argument(
@@ -1229,7 +1237,7 @@ pub(crate) fn tree(op_level: u8, plugins: &[(String, u8)]) -> ClientboundCommand
         t.literals(root, &["players", "ips"]);
     }
     if let Some(root) = t.root("co", true) {
-        // Solaris block log (CoreProtect-style `u:` `t:` `r:` parameters).
+        // Krasnokamen block log (CoreProtect-style `u:` `t:` `r:` parameters).
         t.literals(root, &["inspect", "i", "help"]);
         for name in ["lookup", "l", "rollback", "rb", "restore", "rs"] {
             let literal = t.literal(root, name, true);
