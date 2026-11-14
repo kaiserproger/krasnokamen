@@ -170,6 +170,7 @@ pub(crate) fn publication_counts(
         in_weapon_reach: engaged(battle.combat.work.in_weapon_reach),
         fighting: engaged(battle.combat.work.fighting),
         acting: engaged(battle.combat.work.acting),
+        strikes: engaged(battle.combat.work.strikes),
         shields_raised: engaged(battle.combat.work.shields_raised),
         shield_blocks: engaged(battle.combat.work.shield_blocks),
         weapon_swaps: engaged(battle.combat.work.weapon_swaps),

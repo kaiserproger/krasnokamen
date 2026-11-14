@@ -1037,6 +1037,8 @@ async def measure(args: argparse.Namespace, scenario: dict[str, Any], directory:
     plugin_after: dict[str, Any] = {}
     try:
         server = [str(args.server_bin), "--config", str(path), "--no-console"]
+        import shlex
+        server = [*shlex.split(getattr(args, "server_wrapper", "")), *server]
         result["server_command"] = server
         await session.spawn("server", server)
         await wait_dashboard(session, url, args.readiness_seconds)
@@ -1407,6 +1409,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--server-bin", type=Path)
     parser.add_argument("--bots-bin", type=Path)
+    parser.add_argument("--server-wrapper", default="",
+                        help="measured server command prefix, forwarding termination; preparation is unchanged")
     parser.add_argument("--spain-fixture", type=Path,
                         help="Surveyed staged-world and route data for spain-industrial")
     parser.add_argument("--plugins-dir", type=Path,

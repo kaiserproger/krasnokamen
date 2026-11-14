@@ -276,7 +276,8 @@ def server_environment(a, base):
 
 
 def server_argv(a, binary, config, unit):
-    argv = [str(binary), '--config', str(config)]
+    import shlex
+    argv = [*shlex.split(a.server_wrapper), str(binary), '--config', str(config)]
     if a.server_scope is None:
         return argv
     scope = ['systemd-run', '--user', '--scope', '--quiet', '--collect', '--unit', unit]

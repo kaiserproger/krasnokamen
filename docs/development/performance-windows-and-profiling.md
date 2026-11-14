@@ -54,6 +54,58 @@ comparable only with other `-p` numbers from the same session.
   856 of 929 periods (2026-10-10); pinned, 0. Check `cpu.stat` throttling before
   reading tick tails.
 
+## Always-profile server load windows
+
+`server-load-profile` runs an explicit existing battle, coreperf or catalog
+workload and **always** records `perf` CPU-clock call stacks, irrespective of
+its tick cost. Use an immutable, non-incremental frame-pointer release pin.
+On the owner host run the whole command through `mem-run.sh -x`; profiler
+smoke belongs outside that window. The wrapper forwards console input and
+shutdown to the real server; bots and the battle recorder are not sampled.
+
+```sh
+python3 -m tools.harness run server-load-profile -- \
+  --kind coreperf --budget-ms 50 -- \
+  python3 -m tools.coreperf.profiles native-100 \
+  --server-bin /absolute/server-pin/krasnokamen \
+  --bots-bin /absolute/bots-pin/player-scale-bots \
+  --build-receipt /absolute/server-pin/manifest.json \
+  --fixture-cache /absolute/prepared-cache \
+  --server-wrapper '{wrapper}' --out '{out}/workload'
+```
+
+The harness expands `{wrapper}` to the maintained profiler wrapper and `{out}`
+to its artifact directory. `--kind battle` accepts the battle runner with
+`--take --server-wrapper '{wrapper}' --run-dir '{out}/workload'`;
+`--kind catalog` accepts one scenario and one client rung, using
+`--server-wrapper '{wrapper}' --out '{out}/workload'`. Other arguments remain
+those of the original workload: do not shorten a canonical window to pass.
+
+`profile-result.json` retains every window's tick range, mean and p95 active
+iteration milliseconds, explicit p95 budget, sampled server CPU milliseconds
+per completed source tick, ranked self and inclusive functions, and separate
+hash/comparison, allocation and map-lookup stack flags. Inclusive functions
+and flagged categories overlap: never sum them. Kernel samples without
+symbols stay `[unknown]`, not reassigned to their first user caller.
+`neighbours.txt` records first/mid/last process snapshots inside the invocation;
+an idle waiting runner or frozen build is not evidence of CPU interference.
+Capture logs, binary manifests and raw tick telemetry remain the provenance.
+
+A failed command, prepared/smoke-only receipt, incomplete battle, missing middle
+snapshot, missing/discontinuous tick stream, failed profiler or absent call
+stacks fails closed. A full capture over the budget is `budget_exceeded`, not a
+measurement pass.
+Complete source windows from a failed workload still retain ranked functions
+with `diagnostic_only: true`; the process and report remain failed regardless
+of their timing budget. An incomplete readiness/setup attempt is not a measured
+window and cannot pass. Parser/budget negative controls:
+`python3 -m unittest tools.harness.test_server_load_profile`. A real-window
+negative control re-analyzes the same capture with a budget below its p95.
+Profile first; only then run N/2N/4N on a measured hot spot under identical
+conditions. Report growth exponents and CPU as well as wall time, not a
+capacity claim from the profiled run.
+
+
 ## Profiling recipes
 
 - **Frame-pointer release build** for attribution:
