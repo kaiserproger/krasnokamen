@@ -349,6 +349,15 @@ def cmd_run(argv: list[str]) -> int:
         run_tree = ledger.tree_fingerprint(REPO_ROOT)
     except Exception as error:
         run_tree = {"head": "unavailable", "dirty": True, "error": str(error)}
+    # The client checkout the run's client binary came from. A client-surface row is promoted on a
+    # `client:<sha>` fix_commit (docs/bugs/README.md): its negative control is a receipt whose client
+    # is the pre-fix one, so the receipt has to say which client ran. Never fatal.
+    try:
+        from . import ledger, runtime
+
+        client_tree = ledger.tree_fingerprint(runtime.sibling_root("client"))
+    except Exception as error:
+        client_tree = {"head": "unavailable", "dirty": True, "error": str(error)}
     start_epoch = time.time()
     named_scenario: dict[str, Any] | None = None
     if scenario is not None:
@@ -436,6 +445,7 @@ def cmd_run(argv: list[str]) -> int:
             "duration_seconds": round(time.time() - start_epoch, 3),
             "details": details,
             "tree": run_tree,
+            "client_tree": client_tree,
             "error": error,
         }
         (artifact_dir / "result.json").write_text(

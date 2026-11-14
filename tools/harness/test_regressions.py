@@ -711,6 +711,126 @@ class LedgerToolTests(unittest.TestCase):
         # The ref the receipt covers carried the red control, so it is rerun on restore.
         self.assertEqual(len(runner.seen), 2)
 
+    def client_repo(self):
+        """A second repository beside the server one: the client the `client:<sha>` fix lives in."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name) / 'solaris-client'
+        root.mkdir(parents=True)
+        self.git(root, 'init', '-q')
+        (root / 'Client.java').write_text('v1\n')
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'client base')
+        self.client_base = self.git(root, 'rev-parse', 'HEAD')
+        (root / 'Client.java').write_text('v2\n')
+        self.git(root, 'commit', '-qam', 'client fix')
+        self.client_fix = self.git(root, 'rev-parse', 'HEAD')
+        self.client_root = patch.dict(os.environ, {'KRASNOKAMEN_CLIENT_ROOT': str(root)})
+        self.client_root.start()
+        self.addCleanup(self.client_root.stop)
+        return root
+
+    def client_row(self, client_sha=None, ref='harness:entities:native-v2-craft-drag'):
+        root = self.scratch(area='client', ref=ref)
+        fix = f'client:{client_sha}' if client_sha else ''
+        text = (root / 'docs/bugs/ledger.toml').read_text().replace(
+            f'fix_commit = "{self.fix}"', f'fix_commit = "{fix}"')
+        (root / 'docs/bugs/ledger.toml').write_text(text)
+        self.git(root, 'commit', '-qam', 'client row')
+        return root
+
+    def client_receipt(self, root, client_head, *, verdict=True, status=None, register=True, server_tree=None):
+        tree = server_tree or ledger.tree_fingerprint(root)
+        path = root / f'.analysis/validation/{abs(hash((client_head, verdict, status)))}-x/result.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        body = {'status': status or ('passed' if verdict else 'failed'), 'profile': 'entities',
+                'ended_at': '2999-01-01T00:00:00+00:00',
+                'details': {'named_scenario': {'id': 'native-v2-craft-drag'},
+                            'verdicts': {'native-v2-craft-drag': verdict}, 'server_binary_sha256': 'abc'},
+                'tree': tree, 'client_tree': {'head': client_head, 'dirty': False, 'sha256': 'c' * 64}}
+        path.write_text(json.dumps(body))
+        if register:
+            registry = root / '.analysis/ledger-builds'
+            registry.mkdir(parents=True, exist_ok=True)
+            (registry / 'abc.json').write_text(json.dumps(
+                {'sha256': 'abc', 'tree': {'head': tree['head'], 'sha256': tree['sha256']}}))
+        return path
+
+    def test_client_fix_commit_promotes_on_a_red_control_and_a_green_restore(self):
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        control = self.client_receipt(root, self.client_base, verdict=False)
+        restore = self.client_receipt(root, self.client_fix, verdict=True)
+        receipt = self.promote(root, self.runner(), client_control_receipt=control,
+                              client_receipt=restore, dry_run=True)
+        self.assertTrue(receipt['client_fix'])
+        self.assertEqual(receipt['control_tree'], 'client')
+        self.assertEqual(receipt['negative_control']['client_head'], self.client_base)
+        self.assertEqual(receipt['restored']['client_head'], self.client_fix)
+        self.assertIn('harness:entities:native-v2-craft-drag', receipt['negative_control']['red'])
+        # The runner is never invoked: receipts are the evidence for a client fix.
+        self.assertEqual(self.runner().seen, [])
+        self.promote(root, self.runner(), client_control_receipt=control, client_receipt=restore)
+        self.assertIn('status = "fixed"', (root / 'docs/bugs/ledger.toml').read_text())
+
+    def test_client_control_that_stays_green_is_refused(self):
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        with self.assertRaisesRegex(ledger.Refused, 'not red on any of the row'):
+            self.promote(root, self.runner(), client_control_receipt=self.client_receipt(root, self.client_base),
+                         client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+
+    def test_client_control_that_already_has_the_fix_is_refused(self):
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        with self.assertRaisesRegex(ledger.Refused, 'already contains the fix'):
+            self.promote(root, self.runner(),
+                         client_control_receipt=self.client_receipt(root, self.client_fix, verdict=False),
+                         client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+
+    def test_client_restore_on_the_pre_fix_client_is_refused(self):
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        with self.assertRaisesRegex(ledger.Refused, 'does not contain the fix'):
+            self.promote(root, self.runner(),
+                         client_control_receipt=self.client_receipt(root, self.client_base, verdict=False),
+                         client_receipt=self.client_receipt(root, self.client_base), dry_run=True)
+
+    def test_unknown_client_commit_is_refused(self):
+        self.client_repo()
+        root = self.client_row(client_sha='0' * 12)
+        with self.assertRaisesRegex(ledger.Refused, 'not a commit of the client repository'):
+            self.promote(root, self.runner(), dry_run=True)
+
+    def test_receipt_without_a_client_tree_is_refused(self):
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        control = self.client_receipt(root, self.client_base, verdict=False)
+        body = json.loads(control.read_text())
+        body.pop('client_tree')
+        control.write_text(json.dumps(body))
+        with self.assertRaisesRegex(ledger.Refused, 'records no client tree'):
+            self.promote(root, self.runner(), client_control_receipt=control,
+                         client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+
+    def test_client_fix_commit_needs_both_receipts_and_a_graphical_ref(self):
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        with self.assertRaisesRegex(ledger.Refused, 'needs the negative control'):
+            self.promote(root, self.runner(), client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+        with self.assertRaisesRegex(ledger.Refused, 'needs the restore'):
+            self.promote(root, self.runner(),
+                         client_control_receipt=self.client_receipt(root, self.client_base, verdict=False), dry_run=True)
+        plain = self.client_row(client_sha=self.client_fix[:12], ref='cargo:mc-core:mod::t')
+        with self.assertRaisesRegex(ledger.Refused, 'real-client harness ref'):
+            self.promote(plain, self.runner(), client_control_receipt=self.client_receipt(root, self.client_base, verdict=False),
+                         client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+
+    def test_client_control_supplied_to_a_server_fix_commit_is_refused(self):
+        root = self.scratch(area='client', ref='harness:entities:native-v2-craft-drag')
+        with self.assertRaisesRegex(ledger.Refused, 'only for a fix_commit of the form client'):
+            self.promote(root, self.runner(), client_control_receipt=Path('/nonexistent.json'), dry_run=True)
+
     def test_a_later_regression_on_head_refuses_promotion(self):
         root = self.scratch()
         (root / 'src/engine.rs').write_text('value = buggy again\n')

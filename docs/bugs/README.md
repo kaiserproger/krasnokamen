@@ -139,7 +139,19 @@ worker, runs the negative control.
    not yet committed, is `patch:<sha256>` of the non-test hunks of the git diff
    passed as `--fix-patch` (a mismatch prints the value to record; the patch
    must still apply in reverse on the candidate, so a later edit or re-break of
-   it refuses). The candidate is the
+   it refuses). A **client** fix is `client:<sha>` instead: the commit of the
+   client repository (`KRASNOKAMEN_CLIENT_ROOT`, else `solaris-client` beside
+   the core checkout), resolved there and refused when unknown. It is a client
+   behaviour change, so it is proved by receipts, not by reversing server
+   hunks: `--client-control-receipt` is a real-client `result.json` of the
+   **pre-fix** client (one that does not contain `<sha>`, e.g. `<sha>^`) whose
+   client ref is **red**, and `--client-receipt` is a `passed` one of the client
+   that contains `<sha>` with the same ref **green**. Both ran on the tree being
+   promoted (the same `tree`/`client_tree` identity and server-binary registry
+   checks as rule 3; the receipt must record `client_tree`, written by the
+   harness at run start, or it is refused). No worktree, patch reversal or ref
+   run is involved, and a row whose only refs are unit tests cannot use this
+   form. The candidate is the
    exact tree: `HEAD` plus its uncommitted diff and untracked files
    (`docs/bugs/` aside), identified by a fingerprint; no commit is needed. The
    control and the restore worktrees reproduce it, verified by that fingerprint.
