@@ -230,7 +230,9 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
             continue;
         }
         let mut velocity = state.entities.vel(slot).map(|value| value / 20.0);
-        velocity[1] -= 0.04;
+        if !state.entities.row(slot).controls.no_gravity {
+            velocity[1] -= 0.04;
+        }
         let desired = Vec3::new(velocity[0], velocity[1], velocity[2]);
         let resolved = mc_physics::resolve_collision_displacement(
             &TickSampler {

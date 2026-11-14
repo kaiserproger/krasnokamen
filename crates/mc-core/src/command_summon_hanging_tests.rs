@@ -97,6 +97,22 @@ fn authored_painting_facing_and_variant_are_honoured_and_reload() {
 }
 
 #[test]
+fn summoned_invulnerable_painting_survives_survival_attack_and_creative_bypasses() {
+    let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
+    let painting = run(&mut state, actor, "summon painting ~ ~ ~ {Invulnerable:1b}")[0];
+    let attack = crate::boundary::PlayerInput::Attack {
+        connection: ConnectionId(1),
+        target: painting,
+    };
+    let (output, _, _) = crate::tick::run_tick(&mut state, std::slice::from_ref(&attack));
+    assert!(state.entities.slot_of(painting).is_some());
+    assert!(output.changes.entities_spawned.is_empty());
+    state.players.get_mut(&actor).unwrap().game_mode = crate::commands::GameMode::Creative;
+    crate::tick::run_tick(&mut state, &[attack]);
+    assert!(state.entities.slot_of(painting).is_none());
+}
+
+#[test]
 fn invalid_painting_nbt_is_refused_without_creating_an_entity() {
     for nbt in [
         "{facing:4b}",

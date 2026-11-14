@@ -382,6 +382,7 @@ pub(in crate::tick) fn move_input(
         }
     }
     let grounded = state.entities.ground(slot);
+    let stalagmite = grounded && crate::mob_fall::stalagmite_at(state, new_pos);
     let landing_factor = if grounded {
         state
             .world
@@ -401,7 +402,7 @@ pub(in crate::tick) fn move_input(
         if fall_flying && matches!(input, PlayerInput::Move { .. }) && dy > -0.5 {
             player.fall_distance = 0.0;
         }
-        (player.fall(dy, grounded, cushioned) * landing_factor).ceil()
+        (player.fall_with_stalagmite(dy, grounded, cushioned, stalagmite) * landing_factor).ceil()
     });
     if damage > 0.0 {
         let seq = state.next_seq(entity);
@@ -411,7 +412,11 @@ pub(in crate::tick) fn move_input(
             kind: IntentKind::DamageEntity {
                 target: entity,
                 amount: damage,
-                kind: crate::survival::DamageKind::Fall,
+                kind: if stalagmite {
+                    crate::survival::DamageKind::Stalagmite
+                } else {
+                    crate::survival::DamageKind::Fall
+                },
                 source: None,
             },
             footprint: Footprint {
