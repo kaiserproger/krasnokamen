@@ -281,7 +281,7 @@ impl VillagerProfession {
         }
     }
     pub fn from_name(name: &str) -> Option<Self> {
-        if let Some(path) = name.strip_prefix("solaris:") {
+        if let Some(path) = name.strip_prefix("krasnokamen:") {
             return match path {
                 "miner" => Some(Self::Miner),
                 "lumberjack" => Some(Self::Lumberjack),

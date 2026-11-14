@@ -10,7 +10,7 @@ Resolution and evidence stay in the catalog; this file is navigation only.
 
 ```text
 bucket-resync        debug        bucket resync debug-loop backend
-build                rust         cargo build --locked -p mc-edge --bin solaris-v2; --release selects release
+build                rust         cargo build --locked -p mc-edge --bin krasnokamen; --release selects release
 catalog-load         scale        Owner catalog v2 open-loop controls, exact wall windows and classified receipts (explicit release binaries)
 clippy               rust         cargo clippy --workspace --all-targets -- -D warnings
 code-health          rust         cargo run -p xtask -- code-health

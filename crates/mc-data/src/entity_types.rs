@@ -273,7 +273,7 @@ fn contract_identifier(name: &'static str) -> Identifier {
 
 /// Repo-owned entity type slice used when `registries.json` is absent.
 #[must_use]
-pub fn solaris_required_entity_types() -> EntityTypeRegistry {
+pub fn krasnokamen_required_entity_types() -> EntityTypeRegistry {
     let raw: RawRegistries = serde_json::from_str(REQUIRED_REGISTRIES)
         .expect("embedded required registries JSON is valid");
     let entity_types = raw
@@ -497,7 +497,7 @@ mod tests {
 
     #[test]
     fn registry_resolves_entity_type_ids() {
-        let registry = solaris_required_entity_types();
+        let registry = krasnokamen_required_entity_types();
 
         assert_eq!(
             registry.id_of(&Identifier::parse("minecraft:cow").unwrap()),
@@ -508,7 +508,7 @@ mod tests {
 
     #[test]
     fn registry_exposes_m32_entity_facts() {
-        let registry = solaris_required_entity_types();
+        let registry = krasnokamen_required_entity_types();
 
         let chicken = registry
             .facts_of(&Identifier::parse("minecraft:chicken").unwrap())
