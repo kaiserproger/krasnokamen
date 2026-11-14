@@ -134,11 +134,11 @@ impl SeparationGrid {
                 }
                 examined += 1;
                 let m = &members[other];
-                if (actor.pos[1] - m.pos[1]).abs() >= 2.0 {
+                if (actor.pos[1] - m.pos[1]).abs() > LEVELS {
                     continue;
                 }
                 let d2 = (actor.pos[0] - m.pos[0]).powi(2) + (actor.pos[2] - m.pos[2]).powi(2);
-                if d2 > SENSE * SENSE {
+                if d2 > radius * radius || !keep(m) {
                     continue;
                 }
                 let Some(at) = best.iter().position(|&(distance, old)| {
@@ -270,20 +270,50 @@ fn movement_with_neighbours(
     if speed > max_step {
         drive = drive.map(|v| v * max_step / speed);
     }
-    // Reserve half the free gap for each participant's simultaneous movement.
-    // This bounds closing even when the other row is steering towards us.
-    for &(distance, other) in &near {
+    let mut drive = keep_gap(&runtime.members, index, &near, MIN_SPACING, drive);
+    let moving = mth::length2(drive[0], drive[1]);
+    if settling && !packed && moving > 0.0 {
+        let kept = (moving - CROWD_BRAKE).max(0.0) / moving;
+        drive = drive.map(|v| v * kept);
+    }
+    // Physics drive is blocks/SECOND, whereas all battle tuning is blocks/tick.
+    (
+        runtime.constrain_velocity(
+            m.pos,
+            [
+                drive[0] / mc_physics::TICK_SECONDS,
+                0.0,
+                drive[1] / mc_physics::TICK_SECONDS,
+            ],
+        ),
+        pushes,
+    )
+}
+
+/// Reserve half the free gap to each of `near` for its simultaneous
+/// movement: `drive` (blocks per tick) never closes on a neighbour faster
+/// than that, and not at all inside `spacing`. This bounds closing even when
+/// the other row is steering towards us.
+pub(super) fn keep_gap(
+    members: &[Member],
+    index: usize,
+    near: &[(f64, usize); NEIGHBOURS],
+    spacing: f64,
+    mut drive: [f64; 2],
+) -> [f64; 2] {
+    let m = &members[index];
+    for &(distance, other) in near {
         if other == usize::MAX || distance < 1e-8 {
             continue;
         }
-        let contact = &runtime.members[other];
+        let contact = &members[other];
         let dist = distance.sqrt();
         let towards = [
             (contact.pos[0] - m.pos[0]) / dist,
             (contact.pos[2] - m.pos[2]) / dist,
         ];
         let closing = drive[0] * towards[0] + drive[1] * towards[1];
-        let allowed = ((dist - MIN_SPACING) * 0.5).max(0.0);
+        let allowed = ((dist - spacing) * 0.5).max(0.0);
         if closing > allowed {
             drive[0] -= towards[0] * (closing - allowed);
             drive[1] -= towards[1] * (closing - allowed);

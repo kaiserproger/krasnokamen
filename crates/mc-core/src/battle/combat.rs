@@ -113,6 +113,12 @@ pub struct Work {
     pub shields_raised: u64,
     /// Shield blocks (`ShieldBlock` events) this tick.
     pub shield_blocks: u64,
+    /// Weapon swaps started this tick (weapons.rs).
+    pub weapon_swaps: u64,
+    /// Active fighters holding a spear, a sword (or mace) and a bow.
+    pub holding_spear: u64,
+    pub holding_sword: u64,
+    pub holding_bow: u64,
 }
 
 #[derive(Debug, Default)]
@@ -289,6 +295,8 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
     }
     strikes.clear();
     combat.strikes = strikes;
+    // Two main weapons: swaps start before this tick's volleys and windups.
+    super::weapons::step(frame, battle, &mut combat, out);
     super::archery::step(frame, battle, &mut combat, out);
     for bi in 0..battle.columns.ids.len() {
         if !battle.columns.active[bi] || battle.columns.carried[bi] {
@@ -303,6 +311,10 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         let Action::Guard { until } = fighter.action else {
             continue;
         };
+        // Two main weapons: no windup while the drawn weapon comes up.
+        if fighter.arms.swapping(frame.tick) {
+            continue;
+        }
         if fighter.weapon == Weapon::Bow || frame.tick < until {
             continue;
         }

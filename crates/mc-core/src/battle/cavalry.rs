@@ -115,6 +115,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             continue;
         }
         let wounded = matches!(combat.fighters[bi].action, Action::Wounded);
+        let near = horses_near(&battle.formation, bi);
         let routing = super::combat::context(battle, bi).is_some_and(|c| c.routing);
         if wounded || routing || battle.columns.targets[bi].is_none() {
             // Carry the formation's approach/withdrawal/rout direction on the
@@ -215,7 +216,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             let speed = if distance <= 46.0 { 6.4 } else { 4.6 };
             [toward[0] * speed, 0.0, toward[1] * speed]
         };
-        let push = horse_push(&battle.formation, bi);
+        let push = horse_push(&battle.formation, bi, &near);
         let velocity = [velocity[0] + push[0], velocity[1], velocity[2] + push[1]];
         let velocity = battle.formation.constrain_velocity(position, velocity);
         battle.columns.drive[horse_bi] = velocity;

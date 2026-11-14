@@ -24,7 +24,7 @@ const AROUND: i32 = 8;
 const WALK_OUT: f64 = 0.079 / mc_physics::TICK_SECONDS;
 /// Deepest drop a body walks into, in blocks; deeper holes are steered around
 /// and never staged in (vanilla mobs avoid falls over about three blocks).
-const MAX_DROP: f64 = 2.0;
+pub(crate) const MAX_DROP: f64 = 2.0;
 /// Cells above head height always read for a terrain roof (cave mouths and
 /// overhangs on edited terrain, whose heightmaps are stale).
 const ROOF_BAND: i32 = 4;
@@ -440,16 +440,30 @@ fn cover(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32, y: i32) ->
         .count()
 }
 
+/// Whether terrain rock (a cave roof or an overhang, not a tree) lies over a
+/// body's head: [`steer`] then walks it out toward open sky whatever its
+/// slot, flight or crowd says.
+pub(crate) fn under_rock(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3]) -> bool {
+    let feet = (pos[1] + CONTACT).floor() as i32;
+    cover(
+        world,
+        registry,
+        pos[0].floor() as i32,
+        pos[2].floor() as i32,
+        feet + 2,
+    ) > 0
+}
+
 /// From a body under rock (pushed or knocked into a cave mouth), the way to
 /// the first open-sky column it can stand in (no wall, no drop: see
 /// [`footing`]) on the nearest ring within [`AROUND`] blocks; `None` under
 /// open sky or with no such opening near.
 fn exit(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3]) -> Option<[f64; 2]> {
-    let feet = (pos[1] + CONTACT).floor() as i32;
-    let (x, z) = (pos[0].floor() as i32, pos[2].floor() as i32);
-    if cover(world, registry, x, z, feet + 2) == 0 {
+    if !under_rock(world, registry, pos) {
         return None;
     }
+    let feet = (pos[1] + CONTACT).floor() as i32;
+    let (x, z) = (pos[0].floor() as i32, pos[2].floor() as i32);
     (1..=AROUND).find_map(|radius| {
         (-radius..=radius)
             .flat_map(|dz| (-radius..=radius).map(move |dx| (dx, dz)))
