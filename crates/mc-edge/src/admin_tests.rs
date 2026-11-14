@@ -938,6 +938,55 @@ async fn moderation_selectors_filtered_ban_and_online_pardon() {
     // The fixture's TempDir removes this directory when it is dropped.
 }
 
+/// A failing admin test must leave no world behind, and touch no other one.
+///
+/// The fixture used to delete its directory only on the success path, so every
+/// panic leaked a whole world (one leaked directory held 229k files and pushed
+/// the shared tmpfs past half its inode budget). Directories that existed before
+/// this run belong to someone else and must survive.
+#[test]
+fn a_failing_admin_test_leaves_no_temp_dir_and_removes_no_other() {
+    let before = admin_temp_dirs();
+    let mut created = None;
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let (_server, dir) = fixture_in_temp_dir();
+        created = Some(dir.path().to_path_buf());
+        assert!(dir.path().is_dir(), "the fixture directory exists during the test");
+        panic!("simulated assertion failure inside an admin test");
+    }));
+    std::panic::set_hook(previous);
+    assert!(outcome.is_err(), "the simulated admin test must fail");
+    let created = created.expect("the fixture ran");
+    assert!(
+        !created.exists(),
+        "a failed admin test left {} behind",
+        created.display()
+    );
+    let after = admin_temp_dirs();
+    assert!(
+        after.is_superset(&before),
+        "an admin test removed a directory that already existed: {:?}",
+        before.difference(&after).collect::<Vec<_>>()
+    );
+}
+
+/// The passing path of the same fixture leaves nothing either.
+#[test]
+fn a_passing_admin_test_leaves_no_temp_dir() {
+    let before = admin_temp_dirs();
+    let path = {
+        let (server, dir) = fixture_in_temp_dir();
+        let path = dir.path().to_path_buf();
+        assert!(path.is_dir());
+        server.hub.shutdown();
+        path
+    };
+    assert!(!path.exists(), "a passing admin test left {} behind", path.display());
+    assert!(admin_temp_dirs().is_superset(&before), "a pre-existing directory disappeared");
+}
+
 #[path = "clock_queue_tests.rs"]
 mod clock_queue_tests;
 
