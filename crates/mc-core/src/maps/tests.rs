@@ -816,8 +816,10 @@ fn using_an_empty_map_sends_the_filled_map_slot_to_the_player() {
 
 /// MAP-FRAME-MARKER-RECOVERY-LIMIT: vanilla's `MapItemSavedData.frameMarkers` is an uncapped map
 /// keyed by frame position (javap `MapItemSavedData.tickCarriedBy` puts without a count check;
-/// only the banner/decoration tracking has the 256 limit), so a world with more than 256 item
-/// frames showing one map is valid and must checkpoint and recover.
+/// only the banner/decoration tracking has the 256 limit), so a save holding more than 256
+/// markers is valid and must recover. The live writer keeps its documented bound
+/// (`docs/architecture/persistence.md`): beyond it a frame still shows while nearby, it is just
+/// not retained as a distant waypoint.
 #[test]
 fn more_than_256_retained_frame_markers_checkpoint_and_recover() {
     let mut state = test_state();
@@ -857,14 +859,20 @@ fn more_than_256_retained_frame_markers_checkpoint_and_recover() {
     assert!(frames > 256);
     state.tick = 10;
     crate::maps::tick(&mut state);
-    let retained = state.maps.records[&id].frame_markers.len();
-    assert!(
-        retained > 256,
-        "live path retained {retained} frame markers"
+    let live = state.maps.records[&id].frame_markers.len();
+    assert_eq!(
+        live, 256,
+        "the live writer stays at its documented bound, saw {live}"
     );
+    // A save made by vanilla or by a build without the bound can hold more than
+    // the writer keeps: recovery hands it back unchanged instead of refusing the
+    // world.
+    let record = std::sync::Arc::make_mut(state.maps.records.get_mut(&id).unwrap());
+    record.frame_markers = (0..300).map(|index| (index, 0, 0)).collect();
     let mut globals = std::collections::BTreeMap::new();
     crate::maps::checkpoint(&state.maps.records, state.tick, &mut globals).unwrap();
     let recovered = crate::maps::recover(&globals).expect("a save valid in vanilla must recover");
+    assert_eq!(recovered[&id].frame_markers.len(), 300);
     assert_eq!(
         recovered[&id].frame_markers,
         state.maps.records[&id].frame_markers

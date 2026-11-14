@@ -810,6 +810,26 @@ pub(crate) fn sync_rider(state: &mut TickState, slot: EntitySlot) {
         state.appearance_changed.push(body.id);
     }
 }
+/// Liquid inside the camel's body: water or lava from the feet up to mid-height.
+fn in_liquid(state: &TickState, slot: EntitySlot) -> bool {
+    let pos = state.entities.pos(slot);
+    let height = state.entities.body(slot).height;
+    [pos[1], pos[1] + height * 0.5].into_iter().any(|y| {
+        state
+            .world
+            .block_at(
+                pos[0].floor() as i32,
+                y.floor() as i32,
+                pos[2].floor() as i32,
+            )
+            .is_some_and(|id| {
+                matches!(
+                    state.registry.materials.classify(id),
+                    mc_physics::BlockMaterial::Water | mc_physics::BlockMaterial::Lava
+                )
+            })
+    })
+}
 fn controllable(state: &TickState, slot: EntitySlot, actor: EntityId) -> bool {
     let Some(player) = state.players.get(&actor) else {
         return false;
@@ -821,9 +841,6 @@ fn controllable(state: &TickState, slot: EntitySlot, actor: EntityId) -> bool {
         return kind == crate::vehicles::VehicleKind::Boat;
     }
     let row = state.entities.row(slot);
-    if rider(state, slot).is_none_or(|rider| state.entities.body(rider).id != actor) {
-        return false;
-    }
     if name(state, slot) == "minecraft:happy_ghast" {
         return row.loot.body_armor.is_some();
     }
@@ -1047,13 +1064,14 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 cooldown
             }
         };
-        if cooldown < 50
-            && state.entities.ground(slot)
-            && state.entities.row(slot).appearance.extra.contains(&(
-                CAMEL_DASH_INDEX,
-                crate::boundary::EntityDataValue::Boolean(true),
-            ))
-        {
+        let dashing = state.entities.row(slot).appearance.extra.contains(&(
+            CAMEL_DASH_INDEX,
+            crate::boundary::EntityDataValue::Boolean(true),
+        ));
+        // Landing ends the dash once the launch cooldown allows it again, and
+        // liquid ends it at any time: a camel that steps into water or lava
+        // stops dashing.
+        if dashing && ((cooldown < 50 && state.entities.ground(slot)) || in_liquid(state, slot)) {
             crate::special_mobs::metadata(
                 state,
                 slot,
