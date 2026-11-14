@@ -452,6 +452,13 @@ def run_village_qa(ctx: ProfileContext) -> dict[str, Any]:
     return village_qa.run(ctx)
 
 
+def run_village_break(ctx: ProfileContext) -> dict[str, Any]:
+    """BREAKER GLUE (BreakIssue1x11): ISSUE-1-11 attacks on the village-qa fixture."""
+    from .backends import village_break
+
+    return village_break.run(ctx)
+
+
 def run_village_autonomy_qa(ctx: ProfileContext) -> dict[str, Any]:
     """Generated-village autonomy: ownerless growth, no-give building, claim fencing (native)."""
     from .backends import village_autonomy_qa
@@ -941,6 +948,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Graphical singleplayer interrupted-start, held-lease and weak-hardware regressions",
         "run": run_singleplayer_regressions,
     },
+    "village-break": {
+        "scope": "real-client",
+        "description": "BREAKER GLUE: ISSUE-1-11 sleep/job attacks on the village-qa fixture",
+        "run": run_village_break,
+    },
     "village-qa": {
         "scope": "real-client",
         "description": "Issue #1 settlement acceptance: house/workshop/storage/mine/camp, bind, door/sleep/harvest/mine/lumber PASS-FAIL (native --client, windowed for screenshots)",
@@ -1190,6 +1202,7 @@ PROFILE_PREREQUISITES = {
     "singleplayer-regressions": _NATIVE,
     "weak-first-view": _NATIVE,
     "village-qa": _NATIVE,
+    "village-break": _NATIVE,
     "village-autonomy-qa": _NATIVE,
     "civilization-seed-qa": _NATIVE,
     "village-owner-order-qa": _NATIVE,
