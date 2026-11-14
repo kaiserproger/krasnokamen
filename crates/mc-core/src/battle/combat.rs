@@ -288,7 +288,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             continue;
         }
         // Three cautious soldiers in four; decisions once/20t, not per frame.
-        if (frame.tick + id.0 as u64) % 20 != 0 {
+        if !(frame.tick + id.0 as u64).is_multiple_of(20) {
             continue;
         }
         fighter.action = Action::Guard {

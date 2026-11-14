@@ -62,7 +62,7 @@ fn aimed_arc_matches_native_drag_at_long_and_short_ranges() {
         let speed = velocity.iter().map(|v| v * v).sum::<f64>().sqrt();
         assert!(speed <= 4.5);
         if distance == 200.0 {
-            let angle = velocity[1].atan2(velocity[0]).to_degrees();
+            let angle = mth::atan2(velocity[1], velocity[0]).to_degrees();
             assert!((23.0..25.0).contains(&angle), "{angle}");
             assert!(speed > 4.4);
         }
@@ -74,7 +74,7 @@ fn aimed_arc_matches_native_drag_at_long_and_short_ranges() {
                 velocity[axis] *= 0.99;
             }
             velocity[1] -= 0.05;
-            nearest = nearest.min((position[0] - distance).hypot(position[1] - height));
+            nearest = nearest.min(mth::length2(position[0] - distance, position[1] - height));
         }
         assert!(nearest < 1e-8, "{distance} blocks missed by {nearest}");
     }

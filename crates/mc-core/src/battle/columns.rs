@@ -138,6 +138,7 @@ impl Columns {
         self.index_by_slot.get(slot.0 as usize).copied().flatten()
     }
 
+    #[cfg(test)]
     pub fn target(&self, slot: EntitySlot) -> Option<&EnemyTarget> {
         self.targets[self.index(slot)?].as_ref()
     }

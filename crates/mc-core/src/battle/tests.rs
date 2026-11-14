@@ -53,7 +53,7 @@ fn nearest_enemy_matches_exhaustive_oracle_and_stable_id_ties() {
         unit(9, 2, -3.0, 64.0, 0.0),
         unit(2, 3, -5.0, 64.0, 0.0),
     ];
-    let mut seed = 0xb177_1e_u64;
+    let mut seed = 0x00b1_771e_u64;
     let mut next = || {
         seed ^= seed << 13;
         seed ^= seed >> 7;
@@ -338,6 +338,7 @@ fn faction_fields_reject_invalid_native_and_json_values() {
 #[test]
 fn paused_battle_keeps_its_clock_and_clears_motion() {
     let mut state = fixture();
+    spawn(&mut state, 0, "minecraft:cow", [1.0, 100.0, 1.0]);
     state.hostile.battle.elapsed_ticks = 41;
     state
         .hostile
@@ -345,23 +346,24 @@ fn paused_battle_keeps_its_clock_and_clears_motion() {
         .columns
         .drive_by_slot
         .push([1.0, 0.0, 0.0]);
+    state
+        .hostile
+        .battle
+        .columns
+        .look_by_slot
+        .push(Some([1.0; 3]));
     assert!(step(&mut state).is_empty());
     assert_eq!(state.hostile.battle.elapsed_ticks, 41);
-    assert!(
-        state
-            .hostile
-            .battle
-            .columns
-            .drive_by_slot
-            .iter()
-            .all(|drive| *drive == [0.0; 3])
-    );
+    assert!(state.hostile.battle.columns.drive_by_slot.is_empty());
+    assert!(state.hostile.battle.columns.look_by_slot.is_empty());
     state.hostile.battle.running = true;
     assert!(step(&mut state).is_empty());
     assert_eq!(state.hostile.battle.elapsed_ticks, 42);
     state.hostile.battle.running = false;
     assert!(step(&mut state).is_empty());
     assert_eq!(state.hostile.battle.elapsed_ticks, 42);
+    assert!(state.hostile.battle.columns.drive_by_slot.is_empty());
+    assert!(state.hostile.battle.columns.look_by_slot.is_empty());
 }
 
 #[test]

@@ -326,9 +326,8 @@ fn value_shape(
                                     return Err("duplicate sound field");
                                 }
                                 identifier(required(sound, "sound_id")?)?;
-                                if let Some(range) = field(sound, "range") {
-                                    if !number(range)?.is_finite() { return Err("invalid sound range"); }
-                                }
+                                if let Some(range) = field(sound, "range")
+                                    && !number(range)?.is_finite() { return Err("invalid sound range"); }
                                 if sound.iter().any(|(key, _)| !matches!(key.as_str(), "sound_id" | "range")) {
                                     return Err("unknown sound field");
                                 }
