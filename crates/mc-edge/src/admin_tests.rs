@@ -54,23 +54,6 @@ pub(crate) fn fixture() -> (EdgeServer, AdminWorld) {
     (server, AdminWorld(dir))
 }
 
-/// Directory names matching this fixture's prefix; used by the leak oracles.
-pub(crate) fn admin_temp_dirs() -> std::collections::BTreeSet<std::path::PathBuf> {
-    let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) else {
-        return Default::default();
-    };
-    entries
-        .flatten()
-        .filter(|entry| {
-            entry
-                .file_name()
-                .to_string_lossy()
-                .starts_with("mc-edge-admin-")
-        })
-        .map(|entry| entry.path())
-        .collect()
-}
-
 fn server_at(dir: &std::path::Path) -> EdgeServer {
     let mut config = mc_core::config::CoreConfig::new(dir.join("world"), 42);
     config.vanilla_data_dir =
@@ -965,11 +948,12 @@ async fn moderation_selectors_filtered_ban_and_online_pardon() {
 ///
 /// The fixture used to delete its directory only on the success path, so every
 /// panic leaked a whole world (one leaked directory held 229k files and pushed
-/// the shared tmpfs past half its inode budget). Directories that existed before
-/// this run belong to someone else and must survive.
+/// the shared tmpfs past half its inode budget). The check is hermetic: it looks
+/// at the directory the fixture created and at a sentinel it owns, never at the
+/// whole temp dir, because neighbouring tests create and remove their own.
 #[test]
 fn a_failing_admin_test_leaves_no_temp_dir_and_removes_no_other() {
-    let before = admin_temp_dirs();
+    let sentinel = admin_temp_dir();
     let mut created = None;
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
@@ -987,18 +971,17 @@ fn a_failing_admin_test_leaves_no_temp_dir_and_removes_no_other() {
         "a failed admin test left {} behind",
         created.display()
     );
-    let after = admin_temp_dirs();
     assert!(
-        after.is_superset(&before),
-        "an admin test removed a directory that already existed: {:?}",
-        before.difference(&after).collect::<Vec<_>>()
+        sentinel.path().is_dir(),
+        "the fixture removed the test's own sentinel directory {}",
+        sentinel.path().display()
     );
 }
 
 /// The passing path of the same fixture leaves nothing either.
 #[test]
 fn a_passing_admin_test_leaves_no_temp_dir() {
-    let before = admin_temp_dirs();
+    let sentinel = admin_temp_dir();
     let path = {
         let (server, dir) = fixture_in_temp_dir();
         let path = dir.path().to_path_buf();
@@ -1007,7 +990,7 @@ fn a_passing_admin_test_leaves_no_temp_dir() {
         path
     };
     assert!(!path.exists(), "a passing admin test left {} behind", path.display());
-    assert!(admin_temp_dirs().is_superset(&before), "a pre-existing directory disappeared");
+    assert!(sentinel.path().is_dir(), "the fixture removed a directory it did not create");
 }
 
 #[path = "clock_queue_tests.rs"]
