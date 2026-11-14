@@ -98,6 +98,7 @@ def resolve_binary(ctx: ProfileContext) -> Path:
                 "native-client-build.log",
                 cwd=root,
                 env=env,
+                phase_name="client_start",
             )
         _record_binary(ctx, binary)
         evidence["binary_status"] = "ready"
@@ -183,6 +184,7 @@ def _read_descriptor(
     return descriptor, token
 
 
+@runtime.in_phase("client_start")
 def start(
     ctx: ProfileContext,
     binary: Path,
@@ -314,7 +316,9 @@ def start(
             events = selector.select(remaining)
             if any(key.fd == pid_fd for key, _ in events):
                 process.wait()
-                raise RuntimeError(f"native client exited {process.returncode} before MCP readiness")
+                raise runtime.ChildExited(
+                    f"native client exited {process.returncode} before MCP readiness",
+                    process.returncode, log_path)
             names = _descriptor_names(notify_fd) if any(key.fd == notify_fd for key, _ in events) else []
             if not names:
                 continue
@@ -352,6 +356,8 @@ def start(
         evidence.update(
             {"launch_status": "failed", "failure_stage": stage, "error_type": type(exc).__name__}
         )
+        if process is not None and process.poll() is not None:
+            evidence["startup_child_exit"] = process.returncode
         try:
             if client is not None:
                 try:
@@ -372,7 +378,10 @@ def start(
             for secret in (token, nonce):
                 if isinstance(secret, str) and secret:
                     message = message.replace(secret, "[REDACTED]")
-            raise RuntimeError(f"native client startup failed during {stage}: {message}") from None
+            wrapped = f"native client startup failed during {stage}: {message}"
+            if isinstance(exc, runtime.ChildExited):
+                raise runtime.ChildExited(wrapped, exc.returncode, exc.log_path) from None
+            raise RuntimeError(wrapped) from None
         raise
     finally:
         if selector is not None:

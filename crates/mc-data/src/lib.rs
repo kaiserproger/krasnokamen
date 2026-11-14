@@ -77,6 +77,7 @@ pub mod mob_effects_26_1_2;
 pub mod outline_shapes;
 pub mod player_nbt;
 pub mod recipes;
+pub mod registry_network;
 pub mod resource_path;
 mod runtime_resources;
 mod sidecar;

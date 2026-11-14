@@ -146,10 +146,14 @@ def render(run_dir: Path, output: Path) -> None:
     sheet.save(output, format="PNG", optimize=True)
 
 
-if __name__ == "__main__":
+def parse_args(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    args = parser.parse_args()
+    return parser.parse_args(argv)
+
+
+if __name__ == "__main__":
+    args = parse_args()
     render(args.run_dir.resolve(), args.output.resolve())
     print(args.output)

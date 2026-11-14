@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from .. import runtime
+
 
 class ProbeSteps:
     def __init__(self, client: Any, artifact_dir: Path, timeout: float, scenario: str) -> None:
@@ -36,6 +38,8 @@ class ProbeSteps:
             entry["result"] = result
             return result
         except Exception as error:
+            if name in {"minecraft_connect", "minecraft_wait_for_play"}:
+                runtime.tag_failure(error, "join")
             entry["error"] = str(error)
             raise
 
@@ -52,7 +56,8 @@ class ProbeSteps:
     def check(self, name: str, condition: bool) -> None:
         self.report["assertions"][name] = bool(condition)
         if not condition:
-            raise RuntimeError(f"{self.report['id']} assertion failed: {name}")
+            with runtime.phase("assertion"):
+                raise RuntimeError(f"{self.report['id']} assertion failed: {name}")
 
     def wait(self, predicate: Callable[[dict[str, Any]], bool], label: str,
              *, wait_for_play: bool = False,
@@ -75,8 +80,9 @@ class ProbeSteps:
                 self.call("minecraft_wait_for_state_change", {
                     "observed_version": state["state_version"], "timeout_seconds": remaining,
                 })
-        except TimeoutError:
+        except TimeoutError as error:
             self.report["assertions"][label] = False
+            runtime.tag_failure(error, "assertion")
             raise
 
     def fixture(self, command: str) -> None:
@@ -88,6 +94,7 @@ class ProbeSteps:
         if error is None:
             self.report["passed"] = True
         else:
+            runtime.tag_failure(error, "scenario")
             self.report["error"] = f"{type(error).__name__}: {error}"
         self.artifact_dir.mkdir(parents=True, exist_ok=True)
         token = getattr(self.client, "token", "")

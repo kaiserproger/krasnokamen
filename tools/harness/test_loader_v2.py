@@ -131,8 +131,12 @@ class LoaderV2Tests(unittest.TestCase):
             self.assertNotIn("settlements_bundle_cache", result)
 
     def test_cli_forwards_typed_loader_options(self) -> None:
+        from . import preflight
+
         with tempfile.TemporaryDirectory() as temporary:
+            # Only argument forwarding is under test; the paths are placeholders.
             with mock.patch.object(cli, "ARTIFACT_ROOT", Path(temporary)), \
+                 mock.patch.object(preflight, "check"), \
                  mock.patch.dict(profiles.PROFILES, {"loader-live": {"scope": "real-client", "run": mock.Mock(return_value={})}}):
                 run = profiles.PROFILES["loader-live"]["run"]
                 code = cli.cmd_run(["loader-live", "--platform", "fabric",

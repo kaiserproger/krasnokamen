@@ -246,7 +246,7 @@ def fuzz_verdict(scenario: dict, vanilla: dict, solaris: dict, entry: dict, reas
     return entry
 
 
-def main(argv: list[str] | None = None) -> int:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--scenario", action="append", default=[])
@@ -263,7 +263,11 @@ def main(argv: list[str] | None = None) -> int:
         "--vanilla-results", type=Path, default=None,
         help="reuse vanilla-results.json from an earlier run for scenarios it already covers "
              "(vanilla is the fixed oracle; only valid while the scenario JSON is unchanged)")
-    args = parser.parse_args(argv)
+    return parser.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     scenarios = load_scenarios(args.scenario, args.family) if (args.scenario or args.family or not args.fuzz_seed) else []

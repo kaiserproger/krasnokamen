@@ -2,11 +2,13 @@
 //!
 //! A vanilla server only emits the full registry payloads a client needs when
 //! the client declines Known Packs, and those bytes are codec-produced wire
-//! data: the raw data-pack JSON is not equivalent. This module is the one
+//! data: the raw data-pack JSON is not byte-equivalent. This module is the one
 //! capture implementation. It drives a real server through the Configuration
 //! handshake and writes each payload under `mc_data::NETWORK_REGISTRY_PAYLOAD_DIR`
 //! (`reports/registry_network_nbt/**`); do not add a second Configuration
-//! decoder or a derived-JSON substitute.
+//! decoder. `mc_data::registry_network` encodes the same payloads from the data
+//! pack and is checked byte for byte against this capture; ADR 0022 proposes it
+//! as the user path, which would leave this capture to maintainers.
 //!
 //! # Entry points
 //!

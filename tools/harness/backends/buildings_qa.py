@@ -233,7 +233,7 @@ def _deposit_all(probe: ProbeSteps, chest: tuple[int, int, int], items: list[str
     return report
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
+def validate_args(ctx: ProfileContext) -> tuple[float, tuple]:
     if ctx.client != "native":
         raise ValueError("buildings-qa requires --client native")
     if ctx.extra_args or ctx.platform is not None:
@@ -244,7 +244,11 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     select = os.environ.get("BUILDINGS_QA_SELECT", "ALL")
     if select != "ALL" and select not in BLUEPRINTS:
         raise ValueError(f"BUILDINGS_QA_SELECT must be one of {BLUEPRINTS} or ALL")
-    targets = BLUEPRINTS if select == "ALL" else (select,)
+    return timeout, (BLUEPRINTS if select == "ALL" else (select,))
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    timeout, targets = validate_args(ctx)
     _load_blueprints()
     artifact = ctx.artifact_dir
     override = os.environ.get("SOLARIS_SERVER_BINARY")
@@ -292,7 +296,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         server_log = server_log_path.open("wb")
         env = os.environ.copy()
         env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
-        server = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
+        server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                                   cwd=runtime.REPO_ROOT, stdout=server_log,
                                   stderr=subprocess.STDOUT, start_new_session=True, env=env)
         ctx.logs.append(str(server_log_path))
@@ -745,7 +749,9 @@ def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
                 any(line.strip() == "Busy." for line in lines)
             if active:
                 return True
-        probe.call("minecraft_wait_ticks", {"ticks": 1200})
+        # The MCP tool accepts at most 255 ticks per request.
+        for ticks in (255, 255, 255, 255, 180):
+            probe.call("minecraft_wait_ticks", {"ticks": ticks})
     return False
 
 
@@ -2406,7 +2412,7 @@ def _restart_resume(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
     log = server_log_path.open("ab")
     ctx.logs.append(str(server_log_path) + " (restart appended)")
     binary = Path(os.environ["SOLARIS_SERVER_BINARY"]).expanduser().resolve()
-    proc = _sp.Popen([str(binary), "--config", str(config), "--no-console"],
+    proc = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                      cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT,
                      start_new_session=True, env=env)
     probe.server_proc = proc  # type: ignore[attr-defined]

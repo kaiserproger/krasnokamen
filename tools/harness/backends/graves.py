@@ -36,6 +36,7 @@ GRAVE_REQUEST = re.compile(r"grave-(-?\d+)-(-?\d+)-(-?\d+)-[0-9a-f]{4}")
 LOADED_PACKAGES = re.compile(r"loaded_packages=(\d+)")
 
 
+@runtime.in_phase("assertion")
 def _check(checks: dict[str, Any], name: str, condition: bool, detail: Any = None) -> None:
     checks[name] = {"passed": bool(condition), "detail": detail}
     if not condition:
@@ -124,16 +125,29 @@ def check_custody(
     )
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
+def validate_args(ctx: ProfileContext) -> tuple[argparse.Namespace, float]:
     parser = argparse.ArgumentParser(prog="graves")
     parser.add_argument("--bot-name", default="scale_0000")
     parser.add_argument("--give-item", default="minecraft:dirt")
     parser.add_argument("--give-count", type=int, default=7)
     parser.add_argument("--command-timeout-seconds", type=float, default=120.0)
     parser.add_argument("--view-distance", type=int, default=2)
-    args = parser.parse_args(ctx.extra_args)
+    try:
+        args = parser.parse_args(ctx.extra_args)
+    except SystemExit as error:
+        raise ValueError("invalid graves arguments") from error
     if ctx.platform is not None:
         raise ValueError("graves runs the bare native platform without Loader")
+    if not 0 < args.give_count:
+        raise ValueError("--give-count must be positive")
+    timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 600.0
+    if not timeout > 0:
+        raise ValueError("timeout must be positive")
+    return args, timeout
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    args, timeout = validate_args(ctx)
     if ctx.plugins_dir is None:
         raise ValueError(
             "graves requires --plugins-dir pointing at the deployed graves package"
@@ -145,11 +159,6 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     package_sha256 = hashlib.file_digest(
         (package / "plugin.wasm").open("rb"), "sha256"
     ).hexdigest()
-    if not 0 < args.give_count:
-        raise ValueError("--give-count must be positive")
-    timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 600.0
-    if not timeout > 0:
-        raise ValueError("timeout must be positive")
 
     artifact = ctx.artifact_dir
     artifact.mkdir(parents=True, exist_ok=True)
@@ -239,14 +248,12 @@ seed = 11
     server: subprocess.Popen[Any] | None = None
     bot: subprocess.Popen[Any] | None = None
     try:
-        server = subprocess.Popen(
-            argv,
-            cwd=runtime.REPO_ROOT,
-            stdin=subprocess.PIPE,
-            stdout=log_handle,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
+        server = runtime.start_server(argv,
+        cwd=runtime.REPO_ROOT,
+        stdin=subprocess.PIPE,
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,)
         runtime.wait_port(port, min(timeout, 180.0), server, log_path=log_path)
         loaded = _wait_log(
             log_path, "plugin.runtime_ready", min(timeout, 120.0), process=server

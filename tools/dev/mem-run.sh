@@ -137,25 +137,35 @@ fi
 # same slot would reuse that tree's binaries (a false green, seen 2026-11-04). On a
 # tree switch every tracked file of the new tree is touched, so its workspace
 # crates rebuild. The lock files a-e are the old slot locks, so commands of the
-# previous runner version never share a dir with new ones. Never waits: with all 26
-# busy the command is refused.
+# previous runner version never share a dir with new ones. Existing dirs are
+# reused before a new one is created; a new dir is created only if `df` (whole
+# GiB, rounded up) shows at least SOLARIS_SLOT_MIN_FREE_GB (default 80, the owner's free-space floor) free at
+# selection time. This only stops slot proliferation (12 parallel slots filled
+# the disk on 2026-11-07); it reserves nothing, and existing dirs keep growing
+# unchecked, so it is no protection against ENOSPC. Never waits: with no usable
+# dir the command is refused.
 target=${CARGO_TARGET_DIR:-}
 for w in "$@"; do [[ $w == CARGO_TARGET_DIR=* ]] && target=${w#CARGO_TARGET_DIR=}; done
 if [ -z "$target" ]; then
   slots=${SOLARIS_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
   tree=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+  min_free=${SOLARIS_SLOT_MIN_FREE_GB:-80}
+  free_gb=$(df --output=avail -BG "$slots" 2>/dev/null | tail -1 | tr -dc 0-9)
   slot=
-  for pass in own any; do
+  for pass in own existing new; do
+    [ "$pass" = new ] && [ "${free_gb:-0}" -lt "$min_free" ] && break
     for l in {a..z}; do
-      if [ "$pass" = own ] && [ "$(cat "$slots/slot-$l/.solaris-tree" 2>/dev/null)" != "$tree" ]; then
-        continue
-      fi
+      case $pass in
+        own) [ "$(cat "$slots/slot-$l/.solaris-tree" 2>/dev/null)" = "$tree" ] || continue ;;
+        existing) [ -d "$slots/slot-$l" ] || continue ;;
+        new) [ -d "$slots/slot-$l" ] && continue ;;
+      esac
       exec 7>"$dir/$l"
       if flock -n 7; then slot=$l; break 2; fi
       exec 7>&-
     done
   done
-  [ -n "$slot" ] || { echo "mem-run: all 26 shared target dirs busy; refusing (exit 75)" >&2; exit 75; }
+  [ -n "$slot" ] || { echo "mem-run: no free target dir (disk ${free_gb}G free, new dirs need ${min_free}G); finish or cancel another command (exit 75)" >&2; exit 75; }
   export CARGO_TARGET_DIR="$slots/slot-$slot"
   target=$CARGO_TARGET_DIR
   if [ "$(cat "$target/.solaris-tree" 2>/dev/null)" != "$tree" ]; then

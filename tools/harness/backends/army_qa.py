@@ -396,7 +396,7 @@ def _open_dialog(probe: ProbeSteps) -> dict[str, Any]:
     return _wait_title(probe, "Settlement", "dialog_main_open", entry=st)
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
+def validate_args(ctx: ProfileContext) -> float:
     if ctx.client != "native":
         raise ValueError("army-qa requires --client native")
     if ctx.extra_args or ctx.platform is not None:
@@ -404,6 +404,11 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else TIMEOUT
     if not 0 < timeout <= 3600:
         raise ValueError("army-qa --timeout-seconds must be in (0, 3600]")
+    return timeout
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
     override = os.environ.get("SOLARIS_SERVER_BINARY")
     if not override:
@@ -446,7 +451,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         server_log = server_log_path.open("wb")
         env = os.environ.copy()
         env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
-        server = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
+        server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                                   cwd=runtime.REPO_ROOT, stdout=server_log,
                                   stderr=subprocess.STDOUT, start_new_session=True, env=env)
         ctx.logs.append(str(server_log_path))
@@ -1669,7 +1674,7 @@ def _do_restart(ctx: ProfileContext, artifact: Path, address: str, config: Path,
     log = server_log_path.open("ab")
     ctx.logs.append(str(server_log_path) + " (restart appended)")
     binary = Path(os.environ["SOLARIS_SERVER_BINARY"]).expanduser().resolve()
-    proc = _sp.Popen([str(binary), "--config", str(config), "--no-console"],
+    proc = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                      cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT,
                      start_new_session=True, env=env)
     probe.report["restart_new_pid"] = proc.pid

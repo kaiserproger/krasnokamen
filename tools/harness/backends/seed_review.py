@@ -197,6 +197,7 @@ def run(timeout_seconds: float, seed: int = SEED, village_view: list[float] | No
         "captures": [],
         "movements": [],
     }
+    current_phase = "server_start"
     try:
         binary_override = os.environ.get("SOLARIS_SERVER_BINARY")
         if binary_override:
@@ -212,7 +213,9 @@ def run(timeout_seconds: float, seed: int = SEED, village_view: list[float] | No
         if check:
             result["status"] = "prepared"
             return result
+        current_phase = "client_start"
         xvfb, display, xvfb_log = helpers.start_xvfb(run_dir)
+        current_phase = "server_start"
         server_log = (run_dir / "server.log").open("wb")
         server = subprocess.Popen(
             [str(binary), "--config", str(config)],
@@ -227,6 +230,7 @@ def run(timeout_seconds: float, seed: int = SEED, village_view: list[float] | No
         if not world_dir.is_dir():
             raise RuntimeError("server became ready without creating the fresh world directory")
         result["world_dir_created_by_server"] = True
+        current_phase = "client_start"
 
         game_dir = run_dir / "game"
         game_dir.mkdir()
@@ -245,6 +249,7 @@ def run(timeout_seconds: float, seed: int = SEED, village_view: list[float] | No
             token,
             request_timeout_seconds=max(30.0, timeout_seconds + 10.0),
         )
+        current_phase = "join"
         mcp.initialize()
         helpers.wait_client_ready_for_connect(mcp, min(timeout_seconds, 120.0))
         mcp.call_tool("minecraft_connect", {"server_addr": f"127.0.0.1:{server_port}"})
@@ -253,6 +258,7 @@ def run(timeout_seconds: float, seed: int = SEED, village_view: list[float] | No
         )
         if not play.get("in_play"):
             raise RuntimeError(f"client did not reach Play: {play}")
+        current_phase = "scenario"
         mcp.call_tool("minecraft_wait_ticks", {"ticks": 20})
         if village_view is not None:
             mcp.call_tool("minecraft_send_chat", {"message": "gamemode spectator", "command": True})
@@ -297,24 +303,34 @@ def run(timeout_seconds: float, seed: int = SEED, village_view: list[float] | No
         mcp.call_tool("minecraft_disconnect")
         result["passed"] = True
         return result
+    except Exception as error:
+        observed = helpers.observed_phase(error)
+        result["failure_phase"] = observed if observed != "unknown" else current_phase
+        raise
     finally:
-        if mcp is not None:
-            try:
-                mcp.close()
-            except Exception:
-                pass
-        helpers.stop_process(client_process)
-        helpers.stop_process(server, interrupt=True)
-        helpers.stop_process(xvfb)
-        for handle in (client_log, server_log, xvfb_log):
-            if handle is not None:
-                handle.close()
-        (run_dir / "result.json").write_text(
-            json.dumps(result, indent=2, sort_keys=True) + "\n"
-        )
+        try:
+            if mcp is not None:
+                try:
+                    mcp.close()
+                except Exception:
+                    pass
+            helpers.stop_process(client_process)
+            helpers.stop_process(server, interrupt=True)
+            helpers.stop_process(xvfb)
+            for handle in (client_log, server_log, xvfb_log):
+                if handle is not None:
+                    handle.close()
+        except Exception:
+            result["passed"] = False
+            result["failure_phase"] = "teardown"
+            raise
+        finally:
+            (run_dir / "result.json").write_text(
+                json.dumps(result, indent=2, sort_keys=True) + "\n"
+            )
 
 
-def main() -> int:
+def parse_args(argv: list[str] | None = None):
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -323,7 +339,16 @@ def main() -> int:
     parser.add_argument("--check", action="store_true", help="Prepare config and binary without launching clients")
     parser.add_argument("--vanilla-village", type=float, nargs=3, metavar=("X", "Y", "Z"),
                         help="Inspect a measured vanilla village with an operator spectator camera")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if not math.isfinite(args.timeout_seconds) or args.timeout_seconds <= 0:
+        parser.error("--timeout-seconds must be finite and positive")
+    if args.vanilla_village and not all(math.isfinite(value) for value in args.vanilla_village):
+        parser.error("--vanilla-village coordinates must be finite")
+    return args
+
+
+def main() -> int:
+    args = parse_args()
     try:
         result = run(args.timeout_seconds, args.seed, args.vanilla_village, check=args.check)
     except Exception as error:
