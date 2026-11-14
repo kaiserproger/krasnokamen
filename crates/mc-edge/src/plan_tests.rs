@@ -29,6 +29,9 @@ mod native_density_tests;
 #[path = "plan/entity_candidates_tests.rs"]
 mod entity_candidates_tests;
 
+#[path = "plan/floor_tests.rs"]
+mod floor_tests;
+
 #[path = "plan/shared_moves_tests.rs"]
 mod shared_moves_tests;
 

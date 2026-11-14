@@ -377,3 +377,233 @@ fn changed_motion_preserves_deadline_appearance_and_credit_cadence() {
     assert!(plan_entities_for(&out, &mut viewer, 32).is_empty());
     assert_eq!(viewer.tracked_entities[&id].baseline.0, [9.25, 64.0, 8.0]);
 }
+
+/// A cow that moves every tick is visited about twice per movement period (the visit that arms its
+/// deadline, then the deadline), not every tick, and still receives exactly the moves a per-tick visit
+/// would send: one per due tick, against the latest position. Once it stops, it costs one more visit.
+#[test]
+fn armed_rows_skip_intermediate_ticks_and_deliver_at_the_deadline() {
+    use mc_core::blueprint::MovementClass;
+    use mc_core::entities::{ColdFields, EntityKind, EntityStore};
+
+    let mut store = EntityStore::default();
+    let id = EntityId(10);
+    let type_id = type_id_of("minecraft:cow");
+    let interval = u64::from(
+        mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
+            .unwrap()
+            .update_interval,
+    );
+    let slot = store.spawn(
+        id,
+        uuid::Uuid::from_u128(10),
+        EntityKind::Mob { type_id },
+        ColdFields {
+            pos: [9.0, 64.0, 8.0],
+            vel: [0.0; 3],
+            yaw: 0.0,
+            pitch: 0.0,
+            ground: true,
+            health: 20.0,
+            breed_cooldown: 0,
+            pickup_delay: 0,
+            item: None,
+            appearance: Arc::new(EntityAppearance::default()),
+            movement: MovementClass::Walker,
+            half_width: 0.3,
+            height: 1.8,
+            speed: 0.1,
+            attack_damage: 1.0,
+            sight_range: 16.0,
+            attack_reach: 1.0,
+        },
+    );
+    let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+    viewer.loaded_chunks.insert((0, 0), 0);
+    let mut out = output(vec![], vec![], ChangeSet::default());
+    let snapshot = Arc::get_mut(&mut out.snapshot).unwrap();
+    snapshot.entities = store.views();
+    snapshot.tick = (0..interval * 2)
+        .find(|&tick| entity_movement_due(snapshot.entities.get(id).unwrap(), tick, None))
+        .unwrap();
+    assert!(
+        !plan_entities_for(&out, &mut viewer, 32).is_empty(),
+        "spawn"
+    );
+
+    let periods = 5;
+    let mut visits = 0;
+    let mut sent = 0;
+    let mut due_ticks = 0;
+    let mut x = 9.0;
+    for _ in 0..periods * interval {
+        x += 0.2;
+        store.set_pos(slot, [x, 64.0, 8.0]);
+        let snapshot = Arc::get_mut(&mut out.snapshot).unwrap();
+        snapshot.tick += 1;
+        snapshot.entities = store.views();
+        let due = entity_movement_due(snapshot.entities.get(id).unwrap(), snapshot.tick, None);
+
+        let index = TickPlanIndex::with_previous(&out, viewer.previous_entities());
+        let mut interest = std::mem::take(&mut viewer.entity_interest);
+        let mut scratch = PlanScratch::default();
+        interest.prepare(&out.snapshot, &mut viewer, 4, &index, &mut scratch, 32);
+        visits += scratch.visible.len();
+        viewer.entity_interest = interest;
+
+        let packets = plan_entities_for(&out, &mut viewer, 32);
+        let moves = packets
+            .iter()
+            .filter(|packet| packet.id == MoveEntityPos::ID)
+            .count();
+        assert_eq!(
+            moves,
+            usize::from(due),
+            "one move per due tick, none between"
+        );
+        if due {
+            due_ticks += 1;
+            sent += moves;
+            assert_eq!(viewer.tracked_entities[&id].baseline.0, [x, 64.0, 8.0]);
+        }
+    }
+    assert_eq!(sent, due_ticks);
+    assert!(
+        visits <= periods as usize + 1,
+        "{visits} visits in {periods} periods: armed rows must not be visited between deadlines"
+    );
+
+    // Stopped: one visit may remain (the deadline armed by the last move), then none.
+    let mut after = 0;
+    for _ in 0..3 * interval {
+        let snapshot = Arc::get_mut(&mut out.snapshot).unwrap();
+        snapshot.tick += 1;
+        let index = TickPlanIndex::with_previous(&out, viewer.previous_entities());
+        let mut interest = std::mem::take(&mut viewer.entity_interest);
+        let mut scratch = PlanScratch::default();
+        interest.prepare(&out.snapshot, &mut viewer, 4, &index, &mut scratch, 32);
+        after += scratch.visible.len();
+        viewer.entity_interest = interest;
+        assert!(plan_entities_for(&out, &mut viewer, 32).is_empty());
+    }
+    assert!(after <= 1, "a stopped row was visited {after} times");
+}
+
+/// A cow standing in view at `x`, spawned on its due tick: the scene of the armed-row tests.
+struct Mover {
+    store: mc_core::entities::EntityStore,
+    slot: mc_core::entities::EntitySlot,
+    out: TickOutput,
+    viewer: ViewerState,
+    id: EntityId,
+    x: f64,
+}
+
+impl Mover {
+    fn new() -> Self {
+        use mc_core::blueprint::MovementClass;
+        use mc_core::entities::{ColdFields, EntityKind, EntityStore};
+
+        let mut store = EntityStore::default();
+        let id = EntityId(10);
+        let type_id = type_id_of("minecraft:cow");
+        let slot = store.spawn(
+            id,
+            uuid::Uuid::from_u128(10),
+            EntityKind::Mob { type_id },
+            ColdFields {
+                pos: [9.0, 64.0, 8.0],
+                vel: [0.0; 3],
+                yaw: 0.0,
+                pitch: 0.0,
+                ground: true,
+                health: 20.0,
+                breed_cooldown: 0,
+                pickup_delay: 0,
+                item: None,
+                appearance: Arc::new(EntityAppearance::default()),
+                movement: MovementClass::Walker,
+                half_width: 0.3,
+                height: 1.8,
+                speed: 0.1,
+                attack_damage: 1.0,
+                sight_range: 16.0,
+                attack_reach: 1.0,
+            },
+        );
+        let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
+        viewer.loaded_chunks.insert((0, 0), 0);
+        let mut out = output(vec![], vec![], ChangeSet::default());
+        let snapshot = Arc::get_mut(&mut out.snapshot).unwrap();
+        snapshot.entities = store.views();
+        snapshot.tick = (0..20)
+            .find(|&tick| entity_movement_due(snapshot.entities.get(id).unwrap(), tick, None))
+            .unwrap();
+        let mut mover = Self {
+            store,
+            slot,
+            out,
+            viewer,
+            id,
+            x: 9.0,
+        };
+        assert!(!plan_entities_for(&mover.out, &mut mover.viewer, 32).is_empty());
+        mover
+    }
+
+    /// One tick: the cow walks 0.2 blocks (or stands), then the planner runs with `credit`.
+    /// Returns whether it sent a move and whether this tick is the cow's due tick.
+    fn tick(&mut self, walks: bool, credit: usize) -> (bool, bool) {
+        if walks {
+            self.x += 0.2;
+            self.store.set_pos(self.slot, [self.x, 64.0, 8.0]);
+        }
+        let snapshot = Arc::get_mut(&mut self.out.snapshot).unwrap();
+        snapshot.tick += 1;
+        snapshot.entities = self.store.views();
+        let due = entity_movement_due(snapshot.entities.get(self.id).unwrap(), snapshot.tick, None);
+        let packets = plan_entities_for(&self.out, &mut self.viewer, credit);
+        (
+            packets.iter().any(|packet| packet.id == MoveEntityPos::ID),
+            due,
+        )
+    }
+}
+
+/// A continuous mover whose armed deadline is rejected for credit keeps its move as delivery debt:
+/// it goes out on the next tick, as when every tick visited the row, not a whole interval later.
+#[test]
+fn armed_deadline_rejected_for_credit_sends_on_the_next_tick() {
+    let mut mover = Mover::new();
+    let interval = 3;
+    // The ticks before the deadline arm it and move the cow again.
+    for _ in 0..interval - 1 {
+        assert_eq!(mover.tick(true, 32), (false, false));
+    }
+    // Its due tick, credit 0: nothing can be sent.
+    assert_eq!(mover.tick(true, 0), (false, true));
+    // Credit is back and the tick is not due: the debt is paid now.
+    assert_eq!(mover.tick(true, 32), (true, false));
+    assert_eq!(
+        mover.viewer.tracked_entities[&mover.id].baseline.0,
+        [mover.x, 64.0, 8.0]
+    );
+}
+
+/// The last motion lands the tick before an armed deadline and nothing follows: the deadline still
+/// delivers that final position.
+#[test]
+fn armed_row_that_stops_before_its_deadline_delivers_its_last_position() {
+    let mut mover = Mover::new();
+    assert_eq!(mover.tick(true, 32), (false, false));
+    assert_eq!(mover.tick(true, 32), (false, false));
+    // Deadline tick, the cow no longer moves.
+    assert_eq!(mover.tick(false, 32), (true, true));
+    assert_eq!(
+        mover.viewer.tracked_entities[&mover.id].baseline.0,
+        [mover.x, 64.0, 8.0]
+    );
+    for _ in 0..6 {
+        assert!(!mover.tick(false, 32).0);
+    }
+}

@@ -260,40 +260,27 @@ dropped trigger writes. Requested work is never substituted for observation.
 
 ## Many-items benchmarks
 
-Two **noncanonical** profiles measure how the tick pays for dropped-item entities. Neither fills the
-pending table above (`publication_evidence=false`, `noncanonical=true` in the receipt).
+One **noncanonical** profile measures how the tick pays for dropped-item entities
+(`publication_evidence=false`, `noncanonical=true` in the receipt, so it fills nothing in the pending
+table above). The other many-items benchmark is no profile of its own: the kelp-polluted world is
+`native-100` run on a fixture cache that was prepared on a server still washing kelp out, and
+`--require-cache-hit` keeps a run from silently preparing a clean world in its place (about 4,000
+item entities, 1,270 moving, in the world prepared on 2026-11-12; the window scripts of that date name
+the cache). The recipe never mentions kelp or items, so a fixed server loads exactly that world and
+the receipt stays comparable across the fix.
 
-### `native-100-kelp12k`: the preserved polluted native-100 world
-
-The native-100 recipe (same 100 bots, 100,000 mobs, view/simulation distance 6, so the same cache key
-under the same `data/vanilla`) run against the world that the kelp wash-out bug filled with item
-entities: **12,218 item entities** at preparation end (about 98 % kelp), growing to roughly 19,000
-by the end of a window on a server that still washes kelp. Main preserved it read-only as
-`<work>/targets/perf-fixture-cache-kelp12k`; the profile points `--fixture-cache` there by default
-and always passes `--require-cache-hit`.
-
-- The recipe never mentions kelp or items, so a fixed server loads and measures exactly this world
-  and the receipt stays comparable across the fix (B/A on one world).
-- The profile **refuses to prepare**: with no complete entry for the cache key (the recipe or the
-  registry content changed) it fails before touching the cache directory instead of silently
-  measuring a clean world. It also pins the entry: key
-  `e374422d…`, world tree hash `f07d720e…`, 12,218 saved items; a different world fails the run.
-- Item ages in the saved world are at most about 2,900; an item despawns at age 6,000 ticks active. A
-  fixed server therefore loses the preserved items during a long window (the production rate, not a
-  fault): read the resident population per tick from the `items census:` lines, never assume it.
-
-```sh
-python3 -m tools.coreperf.profiles native-100-kelp12k "${COMMON[@]}" \
-    --server-wrapper "env MC_CORE_PHASE_LOG=1"
-```
+Items are a small part of that world's cost: in the window-d legs the item probe counted about 4 % of
+all tracked entity pairs and under 1 % of the packets (item movement is gated by the vanilla update
+interval of 20 ticks in the planner); almost all of the roughly 44,000 packets per tick are mobs.
 
 ### `items-heavy`: N item entities on a sky platform
 
 `python3 -m tools.coreperf.profiles items-heavy --items N [--items-bots 10] "${COMMON[@]}"` builds,
 with public commands only (no gameplay, no randomness), a stone platform at y=199 (no terrain, caves or
-natural mobs), a walled and roofed 14x14 observer pad at the origin where `--items-bots` (default 10)
-creative bots walk at 20 slots/s without edits or chat, and N item entities in four classes (30 %,
-30 %, 20 %, 20 %; the ground class takes the rounding remainder), seed 42, view/simulation distance 8:
+natural mobs) under a stone deck at y=207, a walled and roofed 14x14 observer pad at the origin where
+`--items-bots` (default 10) creative bots land and walk at 20 slots/s without edits or chat, and N item
+entities in four classes (30 %, 30 %, 20 %, 20 %; the ground class takes the rounding remainder),
+seed 42, view/simulation distance 8:
 
 | Class | Layout | What it exercises |
 |---|---|---|
@@ -302,14 +289,19 @@ creative bots walk at 20 slots/s without edits or chat, and N item entities in f
 | `pile_full` | 16 full stacks (count 64) of one kind in one position, piles two blocks apart | a same-kind candidate that cannot receive anything |
 | `pile_mixed` | 16 distinct kinds, count 1, in one position | candidates of the wrong kind |
 
-Nothing merges, so the platform population is stationary (checked: the saved snapshot must hold
-exactly N items above the floor before and after the run; items elsewhere, natural drops such as the
-kelp wash-out items of the seed-42 ocean east of the origin, are counted separately in the receipt and
-enter the per-tick census). Random ticks are off (`randomTickSpeed 0`) so that growth, and the
-wash-out it triggers, is not part of this benchmark. The ladder is N = 0 (platform, pad and bots only), 10,000 and 30,000;
-the maximum is 36,000 (the items must stay inside the 6-chunk item tracking range of every bot).
-The fixture cache key contains N. All summons run in the last preparation region so items age only from
-their summon to the end of preparation (an item ages 6,000 ticks active before it despawns).
+Nothing merges and nothing is picked up, so the platform population is stationary (checked: the saved
+snapshot must hold exactly N items above the floor before and after the run; items elsewhere, natural
+drops such as the kelp wash-out items of the seed-42 ocean east of the origin, are counted separately
+in the receipt and enter the per-tick census). The deck is what keeps the bots off the items: a bot
+lands on the highest surface with the longest straight runway nearest its anchor, so with no deck the
+10 bots landed on the open platform, walked over the items and moved 1,853 of 10,000 into their
+inventories during the first window-d legs (the failed census; the water class lost nothing and the
+merge scan counted 60 merges). On the deck they walk at y=208, outside the pickup box. Random ticks
+are off (`randomTickSpeed 0`) so that growth, and the wash-out it triggers, is not part of this
+benchmark. The ladder is N = 0 (platform, pad and bots only), 10,000 and 30,000; the maximum is 36,000
+(the items must stay inside the 6-chunk item tracking range of every bot). The fixture cache key
+contains N. All summons run in the last preparation region so items age only from their summon to the
+end of preparation (an item ages 6,000 ticks active before it despawns).
 
 ### Per-item attribution (`MC_CORE_PHASE_LOG=1`, no work when unset)
 

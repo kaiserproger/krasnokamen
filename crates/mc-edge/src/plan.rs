@@ -598,8 +598,8 @@ impl ViewerState {
             .unwrap_or(server_distance)
             .min(server_distance);
         let center = (
-            (self.position[0].floor() as i32).div_euclid(16),
-            (self.position[2].floor() as i32).div_euclid(16),
+            floor_i32(self.position[0]).div_euclid(16),
+            floor_i32(self.position[2]).div_euclid(16),
         );
         !self.skipped
             && !self.forget_all
@@ -1772,7 +1772,7 @@ fn plan_entities(
         let turned = due && tracked.head_yaw != packed_head;
         let resend = tracked.resend;
         if !stale && !resend && movement.is_none() && !turned {
-            interest.completed(entity, tracked, snapshot.tick, due);
+            interest.completed(entity, tracked, snapshot.tick, due, false);
             continue;
         }
         let update_start = out.len();
@@ -1837,13 +1837,14 @@ fn plan_entities(
             tracked.appearance = Arc::clone(&entity.appearance);
             tracked.resend = false;
         }
+        let moved = movement.is_some() || turned;
         if let Some(packet) = movement {
             tracked.baseline = packet.next;
         }
         if turned {
             tracked.head_yaw = packed_head;
         }
-        interest.completed(entity, tracked, snapshot.tick, due);
+        interest.completed(entity, tracked, snapshot.tick, due, moved);
     }
     viewer.entity_interest = interest;
 }
@@ -2612,19 +2613,37 @@ fn spiral_square(center: (i32, i32), view_distance: i32) -> Vec<(i32, i32)> {
     cells.into_iter().map(|(x, z, _)| (x, z)).collect()
 }
 
+/// `value.floor() as i32` (saturating, NaN to zero) without a libm call.
+///
+/// Bottleneck: baseline x86-64 has no `roundsd`, so `f64::floor` is a `floor` call, and `mul_add` an
+/// `fmaf` call; per-entity-per-viewer planning made them 11 % of the fanout threads' self time on
+/// native-100 (FP perf leg, window c). Fence: bit-identical to the floor form for every input
+/// (`floor_matches_the_libm_form`). Removal path: none needed; delete when the build baseline gains SSE4.1.
+#[inline]
+fn floor_i32(value: f64) -> i32 {
+    let integer = value as i32;
+    integer.saturating_sub(i32::from(value < f64::from(integer)))
+}
+
+/// [`floor_i32`] for `f32`.
+#[inline]
+fn floor_f32_i32(value: f32) -> i32 {
+    let integer = value as i32;
+    integer.saturating_sub(i32::from(value < integer as f32))
+}
+
 /// Vanilla `Mth.packDegrees`: floor(yaw * 256 / 360) as a byte.
+///
+/// `degrees * 256.0` equals `fma(degrees, 256.0, 0.0)` for every input: the product is a power-of-two
+/// scaling, exact unless it overflows (both give infinity), and the sign of a zero is lost to the floor.
 fn pack_degrees(degrees: f32) -> u8 {
-    (degrees.mul_add(256.0, 0.0) / 360.0).floor() as i32 as u8
+    floor_f32_i32(degrees * 256.0 / 360.0) as u8
 }
 
 /// `Mth.floor(delta * 4096)` clamped to `i16`, or `None` when the delta
 /// exceeds relative-move range (caller falls back to absolute sync).
 fn delta_to_short(delta: f64) -> Option<i16> {
-    let scaled = (delta * 4096.0).floor();
-    if scaled < f64::from(i16::MIN) || scaled > f64::from(i16::MAX) {
-        return None;
-    }
-    Some(scaled as i16)
+    i16::try_from(floor_i32(delta * 4096.0)).ok()
 }
 
 /// Frame `body` once (threshold-256 compression) and push it; nothing is

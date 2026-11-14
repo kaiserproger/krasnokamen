@@ -238,10 +238,7 @@ impl TickPlanIndex {
 }
 
 pub(super) fn entity_chunk(position: [f64; 3]) -> (i32, i32) {
-    (
-        (position[0] / 16.0).floor() as i32,
-        (position[2] / 16.0).floor() as i32,
-    )
+    (floor_i32(position[0] / 16.0), floor_i32(position[2] / 16.0))
 }
 
 pub(super) fn event_subject(event: EntityEvent) -> EntityId {

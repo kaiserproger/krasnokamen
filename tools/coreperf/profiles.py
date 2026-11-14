@@ -27,9 +27,9 @@ from tools.harness.backends import catalog_load as load
 
 PROFILES = {"idle": (0, 0, 0, 8), "explore-3": (3, 0, 0, 8), "explore-20": (20, 0, 0, 8),
             "native-100": (100, 100000, 0, 6), "villager-heavy": (100, 100000, 20000, 6),
-            # Noncanonical many-items benchmarks (docs/performance/PROFILES.md#many-items-benchmarks):
-            # the preserved kelp-polluted native-100 world, and a synthetic sky platform with N items.
-            "native-100-kelp12k": (100, 100000, 0, 6), "items-heavy": (0, 0, 0, 8)}
+            # Noncanonical many-items benchmark (docs/performance/PROFILES.md#many-items-benchmarks):
+            # a synthetic sky platform with N items.
+            "items-heavy": (0, 0, 0, 8)}
 CANONICAL_PROFILES = frozenset(("idle", "explore-3", "explore-20", "native-100", "villager-heavy"))
 SCALE_PROFILES = {
     f"scale-{label}-{mix}": (count, mix)
@@ -38,15 +38,6 @@ SCALE_PROFILES = {
 }
 
 PIN_ROOT = Path("/run/media/kaiserroman/games/solaris-work/pins")
-
-# native-100-kelp12k: the native-100 world as it stood after the kelp wash-out bug filled it with
-# item entities (2026-11-12, tree 931b1699 lineage). It is the native-100 recipe, so its cache key
-# equals native-100's key under the same registry; the profile only pins WHICH world that key must
-# resolve to, and refuses to prepare a fresh (clean) one in its place.
-KELP12K_CACHE = PIN_ROOT.parent / "targets/perf-fixture-cache-kelp12k"
-KELP12K_KEY = "e374422ddae0f4eb5d1b0411776207f944bb1c10b41e75d25d00b0b27f005534"
-KELP12K_WORLD_SHA256 = "f07d720e4e3d3858c28f82f70bf0e16a881b3009a99509782a87699cfecace6f"
-KELP12K_ITEMS = 12218
 
 # items-heavy geometry: a sky platform at y=199 so no natural terrain, cave or mob interferes.
 ITEMS_MAX = 36000
@@ -171,8 +162,10 @@ def items_layout(items: int) -> dict[str, Any]:
     `ground` and `water` hold two items per block cell of mutually non-mergeable kinds; the two pile
     classes stack 16 items in one position per pile, either one kind in full stacks (stackable but
     saturated, so the merge scan finds a same-kind candidate and moves nothing) or 16 distinct kinds
-    (never stackable). Piles sit two blocks apart. Nothing in the layout merges, so the resident
-    item count is stationary and the per-item cost is read from a constant population.
+    (never stackable). Piles sit two blocks apart. Nothing in the layout merges, and the observers
+    cannot reach it: the deck over the whole platform (see `items_fixture`) keeps them eight blocks
+    above the items, so the resident item count is stationary and the per-item cost is read from a
+    constant population.
     """
     if not 0 <= items <= ITEMS_MAX:
         raise ValueError(f"items must be within 0..{ITEMS_MAX}")
@@ -199,12 +192,21 @@ def items_layout(items: int) -> dict[str, Any]:
 def items_fixture(items: int) -> dict[str, Any]:
     """`items` item entities on a sky platform, summoned by public commands in the last region.
 
-    Region `platform` writes the rules, a stone floor at y=199 (clearing y=200..204 above it), the
-    walled and roofed observer pad at the origin and the pool; region `items` clears the loot the
-    rules' kills dropped, then only summons, so every
+    Region `platform` writes the rules, a stone floor at y=199 (clearing y=200..204 above it), a stone
+    deck at y=207 over the whole platform, the walled and roofed observer pad at the origin and the
+    pool; region `items` clears the loot the rules' kills dropped, then only summons, so every
     item ages from its summon to the end of preparation alone (an item despawns at age 6000 and
     ages only while a player keeps its chunk active). Positions are deterministic functions of the
     index: no randomness, no gameplay.
+
+    The deck is what keeps the census true. A bot lands on the surface with the longest straight
+    runway nearest its anchor, whatever the pad walls are; without a deck that is the open platform,
+    where the 10 bots walked over the items and picked them up. Window d, N10k, per item identity
+    between the prepared and the final snapshot: 1,853 of 10,000 items gone (1,605 ground, 194 mixed
+    pile, 54 full pile, none of the 3,000 water items); the 6,085 item count the platform lost is
+    exactly what the player inventories gained beyond their starting 64 dirt each, and the merge scan
+    reported 60 merges in all. On the deck the bots walk at
+    y=208, outside the item pickup box.
     """
     layout = items_layout(items)
     floor = ITEMS_FLOOR_Y
@@ -219,6 +221,7 @@ def items_fixture(items: int) -> dict[str, Any]:
         for z0, z1 in ((-90, -1), (0, 90)):
             platform.append(f"fill {x0} {floor} {z0} {x1} {floor} {z1} minecraft:stone")
             platform += [f"fill {x0} {y} {z0} {x1} {y} {z1} minecraft:air" for y in range(floor + 1, floor + 6)]
+            platform.append(f"fill {x0} {floor + 8} {z0} {x1} {floor + 8} {z1} minecraft:stone")
     # Observer pad: 18x18 footprint, two-block walls, 14x14x7 interior, roof at floor+8.
     platform += [f"fill -9 {floor + 1} -9 8 {floor + 8} 8 minecraft:stone",
                  f"fill -7 {floor + 1} -7 6 {floor + 7} 6 minecraft:air"]
@@ -278,20 +281,6 @@ def items_census(recipe: dict[str, Any], snapshot: dict[str, Any]) -> dict[str, 
                          f"{recipe['items']['requested']} (merged, despawned or lost)")
     return {"platform": platform, "off_platform": saved_items(snapshot) - platform}
 
-
-def validate_kelp12k(key: str, prepared: dict[str, Any]) -> dict[str, Any]:
-    """The named benchmark measures exactly the preserved polluted world, never a fresh one."""
-    cache = prepared.get("fixture_cache", {})
-    saved = saved_items(prepared["snapshot"])
-    world = prepared.get("fixture", {}).get("sha256")
-    if key != KELP12K_KEY or cache.get("status") != "hit":
-        raise ValueError(f"native-100-kelp12k must hit cache entry {KELP12K_KEY}, got key {key} "
-                         f"status {cache.get('status')}")
-    if world != KELP12K_WORLD_SHA256:
-        raise ValueError(f"kelp12k world hash {world} differs from the preserved {KELP12K_WORLD_SHA256}")
-    if saved != KELP12K_ITEMS:
-        raise ValueError(f"kelp12k world holds {saved} item entities, preserved world held {KELP12K_ITEMS}")
-    return {"key": key, "world_sha256": world, "items": saved}
 
 
 def scale_fixture(residents: int, mix: str, *, excluded_kinds: tuple[str, ...] = (),
@@ -1526,8 +1515,7 @@ async def run(args: argparse.Namespace) -> int:
                   fixture(args.mobs, args.villagers))
         if args.profile not in CANONICAL_PROFILES and args.profile not in SCALE_PROFILES:
             result["noncanonical"] = True
-            result["variant"] = (recipe["variant"] if args.profile == "items-heavy"
-                                 else "native-100-kelp-polluted-world-cache")
+            result["variant"] = recipe["variant"]
         if args.projectiles is not None:
             add_projectile_fixture(recipe, args.projectiles, smoke=args.smoke)
         if args.xp_orbs is not None:
@@ -1582,8 +1570,6 @@ async def run(args: argparse.Namespace) -> int:
         finally:
             args.server_toml_extra = ""
         validate_prepared(recipe, prepared)
-        if args.profile == "native-100-kelp12k":
-            result["kelp12k_world"] = validate_kelp12k(key, prepared)
         if args.profile == "items-heavy":
             result["items_before"] = items_census(recipe, prepared["snapshot"])
         if recipe.get("spawn_rules"):
@@ -1645,11 +1631,9 @@ def main() -> int:
     parser.add_argument("--build-receipt", type=Path, required=True)
     parser.add_argument("--out", type=Path)
     parser.add_argument("--fixture-cache", type=Path,
-                        help="shared pristine fixture cache (default: .analysis/profile-fixtures; "
-                             "native-100-kelp12k: the preserved kelp12k cache)")
+                        help="shared pristine fixture cache (default: .analysis/profile-fixtures)")
     parser.add_argument("--require-cache-hit", action="store_true",
-                        help="fail instead of preparing when the fixture cache lacks the entry "
-                             "(always on for native-100-kelp12k)")
+                        help="fail instead of preparing when the fixture cache lacks the entry")
     parser.add_argument("--items", type=int,
                         help=f"items-heavy only: item entities on the sky platform, 0..{ITEMS_MAX} (10000 and 30000 are the ladder)")
     parser.add_argument("--items-bots", type=int, default=10,
@@ -1765,10 +1749,6 @@ def main() -> int:
         args.clients, args.mobs, args.villagers, args.view_distance = PROFILES[args.profile]
         if args.profile == "items-heavy":
             args.clients = args.items_bots
-    if args.profile == "native-100-kelp12k":
-        args.require_cache_hit = True
-        if args.fixture_cache is None:
-            args.fixture_cache = KELP12K_CACHE
     if args.fixture_cache is None:
         args.fixture_cache = load.ROOT / ".analysis/profile-fixtures"
     args.seed, args.prepare_concurrency = 42, 3

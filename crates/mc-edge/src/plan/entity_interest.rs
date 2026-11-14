@@ -9,14 +9,19 @@ pub(super) struct EntityInterest {
     previous: Option<mc_core::boundary::EntityViews>,
     position: Option<([u64; 2], i32)>,
     held: HashSet<(i32, i32)>,
-    ranges: HashSet<i32>,
+    /// Distinct tracking ranges of the tracked kinds (a handful): a linear probe replaces the hash of
+    /// every `changed` call (1.9 % of the fanout threads' self time, window c); order never matters.
+    ranges: Vec<i32>,
     visible: HashMap<EntityId, Order>,
     spawns: HashSet<EntityId>,
     removals: HashSet<EntityId>,
     bosses: HashSet<EntityId>,
     dirty: HashSet<EntityId>,
     ready: HashSet<EntityId>,
-    scheduled: HashMap<EntityId, u64>,
+    /// Armed movement deadline of a row, and whether movement was already pending when it was armed
+    /// (`true`: the deadline is delivery debt and stays `ready` if credit rejects it; `false`: a
+    /// speculative visit, which must behave like the per-tick visit it replaces).
+    scheduled: HashMap<EntityId, (u64, bool)>,
     due: BinaryHeap<Reverse<(u64, i32)>>,
     order: Vec<Order>,
     resume: Option<Order>,
@@ -159,12 +164,17 @@ impl EntityInterest {
                 }
                 self.due.pop();
                 let id = EntityId(id);
-                if self.scheduled.get(&id) != Some(&tick) {
+                let Some(&(at, pending)) = self.scheduled.get(&id) else {
+                    continue;
+                };
+                if at != tick {
                     continue;
                 }
                 self.scheduled.remove(&id);
                 if self.visible.contains_key(&id) && viewer.tracked_entities.contains_key(&id) {
-                    self.ready.insert(id);
+                    if pending {
+                        self.ready.insert(id);
+                    }
                     self.dirty.insert(id);
                 }
             }
@@ -233,11 +243,31 @@ impl EntityInterest {
             });
         if !interior {
             self.changed(snapshot, viewer, distance, id);
-        } else if delta.appearance_changed || delta.motion_changed {
+        } else if delta.appearance_changed {
+            self.dirty.insert(id);
+        } else if delta.motion_changed {
             // Keep changed movement in canonical credit order even before
             // its due tick. Only completed rows may arm a deadline: arming
             // rows behind a blocked cursor would invent delivery debt.
-            self.dirty.insert(id);
+            // A row that already holds a deadline is visited at that tick
+            // whatever it does meanwhile, and a visit before it only
+            // re-arms the same deadline: skipping it is output-identical
+            // and spares every moving row a hash insert and a visit per
+            // tick (bottleneck: `delta`/`completed`/`entity_movement` and the
+            // dirty set were 20 % of the fanout threads' self time, window c).
+            // The skipped visit would have found movement pending, so the deadline
+            // becomes delivery debt (`ready` when it fires) exactly then; a delta
+            // on the deadline tick itself must not, as its per-tick visit never did.
+            match self.scheduled.get_mut(&id) {
+                None => {
+                    self.dirty.insert(id);
+                }
+                Some((at, pending)) => {
+                    if snapshot.tick < *at {
+                        *pending = true;
+                    }
+                }
+            }
         }
     }
 
@@ -301,8 +331,9 @@ impl EntityInterest {
             let chunk = entity_chunk(entity.position);
             if viewer.loaded_chunks.contains_key(&chunk)
                 && let Some(range) = tracking_range(entity.type_id, distance)
+                && !self.ranges.contains(&range)
             {
-                self.ranges.insert(range);
+                self.ranges.push(range);
             }
             let center = entity_chunk(viewer.position);
             (chunk.0 - center.0).abs() <= distance.max(0)
@@ -391,29 +422,43 @@ impl EntityInterest {
         self.ready.contains(&id)
     }
 
+    /// `entity` was visited: it leaves the visit set, and its next movement deadline is armed.
+    ///
+    /// A row visited off its due tick (`!due`) is armed for its next due tick whether or not movement
+    /// is pending yet: the visit at that tick sends what has accumulated against the client baseline,
+    /// exactly what the per-tick visits of a moving row would have found, and `delta` skips an armed
+    /// row. A row visited on its due tick that sent movement (`moved`) is armed for the following
+    /// one, since it is evidently still moving. A row that did neither is not armed: it is visited
+    /// again when it next changes. Only a deadline armed with movement already pending is delivery
+    /// debt (`ready` when it fires); the others are visits that a changing row would have made
+    /// anyway, so credit rejection at that tick leaves them exactly as the per-tick visit did.
+    /// Rows blocked by credit never complete, so they arm nothing. Fence: `entity_interest_tests`,
+    /// `armed_rows_*` there.
     pub(super) fn completed(
         &mut self,
         entity: &EntityView,
         tracked: &TrackedEntity,
         tick: u64,
         due: bool,
+        moved: bool,
     ) {
         if !self.seeded {
             return;
         }
         self.dirty.remove(&entity.id);
         self.ready.remove(&entity.id);
-        if !due
-            && (entity_movement(entity, tracked.baseline).is_some()
-                || tracked.head_yaw != pack_degrees(entity.head_yaw))
-        {
+        if !due || moved {
+            let pending = !due
+                && (entity_movement(entity, tracked.baseline).is_some()
+                    || tracked.head_yaw != pack_degrees(entity.head_yaw));
             let interval =
                 mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(entity.type_id)
                     .map_or(1, |contract| u64::from(contract.update_interval).max(1));
             let phase =
                 (tick % interval + entity.id.0.rem_euclid(interval as i32) as u64) % interval;
             let next = tick.saturating_add(interval - phase);
-            if self.scheduled.insert(entity.id, next) != Some(next) {
+            let before = self.scheduled.insert(entity.id, (next, pending));
+            if before.map(|(at, _)| at) != Some(next) {
                 self.due.push(Reverse((next, entity.id.0)));
             }
         } else {
