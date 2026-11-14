@@ -29,6 +29,44 @@ use blocks::{NEIGHBOURS, facing_delta};
 use mc_world::{BlockPos, BlockRegistry, BlockState, BlockStateId, ScheduledBlockTick};
 use planning::BlockPlanningRead;
 use std::collections::{BTreeMap, HashSet};
+mod diag {
+    use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+    pub(super) static RUNS: AtomicU64 = AtomicU64::new(0);
+    pub(super) static REBUILDS: AtomicU64 = AtomicU64::new(0);
+    pub(super) static REBUILD_NS: AtomicU64 = AtomicU64::new(0);
+    pub(super) static BODIES: AtomicU64 = AtomicU64::new(0);
+    pub(super) static QUERIES: AtomicU64 = AtomicU64::new(0);
+    static DUE: AtomicU64 = AtomicU64::new(0);
+    static PLATE: AtomicU64 = AtomicU64::new(0);
+    static RAIL: AtomicU64 = AtomicU64::new(0);
+    static BUTTON: AtomicU64 = AtomicU64::new(0);
+    pub(super) fn rebuilt(ns: u64, bodies: u64) {
+        REBUILDS.fetch_add(1, Relaxed);
+        REBUILD_NS.fetch_add(ns, Relaxed);
+        BODIES.fetch_add(bodies, Relaxed);
+    }
+    pub(super) fn pass(due: u64, plate: u64, rail: u64, button: u64, tick: u64) {
+        DUE.fetch_add(due, Relaxed);
+        PLATE.fetch_add(plate, Relaxed);
+        RAIL.fetch_add(rail, Relaxed);
+        BUTTON.fetch_add(button, Relaxed);
+        let runs = RUNS.fetch_add(1, Relaxed) + 1;
+        if runs % 200 == 0 {
+            eprintln!(
+                "redstone-diag: tick={tick} runs={runs} due={} plate={} rail={} wood_button={} rebuilds={} rebuild_ms={} bodies={} queries={}",
+                DUE.load(Relaxed),
+                PLATE.load(Relaxed),
+                RAIL.load(Relaxed),
+                BUTTON.load(Relaxed),
+                REBUILDS.load(Relaxed),
+                REBUILD_NS.load(Relaxed) / 1_000_000,
+                BODIES.load(Relaxed),
+                QUERIES.load(Relaxed),
+            );
+        }
+    }
+}
+
 
 #[derive(Default)]
 pub(crate) struct RedstoneState {
@@ -472,17 +510,27 @@ pub(crate) fn run(
     };
     wires.settled.clear();
     let mut entity_query = std::mem::take(&mut state.redstone.entity_query);
-    if due.iter().any(|tick| {
-        at(state, tick.pos).is_some_and(|block| {
+    let (mut n_plate, mut n_rail, mut n_button) = (0u64, 0u64, 0u64);
+    for tick in &due {
+        if let Some(block) = at(state, tick.pos) {
             let path = block.block.id.path();
-            path.ends_with("_pressure_plate")
-                || path == "detector_rail"
-                || (path.ends_with("_button")
-                    && !matches!(path, "stone_button" | "polished_blackstone_button"))
-        })
-    }) {
-        entity_query.rebuild(state);
+            if path.ends_with("_pressure_plate") {
+                n_plate += 1;
+            } else if path == "detector_rail" {
+                n_rail += 1;
+            } else if path.ends_with("_button")
+                && !matches!(path, "stone_button" | "polished_blackstone_button")
+            {
+                n_button += 1;
+            }
+        }
     }
+    if n_plate + n_rail + n_button > 0 {
+        let started = std::time::Instant::now();
+        entity_query.rebuild(state);
+        diag::rebuilt(started.elapsed().as_nanos() as u64, state.entities.len() as u64);
+    }
+    diag::pass(due.len() as u64, n_plate, n_rail, n_button, state.tick);
     for tick in due {
         if at(state, tick.pos).is_some_and(|b| b.block.id == tick.block) {
             tick_cell(

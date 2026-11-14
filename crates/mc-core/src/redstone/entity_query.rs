@@ -94,6 +94,7 @@ impl EntityQuery {
         limit: usize,
         accepts: impl Fn(EntitySlot) -> bool,
     ) -> usize {
+        super::diag::QUERIES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.count_in(&self.bodies, min, max, limit, &accepts)
     }
 
