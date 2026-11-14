@@ -360,6 +360,10 @@ regression = []
         self.assertFalse(ledger._failing_verdict(failed('buildings_gate_L1_funded'), 'buildings-qa', 'gate.L3_upgrade'))
         self.assertFalse(ledger._failing_verdict(failed('buildings_house_L1_built'), 'buildings-qa', 'wall.L1_built'))
         self.assertFalse(ledger._failing_verdict(failed('in_play'), 'buildings-qa', 'wall.L1_built'))
+        self.assertTrue(ledger._failing_verdict(failed('buildings_house_L1_broken_cell_repaired'),
+                                               'buildings-qa', 'house.L1_broken_cell_repaired'))
+        self.assertFalse(ledger._failing_verdict(failed('buildings_house_L1_funded'),
+                                                'buildings-qa', 'house.L1_broken_cell_repaired'))
 
     def test_failed_profile_run_is_red_for_the_verdict_its_scenario_report_records(self):
         # village-qa records its six verdicts, then fails the aggregate `all_behaviours_pass`: the failed

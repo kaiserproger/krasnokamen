@@ -128,6 +128,8 @@ def _failing_verdict(receipt, profile, verdict):
         if error.value is not None:
             return True
         blueprint, _, behaviour = verdict.partition('.')
+        if profile == 'buildings-qa' and verdict == 'house.L1_broken_cell_repaired':
+            return _assertion_failure(receipt) == 'buildings_house_L1_broken_cell_repaired'
         level = re.match(r'L\d+_', behaviour)
         prefix = f'buildings_{blueprint}_' + (level.group(0) if level else '')
         return profile == 'buildings-qa' and (_assertion_failure(receipt) or '').startswith(prefix)

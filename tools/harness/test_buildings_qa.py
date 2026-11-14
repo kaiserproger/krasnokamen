@@ -243,6 +243,30 @@ class AdmissionTest(unittest.TestCase):
                 buildings_qa._admitted_or_caught(probe, {}, "buildings_gate", "gate", 3, False)
 
 
+class HouseRepairOracleTest(unittest.TestCase):
+    def test_requires_both_repaired_block_and_original_project_to_end(self):
+        from tools.harness.backends import village_autonomy_qa as village
+        origin = [1, 70, 1]
+        for block, progress, expected in (
+            ("minecraft:air", None, False),
+            ("minecraft:oak_log", {"blueprint": "house", "origin": origin, "level": 1}, False),
+            ("minecraft:oak_log", {"blueprint": "farm", "origin": origin, "level": 1}, True),
+            ("minecraft:oak_log", None, True),
+        ):
+            with self.subTest(block=block, progress=progress):
+                probe = FakeProbe()
+                sub = {"L1_broken_cell": [1, 71, 1], "L1_broken_origin": origin}
+                with mock.patch.object(buildings_qa, "_read", return_value={"block_id": block}), \
+                     mock.patch.object(village, "_project_status", return_value={}), \
+                     mock.patch.object(village, "_project_progress", return_value=progress):
+                    if expected:
+                        buildings_qa._check_house_repair(probe, sub, "buildings_house")
+                        self.assertEqual(sub["behaviour"]["L1_broken_cell_repaired"], "PASS")
+                    else:
+                        with self.assertRaisesRegex(RuntimeError, "buildings_house_L1_broken_cell_repaired"):
+                            buildings_qa._check_house_repair(probe, sub, "buildings_house")
+
+
 class SequentialFlowTest(unittest.TestCase):
     """`_scenario_sequential` for one blueprint with every game-facing helper replaced."""
 
@@ -282,6 +306,8 @@ class SequentialFlowTest(unittest.TestCase):
             _building_bounds=building_bounds,
             _building_seq=lambda *a, **k: 7,
             _adversarial_break=lambda *a, **k: False,
+            _break_placed_house_cell=lambda *a, **k: None,
+            _check_house_repair=lambda *a, **k: None,
             _wait_certified_origin_here=wait_cert,
             _verify_level=lambda *a, **k: None,
         )

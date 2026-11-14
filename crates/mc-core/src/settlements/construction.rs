@@ -2162,6 +2162,11 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
     else {
         return false;
     };
+    // Certification is not a substitute for matching the placed blueprint:
+    // the executor may have reached its last cell after a player broke one.
+    if executor::recover(state, id, &project.structure) != Ok(false) {
+        return false;
+    }
     if !executor::status(state, id, &project.structure)
         .is_ok_and(|snapshot| snapshot.state == ScriptStructureState::Committed)
     {

@@ -74,7 +74,7 @@ The content registry rebuilds an immutable, ordered recipe/ingredient index with
 
 A non-persisted settlement-registry memo retains at most 16 Boolean or wood-reservation proofs together. Its keys compare the probe kind, full ordered bill, every slot and stack component by value, and a strongly owned recipe-index identity; it is never saved, so a loaded world starts without it. Native callers run on the tick owner, not entity workers. Concurrent misses may duplicate computation and vary eviction order, never results. The typed structure ledger is likewise derived from the canonical plugin domain: every write, mutable borrow, deletion and WAL replay invalidates its exact domain, while checkpoint and journal bytes remain unchanged.
 
-A foreign edit in a fenced construction footprint pauses the project as `footprint_changed`; the next construction admission re-snapshots and resumes it. **Remaining cells can be placed over the changed world**, while already placed cells are not re-planned. Removing a settlement cancels its construction handle but leaves placed blocks and carried materials.
+A foreign edit in a fenced construction footprint pauses the project as `footprint_changed`; the next construction admission re-snapshots and resumes it. Previously placed blueprint cells whose block identity no longer matches are queued for repair and paid for from real stock, like other construction. Completion checks those cells again before certification. If repair materials are missing, the project reports the shortage and waits for the existing supply rules. Removing a settlement cancels its construction handle but leaves placed blocks and carried materials.
 
 ## Owner build requests
 

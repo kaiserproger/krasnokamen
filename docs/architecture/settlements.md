@@ -36,6 +36,11 @@ worker returns to extraction without cancelling the structure, and is not
 borrowed again until its remaining bill is funded. Lumber search for an active
 wood shortage follows the project's selected wood family. Partial loads return
 through the ordinary storage transaction when they can fund the remaining work.
+After footprint interference the native structure executor derives a bounded
+repair stage from completed build cells that no longer match the world. It
+persists that stage in the existing structure ledger; repairs use the same
+material custody and one-cell transaction as ordinary work, and completion
+reconciles the world before issuing a certificate.
 
 Breeding-ration provisioning retains its own transient storage destination once
 a resident finds a reachable spare bed. Arrival completes that food transfer
