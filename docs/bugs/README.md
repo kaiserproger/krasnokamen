@@ -234,7 +234,7 @@ worker, runs the negative control.
    nothing about this source and is refused. A unit test cannot close a client
    failure.
 4. Automatic negative control: the fix commit's non-test hunks (test files,
-   `docs/` and Rust hunks after the first `#[cfg(test)] mod` stay) are
+   `docs/` and Rust hunks inside inline `#[cfg(test)]` modules stay) are
    reverse-applied onto the candidate in a temporary worktree; only if
    they no longer apply there, onto a worktree at `fix_commit`
    (`control_tree: head|fix_commit` in `promote.json`). Then every ref runs

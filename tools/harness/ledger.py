@@ -425,6 +425,72 @@ def format_row(ident, row):
 _TEST_PATH = re.compile(r'(^|/)(tests?|testdata|fixtures?)/|(^|/)[^/]*_tests?(\.rs|\.py|/)|(^|/)tests?\.rs$|(^|/)test_[^/]*\.py$')
 _CFG_TEST_MOD = re.compile(r'^[ \t]*#\[cfg\(test\)\][ \t]*\n(?:[ \t]*#\[[^\n]*\][ \t]*\n)*[ \t]*(?:pub(?:\([^)]*\))? )?mod \w+\s*\{', re.MULTILINE)
 _HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
+_RUST_RAW_STRING = re.compile(r'(?:br|rb|r)(#*)"')
+_RUST_CHAR = re.compile(r"(?:b)?'(?:\\.|[^'\\\n])'")
+
+
+def _rust_test_ranges(source):
+    """Line ranges of inline cfg(test) modules, ignoring braces in Rust literals and comments."""
+    masked = list(source)
+    pos = 0
+    while pos < len(source):
+        start = pos
+        if source.startswith('//', pos):
+            end = source.find('\n', pos)
+            pos = len(source) if end < 0 else end
+        elif source.startswith('/*', pos):
+            pos += 2
+            depth = 1
+            while pos < len(source) and depth:
+                if source.startswith('/*', pos):
+                    depth += 1
+                    pos += 2
+                elif source.startswith('*/', pos):
+                    depth -= 1
+                    pos += 2
+                else:
+                    pos += 1
+            if depth:
+                raise Refused('unterminated Rust block comment while splitting test hunks')
+        else:
+            raw = _RUST_RAW_STRING.match(source, pos)
+            char = _RUST_CHAR.match(source, pos)
+            if raw:
+                end = source.find('"' + raw.group(1), raw.end())
+                if end < 0:
+                    raise Refused('unterminated Rust raw string while splitting test hunks')
+                pos = end + 1 + len(raw.group(1))
+            elif char:
+                pos = char.end()
+            elif source[pos] == '"':
+                pos += 1
+                while pos < len(source) and source[pos] != '"':
+                    pos += 2 if source[pos] == '\\' else 1
+                if pos >= len(source):
+                    raise Refused('unterminated Rust string while splitting test hunks')
+                pos += 1
+            else:
+                pos += 1
+                continue
+        for index in range(start, pos):
+            if source[index] != '\n':
+                masked[index] = ' '
+    code = ''.join(masked)
+    ranges = []
+    for match in _CFG_TEST_MOD.finditer(code):
+        depth = 1
+        pos = match.end()
+        while pos < len(code) and depth:
+            if code[pos] == '{':
+                depth += 1
+            elif code[pos] == '}':
+                depth -= 1
+            pos += 1
+        if depth:
+            raise Refused('unterminated Rust test module while splitting test hunks')
+        ranges.append((source.count('\n', 0, match.start()) + 1,
+                       source.count('\n', 0, pos - 1) + 1))
+    return ranges
 
 
 def _hunk_changed_lines(hunk):
@@ -451,8 +517,8 @@ def non_test_patch(root, commit):
 def _split_non_test(diff, source_of):
     """Split a diff into (patch text of its non-test hunks, reversed files, kept test files).
 
-    Test hunks are those in test files and, for Rust, those after the first
-    `#[cfg(test)] mod`. A hunk straddling that boundary refuses: it cannot be split.
+    Test hunks are those in test files or inside Rust inline `#[cfg(test)]` modules.
+    A hunk straddling a module boundary refuses: it cannot be split.
     `source_of(path)` is the post-change text of a file.
     """
     patch, reversed_files, test_files = [], [], []
@@ -474,23 +540,16 @@ def _split_non_test(diff, source_of):
         if _TEST_PATH.search(path):
             test_files.append(path)
             continue
-        threshold = None
-        if path.endswith('.rs') and not any(text.startswith('+++ /dev/null') for text in header):
-            source = source_of(path)
-            found = _CFG_TEST_MOD.search(source)
-            if found:
-                threshold = source.count('\n', 0, found.start()) + 1
-            if threshold is not None and threshold > 1 and any(
-                    text.startswith('new file mode') for text in header):
-                # A file the fix commit adds is one hunk: reversing it deletes the file and
-                # its inline test module together, so there is no boundary to straddle.
-                threshold = None
+        ranges = []
+        if (path.endswith('.rs') and not any(text.startswith(('+++ /dev/null', 'new file mode')) for text in header)):
+            ranges = _rust_test_ranges(source_of(path))
         kept = []
         for hunk in hunks:
             changed = _hunk_changed_lines(hunk)
-            if threshold is not None and changed and all(line >= threshold for line in changed):
+            in_test = [any(start <= line <= end for start, end in ranges) for line in changed]
+            if in_test and all(in_test):
                 continue
-            if threshold is not None and any(line >= threshold for line in changed):
+            if any(in_test):
                 raise Refused(f'a hunk of {path} straddles its #[cfg(test)] module; split the fix commit')
             kept.append(hunk)
         if kept:

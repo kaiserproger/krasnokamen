@@ -1103,6 +1103,25 @@ class LedgerToolTests(unittest.TestCase):
         self.assertIn('-    1\n+    2\n', patch_text)
         self.assertNotIn('assert_eq', patch_text)
 
+    def test_inline_test_module_before_later_production(self):
+        root = self.scratch()
+        filler = ''.join(f'// filler {n}\n' for n in range(12))
+        source = ('#[cfg(test)]\nmod tests {\n'
+                  '    const BRACES: &str = r#"} { /*"#;\n'
+                  '    /* { nested /* } */ { */\n'
+                  '    fn test_it() { assert!(true); }\n}\n'
+                  + filler + 'fn later() -> u8 {\n    1\n}\n')
+        (root / 'src/lib.rs').write_text(source)
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'test module before production')
+        changed = source.replace('assert!(true)', 'assert!(false)').replace('    1\n', '    2\n')
+        (root / 'src/lib.rs').write_text(changed)
+        self.git(root, 'commit', '-qam', 'change test and production')
+        patch_text, reversed_files, _ = ledger.non_test_patch(root, self.git(root, 'rev-parse', 'HEAD'))
+        self.assertEqual(reversed_files, ['src/lib.rs'])
+        self.assertIn('-    1\n+    2\n', patch_text)
+        self.assertNotIn('assert!(false)', patch_text)
+
     def test_hunk_straddling_the_test_module_is_refused(self):
         root = self.scratch()
         source = 'fn value() -> u8 {\n    1\n}\n#[cfg(test)]\nmod tests {\n    fn it() {}\n}\n'
