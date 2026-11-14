@@ -3,6 +3,6 @@ linker = "clang"
 rustflags = ["-C", "link-arg=-fuse-ld=mold"]
 
 [env]
-# Chunk encoding uses 16 MiB runtime worker stacks in solaris-v2.
+# Chunk encoding uses 16 MiB runtime worker stacks in krasnokamen.
 # Keep the same headroom for debug-build test threads.
 RUST_MIN_STACK = "16777216"

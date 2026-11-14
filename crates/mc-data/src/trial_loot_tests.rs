@@ -8,8 +8,8 @@ fn tables() -> TrialLootTables {
 }
 #[test]
 fn all_runtime_trial_tables_roll_canonical_components() {
-    let items = crate::items::solaris_required_items();
-    let facts = crate::item_components::solaris_required_item_facts();
+    let items = crate::items::krasnokamen_required_items();
+    let facts = crate::item_components::krasnokamen_required_item_facts();
     let tables = tables();
     for name in tables.tables.keys() {
         for seed in 0..100 {
@@ -26,8 +26,8 @@ fn all_runtime_trial_tables_roll_canonical_components() {
 }
 #[test]
 fn normal_and_ominous_key_tables_are_distinct_and_exact() {
-    let items = crate::items::solaris_required_items();
-    let facts = crate::item_components::solaris_required_item_facts();
+    let items = crate::items::krasnokamen_required_items();
+    let facts = crate::item_components::krasnokamen_required_item_facts();
     let tables = tables();
     for (table, item) in [
         ("spawners/trial_chamber/key", "trial_key"),
