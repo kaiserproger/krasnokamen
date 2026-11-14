@@ -256,3 +256,33 @@ fn native_removed_and_added_component_collision_is_corrupt_not_last_writer_wins(
         ItemNbtError::InvalidComponent("duplicate item component minecraft:custom_name".into())
     );
 }
+
+#[test]
+fn resolved_component_admission_matches_named_codec_without_losing_components() {
+    let items = crate::items::krasnokamen_required_items();
+    let name = Identifier::parse("minecraft:diamond_sword").unwrap();
+    let item = items.id_of(&name).unwrap();
+    let original = rich_stack_fields();
+    let Some(Tag::Compound(components)) = field(&original, "components") else {
+        unreachable!()
+    };
+    let named = stack_from_component_patch(&items, &name, components).unwrap();
+    let resolved = stack_from_resolved_component_patch(&items, item, components.clone()).unwrap();
+    assert_eq!(resolved, named);
+    assert_components_eq(
+        &stack_to_fields(&items, &named).unwrap(),
+        &stack_to_fields(&items, &resolved).unwrap(),
+    );
+    let bad = vec![(
+        "minecraft:damage".into(),
+        Tag::String("not a number".into()),
+    )];
+    assert_eq!(
+        stack_from_resolved_component_patch(&items, item, bad.clone()).unwrap_err(),
+        stack_from_component_patch(&items, &name, &bad).unwrap_err(),
+    );
+    assert_eq!(
+        stack_from_resolved_component_patch(&items, u32::MAX, Vec::new()).unwrap_err(),
+        ItemNbtError::UnknownItem(u32::MAX.to_string()),
+    );
+}

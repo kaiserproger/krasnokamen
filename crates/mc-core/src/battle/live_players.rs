@@ -339,9 +339,7 @@ fn eligible(state: &TickState, regiment: &Regiment, side: u16, tier: u8) -> bool
         return true;
     }
     let formation = &state.hostile.battle.formation;
-    let trident = mc_data::Identifier::parse("minecraft:trident".to_owned())
-        .ok()
-        .and_then(|id| state.registry.items.id_of(&id));
+    let trident = state.registry.battle_ids.item(super::ids::KitItem::Trident);
     let first = formation.members[regiment.start].id;
     let kind = (regiment.start..regiment.start + regiment.len)
         .find_map(|i| state.entities.slot_of(formation.members[i].id))
@@ -351,7 +349,7 @@ fn eligible(state: &TickState, regiment: &Regiment, side: u16, tier: u8) -> bool
         row.entity_life.mount.vehicle.is_none()
             && row.appearance.equipment[0]
                 .as_ref()
-                .is_some_and(|stack| Some(stack.item_id) != trident)
+                .is_some_and(|stack| stack.item_id != trident)
     })
 }
 

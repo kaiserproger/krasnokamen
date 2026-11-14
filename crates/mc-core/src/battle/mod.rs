@@ -9,6 +9,7 @@ pub(crate) mod combat;
 mod faction;
 pub(crate) mod formation;
 mod ground;
+pub(crate) mod ids;
 pub(crate) mod live_players;
 pub(crate) mod morale;
 pub(crate) mod retaliation;

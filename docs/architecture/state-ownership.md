@@ -328,6 +328,12 @@ nothing; the `phase ms:`, `tick outer ms:` and `journal build ms:` summary
 prefixes and field units remain compatible with the coreperf log reader.
 These opt-in log records do not replace authoritative `TickTimes` telemetry.
 
+Battle staging resolves its vanilla item carriers and husk/horse type IDs once
+in the stable registry tables. Loadout component variants still use the canonical
+item codec; resolved equipment enters the summon image before normal attribute
+and wire-appearance restoration. No per-fighter item-name NBT round trip or
+entity-name registry lookup is needed, and no combinatorial loadout cache is kept.
+
 ## Recurring allocator and farming projections
 
 Villager threat and pickup projection visits entity bodies only in neighboring

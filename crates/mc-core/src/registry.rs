@@ -123,6 +123,8 @@ pub struct RegistryTables {
     pub zombie_type_id: u32,
     /// Item id of `minecraft:shears` (shearing wool mobs).
     pub shears_item: Option<u32>,
+    /// Battle kit and body identities, resolved once with the stable registry.
+    pub(crate) battle_ids: crate::battle::ids::Ids,
     /// Item facts (stack sizes, food, use durations) for [`ItemRules`](crate::inventory::ItemRules).
     pub item_facts: mc_data::item_components::ItemFactsTable,
     /// Canonical vanilla tags, shared with village processors and biome gates.
@@ -573,6 +575,8 @@ impl CoreRegistry {
             .ok_or_else(|| CoreError::Registry("missing minecraft:zombie".to_owned()))?;
         let shears_item =
             items.id_of(&Identifier::parse("minecraft:shears").expect("item id parses"));
+        let battle_ids =
+            crate::battle::ids::Ids::load(&items, &entity_types).map_err(CoreError::Registry)?;
         let enchantments = crate::inventory::enchanting::EnchantmentCatalog::load(root)
             .map_err(CoreError::Registry)?;
         let advancements = Arc::new(match vanilla_data_dir {
@@ -596,6 +600,7 @@ impl CoreRegistry {
             stable: Arc::new(RegistryTables {
                 blocks,
                 shears_item,
+                battle_ids,
                 items: Arc::new(items),
                 entity_loot,
                 entity_loot_lookups,
