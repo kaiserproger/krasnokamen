@@ -44,6 +44,11 @@ ledger; repairs use the same material custody and one-cell transaction as
 ordinary work, and completion reconciles the world before issuing a
 certificate.
 
+Street and workstation construction are temporary Builder employment. Completing
+that infrastructure releases its Builder, so production's live free-resident list
+can change between dialogs. Opening or refusing a production plan does not own a
+worker; admission owns the selected resident for the unfinished order.
+
 Breeding-ration provisioning retains its own transient storage destination once
 a resident finds a reachable spare bed. Arrival completes that food transfer
 even when the bed is outside storage's local POI scan; ordinary worker hauling
