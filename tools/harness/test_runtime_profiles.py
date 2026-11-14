@@ -140,7 +140,7 @@ class ProfileTaskTests(unittest.TestCase):
                 mock.patch.object(runtime, "port_open", return_value=False), \
                 mock.patch.object(runtime, "wait_port"), \
                 mock.patch.object(runtime.subprocess, "Popen") as launch:
-            os.environ.pop("SOLARIS_PW_ROOT", None)
+            os.environ.pop("KRASNOKAMEN_PW_ROOT", None)
             root = Path(directory)
             launch.return_value = mock.Mock()
             _, handle = runtime.start_client(**_valid_kwargs(root / "game", root / "client.log"))
@@ -175,7 +175,7 @@ class ProfileTaskTests(unittest.TestCase):
                     seen["env"] = env
                 finally:
                     handle.close()
-            self.assertEqual(seen["env"]["SOLARIS_CLIENT_MCP_USERNAME"], "SvcProfile")
+            self.assertEqual(seen["env"]["KRASNOKAMEN_CLIENT_MCP_USERNAME"], "SvcProfile")
 
     def test_vanilla_explicit_uses_direct_mojang_command(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -314,7 +314,7 @@ class ModProvisioningTests(unittest.TestCase):
                     self.assertEqual(staged_target.parent, game / "mods")
                     # Fail-closed verification runs before Gradle starts.
                     self.assertGreaterEqual(verify.call_count, 1)
-                    marker = json.loads((game / "solaris-profile.json").read_text())
+                    marker = json.loads((game / "krasnokamen-profile.json").read_text())
                     self.assertEqual(marker["client_profile"], "svc")
                     self.assertEqual(marker["platform"], "fabric")
                 finally:

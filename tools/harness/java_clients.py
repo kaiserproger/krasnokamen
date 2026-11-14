@@ -31,10 +31,10 @@ Contract the matrix runner relies on:
   Audio isolation (OpenAL ``null``, no audio server) is forced per client by
   ``runtime.start_client`` and recorded in each ``game/java-audio-isolation.json``.
 * ``authenticate=True`` registers every Play session through the live
-  ``solaris-auth`` plugin (``/register <pw> <pw>`` with a generated
+  ``krasnokamen-auth`` plugin (``/register <pw> <pw>`` with a generated
   password, then fresh ``'registered'`` and ``'logged in'`` chat
   acknowledgements per the ``auth_live_check.py`` contract). Only for
-  gameplay/capability fixtures whose server deploys ``solaris-auth``;
+  gameplay/capability fixtures whose server deploys ``krasnokamen-auth``;
   without it registration fails closed. Passwords never appear in
   ``group.json``, receipts or errors — use :func:`authenticate_client`
   directly when a custom password is required.
@@ -91,7 +91,7 @@ def _confirm_exact_permission(client: Any, address: str, timeout_seconds: float)
     without showing the permission screen (e.g. cached grant). Never
     attempts any other title.
     """
-    expected = f"Allow Solaris content from {address}?"
+    expected = f"Allow Krasnokamen content from {address}?"
     deadline = time.monotonic() + timeout_seconds
     last_error: Exception | None = None
     observed: dict[str, Any] | None = None

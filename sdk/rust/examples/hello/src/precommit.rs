@@ -80,8 +80,8 @@
 
 use std::collections::VecDeque;
 
-use solaris_plugin_sdk::events::CommandInvoked;
-use solaris_plugin_sdk::{
+use krasnokamen_plugin_sdk::events::CommandInvoked;
+use krasnokamen_plugin_sdk::{
     BuildContext, BuildDecision, Command, Config, DamageContext, DamageDecision, DamageTarget,
     Event, Failure, HookActor, InitContext, LogLevel, log, message_player,
 };

@@ -87,10 +87,7 @@ pub(crate) struct LiveState {
 }
 
 pub(crate) fn valid_name(name: &str) -> bool {
-    (1..=16).contains(&name.len())
-        && name
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    (1..=16).contains(&name.len()) && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
 }
 
 pub(crate) fn parse_side(word: &str) -> Option<u16> {
@@ -349,7 +346,11 @@ fn choose_slot(
         [sum[0] + origin[0], sum[1] + origin[2]]
     });
     let centre = [centre[0] / foot.len() as f64, centre[1] / foot.len() as f64];
-    let tiers = if state.hostile.battle.running { 0..3 } else { 0..1 };
+    let tiers = if state.hostile.battle.running {
+        0..3
+    } else {
+        0..1
+    };
     for tier in tiers {
         let mut best: Option<(f64, usize, usize)> = None;
         for &i in &foot {
@@ -575,7 +576,10 @@ fn yaw_of(facing: [f64; 2]) -> f32 {
 }
 
 fn teleport(state: &mut TickState, id: EntityId, to: [f64; 3], yaw: f32, pitch: f32) {
-    let slot = state.entities.slot_of(id).expect("online player has a body");
+    let slot = state
+        .entities
+        .slot_of(id)
+        .expect("online player has a body");
     crate::mounts::dismount(state, id);
     state.entities.set_rot(slot, yaw, pitch);
     state.entities.set_pos(slot, to);
@@ -663,7 +667,10 @@ pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<Strin
         Some(index) => {
             let hold = &state.hostile.battle.live.holds[index];
             if hold.side != side {
-                return Err(format!("{name} holds a slot of side {}, not {side}", hold.side));
+                return Err(format!(
+                    "{name} holds a slot of side {}, not {side}",
+                    hold.side
+                ));
             }
             (hold.regiment, hold.file)
         }
@@ -802,9 +809,13 @@ fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<Stri
                 position(&r.spec, file, 0, file_interval(r))
             }
         });
-        if let Placement::At(ground) =
-            ground::place(&state.world, &state.registry, at, PLAYER_HALF_WIDTH, PLAYER_HEIGHT)
-        {
+        if let Placement::At(ground) = ground::place(
+            &state.world,
+            &state.registry,
+            at,
+            PLAYER_HALF_WIDTH,
+            PLAYER_HEIGHT,
+        ) {
             at = ground;
         }
         (at, yaw_of(r.spec.facing))
@@ -841,8 +852,7 @@ pub(crate) fn spectate(
     target: &str,
 ) -> Result<String, String> {
     let viewer = player_named(state, name).ok_or_else(|| format!("{name} is not online"))?;
-    let subject =
-        player_named(state, target).ok_or_else(|| format!("{target} is not online"))?;
+    let subject = player_named(state, target).ok_or_else(|| format!("{target} is not online"))?;
     if viewer == subject {
         return Err("a spectator cannot follow itself".into());
     }

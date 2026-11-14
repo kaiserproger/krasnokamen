@@ -61,17 +61,17 @@ class LoaderV2Tests(unittest.TestCase):
 
     def test_shared_probe_uses_frozen_binary_without_building(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            binary = Path(temporary) / "solaris-v2"
+            binary = Path(temporary) / "krasnokamen"
             binary.write_text("#!/bin/false\n")
             binary.chmod(0o700)
-            with mock.patch.dict("os.environ", {"SOLARIS_SERVER_BINARY": str(binary)}), \
+            with mock.patch.dict("os.environ", {"KRASNOKAMEN_SERVER_BINARY": str(binary)}), \
                  mock.patch.object(profiles, "_run_command") as build:
                 selected = profiles._server_binary(profiles.ProfileContext(Path(temporary)))
             self.assertEqual(selected, binary)
             build.assert_not_called()
 
     def test_shared_probe_rejects_invalid_frozen_binary_without_building(self) -> None:
-        with mock.patch.dict("os.environ", {"SOLARIS_SERVER_BINARY": "/missing/solaris-v2"}), \
+        with mock.patch.dict("os.environ", {"KRASNOKAMEN_SERVER_BINARY": "/missing/krasnokamen"}), \
              mock.patch.object(profiles, "_run_command") as build:
             with self.assertRaisesRegex(RuntimeError, "missing executable server binary"):
                 profiles._server_binary(profiles.ProfileContext(Path("/tmp")))

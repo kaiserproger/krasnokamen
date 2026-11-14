@@ -75,7 +75,7 @@ fn nbt(value: &Tag) -> Vec<u8> {
 fn equippable_preserves_asset_and_entity_set_on_wire_and_storage() {
     let value = fields(vec![
         ("slot", text("chest")),
-        ("asset_id", text("solaris_battle:holy")),
+        ("asset_id", text("krasnokamen_battle:holy")),
         (
             "allowed_entities",
             make_list(vec![text("minecraft:zombie"), text("minecraft:skeleton")]),
@@ -88,7 +88,7 @@ fn equippable_preserves_asset_and_entity_set_on_wire_and_storage() {
     );
     payload.write_bool(true);
     payload
-        .write_identifier(&Identifier::parse("solaris_battle:holy").unwrap())
+        .write_identifier(&Identifier::parse("krasnokamen_battle:holy").unwrap())
         .unwrap();
     payload.write_bool(false);
     payload.write_bool(true);

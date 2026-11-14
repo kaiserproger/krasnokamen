@@ -331,18 +331,14 @@ pub(crate) fn around_obstacles(
     let half_width = frame.entities.body(slot).half_width;
     let (world, registry) = (frame.world, frame.registry);
     let turned = match mover {
-        Mover::Foot => super::ground::deflect_foot(world, registry, pos, half_width, drive, heading, 1.0),
-        Mover::Rider => super::ground::deflect(world, registry, pos, half_width, drive, heading, 1.0),
+        Mover::Foot => {
+            super::ground::deflect_foot(world, registry, pos, half_width, drive, heading, 1.0)
+        }
+        Mover::Rider => {
+            super::ground::deflect(world, registry, pos, half_width, drive, heading, 1.0)
+        }
         Mover::Fugitive(escape) => super::ground::deflect_mounted(
-            world,
-            registry,
-            pos,
-            half_width,
-            drive,
-            heading,
-            1.0,
-            escape,
-            frame.tick,
+            world, registry, pos, half_width, drive, heading, 1.0, escape, frame.tick,
         ),
     };
     if turned == drive {

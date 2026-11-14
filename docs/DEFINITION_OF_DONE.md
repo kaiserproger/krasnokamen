@@ -1,6 +1,6 @@
 # Definition Of Done
 
-This document is the hard process contract for Solaris agents. It does
+This document is the hard process contract for Krasnokamen agents. It does
 not slow down draft implementation; it prevents draft work from being
 reported as release quality.
 
@@ -40,7 +40,7 @@ The last line checks the git-ignored licensed content cache
 ([how to build it](OPERATING.md#vanilla-content-cache)). Also check, when
 relevant:
 
-- Port `25565` is free before starting `solaris-v2`.
+- Port `25565` is free before starting `krasnokamen`.
 - The current branch matches the milestone branch named in the plan.
 - Local-only files such as `.analysis/`, `data/vanilla/` and `opencode.json`
   are git-ignored and will not be staged.
@@ -96,14 +96,14 @@ harness gates cannot downgrade a failed real-client observation.
 
 ## Vanilla Parity Target
 
-Solaris is not a bit-perfect clone, but the release target is hard:
+Krasnokamen is not a bit-perfect clone, but the release target is hard:
 
 - At least 80% coverage of scoped vanilla overworld-survival mechanics
   that a normal vanilla Java client can observe. The server's canonical
   release is 26.3 (protocol 777); 26.1.2 clients are served through the
   retained legacy profile, so state which release a claim was observed on.
 - The remaining 20% must be documented as non-goal, deferred, or
-  knowingly divergent Solaris semantics.
+  knowingly divergent Krasnokamen semantics.
 - A mechanic counts toward the 80% only when its normal path is covered
   by tests and at least one vanilla/client-visible evidence source.
 - Packet IDs, field layouts, registry/data facts, and gameplay timing
@@ -139,7 +139,7 @@ A stabilization milestone is done only when:
 - The cargo baseline passes after the final change.
 - New or changed mechanics have focused tests that exercise real runtime
   paths.
-- Vanilla/Solaris divergence is measured or explicitly accepted.
+- Vanilla/Krasnokamen divergence is measured or explicitly accepted.
 - PrismLauncher or real-client automation covers the client-visible
   scenario, or the closeout remains `draft`.
 - Performance budgets are measured for hot-path changes.
