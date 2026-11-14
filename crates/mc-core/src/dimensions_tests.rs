@@ -2128,7 +2128,7 @@ fn legacy_only_dimension_layout_is_rejected_without_creating_modern_world() {
         let error = crate::Core::open(import_config(&directory.0))
             .unwrap_err()
             .to_string();
-        assert!(error.contains("solaris-v2 world import-anvil"), "{error}");
+        assert!(error.contains("krasnokamen world import-anvil"), "{error}");
         assert!(!directory.0.join("dimensions").exists());
         assert!(!directory.0.join("CHECKPOINT-MANIFEST.json").exists());
     }

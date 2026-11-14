@@ -1,6 +1,6 @@
 //! Narrow worldgen feature fact reader.
 //!
-//! This parses placed/configured feature JSON into scalar facts Solaris can feed
+//! This parses placed/configured feature JSON into scalar facts Krasnokamen can feed
 //! into independent generation policy. It does not execute vanilla feature or
 //! placement algorithms.
 

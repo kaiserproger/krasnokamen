@@ -434,8 +434,8 @@ class NativeLanguageTests(unittest.TestCase):
 
         def start(*_args, **_kwargs):
             environ = gate.scene_shot.os.environ
-            seen["language"] = environ.get("SOLARIS_CLIENT_LANGUAGE")
-            seen["settings"] = json.loads(Path(environ["SOLARIS_CLIENT_SETTINGS"]).read_text())
+            seen["language"] = environ.get("KRASNOKAMEN_CLIENT_LANGUAGE")
+            seen["settings"] = json.loads(Path(environ["KRASNOKAMEN_CLIENT_SETTINGS"]).read_text())
             raise RuntimeError("client launch stopped")
 
         for language, ambient in (("ru_ru", None), ("en_us", "ru_ru")):
@@ -449,9 +449,9 @@ class NativeLanguageTests(unittest.TestCase):
                 (root / "playable.toml").write_text(
                     (gate.scene_shot.runtime.REPO_ROOT / "playable.toml").read_text())
                 (root / "template").mkdir()
-                env = {"SOLARIS_SERVER_BINARY": str(binary), "XDG_DATA_HOME": str(root / "xdg")}
+                env = {"KRASNOKAMEN_SERVER_BINARY": str(binary), "XDG_DATA_HOME": str(root / "xdg")}
                 if ambient:
-                    env["SOLARIS_CLIENT_LANGUAGE"] = ambient
+                    env["KRASNOKAMEN_CLIENT_LANGUAGE"] = ambient
                 seen.clear()
                 with patch.dict("os.environ", env), \
                         patch.object(gate.scene_shot.runtime, "REPO_ROOT", root), \
@@ -468,7 +468,7 @@ class NativeLanguageTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError, "client launch stopped"):
                         gate.run(ctx)
                     # An ambient value is restored for the caller, not leaked or dropped.
-                    self.assertEqual(gate.scene_shot.os.environ.get("SOLARIS_CLIENT_LANGUAGE"), ambient)
+                    self.assertEqual(gate.scene_shot.os.environ.get("KRASNOKAMEN_CLIENT_LANGUAGE"), ambient)
                 self.assertEqual(seen["language"], language)
                 # The harness never writes the language into the persisted client settings.
                 self.assertNotIn("language", seen["settings"])

@@ -173,7 +173,7 @@ Data-defined blueprints get `spawn_weight = 0`: no natural spawning.
   plugin startup contribution's work recipes and block tools as JSON strings.
   `MobBlueprintDef::from_json` plus `CoreRegistry::register_blueprint` is the only
   admission path.
-- **Layer 2 plugins:** `solaris:plugin@0.8.0` adds
+- **Layer 2 plugins:** `krasnokamen:plugin@0.9.0` adds
   `mob-blueprints: option<list<string>>` to `startup-contribution`. The host bounds
   each package to 64 JSON strings of at most 16 KiB. Core requires every id's
   namespace to equal the defining plugin id, sorts the complete deployment by id,
@@ -181,7 +181,7 @@ Data-defined blueprints get `spawn_weight = 0`: no natural spawning.
   definitions and custom keys; changed or removed definitions refuse reopening.
   The field is omitted when empty, retaining identity bytes for vanilla worlds.
   Native capture/replay stores the custom id; Anvil export writes `presents_as`
-  and retains the custom name in `solaris:MobBlueprint`. Anvil remains a vanilla
+  and retains the custom name in `krasnokamen:MobBlueprint`. Anvil remains a vanilla
   interchange format, not the native custom-behavior restart path.
 - **Operator data directory:** proposed separately, not part of plugin loading.
   It would use the same validator and deterministic startup ordering.

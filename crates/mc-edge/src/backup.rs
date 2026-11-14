@@ -17,7 +17,7 @@ const BACKUP_FORMAT: u32 = 2;
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 struct BackupManifest {
     format: u32,
-    solaris_version: String,
+    krasnokamen_version: String,
     target_release: String,
     protocol_version: i32,
     world_version: u32,
@@ -31,7 +31,7 @@ impl BackupManifest {
     fn current() -> Self {
         Self {
             format: BACKUP_FORMAT,
-            solaris_version: env!("CARGO_PKG_VERSION").to_owned(),
+            krasnokamen_version: env!("CARGO_PKG_VERSION").to_owned(),
             target_release: mc_protocol::TARGET_RELEASE.to_owned(),
             protocol_version: mc_protocol::PROTOCOL_VERSION,
             world_version: mc_protocol::WORLD_VERSION,
@@ -44,7 +44,7 @@ impl BackupManifest {
 }
 
 /// Core::open leases the world through `mc_world::storage::open_for_lease`: the
-/// directory inode on Unix, its `.solaris-world.lock` on Windows.
+/// directory inode on Unix, its `.krasnokamen-world.lock` on Windows.
 /// redb 3 uses the same File::try_lock on state.redb. Locking the raw file also
 /// excludes direct NativeStore users without opening/repairing the database.
 struct ExclusiveLease(File);

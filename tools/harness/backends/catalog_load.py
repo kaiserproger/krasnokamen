@@ -876,7 +876,7 @@ def plugin_proof(directory: Path, recipe: dict[str, Any], fixture: dict[str, Any
         if outcome in ("rejected", "stale_revision"):
             refusal = {"plugin": owner, "tick": int(tick), "outcome": outcome,
                        "request": fields.get("request")}
-            if (owner == "solaris-economy" and outcome == "rejected"
+            if (owner == "krasnokamen-economy" and outcome == "rejected"
                     and re.fullmatch(r"pay-status-\d+", fields.get("request", ""))):
                 absence_probes.append(refusal)
             else:
@@ -928,7 +928,7 @@ def plugin_proof(directory: Path, recipe: dict[str, Any], fixture: dict[str, Any
     proof["payment_absence_probes"] = absence_probes
     if absence_probes and (len(absence_probes) != 1 or proof["errors"]
             or observed[(0, "steady", "Paid 7 coins.")] != 1
-            or proof["journal"].get("solaris-economy", {}).get("committed", 0) < 1):
+            or proof["journal"].get("krasnokamen-economy", {}).get("committed", 0) < 1):
         proof["errors"].extend(absence_probes)
     journaled = sum(row.get("journaled_messages", 0) for row in proof["journal"].values())
     if journaled < proof["successful_replies"]:

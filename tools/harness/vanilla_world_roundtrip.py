@@ -129,11 +129,11 @@ def main():
         def v2(phase, native, anvil):
             command = [str(runner), "-x", "-m", "8G", "env", "CARGO_BUILD_JOBS=6",
                        "CARGO_PROFILE_DEV_DEBUG=0", "CARGO_PROFILE_TEST_DEBUG=0",
-                       f"SOLARIS_VANILLA_ROUNDTRIP_WORLD={native}", f"SOLARIS_VANILLA_ROUNDTRIP_PHASE={phase}",
-                       f"SOLARIS_VANILLA_ROUNDTRIP_ANVIL={anvil}",
-                       f"SOLARIS_VANILLA_ROUNDTRIP_RECEIPT={output / (phase + '-conversion.json')}",
-                       f"SOLARIS_VANILLA_ROUNDTRIP_EXPORT={world if phase == 'create' else output / 'reexport'}",
-                       f"SOLARIS_VANILLA_ROUNDTRIP_EXPORT_RECEIPT={output / (phase + '-export.json')}",
+                       f"KRASNOKAMEN_VANILLA_ROUNDTRIP_WORLD={native}", f"KRASNOKAMEN_VANILLA_ROUNDTRIP_PHASE={phase}",
+                       f"KRASNOKAMEN_VANILLA_ROUNDTRIP_ANVIL={anvil}",
+                       f"KRASNOKAMEN_VANILLA_ROUNDTRIP_RECEIPT={output / (phase + '-conversion.json')}",
+                       f"KRASNOKAMEN_VANILLA_ROUNDTRIP_EXPORT={world if phase == 'create' else output / 'reexport'}",
+                       f"KRASNOKAMEN_VANILLA_ROUNDTRIP_EXPORT_RECEIPT={output / (phase + '-export.json')}",
                        "cargo", "test", "-p", "mc-world-conversion", TEST, "--", "--ignored", "--exact", "--nocapture"]
             receipt.setdefault("conversion_receipts", {})[phase] = {
                 "import": str(output / (phase + "-conversion.json")),
@@ -144,7 +144,7 @@ def main():
                 result = subprocess.run(command, cwd=ROOT, stdout=handle, stderr=subprocess.STDOUT,
                                         timeout=args.timeout * 4, check=False)
             receipt["logs"][f"v2_{phase}"] = str(log)
-            if result.returncode or f"SOLARIS_VANILLA_ROUNDTRIP_{phase.upper()}_OK" not in log.read_text():
+            if result.returncode or f"KRASNOKAMEN_VANILLA_ROUNDTRIP_{phase.upper()}_OK" not in log.read_text():
                 raise RuntimeError(f"v2 {phase} failed (exit {result.returncode}); see {log}")
             receipt["checks"][f"v2_{phase}"] = True
 

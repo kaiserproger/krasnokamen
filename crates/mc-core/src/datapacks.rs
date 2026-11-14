@@ -572,7 +572,7 @@ impl PackSet {
     /// install onto `base` is skipped with a warning naming it and the file, so a
     /// pack that a live `/datapack enable` refused cannot stop the next start.
     /// This deliberately differs from vanilla, which enables a new pack and refuses
-    /// to start when it fails (offering `--safeMode`); Solaris has no safe mode.
+    /// to start when it fails (offering `--safeMode`); Krasnokamen has no safe mode.
     /// A pack the saved selection holds that no longer loads still stops the start,
     /// naming pack and file: fix or remove that pack and start again.
     pub(crate) fn open(

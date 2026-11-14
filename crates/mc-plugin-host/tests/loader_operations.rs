@@ -1,6 +1,6 @@
 //! The loader-live gate's own guest surface: two owners, one real component.
 //!
-//! `examples/loader-live-gate` deploys the same `solaris-hello-plugin` component
+//! `examples/loader-live-gate` deploys the same `krasnokamen-hello-plugin` component
 //! twice - as `ruby-live` and as `sapphire-live` - and the Loader gate is what a
 //! real client does with the result. This file is the part of that gate a native
 //! test can establish without a client: the component is really built and started,
@@ -389,7 +389,7 @@ async fn answer_input_opens(boundary: &ScriptBoundary, session: u64, revision: u
                 "{owner} did not enable {action_id}: {declared:?}"
             );
         }
-        let instance = format!("solaris:view-{}", owner.len());
+        let instance = format!("krasnokamen:view-{}", owner.len());
         boundary
             .try_enqueue_event(opened(
                 owner,
@@ -509,7 +509,7 @@ async fn the_counters_come_from_admitted_actions_and_a_reconnect_starts_from_zer
     );
 
     // One real admitted edge, on the instance the owner answered with.
-    let instance = format!("solaris:view-{}", RUBY.id.len());
+    let instance = format!("krasnokamen:view-{}", RUBY.id.len());
     boundary
         .try_enqueue_event(action(&RUBY, SESSION, &instance, 1, "ruby-live:key_press"))
         .unwrap();
@@ -527,7 +527,7 @@ async fn the_counters_come_from_admitted_actions_and_a_reconnect_starts_from_zer
             RUBY.id,
             hud.request_id(),
             SESSION,
-            "solaris:hud-1",
+            "krasnokamen:hud-1",
             1,
         ))
         .unwrap();
@@ -540,7 +540,7 @@ async fn the_counters_come_from_admitted_actions_and_a_reconnect_starts_from_zer
     let (_, present) = admitted
         .into_present_client_view()
         .expect("the HUD is refreshed by a present");
-    assert_eq!(present.view_instance_id(), "solaris:hud-1");
+    assert_eq!(present.view_instance_id(), "krasnokamen:hud-1");
     assert_eq!(present.expected_revision(), 1);
 
     run(&boundary, &RUBY, SESSION, "input_status");
@@ -562,7 +562,7 @@ async fn the_counters_come_from_admitted_actions_and_a_reconnect_starts_from_zer
             RUBY.id,
             request.request_id(),
             RECONNECTED,
-            "solaris:reconnected-input",
+            "krasnokamen:reconnected-input",
             1,
         ))
         .unwrap();
@@ -578,7 +578,7 @@ async fn the_counters_come_from_admitted_actions_and_a_reconnect_starts_from_zer
         .try_enqueue_event(action(
             &RUBY,
             RECONNECTED,
-            "solaris:reconnected-input",
+            "krasnokamen:reconnected-input",
             1,
             "ruby-live:key_press",
         ))
@@ -625,7 +625,7 @@ async fn a_refused_open_is_never_presented_against_and_the_answered_revision_is_
             RUBY.id,
             hud.request_id(),
             SESSION,
-            "solaris:hud-4",
+            "krasnokamen:hud-4",
             3,
         ))
         .unwrap();
@@ -635,7 +635,7 @@ async fn a_refused_open_is_never_presented_against_and_the_answered_revision_is_
     let (_, present) = admitted
         .into_present_client_view()
         .expect("update presents the held instance");
-    assert_eq!(present.view_instance_id(), "solaris:hud-4");
+    assert_eq!(present.view_instance_id(), "krasnokamen:hud-4");
     assert_eq!(present.expected_revision(), 3);
     let (_, _, text) = line(&boundary).await;
     assert_eq!(text, "Ruby UI request: update.");
@@ -647,7 +647,7 @@ async fn a_refused_open_is_never_presented_against_and_the_answered_revision_is_
     let (_, _, instance) = admitted
         .into_close_client_view()
         .expect("hide closes the held instance");
-    assert_eq!(instance, "solaris:hud-4");
+    assert_eq!(instance, "krasnokamen:hud-4");
     let (_, _, text) = line(&boundary).await;
     assert_eq!(text, "Ruby UI request: hide.");
     run(&boundary, &RUBY, SESSION, "hide");
@@ -697,7 +697,7 @@ async fn one_pending_hud_open_coalesces_the_latest_model_and_leaves_no_orphan_in
     let boundary = host.boundary().clone();
     boundary.try_enqueue_event(joined(SESSION)).unwrap();
     answer_input_opens_alone(&boundary, &RUBY, SESSION).await;
-    let input_instance = format!("solaris:view-{}", RUBY.id.len());
+    let input_instance = format!("krasnokamen:view-{}", RUBY.id.len());
 
     // The panel is opened, and the owner's answer is withheld.
     run(&boundary, &RUBY, SESSION, "hud");
@@ -750,7 +750,7 @@ async fn one_pending_hud_open_coalesces_the_latest_model_and_leaves_no_orphan_in
             RUBY.id,
             pending.request_id(),
             SESSION,
-            "solaris:hud-1",
+            "krasnokamen:hud-1",
             4,
         ))
         .unwrap();
@@ -760,7 +760,7 @@ async fn one_pending_hud_open_coalesces_the_latest_model_and_leaves_no_orphan_in
         .into_present_client_view()
         .expect("the answered open is presented, never opened again");
     assert_eq!(present.player_id().value(), SESSION);
-    assert_eq!(present.view_instance_id(), "solaris:hud-1");
+    assert_eq!(present.view_instance_id(), "krasnokamen:hud-1");
     assert_eq!(present.expected_revision(), 4);
     assert_eq!(
         hud_line(present.model()),
@@ -776,7 +776,7 @@ async fn one_pending_hud_open_coalesces_the_latest_model_and_leaves_no_orphan_in
     let (_, _, instance) = admitted
         .into_close_client_view()
         .expect("hide closes the instance the answer named");
-    assert_eq!(instance, "solaris:hud-1");
+    assert_eq!(instance, "krasnokamen:hud-1");
     let (_, _, text) = line(&boundary).await;
     assert_eq!(text, "Ruby UI request: hide.");
 
@@ -824,7 +824,7 @@ async fn a_hide_during_a_pending_hud_open_closes_the_answered_instance() {
             RUBY.id,
             pending.request_id(),
             SESSION,
-            "solaris:hud-2",
+            "krasnokamen:hud-2",
             1,
         ))
         .unwrap();
@@ -833,7 +833,7 @@ async fn a_hide_during_a_pending_hud_open_closes_the_answered_instance() {
     let (_, _, instance) = admitted
         .into_close_client_view()
         .expect("the hidden panel's answered instance is closed");
-    assert_eq!(instance, "solaris:hud-2");
+    assert_eq!(instance, "krasnokamen:hud-2");
 
     // The hide released the pending open with the instance it produced, so the
     // next request opens a new panel instead of presenting a closed one.
@@ -915,7 +915,7 @@ async fn a_hud_open_left_pending_by_a_disconnect_is_not_attached_to_the_next_ses
             RUBY.id,
             pending.request_id(),
             SESSION,
-            "solaris:stale-hud",
+            "krasnokamen:stale-hud",
             1,
         ))
         .unwrap();
@@ -940,7 +940,7 @@ async fn a_hud_open_left_pending_by_a_disconnect_is_not_attached_to_the_next_ses
             RUBY.id,
             reopened.request_id(),
             RECONNECTED,
-            "solaris:reconnected-hud",
+            "krasnokamen:reconnected-hud",
             2,
         ))
         .unwrap();
@@ -950,7 +950,7 @@ async fn a_hud_open_left_pending_by_a_disconnect_is_not_attached_to_the_next_ses
     let (_, present) = admitted
         .into_present_client_view()
         .expect("the new connection presents the instance it opened");
-    assert_eq!(present.view_instance_id(), "solaris:reconnected-hud");
+    assert_eq!(present.view_instance_id(), "krasnokamen:reconnected-hud");
     assert_eq!(present.expected_revision(), 2);
     let (_, _, text) = line(&boundary).await;
     assert_eq!(text, "Ruby UI request: update.");
@@ -1091,7 +1091,7 @@ async fn answer_input_opens_alone(boundary: &ScriptBoundary, owner: &Owner, sess
         (owner.id, owner.input)
     );
     assert_eq!(request.player_id().value(), session);
-    let instance = format!("solaris:view-{}", owner.id.len());
+    let instance = format!("krasnokamen:view-{}", owner.id.len());
     boundary
         .try_enqueue_event(opened(
             owner.id,

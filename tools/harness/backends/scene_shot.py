@@ -918,7 +918,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     if {"gui_scale", "screen_size"} & settings.keys() and ctx.client != "java":
         raise ValueError("gui_scale and screen_size are Java-only scene settings")
     if {"gui_scale", "language", "screen_size"} & settings.keys():
-        # The language reaches the native client as SOLARIS_CLIENT_LANGUAGE, the Java client
+        # The language reaches the native client as KRASNOKAMEN_CLIENT_LANGUAGE, the Java client
         # through options.txt; both accept exactly the pinned locales.
         _validate_java_display(settings.get("gui_scale", NATIVE_GUI_SCALE), settings.get("language", "en_us"),
                                settings.get("screen_size", WINDOW))
@@ -948,9 +948,9 @@ def run(
     """Run one scene; other profiles can supply a scenario and Python script."""
     (scenario, seed, server_view, spawn_protection, operator, username,
      client_latency_ms, settings, timeout) = validate_scenario(ctx, scenario)
-    binary_text = os.environ.get("SOLARIS_SERVER_BINARY")
+    binary_text = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not binary_text:
-        raise RuntimeError("scene-shot requires SOLARIS_SERVER_BINARY")
+        raise RuntimeError("scene-shot requires KRASNOKAMEN_SERVER_BINARY")
     binary = Path(binary_text).expanduser().resolve()
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise RuntimeError(f"missing executable server binary: {binary}")
@@ -981,7 +981,7 @@ def run(
     if operator:
         prepare_operator_fixture(ctx, [username])
     xdg = artifact / "xdg"
-    settings_path = xdg / "solaris-client" / "client-settings.json"
+    settings_path = xdg / "krasnokamen-client" / "client-settings.json"
     settings_path.parent.mkdir(parents=True)
     if ctx.client == "native":
         from ..preflight import CLIENT_CONTENT_DIRS, client_template
@@ -994,14 +994,14 @@ def run(
             entry = source_root / name
             if entry.exists():
                 (settings_path.parent / name).symlink_to(entry.resolve(), target_is_directory=entry.is_dir())
-    original = os.environ.get("SOLARIS_CLIENT_SETTINGS")
+    original = os.environ.get("KRASNOKAMEN_CLIENT_SETTINGS")
     if original and Path(original).is_file():
         base = json.loads(Path(original).read_text())
     else:
-        base_path = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "solaris-client" / "client-settings.json"
+        base_path = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "krasnokamen-client" / "client-settings.json"
         base = json.loads(base_path.read_text()) if base_path.is_file() else {}
     # The owner's personal fov must not leak into a reference comparison.
-    # The native client takes its language from SOLARIS_CLIENT_LANGUAGE (below), not the file.
+    # The native client takes its language from KRASNOKAMEN_CLIENT_LANGUAGE (below), not the file.
     base.update({"fov": NATIVE_FOV, **{key: value for key, value in settings.items()
                                        if not (key == "language" and ctx.client != "java")}})
     if ctx.client == "java" and "graphics_preset" in settings:
@@ -1028,15 +1028,15 @@ def run(
         xvfb, display, _ = runtime.start_xvfb(artifact, tuple(settings.get("screen_size", WINDOW)))
         ctx.logs.append(str(artifact / "xvfb.log"))
         old_xdg = os.environ.get("XDG_DATA_HOME")
-        old_settings = os.environ.get("SOLARIS_CLIENT_SETTINGS")
-        old_language = os.environ.get("SOLARIS_CLIENT_LANGUAGE")
+        old_settings = os.environ.get("KRASNOKAMEN_CLIENT_SETTINGS")
+        old_language = os.environ.get("KRASNOKAMEN_CLIENT_LANGUAGE")
         try:
             os.environ["XDG_DATA_HOME"] = str(xdg)
-            os.environ["SOLARIS_CLIENT_SETTINGS"] = str(settings_path)
+            os.environ["KRASNOKAMEN_CLIENT_SETTINGS"] = str(settings_path)
             # An ambient value must never leak into a run that did not ask for a language.
-            os.environ.pop("SOLARIS_CLIENT_LANGUAGE", None)
+            os.environ.pop("KRASNOKAMEN_CLIENT_LANGUAGE", None)
             if ctx.client != "java" and "language" in settings:
-                os.environ["SOLARIS_CLIENT_LANGUAGE"] = settings["language"]
+                os.environ["KRASNOKAMEN_CLIENT_LANGUAGE"] = settings["language"]
             if ctx.client == "java":
                 client, client_log, mcp = start_java(
                     ctx, artifact, f"127.0.0.1:{client_port}", username, timeout, display,
@@ -1046,8 +1046,8 @@ def run(
             else:
                 client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display)
         finally:
-            for key, old in (("XDG_DATA_HOME", old_xdg), ("SOLARIS_CLIENT_SETTINGS", old_settings),
-                             ("SOLARIS_CLIENT_LANGUAGE", old_language)):
+            for key, old in (("XDG_DATA_HOME", old_xdg), ("KRASNOKAMEN_CLIENT_SETTINGS", old_settings),
+                             ("KRASNOKAMEN_CLIENT_LANGUAGE", old_language)):
                 if old is None:
                     os.environ.pop(key, None)
                 else:

@@ -191,7 +191,7 @@ def normalise(profile: str, split: dict[str, Any], memory: str | None, out: Path
 def run_first_view(ctx: Context, split: dict[str, Any], memory: str) -> dict[str, Any]:
     """Measure a real window through the canonical harness, not a protocol proxy."""
     log = ctx.out / "first-view.log"
-    command = ["env", f"SOLARIS_SERVER_BINARY={ctx.server_bin}", sys.executable,
+    command = ["env", f"KRASNOKAMEN_SERVER_BINARY={ctx.server_bin}", sys.executable,
                "-m", "tools.harness", "run", "weak-first-view", "--client", "native", "--windowed",
                "--timeout-seconds", str(ctx.readiness_seconds), "--server-cpus", split["server"],
                "--client-cpus", split["bots"], "--memory", memory]

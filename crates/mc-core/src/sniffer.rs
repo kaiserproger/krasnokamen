@@ -309,18 +309,18 @@ pub(crate) fn to_fields(sniffer: &Sniffer) -> Vec<(String, mc_nbt::Tag)> {
     if let Some(target) = sniffer.target {
         fields.push(("Target".into(), Tag::IntArray(target.to_vec())));
     }
-    vec![("solaris:Sniffer".into(), Tag::Compound(fields))]
+    vec![("krasnokamen:Sniffer".into(), Tag::Compound(fields))]
 }
 
 pub(crate) fn from_record(
     record: &mc_data::entity_nbt::VanillaEntity,
 ) -> Result<Option<Box<Sniffer>>, crate::CoreError> {
     use mc_nbt::Tag;
-    let fail = || crate::CoreError::Storage("invalid sniffer state: solaris:Sniffer".into());
+    let fail = || crate::CoreError::Storage("invalid sniffer state: krasnokamen:Sniffer".into());
     let mut records = record
         .extra_fields
         .iter()
-        .filter(|(key, _)| key == "solaris:Sniffer");
+        .filter(|(key, _)| key == "krasnokamen:Sniffer");
     let Some((_, tag)) = records.next() else {
         return Ok(None);
     };

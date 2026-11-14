@@ -824,7 +824,7 @@ fn idle_parrot_and_frog_ticks_do_not_dirty_their_rows() {
 fn sniffer_record(fields: Vec<(String, mc_nbt::Tag)>) -> mc_data::entity_nbt::VanillaEntity {
     mc_data::entity_nbt::VanillaEntity {
         id: "minecraft:sniffer".into(),
-        extra_fields: vec![("solaris:Sniffer".into(), mc_nbt::Tag::Compound(fields))],
+        extra_fields: vec![("krasnokamen:Sniffer".into(), mc_nbt::Tag::Compound(fields))],
         ..Default::default()
     }
 }
@@ -893,11 +893,11 @@ fn obsolete_scalar_rider_fails_closed_in_nbt_and_wal() {
     let mut life = crate::entity_life::EntityLifeState::default();
     let error = crate::mounts::persistence::from_fields(
         &mut life,
-        &[("solaris:Rider".into(), Tag::IntArray(vec![0, 0, 0, 1]))],
+        &[("krasnokamen:Rider".into(), Tag::IntArray(vec![0, 0, 0, 1]))],
     )
     .unwrap_err();
     assert!(
-        error.to_string().contains("solaris:Rider is obsolete"),
+        error.to_string().contains("krasnokamen:Rider is obsolete"),
         "{error}"
     );
     let riders = |ids: &[i32]| {
@@ -911,11 +911,11 @@ fn obsolete_scalar_rider_fails_closed_in_nbt_and_wal() {
     };
     for (ids, reason) in [
         (&[1, 1][..], "duplicate"),
-        (&[1, 2, 3, 4, 5][..], "solaris:Riders"),
+        (&[1, 2, 3, 4, 5][..], "krasnokamen:Riders"),
     ] {
         let error = crate::mounts::persistence::from_fields(
             &mut life,
-            &[("solaris:Riders".into(), riders(ids))],
+            &[("krasnokamen:Riders".into(), riders(ids))],
         )
         .unwrap_err();
         assert!(error.to_string().contains(reason), "{error}");
@@ -1234,7 +1234,7 @@ fn rider_count_beyond_the_vehicle_seat_capacity_is_refused_by_the_image_reader()
     };
     let record = |kind: &str, count: i32| mc_data::entity_nbt::VanillaEntity {
         id: format!("minecraft:{kind}"),
-        extra_fields: vec![("solaris:Riders".into(), riders(count))],
+        extra_fields: vec![("krasnokamen:Riders".into(), riders(count))],
         ..Default::default()
     };
     let error = crate::journal::EntityStateImage::from_record(&state.registry, &record("cow", 2))

@@ -79,7 +79,7 @@ fn production_building(
     Ok(ScriptSettlementBuildingRef::new(
         "building".to_owned(),
         building_id.0.to_string(),
-        format!("solaris:{}", found.kind.name()),
+        format!("krasnokamen:{}", found.kind.name()),
     ))
 }
 

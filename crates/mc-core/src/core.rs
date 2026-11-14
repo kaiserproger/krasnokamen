@@ -103,7 +103,7 @@ pub const TICK_PERIOD: std::time::Duration = std::time::Duration::from_millis(50
 /// Written before anything else of a new world and removed once its initial
 /// checkpoint is durable. A start that finds it repeats the first start on what
 /// the stopped one left; no player can have joined that world yet.
-const FIRST_START_MARKER: &str = ".solaris-first-start";
+const FIRST_START_MARKER: &str = ".krasnokamen-first-start";
 
 /// How long a start waits for another process to release the world. A
 /// singleplayer client relaunched at once starts its server while the previous
@@ -553,7 +553,7 @@ impl Core {
         let is_stage = |path: &std::path::Path| {
             path.file_name()
                 .and_then(std::ffi::OsStr::to_str)
-                .is_some_and(|name| name.starts_with(".solaris-conversion-"))
+                .is_some_and(|name| name.starts_with(".krasnokamen-conversion-"))
         };
         if is_stage(&config.world_dir)
             || std::fs::canonicalize(&config.world_dir).is_ok_and(|path| is_stage(&path))

@@ -1,4 +1,4 @@
-//! Solaris-authored settlement blueprints (vanilla blocks only).
+//! Krasnokamen-authored settlement blueprints (vanilla blocks only).
 //!
 //! Data lives in `assets/blueprints/*.json` as readable ASCII layers (one string per
 //! z row, one char per x, `.` = air, layers listed bottom-up). Each level is the

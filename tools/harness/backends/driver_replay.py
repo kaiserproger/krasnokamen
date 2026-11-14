@@ -18,9 +18,9 @@ else:
     from driver_client import AgentClient, call_and_record, wait_for_existing_or_explicit_connection, wait_for_valid_png
 
 
-CORE_REPLAY_SCENARIO_SCHEMA = "solaris.core_replay.scenario.v1"
-CORE_REPLAY_RESULT_SCHEMA = "solaris.core_replay.result.v1"
-CORE_REPLAY_DRIVERS = {"solaris_protocol", "vanilla_oracle", "real_client"}
+CORE_REPLAY_SCENARIO_SCHEMA = "krasnokamen.core_replay.scenario.v1"
+CORE_REPLAY_RESULT_SCHEMA = "krasnokamen.core_replay.result.v1"
+CORE_REPLAY_DRIVERS = {"krasnokamen_protocol", "vanilla_oracle", "real_client"}
 CORE_REPLAY_EVIDENCE_KINDS = {
     "unit",
     "harness",
@@ -96,7 +96,7 @@ def load_core_replay_manifest(path: Path, expected_scenario_id: str) -> dict[str
                     f"core replay gate {gate['id']} has unsupported evidence kind {gate['evidence_kind']!r}"
                 )
         primary_evidence = {
-            "solaris_protocol": "harness",
+            "krasnokamen_protocol": "harness",
             "vanilla_oracle": "oracle",
             "real_client": "real_client",
         }[driver]
