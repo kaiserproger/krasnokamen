@@ -3,6 +3,7 @@
 import argparse
 import ctypes
 import hashlib
+import importlib.util
 import json
 import math
 import os
@@ -55,6 +56,9 @@ def arguments():
     p.add_argument('--cache', required=True, type=Path, help='server content cache')
     p.add_argument('--run-dir', required=True, type=Path, help='new directory; never overwritten')
     p.add_argument('--world', type=Path, help='stopped native world to copy; omitted creates a fresh generated world')
+    p.add_argument('--arena', choices=['grass'], help='stage on the deterministic grass arena of prepare-arena.py: built into <run-dir>/arena with this pin and --cache (minutes), then copied; its world seed is 42 unless --world-seed says otherwise')
+    p.add_argument('--arena-world', type=Path, help='reuse an already built arena world directory instead of building (implies --arena grass); its sibling result.json supplies the world seed')
+    p.add_argument('--arena-seed', type=int, default=42, help='arena layout seed when building')
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--world-seed', type=int, help='seed of the chosen world; defaults to battle seed')
     p.add_argument('--scenario', choices=['field-100', 'field-1k', 'field-10k'], default='field-10k')
@@ -75,8 +79,17 @@ def arguments():
     p.add_argument('--trace-every', type=int, metavar='TICKS', help=f'trace cadence in recorded ticks, with --trace (default {DEFAULT_TRACE_EVERY_TICKS})')
     p.add_argument('--dry-run', action='store_true')
     a = p.parse_args()
+    if a.arena_world is not None:
+        a.arena = 'grass'
+    if a.arena and a.world:
+        p.error('--arena replaces --world')
+    if not 0 <= a.arena_seed <= 2**63 - 1:
+        p.error('arena seed out of range')
+    recorded_seed = arena_receipt_seed(a.arena_world) if a.arena_world is not None else None
     if a.world_seed is None:
-        a.world_seed = a.seed
+        a.world_seed = (recorded_seed if recorded_seed is not None else ARENA_WORLD_SEED) if a.arena else a.seed
+    elif recorded_seed is not None and recorded_seed != a.world_seed:
+        p.error(f'--world-seed {a.world_seed} differs from the arena receipt world seed {recorded_seed}: the surroundings generate from it')
     if not -(2**63) <= a.world_seed <= 2**63 - 1:
         p.error('world seed must fit a signed 64-bit value')
     if not 0 <= a.seed <= 2**63 - 1 or a.duration < 1 or a.paused_ticks < 0 or a.minimum_battle_ticks < 0 or not (1 <= a.port <= 65535 and 1 <= a.dashboard_port <= 65535):
@@ -691,6 +704,9 @@ def run(a):
     root.mkdir(parents=True, exist_ok=False)
     a.created_dir = root
     world = root / 'world'
+    arena_info = None
+    if a.arena:
+        a.world, arena_info = stage_arena(a, binary, cache, root)
     if a.world:
         shutil.copytree(a.world.resolve(strict=True), world, symlinks=False)
     server_name = f'battle-{uuid.uuid4().hex}'
@@ -750,6 +766,11 @@ def run(a):
                     send(trace_command(a.trace))
             telemetry = threading.Thread(target=telemetry_worker, args=(a.dashboard_port, root / 'telemetry.jsonl', stop, failures, on_batch, ticks, telemetry_gaps if a.allow_marker_gaps else None, trace_policy.batch if trace_policy is not None else None), daemon=True)
             telemetry.start()
+            if a.pre_stage_ticks:
+                # Terrain streams to the recorder first: staged units would compete with it in the recorder's world queue.
+                status_policy.hold = True
+                wait_paused_ticks(ticks, failures, recorder, a.pre_stage_ticks, initial.get('tick') or 0)
+                status_policy.hold = False
             send(commands[0])
             expect(messages, 'Battle staged:')
             if trace_log is not None:
