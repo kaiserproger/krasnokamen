@@ -17,6 +17,26 @@ enum Kind {
 
 type ContactBox = ((i32, i32, i32), (i32, i32, i32));
 
+#[cfg(test)]
+std::thread_local! {
+    static WORK: std::cell::Cell<[usize; 3]> = const { std::cell::Cell::new([0; 3]) };
+}
+
+#[cfg(test)]
+fn count_work(index: usize, amount: usize) {
+    WORK.with(|work| {
+        let mut counts = work.get();
+        counts[index] += amount;
+        work.set(counts);
+    });
+}
+
+/// Candidates, serial rows after classification, exact contact block samples.
+#[cfg(test)]
+fn take_work_counts() -> [usize; 3] {
+    WORK.with(|work| work.replace([0; 3]))
+}
+
 fn world_mut(state: &mut TickState, dimension: Dimension) -> &mut TickState {
     if state.dimension == dimension {
         state
@@ -252,6 +272,8 @@ fn contact_from_gate(
         for x in min.0..=max.0 {
             for z in min.2..=max.2 {
                 let cell = BlockPos { x, y, z };
+                #[cfg(test)]
+                count_work(2, 1);
                 let Some(seen) = state.world.block_at(cell.x, cell.y, cell.z) else {
                     continue;
                 };
@@ -438,6 +460,8 @@ pub(crate) fn finish_with(
     let mut due = Vec::new();
     for dimension in dimensions {
         let world = world_mut(state, dimension);
+        #[cfg(test)]
+        count_work(0, world.entities.len());
         // Portal/world writes happen only in the queued travel phase below.
         let mut match_cache = std::mem::take(&mut world.portal_match_cache);
         match_cache.reset(&world.world);
@@ -465,6 +489,8 @@ pub(crate) fn finish_with(
         };
         world.portal_contact_stamps = stamps;
         for &(index, ()) in pending.iter().flatten() {
+            #[cfg(test)]
+            count_work(1, 1);
             let index = index as usize;
             let slot = EntitySlot(index as u32);
             let row = world.entities.body(slot);
@@ -838,3 +864,7 @@ pub(crate) fn finish_with(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "portals_travel_top100_h07_tests.rs"]
+mod top100_h07_tests;
