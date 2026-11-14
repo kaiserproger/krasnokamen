@@ -18,6 +18,8 @@ meaningful entity changes are journaled; ordinary non-projectile mob motion and
 idle-despawn-counter changes alone are checkpoint-durable only. An entity
 crossing chunks emits a full image. Do not claim exact per-tick mob motion
 recovery.
+Dropped-item pose changes use compact native `ItemMotion` images, including items
+whose lifetime or pickup clock is infinite. Resting items emit no pose image.
 
 Block-log records in `JournalEntry::BlockLog` and the native `block_log` table
 carry the committing server tick. Records from before tick capture have an
@@ -49,6 +51,11 @@ captured chunk revisions remain pinned until the matching acknowledgement.
 Explicit saves queue behind the current checkpoint. Shutdown requests a final
 checkpoint. See [ADR 0020](../decisions/0020-entity-checkpoints-at-one-million.md)
 for the entity checkpoint design.
+
+Disk-full checkpoint drills wrap the real lease-holding native file backend.
+The injected writer and `NativeStore` retain the same `Arc<File>`, as the
+production database and its backup reader do; failure injection never reopens
+the leased database through a second handle.
 
 Container WAL post-images can restore live custody without loading their chunk.
 Before freezing a checkpoint's container snapshot, materialize their dirty chunks
@@ -99,8 +106,8 @@ refused chunk still creates no unsaved custody.
 
 Mob targets are runtime-only. Zombie-family aggressive-arms appearance is
 present in WAL entity post-images but is not stored in checkpoint entity
-records. A WAL-recovered pose is reconciled with the live target on the first
-admitted hostile evaluation after restart, and a changed appearance is
+records. Recovery preserves a WAL pose until the first admitted hostile
+evaluation reconciles it with the live target; a changed appearance is
 journaled as usual. A checkpoint-only restart instead reconstructs the default
 pose and the hostile tick derives it again from live targeting.
 

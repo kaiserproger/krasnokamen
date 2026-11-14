@@ -468,6 +468,7 @@ fn entry_heap(entry: &JournalEntry) -> usize {
         | E::DefaultGameMode { .. }
         | E::RemoveBlockEntity { .. }
         | E::EntityVitals { .. }
+        | E::ItemMotion { .. }
         | E::RemoveEntity { .. } => 0,
         // Rare per tick: a fixed allowance for small nested state, plus direct
         // lengths where the payload can grow without bound.

@@ -132,6 +132,66 @@ fn idle_counter_progression_and_reset_do_not_emit_entity_state_images() {
 }
 
 #[test]
+fn infinite_item_motion_is_durable_without_idle_postimages() {
+    let mut state = fixture();
+    let stone = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:stone").unwrap())
+        .unwrap();
+    let item = crate::tick::spawn_item_entity(
+        &mut state,
+        [8.5, 65.0, 8.5],
+        mc_data::ItemStack::new(stone, 1),
+    );
+    let slot = state.entities.slot_of(item).unwrap();
+    state.entities.row_mut(slot).age = crate::entities::ITEM_AGE_NEVER;
+    state.entities.body_mut(slot).pickup_delay = crate::entities::PICKUP_DELAY_NEVER;
+    let birth = step(&mut state);
+    assert_eq!(image_ids(&birth), vec![item.0]);
+    let base = replay_batches(Replay::default(), &[(state.tick, state.tick, birth)]);
+    for _ in 0..8 {
+        let _ = state.entities.row_mut(slot);
+        let entries = step(&mut state);
+        assert!(image_ids(&entries).is_empty());
+        assert!(
+            entries
+                .iter()
+                .all(|entry| !matches!(entry, JournalEntry::ItemMotion { .. }))
+        );
+    }
+    let position = [9.5, 65.0, 8.5];
+    let velocity = [0.25, 0.0, 0.0];
+    state.entities.set_pos(slot, position);
+    state.entities.set_vel(slot, velocity);
+    state.entities.set_ground(slot, true);
+    let entries = step(&mut state);
+    assert!(
+        image_ids(&entries).is_empty(),
+        "motion must not clone the stack or appearance"
+    );
+    assert!(entries.iter().any(|entry| matches!(
+        entry,
+        JournalEntry::ItemMotion { id, pos, vel, ground: true, .. }
+            if *id == item.0 && *pos == position && *vel == velocity
+    )));
+    let replay = replay_batches(base, &[(state.tick, state.tick, entries)]);
+    let saved = &replay.entities[&item.0];
+    assert_eq!(saved.pos, position);
+    assert_eq!(saved.vel, velocity);
+    assert!(saved.ground);
+    assert_eq!(saved.age, crate::entities::ITEM_AGE_NEVER);
+    assert_eq!(saved.pickup_delay, crate::entities::PICKUP_DELAY_NEVER);
+    let quiet = step(&mut state);
+    assert!(image_ids(&quiet).is_empty());
+    assert!(
+        quiet
+            .iter()
+            .all(|entry| !matches!(entry, JournalEntry::ItemMotion { .. }))
+    );
+}
+
+#[test]
 fn resting_chest_minecarts_emit_no_entity_images_after_first_tick() {
     let mut state = fixture();
     let carts: Vec<_> = (0..100)

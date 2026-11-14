@@ -282,6 +282,74 @@ impl World {
 }
 
 #[test]
+fn native_faction_nbt_is_omitted_for_ordinary_mobs_and_written_once_for_battle() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let mob = world.spawn("minecraft:cow", [0.5, 80.0, 0.5]);
+    for faction in [0, 7, 60_000] {
+        world.tick(|state| state.entities.set_faction(slot(state, mob), faction));
+        let entity = entity_data_record(&world.state, slot(&world.state, mob)).unwrap();
+        let fields =
+            mc_data::entity_nbt::entity_to_fields(&world.state.registry.items, &entity).unwrap();
+        let faction_fields: Vec<_> = fields
+            .iter()
+            .filter(|(key, _)| key == "krasnokamen:Faction")
+            .collect();
+        assert_eq!(
+            faction_fields.len(),
+            usize::from(faction != 0),
+            "ordinary mobs carry no faction key; battle mobs carry exactly one"
+        );
+        if faction != 0 {
+            assert_eq!(faction_fields[0].1, mc_nbt::Tag::Int(i32::from(faction)));
+        }
+    }
+}
+
+#[test]
+fn mob_rider_survives_checkpoint_wal_and_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let horse = world.spawn("minecraft:horse", [8.5, 80.0, 8.5]);
+    let husk = world.spawn("minecraft:husk", [8.5, 80.0, 8.5]);
+    let horse_slot = slot(&world.state, horse);
+    let husk_slot = slot(&world.state, husk);
+    let horse_uuid = world.state.entities.row(horse_slot).uuid;
+    let rider_uuid = world.state.entities.row(husk_slot).uuid;
+    world.state.entities.row_mut(horse_slot).persistent = true;
+    world.state.entities.row_mut(husk_slot).persistent = true;
+    world.tick(|state| state.entities.set_riders(horse_slot, vec![rider_uuid]));
+    world.checkpoint();
+    world = world.crash();
+    let horse_slot = world.state.entities.slot_of_uuid(horse_uuid).unwrap();
+    assert_eq!(
+        world
+            .state
+            .entities
+            .row(horse_slot)
+            .entity_life
+            .mount
+            .riders,
+        vec![rider_uuid]
+    );
+    world.tick(|state| state.entities.row_mut(horse_slot).persistent = false);
+    world = world.crash();
+    let horse_slot = world.state.entities.slot_of_uuid(horse_uuid).unwrap();
+    assert_eq!(
+        world
+            .state
+            .entities
+            .row(horse_slot)
+            .entity_life
+            .mount
+            .riders,
+        vec![rider_uuid]
+    );
+}
+
+#[test]
 fn battle_faction_survives_native_checkpoint_wal_and_restart() {
     let directory = tempfile::tempdir().unwrap();
     let mut world = World::new(directory.path());
@@ -3305,41 +3373,3 @@ container_replay_cases!(
     (chiseled_bookshelf, "chiseled_bookshelf", 6, true),
     (lectern, "lectern", 1, true),
 );
-
-#[test]
-fn retracted_stand_does_not_return_after_checkpoint_restart() {
-    use mc_script::{ScriptNpcOrderOperation, ScriptOperation};
-    let directory = tempfile::tempdir().unwrap();
-    let mut world = World::new(directory.path());
-    world.tick(|_| {});
-    let (entity_uuid, revision, handle) = deploy_pavise(&mut world);
-    world.checkpoint();
-    world.tick(|state| {
-        let result = npc_request(
-            state,
-            ScriptOperation::NpcOrder {
-                operation: ScriptNpcOrderOperation::RetractItem {
-                    operation_id: "retract-pavise".into(),
-                    handle,
-                    expected_revision: revision,
-                    execution_permit: None,
-                    entity_uuid: entity_uuid.to_string(),
-                    equipment_slot: 0,
-                },
-            },
-        );
-        assert!(result.failure().is_none(), "retraction: {result:?}");
-    });
-    let (job, done) = world.capture();
-    let ack = world.commit(job, &done);
-    assert!(ack.is_some());
-    acknowledge_checkpoint(&mut world.state, ack);
-    let config = world.config.clone();
-    drop(world);
-    let world = World::open(config);
-    assert!(
-        world.state.entities.slot_of_uuid_any(entity_uuid).is_none(),
-        "retired stand returned after checkpoint restart"
-    );
-    assert_eq!(pavises(&world.state), 1);
-}

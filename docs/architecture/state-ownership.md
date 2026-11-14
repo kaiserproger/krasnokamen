@@ -76,7 +76,7 @@ The sole kernel tree is `mc-core/src/battle`, restored from the F battle
 line; `hostile` retains its runtime state, not another implementation.
 
 Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
-An unparried blow removes about two times in five on the authored
+An unparried blow removes about eight times in a thousand on the authored
 deterministic roll; seven removals in ten die on the spot and the rest
 withdraw wounded through the ranks. Any landed blow finishes a wounded man, and
 pursuit removes nearly every landed blow, nine in ten fatally. Front ranks
@@ -110,6 +110,15 @@ place round its target (golden-angle rings 1.2-3.6 blocks out), so riders that
 chose the same foe do not pile onto one block. The work counters bound visits,
 target checks, reaction checks, strikes, arc iterations and charge decisions;
 they are not a 20-TPS performance measurement.
+Mounted terrain turns are retained for up to 60 ticks, including while pursuing a
+target or formation slot. A side slide must retain the headroom required by
+steps in its projected direction; otherwise steering weighs another direction
+instead of pressing into a canopy-blocked step. The bounded detour prevents
+the slot from pulling the horse back into the same obstacle on its next tick.
+The ten-second stall census runs after target validation. A soldier holding a
+live enemy within six blocks is in contact, not advancing, even when its virtual
+leader is farther ahead. An invalid retained target cannot hide a blocked soldier;
+the census is derived telemetry and never changes motion.
 
 Large projectile batches (at least 16 shots) derive a reusable, counting-sorted
 two-block XZ grid from the frozen native body snapshot. Conservative half-extent
@@ -128,9 +137,15 @@ Pickup, expiry and physical-profile custody changes still use native owners.
 native `krasnokamen:LifetimeAge`; vanilla `life` projects the effective ground age.
 Hydration refuses an anchored projectile without a native lifetime-age long;
 retained lifetimes accept only 1,201, or 100 for Arrow/SpectralArrow.
+Block impact establishes the native-age anchor. Loss of support exits the idle
+path and clears both the anchor and ground age before falling; a later landing
+starts a fresh ground lifetime, including across checkpoint/WAL recovery.
 Active-clock WAL replay, frozen chunks and wrapping entity age retain elapsed
 time without one arrow image per tick. Loyalty tridents keep their dynamic
 return path and are not treated as idle arrows.
+
+Native mob NBT writes `krasnokamen:Faction` exactly once for a nonzero faction;
+ordinary faction-zero mobs carry no faction key.
 
 Mob riders use the same horse-owned UUID relation as player riders. Staging
 uses `battle::cavalry::mount`, requires a nonzero rider faction and copies it to
