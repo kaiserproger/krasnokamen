@@ -106,6 +106,10 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
     if ctx.scenario_id in ("native-v2-ledger-painting", "native-v2-ledger-axe", "native-v2-ledger-sponge",
                            "native-v2-ledger-setblock-snbt", "native-v2-ledger-crafting-pickup"):
         required = required | {"client_capture", "minecraft_look_at_block"}
+    if ctx.scenario_id in ("native-v2-ledger-spawn-protection", "native-v2-ledger-brush"):
+        required = required | {"minecraft_look_at_block", "minecraft_break_block"}
+    if ctx.scenario_id == "native-v2-ledger-dragon-egg":
+        required = required | {"minecraft_scan_blocks"}
     if ctx.scenario_id == "native-v2-cursor-close":
         required = required | {"minecraft_open_inventory", "client_capture"}
     if ctx.scenario_id in ("native-v2-craft-drag", "native-v2-craft-drag-paced",

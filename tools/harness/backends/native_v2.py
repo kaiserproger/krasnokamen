@@ -225,6 +225,165 @@ def _ledger_crafting_pickup(steps: ProbeSteps, origin: tuple[int, int, int]) -> 
     steps.call("minecraft_close_screen")
 
 
+def _chat_has(steps: ProbeSteps, label: str, *needles: str, timeout_seconds: float = 20) -> dict[str, Any]:
+    def hit(state: dict[str, Any]) -> bool:
+        return any(all(needle in line for needle in needles) for line in state["recent_chat"])
+    return steps.wait(hit, label, timeout_seconds=timeout_seconds)
+
+
+def _ledger_spawn_protection(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    target = _point(origin, dx=2, dz=1)
+    _set(steps, target, "minecraft:stone")
+    _give(steps, "minecraft:diamond_pickaxe")
+    _give(steps, "minecraft:dirt", 1)
+    steps.fixture("gamemode survival @s")
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    steps.call("minecraft_look_at_block", {**target, "face": "up"})
+    steps.call("minecraft_break_block", {
+        **target, "face": "up", "expected_drop_item_id": "minecraft:cobblestone",
+        "expected_drop_count": 0, "timeout_seconds": steps.remaining()})
+    _block(steps, target, "minecraft:air")
+    steps.check("operator_breaks_inside_spawn_radius", True)
+    _set(steps, target, "minecraft:stone")
+    steps.fixture("op LedgerRowsDummy")
+    steps.fixture("deop @s")
+    steps.call("minecraft_wait_ticks", {"ticks": 10})
+    refused = False
+    try:
+        steps.call("minecraft_look_at_block", {**target, "face": "up"})
+        steps.call("minecraft_break_block", {
+            **target, "face": "up", "expected_drop_item_id": "minecraft:cobblestone",
+            "expected_drop_count": 0, "timeout_seconds": 20})
+    except RuntimeError:
+        refused = True
+    still = steps.call("minecraft_read_block", target)
+    steps.check("nonop_break_refused_inside_spawn_radius",
+                refused and still.get("block_id") == "minecraft:stone")
+    steps.call("minecraft_set_hotbar_slot", {"slot": 1})
+    _use(steps, target, "up")
+    steps.call("minecraft_wait_ticks", {"ticks": 10})
+    above = steps.call("minecraft_read_block", _point(origin, dx=2, dy=1, dz=1))
+    steps.check("nonop_place_refused_inside_spawn_radius",
+                above.get("block_id") == "minecraft:air")
+    steps.report["limits"] = ["Spawn radius around the world spawn; one break and one place refusal, operator control first."]
+
+
+def _ledger_dragon_egg(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    point = _point(origin)
+    _set(steps, point, "minecraft:dragon_egg")
+    _use(steps, point)
+    moved: dict[str, Any] | None = None
+    for _ in range(12):
+        moved = steps.call("minecraft_read_block", point)
+        if moved.get("block_id") != "minecraft:dragon_egg":
+            break
+        steps.call("minecraft_wait_ticks", {"ticks": 5})
+    steps.check("egg_left_original_cell", moved is not None and moved.get("block_id") != "minecraft:dragon_egg")
+
+    def scan_eggs() -> list[dict[str, Any]]:
+        # Vanilla samples offsets in [-16, 16) horizontal and [-8, 8) vertical;
+        # four 16^3 boxes cover every possible target cell (scan caps one box at 4096).
+        x, y, z = origin
+        found: list[dict[str, Any]] = []
+        for min_x, max_x in ((x - 16, x - 1), (x, x + 15)):
+            for min_z, max_z in ((z - 16, z - 1), (z, z + 15)):
+                scan = steps.call("minecraft_scan_blocks", {
+                    "min_x": min_x, "max_x": max_x, "min_y": y - 8, "max_y": y + 7,
+                    "min_z": min_z, "max_z": max_z, "max_blocks": 4096})
+                found.extend(row for row in scan.get("blocks", [])
+                             if row.get("block_id") == "minecraft:dragon_egg")
+        return found
+
+    found: list[dict[str, Any]] = []
+    for _ in range(12):
+        steps.call("minecraft_wait_ticks", {"ticks": 10})
+        found = scan_eggs()
+        if len(found) == 1:
+            break
+    steps.report["egg_targets"] = found
+    steps.check("egg_teleported_exactly_once", len(found) == 1)
+    steps.check("egg_not_consumed", item_count(steps.observe(), "minecraft:dragon_egg") == 0)
+    steps.report["limits"] = ["One teleport inside the vanilla sample range; not the falling-block path."]
+
+
+def _ledger_brush(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    point = _point(origin)
+    steps.fixture(
+        f"setblock {point['x']} {point['y']} {point['z']} "
+        'minecraft:suspicious_sand{id:"minecraft:brushable_block",'
+        'LootTable:"minecraft:archaeology/desert_pyramid",LootTableSeed:42L}')
+    _block(steps, point, "minecraft:suspicious_sand", {"dusted": "0"})
+    _give(steps, "minecraft:brush")
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    steps.call("minecraft_look_at_block", {**point, "face": "up"})
+    for _ in range(4):
+        steps.call("minecraft_press_inputs", {"keys": ["use"], "ticks": 60})
+        if steps.call("minecraft_read_block", point).get("block_id") == "minecraft:sand":
+            break
+    _block(steps, point, "minecraft:sand")
+    steps.check("brushing_completed_to_sand", True)
+    steps.call("minecraft_wait_for_visible_entity", {
+        "entity_type": "minecraft:item", "radius": 8, "timeout_seconds": 30})
+    steps.check("brushing_dropped_loot_item", True)
+    steps.report["limits"] = ["One desert-pyramid suspicious sand; the loot drop is seen, not its table entry."]
+
+
+def _ledger_infiniburn(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    steps.fixture("weather clear")
+    props = "age=14,east=false,north=false,south=false,up=false,west=false"
+    nether_fire = _point(origin, dx=0, dy=1, dz=1)
+    _set(steps, _point(origin, dx=0, dz=1), "minecraft:netherrack")
+    _set(steps, nether_fire, f"minecraft:fire[{props}]")
+    stone_fire = _point(origin, dx=3, dy=1, dz=1)
+    _set(steps, _point(origin, dx=3, dz=1), "minecraft:stone")
+    _set(steps, stone_fire, f"minecraft:fire[{props}]")
+    steps.call("minecraft_wait_ticks", {"ticks": 120})
+    eternal = steps.call("minecraft_read_block", nether_fire)
+    steps.report["netherrack_fire"] = eternal
+    age = eternal.get("properties", {}).get("age")
+    steps.check("fire_past_age_15_survives_on_netherrack",
+                eternal.get("block_id") == "minecraft:fire" and age is not None and int(age) >= 15)
+    ordinary: dict[str, Any] | None = None
+    for _ in range(10):
+        ordinary = steps.call("minecraft_read_block", stone_fire)
+        if ordinary.get("block_id") == "minecraft:air":
+            break
+        steps.call("minecraft_wait_ticks", {"ticks": 20})
+    steps.check("fire_at_age_15_expires_on_stone",
+                ordinary is not None and ordinary.get("block_id") == "minecraft:air")
+    steps.report["limits"] = ["Netherrack infiniburn versus an ordinary stone control, both lit at age 14."]
+
+
+def _ledger_pot_shelf(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    pot = _point(origin, dx=0, dz=1)
+    _give(steps, "minecraft:decorated_pot")
+    steps.call("minecraft_set_hotbar_slot", {"slot": 0})
+    _use(steps, _point(origin, dy=-1, dz=1), "up")
+    _block(steps, pot, "minecraft:decorated_pot")
+    steps.check("pot_placed", True)
+    steps.fixture("debug give minecraft:diamond 3 1")
+    steps.call("minecraft_wait_for_inventory", {
+        "item_id": "minecraft:diamond", "count": 3, "timeout_seconds": steps.remaining()})
+    steps.call("minecraft_set_hotbar_slot", {"slot": 1})
+    _use(steps, pot, "up")
+    steps.wait(lambda state: item_count(state, "minecraft:diamond") == 2, "pot_stored_one_diamond")
+    steps.check("pot_stored_one_item", True)
+    steps.fixture(f"data get block {pot['x']} {pot['y']} {pot['z']}")
+    _chat_has(steps, "pot_block_entity_lists_diamond", "minecraft:diamond")
+    steps.check("pot_block_entity_holds_diamond", True)
+    shelf = _point(origin, dx=3, dz=1)
+    _set(steps, shelf, "minecraft:oak_shelf[facing=north,waterlogged=false]")
+    _give(steps, "minecraft:book", 2)
+    steps.call("minecraft_set_hotbar_slot", {"slot": 2})
+    _use(steps, shelf, "north")
+    steps.wait(lambda state: item_count(state, "minecraft:book") == 0, "shelf_stored_book")
+    steps.check("shelf_stored_book", True)
+    steps.fixture(f"data get block {shelf['x']} {shelf['y']} {shelf['z']}")
+    _chat_has(steps, "shelf_block_entity_lists_book", "minecraft:book")
+    steps.check("shelf_block_entity_holds_book", True)
+    steps.report["limits"] = ["One decorated-pot insertion and one shelf insertion, proven by block-entity reads."]
+
+
 def _redstone(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     fixtures = ((-2, "minecraft:lever[face=floor,facing=east]"),
                 (-1, "minecraft:redstone_wire"), (0, "minecraft:repeater[facing=west,delay=1]"),
@@ -923,6 +1082,11 @@ RUNNERS = {
     "native-v2-ledger-sponge": _ledger_sponge,
     "native-v2-ledger-setblock-snbt": _ledger_setblock_snbt,
     "native-v2-ledger-crafting-pickup": _ledger_crafting_pickup,
+    "native-v2-ledger-spawn-protection": _ledger_spawn_protection,
+    "native-v2-ledger-dragon-egg": _ledger_dragon_egg,
+    "native-v2-ledger-brush": _ledger_brush,
+    "native-v2-ledger-infiniburn": _ledger_infiniburn,
+    "native-v2-ledger-pot-shelf": _ledger_pot_shelf,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,
     "native-v2-map-locked-banners": _promotion_maps,
