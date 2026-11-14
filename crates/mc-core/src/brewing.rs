@@ -30,14 +30,25 @@ pub(crate) fn apply_data(state: &mut TickState, pos: BlockPos, next: BrewingStat
     let cell = (pos.x, pos.y, pos.z);
     state.brewing.insert(cell, next);
     for (viewer, open) in &state.open_containers {
-        if *open != cell { continue; }
-        let Some(player) = state.players.get(viewer) else { continue; };
-        let Some(menu) = player.open.as_ref()
-            .filter(|menu| menu.kind == crate::inventory::MenuKind::BrewingStand) else { continue; };
+        if *open != cell {
+            continue;
+        }
+        let Some(player) = state.players.get(viewer) else {
+            continue;
+        };
+        let Some(menu) = player
+            .open
+            .as_ref()
+            .filter(|menu| menu.kind == crate::inventory::MenuKind::BrewingStand)
+        else {
+            continue;
+        };
         let queue = state.outbox.entry(player.connection).or_default();
         for (property, value) in properties.into_iter().enumerate() {
             queue.push(PlayerChange::MenuProperty {
-                window: menu.window, property: property as i16, value,
+                window: menu.window,
+                property: property as i16,
+                value,
             });
         }
     }
@@ -45,8 +56,11 @@ pub(crate) fn apply_data(state: &mut TickState, pos: BlockPos, next: BrewingStat
 
 impl BrewingState {
     fn fence_slots(&mut self, slots: &[ItemStack]) {
-        if self.ingredient.is_some_and(|id| slots.get(3)
-            .is_none_or(|ingredient| ingredient.is_empty() || ingredient.item_id != id)) {
+        if self.ingredient.is_some_and(|id| {
+            slots
+                .get(3)
+                .is_none_or(|ingredient| ingredient.is_empty() || ingredient.item_id != id)
+        }) {
             self.cancelled_time.get_or_insert(self.brew_time);
             self.brew_time = 0;
             self.ingredient = None;
@@ -70,8 +84,11 @@ impl BrewingState {
         };
         let mut next = self.clone();
         if brew_time != self.brew_time {
-            next.ingredient = (brew_time > 0).then(|| slots.get(3))
-                .flatten().filter(|stack| !stack.is_empty()).map(|stack| stack.item_id);
+            next.ingredient = (brew_time > 0)
+                .then(|| slots.get(3))
+                .flatten()
+                .filter(|stack| !stack.is_empty())
+                .map(|stack| stack.item_id);
             next.cancelled_time = None;
         }
         next.brew_time = brew_time;
@@ -81,9 +98,12 @@ impl BrewingState {
     }
 
     pub(crate) fn retain_ingredient(&self, fields: &mut Vec<(String, Tag)>, items: &ItemRegistry) {
-        fields.retain(|(name, _)| name != "solaris:brewing_ingredient");
+        fields.retain(|(name, _)| name != "krasnokamen:brewing_ingredient");
         if let Some(name) = self.ingredient.and_then(|id| items.name_of(id)) {
-            fields.push(("solaris:brewing_ingredient".into(), Tag::String(name.as_str().into())));
+            fields.push((
+                "krasnokamen:brewing_ingredient".into(),
+                Tag::String(name.as_str().into()),
+            ));
         }
     }
 
@@ -172,7 +192,7 @@ impl BrewingState {
         // identity explicitly, so a post-image cannot restart a changed batch.
         if let Some(name) = self.ingredient.and_then(|id| items.name_of(id)) {
             fields.push((
-                "solaris:brewing_ingredient".into(),
+                "krasnokamen:brewing_ingredient".into(),
                 Tag::String(name.as_str().into()),
             ));
         }
@@ -212,7 +232,7 @@ impl BrewingState {
         let ingredient = if brew_time == 0 {
             None
         } else {
-            match field(&fields, "solaris:brewing_ingredient") {
+            match field(&fields, "krasnokamen:brewing_ingredient") {
                 Some(Tag::String(name)) => Identifier::parse(name)
                     .ok()
                     .and_then(|name| items.id_of(&name)),

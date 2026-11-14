@@ -67,27 +67,27 @@ class DecodeTests(unittest.TestCase):
     def test_missing_chunks_fail_instead_of_reporting_partial_parity(self):
         with patch.object(diff, 'load_chunks', return_value={}):
             with self.assertRaisesRegex(ValueError, 'missing'):
-                diff.compare(Path('vanilla'), Path('solaris'), (0, 0), (0, 0))
+                diff.compare(Path('vanilla'), Path('krasnokamen'), (0, 0), (0, 0))
 
     def test_unfinished_oracle_chunks_fail(self):
         unfinished = {'Status': 'minecraft:features', 'sections': []}
         with patch.object(diff, 'load_chunks', return_value={(0, 0): unfinished}):
             with self.assertRaisesRegex(ValueError, 'FULL'):
-                diff.compare(Path('vanilla'), Path('solaris'), (0, 0), (0, 0))
+                diff.compare(Path('vanilla'), Path('krasnokamen'), (0, 0), (0, 0))
 
     def test_exact_properties_and_decoration_metrics(self):
         indices = [0] * 4096
         indices[0] = 1
         vanilla = _chunk([('minecraft:air', None),
                           ('minecraft:poppy', None)], indices)
-        solaris = _chunk([('minecraft:air', None),
+        krasnokamen = _chunk([('minecraft:air', None),
                           ('minecraft:air', None)], indices)
-        vanilla['Status'] = solaris['Status'] = 'minecraft:full'
+        vanilla['Status'] = krasnokamen['Status'] = 'minecraft:full'
         vanilla['sections'][0]['biomes'] = {'palette': ['minecraft:plains']}
-        solaris['sections'][0]['biomes'] = {'palette': ['minecraft:forest']}
+        krasnokamen['sections'][0]['biomes'] = {'palette': ['minecraft:forest']}
         with patch.object(diff, 'load_chunks',
-                          side_effect=[{(0, 0): vanilla}, {(0, 0): solaris}]):
-            result, _ = diff.compare(Path('vanilla'), Path('solaris'), (0, 0), (0, 0))
+                          side_effect=[{(0, 0): vanilla}, {(0, 0): krasnokamen}]):
+            result, _ = diff.compare(Path('vanilla'), Path('krasnokamen'), (0, 0), (0, 0))
         self.assertEqual(result['exact_state_match_nonair_pct'], 0)
         self.assertEqual(result['metrics']['no_decor']['match_pct'], 100)
         self.assertEqual(result['name_mismatch_cells'], 1)
@@ -97,11 +97,11 @@ class DecodeTests(unittest.TestCase):
         self.assertEqual(result['biome_mismatch_cells'], 64)
 
         vanilla = _chunk([('minecraft:water', {'level': '0'})], [0] * 4096)
-        solaris = _chunk([('minecraft:water', {'level': '1'})], [0] * 4096)
-        vanilla['Status'] = solaris['Status'] = 'minecraft:full'
+        krasnokamen = _chunk([('minecraft:water', {'level': '1'})], [0] * 4096)
+        vanilla['Status'] = krasnokamen['Status'] = 'minecraft:full'
         with patch.object(diff, 'load_chunks',
-                          side_effect=[{(0, 0): vanilla}, {(0, 0): solaris}]):
-            result, _ = diff.compare(Path('vanilla'), Path('solaris'), (0, 0), (0, 0))
+                          side_effect=[{(0, 0): vanilla}, {(0, 0): krasnokamen}]):
+            result, _ = diff.compare(Path('vanilla'), Path('krasnokamen'), (0, 0), (0, 0))
         self.assertEqual(result['exact_state_match_nonair_pct'], 0)
         self.assertEqual(result['metrics']['name']['match_nonair_pct'], 100)
         self.assertEqual(result['metrics']['no_decor_state']['match_nonair_pct'], 0)

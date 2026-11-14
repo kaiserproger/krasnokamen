@@ -23,16 +23,70 @@ fn session() -> Session {
 fn particle_registry_delta_maps_each_exact_wire_layout() {
     // IDs from the local 26.3, 26.2 and 26.1.2 registries.json reports.
     let cases: &[(i32, i32, &str, u32, &str, u32, u32, &[u8])] = &[
-        (777, 776, "red_poplar_leaves", 43, "cherry_leaves", 41, 41, &[]),
-        (777, 776, "orange_poplar_leaves", 44, "cherry_leaves", 41, 41, &[]),
-        (777, 776, "yellow_poplar_leaves", 45, "pale_oak_leaves", 42, 42, &[]),
+        (
+            777,
+            776,
+            "red_poplar_leaves",
+            43,
+            "cherry_leaves",
+            41,
+            41,
+            &[],
+        ),
+        (
+            777,
+            776,
+            "orange_poplar_leaves",
+            44,
+            "cherry_leaves",
+            41,
+            41,
+            &[],
+        ),
+        (
+            777,
+            776,
+            "yellow_poplar_leaves",
+            45,
+            "pale_oak_leaves",
+            42,
+            42,
+            &[],
+        ),
         (776, 775, "sulfur_bubbles", 4, "bubble", 3, 3, &[]),
         (776, 775, "noxious_gas", 5, "smoke", 69, 62, &[]),
         (776, 775, "noxious_gas_cloud", 6, "cloud", 11, 4, &[]),
         (776, 775, "geyser", 7, "splash", 77, 70, &[0, 0, 0, 3]),
-        (776, 775, "geyser_base", 8, "splash", 77, 70, &[0, 0, 0, 3, 0x3f, 0x80, 0, 0]),
-        (776, 775, "geyser_poof", 9, "poof", 66, 59, &[0, 0, 0, 3, 0x3f, 0x80, 0, 0]),
-        (776, 775, "geyser_plume", 10, "splash", 77, 70, &[0, 0, 0, 3]),
+        (
+            776,
+            775,
+            "geyser_base",
+            8,
+            "splash",
+            77,
+            70,
+            &[0, 0, 0, 3, 0x3f, 0x80, 0, 0],
+        ),
+        (
+            776,
+            775,
+            "geyser_poof",
+            9,
+            "poof",
+            66,
+            59,
+            &[0, 0, 0, 3, 0x3f, 0x80, 0, 0],
+        ),
+        (
+            776,
+            775,
+            "geyser_plume",
+            10,
+            "splash",
+            77,
+            70,
+            &[0, 0, 0, 3],
+        ),
         (776, 775, "sulfur_cube_goo", 124, "item_slime", 59, 52, &[]),
     ];
     let mut failures = Vec::new();
@@ -42,11 +96,9 @@ fn particle_registry_delta_maps_each_exact_wire_layout() {
         names[target_source_id as usize] = format!("minecraft:{target}");
         let tables = Tables {
             formats: super::super::tables::Formats { upper, lower },
-            particles: IdMap::by_name(
-                [(target, target_source_id)],
-                [(target, target_id)],
-                |_| None,
-            ),
+            particles: IdMap::by_name([(target, target_source_id)], [(target, target_id)], |_| {
+                None
+            }),
             particle_names: names,
             ..Tables::default()
         };
@@ -55,14 +107,19 @@ fn particle_registry_delta_maps_each_exact_wire_layout() {
         input.extend_from_slice(options);
         let mut remaining = input.as_slice();
         let mut actual = Vec::new();
-        if !matches!(particle_options(&tables, &mut remaining, &mut actual), Ok(true))
-            || !remaining.is_empty()
+        if !matches!(
+            particle_options(&tables, &mut remaining, &mut actual),
+            Ok(true)
+        ) || !remaining.is_empty()
             || actual != [target_id as u8]
         {
             failures.push(source);
         }
     }
-    assert!(failures.is_empty(), "failed particle mappings: {failures:?}");
+    assert!(
+        failures.is_empty(),
+        "failed particle mappings: {failures:?}"
+    );
 }
 
 #[test]
@@ -70,7 +127,10 @@ fn play_update_tags_fails_with_pair_and_packet_context() {
     let error = clientbound(&mut session(), "minecraft:update_tags", &[])
         .unwrap_err()
         .to_string();
-    assert!(error.contains("update_tags") && error.contains("777 -> 775"), "{error}");
+    assert!(
+        error.contains("update_tags") && error.contains("777 -> 775"),
+        "{error}"
+    );
 }
 
 #[test]
@@ -133,8 +193,22 @@ fn level_particles_complete_packets_preserve_supported_options_on_both_steps() {
     let cases: &[(&str, u8, u8, u8, &[u8], &[u8])] = &[
         ("block", 1, 1, 1, &[9], &[4]),
         ("item", 57, 54, 47, &[10, 2, 0, 0], &[3, 2, 0, 0]),
-        ("dust", 21, 21, 14, &[1, 2, 3, 4, 0x3f, 0x80, 0, 0], &[1, 2, 3, 4, 0x3f, 0x80, 0, 0]),
-        ("dust_color_transition", 22, 22, 15, &[1, 2, 3, 4, 5, 6, 7, 8, 0x3f, 0x80, 0, 0], &[1, 2, 3, 4, 5, 6, 7, 8, 0x3f, 0x80, 0, 0]),
+        (
+            "dust",
+            21,
+            21,
+            14,
+            &[1, 2, 3, 4, 0x3f, 0x80, 0, 0],
+            &[1, 2, 3, 4, 0x3f, 0x80, 0, 0],
+        ),
+        (
+            "dust_color_transition",
+            22,
+            22,
+            15,
+            &[1, 2, 3, 4, 5, 6, 7, 8, 0x3f, 0x80, 0, 0],
+            &[1, 2, 3, 4, 5, 6, 7, 8, 0x3f, 0x80, 0, 0],
+        ),
     ];
     for &(name, id777, id776, id775, options, expected_options) in cases {
         for (upper, lower, source, target) in [(777, 776, id777, id776), (776, 775, id776, id775)] {
@@ -143,7 +217,11 @@ fn level_particles_complete_packets_preserve_supported_options_on_both_steps() {
             let tables = Tables {
                 formats: super::super::tables::Formats { upper, lower },
                 particle_names: names,
-                particles: IdMap::by_name([(name, u32::from(source))], [(name, u32::from(target))], |_| None),
+                particles: IdMap::by_name(
+                    [(name, u32::from(source))],
+                    [(name, u32::from(target))],
+                    |_| None,
+                ),
                 block_states: IdMap::by_name([("stone", 9)], [("stone", 4)], |_| None),
                 items: IdMap::by_name([("stick", 10)], [("stick", 3)], |_| None),
                 ..Tables::default()
@@ -151,7 +229,13 @@ fn level_particles_complete_packets_preserve_supported_options_on_both_steps() {
             let mut s = test_session(tables);
             let input = particle_packet(upper == 777, source, options);
             let expected = particle_packet(false, target, expected_options);
-            assert_eq!(clientbound(&mut s, "minecraft:level_particles", &input).unwrap().unwrap(), expected, "{name} {upper}->{lower}");
+            assert_eq!(
+                clientbound(&mut s, "minecraft:level_particles", &input)
+                    .unwrap()
+                    .unwrap(),
+                expected,
+                "{name} {upper}->{lower}"
+            );
         }
     }
 }
@@ -171,11 +255,23 @@ fn level_particles_explicitly_refuses_vibration_and_trail_on_both_steps() {
             let tables = Tables {
                 formats: super::super::tables::Formats { upper, lower },
                 particle_names: names,
-                particles: IdMap::by_name([(name, u32::from(source))], [(name, u32::from(target))], |_| None),
+                particles: IdMap::by_name(
+                    [(name, u32::from(source))],
+                    [(name, u32::from(target))],
+                    |_| None,
+                ),
                 ..Tables::default()
             };
-            let error = clientbound(&mut test_session(tables), "minecraft:level_particles", &particle_packet(upper == 777, source, options)).unwrap_err();
-            assert!(format!("{error:#}").contains("particle payload"), "{name} {upper}->{lower}: {error:#}");
+            let error = clientbound(
+                &mut test_session(tables),
+                "minecraft:level_particles",
+                &particle_packet(upper == 777, source, options),
+            )
+            .unwrap_err();
+            assert!(
+                format!("{error:#}").contains("particle payload"),
+                "{name} {upper}->{lower}: {error:#}"
+            );
         }
     }
 }

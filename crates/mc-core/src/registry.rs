@@ -9,9 +9,9 @@
 use std::sync::Arc;
 
 use mc_data::Identifier;
-use mc_data::blocks::solaris_required_blocks_report;
-use mc_data::entity_types::solaris_required_entity_types;
-use mc_data::items::solaris_required_items;
+use mc_data::blocks::krasnokamen_required_blocks_report;
+use mc_data::entity_types::krasnokamen_required_entity_types;
+use mc_data::items::krasnokamen_required_items;
 use mc_physics::BlockMaterialIds;
 use mc_world::BlockRegistry;
 
@@ -312,13 +312,13 @@ impl CoreRegistry {
             CoreError::Registry("vanilla content directory must be selected before startup".into())
         })?;
         tracing::info!(stage = "registries", "Loading game registries and loot");
-        let report = solaris_required_blocks_report();
+        let report = krasnokamen_required_blocks_report();
         let blocks = Arc::new(
             BlockRegistry::from_report(&report)
                 .map_err(|err| CoreError::Registry(err.to_string()))?,
         );
-        let items = solaris_required_items();
-        let entity_types = solaris_required_entity_types();
+        let items = krasnokamen_required_items();
+        let entity_types = krasnokamen_required_entity_types();
         let entity_loot = Arc::new(
             mc_data::loot::entity_26_1_2::load_vanilla(root).map_err(CoreError::Registry)?,
         );
@@ -357,9 +357,11 @@ impl CoreRegistry {
                 (item_facts, tags, recipes, loot, mining, Some(worldgen_tags))
             }
             None => (
-                mc_data::item_components::solaris_required_item_facts(),
-                Arc::new(mc_data::tags::solaris_required_client_tags(&items, &report)),
-                mc_data::recipes::solaris_required_recipes(),
+                mc_data::item_components::krasnokamen_required_item_facts(),
+                Arc::new(mc_data::tags::krasnokamen_required_client_tags(
+                    &items, &report,
+                )),
+                mc_data::recipes::krasnokamen_required_recipes(),
                 mc_data::loot::load_builtin(root)
                     .map_err(|error| CoreError::Registry(error.to_string()))?,
                 mc_data::block_mining::BlockMiningTable::default(),
@@ -375,7 +377,7 @@ impl CoreRegistry {
                     .join("biome"),
             )
             .map_err(|err| CoreError::Registry(err.to_string()))?,
-            None => mc_data::biomes::solaris_required_biome_spawn_rules(),
+            None => mc_data::biomes::krasnokamen_required_biome_spawn_rules(),
         };
         let explosion = match vanilla_data_dir {
             Some(dir) => match mc_data::block_explosion::load_block_explosion_report(
@@ -559,51 +561,51 @@ impl CoreRegistry {
             iron_smelting,
             loot,
             stable: Arc::new(RegistryTables {
-            blocks,
-            shears_item,
-            items: std::sync::Arc::new(items),
-            entity_loot,
-            entity_loot_lookups,
-            chest_loot,
-            fishing_loot,
-            trial_loot,
-            mining,
-            explosion,
-            light,
-            map_colors: map_colors.into(),
-            entity_types,
-            materials,
-            collision_boxes,
-            outlines,
-            max_collision_box_y,
-            max_collision_boxes_per_cell,
-            states,
-            blueprint_index: index_blueprints(&blueprints),
-            blueprints,
-            biome_spawns,
-            item_type_id,
-            cow_type_id,
-            zombie_type_id,
-            item_facts,
-            tags,
-            worldgen_tags,
-            advancements,
-            advancement_blocks,
-            advancement_reward_loot,
-            enchantments,
-            farming,
-            hazard_flags,
-            wooden_doors,
-            fire_states,
-            plugin_rules: None,
-            plugin_ore_profile: None,
-            plugin_client_bundles: Vec::new(),
-            plugin_item_ids: Vec::new(),
-            plugin_work_recipe_ids: Vec::new(),
-            plugin_crafting_recipes: Vec::new(),
-            block_tools: crate::block_tools::BlockToolTable::default(),
-            paintings: crate::painting::load(root)?,
-            carrier_blocks: crate::carrier_blocks::CarrierBlocks::default(),
+                blocks,
+                shears_item,
+                items: std::sync::Arc::new(items),
+                entity_loot,
+                entity_loot_lookups,
+                chest_loot,
+                fishing_loot,
+                trial_loot,
+                mining,
+                explosion,
+                light,
+                map_colors: map_colors.into(),
+                entity_types,
+                materials,
+                collision_boxes,
+                outlines,
+                max_collision_box_y,
+                max_collision_boxes_per_cell,
+                states,
+                blueprint_index: index_blueprints(&blueprints),
+                blueprints,
+                biome_spawns,
+                item_type_id,
+                cow_type_id,
+                zombie_type_id,
+                item_facts,
+                tags,
+                worldgen_tags,
+                advancements,
+                advancement_blocks,
+                advancement_reward_loot,
+                enchantments,
+                farming,
+                hazard_flags,
+                wooden_doors,
+                fire_states,
+                plugin_rules: None,
+                plugin_ore_profile: None,
+                plugin_client_bundles: Vec::new(),
+                plugin_item_ids: Vec::new(),
+                plugin_work_recipe_ids: Vec::new(),
+                plugin_crafting_recipes: Vec::new(),
+                block_tools: crate::block_tools::BlockToolTable::default(),
+                paintings: crate::painting::load(root)?,
+                carrier_blocks: crate::carrier_blocks::CarrierBlocks::default(),
             }),
         })
     }
@@ -665,7 +667,7 @@ impl CoreRegistry {
             return Err(fail("recipes"));
         }
         // Embedded ids stay available when the cache lacks them (v1 shape).
-        let embedded = mc_data::recipes::solaris_required_recipes();
+        let embedded = mc_data::recipes::krasnokamen_required_recipes();
         let mut by_id: std::collections::BTreeMap<_, _> = recipes
             .into_iter()
             .map(|recipe| (recipe.id.clone(), recipe))

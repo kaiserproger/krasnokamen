@@ -96,7 +96,10 @@ fn targets(
     };
     match &target {
         Target::Selector(selector) => crate::command_execution::selector(
-            world, request.executor, selector, state.datapacks.packs(),
+            world,
+            request.executor,
+            selector,
+            state.datapacks.packs(),
         ),
         target => crate::command_execution::resolve_target(world, request.executor, target),
     }
@@ -705,7 +708,11 @@ pub(crate) fn finish(
     for world in state.other_dimensions.values_mut() {
         jobs.append(&mut world.command_context.jobs);
     }
-    if !requests.is_empty() || !respawns.is_empty() || !jobs.is_empty() || state.command_context.waiting() {
+    if !requests.is_empty()
+        || !respawns.is_empty()
+        || !jobs.is_empty()
+        || state.command_context.waiting()
+    {
         super::globals::roster(state);
     }
     let mut changes = BTreeMap::new();

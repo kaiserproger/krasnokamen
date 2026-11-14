@@ -254,7 +254,7 @@ def check_bread_job(before, after, job, worker, job_id, wheat_id, bread_id):
         return ["invalid bread recipe registry identities"]
     if before.get("worker") != worker or after.get("worker") != worker or job.get("worker") != worker:
         errors.append("worker identity mismatch")
-    if job.get("id") != job_id or job.get("recipe") != "solaris-settlements:bread":
+    if job.get("id") != job_id or job.get("recipe") != "krasnokamen-settlements:bread":
         errors.append("job identity or recipe mismatch")
     if job.get("count") != 1 or job.get("done") != 1 or job.get("cancelled") is not False:
         errors.append("single bread portion did not complete")

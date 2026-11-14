@@ -20,7 +20,7 @@ fn list(elements: Vec<Tag>, element_type: u8) -> Tag {
 }
 fn public_fields(fields: &mut Vec<(String, Tag)>) {
     fields.retain(|(key, _)| {
-        !key.starts_with("solaris") && !key.starts_with("Solaris") && key != "DataVersion"
+        !key.starts_with("krasnokamen") && !key.starts_with("Krasnokamen") && key != "DataVersion"
     });
 }
 
@@ -136,7 +136,8 @@ pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
     }
     let key = (pos.x, pos.y, pos.z);
     if kind == BlockEntityKind::Hopper
-        && let Some(ticks) = state.redstone_containers.data_cooldown(pos, state.tick) {
+        && let Some(ticks) = state.redstone_containers.data_cooldown(pos, state.tick)
+    {
         put(&mut fields, "TransferCooldown", Tag::Int(ticks));
     }
     if let Some(clock) = state.gateway_ages.get(&pos) {
@@ -144,7 +145,8 @@ pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
     }
     if let Some(live) = state.block_entities.get(&key) {
         if (kind.inventory_size().is_some() || kind == BlockEntityKind::ChiseledBookshelf)
-            && !fields.iter().any(|(key, _)| key == "LootTable") {
+            && !fields.iter().any(|(key, _)| key == "LootTable")
+        {
             let mut items = Vec::new();
             for (slot, stack) in live
                 .slots
@@ -162,9 +164,14 @@ pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
         if kind == BlockEntityKind::DecoratedPot {
             fields.retain(|(name, _)| name != "item");
             if let Some(stack) = live.slots.first().filter(|stack| !stack.is_empty()) {
-                put(&mut fields, "item", Tag::Compound(
-                    mc_data::item_nbt::stack_to_fields(&state.registry.items, stack)
-                        .map_err(|error| error.to_string())?));
+                put(
+                    &mut fields,
+                    "item",
+                    Tag::Compound(
+                        mc_data::item_nbt::stack_to_fields(&state.registry.items, stack)
+                            .map_err(|error| error.to_string())?,
+                    ),
+                );
             }
         }
         if let Some(furnace) = &live.furnace {
@@ -207,16 +214,27 @@ pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
     }
     if let Some(lectern) = state.lecterns.get(&key) {
         fields.retain(|(name, _)| name != "Book" && name != "Page");
-        if let Some(book) = state.block_entities.get(&key)
-            .and_then(|container| container.slots.first()).filter(|book| !book.is_empty()) {
-            put(&mut fields, "Book", Tag::Compound(
-                mc_data::item_nbt::stack_to_fields(&state.registry.items, book)
-                    .map_err(|error| error.to_string())?));
+        if let Some(book) = state
+            .block_entities
+            .get(&key)
+            .and_then(|container| container.slots.first())
+            .filter(|book| !book.is_empty())
+        {
+            put(
+                &mut fields,
+                "Book",
+                Tag::Compound(
+                    mc_data::item_nbt::stack_to_fields(&state.registry.items, book)
+                        .map_err(|error| error.to_string())?,
+                ),
+            );
             put(&mut fields, "Page", Tag::Int(lectern.page()));
         }
     }
     if let Some(spawner) = state.monster_spawners.data_fields(pos, state.tick) {
-        for (name, value) in spawner { put(&mut fields, &name, value); }
+        for (name, value) in spawner {
+            put(&mut fields, &name, value);
+        }
     }
     if let Some(spawner) = state.trial_spawners.get(&key) {
         for (name, value) in spawner.fields(&state.registry.items) {
@@ -229,10 +247,14 @@ pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
         }
     }
     if let Some(sculk) = crate::sculk::data_fields(state, pos) {
-        for (name, value) in sculk { put(&mut fields, &name, value); }
+        for (name, value) in sculk {
+            put(&mut fields, &name, value);
+        }
     }
     if let Some(shrieker) = crate::shrieker::data_fields(state, pos) {
-        for (name, value) in shrieker { put(&mut fields, &name, value); }
+        for (name, value) in shrieker {
+            put(&mut fields, &name, value);
+        }
     }
     public_fields(&mut fields);
     Ok(Tag::Compound(fields))
@@ -286,10 +308,11 @@ impl Accessor {
                         "No entity was found"
                     } else {
                         "Only one entity is allowed, but the provided selector allows more than one"
-                    }.into());
+                    }
+                    .into());
                 };
-                let (dimension, _) = crate::dimensions::travel::locate(state, *id)
-                    .ok_or("No entity was found")?;
+                let (dimension, _) =
+                    crate::dimensions::travel::locate(state, *id).ok_or("No entity was found")?;
                 Ok(Self::Entity(dimension, *id))
             }
             "block" => {
@@ -314,14 +337,20 @@ impl Accessor {
 
     pub(crate) fn read(&self, state: &TickState) -> Result<Tag, String> {
         match self {
-            Self::Storage(name) => Ok(state.command_storage.get(name).cloned()
+            Self::Storage(name) => Ok(state
+                .command_storage
+                .get(name)
+                .cloned()
                 .unwrap_or_else(|| Tag::Compound(Vec::new()))),
             Self::Entity(dimension, id) => entity(
                 crate::dimensions::travel::world(state, *dimension)
-                    .ok_or("Entity dimension unavailable")?, *id),
+                    .ok_or("Entity dimension unavailable")?,
+                *id,
+            ),
             Self::Block(dimension, pos) => block(
-                crate::dimensions::travel::world(state, *dimension)
-                    .ok_or("Unknown dimension")?, *pos),
+                crate::dimensions::travel::world(state, *dimension).ok_or("Unknown dimension")?,
+                *pos,
+            ),
         }
     }
 
@@ -332,11 +361,11 @@ impl Accessor {
                 "entity",
                 vec![crate::command_execution::entity_name(
                     crate::dimensions::travel::world(state, *dimension)
-                        .ok_or("Entity dimension unavailable")?, *id)],
+                        .ok_or("Entity dimension unavailable")?,
+                    *id,
+                )],
             ),
-            Self::Block(_, BlockPos { x, y, z }) => (
-                "block", vec![text(x), text(y), text(z)],
-            ),
+            Self::Block(_, BlockPos { x, y, z }) => ("block", vec![text(x), text(y), text(z)]),
         })
     }
 }
@@ -398,7 +427,9 @@ pub(crate) fn mutate(
     if context.permission < 2 {
         return Err(crate::commands::CommandError::Unknown.message());
     }
-    if argument(&mut input)? != "data" { return Err("Expected data".into()); }
+    if argument(&mut input)? != "data" {
+        return Err("Expected data".into());
+    }
     let action = argument(&mut input)?;
     let target = Accessor::parse(state, context, &mut input)?;
     let (kind, args) = target.feedback(state)?;
@@ -406,32 +437,47 @@ pub(crate) fn mutate(
         Accessor::Storage(name) => {
             let empty = Tag::Compound(Vec::new());
             let previous = state.command_storage.get(&name).unwrap_or(&empty);
-            let (count, next) = crate::command_storage::prepare(state, context, previous, action, input)?;
+            let (count, next) =
+                crate::command_storage::prepare(state, context, previous, action, input)?;
             state.command_storage.insert(name, next);
             state.command_storage_dirty = true;
             count
         }
         target => {
             let previous = target.read(state)?;
-            let (count, next) = crate::command_storage::prepare(state, context, &previous, action, input)?;
+            let (count, next) =
+                crate::command_storage::prepare(state, context, &previous, action, input)?;
             let dimension = match target {
                 Accessor::Entity(dimension, _) | Accessor::Block(dimension, _) => dimension,
                 Accessor::Storage(_) => unreachable!(),
             };
-            let world = if state.dimension == dimension { &mut *state } else {
-                state.other_dimensions.get_mut(&dimension).map(|world| &mut **world)
+            let world = if state.dimension == dimension {
+                &mut *state
+            } else {
+                state
+                    .other_dimensions
+                    .get_mut(&dimension)
+                    .map(|world| &mut **world)
                     .ok_or("Target dimension unavailable")?
             };
             match target {
-                Accessor::Entity(_, id) => crate::command_summon::data::update(world, id, &previous, &next)?,
-                Accessor::Block(_, pos) => crate::command_block_entity::data::update(world, pos, &previous, &next)?,
+                Accessor::Entity(_, id) => {
+                    crate::command_summon::data::update(world, id, &previous, &next)?
+                }
+                Accessor::Block(_, pos) => {
+                    crate::command_block_entity::data::update(world, pos, &previous, &next)?
+                }
                 Accessor::Storage(_) => unreachable!(),
             }
             count
         }
     };
     crate::command_execution::success_feedback(
-        state, context.connection, &format!("commands.data.{kind}.modified"), args);
+        state,
+        context.connection,
+        &format!("commands.data.{kind}.modified"),
+        args,
+    );
     Ok(count)
 }
 

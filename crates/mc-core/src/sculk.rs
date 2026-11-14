@@ -39,7 +39,12 @@ pub(crate) struct PreparedData {
 }
 
 pub(crate) fn data_fields(state: &TickState, pos: BlockPos) -> Option<Vec<(String, Tag)>> {
-    Some(fields(state, pos, state.sculk.entries.get(&pos)?, vibration::pending(state, pos)))
+    Some(fields(
+        state,
+        pos,
+        state.sculk.entries.get(&pos)?,
+        vibration::pending(state, pos),
+    ))
 }
 
 pub(crate) fn prepare_data(
@@ -51,12 +56,14 @@ pub(crate) fn prepare_data(
     let old = state.sculk.entries.get(&pos);
     if let Some(entry) = old {
         let (name, value) = match entry {
-            Entry::Sensor { deadline, .. } => ("solaris:phase_until", *deadline),
-            Entry::Catalyst { bloom_until, .. } => ("solaris:bloom_until", *bloom_until),
+            Entry::Sensor { deadline, .. } => ("krasnokamen:phase_until", *deadline),
+            Entry::Catalyst { bloom_until, .. } => ("krasnokamen:bloom_until", *bloom_until),
         };
         mc_data::trial_nbt::set(input, name, Tag::Long(value as i64));
     }
-    if listener_changed { input.retain(|(name, _)| name != "solaris:event_arrival"); }
+    if listener_changed {
+        input.retain(|(name, _)| name != "krasnokamen:event_arrival");
+    }
     let (entry, mut pending) = decode_fields(input, state.tick)?;
     if !listener_changed && old.is_some() {
         pending = vibration::pending(state, pos).cloned();
@@ -67,8 +74,14 @@ pub(crate) fn prepare_data(
 
 pub(crate) fn apply_data(state: &mut TickState, pos: BlockPos, prepared: PreparedData) {
     if matches!(&prepared.entry, Entry::Sensor { .. }) {
-        let calibrated = block(state, pos).is_some_and(|block| block.block.id.path() == "calibrated_sculk_sensor");
-        vibration::listen(state, pos, vibration::centre(pos), if calibrated { 16 } else { 8 });
+        let calibrated = block(state, pos)
+            .is_some_and(|block| block.block.id.path() == "calibrated_sculk_sensor");
+        vibration::listen(
+            state,
+            pos,
+            vibration::centre(pos),
+            if calibrated { 16 } else { 8 },
+        );
         vibration::restore(state, pos, prepared.pending);
     }
     state.sculk.entries.insert(pos, prepared.entry);
@@ -131,7 +144,10 @@ fn decode(bytes: &[u8], tick: u64) -> Result<(Entry, Option<vibration::Pending>)
     decode_fields(&f, tick)
 }
 
-fn decode_fields(f: &[(String, Tag)], tick: u64) -> Result<(Entry, Option<vibration::Pending>), String> {
+fn decode_fields(
+    f: &[(String, Tag)],
+    tick: u64,
+) -> Result<(Entry, Option<vibration::Pending>), String> {
     let name = match field(f, "id") {
         Some(Tag::String(s)) => s.as_str(),
         _ => return Err("id must be a string".into()),
@@ -144,14 +160,14 @@ fn decode_fields(f: &[(String, Tag)], tick: u64) -> Result<(Entry, Option<vibrat
                 .transpose()?
                 .flatten();
             if let Some(p) = &mut pending
-                && field(f, "solaris:event_arrival").is_some()
+                && field(f, "krasnokamen:event_arrival").is_some()
             {
-                p.arrival = deadline(f, "solaris:event_arrival")?;
+                p.arrival = deadline(f, "krasnokamen:event_arrival")?;
             }
             Ok((
                 Entry::Sensor {
                     frequency,
-                    deadline: deadline(f, "solaris:phase_until")?,
+                    deadline: deadline(f, "krasnokamen:phase_until")?,
                 },
                 pending,
             ))
@@ -211,7 +227,7 @@ fn decode_fields(f: &[(String, Tag)], tick: u64) -> Result<(Entry, Option<vibrat
             Ok((
                 Entry::Catalyst {
                     cursors,
-                    bloom_until: deadline(f, "solaris:bloom_until")?,
+                    bloom_until: deadline(f, "krasnokamen:bloom_until")?,
                 },
                 None,
             ))
@@ -219,7 +235,12 @@ fn decode_fields(f: &[(String, Tag)], tick: u64) -> Result<(Entry, Option<vibrat
         _ => Err("id is not a sculk block entity".into()),
     }
 }
-fn fields(state: &TickState, pos: BlockPos, entry: &Entry, pending: Option<&vibration::Pending>) -> Vec<(String, Tag)> {
+fn fields(
+    state: &TickState,
+    pos: BlockPos,
+    entry: &Entry,
+    pending: Option<&vibration::Pending>,
+) -> Vec<(String, Tag)> {
     let name = block(state, pos)
         .map(|b| b.block.id.path())
         .unwrap_or("sculk_sensor");
@@ -238,10 +259,16 @@ fn fields(state: &TickState, pos: BlockPos, entry: &Entry, pending: Option<&vibr
                 vibration::listener_nbt(pending, state.tick),
             ));
             if let Some(p) = pending {
-                f.push(("solaris:event_arrival".into(), Tag::Long(p.arrival as i64)));
+                f.push((
+                    "krasnokamen:event_arrival".into(),
+                    Tag::Long(p.arrival as i64),
+                ));
             }
             if *deadline != 0 {
-                f.push(("solaris:phase_until".into(), Tag::Long(*deadline as i64)));
+                f.push((
+                    "krasnokamen:phase_until".into(),
+                    Tag::Long(*deadline as i64),
+                ));
             }
         }
         Entry::Catalyst {
@@ -271,7 +298,10 @@ fn fields(state: &TickState, pos: BlockPos, entry: &Entry, pending: Option<&vibr
                 .collect();
             f.push(("cursors".into(), list(entries, mc_nbt::tag_type::COMPOUND)));
             if *bloom_until != 0 {
-                f.push(("solaris:bloom_until".into(), Tag::Long(*bloom_until as i64)));
+                f.push((
+                    "krasnokamen:bloom_until".into(),
+                    Tag::Long(*bloom_until as i64),
+                ));
             }
         }
     }
@@ -280,8 +310,11 @@ fn fields(state: &TickState, pos: BlockPos, entry: &Entry, pending: Option<&vibr
 
 fn encode(state: &TickState, pos: BlockPos, entry: &Entry) -> Vec<u8> {
     let mut bytes = Vec::new();
-    mc_nbt::write_network(&mut bytes, &Tag::Compound(fields(state, pos, entry, vibration::pending(state, pos))))
-        .expect("sculk NBT");
+    mc_nbt::write_network(
+        &mut bytes,
+        &Tag::Compound(fields(state, pos, entry, vibration::pending(state, pos))),
+    )
+    .expect("sculk NBT");
     bytes
 }
 

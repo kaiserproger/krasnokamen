@@ -103,7 +103,7 @@ pub const TICK_PERIOD: std::time::Duration = std::time::Duration::from_millis(50
 /// Written before anything else of a new world and removed once its initial
 /// checkpoint is durable. A start that finds it repeats the first start on what
 /// the stopped one left; no player can have joined that world yet.
-const FIRST_START_MARKER: &str = ".solaris-first-start";
+const FIRST_START_MARKER: &str = ".krasnokamen-first-start";
 
 /// How long a start waits for another process to release the world. A
 /// singleplayer client relaunched at once starts its server while the previous
@@ -538,7 +538,7 @@ impl Core {
         let is_stage = |path: &std::path::Path| {
             path.file_name()
                 .and_then(std::ffi::OsStr::to_str)
-                .is_some_and(|name| name.starts_with(".solaris-conversion-"))
+                .is_some_and(|name| name.starts_with(".krasnokamen-conversion-"))
         };
         if is_stage(&config.world_dir)
             || std::fs::canonicalize(&config.world_dir).is_ok_and(|path| is_stage(&path))
@@ -670,13 +670,18 @@ impl Core {
         let datapacks = crate::datapacks::PackSet::load(
             &datapack_root,
             tick_state.datapacks.selection().clone(),
-        ).map_err(CoreError::Registry)?;
-        let registry = datapacks.prepare_content(&base_registry).map_err(CoreError::Registry)?;
+        )
+        .map_err(CoreError::Registry)?;
+        let registry = datapacks
+            .prepare_content(&base_registry)
+            .map_err(CoreError::Registry)?;
         tick_state.registry = Arc::clone(&registry);
         for world in tick_state.other_dimensions.values_mut() {
             world.registry = Arc::clone(&registry);
         }
-        tick_state.datapacks.install(datapacks, datapack_root, base_registry);
+        tick_state
+            .datapacks
+            .install(datapacks, datapack_root, base_registry);
         let world_spawn = tick_state.world.world_spawn();
         let terrain_epoch = crate::terrain::epoch_for_open(&tick_state)?;
         // Fresh epoch (minted when the stored record had none): stage it in

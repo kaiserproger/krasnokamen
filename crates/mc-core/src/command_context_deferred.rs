@@ -35,7 +35,9 @@ pub(super) enum Action {
 
 impl Runtime {
     pub(crate) fn completion_id(&mut self) -> Result<CompletionId, String> {
-        self.next_completion = self.next_completion.checked_add(1)
+        self.next_completion = self
+            .next_completion
+            .checked_add(1)
             .ok_or("Command completion identity exhausted")?;
         Ok(CompletionId(self.next_completion))
     }
@@ -45,7 +47,10 @@ impl Runtime {
     }
 
     pub(crate) fn suspend_functions(&mut self, stop_depth: usize) {
-        self.continuations.push_back(Action::Functions { depth: self.depth, stop_depth });
+        self.continuations.push_back(Action::Functions {
+            depth: self.depth,
+            stop_depth,
+        });
     }
 
     pub(crate) fn suspend_block(&mut self, continuation: crate::command_blocks::Continuation) {
@@ -55,7 +60,10 @@ impl Runtime {
 
 pub(crate) fn source_entity(state: &TickState, connection: ConnectionId) -> Option<EntityId> {
     state.connections.entity_of(connection).or_else(|| {
-        state.other_dimensions.values().find_map(|world| world.connections.entity_of(connection))
+        state
+            .other_dimensions
+            .values()
+            .find_map(|world| world.connections.entity_of(connection))
     })
 }
 
@@ -66,12 +74,21 @@ pub(super) fn suspend(
     stores: Vec<crate::command_store::Store>,
 ) -> Result<(), String> {
     let source = source_entity(state, context.connection);
-    let waiting = Waiting { id, context, source, stores, result: None };
+    let waiting = Waiting {
+        id,
+        context,
+        source,
+        stores,
+        result: None,
+    };
     if state.command_context.waiting.is_some() {
         if crate::command_debug::trace_waiting_for(state, id) {
             // The child command and its function frames finish first. Only
             // then can the same I/O worker persist the enclosing trace.
-            state.command_context.continuations.push_back(Action::Trace(waiting));
+            state
+                .command_context
+                .continuations
+                .push_back(Action::Trace(waiting));
             return Ok(());
         }
         return Err("Command already waiting for completion".into());
@@ -84,25 +101,36 @@ pub(super) fn suspend(
 /// worker event cannot complete a later command, even from the same connection.
 pub(crate) fn complete(state: &mut TickState, id: CompletionId, success: bool, value: i32) {
     if let Some(waiting) = &mut state.command_context.waiting
-        && waiting.id == id && waiting.result.is_none()
+        && waiting.id == id
+        && waiting.result.is_none()
     {
         waiting.result = Some((success, value));
     }
 }
 
 pub(crate) fn completion_context(state: &TickState, id: CompletionId) -> Option<Context> {
-    state.command_context.waiting.as_ref().filter(|waiting| {
-        waiting.id == id && source_is_current(state, waiting.context, waiting.source)
-    }).map(|waiting| waiting.context)
+    state
+        .command_context
+        .waiting
+        .as_ref()
+        .filter(|waiting| {
+            waiting.id == id && source_is_current(state, waiting.context, waiting.source)
+        })
+        .map(|waiting| waiting.context)
 }
 
 fn source_is_current(state: &TickState, context: Context, source: Option<EntityId>) -> bool {
     context.connection == crate::command_console::CONNECTION
         || source.is_some_and(|source| {
-            std::iter::once(state).chain(state.other_dimensions.values().map(Box::as_ref))
-                .any(|world| world.connections.entity_of(context.connection) == Some(source)
-                    && world.plugin_players.permission(context.connection)
-                        .is_some_and(|permission| permission >= context.permission))
+            std::iter::once(state)
+                .chain(state.other_dimensions.values().map(Box::as_ref))
+                .any(|world| {
+                    world.connections.entity_of(context.connection) == Some(source)
+                        && world
+                            .plugin_players
+                            .permission(context.connection)
+                            .is_some_and(|permission| permission >= context.permission)
+                })
         })
 }
 
@@ -111,8 +139,12 @@ pub(crate) fn execute_job(state: &mut TickState, job: &super::Job, changes: &mut
         return;
     }
     if let Some(pos) = job.block {
-        crate::dimensions::travel::execute_block_chain(state, job.context.dimension,
-            crate::command_blocks::Invocation::Start(pos), changes);
+        crate::dimensions::travel::execute_block_chain(
+            state,
+            job.context.dimension,
+            crate::command_blocks::Invocation::Start(pos),
+            changes,
+        );
     } else {
         super::run(state, &job.text, job.context, changes);
     }
@@ -138,10 +170,19 @@ pub(crate) fn resume(state: &mut TickState, changes: &mut ChangeSet) {
 }
 
 fn resume_completed(state: &mut TickState, changes: &mut ChangeSet) {
-    if !state.command_context.waiting.as_ref().is_some_and(|waiting| waiting.result.is_some()) {
+    if !state
+        .command_context
+        .waiting
+        .as_ref()
+        .is_some_and(|waiting| waiting.result.is_some())
+    {
         return;
     }
-    let waiting = state.command_context.waiting.take().expect("completed command");
+    let waiting = state
+        .command_context
+        .waiting
+        .take()
+        .expect("completed command");
     if !source_is_current(state, waiting.context, waiting.source) {
         state.command_context.continuations.clear();
         crate::datapacks::cancel_pending(state);
@@ -163,12 +204,27 @@ fn resume_completed(state: &mut TickState, changes: &mut ChangeSet) {
                     execution.successes = execution.successes.saturating_add(1);
                 }
                 state.command_context.depth = execution.depth;
-                let running = std::mem::replace(&mut state.datapacks.running, execution.function_running);
-                let branches = execution.branches.iter_mut().map(|(text, context, continuation, stores)| {
-                    (text.as_str(), *context, *continuation, std::mem::take(stores))
-                }).collect::<VecDeque<_>>();
+                let running =
+                    std::mem::replace(&mut state.datapacks.running, execution.function_running);
+                let branches = execution
+                    .branches
+                    .iter_mut()
+                    .map(|(text, context, continuation, stores)| {
+                        (
+                            text.as_str(),
+                            *context,
+                            *continuation,
+                            std::mem::take(stores),
+                        )
+                    })
+                    .collect::<VecDeque<_>>();
                 state.command_context.completed_successes = super::execute_branches(
-                    state, branches, execution.stage, execution.successes, execution.produced, changes,
+                    state,
+                    branches,
+                    execution.stage,
+                    execution.successes,
+                    execution.produced,
+                    changes,
                 );
                 state.datapacks.running = running;
             }
@@ -198,8 +254,10 @@ fn resume_completed(state: &mut TickState, changes: &mut ChangeSet) {
                 state.command_context.depth = 0;
                 state.command_context.resuming = false;
                 crate::dimensions::travel::execute_block_chain(
-                    state, dimension,
-                    crate::command_blocks::Invocation::Resume(continuation, successes), changes,
+                    state,
+                    dimension,
+                    crate::command_blocks::Invocation::Resume(continuation, successes),
+                    changes,
                 );
                 state.command_context.resuming = true;
             }

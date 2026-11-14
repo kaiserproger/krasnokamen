@@ -26,7 +26,8 @@ impl Lectern {
         let book = match mc_data::item_nbt::field(fields, "Book") {
             None => ItemStack::EMPTY,
             Some(Tag::Compound(fields)) => mc_data::item_nbt::stack_from_fields(items, fields)
-                .map_err(|error| error.to_string())?.unwrap_or(ItemStack::EMPTY),
+                .map_err(|error| error.to_string())?
+                .unwrap_or(ItemStack::EMPTY),
             Some(_) => return Err("Book: expected item compound".into()),
         };
         let pages = page_count(&book);
@@ -34,7 +35,8 @@ impl Lectern {
             None => 0,
             Some(Tag::Int(page)) => *page,
             Some(_) => return Err("Page: expected Int".into()),
-        }.clamp(0, (pages - 1).max(0));
+        }
+        .clamp(0, (pages - 1).max(0));
         Ok((Self { page, pages }, book))
     }
 
@@ -46,21 +48,48 @@ impl Lectern {
 fn publish_page(state: &mut TickState, pos: BlockPos) {
     let page = state.lecterns[&key(pos)].page as i16;
     for (viewer, cell) in &state.open_containers {
-        if *cell != key(pos) { continue; }
-        let Some(player) = state.players.get(viewer) else { continue; };
-        let Some(menu) = player.open.as_ref().filter(|menu| menu.kind == MenuKind::Lectern) else { continue; };
-        state.outbox.entry(player.connection).or_default().push(PlayerChange::MenuProperty {
-            window: menu.window, property: 0, value: page,
-        });
+        if *cell != key(pos) {
+            continue;
+        }
+        let Some(player) = state.players.get(viewer) else {
+            continue;
+        };
+        let Some(menu) = player
+            .open
+            .as_ref()
+            .filter(|menu| menu.kind == MenuKind::Lectern)
+        else {
+            continue;
+        };
+        state
+            .outbox
+            .entry(player.connection)
+            .or_default()
+            .push(PlayerChange::MenuProperty {
+                window: menu.window,
+                property: 0,
+                value: page,
+            });
     }
 }
 
 pub(crate) fn apply_data(state: &mut TickState, pos: BlockPos, next: Lectern) {
-    let page_changed = state.lecterns.get(&key(pos)).is_none_or(|old| old.page != next.page);
+    let page_changed = state
+        .lecterns
+        .get(&key(pos))
+        .is_none_or(|old| old.page != next.page);
     state.lecterns.insert(key(pos), next);
-    let has_book = state.block_entities.get(&key(pos))
-        .and_then(|container| container.slots.first()).is_some_and(|book| !book.is_empty());
-    set_property(state, pos, "has_book", if has_book { "true" } else { "false" });
+    let has_book = state
+        .block_entities
+        .get(&key(pos))
+        .and_then(|container| container.slots.first())
+        .is_some_and(|book| !book.is_empty());
+    set_property(
+        state,
+        pos,
+        "has_book",
+        if has_book { "true" } else { "false" },
+    );
     if !has_book {
         set_property(state, pos, "powered", "false");
     } else if page_changed {
@@ -129,8 +158,8 @@ pub(crate) fn decode_chunk(
         else {
             return Err(fail(&"expected compound"));
         };
-        let (lectern, book) = Lectern::from_fields(&fields, &registry.items)
-            .map_err(|error| fail(&error))?;
+        let (lectern, book) =
+            Lectern::from_fields(&fields, &registry.items).map_err(|error| fail(&error))?;
         decoded.push((key(*pos), lectern, book));
     }
     Ok(decoded)

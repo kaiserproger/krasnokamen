@@ -241,10 +241,13 @@ fn publish_transition(
         event(state, pos, 1011, 0);
     }
     if value.elapsed.is_some() && (record_changed || previous.elapsed.is_none()) {
-        let (name, _, _) = song(&state.registry.items, &value.record).expect("admitted playing record");
+        let (name, _, _) =
+            song(&state.registry.items, &value.record).expect("admitted playing record");
         let registry_id = mc_data::required_registry_entry_id(
-            "jukebox_song", &Identifier::parse(format!("minecraft:{name}")).unwrap(),
-        ).expect("embedded song registry");
+            "jukebox_song",
+            &Identifier::parse(format!("minecraft:{name}")).unwrap(),
+        )
+        .expect("embedded song registry");
         event(state, pos, 1010, registry_id as i32);
     }
     if let Some(next) = property(

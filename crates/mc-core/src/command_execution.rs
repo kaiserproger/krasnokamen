@@ -355,7 +355,13 @@ pub(crate) fn execute(
                 );
                 return Failed;
             }
-            let targets = match player_targets(state, executor, target) { Ok(targets) => targets, Err(message) => { error(state, connection, message); return Failed; } };
+            let targets = match player_targets(state, executor, target) {
+                Ok(targets) => targets,
+                Err(message) => {
+                    error(state, connection, message);
+                    return Failed;
+                }
+            };
             if targets.is_empty() {
                 feedback(
                     state,
@@ -538,7 +544,7 @@ pub(crate) fn execute(
                     state.push_player(
                         connection,
                         PlayerChange::Chat {
-                            message: format!("SOLARIS_MENU {snapshot}"),
+                            message: format!("KRASNOKAMEN_MENU {snapshot}"),
                         },
                     );
                     return CommandResult::Completed;
@@ -602,7 +608,13 @@ pub(crate) fn execute(
             destination,
             rotation: facing,
         } => {
-            let targets = match resolve_target(state, executor, target) { Ok(targets) => targets, Err(message) => { error(state, connection, message); return Failed; } };
+            let targets = match resolve_target(state, executor, target) {
+                Ok(targets) => targets,
+                Err(message) => {
+                    error(state, connection, message);
+                    return Failed;
+                }
+            };
             if targets.is_empty() {
                 feedback(
                     state,
@@ -628,7 +640,13 @@ pub(crate) fn execute(
                         feedback(state, connection, "argument.entity.toomany", Vec::new());
                         return Failed;
                     }
-                    let ids = match resolve_target(state, executor, target) { Ok(targets) => targets, Err(message) => { error(state, connection, message); return Failed; } };
+                    let ids = match resolve_target(state, executor, target) {
+                        Ok(targets) => targets,
+                        Err(message) => {
+                            error(state, connection, message);
+                            return Failed;
+                        }
+                    };
                     if ids.len() != 1 {
                         feedback(
                             state,
@@ -970,7 +988,13 @@ pub(crate) fn execute(
             return Success(1);
         }
         Command::Kill { target } => {
-            let targets = match resolve_target(state, executor, target) { Ok(targets) => targets, Err(message) => { error(state, connection, message); return Failed; } };
+            let targets = match resolve_target(state, executor, target) {
+                Ok(targets) => targets,
+                Err(message) => {
+                    error(state, connection, message);
+                    return Failed;
+                }
+            };
             if targets.is_empty() {
                 feedback(
                     state,
@@ -1067,7 +1091,13 @@ pub(crate) fn execute(
             ) {
                 text(message)
             } else {
-                match expand_message(state, executor, message) { Ok(message) => message, Err(message) => { error(state, connection, message); return Failed; } }
+                match expand_message(state, executor, message) {
+                    Ok(message) => message,
+                    Err(message) => {
+                        error(state, connection, message);
+                        return Failed;
+                    }
+                }
             };
             let content = translated(key, vec![name, message]);
             if connection == crate::command_console::CONNECTION {
@@ -1126,7 +1156,13 @@ pub(crate) fn execute(
                 })
                 .collect();
             let message = if *selectors {
-                match expand_message(state, executor, message) { Ok(message) => message, Err(message) => { error(state, connection, message); return Failed; } }
+                match expand_message(state, executor, message) {
+                    Ok(message) => message,
+                    Err(message) => {
+                        error(state, connection, message);
+                        return Failed;
+                    }
+                }
             } else {
                 text(message)
             };
@@ -1170,9 +1206,9 @@ pub(crate) fn execute(
                     return Failed;
                 }
             }
-                .into_iter()
-                .filter(|target| !state.entity_session_locked(*target))
-                .collect();
+            .into_iter()
+            .filter(|target| !state.entity_session_locked(*target))
+            .collect();
             if targets.is_empty() {
                 feedback(
                     state,
@@ -1183,7 +1219,13 @@ pub(crate) fn execute(
                 return Failed;
             }
             let message = if *selectors {
-                match expand_message(state, executor, message) { Ok(message) => message, Err(message) => { error(state, connection, message); return Failed; } }
+                match expand_message(state, executor, message) {
+                    Ok(message) => message,
+                    Err(message) => {
+                        error(state, connection, message);
+                        return Failed;
+                    }
+                }
             } else {
                 text(message)
             };

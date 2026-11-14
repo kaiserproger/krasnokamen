@@ -161,7 +161,7 @@ lease and backup contract is in
 
 ## Plugin admission
 
-Independently deployed `solaris:plugin@0.8.0` components execute outside the
+Independently deployed `krasnokamen:plugin@0.9.0` components execute outside the
 tick. Guests receive owned values and opaque handles, not native pointers,
 locks, slots or world ownership. The native owner validates current identities,
 revisions, complete custody and capabilities when applying operations. Plugin

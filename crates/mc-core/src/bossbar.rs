@@ -2,7 +2,7 @@
 //!
 //! Server-global registry (bar id -> bar), moved between dimension worlds by
 //! `dimensions_tick::swap_globals`. Vanilla persists this in level.dat;
-//! Solaris keeps it session-local (see open issues).
+//! Krasnokamen keeps it session-local (see open issues).
 
 use std::collections::{BTreeMap, BTreeSet};
 

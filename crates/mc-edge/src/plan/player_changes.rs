@@ -134,7 +134,9 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             },
         ),
         PlayerChange::RecipesUnlocked {
-            registry, recipes, replace,
+            registry,
+            recipes,
+            replace,
         } => {
             let catalog = crate::recipes::catalog(&registry.0);
             if viewer

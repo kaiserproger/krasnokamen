@@ -114,7 +114,10 @@ fn hover_entry(name: &str, description: &mc_nbt::Tag) -> mc_nbt::Tag {
         (
             "hover_event".to_owned(),
             mc_nbt::Tag::Compound(vec![
-                ("action".to_owned(), mc_nbt::Tag::String("show_text".to_owned())),
+                (
+                    "action".to_owned(),
+                    mc_nbt::Tag::String("show_text".to_owned()),
+                ),
                 ("value".to_owned(), description.clone()),
             ]),
         ),
@@ -130,108 +133,185 @@ pub(super) fn report_list(
     let descriptions = state.datapacks.catalog();
     let enabled = &state.datapacks.selection().enabled;
     let mut count = 0;
-    let messages = ["enabled", "available"].into_iter()
+    let messages = ["enabled", "available"]
+        .into_iter()
         .filter(|kind| filter.is_none_or(|filter| filter == *kind))
         .map(|kind| {
             let names: Vec<String> = if kind == "enabled" {
-                enabled.iter().filter(|id| descriptions.contains_key(*id)).cloned().collect()
+                enabled
+                    .iter()
+                    .filter(|id| descriptions.contains_key(*id))
+                    .cloned()
+                    .collect()
             } else {
-                descriptions.keys().filter(|id| !enabled.contains(*id)).cloned().collect()
+                descriptions
+                    .keys()
+                    .filter(|id| !enabled.contains(*id))
+                    .cloned()
+                    .collect()
             };
             count += names.len() as i32;
             list_feedback(kind, &names, descriptions)
-        }).collect::<Vec<_>>();
+        })
+        .collect::<Vec<_>>();
     for (key, args) in messages {
         crate::command_execution::feedback(state, connection, &key, args);
     }
     count
 }
 
-fn discover_descriptions(root: &std::path::Path) -> Result<std::collections::BTreeMap<String, mc_nbt::Tag>, String> {
+fn discover_descriptions(
+    root: &std::path::Path,
+) -> Result<std::collections::BTreeMap<String, mc_nbt::Tag>, String> {
     let mut descriptions = super::PackSet::default().descriptions;
     let mut remaining = super::MAX_BYTES;
     for (id, pack) in super::discover(root, &mut remaining)? {
-        if pack.features.iter().all(|feature| super::ENABLED_FEATURES.contains(&feature.as_str())) {
+        if pack
+            .features
+            .iter()
+            .all(|feature| super::ENABLED_FEATURES.contains(&feature.as_str()))
+        {
             descriptions.insert(id, pack.description);
         }
     }
     Ok(descriptions)
 }
 
-fn create(state: &mut TickState, connection: crate::boundary::ConnectionId, name: &str, description: &str) -> Result<crate::command_execution::CommandResult, String> {
-    if state.command_context.current.is_none_or(|context| context.permission < 4) {
+fn create(
+    state: &mut TickState,
+    connection: crate::boundary::ConnectionId,
+    name: &str,
+    description: &str,
+) -> Result<crate::command_execution::CommandResult, String> {
+    if state
+        .command_context
+        .current
+        .is_none_or(|context| context.permission < 4)
+    {
         return Err(crate::commands::CommandError::Unknown.message());
     }
     let name = pack_name(name).ok_or("Invalid new pack name")?;
     let stem = name.split('.').next().unwrap_or("").to_ascii_uppercase();
-    if name.is_empty() || name.len() > 255 || name.ends_with(['.', ' '])
-        || name.chars().any(|ch| ch.is_control() || "<>:\"/\\|?*".contains(ch))
+    if name.is_empty()
+        || name.len() > 255
+        || name.ends_with(['.', ' '])
+        || name
+            .chars()
+            .any(|ch| ch.is_control() || "<>:\"/\\|?*".contains(ch))
         || matches!(stem.as_str(), "" | "CON" | "PRN" | "AUX" | "NUL")
-        || (stem.len() == 4 && (stem.starts_with("COM") || stem.starts_with("LPT"))
+        || (stem.len() == 4
+            && (stem.starts_with("COM") || stem.starts_with("LPT"))
             && matches!(stem.as_bytes()[3], b'1'..=b'9'))
     {
         return Err(format!("Invalid new pack name '{name}'"));
     }
-    let description = crate::command_text::parse_component(description).map_err(|error| error.message())?;
-    let context = state.command_context.current.expect("owner permission checked");
-    let description = crate::command_text::resolve_component(state, context.executor, &description)?;
+    let description =
+        crate::command_text::parse_component(description).map_err(|error| error.message())?;
+    let context = state
+        .command_context
+        .current
+        .expect("owner permission checked");
+    let description =
+        crate::command_text::resolve_component(state, context.executor, &description)?;
     let encoded_description = component_json(&description)?;
     let completion = state.command_context.completion_id()?;
-    state.datapacks.request_work(connection, false, Some(completion), move |root| {
-        let mut descriptions = discover_descriptions(root)?;
-        create_pack(root, &name, encoded_description)?;
-        descriptions.insert(format!("file/{name}"), description);
-        Ok(super::WorkerResult::Created { descriptions, name })
-    })?;
-    Ok(crate::command_execution::CommandResult::Deferred(completion))
+    state
+        .datapacks
+        .request_work(connection, false, Some(completion), move |root| {
+            let mut descriptions = discover_descriptions(root)?;
+            create_pack(root, &name, encoded_description)?;
+            descriptions.insert(format!("file/{name}"), description);
+            Ok(super::WorkerResult::Created { descriptions, name })
+        })?;
+    Ok(crate::command_execution::CommandResult::Deferred(
+        completion,
+    ))
 }
 
 fn component_json(tag: &mc_nbt::Tag) -> Result<serde_json::Value, String> {
     use mc_nbt::Tag;
     Ok(match tag {
         Tag::String(value) => value.clone().into(),
-        Tag::Compound(fields) => serde_json::Value::Object(fields.iter().map(|(key, value)| {
-            let encoded = if matches!(key.as_str(), "bold" | "italic" | "underlined" | "strikethrough" | "obfuscated" | "interpret")
-                && let Tag::Byte(value) = value
-            {
-                serde_json::Value::Bool(*value != 0)
-            } else {
-                component_json(value)?
-            };
-            Ok((key.clone(), encoded))
-        }).collect::<Result<_, String>>()?),
-        Tag::List(list) => serde_json::Value::Array(list.elements.iter().map(component_json).collect::<Result<_, _>>()?),
+        Tag::Compound(fields) => serde_json::Value::Object(
+            fields
+                .iter()
+                .map(|(key, value)| {
+                    let encoded = if matches!(
+                        key.as_str(),
+                        "bold"
+                            | "italic"
+                            | "underlined"
+                            | "strikethrough"
+                            | "obfuscated"
+                            | "interpret"
+                    ) && let Tag::Byte(value) = value
+                    {
+                        serde_json::Value::Bool(*value != 0)
+                    } else {
+                        component_json(value)?
+                    };
+                    Ok((key.clone(), encoded))
+                })
+                .collect::<Result<_, String>>()?,
+        ),
+        Tag::List(list) => serde_json::Value::Array(
+            list.elements
+                .iter()
+                .map(component_json)
+                .collect::<Result<_, _>>()?,
+        ),
         Tag::Byte(value) => (*value).into(),
         Tag::Short(value) => (*value).into(),
         Tag::Int(value) => (*value).into(),
         Tag::Long(value) => (*value).into(),
-        Tag::Float(value) => serde_json::Number::from_f64(f64::from(*value)).ok_or("Non-finite component number")?.into(),
-        Tag::Double(value) => serde_json::Number::from_f64(*value).ok_or("Non-finite component number")?.into(),
+        Tag::Float(value) => serde_json::Number::from_f64(f64::from(*value))
+            .ok_or("Non-finite component number")?
+            .into(),
+        Tag::Double(value) => serde_json::Number::from_f64(*value)
+            .ok_or("Non-finite component number")?
+            .into(),
         _ => return Err("Unsupported array in text component".into()),
     })
 }
 
-fn create_pack(root: &std::path::Path, name: &str, description: serde_json::Value) -> Result<(), String> {
+fn create_pack(
+    root: &std::path::Path,
+    name: &str,
+    description: serde_json::Value,
+) -> Result<(), String> {
     use std::io::Write;
     // Canonical 26.3 version.json: data_major=121, data_minor=0.
     let bytes = serde_json::to_vec_pretty(&serde_json::json!({
         "pack": { "description": description, "min_format": [121, 0], "max_format": [121, 0] }
-    })).map_err(|error| format!("Encoding datapack '{name}': {error}"))?;
-    std::fs::create_dir_all(root).map_err(|error| format!("Creating datapack directory: {error}"))?;
-    if std::fs::symlink_metadata(root).map_err(|error| error.to_string())?.file_type().is_symlink() {
+    }))
+    .map_err(|error| format!("Encoding datapack '{name}': {error}"))?;
+    std::fs::create_dir_all(root)
+        .map_err(|error| format!("Creating datapack directory: {error}"))?;
+    if std::fs::symlink_metadata(root)
+        .map_err(|error| error.to_string())?
+        .file_type()
+        .is_symlink()
+    {
         return Err("Datapack root cannot be a symlink".into());
     }
     let directory = root.join(name);
-    std::fs::create_dir(&directory).map_err(|error| format!("Creating datapack '{name}': {error}"))?;
+    std::fs::create_dir(&directory)
+        .map_err(|error| format!("Creating datapack '{name}': {error}"))?;
     let metadata = directory.join("pack.mcmeta");
     let result = (|| {
-        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&metadata)?;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&metadata)?;
         file.write_all(&bytes)?;
         file.sync_all()
     })();
     if let Err(error) = result {
-        let cleanup = std::fs::remove_file(&metadata).and_then(|()| std::fs::remove_dir(&directory));
-        return Err(format!("Creating datapack '{name}': {error}; cleanup: {cleanup:?}"));
+        let cleanup =
+            std::fs::remove_file(&metadata).and_then(|()| std::fs::remove_dir(&directory));
+        return Err(format!(
+            "Creating datapack '{name}': {error}; cleanup: {cleanup:?}"
+        ));
     }
     Ok(())
 }
@@ -248,18 +328,26 @@ fn list_feedback(
     let mut entries = Vec::with_capacity(names.len() * 2 - 1);
     for name in names {
         if !entries.is_empty() {
-            entries.push(Tag::Compound(vec![("text".into(), Tag::String(", ".into()))]));
+            entries.push(Tag::Compound(vec![(
+                "text".into(),
+                Tag::String(", ".into()),
+            )]));
         }
         entries.push(hover_entry(
             name,
-            descriptions.get(name).unwrap_or(&Tag::String(String::new())),
+            descriptions
+                .get(name)
+                .unwrap_or(&Tag::String(String::new())),
         ));
     }
     (
         format!("commands.datapack.list.{kind}.success"),
         vec![
             Tag::String(names.len().to_string()),
-            Tag::List(ListTag { element_type: tag_type::COMPOUND, elements: entries }),
+            Tag::List(ListTag {
+                element_type: tag_type::COMPOUND,
+                elements: entries,
+            }),
         ],
     )
 }
@@ -372,7 +460,9 @@ fn activate(
 ) -> Result<crate::command_context::CompletionId, String> {
     selection.validate()?;
     let completion = state.command_context.completion_id()?;
-    state.datapacks.request_activation(selection, connection, completion)?;
+    state
+        .datapacks
+        .request_activation(selection, connection, completion)?;
     Ok(completion)
 }
 

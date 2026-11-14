@@ -179,7 +179,12 @@ pub(crate) fn read_slot(
         }
     }
 }
-fn slot_span(name: &str, selected: usize, player: bool, count: usize) -> Option<std::ops::Range<usize>> {
+fn slot_span(
+    name: &str,
+    selected: usize,
+    player: bool,
+    count: usize,
+) -> Option<std::ops::Range<usize>> {
     let start = slot_index(name, selected, player)?;
     let count = if name.starts_with("container.") {
         count
@@ -200,17 +205,25 @@ pub(crate) fn write_slots(
     stacks: &[ItemStack],
     length: usize,
 ) -> Result<i32, String> {
-    if length == 0 { return Ok(0); }
+    if length == 0 {
+        return Ok(0);
+    }
     let empty = ItemStack::EMPTY;
     let stack_at = |index| stacks.get(index).unwrap_or(&empty);
     match destination {
         Destination::Block(coords, slot) => {
             let pos = position(state, executor, *coords)?;
-            if !slot.starts_with("container.") { return Err("Invalid container slot".into()); }
+            if !slot.starts_with("container.") {
+                return Err("Invalid container slot".into());
+            }
             let range = slot_span(slot, 0, false, length).ok_or("Invalid slot range")?;
-            let record = state.block_entities.get(&(pos.x, pos.y, pos.z))
+            let record = state
+                .block_entities
+                .get(&(pos.x, pos.y, pos.z))
                 .ok_or("Container not found")?;
-            if range.end > record.slots.len() { return Err("Container or slot not found".into()); }
+            if range.end > record.slots.len() {
+                return Err("Container or slot not found".into());
+            }
             if crate::plugin_inventories::has_reservations_for_block(state, pos) {
                 let mut candidate = record.slots.clone();
                 for (offset, index) in range.clone().enumerate() {
@@ -221,19 +234,27 @@ pub(crate) fn write_slots(
                 }
             }
             let count = range.len() as i32;
-            let record = state.block_entities.get_mut(&(pos.x, pos.y, pos.z))
+            let record = state
+                .block_entities
+                .get_mut(&(pos.x, pos.y, pos.z))
                 .expect("admitted container");
             for (offset, index) in range.enumerate() {
                 record.slots[index] = stack_at(offset).clone();
             }
-            crate::brewing::slots_replaced(&mut state.brewing, (pos.x, pos.y, pos.z), &record.slots);
+            crate::brewing::slots_replaced(
+                &mut state.brewing,
+                (pos.x, pos.y, pos.z),
+                &record.slots,
+            );
             crate::redstone::containers::inventory_changed(&mut state.redstone_containers, pos);
             state.world.mark_block_entity_dirty(pos);
             crate::tick::refresh_container_viewers(state, pos);
             Ok(count)
         }
         Destination::Entity(target, slot) => {
-            if slot.starts_with("container.") { return Err("Invalid entity slot".into()); }
+            if slot.starts_with("container.") {
+                return Err("Invalid entity slot".into());
+            }
             let required = match slot.as_str() {
                 "armor.feet" => Some("feet"),
                 "armor.legs" => Some("legs"),
@@ -242,47 +263,85 @@ pub(crate) fn write_slots(
                 _ => None,
             };
             let first = stack_at(0);
-            if !first.is_empty() && let Some(required) = required
-                && state.registry.item_facts.facts_for_stack(first, &state.registry.items)
-                    .and_then(|facts| facts.equippable_slot.as_deref()) != Some(required) {
+            if !first.is_empty()
+                && let Some(required) = required
+                && state
+                    .registry
+                    .item_facts
+                    .facts_for_stack(first, &state.registry.items)
+                    .and_then(|facts| facts.equippable_slot.as_deref())
+                    != Some(required)
+            {
                 return Err("Item cannot be placed in the specified armor slot".into());
             }
             enum Write {
                 Player(EntityId, std::ops::Range<usize>),
-                Equipment(EntityId, crate::entities::EntitySlot, [Option<ItemStack>; 6],
-                    crate::plugin_inventories::PreparedEntityCustody),
+                Equipment(
+                    EntityId,
+                    crate::entities::EntitySlot,
+                    [Option<ItemStack>; 6],
+                    crate::plugin_inventories::PreparedEntityCustody,
+                ),
             }
             let entities = crate::command_execution::resolve_target(state, executor, target)?;
             let mut prepared = Vec::with_capacity(entities.len());
             let mut count = 0;
             for entity in entities {
                 if let Some(player) = state.players.get(&entity) {
-                    let Some(range) = slot_span(slot, usize::from(player.inventory.selected.min(8)), true, length)
-                        .filter(|range| range.end <= player.inventory.slots.len()) else { continue; };
-                    let replacements: Vec<_> = range.clone().enumerate()
-                        .map(|(offset, index)| (index, stack_at(offset))).collect();
-                    if crate::plugin_inventories::below_player_replacement_floors(state, entity, &replacements) {
+                    let Some(range) = slot_span(
+                        slot,
+                        usize::from(player.inventory.selected.min(8)),
+                        true,
+                        length,
+                    )
+                    .filter(|range| range.end <= player.inventory.slots.len()) else {
+                        continue;
+                    };
+                    let replacements: Vec<_> = range
+                        .clone()
+                        .enumerate()
+                        .map(|(offset, index)| (index, stack_at(offset)))
+                        .collect();
+                    if crate::plugin_inventories::below_player_replacement_floors(
+                        state,
+                        entity,
+                        &replacements,
+                    ) {
                         return Err("Item is reserved by a plugin".into());
                     }
                     count += range.len() as i32;
                     prepared.push(Write::Player(entity, range));
                 } else if let Some(entity_slot) = state.entities.slot_of(entity) {
-                    if !matches!(state.entities.body(entity_slot).kind, crate::entities::EntityKind::Mob { .. }) {
+                    if !matches!(
+                        state.entities.body(entity_slot).kind,
+                        crate::entities::EntityKind::Mob { .. }
+                    ) {
                         continue;
                     }
-                    let Some(range) = slot_span(slot, 0, false, length).filter(|range| range.end <= 6) else { continue; };
-                    let mut equipment = state.entities.row(entity_slot).appearance.equipment.clone();
+                    let Some(range) =
+                        slot_span(slot, 0, false, length).filter(|range| range.end <= 6)
+                    else {
+                        continue;
+                    };
+                    let mut equipment =
+                        state.entities.row(entity_slot).appearance.equipment.clone();
                     for (offset, index) in range.clone().enumerate() {
                         let stack = stack_at(offset);
                         equipment[index] = (!stack.is_empty()).then(|| stack.clone());
                     }
-                    let custody = crate::plugin_inventories::prepare_entity_custody(state, entity_slot, &equipment)
-                        .map_err(|_| "Entity inventory custody is unavailable")?;
+                    let custody = crate::plugin_inventories::prepare_entity_custody(
+                        state,
+                        entity_slot,
+                        &equipment,
+                    )
+                    .map_err(|_| "Entity inventory custody is unavailable")?;
                     count += range.len() as i32;
                     prepared.push(Write::Equipment(entity, entity_slot, equipment, custody));
                 }
             }
-            if prepared.is_empty() { return Err("No entity has the specified slot".into()); }
+            if prepared.is_empty() {
+                return Err("No entity has the specified slot".into());
+            }
             // Every target and its final reservation footprint is admitted.
             for write in prepared {
                 match write {
@@ -294,7 +353,8 @@ pub(crate) fn write_slots(
                         crate::projectiles::weapons::sync(state, entity);
                     }
                     Write::Equipment(entity, slot, equipment, custody) => {
-                        std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).equipment = equipment;
+                        std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance)
+                            .equipment = equipment;
                         crate::entity_loot::restore(state, slot);
                         crate::plugin_inventories::apply_entity_custody(state, custody);
                         state.appearance_changed.push(entity);
@@ -327,7 +387,13 @@ pub(crate) fn execute(
             }
         }
     };
-    let count = write_slots(state, executor, &command.destination, std::slice::from_ref(&stack), 1)?;
+    let count = write_slots(
+        state,
+        executor,
+        &command.destination,
+        std::slice::from_ref(&stack),
+        1,
+    )?;
     if crate::command_execution::accepts_success(state, connection) {
         state.push_player(
             connection,

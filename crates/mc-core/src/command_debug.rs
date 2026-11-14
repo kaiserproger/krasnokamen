@@ -42,7 +42,10 @@ impl Report {
             .create_new(true)
             .open(&path)
             .map_err(|error| error.to_string())?;
-        if let Err(error) = file.write_all(self.content.as_bytes()).and_then(|()| file.sync_all()) {
+        if let Err(error) = file
+            .write_all(self.content.as_bytes())
+            .and_then(|()| file.sync_all())
+        {
             drop(file);
             let _ = std::fs::remove_file(path);
             return Err(error.to_string());
@@ -81,15 +84,22 @@ impl TraceArtifact {
         if self.truncated {
             return;
         }
-        if self.write_fmt(line).and_then(|()| self.write_char('\n')).is_err() {
-            self.content.push_str("\n[ERROR] Function trace output budget exceeded (16 MiB)\n");
+        if self
+            .write_fmt(line)
+            .and_then(|()| self.write_char('\n'))
+            .is_err()
+        {
+            self.content
+                .push_str("\n[ERROR] Function trace output budget exceeded (16 MiB)\n");
             self.truncated = true;
         }
     }
 }
 
 pub(crate) fn trace_budget_exhausted(state: &mut TickState) {
-    if state.debug_tracing && let Some(trace) = state.debug_traces.last_mut() {
+    if state.debug_tracing
+        && let Some(trace) = state.debug_traces.last_mut()
+    {
         trace.record(format_args!("[ERROR] Function command budget exceeded"));
         trace.truncated = true;
     }
@@ -102,7 +112,9 @@ pub(crate) fn swap_runtime(left: &mut TickState, right: &mut TickState) {
 }
 
 pub(crate) fn trace_enter(state: &mut TickState, name: &str, lines: usize) {
-    if state.debug_tracing && let Some(trace) = state.debug_traces.last_mut() {
+    if state.debug_tracing
+        && let Some(trace) = state.debug_traces.last_mut()
+    {
         if trace.content.is_empty() {
             trace.name = name.to_owned();
         }
@@ -111,14 +123,18 @@ pub(crate) fn trace_enter(state: &mut TickState, name: &str, lines: usize) {
 }
 
 pub(crate) fn trace_command(state: &mut TickState, text: &str) {
-    if state.debug_tracing && let Some(trace) = state.debug_traces.last_mut() {
+    if state.debug_tracing
+        && let Some(trace) = state.debug_traces.last_mut()
+    {
         trace.commands += 1;
         trace.record(format_args!("[C] {text}"));
     }
 }
 
 pub(crate) fn trace_result(state: &mut TickState, success: bool, value: i32) {
-    if state.debug_tracing && let Some(trace) = state.debug_traces.last_mut() {
+    if state.debug_tracing
+        && let Some(trace) = state.debug_traces.last_mut()
+    {
         trace.record(format_args!("[R] success={success} result={value}"));
     }
 }
@@ -133,7 +149,11 @@ pub(crate) fn trace_message(
     }
     // A deferred trace may span ticks. Unrelated chat (including private
     // messages to this source) during that wait is not command trace output.
-    if state.command_context.current.is_none_or(|context| context.connection != connection) {
+    if state
+        .command_context
+        .current
+        .is_none_or(|context| context.connection != connection)
+    {
         return;
     }
     if let Some(trace) = state.debug_traces.last_mut()
@@ -156,7 +176,10 @@ pub(crate) fn trace_waiting_for(
     id: crate::command_context::CompletionId,
 ) -> bool {
     state.debug_tracing
-        && state.debug_traces.last().is_some_and(|trace| trace.completion == Some(id))
+        && state
+            .debug_traces
+            .last()
+            .is_some_and(|trace| trace.completion == Some(id))
 }
 
 pub(crate) fn finish_trace(state: &mut TickState) -> Result<(), String> {
@@ -175,16 +198,24 @@ pub(crate) fn finish_trace(state: &mut TickState) -> Result<(), String> {
         } else {
             "commands.debug.function.success.multiple"
         },
-        arguments: if trace.truncated { Vec::new() } else { vec![
-            mc_nbt::Tag::String(trace.commands.to_string()),
-            mc_nbt::Tag::String(if trace.functions == 1 {
-                trace.name
-            } else {
-                trace.functions.to_string()
-            }),
-            mc_nbt::Tag::String(name.clone()),
-        ] },
-        result: if trace.truncated { 0 } else { trace.commands as i32 },
+        arguments: if trace.truncated {
+            Vec::new()
+        } else {
+            vec![
+                mc_nbt::Tag::String(trace.commands.to_string()),
+                mc_nbt::Tag::String(if trace.functions == 1 {
+                    trace.name
+                } else {
+                    trace.functions.to_string()
+                }),
+                mc_nbt::Tag::String(name.clone()),
+            ]
+        },
+        result: if trace.truncated {
+            0
+        } else {
+            trace.commands as i32
+        },
         success: !trace.truncated,
         name,
         content: trace.content,
@@ -195,7 +226,6 @@ pub(crate) fn finish_trace(state: &mut TickState) -> Result<(), String> {
         report,
     )
 }
-
 
 pub(crate) fn start(
     state: &mut TickState,
@@ -265,11 +295,15 @@ pub(crate) fn stop(
         success: true,
         name: format!("profile-results-{timestamp}.txt"),
         content: format!(
-            "---- Solaris tick profile ----\nStart tick: {start_tick}\nEnd tick: {}\nTime span: {} ms\nTick span: {ticks} ticks\nAverage TPS: {average_tps:.2}\n",
-            state.tick, elapsed.as_millis(),
+            "---- Krasnokamen tick profile ----\nStart tick: {start_tick}\nEnd tick: {}\nTime span: {} ms\nTick span: {ticks} ticks\nAverage TPS: {average_tps:.2}\n",
+            state.tick,
+            elapsed.as_millis(),
         ),
     };
-    if let Err(error) = state.datapacks.request_debug_report(connection, completion, report) {
+    if let Err(error) = state
+        .datapacks
+        .request_debug_report(connection, completion, report)
+    {
         crate::command_execution::feedback(state, connection, &error, Vec::new());
         return CommandResult::Failed;
     }
@@ -286,7 +320,10 @@ pub(crate) fn trace_function(
 ) -> CommandResult {
     if state.debug_tracing {
         crate::command_execution::feedback(
-            state, connection, "commands.debug.function.noRecursion", Vec::new(),
+            state,
+            connection,
+            "commands.debug.function.noRecursion",
+            Vec::new(),
         );
         return CommandResult::Failed;
     }

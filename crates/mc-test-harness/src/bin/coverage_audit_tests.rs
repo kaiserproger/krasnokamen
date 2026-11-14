@@ -114,7 +114,7 @@ fn bare_or_non_vanilla_captures_do_not_count_as_oracle_or_client_evidence() {
 |---|---|---|---|---|---|---|
 | C1 | Chunk streaming | In scope | `ready` | Runtime harness plus capture. | None for normal path. | M95 |
 | C2 | Lighting payloads | In scope | `ready` | Runtime harness plus wire-probe capture. | None for normal path. | M95 |
-| C3 | Collision | In scope | `ready` | Runtime harness plus Solaris harness capture. | None for normal path. | M95 |
+| C3 | Collision | In scope | `ready` | Runtime harness plus Krasnokamen harness capture. | None for normal path. | M95 |
 | C4 | Falling blocks | In scope | `ready` | Runtime harness plus vanilla capture. | None for normal path. | M95 |
 
 ## Accepted Non-Goals And Divergences Appendix

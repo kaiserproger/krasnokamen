@@ -11,10 +11,15 @@ pub(crate) fn update(
     let (Tag::Compound(before), Tag::Compound(candidate)) = (before, candidate) else {
         return Err("Block entity data must be a compound".into());
     };
-    if candidate.iter().any(|(key, _)| key.starts_with("solaris") || key.starts_with("Solaris")) {
+    if candidate
+        .iter()
+        .any(|(key, _)| key.starts_with("krasnokamen") || key.starts_with("Krasnokamen"))
+    {
         return Err("Internal block entity fields cannot be edited".into());
     }
-    let kind = state.world.block_at(pos.x, pos.y, pos.z)
+    let kind = state
+        .world
+        .block_at(pos.x, pos.y, pos.z)
         .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
         .and_then(|block| BlockEntityKind::for_block(block.block.id.path()))
         .ok_or("The target block is not a block entity")?;
@@ -24,10 +29,16 @@ pub(crate) fn update(
     // Unopened imported chests keep their typed loot source until first open.
     // A metadata-only edit must not manufacture an empty inventory or replace it.
     let preserve_unopened_loot = !state.block_entities.contains_key(&cell)
-        && ["Items", "LootTable", "LootTableSeed"].iter().all(|key| !changed(key))
-        && state.world.chunk(crate::boundary::ChunkPos {
-            x: pos.x.div_euclid(16), z: pos.z.div_euclid(16),
-        }).and_then(|chunk| chunk.chests.get(&pos))
+        && ["Items", "LootTable", "LootTableSeed"]
+            .iter()
+            .all(|key| !changed(key))
+        && state
+            .world
+            .chunk(crate::boundary::ChunkPos {
+                x: pos.x.div_euclid(16),
+                z: pos.z.div_euclid(16),
+            })
+            .and_then(|chunk| chunk.chests.get(&pos))
             .is_some_and(|chest| chest.loot_table.is_some());
     if preserve_unopened_loot {
         image.storage = None;
@@ -36,13 +47,16 @@ pub(crate) fn update(
         for (name, value) in &image.fields {
             let valid = match name.as_str() {
                 "Command" => matches!(value, Tag::String(command) if command.len() <= 32767),
-                "auto" | "powered" | "conditionMet" | "TrackOutput" | "UpdateLastExecution" =>
-                    matches!(value, Tag::Byte(0 | 1)),
+                "auto" | "powered" | "conditionMet" | "TrackOutput" | "UpdateLastExecution" => {
+                    matches!(value, Tag::Byte(0 | 1))
+                }
                 "SuccessCount" => matches!(value, Tag::Int(_)),
                 "LastExecution" => matches!(value, Tag::Long(_)),
                 _ => true,
             };
-            if !valid { return Err(format!("Invalid command block field {name}")); }
+            if !valid {
+                return Err(format!("Invalid command block field {name}"));
+            }
         }
     }
     image.fields.extend([
@@ -50,20 +64,35 @@ pub(crate) fn update(
         ("y".into(), Tag::Int(pos.y)),
         ("z".into(), Tag::Int(pos.z)),
     ]);
-    if let Some(bytes) = state.world.chunk(crate::boundary::ChunkPos {
-        x: pos.x.div_euclid(16), z: pos.z.div_euclid(16),
-    }).and_then(|chunk| chunk.block_entities.get(&pos)) {
-        let Tag::Compound(fields) = mc_nbt::read_network(&mut bytes.as_slice())
-            .map_err(|error| error.to_string())? else {
-                return Err("Invalid resident block entity image".into());
-            };
-        image.fields.extend(fields.into_iter().filter(|(name, _)|
-            name.starts_with("solaris") || name.starts_with("Solaris")));
+    if let Some(bytes) = state
+        .world
+        .chunk(crate::boundary::ChunkPos {
+            x: pos.x.div_euclid(16),
+            z: pos.z.div_euclid(16),
+        })
+        .and_then(|chunk| chunk.block_entities.get(&pos))
+    {
+        let Tag::Compound(fields) =
+            mc_nbt::read_network(&mut bytes.as_slice()).map_err(|error| error.to_string())?
+        else {
+            return Err("Invalid resident block entity image".into());
+        };
+        image.fields.extend(fields.into_iter().filter(|(name, _)| {
+            name.starts_with("krasnokamen") || name.starts_with("Krasnokamen")
+        }));
     }
-    let native = prepare_native(state, pos, kind, &mut image, changed("Delay"), changed("listener"))?;
+    let native = prepare_native(
+        state,
+        pos,
+        kind,
+        &mut image,
+        changed("Delay"),
+        changed("listener"),
+    )?;
     if let Some(storage) = &image.storage
         && crate::plugin_inventories::has_reservations_for_block(state, pos)
-        && crate::plugin_inventories::below_block_floors(state, pos, &storage.slots) {
+        && crate::plugin_inventories::below_block_floors(state, pos, &storage.slots)
+    {
         return Err("Item is reserved by a plugin".into());
     }
     let mut bytes = Vec::new();
@@ -77,9 +106,16 @@ pub(crate) fn update(
             let slots_changed = current.slots != storage.slots;
             let furnace_changed = current.furnace != storage.furnace;
             if slots_changed || furnace_changed {
-                let current = state.block_entities.get_mut(&cell).expect("admitted live inventory");
-                if slots_changed { current.slots = storage.slots; }
-                if furnace_changed { current.furnace = storage.furnace; }
+                let current = state
+                    .block_entities
+                    .get_mut(&cell)
+                    .expect("admitted live inventory");
+                if slots_changed {
+                    current.slots = storage.slots;
+                }
+                if furnace_changed {
+                    current.furnace = storage.furnace;
+                }
             }
         } else {
             state.block_entities.insert(cell, storage);
@@ -89,22 +125,44 @@ pub(crate) fn update(
         Native::None => {}
         Native::Sculk(prepared) => crate::sculk::apply_data(state, pos, prepared),
         Native::Shrieker(prepared) => crate::shrieker::apply_data(state, pos, prepared),
-        Native::Hopper(ticks) => state.redstone_containers.apply_data_cooldown(pos, ticks, state.tick),
-        Native::Gateway(age) => { state.gateway_ages.insert(pos, crate::end_portals::GatewayAge {
-            age, stored_age: age,
-        }); }
+        Native::Hopper(ticks) => state
+            .redstone_containers
+            .apply_data_cooldown(pos, ticks, state.tick),
+        Native::Gateway(age) => {
+            state.gateway_ages.insert(
+                pos,
+                crate::end_portals::GatewayAge {
+                    age,
+                    stored_age: age,
+                },
+            );
+        }
         Native::Brewing(stand) => crate::brewing::apply_data(state, pos, stand),
-        Native::Crafter(settings) => { state.crafters.entry(cell).or_default().settings = settings; }
+        Native::Crafter(settings) => {
+            state.crafters.entry(cell).or_default().settings = settings;
+        }
         Native::Lectern(lectern) => crate::lectern::apply_data(state, pos, lectern),
-        Native::Campfire(campfire) => { state.campfires.insert(cell, campfire); }
-        Native::Hive(hive) => { state.hives.insert(cell, hive); }
+        Native::Campfire(campfire) => {
+            state.campfires.insert(cell, campfire);
+        }
+        Native::Hive(hive) => {
+            state.hives.insert(cell, hive);
+        }
         Native::Jukebox(jukebox) => crate::jukebox::apply_data(state, pos, jukebox),
-        Native::MonsterSpawner(spawner) => { state.monster_spawners.replace_data(pos, spawner); }
-        Native::TrialSpawner(spawner) => { state.trial_spawners.insert(cell, spawner); }
-        Native::Vault(vault) => { state.vaults.insert(cell, vault); }
+        Native::MonsterSpawner(spawner) => {
+            state.monster_spawners.replace_data(pos, spawner);
+        }
+        Native::TrialSpawner(spawner) => {
+            state.trial_spawners.insert(cell, spawner);
+        }
+        Native::Vault(vault) => {
+            state.vaults.insert(cell, vault);
+        }
     }
     if preserve_unopened_loot {
-        state.world.set_opaque_block_entity(pos, Some(bytes.clone()));
+        state
+            .world
+            .set_opaque_block_entity(pos, Some(bytes.clone()));
     } else {
         state.world.install_command_block_entity(pos, bytes.clone());
     }
@@ -113,7 +171,11 @@ pub(crate) fn update(
     crate::redstone::containers::inventory_changed(&mut state.redstone_containers, pos);
     state.world.mark_block_entity_visible(pos);
     if kind == BlockEntityKind::CommandBlock {
-        crate::command_blocks::data_updated(state, pos, matches!(field(before, "auto"), Some(Tag::Byte(value)) if *value != 0));
+        crate::command_blocks::data_updated(
+            state,
+            pos,
+            matches!(field(before, "auto"), Some(Tag::Byte(value)) if *value != 0),
+        );
     }
     crate::tick::refresh_container_viewers(state, pos);
     publish(state, pos);
@@ -149,16 +211,31 @@ fn prepare_native(
     // These codecs own byte admission already. Other resident owners admit
     // fields directly, without serializing and reparsing an intermediate image.
     let mut bytes = Vec::new();
-    if matches!(kind, BlockEntityKind::Beehive | BlockEntityKind::Jukebox
-        | BlockEntityKind::MobSpawner | BlockEntityKind::TrialSpawner) {
+    if matches!(
+        kind,
+        BlockEntityKind::Beehive
+            | BlockEntityKind::Jukebox
+            | BlockEntityKind::MobSpawner
+            | BlockEntityKind::TrialSpawner
+    ) {
         mc_nbt::write_network(&mut bytes, &Tag::Compound(image.fields.clone()))
             .map_err(|error| error.to_string())?;
     }
     Ok(match kind {
-        BlockEntityKind::SculkSensor | BlockEntityKind::CalibratedSculkSensor | BlockEntityKind::SculkCatalyst =>
-            Native::Sculk(crate::sculk::prepare_data(state, pos, &mut image.fields, listener_changed)?),
-        BlockEntityKind::SculkShrieker =>
-            Native::Shrieker(crate::shrieker::prepare_data(state, pos, &mut image.fields, listener_changed)?),
+        BlockEntityKind::SculkSensor
+        | BlockEntityKind::CalibratedSculkSensor
+        | BlockEntityKind::SculkCatalyst => Native::Sculk(crate::sculk::prepare_data(
+            state,
+            pos,
+            &mut image.fields,
+            listener_changed,
+        )?),
+        BlockEntityKind::SculkShrieker => Native::Shrieker(crate::shrieker::prepare_data(
+            state,
+            pos,
+            &mut image.fields,
+            listener_changed,
+        )?),
         BlockEntityKind::Hopper => {
             let ticks = match field(&image.fields, "TransferCooldown") {
                 None => 0,
@@ -166,8 +243,11 @@ fn prepare_native(
                 _ => return Err("TransferCooldown: expected Int".into()),
             };
             mc_data::trial_nbt::set(&mut image.fields, "TransferCooldown", Tag::Int(ticks));
-            mc_data::trial_nbt::set(&mut image.fields, "solaris:TransferCooldownUntil",
-                Tag::Long(state.tick.saturating_add(ticks as u64) as i64));
+            mc_data::trial_nbt::set(
+                &mut image.fields,
+                "krasnokamen:TransferCooldownUntil",
+                Tag::Long(state.tick.saturating_add(ticks as u64) as i64),
+            );
             Native::Hopper(ticks)
         }
         BlockEntityKind::EndGateway => {
@@ -175,14 +255,24 @@ fn prepare_native(
             Native::Gateway(gateway.age)
         }
         BlockEntityKind::BrewingStand => {
-            let slots = &image.storage.as_ref().expect("brewing inventory admitted").slots;
+            let slots = &image
+                .storage
+                .as_ref()
+                .expect("brewing inventory admitted")
+                .slots;
             let previous = if let Some(stand) = state.brewing.get(&cell) {
                 stand.clone()
-            } else if let Some(bytes) = state.world.chunk(crate::boundary::ChunkPos {
-                x: pos.x.div_euclid(16), z: pos.z.div_euclid(16),
-            }).and_then(|chunk| chunk.block_entities.get(&pos)) {
+            } else if let Some(bytes) = state
+                .world
+                .chunk(crate::boundary::ChunkPos {
+                    x: pos.x.div_euclid(16),
+                    z: pos.z.div_euclid(16),
+                })
+                .and_then(|chunk| chunk.block_entities.get(&pos))
+            {
                 crate::brewing::BrewingState::decode(bytes, &state.registry.items)
-                    .ok_or("Invalid resident brewing stand")?.0
+                    .ok_or("Invalid resident brewing stand")?
+                    .0
             } else {
                 crate::brewing::BrewingState::default()
             };
@@ -193,42 +283,62 @@ fn prepare_native(
             Native::Brewing(stand)
         }
         BlockEntityKind::Crafter => {
-            let (settings, slots) = mc_data::storage_blocks::decode_crafter(&image.fields, &state.registry.items)?;
-            image.storage = Some(BlockEntityState { slots, furnace: None });
+            let (settings, slots) =
+                mc_data::storage_blocks::decode_crafter(&image.fields, &state.registry.items)?;
+            image.storage = Some(BlockEntityState {
+                slots,
+                furnace: None,
+            });
             Native::Crafter(settings)
         }
         BlockEntityKind::Lectern => {
-            let (lectern, book) = crate::lectern::Lectern::from_fields(&image.fields, &state.registry.items)?;
+            let (lectern, book) =
+                crate::lectern::Lectern::from_fields(&image.fields, &state.registry.items)?;
             mc_data::trial_nbt::set(&mut image.fields, "Page", Tag::Int(lectern.page()));
-            image.storage = Some(BlockEntityState { slots: vec![book], furnace: None });
+            image.storage = Some(BlockEntityState {
+                slots: vec![book],
+                furnace: None,
+            });
             Native::Lectern(lectern)
         }
-        BlockEntityKind::Campfire => Native::Campfire(
-            crate::campfire::CampfireState::from_fields(&image.fields, &state.registry.items)?),
-        BlockEntityKind::Beehive => Native::Hive(crate::bees::Hive::decode(&bytes)
-            .map_err(|error| error.to_string())?),
+        BlockEntityKind::Campfire => Native::Campfire(crate::campfire::CampfireState::from_fields(
+            &image.fields,
+            &state.registry.items,
+        )?),
+        BlockEntityKind::Beehive => {
+            Native::Hive(crate::bees::Hive::decode(&bytes).map_err(|error| error.to_string())?)
+        }
         BlockEntityKind::Jukebox => {
             let jukebox = crate::jukebox::Jukebox::decode(&bytes, &state.registry.items)
                 .map_err(|error| error.to_string())?;
             image.storage = Some(BlockEntityState {
-                slots: vec![jukebox.record().clone()], furnace: None,
+                slots: vec![jukebox.record().clone()],
+                furnace: None,
             });
             Native::Jukebox(jukebox)
         }
         BlockEntityKind::MobSpawner => {
             let decoded = crate::monster_spawner::Spawner::decode(&bytes, &state.registry)?;
-            let spawner = state.monster_spawners.prepare_data(pos, decoded, delay_changed, state.tick);
+            let spawner =
+                state
+                    .monster_spawners
+                    .prepare_data(pos, decoded, delay_changed, state.tick);
             image.fields = spawner.data_fields().clone();
             Native::MonsterSpawner(spawner)
         }
         BlockEntityKind::TrialSpawner => {
             let mut spawner = crate::trial_spawner::Spawner::decode(&bytes, &state.registry.items)?;
-            if let Some(old) = state.trial_spawners.get(&cell) { old.preserve_pending(&mut spawner); }
+            if let Some(old) = state.trial_spawners.get(&cell) {
+                old.preserve_pending(&mut spawner);
+            }
             image.fields = spawner.fields(&state.registry.items);
             Native::TrialSpawner(spawner)
         }
         BlockEntityKind::Vault => {
-            let vault = mc_data::trial_nbt::VaultData::from_fields(image.fields.clone(), &state.registry.items)?;
+            let vault = mc_data::trial_nbt::VaultData::from_fields(
+                image.fields.clone(),
+                &state.registry.items,
+            )?;
             image.fields = vault.to_fields(&state.registry.items);
             Native::Vault(vault)
         }

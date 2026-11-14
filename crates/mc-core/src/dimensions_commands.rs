@@ -89,7 +89,10 @@ pub(crate) fn resolve(
         let world = world(state, request.dimension).ok_or("Unknown dimension")?;
         return match target {
             Target::Selector(selector) => crate::command_execution::selector(
-                world, request.executor, selector, state.datapacks.packs(),
+                world,
+                request.executor,
+                selector,
+                state.datapacks.packs(),
             ),
             _ => crate::command_execution::resolve_target(world, request.executor, target),
         };
@@ -117,7 +120,10 @@ pub(crate) fn resolve(
     {
         let selected_in_world = match selector.as_ref().unwrap_or(target) {
             Target::Selector(selector) => crate::command_execution::selector(
-                world, request.executor, selector, state.datapacks.packs(),
+                world,
+                request.executor,
+                selector,
+                state.datapacks.packs(),
             ),
             target => crate::command_execution::resolve_target(world, request.executor, target),
         }?;
@@ -143,7 +149,12 @@ pub(crate) fn resolve(
             (entity, distance)
         })
         .collect();
-    Ok(crate::command_execution::order_and_limit(state, request.executor, selector, candidates))
+    Ok(crate::command_execution::order_and_limit(
+        state,
+        request.executor,
+        selector,
+        candidates,
+    ))
 }
 
 pub(crate) fn commit(world: &mut TickState, changes: &mut ChangeSet) {
@@ -220,7 +231,9 @@ pub(crate) fn execute(
     mut request: Request,
     changes: &mut BTreeMap<Dimension, ChangeSet>,
 ) -> Result<crate::command_execution::CommandResult, String> {
-    use crate::command_execution::CommandResult::{Completed, Deferred, Failed, Success, Unavailable};
+    use crate::command_execution::CommandResult::{
+        Completed, Deferred, Failed, Success, Unavailable,
+    };
     let source_dimension = locate(state, request.executor)
         .map(|(dimension, _)| dimension)
         .unwrap_or(state.dimension);

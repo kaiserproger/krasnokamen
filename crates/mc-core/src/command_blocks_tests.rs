@@ -267,11 +267,16 @@ fn data_merge_validates_native_fields_and_requires_operator() {
     advance(&mut state);
     assert_eq!(state.day_time, 7);
     crate::command_console::execute(
-        &mut state, connection,
+        &mut state,
+        connection,
         "data merge block 0 60 0 {SuccessCount:12}",
-        2, &mut ChangeSet::default(),
+        2,
+        &mut ChangeSet::default(),
     );
-    assert!(matches!(mc_data::item_nbt::field(&read(&state, pos).unwrap(), "SuccessCount"), Some(Tag::Int(12))));
+    assert!(matches!(
+        mc_data::item_nbt::field(&read(&state, pos).unwrap(), "SuccessCount"),
+        Some(Tag::Int(12))
+    ));
     let before = read(&state, pos).unwrap();
     crate::command_console::execute(
         &mut state,

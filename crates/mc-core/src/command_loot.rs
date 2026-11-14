@@ -213,7 +213,11 @@ pub(crate) fn execute(
         }
         Output::Replace(destination, limit) => {
             count = command_item_replace::write_slots(
-                state, executor, destination, &stacks, limit.unwrap_or(stacks.len()),
+                state,
+                executor,
+                destination,
+                &stacks,
+                limit.unwrap_or(stacks.len()),
             )?;
         }
     }

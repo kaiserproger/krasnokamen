@@ -123,7 +123,11 @@ pub fn evaluate_criterion(criterion: &Criterion, context: &EventContext<'_>) -> 
 /// negation and disjunction.
 #[must_use]
 pub fn evaluate_conditions(conditions: &Value, entity: &Value) -> Evaluation {
-    let context = EventContext { trigger: "", event: entity, inventory: &[] };
+    let context = EventContext {
+        trigger: "",
+        event: entity,
+        inventory: &[],
+    };
     let mut evaluator = Evaluator {
         context: &context,
         unsupported: BTreeSet::new(),

@@ -160,7 +160,7 @@ fn ender_chest_same_player_shares_chests_but_never_other_players_or_block_storag
 }
 #[test]
 fn ender_chest_rejects_corrupt_slots_and_preserves_unknown_fields() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut original = Vec::new();
     mc_nbt::write_named(
         &mut original,

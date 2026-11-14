@@ -345,7 +345,10 @@ impl CampfireState {
         let mut fields = self.items_nbt(items);
         fields.extend([
             ("CookingTimes".into(), Tag::IntArray(self.progress.to_vec())),
-            ("CookingTotalTimes".into(), Tag::IntArray(self.total.to_vec())),
+            (
+                "CookingTotalTimes".into(),
+                Tag::IntArray(self.total.to_vec()),
+            ),
         ]);
         fields
     }

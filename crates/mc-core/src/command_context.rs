@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 #[path = "command_context_deferred.rs"]
 mod deferred;
-pub(crate) use deferred::{CompletionId, completion_context, complete, execute_job, resume};
+pub(crate) use deferred::{CompletionId, complete, completion_context, execute_job, resume};
 
 pub(crate) const LIMIT: usize = 65_536;
 /// Local simulation increments the published tick before shared command commit.
@@ -443,7 +443,9 @@ pub(crate) fn run(
     if state.command_context.waiting() && state.command_context.depth == 0 {
         if state.command_context.jobs.len() < LIMIT {
             state.command_context.jobs.push(Job {
-                text: text.to_owned(), context, block: None,
+                text: text.to_owned(),
+                context,
+                block: None,
                 source: deferred::source_entity(state, context.connection),
             });
         } else {
@@ -465,9 +467,15 @@ pub(crate) fn run(
     execute_branches(
         state,
         std::collections::VecDeque::from([(
-            text.trim(), context, false, Vec::<crate::command_store::Store>::new(),
+            text.trim(),
+            context,
+            false,
+            Vec::<crate::command_store::Store>::new(),
         )]),
-        None, 0, 0, changes,
+        None,
+        0,
+        0,
+        changes,
     )
 }
 
@@ -730,16 +738,23 @@ fn execute_branches(
             branches.push_back((text, context, continuation, stores));
         }
         if state.command_context.waiting.is_some() {
-            state.command_context.continuations.push_back(deferred::Action::Branches(
-                deferred::PausedExecution {
-                    branches: branches.into_iter().map(|(text, context, continuation, stores)| {
-                        (text.to_owned(), context, continuation, stores)
-                    }).collect(),
-                    stage, successes, produced, awaited,
+            state
+                .command_context
+                .continuations
+                .push_back(deferred::Action::Branches(deferred::PausedExecution {
+                    branches: branches
+                        .into_iter()
+                        .map(|(text, context, continuation, stores)| {
+                            (text.to_owned(), context, continuation, stores)
+                        })
+                        .collect(),
+                    stage,
+                    successes,
+                    produced,
+                    awaited,
                     depth: state.command_context.depth - 1,
                     function_running: state.datapacks.running,
-                },
-            ));
+                }));
             break;
         }
     }

@@ -46,18 +46,30 @@ fn short(fields: &Fields, key: &str, default: i16, min: i16, max: i16) -> Result
 }
 impl Spawners {
     pub(crate) fn data_fields(&self, pos: BlockPos, tick: u64) -> Option<Fields> {
-        let spawner = self.chunks.get(&(pos.x.div_euclid(16), pos.z.div_euclid(16)))?
+        let spawner = self
+            .chunks
+            .get(&(pos.x.div_euclid(16), pos.z.div_euclid(16)))?
             .get(&(pos.x, pos.y, pos.z))?;
         let mut fields = spawner.fields.clone();
-        let delay = spawner.deadline.map_or(spawner.delay, |deadline|
-            deadline.saturating_sub(tick).min(spawner.delay));
+        let delay = spawner.deadline.map_or(spawner.delay, |deadline| {
+            deadline.saturating_sub(tick).min(spawner.delay)
+        });
         nbt::set(&mut fields, "Delay", Tag::Short(delay as i16));
         Some(fields)
     }
 
-    pub(crate) fn prepare_data(&self, pos: BlockPos, mut next: Spawner, delay_changed: bool, tick: u64) -> Spawner {
-        if let Some(old) = self.chunks.get(&(pos.x.div_euclid(16), pos.z.div_euclid(16)))
-            .and_then(|entries| entries.get(&(pos.x, pos.y, pos.z))) {
+    pub(crate) fn prepare_data(
+        &self,
+        pos: BlockPos,
+        mut next: Spawner,
+        delay_changed: bool,
+        tick: u64,
+    ) -> Spawner {
+        if let Some(old) = self
+            .chunks
+            .get(&(pos.x.div_euclid(16), pos.z.div_euclid(16)))
+            .and_then(|entries| entries.get(&(pos.x, pos.y, pos.z)))
+        {
             next.deadline = if delay_changed {
                 old.deadline.map(|_| tick.saturating_add(next.delay))
             } else {
@@ -66,15 +78,22 @@ impl Spawners {
             };
         }
         nbt::set(&mut next.fields, "Delay", Tag::Short(next.delay as i16));
-        next.fields.retain(|(name, _)| name != "solaris:spawn_deadline");
+        next.fields
+            .retain(|(name, _)| name != "krasnokamen:spawn_deadline");
         if let Some(deadline) = next.deadline {
-            nbt::set(&mut next.fields, "solaris:spawn_deadline", Tag::Long(deadline as i64));
+            nbt::set(
+                &mut next.fields,
+                "krasnokamen:spawn_deadline",
+                Tag::Long(deadline as i64),
+            );
         }
         next
     }
 
     pub(crate) fn replace_data(&mut self, pos: BlockPos, next: Spawner) {
-        self.chunks.entry((pos.x.div_euclid(16), pos.z.div_euclid(16))).or_default()
+        self.chunks
+            .entry((pos.x.div_euclid(16), pos.z.div_euclid(16)))
+            .or_default()
             .insert((pos.x, pos.y, pos.z), next);
     }
 }
@@ -94,10 +113,10 @@ impl Spawner {
         let potentials = data::potentials(&fields, registry)?;
         let min_delay = short(&fields, "MinSpawnDelay", 200, 1, i16::MAX)? as u64;
         let max_delay = short(&fields, "MaxSpawnDelay", 800, min_delay as i16, i16::MAX)? as u64;
-        let deadline = match field(&fields, "solaris:spawn_deadline") {
+        let deadline = match field(&fields, "krasnokamen:spawn_deadline") {
             None => None,
             Some(Tag::Long(value)) if *value >= 0 => Some(*value as u64),
-            _ => return Err("solaris:spawn_deadline: expected nonnegative Long".into()),
+            _ => return Err("krasnokamen:spawn_deadline: expected nonnegative Long".into()),
         };
         Ok(Self {
             type_id: spawn.type_id,
@@ -117,10 +136,12 @@ impl Spawner {
     fn persist(&mut self, state: &mut TickState, key: Key) {
         nbt::set(&mut self.fields, "Delay", Tag::Short(self.delay as i16));
         self.fields
-            .retain(|(name, _)| name != "solaris:spawn_deadline");
+            .retain(|(name, _)| name != "krasnokamen:spawn_deadline");
         if let Some(deadline) = self.deadline {
-            self.fields
-                .push(("solaris:spawn_deadline".into(), Tag::Long(deadline as i64)));
+            self.fields.push((
+                "krasnokamen:spawn_deadline".into(),
+                Tag::Long(deadline as i64),
+            ));
         }
         let pos = BlockPos {
             x: key.0,

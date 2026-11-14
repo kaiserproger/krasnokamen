@@ -422,7 +422,7 @@ def _register_server(sha256, tree):
 def _server_built_from(root, receipt_text, tree):
     """sha256 of the server binary a receipt names, when the tooling built it from exactly `tree`.
 
-    The scenarios run whatever SOLARIS_SERVER_BINARY names (a pinned old build, a sibling's): the
+    The scenarios run whatever KRASNOKAMEN_SERVER_BINARY names (a pinned old build, a sibling's): the
     source fingerprint of the run says nothing about that binary, so its hash must be one that
     `_run_harness` registered for this candidate."""
     registry = root / '.analysis/ledger-builds'
@@ -433,7 +433,7 @@ def _server_built_from(root, receipt_text, tree):
             named.append(build)
     if not named:
         raise Refused('client receipt names no server binary built from the candidate by the ledger tooling '
-                      '(a pinned or foreign SOLARIS_SERVER_BINARY proves nothing about this source): '
+                      '(a pinned or foreign KRASNOKAMEN_SERVER_BINARY proves nothing about this source): '
                       'run `ledger probe --client` on the candidate and use its receipt')
     for build in named:
         if (build['tree']['head'], build['tree']['sha256']) == (tree['head'], tree['sha256']):

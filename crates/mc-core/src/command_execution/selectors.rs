@@ -162,11 +162,17 @@ pub(crate) fn selector(
     selector: &Selector,
     packs: &crate::datapacks::PackSet,
 ) -> Result<Vec<EntityId>, String> {
-    let predicates = selector.predicates.iter().map(|(id, inverted)| {
-        packs.predicates.get(id.as_str())
-            .map(|predicate| (predicate, *inverted))
-            .ok_or_else(|| format!("Unknown predicate {id}"))
-    }).collect::<Result<Vec<_>, _>>()?;
+    let predicates = selector
+        .predicates
+        .iter()
+        .map(|(id, inverted)| {
+            packs
+                .predicates
+                .get(id.as_str())
+                .map(|predicate| (predicate, *inverted))
+                .ok_or_else(|| format!("Unknown predicate {id}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let origin = crate::command_console::pose(state, executor)
         .map(|(position, _)| position)
         .unwrap_or_else(|| state.world.world_spawn_position());
@@ -266,7 +272,10 @@ pub(crate) fn selector(
             for (predicate, inverted) in &predicates {
                 let evaluation = mc_data::advancements::evaluate_conditions(predicate, &entity);
                 if !evaluation.unsupported.is_empty() {
-                    return Err(format!("Unsupported predicate: {:?}", evaluation.unsupported));
+                    return Err(format!(
+                        "Unsupported predicate: {:?}",
+                        evaluation.unsupported
+                    ));
                 }
                 matched &= evaluation.matches != *inverted;
             }
@@ -389,7 +398,9 @@ pub(crate) fn resolve_target(
             },
             state.datapacks.packs(),
         )?,
-        Target::Selector(value) => return selector(state, executor, value, state.datapacks.packs()),
+        Target::Selector(value) => {
+            return selector(state, executor, value, state.datapacks.packs());
+        }
         Target::Player(name) => {
             let uuid = uuid::Uuid::parse_str(name).ok();
             state

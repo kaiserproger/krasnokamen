@@ -183,7 +183,12 @@ pub(crate) struct PreparedData {
 }
 
 pub(crate) fn data_fields(state: &TickState, pos: BlockPos) -> Option<Vec<(String, Tag)>> {
-    Some(fields(state, pos, state.shriekers.entries.get(&key(pos))?, vibration::pending(state, pos)))
+    Some(fields(
+        state,
+        pos,
+        state.shriekers.entries.get(&key(pos))?,
+        vibration::pending(state, pos),
+    ))
 }
 
 pub(crate) fn prepare_data(
@@ -194,9 +199,15 @@ pub(crate) fn prepare_data(
 ) -> Result<PreparedData, String> {
     let old = state.shriekers.entries.get(&key(pos));
     if let Some(entry) = old {
-        mc_data::trial_nbt::set(input, "solaris:shriek_until", Tag::Long(entry.shriek_until as i64));
+        mc_data::trial_nbt::set(
+            input,
+            "krasnokamen:shriek_until",
+            Tag::Long(entry.shriek_until as i64),
+        );
     }
-    if listener_changed { input.retain(|(name, _)| name != "solaris:event_arrival"); }
+    if listener_changed {
+        input.retain(|(name, _)| name != "krasnokamen:event_arrival");
+    }
     let (entry, mut pending) = decode_fields(input, state.tick)?;
     if !listener_changed && old.is_some() {
         pending = vibration::pending(state, pos).cloned();
@@ -236,27 +247,36 @@ fn decode(bytes: &[u8], tick: u64) -> Result<(Shrieker, Option<Pending>), String
     decode_fields(&fields, tick)
 }
 
-fn decode_fields(fields: &[(String, Tag)], tick: u64) -> Result<(Shrieker, Option<Pending>), String> {
+fn decode_fields(
+    fields: &[(String, Tag)],
+    tick: u64,
+) -> Result<(Shrieker, Option<Pending>), String> {
     if !matches!(crate::warden::unique(fields,"id")?,Some(Tag::String(id)) if id=="minecraft:sculk_shrieker")
     {
         return Err("sculk_shrieker.id: expected minecraft:sculk_shrieker".into());
     }
     let warning_level = integer(fields, "warning_level", 4)?;
-    let shriek_until = match crate::warden::unique(fields, "solaris:shriek_until")? {
+    let shriek_until = match crate::warden::unique(fields, "krasnokamen:shriek_until")? {
         None => 0,
         Some(Tag::Long(n)) if *n >= 0 => *n as u64,
-        _ => return Err("sculk_shrieker.solaris:shriek_until: expected nonnegative long".into()),
+        _ => {
+            return Err("sculk_shrieker.krasnokamen:shriek_until: expected nonnegative long".into());
+        }
     };
     let mut pending = crate::warden::unique(fields, "listener")?
         .map(|tag| vibration::decode_listener(tag, tick))
         .transpose()?
         .flatten();
-    if let Some(tag) = crate::warden::unique(fields, "solaris:event_arrival")? {
+    if let Some(tag) = crate::warden::unique(fields, "krasnokamen:event_arrival")? {
         let Tag::Long(n) = tag else {
-            return Err("sculk_shrieker.solaris:event_arrival: expected nonnegative long".into());
+            return Err(
+                "sculk_shrieker.krasnokamen:event_arrival: expected nonnegative long".into(),
+            );
         };
         if *n < 0 {
-            return Err("sculk_shrieker.solaris:event_arrival: expected nonnegative long".into());
+            return Err(
+                "sculk_shrieker.krasnokamen:event_arrival: expected nonnegative long".into(),
+            );
         }
         if let Some(p) = &mut pending {
             p.arrival = *n as u64;
@@ -388,7 +408,12 @@ pub(crate) fn hydrate(state: &mut TickState) {
     }
     state.shriekers.hydrated = Some(stamp);
 }
-fn fields(state: &TickState, pos: BlockPos, entry: &Shrieker, pending: Option<&Pending>) -> Vec<(String, Tag)> {
+fn fields(
+    state: &TickState,
+    pos: BlockPos,
+    entry: &Shrieker,
+    pending: Option<&Pending>,
+) -> Vec<(String, Tag)> {
     let mut fields = vec![
         ("id".into(), Tag::String("minecraft:sculk_shrieker".into())),
         ("x".into(), Tag::Int(pos.x)),
@@ -400,20 +425,26 @@ fn fields(state: &TickState, pos: BlockPos, entry: &Shrieker, pending: Option<&P
             vibration::listener_nbt(pending, state.tick),
         ),
         (
-            "solaris:shriek_until".into(),
+            "krasnokamen:shriek_until".into(),
             Tag::Long(entry.shriek_until as i64),
         ),
     ];
     if let Some(p) = pending {
-        fields.push(("solaris:event_arrival".into(), Tag::Long(p.arrival as i64)));
+        fields.push((
+            "krasnokamen:event_arrival".into(),
+            Tag::Long(p.arrival as i64),
+        ));
     }
     fields
 }
 
 fn encode(state: &TickState, pos: BlockPos, entry: &Shrieker) -> Vec<u8> {
     let mut bytes = Vec::new();
-    mc_nbt::write_network(&mut bytes, &Tag::Compound(fields(state, pos, entry, vibration::pending(state, pos))))
-        .expect("shrieker NBT");
+    mc_nbt::write_network(
+        &mut bytes,
+        &Tag::Compound(fields(state, pos, entry, vibration::pending(state, pos))),
+    )
+    .expect("shrieker NBT");
     bytes
 }
 pub(crate) fn persist_listener(state: &mut TickState, pos: BlockPos) -> bool {

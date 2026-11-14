@@ -203,7 +203,8 @@ fn initial_book_is_empty_and_core_unlocks_only_named_recipe_displays() {
             replace,
         }];
         let packets = crate::plan::plan_player_changes(&changes, &mut viewer);
-        let book = ClientboundRecipeBookAdd::decode(&mut &body(packets.last().unwrap())[..]).unwrap();
+        let book =
+            ClientboundRecipeBookAdd::decode(&mut &body(packets.last().unwrap())[..]).unwrap();
         assert_eq!(book.replace, replace);
         let mut expected = entry.clone();
         if replace {
@@ -262,7 +263,8 @@ fn vanilla_recipe_unlock_notifications_respect_recipe_metadata() {
             }],
             &mut viewer,
         );
-        let book = ClientboundRecipeBookAdd::decode(&mut &body(packets.last().unwrap())[..]).unwrap();
+        let book =
+            ClientboundRecipeBookAdd::decode(&mut &body(packets.last().unwrap())[..]).unwrap();
         assert_eq!(
             book.entries
                 .iter()
@@ -281,22 +283,30 @@ fn reliable_recipe_reload_uses_each_event_catalog_and_reuses_wire_projection() {
         let content = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla");
         let mut registry = mc_core::registry::CoreRegistry::load(Some(&content)).unwrap();
         registry.recipes = [
-            ("test:craft", serde_json::json!({
-                "type": "minecraft:crafting_shapeless",
-                "ingredients": ["minecraft:stone"],
-                "result": {"id": "minecraft:stick", "count": count}
-            })),
-            ("test:cut", serde_json::json!({
-                "type": "minecraft:stonecutting",
-                "ingredient": "minecraft:stone",
-                "result": {"id": "minecraft:stick", "count": count}
-            })),
+            (
+                "test:craft",
+                serde_json::json!({
+                    "type": "minecraft:crafting_shapeless",
+                    "ingredients": ["minecraft:stone"],
+                    "result": {"id": "minecraft:stick", "count": count}
+                }),
+            ),
+            (
+                "test:cut",
+                serde_json::json!({
+                    "type": "minecraft:stonecutting",
+                    "ingredient": "minecraft:stone",
+                    "result": {"id": "minecraft:stick", "count": count}
+                }),
+            ),
         ]
         .into_iter()
         .map(|(name, json)| {
             mc_data::recipes::parse_datapack_recipe(
-                Identifier::parse(name).unwrap(), &json.to_string(),
-            ).unwrap()
+                Identifier::parse(name).unwrap(),
+                &json.to_string(),
+            )
+            .unwrap()
         })
         .collect();
         Arc::new(registry)
@@ -305,7 +315,10 @@ fn reliable_recipe_reload_uses_each_event_catalog_and_reuses_wire_projection() {
     let second = registry(2);
     let first_catalog = crate::recipes::catalog(&first);
     let second_catalog = crate::recipes::catalog(&second);
-    assert!(Arc::ptr_eq(&first_catalog, &crate::recipes::catalog(&first)));
+    assert!(Arc::ptr_eq(
+        &first_catalog,
+        &crate::recipes::catalog(&first)
+    ));
     assert!(!Arc::ptr_eq(&first_catalog, &second_catalog));
     assert_ne!(first_catalog.update, second_catalog.update);
     assert_ne!(first_catalog.entries, second_catalog.entries);
@@ -313,11 +326,12 @@ fn reliable_recipe_reload_uses_each_event_catalog_and_reuses_wire_projection() {
     // Two completed reloads can still be queued when the pump starts draining.
     // Old reliable events must not be rendered using the newest snapshot.
     for connection in [7, 8] {
-        let mut viewer = crate::plan::ViewerState::new(
-            ConnectionId(connection), EntityId(1), [0.0; 3],
-        );
+        let mut viewer =
+            crate::plan::ViewerState::new(ConnectionId(connection), EntityId(1), [0.0; 3]);
         for (registry, expected) in [
-            (&first, &first_catalog), (&second, &second_catalog), (&first, &first_catalog),
+            (&first, &first_catalog),
+            (&second, &second_catalog),
+            (&first, &first_catalog),
         ] {
             let changes = [PlayerChange::RecipesUnlocked {
                 registry: mc_core::boundary::RecipeSource(Arc::clone(registry)),
@@ -337,7 +351,10 @@ fn reliable_recipe_reload_uses_each_event_catalog_and_reuses_wire_projection() {
             let mut entry = expected.entries["test:craft"].clone();
             entry.flags = 0;
             assert_eq!(book.entries, vec![entry]);
-            assert!(Arc::ptr_eq(viewer.recipe_catalog.as_ref().unwrap(), expected));
+            assert!(Arc::ptr_eq(
+                viewer.recipe_catalog.as_ref().unwrap(),
+                expected
+            ));
             let unchanged = crate::plan::plan_player_changes(&changes, &mut viewer);
             assert_eq!(unchanged.len(), 1, "unchanged catalog must not be resent");
             assert_eq!(unchanged[0].id, ClientboundRecipeBookAdd::ID);

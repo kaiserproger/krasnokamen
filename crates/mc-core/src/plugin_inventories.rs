@@ -1739,12 +1739,7 @@ pub(crate) fn prepare_entity_custody(
     let equipment: BTreeMap<_, _> = [0, 1, 5, 4, 3, 2]
         .iter()
         .enumerate()
-        .map(|(script, native)| {
-            (
-                script as u8,
-                candidate[*native].as_ref().unwrap_or(&empty),
-            )
-        })
+        .map(|(script, native)| (script as u8, candidate[*native].as_ref().unwrap_or(&empty)))
         .collect();
     let mut images = vec![(
         Endpoint::NpcEquipment {
@@ -1766,9 +1761,11 @@ pub(crate) fn prepare_entity_custody(
     }
     let metadata = metadata(state)?;
     let mut prepared = PreparedEntityCustody {
-        metadata: state.plugins.get_domain(OWNER, KEY).is_none().then(|| {
-            serde_json::to_value(metadata).expect("inventory metadata serialization")
-        }),
+        metadata: state
+            .plugins
+            .get_domain(OWNER, KEY)
+            .is_none()
+            .then(|| serde_json::to_value(metadata).expect("inventory metadata serialization")),
         updates: Vec::with_capacity(images.len()),
     };
     for (endpoint, hash) in images {
@@ -1800,7 +1797,8 @@ pub(crate) fn synchronize_entity_custody(
     state: &mut TickState,
     slot: crate::entities::EntitySlot,
 ) -> Result<(), Failure> {
-    let prepared = prepare_entity_custody(state, slot, &state.entities.row(slot).appearance.equipment)?;
+    let prepared =
+        prepare_entity_custody(state, slot, &state.entities.row(slot).appearance.equipment)?;
     apply_entity_custody(state, prepared);
     Ok(())
 }

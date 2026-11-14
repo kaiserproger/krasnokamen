@@ -161,12 +161,19 @@ struct DiscoveredPack {
     features: Vec<String>,
 }
 
-fn discover(root: &Path, remaining: &mut usize) -> Result<BTreeMap<String, DiscoveredPack>, String> {
+fn discover(
+    root: &Path,
+    remaining: &mut usize,
+) -> Result<BTreeMap<String, DiscoveredPack>, String> {
     let mut packs = BTreeMap::new();
     if !root.exists() {
         return Ok(packs);
     }
-    if std::fs::symlink_metadata(root).map_err(|e| e.to_string())?.file_type().is_symlink() {
+    if std::fs::symlink_metadata(root)
+        .map_err(|e| e.to_string())?
+        .file_type()
+        .is_symlink()
+    {
         return Err("Datapack root cannot be a symlink".into());
     }
     for entry in std::fs::read_dir(root).map_err(|e| e.to_string())? {
@@ -175,25 +182,58 @@ fn discover(root: &Path, remaining: &mut usize) -> Result<BTreeMap<String, Disco
         }
         let pack = entry.map_err(|e| e.to_string())?;
         if !pack.file_type().map_err(|e| e.to_string())?.is_dir() {
-            return Err(format!("Only directory datapacks are supported: {}", pack.path().display()));
+            return Err(format!(
+                "Only directory datapacks are supported: {}",
+                pack.path().display()
+            ));
         }
-        let id = format!("file/{}", pack.file_name().into_string().map_err(|_| "Non-UTF8 datapack name")?);
+        let id = format!(
+            "file/{}",
+            pack.file_name()
+                .into_string()
+                .map_err(|_| "Non-UTF8 datapack name")?
+        );
         let raw = read_text(&pack.path().join("pack.mcmeta"), remaining)?;
-        let metadata: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("{id}: {e}"))?;
-        let pack_meta = metadata.get("pack").filter(|value| value.is_object())
+        let metadata: serde_json::Value =
+            serde_json::from_str(&raw).map_err(|e| format!("{id}: {e}"))?;
+        let pack_meta = metadata
+            .get("pack")
+            .filter(|value| value.is_object())
             .ok_or_else(|| format!("{id}: pack.mcmeta requires a pack object"))?;
-        let description = pack_meta.get("description")
-            .map(|value| crate::command_text::parse_component(&value.to_string())
-                .map_err(|error| format!("{id}: {}", error.message())))
-            .transpose()?.unwrap_or_else(|| mc_nbt::Tag::String(String::new()));
-        let features = metadata.get("features").map(|features| {
-            features.get("enabled").and_then(serde_json::Value::as_array)
-                .ok_or_else(|| format!("{id}: invalid features.enabled"))?
-                .iter().map(|feature| feature.as_str().map(str::to_owned)
-                    .ok_or_else(|| format!("{id}: feature identifier must be a string")))
-                .collect::<Result<Vec<_>, String>>()
-        }).transpose()?.unwrap_or_default();
-        packs.insert(id, DiscoveredPack { path: pack.path(), description, features });
+        let description = pack_meta
+            .get("description")
+            .map(|value| {
+                crate::command_text::parse_component(&value.to_string())
+                    .map_err(|error| format!("{id}: {}", error.message()))
+            })
+            .transpose()?
+            .unwrap_or_else(|| mc_nbt::Tag::String(String::new()));
+        let features = metadata
+            .get("features")
+            .map(|features| {
+                features
+                    .get("enabled")
+                    .and_then(serde_json::Value::as_array)
+                    .ok_or_else(|| format!("{id}: invalid features.enabled"))?
+                    .iter()
+                    .map(|feature| {
+                        feature
+                            .as_str()
+                            .map(str::to_owned)
+                            .ok_or_else(|| format!("{id}: feature identifier must be a string"))
+                    })
+                    .collect::<Result<Vec<_>, String>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        packs.insert(
+            id,
+            DiscoveredPack {
+                path: pack.path(),
+                description,
+                features,
+            },
+        );
     }
     Ok(packs)
 }
@@ -305,7 +345,8 @@ impl PackSet {
                     }
                 } else if kind == "predicate" && resource.ends_with(".json") {
                     let id = identifier(&format!(
-                        "{namespace}:{}", resource.strip_suffix(".json").expect("predicate extension")
+                        "{namespace}:{}",
+                        resource.strip_suffix(".json").expect("predicate extension")
                     ))?;
                     let value: serde_json::Value =
                         serde_json::from_str(&text).map_err(|error| format!("{id}: {error}"))?;
@@ -315,10 +356,14 @@ impl PackSet {
                         serde_json::Value::Array(vec![value])
                     };
                     let evaluation = mc_data::advancements::evaluate_conditions(
-                        &conditions, &serde_json::Value::Null,
+                        &conditions,
+                        &serde_json::Value::Null,
                     );
                     if !evaluation.unsupported.is_empty() {
-                        return Err(format!("Unsupported predicate {id}: {:?}", evaluation.unsupported));
+                        return Err(format!(
+                            "Unsupported predicate {id}: {:?}",
+                            evaluation.unsupported
+                        ));
                     }
                     result.predicates.insert(id, conditions);
                 } else if matches!(kind, "recipe" | "loot_table") && resource.ends_with(".json") {
@@ -521,7 +566,9 @@ impl Runtime {
         &self.packs
     }
     fn catalog(&self) -> &BTreeMap<String, mc_nbt::Tag> {
-        self.discovered.as_deref().unwrap_or(&self.packs.descriptions)
+        self.discovered
+            .as_deref()
+            .unwrap_or(&self.packs.descriptions)
     }
     /// Queue a worker-thread activation for an enable/disable selection:
     /// the worker recompiles and classifies the outcome on completion while
@@ -543,7 +590,11 @@ impl Runtime {
         activation: bool,
         completion: Option<crate::command_context::CompletionId>,
     ) -> Result<(), String> {
-        let base = Arc::clone(self.base_registry.as_ref().ok_or("Datapack runtime is not installed")?);
+        let base = Arc::clone(
+            self.base_registry
+                .as_ref()
+                .ok_or("Datapack runtime is not installed")?,
+        );
         let current = Arc::clone(&self.packs);
         self.request_work(connection, activation, completion, move |root| {
             let packs = PackSet::load(root, selection)?;
@@ -732,7 +783,11 @@ pub(crate) fn drain_until(state: &mut TickState, changes: &mut ChangeSet, stop_d
     crate::command_context::begin_sequence(state);
     let running = std::mem::replace(&mut state.datapacks.running, true);
     while state.datapacks.pending.len() > stop_depth {
-        let mut frame = state.datapacks.pending.pop().expect("pending function frame");
+        let mut frame = state
+            .datapacks
+            .pending
+            .pop()
+            .expect("pending function frame");
         if !frame.started {
             if let Err(error) = crate::command_context::charge(state) {
                 state.datapacks.pending.clear();
@@ -893,7 +948,8 @@ pub(crate) fn poll_worker(state: &mut TickState, changes: &mut ChangeSet) {
         let connection = reload.connection;
         let activation = reload.activation;
         let completion = reload.completion;
-        let event_context = completion.and_then(|id| crate::command_context::completion_context(state, id));
+        let event_context =
+            completion.and_then(|id| crate::command_context::completion_context(state, id));
         let deliver = completion.is_none() || event_context.is_some();
         let result = reload.receiver.try_recv();
         let previous = state.command_context.current;
@@ -926,7 +982,10 @@ pub(crate) fn poll_worker(state: &mut TickState, changes: &mut ChangeSet) {
                             );
                         }
                     }
-                    Ok(WorkerResult::List { descriptions, filter }) => {
+                    Ok(WorkerResult::List {
+                        descriptions,
+                        filter,
+                    }) => {
                         state.datapacks.discovered = Some(Arc::new(descriptions));
                         let count = if deliver {
                             management::report_list(state, connection, filter.as_deref())
@@ -939,7 +998,9 @@ pub(crate) fn poll_worker(state: &mut TickState, changes: &mut ChangeSet) {
                         state.datapacks.discovered = Some(Arc::new(descriptions));
                         if deliver {
                             crate::command_execution::success_feedback(
-                                state, connection, "commands.datapack.create.success",
+                                state,
+                                connection,
+                                "commands.datapack.create.success",
                                 vec![mc_nbt::Tag::String(name)],
                             );
                         }
@@ -949,11 +1010,17 @@ pub(crate) fn poll_worker(state: &mut TickState, changes: &mut ChangeSet) {
                         if deliver {
                             if report.success {
                                 crate::command_execution::success_feedback(
-                                    state, connection, report.feedback, report.arguments,
+                                    state,
+                                    connection,
+                                    report.feedback,
+                                    report.arguments,
                                 );
                             } else {
                                 crate::command_execution::feedback(
-                                    state, connection, report.feedback, report.arguments,
+                                    state,
+                                    connection,
+                                    report.feedback,
+                                    report.arguments,
                                 );
                             }
                         }
@@ -961,7 +1028,11 @@ pub(crate) fn poll_worker(state: &mut TickState, changes: &mut ChangeSet) {
                     }
                     Err(error) => {
                         if deliver {
-                            feedback(state, connection, format!("Datapack operation failed: {error}"));
+                            feedback(
+                                state,
+                                connection,
+                                format!("Datapack operation failed: {error}"),
+                            );
                         }
                     }
                 }
