@@ -5372,5 +5372,14 @@ severity = "major"
 status = "open"
 source = "Architect review of the battle port plan (receipts/BattlePortPlan/fable-review-v2.md, P3; PLAN-v2.md section 4 row 3). On main crates/mc-core/src/plugin_npcs/orders/deployment.rs retire() sets alive=false, health 0 and death_handled but leaves the row and journals no UUID removal; the battle line fixed it with a deferred pending_removals drain at the commit tail (bv-g2l2 335afd19). Not yet reproduced on main: slice B0 first writes the checkpoint/restart test on main."
 repro = "source"
-regression = []
-failing_first = "not recorded"
+regression = [
+  "cargo:mc-core:core::checkpoint_custody_tests::retracted_stand_does_not_return_after_checkpoint_restart",
+  "cargo:mc-core:core::checkpoint_custody_tests::retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart",
+  "cargo:mc-core:core::checkpoint_custody_tests::retired_stand_checkpoint_restart_removes_the_row_and_keeps_one_item",
+  "cargo:mc-core:core::checkpoint_custody_tests::retired_stand_crash_before_checkpoint_matches_the_checkpoint_outcome",
+  "cargo:mc-core:core::checkpoint_custody_tests::broken_deployed_wear_removes_the_stand_across_checkpoint_and_crash",
+  "cargo:mc-core:core::checkpoint_custody_tests::breaking_wear_through_commit_damage_with_last_row_stand_keeps_other_piece_target",
+  "cargo:mc-core:core::checkpoint_custody_tests::unblocked_arrow_wear_break_removes_the_stand_without_stale_arrow_slot",
+  "cargo:mc-core:plugin_npcs::tests::deployed_item_keeps_exact_custody_across_permit_and_capacity_refusals",
+]
+failing_first = "reported"

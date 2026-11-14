@@ -294,12 +294,16 @@ pub(super) fn execute(
     Ok(order_result(revision, result))
 }
 fn retire(state: &mut TickState, slot: EntitySlot) {
+    let id = state.entities.body(slot).id;
     let (body, row) = state.entities.parts_mut(slot);
     std::sync::Arc::make_mut(&mut row.appearance).equipment[0] = None;
     row.health = 0.0;
     body.alive = false;
     row.loot.death_handled = true;
-    state.appearance_changed.push(body.id);
+    state.appearance_changed.push(id);
+    // Keep the row until the commit tail so staged slots remain valid; the
+    // ordinary removal path then journals its UUID and publishes the WAL removal.
+    state.pending_removals.push(id);
 }
 
 pub(crate) fn projectile_hit(

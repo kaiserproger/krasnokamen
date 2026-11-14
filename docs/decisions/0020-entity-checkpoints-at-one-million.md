@@ -142,6 +142,12 @@ Chunk eviction (`world.rs` 624–667) removes chunks, not entities, so it never
 creates an entity tombstone. Checkpoint marks are independent of WAL and wire
 marks.
 
+Retiring a deployed stand defers row removal until the commit tail, after
+staged slots have been consumed. The ordinary removal path logs its UUID for
+the next checkpoint tombstone and publishes `RemoveEntity` in the retirement
+tick's WAL, so checkpoint restart and crash replay agree. Breaking deployed
+wear drops nothing: deployed stands have zero equipment drop chances.
+
 **Reopen seeding.** The WAL fold drops a row, and its UUID, on `RemoveEntity`
 and on `Entity`/`EntityVitals` with `alive = false` (`journal/replay.rs`
 881–883, 935–947). So the fold must record `(uuid, tick)` before dropping. An
