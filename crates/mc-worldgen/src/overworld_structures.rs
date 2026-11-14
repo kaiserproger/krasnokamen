@@ -40,6 +40,8 @@ pub(crate) struct OverworldStructures {
     stronghold: StructureTemplate,
     stronghold_eye_states: [(BlockStateId, BlockStateId); 4],
     stronghold_portal: BlockStateId,
+    /// `air`, `cave_air` and `void_air`, the cells a support column may fill.
+    air: Vec<BlockStateId>,
     families: Vec<Family>,
     features: Vec<features::Feature>,
     reach_before: [i32; 2],
@@ -249,11 +251,69 @@ impl OverworldStructures {
             stronghold,
             stronghold_eye_states: stronghold_eye_states(blocks)?,
             stronghold_portal: state(blocks, "minecraft:end_portal")?,
+            air: ["minecraft:air", "minecraft:cave_air", "minecraft:void_air"]
+                .into_iter()
+                .filter_map(|name| state(blocks, name).ok())
+                .collect(),
             families,
             features: features::load(root, blocks)?,
             reach_before,
             reach_after,
         })
+    }
+
+    fn is_surface_family(&self, structure: &Identifier) -> bool {
+        self.families
+            .iter()
+            .any(|family| &family.id == structure && matches!(family.height, Height::Surface))
+    }
+
+    /// Rest a `Height::Surface` template on the ground under its own footprint.
+    ///
+    /// Vanilla descends the start until three of the template bounding box's
+    /// four corners are no longer air (`RuinedPortalStructure.findSuitableY`),
+    /// which needs the raw terrain column; this generator pastes villages before
+    /// structures, so descending sinks a ruin into a village instead
+    /// (WORLDGEN-RUINED-PORTAL-FLOATS-ON-SLOPE).
+    ///
+    /// The support column keeps the origin and fills the air gap between a
+    /// footprint column's lowest template cell and the first non-air block with
+    /// that cell's own block — vanilla's beardifier writes a piece's own blocks
+    /// under it too. The gap is above the terrain surface, where the generator
+    /// itself places air, so the column's soil would be the wrong material, and a
+    /// farm's wheat/water must not be copied upward. Air only: a fluid cell can
+    /// belong to another structure (the village farm trough), and the gap is
+    /// bounded so a ruin over a chasm does not grow a pillar.
+    fn support_columns(&self, chunk: &mut Chunk, template: &StructureTemplate, origin: BlockPos) {
+        const DEPTH: i32 = 4;
+        let chunk_pos = chunk.pos;
+        let mut lowest: BTreeMap<(i32, i32), (i32, BlockStateId)> = BTreeMap::new();
+        for block in template.blocks() {
+            if self.air.contains(&block.state) {
+                continue;
+            }
+            lowest
+                .entry((block.pos[0], block.pos[2]))
+                .and_modify(|cell| *cell = (cell.0.min(block.pos[1]), block.state))
+                .or_insert((block.pos[1], block.state));
+        }
+        for ((local_x, local_z), (base, material)) in lowest {
+            let x = origin.x + local_x - chunk_pos.x * 16;
+            let z = origin.z + local_z - chunk_pos.z * 16;
+            if !(0..16).contains(&x) || !(0..16).contains(&z) {
+                continue;
+            }
+            let (x, z) = (x as u8, z as u8);
+            let base_y = origin.y + base;
+            for y in (base_y - DEPTH..base_y).rev() {
+                match chunk.get_block(x, y, z) {
+                    Some(id) if self.air.contains(&id) => {
+                        chunk.set_block(x, y, z, material);
+                    }
+                    _ => break,
+                }
+            }
+        }
     }
 
     fn visit(
@@ -396,6 +456,9 @@ impl OverworldStructures {
                 );
                 let eyes = (structure.path() == "stronghold")
                     .then_some((&self.stronghold_eye_states, self.stronghold_portal));
+                if self.is_surface_family(structure) {
+                    self.support_columns(chunk, template, origin);
+                }
                 let changed = paste_template_with_eyes(chunk, template, origin, self.seed, eyes);
                 for (t, c) in touched.iter_mut().zip(changed) {
                     *t |= c;

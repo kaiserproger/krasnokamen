@@ -96,6 +96,7 @@ fn generated_fully_eyed_stronghold_activates_portal() {
         stronghold: template,
         stronghold_eye_states: eyes,
         stronghold_portal: state(&registry, "minecraft:end_portal").unwrap(),
+        air: vec![state(&registry, "minecraft:air").unwrap()],
         families: Vec::new(),
         features: Vec::new(),
         reach_before: [3, 2],
@@ -130,6 +131,7 @@ fn generated_stronghold_eye_patterns_vary_between_sites_in_one_world() {
         stronghold: template.clone(),
         stronghold_eye_states: stronghold_eye_states(&registry).unwrap(),
         stronghold_portal: state(&registry, "minecraft:end_portal").unwrap(),
+        air: vec![state(&registry, "minecraft:air").unwrap()],
         families: Vec::new(),
         features: Vec::new(),
         reach_before: [3, 2],
@@ -187,6 +189,7 @@ fn generated_stronghold_frame_eyes_are_independent_and_seeded() {
             stronghold: template.clone(),
             stronghold_eye_states: stronghold_eye_states(&registry).unwrap(),
             stronghold_portal: state(&registry, "minecraft:end_portal").unwrap(),
+            air: vec![state(&registry, "minecraft:air").unwrap()],
             families: Vec::new(),
             features: Vec::new(),
             reach_before: [3, 2],
@@ -690,6 +693,81 @@ fn ocean_monument_start_is_underwater() {
         sites[0].position.y + 16 < 63,
         "monument roof must be underwater"
     );
+}
+
+#[test]
+fn floating_surface_structure_rests_on_a_support_column() {
+    // WORLDGEN-RUINED-PORTAL-FLOATS-ON-SLOPE: a surface template that hangs over
+    // air gets a support column of its own column's ground material, so the
+    // netherrack platform no longer floats above the ground below its footprint.
+    let registry = registry();
+    let mut structures = OverworldStructures::load(&root(), 42, &registry).unwrap();
+    structures.strongholds.clear();
+    structures
+        .families
+        .retain(|family| family.id.path().starts_with("ruined_portal"));
+    let family = &mut structures.families[0];
+    family.frequency = 1.0;
+    family.exclusion = None;
+    family.biomes.insert(id("minecraft:plains"));
+    let (x, z) = family.placement.potential_chunk(42, 0, 0);
+    let surface = |_: i32, _: i32| 64;
+    let biome = |_, _, _| id("minecraft:plains");
+    let sites = structures.sites((x, z), (x, z), surface, |_, _| 51, biome);
+    assert_eq!(sites.len(), 1);
+    let origin_y = sites[0].position.y;
+    let stone = state(&registry, "minecraft:stone").unwrap();
+    let dirt = state(&registry, "minecraft:dirt").unwrap();
+    let air = state(&registry, "minecraft:air").unwrap();
+    let mut chunk = Chunk::empty(ChunkPos { x, z }, stone, id("minecraft:plains"));
+    // Air above a dirt ground at y=62: the ruin pasted above it floats.
+    for y in 63..=origin_y + 40 {
+        for lx in 0..16 {
+            for lz in 0..16 {
+                assert!(chunk.set_block(lx, y, lz, air).is_some());
+            }
+        }
+    }
+    for lx in 0..16u8 {
+        for lz in 0..16u8 {
+            assert!(chunk.set_block(lx, 62, lz, dirt).is_some());
+        }
+    }
+    structures.paste(&mut chunk, surface, |_, _| 51, biome);
+    let family = &structures.families[0];
+    let template = &family.templates
+        [(hash(structures.seed ^ 0x53545255, x, z) as usize) % family.templates.len()];
+    let mut lowest = std::collections::BTreeMap::new();
+    for block in template.blocks() {
+        if block.state == air {
+            continue;
+        }
+        lowest
+            .entry((block.pos[0], block.pos[2]))
+            .and_modify(|cell: &mut (i32, u32)| *cell = (cell.0.min(block.pos[1]), block.state.0))
+            .or_insert((block.pos[1], block.state.0));
+    }
+    let mut columns = 0;
+    for ((lx, lz), (base, material)) in lowest {
+        if !(0..16).contains(&lx) || !(0..16).contains(&lz) {
+            continue;
+        }
+        columns += 1;
+        let (lx, lz) = (lx as u8, lz as u8);
+        let below = chunk.get_block(lx, origin_y + base - 1, lz);
+        assert!(
+            below.is_some_and(|id| id != air),
+            "column {lx},{lz} floats above air"
+        );
+        if origin_y + base - 1 == 63 {
+            assert_eq!(
+                chunk.get_block(lx, 63, lz),
+                Some(mc_world::BlockStateId(material)),
+                "the support column uses the template's own base block"
+            );
+        }
+    }
+    assert!(columns > 0, "the template has footprint columns");
 }
 
 #[test]

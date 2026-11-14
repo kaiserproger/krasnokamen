@@ -131,7 +131,12 @@ pub use terrain::{HeightContextStats, height_context_stats, reset_height_context
 /// water, lava and solid pressure barriers on both CPU and GPU density paths;
 /// place shipwrecks and ocean ruins on the seabed, cap the monument below sea
 /// level, and generate mineshaft loot as chest minecarts.
-pub const WORLDGEN_REVISION: u32 = 31;
+///
+/// 32: a `Height::Surface` template that hangs over air gets a support column of
+/// its own column's ground material above the first non-air block, because
+/// vanilla's descent (`RuinedPortalStructure.findSuitableY`) cannot run before
+/// this generator's villages. Ruined portals no longer float over a slope.
+pub const WORLDGEN_REVISION: u32 = 32;
 
 /// Crate version, exposed so other crates and the binary can report it.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
