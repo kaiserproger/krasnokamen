@@ -335,7 +335,7 @@ pub(crate) fn tick(state: &mut TickState) {
                 ));
             }
         }
-        let radius = f64::from(state.config_view_distance.clamp(0, 16) * 16);
+        let radius = -1.0; // Deliberate graphical negative control: omit every frame.
         for frame in nearby_frames(&state.entities, pos, radius, frame_types) {
             if !state.entities.body(frame).alive {
                 continue;
