@@ -64,6 +64,7 @@ class ProtocolWireTests(unittest.TestCase):
 
     def test_received_container_suffix_survives_menu_closure(self):
         observer = wire.PlayObserver.__new__(wire.PlayObserver)
+        observer.current_window = 4
         observer.menus = {0: {'slots': [None] * 46},
                           4: {'slots': [None] * 63}}
         observer.menus[4]['slots'][27] = {'item_id': 1, 'count': 4}
@@ -72,6 +73,79 @@ class ProtocolWireTests(unittest.TestCase):
         self.assertEqual(observer.menus[0]['slots'][9], {'item_id': 1, 'count': 4})
         self.assertEqual(observer.menus[0]['slots'][44], {'item_id': 2, 'count': 7})
         self.assertIsNone(observer.menus[0]['slots'][0])
+
+    def test_newer_window_zero_updates_override_stale_open_menu(self):
+        observer = wire.PlayObserver.__new__(wire.PlayObserver)
+        observer.current_window = 1
+        observer.menus = {0: {'slots': [None] * 46}, 1: {'slots': [None] * 45}}
+        menu, player = observer.menus[1]['slots'], observer.menus[0]['slots']
+        menu[-9] = {'item_id': 1, 'count': 4}
+        observer._cache_player_suffix(1)
+        player[36] = {'item_id': 1, 'count': 3}
+        player[37] = {'item_id': 2, 'count': 1, 'components': {'minecraft:damage': 1}}
+        observer._cache_player_suffix(0)
+        self.assertEqual(menu[-9], {'item_id': 1, 'count': 3})
+        self.assertEqual(menu[-8]['components']['minecraft:damage'], 1)
+        menu[-7] = {'item_id': 3, 'count': 8}
+        player[36] = {'item_id': 1, 'count': 2}
+        observer._cache_player_suffix(0, 36)
+        self.assertEqual(menu[-9]['count'], 2)
+        self.assertEqual(menu[-7]['count'], 8)
+        observer.current_window = 0
+        menu[-9] = {'item_id': 1, 'count': 4}
+        observer._cache_player_suffix(1)
+        self.assertEqual(player[36]['count'], 2)
+
+    def test_original_bow_window_zero_packet_supersedes_old_menu(self):
+        observer = wire.PlayObserver.__new__(wire.PlayObserver)
+        observer.current_window = 1
+        old = [None] * 45
+        old[-8] = {'item_id': 896, 'count': 4, 'components': {}, 'removed': []}
+        observer.menus = {0: {'slots': [None] * 46}, 1: {'slots': old}}
+        observer._cache_player_suffix(1)
+        # Exact complete window-0 image from DomCommands bc41wx1w frame 1879.
+        body = bytes.fromhex(
+            '00022e0000000000000000000000000000000000000000000000000000000000'
+            '0000000000000001ff06010003010380070000000000000000000000'
+        )
+        observer.menus[0] = decode_menu(body)
+        observer._cache_player_suffix(0)
+        self.assertEqual(old[-8]['count'], 3)
+        self.assertEqual(old[-9]['components']['minecraft:damage'], 1)
+
+    def test_original_bow_packet_replays_through_wire_and_snapshot(self):
+        from .protocol_matrix_client import ProtocolMatrixClient
+        a, b = socket.socketpair()
+        observer = None
+        try:
+            with patch.object(wire, 'join_offline_socket', return_value=(a, {})):
+                observer = wire.PlayObserver(('unused', 0), 'Probe', account_uuid=None, timeout=2)
+            empty_player = bytes([0, 0, 46]) + bytes(46) + bytes([0])
+            wire.send_compressed_frame(b, 0x12, empty_player)
+            wire.send_compressed_frame(b, 0x3b, bytes([1, 0]))
+            stale = (bytes([1, 0, 45]) + bytes(37) + wire.write_varint(4)
+                     + wire.write_varint(896) + bytes([0, 0]) + bytes(7) + bytes([0]))
+            wire.send_compressed_frame(b, 0x12, stale)
+            observer.wait(lambda p: 1 in p.menus, description='old open menu')
+            body = bytes.fromhex(
+                '00022e0000000000000000000000000000000000000000000000000000000000'
+                '0000000000000001ff06010003010380070000000000000000000000'
+            )
+            wire.send_compressed_frame(b, 0x12, body)
+            observer.wait(lambda p: p.menus[0]['state_id'] == 2, description='new player image')
+            client = object.__new__(ProtocolMatrixClient)
+            client.observer = observer
+            client.items = {895: 'minecraft:bow', 896: 'minecraft:arrow'}
+            inventory = client.snapshot()['inventory']
+            self.assertEqual([(item['item_id'], item['count']) for item in inventory],
+                             [('minecraft:bow', 1), ('minecraft:arrow', 3)])
+            self.assertEqual(inventory[0]['components']['minecraft:damage'], 1)
+        finally:
+            if observer is not None:
+                observer.close()
+            else:
+                a.close()
+            b.close()
 
     def test_plain_menu_decodes_slots_and_cursor(self):
         # window 4, state 7, 3 slots: empty, item 42 x 16, empty; cursor 42 x 2.

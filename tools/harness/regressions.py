@@ -87,7 +87,7 @@ def _client_command(profile, scenario):
 # Only profiles explicitly supported by the CLI's windowed native client path.
 _WINDOWED_PROFILES = frozenset({
     'survival', 'inventory', 'entities', 'core-client', 'native-lifecycle',
-    'logical-native', 'native-scale', 'title-connect', 'singleplayer-regressions',
+    'logical-native', 'native-scale', 'native-matrix', 'title-connect', 'singleplayer-regressions',
     'dialogs', 'admin-commands', 'chisel', 'anti-xray', 'block-log',
     'composter-chance', 'chat-visibility', 'datapack-reload', 'village-qa', 'village-autonomy-qa',
     'civilization-seed-qa', 'village-owner-order-qa', 'scene-shot',
@@ -142,6 +142,7 @@ _PROFILE_VERDICTS = {
 # One blueprint's real-builder run: L1..LN built, block-matched and exercised (buildings-qa `--timeout-seconds`).
 BLUEPRINT_RUN_SECONDS = 1800
 _PROFILE_OVERRIDES = {
+    'native-matrix': ('KRASNOKAMEN_MATRIX_PATH', 'KRASNOKAMEN_MATRIX_LEDGER', 'KRASNOKAMEN_MATRIX_RUN_ROOT'),
     'buildings-qa': ('BUILDINGS_QA_SELECT', 'BUILDINGS_QA_KEEP_WORLD',
                      'BUILDINGS_QA_STOP_AFTER_ORDER'),
     'army-qa': ('KRASNOKAMEN_ARMY_QA_PHASE', 'KRASNOKAMEN_ARMY_QA_PLUGINS'),
@@ -163,6 +164,9 @@ def _profile_command(profile, verdict):
         raise ValueError(f'{profile}: partial or resumed profile overrides forbidden: {", ".join(overrides)}')
     if verdict == 'all':
         valid = True
+    elif profile == 'native-matrix':
+        from .backends.native_matrix import frozen_native_rows, verdict_key
+        valid = verdict in {verdict_key(row['id']) for row in frozen_native_rows()}
     elif profile in _BOOLEAN_PROFILE_VERDICTS:
         valid = verdict in _BOOLEAN_PROFILE_VERDICTS[profile]
     elif profile == 'buildings-qa':
@@ -222,8 +226,10 @@ class VerdictNotMet(RuntimeError):
 
 def _profile_verdict(receipt, profile, verdict):
     details = receipt.get('details', {})
+    if profile == 'native-matrix' and details.get('matrix_full_run') is not True:
+        raise VerdictNotMet(f'{profile}:{verdict} requires the full frozen matrix', None)
     verdicts = details.get('verdicts')
-    if profile in _BOOLEAN_PROFILE_VERDICTS or verdicts is not None:
+    if profile == 'native-matrix' or profile in _BOOLEAN_PROFILE_VERDICTS or verdicts is not None:
         value = verdicts.get(verdict) if isinstance(verdicts, dict) else None
         if value is not True:
             raise VerdictNotMet(f'{profile}:{verdict} verdict is {value!r}, not true', value)

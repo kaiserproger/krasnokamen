@@ -530,7 +530,7 @@ class PlayObserver:
                             if window in self.menus and 0 <= slot < len(self.menus[window]["slots"]):
                                 self.menus[window]["slots"][slot] = stack
                                 self.menus[window]["state_id"] = state_id
-                                self._cache_player_suffix(window)
+                                self._cache_player_suffix(window, slot)
                         except UnsupportedObservation as error:
                             self.menu_errors[window] = str(error)
                     elif packet_id == 0x20:  # PlayDisconnect, login_flow.rs

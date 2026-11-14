@@ -72,6 +72,28 @@ class BlocksContractTests(unittest.TestCase):
             total+=len(adapters)
         self.assertEqual(total,107)
 
+    def test_every_matrix_domain_imports(self):
+        import pkgutil
+        from . import matrix_domains
+        modules = [entry.name for entry in pkgutil.iter_modules(matrix_domains.__path__)
+                   if not entry.ispkg and not entry.name.startswith('test_')]
+        self.assertIn('falling_blocks', modules)
+        for name in modules:
+            with self.subTest(module=name):
+                importlib.import_module('tools.harness.matrix_domains.' + name)
+
+    def test_falling_blocks_health_uses_received_metadata(self):
+        falling = importlib.import_module('tools.harness.matrix_domains.falling_blocks')
+        self.assertIs(falling.entity_health, b.entity_health)
+        ctx = self.context(snapshot={'entities': [
+            {'type': 'minecraft:iron_golem', 'health': 72.0},
+            {'type': 'minecraft:cow', 'health': 10.0},
+        ]})
+        self.assertEqual(falling.entity_health(ctx, 'iron_golem'), 72.0)
+        missing = self.context(snapshot={'entities': [{'type': 'minecraft:iron_golem'}]})
+        with self.assertRaisesRegex(MissingCapability, 'snapshot:entities:health'):
+            falling.entity_health(missing, 'iron_golem')
+
     def test_missing_observation_never_becomes_empty_inventory(self):
         with self.assertRaisesRegex(MissingCapability,'snapshot:inventory'):
             b.count(self.context(),'diamond')

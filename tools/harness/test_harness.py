@@ -760,6 +760,21 @@ class ScenarioCatalogTests(unittest.TestCase):
 
 
 class ReadinessCleanupTests(unittest.TestCase):
+    def test_client_bootstrap_retries_only_render_thread_timeout(self) -> None:
+        client = mock.Mock()
+        title = {'state_version': 1, 'in_play': False, 'screen': {'class': 'TitleScreen'}}
+        client.call_tool.side_effect = [
+            RuntimeError('minecraft_observe failed: {"code": "tool-execution-failed", "message": "TimeoutException"}'),
+            title,
+        ]
+        self.assertEqual(runtime.wait_client_ready_for_connect(client, 60), title)
+        self.assertEqual(client.call_tool.call_count, 2)
+        client.call_tool.reset_mock()
+        client.call_tool.side_effect = RuntimeError('minecraft_observe failed: {"code": "other", "message": "TimeoutException"}')
+        with self.assertRaisesRegex(RuntimeError, 'other'):
+            runtime.wait_client_ready_for_connect(client, 60)
+        self.assertEqual(client.call_tool.call_count, 1)
+
     def test_wait_port_observes_real_server_startup(self) -> None:
         port = runtime.reserve_port()
         source = (
@@ -951,6 +966,32 @@ class ReadinessCleanupTests(unittest.TestCase):
                 os.close(child_fd)
             process.stdout.close()
 
+
+
+def load_tests(loader, tests, pattern):
+    tests.addTests(loader.loadTestsFromNames([
+        "tools.harness.test_protocol_lifecycle.LifecycleGuardTests.test_command_fence_uses_private_read_only_query",
+        "tools.harness.test_native_matrix.NativeMatrixTests.test_native_launch_provides_matrix_scenario_id",
+        "tools.harness.test_native_matrix.NativeMatrixTests.test_health_interval_requires_live_complete_below_budget_samples_and_clean_log",
+        "tools.harness.test_native_matrix.NativeMatrixTests.test_health_checks_before_and_after_restart_and_discloses_gap",
+        "tools.harness.test_native_matrix.NativeMatrixTests.test_row_verdicts_distinguish_declared_blockers_and_failures",
+        "tools.harness.test_protocol_entities.ProtocolEntitiesTests.test_end_restart_spawn_then_removal_is_not_missing_spawn",
+        "tools.harness.test_native_matrix.NativeMatrixTests.test_native_missing_content_is_blocked_not_product_failure",
+        "tools.harness.test_native_matrix.NativeMatrixTests.test_native_other_startup_crash_remains_failure",
+        "tools.harness.test_matrix_blocks.BlocksContractTests.test_every_matrix_domain_imports",
+        "tools.harness.test_matrix_blocks.BlocksContractTests.test_falling_blocks_health_uses_received_metadata",
+        "tools.harness.test_matrix_runtime.MatrixRuntimeTests.test_closed_menu_does_not_override_newer_player_inventory",
+        "tools.harness.test_protocol_wire.ProtocolWireTests.test_newer_window_zero_updates_override_stale_open_menu",
+        "tools.harness.test_protocol_wire.ProtocolWireTests.test_original_bow_window_zero_packet_supersedes_old_menu",
+        "tools.harness.test_protocol_wire.ProtocolWireTests.test_original_bow_packet_replays_through_wire_and_snapshot",
+        "tools.harness.test_protocol_input_verbs.EncodingTests.test_break_block_sends_start_then_stop_with_sequence",
+        "tools.harness.test_protocol_input_verbs.EncodingTests.test_select_hotbar_uses_263_set_carried_item_packet",
+        "tools.harness.test_protocol_input_verbs.EncodingTests.test_use_hold_starts_after_admission_and_new_time_sample",
+        "tools.harness.test_java_matrix_client.JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts",
+        "tools.harness.test_matrix_items.ItemAdaptersTest.test_ack_missing_chat_is_capability_failure_not_type_error",
+        "tools.harness.test_protocol_wire.ProtocolWireTests.test_received_container_suffix_survives_menu_closure",
+    ]))
+    return tests
 
 
 if __name__ == "__main__":

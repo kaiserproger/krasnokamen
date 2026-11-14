@@ -400,7 +400,8 @@ seed = {self.seed}
         fresh = ''.join(lines[:fence_index])
         if any(token in fresh for token in ("not implemented", "Unknown command", "Unsupported execute")):
             raise MissingCapability("server_command:" + text.split(" ", 1)[0] + ":" + fresh)
-        return fresh
+        fence = f"Scores for {marker}: {{}}"
+        return ''.join(line for line in fresh.splitlines(keepends=True) if line.strip() != fence)
 
     def query(self, text: str) -> str:
         return self.command(text)

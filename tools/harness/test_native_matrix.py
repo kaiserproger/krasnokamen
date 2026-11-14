@@ -130,6 +130,25 @@ class NativeMatrixTests(unittest.TestCase):
                 {"id": "java", "context": {"client_kind": "vanilla_java_26_1_2"}}]
         self.assertEqual([row["id"] for row in native_matrix.select(rows)], ["linux", "windows"])
 
+    def test_row_verdicts_distinguish_declared_blockers_and_failures(self):
+        details = {'verdicts': {}, 'blocked_rows': [], 'failed_rows': []}
+        declared = {'windows': 'windows_mcp_lane', 'windows_b': 'windows_mcp_lane', 'other': None}
+        native_matrix.record_outcome(details, {'id': 'ok', 'status': 'pass', 'note': ''}, declared)
+        native_matrix.record_outcome(details, {'id': 'windows', 'status': 'blocked',
+                                                'note': 'windows_mcp_lane'}, declared)
+        native_matrix.record_outcome(details, {'id': 'other', 'status': 'blocked',
+                                                'note': 'client startup failed'}, declared)
+        native_matrix.record_outcome(details, {'id': 'bad', 'status': 'fail',
+                                                'note': 'assertion'}, declared)
+        native_matrix.record_outcome(details, {'id': 'windows_b', 'status': 'fail',
+                                                'note': 'windows_mcp_lane'}, declared)
+        self.assertEqual(details['verdicts'], {'26.3.ok': True, '26.3.windows': False,
+                         '26.3.other': False, '26.3.bad': False, '26.3.windows_b': False})
+        self.assertEqual(details['blocked_rows'], [{'id': 'windows', 'reason': 'windows_mcp_lane'}])
+        self.assertEqual(details['failed_rows'], [{'id': 'other', 'reason': 'client startup failed'},
+                         {'id': 'bad', 'reason': 'assertion'},
+                         {'id': 'windows_b', 'reason': 'windows_mcp_lane'}])
+
     def test_receipt_records_exact_status_without_promoting_blocked(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory)

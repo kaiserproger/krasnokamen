@@ -11,10 +11,12 @@ import hashlib
 import json
 import math
 import os
+import re
 import time
 import uuid
 import shlex
 import sys
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -199,6 +201,7 @@ class Lane:
         self.exclude_plugins=exclude_plugins
         self.chunk_fences: list[dict[str,Any]]=[]
         self.wal_checkpoint_baseline: str | None=None
+        self.health: HealthInterval | None = None
         self.host = ProtocolServer(binary=binary, run_dir=directory, port=port,
             vanilla_data=Path(os.environ.get('KRASNOKAMEN_VANILLA_DATA', runtime.REPO_ROOT/'data/vanilla')), seed=81,
             plugins_dir=directory/'plugins', server_name='RunNative', view_distance=VIEW_DISTANCE,
@@ -226,8 +229,14 @@ class Lane:
         ctx = SimpleNamespace(artifact_dir=directory, client_evidence={}, windowed=True,
                               scenario_id=None, commands=self.ctx.commands, cwds=self.ctx.cwds,
                               exits=self.ctx.exits, logs=self.ctx.logs)
-        process, log, client = native_client.start(ctx, self.native, self.address, name,
-                                                  self.timeout, display=self.display)
+        try:
+            process, log, client = native_client.start(ctx, self.native, self.address, name,
+                                                      self.timeout, display=self.display)
+        except runtime.ChildExited as error:
+            from ..matrix_api import MissingCapability
+            if error.log_path and 'missing content file:' in error.log_path.read_text(errors='replace'):
+                raise MissingCapability(f'client:missing_content; see {error.log_path}') from error
+            raise
         self.processes.append(process); self.handles.append(log); self.contexts.append(ctx)
         client.request_timeout_seconds = self.timeout + 5
         ctx.client_evidence['available_tools']=client.list_tools()
@@ -289,8 +298,17 @@ class Lane:
         self.settle(self.clients[0],self.names[0])
 
     def restart(self, crash: bool=False) -> None:
+        if self.health is not None:
+            self.health.finish()
+            self.health.verify_log()
+            self.health.restart_boundaries.append({
+                'kind': 'kill9' if crash else 'clean',
+                'unobserved_shutdown_gap': 'between final metrics read and server stop',
+            })
         proof=self.host.kill9_restart() if crash else self.host.clean_restart()
         self._record_server()
+        if self.health is not None:
+            self.health.begin()
         self.steps.report.setdefault('restarts',[]).append(proof)
         if crash and self.wal_checkpoint_baseline is not None:
             proof['checkpoint_sha256_before_action']=self.wal_checkpoint_baseline
@@ -568,6 +586,10 @@ def run(ctx: Any) -> dict[str, Any]:
     parser.add_argument('--pending',action='store_true')
     parser.add_argument('--exclude-plugin',action='append',default=[])
     args=parser.parse_args(ctx.extra_args)
+    if ctx.server_bin is None and os.environ.get('KRASNOKAMEN_SERVER_BINARY'):
+        ctx.server_bin = Path(os.environ['KRASNOKAMEN_SERVER_BINARY'])
+    if ctx.plugins_dir is None and os.environ.get('KRASNOKAMEN_MATRIX_PLUGINS_DIR'):
+        ctx.plugins_dir = Path(os.environ['KRASNOKAMEN_MATRIX_PLUGINS_DIR'])
     if ctx.client!='native' or not ctx.windowed or ctx.server_bin is None or ctx.plugins_dir is None:
         raise ValueError('native-matrix requires --client native --windowed --server-bin --plugins-dir')
     binary=ctx.server_bin.resolve()
@@ -600,6 +622,13 @@ def run(ctx: Any) -> dict[str, Any]:
             'wave1_id_set_sha256':id_set_hash,'run_root':str(args.run_root.resolve()),
             'all_native_ids':[row['id'] for row in all_native]}
     ctx.client_evidence['matrix']=result
+    canonical = frozen_native_rows()
+    full = (not ctx.extra_args and not any(os.environ.get(name) for name in
+            ('KRASNOKAMEN_MATRIX_PATH', 'KRASNOKAMEN_MATRIX_LEDGER', 'KRASNOKAMEN_MATRIX_RUN_ROOT'))
+            and all_native == canonical)
+    details = ctx.client_evidence
+    details.update(matrix_full_run=False, blocked_rows=[], failed_rows=[], verdicts={})
+    declared = {row['id']: transport_blocker(row) for row in canonical}
     resource_env={name:os.environ[name] for name in (
         'KRASNOKAMEN_CLIENT_ROOT','KRASNOKAMEN_CLIENT_BINARY','KRASNOKAMEN_CLIENT_DATA_DIR',
         'KRASNOKAMEN_CLIENT_RESOURCE_ROOT','KRASNOKAMEN_CLIENT_ASSET_ROOT','KRASNOKAMEN_CLIENT_ASSET_INDEX',
@@ -698,6 +727,9 @@ def run(ctx: Any) -> dict[str, Any]:
                                 (directory/'adapter-transcript.json').write_text(json.dumps(transcript,indent=2))
                         check_health(lane,steps)
                         native_client.capture(lane.clients[0],directory,'final')
+                        lane.health.finish()
+                        lane.health.verify_log()
+                        lane.health.require_complete()
                         row['status']='pass';row['note']='complete native probe; '+str(directory/'probe/scenario.json')
             except (NotImplementedError, MissingCapability) as error:
                 row['note']=str(error)
@@ -708,6 +740,8 @@ def run(ctx: Any) -> dict[str, Any]:
         print('[native-matrix]',row['status'],scenario['id'],row['note'][:180],flush=True)
     counts={status:sum(row['status']==status for row in outcomes) for status in ('pass','fail','blocked','skipped')}
     result['counts']=counts
+    details['matrix_full_run'] = full
+    details['verdicts']['all'] = full and not any(counts[key] for key in ('fail', 'blocked', 'skipped'))
     (args.run_root/'windows-scenarios.json').write_text(json.dumps([s for s in all_native if s['context']['client_kind']=='native_windows'],indent=2))
     if counts['fail'] or counts['blocked']:
         raise RuntimeError('native matrix incomplete: '+json.dumps(counts))

@@ -100,6 +100,18 @@ class JavaMatrixClientTest(unittest.TestCase):
         client.respawn()
         mcp.call_tool.assert_called_once_with("minecraft_respawn", {"timeout_seconds": 30})
 
+    def test_cumulative_system_chat_requires_lossless_ordered_receipts(self):
+        observed = {"received_system_chat": ["first", "first", "last"], "dropped_system_chat": 0}
+        self.assertEqual(JavaMatrixClient.normalize(observed)["events"], observed["received_system_chat"])
+        for invalid in (None, ["ok", 1], "not a journal"):
+            with self.assertRaisesRegex(MissingCapability, "invalid_receipts"):
+                JavaMatrixClient.normalize({"received_system_chat": invalid, "dropped_system_chat": 0})
+        for dropped in (None, -1, True):
+            with self.assertRaisesRegex(MissingCapability, "missing_loss_counter"):
+                JavaMatrixClient.normalize({"received_system_chat": [], "dropped_system_chat": dropped})
+        with self.assertRaisesRegex(MissingCapability, "lost_receipts:1"):
+            JavaMatrixClient.normalize({"received_system_chat": [], "dropped_system_chat": 1})
+
     def test_connection_health_uses_reported_transport_not_play_state(self):
         self.assertIs(JavaMatrixClient.normalize({"in_play": True, "connected": False})["connected"], False)
         self.assertIs(JavaMatrixClient.normalize({"in_play": False, "connected": True})["connected"], True)

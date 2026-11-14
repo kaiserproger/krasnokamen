@@ -100,6 +100,16 @@ class ItemAdaptersTest(unittest.TestCase):
         self.assertTrue(all(text.startswith('tell ') for text in sent))
         self.assertNotEqual(sent[0], sent[1])
         self.assertNotIn('checks', ctx.state)
+
+    def test_ack_missing_chat_is_capability_failure_not_type_error(self):
+        ctx = Context({'events': None})
+        counters = iter((0, 20))
+        ctx.server.dashboard_stats = lambda: {'simulation_tick': next(counters)}
+        ctx.clients[0].command = lambda text: None
+        ctx.wait_until = lambda predicate, **kwargs: predicate()
+        with self.assertRaisesRegex(MissingCapability, 'snapshot:events'):
+            _items.acknowledge(ctx)
+
     def test_block_ack_waits_for_exact_submitted_sequence(self):
         for name in ('use_item_on', 'break_block'):
             ctx = Context({'block_ack_sequence': None})

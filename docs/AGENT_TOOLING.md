@@ -103,6 +103,9 @@ The shared Java client launcher sets both `HOME` and JVM `user.home` to `.home`
 inside that client's game directory. Forge's home-derived Minecraft assets
 therefore use that private directory; provision assets there when needed.
 Gradle's separately configured cache is not isolated by this setting.
+Before connecting, the launcher retries an explicit render-thread observation
+timeout only within the bootstrap deadline; it still requires the actual title
+screen and propagates other MCP errors.
 
 ## Matrix runner status
 

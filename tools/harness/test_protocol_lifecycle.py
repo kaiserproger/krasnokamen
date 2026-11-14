@@ -162,6 +162,28 @@ class LifecycleGuardTests(unittest.TestCase):
             self.assertEqual(line, "Saved the game")
             self.assertEqual(stdin.writes, [b"save-all\n"])
 
+    def test_command_fence_uses_private_read_only_query(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            server = _harness(tmp)
+            server.run_dir.mkdir(parents=True)
+            server.log_path.write_text("")
+            stdin: Any = SimpleNamespace(writes=[], flush=lambda: None)
+            stdin.write = stdin.writes.append
+            server._process = SimpleNamespace(poll=lambda: None, stdin=stdin)
+
+            def fake_wait(path: Path, timeout: float, condition: object) -> str:
+                path.write_text("fixture complete\nScores for MatrixConsoleFence00000001: {}\n")
+                matched, text = condition()
+                self.assertTrue(matched)
+                return text
+
+            with mock.patch.object(lifecycle.runtime, "wait_for_path_condition", side_effect=fake_wait):
+                result = server.command("time query daytime")
+            self.assertEqual(stdin.writes, [
+                b"time query daytime\nscoreboard players list MatrixConsoleFence00000001\n"
+            ])
+            self.assertEqual(result, "fixture complete\n")
+
     def test_stop_fails_closed_on_nonzero_exit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

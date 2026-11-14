@@ -87,6 +87,49 @@ class RegressionLedgerTests(unittest.TestCase):
         receipt['details']['verdicts']['all'] = True
         regressions._profile_verdict(receipt, 'civilization-seed-qa', 'all')
 
+    def test_native_matrix_rejects_unknown_verdict(self):
+        from tools.harness.backends.native_matrix import frozen_native_rows, verdict_key
+        rows = frozen_native_rows()
+        regressions._profile_command('native-matrix', verdict_key(rows[0]['id']))
+        with self.assertRaises(ValueError):
+            regressions._profile_command('native-matrix', '26.3.not-a-frozen-scenario')
+
+    def test_native_matrix_refuses_override_for_regressions(self):
+        for name in ('KRASNOKAMEN_MATRIX_PATH', 'KRASNOKAMEN_MATRIX_LEDGER', 'KRASNOKAMEN_MATRIX_RUN_ROOT'):
+            with self.subTest(name=name), patch.dict(os.environ, {name: '/override'}):
+                with self.assertRaisesRegex(ValueError, name):
+                    regressions._profile_command('native-matrix', 'all')
+
+    def test_native_matrix_rejects_true_partial_verdict(self):
+        receipt = {'status': 'passed', 'details': {
+            'matrix_full_run': False, 'verdicts': {'26.3.example': True}}}
+        with self.assertRaisesRegex(regressions.VerdictNotMet, 'full frozen matrix'):
+            regressions._profile_verdict(receipt, 'native-matrix', '26.3.example')
+        receipt['details']['matrix_full_run'] = True
+        regressions._profile_verdict(receipt, 'native-matrix', '26.3.example')
+        del receipt['details']['verdicts']
+        with self.assertRaises(regressions.VerdictNotMet):
+            regressions._profile_verdict(receipt, 'native-matrix', 'all')
+
+    def test_native_matrix_true_verdict_still_requires_passing_receipt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            child = root / 'child'
+            child.mkdir()
+            (child / 'result.json').write_text(json.dumps({
+                'profile': 'native-matrix', 'status': 'failed',
+                'details': {'verdicts': {'26.3.example': True}, 'failed_rows': [],
+                            'blocked_rows': [{'id': 'windows', 'reason': 'unsupported'}]}}))
+            ctx = profiles.ProfileContext(root)
+            ctx.client_evidence['regressions_server'] = {'sha256': 'expected'}
+            def run_child(argv, ctx, name, **kwargs):
+                (root / name).write_text(f'[harness] artifact={child}\n')
+                raise RuntimeError('matrix incomplete')
+            with patch.object(profiles, '_run_command', run_child):
+                with self.assertRaises(regressions.ReceiptNotPassed):
+                    regressions._client_receipt(ctx, profiles, [], {}, 'native-matrix',
+                                                '26.3.example', True)
+
     def test_profile_verdicts_fail_closed_and_share_one_run(self):
         import json
         with tempfile.TemporaryDirectory() as directory:
