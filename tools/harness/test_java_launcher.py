@@ -70,6 +70,16 @@ class VanillaLauncherTest(unittest.TestCase):
             with self.assertRaisesRegex(MissingCapability, "26.3"):
                 self.command()
 
+    def test_explicit_262_requires_matching_metadata(self):
+        with mock.patch.dict("os.environ", {"KRASNOKAMEN_JAVA_VERSION": "26.2"}):
+            with self.assertRaisesRegex(MissingCapability, "26.2"):
+                self.command()
+            self.metadata["id"] = "26.2"
+            self.info.write_text(json.dumps(self.metadata))
+            (self.assets / "indexes/26.2-30.json").write_bytes(b'{"objects":{}}')
+            command = self.command()
+            self.assertEqual(command[command.index("--version") + 1], "26.2")
+
     def test_modified_client_bytes_fail_closed(self):
         self.client.write_bytes(b"tampered")
         with self.assertRaisesRegex(MissingCapability, "hash|size"):

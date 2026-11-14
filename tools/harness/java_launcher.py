@@ -183,3 +183,34 @@ def prepare_fabric_launch(artifact_dir: Path, agent_root: Path, timeout_seconds:
     if returncode != 0 or not manifest.is_file():
         raise MissingCapability(f"fabric_prepare_failed:exit {returncode}; {log_path}")
     return manifest
+
+
+def modded_gradle_arguments(task: str) -> list[str]:
+    """Select one exact supported modded endpoint; never substitute another release."""
+    version = os.environ.get("KRASNOKAMEN_JAVA_VERSION")
+    platform = os.environ.get("KRASNOKAMEN_JAVA_PLATFORM")
+    if version is None and platform is None:
+        return [task]
+    endpoints = {
+        ("26.1.2", "fabric"): ("0.19.3", "0.155.2+26.1.2", "26.1.2.76"),
+        ("26.1.2", "neoforge"): ("0.19.3", "0.155.2+26.1.2", "26.1.2.76"),
+        ("26.2", "neoforge"): ("0.19.5", None, "26.2.0.93"),
+        ("26.3", "fabric"): ("0.19.5", "0.163.0+26.3", "26.3.0.83"),
+        ("26.3", "neoforge"): ("0.19.5", "0.163.0+26.3", "26.3.0.83"),
+    }
+    endpoint = endpoints.get((version, platform))
+    if endpoint is None:
+        raise MissingCapability(f"unsupported modded Java endpoint: {version}/{platform}")
+    expected_tasks = {":fabric-agent:runClientMcp", f":loader-{platform}:runClientMcp"}
+    if task not in expected_tasks:
+        raise MissingCapability(f"Java endpoint {version}/{platform} conflicts with task {task}")
+    fabric_loader, fabric_api, neo = endpoint
+    arguments = [f"-PminecraftVersion={version}", f"-PneoVersion={neo}",
+                 f"-PfabricLoaderVersion={fabric_loader}"]
+    if fabric_api is not None:
+        arguments.append(f"-PfabricApiVersion={fabric_api}")
+    client_jar = os.environ.get("KRASNOKAMEN_CLIENT_JAR")
+    if client_jar:
+        arguments.append(f"-Pkrasnokamen.clientJar={client_jar}")
+    arguments.append(f":loader-{platform}:runClientMcp")
+    return arguments
