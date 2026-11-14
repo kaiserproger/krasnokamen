@@ -48,9 +48,10 @@ commit on `main` is acceptable. Tags, releases and publication keep their rules.
 
 The independent read-only reviewer for critical areas is the `architect-fable`
 agent (Claude Fable 5.2): persistence, protocol, custody and battle-core
-changes before Main commits them, and a design review before implementing a
-change to the native client's threading model or entity tick; the report goes
-next to the slice as `receipts/<slice>/fable-review.md`.
+changes before Main commits them, and, for a change to the native client's
+threading model or entity tick, a design review before implementation and a code
+review before merging; the report goes next to the slice as
+`receipts/<slice>/fable-review.md`.
 
 Owner decisions on the agent-work retrospective (2026-11-07, chosen from
 `receipts/AgentRetro/` proposals; AGENTS.md restates them):
