@@ -3,10 +3,15 @@ use crate::boundary::ConnectionId;
 use crate::commands::Command;
 use mc_data::Identifier;
 
-fn run(state: &mut TickState, actor: EntityId, text: &str) -> (crate::command_execution::CommandResult, ChangeSet) {
+fn run(
+    state: &mut TickState,
+    actor: EntityId,
+    text: &str,
+) -> (crate::command_execution::CommandResult, ChangeSet) {
     let command = crate::commands::parse(text, true).unwrap();
     let mut changes = ChangeSet::default();
-    let result = crate::command_execution::execute(state, ConnectionId(1), actor, &command, &mut changes);
+    let result =
+        crate::command_execution::execute(state, ConnectionId(1), actor, &command, &mut changes);
     (result, changes)
 }
 
@@ -14,7 +19,10 @@ fn run(state: &mut TickState, actor: EntityId, text: &str) -> (crate::command_ex
 fn swing_command_parses_hand_type_and_duration_and_is_operator_only() {
     match crate::commands::parse("swing @e[type=zombie] offhand stab 23", true) {
         Ok(Command::Swing(command)) => {
-            assert_eq!((command.hand, command.animation, command.duration_ticks), (Hand::Off, SwingKind::Stab, 23));
+            assert_eq!(
+                (command.hand, command.animation, command.duration_ticks),
+                (Hand::Off, SwingKind::Stab, 23)
+            );
         }
         other => panic!("{other:?}"),
     }
@@ -51,8 +59,16 @@ fn swing_command_emits_one_swing_event_per_living_target() {
         .entity_events
         .iter()
         .map(|event| match *event {
-            EntityEvent::Swing { entity, hand, animation, duration_ticks } => {
-                assert_eq!((hand, animation, duration_ticks), (Hand::Main, SwingKind::Whack, 21));
+            EntityEvent::Swing {
+                entity,
+                hand,
+                animation,
+                duration_ticks,
+            } => {
+                assert_eq!(
+                    (hand, animation, duration_ticks),
+                    (Hand::Main, SwingKind::Whack, 21)
+                );
                 entity
             }
             other => panic!("unexpected event {other:?}"),
@@ -64,5 +80,8 @@ fn swing_command_emits_one_swing_event_per_living_target() {
     assert_eq!(swung, expected);
     let (result, changes) = run(&mut state, actor, "swing @e[type=skeleton] offhand none 12");
     assert_eq!(result, crate::command_execution::CommandResult::Failed);
-    assert!(changes.entity_events.is_empty(), "nothing to swing changes nothing");
+    assert!(
+        changes.entity_events.is_empty(),
+        "nothing to swing changes nothing"
+    );
 }

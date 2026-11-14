@@ -43,9 +43,9 @@ def validate_args(ctx: ProfileContext) -> float:
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
-    if not override or not os.environ.get("SOLARIS_CLIENT_BINARY"):
-        raise RuntimeError("composter-chance requires prebuilt SOLARIS_SERVER_BINARY and SOLARIS_CLIENT_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
+    if not override or not os.environ.get("KRASNOKAMEN_CLIENT_BINARY"):
+        raise RuntimeError("composter-chance requires prebuilt KRASNOKAMEN_SERVER_BINARY and KRASNOKAMEN_CLIENT_BINARY")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing server binary: {binary}")
@@ -55,9 +55,9 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     plugins = artifact / "plugins"
     plugins.mkdir()
     config = artifact / "composter.toml"
-    vanilla = os.environ.get("SOLARIS_CLIENT_DATA_DIR")
+    vanilla = os.environ.get("KRASNOKAMEN_CLIENT_DATA_DIR")
     if not vanilla or not Path(vanilla).is_absolute() or not Path(vanilla).is_dir():
-        raise RuntimeError("composter-chance requires an absolute existing SOLARIS_CLIENT_DATA_DIR")
+        raise RuntimeError("composter-chance requires an absolute existing KRASNOKAMEN_CLIENT_DATA_DIR")
     source = (runtime.REPO_ROOT / "playable.toml").read_text()
     token = 'vanilla_data_dir = "data/vanilla"'
     if source.count(token) != 1:

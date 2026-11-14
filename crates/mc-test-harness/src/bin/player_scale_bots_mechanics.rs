@@ -458,7 +458,7 @@ impl Mechanics {
                 });
             }
         }
-        let item_facts = mc_data::item_components::solaris_required_item_facts();
+        let item_facts = mc_data::item_components::krasnokamen_required_item_facts();
         let mut items = HashMap::new();
         let mut item_limits = HashMap::new();
         for item in mc_data::items::load_items_report(root.join("registries.json"))? {

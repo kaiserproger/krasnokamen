@@ -69,7 +69,7 @@ impl Packet for LoginStart {
 
 /// Encrypted shared secret and challenge returned by an online-mode client.
 ///
-/// Solaris uses a 1024-bit RSA key, so each ciphertext is capped at 128 bytes.
+/// Krasnokamen uses a 1024-bit RSA key, so each ciphertext is capped at 128 bytes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EncryptionResponse {
     pub encrypted_shared_secret: Vec<u8>,
