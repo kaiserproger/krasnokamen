@@ -582,13 +582,34 @@ class PlayObserver:
                       self.merchant_offers, self.merchant_errors):
             cache.pop(window, None)
 
-    def _cache_player_suffix(self, window: int) -> None:
-        """Received container suffix remains authoritative after menu closure."""
-        player, menu = self.menus.get(0), self.menus.get(window)
-        if (window != 0 and player is not None and menu is not None
-                and len(player["slots"]) >= 45 and len(menu["slots"]) >= 36):
-            player["slots"][9:36] = menu["slots"][-36:-9]
-            player["slots"][36:45] = menu["slots"][-9:]
+    def _cache_player_suffix(self, window: int, slot: int | None = None) -> None:
+        """Keep the player-inventory image and the open menu's cached suffix in sync.
+
+        The player slots of a menu are its last 36; a complete window-0 image is newer than
+        any menu the client still has open, so it overrides that menu's cached copy, while an
+        open menu's received slots are the fresher side for the player image. `slot` limits
+        the window-0 override to the single slot a ContainerSetSlot update changed."""
+        player = self.menus.get(0)
+        if player is None:
+            return
+        if window == 0:
+            open_menu = self.menus.get(self.current_window) if self.current_window else None
+            if open_menu is None or len(player["slots"]) < 45:
+                return
+            offset = len(open_menu["slots"]) - 36
+            if offset < 0:
+                return
+            for index in (range(9, 45) if slot is None else (slot,)):
+                if 9 <= index < 45:
+                    open_menu["slots"][offset + index - 9] = player["slots"][index]
+            return
+        menu = self.menus.get(window)
+        if menu is None or self.current_window == 0:
+            return
+        if len(player["slots"]) < 45 or len(menu["slots"]) < 36:
+            return
+        player["slots"][9:36] = menu["slots"][-36:-9]
+        player["slots"][36:45] = menu["slots"][-9:]
 
     def close_menu(self, window: int) -> None:
         self.send(0x13, write_varint(window))

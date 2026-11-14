@@ -117,6 +117,9 @@ _BOOLEAN_PROFILE_VERDICTS = {
 # (it sends ClientInformation `en_us` fixed), so the Russian text check runs on vanilla Java.
 _PROFILE_VERDICT_RUN = {
     ('settlement-map-qa', 'localized_text'): ('java', ['--', '--language', 'ru_ru']),
+    # The chisel resource-pack admission is a vanilla-Java client behaviour; the native client
+    # never asks for the optional pack.
+    ('chisel', 'vanilla_optional_admission'): ('java', []),
 }
 _PROFILE_RUN_OPTIONS = {
     'civilization-seed-qa': ['--timeout-seconds', '7200'],
@@ -174,12 +177,15 @@ def _profile_command(profile, verdict):
         from .backends.buildings_qa import LEVELS, PERIMETER
         from .backends.perimeter_qa import VERDICTS as PERIMETER_VERDICTS
         blueprint, separator, behaviour = verdict.partition('.')
-        valid = bool(separator) and blueprint in LEVELS and (
-            behaviour in {'settlement_founded', 'L1_built'}
-            or (blueprint, behaviour) == ('house', 'broken_cell_replaced')
-            or behaviour == 'L2_upgrade' and LEVELS[blueprint] >= 2
-            or behaviour == 'L3_upgrade' and LEVELS[blueprint] >= 3
-        )
+        if blueprint == PERIMETER:
+            valid = bool(separator) and behaviour in PERIMETER_VERDICTS
+        else:
+            valid = bool(separator) and blueprint in LEVELS and (
+                behaviour in {'settlement_founded', 'L1_built'}
+                or (blueprint, behaviour) == ('house', 'broken_cell_replaced')
+                or behaviour == 'L2_upgrade' and LEVELS[blueprint] >= 2
+                or behaviour == 'L3_upgrade' and LEVELS[blueprint] >= 3
+            )
     else:
         valid = verdict in _PROFILE_VERDICTS.get(profile, (None, {'all'}))[1]
     if not valid:
