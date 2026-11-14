@@ -8,6 +8,15 @@ fn registry() -> BlockRegistry {
 fn root() -> std::path::PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
 }
+fn fill_box(chunk: &mut Chunk, min_y: i32, max_y: i32, state: BlockStateId) {
+    for y in min_y..=max_y {
+        for lx in 0..16u8 {
+            for lz in 0..16u8 {
+                assert!(chunk.set_block(lx, y, lz, state).is_some());
+            }
+        }
+    }
+}
 
 #[test]
 fn archaeology_pyramid_generated_with_loot() {
@@ -97,6 +106,8 @@ fn generated_fully_eyed_stronghold_activates_portal() {
         stronghold_eye_states: eyes,
         stronghold_portal: state(&registry, "minecraft:end_portal").unwrap(),
         air: vec![state(&registry, "minecraft:air").unwrap()],
+        ground: HashSet::new(),
+        filler: state(&registry, "minecraft:stone").unwrap(),
         families: Vec::new(),
         features: Vec::new(),
         reach_before: [3, 2],
@@ -132,6 +143,8 @@ fn generated_stronghold_eye_patterns_vary_between_sites_in_one_world() {
         stronghold_eye_states: stronghold_eye_states(&registry).unwrap(),
         stronghold_portal: state(&registry, "minecraft:end_portal").unwrap(),
         air: vec![state(&registry, "minecraft:air").unwrap()],
+        ground: HashSet::new(),
+        filler: state(&registry, "minecraft:stone").unwrap(),
         families: Vec::new(),
         features: Vec::new(),
         reach_before: [3, 2],
@@ -190,6 +203,8 @@ fn generated_stronghold_frame_eyes_are_independent_and_seeded() {
             stronghold_eye_states: stronghold_eye_states(&registry).unwrap(),
             stronghold_portal: state(&registry, "minecraft:end_portal").unwrap(),
             air: vec![state(&registry, "minecraft:air").unwrap()],
+            ground: HashSet::new(),
+            filler: state(&registry, "minecraft:stone").unwrap(),
             families: Vec::new(),
             features: Vec::new(),
             reach_before: [3, 2],
@@ -698,8 +713,9 @@ fn ocean_monument_start_is_underwater() {
 #[test]
 fn floating_surface_structure_rests_on_a_support_column() {
     // WORLDGEN-RUINED-PORTAL-FLOATS-ON-SLOPE: a surface template that hangs over
-    // air gets a support column of its own column's ground material, so the
-    // netherrack platform no longer floats above the ground below its footprint.
+    // air gets a support column of the column's TERRAIN material, so the
+    // netherrack platform no longer floats above the ground below its footprint
+    // and no template block is copied into the gap.
     let registry = registry();
     let mut structures = OverworldStructures::load(&root(), 42, &registry).unwrap();
     structures.strongholds.clear();
@@ -737,37 +753,280 @@ fn floating_surface_structure_rests_on_a_support_column() {
     let family = &structures.families[0];
     let template = &family.templates
         [(hash(structures.seed ^ 0x53545255, x, z) as usize) % family.templates.len()];
-    let mut lowest = std::collections::BTreeMap::new();
+    let template_states: HashSet<BlockStateId> =
+        template.blocks().iter().map(|block| block.state).collect();
+    assert!(
+        !template_states.contains(&dirt),
+        "the fixture needs a template without dirt"
+    );
+    let mut lowest = BTreeMap::new();
     for block in template.blocks() {
         if block.state == air {
             continue;
         }
         lowest
             .entry((block.pos[0], block.pos[2]))
-            .and_modify(|cell: &mut (i32, u32)| *cell = (cell.0.min(block.pos[1]), block.state.0))
-            .or_insert((block.pos[1], block.state.0));
+            .and_modify(|base: &mut i32| *base = (*base).min(block.pos[1]))
+            .or_insert(block.pos[1]);
     }
     let mut columns = 0;
-    for ((lx, lz), (base, material)) in lowest {
+    for ((lx, lz), base) in lowest {
         if !(0..16).contains(&lx) || !(0..16).contains(&lz) {
             continue;
         }
         columns += 1;
         let (lx, lz) = (lx as u8, lz as u8);
-        let below = chunk.get_block(lx, origin_y + base - 1, lz);
+        let base_y = origin_y + base;
+        let support = chunk.get_block(lx, base_y - 1, lz);
         assert!(
-            below.is_some_and(|id| id != air),
+            support.is_some_and(|id| id != air),
             "column {lx},{lz} floats above air"
         );
-        if origin_y + base - 1 == 63 {
+        let support = support.unwrap();
+        assert_eq!(
+            support, dirt,
+            "column {lx},{lz} continues the terrain under the gap"
+        );
+        assert!(
+            !template_states.contains(&support),
+            "column {lx},{lz} copies a template block into the support column"
+        );
+        assert!(
+            !registry.by_id(support).unwrap().has_fluid(),
+            "column {lx},{lz} fills the gap with a fluid"
+        );
+        for y in 63..base_y {
             assert_eq!(
-                chunk.get_block(lx, 63, lz),
-                Some(mc_world::BlockStateId(material)),
-                "the support column uses the template's own base block"
+                chunk.get_block(lx, y, lz),
+                Some(dirt),
+                "column {lx},{lz} gap cell {y} is not terrain material"
             );
         }
     }
     assert!(columns > 0, "the template has footprint columns");
+}
+
+#[test]
+fn ruined_portal_support_columns_never_copy_template_material() {
+    // Review of 81a2b6bb8: the fill kept the last visited template block of a
+    // column, so `portal_6`'s netherrack-over-gold column grew four gold blocks
+    // under the platform, and other columns copied chests or lava. Every 26.3
+    // ruined portal template the generator loads is walked here over an air gap:
+    // the support must be terrain material, never a template block, fluid or
+    // block entity.
+    let registry = registry();
+    let structures = OverworldStructures::load(&root(), 42, &registry).unwrap();
+    let air = state(&registry, "minecraft:air").unwrap();
+    let stone = state(&registry, "minecraft:stone").unwrap();
+    let dirt = state(&registry, "minecraft:dirt").unwrap();
+    let netherrack = state(&registry, "minecraft:netherrack").unwrap();
+    let gold = state(&registry, "minecraft:gold_block").unwrap();
+    let directory = root().join("data/minecraft/structure/ruined_portal");
+    let mut paths: Vec<_> = std::fs::read_dir(&directory)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("nbt"))
+        .collect();
+    paths.sort();
+    let (loaded, _) = catalog::templates(&root(), "ruined_portal", &registry).unwrap();
+    assert_eq!(
+        paths.len(),
+        loaded.len(),
+        "the test walks exactly the templates the generator loads"
+    );
+    let mut reviewed_shape: Vec<String> = Vec::new();
+    for path in &paths {
+        let name = path.file_stem().and_then(|stem| stem.to_str()).unwrap();
+        let template = clean_template(
+            StructureTemplate::from_nbt_file(path, &registry).unwrap(),
+            "ruined_portal",
+            &registry,
+        )
+        .unwrap();
+        let (min, max) = template.bounds();
+        // Centre every footprint column inside chunk (0, 0).
+        let origin = BlockPos {
+            x: (16 - (max[0] - min[0] + 1)) / 2 - min[0],
+            y: 100,
+            z: (16 - (max[2] - min[2] + 1)) / 2 - min[2],
+        };
+        let template_states: HashSet<BlockStateId> =
+            template.blocks().iter().map(|block| block.state).collect();
+        assert!(
+            !template_states.contains(&dirt),
+            "{name} template has no dirt, so a dirt support proves the fill is not template material"
+        );
+        let mut lowest: BTreeMap<(i32, i32), i32> = BTreeMap::new();
+        for block in template.blocks() {
+            if block.state == air {
+                continue;
+            }
+            lowest
+                .entry((block.pos[0], block.pos[2]))
+                .and_modify(|base: &mut i32| *base = (*base).min(block.pos[1]))
+                .or_insert(block.pos[1]);
+        }
+        // A dirt floor exactly four cells under every column: the deepest gap
+        // the rule may fill still lands on natural terrain.
+        let mut chunk = Chunk::empty(ChunkPos { x: 0, z: 0 }, stone, id("minecraft:plains"));
+        fill_box(&mut chunk, 0, origin.y + max[1] + 1, air);
+        for (&(lx, lz), &base) in &lowest {
+            let (x, z) = ((origin.x + lx) as u8, (origin.z + lz) as u8);
+            assert!(chunk.set_block(x, origin.y + base - 5, z, dirt).is_some());
+        }
+        structures.support_columns(&mut chunk, &template, origin);
+        let lowest_y = origin.y + lowest.values().copied().min().unwrap();
+        for (&(lx, lz), &base) in &lowest {
+            let (x, z) = ((origin.x + lx) as u8, (origin.z + lz) as u8);
+            let base_y = origin.y + base;
+            for y in base_y - 4..base_y {
+                assert_eq!(
+                    chunk.get_block(x, y, z),
+                    Some(dirt),
+                    "{name} column {lx},{lz} must continue the terrain under the gap"
+                );
+            }
+        }
+        for y in 61..lowest_y {
+            for x in 0..16u8 {
+                for z in 0..16u8 {
+                    let cell = chunk.get_block(x, y, z).unwrap();
+                    if cell == air {
+                        continue;
+                    }
+                    assert!(
+                        !template_states.contains(&cell) || cell == stone,
+                        "{name} copied {} into its support column at {x},{y},{z}",
+                        registry.by_id(cell).unwrap().block.id.path()
+                    );
+                    assert!(
+                        cell == dirt || cell == stone,
+                        "{name} wrote {} under its template at {x},{y},{z}",
+                        registry.by_id(cell).unwrap().block.id.path()
+                    );
+                    assert!(
+                        !registry.by_id(cell).unwrap().has_fluid(),
+                        "{name} filled the gap with a fluid at {x},{y},{z}"
+                    );
+                }
+            }
+        }
+        // No ground within the bound: the dimension filler, never a template block.
+        let mut bare = Chunk::empty(ChunkPos { x: 0, z: 0 }, air, id("minecraft:plains"));
+        structures.support_columns(&mut bare, &template, origin);
+        for (&(lx, lz), &base) in &lowest {
+            let (x, z) = ((origin.x + lx) as u8, (origin.z + lz) as u8);
+            let base_y = origin.y + base;
+            for y in base_y - 4..base_y {
+                assert_eq!(
+                    bare.get_block(x, y, z),
+                    Some(stone),
+                    "{name} column {lx},{lz} must use the dimension filler over a chasm"
+                );
+            }
+        }
+        for (&(lx, lz), &base) in &lowest {
+            let lowest_state = template
+                .blocks()
+                .iter()
+                .find(|block| block.pos == [lx, base, lz])
+                .map(|block| block.state);
+            let gold_above = template.blocks().iter().any(|block| {
+                block.pos[0] == lx
+                    && block.pos[2] == lz
+                    && block.pos[1] > base
+                    && block.state == gold
+            });
+            if lowest_state == Some(netherrack) && gold_above {
+                reviewed_shape.push(name.to_owned());
+            }
+        }
+    }
+    assert!(
+        reviewed_shape.iter().any(|name| name == "portal_6"),
+        "the reviewed netherrack-over-gold column is covered: {reviewed_shape:?}"
+    );
+
+    // End-to-end: pasting `portal_6` into a chunk with a terrain ground under it
+    // writes terrain support, not the template's own netherrack or gold.
+    let mut structures = OverworldStructures::load(&root(), 42, &registry).unwrap();
+    structures.strongholds.clear();
+    structures
+        .families
+        .retain(|family| family.id.path() == "ruined_portal");
+    assert_eq!(structures.families.len(), 1, "one overworld ruined portal");
+    let portal_6 = clean_template(
+        StructureTemplate::from_nbt_file(&directory.join("portal_6.nbt"), &registry).unwrap(),
+        "ruined_portal",
+        &registry,
+    )
+    .unwrap();
+    let family = &mut structures.families[0];
+    family.frequency = 1.0;
+    family.exclusion = None;
+    family.biomes.insert(id("minecraft:plains"));
+    family.templates = vec![portal_6.clone()];
+    let (x, z) = family.placement.potential_chunk(42, 0, 0);
+    let surface = |_: i32, _: i32| 64;
+    let biome = |_, _, _| id("minecraft:plains");
+    let sites = structures.sites((x, z), (x, z), surface, |_, _| 51, biome);
+    assert_eq!(sites.len(), 1);
+    let origin_y = sites[0].position.y;
+    let mut chunk = Chunk::empty(ChunkPos { x, z }, stone, id("minecraft:plains"));
+    for y in 61..=origin_y + 20 {
+        for lx in 0..16u8 {
+            for lz in 0..16u8 {
+                assert!(chunk.set_block(lx, y, lz, air).is_some());
+            }
+        }
+    }
+    for lx in 0..16u8 {
+        for lz in 0..16u8 {
+            assert!(chunk.set_block(lx, 60, lz, dirt).is_some());
+        }
+    }
+    structures.paste(&mut chunk, surface, |_, _| 51, biome);
+    let mut lowest_y = i32::MAX;
+    for block in portal_6.blocks() {
+        if block.state != air {
+            lowest_y = lowest_y.min(origin_y + block.pos[1]);
+        }
+    }
+    let pasted_states: HashSet<BlockStateId> =
+        portal_6.blocks().iter().map(|block| block.state).collect();
+    let mut support_cells = 0;
+    for y in 61..lowest_y {
+        for lx in 0..16u8 {
+            for lz in 0..16u8 {
+                let cell = chunk.get_block(lx, y, lz).unwrap();
+                if cell == air {
+                    continue;
+                }
+                assert!(
+                    !pasted_states.contains(&cell) || cell == stone,
+                    "the pasted ruin copied {} into its support column at {lx},{y},{lz}",
+                    registry.by_id(cell).unwrap().block.id.path()
+                );
+                assert!(
+                    !registry.by_id(cell).unwrap().has_fluid(),
+                    "the pasted ruin filled its support column with a fluid at {lx},{y},{lz}"
+                );
+                support_cells += usize::from(cell == dirt);
+            }
+        }
+    }
+    assert!(
+        support_cells > 0,
+        "portal_6 rests on a terrain support column"
+    );
+    assert!(
+        !chunk.block_entities.keys().any(|pos| pos.y < lowest_y),
+        "no block entity under the portal"
+    );
+    assert!(
+        !chunk.chests.keys().any(|pos| pos.y < lowest_y),
+        "no chest under the portal"
+    );
 }
 
 #[test]

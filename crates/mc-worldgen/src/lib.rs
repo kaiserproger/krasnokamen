@@ -136,7 +136,14 @@ pub use terrain::{HeightContextStats, height_context_stats, reset_height_context
 /// its own column's ground material above the first non-air block, because
 /// vanilla's descent (`RuinedPortalStructure.findSuitableY`) cannot run before
 /// this generator's villages. Ruined portals no longer float over a slope.
-pub const WORLDGEN_REVISION: u32 = 32;
+///
+/// 33: that support column is filled with the column's terrain material, never
+/// the template's own block: revision 32 copied the last visited template block,
+/// so `portal_6` grew gold blocks under its netherrack platform and other
+/// columns copied chests or lava. Revision-33 chunks continue the natural ground
+/// the gap lands on and fall back to stone when it is a structure block, a fluid
+/// or a village farm cell.
+pub const WORLDGEN_REVISION: u32 = 33;
 
 /// Crate version, exposed so other crates and the binary can report it.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
