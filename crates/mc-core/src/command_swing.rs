@@ -1,6 +1,7 @@
 //! Vanilla operator `/swing`, emitted as a transient entity event.
 use crate::boundary::{ChangeSet, EntityEvent, EntityId, Hand, SwingKind};
-use crate::commands::{CommandError, Target, target_of};
+use crate::command_args::CommandError;
+use crate::commands::{Target, target_of};
 use crate::entities::EntityKind;
 use crate::tick::TickState;
 

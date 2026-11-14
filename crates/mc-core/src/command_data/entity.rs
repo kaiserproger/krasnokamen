@@ -46,7 +46,7 @@ const ITEM_FIELDS: [&str; 6] = [
 
 fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, String> {
     if context.permission < 2 {
-        return Err(crate::commands::CommandError::Unknown.message());
+        return Err(crate::command_args::CommandError::Unknown.message());
     }
     argument(&mut input)?; // data
     let action = argument(&mut input)?;

@@ -5,7 +5,7 @@
 //! net/minecraft/util/datafix/fixes/GameRuleRegistryFix.java (legacy aliases).
 //! The feature-gated max_minecart_speed is deliberately not registered.
 
-use crate::commands::CommandError;
+use crate::command_args::CommandError;
 use crate::tick::TickState;
 
 /// Operational limit: random ticks scale with each active section every tick.

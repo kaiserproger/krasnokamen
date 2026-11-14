@@ -59,7 +59,7 @@ pub(in crate::battle) fn command(
     staging::execute(state, changes, ORIGIN, &command)
 }
 
-fn parse(text: &str) -> Result<BattleCommand, crate::commands::CommandError> {
+fn parse(text: &str) -> Result<BattleCommand, crate::command_args::CommandError> {
     let words: Vec<&str> = text.split(' ').collect();
     staging::parse(&words)
 }

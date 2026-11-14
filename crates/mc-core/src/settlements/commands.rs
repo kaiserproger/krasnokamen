@@ -6,7 +6,7 @@
 //! owns as `"Server"`. Membership itself stays in villager columns via the
 //! parent-owned `settlements::{bind,unbind,remove,member_count}` helpers.
 
-use crate::commands::CommandError;
+use crate::command_args::CommandError;
 use crate::settlements::SettlementRecord;
 
 #[cfg(test)]

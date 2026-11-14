@@ -87,7 +87,7 @@ fn level_two_nested_tick_is_denied_through_shared_player_input() {
         "level2 must not reach the tick mutation"
     );
     assert!(replies.iter().any(|reply| matches!(reply,
-        PlayerChange::Chat { message } if message == &crate::commands::CommandError::Unknown.message()
+        PlayerChange::Chat { message } if message == &crate::command_args::CommandError::Unknown.message()
     )));
     assert!(state.command_context.current.is_none());
 }
@@ -265,7 +265,7 @@ fn public_and_level_two_native_commands_retain_existing_admission() {
     for level in 0..=4 {
         let replies = player(&mut state, level, "me public-permission-check");
         assert!(!replies.iter().any(|reply| matches!(reply,
-            PlayerChange::Chat { message } if message == &crate::commands::CommandError::Unknown.message()
+            PlayerChange::Chat { message } if message == &crate::command_args::CommandError::Unknown.message()
         )));
     }
     player(&mut state, 2, "execute run time set 321");

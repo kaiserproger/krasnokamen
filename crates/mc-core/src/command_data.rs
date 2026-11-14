@@ -371,7 +371,7 @@ pub(crate) fn query(
     mut input: &str,
 ) -> Result<i32, String> {
     if context.permission < 2 {
-        return Err(crate::commands::CommandError::Unknown.message());
+        return Err(crate::command_args::CommandError::Unknown.message());
     }
     if argument(&mut input)? != "data" || argument(&mut input)? != "get" {
         return Err("Expected data get entity|block".into());

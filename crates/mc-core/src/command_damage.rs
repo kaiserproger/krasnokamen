@@ -1,6 +1,7 @@
 //! Vanilla `/damage` syntax feeding the existing native damage merge.
 use crate::boundary::{ChangeSet, ConnectionId, EntityId};
-use crate::commands::{CommandError, Coord, SelectorKind, Target};
+use crate::command_args::{CommandError, Coord};
+use crate::commands::{SelectorKind, Target};
 use crate::entities::EntityKind;
 use crate::intent::DamageSource;
 use crate::survival::DamageKind;

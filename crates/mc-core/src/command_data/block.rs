@@ -29,7 +29,7 @@ pub(crate) fn command(state: &mut TickState, context: Context, input: &str) -> C
 /// Position of the edited block as the feedback arguments.
 fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Vec<Tag>, String> {
     if context.permission < 2 {
-        return Err(crate::commands::CommandError::Unknown.message());
+        return Err(crate::command_args::CommandError::Unknown.message());
     }
     argument(&mut input)?; // data
     let action = argument(&mut input)?;

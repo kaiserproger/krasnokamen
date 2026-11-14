@@ -49,6 +49,7 @@ mod chorus;
 pub mod chunk_loader;
 pub(crate) mod chunk_tickets;
 pub mod combat;
+pub mod command_args;
 pub mod command_attribute;
 mod command_block_entity;
 mod command_blocks;

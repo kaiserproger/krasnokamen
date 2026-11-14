@@ -6,6 +6,7 @@
 use mc_data::{Identifier, ItemStack};
 use mc_physics::mth;
 
+use crate::command_args::{CommandError, Coord, coord};
 use crate::inventory::{ItemRules, PlayerInventory};
 use crate::survival::{Difficulty, Experience};
 
@@ -170,25 +171,6 @@ pub struct Selector {
     pub extent: [Option<f64>; 3],
     pub limit: Option<usize>,
     pub sort: Option<SelectorSort>,
-}
-
-/// Absolute, `~`-relative, or `^`-local command coordinate.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Coord {
-    pub relative: bool,
-    pub local: bool,
-    pub value: f64,
-}
-
-impl Coord {
-    #[must_use]
-    pub fn resolve(self, base: f64) -> f64 {
-        if self.relative {
-            base + self.value
-        } else {
-            self.value
-        }
-    }
 }
 
 pub(crate) fn resolve_coords(coords: [Coord; 3], origin: [f64; 3], rotation: [f32; 2]) -> [f64; 3] {
@@ -374,7 +356,7 @@ pub enum Command {
         target: Target,
         levels: bool,
     },
-    WorldBorder(BorderCommand),
+    WorldBorder(crate::command_border::BorderCommand),
     BossBar(crate::command_bossbar::BossBarCommand),
     Settlement(crate::settlements::commands::SettlementCommand),
     World(crate::command_world::WorldCommand),
@@ -426,26 +408,6 @@ pub enum Command {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommandError {
-    /// Unknown command, or one the sender may not see (vanilla hides
-    /// operator commands from non-operators).
-    Unknown,
-    Usage(&'static str),
-    Message(String),
-}
-
-impl CommandError {
-    #[must_use]
-    pub fn message(&self) -> String {
-        match self {
-            Self::Unknown => "Unknown or incomplete command, see below for error".to_owned(),
-            Self::Usage(_) => "Unknown or incomplete command, see below for error".to_owned(),
-            Self::Message(message) => message.clone(),
-        }
-    }
-}
-
 /// Parses the supported vanilla command syntax. Administration commands are
 /// handled by the edge before submission to the tick.
 pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
@@ -493,7 +455,7 @@ pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
         }
         "xp" | "experience" => parse_experience(args),
         "summon" => parse_summon(args),
-        "worldborder" => parse_border(args).map(Command::WorldBorder),
+        "worldborder" => crate::command_border::parse(args).map(Command::WorldBorder),
         "forceload" => crate::forceload::parse(args).map(Command::ForceLoad),
         "co" => crate::block_log::parse(args).map(Command::BlockLog),
         "setblock" | "fill" | "clone" | "spawnpoint" | "setworldspawn" => {
@@ -968,31 +930,6 @@ fn item_id(word: &str) -> Option<Identifier> {
     Identifier::parse(name).ok()
 }
 
-pub(crate) fn coord(word: &str) -> Option<Coord> {
-    if let Some(rest) = word.strip_prefix('~').or_else(|| word.strip_prefix('^')) {
-        let value = if rest.is_empty() {
-            0.0
-        } else {
-            rest.parse().ok()?
-        };
-        return value_ok(value).then_some(Coord {
-            relative: true,
-            local: word.starts_with('^'),
-            value,
-        });
-    }
-    let value: f64 = word.parse().ok()?;
-    value_ok(value).then_some(Coord {
-        relative: false,
-        local: false,
-        value,
-    })
-}
-
-fn value_ok(value: f64) -> bool {
-    value.is_finite() && value.abs() <= 30_000_000.0
-}
-
 pub(crate) fn coords(words: &[&str]) -> Option<[Coord; 3]> {
     match words {
         [x, y, z] => {
@@ -1432,116 +1369,6 @@ pub fn add_experience(experience: &mut Experience, amount: i32, levels: bool) {
         experience.add_levels(amount);
     } else {
         experience.add_points(amount);
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum BorderCommand {
-    Center([Coord; 2]),
-    Set { size: f64, time: i64 },
-    Add { delta: f64, time: i64 },
-    DamageBuffer(f64),
-    DamageAmount(f64),
-    WarningDistance(i32),
-    WarningTime(i32),
-    Get,
-}
-/// Vanilla `TimeArgument` units (TimeArgument.javap static init:
-/// d=24000, s=20, t=1, bare=1); minimum 0 for the border time argument
-/// (`TimeArgument.time(0)` at WorldBorderCommand.javap registration).
-fn parse_border_time(raw: &str) -> Option<i64> {
-    let (number, unit) = if let Some(prefix) = raw.strip_suffix('d') {
-        (prefix, 24_000_i64)
-    } else if let Some(prefix) = raw.strip_suffix('s') {
-        (prefix, 20_i64)
-    } else if let Some(prefix) = raw.strip_suffix('t') {
-        (prefix, 1_i64)
-    } else {
-        (raw, 1_i64)
-    };
-    let value: f64 = number.parse().ok()?;
-    if !value.is_finite() || value < 0.0 {
-        return None;
-    }
-    let scaled = (value * unit as f64).round();
-    (scaled < i64::MAX as f64).then_some(scaled as i64)
-}
-pub(crate) fn parse_border(args: &[&str]) -> Result<BorderCommand, CommandError> {
-    let invalid = || {
-        CommandError::Usage(
-            "worldborder <center x z|set size [time]|add size [time]|damage buffer|damage amount|warning distance|warning time|get>",
-        )
-    };
-    let number = |raw: &str| {
-        raw.parse::<f64>()
-            .ok()
-            .filter(|n| n.is_finite())
-            .ok_or_else(invalid)
-    };
-    match args {
-        ["get"] => Ok(BorderCommand::Get),
-        ["center", x, z] => {
-            let x = coord(x).filter(|c| !c.local).ok_or_else(invalid)?;
-            let z = coord(z).filter(|c| !c.local).ok_or_else(invalid)?;
-            Ok(BorderCommand::Center([x, z]))
-        }
-        ["damage", "buffer", value] => {
-            let value = number(value)?;
-            if value < 0.0 {
-                return Err(invalid());
-            }
-            Ok(BorderCommand::DamageBuffer(value))
-        }
-        ["damage", "amount", value] => {
-            let value = number(value)?;
-            if !(0.0..=5.0).contains(&value) {
-                return Err(invalid());
-            }
-            Ok(BorderCommand::DamageAmount(value))
-        }
-        ["warning", "distance", value] => {
-            let value = value
-                .parse::<i32>()
-                .ok()
-                .filter(|v| *v >= 0)
-                .ok_or_else(invalid)?;
-            Ok(BorderCommand::WarningDistance(value))
-        }
-        ["warning", "time", value] => {
-            let value = value
-                .parse::<i32>()
-                .ok()
-                .filter(|v| *v >= 0)
-                .ok_or_else(invalid)?;
-            Ok(BorderCommand::WarningTime(value))
-        }
-        [mode @ ("set" | "add"), size] => {
-            let size = number(size)?;
-            if *mode == "set" {
-                if !(1.0..=crate::command_border::MAX_SIZE).contains(&size) {
-                    return Err(invalid());
-                }
-                Ok(BorderCommand::Set { size, time: 0 })
-            } else {
-                Ok(BorderCommand::Add {
-                    delta: size,
-                    time: 0,
-                })
-            }
-        }
-        [mode @ ("set" | "add"), size, time] => {
-            let size = number(size)?;
-            let time = parse_border_time(time).ok_or_else(invalid)?;
-            if *mode == "set" {
-                if !(1.0..=crate::command_border::MAX_SIZE).contains(&size) {
-                    return Err(invalid());
-                }
-                Ok(BorderCommand::Set { size, time })
-            } else {
-                Ok(BorderCommand::Add { delta: size, time })
-            }
-        }
-        _ => Err(invalid()),
     }
 }
 

@@ -2,7 +2,7 @@
 //! Execution lives in [`crate::bossbar`].
 
 use crate::bossbar::{BarColor, BarOverlay};
-use crate::commands::CommandError;
+use crate::command_args::CommandError;
 
 /// Typed `/bossbar` command. Component payloads stay raw text here; the
 /// executor parses/resolves them via `crate::command_text`.
