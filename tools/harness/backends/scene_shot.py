@@ -1365,6 +1365,9 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-village-breeding": "village_breeding_scene.json",
         "native-settlement-radius-growth": "settlement_radius_scene.json",
         "native-settlement-buildings-upgrade": "settlement_buildings_scene.json",
+        "issue1-01-villager-leg": "issue1_01_villager_leg_scene.json",
+        "issue1-18-sheep-goat": "issue1_18_sheep_goat_scene.json",
+        "issue1-19-hostile-motion": "issue1_19_hostile_motion_scene.json",
     }
     if ctx.scenario_id in named_fixtures:
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):

@@ -547,6 +547,25 @@ class SceneShotTests(unittest.TestCase):
                     scene_shot.validate_scenario(Context(), {"steps": []})
             self.assertEqual(scenarios.SCENARIOS[name].profile, "scene-shot")
 
+    def test_every_registered_scene_runs_its_own_fixture_without_an_override(self):
+        for name, entry in scenarios.SCENARIOS.items():
+            if entry.profile != "scene-shot":
+                continue
+            fixture = [source for source in entry.sources if source.endswith("_scene.json")]
+            self.assertEqual(len(fixture), 1, name)
+
+            class Context:
+                client = "native"
+                windowed = True
+                platform = None
+                scenario_id = entry.scenario_id
+                extra_args = []
+                timeout_seconds = 600
+            with self.subTest(name), patch.dict("os.environ", {"SCENE_SHOT_SCENARIO": ""}):
+                scenario = scene_shot.validate_scenario(Context())[0]
+                expected = json.loads((scene_shot.runtime.REPO_ROOT / fixture[0]).read_text())
+                self.assertEqual(scenario["steps"], expected["steps"])
+
     def test_named_feedback_scene_rejects_overrides(self):
         class Context:
             client = "native"
