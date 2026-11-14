@@ -2765,9 +2765,8 @@ severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = ["cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval", "cargo:mc-core:hostile_tests::zombie_chase_publishes_and_clears_aggressive_pose_metadata", "cargo:mc-core:journal_touched::tests::zombie_chase_pose_is_journaled_and_repaired_after_recovery", "harness:scene-shot:issue1-19-hostile-motion"]
-fix_commit = "client:9a645aa9"
 proving_assertions = { "harness:scene-shot:issue1-19-hostile-motion" = "zombie_arm_raised_pixels" }
-repro_check = "Stage2X SLICES.md:151-152 and receipts/XIssue1Scenes/report.md: fixture teleports drive each kind and check per-segment speed and zombie arm pixels; three green runs, pose reversal dbd3a20a9528 red at zombie_arm_raised_pixels, and wrong-speed probe red at mob_speed_zombie. This does not prove AI gait; client gait/pose observation or fixed-speed server walk remains needed. Registered scene bound in 6ce0940b8. The historical control is not an exact reversal of the final candidate; stage 3 needs a clean exact reversal pin."
+repro_check = "Stage2X SLICES.md:151-152 and receipts/XIssue1Scenes/report.md: fixture teleports drive each kind and check per-segment speed and zombie arm pixels; three green runs, control dbd3a20a9528 red at zombie_arm_raised_pixels, and wrong-speed probe red at mob_speed_zombie. This does not prove AI gait; client gait/pose observation or fixed-speed server walk remains needed. Registered scene bound in 6ce0940b8. The control forcibly disables both pose paths and is not an exact reversal; 9a645aa9 was only a provisional clippy/rustfmt carrier, not a demonstrated fix. Identify the actual fix and rebuild a clean exact-reversal control for stage 3."
 failing_first = "reported"
 
 [[bug]]
