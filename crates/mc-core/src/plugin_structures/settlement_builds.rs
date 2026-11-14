@@ -263,7 +263,11 @@ pub(crate) fn recover(
         return Ok(false);
     }
     let target = world(state, &record.snapshot.dimension)?;
-    let build = record.snapshot.stages.iter().position(|stage| stage.stage == "build");
+    let build = record
+        .snapshot
+        .stages
+        .iter()
+        .position(|stage| stage.stage == "build");
     let mut repair = Vec::new();
     if let Some(index) = build {
         let current = record.snapshot.current_stage_index as usize;
@@ -275,13 +279,25 @@ pub(crate) fn recover(
             0
         };
         for cell in record.cells[index].iter().take(completed) {
-            let actual = target.world.block_at(cell.at[0], cell.at[1], cell.at[2])
+            let now = target
+                .world
+                .block_at(cell.at[0], cell.at[1], cell.at[2])
                 .ok_or(Failure::Unloaded)?;
-            let actual = target.registry.blocks.by_id(mc_world::BlockStateId(actual))
+            let actual = target
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(now))
                 .ok_or(Failure::InvalidRequest)?;
-            let expected = target.registry.blocks.by_id(mc_world::BlockStateId(cell.state))
+            let expected = target
+                .registry
+                .blocks
+                .by_id(mc_world::BlockStateId(cell.state))
                 .ok_or(Failure::InvalidRequest)?;
-            if actual.block.raw_id != expected.block.raw_id {
+            // Only an emptied cell is re-placed, as in `reopen_emptied`: a
+            // solid foreign block in a placed cell keeps its place.
+            if actual.block.raw_id != expected.block.raw_id
+                && crate::settlements::construction::clearable(target, now)
+            {
                 repair.push(cell.clone());
             }
         }
@@ -296,7 +312,12 @@ pub(crate) fn recover(
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
     // The repair stage is derived afresh, so repeated interference cannot
     // accumulate stages or charge again for cells already repaired.
-    if let Some(index) = record.snapshot.stages.iter().position(|stage| stage.stage == "repair") {
+    if let Some(index) = record
+        .snapshot
+        .stages
+        .iter()
+        .position(|stage| stage.stage == "repair")
+    {
         record.snapshot.stages.truncate(index);
         record.cells.truncate(index);
         if record.snapshot.current_stage_index as usize >= index {
@@ -312,7 +333,10 @@ pub(crate) fn recover(
             }
         }
         record.snapshot.stages.push(ScriptStructureStagePlan::new(
-            "repair".into(), repair.len() as u32, repair.len() as u64, materials(&counts),
+            "repair".into(),
+            repair.len() as u32,
+            repair.len() as u64,
+            materials(&counts),
         ));
         record.cells.push(repair);
     }
