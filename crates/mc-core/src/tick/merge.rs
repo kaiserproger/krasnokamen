@@ -820,6 +820,14 @@ impl TickState {
             }
             dead_slots.push(slot);
         }
+        // Retired rows stay in place until staged slots have been consumed.
+        for id in std::mem::take(&mut self.pending_removals) {
+            if let Some(slot) = self.entities.slot_of_any(id)
+                && !matches!(self.entities.body(slot).kind, EntityKind::Player { .. })
+            {
+                dead_slots.push(slot);
+            }
+        }
         dead_slots.sort_by_key(|slot| std::cmp::Reverse(slot.0));
         dead_slots.dedup();
         let mut removed: Vec<EntityId> = Vec::with_capacity(dead_slots.len());
