@@ -173,6 +173,51 @@ fn exhaustive_flight_oracle_covers_negative_seams_long_sweeps_ties_and_swap_remo
 }
 
 #[test]
+fn snapshot_restricts_remote_bodies_but_keeps_global_armor_stands() {
+    let (mut state, player) = scene();
+    for index in 0..4096 {
+        mob(&mut state, "minecraft:cow", [1000.0 + index as f64, 201.0, 1000.0]);
+    }
+    let stand = mob(&mut state, "minecraft:armor_stand", [1000.0, 201.0, 1000.0]);
+    let id = arrow(&mut state, player, [-16.7, 201.7, -0.1], [2.0, 0.0, 0.0], 0);
+    run(&mut state, &mut Vec::new(), std::iter::once(id));
+    let bodies = &state.projectiles.bodies;
+    assert!(bodies.len() < 10, "remote cows must not enter the snapshot: {}", bodies.len());
+    assert!(bodies.iter().any(|body| body.id == stand && body.deployed_candidate));
+}
+
+#[test]
+fn randomized_snapshot_matches_exhaustive_flight() {
+    for seed in 0..8u64 {
+        let simulate = |indexed| {
+            let (mut state, player) = scene();
+            let mut random = seed + 1;
+            for _ in 0..40 {
+                random = random.wrapping_mul(6364136223846793005).wrapping_add(1);
+                let x = (random % 96) as f64 - 48.0;
+                random = random.wrapping_mul(6364136223846793005).wrapping_add(1);
+                let z = (random % 24) as f64 - 12.0;
+                mob(&mut state, "minecraft:cow", [x, 201.0, z]);
+            }
+            mob(&mut state, "minecraft:cow", [-15.8, 201.0, -0.1]);
+            let ids: Vec<_> = (0..3)
+                .map(|_| arrow(&mut state, player, [-16.7, 201.7, -0.1], [3.0, 0.0, 0.0], 2))
+                .collect();
+            let names = identities(&state);
+            let mut intents = Vec::new();
+            if indexed {
+                run(&mut state, &mut intents, ids.into_iter());
+            } else {
+                exhaustive(&mut state, &mut intents, &ids);
+            }
+            assert!(!intents.is_empty());
+            digest(&state, &intents, &names)
+        };
+        assert_eq!(simulate(true), simulate(false), "seed={seed}");
+    }
+}
+
+#[test]
 fn neighbouring_chunk_omission_changes_boundary_hit_oracle() {
     let (mut state, player) = scene();
     let victim = mob(&mut state, "minecraft:cow", [-15.8, 201.0, -0.1]);
