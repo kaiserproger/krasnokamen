@@ -159,7 +159,7 @@ port = {self.port}
 
 [auth]
 online_mode = false
-require_plugin_login = {str(self.plugins_dir is not None and (self.plugins_dir / "solaris-auth").is_dir()).lower()}
+require_plugin_login = {str(self.plugins_dir is not None and (self.plugins_dir / "krasnokamen-auth").is_dir()).lower()}
 
 [dashboard]
 enabled = true

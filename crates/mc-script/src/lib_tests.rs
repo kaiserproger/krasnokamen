@@ -2360,7 +2360,7 @@ fn declared_command_node_gates_admission_through_the_provider_table() {
     const PLAYER: &str = "069a79f4-44e9-4726-a5be-fca90e38aaf5";
     let (boundary, endpoint) = script_boundary_pair(nonzero(4), nonzero(4));
     let provider = ScriptPluginManifest::new(
-        "solaris-permissions",
+        "krasnokamen-permissions",
         "Permissions",
         "0.1.0",
         COMPONENT_PLUGIN_API_VERSION,
@@ -2370,14 +2370,14 @@ fn declared_command_node_gates_admission_through_the_provider_table() {
     .validate()
     .unwrap();
     let gated = ScriptPluginManifest::new(
-        "solaris-essentials",
+        "krasnokamen-essentials",
         "Essentials",
         "0.1.0",
         COMPONENT_PLUGIN_API_VERSION,
     )
     .declare_player_command_root("home")
     .declare_player_command_root("delwarp")
-    .declare_command_permission("delwarp", "solaris.essentials.manage")
+    .declare_command_permission("delwarp", "krasnokamen.essentials.manage")
     .validate()
     .unwrap();
     let player = ScriptPlayerId::new(1);
@@ -2427,7 +2427,7 @@ fn declared_command_node_gates_admission_through_the_provider_table() {
     assert!(
         !boundary
             .command_permissions()
-            .allows(PLAYER, "solaris.essentials.manage")
+            .allows(PLAYER, "krasnokamen.essentials.manage")
     );
     assert!(matches!(
         admit("delwarp x", false),
@@ -2435,12 +2435,12 @@ fn declared_command_node_gates_admission_through_the_provider_table() {
     ));
     assert!(boundary.command_permissions().allows(
         "00000000-0000-0000-0000-000000000001",
-        "solaris.essentials.manage"
+        "krasnokamen.essentials.manage"
     ));
 
     boundary
         .command_permissions()
-        .publish(&[format!("{PLAYER} solaris.essentials.manage")])
+        .publish(&[format!("{PLAYER} krasnokamen.essentials.manage")])
         .unwrap();
     assert!(matches!(
         admit("delwarp x", false),
@@ -2451,7 +2451,7 @@ fn declared_command_node_gates_admission_through_the_provider_table() {
         admit("delwarp x", false),
         Ok(PreparedPlayerCommand::PermissionDenied)
     ));
-    endpoint.unregister_plugin_routes("solaris-permissions");
+    endpoint.unregister_plugin_routes("krasnokamen-permissions");
     assert!(matches!(
         admit("delwarp x", false),
         Ok(PreparedPlayerCommand::PermissionDenied)
@@ -2466,14 +2466,14 @@ fn declared_command_node_gates_admission_through_the_provider_table() {
 fn command_permission_for_an_undeclared_root_and_a_second_provider_are_refused() {
     assert!(matches!(
         ScriptPluginManifest::new("a", "A", "0.1.0", COMPONENT_PLUGIN_API_VERSION)
-            .declare_command_permission("home", "solaris.essentials.use")
+            .declare_command_permission("home", "krasnokamen.essentials.use")
             .validate(),
         Err(ScriptPluginManifestError::CommandPermissionUnknownRoot { .. })
     ));
     assert!(matches!(
         ScriptPluginManifest::new("a", "A", "0.1.0", COMPONENT_PLUGIN_API_VERSION)
             .declare_player_command_root("home")
-            .declare_command_permission("home", "Solaris Upper")
+            .declare_command_permission("home", "Krasnokamen Upper")
             .validate(),
         Err(ScriptPluginManifestError::InvalidField {
             field: "command permission"

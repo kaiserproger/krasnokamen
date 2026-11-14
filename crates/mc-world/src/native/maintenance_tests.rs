@@ -1,6 +1,6 @@
 use mc_data::Identifier;
-use mc_data::blocks::solaris_required_blocks_report;
-use mc_data::items::solaris_required_items;
+use mc_data::blocks::krasnokamen_required_blocks_report;
+use mc_data::items::krasnokamen_required_items;
 use mc_data::loot::chest_26_1_2::ChestLootCatalog;
 use mc_nbt::Tag;
 use redb::ReadableDatabase;
@@ -10,7 +10,7 @@ use super::*;
 use crate::{BlockRegistry, BlockStateId, Chunk, ChunkPos};
 
 fn blocks() -> BlockRegistry {
-    BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap()
+    BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap()
 }
 
 fn state(blocks: &BlockRegistry, name: &str) -> BlockStateId {
@@ -55,7 +55,7 @@ fn request(keep: [i32; 4], max_inhabited_ticks: i64, dry_run: bool) -> NativePru
 }
 
 fn stored(store: &NativeStore, blocks: &BlockRegistry, x: i32, z: i32) -> bool {
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     store
         .resolve_base(
             0,
@@ -72,7 +72,7 @@ fn stored(store: &NativeStore, blocks: &BlockRegistry, x: i32, z: i32) -> bool {
 #[test]
 fn forest_evidence_rejects_imported_but_accepts_generated_and_missing_baselines() {
     let blocks = blocks();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.redb");
     let generated = chunk(&blocks, 1, 0, 0);
@@ -104,7 +104,7 @@ fn forest_evidence_rejects_imported_but_accepts_generated_and_missing_baselines(
 #[test]
 fn prune_forgets_only_untouched_uninhabited_chunks_outside_the_rectangle() {
     let blocks = blocks();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.redb");
     let store = NativeStore::create(&path, [5; 32]).unwrap();
@@ -241,7 +241,7 @@ fn prune_forgets_only_untouched_uninhabited_chunks_outside_the_rectangle() {
 #[test]
 fn prune_drops_the_metadata_and_watermark_rows_with_the_baseline() {
     let blocks = blocks();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.redb");
     let store = NativeStore::create(&path, [5; 32]).unwrap();
@@ -284,7 +284,7 @@ fn prune_drops_the_metadata_and_watermark_rows_with_the_baseline() {
 #[test]
 fn repack_rewrites_plain_rows_refuses_corrupt_ones_and_compact_keeps_data() {
     let blocks = blocks();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.redb");
     let position = ChunkPos { x: 4, z: 4 };

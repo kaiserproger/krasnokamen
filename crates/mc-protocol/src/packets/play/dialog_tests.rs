@@ -72,14 +72,14 @@ fn clear_dialog_has_empty_body() {
 #[test]
 fn custom_click_without_payload_is_id_then_length_one_tag_end() {
     let packet = ServerboundCustomClickAction {
-        id: Identifier::parse("solaris:ok").unwrap(),
+        id: Identifier::parse("krasnokamen:ok").unwrap(),
         payload: None,
     };
     let mut bytes = Vec::new();
     packet.encode(&mut bytes).unwrap();
-    // string "solaris:ok" (len 10), VarInt payload length 1, TAG_End.
+    // string "krasnokamen:ok" (len 10), VarInt payload length 1, TAG_End.
     let mut expected = vec![10];
-    expected.extend_from_slice(b"solaris:ok");
+    expected.extend_from_slice(b"krasnokamen:ok");
     expected.extend_from_slice(&[1, 0]);
     assert_eq!(bytes, expected);
     assert_eq!(
@@ -92,7 +92,7 @@ fn custom_click_without_payload_is_id_then_length_one_tag_end() {
 fn custom_click_with_inputs_round_trips_vanilla_value_types() {
     // Vanilla input values: text -> String, boolean -> Byte, number_range -> Float.
     let packet = ServerboundCustomClickAction {
-        id: Identifier::parse("solaris:settlement/found").unwrap(),
+        id: Identifier::parse("krasnokamen:settlement/found").unwrap(),
         payload: Some(compound(vec![
             ("name", Tag::String("Ёлки".into())),
             ("walls", Tag::Byte(1)),
@@ -112,7 +112,7 @@ fn custom_click_with_inputs_round_trips_vanilla_value_types() {
 #[test]
 fn custom_click_payload_may_be_a_non_compound_tag() {
     let packet = ServerboundCustomClickAction {
-        id: Identifier::parse("solaris:x").unwrap(),
+        id: Identifier::parse("krasnokamen:x").unwrap(),
         payload: Some(Tag::String("yes".into())),
     };
     let mut bytes = Vec::new();

@@ -80,10 +80,10 @@ artifact. Restart logs append; they are never truncated.
 With the protocol worktree as cwd (all paths below are on the games disk):
 
 ```sh
-SOLARIS_VALIDATION_ROOT=/run/media/kaiserroman/games/solaris-work/scenarios/runs/RunProto \
+KRASNOKAMEN_VALIDATION_ROOT=/run/media/kaiserroman/games/solaris-work/scenarios/runs/RunProto \
 /home/kaiserroman/solaris/.analysis/tools/mem-run.sh -m 6G \
 python3 -m tools.harness run protocol-matrix \
-  --server-bin /run/media/kaiserroman/games/solaris-work/targets/Hotfix/release/solaris-v2 \
+  --server-bin /run/media/kaiserroman/games/solaris-work/targets/Hotfix/release/krasnokamen \
   --plugins-dir /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins \
   --vanilla-data /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla \
   --matrix /run/media/kaiserroman/games/solaris-work/scenarios/matrix.yaml \
@@ -124,7 +124,7 @@ Default package selection is the complete supplied live set. A row may declare
 `exclude_plugins: [graves]`; a domain may use
 `Adapter(setup, act, oracle, exclude_plugins=("graves",))`; a supplemental probe
 may use `--exclude-plugin graves`. Selection uses actual `plugin.toml` **IDs**
-(computer's ID is `solaris`), not guessed directory names. Unknown exclusions
+(computer's ID is `krasnokamen`), not guessed directory names. Unknown exclusions
 fail. Shared `matrix_execution.copy_plugins` makes a private copy and returns
 effective IDs. Profiles record enabled/excluded IDs, expose
 `ctx.state["enabled_plugins"]` and `ctx.server.enabled_plugins`, and ledger notes

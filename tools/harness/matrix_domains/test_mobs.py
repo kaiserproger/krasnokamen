@@ -15,7 +15,7 @@ from ._mob_contracts import CONTRACTS
 from ._mob_loot import _condition, bounds
 from . import mobs, spawning, villagers, settlements
 
-VANILLA=Path(os.environ.get('SOLARIS_VANILLA_DATA',
+VANILLA=Path(os.environ.get('KRASNOKAMEN_VANILLA_DATA',
     '/run/media/kaiserroman/games/solaris-work/solaris/data/vanilla'))
 
 

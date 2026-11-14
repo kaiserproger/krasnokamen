@@ -20,7 +20,7 @@ is explicit offline conversion ([ADR 0013](0013-core-model-v2.md)).
 
 ## Explicit operator revision upgrade
 
-With the server stopped, `solaris-v2 --config server.toml world upgrade-worldgen`
+With the server stopped, `krasnokamen --config server.toml world upgrade-worldgen`
 permits an older revision only when the remaining identity, including seed,
 format and dimension geometry, matches. It updates the header and generation
 and dimension records in one durable transaction. Existing chunks and gameplay
