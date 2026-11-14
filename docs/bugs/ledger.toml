@@ -3687,7 +3687,8 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/BvDeathTilt (native scene-shot base vs candidate, death-tilt-base-vs-candidate.png; fix death-tilt.patch 642165ec on client wt/ClientBattleIntegration 45ceeaf with entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve and entities::crowd::tests::dying_crowd_instances_tilt_about_the_feet_like_the_cpu_pose)"
-regression = []
+regression = ["harness:scene-shot:native-death-tilt"]
+failing_first = "reported"
 
 [[bug]]
 id = "NATIVE-POTION-IMPACT-EFFECT"
