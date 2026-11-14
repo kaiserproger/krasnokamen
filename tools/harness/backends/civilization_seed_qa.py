@@ -405,7 +405,7 @@ def fund(probe: ProbeSteps, detail: dict[str, Any], server: Any,
     })
     probe.call("minecraft_close_screen", {})
 
-def building_blocks(probe: ProbeSteps, lines: list[str]) -> list[dict[str, Any]]:
+def building_blocks(probe: ProbeSteps, lines: list[str], server: Any) -> list[dict[str, Any]]:
     evidence = []
     for building in village._listed_buildings(lines)[:30]:
         if building["natural"]:
@@ -415,10 +415,36 @@ def building_blocks(probe: ProbeSteps, lines: list[str]) -> list[dict[str, Any]]
         if volume > 4096:
             evidence.append({"building": building, "skipped": "scan volume exceeds 4096"})
             continue
-        scan = probe.call("minecraft_scan_blocks", {
-            "min_x": lo[0], "min_y": lo[1], "min_z": lo[2],
-            "max_x": hi[0], "max_y": hi[1], "max_z": hi[2],
-        })
+        initial = probe.observe()["player"]
+        remote = max(abs(coord - initial[axis]) for coord, axis in (
+            (lo[0], "x"), (hi[0], "x"), (lo[2], "z"), (hi[2], "z"))) > 48
+        try:
+            if remote:
+                destination = ((lo[0] + hi[0]) / 2, hi[1] + 3, (lo[2] + hi[2]) / 2)
+                item_merge._console(server, f"tp {village.USERNAME} {destination[0]} {destination[1]} {destination[2]}")
+                probe.wait(lambda state: all(abs(state["player"][axis] - value) < 1
+                                             for axis, value in zip(("x", "y", "z"), destination)),
+                           "building_scan_observer_arrived")
+                for x in range(lo[0] // 16, hi[0] // 16 + 1):
+                    for z in range(lo[2] // 16, hi[2] // 16 + 1):
+                        probe.call("minecraft_wait_for_loaded_block", {
+                            "x": max(lo[0], x * 16), "y": lo[1], "z": max(lo[2], z * 16),
+                            "timeout_seconds": min(120.0, probe.remaining()),
+                        })
+            scan = probe.call("minecraft_scan_blocks", {
+                "min_x": lo[0], "min_y": lo[1], "min_z": lo[2],
+                "max_x": hi[0], "max_y": hi[1], "max_z": hi[2],
+            })
+        finally:
+            if remote:
+                item_merge._console(server, f"tp {village.USERNAME} {initial['x']} {initial['y']} {initial['z']}")
+                probe.wait(lambda state: all(abs(state["player"][axis] - initial[axis]) < 1
+                                             for axis in ("x", "y", "z")),
+                           "building_scan_observer_returned")
+                probe.call("minecraft_wait_for_loaded_block", {
+                    **{axis: math.floor(initial[axis]) for axis in ("x", "y", "z")},
+                    "timeout_seconds": min(120.0, probe.remaining()),
+                })
         relevant = [block for block in scan.get("blocks", [])
                     if str(block.get("block_id", "")).endswith(("_bed", "_door", ":furnace", ":blast_furnace"))]
         evidence.append({"building": building, "blocks": relevant, "truncated": scan.get("truncated", False),
@@ -660,7 +686,7 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
             projects.append(project)
         entities = entity_census(probe)
         ecology = village._probe_ecology(probe, detail, status["buildings_now"], entities=entities)
-        blocks = building_blocks(probe, status["buildings_now"])
+        blocks = building_blocks(probe, status["buildings_now"], server)
         workstations = workstation_blocks(probe, chest)
         workstation_shots = []
         for furnace in workstations:

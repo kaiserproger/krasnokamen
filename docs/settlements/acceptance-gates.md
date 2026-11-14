@@ -33,6 +33,13 @@ Building evidence requires a new non-natural certificate and an observed planner
 
 For House, second-building and baby captures the observer walks to the target, aims, and requires the client's crosshair raycast to identify the bed, a block within the building bounds, or the baby UUID respectively; it then walks back to the observation position. An obstructed or unreachable target fails rather than claiming a screenshot of it. Reviewers still check the resulting pixels.
 
+For a certified building farther than 48 blocks from the creative observer, the
+building-evidence scan temporarily teleports the observer above it, waits for
+every intersecting client chunk to load, scans the actual client blocks, then
+returns the observer and waits for the original chunk. These fixture teleports
+can affect which chunks are simulated; the run does not prove an uninterrupted
+stationary-observer path.
+
 ### Negative controls
 
 Run the same seed-24, fresh-world, windowed `civilization-seed-qa` command with an immutable `pin-release` server built from local `main` before the wave/civ ration-starvation and mixed-wood funding fixes. Keep the same client, snapshot reader, stock, observation bounds and timeout. The old server must fail a construction/growth milestone or the sustained-stall oracle; a startup or prerequisite failure is not evidence that the gate detects these bugs. Retain both `result.json` and the scenario observations.
