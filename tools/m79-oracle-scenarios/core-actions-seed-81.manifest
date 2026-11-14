@@ -1,5 +1,5 @@
 id=core-actions-seed-81
-title=Checked core-action manifest Solaris-vs-vanilla parity
+title=Checked core-action manifest Krasnokamen-vs-vanilla parity
 quality=stabilization
 rows=Q1,Q3
 kind=cargo-ignored-test
@@ -10,4 +10,4 @@ requires=tools/core-replay-scenarios/core-actions-seed-81.json
 consumes=.analysis/server.jar
 consumes=tools/core-replay-scenarios/core-actions-seed-81.json
 success_marker=M79_CORE_REPLAY_COMPARISON_OK core-actions-seed-81
-description=Loads the canonical versioned seed/action/invariant manifest, executes its protocol actions against fresh vanilla and Solaris servers, and diffs normalized observations.
+description=Loads the canonical versioned seed/action/invariant manifest, executes its protocol actions against fresh vanilla and Krasnokamen servers, and diffs normalized observations.

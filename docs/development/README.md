@@ -1,6 +1,6 @@
 # Development playbooks
 
-How Solaris is developed on the owner's machine: procedures, pitfalls and
+How Krasnokamen is developed on the owner's machine: procedures, pitfalls and
 lessons that used to live only in agent skills, prompts and local memory.
 Rules come first from [AGENTS.md](../../AGENTS.md) (with the verbatim
 [owner contract](owner-contract.md)), the
@@ -39,15 +39,15 @@ newest rule and says what it replaced.
 
 - `<work>` is the owner host's work root,
   `/run/media/kaiserroman/games/solaris-work` (AGENTS.md), holding the sibling
-  checkouts (`solaris`, `solaris-client`, `solaris-loader`,
-  `solaris-default-plugins`), agent worktrees `wt/`, build outputs `targets/`
+  checkouts (`krasnokamen`, `krasnokamen-client`, `krasnokamen-loader`,
+  `krasnokamen-default-plugins`), agent worktrees `wt/`, build outputs `targets/`
   and agent receipts `receipts/`. Pages written for the owner host say so;
   elsewhere use your own paths.
 - Developer scripts are tracked under `tools/dev/` (the runner `mem-run.sh`, its
   `heavy-watchdog.py`, `scene-slot.sh`, `instrumentation-guard.py`, the
   test-server scripts in `tools/dev/test-server/` and the Windows-guest driver
   in `tools/dev/winqa/`).
-- The public test server is addressed through `SOLARIS_TEST_HOST`; its address,
+- The public test server is addressed through `KRASNOKAMEN_TEST_HOST`; its address,
   SSH access and all credentials are held by the owner and never written here.
 - Local run state (cursor, queues, receipts, committee answers, logs) stays in
   ignored `.analysis/`; it is optional, not documentation and not startup

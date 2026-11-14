@@ -847,7 +847,7 @@ fn spawned_mobs_tick_and_appear_in_snapshot() {
     assert!(types.contains(&zombie));
     assert!(types.contains(&cow));
     // Other clients spawn a player view as `minecraft:player` (registry id), not a guess.
-    let player_type = mc_data::entity_types::solaris_required_entity_types()
+    let player_type = mc_data::entity_types::krasnokamen_required_entity_types()
         .id_of(&mc_data::Identifier::parse("minecraft:player").unwrap())
         .unwrap();
     assert_eq!(
@@ -6100,7 +6100,7 @@ fn sign_placement_opens_owned_editor_and_text_is_journaled() {
         |c| matches!(c, PlayerChange::SignEditorOpened { position, .. } if *position == target)
     ));
     let lines = vec![
-        "Solaris".to_owned(),
+        "Krasnokamen".to_owned(),
         "survival".to_owned(),
         "".to_owned(),
         "".to_owned(),

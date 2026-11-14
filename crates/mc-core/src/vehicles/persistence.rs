@@ -195,14 +195,14 @@ pub(crate) fn from_record(
         }
         v.enabled = *enabled != 0;
     }
-    if let Some(tag) = unique(fields, "solaris:VehicleTransferCooldown")? {
+    if let Some(tag) = unique(fields, "krasnokamen:VehicleTransferCooldown")? {
         let Tag::Int(cooldown) = tag else {
             return Err(error(
-                "vehicle solaris:VehicleTransferCooldown: expected int",
+                "vehicle krasnokamen:VehicleTransferCooldown: expected int",
             ));
         };
         v.transfer_cooldown = u8::try_from(*cooldown)
-            .map_err(|_| error("vehicle solaris:VehicleTransferCooldown: expected u8"))?;
+            .map_err(|_| error("vehicle krasnokamen:VehicleTransferCooldown: expected u8"))?;
     }
     validate_kind(&v, &record.id).map_err(error)?;
     super::loot::validate(&v).map_err(error)?;
@@ -266,7 +266,7 @@ pub(crate) fn to_fields(
     }
     if v.transfer_cooldown != 0 {
         fields.push((
-            "solaris:VehicleTransferCooldown".into(),
+            "krasnokamen:VehicleTransferCooldown".into(),
             Tag::Int(i32::from(v.transfer_cooldown)),
         ));
     }
