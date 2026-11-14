@@ -105,7 +105,7 @@ pub(crate) fn entity(state: &TickState, id: EntityId) -> Result<Tag, String> {
 }
 
 /// A block entity's full native image: public NBT plus the private native
-/// fields, with live inventory, furnace, brewing, campfire and jukebox state.
+/// fields, with live inventory, furnace, brewing, campfire, jukebox and spawner state.
 pub(crate) fn block_image(
     state: &TickState,
     pos: BlockPos,
@@ -233,6 +233,13 @@ pub(crate) fn block_image(
     if let Some(jukebox) = state.jukeboxes.get(&key) {
         fields.retain(|(key, _)| key != "RecordItem" && key != "ticks_since_song_started");
         fields.extend(jukebox.data_fields(&state.registry.items));
+    }
+    if kind == BlockEntityKind::MobSpawner
+        && let Some(spawner) = state.monster_spawners.data_fields(pos, state.tick)
+    {
+        for (name, value) in spawner {
+            put(&mut fields, &name, value);
+        }
     }
     Ok((kind, fields))
 }
