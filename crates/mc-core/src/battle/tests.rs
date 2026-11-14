@@ -647,21 +647,98 @@ fn native_battle_arrows_clear_allied_ranks_without_changing_unaffiliated_hits() 
 /// gate. Build in the ordinary lane; run its frozen release test binary in -p
 /// with MC_CORE_PHASE_LOG=1 and retain host load alongside the receipt.
 #[test]
-#[ignore = "release battle phase diagnostic; run in the perf lane"]
-fn battle_phase_micro() {
-    assert!(std::env::var_os("MC_CORE_PHASE_LOG").is_some());
-    let side =
-        std::env::var("BATTLE_UNITS_PER_SIDE").map_or(10_000, |value| value.parse().unwrap());
-    let ticks =
-        std::env::var("BATTLE_MICRO_TICKS").map_or(200, |value| value.parse::<usize>().unwrap());
-    assert!(ticks > 0);
+fn native_battle_arrows_clear_allied_ranks_without_changing_unaffiliated_hits() {
+    for (owner_faction, near_faction, near_hit, player) in [
+        (1, 1, false, false),
+        (1, 2, true, false),
+        (0, 0, true, false),
+        (1, 1, true, true),
+    ] {
+        let mut state = fixture();
+        let chunks = (0..=8)
+            .map(|z| (crate::boundary::ChunkPos { x: 0, z }, 0))
+            .collect();
+        state.world.ensure_blocking(&chunks);
+        for z in 0..=8 {
+            state.tickets.insert(
+                format!("battle-arrow-regression-{z}"),
+                (crate::boundary::ChunkPos { x: 0, z }, 0),
+            );
+        }
+        state.refresh_active_chunks(state.tick);
+        let owner = spawn(
+            &mut state,
+            owner_faction,
+            "minecraft:husk",
+            [8.5, 64.0, 8.5],
+        );
+        let near = if player {
+            let connection = crate::boundary::ConnectionId(1);
+            crate::tick::run_tick(
+                &mut state,
+                &[crate::boundary::PlayerInput::Join {
+                    connection,
+                    uuid: uuid::Uuid::new_v4(),
+                    name: "battle-arrow-player".into(),
+                    permission_level: 0,
+                }],
+            );
+            let id = state.connections.entity_of(connection).unwrap();
+            let slot = state.entities.slot_of(id).unwrap();
+            state.entities.set_pos(slot, [8.5, 64.0, 10.5]);
+            state.entities.set_faction(slot, near_faction);
+            state.entities.row_mut(slot).protected_until = 0;
+            id
+        } else {
+            spawn(
+                &mut state,
+                near_faction,
+                "minecraft:husk",
+                [8.5, 64.0, 10.5],
+            )
+        };
+        let enemy = spawn(&mut state, 2, "minecraft:husk", [8.5, 64.0, 128.5]);
+        for id in [owner, near, enemy] {
+            let slot = state.entities.slot_of(id).unwrap();
+            let row = state.entities.row_mut(slot);
+            row.controls.no_ai = true;
+            row.persistent = true;
+        }
+        let owner_slot = state.entities.slot_of(owner).unwrap();
+        let mut from = state.entities.pos(owner_slot);
+        from[1] += state.entities.body(owner_slot).height * 0.85;
+        let (velocity, _) = archery::aimed_arc(from, [8.5, 64.8, 128.5]).unwrap();
+        crate::hostile::launch_arrow(&mut state, owner, from, velocity, 2.0).unwrap();
+        let mut near_damage = 0;
+        let mut enemy_damage = 0;
+        for _ in 0..90 {
+            let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+            for event in &output.changes.entity_events {
+                if let crate::boundary::EntityEvent::Damage { entity, .. } = event {
+                    near_damage += usize::from(*entity == near);
+                    enemy_damage += usize::from(*entity == enemy);
+                }
+            }
+        }
+        assert_eq!(
+            near_damage > 0,
+            near_hit,
+            "owner={owner_faction} near={near_faction}"
+        );
+        assert_eq!(
+            enemy_damage > 0,
+            !near_hit,
+            "owner={owner_faction} near={near_faction}"
+        );
+    }
+}
+
+fn staged_flat_fixture(side: usize) -> crate::tick::TickState {
     let mut state = fixture();
-    let mut changes = crate::boundary::ChangeSet::default();
-    let origin = [8.5, 64.0, 8.5];
     staging::execute(
         &mut state,
-        &mut changes,
-        origin,
+        &mut crate::boundary::ChangeSet::default(),
+        [8.5, 64.0, 8.5],
         &staging::BattleCommand::Setup {
             seed: 42,
             count: side,
@@ -674,6 +751,110 @@ fn battle_phase_micro() {
     for _ in 0..8 {
         crate::tick::run_tick(&mut state, &[]);
     }
+    state
+}
+
+fn melee_contact(battle: &BattleState) -> bool {
+    battle.formation.regiments.iter().any(|regiment| {
+        !battle.columns.ranged[regiment.start]
+            && regiment.enemy.is_some()
+            && regiment.gap <= 6.0
+            && !regiment.morale.broken
+            && regiment.live_count > 0
+    })
+}
+
+fn native_battle_losses(state: &crate::tick::TickState) -> ([usize; 2], [usize; 2], usize) {
+    let mut dead = [0; 2];
+    let mut removed = [0; 2];
+    let mut native_wounds = 0;
+    for member in &state.hostile.battle.formation.members {
+        let faction = state.hostile.battle.formation.regiments[member.regiment]
+            .spec
+            .faction;
+        let i = usize::from(faction - 1);
+        let health = state
+            .entities
+            .slot_of(member.id)
+            .map(|slot| state.entities.row(slot).health)
+            .filter(|health| *health > 0.0);
+        dead[i] += usize::from(health.is_none());
+        removed[i] += usize::from(health.is_none() || member.wounded);
+        native_wounds += usize::from(member.wounded && health.is_some_and(|health| health < 20.0));
+    }
+    (dead, removed, native_wounds)
+}
+
+fn log_attrition(state: &crate::tick::TickState, elapsed: usize, engaged_ticks: u64) {
+    let (dead, removed, native_wounds) = native_battle_losses(state);
+    let minutes = engaged_ticks as f64 / (20.0 * 60.0);
+    if minutes > 0.0 {
+        eprintln!(
+            "BATTLE_ATTRITION elapsed={elapsed} engaged_ticks={engaged_ticks} native_deaths={dead:?} removed={removed:?} native_wounds={native_wounds} deaths_per_engaged_minute={:?} removals_per_engaged_minute={:?}",
+            dead.map(|count| count as f64 / minutes),
+            removed.map(|count| count as f64 / minutes)
+        );
+    }
+}
+
+#[test]
+#[ignore = "20k native three-minute contact regression; run in release"]
+fn battle20k_loses_frontline_men_within_three_engaged_minutes() {
+    let mut state = staged_flat_fixture(10_000);
+    staging::execute(
+        &mut state,
+        &mut crate::boundary::ChangeSet::default(),
+        [8.5, 64.0, 8.5],
+        &staging::BattleCommand::Start,
+    )
+    .unwrap();
+    let mut engaged_ticks = 0;
+    let mut melee_kills = 0;
+    let mut wounds = 0;
+    for _ in 0..4_200 {
+        crate::tick::run_tick(&mut state, &[]);
+        engaged_ticks += u64::from(melee_contact(&state.hostile.battle));
+        melee_kills += state.hostile.battle.combat.work.killed;
+        wounds += state.hostile.battle.combat.work.wounded;
+        if engaged_ticks == 3_600 {
+            break;
+        }
+    }
+    let (dead, removed, native_wounds) = native_battle_losses(&state);
+    log_attrition(
+        &state,
+        state.hostile.battle.elapsed_ticks as usize,
+        engaged_ticks,
+    );
+    assert!(engaged_ticks > 0, "armies never reached melee contact");
+    assert!(
+        melee_kills >= 4,
+        "melee_kills={melee_kills} wounds={wounds}"
+    );
+    assert!(wounds >= 50, "melee_kills={melee_kills} wounds={wounds}");
+    assert!(
+        native_wounds >= 20,
+        "no native health loss for {wounds} wounds"
+    );
+    assert!(dead.into_iter().all(|count| count > 0), "{dead:?}");
+    assert!(removed.into_iter().all(|count| count >= 20), "{removed:?}");
+}
+
+/// In-process native tick diagnostic, not a paced/networked TPS or checkpoint
+/// gate. Build in the ordinary lane; run its frozen release test binary in -p
+/// with MC_CORE_PHASE_LOG=1 and retain host load alongside the receipt.
+#[test]
+#[ignore = "release battle phase diagnostic; run in the perf lane"]
+fn battle_phase_micro() {
+    assert!(std::env::var_os("MC_CORE_PHASE_LOG").is_some());
+    let side =
+        std::env::var("BATTLE_UNITS_PER_SIDE").map_or(10_000, |value| value.parse().unwrap());
+    let ticks =
+        std::env::var("BATTLE_MICRO_TICKS").map_or(200, |value| value.parse::<usize>().unwrap());
+    assert!(ticks > 0);
+    let mut state = staged_flat_fixture(side);
+    let mut changes = crate::boundary::ChangeSet::default();
+    let origin = [8.5, 64.0, 8.5];
     for running in [false, true] {
         if running {
             staging::execute(

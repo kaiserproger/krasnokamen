@@ -33,6 +33,8 @@ pub(super) struct Hittable {
     min: [f64; 3],
     max: [f64; 3],
     item: bool,
+    /// Frozen mob allegiance; players and vanilla/unaffiliated bodies stay zero.
+    battle_faction: u16,
 }
 
 #[cfg(test)]
@@ -112,6 +114,7 @@ fn hittables_from_slots(
                     id: part,
                     uuid,
                     item: false,
+                    battle_faction: 0,
                     deployed_candidate: false,
                     min,
                     max,
@@ -1261,6 +1264,15 @@ fn step(
     };
     let reach = block_hit.map_or(1.0, |(t, _)| t);
     let owner = super::owner_id(state, record);
+    let battle_faction = if record.kind.arrow() {
+        owner
+            .and_then(|owner| state.entities.slot_of_any(owner))
+            .map(|slot| state.entities.body(slot))
+            .filter(|body| matches!(body.kind, EntityKind::Mob { .. }))
+            .map_or(0, |body| body.faction)
+    } else {
+        0
+    };
     if !(record.kind == ProjectileKind::Trident && (!record.hit.is_empty() || record.returning)) {
         loop {
             let victim = candidates
@@ -1268,6 +1280,10 @@ fn step(
                 .map(|&index| &bodies[index])
                 .filter(|body| !body.item || record.kind == ProjectileKind::FishingHook)
                 .filter(|body| Some(body.uuid) != record.owner && !record.hit.contains(&body.uuid))
+                // Battle volleys cross their own ranks just as a scoreboard
+                // team with friendlyFire=false does; ordinary arrows and player
+                // targets retain the existing collision and scoreboard rules.
+                .filter(|body| battle_faction == 0 || body.battle_faction != battle_faction)
                 .filter(|body| {
                     owner.is_none_or(|owner| {
                         crate::scoreboard::permits_player_damage(state, owner, body.id)

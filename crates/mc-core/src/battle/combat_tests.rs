@@ -183,7 +183,7 @@ fn shield_window_is_inclusive_and_parry_staggers_without_damage() {
 fn calibration_has_thirteen_per_thousand_removals_nine_wounded_per_death() {
     let mut counts = [0; 3];
     for sample in 0..10_000 {
-        counts[match outcome(sample, false, 0.0) {
+        counts[match outcome(sample, false, 0.0, 1.0) {
             Outcome::Glance => 0,
             Outcome::Wound => 1,
             Outcome::Kill => 2,
@@ -192,10 +192,33 @@ fn calibration_has_thirteen_per_thousand_removals_nine_wounded_per_death() {
     assert_eq!(counts, [9870, 117, 13]);
     assert_eq!(
         (0..10_000)
-            .filter(|r| outcome(*r, true, 0.0) == Outcome::Kill)
+            .filter(|r| outcome(*r, true, 0.0, 1.0) == Outcome::Kill)
             .count(),
         900
     );
+}
+
+#[test]
+fn three_minute_film_calibration_accounts_for_deployed_frontage_and_army_size() {
+    let reference_width = FactionFront::scale(10_000, 600);
+    let staged_width = FactionFront::scale(10_000, 215);
+    assert!(staged_width > reference_width);
+    assert_eq!(FactionFront::scale(1_000, 60), reference_width);
+    assert_eq!(FactionFront::scale(10_000, 0), 1.0);
+    let mut counts = [0; 3];
+    for sample in 0..10_000 {
+        counts[match outcome(sample, false, 0.0, staged_width) {
+            Outcome::Glance => 0,
+            Outcome::Wound => 1,
+            Outcome::Kill => 2,
+        }] += 1;
+    }
+    assert_eq!(counts, [8790, 1089, 121]);
+    // Outcome calibration must not compress the human animation clocks.
+    assert_eq!(Weapon::Sword.windup(), 10);
+    assert_eq!(Weapon::Sword.cycle(), 21);
+    assert_eq!(Weapon::Spear.windup(), 11);
+    assert_eq!(Weapon::Mace.windup(), 12);
 }
 
 #[test]

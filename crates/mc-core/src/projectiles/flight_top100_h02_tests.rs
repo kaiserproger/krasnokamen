@@ -798,6 +798,7 @@ fn fine_grid_twenty_thousand_bodies_bounds_work_and_rejects_other_heights() {
                 uuid: Uuid::from_u128(i as u128 + 1),
                 deployed_candidate: false,
                 item: false,
+                battle_faction: 0,
                 min: [x - 0.3, y, z - 0.3],
                 max: [x + 0.3, y + 1.8, z + 0.3],
             }
@@ -875,6 +876,7 @@ fn fine_grid_includes_wide_bodies_across_negative_cell_edges_and_bounds_sparse_s
         uuid: Uuid::from_u128(1),
         deployed_candidate: false,
         item: false,
+        battle_faction: 0,
         min: [-9.0, 64.0, -3.0],
         max: [3.0, 70.0, 9.0],
     }];
@@ -899,6 +901,7 @@ fn fine_grid_includes_wide_bodies_across_negative_cell_edges_and_bounds_sparse_s
         uuid: Uuid::from_u128(2),
         deployed_candidate: false,
         item: false,
+        battle_faction: 0,
         min: [29_999_999.0, 64.0, 29_999_999.0],
         max: [30_000_000.0, 66.0, 30_000_000.0],
     });
