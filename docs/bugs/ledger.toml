@@ -1862,7 +1862,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-HOVER Fix patch: reversing it makes the list print plain pack names instead of hover chat links."
 regression = ["cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover"]
 fix_commit = "patch:61916b68f2759fa892f3eedc6158c06aa19d47274e877ab607e220a850d0593a"
-repro_check = "control receipts/XCoreCommands/negative-control.log (reverse of the recorded patch -> red at datapack_commands_tests.rs:185: plain text(id) names carry no link/hover, the symptom); the ref needs test helper df2766ffb on wt/XCoreCommands"
+repro_check = "control receipts/XCoreCommands/negative-control.log (reverse of the recorded patch -> red at datapack_commands_tests.rs:185: plain text(id) names carry no link/hover, the symptom); the ref needs test helper df2766ffb on wt/XCoreCommands; candidate: real-client check required (repro=manual)"
 
 [[bug]]
 id = "BEE-FLOWER-TABLE"
@@ -5283,7 +5283,7 @@ status = "open"
 source = "BreakB10Commands round 3 H3 (REBREAK3.md). The listing now keeps a selected pack that failed to scan, with the load error as its hover."
 regression = ["cargo:mc-core:datapacks::command_tests::the_list_keeps_a_selected_pack_whose_pack_mcmeta_broke", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:4b74ef2fefca7443e10acdf6e42eb5d4a52250cb4d7b4674b0c54b97dc5246fb"
-repro_check = "control receipts/XCoreCommands/negative-control.log (recorded patch reversed -> red at datapack_commands_tests.rs:1747, the still-selected pack is dropped); needs df2766ffb"
+repro_check = "control receipts/XCoreCommands/negative-control.log (recorded patch reversed -> red at datapack_commands_tests.rs:1747, the still-selected pack is dropped); needs df2766ffb; candidate: real-client check required (repro=manual)"
 
 [[bug]]
 id = "DATAPACK-DISABLE-SKIPPED-PACK-UNKNOWN"
