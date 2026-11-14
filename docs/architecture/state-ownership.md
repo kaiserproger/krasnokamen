@@ -190,6 +190,8 @@ A routed core `/team` add implicitly moves an entry and the edge forgets
 that projected membership without sending a removal. Holds end only by
 `battle reset` or a restart (`spectate` and going offline keep them).
 `battle reset` removes staged rows, but summoned faction rows keep their team.
+An ex-holder keeps the projected team's hidden nameplate and team colour while
+that team survives a reset, until the team leaves.
 Nameplates are always hidden for projected teams, including with hidden HUD;
 options enable friendly fire but not see-friendly-invisibles.
 No `/team` command can name a team

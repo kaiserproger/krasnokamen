@@ -12,8 +12,8 @@
 //! - removing an entry from a team that does not hold it throws, which
 //!   disconnects. The projection never sends method 4: entries stay until
 //!   their team is removed, or an add moves them. The core's entry-free rule
-//!   (`mc_core::scoreboard::require_no_team`) keeps active faction entries out
-//!   of `/team`; [`release_for_core_team`] forgets entries moved by a core add;
+//!   rejects faction admission for `/team` entries and rejects `/team join`
+//!   for active faction entries; [`forget_for_core_team`] tracks core adds;
 //! - the scoreboard outlives respawns and dimension changes;
 //! - a team member's nameplate follows the team's nametag visibility before
 //!   the hidden-HUD check, so these teams use `never`.
@@ -304,13 +304,13 @@ pub(crate) fn plan_teams(
             push_reliable(out, connection, &team(faction, CREATE, Vec::new()));
             teams.created.insert(at, faction);
         }
-        push_members(out, connection, faction, ADD, members);
+        push_members(out, connection, faction, members);
     }
 }
 
-/// Forget entries moved by a core team add. Vanilla moves them implicitly;
-/// no projected removal may precede or follow the add.
-pub(crate) fn release_for_core_team(
+/// Forget entries moved by a core team add. Vanilla performs the move;
+/// the projection only updates its baseline, without an entry-removal packet.
+pub(crate) fn forget_for_core_team(
     event: &mc_core::scoreboard::ScoreboardEvent,
     viewer: &mut ViewerState,
 ) {
@@ -327,7 +327,7 @@ pub(crate) fn release_for_core_team(
         return;
     }
     for member in members {
-        // The entry exactly as it was sent: a mob's hyphenated lowercase UUID.
+        // UUID spelling variants share a baseline key; player names stay exact.
         match Uuid::try_parse(member) {
             Ok(uuid) => {
                 teams.mobs.remove(&uuid);
@@ -344,13 +344,12 @@ fn push_members(
     out: &mut Vec<PlannedPacket>,
     connection: mc_core::boundary::ConnectionId,
     faction: u16,
-    method: u8,
     mut members: Vec<String>,
 ) {
     while !members.is_empty() {
         let rest = members.split_off(members.len().min(MEMBERS_PER_PACKET));
         let chunk = std::mem::replace(&mut members, rest);
-        push_reliable(out, connection, &team(faction, method, chunk));
+        push_reliable(out, connection, &team(faction, ADD, chunk));
     }
 }
 

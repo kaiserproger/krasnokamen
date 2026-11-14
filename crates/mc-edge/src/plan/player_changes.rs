@@ -267,7 +267,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
         PlayerChange::Scoreboard { events } => {
             let start = out.len();
             for event in events.iter() {
-                crate::faction_teams::release_for_core_team(event, viewer);
+                crate::faction_teams::forget_for_core_team(event, viewer);
                 push_scoreboard_event(out, conn, event.clone());
             }
             merge_frames(out, start);
