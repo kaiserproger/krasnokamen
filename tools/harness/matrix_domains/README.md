@@ -85,10 +85,10 @@ artifact. Restart logs append; they are never truncated.
 With the protocol worktree as cwd (all paths below are on the games disk):
 
 ```sh
-SOLARIS_VALIDATION_ROOT=/run/media/kaiserroman/games/solaris-work/scenarios/runs/RunProto \
+KRASNOKAMEN_VALIDATION_ROOT=/run/media/kaiserroman/games/solaris-work/scenarios/runs/RunProto \
 /home/kaiserroman/solaris/.analysis/tools/mem-run.sh -m 6G \
 python3 -m tools.harness run protocol-matrix \
-  --server-bin /run/media/kaiserroman/games/solaris-work/targets/Hotfix/release/solaris-v2 \
+  --server-bin /run/media/kaiserroman/games/solaris-work/targets/Hotfix/release/krasnokamen \
   --plugins-dir /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins \
   --vanilla-data /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla \
   --matrix /run/media/kaiserroman/games/solaris-work/scenarios/matrix.yaml \
@@ -110,7 +110,7 @@ Native matrix client startup that reports a missing content file is recorded as
 blocked, not as an executed scenario failure. Other client exits remain failures.
 An unoverridden native-matrix run uses the checked-in frozen matrix and writes
 its ledger and run root under its own receipt directory. Set
-`SOLARIS_SERVER_BINARY` and `SOLARIS_MATRIX_PLUGINS_DIR` for this mode.
+`KRASNOKAMEN_SERVER_BINARY` and `KRASNOKAMEN_MATRIX_PLUGINS_DIR` for this mode.
 Each exercised row publishes `details.verdicts["26.3.<scenario id>"]`, while
 `blocked_rows` and `failed_rows` distinguish declared transport blockers from
 other incomplete outcomes. A false or absent verdict is not a pass.
@@ -144,7 +144,7 @@ Default package selection is the complete supplied live set. A row may declare
 `exclude_plugins: [graves]`; a domain may use
 `Adapter(setup, act, oracle, exclude_plugins=("graves",))`; a supplemental probe
 may use `--exclude-plugin graves`. Selection uses actual `plugin.toml` **IDs**
-(computer's ID is `solaris`), not guessed directory names. Unknown exclusions
+(computer's ID is `krasnokamen`), not guessed directory names. Unknown exclusions
 fail. Shared `matrix_execution.copy_plugins` makes a private copy and returns
 effective IDs. Profiles record enabled/excluded IDs, expose
 `ctx.state["enabled_plugins"]` and `ctx.server.enabled_plugins`, and ledger notes

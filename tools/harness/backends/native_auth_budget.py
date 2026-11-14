@@ -1,9 +1,9 @@
-"""solaris-auth register and login complete on a native client (AUTH-BUDGET).
+"""krasnokamen-auth register and login complete on a native client (AUTH-BUDGET).
 
 The plugin hashes passwords with Argon2id inside a host import, which takes far more
 than the old 100 ms (four 25 ms epochs) wall-clock allowance of one callback; the
 host then retired the plugin and the locked player never authenticated. The real
-`solaris-auth` package runs behind the native login gate: ordinary chat is refused
+`krasnokamen-auth` package runs behind the native login gate: ordinary chat is refused
 until `/register` (and, after a reconnect, `/login`) unlocks the session, so a chat
 echo that arrives proves the unlock.
 """

@@ -251,7 +251,7 @@ fn restored_sensor_retains_its_frequency_and_active_deadline() {
         ),
         ("last_vibration_frequency".into(), mc_nbt::Tag::Int(7)),
         (
-            "solaris:phase_until".into(),
+            "krasnokamen:phase_until".into(),
             mc_nbt::Tag::Long((rig.state.tick + 20) as i64),
         ),
     ]);
@@ -486,7 +486,7 @@ fn retention_prunes_by_count_then_age() {
 }
 
 fn required_blocks() -> mc_world::BlockRegistry {
-    mc_world::BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+    mc_world::BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
         .expect("required blocks")
 }
 
@@ -501,7 +501,7 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
         mc_world::native::NativeStore::create(&directory.path().join("state.redb"), [7; 32])
             .expect("store");
     let blocks = required_blocks();
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let now = unix_now();
     let stone = |seq| Record {
         change: Change::Block {
@@ -577,7 +577,7 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
 /// still reads them back as the same blocks and items.
 #[test]
 fn table_rows_survive_runtime_id_reordering() {
-    let report = mc_data::blocks::solaris_required_blocks_report();
+    let report = mc_data::blocks::krasnokamen_required_blocks_report();
     let old = mc_world::BlockRegistry::from_report(&report).expect("blocks");
     let mut next = 0;
     let renumbered: Vec<_> = report
@@ -716,9 +716,9 @@ fn table_row_with_unknown_name_fails_load() {
     let store =
         mc_world::native::NativeStore::create(&directory.path().join("state.redb"), [7; 32])
             .expect("store");
-    let report = mc_data::blocks::solaris_required_blocks_report();
+    let report = mc_data::blocks::krasnokamen_required_blocks_report();
     let blocks = mc_world::BlockRegistry::from_report(&report).expect("blocks");
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let diamond = items.id_of(&id("minecraft:diamond")).expect("diamond");
     let chest = blocks
         .block(&id("minecraft:chest"))

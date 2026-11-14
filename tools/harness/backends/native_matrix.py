@@ -247,7 +247,7 @@ class Lane:
         self.wal_checkpoint_baseline: str | None=None
         self.health: HealthInterval | None = None
         self.host = ProtocolServer(binary=binary, run_dir=directory, port=port,
-            vanilla_data=Path(os.environ.get('SOLARIS_VANILLA_DATA', runtime.REPO_ROOT/'data/vanilla')), seed=81,
+            vanilla_data=Path(os.environ.get('KRASNOKAMEN_VANILLA_DATA', runtime.REPO_ROOT/'data/vanilla')), seed=81,
             plugins_dir=directory/'plugins', server_name='RunNative', view_distance=3,
             startup_timeout_seconds=timeout, command_timeout_seconds=timeout,
             port_range=(26300,26399),
@@ -295,7 +295,7 @@ class Lane:
         play = client.call_tool('minecraft_wait_for_play', {'timeout_seconds': self.timeout})
         if play.get('in_play') is not True:
             raise RuntimeError(f'native client cannot enter Play: {play}')
-        if 'solaris-auth' not in self.host.enabled_plugins:
+        if 'krasnokamen-auth' not in self.host.enabled_plugins:
             return
         client.call_tool('minecraft_send_chat', {'message': 'register native-matrix-test native-matrix-test', 'command': True})
         client.call_tool('minecraft_send_chat', {'message': 'login native-matrix-test', 'command': True})
@@ -603,20 +603,20 @@ def storage(lane: Lane, scenario: dict[str, Any]) -> None:
 def run(ctx: Any) -> dict[str, Any]:
     parser = argparse.ArgumentParser(prog='native-matrix')
     parser.add_argument('--matrix',type=Path,default=Path(os.environ.get(
-        'SOLARIS_MATRIX_PATH', runtime.REPO_ROOT / 'tools/harness/matrix_specs/matrix.yaml')))
+        'KRASNOKAMEN_MATRIX_PATH', runtime.REPO_ROOT / 'tools/harness/matrix_specs/matrix.yaml')))
     parser.add_argument('--ledger',type=Path,default=Path(os.environ.get(
-        'SOLARIS_MATRIX_LEDGER', ctx.artifact_dir / 'matrix-ledger.jsonl')))
+        'KRASNOKAMEN_MATRIX_LEDGER', ctx.artifact_dir / 'matrix-ledger.jsonl')))
     parser.add_argument('--run-root',type=Path,default=Path(os.environ.get(
-        'SOLARIS_MATRIX_RUN_ROOT', ctx.artifact_dir / 'matrix-runs')))
+        'KRASNOKAMEN_MATRIX_RUN_ROOT', ctx.artifact_dir / 'matrix-runs')))
     parser.add_argument('--only-id',action='append',default=[])
     parser.add_argument('--limit',type=int)
     parser.add_argument('--pending',action='store_true')
     parser.add_argument('--exclude-plugin',action='append',default=[])
     args=parser.parse_args(ctx.extra_args)
-    if ctx.server_bin is None and os.environ.get('SOLARIS_SERVER_BINARY'):
-        ctx.server_bin = Path(os.environ['SOLARIS_SERVER_BINARY'])
-    if ctx.plugins_dir is None and os.environ.get('SOLARIS_MATRIX_PLUGINS_DIR'):
-        ctx.plugins_dir = Path(os.environ['SOLARIS_MATRIX_PLUGINS_DIR'])
+    if ctx.server_bin is None and os.environ.get('KRASNOKAMEN_SERVER_BINARY'):
+        ctx.server_bin = Path(os.environ['KRASNOKAMEN_SERVER_BINARY'])
+    if ctx.plugins_dir is None and os.environ.get('KRASNOKAMEN_MATRIX_PLUGINS_DIR'):
+        ctx.plugins_dir = Path(os.environ['KRASNOKAMEN_MATRIX_PLUGINS_DIR'])
     if ctx.client!='native' or not ctx.windowed or ctx.server_bin is None or ctx.plugins_dir is None:
         raise ValueError('native-matrix requires --client native --windowed --server-bin --plugins-dir')
     binary=ctx.server_bin.resolve()
@@ -651,16 +651,16 @@ def run(ctx: Any) -> dict[str, Any]:
     ctx.client_evidence['matrix']=result
     canonical = frozen_native_rows()
     full = (not ctx.extra_args and not any(os.environ.get(name) for name in
-            ('SOLARIS_MATRIX_PATH', 'SOLARIS_MATRIX_LEDGER', 'SOLARIS_MATRIX_RUN_ROOT'))
+            ('KRASNOKAMEN_MATRIX_PATH', 'KRASNOKAMEN_MATRIX_LEDGER', 'KRASNOKAMEN_MATRIX_RUN_ROOT'))
             and all_native == canonical)
     details = ctx.client_evidence
     details.update(matrix_full_run=False, blocked_rows=[], failed_rows=[], verdicts={})
     declared = {row['id']: transport_blocker(row) for row in canonical}
     resource_env={name:os.environ[name] for name in (
-        'SOLARIS_CLIENT_ROOT','SOLARIS_CLIENT_BINARY','SOLARIS_CLIENT_DATA_DIR',
-        'SOLARIS_CLIENT_RESOURCE_ROOT','SOLARIS_CLIENT_ASSET_ROOT','SOLARIS_CLIENT_ASSET_INDEX',
+        'KRASNOKAMEN_CLIENT_ROOT','KRASNOKAMEN_CLIENT_BINARY','KRASNOKAMEN_CLIENT_DATA_DIR',
+        'KRASNOKAMEN_CLIENT_RESOURCE_ROOT','KRASNOKAMEN_CLIENT_ASSET_ROOT','KRASNOKAMEN_CLIENT_ASSET_INDEX',
         'TMPDIR','SA_SCRATCH') if name in os.environ}
-    resource_env['SOLARIS_AUDIO_RECEIPT_DIR']=str(args.run_root.resolve()/'repro-audio')
+    resource_env['KRASNOKAMEN_AUDIO_RECEIPT_DIR']=str(args.run_root.resolve()/'repro-audio')
     result['repro_prefix']=['env','-u','WAYLAND_DISPLAY',*(f'{key}={value}' for key,value in resource_env.items()),
         '/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh','-m','6G','sh',
         str(runtime.REPO_ROOT/'tools/harness/screen_audio_graph.sh'),sys.executable,'-m','tools.harness',

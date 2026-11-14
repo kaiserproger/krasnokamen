@@ -248,7 +248,7 @@ class NativeMatrixTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             log = root / 'client.log'
-            log.write_text('solaris-client: missing content file: /private/facts/block_collision_shapes_26_3.bin\n')
+            log.write_text('krasnokamen-client: missing content file: /private/facts/block_collision_shapes_26_3.bin\n')
             lane = object.__new__(native_matrix.Lane)
             lane.directory, lane.processes = root, []
             lane.ctx = SimpleNamespace(client_evidence={}, commands=[], cwds=[], exits=[], logs=[])

@@ -23,7 +23,7 @@ fn fixture(
     plan
 }
 fn profile(name: &str, grid: &Grid, dem: &[f64], p: &HydrologyPlan) {
-    let Some(directory) = std::env::var_os("SOLARIS_W2_ARTIFACT_DIR") else {
+    let Some(directory) = std::env::var_os("KRASNOKAMEN_W2_ARTIFACT_DIR") else {
         return;
     };
     let directory = std::path::PathBuf::from(directory);
@@ -233,7 +233,7 @@ fn h07_snow_soil_groundwater_and_dry_season_close_the_balance() {
     assert!(p.actual_et_m3[0][3] < 5.0);
     let hydro = fixture("H07", &g, &[10.0], &[false], &p.local_m3);
     assert_eq!(hydro.external_outflow_m3, p.local_m3[0]);
-    if let Some(path) = std::env::var_os("SOLARIS_W2_ARTIFACT_DIR") {
+    if let Some(path) = std::env::var_os("KRASNOKAMEN_W2_ARTIFACT_DIR") {
         let mut csv = String::from(
             "season,precipitation_m3,runoff_m3,et_m3,snow_m3,soil_m3,groundwater_m3\n",
         );
@@ -319,7 +319,7 @@ fn h11_distributaries_split_one_flow_instead_of_copying_it() {
         );
     }
     assert!(split_delta(&p, 2, &[3, 4], &[1.0, 1.0]).is_err());
-    if let Some(directory) = std::env::var_os("SOLARIS_W2_ARTIFACT_DIR") {
+    if let Some(directory) = std::env::var_os("KRASNOKAMEN_W2_ARTIFACT_DIR") {
         let mut csv = String::from(
             "source,receiver,fraction,volume_s0_m3,volume_s1_m3,volume_s2_m3,volume_s3_m3\n",
         );
