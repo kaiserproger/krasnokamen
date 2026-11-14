@@ -54,7 +54,7 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         // Latest routed global roster; seeds fresh viewers' player profiles
         // so a first routed Roster never mass-removes tracked entities.
         let mut latest_roster: Arc<[mc_core::dimensions::RosterPlayer]> = Arc::from(Vec::new());
-        let coreperf = std::env::var_os("SOLARIS_COREPERF_REGIONS").is_some();
+        let coreperf = std::env::var_os("KRASNOKAMEN_COREPERF_REGIONS").is_some();
         loop {
             let out = match rx.recv().await {
                 Ok(out) => out,
@@ -705,7 +705,7 @@ mod roster_seed_tests {
         Arc::new(
             EdgeServer::new(
                 hub,
-                Arc::new(mc_data::solaris_required_data()),
+                Arc::new(mc_data::krasnokamen_required_data()),
                 Arc::default(),
                 cfg,
             )

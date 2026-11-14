@@ -267,7 +267,7 @@
       "max": 0
     }
   ],
-  "known_divergence": "Mobs steer horizontally while airborne in Solaris (the idle-wander drive is applied mid-fall; vanilla creates no new wander path in the air, so an idle mob drops straight). Trace of farm-mob-kill-chamber wave 0 (seed 22): one skeleton drifts x 2.45->1.95, z 2.54->2.95 during the 25-block fall, lands on the glass rim (y=67) instead of the hopper pad, and its drops never reach a hopper (items rest there until the 6000-tick despawn): Solaris collects ~101 of ~128 bones (vanilla 123 +- 6.4). Fall damage, loot tables and hopper pickup match (the same chamber with 100-tick waves collects 123 bones / 114 arrows).",
+  "known_divergence": "Mobs steer horizontally while airborne in Krasnokamen (the idle-wander drive is applied mid-fall; vanilla creates no new wander path in the air, so an idle mob drops straight). Trace of farm-mob-kill-chamber wave 0 (seed 22): one skeleton drifts x 2.45->1.95, z 2.54->2.95 during the 25-block fall, lands on the glass rim (y=67) instead of the hopper pad, and its drops never reach a hopper (items rest there until the 6000-tick despawn): Krasnokamen collects ~101 of ~128 bones (vanilla 123 +- 6.4). Fall damage, loot tables and hopper pickup match (the same chamber with 100-tick waves collects 123 bones / 114 arrows).",
   "rate": {
     "metric": {
       "kind": "container_items",

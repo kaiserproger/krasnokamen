@@ -24,7 +24,7 @@ fn singleplayer_pause_stops_world_until_resume() {
     let joined = next_tick(&rt, &mut rx, Duration::from_secs(2)).unwrap_or(joined);
     core.submit(PlayerInput::Command {
         connection,
-        command: "solaris_pause on".into(),
+        command: "krasnokamen_pause on".into(),
         permission_level: 4,
     });
     let (paused_at, _) = wait_for_pause(&core, &rt, &mut rx);
@@ -36,7 +36,7 @@ fn singleplayer_pause_stops_world_until_resume() {
     assert!(core.checkpoint(), "checkpoint while paused");
     core.submit(PlayerInput::Command {
         connection,
-        command: "solaris_pause off".into(),
+        command: "krasnokamen_pause off".into(),
         permission_level: 4,
     });
     let resumed = next_tick(&rt, &mut rx, Duration::from_secs(2)).expect("resume tick");
@@ -62,7 +62,7 @@ fn singleplayer_pause_requires_one_operator_and_join_resumes() {
     next_tick(&rt, &mut rx, Duration::from_secs(2)).expect("joined");
     core.submit(PlayerInput::Command {
         connection: owner,
-        command: "solaris_pause on".into(),
+        command: "krasnokamen_pause on".into(),
         permission_level: 0,
     });
     assert!(next_tick(&rt, &mut rx, Duration::from_secs(2)).is_some());
@@ -72,7 +72,7 @@ fn singleplayer_pause_requires_one_operator_and_join_resumes() {
     );
     core.submit(PlayerInput::Command {
         connection: owner,
-        command: "solaris_pause on".into(),
+        command: "krasnokamen_pause on".into(),
         permission_level: 4,
     });
     wait_for_pause(&core, &rt, &mut rx);
@@ -87,7 +87,7 @@ fn singleplayer_pause_requires_one_operator_and_join_resumes() {
     next_tick(&rt, &mut rx, Duration::from_secs(2)).expect("guest joined");
     core.submit(PlayerInput::Command {
         connection: owner,
-        command: "solaris_pause on".into(),
+        command: "krasnokamen_pause on".into(),
         permission_level: 4,
     });
     assert!(next_tick(&rt, &mut rx, Duration::from_secs(2)).is_some());
@@ -192,7 +192,7 @@ fn singleplayer_pause_holds_scheduled_block_deadline_and_entity() {
     let mob_uuid = mob_uuid.expect("mob and scheduled block become visible");
     core.submit(PlayerInput::Command {
         connection: ConnectionId(1),
-        command: "solaris_pause on".into(),
+        command: "krasnokamen_pause on".into(),
         permission_level: 4,
     });
     let (_, last) = wait_for_pause(&core, &rt, &mut rx);
@@ -238,7 +238,7 @@ fn singleplayer_pause_holds_scheduled_block_deadline_and_entity() {
     assert_eq!(after.block_ticks, before.block_ticks);
     core.submit(PlayerInput::Command {
         connection: ConnectionId(1),
-        command: "solaris_pause off".into(),
+        command: "krasnokamen_pause off".into(),
         permission_level: 4,
     });
     let resumed = next(&mut rx, Duration::from_secs(10)).expect("resumed tick");

@@ -1,4 +1,4 @@
-//! `solaris:screen` relay state machine (ADR 0018 "Screen sharing"). Pure: no
+//! `krasnokamen:screen` relay state machine (ADR 0018 "Screen sharing"). Pure: no
 //! I/O and no clock; callers pass `Instant`s and deliver the returned effects.
 //! The server never decodes frame bytes: it only reassembles owner parts,
 //! bounds them and forwards them to permitted viewers that are looking.
@@ -11,7 +11,7 @@ use bytes::Bytes;
 use mc_core::boundary::{ConnectionId, EntityId};
 use uuid::Uuid;
 
-pub(crate) const CHANNEL: &str = "solaris:screen";
+pub(crate) const CHANNEL: &str = "krasnokamen:screen";
 const VERSION: u8 = 1;
 
 const MAX_WIDTH_BLOCKS: u8 = 16;

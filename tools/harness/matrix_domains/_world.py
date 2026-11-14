@@ -1,6 +1,6 @@
 """World-domain helpers; plain shared Matrix API, never a second runner.
 
-Solaris source facts (deploy-final): command_context.rs:215-288 implements
+Krasnokamen source facts (deploy-final): command_context.rs:215-288 implements
 block/entity/score conditions; scoreboard.rs:757-767 reports numeric scores.
 command_blocks.rs:245-288 supports data get ONLY for command blocks, NOT entity
 NBT or arbitrary containers. Rich observations therefore fail closed.

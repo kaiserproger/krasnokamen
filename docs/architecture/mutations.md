@@ -82,7 +82,7 @@ requires new destinations and writes conversion receipts.
 `python3 -m tools.harness run PROFILE` validates the registered profile and its
 prerequisites, owns server/client/Xvfb lifecycle where needed, and records
 `passed`, `failed`, `prepared` or `interrupted` plus commands/logs/errors under
-`.analysis/validation/`. Every actual server launch uses `solaris-v2`; there is
+`.analysis/validation/`. Every actual server launch uses `krasnokamen`; there is
 no variant selector. Preparation and timeouts never count as gameplay passes.
 See [AGENT_TOOLING.md](../AGENT_TOOLING.md#harness-entrypoint).
 
