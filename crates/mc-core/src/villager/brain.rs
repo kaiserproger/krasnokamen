@@ -727,6 +727,64 @@ fn nearest_threat(
         .min_by(|a, b| a.0.total_cmp(&b.0).then_with(|| a.1.cmp(&b.1)))
         .map(|(_, _, at)| at)
 }
+/// Recover an awake resident embedded in actual block collision geometry.
+/// Unloaded cells do not authorize relocation; candidates are bounded to two
+/// blocks and must have the navigator's normal supported standing clearance.
+fn recover_penetration(state: &mut TickState, slot: EntitySlot) {
+    let pos = state.entities.pos(slot);
+    let body = state.entities.body(slot);
+    let width = body.half_width;
+    let height = body.height;
+    let bounds = [
+        pos[0] - width, pos[1], pos[2] - width,
+        pos[0] + width, pos[1] + height, pos[2] + width,
+    ];
+    let mut embedded = false;
+    for x in bounds[0].floor() as i32..=bounds[3].floor() as i32 {
+        for y in (bounds[1].floor() as i32 - 1)..=bounds[4].floor() as i32 {
+            for z in bounds[2].floor() as i32..=bounds[5].floor() as i32 {
+                let Some(id) = state.world.block_at(x, y, z) else { return };
+                let Some(shapes) = state.registry.collision_boxes.get(id as usize) else { return };
+                for shape in shapes.iter() {
+                    let b = shape.as_blocks();
+                    let obstacle = [
+                        f64::from(x) + b[0], f64::from(y) + b[1], f64::from(z) + b[2],
+                        f64::from(x) + b[3], f64::from(y) + b[4], f64::from(z) + b[5],
+                    ];
+                    embedded |= mc_physics::aabb_intersects_deflated_obstacle(bounds, obstacle, 1e-6);
+                }
+            }
+        }
+    }
+    if !embedded {
+        return;
+    }
+    let origin = at(pos);
+    let mut best: Option<([f64; 3], f64)> = None;
+    for dx in -2..=2 {
+        for dy in -2..=2 {
+            for dz in -2..=2 {
+                let cell = BlockPos { x: origin.x + dx, y: origin.y + dy, z: origin.z + dz };
+                if let Some(point) = standing(&state.world, &state.registry, cell, width, height) {
+                    let d = distance(pos, point);
+                    if best.is_none_or(|(_, previous)| d < previous) {
+                        best = Some((point, d));
+                    }
+                }
+            }
+        }
+    }
+    if let Some((point, _)) = best {
+        state.entities.set_pos(slot, point);
+        state.entities.set_vel(slot, [0.0; 3]);
+        let resident = state.entities.row_mut(slot).villager.as_mut().unwrap();
+        resident.seat = None;
+        resident.navigation_path.clear();
+        resident.navigation_chunks.clear();
+        resident.navigation_repath_at = 0;
+    }
+}
+
 /// Called after merge effects and conversion, before publication. No player
 /// item reservations survive here; all villager mutations have one owner.
 pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
@@ -755,6 +813,9 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         }
         let slot = cache.residents[index];
         let id = cache.resident_data[index].id;
+        if state.entities.row(slot).villager.as_ref().is_some_and(|v| !v.sleeping) {
+            recover_penetration(state, slot);
+        }
         let merchant_busy = cache.merchants.binary_search(&id).is_ok();
         let scheduled = cache.activity_for(
             if state.tick < cache.resident_data[index].baby_until {
@@ -796,6 +857,9 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                 .unwrap();
             super::doors::interact(state, slot, &mut v, changes);
             state.entities.row_mut_unmarked(slot).villager = Some(v);
+        }
+        if cache.admitted(slot) {
+            super::doors::clear_approaches(state, slot, changes);
         }
         if !cache.admitted(slot) {
             let brain = &mut cache.resident_data[index];

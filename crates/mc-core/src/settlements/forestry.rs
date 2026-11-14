@@ -410,7 +410,7 @@ pub(crate) fn plant_drops(
     roll(state, at, block)
 }
 
-fn roll(
+pub(crate) fn roll(
     state: &TickState,
     at: [i32; 3],
     block: u32,

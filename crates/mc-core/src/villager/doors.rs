@@ -91,6 +91,65 @@ fn needed_by_other(state: &TickState, opener: EntitySlot, lower: BlockPos) -> bo
     })
 }
 
+/// Clear wild foliage in the two approach columns of a nearby resident door.
+/// Placed leaves have `persistent=true`; retained player edits are also vetoed.
+/// Logs are not touched: baseline matching alone cannot distinguish a tree
+/// trunk from an authored or player-built doorway.
+pub(super) fn clear_approaches(state: &mut TickState, slot: EntitySlot, changes: &mut ChangeSet) {
+    let resident = state.entities.row(slot).villager.as_ref().unwrap();
+    let Some(settlement) = resident.settlement.filter(|_| !resident.sleeping) else {
+        return;
+    };
+    let origin = crate::settlements::allocator::at(state.entities.pos(slot));
+    for dx in -4..=4 {
+        for dy in -1..=1 {
+            for dz in -4..=4 {
+                let door_pos = BlockPos { x: origin.x + dx, y: origin.y + dy, z: origin.z + dz };
+                let Some(id) = state.world.block_at(door_pos.x, door_pos.y, door_pos.z) else { continue };
+                if !interactable(&state.registry, id) { continue; }
+                let Some(block) = state.registry.blocks.by_id(BlockStateId(id)) else { continue };
+                if !block.properties.iter().any(|(key, value)| key == "half" && value == "lower") {
+                    continue;
+                }
+                let facing = block.properties.iter().find(|(key, _)| key == "facing").map(|(_, value)| value.as_str());
+                let (sx, sz) = match facing {
+                    Some("north" | "south") => (0, 1),
+                    Some("east" | "west") => (1, 0),
+                    _ => continue,
+                };
+                for sign in [-1, 1] {
+                    for height in 0..=2 {
+                        let at = [door_pos.x + sx * sign, door_pos.y + height, door_pos.z + sz * sign];
+                        let Some(block) = state.world.block_at(at[0], at[1], at[2]) else { continue };
+                        let Some(definition) = state.registry.blocks.by_id(BlockStateId(block)) else { continue };
+                        let wild_leaf = definition.block.id.path().ends_with("_leaves")
+                            && definition.properties.iter().any(|(key, value)| key == "persistent" && value == "false")
+                            && !state.block_log.player_touched(at);
+                        if !wild_leaf { continue; }
+                        let Ok(drops) = crate::settlements::forestry::roll(state, at, block) else { continue };
+                        if !drops.is_empty() {
+                            let images = crate::plugin_structures::settlement_builds::source_images(state, settlement);
+                            let mut post: Vec<_> = images.iter().map(|image| image.slots.clone()).collect();
+                            if drops.iter().any(|stack| !crate::settlements::construction_crafting::add_stack(state, &mut post, stack)) {
+                                continue;
+                            }
+                            let transfers = images.into_iter().zip(post).filter_map(|(before, after)| {
+                                (before.slots != after).then_some(crate::settlements::inventory::Change { before, after })
+                            }).collect();
+                            if crate::settlements::inventory::commit(state, transfers).is_err() {
+                                continue;
+                            }
+                        }
+                        let position = BlockPos { x: at[0], y: at[1], z: at[2] };
+                        state.world.set_block(at[0], at[1], at[2], state.registry.states.air);
+                        changes.blocks.push(BlockChange { position, state: state.registry.states.air });
+                    }
+                }
+            }
+        }
+    }
+}
+
 pub(super) fn interact(
     state: &mut TickState,
     slot: EntitySlot,
