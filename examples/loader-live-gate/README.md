@@ -95,10 +95,10 @@ python3 -m tools.harness run scenario loader-v2-settlements-smoke --platform fab
 Use `python3 -m tools.harness explain` for scenario scope and prerequisites, and
 [AGENT_TOOLING](../../docs/AGENT_TOOLING.md). This named smoke is not a
 replacement claim for the retired two-owner input/audio gate. Its actual result
-and visual-review limits must come from its own receipt. The Forge Xvfb profile
-sets `earlyWindowControl=false` in `fml.toml` (`tools/harness/loader.py`) so
-Minecraft creates its normal game window instead of the failing FML early-window
-GL context handoff; Forge's early-window GL features are outside that gate's
+and visual-review limits must come from its own receipt. The Forge and NeoForge
+Xvfb profiles set `earlyWindowControl=false` in `fml.toml`
+(`tools/harness/loader.py`) so Minecraft creates its normal game window instead
+of the failing FML early window; early-window GL features are outside that gate's
 evidence.
 
 ## Manual inspection
