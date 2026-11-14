@@ -226,7 +226,7 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
         state.entities.body_mut(slot).attack_cooldown =
             state.entities.body(slot).attack_cooldown.saturating_sub(1);
         if let Some(kind) = state.registry.blueprint(type_id).and_then(goal) {
-            super::run(state, intents, id, kind, &targets);
+            super::run(state, intents, id, kind, &grid);
         } else if raider == Raider::Illusioner {
             illusioner(state, id, slot, &grid);
         } else if let Some((victim, at)) = target {

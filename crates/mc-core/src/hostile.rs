@@ -328,7 +328,9 @@ pub(crate) fn run(
             Special::Ranged => shoot(state, id, &target_grid),
             Special::Swell => swell(state, intents, id, &target_grid, &mut gone),
             Special::Projectile => {}
-            Special::Native(kind) => crate::special_mobs::run(state, intents, id, kind, &targets),
+            Special::Native(kind) => {
+                crate::special_mobs::run(state, intents, id, kind, &target_grid)
+            }
         }
     }
     // Removal swaps the last row into the hole: highest slots first.

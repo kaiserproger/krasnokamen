@@ -920,6 +920,7 @@ pub(crate) fn tick(state: &mut TickState, intents: &mut Vec<crate::intent::Inten
     });
     state.projectiles.using = charges;
     let mut riptides = std::mem::take(&mut state.projectiles.riptides);
+    let mut candidates = Vec::new();
     riptides.retain(|actor, spin| {
         let actor = *actor;
         let Some(slot) = state.entities.slot_of(actor) else {
@@ -936,8 +937,8 @@ pub(crate) fn tick(state: &mut TickState, intents: &mut Vec<crate::intent::Inten
         }
         let position = state.entities.pos(slot);
         let step = std::array::from_fn(|axis| position[axis] - spin.previous[axis]);
-        for index in 0..state.entities.len() as u32 {
-            let target_slot = crate::entities::EntitySlot(index);
+        super::flight::swept_slots(state, spin.previous, position, 0.5, &mut candidates);
+        for &target_slot in &candidates {
             let row = state.entities.row(target_slot);
             if !state.entities.body(target_slot).alive
                 || state.entities.body(target_slot).id == actor

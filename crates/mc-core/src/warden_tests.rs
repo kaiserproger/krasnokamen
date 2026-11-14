@@ -26,7 +26,7 @@ fn step(state: &mut TickState, mob: EntityId, player: EntityId, tick: u64) -> Ve
         &mut intents,
         mob,
         crate::blueprint::GoalKind::SonicBoom,
-        &targets,
+        &crate::target_grid::TargetGrid::linear(&targets),
     );
     intents
 }

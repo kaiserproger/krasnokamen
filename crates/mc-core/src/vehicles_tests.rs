@@ -1004,7 +1004,7 @@ fn expired_hostile_and_tnt_cart_each_emit_one_tombstone() {
         &mut Vec::new(),
         vex,
         crate::blueprint::GoalKind::VexLife,
-        &[],
+        &crate::target_grid::TargetGrid::linear(&[]),
     );
     assert!(s.entities.slot_of_any(vex).is_none());
     rail(&mut s, 0, 65, 0, "east_west", "rail", false);
