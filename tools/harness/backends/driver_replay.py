@@ -8,6 +8,7 @@ import os
 import platform
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -209,9 +210,12 @@ def core_replay_provenance(run_dir: Path) -> dict[str, Any]:
     if re.fullmatch(r"[0-9a-fA-F]{40}|[0-9a-fA-F]{64}", commit) is None:
         raise ValueError("git rev-parse did not return a full object id")
 
-    properties_path = Path(
-        os.environ.get("SOLARIS_LOADER_ROOT", repo_root().parent / "solaris-loader")
-    ).expanduser().resolve() / "gradle.properties"
+    if __package__:
+        from ..runtime import sibling_root
+    else:  # a top-level module beside driver.py (direct script or file loader)
+        sys.path.insert(0, str(repo_root()))
+        from tools.harness.runtime import sibling_root
+    properties_path = sibling_root("loader") / "gradle.properties"
     client_version = ""
     for line in properties_path.read_text(encoding="utf-8").splitlines():
         if line.startswith("minecraftVersion="):

@@ -151,8 +151,9 @@ def run(client: Any, artifact: Path, timeout: float, *, owned_window: dict[str, 
         fov_label_before = next(
             (n.get("label", "") for n in options.get("ui_nodes", [])
              if n.get("id") == "settings/fov"), "")
-        # First press only persists the default (null -> 70.0, no visible
-        # change); press TWICE so the value really changes (70 -> 75).
+        # With no saved settings the first press only persists the default
+        # (null -> 70.0, no visible change); with saved settings it steps.
+        # Press until the value moves (at most twice), then require one step.
         for _ in range(2):
             probe.call("minecraft_click_screen_button", {
                 "expected_screen_class": OPTIONS_CLASS,
@@ -165,11 +166,22 @@ def run(client: Any, artifact: Path, timeout: float, *, owned_window: dict[str, 
             fov_label_before = next(
                 (n.get("label", "") for n in options.get("ui_nodes", [])
                  if n.get("id") == "settings/fov"), fov_label_before)
+            if options["client_settings"]["fov"] != fov_before:
+                break
         changed = options
         probe.check("options_fov_applied",
-                    changed.get("client_settings", {}).get("fov") == 75.0)
+                    changed.get("client_settings", {}).get("fov") == fov_before + 5.0)
         record("options", fov_before=fov_before,
                fov_after=changed.get("client_settings", {}).get("fov"))
+        # GUI scale lives on the Interface tab of the tabbed Options screen.
+        probe.call("minecraft_click_screen_button", {
+            "expected_screen_class": OPTIONS_CLASS,
+            "expected_title": changed["screen"].get("title", ""),
+            "button_label": "Interface",
+        })
+        changed = probe.wait(
+            lambda s: any(n.get("id") == "settings/ui_scale" for n in s.get("ui_nodes", [])),
+            "options_interface_tab")
         scale_node = next(n for n in changed.get("ui_nodes", []) if n.get("id") == "settings/ui_scale")
         scale_before = changed.get("client_settings", {}).get("ui_scale", 0.0)
         probe.call("minecraft_click_screen_button", {
@@ -290,14 +302,24 @@ def run(client: Any, artifact: Path, timeout: float, *, owned_window: dict[str, 
         })["blocks"]
         air = {"minecraft:air", "minecraft:cave_air", "minecraft:void_air"}
         indexed = {(b["x"], b["y"], b["z"]): b for b in blocks}
-        target = next(
+        candidates = sorted(
             (b for b in blocks
              if b["block_id"] not in air
              and indexed.get((b["x"], b["y"] + 1, b["z"]), {}).get("block_id") in air
              and (b["x"] + 0.5 - p["x"]) ** 2 + (b["z"] + 0.5 - p["z"]) ** 2 <= 2.5 ** 2
              and (b["x"] + 0.5 - p["x"]) ** 2 + (b["y"] + 1 - (p["y"] + 1.62)) ** 2
                  + (b["z"] + 0.5 - p["z"]) ** 2 <= 3.5 ** 2),
-            None)
+            key=lambda b: ((b["x"] + 0.5 - p["x"]) ** 2
+                           + (b["y"] + 1 - (p["y"] + 1.62)) ** 2
+                           + (b["z"] + 0.5 - p["z"]) ** 2))
+        target = None
+        for candidate in candidates:
+            position = {axis: candidate[axis] for axis in ("x", "y", "z")}
+            probe.call("minecraft_look_at_block", {**position, "face": "up"})
+            hit = probe.observe().get("target") or {}
+            if hit.get("type") == "block" and all(hit.get(axis) == value for axis, value in position.items()):
+                target = candidate
+                break
         probe.check("crack_target_found", target is not None)
         crack = probe.call("minecraft_mine_until_crack", {
             "x": target["x"], "y": target["y"], "z": target["z"],

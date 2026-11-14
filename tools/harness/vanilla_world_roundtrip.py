@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-TEST = "dimensions::tests::vanilla_headless_world_roundtrip"
+TEST = "roundtrip_tests::vanilla_headless_world_roundtrip"
 
 
 def read_nbt(path: Path):
@@ -124,7 +124,7 @@ def main():
         home.mkdir()
         shutil.copyfile(args.eula_file, home / "eula.txt")
         world = home / "world"
-        runner = ROOT / ".analysis/tools/mem-run.sh"
+        runner = ROOT / "tools/dev/mem-run.sh"
 
         def v2(phase, native, anvil):
             command = [str(runner), "-x", "-m", "8G", "env", "CARGO_BUILD_JOBS=6",
@@ -134,7 +134,7 @@ def main():
                        f"SOLARIS_VANILLA_ROUNDTRIP_RECEIPT={output / (phase + '-conversion.json')}",
                        f"SOLARIS_VANILLA_ROUNDTRIP_EXPORT={world if phase == 'create' else output / 'reexport'}",
                        f"SOLARIS_VANILLA_ROUNDTRIP_EXPORT_RECEIPT={output / (phase + '-export.json')}",
-                       "cargo", "test", "-p", "mc-core", TEST, "--", "--ignored", "--exact", "--nocapture"]
+                       "cargo", "test", "-p", "mc-world-conversion", TEST, "--", "--ignored", "--exact", "--nocapture"]
             receipt.setdefault("conversion_receipts", {})[phase] = {
                 "import": str(output / (phase + "-conversion.json")),
                 "export": str(output / (phase + "-export.json")),

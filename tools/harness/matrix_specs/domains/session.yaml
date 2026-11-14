@@ -1,0 +1,1333 @@
+domain: session
+phase: executable specification; adapters use shared matrix_api, this file is NOT a runner DSL
+target_release: 26.1.2
+source_tree: /run/media/kaiserroman/games/solaris-work/wt/deploy-final
+ports:
+  - 26540
+  - 26559
+execution_contract:
+  context:
+    Driver applies every row factor before setup; no overriding mode/dimension/permissions. All matrix_rows
+    must execute; unsupported combination is blocked, never substituted.
+  setup:
+    Commands run as server fixture authority, in actor dimension using execute in; subject player actions retain
+    row permission.
+  synchronization:
+    Received packets, exact console predicates, and pushed dashboard tick events only. No sleeps.
+    Feedback fence proves only ordering.
+  references:
+    Vanilla mechanics reference minecraft.wiki; Solaris extensions/SLOs explicitly separate. No claim
+    that Solaris WAL/hot backup/anti-xray are vanilla features.
+  temporal_snapshots:
+    Freeze or record exact simulation tick; compare timers relative to ticks, not literal after
+    arbitrary elapsed time.
+  oracles:
+    A missing field/query is MissingCapability, not an empty value or success. Require non-empty Check list
+    and observed causality.
+  permission:
+    Subject minimum permission is a POSITIVE minimum, not a context override. Below minimum, execute actor
+    command unchanged and require hidden root + refusal + unchanged state. Console authority only creates fixtures
+    unless context.permission == console.
+  boundary:
+    Adapter invokes shared MatrixContext.boundary() exactly once after first acknowledged subject action.
+    Driver owns all context network/lifecycle operations.
+  scope_status:
+    Specifications cover all subjects/rows. Registered unavailable adapters raise exact MissingCapability
+    before mutation; they are blocked, NOT completed execution.
+  plugin_profiles:
+    Use shared select_plugin_profile and plugin_set_fingerprint. No adapter-wide exclusions or fabricated
+    plugin fingerprints. Missing client observations remain blocked in both profiles.
+context_overlays:
+  duplicate_login:
+    actions:
+      - connect second session same identity while original owns custody
+      - wait new Play and old disconnect; old socket cannot mutate
+    checks:
+      - old_session_connected: false
+      - new_session_connected: true
+      - UUID_live_owner_count: 1
+      - custody_total: unchanged
+    reference: owner decision 2026-10-24; vanilla newcomer replaces old session; ServerFixes owns implementation
+  crash_kill9_wal_replay:
+    actions:
+      - capture durable tick and atomic custody ledger
+      - kill9_restart before next checkpoint
+      - reconnect; query recovered state
+    checks:
+      - recovered_tick: last durably committed WAL tick, not last sent input
+      - custody_total: conserved; each transaction wholly before or wholly after
+    capabilities:
+      - server_kill9_wal_replay
+      - observe:durable_tick
+      - observe:atomic_custody
+  clean_restart_mid_action:
+    actions:
+      - capture state at stop boundary
+      - clean_restart same directory and identity
+      - reconnect
+    checks:
+      - persistent_state: equals committed pre-stop snapshot
+    capabilities:
+      - server_clean_restart
+  hot_backup_during_action:
+    actions:
+      - hot_backup
+      - restore_backup into separate world
+      - query frozen backup image
+    checks:
+      - backup_tick: manifest recoverable tick
+      - custody_total: conserved in single image
+    capabilities:
+      - server_backup_restore
+  pause_when_empty_resume:
+    actions:
+      - all clients disconnect
+      - await explicit pause transition event
+      - record ticks at pause and next independent liveness event; no sleep or wait-for-tick deadlock
+      - reconnect and await newer tick
+    checks:
+      - tick_while_paused: unchanged
+      - tick_after_join: greater than pause tick
+      - inflight_state: unchanged while paused
+    capabilities:
+      - server_pause_empty
+      - observe:pause_transition
+  save_all_checkpoint:
+    actions:
+      - save_all; await durable checkpoint acknowledgment
+    checks:
+      - checkpoint_committed: true
+  reconnect_mid_action:
+    actions:
+      - disconnect after first state-changing received action
+      - reconnect same identity
+      - continue subject action
+    checks:
+      - custody_total: unchanged
+      - stale_old_connection_mutations: 0
+  disconnect_during_menu:
+    actions:
+      - capture inventory+container+cursor single image
+      - disconnect while menu open
+      - reconnect and reopen container
+    checks:
+      - menu_old_id_reused: false
+      - custody_total: exact initial total including resolved cursor
+    capabilities:
+      - observe:atomic_custody
+  slow_reader_backpressure:
+    actions:
+      - throttle only designated reader; normal observer continues
+      - restore reader; await authoritative resync
+    checks:
+      - normal_observer_progress: true
+      - resumed_reader_final_state: equals authoritative state
+    capabilities:
+      - slow_reader_backpressure
+  malformed_or_stale_packet:
+    actions:
+      - send stale menu state or malformed packet at subject mutation boundary
+    checks:
+      - unauthorized_state_changes: 0
+      - process_alive: true
+    capabilities:
+      - malformed_packet_injection
+server_query_support:
+  execute_if_block_entity_score: implemented command_context.rs:215-288
+  data_queries:
+    - id: data_get_entity
+      evidence: crates/mc-core/src/command_context.rs:495-503 -> datapacks.rs:503-505 -> command_blocks.rs:258,283
+      repro: data get entity <online-player> Inventory
+      expected: NBT inventory payload
+      observed_source:
+        Dedicated data dispatcher supports command blocks only; not general entity/block NBT. Live
+        frozen-binary receipt DomLifecycle/20261024T032808-protocol-matrix-u4kezcpd/server.log:24 confirms restriction.
+    - id: data_get_block
+      evidence: crates/mc-core/src/command_context.rs:495-503 -> datapacks.rs:503-505 -> command_blocks.rs:258,283
+      repro: setblock 0 65 0 chest; data get block 0 65 0
+      expected: Chest NBT payload
+      observed_source:
+        Dedicated data dispatcher supports command blocks only; not general entity/block NBT. Live
+        frozen-binary receipt DomLifecycle/20261024T032808-protocol-matrix-u4kezcpd/server.log:24 confirms restriction.
+    - id: execute_store
+      evidence: crates/mc-core/src/command_context.rs:473
+      repro: execute store result score n lc run data get entity <player> Health
+      expected: Store numeric query result
+      observed_source: Explicit not implemented error
+  clean_restart: Shared ProtocolServer.clean_restart implemented; payload fixture/readback gaps remain distinct.
+subjects:
+  session.join_fresh_spawn:
+    preconditions:
+      - Fresh world/account; second observer already connected; default spawn radius recorded
+    actions:
+      - reconnect fresh actor; observe initial position, block collision shapes, chunks and observer join component
+    checks:
+      - observation: player bounding box intersects solid
+        operator: equals
+        expected: false
+      - observation: support under player
+        operator: equals
+        expected: true
+      - observation: observer join translation key
+        operator: equals
+        expected: multiplayer.player.joined
+      - observation: observer join color
+        operator: equals
+        expected: yellow
+      - observation: initial chunk present
+        operator: equals
+        expected: true
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Spawn
+    missing_capabilities:
+      - snapshot:chunk_collision_shapes
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: pw:session.join_fresh_spawn/fabric_solaris_loader/spectator/overworld/peaceful/2/duplicate_login/steady/non_op_0@vanilla
+        context:
+          client_kind: fabric_solaris_loader
+          game_mode: spectator
+          dimension: overworld
+          difficulty: peaceful
+          player_count: "2"
+          network_condition: duplicate_login
+          server_lifecycle: steady
+          permission: non_op_0
+          plugin_profile: vanilla
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: Login(Play) then spawn on solid, non-suffocating ground near world spawn; chunks around spawn
+            loaded; others get yellow join message"
+          - "vanilla 26.1.2 newcomer wins (owner requirement, BugTriage DUPLICATE-LOGIN): the existing session is disconnected
+            ('You logged in from another location'), the new connection reaches Play with the same persisted player
+            state; exactly one live player entity for the UUID, no inventory copy or loss, no join-wait timeout. Current
+            Solaris (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
+            — expected to fail until ServerFixes lands"
+          - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
+            desync between observers
+          - "plugin profile vanilla (solaris-auth not deployed): plain server behaviour per reference; no solaris-auth
+            side effects"
+      - id: pw:session.join_fresh_spawn/fabric_solaris_loader/spectator/overworld/peaceful/2/duplicate_login/steady/non_op_0@live
+        context:
+          client_kind: fabric_solaris_loader
+          game_mode: spectator
+          dimension: overworld
+          difficulty: peaceful
+          player_count: "2"
+          network_condition: duplicate_login
+          server_lifecycle: steady
+          permission: non_op_0
+          plugin_profile: live
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: Login(Play) then spawn on solid, non-suffocating ground near world spawn; chunks around spawn
+            loaded; others get yellow join message"
+          - "vanilla 26.1.2 newcomer wins (owner requirement, BugTriage DUPLICATE-LOGIN): the existing session is disconnected
+            ('You logged in from another location'), the new connection reaches Play with the same persisted player
+            state; exactly one live player entity for the UUID, no inventory copy or loss, no join-wait timeout. Current
+            Solaris (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
+            — expected to fail until ServerFixes lands"
+          - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
+            desync between observers
+          - "live set (solaris-auth): the player is locked (no build/damage/commands) until /register or /login succeeds"
+    minimum_tested_action_permission: 0
+    plugin_profiles:
+      changed_by:
+        - solaris-auth
+      vanilla: 4374e3bce7dc3ed09aa5c700d7b62d2e33470b749fc153db45d339dceaa2676b
+      live: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+    plugin_profile_contract:
+      Driver resolves exact row profile through select_plugin_profile; @live preserves the
+      live set, @vanilla excludes changed_by only. Require actual deployment fingerprint equality before execution.
+      Context oracle is authoritative; do not substitute native behavior for plugin-owned behavior. This subject
+      remains capability-blocked.
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.rejoin_restore_state:
+    preconditions:
+      - give actor diamond 7; experience set actor 5 levels; effect give actor speed infinite 0
+      - gamerule naturalRegeneration false; safe stone sprint platform (160..800,79,158..162); clear headroom
+      - spawnpoint actor 161 80 160; teleport_to 161.5 88 160.5; await received health below 20 after actual fall
+      - look_at 800 81.62 160.5; move(forward=1,ticks=1200,sprint=true); await food below 20; capture authoritative
+        leave snapshot
+    actions:
+      - disconnect
+      - reconnect same account; observe first authoritative state before movement
+    checks:
+      - observation: position/rotation/health/food/xp/inventory/effects/gamemode at restore
+        operator: equals_capture
+        expected: last committed leave state
+      - observation: sum diamond count
+        operator: equals
+        expected: 7
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Player.dat_format
+    missing_capabilities:
+      - data_get_entity
+      - observe:leave_snapshot
+      - client:move_physics
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: bl:session.rejoin_restore_state/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: java_mcp
+        context_oracle:
+          - "reference: position/rotation/health/food/XP/inventory/effects/game mode restored exactly (vanilla playerdata)"
+          - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: complete_adapter
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.status_ping:
+    preconditions:
+      - Capture effective MOTD and max players from independent full dashboard payload; known online cohort
+    actions:
+      - status handshake protocol 775; request JSON; ping payload 72623859790382856
+    checks:
+      - observation: version.name
+        operator: equals
+        expected: 26.1.2
+      - observation: version.protocol
+        operator: equals
+        expected: 775
+      - observation: players.online
+        operator: equals_capture
+        expected: connected cohort
+      - observation: players.max
+        operator: equals_capture
+        expected: configured max players from independent dashboard
+      - observation: description
+        operator: equals_capture
+        expected: configured MOTD from independent dashboard
+      - observation: pong payload
+        operator: equals
+        expected: 72623859790382856
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Java_Edition_protocol/Packets
+    missing_capabilities: []
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/status.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: bl:session.status_ping/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: java_mcp
+        context_oracle:
+          - "reference: status JSON: version 26.1.2 + protocol, MOTD, online/max players, sample; pong echoes payload"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: complete_adapter
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.online_mode_auth:
+    preconditions:
+      - online-mode true; authorized valid account and invalid offline claimant; never log access tokens
+    actions:
+      - join valid account
+      - join invalid claimant
+    checks:
+      - observation: valid profile UUID/properties
+        operator: equals_capture
+        expected: authenticated profile
+      - observation: transport encryption enabled
+        operator: equals
+        expected: true
+      - observation: invalid claimant reaches Play
+        operator: equals
+        expected: false
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Java_Edition_protocol/Encryption
+    missing_capabilities:
+      - online_mode_auth
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/crypto.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: bl:session.online_mode_auth/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: java_mcp
+        context_oracle:
+          - "reference: encryption + session-server verification; profile UUID/skin properties from Mojang; offline
+            accounts refused"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.offline_mode_uuid:
+    preconditions:
+      - Read canonical fixture auth.online_mode=false; use exact context actor name (do not substitute identity)
+    actions:
+      - reconnect
+      - give actor diamond 7
+      - disconnect
+      - reconnect
+    checks:
+      - observation: UUID
+        operator: equals
+        expected: UUID.nameUUIDFromBytes(UTF8("OfflinePlayer:" + actual context actor name))
+      - observation: restored diamond total
+        operator: equals
+        expected: 7
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/UUID
+    missing_capabilities:
+      - data_get_entity
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: bl:session.offline_mode_uuid/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: java_mcp
+        context_oracle:
+          - "reference: UUID = name-based v3 (OfflinePlayer:<name>); same name -> same saved player"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: complete_adapter
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.whitelist_gate:
+    preconditions:
+      - whitelist on; actor unlisted; actor initially disconnected
+    actions:
+      - reconnect rejected
+      - console whitelist add actor
+      - reconnect accepted
+    checks:
+      - observation: first disconnect reason translation
+        operator: equals
+        expected: multiplayer.disconnect.not_whitelisted
+      - observation: second reaches Play
+        operator: equals
+        expected: true
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Commands/whitelist
+    missing_capabilities: []
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/admin.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: bl:session.whitelist_gate/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: op_3
+        driver: java_mcp
+        context_oracle:
+          - "reference: unlisted join refused with whitelist message; added player joins"
+    minimum_tested_action_permission: 3
+    implementation:
+      class: complete_adapter
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.ban_pardon:
+    preconditions:
+      - actor and observer connected; isolated actor source IP
+    actions:
+      - console ban actor matrix-ban
+      - reconnect rejected
+      - console pardon actor
+      - reconnect accepted
+      - console ban-ip actor-IP matrix-ip-ban
+      - reconnect rejected
+      - console pardon-ip actor-IP
+      - reconnect accepted
+    checks:
+      - observation: each banned attempt Play
+        operator: equals
+        expected: false
+      - observation: ban disconnect includes reason
+        operator: equals
+        expected: true
+      - observation: each pardoned attempt Play
+        operator: equals
+        expected: true
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Commands/ban
+    missing_capabilities:
+      - server:restored_player_data (hot-backup context)
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/admin.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: pw:session.ban_pardon/fabric_svc/survival/the_nether/easy/1/normal/hot_backup_during_action/op_4
+        context:
+          client_kind: fabric_svc
+          game_mode: survival
+          dimension: the_nether
+          difficulty: easy
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: hot_backup_during_action
+          permission: op_4
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: online target kicked with reason; rejoin refused with ban reason; pardon restores access"
+          - server keeps ticking during backup; the backup restores to a single consistent tick (no torn state between
+            player and containers)
+          - holds in the_nether (dimension-isolated world)
+    minimum_tested_action_permission: 3
+    implementation:
+      class: real_but_partial
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+      remaining_clause: Hot-backup context awaits semantic restored player custody, not just manifest verification.
+  session.kick:
+    preconditions:
+      - give actor diamond 7; observer connected
+    actions:
+      - console kick actor matrix-kick
+      - observe disconnect and leave
+      - reconnect
+    checks:
+      - observation: disconnect reason contains
+        operator: equals
+        expected: matrix-kick
+      - observation: observer leave translation
+        operator: equals
+        expected: multiplayer.player.left
+      - observation: diamond total after reconnect
+        operator: equals
+        expected: 7
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Commands/kick
+    missing_capabilities:
+      - observe:disconnect_reason_and_leave_component
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/admin.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: pw:session.kick/fabric_distant_horizons/adventure/overworld/easy/N8/malformed_or_stale_packet/pause_when_empty_resume/op_1
+        context:
+          client_kind: fabric_distant_horizons
+          game_mode: adventure
+          dimension: overworld
+          difficulty: easy
+          player_count: N8
+          network_condition: malformed_or_stale_packet
+          server_lifecycle: pause_when_empty_resume
+          permission: op_1
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: target disconnected with reason; others see leave message; saved state intact"
+          - "NEGATIVE (permission op_1 < op 3): command not advertised in the command tree, execution answers 'Unknown
+            or incomplete command', no state change"
+          - out-of-reach/illegal/malformed input is rejected (BlockChangedAck + block update / correction teleport /
+            protocol disconnect) without state change; a stale container state_id is applied once and followed by a
+            full-state resync (vanilla handleContainerClick); never duplicated; server keeps running
+          - while empty the world does not advance (no growth/smelting/mob movement); after rejoin it resumes from the
+            same tick and the action completes normally
+          - "8 concurrent actors: results conserved, server MSPT stays below 50 ms, no correction storms or protocol
+            errors"
+    minimum_tested_action_permission: 3
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.mute_warn:
+    preconditions:
+      - two authenticated players
+    actions:
+      - console mute actor
+      - actor chat token, /me token, /msg observer token
+      - console unmute actor
+      - actor chat fresh token
+      - console warn actor matrix-warning
+    checks:
+      - observation: muted token broadcast count
+        operator: equals
+        expected: 0
+      - observation: unmuted token observer count
+        operator: equals
+        expected: 1
+      - observation: actor warning includes
+        operator: equals
+        expected: matrix-warning
+    reference:
+      scope: solaris_extension_no_vanilla_equivalent
+      source:
+        - crates/mc-edge/src/admin.rs
+        - crates/mc-core/src/boundary.rs
+    missing_capabilities:
+      - observe:command_roots
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/admin.rs
+      - crates/mc-core/src/boundary.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: pw:session.mute_warn/native_linux/adventure/overworld/peaceful/2/malformed_or_stale_packet/clean_restart_mid_action/op_2@vanilla
+        context:
+          client_kind: native_linux
+          game_mode: adventure
+          dimension: overworld
+          difficulty: peaceful
+          player_count: "2"
+          network_condition: malformed_or_stale_packet
+          server_lifecycle: clean_restart_mid_action
+          permission: op_2
+          plugin_profile: vanilla
+        driver: native_mcp
+        context_oracle:
+          - "reference: muted chat and /me,/msg refused natively; unmute restores; warn delivered (Solaris moderation,
+            no vanilla analogue)"
+          - "NEGATIVE (permission op_2 < op 3): command not advertised in the command tree, execution answers 'Unknown
+            or incomplete command', no state change"
+          - out-of-reach/illegal/malformed input is rejected (BlockChangedAck + block update / correction teleport /
+            protocol disconnect) without state change; a stale container state_id is applied once and followed by a
+            full-state resync (vanilla handleContainerClick); never duplicated; server keeps running
+          - after /stop + restart the world, block entities, entities (same UUIDs), player inventories/positions and
+            partially finished processes equal the last committed pre-stop state; no duplication or loss
+          - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
+            desync between observers
+          - "plugin profile vanilla (solaris-essentials not deployed): plain server behaviour per reference; no solaris-essentials
+            side effects"
+      - id: pw:session.mute_warn/native_linux/adventure/overworld/peaceful/2/malformed_or_stale_packet/clean_restart_mid_action/op_2@live
+        context:
+          client_kind: native_linux
+          game_mode: adventure
+          dimension: overworld
+          difficulty: peaceful
+          player_count: "2"
+          network_condition: malformed_or_stale_packet
+          server_lifecycle: clean_restart_mid_action
+          permission: op_2
+          plugin_profile: live
+        driver: native_mcp
+        context_oracle:
+          - "reference: muted chat and /me,/msg refused natively; unmute restores; warn delivered (Solaris moderation,
+            no vanilla analogue)"
+          - "NEGATIVE (permission op_2 < op 3): command not advertised in the command tree, execution answers 'Unknown
+            or incomplete command', no state change"
+          - out-of-reach/illegal/malformed input is rejected (BlockChangedAck + block update / correction teleport /
+            protocol disconnect) without state change; a stale container state_id is applied once and followed by a
+            full-state resync (vanilla handleContainerClick); never duplicated; server keeps running
+          - after /stop + restart the world, block entities, entities (same UUIDs), player inventories/positions and
+            partially finished processes equal the last committed pre-stop state; no duplication or loss
+          - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
+            desync between observers
+          - "live set: /msg is solaris-essentials; record whether a native mute also refuses the plugin's /msg"
+    minimum_tested_action_permission: 3
+    plugin_profiles:
+      changed_by:
+        - solaris-essentials
+      vanilla: 767fbd3331effa358e238e39e2a88ed1345d5623207015671228536e53975f00
+      live: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+    plugin_profile_contract:
+      Driver resolves exact row profile through select_plugin_profile; @live preserves the
+      live set, @vanilla excludes changed_by only. Require actual deployment fingerprint equality before execution.
+      Context oracle is authoritative; do not substitute native behavior for plugin-owned behavior. This subject
+      remains capability-blocked.
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+      remaining_clause:
+        Both exact rows are permission-negative op_2<3. Command-tree observation is absent; structured
+        chat alone cannot prove the permission oracle. Preserve exact plugin profile.
+  session.transfer:
+    preconditions:
+      - second isolated server accepts-transfers=true on assigned port; actor has saved inventory
+    actions:
+      - console transfer 127.0.0.1 target-port actor
+      - follow Transfer packet
+    checks:
+      - observation: transfer host/port
+        operator: equals_capture
+        expected: target endpoint
+      - observation: target Play
+        operator: equals
+        expected: true
+      - observation: source saved inventory
+        operator: equals_capture
+        expected: before transfer
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Commands/transfer
+    missing_capabilities:
+      - transfer_follow
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: bl:session.transfer/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: op_3
+        driver: java_mcp
+        context_oracle:
+          - "reference: client receives Transfer and reconnects to target server; source saves player"
+    minimum_tested_action_permission: 3
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.connection_limit:
+    preconditions:
+      - per-IP/global limits explicit from test config; known admitted connection cohort
+    actions:
+      - open limit+1 sockets; maintain existing gameplay chat
+    checks:
+      - observation: admitted connections
+        operator: less_equal
+        expected: configured limit
+      - observation: existing observer token echoes
+        operator: equals
+        expected: 1
+      - observation: server process exit
+        operator: equals
+        expected: null
+    reference:
+      scope: solaris_extension_no_vanilla_equivalent
+      source:
+        - crates/mc-edge/src/conn_limit.rs
+    missing_capabilities:
+      - same_tick_admission_fence
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/conn_limit.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: pw:session.connection_limit/forge_solaris_loader/creative/overworld/hard/N8/reconnect_mid_action/clean_restart_mid_action/op_2
+        context:
+          client_kind: forge_solaris_loader
+          game_mode: creative
+          dimension: overworld
+          difficulty: hard
+          player_count: N8
+          network_condition: reconnect_mid_action
+          server_lifecycle: clean_restart_mid_action
+          permission: op_2
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: excess connections refused before login; existing players unaffected"
+          - after reconnect the client receives exactly the server-committed state; the interrupted action is either
+            fully applied or not at all; item totals across player/containers/entities unchanged except by the committed
+            part
+          - after /stop + restart the world, block entities, entities (same UUIDs), player inventories/positions and
+            partially finished processes equal the last committed pre-stop state; no duplication or loss
+          - "8 concurrent actors: results conserved, server MSPT stays below 50 ms, no correction storms or protocol
+            errors"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.protocol_mismatch:
+    preconditions:
+      - server protocol 775; unique unused name
+    actions:
+      - send login handshake at 774 and 776 independently
+    checks:
+      - observation: 774 refusal translation
+        operator: equals
+        expected: multiplayer.disconnect.incompatible (with [26.1.2])
+      - observation: 776 refusal translation
+        operator: equals
+        expected: multiplayer.disconnect.incompatible (with [26.1.2])
+      - observation: created player records
+        operator: equals
+        expected: 0
+    reference:
+      scope: vanilla_26.1.2
+      source:
+        - https://minecraft.wiki/w/Java_Edition_protocol/Packets
+        - crates/mc-edge/src/handshake.rs:29-34,51-60
+        - tools/harness/wire.py:18-19,107-113
+    missing_capabilities: []
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: bl:session.protocol_mismatch/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
+        context:
+          client_kind: protocol_bot
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: protocol_bot
+        context_oracle:
+          - "reference: login disconnect with outdated client/server message; no player created"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: complete_adapter
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.max_players_full:
+    preconditions:
+      - Set canonical fixture max_players to row cohort size; reconnect every cohort actor; reserve unused MatrixOverflow
+        identity
+    actions:
+      - Attempt one extra offline login above configured capacity
+      - Apply context boundary after received rejection; each existing actor receives fresh chat echo
+    checks:
+      - observation: third reason translation
+        operator: equals
+        expected: multiplayer.disconnect.server_full
+      - observation: third Play
+        operator: equals
+        expected: false
+      - observation: existing token received
+        operator: equals
+        expected: true
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Server.properties
+    missing_capabilities: []
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/server_properties.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: pw:session.max_players_full/native_windows/spectator/the_nether/hard/1/malformed_or_stale_packet/clean_restart_mid_action/op_3
+        context:
+          client_kind: native_windows
+          game_mode: spectator
+          dimension: the_nether
+          difficulty: hard
+          player_count: "1"
+          network_condition: malformed_or_stale_packet
+          server_lifecycle: clean_restart_mid_action
+          permission: op_3
+        driver: native_mcp
+        context_oracle:
+          - "reference: refused with server-full message (ops bypass is vanilla-optional)"
+          - out-of-reach/illegal/malformed input is rejected (BlockChangedAck + block update / correction teleport /
+            protocol disconnect) without state change; a stale container state_id is applied once and followed by a
+            full-state resync (vanilla handleContainerClick); never duplicated; server keeps running
+          - after /stop + restart the world, block entities, entities (same UUIDs), player inventories/positions and
+            partially finished processes equal the last committed pre-stop state; no duplication or loss
+          - holds in the_nether (dimension-isolated world)
+    minimum_tested_action_permission: 0
+    implementation:
+      class: complete_adapter
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.view_distance_negotiation:
+    preconditions:
+      - server view-distance 8; simulation-distance 4; stationary safe actor
+    actions:
+      - set ClientInformation view distance 2,8,32; after each wait received cache-center and settled chunk set
+    checks:
+      - observation: effective view radius each trial
+        operator: equals
+        expected:
+          - 2
+          - 8
+          - 8
+      - observation: required visible chunk coordinates missing
+        operator: equals
+        expected: []
+      - observation: simulation distance packet
+        operator: equals
+        expected: 4
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Server.properties
+    missing_capabilities:
+      - observe:cache_center_and_simulation_distance
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/view_negotiation_tests.rs
+      - crates/mc-edge/src/server_view_distance_tests.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: bl:session.view_distance_negotiation/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: java_mcp
+        context_oracle:
+          - "reference: server sends min(client, server) view; simulation radius bounded; no chunk holes"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.locale_presentation:
+    preconditions:
+      - actor ru_ru; observer en_us
+    actions:
+      - issue same Solaris-localized response; set actor en_us; repeat; send vanilla translatable tellraw
+    checks:
+      - observation: localized ru text
+        operator: equals_capture
+        expected: shipped ru_ru locale entry
+      - observation: localized en text
+        operator: equals_capture
+        expected: shipped en_us locale entry
+      - observation: vanilla translation key retained
+        operator: equals
+        expected: true
+    reference:
+      scope: solaris_extension_no_vanilla_equivalent
+      source:
+        - crates/mc-core/src/boundary.rs
+    missing_capabilities:
+      - observe:localized_dialog
+    server_gap: []
+    source_modules:
+      - crates/mc-core/src/boundary.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: pw:session.locale_presentation/protocol_bot/creative/the_nether/easy/1/normal/crash_kill9_wal_replay/op_2
+        context:
+          client_kind: protocol_bot
+          game_mode: creative
+          dimension: the_nether
+          difficulty: easy
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: crash_kill9_wal_replay
+          permission: op_2
+        driver: protocol_bot
+        context_oracle:
+          - "reference: server-translated Solaris texts follow ClientInformation locale; vanilla translatable components
+            untouched"
+          - "after SIGKILL + restart (no wait for a published WAL fence) the world equals a consistent prefix of the
+            committed transactions: every transaction is all-or-nothing (no torn/split/half-moved stacks), no item duplication,
+            nothing that was durable before the action (setup baseline) is lost, and later transactions only appear
+            after earlier ones; surviving every pre-kill ACK is NOT required (latest-ACK durability needs a separate
+            fenced proof); world opens or fails closed on corruption (never silently reset); where the reference says
+            'identical/restored after restart', read it as identical to that recovered prefix"
+          - holds in the_nether (dimension-isolated world)
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+      source_facts:
+        - crates/mc-core/src/settlements/ui_text.rs:20-23; ui_tests.rs:1257-1261 (localized settlement dialog, not
+          fabricated chat text)
+  session.rcon:
+    preconditions:
+      - Canonical server.reconfigure enables RCON on server.port+2, bound to loopback with fixture-only password
+      - Console creates lc_rcon objective and sentinel=3 before unauthenticated mutation attempts
+    actions:
+      - authenticate wrong password then issue forbidden command
+      - authenticate correct password; scoreboard objectives add lc dummy; scoreboard players set sentinel lc 17;
+        scoreboard players get sentinel lc
+    checks:
+      - observation: wrong-auth response id
+        operator: equals
+        expected: -1
+      - observation: correct get output integer
+        operator: equals
+        expected: 17
+      - observation: unauth command state changes
+        operator: equals
+        expected: 0
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/RCON
+    missing_capabilities: []
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/rcon.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: bl:session.rcon/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_4
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: op_4
+        driver: java_mcp
+        context_oracle:
+          - "reference: authenticated command output returned; bad password rejected; no gameplay authority bypass"
+    minimum_tested_action_permission: 4
+    implementation:
+      class: complete_adapter
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+      source_facts:
+        - crates/mc-edge/src/rcon.rs:1-2,35-64,78-118 (local 26.1.2 javap wire facts)
+  session.query_gs4:
+    preconditions:
+      - Canonical server.reconfigure enables UDP query on server.port+2; effective config/dashboard/actual client
+        cohort independently define expected metadata
+    actions:
+      - challenge; basic and full stat; malformed datagram; repeat valid query
+    checks:
+      - observation: basic/full MOTD/map/version/players
+        operator: equals_capture
+        expected: server config and roster
+      - observation: valid query after malformed
+        operator: equals
+        expected: true
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Query
+    missing_capabilities: []
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/query.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: bl:session.query_gs4/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: java_mcp
+        context_oracle:
+          - "reference: MOTD/map/player list/version returned; malformed query ignored"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: complete_adapter
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+      source_facts:
+        - crates/mc-edge/src/query.rs:1,55-80,97-135 (local 26.1.2 javap wire facts)
+  session.velocity_forwarding:
+    preconditions:
+      - Velocity modern forwarding with isolated secret; proxy-only backend
+    actions:
+      - join through proxy
+      - attempt direct and unsigned joins
+    checks:
+      - observation: profile uuid/ip/properties
+        operator: equals_capture
+        expected: proxy authenticated profile
+      - observation: direct Play
+        operator: equals
+        expected: false
+      - observation: unsigned Play
+        operator: equals
+        expected: false
+    reference:
+      scope: proxy_extension_no_vanilla_equivalent
+      source:
+        - crates/mc-edge/src/proxy.rs
+    missing_capabilities:
+      - velocity_proxy
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/proxy.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: bl:session.velocity_forwarding/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: java_mcp
+        context_oracle:
+          - "reference: forwarded IP/UUID/properties used; direct/unsigned join refused"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.msmp_management:
+    preconditions:
+      - management protocol enabled with ephemeral auth; server fixture disposable
+    actions:
+      - unauth players request
+      - auth players/allowlist add-remove/bans add-remove/save/stop JSON-RPC calls
+    checks:
+      - observation: unauth accepted
+        operator: equals
+        expected: false
+      - observation: players result
+        operator: equals_capture
+        expected: online cohort
+      - observation: allowlist and ban roundtrip
+        operator: equals_capture
+        expected: requested values
+      - observation: save result
+        operator: equals
+        expected: true
+      - observation: stop exits cleanly
+        operator: equals
+        expected: 0
+    reference:
+      scope: vanilla_26.1.2
+      source: https://minecraft.wiki/w/Minecraft_Server_Management_Protocol
+    missing_capabilities:
+      - admin_protocol_client:msmp
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/msmp.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: pw:session.msmp_management/vanilla_java_26_1_2/adventure/the_nether/hard/1/normal/clean_restart_mid_action/op_2
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: adventure
+          dimension: the_nether
+          difficulty: hard
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: clean_restart_mid_action
+          permission: op_2
+        driver: java_mcp
+        context_oracle:
+          - "reference: JSON-RPC results match server state; auth required"
+          - after /stop + restart the world, block entities, entities (same UUIDs), player inventories/positions and
+            partially finished processes equal the last committed pre-stop state; no duplication or loss
+          - holds in the_nether (dimension-isolated world)
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.dashboard_metrics:
+    preconditions:
+      - dashboard enabled; known cohort; no other clients
+    actions:
+      - record stats; actor chats token; record newer pushed tick stats
+    checks:
+      - observation: player count
+        operator: equals_capture
+        expected: len connected cohort
+      - observation: tick second
+        operator: greater_than_capture
+        expected: tick first
+      - observation: TPS
+        operator: finite_range
+        expected:
+          - 0
+          - 20.1
+      - observation: MSPT
+        operator: finite_range
+        expected:
+          - 0
+          - null
+      - observation: RSS bytes
+        operator: greater_than
+        expected: 0
+    reference:
+      scope: solaris_extension_no_vanilla_equivalent
+      source:
+        - crates/mc-edge/src/dashboard.rs:675-701
+    missing_capabilities:
+      - observe:server_rss
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/dashboard.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: pw:session.dashboard_metrics/neoforge_solaris_loader/adventure/the_end/normal/2/slow_reader_backpressure/save_all_checkpoint/op_3
+        context:
+          client_kind: neoforge_solaris_loader
+          game_mode: adventure
+          dimension: the_end
+          difficulty: normal
+          player_count: "2"
+          network_condition: slow_reader_backpressure
+          server_lifecycle: save_all_checkpoint
+          permission: op_3
+        driver: loader_java_mcp
+        context_oracle:
+          - "reference: player count/TPS/MSPT/memory values match server state; read-only"
+          - server tick (MSPT) and other players unaffected; slow client either catches up with consistent state or
+            is disconnected by bounded queue/timeout; no unbounded memory growth
+          - save-all completes without stalling the tick; post-save state equals pre-save state
+          - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
+            desync between observers
+          - holds in the_end (dimension-isolated world)
+    minimum_tested_action_permission: 0
+    implementation:
+      class: complete_adapter
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+  session.server_brand_f3:
+    preconditions:
+      - 26.1.2 graphical client at Play
+    actions:
+      - open F3 debug overlay; observe brand; send fresh chat token
+    checks:
+      - observation: brand
+        operator: equals
+        expected: Solaris
+      - observation: chat token echo
+        operator: equals
+        expected: true
+    reference:
+      scope: solaris_brand_vanilla_custom_payload_surface
+      source: https://minecraft.wiki/w/Debug_screen
+    missing_capabilities:
+      - read_hud_ui
+    server_gap: []
+    source_modules:
+      - crates/mc-edge/src/configuration.rs
+      - crates/mc-edge/src/login.rs
+      - crates/mc-edge/src/handshake.rs
+      - crates/mc-core/src/tick/input/session.rs
+    matrix_rows:
+      - id: bl:session.server_brand_f3/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+        context:
+          client_kind: vanilla_java_26_1_2
+          game_mode: survival
+          dimension: overworld
+          difficulty: normal
+          player_count: "1"
+          network_condition: normal
+          server_lifecycle: steady
+          permission: non_op_0
+        driver: java_mcp
+        context_oracle:
+          - "reference: server brand shows Solaris; client keeps play"
+    minimum_tested_action_permission: 0
+    implementation:
+      class: registered_stub
+      adapter: tools/harness/matrix_domains/session.py
+      not_a_live_pass: true
+shared_api: bots-runproto@1e20dd5f merged into dom-lifecycle; shared MatrixContext/server/client APIs only
+implementation_counts:
+  spec_only: 0
+  registered_stub: 11
+  complete_adapter: 9
+  real_but_partial: 1
+  executed_in_ledger:
+    pass: 1
+    fail: 0

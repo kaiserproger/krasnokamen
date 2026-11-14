@@ -1,0 +1,517 @@
+schema: solaris-world-adapter-index/1
+domain: farming
+note:
+  Documentation index only; execution is the shared Python Adapter interface, not a YAML DSL. Registration is
+  not coverage. Original matrix contexts and all oracle clauses remain acceptance obligations.
+subjects_specified: 18
+matrix_rows: 27
+adapter_path: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py
+subjects:
+  - id: farming.wheat_carrot_potato_beetroot
+    matrix_ids:
+      - bl:farming.wheat_carrot_potato_beetroot/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.multiplayer_x_same_block:farming.wheat_carrot_potato_beetroot/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.multiplayer_x_same_block:farming.wheat_carrot_potato_beetroot/native_linux/survival/overworld/normal/N8/normal/steady/non_op_0
+      - tr.restart_x_inflight.clean_restart_mid_action:farming.wheat_carrot_potato_beetroot/vanilla_java_26_1_2/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inflight.crash_kill9_wal_replay:farming.wheat_carrot_potato_beetroot/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:9-23
+    actions:
+      callable: tools.harness.matrix_domains.farming.wheat_carrot_potato_beetroot
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:9-23
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Tutorial:Crop_farming
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.stem_crops
+    matrix_ids:
+      - bl:farming.stem_crops/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:26-35
+    actions:
+      callable: tools.harness.matrix_domains.farming.stem_crops
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:26-35
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Tutorial:Pumpkin_and_melon_farming
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.nether_wart
+    matrix_ids:
+      - pw:farming.nether_wart/fabric_distant_horizons/adventure/the_nether/peaceful/1/slow_reader_backpressure/save_all_checkpoint/op_4
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:38-41
+    actions:
+      callable: tools.harness.matrix_domains.farming.nether_wart
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:38-41
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Nether_Wart
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.sugar_cane_cactus_bamboo
+    matrix_ids:
+      - bl:farming.sugar_cane_cactus_bamboo/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:44-56
+    actions:
+      callable: tools.harness.matrix_domains.farming.sugar_cane_cactus_bamboo
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:44-56
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Cactus
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.kelp_seagrass
+    matrix_ids:
+      - pw:farming.kelp_seagrass/native_windows/spectator/overworld/hard/N8/normal/save_all_checkpoint/op_4
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:59-70
+    actions:
+      callable: tools.harness.matrix_domains.farming.kelp_seagrass
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:59-70
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Kelp
+        - https://minecraft.wiki/w/Seagrass
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.sweet_berries_cocoa_glow_berries
+    matrix_ids:
+      - bl:farming.sweet_berries_cocoa_glow_berries/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:73-88
+    actions:
+      callable: tools.harness.matrix_domains.farming.sweet_berries_cocoa_glow_berries
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:73-88
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Cocoa_Beans
+        - https://minecraft.wiki/w/Glow_Berries
+        - https://minecraft.wiki/w/Sweet_Berries
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.chorus
+    matrix_ids:
+      - bl:farming.chorus/vanilla_java_26_1_2/survival/the_end/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/chorus.rs
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:91-94
+    actions:
+      callable: tools.harness.matrix_domains.farming.chorus
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:91-94
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Chorus_Flower
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.mushrooms_vines_spread
+    matrix_ids:
+      - pw:farming.mushrooms_vines_spread/forge_solaris_loader/adventure/overworld/hard/N8/duplicate_login/clean_restart_mid_action/op_4
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:97-113
+    actions:
+      callable: tools.harness.matrix_domains.farming.mushrooms_vines_spread
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:97-113
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Mushroom
+        - https://minecraft.wiki/w/Vines
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.saplings_trees
+    matrix_ids:
+      - bl:farming.saplings_trees/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:116-124
+    actions:
+      callable: tools.harness.matrix_domains.farming.saplings_trees
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:116-124
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Sapling
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.grass_mycelium_spread
+    matrix_ids:
+      - pw:farming.grass_mycelium_spread/neoforge_solaris_loader/survival/the_nether/easy/2/reconnect_mid_action/crash_kill9_wal_replay/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:127-137
+    actions:
+      callable: tools.harness.matrix_domains.farming.grass_mycelium_spread
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:127-137
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Grass_Block
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.farmland_trample_dry
+    matrix_ids:
+      - pw:farming.farmland_trample_dry/fabric_svc/creative/the_nether/normal/1/duplicate_login/hot_backup_during_action/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:140-148
+    actions:
+      callable: tools.harness.matrix_domains.farming.farmland_trample_dry
+      optional_client_verbs:
+        - move
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:140-148
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Farmland
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.random_tick_speed
+    matrix_ids:
+      - bl:farming.random_tick_speed/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:151-157
+    actions:
+      callable: tools.harness.matrix_domains.farming.random_tick_speed
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:151-157
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Tick#Random_tick
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.shear_sheep_wool_regrow
+    matrix_ids:
+      - bl:farming.shear_sheep_wool_regrow/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/entity_life.rs
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:160-180
+    actions:
+      callable: tools.harness.matrix_domains.farming.shear_sheep_wool_regrow
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:160-180
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Sheep
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.milk_cow
+    matrix_ids:
+      - pw:farming.milk_cow/fabric_solaris_loader/adventure/overworld/peaceful/2/slow_reader_backpressure/crash_kill9_wal_replay/op_1
+      - tr.dupe.two_players_take_same_tick:farming.milk_cow/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.destroy_during_interaction:farming.milk_cow/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.restart_after_interaction:farming.milk_cow/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:183-189
+    actions:
+      callable: tools.harness.matrix_domains.farming.milk_cow
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:183-189
+      expected_version: Java 26.1.2
+      sources: []
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.chicken_eggs
+    matrix_ids:
+      - pw:farming.chicken_eggs/protocol_bot/spectator/the_end/peaceful/2/normal/steady/op_3
+      - tr.restart_x_inflight.clean_restart_mid_action:farming.chicken_eggs/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inflight.crash_kill9_wal_replay:farming.chicken_eggs/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:192-201
+    actions:
+      callable: tools.harness.matrix_domains.farming.chicken_eggs
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:192-201
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Chicken
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - entities
+    server_gap_evidence: []
+  - id: farming.bees_pollinate
+    matrix_ids:
+      - pw:farming.bees_pollinate/vanilla_java_26_1_2/survival/overworld/hard/N8/malformed_or_stale_packet/clean_restart_mid_action/op_1
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/bees.rs
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:204-221
+    actions:
+      callable: tools.harness.matrix_domains.farming.bees_pollinate
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:204-221
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Bee
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: farming.taming
+    matrix_ids:
+      - bl:farming.taming/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/taming.rs
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:224-284
+    actions:
+      callable: tools.harness.matrix_domains.farming.taming
+      optional_client_verbs:
+        - interact_entity
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:224-284
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Fox
+        - https://minecraft.wiki/w/Taming
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - entities
+    server_gap_evidence: []
+  - id: farming.golden_dandelion
+    matrix_ids:
+      - pw:farming.golden_dandelion/native_linux/adventure/overworld/easy/N8/slow_reader_backpressure/pause_when_empty_resume/op_4
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/golden_dandelion.rs
+      - crates/mc-core/src/farming.rs
+      - crates/mc-core/src/plants.rs
+      - crates/mc-core/src/plants_growth.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:287-295
+    actions:
+      callable: tools.harness.matrix_domains.farming.golden_dandelion
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/farming.py:287-295
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Golden_Dandelion
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []

@@ -1,0 +1,351 @@
+schema: solaris-world-adapter-index/1
+domain: portals_dimensions
+note:
+  Documentation index only; execution is the shared Python Adapter interface, not a YAML DSL. Registration is
+  not coverage. Original matrix contexts and all oracle clauses remain acceptance obligations.
+subjects_specified: 11
+matrix_rows: 17
+adapter_path: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py
+subjects:
+  - id: portals_dimensions.nether_portal_build_light
+    matrix_ids:
+      - pw:portals_dimensions.nether_portal_build_light/fabric_distant_horizons/creative/the_nether/normal/N8/duplicate_login/hot_backup_during_action/op_4
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/portals.rs
+      - crates/mc-core/src/portals_nether.rs
+      - crates/mc-core/src/portals_travel.rs
+      - crates/mc-core/src/dimensions_travel.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:17-39
+    actions:
+      callable: tools.harness.matrix_domains.portals_dimensions.nether_portal_build_light
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:17-39
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Nether_Portal#Creation
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: portals_dimensions.nether_portal_travel_link
+    matrix_ids:
+      - pw:portals_dimensions.nether_portal_travel_link/forge_solaris_loader/spectator/the_nether/easy/2/slow_reader_backpressure/save_all_checkpoint/op_4
+      - tr.restart_x_inflight.clean_restart_mid_action:portals_dimensions.nether_portal_travel_link/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inflight.crash_kill9_wal_replay:portals_dimensions.nether_portal_travel_link/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.disconnect_x_transient_state.reconnect_mid_action:portals_dimensions.nether_portal_travel_link/protocol_bot/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_transient_state.duplicate_login:portals_dimensions.nether_portal_travel_link/vanilla_java_26_1_2/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/portals.rs
+      - crates/mc-core/src/portals_nether.rs
+      - crates/mc-core/src/portals_travel.rs
+      - crates/mc-core/src/dimensions_travel.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:42-57
+    actions:
+      callable: tools.harness.matrix_domains.portals_dimensions.nether_portal_travel_link
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:42-57
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Nether_Portal#Behavior
+        - https://minecraft.wiki/w/Nether_Portal#Portal_linkage_between_Overworld_and_Nether
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - dimension
+        - position
+    server_gap_evidence: []
+  - id: portals_dimensions.portal_gamerules
+    matrix_ids:
+      - bl:portals_dimensions.portal_gamerules/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/portals.rs
+      - crates/mc-core/src/portals_nether.rs
+      - crates/mc-core/src/portals_travel.rs
+      - crates/mc-core/src/dimensions_travel.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:60-75
+    actions:
+      callable: tools.harness.matrix_domains.portals_dimensions.portal_gamerules
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:60-75
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Nether_Portal
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - dimension
+    server_gap_evidence: []
+  - id: portals_dimensions.entities_through_portals
+    matrix_ids:
+      - pw:portals_dimensions.entities_through_portals/neoforge_solaris_loader/spectator/the_nether/easy/1/malformed_or_stale_packet/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/portals.rs
+      - crates/mc-core/src/portals_nether.rs
+      - crates/mc-core/src/portals_travel.rs
+      - crates/mc-core/src/dimensions_travel.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:78-88
+    actions:
+      callable: tools.harness.matrix_domains.portals_dimensions.entities_through_portals
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:78-88
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Nether_Portal
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: portals_dimensions.end_portal_travel
+    matrix_ids:
+      - pw:portals_dimensions.end_portal_travel/fabric_solaris_loader/creative/overworld/hard/N8/reconnect_mid_action/crash_kill9_wal_replay/op_3
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/end_portals.rs
+      - crates/mc-core/src/portals.rs
+      - crates/mc-core/src/portals_nether.rs
+      - crates/mc-core/src/portals_travel.rs
+      - crates/mc-core/src/dimensions_travel.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:91-98
+    actions:
+      callable: tools.harness.matrix_domains.portals_dimensions.end_portal_travel
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:91-98
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/End_Portal#Behavior
+        - https://minecraft.wiki/w/Obsidian_platform
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - dimension
+    server_gap_evidence: []
+  - id: portals_dimensions.end_exit_return
+    matrix_ids:
+      - pw:portals_dimensions.end_exit_return/native_windows/creative/the_end/hard/1/duplicate_login/pause_when_empty_resume/op_3
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/end_portals.rs
+      - crates/mc-core/src/portals.rs
+      - crates/mc-core/src/portals_nether.rs
+      - crates/mc-core/src/portals_travel.rs
+      - crates/mc-core/src/dimensions_travel.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:101-110
+    actions:
+      callable: tools.harness.matrix_domains.portals_dimensions.end_exit_return
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:101-110
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Exit_portal
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - dimension
+        - position
+    server_gap_evidence: []
+  - id: portals_dimensions.end_gateway
+    matrix_ids:
+      - bl:portals_dimensions.end_gateway/vanilla_java_26_1_2/survival/the_end/normal/1/normal/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/end_portals.rs
+      - crates/mc-core/src/portals.rs
+      - crates/mc-core/src/portals_nether.rs
+      - crates/mc-core/src/portals_travel.rs
+      - crates/mc-core/src/dimensions_travel.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:113-131
+    actions:
+      callable: tools.harness.matrix_domains.portals_dimensions.end_gateway
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:113-131
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/End_Gateway
+        - https://minecraft.wiki/w/End_Gateway#Behavior
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - nearby_blocks
+        - position
+    server_gap_evidence: []
+  - id: portals_dimensions.dragon_fight
+    matrix_ids:
+      - pw:portals_dimensions.dragon_fight/vanilla_java_26_1_2/adventure/the_end/peaceful/1/duplicate_login/save_all_checkpoint/op_1
+      - tr.restart_x_inflight.clean_restart_mid_action:portals_dimensions.dragon_fight/native_linux/survival/the_end/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inflight.crash_kill9_wal_replay:portals_dimensions.dragon_fight/protocol_bot/survival/the_end/normal/1/normal/crash_kill9_wal_replay/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/end_fight.rs
+      - crates/mc-core/src/end_fight/flight.rs
+      - crates/mc-core/src/end_fight/pillars.rs
+      - crates/mc-core/src/portals.rs
+      - crates/mc-core/src/portals_nether.rs
+      - crates/mc-core/src/portals_travel.rs
+      - crates/mc-core/src/dimensions_travel.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:134-158
+    actions:
+      callable: tools.harness.matrix_domains.portals_dimensions.dragon_fight
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:134-158
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Ender_Dragon#Behavior
+        - https://minecraft.wiki/w/Ender_Dragon#Death
+        - https://minecraft.wiki/w/Ender_Dragon#Drops
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - entities
+    server_gap_evidence: []
+  - id: portals_dimensions.dragon_respawn
+    matrix_ids:
+      - pw:portals_dimensions.dragon_respawn/protocol_bot/spectator/the_end/peaceful/1/slow_reader_backpressure/pause_when_empty_resume/op_4
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/end_fight/persistence.rs
+      - crates/mc-core/src/portals.rs
+      - crates/mc-core/src/portals_nether.rs
+      - crates/mc-core/src/portals_travel.rs
+      - crates/mc-core/src/dimensions_travel.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:161-170
+    actions:
+      callable: tools.harness.matrix_domains.portals_dimensions.dragon_respawn
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:161-170
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Ender_Dragon#Respawning
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: portals_dimensions.eye_of_ender_throw
+    matrix_ids:
+      - pw:portals_dimensions.eye_of_ender_throw/fabric_svc/adventure/overworld/easy/2/reconnect_mid_action/pause_when_empty_resume/op_1
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/projectiles/eye.rs
+      - crates/mc-core/src/portals.rs
+      - crates/mc-core/src/portals_nether.rs
+      - crates/mc-core/src/portals_travel.rs
+      - crates/mc-core/src/dimensions_travel.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:173-182
+    actions:
+      callable: tools.harness.matrix_domains.portals_dimensions.eye_of_ender_throw
+      optional_client_verbs:
+        - use_item
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:173-182
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Eye_of_Ender
+        - https://minecraft.wiki/w/Eye_of_Ender#Locating_strongholds
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: portals_dimensions.command_dimension_travel
+    matrix_ids:
+      - pw:portals_dimensions.command_dimension_travel/native_linux/survival/the_nether/normal/2/normal/clean_restart_mid_action/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/dimensions_commands.rs
+      - crates/mc-core/src/portals.rs
+      - crates/mc-core/src/portals_nether.rs
+      - crates/mc-core/src/portals_travel.rs
+      - crates/mc-core/src/dimensions_travel.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:185-200
+    actions:
+      callable: tools.harness.matrix_domains.portals_dimensions.command_dimension_travel
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/portals_dimensions.py:185-200
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Chat
+        - https://minecraft.wiki/w/Commands/execute#in
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields:
+        - dimension
+        - events
+    server_gap_evidence: []

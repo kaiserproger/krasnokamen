@@ -4,12 +4,14 @@ from __future__ import annotations
 import array
 import math
 import os
+import json
 from pathlib import Path
 import subprocess
 import threading
 import time
 from typing import Any, Callable
 
+from .matrix_api import MissingCapability
 
 class SoundCapture:
     RATE = 48000
@@ -165,3 +167,89 @@ def exercise_sounds(
     if any(amplitude(stopped, frequency) > baseline * 0.03 for frequency in (440, 660)):
         raise RuntimeError("stop_client_sound left owner audio audible")
     return evidence
+
+
+def private_alsa_config(root: Path) -> str:
+    """ALSA default routes only to our private Pulse sink and silent source."""
+    server=json.dumps("unix:"+str(root/"pulse/native"))
+    return (
+        'pcm.!default {\n  type asym\n'
+        f'  playback.pcm {{ type pulse server {server} device "agents-null" }}\n'
+        f'  capture.pcm {{ type pulse server {server} device "agents-silent-input" }}\n'
+        '}\n'
+        f'ctl.!default {{ type pulse server {server} }}\n'
+    )
+
+
+def private_audio_preflight(artifact_dir: Path, *, require_source: bool = True,
+                            require_alsa: bool = False) -> dict[str, Any]:
+    """Fail before any SVC JVM starts unless capture is hardware-free.
+
+    The ScreenAudio wrapper owns the graph. Forced Pulse-only OpenAL plus an
+    explicit private Pulse socket prevents ALSA/default-server fallback.
+    """
+    root_text = os.environ.get("SOLARIS_PW_ROOT")
+    if not root_text:
+        raise MissingCapability("private_audio:screen_audio_graph_wrapper_required")
+    root = Path(root_text).resolve()
+    pulse = root / "pulse/native"
+    if (os.environ.get("PIPEWIRE_RUNTIME_DIR") != str(root)
+            or os.environ.get("XDG_RUNTIME_DIR") != str(root)
+            or os.environ.get("PULSE_SERVER") != "unix:" + str(pulse)
+            or os.environ.get("ALSOFT_DRIVERS") != "pulse"):
+        raise MissingCapability("private_audio:isolated_runtime_and_pulse_only_backend_required")
+    if not pulse.is_socket():
+        raise MissingCapability(f"private_audio:pulse_socket_missing:{pulse}")
+    alsa_config=None
+    if require_alsa:
+        config=root/"alsa.conf"
+        if (os.environ.get("ALSA_CONFIG_PATH")!=str(config) or not config.is_file()
+                or config.read_text()!=private_alsa_config(root)):
+            raise MissingCapability("private_audio:private_alsa_default_config_required")
+        alsa_config=config.read_text()
+    observed = subprocess.run(["pw-dump"], capture_output=True, text=True, check=True)
+    graph = json.loads(observed.stdout)
+    if any(token in observed.stdout.lower() for token in ("alsa_", "bluez_", "api.alsa", "api.bluez")):
+        raise MissingCapability("private_audio:hardware_audio_node_detected")
+    names = {entry.get("info", {}).get("props", {}).get("node.name"):
+             entry.get("info", {}).get("props", {}).get("media.class", "")
+             for entry in graph if isinstance(entry.get("info"), dict)}
+    source = os.environ.get("PULSE_SOURCE")
+    if require_source and (source != "agents-silent-input"
+                           or not names.get(source, "").startswith("Audio/Source")):
+        raise MissingCapability("private_audio:virtual_silent_input_source_required")
+    if require_source and not names.get("agents-null","").startswith("Audio/Sink"):
+        raise MissingCapability("private_audio:virtual_null_output_sink_required")
+    result = {"private_runtime": str(root), "pulse_server": str(pulse),
+              "capture_source": source, "openal_backend": "pulse",
+              "hardware_audio_nodes": [], "graph": graph}
+    if alsa_config is not None:
+        result["alsa_config_path"]=str(root/"alsa.conf")
+        result["alsa_config"]=alsa_config
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    (artifact_dir / "private-audio-preflight.json").write_text(json.dumps(result, indent=2) + "\n")
+    return result
+
+
+def prepare_private_audio() -> None:
+    """Create only silent input/output on the proven private graph."""
+    from . import runtime
+
+    root = Path(os.environ["SOLARIS_PW_ROOT"])
+    pulse = root / "pulse/native"
+    runtime.wait_for_path_condition(pulse, 30, lambda: (pulse.is_socket(), None))
+    receipt = Path(os.environ["SOLARIS_AUDIO_RECEIPT_DIR"])
+    (root/"alsa.conf").write_text(private_alsa_config(root))
+    private_audio_preflight(receipt / "before", require_source=False, require_alsa=True)
+    commands = [
+        ["pw-cli", "create-node", "adapter",
+         "{ factory.name=support.null-audio-sink node.name=agents-null node.description=SolarisAgentsNull media.class=Audio/Sink object.linger=true audio.position=[ FL FR ] }"],
+        ["pw-cli", "create-node", "adapter",
+         "{ factory.name=support.null-audio-sink node.name=agents-silent-input media.class=Audio/Source/Virtual object.linger=true audio.position=[ FL FR ] }"],
+    ]
+    results = []
+    for command in commands:
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+        results.append({"command": command, "stdout": result.stdout, "stderr": result.stderr})
+    (receipt / "setup.json").write_text(json.dumps(results, indent=2) + "\n")
+    private_audio_preflight(receipt / "ready", require_alsa=True)

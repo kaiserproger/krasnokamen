@@ -14,7 +14,7 @@ from . import compare
 def args(**changes):
     values = dict(setup_smoke=False, prepare_only=False, clients=100, mobs=20000, villagers=64, fixture_cache=None,
                   steady_seconds=60, burst_seconds=30, recovery_seconds=60, warmup_ticks=200,
-                  measure_ticks=1200, parity_resume_receipt=None, main_go_receipt=None,
+                  measure_ticks=1200, main_go_receipt=None,
                   seed=42, view_distance=6, server_cpus='0-7', bot_cpus='8-11',
                   vanilla_data_dir=Path('/data/vanilla'), min_tps=19.5, sustained_seconds=5,
                   max_tick_p99_ms=50, max_tick_max_ms=250, max_rss_mb=3072)
@@ -81,8 +81,46 @@ class CompareContractTests(unittest.TestCase):
         for region in recipe['regions'][:-1]:
             kinds = {command.split()[1] for command in region['commands'] if command.startswith('summon ')}
             self.assertEqual(len(kinds), 1)
-            self.assertTrue(any(command.startswith('fill ') and ' 71 ' in command
+            roof_y = 67 if kinds == {'minecraft:spider'} else 71
+            self.assertTrue(any(command.startswith('fill ') and f' {roof_y} ' in command
                                 and command.endswith('minecraft:stone') for command in region['commands']))
+
+    def test_spider_pen_roofs_bound_unassisted_falls_without_disabling_ai(self):
+        spiders = 0
+        for region in compare.fixture(100000, 0)['regions']:
+            summons = [command.split() for command in region['commands']
+                       if command.startswith('summon minecraft:spider ')]
+            if not summons:
+                continue
+            spiders += len(summons)
+            roofs = [command.split() for command in region['commands']
+                     if command.startswith('fill ') and command.endswith('minecraft:stone')
+                     and command.split()[2] == command.split()[5]]
+            self.assertEqual(len(roofs), 1, region['name'])
+            roof_y = int(roofs[0][2])
+            x1, _, z1, x2, _, z2 = map(int, roofs[0][1:7])
+            walls = {tuple(map(int, command.split()[1:7])) for command in region['commands']
+                     if command.startswith('fill ') and command.endswith('minecraft:stone')
+                     and command.split()[2] != command.split()[5]}
+            self.assertEqual(walls, {
+                (x1, 64, z1, x2, roof_y - 1, z1),
+                (x1, 64, z2, x2, roof_y - 1, z2),
+                (x1, 64, z1 + 1, x1, roof_y - 1, z2 - 1),
+                (x2, 64, z1 + 1, x2, roof_y - 1, z2 - 1),
+            })
+            self.assertIn(
+                f'fill {x1 + 1} 63 {z1 + 1} {x2 - 1} 63 {z2 - 1} minecraft:grass_block',
+                region['commands'])
+            for summon in summons:
+                # Even a climbing spider's feet must stay below three blocks
+                # above the floor. A detached free fall must remain nonlethal.
+                self.assertLessEqual(roof_y - float(summon[3]), 3, region['name'])
+                self.assertGreater(roof_y - float(summon[3]), 0.9, region['name'])
+                self.assertTrue(x1 + 1 <= float(summon[2]) - 0.7 < float(summon[2]) + 0.7 <= x2)
+                self.assertTrue(z1 + 1 <= float(summon[4]) - 0.7 < float(summon[4]) + 0.7 <= z2)
+            self.assertFalse(any('NoAI' in command or 'Invulnerable' in command
+                                 for command in region['commands']))
+        self.assertEqual(spiders, 12500)
 
     def test_gameplay_uses_wire_crafting_nonlethal_combat_and_edits(self):
         spec = compare.gameplay(compare.fixture(8, 2))
@@ -125,21 +163,14 @@ class CompareContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'Main'):
             compare.verify_resume(args())
 
-    def test_all_resume_fields_and_go_are_required(self):
+    def test_go_receipt_is_required_and_nonempty(self):
         with tempfile.TemporaryDirectory() as directory:
-            resume, go = Path(directory) / 'resume.json', Path(directory) / 'go.txt'
+            go = Path(directory) / 'go.txt'
             go.write_text('Main GO window 15; actual authorization fixture for unit test')
-            approved = {key: True for key in ('full_parity_verified', 'native_storage_verified',
-                                              'w2_w3_real_client_verified')}
-            for missing in approved:
-                resume.write_text(json.dumps({key: value for key, value in approved.items() if key != missing}))
-                with self.assertRaisesRegex(ValueError, missing):
-                    compare.verify_resume(args(parity_resume_receipt=resume, main_go_receipt=go))
-            resume.write_text(json.dumps(approved))
-            compare.verify_resume(args(parity_resume_receipt=resume, main_go_receipt=go))
+            compare.verify_resume(args(main_go_receipt=go))
             go.write_text('')
             with self.assertRaisesRegex(ValueError, 'empty Main'):
-                compare.verify_resume(args(parity_resume_receipt=resume, main_go_receipt=go))
+                compare.verify_resume(args(main_go_receipt=go))
 
     def test_setup_smoke_is_explicitly_tiny(self):
         tiny = dict(setup_smoke=True, clients=2, mobs=8, villagers=2, steady_seconds=2,

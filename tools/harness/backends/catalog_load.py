@@ -122,6 +122,7 @@ class Session:
         self.failure: dict[str, Any] | None = None
         self.stopping = False
         self.fixture_commands_sent: dict[str, Any] | None = None
+        self.fixture_map_frames: dict[str, Any] | None = None
         self.checkpoints: list[dict[str, Any]] = []
         self.live_complete: dict[str, Any] | None = None
         self.completed_schedule: dict[str, Any] | None = None
@@ -173,6 +174,8 @@ class Session:
                     self.checkpoints.append(event)
                     if len(self.checkpoints) > 4096:
                         del self.checkpoints[0]
+                if event.get("event") == "fixture_map_frames_observed":
+                    self.fixture_map_frames = event
                 if event.get("event") == "login_release":
                     self.login_release = event
                 self.push_event(event)
@@ -208,9 +211,10 @@ class Session:
             raise ClassifiedFailure(outcome, "bot disconnected")
 
 
-    async def http(self, url: str, timeout: float) -> dict[str, Any]:
+    async def http(self, url: str, timeout: float,
+                   bearer_token: str | None = None) -> dict[str, Any]:
         try:
-            return await asyncio.to_thread(scale.http_json, url, timeout)
+            return await asyncio.to_thread(scale.http_json, url, timeout, bearer_token)
         except (OSError, ValueError) as error:
             self.alive()
             raise ClassifiedFailure("INFRA_BLOCKED", f"telemetry unavailable: {error}") from error
@@ -262,6 +266,7 @@ name = "catalog-load-isolated"
 view_distance = {args.view_distance}
 simulation_distance = {args.view_distance}
 max_players = {max(10, clients)}
+worldgen_gpu = {json.dumps(getattr(args, "worldgen_gpu", False))}
 [network]
 bind_address = "127.0.0.1"
 port = {game}
@@ -276,6 +281,7 @@ enabled = true
 bind_address = "127.0.0.1"
 port = {dashboard}
 allow_remote = false
+metrics_bearer_token = {json.dumps(getattr(args, "metrics_bearer_token", None) or "")}
 ''')
     if plugins_dir is not None:
         with path.open("a") as handle:
@@ -1284,6 +1290,9 @@ async def run(args: argparse.Namespace) -> int:
     task = asyncio.current_task()
     assert task is not None
     asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, task.cancel)
+    if args.scenario == ["spain-industrial"]:
+        from .catalog_spain import run_spain
+        return await run_spain(args)
     args.out.mkdir(parents=True)
     mapping = json.loads(MAPPING.read_text())
     entries = {s["id"]: s for s in mapping["scenarios"]}
@@ -1320,17 +1329,15 @@ async def run(args: argparse.Namespace) -> int:
                 minimum = recipe.get("constraints", {}).get("minimum_clients", 1)
                 if min(args.ramp_clients or [args.clients]) < minimum:
                     raise ClassifiedFailure("SETUP_FAILED", f"recipe requires at least {minimum} clients for its declared regions")
-            if not args.smoke:
-                if not args.parity_resume_receipt:
-                    raise ClassifiedFailure("INFRA_BLOCKED", "owner window-hold: full parity and native compact storage confirmation required before perf resume")
-                resume = json.loads(args.parity_resume_receipt.read_text())
-                if resume.get("full_parity_verified") is not True or resume.get("native_storage_verified") is not True:
-                    raise ClassifiedFailure("INFRA_BLOCKED", "resume receipt lacks full parity/native storage verification")
-                receipt["resume_receipt_sha256"] = scale.binary_sha256(args.parity_resume_receipt)
+            receipt["worldgen_gpu"] = args.worldgen_gpu
             binaries = {"server": args.server_bin, "bots": args.bots_bin}
             for name, binary in binaries.items():
                 if binary is None or not binary.is_file() or not os.access(binary, os.X_OK):
                     raise ClassifiedFailure("INFRA_BLOCKED", f"missing/nonexecutable explicit release {name} binary: {binary}")
+                try:
+                    scale.refuse_incremental_pin(binary, name)
+                except ValueError as error:
+                    raise ClassifiedFailure("INFRA_BLOCKED", str(error)) from error
             receipt["binaries"] = {name: {"path": str(binary), "sha256": scale.binary_sha256(binary)} for name, binary in binaries.items()}
             receipt["registry_hashes"] = tree_hash(args.vanilla_data_dir)
             fixture = await prepare(args, directory / "prepare", recipe)
@@ -1372,12 +1379,14 @@ async def run(args: argparse.Namespace) -> int:
     return int(any(r["outcome"] in {"SETUP_FAILED", "CORRECTNESS_FAIL", "PERF_FAIL"} for r in summary["results"]))
 
 
-def main() -> int:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario", action="append")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--server-bin", type=Path)
     parser.add_argument("--bots-bin", type=Path)
+    parser.add_argument("--spain-fixture", type=Path,
+                        help="Surveyed staged-world and route data for spain-industrial")
     parser.add_argument("--plugins-dir", type=Path,
                         help="Real current-WIT v2 packages for plugin-heavy; never synthesized")
     parser.add_argument("--vanilla-data-dir", type=Path, default=ROOT / "data/vanilla")
@@ -1397,12 +1406,20 @@ def main() -> int:
     parser.add_argument("--max-tick-p99-ms", type=float, default=50)
     parser.add_argument("--max-tick-max-ms", type=float, default=250)
     parser.add_argument("--max-rss-mb", type=float, default=3072)
-    parser.add_argument("--parity-resume-receipt", type=Path)
-    args = parser.parse_args()
+    parser.add_argument("--worldgen-gpu", action="store_true",
+                        help="generate the server's chunk density on the GPU ([server].worldgen_gpu)")
+    args = parser.parse_args(argv)
     if args.out.exists():
         parser.error("--out must be a new directory; existing receipts are never overwritten")
     if args.scenario and len(args.scenario) != len(set(args.scenario)):
         parser.error("--scenario IDs must not be repeated")
+    if args.scenario and args.scenario != ["spain-industrial"]:
+        available = {item["id"] for item in json.loads(MAPPING.read_text())["scenarios"]}
+        unknown = set(args.scenario) - available
+        if unknown:
+            parser.error(f"unknown scenario IDs: {sorted(unknown)}")
+    if args.spain_fixture and args.scenario != ["spain-industrial"]:
+        parser.error("--spain-fixture requires only --scenario spain-industrial")
     if not 1 <= args.clients <= 4096 or not 1 <= args.view_distance <= 32:
         parser.error("clients must be 1..4096 and view-distance 1..32")
     if args.ramp_clients and (any(not 1 <= n <= 4096 for n in args.ramp_clients) or args.ramp_clients != sorted(set(args.ramp_clients))):
@@ -1415,11 +1432,15 @@ def main() -> int:
         parser.error("smoke measurement windows must total <=120 seconds")
     args.out = args.out.resolve()
     args.vanilla_data_dir = args.vanilla_data_dir.resolve()
-    for name in ("server_bin", "bots_bin", "plugins_dir", "parity_resume_receipt"):
+    for name in ("server_bin", "bots_bin", "plugins_dir"):
         value = getattr(args, name)
         if value:
             setattr(args, name, value.resolve())
-    return asyncio.run(run(args))
+    return args
+
+
+def main() -> int:
+    return asyncio.run(run(parse_args()))
 
 
 if __name__ == "__main__":

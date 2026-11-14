@@ -1,0 +1,1093 @@
+"""Real-client acceptance for issue #1 settlement behaviour (village QA).
+
+Canonical harness lifecycle sibling of the `dialogs` backend: fresh local
+release server from this tree, fresh world, op player through the native
+client (windowed on its own Xvfb, MCP). Scenario: build a small house with a
+wooden door and a valid bed, a workshop (composter + mature wheat farmland
+inside reach), a storage (chest), a top-of-zone mine (smithing table at grade)
+and a lumber camp (fletching table) near mature persistent=false oaks;
+`/settlement create` with a computed radius covering the fixtures, certify
+buildings via chat commands, `/summon` one plain villager per job (no
+profession NBT: the allocator assigns certified slots), sequential nearest-bind per role.
+Frozen daylight (`gamerule advance_time false`, no natural clock advance) and frozen
+random growth (`gamerule random_tick_speed 0`, mature saplings/leaves persist) + real
+event ticks, single `time set` per phase (3000 work, 18000 night, 3000 morning, 9000):
+
+1. a worker physically crosses a certified door (open seen + plane flip by a
+   worker UUID, close awaited on a bounded exact predicate);
+2. the same 3 entities persist through the night; a villager holding a fixture
+   job (nameplate and received VillagerData agree, whatever role it was
+   summoned for) sleeps in the bed within NIGHT_TICKS game ticks, still holds
+   that job on waking at 3000 and gets back to work within MORNING_TICKS:
+   within 2.5 blocks of its station, or (miner) inside the mine, or
+   (lumberjack) a log beside the spot where it stopped is cut while it stands there;
+3. farmer harvests mature wheat (age 7 -> replanted);
+4. miner digs inside the zone and the chest holds mining products;
+5. lumberjack cuts a mature oak AND replants AND the chest holds oak logs
+   (deposit trips run at day-end 9000, polled with a bounded chest wait).
+
+Every check is a strict PASS/FAIL verdict in
+`probe.report["settlement_acceptance"]`; fixture chat commands are receipted
+separately and never count as behaviour evidence. Screenshots + server log +
+chest slot contents are retained. Product code is untouched.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import math
+import os
+import subprocess
+import time as _time
+from pathlib import Path
+from typing import Any
+
+from .. import runtime
+from ..profiles import ProfileContext
+from . import native_client
+from .gameplay import peak_rss_kib, prepare_operator_fixture
+from .probe_steps import ProbeSteps
+
+USERNAME = "VillageQA"
+SETTLEMENT = "qa"
+
+# Mining products the miner can deposit (drop_name() mapping + natural stone).
+MINING_ITEMS = frozenset({
+    "minecraft:cobblestone", "minecraft:stone", "minecraft:cobbled_deepslate",
+    "minecraft:deepslate", "minecraft:dirt", "minecraft:gravel",
+    "minecraft:sand", "minecraft:granite", "minecraft:diorite",
+    "minecraft:andesite", "minecraft:tuff", "minecraft:calcite",
+    "minecraft:coal", "minecraft:raw_iron", "minecraft:raw_copper",
+    "minecraft:raw_gold", "minecraft:redstone", "minecraft:lapis_lazuli",
+    "minecraft:emerald", "minecraft:diamond",
+})
+
+# Phase plan: 18000 build-night (villagers staged in-house), 3000 work,
+# 18000 night sleep, 3000 morning return, 9000 day-end deposits. One set each.
+TIME_SET_PHASES = ("time set 18000", "time set 3000", "time set 18000", "time set 3000", "time set 9000")
+
+
+def _abs(origin: tuple[int, int, int], dx: int, dy: int, dz: int) -> tuple[int, int, int]:
+    return (origin[0] + dx, origin[1] + dy, origin[2] + dz)
+
+
+def _rect(origin: tuple[int, int, int], lo: tuple[int, int, int],
+          hi: tuple[int, int, int]) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
+    return (_abs(origin, *lo), _abs(origin, *hi))
+
+
+def house_beds(hx0: int, hy0: int, hz0: int) -> list[tuple[tuple[int, int, int], tuple[int, int, int]]]:
+    """One bed per fixture worker, foot west of head (vanilla east-facing pair, cf. brain_tests),
+    side by side along z; the interior's east column stays the walkway from the door."""
+    return [((hx0 + 1, hy0 + 1, hz0 + dz), (hx0 + 2, hy0 + 1, hz0 + dz))
+            for dz in range(1, len(VILLAGER_ROLES) + 1)]
+
+
+# A zombie's sensor reach plus the miner's dig reach (mining.rs hostile_near: threat_range 8 + 3).
+CAVE_HOSTILE_REACH = 11.0
+
+
+def cave_hostile_feet(mine_lo: tuple[int, int, int],
+                      entrance: tuple[int, int, int]) -> tuple[int, int, int]:
+    """Feet cell of a zombie sealed in stone two columns west of the mine, under the pad (the
+    u2wl2u3f cave hunter): in reach of the first staircase cell, never on the staircase's way east."""
+    return (mine_lo[0] - 2, entrance[1] - 7, entrance[2])
+
+
+def within_hostile_reach(feet: tuple[int, int, int], cell: tuple[int, int, int]) -> bool:
+    """hostile_near's range test: mob feet to the dig cell's centre."""
+    return math.dist((feet[0] + 0.5, feet[1], feet[2] + 0.5),
+                     (cell[0] + 0.5, cell[1] + 0.5, cell[2] + 0.5)) <= CAVE_HOSTILE_REACH
+
+
+def bed_facing_valid(foot: tuple[int, int, int], head: tuple[int, int, int], facing: str) -> bool:
+    """East-facing head must sit one block east of its foot, same y/z."""
+    if facing != "east":
+        return False
+    return head[0] == foot[0] + 1 and head[1] == foot[1] and head[2] == foot[2]
+
+
+def house_headroom_ok(bed_y: int, roof_y: int) -> bool:
+    """Two full air blocks above the bed: roof at least 3 above bed level."""
+    return roof_y - bed_y >= 3
+
+
+def door_crossed(before_x: float, after_x: float, door_x: int) -> bool:
+    """True when a track flips sides of the door plane (block centre +/- 0.5)."""
+    return (before_x - (door_x + 0.5)) * (after_x - (door_x + 0.5)) < 0
+
+
+def chest_has(items: dict[str, int], wanted: frozenset[str] | set[str]) -> bool:
+    return any(items.get(name, 0) > 0 for name in wanted)
+
+
+def count_time_sets(commands: list[str]) -> int:
+    return sum(1 for command in commands if command.startswith("time set "))
+
+
+def all_behaviours_pass(behaviour: dict[str, str]) -> bool:
+    required = ("door_walk", "sleep_return", "night_door", "farmer_harvest", "miner_deposit", "lumberjack")
+    return all(behaviour.get(name) == "PASS" for name in required)
+
+
+def trees_separated(soils: list[tuple[int, int, int]], min_gap: int = 5) -> bool:
+    """5x5 crowns (radius 2) need Chebyshev distance >= 5 or trunks get overwritten."""
+    for i, (ax, _, az) in enumerate(soils):
+        for bx, _, bz in soils[i + 1:]:
+            if max(abs(ax - bx), abs(az - bz)) < min_gap:
+                return False
+    return True
+
+
+def required_radius(anchor: tuple[int, int, int], points: list[tuple[int, int, int]]) -> int:
+    """Smallest radius sphere around the anchor covering every fixture point."""
+    far = max(math.dist(anchor, point) for point in points)
+    return max(1, min(256, math.ceil(far) + 1))
+
+
+def is_sleep_pose(y: float, bed_y: int, tol: float = 0.15) -> bool:
+    """Sleeping entity rests at bed.y + 0.6875 (core sleeping pose)."""
+    return abs(y - (bed_y + 0.6875)) <= tol
+
+
+def sleeping_at_bed(row: dict[str, Any], bed: tuple[int, int, int]) -> bool:
+    # The native client's received DATA_POSE projects SLEEPING_DIMENSIONS
+    # (0.2 high); this proves pose, unlike mere proximity to a bed. Relative
+    # movement quantization can drift the separately exposed entity position.
+    bounds = row.get("bounding_box", {})
+    height = float(bounds.get("max_y", 0)) - float(bounds.get("min_y", 0))
+    return (abs(height - 0.2) < 0.02 and float(row.get("health", 0)) > 0
+            and is_sleep_pose(float(row["y"]), bed[1], 0.5)
+            and math.dist((float(row["x"]), float(row["z"])),
+                          (bed[0] + 0.5, bed[2] + 0.5)) < 0.75)
+
+
+# Fixture jobs as the server shows them on a villager: the nameplate word
+# (`name · job · activity`) and the vanilla VillagerData profession a vanilla
+# client renders as the outfit (miner -> toolsmith, lumberjack -> fletcher).
+JOB_ROLES = {"фермер": "farmer", "шахтёр": "miner", "лесоруб": "lumberjack"}
+JOB_WIRE_PROFESSION = {"farmer": 5, "miner": 13, "lumberjack": 7}
+RETURN_RADIUS = 2.5
+# One summoned villager per fixture job, house villager first. A jobless extra
+# villager could hold a bed, leaving sleep_return no worker to judge.
+VILLAGER_ROLES = ("farmer", "miner", "lumberjack")
+# The sleeper sleep_return judges. Every worker has a bed, so the miner always
+# sleeps; the sealed cave zombie parks its digging under the pre-fix hostile
+# rule, so only the woken worker's walk to its job site (ISSUE-1-11) and the
+# visibility rule (ISSUE-1-27) get it back to work.
+SLEEP_RETURN_JOB = "miner"
+
+
+def nameplate(row: dict[str, Any]) -> str | None:
+    text = ((row.get("received_metadata") or {}).get("2") or {}).get("value")
+    return text if isinstance(text, str) else None
+
+
+def villager_job(row: dict[str, Any]) -> str | None:
+    """Fixture role of the job a villager holds, from client-received data.
+
+    Jobs follow the allocator, not summon order, so the role a villager was
+    summoned for proves nothing. Both client-visible signals must agree."""
+    parts = (nameplate(row) or "").split(" · ")
+    role = JOB_ROLES.get(parts[1]) if len(parts) == 3 else None
+    data = ((row.get("received_metadata") or {}).get("19") or {}).get("value")
+    if role is None or not isinstance(data, list) or len(data) != 3:
+        return None
+    return role if data[1] == JOB_WIRE_PROFESSION[role] else None
+
+
+def returned_to_job(row: dict[str, Any], job: str,
+                    stations: dict[str, tuple[int, int, int]]) -> bool:
+    """Still holds `job` and stands within RETURN_RADIUS of that job's station."""
+    station = stations[job]
+    return (villager_job(row) == job
+            and math.dist((float(row["x"]), float(row["z"])),
+                          (station[0] + 0.5, station[2] + 0.5)) < RETURN_RADIUS)
+
+
+# The server cuts a tree within this distance of its trunk (lumber.rs REACH).
+LUMBER_REACH = 4.0
+# Game ticks after `time set 3000` for the woken sleeper to get back to work:
+# a lumberjack's tree can be a long route away inside the settlement radius.
+MORNING_TICKS = 2400
+# Game ticks after `time set 18000` for a worker to walk home and lie down.
+NIGHT_TICKS = 1200
+# Game ticks for the house door to read shut after the night phase. Vanilla closes
+# a door once the villager that opened it has passed (InteractWithDoor; SleepInBed.start
+# closes the rest). The night phase ends when the judged sleeper lies down, so other
+# workers may still be walking in through the door: allow them half the walk-home budget.
+DOOR_CLOSE_TICKS = NIGHT_TICKS // 2
+
+
+def log_cells_near(rows: list[dict[str, Any]], pos: tuple[float, float, float],
+                   reach: float = LUMBER_REACH) -> list[tuple[int, int, int]]:
+    """Received log blocks within cutting reach of a standing villager."""
+    cells = [(int(row["x"]), int(row["y"]), int(row["z"])) for row in rows
+             if str(row.get("block_id", "")).endswith("_log")]
+    near = [cell for cell in cells
+            if math.dist((pos[0], pos[2]), (cell[0] + 0.5, cell[2] + 0.5)) <= reach]
+    return sorted(near, key=lambda cell: math.dist((pos[0], pos[2]), (cell[0] + 0.5, cell[2] + 0.5)))[:8]
+
+
+class WorkReturn:
+    """Whether a woken worker got back to work, from client-received state only.
+
+    Every job: it still shows the job and stands within RETURN_RADIUS of that
+    job's station. Or it starts the job's work where the job is done: a miner
+    stands inside the mine footprint; a lumberjack cuts a tree, i.e. a log
+    block within LUMBER_REACH of where it stopped turns into something else
+    while it is still there. A farmer has only the station check."""
+
+    def __init__(self, job: str, stations: dict[str, tuple[int, int, int]],
+                 mine: tuple[tuple[int, int, int], tuple[int, int, int]]) -> None:
+        self.job = job
+        self.stations = stations
+        self.mine = mine
+        self.evidence: str | None = None
+        self.pos: tuple[float, float, float] | None = None
+        self.stationary = False
+        self.scanned_at: tuple[float, float, float] | None = None
+        self.watched: list[tuple[int, int, int]] = []
+        self.travelled = 0.0
+
+    def see(self, row: dict[str, Any]) -> None:
+        pos = (float(row["x"]), float(row["y"]), float(row["z"]))
+        if self.pos is not None:
+            step = math.dist(self.pos, pos)
+            self.travelled += step
+            self.stationary = step < 0.2
+        self.pos = pos
+        if self.evidence is not None or villager_job(row) != self.job:
+            return
+        if returned_to_job(row, self.job, self.stations):
+            self.evidence = f"within {RETURN_RADIUS} of its station {list(self.stations[self.job])}"
+        elif self.job == "miner":
+            (x0, _, z0), (x1, y1, z1) = self.mine
+            if x0 <= pos[0] < x1 + 1 and z0 <= pos[2] < z1 + 1 and pos[1] <= y1 + 1:
+                self.evidence = f"inside the mine at {[round(v, 2) for v in pos]}"
+
+    def scan_spot(self) -> tuple[float, float, float] | None:
+        """Where to look for its tree: a lumberjack that stopped somewhere new."""
+        if (self.job != "lumberjack" or self.evidence is not None or not self.stationary
+                or self.pos is None):
+            return None
+        if self.scanned_at is not None and math.dist(self.scanned_at, self.pos) < 1.0:
+            return None
+        return self.pos
+
+    def scanned(self, spot: tuple[float, float, float], rows: list[dict[str, Any]]) -> None:
+        self.scanned_at = spot
+        self.watched = log_cells_near(rows, spot)
+
+    def logs_now(self, blocks: dict[tuple[int, int, int], str]) -> None:
+        """Fresh reads of the watched logs; a vanished one next to it is a cut."""
+        if self.evidence is not None or self.pos is None:
+            return
+        for cell, block_id in blocks.items():
+            if (cell in self.watched and not block_id.endswith("_log")
+                    and math.dist((self.pos[0], self.pos[2]), (cell[0] + 0.5, cell[2] + 0.5))
+                    <= LUMBER_REACH + 0.5):
+                self.evidence = f"cut the log at {list(cell)} -> {block_id}"
+                return
+
+
+def _game_time(steps: ProbeSteps) -> int:
+    """Server world age as the client received it (advances while daylight is frozen)."""
+    return int((steps.observe().get("time") or {}).get("game_time") or 0)
+
+
+def _scan(steps: ProbeSteps, lo: tuple[int, int, int], hi: tuple[int, int, int]) -> list[dict[str, Any]]:
+    """Every received block in the box, following the scan's byte-bounded pages."""
+    rows: list[dict[str, Any]] = []
+    offset = 0
+    while True:
+        page = steps.call("minecraft_scan_blocks", {
+            "min_x": lo[0], "min_y": lo[1], "min_z": lo[2],
+            "max_x": hi[0], "max_y": hi[1], "max_z": hi[2], "offset": offset})
+        rows.extend(row for row in page.get("blocks", []) if isinstance(row, dict))
+        following = page.get("next_offset")
+        if following is None:
+            return rows
+        if following <= offset:
+            raise RuntimeError(f"village-qa scan did not advance past offset {offset}")
+        offset = following
+
+
+def _block_id(block: dict[str, Any]) -> str:
+    return str(block.get("block_id", ""))
+
+
+def _props(block: dict[str, Any]) -> dict[str, Any]:
+    props = block.get("properties") or {}
+    return dict(props) if isinstance(props, dict) else {}
+
+
+def _unwrap_block(result: dict[str, Any]) -> dict[str, Any]:
+    """`minecraft_wait_for_block_state` returns a wait envelope around the block."""
+    if isinstance(result.get("block"), dict):
+        return result["block"]
+    return result
+
+
+def _read(steps: ProbeSteps, pos: tuple[int, int, int]) -> dict[str, Any]:
+    x, y, z = pos
+    return _unwrap_block(steps.call("minecraft_read_block", {"x": x, "y": y, "z": z}))
+
+
+def _expect_block(steps: ProbeSteps, pos: tuple[int, int, int],
+                  block_id: str, label: str) -> dict[str, Any]:
+    x, y, z = pos
+    block = _unwrap_block(steps.call(
+        "minecraft_wait_for_block_state",
+        {"x": x, "y": y, "z": z, "block_id": block_id,
+         "properties": {}, "timeout_seconds": steps.remaining()}))
+    if _block_id(block) != block_id:
+        raise RuntimeError(f"village-qa fixture failed at {label}: "
+                           f"expected {block_id} at {pos}, got {block}")
+    return block
+
+
+def _chat_echo(steps: ProbeSteps, label: str) -> dict[str, Any]:
+    import uuid as _uuid
+    marker = f"village-qa {label} {_uuid.uuid4().hex[:8]}"
+    steps.call("minecraft_send_chat", {"message": marker, "command": False})
+    return steps.wait(lambda s: any(marker in line for line in s.get("recent_chat", [])),
+                      f"{label}_server_echo")
+
+
+def _entities(steps: ProbeSteps, entity_type: str) -> list[dict[str, Any]]:
+    """Client-visible entities of one type via the explicit list tool (observe has none)."""
+    result = steps.call("minecraft_list_entities", {"radius": 64, "limit": 128})
+    rows = result.get("entities", [])
+    return [row for row in rows if isinstance(row, dict)
+            and row.get("entity_type") == entity_type]
+
+
+def _villagers(steps: ProbeSteps) -> list[dict[str, Any]]:
+    return _entities(steps, "minecraft:villager")
+
+
+def _sealed_hostile(steps: ProbeSteps, feet: tuple[int, int, int]) -> list[float] | None:
+    """Position of the live zombie still in its one-cell pocket, if the client lists one."""
+    for row in _entities(steps, "minecraft:zombie"):
+        pos = [float(row["x"]), float(row["y"]), float(row["z"])]
+        if (float(row.get("health", 0)) > 0
+                and math.dist((pos[0], pos[2]), (feet[0] + 0.5, feet[2] + 0.5)) < 0.8
+                and abs(pos[1] - feet[1]) < 0.6):
+            return [round(v, 2) for v in pos]
+    return None
+
+
+def _tick(steps: ProbeSteps) -> None:
+    """Wait for four native simulation ticks, never a wall-clock sleep."""
+    steps.call("minecraft_wait_ticks", {"ticks": 4})
+
+
+def _verdict(detail: dict[str, Any], name: str, verdict: str, evidence: str = "",
+             repro: str = "") -> None:
+    detail["behaviour"][name] = verdict
+    if evidence:
+        detail["evidence"][name] = evidence
+    if repro:
+        detail["repro"][name] = repro
+
+
+def _open_chest(steps: ProbeSteps, chest: tuple[int, int, int]) -> dict[int, dict[str, Any]]:
+    """Open a chest through the ordinary use path; return chest slots 0..26."""
+    steps.call("minecraft_set_hotbar_slot", {"slot": 8})
+    steps.call("minecraft_use_item_on",
+               {"x": chest[0], "y": chest[1], "z": chest[2], "face": "up", "hand": "main_hand"})
+    state = steps.wait(
+        lambda s: s["container"]["container_id"] != 0
+        and s["container"]["menu_class"] == "net.minecraft.world.inventory.ChestMenu",
+        "chest_menu_received")
+    if state["container"]["slot_count"] != 63:
+        raise RuntimeError(f"village-qa chest slot_count is {state['container']['slot_count']}, want 63")
+    slots: dict[int, dict[str, Any]] = {}
+    for row in state["container"]["slots"]:
+        if isinstance(row, dict) and 0 <= int(row.get("slot", -1)) < 27:
+            slots[int(row["slot"])] = {"item_id": row.get("item_id"), "count": row.get("count", 0)}
+    steps.call("minecraft_close_screen", {})
+    steps.wait(lambda s: s["container"]["container_id"] == 0, "chest_menu_closed")
+    return slots
+
+
+def _chest_totals(slots: dict[int, dict[str, Any]]) -> dict[str, int]:
+    totals: dict[str, int] = {}
+    for entry in slots.values():
+        name = str(entry.get("item_id", "minecraft:air"))
+        if name != "minecraft:air" and int(entry.get("count", 0)) > 0:
+            totals[name] = totals.get(name, 0) + int(entry.get("count", 0))
+    return totals
+
+
+def validate_args(ctx: ProfileContext) -> float:
+    if ctx.client != "native":
+        raise ValueError("village-qa requires --client native")
+    if ctx.extra_args or ctx.platform is not None:
+        raise ValueError("village-qa accepts only --client, --windowed and --timeout-seconds")
+    timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 600.0
+    if not 0 < timeout <= 600:
+        raise ValueError("village-qa --timeout-seconds must be in (0, 600]")
+    return timeout
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    timeout = validate_args(ctx)
+    artifact = ctx.artifact_dir
+    override = os.environ.get("SOLARIS_SERVER_BINARY")
+    if not override:
+        raise RuntimeError("village-qa requires SOLARIS_SERVER_BINARY (a solaris-v2 built from this tree)")
+    binary = Path(override).expanduser().resolve()
+    if not binary.is_file():
+        raise RuntimeError(f"missing executable server binary: {binary}")
+    server_port = runtime.reserve_port()
+    address = f"127.0.0.1:{server_port}"
+    config = artifact / "village-qa.toml"
+    source = (runtime.REPO_ROOT / "playable.toml").read_text()
+    replacements = (
+        ("port = 25565", f"port = {server_port}"),
+        ('world_dir = ".analysis/test-world-v12"',
+         f'world_dir = "{(artifact / "world").relative_to(runtime.REPO_ROOT).as_posix()}"'),
+        ('directory = "plugins"', f"directory = {json.dumps(str(artifact / 'plugins'))}"),
+        ("seed = 0", "seed = 81"),
+    )
+    for old_tok, new_tok in replacements:
+        if source.count(old_tok) != 1:
+            raise RuntimeError(f"expected one village-qa config token: {old_tok}")
+        source = source.replace(old_tok, new_tok, 1)
+    config.write_text(source)
+    (artifact / "plugins").mkdir(parents=True, exist_ok=True)
+    prepare_operator_fixture(ctx, [USERNAME])
+    evidence = ctx.client_evidence
+    with binary.open("rb") as server_executable:
+        server_hash = hashlib.file_digest(server_executable, "sha256").hexdigest()
+    evidence.update(server_address=address, server_binary_path=str(binary),
+                    server_binary_sha256=server_hash, world_dir=str(artifact / "world"), seed=81)
+    server = client_process = xvfb = mcp = None
+    server_log = None
+    server_log_path = artifact / "server.log"
+    try:
+        server_log = server_log_path.open("wb")
+        env = os.environ.copy()
+        env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+        server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
+                                  cwd=runtime.REPO_ROOT, stdout=server_log,
+                                  stderr=subprocess.STDOUT, start_new_session=True, env=env)
+        ctx.logs.append(str(server_log_path))
+        runtime.wait_port(server_port, timeout, server, log_path=server_log_path)
+        display = None
+        if ctx.windowed:
+            xvfb, display, _ = runtime.start_xvfb(artifact)
+            ctx.logs.append(str(artifact / "xvfb.log"))
+        client_process, _client_log, mcp = native_client.start(
+            ctx, native_client.resolve_binary(ctx), address, USERNAME, timeout, display=display)
+        mcp.request_timeout_seconds = min(timeout + 10, 130.0)
+        with ProbeSteps(mcp, artifact / "village-qa", timeout, "village-qa-settlements") as probe:
+            probe.call("minecraft_wait_for_play", {"timeout_seconds": probe.remaining()})
+            if ctx.windowed:
+                native_client.capture(mcp, artifact, "village-qa-spawn")
+            detail: dict[str, Any] = {"behaviour": {}, "evidence": {}, "repro": {}}
+            probe.report["settlement_acceptance"] = detail
+            _scenario(probe, detail, ctx, artifact)
+            if ctx.windowed:
+                native_client.capture(mcp, artifact, "village-qa-final")
+        if ctx.windowed:
+            evidence["capture"] = native_client.capture(mcp, artifact)
+        if client_process is not None:
+            rss = peak_rss_kib(client_process.pid)
+            if rss is not None:
+                evidence["peak_client_rss_kib"] = rss
+        return {"scenario": probe.report}
+    finally:
+        if mcp is not None:
+            try:
+                mcp.close()
+            except Exception:
+                pass
+        runtime.stop_process(client_process)
+        runtime.stop_process(server, interrupt=True)
+        runtime.stop_process(xvfb)
+        if server_log is not None:
+            server_log.close()
+
+
+def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, artifact: Path) -> None:
+    rooted = probe.wait(lambda s: isinstance((s.get("player") or {}).get("x"), float),
+                        "player_present")
+    px, py, pz = (math.floor(rooted["player"][axis]) for axis in ("x", "y", "z"))
+    origin = (int(px), int(py), int(pz))
+    detail["origin_block"] = list(origin)
+
+    def fixture(command: str) -> None:
+        probe.fixture(command)
+
+    def settled(label: str) -> dict[str, Any]:
+        return _chat_echo(probe, label)
+
+    def teleport(x: float, y: float, z: float) -> None:
+        fixture(f"tp @s {x:.1f} {y:.1f} {z:.1f}")
+        probe.wait(lambda s: abs(float(s["player"]["x"]) - x) < 3.0
+                   and abs(float(s["player"]["z"]) - z) < 3.0, "player_teleported")
+
+    # --- level a pad through ordinary chat commands (one daylight freeze, no time spam) ---
+    x0, y0, z0 = origin
+    # 61*61*17 exceeds vanilla's 32768-command block limit; each slab fits.
+    for low, high in ((-8, -1), (0, 7), (8, 8)):
+        fixture(f"fill {x0 - 30} {y0 + low} {z0 - 30} {x0 + 30} {y0 + high} {z0 + 30} minecraft:air")
+    fixture(f"fill {x0 - 30} {y0 - 2} {z0 - 30} {x0 + 30} {y0 - 2} {z0 + 30} minecraft:dirt")
+    fixture(f"fill {x0 - 30} {y0 - 1} {z0 - 30} {x0 + 30} {y0 - 1} {z0 + 30} minecraft:grass_block")
+    fixture(f"fill {x0 - 2} {y0 - 1} {z0 - 2} {x0 + 2} {y0 - 1} {z0 + 2} minecraft:stone")
+    fixture("gamemode creative @s")
+    fixture("effect give @s minecraft:regeneration infinite 255 true")
+    fixture("gamerule advance_time false")
+    fixture("gamerule spawn_mobs false")
+    fixture("gamerule random_tick_speed 0")
+    fixture("time set 18000")
+    _expect_block(probe, (x0, y0 - 1, z0), "minecraft:stone", "spawn_pad_leveled")
+
+    # --- house 5x5x5: floor y0, roof y0+4, walls y0+1..y0+3, east door, one east bed per worker ---
+    house_lo, house_hi = _rect(origin, (0, 0, 0), (4, 4, 4))
+    hx0, hy0, hz0 = house_lo
+    hx1, hy1, hz1 = house_hi
+    fixture(f"fill {hx0} {hy0} {hz0} {hx1} {hy0} {hz1} minecraft:oak_planks")
+    fixture(f"fill {hx0} {hy1} {hz0} {hx1} {hy1} {hz1} minecraft:oak_planks")
+    fixture(f"fill {hx0} {hy0 + 1} {hz0} {hx1} {hy0 + 3} {hz0} minecraft:cobblestone")
+    fixture(f"fill {hx0} {hy0 + 1} {hz1} {hx1} {hy0 + 3} {hz1} minecraft:cobblestone")
+    fixture(f"fill {hx0} {hy0 + 1} {hz0} {hx0} {hy0 + 3} {hz1} minecraft:cobblestone")
+    fixture(f"fill {hx1} {hy0 + 1} {hz0} {hx1} {hy0 + 3} {hz1} minecraft:cobblestone")
+    door = (hx1, hy0 + 1, hz0 + 2)
+    door_top = (hx1, hy0 + 2, hz0 + 2)
+    fixture(f"setblock {door[0]} {door[1]} {door[2]} minecraft:air")
+    fixture(f"setblock {door_top[0]} {door_top[1]} {door_top[2]} minecraft:air")
+    fixture(f"setblock {door[0]} {door[1]} {door[2]} minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]")
+    fixture(f"setblock {door_top[0]} {door_top[1]} {door_top[2]} minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]")
+    beds = house_beds(hx0, hy0, hz0)
+    for bed_foot, bed_head in beds:
+        assert bed_facing_valid(bed_foot, bed_head, "east"), "bed fixture must be east foot->head"
+        assert house_headroom_ok(bed_head[1], hy1), "bed needs two air blocks under the roof"
+        fixture(f"setblock {bed_foot[0]} {bed_foot[1]} {bed_foot[2]} minecraft:red_bed[facing=east,part=foot,occupied=false]")
+        fixture(f"setblock {bed_head[0]} {bed_head[1]} {bed_head[2]} minecraft:red_bed[facing=east,part=head,occupied=false]")
+    _expect_block(probe, door, "minecraft:oak_door", "house_door_placed")
+    for index, (_, bed_head) in enumerate(beds):
+        _expect_block(probe, bed_head, "minecraft:red_bed", f"house_bed_{index}_placed")
+    bed_heads = [head for _, head in beds]
+    house_stage = (hx0 + 3, hy0 + 1, hz0 + 3)
+    fixture(f"setblock {house_stage[0]} {house_stage[1]} {house_stage[2]} minecraft:air")
+    if ctx.windowed:
+        native_client.capture(probe.client, artifact, "village-qa-house")
+
+    # --- workshop 5x5x5 with west door and open interior; farm inside reach east ---
+    work_lo, work_hi = _rect(origin, (8, 0, 0), (12, 4, 4))
+    wx0, wy0, wz0 = work_lo
+    wx1, wy1, wz1 = work_hi
+    fixture(f"fill {wx0} {wy0} {wz0} {wx1} {wy0} {wz1} minecraft:oak_planks")
+    fixture(f"fill {wx0} {wy1} {wz0} {wx1} {wy1} {wz1} minecraft:oak_planks")
+    fixture(f"fill {wx0} {wy0 + 1} {wz0} {wx1} {wy0 + 3} {wz0} minecraft:cobblestone")
+    fixture(f"fill {wx0} {wy0 + 1} {wz1} {wx1} {wy0 + 3} {wz1} minecraft:cobblestone")
+    fixture(f"fill {wx0} {wy0 + 1} {wz0} {wx0} {wy0 + 3} {wz1} minecraft:cobblestone")
+    fixture(f"fill {wx1} {wy0 + 1} {wz0} {wx1} {wy0 + 3} {wz1} minecraft:cobblestone")
+    work_door = (wx0, wy0 + 1, wz0 + 2)
+    work_door_top = (wx0, wy0 + 2, wz0 + 2)
+    fixture(f"setblock {work_door[0]} {work_door[1]} {work_door[2]} minecraft:air")
+    fixture(f"setblock {work_door_top[0]} {work_door_top[1]} {work_door_top[2]} minecraft:air")
+    fixture(f"setblock {work_door[0]} {work_door[1]} {work_door[2]} minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]")
+    fixture(f"setblock {work_door_top[0]} {work_door_top[1]} {work_door_top[2]} minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]")
+    composter = (wx0 + 1, wy0 + 1, wz0 + 1)
+    fixture(f"setblock {composter[0]} {composter[1]} {composter[2]} minecraft:composter")
+    farmer_stage = (wx0 + 2, wy0 + 1, wz0 + 2)
+    fixture(f"setblock {farmer_stage[0]} {farmer_stage[1]} {farmer_stage[2]} minecraft:air")
+    fixture(f"setblock {farmer_stage[0]} {farmer_stage[1] + 1} {farmer_stage[2]} minecraft:air")
+    # Farmland row inside the east wall line: within farmer REACH 4 of the station.
+    farm = [(wx1, wy0, wz0 + 1 + i) for i in range(3)]
+    for fx, fy, fz in farm:
+        fixture(f"setblock {fx} {fy} {fz} minecraft:farmland[moisture=7]")
+        fixture(f"setblock {fx} {fy + 1} {fz} minecraft:wheat[age=7]")
+    fixture(f"setblock {wx1 + 1} {wy0} {wz0 + 2} minecraft:water")
+    _expect_block(probe, composter, "minecraft:composter", "workshop_composter_placed")
+    _expect_block(probe, (farm[0][0], farm[0][1] + 1, farm[0][2]), "minecraft:wheat", "wheat_mature_placed")
+    wheat_props = _props(_read(probe, (farm[0][0], farm[0][1] + 1, farm[0][2])))
+    if wheat_props.get("age") != "7":
+        raise RuntimeError(f"village-qa fixture failed: wheat age is {wheat_props}, want age=7")
+    if ctx.windowed:
+        native_client.capture(probe.client, artifact, "village-qa-workshop")
+
+    # --- storage 5x5x5 with west door, open interior, one chest ---
+    store_lo, store_hi = _rect(origin, (8, 0, 6), (12, 4, 10))
+    sx0, sy0, sz0 = store_lo
+    sx1, sy1, sz1 = store_hi
+    fixture(f"fill {sx0} {sy0} {sz0} {sx1} {sy0} {sz1} minecraft:oak_planks")
+    fixture(f"fill {sx0} {sy1} {sz0} {sx1} {sy1} {sz1} minecraft:oak_planks")
+    fixture(f"fill {sx0} {sy0 + 1} {sz0} {sx1} {sy0 + 3} {sz0} minecraft:cobblestone")
+    fixture(f"fill {sx0} {sy0 + 1} {sz1} {sx1} {sy0 + 3} {sz1} minecraft:cobblestone")
+    fixture(f"fill {sx0} {sy0 + 1} {sz0} {sx0} {sy0 + 3} {sz1} minecraft:cobblestone")
+    fixture(f"fill {sx1} {sy0 + 1} {sz0} {sx1} {sy0 + 3} {sz1} minecraft:cobblestone")
+    store_door = (sx0, sy0 + 1, sz0 + 2)
+    store_door_top = (sx0, sy0 + 2, sz0 + 2)
+    fixture(f"setblock {store_door[0]} {store_door[1]} {store_door[2]} minecraft:air")
+    fixture(f"setblock {store_door_top[0]} {store_door_top[1]} {store_door_top[2]} minecraft:air")
+    fixture(f"setblock {store_door[0]} {store_door[1]} {store_door[2]} minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]")
+    fixture(f"setblock {store_door_top[0]} {store_door_top[1]} {store_door_top[2]} minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]")
+    chest = (sx0 + 1, sy0 + 1, sz0 + 1)
+    fixture(f"setblock {chest[0]} {chest[1]} {chest[2]} minecraft:chest[facing=north,type=single,waterlogged=false]")
+    store_stage = (sx0 + 2, sy0 + 1, sz0 + 2)
+    fixture(f"setblock {store_stage[0]} {store_stage[1]} {store_stage[2]} minecraft:air")
+    fixture(f"setblock {store_stage[0]} {store_stage[1] + 1} {store_stage[2]} minecraft:air")
+    _expect_block(probe, chest, "minecraft:chest", "storage_chest_placed")
+    if ctx.windowed:
+        native_client.capture(probe.client, artifact, "village-qa-storage")
+
+    # --- mine zone at grade: stone to y0, air above, smithing table at top plane ---
+    mine_lo, mine_hi = _rect(origin, (14, -6, -2), (24, 1, 8))
+    mx1, my1, _mz1 = mine_hi
+    fixture(f"fill {mine_lo[0]} {mine_lo[1]} {mine_lo[2]} {mx1} {my1 - 1} {mine_hi[2]} minecraft:stone")
+    fixture(f"fill {mine_lo[0]} {my1} {mine_lo[2]} {mx1} {my1 + 3} {mine_hi[2]} minecraft:air")
+    entrance = (mine_lo[0] + 1, my1, mine_lo[2] + 1)
+    fixture(f"setblock {entrance[0]} {entrance[1]} {entrance[2]} minecraft:smithing_table")
+    miner_stage = (entrance[0] + 1, my1, entrance[2])
+    fixture(f"setblock {miner_stage[0]} {miner_stage[1]} {miner_stage[2]} minecraft:air")
+    _expect_block(probe, entrance, "minecraft:smithing_table", "mine_station_placed")
+    # Permanent hazards can select any surface lane. Observe the first two
+    # descending floor cells of every lane, never just the original entrance.
+    dig_cells = [(entrance[0] + dx, entrance[1] - dx, z)
+                 for dx in (1, 2) for z in range(mine_lo[2] + 1, mine_hi[2])]
+    dig_before = {cell: _block_id(_read(probe, cell)) for cell in dig_cells}
+    detail["mine_probe_cells"] = len(dig_cells)
+
+    # --- a zombie sealed in stone beside the mine, under the pad (u2wl2u3f): within the
+    # miner's sensor reach of the first staircase cell, but no resident can see or reach it.
+    # The pre-fix hostile rule counted it and parked the miner on every lane. ---
+    cave = cave_hostile_feet(mine_lo, entrance)
+    assert cave[0] < mine_lo[0], "the cave lies outside the mine, off the staircase"
+    assert within_hostile_reach(cave, (entrance[0] + 1, entrance[1] - 1, entrance[2])), \
+        "the cave zombie must be in reach of the first staircase cell"
+    kx, ky, kz = cave
+    fixture(f"fill {kx - 1} {ky - 1} {kz - 1} {kx + 1} {ky + 2} {kz + 1} minecraft:stone")
+    fixture(f"fill {kx} {ky} {kz} {kx} {ky + 1} {kz} minecraft:air")
+    fixture(f"summon minecraft:zombie {kx + 0.5:.1f} {ky:.1f} {kz + 0.5:.1f} {{PersistenceRequired:1b}}")
+    settled("cave_hostile_summoned")
+    cave_start = None
+    for _ in range(25):  # bounded: the summon reaches the client within a few ticks
+        if (cave_start := _sealed_hostile(probe, cave)) is not None:
+            break
+        _tick(probe)
+    if cave_start is None:
+        raise RuntimeError(f"village-qa fixture failed: no live zombie listed in the sealed cave at {list(cave)}")
+    detail["cave_hostile"] = {"feet": list(cave), "start": cave_start}
+
+    # --- lumber camp 5x5x5 with west door; two separated mature persistent=false oaks ---
+    camp_lo, camp_hi = _rect(origin, (14, 0, 12), (18, 4, 16))
+    cx0, cy0, cz0 = camp_lo
+    cx1, cy1, cz1 = camp_hi
+    fixture(f"fill {cx0} {cy0} {cz0} {cx1} {cy0} {cz1} minecraft:oak_planks")
+    fixture(f"fill {cx0} {cy1} {cz0} {cx1} {cy1} {cz1} minecraft:oak_planks")
+    fixture(f"fill {cx0} {cy0 + 1} {cz0} {cx1} {cy0 + 3} {cz0} minecraft:cobblestone")
+    fixture(f"fill {cx0} {cy0 + 1} {cz1} {cx1} {cy0 + 3} {cz1} minecraft:cobblestone")
+    fixture(f"fill {cx0} {cy0 + 1} {cz0} {cx0} {cy0 + 3} {cz1} minecraft:cobblestone")
+    fixture(f"fill {cx1} {cy0 + 1} {cz0} {cx1} {cy0 + 3} {cz1} minecraft:cobblestone")
+    camp_door = (cx0, cy0 + 1, cz0 + 2)
+    camp_door_top = (cx0, cy0 + 2, cz0 + 2)
+    fixture(f"setblock {camp_door[0]} {camp_door[1]} {camp_door[2]} minecraft:air")
+    fixture(f"setblock {camp_door_top[0]} {camp_door_top[1]} {camp_door_top[2]} minecraft:air")
+    fixture(f"setblock {camp_door[0]} {camp_door[1]} {camp_door[2]} minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]")
+    fixture(f"setblock {camp_door_top[0]} {camp_door_top[1]} {camp_door_top[2]} minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]")
+    fletcher = (cx0 + 1, cy0 + 1, cz0 + 1)
+    fixture(f"setblock {fletcher[0]} {fletcher[1]} {fletcher[2]} minecraft:fletching_table")
+    lumber_stage = (cx0 + 2, cy0 + 1, cz0 + 2)
+    fixture(f"setblock {lumber_stage[0]} {lumber_stage[1]} {lumber_stage[2]} minecraft:air")
+    fixture(f"setblock {lumber_stage[0]} {lumber_stage[1] + 1} {lumber_stage[2]} minecraft:air")
+    _expect_block(probe, fletcher, "minecraft:fletching_table", "camp_station_placed")
+    # Chebyshev >= 5 apart so neither 5x5 crown overwrites the other's trunk.
+    tree_soils = [(cx0 + 1, cy0, cz1 + 2), (cx0 + 4, cy0, cz1 + 7)]
+    assert trees_separated(tree_soils), "tree crowns must not overlap trunks"
+    for tx, ty, tz in tree_soils:
+        fixture(f"setblock {tx} {ty} {tz} minecraft:dirt")
+        fixture(f"fill {tx - 2} {ty + 3} {tz - 2} {tx + 2} {ty + 5} {tz + 2} minecraft:oak_leaves[persistent=false,waterlogged=false]")
+        fixture(f"fill {tx} {ty + 1} {tz} {tx} {ty + 4} {tz} minecraft:oak_log")
+    settled("trees_planted")
+    tree_trunks = {soil: [(soil[0], soil[1] + h, soil[2]) for h in (1, 2, 3, 4)]
+                   for soil in tree_soils}
+    for soil, cells in tree_trunks.items():
+        for cell in cells:
+            _expect_block(probe, cell, "minecraft:oak_log", f"tree_trunk_{soil}")
+    if ctx.windowed:
+        native_client.capture(probe.client, artifact, "village-qa-camp")
+
+    # Raised floors have ordinary half-step approaches: a 1.95-high villager
+    # cannot jump a full block through a two-block-high lintel.
+    for cell, dx, facing in ((door, 1, "west"), (work_door, -1, "east"),
+                             (store_door, -1, "east"), (camp_door, -1, "east")):
+        fixture(f"setblock {cell[0] + dx} {cell[1] - 1} {cell[2]} "
+                f"minecraft:oak_stairs[facing={facing},half=bottom,shape=straight]")
+
+    # --- settlement radius covers every fixture, then certification ---
+    cover = [house_lo, house_hi, work_lo, work_hi, store_lo, store_hi,
+             mine_lo, mine_hi, camp_lo, camp_hi, *tree_soils,
+             farmer_stage, miner_stage, lumber_stage, house_stage]
+    radius = required_radius(origin, cover)
+    detail["settlement_radius"] = radius
+    fixture(f"settlement create {SETTLEMENT} {radius}")
+    settled("settlement_created")
+    fixture(f"settlement building certify house {house_lo[0]} {house_lo[1]} {house_lo[2]} "
+            f"{house_hi[0]} {house_hi[1]} {house_hi[2]}")
+    house_echo = settled("house_certified")
+    if not any("Certified house" in line for line in house_echo.get("recent_chat", [])):
+        raise RuntimeError("village-qa fixture failed: house not certified: "
+                           f"{house_echo.get('recent_chat', [])[-4:]}")
+    fixture(f"settlement building certify farmer {work_lo[0]} {work_lo[1]} {work_lo[2]} "
+            f"{work_hi[0]} {work_hi[1]} {work_hi[2]}")
+    farmer_echo = settled("farmer_certified")
+    probe.check("farmer_certificate_accepted",
+                any("Certified farmer" in line for line in farmer_echo.get("recent_chat", [])))
+    fixture(f"settlement building certify storage {store_lo[0]} {store_lo[1]} {store_lo[2]} "
+            f"{store_hi[0]} {store_hi[1]} {store_hi[2]}")
+    storage_echo = settled("storage_certified")
+    probe.check("storage_certificate_accepted",
+                any("Certified storage" in line for line in storage_echo.get("recent_chat", [])))
+    fixture(f"settlement building certify mine {mine_lo[0]} {mine_lo[1]} {mine_lo[2]} "
+            f"{mine_hi[0]} {mine_hi[1]} {mine_hi[2]}")
+    mine_echo = settled("mine_certified")
+    probe.check("mine_certificate_accepted",
+                any("Certified mine" in line for line in mine_echo.get("recent_chat", [])))
+    fixture(f"settlement building certify lumber_camp {camp_lo[0]} {camp_lo[1]} {camp_lo[2]} "
+            f"{camp_hi[0]} {camp_hi[1]} {camp_hi[2]}")
+    camp_echo = settled("camp_certified")
+    probe.check("camp_certificate_accepted",
+                any("Certified lumber_camp" in line for line in camp_echo.get("recent_chat", [])))
+
+    # --- chest starts empty (MCP slot evidence baseline) ---
+    teleport(float(store_stage[0]) + 0.5, float(store_stage[1]), float(store_stage[2]) + 0.5)
+    if ctx.windowed:
+        native_client.capture(probe.client, artifact, "village-qa-chest-empty")
+    empty_totals = _chest_totals(_open_chest(probe, chest))
+    detail["chest_empty_baseline"] = empty_totals
+    if empty_totals:
+        raise RuntimeError(f"village-qa fixture failed: chest not empty: {empty_totals}")
+
+    # --- summon + bind sequentially, nearest fresh villager per role ---
+    detail["villager_uuids"] = []
+    role_plan = tuple(zip(VILLAGER_ROLES, (house_stage, miner_stage, lumber_stage), strict=True))
+    role_uuid: dict[str, str] = {}
+    for role, stage in role_plan:
+        fixture(f"summon minecraft:villager {stage[0]} {stage[1]} {stage[2]}")
+        settled(f"{role}_summoned")
+        candidates = _villagers(probe)
+        if not candidates:
+            raise RuntimeError(f"village-qa fixture failed: no villagers listed after {role} summon")
+        taken = set(role_uuid.values())
+        fresh = [row for row in candidates if row.get("entity_uuid") not in taken]
+        probe.check(f"{role}_has_fresh_entity", bool(fresh))
+        pick = min(fresh,
+                   key=lambda row: abs(float(row["x"]) - stage[0]) + abs(float(row["z"]) - stage[2]))
+        uuid = str(pick["entity_uuid"])
+        teleport(float(pick["x"]), float(pick["y"]) + 1.0, float(pick["z"]))
+        fixture(f"settlement bind {SETTLEMENT} {uuid}")
+        role_uuid[role] = uuid
+        detail["villager_uuids"].append({"role": role, "uuid": uuid, "stage": list(stage)})
+    bound_echo = settled("villagers_bound")
+    detail["bind_chat"] = bound_echo.get("recent_chat", [])[:12]
+    detail["bind_ok_count"] = sum(1 for line in probe.observe().get("recent_chat", [])
+                                  if "Bound " in line and f" to {SETTLEMENT}." in line)
+    probe.check("three_villagers_bound", len(set(role_uuid.values())) == len(VILLAGER_ROLES)
+                and detail["bind_ok_count"] >= len(VILLAGER_ROLES))
+    detail["villagers_visible"] = len(_villagers(probe))
+    detail["villager_uuids_observed"] = list(role_uuid.values())
+    if count_time_sets(probe.report["fixture_commands"]) != 1:
+        raise RuntimeError("village-qa fixture failed: expected one initial night phase")
+    if ctx.windowed:
+        native_client.capture(probe.client, artifact, "village-qa-bound")
+
+    stations = {"farmer": composter, "miner": entrance, "lumberjack": fletcher}
+    worker_uuids = {role_uuid[role] for role in stations}
+    doors = [door, work_door, store_door, camp_door]
+    teleport(x0 + 6.5, y0 + 1.0, z0 + 7.5)
+    probe.call("minecraft_look", {"yaw_deg": 180, "pitch_deg": 0})
+
+    # --- (1) door walk: frozen day 3000, worker crossing + open + awaited close ---
+    fixture("time set 3000")
+    settled("day_work_begins")
+    for cell in doors:
+        if "door" not in _block_id(_read(probe, cell)):
+            _verdict(detail, "door_walk", "FAIL", f"door cell {list(cell)} holds no door",
+                     f"minecraft_read_block {cell[0]} {cell[1]} {cell[2]}")
+            break
+    else:
+        tracks: dict[str, list[tuple[float, float, float]]] = {}
+        crossed: dict[str, tuple[int, int, int]] = {}
+        opened_doors: set[tuple[int, int, int]] = set()
+        flips: dict[str, int] = {}
+        deadline = _time.monotonic() + 70.0
+        while _time.monotonic() < deadline and not any(
+                cell in opened_doors for cell in crossed.values()):
+            for row in _villagers(probe):
+                uuid = str(row.get("entity_uuid"))
+                pos = (float(row["x"]), float(row["y"]), float(row["z"]))
+                history = tracks.setdefault(uuid, [])
+                history.append(pos)
+                if len(history) >= 2 and uuid in worker_uuids:
+                    for cell in doors:
+                        if abs(pos[1] - cell[1]) < 3.5 \
+                                and abs(pos[2] - (cell[2] + 0.5)) < 0.9 \
+                                and door_crossed(history[-2][0], pos[0], cell[0]):
+                            crossed[uuid] = cell
+                            flips[uuid] = flips.get(uuid, 0) + 1
+            for cell in doors:
+                if _props(_read(probe, cell)).get("open") == "true":
+                    opened_doors.add(cell)
+            if not any(cell in opened_doors for cell in crossed.values()):
+                _tick(probe)
+        detail["door_flips"] = {uuid[:8]: count for uuid, count in flips.items()}
+        crossings = [(uuid, cell) for uuid, cell in crossed.items() if cell in opened_doors]
+        if crossings:
+            # Bounded exact predicate: the crossed door must actually close again.
+            crosser, cell = crossings[0]
+            close_deadline = _time.monotonic() + 40.0
+            closed = _props(_read(probe, cell)).get("open") == "false"
+            while not closed and _time.monotonic() < close_deadline:
+                _tick(probe)
+                closed = _props(_read(probe, cell)).get("open") == "false"
+            if closed:
+                _verdict(detail, "door_walk", "PASS",
+                         f"worker {crosser[:8]} crossed door {list(cell)} "
+                         f"(open seen, flips={flips.get(crosser)}, ends open=false)")
+            else:
+                _verdict(detail, "door_walk", "FAIL",
+                         f"worker {crosser[:8]} crossed {list(cell)} but it never closed",
+                         f"time set 3000 (frozen); minecraft_read_block {cell[0]} {cell[1]} {cell[2]}; "
+                         "server log: villager door open/close lines")
+        else:
+            _verdict(detail, "door_walk", "FAIL",
+                     f"crossed={list(crossed)} opened={[list(c) for c in opened_doors]}",
+                     "time set 3000 (frozen); minecraft_read_block at the four doors; "
+                     "server log: villager door open/close lines")
+    if ctx.windowed:
+        native_client.capture(probe.client, artifact, "village-qa-workday")
+    # --- (1b) every fixture job is taken before the night ---
+    # Bounded wait for the exact state: each of the three jobs is shown held by
+    # some villager (nameplate and VillagerData agree), whoever was summoned
+    # for which role.
+    day_jobs: dict[str, str] = {}
+    jobs_deadline = _time.monotonic() + 90.0
+    while _time.monotonic() < jobs_deadline:
+        day_jobs = {str(row.get("entity_uuid")): job for row in _villagers(probe)
+                    if (job := villager_job(row)) is not None}
+        if set(day_jobs.values()) == set(stations):
+            break
+        _tick(probe)
+    detail["day_jobs"] = {uuid[:8]: job for uuid, job in day_jobs.items()}
+
+    # --- (2) night sleep: same entities persist, every worker sleeps in a bed; the one
+    # holding SLEEP_RETURN_JOB is the sleeper judged in the morning ---
+    evening = {str(row["entity_uuid"]): (float(row["x"]), float(row["y"]), float(row["z"]))
+               for row in _villagers(probe)}
+    fixture("time set 18000")
+    settled("night_falls")
+    night_tracks: dict[str, tuple[float, float, float]] = {}
+    bed_sleepers: dict[str, str | None] = {}
+    sleeper: str | None = None
+    sleeper_job: str | None = None
+    sleeper_bed: tuple[int, int, int] | None = None
+    # Game ticks, not seconds: a loaded host slows the server, and a worker far
+    # from home needs the same simulated walk either way.
+    night_start = _game_time(probe)
+    night_ticks = 0
+    while night_ticks < NIGHT_TICKS:
+        for row in _villagers(probe):
+            uuid = str(row.get("entity_uuid"))
+            pos = (float(row["x"]), float(row["y"]), float(row["z"]))
+            night_tracks[uuid] = pos
+            for head in bed_heads:
+                if sleeping_at_bed(row, head):
+                    bed_sleepers[uuid[:8]] = nameplate(row)
+                    if villager_job(row) == SLEEP_RETURN_JOB:
+                        sleeper, sleeper_job, sleeper_bed = uuid, SLEEP_RETURN_JOB, head
+        if sleeper is not None and set(evening) <= set(night_tracks):
+            break
+        _tick(probe)
+        night_ticks = _game_time(probe) - night_start
+    detail["night_ticks"] = night_ticks
+    detail["bed_sleepers"] = bed_sleepers
+    # --- (2b) issue #1 (ISSUE-1-08): the workers that walked in for the night left the
+    # house door shut; read from the client within DOOR_CLOSE_TICKS game ticks ---
+    door_start = _game_time(probe)
+    door_state = _props(_read(probe, door)).get("open")
+    while door_state != "false" and _game_time(probe) - door_start < DOOR_CLOSE_TICKS:
+        _tick(probe)
+        door_state = _props(_read(probe, door)).get("open")
+    detail["night_door"] = {"door": list(door), "open": door_state,
+                            "ticks": _game_time(probe) - door_start}
+    if bed_sleepers and door_state == "false":
+        _verdict(detail, "night_door", "PASS",
+                 f"{len(bed_sleepers)} workers asleep, house door {list(door)} shut")
+    else:
+        _verdict(detail, "night_door", "FAIL",
+                 f"bed_sleepers={bed_sleepers} house door {list(door)} open={door_state!r} "
+                 f"after {detail['night_door']['ticks']} ticks",
+                 f"time set 18000; minecraft_read_block {door[0]} {door[1]} {door[2]} once the workers sleep")
+    # --- morning at work hours 3000 (not idle 23000): the same entity still
+    # holds the same job and gets back to work, within MORNING_TICKS game ticks ---
+    fixture("time set 3000")
+    settled("morning_returns")
+    morning: dict[str, tuple[float, float, float]] = {}
+    woke_plate: str | None = None
+    closest: float | None = None
+    work = WorkReturn(sleeper_job, stations, (mine_lo, mine_hi)) if sleeper_job else None
+    morning_start = _game_time(probe)
+    morning_ticks = 0
+    while morning_ticks < MORNING_TICKS:
+        for row in _villagers(probe):
+            uuid = str(row.get("entity_uuid"))
+            morning[uuid] = (float(row["x"]), float(row["y"]), float(row["z"]))
+            if uuid == sleeper and work is not None:
+                woke_plate = nameplate(row)
+                station = stations[work.job]
+                gap = math.dist((float(row["x"]), float(row["z"])),
+                                (station[0] + 0.5, station[2] + 0.5))
+                closest = gap if closest is None else min(closest, gap)
+                work.see(row)
+        if work is not None and (spot := work.scan_spot()) is not None:
+            x, y, z = (math.floor(v) for v in spot)
+            work.scanned(spot, _scan(probe, (x - 5, y - 1, z - 5), (x + 5, y + 7, z + 5)))
+        if work is not None and work.watched and work.evidence is None:
+            work.logs_now({cell: _block_id(_read(probe, cell)) for cell in work.watched})
+        if set(evening) <= set(morning) and work is not None and work.evidence is not None:
+            break
+        _tick(probe)
+        morning_ticks = _game_time(probe) - morning_start
+    same_entities = set(evening) != set() and set(evening) <= set(morning)
+    held_by_day = sleeper is not None and day_jobs.get(sleeper) == sleeper_job
+    station = list(stations[sleeper_job]) if sleeper_job else None
+    evidence = work.evidence if work is not None else None
+    # The check exercises the fix only while the cave zombie is still sealed in reach.
+    detail["cave_hostile"]["morning"] = _sealed_hostile(probe, cave)
+    detail["sleeper"] = {"uuid": sleeper, "job": sleeper_job, "day_job": day_jobs.get(sleeper or ""),
+                         "station": station, "closest": closest, "woke_nameplate": woke_plate,
+                         "back_to_work": evidence, "morning_ticks": morning_ticks,
+                         "travelled": round(work.travelled, 1) if work is not None else None,
+                         "watched_logs": [list(cell) for cell in work.watched] if work is not None else []}
+    if (same_entities and held_by_day and evidence is not None
+            and detail["cave_hostile"]["morning"] is not None):
+        _verdict(detail, "sleep_return", "PASS",
+                 f"same {len(evening)} entities persist; {sleeper[:8]} held {sleeper_job} by day, slept by bed "
+                 f"{list(sleeper_bed)}, still held it on waking and got back to work: {evidence}")
+    else:
+        _verdict(detail, "sleep_return", "FAIL",
+                 f"same_entities={same_entities} sleeper={sleeper} job={sleeper_job} "
+                 f"day_job={day_jobs.get(sleeper or '')} station={station} closest={closest} "
+                 f"back_to_work={evidence} morning_ticks={morning_ticks} "
+                 f"woke_nameplate={woke_plate!r} bed_sleepers={bed_sleepers} "
+                 f"cave_hostile={detail['cave_hostile']}",
+                 "time set 18000; minecraft_list_entities radius 64; time set 3000; re-observe the "
+                 "sleeper's nameplate/VillagerData job, its station distance and (miner) mine "
+                 "footprint or (lumberjack) the logs around where it stops")
+    if ctx.windowed:
+        native_client.capture(probe.client, artifact, "village-qa-morning")
+
+    # --- (3) farmer harvests mature wheat (frozen day, poll age, no time spam) ---
+    wheat_cell = (farm[0][0], farm[0][1] + 1, farm[0][2])
+    wheat_now = _read(probe, wheat_cell)
+    harvest_deadline = _time.monotonic() + 70.0
+    while _props(wheat_now).get("age") == "7" and _time.monotonic() < harvest_deadline:
+        _tick(probe)
+        wheat_now = _read(probe, wheat_cell)
+    age_now = _props(wheat_now).get("age")
+    if _block_id(wheat_now) == "minecraft:wheat" and age_now is not None and int(age_now) < 7:
+        _verdict(detail, "farmer_harvest", "PASS",
+                 f"wheat at {list(wheat_cell)} changed age 7 -> {age_now} (harvested and replanted)")
+    else:
+        _verdict(detail, "farmer_harvest", "FAIL",
+                 f"wheat still age=7 at {list(wheat_cell)} after 70s frozen workday",
+                 f"time set 3000 (frozen); minecraft_read_block {wheat_cell[0]} {wheat_cell[1]} {wheat_cell[2]}; "
+                 "server log: harvest lines")
+    if ctx.windowed:
+        native_client.capture(probe.client, artifact, "village-qa-farm")
+
+    # --- (4)+(5) work window: miner digs, lumberjack cuts (frozen 3000) ---
+    dug_seen: tuple[int, int, int] | None = None
+    cut_seen: tuple[int, int, int] | None = None
+    replant_seen = False
+    work_deadline = probe.deadline - 190.0
+    while (dug_seen is None or cut_seen is None or not replant_seen) and _time.monotonic() < work_deadline:
+        _tick(probe)
+        if dug_seen is None:
+            for cell in dig_cells:
+                if _block_id(_read(probe, cell)) != dig_before[cell]:
+                    dug_seen = cell
+                    break
+        if cut_seen is None:
+            for cells in tree_trunks.values():
+                for cell in cells:
+                    if _block_id(_read(probe, cell)) != "minecraft:oak_log":
+                        cut_seen = cell
+                        break
+                if cut_seen is not None:
+                    break
+        for soil in tree_soils:
+            if _block_id(_read(probe, (soil[0], soil[1] + 1, soil[2]))) == "minecraft:oak_sapling":
+                replant_seen = True
+    if ctx.windowed:
+        native_client.capture(probe.client, artifact, "village-qa-mine")
+
+    # --- day-end 9000 triggers deposit trips; bounded chest wait for both products ---
+    fixture("time set 9000")
+    settled("day_end_deposits")
+    totals: dict[str, int] = {}
+    deposit_deadline = probe.deadline - 70.0
+    last_chest_check = 0.0
+    while _time.monotonic() < deposit_deadline:
+        _tick(probe)
+        for soil in tree_soils:
+            base = (soil[0], soil[1] + 1, soil[2])
+            if _block_id(_read(probe, base)) == "minecraft:oak_sapling":
+                replant_seen = True
+        if _time.monotonic() - last_chest_check >= 20.0:
+            last_chest_check = _time.monotonic()
+            teleport(float(store_stage[0]) + 0.5, float(store_stage[1]), float(store_stage[2]) + 0.5)
+            totals = _chest_totals(_open_chest(probe, chest))
+            if chest_has(totals, MINING_ITEMS) and totals.get("minecraft:oak_log", 0) > 0:
+                break
+    if ctx.windowed:
+        native_client.capture(probe.client, artifact, "village-qa-lumber")
+
+    # --- final chest slot evidence (one open, MCP slots 0..26) ---
+    teleport(float(store_stage[0]) + 0.5, float(store_stage[1]), float(store_stage[2]) + 0.5)
+    totals = _chest_totals(_open_chest(probe, chest))
+    detail["chest_final_totals"] = totals
+    detail["cave_hostile"]["end"] = _sealed_hostile(probe, cave)
+
+    if dug_seen is not None and chest_has(totals, MINING_ITEMS) and detail["cave_hostile"]["end"] is not None:
+        _verdict(detail, "miner_deposit", "PASS",
+                 f"dug {list(dug_seen)} {dig_before[dug_seen]} -> "
+                 f"{_block_id(_read(probe, dug_seen))}; chest holds mining {totals}; "
+                 f"cave zombie still sealed at {detail['cave_hostile']['end']}")
+    else:
+        _verdict(detail, "miner_deposit", "FAIL",
+                 f"dug={dug_seen} chest={totals} cave_hostile={detail['cave_hostile']}",
+                 f"time set 9000 (frozen day-end); open chest at {list(chest)} "
+                 "(minecraft_use_item_on face up -> ChestMenu slots 0..26); "
+                 "server log: mining dig/deposit lines")
+    if cut_seen is not None and replant_seen and totals.get("minecraft:oak_log", 0) > 0:
+        _verdict(detail, "lumberjack", "PASS",
+                 f"trunk {list(cut_seen)} cut, sapling replanted; "
+                 f"chest oak_log={totals.get('minecraft:oak_log', 0)} totals={totals}")
+    else:
+        _verdict(detail, "lumberjack", "FAIL",
+                 f"cut={cut_seen} replant={replant_seen} chest={totals}",
+                 f"time set 9000 (frozen day-end); minecraft_read_block at {tree_soils[0]} trunk; "
+                 "open chest (ChestMenu slots 0..26); server log: lumber cut/replant/deposit lines")
+
+    # --- settlement evidence through ordinary menus/chat ---
+    probe.call("minecraft_send_chat", {"message": f"settlement info {SETTLEMENT}", "command": True})
+    info = _chat_echo(probe, "settlement_info")
+    detail["settlement_info_chat"] = info.get("recent_chat", [])[:6]
+    probe.call("minecraft_send_chat", {"message": "settlement building list", "command": True})
+    listing = _chat_echo(probe, "building_list")
+    detail["building_list_chat"] = listing.get("recent_chat", [])[:12]
+    inv = probe.observe()
+    detail["player_inventory"] = inv.get("inventory", [])
+    detail["recent_chat_tail"] = inv.get("recent_chat", [])[-20:]
+    detail["villager_positions"] = [
+        {"uuid": v.get("entity_uuid"), "position": [v.get("x"), v.get("y"), v.get("z")]}
+        for v in _villagers(probe)]
+    detail["time_set_count"] = count_time_sets(probe.report["fixture_commands"])
+    probe.check("all_behaviours_pass", all_behaviours_pass(detail["behaviour"]))

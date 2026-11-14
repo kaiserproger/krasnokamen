@@ -618,10 +618,41 @@ class CatalogEventTests(unittest.IsolatedAsyncioTestCase):
                     await load.public_region(SimpleNamespace(readiness_seconds=1, view_distance=8),
                                              root, 25565, region, save_command=save_command)
                 self.assertEqual(bot_command.call_args.args[0].view_distance, 8)
+                command = phase.spawn.call_args.args[1]
+                self.assertIn("--open-loop", command)
+                schedule = Path(command[command.index("--schedule-file") + 1])
+                self.assertEqual(schedule, root / "schedule.json")
+                self.assertEqual(json.loads(schedule.read_text()),
+                                 {"windows": [{"name": "steady", "duration_ms": 1000}]})
                 commands = json.loads((root / "commands.json").read_text())
                 self.assertEqual(commands["setup"], ["time set 2000", save_command])
                 self.assertEqual(set(commands), {"setup"})
                 phase.stop.assert_awaited_once()
+
+    async def test_frame_setup_saves_after_observed_interactions(self):
+        region = {"name": "frames", "anchor": [32, 32], "commands": ["summon item_frame 0 65 0"],
+                  "frame_positions": [[0, 65, 0]]}
+        for observed in (1, 0):
+            with self.subTest(observed=observed), tempfile.TemporaryDirectory() as directory:
+                phase = SimpleNamespace(spawn=AsyncMock(), ready=AsyncMock(return_value={"clients": 1}),
+                                        stop=AsyncMock(), shutdown={}, process_samples=lambda: {},
+                                        fixture_map_frames={"count": observed})
+                root = Path(directory) / "region"
+                with patch.object(load, "Session", return_value=phase), \
+                     patch.object(load, "bot_command", return_value=["bots"]), \
+                     patch.object(load, "_await_fixture_checkpoint", new=AsyncMock(return_value={})):
+                    if observed:
+                        receipt = await load.public_region(SimpleNamespace(readiness_seconds=1, view_distance=8),
+                                                           root, 25565, region, save_command="save-all")
+                        self.assertEqual(receipt["map_frames_observed"]["count"], 1)
+                    else:
+                        with self.assertRaisesRegex(load.ClassifiedFailure, "metadata evidence incomplete"):
+                            await load.public_region(SimpleNamespace(readiness_seconds=1, view_distance=8),
+                                                     root, 25565, region, save_command="save-all")
+                commands = json.loads((root / "commands.json").read_text())
+                self.assertEqual(commands["setup"], region["commands"])
+                self.assertEqual(commands["save_after_frames"], "save-all")
+                self.assertEqual(commands["frame_positions"], region["frame_positions"])
 
     async def test_fixture_commits_without_one_feedback_per_setup_command(self):
         session = load.Session(None, Path("."))
@@ -670,12 +701,14 @@ class CatalogEventTests(unittest.IsolatedAsyncioTestCase):
     async def test_checkpoint_ack_survives_consumed_ready_and_queue_eviction(self):
         reader = asyncio.StreamReader(limit=64 * 1024 * 1024)
         events = [{"event": "fixture_commands_sent", "commands_sent": 1},
-                  {"event": "ready", "clients": 1}, {"event": "fixture_checkpoint_saved", "bot": 0}]
-        events += [{"event": "sample", "sample": index} for index in range(200)]
+                  {"event": "fixture_checkpoint_saved", "bot": 0}, {"event": "ready", "clients": 1}]
         reader.feed_data(b"".join(json.dumps(row).encode() + b"\n" for row in events))
         reader.feed_eof()
         session = load.Session(None, Path("."))
         await session.read_events(SimpleNamespace(stdout=reader), io.BytesIO())
+        self.assertEqual((await session.ready(1, 1))["clients"], 1)
+        for index in range(200):
+            session.push_event({"event": "sample", "sample": index})
         receipt = await load._await_fixture_checkpoint(session, 1)
         self.assertEqual(receipt["commands_sent_event"]["commands_sent"], 1)
         self.assertEqual(receipt["checkpoint_event"]["event"], "fixture_checkpoint_saved")

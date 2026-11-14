@@ -1,0 +1,412 @@
+schema: solaris-domain-adapter-index/1
+domain: special_blocks
+subjects_specified: 8
+vanilla_provenance: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/version.json
+shared_interface: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_api.py
+execution: canonical tools.harness run protocol-matrix/java/native; no second runner or DSL
+observation_contract: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py
+missing_query_capabilities_on_original_binary:
+  - data_get_entity
+  - data_get_block
+sync:
+  Exact received BlockChangedAck sequence fences use/mine admission; machine-checkable world/inventory oracles
+  determine success. No revision or submission-only ACK inference. Fixtures wait received block state.
+subjects:
+  - subject: special_blocks.beacon_pyramid_effects
+    matrix_ids:
+      - pw:special_blocks.beacon_pyramid_effects/fabric_svc/creative/the_end/peaceful/2/malformed_or_stale_packet/save_all_checkpoint/op_3
+      - pw:special_blocks.beacon_pyramid_effects/forge_solaris_loader/survival/the_nether/hard/1/disconnect_during_menu/clean_restart_mid_action/op_1
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: range/effects by tier; secondary at tier 4
+    vanilla_source:
+      - https://minecraft.wiki/w/Beacon
+    solaris_sources:
+      - core:beacon.rs
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
+      function: beacon_pyramid_effects
+      line: 12
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','creative','adventure')
+        - command(ctx,'fill -4 139 -5 6 143 5 stone')
+        - command(ctx,f'fill {1-layer} {144-layer} {-layer} {1+layer} {144-layer} {layer} iron_block')
+        - setblock(ctx,'beacon')
+        - equip(ctx,'emerald')
+        - command(ctx,f'tp {actor(ctx).name} {1+radius+2}.5 144 .5')
+        - command(ctx,f'effect clear {actor(ctx).name}')
+        - command(ctx,f'tp {actor(ctx).name} .5 144 2.5')
+    actions:
+      - actor(ctx).open_container(POS)
+      - "ctx.wait_until(lambda:observed(ctx,'menu')['properties'].get(0,\n                       observed(ctx,'menu')['properties'].get('0'))==level,\n\
+        \                       description='received beacon menu pyramid level')"
+      - actor(ctx).click_slot(28)
+      - actor(ctx).click_slot(0)
+      - call(actor(ctx),'set_beacon','minecraft:speed','minecraft:regeneration' if level==4 else None)
+      - boundary(ctx)
+      - call(actor(ctx),'close_container')
+      - ticks(ctx,80)
+      - ticks(ctx,80)
+    machine_checks:
+      - "check(ctx,'beacon_levels',observed(ctx,'menu')['properties'].get(0,\n              observed(ctx,'menu')['properties'].get('0'))==level)"
+      - check(ctx,'beacon_primary:'+str(level),'minecraft:speed' in active,active)
+      - check(ctx,'beacon_secondary','minecraft:regeneration' in active,active)
+      - check(ctx,'beacon_outside_range','minecraft:speed' not in effects(ctx))
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - client:close_container
+      - client:set_beacon
+      - snapshot:menu.properties
+      - snapshot:effects
+      - snapshot:registries.minecraft:mob_effect
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - creative
+      - adventure
+    observations:
+      - observed(ctx,'menu')
+      - observed(ctx,'menu')
+      - observed(ctx,'menu')
+      - observed(ctx,'menu')
+      - effects(ctx)
+      - effects(ctx)
+  - subject: special_blocks.conduit
+    matrix_ids:
+      - pw:special_blocks.conduit/fabric_solaris_loader/survival/overworld/easy/2/normal/pause_when_empty_resume/op_2
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: conduit power to players in water; attacks hostiles at full frame
+    vanilla_source:
+      - https://minecraft.wiki/w/Conduit
+    solaris_sources:
+      - core:conduit.rs
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
+      function: conduit
+      line: 36
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','creative','adventure')
+        - command(ctx,'fill -2 143 -3 4 147 3 water')
+        - setblock(ctx,'prismarine',p)
+        - setblock(ctx,'conduit[waterlogged=true]',(1,145,0))
+        - command(ctx,f'tp {actor(ctx).name} .5 144 .5')
+        - command(ctx,'summon drowned 2.5 144 .5 {NoAI:1b}')
+    actions:
+      - boundary(ctx)
+      - ticks(ctx,80)
+      - "ctx.wait_until(lambda:any(e.get('health') is not None for e in entities(ctx,'drowned')),\n                \
+        \   description='received drowned spawn and health')"
+      - ticks(ctx,80)
+    machine_checks:
+      - check(ctx,'full_frame_42',len(frame)==42)
+      - check(ctx,'conduit_power','minecraft:conduit_power' in effects(ctx))
+      - check(ctx,'conduit_attacks_hostile',entity_health(ctx,'drowned')<before)
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - snapshot:entities.health
+      - snapshot:effects
+      - snapshot:registries.minecraft:mob_effect
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - creative
+      - adventure
+    observations:
+      - effects(ctx)
+      - entity_health(ctx,'drowned')
+      - entity_health(ctx,'drowned')
+  - subject: special_blocks.jukebox_allay
+    matrix_ids:
+      - pw:special_blocks.jukebox_allay/fabric_distant_horizons/adventure/the_end/hard/N8/duplicate_login/crash_kill9_wal_replay/op_2
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: allay duplicates once with cooldown; delivers items to note block
+    vanilla_source:
+      - https://minecraft.wiki/w/Allay
+    solaris_sources:
+      - core:jukebox.rs
+      - core:allay.rs
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
+      function: jukebox_allay
+      line: 56
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','creative')
+        - setblock(ctx,'jukebox')
+        - command(ctx,'summon allay 2.5 144 .5')
+        - equip(ctx,'music_disc_13')
+        - equip(ctx,'amethyst_shard',2)
+        - equip(ctx,'diamond')
+        - setblock(ctx,'note_block',(3,144,0))
+        - equip(ctx)
+        - command(ctx,'summon item 6.5 144 .5 {Item:{id:"minecraft:diamond",count:1}}')
+    actions:
+      - use(ctx)
+      - ticks(ctx,20)
+      - call(actor(ctx),'interact_entity',allay['id'])
+      - ticks(ctx,2)
+      - use(ctx,(3,144,0))
+      - ctx.wait_until(delivered,description='allay delivers to note block',timeout_seconds=30)
+    machine_checks:
+      - check(ctx,'allay_duplicated',len(entities(ctx,'allay'))==2)
+      - check(ctx,'duplication_shard_cost',shards==(2 if ctx.factors['game_mode']=='creative' else 1))
+      - check(ctx,'duplication_cooldown',len(entities(ctx,'allay'))==2)
+      - check(ctx,'cooldown_keeps_second_shard',count(ctx,'amethyst_shard')==shards)
+      - check(ctx,'note_block_delivery',delivered())
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - client:interact_entity
+      - snapshot:entities
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - creative
+  - subject: special_blocks.bell_ring
+    matrix_ids:
+      - pw:special_blocks.bell_ring/vanilla_java_26_1_2/spectator/overworld/normal/N8/slow_reader_backpressure/hot_backup_during_action/non_op_0
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: villagers flee indoors; raiders glow
+    vanilla_source:
+      - https://minecraft.wiki/w/Bell
+    solaris_sources:
+      - core:villager/brain.rs
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
+      function: bell_ring
+      line: 77
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','creative','adventure')
+        - command(ctx,'fill 3 144 3 5 147 5 stone')
+        - command(ctx,'fill 4 144 3 4 146 4 air')
+        - setblock(ctx,'red_bed[part=foot,facing=south]',(4,144,3))
+        - setblock(ctx,'red_bed[part=head,facing=south]',(4,144,4))
+        - command(ctx,'summon villager 3.5 144 1.5')
+        - command(ctx,'summon pillager 2.5 144 .5 {NoAI:1b}')
+        - setblock(ctx,'bell[attachment=floor]')
+        - equip(ctx)
+    actions:
+      - use(ctx,POS,'south')
+      - ticks(ctx,80)
+    machine_checks:
+      - check(ctx,'raider_glows','minecraft:glowing' in data(ctx,'entity @e[type=pillager,limit=1]','active_effects'))
+      - check(ctx,'villager_flees_indoors',any(3<=e['position'][0]<=6 and 3<=e['position'][2]<=6 for e in villagers),villagers)
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - data_get_entity
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - creative
+      - adventure
+  - subject: special_blocks.copper_aging
+    matrix_ids:
+      - pw:special_blocks.copper_aging/protocol_bot/survival/overworld/hard/N8/reconnect_mid_action/steady/non_op_0
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: four stages; waxed stops
+    vanilla_source:
+      - https://minecraft.wiki/w/Block_of_Copper
+    solaris_sources:
+      - core:copper.rs
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
+      function: copper_aging
+      line: 87
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - command(ctx,'gamerule random_tick_speed 4096')
+        - setblock(ctx,initial)
+        - setblock(ctx,'waxed_copper_block')
+    actions:
+      - boundary(ctx)
+      - ctx.wait_until(lambda:not block_is(ctx,POS,initial),description='copper oxidation '+initial,timeout_seconds=120)
+      - ticks(ctx,400)
+    machine_checks:
+      - check(ctx,'adjacent_oxidation_stage:'+initial,any(e['before']==initial and e['after']==next_stage for e in history),history)
+      - block(ctx,POS,'waxed_copper_block')
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - snapshot:block_transitions
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes: see cited adapter branch
+  - subject: special_blocks.composter_hopper
+    matrix_ids:
+      - pw:special_blocks.composter_hopper/native_linux/adventure/overworld/easy/N8/duplicate_login/crash_kill9_wal_replay/op_4
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: compost accepted; bone meal extracted
+    vanilla_source:
+      - https://minecraft.wiki/w/Composter
+    solaris_sources:
+      - core:composter.rs
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
+      function: composter_hopper
+      line: 98
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival')
+        - setblock(ctx,'chest',(1,143,0))
+        - setblock(ctx,'hopper[facing=down]')
+        - setblock(ctx,'composter',(1,145,0))
+        - setblock(ctx,'hopper[facing=down]',(1,146,0))
+        - equip(ctx,'cake',7)
+    actions:
+      - actor(ctx).open_container((1,146,0))
+      - actor(ctx).click_slot(32)
+      - actor(ctx).click_slot(0)
+      - call(actor(ctx),'close_container')
+      - boundary(ctx)
+      - ticks(ctx,200)
+      - actor(ctx).open_container((1,143,0))
+    machine_checks:
+      - block(ctx,(1,145,0),'composter[level=0]')
+      - check(ctx,'one_extracted_bone_meal',sum(s['count'] for s in menu['slots'] if s['slot']<27 and s['item_id']=='minecraft:bone_meal')==1)
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - client:close_container
+      - snapshot:menu
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+  - subject: special_blocks.monster_spawner_entity
+    matrix_ids:
+      - pw:special_blocks.monster_spawner_entity/neoforge_solaris_loader/survival/the_nether/easy/1/duplicate_login/crash_kill9_wal_replay/op_2
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: spawns that type
+    vanilla_source:
+      - https://minecraft.wiki/w/Monster_Spawner
+    solaris_sources:
+      - core:monster_spawner.rs
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
+      function: monster_spawner_entity
+      line: 107
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','creative')
+        - command(ctx,'fill -3 144 -3 5 148 3 air')
+        - command(ctx,'fill -3 143 -3 5 143 3 grass_block')
+        - setblock(ctx,'spawner')
+        - equip(ctx,'pig_spawn_egg')
+    actions:
+      - use(ctx)
+      - ctx.wait_until(lambda:len(entities(ctx,'pig'))>0,description='pig spawner produces pig',timeout_seconds=60)
+    machine_checks:
+      - check(ctx,'spawner_pig_type','minecraft:pig' in data(ctx,'block 1 144 0','SpawnData'))
+      - check(ctx,'pig_spawned',len(entities(ctx,'pig'))>0)
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - data_get_block
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - creative
+  - subject: special_blocks.decorated_pot_chiseled_bookshelf
+    matrix_ids:
+      - pw:special_blocks.decorated_pot_chiseled_bookshelf/native_windows/spectator/overworld/normal/1/reconnect_mid_action/crash_kill9_wal_replay/op_2
+    status: server_gap
+    server_gap:
+      - SPECIAL-001
+    vanilla_version: 26.1.2
+    expected: "vanilla: single-stack storage / 6 book slots with comparator"
+    vanilla_source:
+      - https://minecraft.wiki/w/Chiseled_Bookshelf
+    solaris_sources:
+      - core:tick/input/interact.rs
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
+      function: decorated_pot_chiseled_bookshelf
+      line: 115
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','creative')
+        - setblock(ctx,'decorated_pot')
+        - equip(ctx,'diamond',3)
+        - setblock(ctx,'chiseled_bookshelf[facing=south]')
+        - equip(ctx,'book',6)
+        - setblock(ctx,'comparator[facing=north]',(1,144,-1))
+    actions:
+      - use(ctx)
+      - use(ctx,POS,'south',(x,y,1.0))
+      - ticks(ctx,2)
+    machine_checks:
+      - check(ctx,'pot_single_item_storage','minecraft:diamond' in data(ctx,'block 1 144 0','item'))
+      - check(ctx,'pot_item_debit',count(ctx,'diamond')==(3 if ctx.factors['game_mode']=='creative' else 2))
+      - block(ctx,POS,f'chiseled_bookshelf[slot_{slot}_occupied=true]')
+      - check(ctx,'bookshelf_last_slot',scalar(ctx,'block 1 144 0','last_interacted_slot')==slot)
+      - check(ctx,'bookshelf_comparator_six',scalar(ctx,'block 1 144 -1','OutputSignal')==6)
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - data_get_block
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - creative
+fixture_location: Arena floor y=143, interactions y=144; outside shop auto-open y=60..100. All ten plugins retained.
+shared_interface_revision: d4cba654
+common_required_capabilities:
+  - client:teleport_to
+  - client:read_block_state
+  - server:ensure_loaded
+  - snapshot:inventory
+  - snapshot:block_ack_sequence
+  - dashboard:simulation_tick
+adapter_commit: a7485690
+multiplayer_contract:
+  "Ordinary N2 actor+observer supported for seven simple block_interact state subjects and block_place
+  extras: exact received observer state checked. Other subjects/N8/concurrent triples remain explicit partial coverage."

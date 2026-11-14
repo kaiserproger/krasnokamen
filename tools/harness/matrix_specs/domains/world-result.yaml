@@ -1,0 +1,148 @@
+verdict: blocked
+agent: DomWorld
+worktree: /run/media/kaiserroman/games/solaris-work/wt/dom-world
+revision: 5322ebe0
+shared_base: bots-runproto/1e20dd5f
+commits_authored: [0370faa3, a6efd610, e71d294a, a37ebc53, 5322ebe0]
+integration_owner: RunProto
+product_changes: false
+subjects_specified:
+  {
+    farming: 18,
+    redstone: 17,
+    fluids: 12,
+    entities_misc: 11,
+    weather_time: 8,
+    portals_dimensions: 11,
+    movement: 15,
+  }
+subjects_registered: 92
+matrix_rows: 143
+completion_claim: false
+classification_order:
+  [
+    spec_only,
+    registered_stub,
+    real_partial,
+    complete_adapter,
+    ledger_pass,
+    ledger_fail,
+  ]
+before:
+  farming: [0, 0, 12, 6, 0, 0]
+  redstone: [0, 0, 10, 7, 0, 0]
+  fluids: [0, 0, 5, 7, 1, 0]
+  entities_misc: [0, 0, 11, 0, 0, 0]
+  weather_time: [0, 0, 7, 1, 0, 0]
+  portals_dimensions: [0, 0, 10, 1, 0, 0]
+  movement: [0, 0, 14, 1, 0, 0]
+  total: [0, 0, 69, 23, 1, 0]
+after:
+  farming: [0, 0, 7, 11, 0, 0]
+  redstone: [0, 0, 5, 12, 0, 0]
+  fluids: [0, 0, 5, 7, 1, 0]
+  entities_misc: [0, 0, 11, 0, 0, 0]
+  weather_time: [0, 0, 7, 1, 0, 0]
+  portals_dimensions: [0, 0, 9, 2, 0, 0]
+  movement: [0, 0, 14, 1, 0, 0]
+  total: [0, 0, 58, 34, 1, 0]
+classification_scope: Authored subject clauses only. Eleven explicit promotions; unchanged subjects retain baseline classification. Complete_adapter does not mean executable with every driver, verified vanilla parity, or accepted multiplayer/lifecycle context.
+coverage_evidence: /run/media/kaiserroman/games/solaris-work/scenarios/domains/world-coverage.yaml
+findings:
+  - severity: gameplay_failure
+    subject: fluids.sponge
+    evidence: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T035224-protocol-matrix-he798992/result.json
+    detail: Received block ACK 1 and empty inventory, but wet_sponge at (3,100,16) and air at (3,101,16) both fail authoritative queries. Exact residual block not queried. All ten plugins present; actor and fixture outside shop.
+  - severity: unisolated_circuit_failure
+    subject: redstone.sculk_sensor_signal
+    evidence: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T043238-protocol-matrix-4_gyxzcu/result.json
+    detail: Corrected downward latches still fail 74 expected-lit checks; 86 checks pass including all five powered-note stimuli. Sensor, dust and latch owner not isolated. Earlier perpendicular-latch failure was a fixture error, not a product finding.
+  - severity: acceptance_blocker
+    detail: Fifty-eight subject adapters remain partial, and shared all-participant/observer acceptance is not established. Runtime capability failures are not passes. XP merge/cooldown and command-block output remain explicitly unproved despite additional real checks.
+server_gap:
+  - subject: fluids.sponge
+    classification: source_gap_and_live_expected_behavior_failure
+    evidence: /run/media/kaiserroman/games/solaris-work/scenarios/domains/fluids-bugs.md
+  - subject: entities_misc.paintings
+    classification: source_evidence_only
+    evidence: /run/media/kaiserroman/games/solaris-work/scenarios/domains/entities_misc-bugs.md:5-11
+  - subject: entities_misc.happy_ghast_harness
+    classification: source_evidence_only
+    evidence: /run/media/kaiserroman/games/solaris-work/scenarios/domains/entities_misc-bugs.md:13-19
+bug_routing: Sent to BugTriage with build/receipt identity and explicit fixture-versus-product distinctions. No product fixes or BUGS.md edits.
+missing_capabilities:
+  - authoritative_consumed_nonblock_input_receipts
+  - all_participant_concurrency_and_received_observer_oracles
+  - authoritative_block_mutation_and_container_transfer_ticks
+  - physics_movement_vehicle_fall_flying_and_teleport_confirmation
+  - received_pose_velocity_passengers_equipment_and_species_metadata
+  - verified_biome_weather_and_movement_correction_observations
+  - data_get_entity_and_arbitrary_block_entities_on_original_binary
+  - execute_store_on_original_binary
+  - optional_NBT_path_presence_without_fabricated_defaults
+  - command_block_output_operator_chat_and_console_cursor
+  - XP_orb_merge_count_value_and_authoritative_pickup_cooldown
+available_received_fields:
+  [
+    entity_id,
+    entity_uuid,
+    entity_type,
+    entity_position,
+    optional_health,
+    optional_item_stack,
+    optional_xp_value,
+    optional_effects,
+    player_xp,
+  ]
+validation:
+  focused_tests:
+    command: env PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools.harness.matrix_domains.test_world -v
+    last_full_batch: 37 passed in 4.255 seconds
+    subsequent_changed_scope: New Nether/End detector test and existing daylight/bulb test passed; 2 tests in 0.010 seconds.
+    distinct_tests_exercised: 38
+    scope: Lightweight offline contract tests only; no claim of a single full 38-test execution or gameplay parity.
+    prior_mem_run: 32 passed under mem-run -m 3G in 5.229 seconds.
+  rust_clippy: Not applicable; no Rust crate changed.
+  live_hold:
+    owner: Main
+    state: No new live runs, sweeps or Gradle builds until released; queued mem-run job bg_1149 cancelled.
+  live_pass:
+    receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T033930-protocol-matrix-z0trndz5/result.json
+    matrix_id: tr.restart_x_inflight.crash_kill9_wal_replay:fluids.water_flow/protocol_bot/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+    checks: 12
+    assertions: Seven-block spread, eighth block dry, falling, nearest of two drops, direct SIGKILL exit -9 and same-world replay.
+    plugins: All ten live plugins.
+    server_sha256: 7e7ba95853ca0bdf34ec1cd23c6a6143ba03916da7c664898e95a04727f3f299
+    ledger: Recorded through gen_matrix.py; supersedes narrower receipt for the same one ID.
+  supplemental_failures: No ledger entries for sponge or sculk probes.
+changed_files:
+  repository_root: /run/media/kaiserroman/games/solaris-work/wt/dom-world
+  repository_files:
+    - tools/harness/matrix_domains/_world.py
+    - tools/harness/matrix_domains/farming.py
+    - tools/harness/matrix_domains/redstone.py
+    - tools/harness/matrix_domains/fluids.py
+    - tools/harness/matrix_domains/movement.py
+    - tools/harness/matrix_domains/weather_time.py
+    - tools/harness/matrix_domains/entities_misc.py
+    - tools/harness/matrix_domains/portals_dimensions.py
+    - tools/harness/matrix_domains/test_world.py
+  specification_root: /run/media/kaiserroman/games/solaris-work/scenarios/domains
+  specification_files:
+    [
+      farming.yaml,
+      redstone.yaml,
+      fluids.yaml,
+      entities_misc.yaml,
+      weather_time.yaml,
+      portals_dimensions.yaml,
+      movement.yaml,
+      fluids-bugs.md,
+      entities_misc-bugs.md,
+      world-adapters.md,
+      world-coverage.yaml,
+      world-result.yaml,
+    ]
+  shared_ledger: /run/media/kaiserroman/games/solaris-work/scenarios/ledger.jsonl
+  integration_warning: Shared RunProto files are inherited base changes, not authored worker deliverables; latest worker SHA sent directly to RunProto.
+report_path: /run/media/kaiserroman/games/solaris-work/scenarios/domains/world-adapters.md

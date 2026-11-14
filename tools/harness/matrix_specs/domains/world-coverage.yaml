@@ -1,0 +1,233 @@
+schema: solaris-world-coverage-audit/1
+scope: Subject actions and every explicit subject oracle clause; not proof of every context factor or live parity.
+classification:
+  spec_only: No registered executable act and oracle.
+  registered_stub: Registration raises MissingCapability or NotImplemented without a real oracle.
+  real_partial: Real act and real checks exist, but one or more explicit clauses remain absent or capability-blocked.
+  complete_adapter: Real act and all explicit subject oracle clauses are authored; execution may still require unavailable capabilities.
+  executed_in_ledger: Orthogonal count of distinct stable matrix IDs with validated pass or fail receipts; supplemental probes excluded.
+baseline:
+  farming:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 12,
+      complete_adapter: 6,
+      ledger_pass: 0,
+      ledger_fail: 0,
+    }
+  redstone:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 10,
+      complete_adapter: 7,
+      ledger_pass: 0,
+      ledger_fail: 0,
+    }
+  fluids:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 5,
+      complete_adapter: 7,
+      ledger_pass: 1,
+      ledger_fail: 0,
+    }
+  entities_misc:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 11,
+      complete_adapter: 0,
+      ledger_pass: 0,
+      ledger_fail: 0,
+    }
+  weather_time:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 7,
+      complete_adapter: 1,
+      ledger_pass: 0,
+      ledger_fail: 0,
+    }
+  portals_dimensions:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 10,
+      complete_adapter: 1,
+      ledger_pass: 0,
+      ledger_fail: 0,
+    }
+  movement:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 14,
+      complete_adapter: 1,
+      ledger_pass: 0,
+      ledger_fail: 0,
+    }
+  total:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 69,
+      complete_adapter: 23,
+      ledger_pass: 1,
+      ledger_fail: 0,
+    }
+baseline_complete_subjects:
+  farming:
+    [
+      stem_crops,
+      nether_wart,
+      sugar_cane_cactus_bamboo,
+      chorus,
+      saplings_trees,
+      grass_mycelium_spread,
+    ]
+  redstone:
+    [
+      wire_power_levels,
+      observer_pulse,
+      piston_push_pull,
+      slime_honey_flying_machine,
+      quasi_connectivity,
+      trapped_chest_note_door_power,
+      update_order_quirks,
+    ]
+  fluids:
+    [
+      water_flow,
+      infinite_water_source,
+      lava_source_conversion,
+      water_lava_interaction,
+      entity_push_items,
+      fire_extinguish,
+      concrete_powder,
+    ]
+  entities_misc: []
+  weather_time: [rain_effects]
+  portals_dimensions: [end_portal_travel]
+  movement: [sneak_edge]
+source_acceptance:
+  - /run/media/kaiserroman/games/solaris-work/scenarios/subjects.py:58-74
+  - /run/media/kaiserroman/games/solaris-work/scenarios/subjects3.py:68-122
+  - /run/media/kaiserroman/games/solaris-work/scenarios/subjects3.py:155-178
+  - /run/media/kaiserroman/games/solaris-work/scenarios/subjects4.py:89-101
+confirmed_missing_timing_capabilities:
+  server_tick_block_updates: RunProto confirmed no authoritative block-transition ticks; received packet arrival or SetTime is not mutation time. Repeater settles/locks are checked, but delay acceptance remains blocked.
+  server_tick_container_transfers: RunProto confirmed no authoritative container transfer ticks. Locked custody and top/side/bottom furnace routing are checked, but eight-tick cadence remains blocked.
+ledger:
+  pass:
+    - id: tr.restart_x_inflight.crash_kill9_wal_replay:fluids.water_flow/protocol_bot/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomWorld/20261024T033930-protocol-matrix-z0trndz5/result.json
+  fail: []
+after:
+  revision: 5322ebe0
+  classification_scope: Authored subject clauses; unchanged subjects retain the baseline classification. Not live parity or composite-context acceptance.
+  farming:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 7,
+      complete_adapter: 11,
+      ledger_pass: 0,
+      ledger_fail: 0,
+    }
+  redstone:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 5,
+      complete_adapter: 12,
+      ledger_pass: 0,
+      ledger_fail: 0,
+    }
+  fluids:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 5,
+      complete_adapter: 7,
+      ledger_pass: 1,
+      ledger_fail: 0,
+    }
+  entities_misc:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 11,
+      complete_adapter: 0,
+      ledger_pass: 0,
+      ledger_fail: 0,
+    }
+  weather_time:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 7,
+      complete_adapter: 1,
+      ledger_pass: 0,
+      ledger_fail: 0,
+    }
+  portals_dimensions:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 9,
+      complete_adapter: 2,
+      ledger_pass: 0,
+      ledger_fail: 0,
+    }
+  movement:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 14,
+      complete_adapter: 1,
+      ledger_pass: 0,
+      ledger_fail: 0,
+    }
+  total:
+    {
+      spec_only: 0,
+      registered_stub: 0,
+      real_partial: 58,
+      complete_adapter: 34,
+      ledger_pass: 1,
+      ledger_fail: 0,
+    }
+newly_complete_authored_subjects:
+  farming:
+    kelp_seagrass: Kelp reaches age 25 and stops; seagrass grows underwater outside the shop fixture.
+    sweet_berries_cocoa_glow_berries: Berry and cocoa maturation; use-harvest resets berry and cave-vine state.
+    shear_sheep_wool_regrow: One to three wool across received dropped stacks and inventory; sheared state and grass-mediated regrowth.
+    bees_pollinate: Hive honey rises and crops advance with random ticks disabled before planting.
+    taming: Exact owner UUID, applicable sit/stand/follow behaviour, horse/llama taming and newborn fox trust; species metadata still gates execution.
+  redstone:
+    comparator_modes: Empty and partial/full chest signals, cake, eight frame rotations and subtraction.
+    pressure_plates_buttons: Living/item trigger rules, wood-versus-stone arrow activation, light/heavy count thresholds and saturation.
+    dispenser_behaviours: All named item families, returned/consumed stock, exact spawned counts, three honeycombs and shears wear, armor destination.
+    daylight_target_bulb_lamp: Overworld noon/midnight, non-inverted Nether/End zero, and retained versus non-retained output over two pulses.
+    sculk_sensor_signal: Ordinary/calibrated distance strength, accepted/rejected frequency, persistent pulse latches; live probe fails and root cause is not isolated.
+  portals_dimensions:
+    nether_portal_build_light: All six minimum-frame and 441 maximum-frame cells, 24-wide rejection, broken-frame collapse and refusal.
+additional_partial_clause_work:
+  entities_misc.experience_orbs: Received XP pickup delta and mending damage are checked; merge-by-value and exact pickup cooldown are not covered.
+  redstone.command_block: Impulse/chain/repeat and relative execution origin are checked; operator-output cursor remains explicitly unavailable.
+remaining_capability_boundaries:
+  - Authoritative mutation/transfer timestamps, not packet arrival or SetTime.
+  - Original-binary entity NBT and arbitrary block-entity queries, including absent-versus-present optional paths.
+  - Species ownership, sitting, baby/trust, equipment, passengers, pose and velocity observations.
+  - Consumed physics/vehicle/entity-use inputs and all-participant concurrent custody receipts.
+  - Verified biome/weather, movement correction/peak-height and dimension transition observations.
+  - Command-block output with operator-chat and console cursors.
+  - XP-orb merge count/value and authoritative pickup-cooldown observations.
+live_hold:
+  reason: Main reserved admission for critical server-fix compilation; no new live runs, sweeps or Gradle builds until explicitly released.
+  queued_job_cancelled: bg_1149
+  offline_validation: 37 tests passed before the final detector case; the new detector case and affected existing test both passed afterward. 38 distinct tests exercised.

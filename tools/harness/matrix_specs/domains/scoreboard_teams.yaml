@@ -1,0 +1,282 @@
+kind: adapter-source-index
+not_a_runner_or_dsl: true
+domain: scoreboard_teams
+vanilla_version: 26.1.2
+adapter_module: tools.harness.matrix_domains.scoreboard_teams
+shared_interface: tools.harness.matrix_api.Adapter
+source_checkout: /run/media/kaiserroman/games/solaris-work/wt/deploy-final
+ports:
+- 26520
+- 26539
+sources:
+- https://minecraft.wiki/w/Scoreboard
+- /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/scoreboard.rs:195-260
+synchronization: received state / console response / dashboard tick counter; no sleeps
+subjects:
+- subject: scoreboard_teams.criteria_auto
+  matrix_ids:
+  - pw:scoreboard_teams.criteria_auto/fabric_solaris_loader/survival/the_nether/normal/1/reconnect_mid_action/pause_when_empty_resume/op_3
+  - pw:scoreboard_teams.criteria_auto/forge_solaris_loader/spectator/overworld/easy/1/duplicate_login/save_all_checkpoint/non_op_0
+  preconditions:
+    setup_callable: scoreboard_teams.ADAPTERS['scoreboard_teams.criteria_auto'].setup
+    fixture_calls:
+    - p.admin(ctx, f'kill {name}')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: scoreboard_teams.criteria_auto
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:53-67
+    calls:
+    - ctx.server.command(f'scoreboard objectives add {objective} {criterion}')
+    - p.rich_action(ctx, 'respawn')
+    - p.rich_action(ctx, 'attack_until_dead', p.observe(ctx, 'entity_id', 1))
+    authoritative_commands_in_action_order:
+    - ctx.server.command(f'scoreboard objectives add {objective} {criterion}')
+    - p.admin(ctx, f'kill {name}')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.test(ctx, 'criterion admitted ' + criterion, 'Created objective' in reply, reply)
+    - p.query(ctx, f'scoreboard players get {name} hp', rf'has {int(p.observe(ctx, "health"))} \[hp\]')
+    - p.query(ctx, f'scoreboard players get {name} food', rf'has {int(p.observe(ctx, "food"))} \[food\]')
+    - p.query(ctx, f'scoreboard players get {name} deaths', r'has 1 \[deaths\]')
+    - p.query(ctx, f'scoreboard players get {name} kills', r'has 1 \[kills\]')
+    - p.query(ctx, f'scoreboard players get {other.name} deaths', r'has 1 \[deaths\]')
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap:
+  - food criterion missing; scoreboard.rs:226
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: auto-updated by events'
+- subject: scoreboard_teams.objectives_display
+  matrix_ids:
+  - pw:scoreboard_teams.objectives_display/fabric_svc/spectator/overworld/easy/2/duplicate_login/crash_kill9_wal_replay/op_1
+  - pw:scoreboard_teams.objectives_display/native_windows/survival/the_end/hard/N8/normal/steady/op_4
+  preconditions:
+    setup_callable: scoreboard_teams.ADAPTERS['scoreboard_teams.objectives_display'].setup
+    fixture_calls:
+    - p.admin(ctx, 'scoreboard objectives add matrix dummy')
+    - p.admin(ctx, f'scoreboard players set {p.client(ctx).name} matrix 7')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: scoreboard_teams.objectives_display
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:8-18
+    calls:
+    - p.client(ctx).command(f'scoreboard objectives setdisplay {slot} matrix')
+    authoritative_commands_in_action_order:
+    - p.admin(ctx, 'scoreboard objectives add matrix dummy')
+    - p.admin(ctx, f'scoreboard players set {p.client(ctx).name} matrix 7')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, f'client {index} {slot}', p.observe(ctx, 'scoreboard.displays', index).get(slot), 'matrix')
+    - "p.check(ctx, f'client {index} display score',\n                    p.observe(ctx, 'scoreboard.scores', index)[p.client(ctx).name]['matrix'],\
+      \ 7)"
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: displayed objective packets to all clients'
+- subject: scoreboard_teams.scoreboard_persistence
+  matrix_ids:
+  - pw:scoreboard_teams.scoreboard_persistence/protocol_bot/creative/the_end/peaceful/N8/slow_reader_backpressure/hot_backup_during_action/op_4
+  preconditions:
+    setup_callable: scoreboard_teams.ADAPTERS['scoreboard_teams.scoreboard_persistence'].setup
+    fixture_calls:
+    - p.admin(ctx, 'scoreboard objectives add matrix dummy')
+    - p.admin(ctx, 'team add matrix')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: scoreboard_teams.scoreboard_persistence
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:126-138
+    calls:
+    - p.restart(ctx)
+    authoritative_commands_in_action_order:
+    - p.admin(ctx, 'scoreboard objectives add matrix dummy')
+    - p.admin(ctx, 'team add matrix')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.response(ctx, f'scoreboard players set {name} matrix 23', r'Updated scores for 1 holders')
+    - p.response(ctx, 'scoreboard objectives setdisplay sidebar matrix', r'Updated display slot')
+    - p.response(ctx, f'team join matrix {name}', r'Updated team membership for 1 players')
+    - p.response(ctx, 'team modify matrix color red', r'Modified team matrix')
+    - p.query(ctx, f'scoreboard players get {name} matrix', r'has 23 \[matrix\]')
+    - p.query(ctx, 'team list matrix', rf'Members:.*\b{name}\b')
+    - p.check(ctx, 'display restored', p.observe(ctx, 'scoreboard.displays')['sidebar'], 'matrix')
+    - p.check(ctx, 'team color restored', p.observe(ctx, 'teams')['matrix']['color'], 'red')
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap:
+  - 'Live End restart failure: retained DragonFight UUID missing; scoreboard_teams-bugs.md:25-34'
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: state restored exactly'
+- subject: scoreboard_teams.scores_modify
+  matrix_ids:
+  - pw:scoreboard_teams.scores_modify/vanilla_java_26_1_2/adventure/the_nether/hard/2/normal/clean_restart_mid_action/non_op_0
+  preconditions:
+    setup_callable: scoreboard_teams.ADAPTERS['scoreboard_teams.scores_modify'].setup
+    fixture_calls:
+    - p.admin(ctx, 'scoreboard objectives add matrix dummy')
+    - p.admin(ctx, f'scoreboard players set {name} matrix 7')
+    - p.admin(ctx, 'scoreboard players set factor matrix 3')
+    - p.admin(ctx, 'scoreboard players set factor matrix 3')
+    - p.admin(ctx, 'scoreboard players set factor matrix 8')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: scoreboard_teams.scores_modify
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:21-50
+    calls: []
+    authoritative_commands_in_action_order:
+    - p.admin(ctx, 'scoreboard objectives add matrix dummy')
+    - p.admin(ctx, f'scoreboard players set {name} matrix 7')
+    - p.admin(ctx, 'scoreboard players set factor matrix 3')
+    - p.admin(ctx, 'scoreboard players set factor matrix 3')
+    - p.admin(ctx, 'scoreboard players set factor matrix 8')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.response(ctx, command, r'Unknown or incomplete command|permission')
+    - p.query(ctx, f'scoreboard players get {name} matrix', r'\bhas 7 \[matrix\]')
+    - p.query(ctx, 'scoreboard players get factor matrix', r'\bhas 3 \[matrix\]')
+    - p.response(ctx, f'scoreboard players {verb} {name} matrix {value}', r'Updated scores for 1 holders')
+    - p.query(ctx, f'scoreboard players get {name} matrix', rf'\bhas {expected} \[matrix\]')
+    - p.response(ctx, f'scoreboard players operation {name} matrix {operation} factor matrix', r'Updated scores
+      for 1 holders')
+    - p.query(ctx, f'scoreboard players get {name} matrix', rf'\bhas {expected} \[matrix\]')
+    - p.response(ctx, f'scoreboard players operation {name} matrix >< factor matrix', r'Updated scores for 1 holders')
+    - p.query(ctx, f'scoreboard players get {name} matrix', r'\bhas 8 \[matrix\]')
+    - p.query(ctx, 'scoreboard players get factor matrix', r'\bhas 3 \[matrix\]')
+    - p.response(ctx, f'scoreboard players reset {name} matrix', r'Updated scores for 1 holders')
+    - p.query(ctx, f'scoreboard players get {name} matrix', 'Score is not set')
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: scores updated; query returns'
+- subject: scoreboard_teams.team_options
+  matrix_ids:
+  - pw:scoreboard_teams.team_options/fabric_distant_horizons/survival/the_nether/easy/2/malformed_or_stale_packet/steady/op_2
+  preconditions:
+    setup_callable: scoreboard_teams.ADAPTERS['scoreboard_teams.team_options'].setup
+    fixture_calls:
+    - p.admin(ctx, 'team add matrix')
+    - p.admin(ctx, f'team join matrix {actor.name}')
+    - p.admin(ctx, f'effect give {p.client(ctx, 1).name} minecraft:invisibility 30 0')
+    - p.admin(ctx, f'kill {p.client(ctx, 1).name}')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: scoreboard_teams.team_options
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:86-113
+    calls:
+    - ctx.server.command(f'team modify matrix {key} {value}')
+    - p.client(ctx).attack(p.observe(ctx, 'entity_id', 1))
+    - p.ticks(ctx, 10)
+    - p.rich_action(ctx, 'nameplate_visible', p.client(ctx, 1).name)
+    - p.rich_action(ctx, 'walk_through_player', p.client(ctx, 1).name)
+    - p.rich_action(ctx, 'entity_render_visible', p.observe(ctx, 'entity_id', 1))
+    - p.ticks(ctx, 2)
+    authoritative_commands_in_action_order:
+    - p.admin(ctx, 'team add matrix')
+    - p.admin(ctx, f'team join matrix {actor.name}')
+    - ctx.server.command(f'team modify matrix {key} {value}')
+    - p.admin(ctx, f'effect give {p.client(ctx, 1).name} minecraft:invisibility 30 0')
+    - p.admin(ctx, f'kill {p.client(ctx, 1).name}')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.test(ctx, 'team option accepted ' + key, 'Modified team' in reply, reply)
+    - "p.check(ctx, 'team option observed ' + key,\n                    p.observe(ctx, 'teams')['matrix'][key],\n\
+      \                    {'false': False}.get(value, value.strip('\"')))"
+    - p.check(ctx, 'friendly fire prevented', p.observe(ctx, 'health', 1), health)
+    - p.check(ctx, 'nameplate hidden', p.rich_action(ctx, 'nameplate_visible', p.client(ctx, 1).name), False)
+    - p.check(ctx, 'collision disabled', p.observe(ctx, 'last_collision.player_blocked'), False)
+    - p.check(ctx, 'invisible teammate hidden', p.rich_action(ctx, 'entity_render_visible', p.observe(ctx, 'entity_id',
+      1)), False)
+    - p.check(ctx, 'team death message hidden', p.observe(ctx, 'death_messages')[before:], [])
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap:
+  - deathMessageVisibility option missing; scoreboard.rs:212-216
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: each option enforced/presented'
+- subject: scoreboard_teams.teams_membership
+  matrix_ids:
+  - pw:scoreboard_teams.teams_membership/neoforge_solaris_loader/adventure/overworld/normal/2/normal/save_all_checkpoint/op_2
+  preconditions:
+    setup_callable: scoreboard_teams.ADAPTERS['scoreboard_teams.teams_membership'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: scoreboard_teams.teams_membership
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:70-83
+    calls:
+    - p.client(ctx).command('team add matrix')
+    - p.client(ctx).command(f'team join matrix {name}')
+    - p.client(ctx).command('team modify matrix color red')
+    - p.client(ctx).command(f'team leave {name}')
+    - p.client(ctx).command(f'team join matrix {name}')
+    - p.client(ctx).command('team empty matrix')
+    - p.client(ctx).command('team remove matrix')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.query(ctx, 'team list matrix', rf'Members:.*\b{name}\b')
+    - p.check(ctx, 'red team packet', p.observe(ctx, 'teams')['matrix']['color'], 'red')
+    - p.query(ctx, 'team list matrix', r'Members:\s*$')
+    - p.query(ctx, 'team list matrix', r'Members:\s*$')
+    - p.test(ctx, 'team removed packet', 'matrix' not in p.observe(ctx, 'teams'), p.observe(ctx, 'teams'))
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  implementation_class: real_but_partial
+  subject_oracle_text: 'reference: membership and tab-list color'
+  remaining_oracle_clause:
+    description: Tab-list color not asserted.
+    missing_capabilities:
+    - snapshot:tab_list
+- subject: scoreboard_teams.trigger
+  matrix_ids:
+  - pw:scoreboard_teams.trigger/native_linux/survival/overworld/easy/1/slow_reader_backpressure/clean_restart_mid_action/op_2
+  preconditions:
+    setup_callable: scoreboard_teams.ADAPTERS['scoreboard_teams.trigger'].setup
+    fixture_calls:
+    - p.admin(ctx, 'scoreboard objectives add matrix trigger')
+    - p.admin(ctx, f'scoreboard players enable {name} matrix')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: scoreboard_teams.trigger
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/scoreboard_teams.py:116-123
+    calls: []
+    authoritative_commands_in_action_order:
+    - p.admin(ctx, 'scoreboard objectives add matrix trigger')
+    - p.admin(ctx, f'scoreboard players enable {name} matrix')
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.response(ctx, 'trigger matrix add 1', r'Triggered matrix with value 1')
+    - p.query(ctx, f'scoreboard players get {name} matrix', r'has 1 \[matrix\]')
+    - p.response(ctx, 'trigger matrix add 1', r'That trigger is not enabled')
+    - p.query(ctx, f'scoreboard players get {name} matrix', r'has 1 \[matrix\]')
+    delegated_helpers: []
+  expected_contract: Vanilla 26.1.2; exact values/formulas in Check calls, cited sources above
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: score incremented once then disabled'
+receipt_policy: Index of shared Python Adapter callables, not an interpreter. Capability requests are not live pass
+  evidence; consult canonical receipts and ledger.
+helper_sources: {}
+adapter_revision: 794c8ff5

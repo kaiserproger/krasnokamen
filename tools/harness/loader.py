@@ -21,21 +21,40 @@ from . import runtime
 from .mcp import McpClient
 
 REPO_ROOT = runtime.REPO_ROOT
-SERVER_ADDRESS = "127.0.0.1:25567"
-CONFIRMATION_TITLES = (
-    f"Allow Solaris content from {SERVER_ADDRESS}?",
-    "Allow Solaris content from localhost:25567?",
-)
+# The port `examples/loader-live-gate/playable.toml` ships with. Every run replaces it
+# with a free port of its own, so gates from different agents never collide.
+TEMPLATE_SERVER_PORT = 25567
 PLATFORMS = ("fabric", "neoforge", "forge")
 USERNAMES = {"fabric": "GateFabric", "neoforge": "GateNeoForge", "forge": "GateForge"}
 
 
-def confirm_loader_permission(client: Any, timeout_seconds: float) -> str:
+def server_address(port: int) -> str:
+    return f"127.0.0.1:{port}"
+
+
+def confirmation_titles(port: int) -> tuple[str, str]:
+    """The Loader permission prompt names the server address the client connected to."""
+    return (
+        f"Allow Solaris content from {server_address(port)}?",
+        f"Allow Solaris content from localhost:{port}?",
+    )
+
+
+def reserve_server_ports() -> tuple[int, int]:
+    """A free server port and a distinct free MCP port for one run."""
+    server_port = runtime.reserve_port()
+    mcp_port = runtime.reserve_port()
+    while mcp_port == server_port:
+        mcp_port = runtime.reserve_port()
+    return server_port, mcp_port
+
+
+def confirm_loader_permission(client: Any, timeout_seconds: float, server_port: int) -> str:
     deadline = time.monotonic() + timeout_seconds
     last_error: Exception | None = None
     observed: dict[str, Any] | None = None
     while time.monotonic() < deadline:
-        for title in CONFIRMATION_TITLES:
+        for title in confirmation_titles(server_port):
             try:
                 client.call_tool(
                     "minecraft_click_confirmation_button",
@@ -85,8 +104,10 @@ def run(
         raise ValueError(f"server candidate is not executable: {server_bin}")
     if not plugins_dir.is_dir():
         raise ValueError(f"plugin deployment is not a directory: {plugins_dir}")
-    if runtime.port_open(25567):
-        raise RuntimeError("loader live-gate server port 25567 is already in use")
+    runtime.ensure_loader_gradle_home()
+    server_port, mcp_port = reserve_server_ports()
+    if runtime.port_open(server_port):
+        raise RuntimeError(f"loader live-gate server port {server_port} is already in use")
 
     game_dir = artifact_dir / "game"
     game_dir.mkdir(parents=True, exist_ok=True)
@@ -113,6 +134,10 @@ def run(
         'world_dir = ".analysis/loader-live-gate/world-v26"',
         f'world_dir = "{world_dir.relative_to(REPO_ROOT).as_posix()}"',
     )
+    template_port = f"port = {TEMPLATE_SERVER_PORT}"
+    if config_text.count(template_port) != 1:
+        raise RuntimeError(f"loader-live-gate playable.toml must declare exactly one {template_port!r}")
+    config_text = config_text.replace(template_port, f"port = {server_port}")
     username = USERNAMES[platform]
     owners = tuple(sorted(path.parent.name for path in plugins_dir.glob("*/plugin.toml")))
     config_text = config_text.replace(
@@ -138,7 +163,6 @@ def run(
         )
     expected_bundle_cache_files.sort()
     token = f"solaris-loader-{platform}-{time.time_ns()}"
-    mcp_port = runtime.reserve_port()
 
     xvfb = server = client_process = None
     xvfb_log = server_log_handle = client_log_handle = None
@@ -149,7 +173,8 @@ def run(
         "game_dir": str(game_dir.relative_to(REPO_ROOT)),
         "world_dir": str(world_dir.relative_to(REPO_ROOT)),
         "run_config": str(run_config.relative_to(REPO_ROOT)),
-        "server_address": SERVER_ADDRESS,
+        "server_address": server_address(server_port),
+        "server_port": server_port,
         "mcp_port": mcp_port,
         "forge_early_window_control": False if platform == "forge" else None,
         "server_binary": str(server_bin),
@@ -159,6 +184,7 @@ def run(
     }
     try:
         xvfb, display, xvfb_log = runtime.start_xvfb(artifact_dir)
+        result["display"] = display
 
         server_log_path = artifact_dir / "server.log"
         server_log_handle = server_log_path.open("wb")
@@ -169,7 +195,7 @@ def run(
             stderr=subprocess.STDOUT,
             start_new_session=True,
         )
-        runtime.wait_port(25567, min(timeout_seconds, 90.0), server, log_path=server_log_path)
+        runtime.wait_port(server_port, min(timeout_seconds, 90.0), server, log_path=server_log_path)
         result["server_ready"] = True
 
         client_process, client_log_handle = runtime.start_client(
@@ -199,9 +225,9 @@ def run(
             before_screen.get("class") if isinstance(before_screen, dict) else before.get("current_screen")
         )
         result["in_play_before_connect"] = bool(before.get("in_play"))
-        mcp.call_tool("minecraft_connect", {"server_addr": SERVER_ADDRESS})
+        mcp.call_tool("minecraft_connect", {"server_addr": server_address(server_port)})
         result["permission_title"] = confirm_loader_permission(
-            mcp, min(timeout_seconds, 90.0)
+            mcp, min(timeout_seconds, 90.0), server_port
         )
         result["permission_confirmed"] = True
 

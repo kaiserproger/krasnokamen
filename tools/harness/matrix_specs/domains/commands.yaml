@@ -1,0 +1,1646 @@
+domain: commands
+vanilla_version: 26.1.2
+port_range:
+  - 26460
+  - 26479
+execution: shared matrix_api Adapter only; YAML is specification, not a second runner/DSL
+evidence_scope: Specifications and blocked requirements are not runtime passes; see canonical receipts and ledger.
+subjects:
+  - id: commands.advancement
+    matrix_ids:
+      - pw:commands.advancement/forge_solaris_loader/survival/the_nether/peaceful/1/reconnect_mid_action/hot_backup_during_action/console
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.advancement]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, advancement) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/advancement
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: advancement grant {p} only minecraft:story/root
+    oracle:
+      client.advancements.contains: minecraft:story/root
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.ban
+    matrix_ids:
+      - pw:commands.ban/protocol_bot/creative/overworld/normal/2/slow_reader_backpressure/pause_when_empty_resume/console
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.ban]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, ban) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/ban
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: ban {q} MatrixBan
+    oracle:
+      target.connected: false
+      target.disconnect_reason.contains: MatrixBan
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.ban-ip
+    matrix_ids:
+      - pw:commands.ban-ip/fabric_svc/adventure/the_end/hard/N8/normal/crash_kill9_wal_replay/console
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.ban-ip]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, ban-ip) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/ban-ip
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: ban-ip {q} MatrixBanIp
+    oracle:
+      target.connected: false
+      ip_banlist.contains: target IP
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.banlist
+    matrix_ids:
+      - pw:commands.banlist/vanilla_java_26_1_2/spectator/overworld/easy/2/duplicate_login/save_all_checkpoint/console
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.banlist]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, banlist) defines explicit inventory,entity,scoreboard/datapack fixtures
+      commands:
+        - ban MatrixOffline MatrixBanlist
+    source:
+      - https://minecraft.wiki/w/Commands/banlist
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: banlist players
+    oracle:
+      listed_players: fixture banned accounts
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.bossbar
+    matrix_ids:
+      - pw:commands.bossbar/neoforge_solaris_loader/adventure/the_nether/hard/1/malformed_or_stale_packet/clean_restart_mid_action/op_1
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.bossbar]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, bossbar) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/bossbar
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: bossbar set matrix:test value 37
+    oracle:
+      query: bossbar get matrix:test value
+      equals: 37
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.clear
+    matrix_ids:
+      - pw:commands.clear/native_linux/survival/the_nether/normal/1/slow_reader_backpressure/steady/op_3
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.clear]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, clear) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/clear
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: clear {p} stone 3
+    oracle:
+      inventory.minecraft:stone: 4
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.co
+    matrix_ids:
+      - pw:commands.co/fabric_solaris_loader/creative/the_end/easy/1/normal/save_all_checkpoint/op_4
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.co]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, co) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/commands.rs
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/admin.rs
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: co inspect
+    oracle:
+      inspector_mode: true
+    reference_scope: Solaris extension; no vanilla equivalent
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.data
+    matrix_ids:
+      - bl:commands.data/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.data]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, data) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/data
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: data get entity {p} Inventory
+    oracle:
+      query: data get entity {p} Inventory
+      type: SNBT list matching received inventory
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    server_gap:
+      id: DATA-ENTITY
+      evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_blocks.rs:255-287
+      description: Only get|merge block on command blocks; generic entity/storage paths unsupported on original binary.
+      status: source-confirmed on original Hotfix tree; live receipts separate
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.datapack
+    matrix_ids:
+      - pw:commands.datapack/fabric_distant_horizons/creative/the_end/hard/N8/duplicate_login/clean_restart_mid_action/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.datapack]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, datapack) defines explicit inventory,entity,scoreboard/datapack fixtures
+      datapack:
+        name: file/matrix
+        function: matrix:command_probe
+        body: scoreboard players set result matrix_fn 37
+    source:
+      - https://minecraft.wiki/w/Commands/datapack
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: datapack disable "file/matrix"
+    oracle:
+      enabled_datapacks.excludes: file/matrix
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    server_gap:
+      id: DATAPACK-ENABLE
+      evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/datapacks.rs:549-553
+      description: list only; enable/disable rejects.
+      status: source-confirmed on original Hotfix tree; live receipts separate
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.help
+    matrix_ids:
+      - bl:commands.help/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.help]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, help) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/help
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: help give
+    oracle:
+      feedback.contains:
+        - give
+        - targets
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.list
+    matrix_ids:
+      - bl:commands.list/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.list]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, list) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/list
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: list
+    oracle:
+      feedback.online_names: all connected names
+      feedback.count: len(clients)
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.me
+    matrix_ids:
+      - bl:commands.me/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.me]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, me) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/me
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: me MatrixEmote
+    oracle:
+      every_client.events: "* {p} MatrixEmote"
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.msg
+    matrix_ids:
+      - bl:commands.msg/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0@vanilla
+      - bl:commands.msg/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0@live
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.msg]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, msg) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/msg
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: msg {q} MatrixPrivate
+    oracle:
+      recipients:
+        - sender
+        - target
+      message: MatrixPrivate
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    plugin_profiles:
+      changed_by:
+        - solaris-essentials
+      vanilla: 767fbd3331effa358e238e39e2a88ed1345d5623207015671228536e53975f00
+      live: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
+    plugin_profile_oracle:
+      vanilla: core private messaging semantics; selectors forbidden below op2
+      live:
+        solaris-essentials exact-name resolution; @a produces Online player not found or ambiguous.; messages
+        use [to target] and [from sender] prefixes
+      source: /run/media/kaiserroman/games/solaris-work/solaris-default-plugins/sources/solaris-essentials/src/lib.rs:450-471,607-610,636-645,853-863
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.tell
+    matrix_ids:
+      - bl:commands.tell/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.tell]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, tell) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/tell
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: tell {q} MatrixPrivate
+    oracle:
+      recipients:
+        - sender
+        - target
+      message: MatrixPrivate
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.w
+    matrix_ids:
+      - bl:commands.w/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.w]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, w) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/w
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: w {q} MatrixPrivate
+    oracle:
+      recipients:
+        - sender
+        - target
+      message: MatrixPrivate
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.teammsg
+    matrix_ids:
+      - bl:commands.teammsg/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.teammsg]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, teammsg) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/teammsg
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: teammsg MatrixTeam
+    oracle:
+      recipients: own team only
+      message: MatrixTeam
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.tm
+    matrix_ids:
+      - bl:commands.tm/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.tm]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, tm) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/tm
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: tm MatrixTeam
+    oracle:
+      recipients: own team only
+      message: MatrixTeam
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.settlement
+    matrix_ids:
+      - bl:commands.settlement/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.settlement]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, settlement) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/commands.rs
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/admin.rs
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: settlement guide
+    oracle:
+      feedback.contains: settlement
+    reference_scope: Solaris extension; no vanilla equivalent
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.trigger
+    matrix_ids:
+      - bl:commands.trigger/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.trigger]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, trigger) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/trigger
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: trigger matrix_cmd add 3
+    oracle:
+      score: 3
+      second_trigger_score: 3
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.gamemode
+    matrix_ids:
+      - bl:commands.gamemode/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.gamemode]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, gamemode) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/gamemode
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: gamemode creative {p}
+    oracle:
+      playerGameType: 1
+      client.game_mode: creative
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.teleport
+    matrix_ids:
+      - bl:commands.teleport/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.teleport]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, teleport) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/teleport
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: teleport {p} 4.5 80 4.5
+    oracle:
+      client.position:
+        - 4.5
+        - 80
+        - 4.5
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.tp
+    matrix_ids:
+      - bl:commands.tp/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.tp]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, tp) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/tp
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: tp {p} 4.5 80 4.5
+    oracle:
+      client.position:
+        - 4.5
+        - 80
+        - 4.5
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.execute
+    matrix_ids:
+      - bl:commands.execute/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.execute]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, execute) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/execute
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: execute positioned 2 80 2 run setblock ~ ~ ~ gold_block
+    oracle:
+      block[2,80,2]: minecraft:gold_block
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.give
+    matrix_ids:
+      - bl:commands.give/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.give]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, give) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/give
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: give {p} stone 7
+    oracle:
+      inventory.minecraft:stone: 7
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.kill
+    matrix_ids:
+      - bl:commands.kill/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.kill]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, kill) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/kill
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: kill @e[type=pig,name=MatrixKill]
+    oracle:
+      entity[name=MatrixKill].exists: false
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.time
+    matrix_ids:
+      - bl:commands.time/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.time]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, time) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/time
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: time set 6000
+    oracle:
+      query: time query daytime
+      equals: 6000
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.weather
+    matrix_ids:
+      - bl:commands.weather/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.weather]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, weather) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/weather
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: weather rain 6000t
+    oracle:
+      client.weather: rain
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.difficulty
+    matrix_ids:
+      - bl:commands.difficulty/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.difficulty]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, difficulty) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/difficulty
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: difficulty easy
+    oracle:
+      query: difficulty
+      equals: easy
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.gamerule
+    matrix_ids:
+      - bl:commands.gamerule/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.gamerule]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, gamerule) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/gamerule
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: gamerule minecraft:keep_inventory true
+    oracle:
+      query: gamerule minecraft:keep_inventory
+      equals: true
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.summon
+    matrix_ids:
+      - bl:commands.summon/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.summon]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, summon) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/summon
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: summon pig 3 80 0 {{NoAI:1b,CustomName:"MatrixSummon"}}
+    oracle:
+      entity[type=pig,name=MatrixSummon].exists: true
+      Pos:
+        - 3
+        - 80
+        - 0
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.worldborder
+    matrix_ids:
+      - bl:commands.worldborder/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.worldborder]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, worldborder) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/worldborder
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: worldborder set 128
+    oracle:
+      query: worldborder get
+      equals: 128
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.setblock
+    matrix_ids:
+      - bl:commands.setblock/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.setblock]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, setblock) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/setblock
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: setblock 2 80 2 gold_block
+    oracle:
+      block[2,80,2]: minecraft:gold_block
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.fill
+    matrix_ids:
+      - bl:commands.fill/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.fill]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, fill) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/fill
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: fill 2 80 2 3 80 3 gold_block
+    oracle:
+      blocks: all four x,z in2..3 at y80 are gold_block
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.experience
+    matrix_ids:
+      - bl:commands.experience/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.experience]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, experience) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/experience
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: experience set {p} 7 levels
+    oracle:
+      query: experience query {p} levels
+      equals: 7
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.xp
+    matrix_ids:
+      - bl:commands.xp/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.xp]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, xp) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/xp
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: xp set {p} 7 levels
+    oracle:
+      query: experience query {p} levels
+      equals: 7
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.spawnpoint
+    matrix_ids:
+      - bl:commands.spawnpoint/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.spawnpoint]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, spawnpoint) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/spawnpoint
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: spawnpoint {p} 4 80 4
+    oracle:
+      data_get.respawn.position:
+        - 4
+        - 80
+        - 4
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.setworldspawn
+    matrix_ids:
+      - bl:commands.setworldspawn/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.setworldspawn]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, setworldspawn) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/setworldspawn
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: setworldspawn 4 80 4
+    oracle:
+      world_metadata.spawn:
+        - 4
+        - 80
+        - 4
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.forceload
+    matrix_ids:
+      - bl:commands.forceload/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.forceload]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, forceload) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/forceload
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: forceload add 0 0
+    oracle:
+      query: forceload query 0 0
+      forced: true
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.say
+    matrix_ids:
+      - bl:commands.say/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.say]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, say) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/say
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: say MatrixBroadcast
+    oracle:
+      all_clients.message: MatrixBroadcast
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.seed
+    matrix_ids:
+      - bl:commands.seed/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.seed]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, seed) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/seed
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: seed
+    oracle:
+      returned_seed: equals configured isolated world seed
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.enchant
+    matrix_ids:
+      - bl:commands.enchant/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.enchant]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, enchant) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/enchant
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: enchant {p} sharpness 2
+    oracle:
+      equipment.mainhand.components.minecraft:enchantments.minecraft:sharpness: 2
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.effect
+    matrix_ids:
+      - bl:commands.effect/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.effect]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, effect) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/effect
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: effect give {p} speed 30 1 true
+    oracle:
+      active_effects.minecraft:speed.amplifier: 1
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.debug
+    matrix_ids:
+      - pw:commands.debug/native_windows/survival/the_nether/easy/2/normal/pause_when_empty_resume/non_op_0
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.debug]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, debug) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/debug
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: debug start
+    oracle:
+      vanilla_profiler_running: true
+      explicit_unsupported_reply: failure, not fixture pass
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    server_gap:
+      id: DEBUG-PROFILER
+      evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/commands.rs:963-975
+      description: Vanilla profiler root replaced with Solaris give fixture.
+      status: source-confirmed on original Hotfix tree; live receipts separate
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.team
+    matrix_ids:
+      - bl:commands.team/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.team]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, team) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/team
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: team join matrix_cmd {p}
+    oracle:
+      query: team list matrix_cmd
+      members.contains: "{p}"
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.tps
+    matrix_ids:
+      - bl:commands.tps/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.tps]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, tps) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/commands.rs
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/admin.rs
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: tps
+    oracle:
+      parsed_tps.range:
+        - 0
+        - 20
+      reference: Solaris extension
+    reference_scope: Solaris extension; no vanilla equivalent
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.mspt
+    matrix_ids:
+      - bl:commands.mspt/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.mspt]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, mspt) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/commands.rs
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/admin.rs
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: mspt
+    oracle:
+      parsed_mspt.min: 0
+      reference: Solaris extension
+    reference_scope: Solaris extension; no vanilla equivalent
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.scoreboard
+    matrix_ids:
+      - bl:commands.scoreboard/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.scoreboard]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, scoreboard) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/scoreboard
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: scoreboard players set {p} matrix_cmd 37
+    oracle:
+      query: scoreboard players get {p} matrix_cmd
+      equals: 37
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.locate
+    matrix_ids:
+      - bl:commands.locate/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.locate]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, locate) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/locate
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: locate biome minecraft:plains
+    oracle:
+      located_biome: minecraft:plains
+      verify: authoritative biome query at returned coordinates
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.tellraw
+    matrix_ids:
+      - bl:commands.tellraw/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.tellraw]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, tellraw) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/tellraw
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: tellraw {p} {{"text":"MatrixRaw"}}
+    oracle:
+      target.chat_text: MatrixRaw
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.title
+    matrix_ids:
+      - bl:commands.title/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.title]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, title) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/title
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: title {p} title {{"text":"MatrixTitle"}}
+    oracle:
+      target.title: MatrixTitle
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.function
+    matrix_ids:
+      - bl:commands.function/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.function]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, function) defines explicit inventory,entity,scoreboard/datapack fixtures
+      datapack:
+        name: file/matrix
+        function: matrix:command_probe
+        body: scoreboard players set result matrix_fn 37
+    source:
+      - https://minecraft.wiki/w/Commands/function
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: function matrix:command_probe
+    oracle:
+      score.result.matrix_fn: 37
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.schedule
+    matrix_ids:
+      - bl:commands.schedule/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.schedule]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, schedule) defines explicit inventory,entity,scoreboard/datapack fixtures
+      datapack:
+        name: file/matrix
+        function: matrix:command_probe
+        body: scoreboard players set result matrix_fn 37
+    source:
+      - https://minecraft.wiki/w/Commands/schedule
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: schedule function matrix:command_probe 5t
+    oracle:
+      score.result.matrix_fn.after6ticks: 37
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.reload
+    matrix_ids:
+      - bl:commands.reload/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.reload]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, reload) defines explicit inventory,entity,scoreboard/datapack fixtures
+      datapack:
+        name: file/matrix
+        function: matrix:command_probe
+        body: scoreboard players set result matrix_fn 37
+    source:
+      - https://minecraft.wiki/w/Commands/reload
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: reload
+    oracle:
+      reloaded_function.score.result.matrix_fn: 37
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.tick
+    matrix_ids:
+      - bl:commands.tick/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.tick]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, tick) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/tick
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: tick rate 10
+    oracle:
+      server.tick_rate: 10
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.kick
+    matrix_ids:
+      - bl:commands.kick/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/op_3
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.kick]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, kick) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/kick
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: kick {q} MatrixKick
+    oracle:
+      target.connected: false
+      reason: MatrixKick
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.mute
+    matrix_ids:
+      - bl:commands.mute/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.mute]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, mute) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/commands.rs
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/admin.rs
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: mute {q}
+    oracle:
+      public_message_count: 0
+    reference_scope: Solaris extension; no vanilla equivalent
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.unmute
+    matrix_ids:
+      - bl:commands.unmute/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.unmute]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, unmute) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/commands.rs
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/admin.rs
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: unmute {q}
+    oracle:
+      public_message_count: 1
+    reference_scope: Solaris extension; no vanilla equivalent
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.warn
+    matrix_ids:
+      - bl:commands.warn/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.warn]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, warn) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/commands.rs
+      - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/admin.rs
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: warn {q} MatrixWarn
+    oracle:
+      target.message: MatrixWarn
+    reference_scope: Solaris extension; no vanilla equivalent
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.transfer
+    matrix_ids:
+      - bl:commands.transfer/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/op_3
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.transfer]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, transfer) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/transfer
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: transfer 127.0.0.1 26479 {q}
+    oracle:
+      target.transfer:
+        host: 127.0.0.1
+        port: 26479
+      target_new_server_joined: true
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.pardon
+    matrix_ids:
+      - bl:commands.pardon/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/op_3
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.pardon]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, pardon) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/pardon
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: pardon {q}
+    oracle:
+      target.reconnected: true
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.pardon-ip
+    matrix_ids:
+      - bl:commands.pardon-ip/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.pardon-ip]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, pardon-ip) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/pardon-ip
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: pardon-ip {q}
+    oracle:
+      target.reconnected: true
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.op
+    matrix_ids:
+      - bl:commands.op/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/op_3
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.op]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, op) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/op
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: op {q}
+    oracle:
+      target.command_roots.contains: give
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.deop
+    matrix_ids:
+      - bl:commands.deop/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/op_3
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.deop]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, deop) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/deop
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: deop {q}
+    oracle:
+      target.command_roots.excludes: give
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.whitelist
+    matrix_ids:
+      - bl:commands.whitelist/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.whitelist]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, whitelist) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/whitelist
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: whitelist add MatrixOffline
+    oracle:
+      query: whitelist list
+      contains: MatrixOffline
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.stop
+    matrix_ids:
+      - bl:commands.stop/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/console
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.stop]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, stop) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/stop
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: stop
+    oracle:
+      server.exit_code: 0
+      checkpoint.restored_player_inventory: equals pre-stop
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+  - id: commands.save-all
+    matrix_ids:
+      - bl:commands.save-all/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/console
+    adapter: tools.harness.matrix_domains.commands:ADAPTERS[commands.save-all]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+      adapter_setup: commands._setup(ctx, save-all) defines explicit inventory,entity,scoreboard/datapack fixtures
+    source:
+      - https://minecraft.wiki/w/Commands/save-all
+    expected_version: Java 26.1.2
+    actions:
+      - verb: command
+        text: save-all flush
+    oracle:
+      checkpoint.flushed: true
+      restart.inventory: equals pre-save
+    required_permission_probe:
+      threshold: root minimum in matrix subject steps
+      below_threshold: root absent from command tree; command error; no mutation
+      status: requires separate preconfigured low-op client; adapter does not silently deop matrix actor
+    permission_contract:
+      low-permission branch rejects with hidden command root; authorized successful branch cannot
+      claim complete without separate op_(minimum-1) probe capability
+phase2_checkpoint:
+  "41 distinct focused tests exercised: 39 passed before split; 4 affected split regressions passed
+  afterward. No new live pass."

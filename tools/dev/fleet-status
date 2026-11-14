@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""One screen of fleet state (owner host): fleet-status [--mem-dir DIR]
+
+CLAIMS      unreleased task leases (task-claim): agent, start, timebox left or overrun,
+            lease end; an expired lease can be taken over.
+TOKENS      mem-run build tokens: holder pid, age, command and tree (cwd); commands
+            waiting for one.
+SCENES      scene-slot.sh slots, the same way.
+HOST        load average, available memory, mem-run commands running.
+
+Read-only: a slot counts as held only while its flock is held (probed with a shared
+non-blocking lock), so records of finished holders never show. Paths: --mem-dir
+(default /tmp/solaris-mem-slots), $SOLARIS_SCENE_SLOT_DIR (default /tmp) and
+$SOLARIS_FLEET_DIR (default <work>/fleet), as the tools that write them use;
+SOLARIS_FLEET_NOW fixes the clock (tests only).
+"""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import wtlib as w  # noqa: E402
+
+
+def now() -> int:
+    return int(os.environ.get("SOLARIS_FLEET_NOW") or time.time())
+
+
+def minutes(seconds: int) -> str:
+    seconds = max(0, seconds)
+    return f"{seconds // 3600}h{seconds % 3600 // 60:02d}m" if seconds >= 3600 else f"{seconds // 60}m"
+
+
+def clock(epoch: int) -> str:
+    return time.strftime("%H:%M" if abs(now() - epoch) < 20 * 3600 else "%m-%d %H:%M", time.localtime(epoch))
+
+
+def command_text(argv: list[str]) -> str:
+    """The command a slot holder runs; a token holder's argv is `bash .../mem-run.sh [-x] [-p] [-m N] CMD...`."""
+    for i, word in enumerate(argv):
+        if word.endswith("mem-run.sh"):
+            rest = argv[i + 1:]
+            while rest and rest[0] in ("-x", "-p", "-m"):
+                rest = rest[2:] if rest[0] == "-m" else rest[1:]
+            argv = rest
+            break
+    text = " ".join(argv)
+    return text if len(text) <= 72 else text[:69] + "..."
+
+
+def alive(pid: int) -> bool:
+    return Path(f"/proc/{pid}").exists()
+
+
+def holder(path: Path) -> dict | None:
+    """The holder record of a held slot lock file, or None when the slot is free."""
+    try:
+        fd = os.open(path, os.O_RDONLY)
+    except OSError:
+        return None
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            data = os.pread(fd, 65536, 0).decode(errors="replace")
+            try:
+                return json.loads(data)
+            except ValueError:
+                return {}
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return None
+    finally:
+        os.close(fd)
+
+
+def waiters(wait_dir: Path) -> list[dict]:
+    found = []
+    for path in sorted(wait_dir.glob("*.json")) if wait_dir.is_dir() else []:
+        try:
+            record = json.loads(path.read_text())
+            cmdline = Path(f"/proc/{record['pid']}/cmdline").read_bytes()
+        except (OSError, ValueError, KeyError):
+            continue
+        if b"slot-lock" in cmdline:  # a live waiter, not a reused pid
+            found.append(record)
+    return sorted(found, key=lambda r: r.get("since", 0))
+
+
+def slot_lines(title: str, lock_dir: Path, pattern: str, wait_dir: Path) -> list[str]:
+    paths = sorted(lock_dir.glob(pattern), key=lambda p: (len(p.name), p.name)) if lock_dir.is_dir() else []
+    held = [(path, holder(path)) for path in paths]
+    held = [(path, record) for path, record in held if record is not None]
+    queued = waiters(wait_dir)
+    lines = [f"{title} ({len(held)}/{len(paths)} in use, {len(queued)} waiting)"]
+    at = now()
+    prefix, suffix = pattern.split("*")
+    for path, record in held:
+        slot = path.name[len(prefix):len(path.name) - len(suffix)]
+        if not record:
+            lines.append(f"  {slot:<3} held (no holder record: taken before slot-lock.py)")
+            continue
+        pid = record.get("pid", "?")
+        state = "" if not isinstance(pid, int) or alive(pid) else " (exited; its scope is draining)"
+        lines.append(f"  {slot:<3} pid {pid:<8} {minutes(at - record.get('since', at)):>6}  "
+                     f"{command_text(record.get('argv', []))}{state}")
+        lines.append(f"      in {record.get('cwd', '?')}")
+    for record in queued:
+        lines.append(f"  waiting pid {record['pid']:<8} {minutes(at - record.get('since', at)):>6}  "
+                     f"{command_text(record.get('argv', []))}")
+        lines.append(f"      in {record.get('cwd', '?')}")
+    return lines
+
+
+def claim_lines(fleet: Path) -> list[str]:
+    at = now()
+    claims = []
+    for path in sorted((fleet / "claims").glob("*.json")) if (fleet / "claims").is_dir() else []:
+        try:
+            claim = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if claim.get("released") is None:
+            claims.append(claim)
+    claims.sort(key=lambda c: c["start"])
+    expired = sum(1 for c in claims if at >= c["expires"])
+    lines = [f"CLAIMS ({len(claims) - expired} live, {expired} expired)"]
+    if claims:
+        lines.append(f"  {'TASK':<24} {'AGENT':<20} {'START':<11} {'TIMEBOX':<8} {'LEFT':<14} LEASE")
+    for claim in claims:
+        left = claim["lease_start"] + claim["timebox_min"] * 60 - at
+        left_text = f"{minutes(left)} left" if left >= 0 else f"OVERRUN {minutes(-left)}"
+        lease = (f"until {clock(claim['expires'])}" if at < claim["expires"]
+                 else f"EXPIRED {clock(claim['expires'])}, can be taken over")
+        renewed = f" (renewed {claim['renewals']}x)" if claim.get("renewals") else ""
+        lines.append(f"  {claim['task']:<24} {claim['agent']:<20} {clock(claim['start']):<11} "
+                     f"{str(claim['timebox_min']) + 'm':<8} {left_text:<14} {lease}{renewed}")
+    return lines
+
+
+def host_line(mem_dir: Path) -> str:
+    load = Path("/proc/loadavg").read_text().split()[:3]
+    meminfo = dict(line.split(":", 1) for line in Path("/proc/meminfo").read_text().splitlines() if ":" in line)
+    gib = lambda key: int(meminfo[key].split()[0]) / 1048576  # noqa: E731
+    running = len(list((mem_dir / "run").iterdir())) if (mem_dir / "run").is_dir() else 0
+    return (f"HOST load {' '.join(load)} on {os.cpu_count()} CPUs, memory {gib('MemAvailable'):.0f}G available "
+            f"of {gib('MemTotal'):.0f}G, {running} mem-run commands running")
+
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(prog="fleet-status", description=__doc__.split("\n\n")[0])
+    parser.add_argument("--mem-dir", type=Path, default=Path("/tmp/solaris-mem-slots"))
+    args = parser.parse_args(argv)
+    scene_dir = Path(os.environ.get("SOLARIS_SCENE_SLOT_DIR") or "/tmp")
+    fleet = Path(os.environ.get("SOLARIS_FLEET_DIR") or w.WORK / "fleet")
+    lines = [f"fleet-status {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(now()))}"]
+    lines += claim_lines(fleet)
+    lines += slot_lines("BUILD TOKENS", args.mem_dir / "tokens", "token-*.lock", args.mem_dir / "tokens" / "wait")
+    lines += slot_lines("SCENE SLOTS", scene_dir, "solaris-scene-slot-*.lock", scene_dir / "solaris-scene-slot-wait")
+    lines.append(host_line(args.mem_dir))
+    print("\n".join(lines))
+
+
+if __name__ == "__main__":
+    w.run_tool(main)

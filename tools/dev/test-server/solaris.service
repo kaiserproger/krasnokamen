@@ -1,0 +1,18 @@
+[Unit]
+Description=Solaris Minecraft server (test)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=solaris
+Group=solaris
+Environment=SOLARIS_SERVER_DIR=/opt/solaris
+EnvironmentFile=-/etc/default/solaris
+ExecStart=/bin/sh -c 'cd "$$SOLARIS_SERVER_DIR" && export HOME="$$SOLARIS_SERVER_DIR" && exec ./solaris-v2 --config "$$SOLARIS_SERVER_DIR/server.toml" --no-console'
+Restart=on-failure
+RestartSec=5
+MemoryMax=3G
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

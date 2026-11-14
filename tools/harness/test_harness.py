@@ -25,6 +25,37 @@ from .backends import driver
 from types import SimpleNamespace
 
 
+class ProcessStopTests(unittest.TestCase):
+    def test_server_restart_can_wait_for_the_production_stop_deadline(self) -> None:
+        process = mock.Mock(pid=123, returncode=0)
+        process.poll.return_value = None
+        with mock.patch.object(runtime.os, "killpg") as kill:
+            runtime.stop_process(process, interrupt=True, timeout_seconds=90.0)
+        kill.assert_called_once_with(123, signal.SIGINT)
+        process.wait.assert_called_once_with(timeout=90.0)
+
+    def test_server_stop_deadline_still_kills_a_process_that_does_not_exit(self) -> None:
+        process = mock.Mock(pid=123)
+        process.poll.return_value = None
+        process.wait.side_effect = [subprocess.TimeoutExpired("server", 90.0), -9]
+        with mock.patch.object(runtime.os, "killpg") as kill:
+            runtime.stop_process(process, interrupt=True, timeout_seconds=90.0)
+        self.assertEqual(kill.call_args_list, [
+            mock.call(123, signal.SIGINT), mock.call(123, signal.SIGKILL),
+        ])
+        self.assertEqual(process.wait.call_args_list, [
+            mock.call(timeout=90.0), mock.call(timeout=5),
+        ])
+
+    def test_other_processes_keep_the_short_cleanup_deadline(self) -> None:
+        process = mock.Mock(pid=123, returncode=0)
+        process.poll.return_value = None
+        with mock.patch.object(runtime.os, "killpg") as kill:
+            runtime.stop_process(process)
+        kill.assert_called_once_with(123, signal.SIGTERM)
+        process.wait.assert_called_once_with(timeout=8.0)
+
+
 class ClientSettingsTests(unittest.TestCase):
     def test_invalid_username_rejected(self) -> None:
         with mock.patch.dict(os.environ, {
@@ -45,6 +76,54 @@ class ClientSettingsTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"SOLARIS_CLIENT_MCP_TOKEN": "t"}):
             with self.assertRaises(ValueError):
                 cli.resolve_client_settings("quilt")
+
+class McpLeaseRetryTests(unittest.TestCase):
+    REVOKED = {"isError": True, "structuredContent": {
+        "code": "controller_lease_revoked", "retryable": False, "stage": "automation"}}
+
+    def test_a_call_refused_by_a_revoked_lease_is_issued_once_more(self) -> None:
+        # Harness XTest input revokes the native client's writer lease while a call is in flight.
+        from .mcp import McpClient
+
+        client = McpClient("http://127.0.0.1:1/mcp", "t")
+        replies = [self.REVOKED, {"structuredContent": {"frame_id": 7}}]
+        with mock.patch.object(client, "_request", side_effect=replies) as request:
+            self.assertEqual(client.call_tool("client_capture", {"name": "x"}), {"frame_id": 7})
+        self.assertEqual(request.call_count, 2)
+
+    def test_other_errors_and_a_second_revocation_still_fail(self) -> None:
+        from .mcp import McpClient
+
+        client = McpClient("http://127.0.0.1:1/mcp", "t")
+        other = {"isError": True, "structuredContent": {"code": "controller_busy"}}
+        with mock.patch.object(client, "_request", side_effect=[other]) as request:
+            with self.assertRaisesRegex(RuntimeError, "controller_busy"):
+                client.call_tool("minecraft_send_chat", {})
+        self.assertEqual(request.call_count, 1)
+        with mock.patch.object(client, "_request", side_effect=[self.REVOKED, self.REVOKED]):
+            with self.assertRaisesRegex(RuntimeError, "controller_lease_revoked"):
+                client.call_tool("minecraft_send_chat", {})
+
+class SiblingRootTests(unittest.TestCase):
+    def test_a_linked_worktree_finds_the_main_checkouts_sibling_and_the_variable_wins(self) -> None:
+        # <work>/solaris (main checkout), <work>/wt/Name (git worktree), <work>/solaris-loader (sibling).
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp).resolve()
+            main, worktree, loader = work / "solaris", work / "wt" / "Name", work / "solaris-loader"
+            loader.mkdir()
+            git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "init.defaultBranch=main"]
+            subprocess.run([*git, "init", "-q", str(main)], check=True)
+            subprocess.run([*git, "-C", str(main), "commit", "-q", "--allow-empty", "-m", "base"], check=True)
+            subprocess.run([*git, "-C", str(main), "worktree", "add", "-q", "-b", "wt/Name", str(worktree)],
+                           check=True)
+            unset = {key: value for key, value in os.environ.items() if key not in runtime.SIBLING_ENV.values()}
+            with mock.patch.dict(os.environ, unset, clear=True):
+                self.assertEqual(runtime.sibling_root("loader", worktree), loader)
+                self.assertEqual(runtime.sibling_root("loader", main), loader)
+            other = work / "other-loader"
+            with mock.patch.dict(os.environ, {"SOLARIS_LOADER_ROOT": str(other)}):
+                self.assertEqual(runtime.sibling_root("loader", worktree), other)
+
 
 class DriverLabelTests(unittest.TestCase):
     def test_missing_manifest_defaults_to_draft(self) -> None:
@@ -148,7 +227,7 @@ class RunTestPolicyTests(unittest.TestCase):
                 with mock.patch.object(cli, "_default_cpu_quota", return_value="600%"):
                     with mock.patch.object(cli, "_available_bytes", return_value=16 * 1024**3):
                         with mock.patch.object(cli, "_scope_command", return_value=["scope"]) as scope:
-                            with mock.patch.object(cli.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+                            with mock.patch.object(cli.os, "execvpe"):
                                 with contextlib.redirect_stdout(io.StringIO()):
                                     self.assertEqual(cli._exec_in_scope(profile), 0)
                 scope.assert_called_once_with("600%", expected)
@@ -166,7 +245,7 @@ class RunTestPolicyTests(unittest.TestCase):
                 with mock.patch.dict(os.environ, {cli.MEMORY_MAX_ENV: "8G"}):
                     with mock.patch.object(cli, "_available_bytes", return_value=16 * 1024**3):
                         with mock.patch.object(cli, "_scope_command", return_value=["scope"]) as scope:
-                            with mock.patch.object(cli.subprocess, "run", return_value=SimpleNamespace(returncode=0)):
+                            with mock.patch.object(cli.os, "execvpe"):
                                 with contextlib.redirect_stdout(io.StringIO()):
                                     self.assertEqual(cli._exec_in_scope("correctness"), 0)
                         scope.assert_called_once_with("600%", "8G")
@@ -204,6 +283,17 @@ class RunTestPolicyTests(unittest.TestCase):
 
 
 class ReceiptContractTests(unittest.TestCase):
+    def test_test_stage_deadline_is_only_set_by_explicit_option(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            contexts = []
+            spec = {"scope": "harness", "prerequisites": profiles._NONE,
+                    "run": lambda ctx: contexts.append(ctx.stage_timeout_seconds) or {}}
+            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):
+                with mock.patch.dict(profiles.PROFILES, {"test": spec}):
+                    self.assertEqual(cli.cmd_run(["test"]), 0)
+                    self.assertEqual(cli.cmd_run(["test", "--timeout-seconds", "7"]), 0)
+            self.assertEqual(contexts, [None, 7.0])
+
     def test_unknown_profile_never_passes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):
@@ -225,7 +315,7 @@ class ReceiptContractTests(unittest.TestCase):
                 profiles._run_command(command, ctx, f"step-{index}.log")
             return {}
 
-        spec = {"scope": "harness", "run": run_commands}
+        spec = {"scope": "harness", "run": run_commands, "prerequisites": profiles._NONE}
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):
                 with mock.patch.dict(profiles.PROFILES, {"failing-commands": spec}):
@@ -263,9 +353,16 @@ class ReceiptContractTests(unittest.TestCase):
             self.fail("gameplay must not execute after missing tool discovery")
 
         with tempfile.TemporaryDirectory() as tmp:
-            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):
+            reports = Path(tmp) / "data" / "vanilla" / "reports"
+            reports.mkdir(parents=True)
+            (Path(tmp) / "facts").mkdir()
+            (Path(tmp) / "resources" / "assets").mkdir(parents=True)
+            for name in ("blocks.json", "block_mining.json", "block_light.json", "registries.json"):
+                (reports / name).touch()
+            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), mock.patch("tools.harness.mcp_schema.native_schema", return_value={}), mock.patch.dict(os.environ, {"SOLARIS_CLIENT_DATA_DIR": str(reports.parent), "SOLARIS_SERVER_BINARY": "/bin/true", "SOLARIS_CLIENT_BINARY": "/bin/true"}):
                 with mock.patch.dict(profiles.PROFILES, {
-                    "survival": {"scope": "real-client", "run": missing_tools},
+                    "survival": {"scope": "real-client", "run": missing_tools,
+                                 "prerequisites": profiles.PROFILE_PREREQUISITES["survival"]},
                 }):
                     code = cli.cmd_run(["survival", "--client", "native"])
             payload = json.loads(next(Path(tmp).glob("*/result.json")).read_text())
@@ -286,6 +383,81 @@ class ReceiptContractTests(unittest.TestCase):
         self.assertEqual(payload["commands"], [])
 
 
+class GravesCustodyTests(unittest.TestCase):
+    """The gate's own assertions must fail closed on duplication."""
+
+    @staticmethod
+    def receipt(**overrides):
+        receipt = {
+            "status": "PASS",
+            "source_unchanged": True,
+            "blocks": [{
+                "dimension": "minecraft:overworld", "x": -574, "y": 71, "z": 320,
+                "state": 1, "block": "minecraft:barrel",
+                "items": [{"item": "minecraft:dirt", "count": 7, "place": "container", "slot": 0}],
+            }],
+            "players": [{"uuid": "u", "items": []}],
+            "item_entities": [],
+        }
+        receipt.update(overrides)
+        return receipt
+
+    def test_custody_passes_with_exact_barrel_and_no_copies(self) -> None:
+        from .backends.graves import check_custody
+
+        checks: dict[str, object] = {}
+        check_custody(checks, self.receipt(), item="minecraft:dirt", count=7)
+        self.assertTrue(all(check["passed"] for check in checks.values()))
+
+    def test_inventory_copy_fails_closed(self) -> None:
+        from .backends.graves import check_custody
+
+        receipt = self.receipt(players=[{"uuid": "u", "items": [
+            {"item": "minecraft:dirt", "count": 7, "place": "inventory", "slot": 0}]}])
+        with self.assertRaisesRegex(RuntimeError, "player_inventory_holds_no_copy"):
+            check_custody({}, receipt, item="minecraft:dirt", count=7)
+
+    def test_dropped_copy_fails_closed(self) -> None:
+        from .backends.graves import check_custody
+
+        receipt = self.receipt(item_entities=[
+            {"type_id": 40, "position": [0.0, 0.0, 0.0], "item": "minecraft:dirt", "count": 7}])
+        with self.assertRaisesRegex(RuntimeError, "no_dropped_copy"):
+            check_custody({}, receipt, item="minecraft:dirt", count=7)
+
+    def test_wrong_barrel_count_fails_closed(self) -> None:
+        from .backends.graves import check_custody
+
+        receipt = self.receipt()
+        receipt["blocks"][0]["items"][0]["count"] = 6
+        with self.assertRaisesRegex(RuntimeError, "barrel_holds_exactly_given_stacks"):
+            check_custody({}, receipt, item="minecraft:dirt", count=7)
+
+    def test_non_barrel_cell_fails_closed(self) -> None:
+        from .backends.graves import check_custody
+
+        receipt = self.receipt()
+        receipt["blocks"][0]["block"] = "minecraft:air"
+        with self.assertRaisesRegex(RuntimeError, "grave_is_barrel"):
+            check_custody({}, receipt, item="minecraft:dirt", count=7)
+
+    def test_probe_failure_receipt_never_passes(self) -> None:
+        from .backends.graves import check_custody
+
+        receipt = self.receipt(status="FAIL", source_unchanged=None)
+        receipt["error"] = "journal tail"
+        with self.assertRaisesRegex(RuntimeError, "probe_pass"):
+            check_custody({}, receipt, item="minecraft:dirt", count=7)
+
+    def test_grave_coordinates_parse_from_the_plugin_request(self) -> None:
+        from .backends.graves import GRAVE_REQUEST
+
+        match = GRAVE_REQUEST.search(
+            "plugin.command_result: request=grave--574-71-320-cd88 outcome=\"committed\"")
+        self.assertIsNotNone(match)
+        self.assertEqual([int(match.group(i)) for i in (1, 2, 3)], [-574, 71, 320])
+
+
 class SharedClientProbeTests(unittest.TestCase):
     def test_inventory_missing_click_tools_fails_before_fixture_actions(self) -> None:
         from . import compatibility
@@ -302,8 +474,15 @@ class SharedClientProbeTests(unittest.TestCase):
             return compatibility.run_inventory_probe(MissingClicks(), ctx.artifact_dir)
 
         with tempfile.TemporaryDirectory() as tmp:
-            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), mock.patch.dict(profiles.PROFILES, {
-                "inventory": {"scope": "real-client", "run": probe},
+            reports = Path(tmp) / "data" / "vanilla" / "reports"
+            reports.mkdir(parents=True)
+            (Path(tmp) / "facts").mkdir()
+            (Path(tmp) / "resources" / "assets").mkdir(parents=True)
+            for name in ("blocks.json", "block_mining.json", "block_light.json", "registries.json"):
+                (reports / name).touch()
+            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), mock.patch("tools.harness.mcp_schema.native_schema", return_value={}), mock.patch.dict(os.environ, {"SOLARIS_CLIENT_DATA_DIR": str(reports.parent), "SOLARIS_SERVER_BINARY": "/bin/true", "SOLARIS_CLIENT_BINARY": "/bin/true"}), mock.patch.dict(profiles.PROFILES, {
+                "inventory": {"scope": "real-client", "run": probe,
+                              "prerequisites": profiles.PROFILE_PREREQUISITES["inventory"]},
             }):
                 code = cli.cmd_run(["inventory", "--client", "native"])
             payload = json.loads(next(Path(tmp).glob("*/result.json")).read_text())
@@ -327,6 +506,54 @@ class SharedClientProbeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(RuntimeError, "minecraft_attack_entity_once"):
                 entities_probe.run(MissingAttack(), Path(tmp), 1.0)
+
+    def test_entities_fixture_ignores_existing_pigs_and_waits_for_authored_uuid(self) -> None:
+        from .backends import entities_probe
+
+        fixture_uuid = "11111111-2222-4333-8444-555555555555"
+        natural = {"entity_id": 1, "entity_uuid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                   "entity_type": "minecraft:pig"}
+        fixture = {"entity_id": 2, "entity_uuid": fixture_uuid, "entity_type": "minecraft:pig"}
+        steps = mock.Mock()
+        steps.observe.side_effect = [{"state_version": 10}, {"state_version": 11}]
+        steps.remaining.return_value = 9
+        steps.call.side_effect = [{"entities": [natural]}, {}, {"entities": [natural, fixture]}]
+        steps.check.side_effect = lambda label, condition: self.assertTrue(condition, label)
+        with mock.patch.object(entities_probe.uuid, "uuid4", return_value=fixture_uuid):
+            result = entities_probe._summon_fixture_pig(steps, {"x": 0, "y": 64, "z": 0})
+        self.assertEqual(result, fixture)
+        self.assertIn(fixture_uuid, steps.fixture.call_args.args[0])
+        self.assertEqual(steps.call.call_args_list[1], mock.call(
+            "minecraft_wait_for_state_change", {"observed_version": 10, "timeout_seconds": 9}))
+
+    def test_entities_probe_can_start_when_natural_pigs_are_present(self) -> None:
+        from .backends import entities_probe
+
+        natural = {"entity_id": 1, "entity_uuid": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                   "entity_type": "minecraft:pig"}
+        visible = [natural]
+        steps = mock.MagicMock()
+        steps.__enter__.return_value = steps
+        steps.__exit__.return_value = False
+        steps.wait.return_value = {"player": {"x": 0, "y": 64, "z": 0}, "inventory": []}
+        steps.observe.return_value = {"state_version": 10}
+        steps.check.side_effect = lambda label, condition: self.assertTrue(condition, label)
+        steps.call.side_effect = lambda name, args=None: {"entities": list(visible)}
+
+        def fixture(command):
+            if command.startswith("summon "):
+                authored_uuid = command.split("UUID:'", 1)[1].split("'", 1)[0]
+                visible.append({"entity_id": 2, "entity_uuid": authored_uuid,
+                                "entity_type": "minecraft:pig"})
+            else:
+                raise RuntimeError("reached combat setup")
+
+        steps.fixture.side_effect = fixture
+        client = mock.Mock()
+        client.list_tools.return_value = [{"name": name} for name in entities_probe.REQUIRED_TOOLS]
+        with mock.patch.object(entities_probe, "ProbeSteps", return_value=steps):
+            with self.assertRaisesRegex(RuntimeError, "reached combat setup"):
+                entities_probe.run(client, Path("/unused"), 10)
 
     def test_unknown_container_slot_is_not_treated_as_empty(self) -> None:
         from .backends.probe_steps import container_slot
@@ -406,7 +633,7 @@ class ScenarioCatalogTests(unittest.TestCase):
             proves="nothing",
             limits="test fixture",
         )
-        return scenario, {"fake-profile": {"scope": "harness", "run": run}}
+        return scenario, {"fake-profile": {"scope": "harness", "run": run, "prerequisites": profiles._NONE}}
 
     def test_unknown_scenario_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -552,6 +779,94 @@ class ReadinessCleanupTests(unittest.TestCase):
                     self.assertEqual(process.wait(timeout=10), 3)
                 finally:
                     runtime.stop_process(process)
+
+    def test_wait_port_does_not_accept_a_foreign_listener(self) -> None:
+        # Regression: a concurrent/stale server holding the port made wait_port
+        # return success for a child that never bound it, so clients joined the
+        # wrong server (java-matrix auth ack missing, "logged in from another
+        # location"). Readiness must be the child's own LISTEN socket.
+        port = runtime.reserve_port()
+        holder_source = (
+            "import signal,socket,sys; "
+            "listener=socket.socket(); "
+            "listener.bind(('127.0.0.1',int(sys.argv[1]))); "
+            "listener.listen(); print('foreign ready',flush=True); signal.pause()"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "child.log"
+            with log_path.open("wb") as log:
+                holder = subprocess.Popen(
+                    [sys.executable, "-c", holder_source, str(port)],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                child = subprocess.Popen(
+                    [sys.executable, "-c", "import signal; signal.pause()"],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                try:
+                    runtime.wait_port(port, 10.0, holder, log_path=log_path)  # holder owns it
+                    self.assertTrue(runtime.port_open(port))  # the foreign listener accepts
+                    with self.assertRaises(RuntimeError) as raised:
+                        runtime.wait_port(port, 3.0, child, log_path=log_path)
+                    self.assertIn("did not become ready", str(raised.exception))
+                    self.assertIsNone(child.poll())
+                finally:
+                    runtime.stop_process(holder)
+                    runtime.stop_process(child)
+
+    def test_wait_port_child_exit_wins_over_foreign_listener(self) -> None:
+        port = runtime.reserve_port()
+        holder_source = (
+            "import signal,socket,sys; "
+            "listener=socket.socket(); "
+            "listener.bind(('127.0.0.1',int(sys.argv[1]))); "
+            "listener.listen(); signal.pause()"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "child.log"
+            with log_path.open("wb") as log:
+                holder = subprocess.Popen(
+                    [sys.executable, "-c", holder_source, str(port)],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                child = subprocess.Popen(
+                    [sys.executable, "-c", "import time; time.sleep(0.5); raise SystemExit(3)"],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                try:
+                    with self.assertRaises(runtime.ChildExited):
+                        runtime.wait_port(port, 10.0, child, log_path=log_path)
+                finally:
+                    runtime.stop_process(holder)
+                    runtime.stop_process(child)
+
+    def test_wait_port_accepts_a_descendant_listener(self) -> None:
+        # Loader clients are forked by Gradle's JavaExec: the MCP listener
+        # belongs to a child of the spawned process and must count as ready.
+        port = runtime.reserve_port()
+        binder = (
+            "import signal,socket,sys; "
+            "listener=socket.socket(); "
+            "listener.bind(('127.0.0.1',int(sys.argv[1]))); "
+            "listener.listen(); print('bound',flush=True); signal.pause()"
+        )
+        parent_source = (
+            "import signal,subprocess,sys; "
+            f"subprocess.Popen([sys.executable,'-c',{binder!r},str(sys.argv[1])]); "
+            "print('parent ready',flush=True); signal.pause()"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            log_path = Path(tmp) / "parent.log"
+            with log_path.open("wb") as log:
+                parent = subprocess.Popen(
+                    [sys.executable, "-c", parent_source, str(port)],
+                    stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                )
+                try:
+                    runtime.wait_port(port, 10.0, parent, log_path=log_path)
+                    self.assertIsNone(parent.poll())
+                finally:
+                    runtime.stop_process(parent)
 
     def test_xvfb_closed_display_announcement_stops_process_before_fallback(self) -> None:
         popen = subprocess.Popen

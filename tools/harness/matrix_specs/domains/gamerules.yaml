@@ -1,0 +1,1788 @@
+domain: gamerules
+vanilla_version: 26.1.2
+port_range:
+  - 26460
+  - 26479
+execution: shared matrix_api Adapter only; YAML is specification, not a second runner/DSL
+evidence_scope: Specifications and blocked requirements are not runtime passes; see canonical receipts and ledger.
+persistence: Every successful behavioral oracle saves, disconnects, clean-restarts the same world, reconnects, and queries the assigned nondefault value; failed behavior is never hidden by a missing restart capability.
+subjects:
+  - id: gamerules.advance_time
+    matrix_ids:
+      - pw:gamerules.advance_time/native_linux/adventure/the_nether/easy/1/malformed_or_stale_packet/crash_kill9_wal_replay/console
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.advance_time]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - doDaylightCycle
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:advance_time false
+      - experiment: time set 6000; gamerule advance_time false; wait 160 dashboard ticks
+    oracle:
+      query_or_observation: time query daytime
+      expected: 6000
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.advance_weather
+    matrix_ids:
+      - pw:gamerules.advance_weather/vanilla_java_26_1_2/spectator/the_end/hard/N8/normal/steady/op_4
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.advance_weather]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - doWeatherCycle
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:advance_weather false
+      - experiment: weather rain 1t; gamerule advance_weather false; wait 160 ticks
+    oracle:
+      query_or_observation: client.weather
+      expected: rain
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.allow_entering_nether_using_portals
+    matrix_ids:
+      - pw:gamerules.allow_entering_nether_using_portals/fabric_solaris_loader/survival/overworld/peaceful/2/duplicate_login/pause_when_empty_resume/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.allow_entering_nether_using_portals]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - allowEnteringNetherUsingPortals
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:allow_entering_nether_using_portals false
+      - experiment: disable rule; build 4x5 obsidian portal at 2 79 0; tp actor 3.5 80 0.5; wait 160 ticks
+    oracle:
+      query_or_observation: client.dimension
+      expected: unchanged
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.block_drops
+    matrix_ids:
+      - pw:gamerules.block_drops/fabric_distant_horizons/creative/the_end/normal/2/slow_reader_backpressure/save_all_checkpoint/op_1
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.block_drops]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - doTileDrops
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:block_drops false
+      - experiment: disable rule; setblock 3 80 0 stone; setblock 3 80 0 air destroy
+    oracle:
+      query_or_observation: execute unless entity @e[type=item,x=3,y=80,z=0,distance=..3] run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.block_explosion_drop_decay
+    matrix_ids:
+      - pw:gamerules.block_explosion_drop_decay/forge_solaris_loader/adventure/overworld/peaceful/1/reconnect_mid_action/hot_backup_during_action/op_3
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.block_explosion_drop_decay]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - blockExplosionDropDecay
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:block_explosion_drop_decay false
+      - experiment:
+          disable decay; isolated stone floor; bed explosion outside overworld; census destroyed blocks and
+          stone drops before pickup
+    oracle:
+      query_or_observation: sum(item counts) == count(destroyed eligible stone blocks)
+      expected: true
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - controlled_explosion:block_drop_census
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.command_block_output
+    matrix_ids:
+      - pw:gamerules.command_block_output/neoforge_solaris_loader/adventure/the_end/hard/2/duplicate_login/clean_restart_mid_action/non_op_0
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.command_block_output]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - commandBlockOutput
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:command_block_output false
+      - experiment: disable rule; op observer; command block executes time set 1000
+    oracle:
+      query_or_observation: observer.events filtered command-block admin feedback
+      expected: []
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - admin_chat_observer:command_block_output
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.command_blocks_work
+    matrix_ids:
+      - pw:gamerules.command_blocks_work/native_windows/adventure/the_nether/hard/1/malformed_or_stale_packet/pause_when_empty_resume/console
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.command_blocks_work]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - enableCommandBlocks
+        - commandBlocksEnabled
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:command_blocks_work false
+      - experiment:
+          disable rule; setblock 3 80 0 command_block; data merge block 3 80 0 {Command:"scoreboard players
+          set result matrix_rule 1",auto:1b}; wait 20 ticks
+    oracle:
+      query_or_observation: scoreboard players get result matrix_rule
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.drowning_damage
+    matrix_ids:
+      - pw:gamerules.drowning_damage/protocol_bot/spectator/the_end/hard/2/slow_reader_backpressure/steady/console
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.drowning_damage]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - drowningDamage
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:drowning_damage false
+      - experiment: disable rule; fill -1 80 -1 1 82 1 water; submerged unarmored actor; wait 400 ticks
+    oracle:
+      query_or_observation: client.health == pre_health
+      expected: true
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.elytra_movement_check
+    matrix_ids:
+      - pw:gamerules.elytra_movement_check/fabric_svc/adventure/overworld/easy/2/slow_reader_backpressure/hot_backup_during_action/op_1
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.elytra_movement_check]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - disableElytraMovementCheck
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:elytra_movement_check false
+      - experiment:
+          elytra-equipped airborne actor; disable rule; send overspeed public move_to; compare correction
+          event with enabled rule
+    oracle:
+      query_or_observation: "client.position_corrections: excessive-speed check disabled"
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - raw_move:elytra_overspeed
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.ender_pearls_vanish_on_death
+    matrix_ids:
+      - bl:gamerules.ender_pearls_vanish_on_death/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.ender_pearls_vanish_on_death]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - enderPearlsVanishOnDeath
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:ender_pearls_vanish_on_death false
+      - experiment: set false; actor use_item ender pearl upward; kill actor before projectile lands
+    oracle:
+      query_or_observation: execute if entity @e[type=ender_pearl] run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - owned_projectile:inflight_death
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.entity_drops
+    matrix_ids:
+      - bl:gamerules.entity_drops/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.entity_drops]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - doEntityDrops
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:entity_drops false
+      - experiment: disable rule; summon oak_boat named MatrixDrop; kill named boat
+    oracle:
+      query_or_observation: execute unless entity @e[type=item,x=3,y=80,z=0,distance=..3] run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.fall_damage
+    matrix_ids:
+      - bl:gamerules.fall_damage/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.fall_damage]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - fallDamage
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:fall_damage false
+      - experiment: disable rule; tp actor 0.5 94 0.5 over stone pad; physical move until landed
+    oracle:
+      query_or_observation: client.health == pre_health
+      expected: true
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.fire_damage
+    matrix_ids:
+      - bl:gamerules.fire_damage/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.fire_damage]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - fireDamage
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:fire_damage false
+      - experiment: disable rule; setblock 0 80 0 fire; wait 160 ticks
+    oracle:
+      query_or_observation: client.health == pre_health
+      expected: true
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.fire_spread_radius_around_player
+    matrix_ids:
+      - bl:gamerules.fire_spread_radius_around_player/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.fire_spread_radius_around_player]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: 128
+      aliases: []
+      min: -1
+      max: 2147483647
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:fire_spread_radius_around_player 0
+      - experiment: set 0; ignite wood pad at 3 80 3; wait 160 ticks
+    oracle:
+      query_or_observation: execute if block 2 79 2 oak_planks run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.forgive_dead_players
+    matrix_ids:
+      - bl:gamerules.forgive_dead_players/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.forgive_dead_players]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - forgiveDeadPlayers
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:forgive_dead_players false
+      - experiment: angry persistent neutral mob within 32 blocks targets actor; true; kill actor
+    oracle:
+      query_or_observation: data get entity <mob> anger / angry_at
+      expected: no dead actor target
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - neutral_mob_anger:target_and_death
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.freeze_damage
+    matrix_ids:
+      - bl:gamerules.freeze_damage/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.freeze_damage]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - freezeDamage
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:freeze_damage false
+      - experiment: disable rule; actor in powder snow; wait 160 ticks
+    oracle:
+      query_or_observation: client.health == pre_health
+      expected: true
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.global_sound_events
+    matrix_ids:
+      - bl:gamerules.global_sound_events/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.global_sound_events]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - globalSoundEvents
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:global_sound_events false
+      - experiment: set false; spawn wither beyond local audible radius of observer; wait charge completion
+    oracle:
+      query_or_observation: observer boss-spawn global sound events
+      expected: []
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - sound_events:remote_boss_spawn
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.immediate_respawn
+    matrix_ids:
+      - bl:gamerules.immediate_respawn/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.immediate_respawn]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: false
+      aliases:
+        - doImmediateRespawn
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:immediate_respawn true
+      - experiment: set true; kill actor; wait respawn packet
+    oracle:
+      query_or_observation: client.health > 0 and client.screen != death
+      expected: true
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.keep_inventory
+    matrix_ids:
+      - bl:gamerules.keep_inventory/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.keep_inventory]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: false
+      aliases:
+        - keepInventory
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:keep_inventory true
+      - experiment: set true; give actor diamond 3; experience set actor 7 levels; kill; client respawn
+    oracle:
+      query_or_observation: inventory diamond count, experience query actor levels
+      expected:
+        - 3
+        - 7
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.lava_source_conversion
+    matrix_ids:
+      - bl:gamerules.lava_source_conversion/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.lava_source_conversion]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: false
+      aliases:
+        - lavaSourceConversion
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:lava_source_conversion true
+      - experiment: set true; solid trough with source lava at 2 80 2 and 4 80 2; wait 160 ticks
+    oracle:
+      query_or_observation: execute if block 3 80 2 lava[level=0] run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.limited_crafting
+    matrix_ids:
+      - bl:gamerules.limited_crafting/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.limited_crafting]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: false
+      aliases:
+        - doLimitedCrafting
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:limited_crafting true
+      - experiment:
+          set true; revoke all actor recipes; give oak log; attempt locked planks recipe through crafting
+          slots
+    oracle:
+      query_or_observation: client crafted output count
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - recipe_unlock_and_crafting:locked_recipe
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.locator_bar
+    matrix_ids:
+      - bl:gamerules.locator_bar/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.locator_bar]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - locatorBar
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:locator_bar false
+      - experiment: set false; two nonsneaking players in same dimension; await waypoint removal
+    oracle:
+      query_or_observation: client.waypoints
+      expected: []
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - snapshot:waypoints
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.log_admin_commands
+    matrix_ids:
+      - bl:gamerules.log_admin_commands/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.log_admin_commands]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - logAdminCommands
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:log_admin_commands false
+      - experiment: set false; op client time set 1000 with unique source account
+    oracle:
+      query_or_observation: server.log command-admin records between fences
+      expected: []
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - server_log:admin_command_records
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.max_block_modifications
+    matrix_ids:
+      - bl:gamerules.max_block_modifications/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.max_block_modifications]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: 32768
+      aliases:
+        - commandModificationBlockLimit
+      min: 1
+      max: 2147483647
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:max_block_modifications 1
+      - experiment: set 1; fill 2 80 2 3 80 2 gold_block over air
+    oracle:
+      query_or_observation: execute if block 2 80 2 air ... and 3 80 2 air
+      expected: true
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.max_command_forks
+    matrix_ids:
+      - bl:gamerules.max_command_forks/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.max_command_forks]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: 65536
+      aliases:
+        - maxCommandForkCount
+      min: 0
+      max: 2147483647
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:max_command_forks 1
+      - experiment:
+          set 1; installed function executes as two players run scoreboard players add result matrix_rule
+          1
+    oracle:
+      query_or_observation: scoreboard players get result matrix_rule
+      expected: <=1; command reports fork limit
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    adapter_status: real_adapter; not a live pass; full row context still required
+    implemented_causal_probe:
+      Two real cow/pig forks increment a server scoreboard; limit 1 caps the result and reports
+      the fork limit.
+  - id: gamerules.max_command_sequence_length
+    matrix_ids:
+      - bl:gamerules.max_command_sequence_length/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.max_command_sequence_length]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: 65536
+      aliases:
+        - maxCommandChainLength
+      min: 0
+      max: 2147483647
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:max_command_sequence_length 1
+      - experiment: set 1; function containing three independent scoreboard increments
+    oracle:
+      query_or_observation: scoreboard players get result matrix_rule
+      expected: 1
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - fixture_datapack:three_command_function
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+    server_gap:
+      id: RULE-COMMAND-BUDGET
+      evidence: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_context.rs:9,127-136
+      description: Runtime charges constant65536 rather than configured rule.
+      status: source-confirmed on original Hotfix tree; live receipts separate
+  - id: gamerules.max_entity_cramming
+    matrix_ids:
+      - bl:gamerules.max_entity_cramming/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.max_entity_cramming]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: 24
+      aliases:
+        - maxEntityCramming
+      min: 0
+      max: 2147483647
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:max_entity_cramming 0
+      - experiment: set 0; trap 25 pushable cows in 1x1 chamber; wait 200 ticks
+    oracle:
+      query_or_observation: data get entity cow Health
+      expected: unchanged; cramming disabled
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    adapter_status: real_adapter; not a live pass; full row context still required
+    implemented_causal_probe:
+      26 actually received cows in enclosed cell; compare UUID health census with rule0 and
+      positive rule1 control.
+  - id: gamerules.max_snow_accumulation_height
+    matrix_ids:
+      - bl:gamerules.max_snow_accumulation_height/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.max_snow_accumulation_height]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: 1
+      aliases:
+        - snowAccumulationHeight
+      min: 0
+      max: 8
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:max_snow_accumulation_height 0
+      - experiment: set 0; controlled snowing cold-biome precipitation tick over solid pad
+    oracle:
+      query_or_observation: execute if block 3 80 0 air run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - controlled_snow_precipitation_tick
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.mob_drops
+    matrix_ids:
+      - bl:gamerules.mob_drops/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.mob_drops]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - doMobLoot
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:mob_drops false
+      - experiment: set false; summon cow named MatrixDrop at 3 80 0; kill named cow
+    oracle:
+      query_or_observation: execute unless entity @e[type=item,x=3,y=80,z=0,distance=..3] run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.mob_explosion_drop_decay
+    matrix_ids:
+      - bl:gamerules.mob_explosion_drop_decay/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.mob_explosion_drop_decay]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - mobExplosionDropDecay
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:mob_explosion_drop_decay false
+      - experiment: set false; controlled charged creeper explosion in isolated stone fixture
+    oracle:
+      query_or_observation: eligible destroyed block count == item count
+      expected: true
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - controlled_explosion:mob_drop_census
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.mob_griefing
+    matrix_ids:
+      - bl:gamerules.mob_griefing/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.mob_griefing]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - mobGriefing
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:mob_griefing false
+      - experiment: set false; controlled creeper detonation beside stone target
+    oracle:
+      query_or_observation: execute if block 3 80 0 stone run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - controlled_creeper_detonation
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.natural_health_regeneration
+    matrix_ids:
+      - bl:gamerules.natural_health_regeneration/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.natural_health_regeneration]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - naturalRegeneration
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:natural_health_regeneration false
+      - experiment: set false; unarmored damaged actor with full food/saturation; wait 200 ticks without effects
+    oracle:
+      query_or_observation: client.health == pre_health
+      expected: true
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    adapter_status: real_adapter; not a live pass; full row context still required
+    implemented_causal_probe:
+      Received full food + one-tick instant damage; rule false preserves health, positive
+      rule true control heals, restore false.
+  - id: gamerules.player_movement_check
+    matrix_ids:
+      - bl:gamerules.player_movement_check/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.player_movement_check]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - disablePlayerMovementCheck
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:player_movement_check false
+      - experiment: set false; send excessive public move_to displacement; exclude collision/floating failures
+    oracle:
+      query_or_observation: excessive-speed correction events
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - raw_move:ground_overspeed
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.players_nether_portal_creative_delay
+    matrix_ids:
+      - bl:gamerules.players_nether_portal_creative_delay/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.players_nether_portal_creative_delay]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: 0
+      aliases:
+        - playersNetherPortalCreativeDelay
+      min: 0
+      max: 2147483647
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:players_nether_portal_creative_delay 20
+      - experiment: set 20; creative actor in valid portal; observe entry and dimension change ticks
+    oracle:
+      query_or_observation: transition_tick-entry_tick
+      expected: 20
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.players_nether_portal_default_delay
+    matrix_ids:
+      - bl:gamerules.players_nether_portal_default_delay/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.players_nether_portal_default_delay]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: 80
+      aliases:
+        - playersNetherPortalDefaultDelay
+      min: 0
+      max: 2147483647
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:players_nether_portal_default_delay 20
+      - experiment: set 20; noncreative actor in valid portal; observe entry and transition ticks
+    oracle:
+      query_or_observation: transition_tick-entry_tick
+      expected: 20
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.players_sleeping_percentage
+    matrix_ids:
+      - bl:gamerules.players_sleeping_percentage/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+      - tr.observer_clause:gamerules.players_sleeping_percentage/protocol_bot/survival/overworld/normal/2/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.players_sleeping_percentage]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: 100
+      aliases:
+        - playersSleepingPercentage
+      min: 0
+      max: 2147483647
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:players_sleeping_percentage 101
+      - experiment: Two overworld players; one uses the head of a south-facing red bed at night. Both clients must receive occupied=true after the input acknowledgement. Wait 160 ticks at 101, then 160 at 100, then 160 at 50.
+    oracle:
+      query_or_observation: time query daytime plus both clients' received bed block states
+      expected: At 101 and 100 daytime remains in [13000,23000); at 50 daytime is below 1000 and both clients receive the existing red bed with occupied=false.
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - driver-dependent actual block_ack_sequence and read_block_state
+    adapter_status: real sleep quorum adapter with negative 100 and positive 50 controls; not a live pass
+    approved_split_contract:
+      actor_only_rows:
+        - bl:gamerules.players_sleeping_percentage/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+      behavior_rows:
+        - tr.observer_clause:gamerules.players_sleeping_percentage/protocol_bot/survival/overworld/normal/2/normal/steady/op_2
+      subject_covered_only_when: actor-only and behavioral rows both pass
+      actor_only_oracle:
+        canonical default query/set, save_all, disconnect, same-world clean_restart, reconnect, canonical
+        nondefault query
+  - id: gamerules.projectiles_can_break_blocks
+    matrix_ids:
+      - bl:gamerules.projectiles_can_break_blocks/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.projectiles_can_break_blocks]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - projectilesCanBreakBlocks
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:projectiles_can_break_blocks false
+      - experiment: set false; actor shoots arrow into decorated pot
+    oracle:
+      query_or_observation: execute if block 3 80 0 decorated_pot run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+    implemented_causal_probe:
+      Actual held bow (20 received ticks) and release; received arrow count decrements. Rule
+      false preserves decorated pot, positive true control breaks it; restore false.
+  - id: gamerules.pvp
+    matrix_ids:
+      - bl:gamerules.pvp/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+      - tr.observer_clause:gamerules.pvp/protocol_bot/survival/overworld/normal/2/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.pvp]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases: []
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:pvp false
+      - experiment: set false; unarmored second survival player; actor attack entity once; wait attack resolution
+    oracle:
+      query_or_observation: victim.health == pre_health
+      expected: true
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    adapter_status: real_adapter; not a live pass; full row context still required
+    implemented_causal_probe:
+      Real victim accepted UUID and entityID; melee and charged-bow attacks preserve victim
+      health under false and reduce received victim health under true; restore false. Both p1 persistence and p2 behavior
+      rows independently required.
+    approved_split_contract:
+      actor_only_rows:
+        - bl:gamerules.pvp/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+      behavior_rows:
+        - tr.observer_clause:gamerules.pvp/protocol_bot/survival/overworld/normal/2/normal/steady/op_2
+      subject_covered_only_when: actor-only and behavioral rows both pass
+      actor_only_oracle:
+        canonical default query/set, save_all, disconnect, same-world clean_restart, reconnect, canonical
+        nondefault query
+  - id: gamerules.raids
+    matrix_ids:
+      - bl:gamerules.raids/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.raids]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - disableRaids
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:raids false
+      - experiment: set false; raid-omen actor enters valid village; wait omen countdown
+    oracle:
+      query_or_observation: raid bossbars and raid-wave entity census
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - village_raid_trigger:raid_omen
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.random_tick_speed
+    matrix_ids:
+      - bl:gamerules.random_tick_speed/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.random_tick_speed]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: 3
+      aliases:
+        - randomTickSpeed
+      min: 0
+      max: 2147483647
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:random_tick_speed 0
+      - experiment: set 0; hydrated wheat age0 at 3 81 0 in lit loaded chunk; wait 160 ticks
+    oracle:
+      query_or_observation: execute if block 3 81 0 wheat[age=0] run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.reduced_debug_info
+    matrix_ids:
+      - bl:gamerules.reduced_debug_info/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.reduced_debug_info]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: false
+      aliases:
+        - reducedDebugInfo
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:reduced_debug_info true
+      - experiment: set true; await client entity status reduced-debug update
+    oracle:
+      query_or_observation: client.reduced_debug_info
+      expected: true
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.respawn_radius
+    matrix_ids:
+      - bl:gamerules.respawn_radius/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.respawn_radius]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: 10
+      aliases:
+        - spawnRadius
+      min: 0
+      max: 2147483647
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:respawn_radius 0
+      - experiment: set 0; clear personal respawn via fixture; setworldspawn 4 80 4; kill and respawn
+    oracle:
+      query_or_observation: client.position horizontal block coordinates
+      expected:
+        - 4
+        - 4
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - respawn_without_personal_spawn
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.send_command_feedback
+    matrix_ids:
+      - bl:gamerules.send_command_feedback/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+      - tr.observer_clause:gamerules.send_command_feedback/protocol_bot/survival/overworld/normal/2/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.send_command_feedback]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - sendCommandFeedback
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:send_command_feedback false
+      - experiment: Disable advance_time; false suppresses actor feedback and other-op admin broadcast while time set 1000 still executes. Enable true; time set 2000 executes and each client receives exactly one result before the received console fence.
+    oracle:
+      query_or_observation: all clients' cumulative events, daytime query, and observer chat.type.admin component style
+      expected: false has no result messages; true has exactly one per client, other ops' broadcast is gray and italic; canonical rule survives same-world restart
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - snapshot:chat_components.admin_color_and_italic
+    adapter_status: real actor and operator-broadcast controls; exact received styling remains unavailable in the shared decoder
+  - id: gamerules.show_advancement_messages
+    matrix_ids:
+      - bl:gamerules.show_advancement_messages/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.show_advancement_messages]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - announceAdvancements
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:show_advancement_messages false
+      - experiment: set false; revoke then grant story/root
+    oracle:
+      query_or_observation: all clients events chat.type.advancement
+      expected: []
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.show_death_messages
+    matrix_ids:
+      - bl:gamerules.show_death_messages/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.show_death_messages]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - showDeathMessages
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:show_death_messages false
+      - experiment: set false; kill named actor; authoritative death fence
+    oracle:
+      query_or_observation: all clients events death message
+      expected: []
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.spawner_blocks_work
+    matrix_ids:
+      - bl:gamerules.spawner_blocks_work/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.spawner_blocks_work]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - spawnerBlocksEnabled
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:spawner_blocks_work false
+      - experiment: set false; nearby eligible player and spawner with forced zero delay and valid pig SpawnData; wait20
+    oracle:
+      query_or_observation: new pig entity census
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - spawner_nbt_fixture:guaranteed_attempt
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.spawn_mobs
+    matrix_ids:
+      - bl:gamerules.spawn_mobs/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.spawn_mobs]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - doMobSpawning
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:spawn_mobs false
+      - experiment:
+          set false; known eligible grass/light fixture; run controlled natural-spawn opportunity with players
+          in range
+    oracle:
+      query_or_observation: new natural mob census
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - controlled_natural_spawn_attempt
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.spawn_monsters
+    matrix_ids:
+      - bl:gamerules.spawn_monsters/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.spawn_monsters]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - spawnMonsters
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:spawn_monsters false
+      - experiment: set false; dark valid floor; controlled monster spawn opportunity (not summon/spawner)
+    oracle:
+      query_or_observation: new natural monster census
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - controlled_monster_spawn_attempt
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.spawn_patrols
+    matrix_ids:
+      - bl:gamerules.spawn_patrols/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.spawn_patrols]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - doPatrolSpawning
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:spawn_patrols false
+      - experiment: set false; day5+ eligible overworld patrol opportunity
+    oracle:
+      query_or_observation: new patrol entity census
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - controlled_patrol_spawn_attempt
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.spawn_phantoms
+    matrix_ids:
+      - bl:gamerules.spawn_phantoms/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.spawn_phantoms]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - doInsomnia
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:spawn_phantoms false
+      - experiment: set false; non-spectator sky-exposed player TimeSinceRest>=72000 at night; controlled phantom attempt
+    oracle:
+      query_or_observation: new phantom census
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - player_insomnia_fixture:phantom_attempt
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.spawn_wandering_traders
+    matrix_ids:
+      - bl:gamerules.spawn_wandering_traders/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.spawn_wandering_traders]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - doTraderSpawning
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:spawn_wandering_traders false
+      - experiment: set false; eligible trader attempt with chance and delay fixture
+    oracle:
+      query_or_observation: new wandering_trader census
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - controlled_trader_spawn_attempt
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.spawn_wardens
+    matrix_ids:
+      - bl:gamerules.spawn_wardens/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.spawn_wardens]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - doWardenSpawning
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:spawn_wardens false
+      - experiment: set false; can_summon shrieker; warning level4 player activates shrieker; wait emergence deadline
+    oracle:
+      query_or_observation: new warden census
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - sculk_shrieker_warning_fixture
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.spectators_generate_chunks
+    matrix_ids:
+      - bl:gamerules.spectators_generate_chunks/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.spectators_generate_chunks]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - spectatorsGenerateChunks
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:spectators_generate_chunks false
+      - experiment: set false; spectator move_to ungenerated chunk; wait requested chunk event
+    oracle:
+      query_or_observation: newly generated chunk count
+      expected: 0
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - chunk_generation_census
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.spread_vines
+    matrix_ids:
+      - bl:gamerules.spread_vines/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.spread_vines]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - doVinesSpread
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:spread_vines false
+      - experiment: set false; north-facing vine on wall at 3 82 3; wait random tick opportunities
+    oracle:
+      query_or_observation: execute if block 3 81 3 air run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.tnt_explodes
+    matrix_ids:
+      - bl:gamerules.tnt_explodes/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.tnt_explodes]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - tntExplodes
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:tnt_explodes false
+      - experiment: set false; summon primed TNT fuse1 beside stone target; wait160 ticks
+    oracle:
+      query_or_observation: execute if block 3 80 0 stone run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+  - id: gamerules.tnt_explosion_drop_decay
+    matrix_ids:
+      - bl:gamerules.tnt_explosion_drop_decay/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.tnt_explosion_drop_decay]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: false
+      aliases:
+        - tntExplosionDropDecay
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:tnt_explosion_drop_decay true
+      - experiment: set false; TNT in isolated stone fixture with block_drops true
+    oracle:
+      query_or_observation: destroyed eligible block count == item count
+      expected: true
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - controlled_explosion:tnt_drop_census
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+  - id: gamerules.universal_anger
+    matrix_ids:
+      - bl:gamerules.universal_anger/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+      - tr.observer_clause:gamerules.universal_anger/protocol_bot/survival/overworld/normal/2/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.universal_anger]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: false
+      aliases:
+        - universalAnger
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:universal_anger true
+      - experiment: set true; two survival players; one attacks neutral zombified piglin; second approaches
+    oracle:
+      query_or_observation: data get entity piglin anger target
+      expected: either nearby player allowed; second attacked when first unavailable
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+    missing_capabilities:
+      - neutral_mob_anger:second_player
+    adapter_status:
+      "blocked: controlled behavioral fixture unavailable; registration roundtrip alone is never passing
+      coverage"
+    approved_split_contract:
+      actor_only_rows:
+        - bl:gamerules.universal_anger/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+      behavior_rows:
+        - tr.observer_clause:gamerules.universal_anger/protocol_bot/survival/overworld/normal/2/normal/steady/op_2
+      subject_covered_only_when: actor-only and behavioral rows both pass
+      actor_only_oracle:
+        canonical default query/set, save_all, disconnect, same-world clean_restart, reconnect, canonical
+        nondefault query
+  - id: gamerules.water_source_conversion
+    matrix_ids:
+      - bl:gamerules.water_source_conversion/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+    adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.water_source_conversion]
+    preconditions:
+      context: driver applies exact matrix factors before setup; never override mode,dimension,permission
+      world: fresh isolated owned world; fixture commands use scoped server console
+    source:
+      - https://minecraft.wiki/w/Game_rule
+      - /run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomCommands/gamerules.javap.txt
+    expected_version: Java 26.1.2
+    registration:
+      default: true
+      aliases:
+        - waterSourceConversion
+      min: null
+      max: null
+      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+    actions:
+      - verb: command
+        text: gamerule minecraft:water_source_conversion false
+      - experiment: set false; solid trough sources at 2 80 2 and4 80 2; wait160 ticks
+    oracle:
+      query_or_observation: execute if block 3 80 2 water[level=1] run say PASS
+      expected: PASS
+      also: canonical query equals assigned value; after context boundary same rule persists
+      post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
+phase2_checkpoint:
+  50 distinct tests exercised; 9 affected sleep/persistence tests and 2 corrected feedback tests passed after 44 previous methods.
+  No new live pass. Projectile probe failed on proven stale inventory observation; RunProto owns the decoder fix.

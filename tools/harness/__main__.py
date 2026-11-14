@@ -8,14 +8,20 @@ Subcommands:
                         launch (or check) a real client; replaces the two
                         run-*-client-mcp.sh launchers
   mcp ...               route to the client MCP smoke (tools/harness/mcp.py)
+  ledger probe|promote  classify bug-ledger rows / the only way a row becomes fixed
+  plan [--base REV] [--paths ...] [--json]
+                        print the validation a change requires (tools/harness/plan.py)
 """
 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime
 import json
+import math
 import os
+import signal
 import shutil
 import subprocess
 import sys
@@ -25,12 +31,11 @@ from pathlib import Path
 from typing import Any
 
 from .profiles import LOADER_PLATFORMS, ProfileContext, list_profiles
-from .runtime import AGENT_ROOT, REPO_ROOT, USERNAME_RE, port_open
+from .runtime import REPO_ROOT, USERNAME_RE, port_open, sibling_root
 
-ARTIFACT_ROOT = REPO_ROOT / ".analysis" / "validation"
+ARTIFACT_ROOT = Path(os.environ.get("SOLARIS_VALIDATION_ROOT", REPO_ROOT / ".analysis" / "validation"))
 
 CLIENT_DEFAULT_PORT = 39095
-CLIENT_DEFAULT_GAME_DIR = AGENT_ROOT / "fabric-agent" / "run-mcp"
 CLIENT_DEFAULT_USERNAME = "SolarisMcp"
 LOADER_DEFAULT_USERNAME = "SolarisLoader"
 
@@ -55,7 +60,7 @@ def resolve_client_settings(platform: str | None) -> dict[str, Any]:
     default_game_dir = (
         str(REPO_ROOT / ".analysis" / "minecraft-loader-mcp" / platform)
         if platform is not None
-        else str(CLIENT_DEFAULT_GAME_DIR)
+        else str(sibling_root("loader") / "fabric-agent" / "run-mcp")
     )
     raw_game_dir = os.environ.get("SOLARIS_CLIENT_MCP_GAME_DIR", default_game_dir)
     game_dir = (
@@ -113,13 +118,14 @@ def client_check_commands(
 ) -> list[list[str]]:
     game_dir = str(settings["game_dir"])
     username = str(settings["username"])
+    loader = sibling_root("loader")
     if platform is None:
         return [
             [
-                str(AGENT_ROOT / "gradlew"),
+                str(loader / "gradlew"),
                 "--no-configuration-cache",
                 "-p",
-                str(AGENT_ROOT),
+                str(loader),
                 f"-Psolaris.clientMcp.gameDir={game_dir}",
                 f"-Psolaris.clientMcp.username={username}",
                 ":fabric-agent:validateClientMcpRunProperties",
@@ -130,21 +136,21 @@ def client_check_commands(
         ]
     return [
         [
-            str(AGENT_ROOT / "gradlew"),
+            str(loader / "gradlew"),
             "--no-configuration-cache",
             "-p",
-            str(AGENT_ROOT),
+            str(loader),
             f"-Psolaris.clientMcp.gameDir={game_dir}",
             f"-Psolaris.clientMcp.username={username}",
             ":validateLoaderClientMcpRunProperties",
             ":java-agent:jar",
         ],
         [
-            str(AGENT_ROOT / "gradlew"),
+            str(loader / "gradlew"),
             "--no-configuration-cache",
             "--dry-run",
             "-p",
-            str(AGENT_ROOT),
+            str(loader),
             f"-Psolaris.clientMcp.gameDir={game_dir}",
             f"-Psolaris.clientMcp.username={username}",
             f":loader-{platform}:runClientMcp",
@@ -158,11 +164,12 @@ def client_launch_command(
     game_dir = str(settings["game_dir"])
     username = str(settings["username"])
     task = ":fabric-agent:runClientMcp" if platform is None else f":loader-{platform}:runClientMcp"
+    loader = sibling_root("loader")
     return [
-        str(AGENT_ROOT / "gradlew"),
+        str(loader / "gradlew"),
         "--no-configuration-cache",
         "-p",
-        str(AGENT_ROOT),
+        str(loader),
         f"-Psolaris.clientMcp.gameDir={game_dir}",
         f"-Psolaris.clientMcp.username={username}",
         task,
@@ -175,7 +182,7 @@ def run_client(platform: str | None, check: bool) -> int:
     except (RuntimeError, ValueError) as error:
         print(f"harness client: {error}", file=sys.stderr)
         return 2
-    gradlew = AGENT_ROOT / "gradlew"
+    gradlew = sibling_root("loader") / "gradlew"
     if not (gradlew.is_file() and os.access(gradlew, os.X_OK)):
         print(f"harness client: missing executable Gradle wrapper: {gradlew}",
               file=sys.stderr)
@@ -307,7 +314,7 @@ def cmd_run(argv: list[str]) -> int:
     parser.add_argument("--windowed", action="store_true",
                         help="native graphical validation under owned Xvfb, with GPU capture")
     parser.add_argument("--server-bin", type=Path, default=None,
-                        help="immutable solaris-v2 executable (loader-live only)")
+                        help="immutable solaris-v2 executable (loader-live or matrix profiles)")
     if scenario_error is None:
         args, extra = parser.parse_known_args(argv)
         profile = args.profile
@@ -327,9 +334,17 @@ def cmd_run(argv: list[str]) -> int:
         else:
             extra = list(scenario.selector)
     spec = catalog.PROFILES.get(profile)
-    if scenario_error is None and args.server_bin is not None and profile != "loader-live":
-        scenario_error = "--server-bin is only supported by loader-live"
+    if scenario_error is None and args.server_bin is not None and profile not in {"loader-live", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}:
+        scenario_error = "--server-bin is only supported by loader-live or matrix profiles"
     started_at = _utc_now()
+    # The tree the run starts on, so a later promotion can tell whether the receipt proves
+    # the candidate (ledger.check_client_receipt); never fatal.
+    try:
+        from . import ledger
+
+        run_tree = ledger.tree_fingerprint(REPO_ROOT)
+    except Exception as error:
+        run_tree = {"head": "unavailable", "dirty": True, "error": str(error)}
     start_epoch = time.time()
     named_scenario: dict[str, Any] | None = None
     if scenario is not None:
@@ -352,6 +367,9 @@ def cmd_run(argv: list[str]) -> int:
             "repo_revisions": scenario_catalog.repo_revisions(),
         }
 
+    failure_phase = "preflight"
+    child_failure = None
+
     def finish(
         status: str,
         scope: str,
@@ -366,6 +384,37 @@ def cmd_run(argv: list[str]) -> int:
         exits = list(evidence.exits if evidence else [])
         logs = list(evidence.logs if evidence else [])
         details = {**(evidence.client_evidence if evidence else {}), **details}
+        if profile in {"protocol-matrix", "matrix-random", "native-matrix", "java-matrix"}:
+            binary = details.get("server_binary_path")
+            if binary:
+                manifest = Path(binary).parent / "manifest.json"
+                if manifest.is_file():
+                    details["server_pin_manifest"] = str(manifest.resolve())
+                    try:
+                        pin = json.loads(manifest.read_text())
+                        if (Path(pin.get("binary", "")) != Path(binary)
+                                or pin.get("binary_sha256") != details.get("server_binary_sha256")):
+                            raise ValueError("pin manifest does not match selected binary")
+                        details["server_pin"] = pin
+                    except (OSError, ValueError, TypeError) as exc:
+                        details["server_pin_error"] = str(exc)
+        if status in {"failed", "timeout"}:
+            code = (child_failure.returncode if child_failure is not None
+                    else details.get("startup_child_exit"))
+            failure_logs = list(logs)
+            if child_failure is not None and str(child_failure.log_path) not in failure_logs:
+                failure_logs.append(str(child_failure.log_path))
+            details["failure"] = {
+                "phase": failure_phase,
+                "exit_code": code if code is not None and code >= 0 else None,
+                "signal": -code if code is not None and code < 0 else None,
+                "server_binary": {"path": details.get("server_binary_path"),
+                                  "sha256": details.get("server_binary_sha256")},
+                "client_binary": {"path": details.get("binary_path"),
+                                  "sha256": details.get("binary_sha256")},
+                "logs": failure_logs,
+            }
+
         if named_scenario is not None:
             details = dict(details)
             named_scenario["commands_cwd"] = list(evidence.cwds) if evidence else []
@@ -382,12 +431,16 @@ def cmd_run(argv: list[str]) -> int:
             "ended_at": ended_at,
             "duration_seconds": round(time.time() - start_epoch, 3),
             "details": details,
+            "tree": run_tree,
             "error": error,
         }
         (artifact_dir / "result.json").write_text(
             json.dumps(receipt, indent=2, sort_keys=True) + "\n"
         )
-        outcome = {"passed": "PASS", "failed": "FAIL",
+        if profile == "native-matrix":
+            from .backends.native_matrix import record_receipt
+            record_receipt(receipt, artifact_dir / "result.json")
+        outcome = {"passed": "PASS", "failed": "FAIL", "timeout": "TIMEOUT",
                    "prepared": "PREPARED", "interrupted": "INTERRUPTED"}[status]
         print(
             f"[harness] {outcome} profile={profile} "
@@ -424,34 +477,62 @@ def cmd_run(argv: list[str]) -> int:
         extra_args=extra,
         release=release,
         timeout_seconds=timeout_seconds,
+        stage_timeout_seconds=timeout_seconds,
         platform=platform,
         scenario_id=None if scenario is None else scenario.scenario_id,
         manifest=None if scenario is None else scenario.manifest,
         client=client,
+        include_regression_client=profile == "regressions-client",
         plugins_dir=args.plugins_dir,
         windowed=args.windowed,
         server_bin=args.server_bin,
     )
+    interrupted_signal = signal.SIGINT
+    def terminate(signum: int, frame: Any) -> None:
+        nonlocal interrupted_signal
+        interrupted_signal = signum
+        raise KeyboardInterrupt(signal.Signals(signum).name)
+
+    previous_handlers = {sig: signal.signal(sig, terminate)
+                         for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
     try:
-        if ctx.server_bin is not None and profile != "loader-live":
-            raise ValueError("--server-bin is supported only by loader-live")
+        if timeout_seconds is not None and (not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
+            raise ValueError("--timeout-seconds must be finite and positive")
+        if ctx.server_bin is not None and profile not in {"loader-live", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}:
+            raise ValueError("--server-bin is supported only by loader-live or matrix profiles")
         if (ctx.plugins_dir is not None and client != "native"
-                and ctx.scenario_id != "java-v2-p5-towns" and profile != "loader-live"):
-            raise ValueError("--plugins-dir requires native gameplay, java-v2-p5-towns or loader-live")
-        if ctx.windowed and client != "native":
-            raise ValueError("--windowed requires --client native")
-        if client == "native" and profile not in {"survival", "inventory", "entities", "core-client", "native-lifecycle", "logical-native", "native-scale", "title-connect"}:
+                and ctx.scenario_id != "java-v2-p5-towns" and profile not in {"loader-live", "graves", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}):
+            raise ValueError("--plugins-dir requires native gameplay, java-v2-p5-towns, loader-live, graves or matrix profiles")
+        if (ctx.windowed and client != "native"
+                and not (client == "java" and (profile in {"scene-shot", "settlement-map-qa"}
+                                               or ctx.scenario_id == "java-v2-p5-shift-double-click"))):
+            raise ValueError("--windowed requires native, a supported Java graphical profile, or java-v2-p5-shift-double-click")
+        if client == "native" and profile not in {"survival", "inventory", "entities", "core-client", "native-lifecycle", "logical-native", "native-scale", "native-matrix", "title-connect", "singleplayer-regressions", "weak-first-view", "dialogs", "admin-commands", "chisel", "anti-xray", "block-log", "composter-chance", "chat-visibility", "datapack-reload", "village-qa", "village-autonomy-qa", "civilization-seed-qa", "village-owner-order-qa", "scene-shot", "settlement-map-qa", "claim-only-qa", "buildings-qa", "army-qa", "autocraft-qa"}:
             raise RuntimeError(
                 f"profile {profile!r} is not enabled for native; "
                 "supported shared Python minecraft_* profiles: survival, inventory, entities, core-client subset, native-lifecycle, logical-native, native-scale. "
                 "Java-only minecraft_run_scenario definitions are not executed natively."
             )
-        details = spec["run"](ctx)
+        from . import preflight
+        needs = preflight.check(profile, ctx, spec)
+        with preflight.client_data_root(ctx) if 'client_data' in needs else contextlib.nullcontext():
+            failure_phase = "unknown"
+            details = spec["run"](ctx)
     except KeyboardInterrupt:
-        return finish("interrupted", spec["scope"], {}, "interrupted by user",
-                      artifact_dir, 130, ctx)
+        return finish("interrupted", spec["scope"], {}, f"received {signal.Signals(interrupted_signal).name}",
+                      artifact_dir, 128 + interrupted_signal, ctx)
+    except subprocess.TimeoutExpired as error:
+        return finish("timeout", spec["scope"], {}, str(error), artifact_dir, 1, ctx)
     except Exception as error:
+        from .runtime import child_exit, observed_phase
+        child_failure = child_exit(error)
+        observed = observed_phase(error)
+        if observed != "unknown":
+            failure_phase = observed
         return finish("failed", spec["scope"], {}, str(error), artifact_dir, 1, ctx)
+    finally:
+        for sig, handler in previous_handlers.items():
+            signal.signal(sig, handler)
     if scenario is not None and isinstance(details, dict):
         if scenario.tests:
             evidence_text = scenario_catalog.log_text(ctx)
@@ -462,6 +543,7 @@ def cmd_run(argv: list[str]) -> int:
             reasons = [f"missing test: {name}" for name in missing]
             reasons.extend(scenario_catalog.count_failures(counts))
             if reasons:
+                failure_phase = "assertion"
                 return finish(
                     "failed",
                     spec["scope"],
@@ -665,20 +747,18 @@ def _exec_in_scope(profile: str | None) -> int | None:
     environment = dict(os.environ, **{CPU_SCOPE_ENV: "1"})
     print(
         f"[harness] scope CPUQuota={quota} MemoryHigh={os.environ.get(MEMORY_HIGH_ENV, DEFAULT_MEMORY_HIGH)} "
-        f"MemoryMax={memory_max}"
+        f"MemoryMax={memory_max}", flush=True
     )
-    completed = subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-        env=environment,
-        check=False,
-    )
-    return completed.returncode
+    # Replace the wrapper so signals sent to the harness reach the scoped run,
+    # rather than killing a parent that is merely waiting for it.
+    os.chdir(REPO_ROOT)
+    os.execvpe(command[0], command, environment)
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python3 -m tools.harness")
-    parser.add_argument("command", nargs="?", choices=["list", "explain", "run", "client", "mcp"])
+    parser.add_argument("command", nargs="?", choices=["list", "explain", "run", "client", "mcp", "ledger", "plan"])
     parser.add_argument("rest", nargs=argparse.REMAINDER)
     args = parser.parse_args(argv)
     if args.command == "list":
@@ -704,6 +784,14 @@ def main(argv: list[str] | None = None) -> int:
         from . import mcp
 
         return mcp.main(args.rest)
+    if args.command == "ledger":
+        from . import ledger
+
+        return ledger.main(args.rest)
+    if args.command == "plan":
+        from . import plan
+
+        return plan.main(args.rest)
     parser.print_help()
     return 2
 

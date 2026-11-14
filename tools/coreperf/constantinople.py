@@ -629,7 +629,7 @@ async def smoke(args):
     import os
     from tools.harness.backends import catalog_load as catalog
     if not os.environ.get("SOLARIS_HARNESS_CPU_SCOPE"):
-        raise RuntimeError("run the harness under .analysis/tools/mem-run.sh")
+        raise RuntimeError("run the harness under tools/dev/mem-run.sh")
     plan = json.loads((args.plan / "plan.json").read_text())
     if plan["target_villagers"] > 5000 or len(plan["animals"]) > 500 or len(plan["street_routes"]) > 10:
         raise ValueError("phase-1 smoke is capped at 5000 villagers, 500 animals, 10 bots")
@@ -903,7 +903,7 @@ async def native_smoke(args):
     import time
     from tools.harness.backends import catalog_load as catalog
     if not os.environ.get("SOLARIS_HARNESS_CPU_SCOPE"):
-        raise RuntimeError("run the harness under .analysis/tools/mem-run.sh")
+        raise RuntimeError("run the harness under tools/dev/mem-run.sh")
     population = json.loads((args.world / "population.json").read_text())
     args.readiness_seconds = args.timeout_seconds
     args.out.mkdir(parents=True, exist_ok=False)

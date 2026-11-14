@@ -1,0 +1,223 @@
+kind: adapter-source-index
+not_a_runner_or_dsl: true
+domain: voice
+vanilla_version: 26.1.2
+adapter_module: tools.harness.matrix_domains.voice
+shared_interface: tools.harness.matrix_api.Adapter
+source_checkout: /run/media/kaiserroman/games/solaris-work/wt/deploy-final
+ports:
+- 26520
+- 26539
+sources:
+- /run/media/kaiserroman/games/solaris-work/wt/deploy-final/docs/decisions/0019-voice-chat.md:7-55
+- /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/voice_service.rs:44-53
+- https://modrepo.de/minecraft/voicechat/wiki
+synchronization: received state / console response / dashboard tick counter; no sleeps
+subjects:
+- subject: voice.group_voice
+  matrix_ids:
+  - bl:voice.group_voice/fabric_svc/survival/overworld/normal/2/normal/steady/non_op_0
+  preconditions:
+    setup_callable: voice.ADAPTERS['voice.group_voice'].setup
+    fixture_calls:
+    - p.fixture(ctx,'svc_clients',server_bridge=True,audio='synthetic',sink='agents-null')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: voice.group_voice
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:34-50
+    calls:
+    - p.rich_action(ctx,'svc_create_group','matrix-private',password='matrix26520')
+    - p.rich_action(ctx,'svc_join_group',group,password='matrix26520',index=1)
+    - p.client(ctx,1).teleport_to(a[0]+128,a[1],a[2])
+    - p.rich_action(ctx,'svc_send_test_frame',fixture['pcm_marker'])
+    - p.rich_action(ctx,'svc_leave_group',index=1)
+    - p.rich_action(ctx,'svc_send_test_frame',fixture['pcm_marker']+'-left')
+    - p.rich_action(ctx,'svc_flush_frame_boundary')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.test(ctx,'group bypasses distance',any(f['marker']==fixture['pcm_marker'] for f in frames),frames)
+    - p.check(ctx,'nonmember does not hear group',any(f['marker']==fixture['pcm_marker'] for f in p.observe(ctx,'svc.received_frames',2)),False)
+    - p.check(ctx,'former member no longer receives',len(p.observe(ctx,'svc.received_frames',1)),before)
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap:
+  - No SVC bridge; native solaris:voice is not SVC; voice_service.rs:44-53
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: SVC group audio. Not served: no SVC bridge'
+- subject: voice.native_proximity_voice
+  matrix_ids:
+  - pw:voice.native_proximity_voice/native_linux/spectator/the_nether/normal/2/slow_reader_backpressure/save_all_checkpoint/non_op_0
+  preconditions:
+    setup_callable: voice.ADAPTERS['voice.native_proximity_voice'].setup
+    fixture_calls:
+    - "p.fixture(ctx, 'native_voice', enabled=True, range_blocks=48,\n                      source='synthetic_opus',\
+      \ sink='agents-null')"
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: voice.native_proximity_voice
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:53-76
+    calls:
+    - p.rich_action(ctx, 'voice_listen', True)
+    - p.rich_action(ctx, 'voice_listen', True, index=1)
+    - p.client(ctx, 1).teleport_to(origin[0]+10, origin[1], origin[2])
+    - p.rich_action(ctx, 'voice_send_audio', sequence=1, opus=audio['opus'])
+    - p.client(ctx, 1).teleport_to(origin[0]+60, origin[1], origin[2])
+    - p.rich_action(ctx, 'voice_send_audio', sequence=2, opus=audio['opus'])
+    - p.ticks(ctx, 2)
+    - p.rich_action(ctx, 'travel_dimension', 'minecraft:the_nether', index=1)
+    - p.client(ctx, 1).teleport_to(*origin)
+    - p.rich_action(ctx, 'voice_send_audio', sequence=3, opus=audio['opus'])
+    - p.ticks(ctx, 2)
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx, 'speaker UUID', received['speaker'], p.observe(ctx, 'uuid'))
+    - p.check(ctx, 'sequence preserved', received['sequence'], 1)
+    - p.check(ctx, 'audio preserved', received['opus'], audio['opus'])
+    - p.check(ctx, 'never loops back', p.observe(ctx, 'voice.audio_count'), 0)
+    - p.check(ctx, 'outside range silent', p.observe(ctx, 'voice.audio_count', 1), before)
+    - p.check(ctx, 'cross dimension silent', p.observe(ctx, 'voice.audio_count', 1), before)
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: real_but_partial
+  subject_oracle_text: 'reference: solaris:voice protocol 1 (ADR 0019): AUDIO relayed with speaker uuid, eye position
+    and seq to listening native clients in the same dimension within range_blocks (default 48), never to the speaker;
+    nothing beyond range or across dimensions'
+  remaining_oracle_clause:
+    description: Relayed eye position not checked.
+    missing_capabilities:
+    - snapshot:voice.last_audio.eye_position
+- subject: voice.native_voice_listen_and_state
+  matrix_ids:
+  - pw:voice.native_voice_listen_and_state/native_windows/creative/the_end/peaceful/N8/normal/hot_backup_during_action/op_1
+  preconditions:
+    setup_callable: voice.ADAPTERS['voice.native_voice_listen_and_state'].setup
+    fixture_calls:
+    - "p.fixture(ctx, 'native_voice', enabled=enabled, range_blocks=48,\n                          source='synthetic_opus',\
+      \ sink='agents-null')"
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: voice.native_voice_listen_and_state
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:79-97
+    calls:
+    - p.rich_action(ctx, 'voice_listen', listening, index=1)
+    - p.rich_action(ctx, 'voice_send_audio', sequence=10, opus=audio['opus'])
+    - p.ticks(ctx, 2)
+    - p.rich_action(ctx, 'send_custom_payload', 'solaris:voice', payload)
+    - p.ticks(ctx, 2)
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - 'p.check(ctx, ''join state'', p.observe(ctx, ''voice.state''), {''enabled'': enabled, ''range_blocks'': 48})'
+    - p.check(ctx, 'one join state', p.observe(ctx, 'voice.state_count'), 1)
+    - "p.check(ctx, 'listen gate', p.observe(ctx, 'voice.audio_count', 1)-before,\n                    int(enabled\
+      \ and listening))"
+    - p.check(ctx, 'malformed voice never kicks', p.observe(ctx, 'connection.phase'), 'play')
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: VOICE_STATE(enabled, range_blocks) sent once on join; no AUDIO before LISTEN(1)
+    or after LISTEN(0); malformed or unknown payloads ignored, never a kick; disabled -> no relay'
+- subject: voice.proximity_voice
+  matrix_ids:
+  - bl:voice.proximity_voice/fabric_svc/survival/overworld/normal/2/normal/steady/non_op_0
+  preconditions:
+    setup_callable: voice.ADAPTERS['voice.proximity_voice'].setup
+    fixture_calls:
+    - p.fixture(ctx,'svc_clients',server_bridge=True,audio='synthetic',sink='agents-null',max_distance=48)
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: voice.proximity_voice
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:19-31
+    calls:
+    - p.client(ctx,1).teleport_to(a[0]+4,a[1],a[2])
+    - p.rich_action(ctx,'svc_send_test_frame',fixture['pcm_marker'])
+    - p.client(ctx,1).teleport_to(a[0]+64,a[1],a[2])
+    - p.rich_action(ctx,'svc_send_test_frame',fixture['pcm_marker']+'-far')
+    - p.rich_action(ctx,'svc_flush_frame_boundary')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.test(ctx,'nearby voice delivered',any(f['marker']==fixture['pcm_marker'] for f in near),near)
+    - p.check(ctx,'outside radius voice suppressed',len(p.observe(ctx,'svc.received_frames',1)),before)
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap:
+  - No SVC bridge; native solaris:voice is not SVC; voice_service.rs:44-53
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: SVC proximity audio. Not served: Solaris has no SVC protocol bridge (its voice
+    is native solaris:voice only)'
+- subject: voice.svc_client_join_without_server
+  matrix_ids:
+  - pw:voice.svc_client_join_without_server/fabric_svc/survival/overworld/hard/1/malformed_or_stale_packet/pause_when_empty_resume/op_3
+  preconditions:
+    setup_callable: voice.ADAPTERS['voice.svc_client_join_without_server'].setup
+    fixture_calls:
+    - p.fixture(ctx,'svc_clients',server_bridge=False,audio='synthetic',sink='agents-null')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: voice.svc_client_join_without_server
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:9-16
+    calls:
+    - p.rich_action(ctx,'reconnect_profile','fabric_svc')
+    - p.client(ctx).chat('matrix-svc-no-server')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.check(ctx,'ordinary game join',p.observe(ctx,'connection.phase'),'play')
+    - p.check(ctx,'voice unavailable',p.observe(ctx,'svc.connected'),False)
+    - p.test(ctx,'chat independent of missing SVC',True,'server chat echo')
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: joins and plays; SVC reports voice unavailable; no disconnect'
+- subject: voice.voice_non_native_invisible
+  matrix_ids:
+  - pw:voice.voice_non_native_invisible/fabric_solaris_loader/adventure/the_end/easy/2/duplicate_login/clean_restart_mid_action/op_4
+  - pw:voice.voice_non_native_invisible/vanilla_java_26_1_2/spectator/the_end/peaceful/2/reconnect_mid_action/steady/op_2
+  - pw:voice.voice_non_native_invisible/protocol_bot/adventure/overworld/normal/2/duplicate_login/crash_kill9_wal_replay/op_2
+  preconditions:
+    setup_callable: voice.ADAPTERS['voice.voice_non_native_invisible'].setup
+    fixture_calls:
+    - p.fixture(ctx, 'native_voice_speaker', source='synthetic_opus', sink='agents-null')
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: voice.voice_non_native_invisible
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/voice.py:100-107
+    calls:
+    - p.client(ctx).teleport_to(*speaker['near_position'])
+    - p.ticks(ctx, 2)
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - "p.check(ctx, 'no native voice on nonnative',\n            [r for r in p.observe(ctx, 'custom_payloads') if\
+      \ r['channel'] == 'solaris:voice'], [])"
+    - p.check(ctx, 'nonnative play survives', p.observe(ctx, 'connection.phase'), 'play')
+    delegated_helpers: []
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: they never receive solaris:voice (no VOICE_STATE, no relay); play unaffected'
+receipt_policy: Index of shared Python Adapter callables, not an interpreter. Capability requests are not live pass
+  evidence; consult canonical receipts and ledger.
+helper_sources: {}
+adapter_revision: 794c8ff5

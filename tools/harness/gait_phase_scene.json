@@ -1,0 +1,110 @@
+{
+  "seed": 100,
+  "server_view_distance": 4,
+  "client_settings": {
+    "render_distance": 8
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule advance_weather false"
+    },
+    {
+      "cmd": "time set 18000"
+    },
+    {
+      "cmd": "weather clear"
+    },
+    {
+      "tp": [
+        1000.5,
+        175,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 200
+    },
+    {
+      "cmd": "fill 985 159 985 1015 159 1015 minecraft:grass_block"
+    },
+    {
+      "cmd": "fill 985 160 985 1015 175 1015 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "cmd": "gamemode survival"
+    },
+    {
+      "cmd": "effect give @s minecraft:resistance 600 4 true"
+    },
+    {
+      "cmd": "effect give @s minecraft:night_vision 600 0 true"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:zombie]"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:spider]"
+    },
+    {
+      "cmd": "tick rate 2"
+    },
+    {
+      "cmd": "summon minecraft:zombie 1000.5 160 1008.5 {PersistenceRequired:1b}"
+    },
+    {
+      "walk_capture": {
+        "name": "zombie-phase",
+        "entity_type": "minecraft:zombie",
+        "phase": 1.5,
+        "tolerance": 0.45,
+        "min_speed": 0.05,
+        "max_ticks": 200
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:zombie,distance=..20]"
+    },
+    {
+      "cmd": "summon minecraft:spider 1000.5 160 1008.5 {PersistenceRequired:1b}"
+    },
+    {
+      "walk_capture": {
+        "name": "spider-phase",
+        "entity_type": "minecraft:spider",
+        "phase": 1.5,
+        "tolerance": 0.45,
+        "min_speed": 0.05,
+        "max_ticks": 200
+      }
+    }
+  ]
+}

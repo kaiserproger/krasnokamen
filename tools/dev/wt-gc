@@ -1,0 +1,142 @@
+#!/usr/bin/env python3
+"""Read-only report of agent worktrees and release pins: wt-gc [--days 7].
+
+Owner-host tool (see tools/dev/README.md). Lists every registered worktree under
+<work>/wt/ of the four Solaris repos (age of the last change, dirty files, commits
+not in main, target size) and <work>/pins/* older than the threshold. Never
+deletes anything; for each stale worktree it prints the wt-done command.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import wtlib as w  # noqa: E402
+
+
+def status_paths(path: Path) -> list[str]:
+    """Paths of dirty (tracked-modified and untracked non-ignored) files."""
+    raw = w.git(path, "status", "--porcelain=v1", "-z", "-uall", binary=True)
+    fields = [item.decode(errors="surrogateescape") for item in raw.split(b"\0")]
+    paths, i = [], 0
+    while i < len(fields) and fields[i]:
+        paths.append(fields[i][3:])
+        i += 2 if fields[i][0] in "RC" else 1  # renames and copies carry the old path next
+    return paths
+
+
+def inspect(item: tuple[str, dict]) -> dict:
+    key, entry = item
+    path: Path = entry["path"]
+    row = {"name": path.name, "repo": key, "branch": entry["branch"] or "(detached)", "path": path}
+    if entry["prunable"] or not path.is_dir():
+        row.update(missing=True, age=None, dirty=0, ahead=0, target=0)
+        return row
+    ref = w.default_branch_ref(key)
+    dirty = status_paths(path)
+    ahead = int(w.git(path, "rev-list", "--count", "HEAD", "--not", ref))
+    stamps = []
+    for rel in dirty:
+        try:
+            stamps.append(os.lstat(path / rel).st_mtime)
+        except OSError:
+            pass  # a deleted file has no mtime
+    commit = w.git(path, "log", "-1", "--format=%ct", "HEAD", "--not", ref)
+    if commit:
+        stamps.append(float(commit))
+    gitdir = Path(str(w.git(path, "rev-parse", "--path-format=absolute", "--git-dir")))
+    for log in (gitdir / "logs/HEAD", gitdir / "HEAD"):  # created, checked out, committed
+        if log.exists():
+            stamps.append(log.stat().st_mtime)
+            break
+    row.update(
+        missing=False, age=time.time() - max(stamps), dirty=len(dirty), ahead=ahead,
+        target=w.dir_size_bytes(w.TARGETS / path.name) + w.dir_size_bytes(w.HOMES / path.name),
+    )
+    return row
+
+
+def fmt_age(seconds: float | None) -> str:
+    if seconds is None:
+        return "?"
+    days, rest = divmod(int(seconds), 86400)
+    return f"{days}d{rest // 3600:02d}h" if days else f"{rest // 3600}h{rest % 3600 // 60:02d}m"
+
+
+def table(headers: list[str], rows: list[list[str]]) -> None:
+    widths = [max(len(str(r[i])) for r in [headers, *rows]) for i in range(len(headers))]
+    for r in [headers, *rows]:
+        print("  ".join(str(cell).ljust(widths[i]) for i, cell in enumerate(r)).rstrip())
+
+
+def marked(path: Path, marks: list[dict], skip_owner: str | None = None) -> str:
+    """`owner:kind` list of the registry marks on `path` (own worktree mark skipped)."""
+    return ",".join(f"{m['owner']}:{m['kind']}" for m in w.marks_under(path, marks) if m["owner"] != skip_owner)
+
+
+def report_pins(days: float, marks: list[dict]) -> None:
+    pins = sorted(p for p in w.PINS.glob("*") if p.is_dir() and not p.name.startswith(".")) if w.PINS.is_dir() else []
+    print(f"\npins in {w.PINS}: {len(pins)}")
+    if not pins:
+        return
+    rows = []
+    for pin in pins:
+        manifest = pin / "manifest.json"
+        info = json.loads(manifest.read_text()) if manifest.is_file() else {}
+        age = time.time() - (manifest.stat().st_mtime if manifest.is_file() else pin.stat().st_mtime)
+        rows.append([pin.name, info.get("repo", "?"), fmt_age(age), w.human_bytes(w.dir_size_bytes(pin)),
+                     "STALE" if age >= days * 86400 else "", marked(pin, marks), "" if info else "no manifest"])
+    table(["PIN", "REPO", "AGE", "SIZE", "", "IN-USE", "NOTE"], rows)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Read-only worktree and pin report; never deletes.")
+    parser.add_argument("--days", type=float, default=7, help="age in days from which an entry is stale (default 7)")
+    args = parser.parse_args()
+    w.check_host()
+    os.environ["GIT_OPTIONAL_LOCKS"] = "0"  # a report must not rewrite any index
+
+    items, outside = [], 0
+    for key, repo in w.REPOS.items():
+        if not (repo / ".git").exists():
+            continue
+        for entry in w.worktree_entries(key):
+            if w.is_under(entry["path"], w.WT):
+                items.append((key, entry))
+            else:
+                outside += 1
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        rows = list(pool.map(inspect, items))
+    marks = w.in_use_marks()
+    for r in rows:
+        r["inuse"] = marked(r["path"], marks, skip_owner=r["name"])
+    rows.sort(key=lambda r: -(r["age"] if r["age"] is not None else float("inf")))
+
+    threshold = args.days * 86400
+    print(f"worktrees under {w.WT}: {len(rows)} (stale = no change for {args.days:g} days; {outside} registered elsewhere ignored)")
+    table(
+        ["NAME", "REPO", "BRANCH", "AGE", "DIRTY", "AHEAD", "TARGET", "IN-USE", "STATE"],
+        [[r["name"], r["repo"], r["branch"], fmt_age(r["age"]), r["dirty"], r["ahead"], w.human_bytes(r["target"]), r["inuse"],
+          "MISSING (prune)" if r["missing"] else "STALE" if r["age"] >= threshold else ""] for r in rows],
+    )
+    stale = [r for r in rows if not r["missing"] and r["age"] >= threshold]
+    if stale:
+        print("\nstale worktrees; wt-done saves a verified final.patch before removing (nothing here was changed):")
+        for r in stale:
+            note = f"  # {r['dirty']} dirty files, {r['ahead']} commits not in main" if r["dirty"] or r["ahead"] else ""
+            note += f"  # IN USE by {r['inuse']}: wt-done refuses without --force" if r["inuse"] else ""
+            print(f"  {w.TOOLS / 'wt-done'} {r['name']}{note}")
+    if any(r["missing"] for r in rows):
+        print("\nmissing directories: run `git worktree prune` in the listed repo (not done here).")
+    report_pins(threshold / 86400, marks)
+
+
+if __name__ == "__main__":
+    w.run_tool(main)

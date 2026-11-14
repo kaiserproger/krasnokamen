@@ -1,0 +1,172 @@
+kind: adapter-source-index
+not_a_runner_or_dsl: true
+domain: block_log
+vanilla_version: 26.1.2
+adapter_module: tools.harness.matrix_domains.block_log
+shared_interface: tools.harness.matrix_api.Adapter
+source_checkout: /run/media/kaiserroman/games/solaris-work/wt/deploy-final
+ports:
+- 26520
+- 26539
+sources:
+- /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/block_log.rs:878-1019
+- /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/block_log.rs:1290-1385
+synchronization: received state / console response / dashboard tick counter; no sleeps
+subjects:
+- subject: block_log.co_history_restart
+  matrix_ids:
+  - pw:block_log.co_history_restart/fabric_solaris_loader/creative/overworld/peaceful/2/duplicate_login/clean_restart_mid_action/console
+  - pw:block_log.co_history_restart/forge_solaris_loader/survival/the_nether/normal/N8/duplicate_login/steady/non_op_0
+  preconditions:
+    setup_callable: block_log.ADAPTERS['block_log.co_history_restart'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: block_log.co_history_restart
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:78-85
+    calls:
+    - p.restart(ctx)
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - 'p.response(ctx,f''co lookup u:{p.client(ctx).name} t:1h r:8'',r''Block log: [1-9][0-9]* result'')'
+    - p.test(ctx,'history persists',any(p.client(ctx).name in e and 'broke stone' in e for e in lines),lines)
+    - 'p.response(ctx,f''co rollback u:{p.client(ctx).name} t:1h r:8'',r''Rollback complete: 1 change'')'
+    - p.block_is(ctx,ctx.state['pos'],'minecraft:stone')
+    delegated_helpers:
+    - grief(ctx)
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: history persisted'
+- subject: block_log.co_inspect
+  matrix_ids:
+  - pw:block_log.co_inspect/neoforge_solaris_loader/adventure/the_nether/normal/1/reconnect_mid_action/pause_when_empty_resume/op_3
+  - pw:block_log.co_inspect/protocol_bot/adventure/overworld/easy/N8/malformed_or_stale_packet/crash_kill9_wal_replay/op_4
+  preconditions:
+    setup_callable: block_log.ADAPTERS['block_log.co_inspect'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: block_log.co_inspect
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:37-44
+    calls:
+    - p.use(ctx, ctx.state['pos'])
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - p.response(ctx, 'co inspect', r'(?i)inspect.*(enabled|on)')
+    - p.test(ctx, 'inspection history', any('broke stone' in e for e in p.observe(ctx,'events')), p.observe(ctx,'events'))
+    - p.block_is(ctx, ctx.state['pos'], 'minecraft:air')
+    delegated_helpers:
+    - grief(ctx)
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: history shown'
+- subject: block_log.co_lookup
+  matrix_ids:
+  - pw:block_log.co_lookup/native_windows/spectator/the_end/easy/N8/malformed_or_stale_packet/save_all_checkpoint/op_2
+  - pw:block_log.co_lookup/vanilla_java_26_1_2/spectator/overworld/normal/2/malformed_or_stale_packet/steady/console
+  preconditions:
+    setup_callable: block_log.ADAPTERS['block_log.co_lookup'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: block_log.co_lookup
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:47-52
+    calls: []
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - 'p.response(ctx, f''co lookup u:{p.client(ctx).name} t:1h r:8'', r''Block log: [1-9][0-9]* result'')'
+    - p.test(ctx, 'lookup attributed actor and change', any(p.client(ctx).name in e and 'broke stone' in e for e
+      in lines), lines)
+    - 'p.response(ctx, ''co lookup u:matrix_absent_actor t:1h r:8'', r''Block log: 0 result'')'
+    delegated_helpers:
+    - grief(ctx)
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  additional_matrix_obligations:
+    concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+      execution contract; one actor does not cover it.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: matching records listed'
+- subject: block_log.co_restore
+  matrix_ids:
+  - pw:block_log.co_restore/fabric_svc/survival/overworld/hard/1/normal/crash_kill9_wal_replay/op_4
+  - pw:block_log.co_restore/fabric_distant_horizons/spectator/the_end/normal/1/malformed_or_stale_packet/clean_restart_mid_action/op_1
+  preconditions:
+    setup_callable: block_log.ADAPTERS['block_log.co_restore'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: block_log.co_restore
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:69-75
+    calls: []
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - 'p.response(ctx,''co rollback ''+filter_text,r''Rollback complete: 1 change'')'
+    - p.block_is(ctx,ctx.state['pos'],'minecraft:stone')
+    - 'p.response(ctx,''co restore ''+filter_text,r''Restore complete: 1 change'')'
+    - p.block_is(ctx,ctx.state['pos'],'minecraft:air')
+    delegated_helpers:
+    - grief(ctx)
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: changes re-applied'
+- subject: block_log.co_rollback
+  matrix_ids:
+  - pw:block_log.co_rollback/native_linux/spectator/the_end/peaceful/1/slow_reader_backpressure/hot_backup_during_action/op_1
+  - tr.dupe.two_players_take_same_tick:block_log.co_rollback/protocol_bot/survival/overworld/normal/2/normal/steady/op_3
+  - tr.dupe.destroy_during_interaction:block_log.co_rollback/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+  - tr.dupe.restart_after_interaction:block_log.co_rollback/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/op_3
+  preconditions:
+    setup_callable: block_log.ADAPTERS['block_log.co_rollback'].setup
+    fixture_calls: []
+    context: All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+      setup.
+  actions:
+    callable: block_log.co_rollback
+    source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:55-66
+    calls:
+    - p.rich_action(ctx, 'close_container')
+    authoritative_commands_in_action_order: []
+  oracle:
+    callable: _platform.oracle
+    check_calls:
+    - "p.response(ctx, f'co rollback u:{p.client(ctx).name} t:1h r:8',\n               r'Rollback complete: [1-9][0-9]*\
+      \ change')"
+    - "p.check(ctx, 'chest pre-image restored', {k: slot[k] for k in ('item_id', 'count')},\n            {'item_id':\
+      \ 'minecraft:diamond', 'count': 3})"
+    - p.block_is(ctx,ctx.state['pos'],'minecraft:stone')
+    delegated_helpers:
+    - grief(ctx, chest=True)
+  expected_contract: Solaris extension; no vanilla analogue
+  server_gap: []
+  additional_matrix_obligations:
+    same_tick_admission_fence: 'Blocked: simultaneous custody actions and combined per-player conservation are not
+      replaced by a sequential subject invocation.'
+  implementation_class: complete_adapter
+  subject_oracle_text: 'reference: blocks and chest contents restored exactly'
+receipt_policy: Index of shared Python Adapter callables, not an interpreter. Capability requests are not live pass
+  evidence; consult canonical receipts and ledger.
+helper_sources:
+  grief: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/block_log.py:8-34
+adapter_revision: 794c8ff5

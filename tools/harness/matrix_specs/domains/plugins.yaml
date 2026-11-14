@@ -1,0 +1,895 @@
+kind: adapter-source-index
+not_a_runner_or_dsl: true
+domain: plugins
+vanilla_version: 26.1.2
+adapter_module: tools.harness.matrix_domains.plugins
+shared_interface: tools.harness.matrix_api.Adapter
+source_checkout: /run/media/kaiserroman/games/solaris-work/wt/deploy-final
+ports:
+  - 26520
+  - 26539
+sources:
+  - /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/basic-economy/README.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/computer/README.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/graves/README.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/solaris-audit/README.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/solaris-auth/README.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/solaris-economy/README.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/solaris-essentials/README.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/solaris-permissions/README.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/solaris-towns/README.md
+  - /run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/chisel/plugin.toml:10-19
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-edge/src/configuration.rs:95-97,212-216
+synchronization: received state / console response / dashboard tick counter; no sleeps
+subjects:
+  - subject: plugins.audit_queries
+    matrix_ids:
+      - pw:plugins.audit_queries/fabric_solaris_loader/adventure/the_end/easy/1/normal/hot_backup_during_action/op_3
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.audit_queries'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-audit')
+        - p.arena(ctx)
+        - p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:stone')
+        - p.admin(ctx, f'give {p.client(ctx).name} minecraft:stone 1')
+        - p.admin(ctx,f'summon minecraft:cow {x+2} {y} {z}')
+        - p.admin(ctx,f'kill {p.client(ctx).name}')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.audit_queries
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:245-272
+      calls:
+        - p.rich_action(ctx,'break_block',(x+2,y,z))
+        - p.rich_action(ctx, 'select_inventory_item', 'minecraft:stone')
+        - p.use(ctx, (x+2,y-1,z))
+        - p.rich_action(ctx,'craft_recipe','minecraft:oak_planks')
+        - p.client(ctx).drop()
+        - p.rich_action(ctx,'collect_nearby_items')
+        - p.rich_action(ctx,'find_entity','minecraft:cow')
+        - p.rich_action(ctx,'interact_entity',entity)
+        - p.rich_action(ctx,'attack_until_dead',entity)
+        - p.rich_action(ctx,'respawn')
+        - p.client(ctx).command('audit 100')
+      authoritative_commands_in_action_order:
+        - p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:stone')
+        - p.admin(ctx, f'give {p.client(ctx).name} minecraft:stone 1')
+        - p.admin(ctx,f'summon minecraft:cow {x+2} {y} {z}')
+        - p.admin(ctx,f'kill {p.client(ctx).name}')
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.block_is(ctx, (x+2,y,z), 'minecraft:air')
+        - p.block_is(ctx, (x+2,y,z), 'minecraft:stone')
+        - p.response(ctx, 'audit 20', r'(?i)place|placed')
+        - p.response(ctx,text,r'(?i)break|broke|block')
+        - p.test(ctx,'audit actor',p.observe(ctx,'uuid') in line,line)
+        - p.test(ctx,'audit '+kind,kind in events.lower(),events)
+      delegated_helpers:
+        - deploy(ctx,'solaris-audit')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: records of break/place/craft/pickup/kill/interact/death"
+  - subject: plugins.auth_register_login
+    matrix_ids:
+      - pw:plugins.auth_register_login/neoforge_solaris_loader/spectator/the_nether/peaceful/2/slow_reader_backpressure/clean_restart_mid_action/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.auth_register_login'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-auth',require_plugin_login=True)
+        - p.arena(ctx)
+        - p.admin(ctx, f'give {p.client(ctx).name} minecraft:stone 4')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.auth_register_login
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:297-323
+      calls:
+        - p.client(ctx).disconnect()
+        - p.client(ctx).reconnect()
+        - p.rich_action(ctx, 'select_inventory_item', 'minecraft:stone')
+        - p.block_ack(ctx, p.use(ctx, (x+2,y-1,z)))
+        - p.use(ctx, (x+2,y-1,z))
+        - p.client(ctx).disconnect()
+        - p.client(ctx).reconnect()
+        - p.client(ctx).disconnect()
+        - p.client(ctx).reconnect()
+      authoritative_commands_in_action_order:
+        - p.admin(ctx, f'give {p.client(ctx).name} minecraft:stone 4')
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.check(ctx,'join locked',p.observe(ctx,'auth.locked'),True)
+        - p.block_is(ctx, (x+2,y,z), 'minecraft:air')
+        - "p.check(ctx, 'authentication lock denies building without item loss',\n            p.inventory(ctx, 'minecraft:stone'),\
+          \ before)"
+        - p.response(ctx,f'register {password} {password}',r'(?i)registered|зарегистр|logged|вошли')
+        - p.check(ctx,'register unlocks',p.observe(ctx,'auth.locked'),False)
+        - p.response(ctx,'login wrong26520',r'(?i)wrong|invalid|невер')
+        - p.check(ctx,'wrong password remains locked',p.observe(ctx,'auth.locked'),True)
+        - p.response(ctx,'login '+password,r'(?i)logged|вошли|успеш')
+        - p.check(ctx,'correct login unlocks',p.observe(ctx,'auth.locked'),False)
+        - p.response(ctx,'changepassword '+password+' Matrix26520New',r'(?i)changed|измен')
+        - p.response(ctx,'login '+password,r'(?i)wrong|invalid|невер')
+        - p.response(ctx,'login Matrix26520New',r'(?i)logged|вошли|успеш')
+        - p.check(ctx,'no secret echo '+str(actor),any(password in e or 'Matrix26520New' in e for e in p.observe(ctx,'events',actor)),False)
+      delegated_helpers:
+        - deploy(ctx,'solaris-auth',require_plugin_login=True)
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: real_but_partial
+    subject_oracle_text: "reference: locked until login (no build/damage); wrong pw refused; secrets never echoed"
+    remaining_oracle_clause:
+      description:
+        Locked building/item retention is now checked; locked damage needs received entity health and authoritative
+        attack admission (unavailable).
+      missing_capabilities:
+        - snapshot:auth.locked
+        - attack_admission_receipt
+  - subject: plugins.auth_session_timeout
+    matrix_ids:
+      - pw:plugins.auth_session_timeout/fabric_distant_horizons/survival/overworld/normal/N8/reconnect_mid_action/crash_kill9_wal_replay/op_2
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.auth_session_timeout'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-auth',require_plugin_login=True)
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.auth_session_timeout
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:326-335
+      calls:
+        - p.client(ctx).disconnect()
+        - p.client(ctx).reconnect()
+        - p.ticks(ctx,1199)
+        - p.ticks(ctx,1)
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.check(ctx,'initial lock',p.observe(ctx,'auth.locked'),True)
+        - p.check(ctx,'not kicked early',p.observe(ctx,'connection.phase'),'play')
+        - p.check(ctx,'timeout disconnect',p.observe(ctx,'connection.phase'),'disconnected')
+      delegated_helpers:
+        - deploy(ctx,'solaris-auth',require_plugin_login=True)
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    additional_matrix_obligations:
+      concurrent_subject_actors:
+        "Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+        execution contract; one actor does not cover it."
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: kicked after timeout"
+  - subject: plugins.basic_economy_shop
+    matrix_ids:
+      - pw:plugins.basic_economy_shop/vanilla_java_26_1_2/creative/the_end/hard/2/duplicate_login/save_all_checkpoint/op_1
+      - pw:plugins.basic_economy_shop/forge_solaris_loader/survival/the_nether/normal/1/disconnect_during_menu/steady/op_4
+      - tr.restart_x_inventory.clean_restart_mid_action:plugins.basic_economy_shop/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:plugins.basic_economy_shop/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:plugins.basic_economy_shop/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.basic_economy_shop'].setup
+      fixture_calls:
+        - deploy(ctx,'basic-economy')
+        - p.admin(ctx,f'give {p.client(ctx).name} minecraft:emerald 16')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.basic_economy_shop
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:275-294
+      calls:
+        - p.client(ctx).command('economy shop')
+        - p.client(ctx).click_slot(offer['buy_slot'])
+        - p.rich_action(ctx,'close_container')
+        - p.client(ctx).command('economy shop')
+        - p.client(ctx).click_slot(offer['sell_slot'])
+        - p.rich_action(ctx,'close_container')
+        - p.client(ctx).teleport_to(*zone['inside'])
+        - p.client(ctx).teleport_to(*zone['outside'])
+      authoritative_commands_in_action_order:
+        - p.admin(ctx,f'give {p.client(ctx).name} minecraft:emerald 16')
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.check(ctx,'purchase debit',p.inventory(ctx,'minecraft:emerald'),before-offer['buy_cost'])
+        - p.check(ctx,'purchase item',p.inventory(ctx,offer['item_id']),offer['count'])
+        - p.check(ctx,'sale consumes purchased items',p.inventory(ctx,offer['item_id']),0)
+        - p.check(ctx,'sale credits exact refund',p.inventory(ctx,'minecraft:emerald'),before-offer['buy_cost']+offer['sell_credit'])
+        - p.check(ctx,'market enter event',p.observe(ctx,'shop.in_market'),True)
+        - p.check(ctx,'market leave event',p.observe(ctx,'shop.in_market'),False)
+      delegated_helpers:
+        - deploy(ctx,'basic-economy')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: inventory-backed transaction exact; zone events"
+  - subject: plugins.chisel_conversion
+    matrix_ids:
+      - pw:plugins.chisel_conversion/protocol_bot/spectator/the_nether/hard/2/malformed_or_stale_packet/pause_when_empty_resume/op_1
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.chisel_conversion'].setup
+      fixture_calls:
+        - deploy(ctx,'chisel')
+        - p.arena(ctx)
+        - p.admin(ctx,f'give {p.client(ctx).name} chisel:chisel 1')
+        - p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:stone_bricks')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.chisel_conversion
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:338-352
+      calls:
+        - p.rich_action(ctx,'select_inventory_item','chisel:chisel')
+        - p.use(ctx,(x+2,y,z),face)
+        - p.use(ctx,(x+2,y,z),'north')
+      authoritative_commands_in_action_order:
+        - p.admin(ctx,f'give {p.client(ctx).name} chisel:chisel 1')
+        - p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:stone_bricks')
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.block_is(ctx,(x+2,y,z),expected)
+        - p.check(ctx,'chisel wears once',p.observe(ctx,'held_item.damage'),damage+1)
+        - p.check(ctx,'slab grant conservation',p.inventory(ctx,'minecraft:stone_brick_slab')-before,1 if face=='up'
+          else 0)
+        - p.block_is(ctx,(x+2,y,z),'minecraft:stone_brick_slab')
+      delegated_helpers:
+        - deploy(ctx,'chisel')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: block converted; tool wear; slab grants"
+  - subject: plugins.chisel_loader_bundle
+    matrix_ids:
+      - pw:plugins.chisel_loader_bundle/native_linux/spectator/overworld/easy/1/malformed_or_stale_packet/crash_kill9_wal_replay/op_3
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.chisel_loader_bundle'].setup
+      fixture_calls:
+        - p.admin(ctx, f'give {p.client(ctx).name} chisel:chisel 1')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.chisel_loader_bundle
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:355-367
+      calls:
+        - p.rich_action(ctx, 'reconnect_profile', 'vanilla_26_1_2')
+      authoritative_commands_in_action_order:
+        - p.admin(ctx, f'give {p.client(ctx).name} chisel:chisel 1')
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.check(ctx, 'vanilla completes Configuration', p.observe(ctx, 'connection.phase'), 'play')
+        - p.check(ctx, 'vanilla chisel carrier', p.inventory(ctx, 'minecraft:stick'), before + 1)
+      delegated_helpers: []
+      external_helper_calls:
+        - loader_content.bundle_handshake_cache(ctx)
+        - loader_content.custom_items_render(ctx)
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text:
+      "reference: Solaris client that consents gets the chisel item definition/model/texture; vanilla
+      completes configuration without the bundle (edge configuration.rs: optional bundles are negotiated only after
+      a Loader hello) and sees chisel:chisel as its minecraft:stick carrier; the chisel README sentence 'vanilla
+      is refused' is stale vs plugin.toml required = false"
+  - subject: plugins.economy_admin
+    matrix_ids:
+      - pw:plugins.economy_admin/fabric_svc/spectator/the_end/hard/1/reconnect_mid_action/save_all_checkpoint/op_2
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.economy_admin'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-economy',starting_balance=0)
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.economy_admin
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:185-193
+      calls:
+        - p.client(ctx).command(f'econadmin set {uuid} 40')
+        - p.client(ctx).command(f'econadmin add {uuid} 2')
+        - p.rich_action(ctx,'plugin_command_as_nonop',f'econadmin set {uuid} 100',index=1)
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - "p.response(ctx,'money',r'Balance: 40 ')"
+        - "p.response(ctx,'money',r'Balance: 42 ')"
+        - "p.response(ctx,'money',r'Balance: 42 ')"
+      delegated_helpers:
+        - deploy(ctx,'solaris-economy',starting_balance=0)
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: admin-only balance change"
+  - subject: plugins.economy_money_pay
+    matrix_ids:
+      - pw:plugins.economy_money_pay/native_windows/survival/overworld/hard/N8/malformed_or_stale_packet/steady/op_3
+      - tr.dupe.two_players_take_same_tick:plugins.economy_money_pay/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.destroy_during_interaction:plugins.economy_money_pay/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.restart_after_interaction:plugins.economy_money_pay/native_linux/survival/overworld/normal/2/normal/clean_restart_mid_action/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.economy_money_pay'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-economy',starting_balance=100)
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.economy_money_pay
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:169-182
+      calls:
+        - p.restart(ctx)
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - "p.response(ctx,'money',r'Balance: 100 ')"
+        - p.response(ctx,f'pay {target} 7 matrix26520',r'Paid 7 ')
+        - "p.response(ctx,'money',r'Balance: 93 ')"
+        - "p.response(ctx,'money',r'Balance: 107 ',index=1)"
+        - p.response(ctx,f'pay {target} 7 matrix26520',r'token was already committed')
+        - "p.response(ctx,'money',r'Balance: 93 ')"
+        - "p.response(ctx,'money',r'Balance: 107 ',index=1)"
+        - p.response(ctx,f'pay {target} 7 matrix26520',r'token was already committed')
+        - "p.response(ctx,'money',r'Balance: 93 ')"
+        - "p.response(ctx,'money',r'Balance: 107 ',index=1)"
+      delegated_helpers:
+        - deploy(ctx,'solaris-economy',starting_balance=100)
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    additional_matrix_obligations:
+      same_tick_admission_fence:
+        "Blocked: simultaneous custody actions and combined per-player conservation are not
+        replaced by a sequential subject invocation."
+      concurrent_subject_actors:
+        "Blocked: concurrent own-target and shared-target execution requires the shared all-actor
+        execution contract; one actor does not cover it."
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: balances move once; idempotent token"
+  - subject: plugins.essentials_back
+    matrix_ids:
+      - bl:plugins.essentials_back/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.essentials_back'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-essentials')
+        - p.admin(ctx,f'kill {p.client(ctx).name}')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.essentials_back
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:127-140
+      calls:
+        - p.client(ctx).teleport_to(*away)
+        - p.client(ctx).command('home matrix')
+        - p.client(ctx).command('back')
+        - p.rich_action(ctx,'respawn')
+        - p.client(ctx).command('back')
+      authoritative_commands_in_action_order:
+        - p.admin(ctx,f'kill {p.client(ctx).name}')
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.response(ctx,'sethome matrix',r'matrix saved\.')
+        - p.at(ctx,home)
+        - p.at(ctx,away)
+        - p.at(ctx,away)
+      delegated_helpers:
+        - deploy(ctx,'solaris-essentials')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: returns to previous location (player.died event)"
+  - subject: plugins.essentials_homes
+    matrix_ids:
+      - bl:plugins.essentials_homes/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.essentials_homes'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-essentials')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.essentials_homes
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:91-107
+      calls:
+        - other.teleport_to(*other_home)
+        - p.client(ctx).teleport_to(home[0]+5,home[1],home[2])
+        - p.client(ctx).command('home matrix')
+        - other.teleport_to(home[0]+3, home[1], home[2])
+        - other.command('home matrix')
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.response(ctx,'sethome matrix',r'matrix saved\.')
+        - p.response(ctx, 'home matrix', r'Location not found\.', index=1)
+        - p.response(ctx, 'sethome matrix', r'matrix saved\.', index=1)
+        - p.at(ctx,home)
+        - p.response(ctx,'delhome matrix',r'matrix removed\.')
+        - p.response(ctx,'home matrix',r'Location not found\.')
+        - p.at(ctx, other_home, index=1)
+      delegated_helpers:
+        - deploy(ctx,'solaris-essentials')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: home saved per player; teleport"
+  - subject: plugins.essentials_msg_reply
+    matrix_ids:
+      - bl:plugins.essentials_msg_reply/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.essentials_msg_reply'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-essentials')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.essentials_msg_reply
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:156-166
+      calls:
+        - p.client(ctx).command('msg '+other.name+' matrix-private-26520')
+        - other.command('reply matrix-reply-26520')
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.test(ctx,'plugin reply routing',any('[reply from '+other.name+'] matrix-reply-26520' in s for s in p.observe(ctx,'events')),p.observe(ctx,'events'))
+        - p.check(ctx,'private not broadcast',any('matrix-private-26520' in s or 'matrix-reply-26520' in s for s in
+          p.observe(ctx,'events',2)),False)
+      delegated_helpers:
+        - deploy(ctx,'solaris-essentials')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: plugin owns msg root; reply to last sender"
+  - subject: plugins.essentials_spawn_warps
+    matrix_ids:
+      - bl:plugins.essentials_spawn_warps/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.essentials_spawn_warps'].setup
+      fixture_calls:
+        - "deploy(ctx,'solaris-essentials','solaris-permissions',\n           groups={'guest':[], 'member':['solaris.essentials.use','solaris.essentials.manage']},\n\
+          \           default_group='member')"
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.essentials_spawn_warps
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:110-124
+      calls:
+        - p.client(ctx).teleport_to(home[0]+5,home[1],home[2])
+        - p.client(ctx).command(cmd)
+        - p.rich_action(ctx,'operator_plugin_command',f'perm user {p.observe(ctx,"uuid")} set guest')
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.response(ctx,'setspawn',r'saved\.')
+        - p.response(ctx,'setwarp matrix',r'matrix saved\.')
+        - p.at(ctx,home)
+        - p.response(ctx,'delwarp matrix',r'matrix removed\.')
+        - p.response(ctx,'warp matrix',r'Location not found\.')
+        - p.response(ctx,'setwarp denied',r'(?i)permission|operator|unknown')
+      delegated_helpers:
+        - "deploy(ctx,'solaris-essentials','solaris-permissions',\n           groups={'guest':[], 'member':['solaris.essentials.use','solaris.essentials.manage']},\n\
+          \           default_group='member')"
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: warps/spawn teleports; manage gated"
+  - subject: plugins.essentials_tpa
+    matrix_ids:
+      - bl:plugins.essentials_tpa/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.disconnect_x_transient_state.reconnect_mid_action:plugins.essentials_tpa/vanilla_java_26_1_2/survival/overworld/normal/2/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_transient_state.duplicate_login:plugins.essentials_tpa/native_linux/survival/overworld/normal/2/duplicate_login/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.essentials_tpa'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-essentials')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.essentials_tpa
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:143-153
+      calls:
+        - other.teleport_to(start[0]+8,start[1],start[2])
+        - p.client(ctx).command('tpa '+other.name)
+        - p.ticks(ctx,2)
+        - other.command('tpaccept')
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.check(ctx,'request does not teleport early',p.position(ctx),start)
+        - p.at(ctx,target)
+      delegated_helpers:
+        - deploy(ctx,'solaris-essentials')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: requester teleported after accept only"
+  - subject: plugins.graves_custody
+    matrix_ids:
+      - bl:plugins.graves_custody/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.two_players_take_same_tick:plugins.graves_custody/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.destroy_during_interaction:plugins.graves_custody/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.restart_after_interaction:plugins.graves_custody/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:plugins.graves_custody/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:plugins.graves_custody/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:plugins.graves_custody/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.graves_custody'].setup
+      fixture_calls:
+        - deploy(ctx,'graves')
+        - p.admin(ctx,'gamerule keepInventory false')
+        - p.admin(ctx,f'clear {p.client(ctx).name}')
+        - p.admin(ctx,f'give {p.client(ctx).name} minecraft:diamond 3')
+        - p.admin(ctx,f'give {p.client(ctx).name} minecraft:iron_ingot 5')
+        - p.admin(ctx,f'kill {p.client(ctx).name}')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.graves_custody
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:370-386
+      calls:
+        - p.rich_action(ctx,'respawn')
+        - p.client(ctx).teleport_to(pos[0]+1,pos[1],pos[2])
+        - p.rich_action(ctx,'item_entities_in_radius',tuple(pos),4)
+      authoritative_commands_in_action_order:
+        - p.admin(ctx,'gamerule keepInventory false')
+        - p.admin(ctx,f'clear {p.client(ctx).name}')
+        - p.admin(ctx,f'give {p.client(ctx).name} minecraft:diamond 3')
+        - p.admin(ctx,f'give {p.client(ctx).name} minecraft:iron_ingot 5')
+        - p.admin(ctx,f'kill {p.client(ctx).name}')
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.block_is(ctx,pos,'minecraft:barrel')
+        - p.check(ctx,'grave exact custody',sorted((s['item_id'],s['count']) for s in stacks),expected)
+        - p.check(ctx,'no ground copy',p.rich_action(ctx,'item_entities_in_radius',tuple(pos),4),[])
+      delegated_helpers:
+        - deploy(ctx,'graves')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    additional_matrix_obligations:
+      same_tick_admission_fence:
+        "Blocked: simultaneous custody actions and combined per-player conservation are not
+        replaced by a sequential subject invocation."
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: barrel grave at death spot holds exact drops; no ground copy"
+  - subject: plugins.graves_owner_protection
+    matrix_ids:
+      - bl:plugins.graves_owner_protection/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.graves_owner_protection'].setup
+      fixture_calls:
+        - deploy(ctx,'graves',public_after_seconds=2)
+        - p.admin(ctx,'gamerule keepInventory false')
+        - p.admin(ctx,f'give {p.client(ctx).name} minecraft:diamond 1')
+        - p.admin(ctx,f'kill {p.client(ctx).name}')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.graves_owner_protection
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:389-410
+      calls:
+        - guest.teleport_to(pos[0]+1,pos[1],pos[2])
+        - p.rich_action(ctx,'break_block',tuple(pos),index=1)
+        - p.rich_action(ctx,'respawn')
+        - p.client(ctx).teleport_to(pos[0]+1,pos[1],pos[2])
+        - p.rich_action(ctx,'close_container')
+      authoritative_commands_in_action_order:
+        - p.admin(ctx,'gamerule keepInventory false')
+        - p.admin(ctx,f'give {p.client(ctx).name} minecraft:diamond 1')
+        - p.admin(ctx,f'kill {p.client(ctx).name}')
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.check(ctx,'private grave denies guest',p.observe(ctx,'screen.kind',1),'game')
+        - p.block_is(ctx,pos,'minecraft:barrel')
+        - p.check(ctx,'owner can open',p.observe(ctx,'menu.kind'),'generic_9x3')
+        - p.check(ctx,'public grave admits guest',p.observe(ctx,'menu.kind',1),'generic_9x3')
+      delegated_helpers:
+        - deploy(ctx,'graves',public_after_seconds=2)
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: refused until public; owner can loot"
+  - subject: plugins.perm_check_node
+    matrix_ids:
+      - bl:plugins.perm_check_node/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.perm_check_node'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-permissions','solaris-essentials',groups={'guest':[], 'member':['solaris.essentials.use','matrix.build@plot']},default_group='guest')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.perm_check_node
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:78-88
+      calls:
+        - p.rich_action(ctx,'operator_plugin_command',f'perm user {p.observe(ctx,"uuid")} set member')
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.response(ctx,'perm check solaris.essentials.use',r'Permission denied\.')
+        - p.response(ctx,'sethome matrix',r'(?i)permission|unknown')
+        - p.check(ctx,'denial leaves pose',p.position(ctx),before)
+        - p.response(ctx,'perm check solaris.essentials.use',r'Permission granted\.')
+        - p.response(ctx,'perm check matrix.build plot',r'Permission granted\.')
+        - p.response(ctx,'perm check matrix.build other',r'Permission denied\.')
+        - p.response(ctx,'sethome matrix',r'matrix saved\.')
+      delegated_helpers:
+        - deploy(ctx,'solaris-permissions','solaris-essentials',groups={'guest':[], 'member':['solaris.essentials.use','matrix.build@plot']},default_group='guest')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: true/false per group; denies essentials sethome without solaris.essentials.use"
+  - subject: plugins.perm_groups_user_set
+    matrix_ids:
+      - bl:plugins.perm_groups_user_set/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.perm_groups_user_set'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-permissions',groups={'guest':[], 'member':['solaris.essentials.use']},default_group='guest')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.perm_groups_user_set
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:68-75
+      calls:
+        - p.restart(ctx)
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.response(ctx,'perm groups',r'Groups:.*guest.*member')
+        - p.response(ctx,'perm user me set member',r'Group set to member\.')
+        - p.response(ctx,'perm user me list',r'is member\.')
+        - p.response(ctx,'perm user me list',r'is member\.')
+        - p.response(ctx,'perm check solaris.essentials.use',r'Permission granted\.')
+      delegated_helpers:
+        - deploy(ctx,'solaris-permissions',groups={'guest':[], 'member':['solaris.essentials.use']},default_group='guest')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: group assignment persisted; command gates follow nodes"
+  - subject: plugins.plugin_command_tree
+    matrix_ids:
+      - bl:plugins.plugin_command_tree/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.plugin_command_tree'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-essentials','solaris-permissions')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.plugin_command_tree
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:450-459
+      calls:
+        - p.rich_action(ctx,'command_tree_for_permission',level)
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.test(ctx,'plugin msg advertised', 'msg' in roots,roots)
+        - p.check(ctx,'one owner for msg root',roots.count('msg'),1)
+        - p.check(ctx,'setwarp operator visibility','setwarp' in roots,level>=2)
+        - p.response(ctx,'msg '+other.name+' matrix-owned-root',r'\[to '+other.name+r'\] matrix-owned-root')
+      delegated_helpers:
+        - deploy(ctx,'solaris-essentials','solaris-permissions')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: plugin roots advertised per permission; core root shadowed when plugin owns it"
+  - subject: plugins.plugin_startup_fail_closed
+    matrix_ids:
+      - bl:plugins.plugin_startup_fail_closed/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.plugin_startup_fail_closed'].setup
+      fixture_calls:
+        - p.fixture(ctx,'plugin_invalid_startup',case=case,isolated=True)
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.plugin_startup_fail_closed
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:413-418
+      calls: []
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.test(ctx,case+' nonzero exit',receipt['exit_code']!=0,receipt)
+        - p.test(ctx,case+' actionable reason',pattern in receipt['stderr'],receipt['stderr'])
+        - p.check(ctx,case+' no gameplay admission',receipt['play_connections'],0)
+      delegated_helpers: []
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: startup refuses with clear error"
+  - subject: plugins.plugin_storage_persistence
+    matrix_ids:
+      - bl:plugins.plugin_storage_persistence/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.plugin_storage_persistence'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-essentials','solaris-economy',starting_balance=100)
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.plugin_storage_persistence
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:436-447
+      calls:
+        - p.restart(ctx)
+        - p.client(ctx).teleport_to(home[0]+5,home[1],home[2])
+        - p.client(ctx).command('home matrix')
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.response(ctx,'sethome matrix',r'matrix saved\.')
+        - p.response(ctx,f'pay {target} 7 persist26520',r'Paid 7 ')
+        - "p.response(ctx,'money',r'Balance: 93 ')"
+        - "p.response(ctx,'money',r'Balance: 107 ',index=1)"
+        - p.at(ctx,home)
+      delegated_helpers:
+        - deploy(ctx,'solaris-essentials','solaris-economy',starting_balance=100)
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: storage restored exactly"
+  - subject: plugins.plugin_trap_isolation
+    matrix_ids:
+      - bl:plugins.plugin_trap_isolation/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.plugin_trap_isolation'].setup
+      fixture_calls:
+        - deploy(ctx,'harness-trapping-guest')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.plugin_trap_isolation
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:421-433
+      calls:
+        - p.client(ctx).chat('matrix-trigger-trap')
+        - p.ticks(ctx,20)
+        - p.client(ctx).chat('matrix-after-trap')
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.test(ctx,'server ticks after guest trap',after>before,{'before':before,'after':after})
+        - p.check(ctx,'trap isolated',state['isolated'],True)
+        - p.test(ctx,'trap diagnostic',bool(state['trap_message']),state)
+        - p.test(ctx,'healthy session continues',True,'chat echoed after trapped guest')
+      delegated_helpers:
+        - deploy(ctx,'harness-trapping-guest')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: server keeps ticking; plugin disabled/isolated with log"
+  - subject: plugins.towns_create_info
+    matrix_ids:
+      - bl:plugins.towns_create_info/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.towns_create_info'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-towns')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.towns_create_info
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:196-204
+      calls: []
+      authoritative_commands_in_action_order: []
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.response(ctx,'town create matrix',r'Town matrix created\.')
+        - "p.response(ctx, 'town info',\n               r'matrix: 1 members, 0 claims\\. 0 trusted guests, doors members-only\\\
+          .')"
+        - p.response(ctx, 'town claim', r'Chunk claimed for matrix\.')
+        - "p.response(ctx, 'town info',\n               r'matrix: 1 members, 1 claims\\. 0 trusted guests, doors members-only\\\
+          .')"
+        - p.response(ctx, 'town create matrix_second', r'Cannot create that town\.')
+      delegated_helpers:
+        - deploy(ctx,'solaris-towns')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text:
+      "reference: 'Town <name> created.' with the creator as leader and 0 claims; info prints
+      exactly '<name>: 1 members, 0 claims. 0 trusted guests, doors members-only.' (counts only, never an owner
+      uuid); claim answers 'Chunk claimed for <name>.' and info then shows 1 claims; a second create by a town member
+      answers 'Cannot create that town.' (solaris-towns lib.rs create/info/claim; live wasm == monitor-plugins build)"
+  - subject: plugins.towns_protection
+    matrix_ids:
+      - bl:plugins.towns_protection/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0
+    preconditions:
+      setup_callable: plugins.ADAPTERS['plugins.towns_protection'].setup
+      fixture_calls:
+        - deploy(ctx,'solaris-towns')
+        - p.arena(ctx)
+        - p.admin(ctx,f'give {other.name} minecraft:stone 4')
+        - p.admin(ctx,f'setblock {x+2} {y} {z+2} minecraft:chest')
+        - p.admin(ctx,f'give {other.name} minecraft:flint_and_steel 1')
+        - p.admin(ctx,f'summon minecraft:pig {x+3} {y} {z+2}')
+        - p.admin(ctx,f'setblock {x+2} {y} {z+3} minecraft:oak_trapdoor')
+      context:
+        All matrix factors supplied by shared driver; actor mode/dimension/permission not overridden during
+        setup.
+    actions:
+      callable: plugins.towns_protection
+      source: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:207-242
+      calls:
+        - other.teleport_to(x,y,z+2)
+        - p.rich_action(ctx,'select_inventory_item','minecraft:stone',index=1)
+        - p.use(ctx,(x+1,y-1,z+2),index=1)
+        - p.rich_action(ctx,'select_inventory_item','minecraft:flint_and_steel',index=1)
+        - p.use(ctx,(x+1,y-1,z+3),index=1)
+        - p.rich_action(ctx,'find_entity','minecraft:pig',index=1)
+        - p.rich_action(ctx,'entity_state',pig)
+        - other.attack(pig)
+        - p.rich_action(ctx,'entity_state',pig)
+        - p.rich_action(ctx,'select_inventory_item','minecraft:stone',index=1)
+        - p.use(ctx,(x+1,y-1,z+2),index=1)
+        - p.use(ctx,(x+2,y,z+3),index=1)
+      authoritative_commands_in_action_order:
+        - p.admin(ctx,f'give {other.name} minecraft:stone 4')
+        - p.admin(ctx,f'setblock {x+2} {y} {z+2} minecraft:chest')
+        - p.admin(ctx,f'give {other.name} minecraft:flint_and_steel 1')
+        - p.admin(ctx,f'summon minecraft:pig {x+3} {y} {z+2}')
+        - p.admin(ctx,f'setblock {x+2} {y} {z+3} minecraft:oak_trapdoor')
+    oracle:
+      callable: _platform.oracle
+      check_calls:
+        - p.response(ctx,'town create matrix',r'Town matrix created\.')
+        - p.block_is(ctx,(x+1,y,z+2),'minecraft:air')
+        - p.check(ctx,'denied place keeps items',p.inventory(ctx,'minecraft:stone',1),before)
+        - p.check(ctx,'guest container refused',p.observe(ctx,'screen.kind',1),'game')
+        - p.block_is(ctx,(x+1,y,z+3),'minecraft:air')
+        - p.check(ctx,'guest animal damage denied',p.rich_action(ctx,'entity_state',pig)['health'],health)
+        - p.response(ctx,'town trust '+other.name,r'(?i)trust')
+        - p.block_is(ctx,(x+1,y,z+2),'minecraft:stone')
+        - p.response(ctx,'town untrust '+other.name,r'(?i)trust')
+        - p.response(ctx,'town flag use '+('on' if allowed else 'off'),r'(?i)flag|door')
+        - p.check(ctx,'door flag '+str(allowed),after!=before,allowed)
+      delegated_helpers:
+        - deploy(ctx,'solaris-towns')
+    expected_contract: Solaris extension; no vanilla analogue
+    server_gap: []
+    implementation_class: complete_adapter
+    subject_oracle_text: "reference: guest refused w/o item loss; trusted allowed; flag toggles use"
+receipt_policy:
+  Index of shared Python Adapter callables, not an interpreter. Capability requests are not live pass
+  evidence; consult canonical receipts and ledger.
+helper_sources:
+  deploy: /run/media/kaiserroman/games/solaris-work/wt/dom-platform/tools/harness/matrix_domains/plugins.py:15-65
+bundle_policy:
+  The deployed chisel and computer bundles are optional. The required-bundle negative case changes
+  only an isolated fixture copy. A consenting Loader receives custom assets; vanilla joins and sees the chisel stick
+  carrier. Stale chisel README refusal text is not authoritative.
+adapter_revision: 794c8ff5

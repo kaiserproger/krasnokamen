@@ -16,11 +16,12 @@ import struct
 import threading
 import zlib
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-LEVEL_CHUNK_WITH_LIGHT = 0x2D
-LIGHT_UPDATE = 0x30
-FORGET_LEVEL_CHUNK = 0x25
+# Local 26.3 reports/packets.json (45 is KeepAlive, not chunk data).
+LEVEL_CHUNK_WITH_LIGHT = 0x2E
+LIGHT_UPDATE = 0x31
+FORGET_LEVEL_CHUNK = 0x26
 LAYER_BYTES = 2048
 MIN_Y = -64
 
@@ -82,13 +83,14 @@ class Reader:
             raise ValueError(f"unknown NBT tag {kind}")
 
 
-def _bits(longs: list[int]) -> list[int]:
-    return [index * 64 + bit for index, word in enumerate(longs) for bit in range(64)
-            if (word & 0xFFFFFFFFFFFFFFFF) >> bit & 1]
+def _bits(values: bytes) -> list[int]:
+    return [index * 8 + bit for index, value in enumerate(values) for bit in range(8)
+            if value >> bit & 1]
 
 
 def read_light(reader: Reader) -> dict[str, Any]:
-    masks = [reader.longs() for _ in range(4)]
+    # Vanilla 26.3 ByteBufCodecs.BIT_SET uses readByteArray/BitSet.valueOf.
+    masks = [reader.byte_array() for _ in range(4)]
     lists = []
     for mask in masks[:2]:
         layers = [reader.byte_array() for _ in range(reader.varint())]
@@ -207,9 +209,15 @@ class WireLight:
 class LightWireProxy:
     """Unmodified forwarding listener; every server Play light packet feeds `WireLight`."""
 
-    def __init__(self, server_port: int, artifact: Path) -> None:
+    def __init__(self, server_port: int, artifact: Path,
+                 packet_observer: Callable[[WireLight, str, int, bytes], None] | None = None,
+                 client_packet_observer: Callable[[WireLight, str, int, bytes], None] | None = None,
+                 *, decode_light: bool = True) -> None:
         self.server_port = server_port
         self.path = artifact / "light-wire-trace.json"
+        self.packet_observer = packet_observer
+        self.client_packet_observer = client_packet_observer
+        self.decode_light = decode_light
         self.lock = threading.Lock()
         self.connections: list[WireLight] = []
         self.errors: list[str] = []
@@ -245,6 +253,7 @@ class LightWireProxy:
         try:
             with client, socket.create_connection(("127.0.0.1", self.server_port), timeout=10) as server:
                 buffer = bytearray()
+                client_buffer = bytearray() if self.client_packet_observer is not None else None
                 phase, compressed = "login", False
                 while True:
                     ready = select.select([client, server, self.wake], [], [])[0]
@@ -257,6 +266,9 @@ class LightWireProxy:
                         if not data:
                             return
                         if source is client:
+                            if client_buffer is not None:
+                                client_buffer.extend(data)
+                                self._frames(client_buffer, wire, phase, compressed, serverbound=True)
                             target.sendall(data)
                             continue
                         buffer.extend(data)
@@ -267,7 +279,8 @@ class LightWireProxy:
         except Exception as error:
             self.errors.append(f"{type(error).__name__}: {error}")
 
-    def _frames(self, buffer: bytearray, wire: WireLight, phase: str, compressed: bool) -> tuple[str, bool]:
+    def _frames(self, buffer: bytearray, wire: WireLight, phase: str, compressed: bool,
+                *, serverbound: bool = False) -> tuple[str, bool]:
         while True:
             try:
                 header = Reader(bytes(buffer[:5]))
@@ -287,13 +300,20 @@ class LightWireProxy:
             reader = Reader(body)
             packet_id = reader.varint()
             payload = body[reader.offset:]
+            if serverbound:
+                with self.lock:
+                    self.client_packet_observer(wire, phase, packet_id, payload)
+                continue
             with self.lock:
-                if phase == "play" and packet_id == LEVEL_CHUNK_WITH_LIGHT:
-                    wire.chunk_packet(payload)
-                elif phase == "play" and packet_id == LIGHT_UPDATE:
-                    wire.light_packet(payload)
-                elif phase == "play" and packet_id == FORGET_LEVEL_CHUNK:
-                    wire.forget_packet(payload)
+                if self.packet_observer is not None:
+                    self.packet_observer(wire, phase, packet_id, payload)
+                if self.decode_light and phase == "play":
+                    if packet_id == LEVEL_CHUNK_WITH_LIGHT:
+                        wire.chunk_packet(payload)
+                    elif packet_id == LIGHT_UPDATE:
+                        wire.light_packet(payload)
+                    elif packet_id == FORGET_LEVEL_CHUNK:
+                        wire.forget_packet(payload)
             if phase == "login" and packet_id == 3:
                 compressed = True
             elif phase == "login" and packet_id == 2:

@@ -1,0 +1,3 @@
+#!/bin/sh
+# End a task's lease: task-release <task-id> [--agent <name>] (see task-claim).
+exec python3 "$(cd "$(dirname "$0")" && pwd)/task-claim" --release "$@"

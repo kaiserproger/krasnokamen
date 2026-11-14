@@ -1,0 +1,345 @@
+schema: solaris-world-adapter-index/1
+domain: entities_misc
+note:
+  Documentation index only; execution is the shared Python Adapter interface, not a YAML DSL. Registration is
+  not coverage. Original matrix contexts and all oracle clauses remain acceptance obligations.
+subjects_specified: 11
+matrix_rows: 27
+adapter_path: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py
+subjects:
+  - id: entities_misc.boats
+    matrix_ids:
+      - pw:entities_misc.boats/fabric_solaris_loader/survival/overworld/normal/N8/reconnect_mid_action/crash_kill9_wal_replay/op_3
+      - tr.disconnect_x_transient_state.reconnect_mid_action:entities_misc.boats/native_linux/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_transient_state.duplicate_login:entities_misc.boats/protocol_bot/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/vehicles/mod.rs
+      - crates/mc-core/src/vehicles/motion.rs
+      - crates/mc-core/src/entities.rs
+      - crates/mc-core/src/entity_controls.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:7-24
+    actions:
+      callable: tools.harness.matrix_domains.entities_misc.boats
+      optional_client_verbs:
+        - sneak
+        - vehicle_move
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:7-24
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Boat#Behavior
+        - https://minecraft.wiki/w/Boat#Breaking
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: entities_misc.minecarts
+    matrix_ids:
+      - pw:entities_misc.minecarts/forge_solaris_loader/survival/overworld/normal/N8/slow_reader_backpressure/clean_restart_mid_action/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/vehicles/mod.rs
+      - crates/mc-core/src/entities.rs
+      - crates/mc-core/src/entity_controls.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:27-40
+    actions:
+      callable: tools.harness.matrix_domains.entities_misc.minecarts
+      optional_client_verbs:
+        - sneak
+        - vehicle_move
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:27-40
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Minecart
+        - https://minecraft.wiki/w/Minecart_with_Furnace
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: entities_misc.horses_mounts
+    matrix_ids:
+      - pw:entities_misc.horses_mounts/neoforge_solaris_loader/survival/the_nether/peaceful/2/slow_reader_backpressure/pause_when_empty_resume/op_1
+      - tr.dupe.two_players_take_same_tick:entities_misc.horses_mounts/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.destroy_during_interaction:entities_misc.horses_mounts/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.restart_after_interaction:entities_misc.horses_mounts/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.clean_restart_mid_action:entities_misc.horses_mounts/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inventory.crash_kill9_wal_replay:entities_misc.horses_mounts/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+      - tr.restart_x_inventory.hot_backup_during_action:entities_misc.horses_mounts/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
+      - tr.disconnect_x_transient_state.reconnect_mid_action:entities_misc.horses_mounts/vanilla_java_26_1_2/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+      - tr.disconnect_x_transient_state.duplicate_login:entities_misc.horses_mounts/native_linux/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/mounts.rs
+      - crates/mc-core/src/taming.rs
+      - crates/mc-core/src/entities.rs
+      - crates/mc-core/src/entity_controls.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:43-58
+    actions:
+      callable: tools.harness.matrix_domains.entities_misc.horses_mounts
+      optional_client_verbs:
+        - jump
+        - sneak
+        - vehicle_move
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:43-58
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Camel
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: entities_misc.leash
+    matrix_ids:
+      - pw:entities_misc.leash/fabric_distant_horizons/spectator/the_nether/peaceful/2/duplicate_login/clean_restart_mid_action/op_1
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/leash.rs
+      - crates/mc-core/src/entities.rs
+      - crates/mc-core/src/entity_controls.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:61-72
+    actions:
+      callable: tools.harness.matrix_domains.entities_misc.leash
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:61-72
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Lead
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: entities_misc.armor_stand_entity
+    matrix_ids:
+      - pw:entities_misc.armor_stand_entity/fabric_svc/adventure/the_nether/peaceful/1/duplicate_login/steady/op_4
+      - tr.dupe.two_players_take_same_tick:entities_misc.armor_stand_entity/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.destroy_during_interaction:entities_misc.armor_stand_entity/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.restart_after_interaction:entities_misc.armor_stand_entity/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/armor_stand.rs
+      - crates/mc-core/src/entities.rs
+      - crates/mc-core/src/entity_controls.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:75-87
+    actions:
+      callable: tools.harness.matrix_domains.entities_misc.armor_stand_entity
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:75-87
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Armor_Stand
+        - https://minecraft.wiki/w/Armor_Stand#Breaking
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: entities_misc.item_frame_entity
+    matrix_ids:
+      - pw:entities_misc.item_frame_entity/native_linux/creative/overworld/peaceful/N8/normal/save_all_checkpoint/op_1
+      - tr.dupe.two_players_take_same_tick:entities_misc.item_frame_entity/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
+      - tr.dupe.destroy_during_interaction:entities_misc.item_frame_entity/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+      - tr.dupe.restart_after_interaction:entities_misc.item_frame_entity/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/item_frame.rs
+      - crates/mc-core/src/entities.rs
+      - crates/mc-core/src/entity_controls.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:90-102
+    actions:
+      callable: tools.harness.matrix_domains.entities_misc.item_frame_entity
+      optional_client_verbs:
+        - break_block
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:90-102
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Item_Frame
+        - https://minecraft.wiki/w/Item_Frame#Breaking
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: entities_misc.experience_orbs
+    matrix_ids:
+      - pw:entities_misc.experience_orbs/protocol_bot/adventure/overworld/easy/N8/normal/clean_restart_mid_action/op_2
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/experience_orbs.rs
+      - crates/mc-core/src/entities.rs
+      - crates/mc-core/src/entity_controls.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:105-127
+    actions:
+      callable: tools.harness.matrix_domains.entities_misc.experience_orbs
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:105-127
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Experience#Experience_orbs
+        - https://minecraft.wiki/w/Mending
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: entities_misc.display_interaction_markers
+    matrix_ids:
+      - pw:entities_misc.display_interaction_markers/vanilla_java_26_1_2/creative/overworld/hard/N8/malformed_or_stale_packet/save_all_checkpoint/non_op_0
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/command_summon.rs
+      - crates/mc-core/src/entities.rs
+      - crates/mc-core/src/entity_controls.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:130-137
+    actions:
+      callable: tools.harness.matrix_domains.entities_misc.display_interaction_markers
+      optional_client_verbs: []
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:130-137
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Interaction
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: entities_misc.area_effect_cloud
+    matrix_ids:
+      - pw:entities_misc.area_effect_cloud/native_windows/spectator/the_end/easy/2/slow_reader_backpressure/hot_backup_during_action/op_1
+    status: adapter_authored_not_matrix_verified
+    server_evidence:
+      - crates/mc-core/src/entities.rs
+      - crates/mc-core/src/entity_controls.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:140-149
+    actions:
+      callable: tools.harness.matrix_domains.entities_misc.area_effect_cloud
+      optional_client_verbs:
+        - use_item
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:140-149
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Area_Effect_Cloud
+        - https://minecraft.wiki/w/Lingering_Potion
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence: []
+  - id: entities_misc.paintings
+    matrix_ids:
+      - bl:entities_misc.paintings/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: server_gap
+    server_evidence:
+      - crates/mc-core/src/entities.rs
+      - crates/mc-core/src/entity_controls.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:152-162
+    actions:
+      callable: tools.harness.matrix_domains.entities_misc.paintings
+      optional_client_verbs:
+        - break_block
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:152-162
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Painting
+        - https://minecraft.wiki/w/Painting#Breaking
+        - https://minecraft.wiki/w/Painting#Placement
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence:
+      - scenarios/subjects4.py:99
+      - "crates/mc-core/src: no painting placement/attachment implementation hits"
+  - id: entities_misc.happy_ghast_harness
+    matrix_ids:
+      - bl:entities_misc.happy_ghast_harness/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+    status: server_gap
+    server_evidence:
+      - crates/mc-core/src/entities.rs
+      - crates/mc-core/src/entity_controls.rs
+    preconditions:
+      shared_setup: tools.harness.matrix_domains._world.setup
+      fixture:
+        forceload 0..47 x 0..31; stone floor y99; cleared y100..115; actor teleported, mode/dimension/difficulty/permission
+        preserved
+      subject_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:165-180
+    actions:
+      callable: tools.harness.matrix_domains.entities_misc.happy_ghast_harness
+      optional_client_verbs:
+        - vehicle_move
+      context_boundary: shared MatrixContext.boundary exactly once after first stimulus
+    machine_oracle:
+      callable: tools.harness.matrix_domains._world.oracle
+      checks_defined_in: /run/media/kaiserroman/games/solaris-work/wt/dom-world/tools/harness/matrix_domains/entities_misc.py:165-180
+      expected_version: Java 26.1.2
+      sources:
+        - https://minecraft.wiki/w/Happy_Ghast#Riding
+      unavailable_observation_policy: raise MissingCapability, never pass
+      optional_snapshot_fields: []
+    server_gap_evidence:
+      - scenarios/subjects4.py:100
+      - crates/mc-core/src/mounts.rs:14-20 (single rider)
+      - crates/mc-core/src/mounts.rs:116-125 (saddle admission, not harness)

@@ -1,0 +1,137 @@
+{
+  "seed": 100,
+  "server_view_distance": 4,
+  "client_settings": {
+    "render_distance": 8,
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule advance_weather false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "cmd": "weather clear"
+    },
+    {
+      "tp": [
+        1000.5,
+        175,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 200
+    },
+    {
+      "cmd": "fill 995 159 995 1005 159 1005 minecraft:grass_block"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 165 1005 minecraft:air"
+    },
+    {
+      "cmd": "setblock 1000 161 1001 minecraft:obsidian"
+    },
+    {
+      "cmd": "give @s minecraft:diamond_pickaxe 1"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        998.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 100
+    },
+    {
+      "cmd": "gamemode survival"
+    },
+    {
+      "hotbar": {
+        "slot": 0
+      }
+    },
+    {
+      "shot": "tool-far"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "read_block": {
+        "name": "target-before",
+        "args": {
+          "x": 1000,
+          "y": 161,
+          "z": 1001
+        }
+      }
+    },
+    {
+      "observe": "tool-before"
+    },
+    {
+      "shot": "tool-rest"
+    },
+    {
+      "tool_wall_visible": "tool-rest"
+    },
+    {
+      "shot": "tool-attack-1",
+      "hold_keys": [
+        "attack"
+      ]
+    },
+    {
+      "shot": "tool-attack-2",
+      "hold_keys": [
+        "attack"
+      ]
+    },
+    {
+      "shot": "tool-attack-3",
+      "hold_keys": [
+        "attack"
+      ]
+    },
+    {
+      "observe": "tool-after"
+    },
+    {
+      "read_block": {
+        "name": "target-after",
+        "args": {
+          "x": 1000,
+          "y": 161,
+          "z": 1001
+        }
+      }
+    }
+  ]
+}

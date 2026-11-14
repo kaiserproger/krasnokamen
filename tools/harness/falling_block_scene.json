@@ -1,0 +1,78 @@
+{
+  "seed": 100,
+  "server_view_distance": 4,
+  "client_settings": {
+    "render_distance": 8
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "cmd": "weather clear"
+    },
+    {
+      "tp": [
+        1000.5,
+        175,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 120
+    },
+    {
+      "cmd": "fill 984 159 984 1016 159 1016 minecraft:grass_block"
+    },
+    {
+      "cmd": "fill 984 160 984 1016 175 1016 minecraft:air"
+    },
+    {
+      "cmd": "fill 984 176 984 1016 190 1016 minecraft:air"
+    },
+    {
+      "cmd": "fill 990 160 998 1010 185 998 minecraft:black_concrete"
+    },
+    {
+      "cmd": "fill 999 174 1006 1001 174 1008 minecraft:stone"
+    },
+    {
+      "tp": [
+        1000.5,
+        175,
+        1007.5,
+        180,
+        -23
+      ]
+    },
+    {
+      "cmd": "setblock 1000 177 1000 minecraft:stone"
+    },
+    {
+      "cmd": "setblock 1000 178 1000 minecraft:sand"
+    },
+    {
+      "cmd": "tick rate 2"
+    },
+    {
+      "cmd": "setblock 1000 177 1000 minecraft:air"
+    },
+    {
+      "falling_block_capture": "falling"
+    }
+  ]
+}

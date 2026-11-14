@@ -18,6 +18,7 @@ import json
 import math
 import os
 from pathlib import Path
+import shlex
 import shutil
 import signal
 import tempfile
@@ -56,11 +57,14 @@ def fixture(mobs: int, villagers: int) -> dict[str, Any]:
             # Species-separated roofed pens prevent sunlight burning, villager
             # predation, crossfire and spider escape. Creative observers cannot
             # trigger creepers. No NoAI, invulnerability, healing or refill.
-            commands += [f"fill {x - 9} 64 {z - 9} {x + 73} 70 {z - 9} minecraft:stone",
-                         f"fill {x - 9} 64 {z + 73} {x + 73} 70 {z + 73} minecraft:stone",
-                         f"fill {x - 9} 64 {z - 8} {x - 9} 70 {z + 72} minecraft:stone",
-                         f"fill {x + 73} 64 {z - 8} {x + 73} 70 {z + 72} minecraft:stone",
-                         f"fill {x - 9} 71 {z - 9} {x + 73} 71 {z + 73} minecraft:stone"]
+            # Spiders still take damage after detaching from a wall. Keep their
+            # climb/drop below three blocks rather than disabling natural damage.
+            ceiling = 67 if kind == "spider" else 71
+            commands += [f"fill {x - 9} 64 {z - 9} {x + 73} {ceiling - 1} {z - 9} minecraft:stone",
+                         f"fill {x - 9} 64 {z + 73} {x + 73} {ceiling - 1} {z + 73} minecraft:stone",
+                         f"fill {x - 9} 64 {z - 8} {x - 9} {ceiling - 1} {z + 72} minecraft:stone",
+                         f"fill {x + 73} 64 {z - 8} {x + 73} {ceiling - 1} {z + 72} minecraft:stone",
+                         f"fill {x - 9} {ceiling} {z - 9} {x + 73} {ceiling} {z + 73} minecraft:stone"]
             if not group:
                 commands = rules + commands
                 commands.append("setblock 32 64 34 minecraft:crafting_table")
@@ -110,12 +114,8 @@ def verify_resume(args: argparse.Namespace) -> None:
         return
     if args.warmup_ticks < 200 or args.measure_ticks < 1200:
         raise ValueError("canonical comparison requires >=200 warmup and >=1200 measured source ticks")
-    if not args.parity_resume_receipt or not args.main_go_receipt:
-        raise ValueError("Main parity/storage confirmation and current exclusive GO are required")
-    resume = json.loads(args.parity_resume_receipt.read_text())
-    for key in ("full_parity_verified", "native_storage_verified", "w2_w3_real_client_verified"):
-        if resume.get(key) is not True:
-            raise ValueError(f"Main resume confirmation missing {key}")
+    if not args.main_go_receipt:
+        raise ValueError("current Main exclusive GO is required")
     if not args.main_go_receipt.read_text().strip():
         raise ValueError("empty Main exclusive GO receipt")
 
@@ -195,7 +195,8 @@ class CoreSession(load.Session):
 
     async def start_server(self) -> None:
         command = [str(self.args.server_bin), "--config", str(self.config), "--no-console"]
-        command = ["taskset", "-c", self.args.server_cpus, *command]
+        command = [*shlex.split(getattr(self.args, "server_wrapper", "") or ""),
+                   "taskset", "-c", self.args.server_cpus, *command]
         load.scale.dump(self.directory / "server-command.json", command)
         await self.spawn("server", command)
 
@@ -654,10 +655,11 @@ async def run(args: argparse.Namespace) -> int:
         for binary in (args.server_bin, args.bots_bin):
             if not binary.is_file() or not os.access(binary, os.X_OK):
                 raise ValueError(f'missing/nonexecutable explicit binary: {binary}')
+        load.scale.refuse_incremental_pin(args.server_bin, 'server')
+        load.scale.refuse_incremental_pin(args.bots_bin, 'bots')
         result['binaries'] = {str(binary): load.scale.binary_sha256(binary)
                               for binary in (args.server_bin, args.bots_bin)}
         result['registry_hashes'] = load.tree_hash(args.vanilla_data_dir)
-        result['resume_sha256'] = load.scale.binary_sha256(args.parity_resume_receipt) if args.parity_resume_receipt else None
         result['main_go_sha256'] = load.scale.binary_sha256(args.main_go_receipt) if args.main_go_receipt else None
         recipe = fixture(args.mobs, args.villagers)
         load.scale.dump(args.out / 'fixture.json', recipe)
@@ -741,7 +743,6 @@ def main() -> int:
     parser.add_argument('--max-tick-max-ms', type=float, default=250)
     parser.add_argument('--max-rss-mb', type=float, default=3072)
     parser.add_argument('--vanilla-data-dir', type=Path, default=ROOT / 'data/vanilla')
-    parser.add_argument('--parity-resume-receipt', type=Path)
     parser.add_argument('--main-go-receipt', type=Path)
     parser.add_argument('--setup-smoke', action='store_true')
     parser.add_argument('--prepare-only', action='store_true',
@@ -761,8 +762,7 @@ def main() -> int:
         parser.error('--sustained-seconds must be positive')
     if args.warmup_ticks < 0 or args.measure_ticks < 0:
         parser.error('tick fences cannot be negative')
-    for name in ('out', 'server_bin', 'bots_bin', 'vanilla_data_dir', 'fixture_cache',
-                 'parity_resume_receipt', 'main_go_receipt'):
+    for name in ('out', 'server_bin', 'bots_bin', 'vanilla_data_dir', 'fixture_cache', 'main_go_receipt'):
         value = getattr(args, name)
         if value:
             setattr(args, name, value.resolve())

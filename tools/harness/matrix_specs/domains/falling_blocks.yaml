@@ -1,0 +1,311 @@
+schema: solaris-domain-adapter-index/1
+domain: falling_blocks
+subjects_specified: 6
+vanilla_provenance: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/version.json
+shared_interface: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_api.py
+execution: canonical tools.harness run protocol-matrix/java/native; no second runner or DSL
+observation_contract: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py
+missing_query_capabilities_on_original_binary:
+  - data_get_entity
+  - data_get_block
+sync:
+  Exact received BlockChangedAck sequence fences use/mine admission; machine-checkable world/inventory oracles
+  determine success. No revision or submission-only ACK inference. Fixtures wait received block state.
+subjects:
+  - subject: falling_blocks.sand_gravel
+    matrix_ids:
+      - pw:falling_blocks.sand_gravel/vanilla_java_26_1_2/creative/overworld/easy/1/slow_reader_backpressure/save_all_checkpoint/non_op_0
+      - tr.restart_x_inflight.clean_restart_mid_action:falling_blocks.sand_gravel/vanilla_java_26_1_2/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inflight.crash_kill9_wal_replay:falling_blocks.sand_gravel/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: falls, lands as block; breaks on torch/slab and drops item
+    vanilla_source:
+      - https://minecraft.wiki/w/Falling_Block
+    solaris_sources: &id001
+      - core:falling.rs
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
+      function: sand_gravel
+      line: 10
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','creative')
+        - command(ctx,'kill @e[type=item]')
+        - setblock(ctx,'stone',(1,143,0))
+        - setblock(ctx,support)
+        - setblock(ctx,'stone',(1,148,0))
+        - setblock(ctx,material,(1,149,0))
+        - equip(ctx,'diamond_pickaxe')
+        - command(ctx,'fill 1 144 0 1 150 0 air')
+    actions:
+      - mine(ctx,(1,148,0))
+      - ticks(ctx,60)
+    machine_checks:
+      - block(ctx,(1,145,0),material)
+      - block(ctx,(1,145,0),'air')
+      - check(ctx,'fall_break_item:'+material,drops(ctx,material)+count(ctx,material)==1)
+      - check(ctx,'no_falling_ghost',len(entities(ctx,'falling_block'))==0)
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities: []
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - creative
+  - subject: falling_blocks.suspicious_blocks
+    matrix_ids:
+      - pw:falling_blocks.suspicious_blocks/forge_solaris_loader/adventure/the_nether/normal/2/slow_reader_backpressure/crash_kill9_wal_replay/non_op_0
+    status: server_gap
+    server_gap:
+      - FALL-002
+    vanilla_version: 26.1.2
+    expected: falls/breaks without loot; brushing yields loot
+    vanilla_source:
+      - https://minecraft.wiki/w/Suspicious_Sand
+    solaris_sources:
+      - core:plants.rs
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
+      function: suspicious_blocks
+      line: 24
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','creative')
+        - setblock(ctx,'stone',(1,148,0))
+        - setblock(ctx,material,(1,149,0))
+        - equip(ctx,'diamond_pickaxe')
+        - equip(ctx,material+'[block_entity_data={id:"minecraft:brushable_block",item:{id:"minecraft:diamond",count:1}}]')
+        - equip(ctx,'brush')
+        - command(ctx,'kill @e[type=item]')
+        - setblock(ctx,'air')
+    actions:
+      - mine(ctx,(1,148,0))
+      - ticks(ctx,60)
+      - use(ctx,(1,143,0))
+      - actor(ctx).look_at(1.5,144.5,.5)
+      - call(actor(ctx),'use_item',ticks=200)
+      - boundary(ctx)
+    machine_checks:
+      - check(ctx,'archaeology_fall_no_item:'+material,drops(ctx,material)==0 and drops(ctx,'diamond')==0)
+      - block(ctx,POS,'air')
+      - block(ctx,POS,base)
+      - check(ctx,'archaeology_loot_once',count(ctx,'diamond')+drops(ctx,'diamond')==1)
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - client:use_item
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - creative
+  - subject: falling_blocks.anvil_fall_damage
+    matrix_ids:
+      - pw:falling_blocks.anvil_fall_damage/fabric_svc/survival/the_end/easy/2/duplicate_login/clean_restart_mid_action/op_1
+      - pw:falling_blocks.anvil_fall_damage/native_windows/adventure/the_nether/peaceful/N8/normal/save_all_checkpoint/op_3
+    status: real_partial_adapter_one_cell_passed
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: falling_anvil damage by distance; anvil may chip
+    vanilla_source:
+      - https://minecraft.wiki/w/Anvil
+    solaris_sources: *id001
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
+      function: anvil_fall_damage
+      line: 38
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','adventure')
+        - command(ctx,'summon iron_golem 1.5 144 .5 {NoAI:1b}')
+        - setblock(ctx,'stone',(1,151,0))
+        - setblock(ctx,'anvil',(1,152,0))
+        - setblock(ctx,'air',(1,151,0))
+    actions:
+      - "ctx.wait_until(lambda:any(e.get('health') is not None for e in entities(ctx,'iron_golem')),\n             \
+        \      description='received golem spawn and health')"
+      - boundary(ctx)
+      - ticks(ctx,60)
+    machine_checks:
+      - check(ctx,'anvil_damage',0<before-after<=40,{'before':before,'after':after})
+      - check(ctx,'anvil_can_chip',any(block_is(ctx,POS,s) for s in ('anvil','chipped_anvil')))
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - snapshot:entities.health
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - adventure
+    observations:
+      - entity_health(ctx,'iron_golem')
+      - entity_health(ctx,'iron_golem')
+    executed_cells:
+      - id: F:falling_blocks.anvil_fall_damage/protocol_bot/survival/overworld/normal/1/normal/steady/non_op_0
+        status: pass
+        receipt: /run/media/kaiserroman/games/solaris-work/scenarios/runs/DomBlocks/20261024T042629-protocol-matrix-kco6fqjz/protocol-result.json
+        checks: 2
+        observed_health_before: 100.0
+        observed_health_after: 86.0
+  - subject: falling_blocks.dragon_egg
+    matrix_ids:
+      - pw:falling_blocks.dragon_egg/protocol_bot/creative/overworld/normal/1/reconnect_mid_action/hot_backup_during_action/op_2
+      - pw:falling_blocks.dragon_egg/fabric_solaris_loader/survival/the_end/easy/N8/normal/clean_restart_mid_action/non_op_0
+    status: server_gap
+    server_gap:
+      - FALL-001
+    vanilla_version: 26.1.2
+    expected: teleports on click; falls
+    vanilla_source:
+      - https://minecraft.wiki/w/Dragon_Egg
+    solaris_sources: *id001
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
+      function: dragon_egg
+      line: 50
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','creative')
+        - equip(ctx)
+        - setblock(ctx,'dragon_egg')
+        - setblock(ctx,'stone',(1,148,0))
+        - setblock(ctx,'dragon_egg',(1,149,0))
+        - setblock(ctx,'air',(1,148,0))
+    actions:
+      - use(ctx)
+      - ticks(ctx,60)
+    machine_checks:
+      - block(ctx,POS,'air')
+      - check(ctx,'egg_teleported_once',len(eggs)==1,eggs)
+      - check(ctx,'egg_teleport_bounds',abs(pos[0]-1)<=15 and abs(pos[1]-144)<=7 and abs(pos[2])<=15,pos)
+      - block(ctx,POS,'dragon_egg')
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - snapshot:block_region
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - creative
+  - subject: falling_blocks.pointed_dripstone
+    matrix_ids:
+      - pw:falling_blocks.pointed_dripstone/neoforge_solaris_loader/spectator/the_nether/peaceful/1/normal/steady/op_3
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: falls and deals falling_stalactite damage
+    vanilla_source:
+      - https://minecraft.wiki/w/Pointed_Dripstone
+    solaris_sources: *id001
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
+      function: pointed_dripstone
+      line: 61
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - require_modes(ctx,'survival','adventure')
+        - command(ctx,'summon iron_golem 1.5 144 .5 {NoAI:1b}')
+        - setblock(ctx,'stone',(1,154,0))
+        - setblock(ctx,'pointed_dripstone[vertical_direction=down,thickness=tip]',(1,153,0))
+        - setblock(ctx,'air',(1,154,0))
+    actions:
+      - "ctx.wait_until(lambda:any(e.get('health') is not None for e in entities(ctx,'iron_golem')),\n             \
+        \      description='received golem spawn and health')"
+      - boundary(ctx)
+      - ticks(ctx,60)
+    machine_checks:
+      - check(ctx,'stalactite_damage',0<before-after<=40,{'before':before,'after':after})
+      - check(ctx,'stalactite_shattered',len(entities(ctx,'falling_block'))==0)
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - snapshot:entities.health
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes:
+      - survival
+      - adventure
+    observations:
+      - entity_health(ctx,'iron_golem')
+      - entity_health(ctx,'iron_golem')
+  - subject: falling_blocks.falling_into_void_or_unloaded
+    matrix_ids:
+      - pw:falling_blocks.falling_into_void_or_unloaded/fabric_distant_horizons/adventure/the_nether/hard/N8/malformed_or_stale_packet/pause_when_empty_resume/op_4
+      - pw:falling_blocks.falling_into_void_or_unloaded/native_linux/survival/the_end/peaceful/1/malformed_or_stale_packet/clean_restart_mid_action/op_4
+      - tr.restart_x_inflight.clean_restart_mid_action:falling_blocks.falling_into_void_or_unloaded/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+      - tr.restart_x_inflight.crash_kill9_wal_replay:falling_blocks.falling_into_void_or_unloaded/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+    status: adapter_written_unverified
+    server_gap: []
+    vanilla_version: 26.1.2
+    expected: entity removed or persisted per vanilla; no ghost block
+    vanilla_source:
+      - https://minecraft.wiki/w/Falling_Block
+    solaris_sources: *id001
+    adapter:
+      path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/falling_blocks.py
+      function: falling_into_void_or_unloaded
+      line: 73
+    preconditions:
+      common_fixture: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/_blocks.py:fixture
+      subject_calls:
+        - command(ctx,f'fill 1 {minimum} 0 1 {minimum+4} 0 air')
+        - command(ctx,f'tp {actor(ctx).name} 3.5 {minimum+2} .5')
+        - setblock(ctx,'stone',(1,minimum+2,0))
+        - setblock(ctx,'sand',(1,minimum+3,0))
+        - setblock(ctx,'air',(1,minimum+2,0))
+        - setblock(ctx,'stone',(1,154,0))
+        - setblock(ctx,'sand',(1,155,0))
+        - setblock(ctx,'air',(1,154,0))
+    actions:
+      - boundary(ctx)
+      - ticks(ctx,120)
+      - call(ctx.server,'forceload_fixture_chunk',0,0)
+      - call(ctx.server,'unload_fixture_chunk',0,0)
+      - ticks(ctx,60)
+    machine_checks:
+      - check(ctx,'void_no_falling_body',len(entities(ctx,'falling_block'))==0)
+      - check(ctx,'unloaded_entity_no_duplicate',len(entities(ctx,'falling_block'))<=1)
+      - block(ctx,POS,'sand')
+    parameterization:
+      Python loops/branches in the cited function are authoritative; this YAML is an index, never
+      an interpreter input.
+    required_capabilities:
+      - server:forceload_fixture_chunk
+      - server:unload_fixture_chunk
+    context_note:
+      Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
+      are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
+    implemented_modes: see cited adapter branch
+fixture_location: Arena floor y=143, interactions y=144; outside shop auto-open y=60..100. All ten plugins retained.
+shared_interface_revision: d4cba654
+common_required_capabilities:
+  - client:teleport_to
+  - client:read_block_state
+  - server:ensure_loaded
+  - snapshot:inventory
+  - snapshot:block_ack_sequence
+  - dashboard:simulation_tick
+adapter_commit: a7485690
+multiplayer_contract:
+  "Ordinary N2 actor+observer supported for seven simple block_interact state subjects and block_place
+  extras: exact received observer state checked. Other subjects/N8/concurrent triples remain explicit partial coverage."

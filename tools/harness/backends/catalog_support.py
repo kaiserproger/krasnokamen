@@ -15,6 +15,17 @@ def binary_sha256(path: Path) -> str:
         return hashlib.file_digest(binary, "sha256").hexdigest()
 
 
+def refuse_incremental_pin(binary: Path, kind: str) -> None:
+    """Performance windows never run an incremental release build (pin-release records `incremental`).
+
+    A binary without a pin manifest next to it carries no record and passes here; the callers that
+    require a pin (`profiles.pinned_binary`) check the manifest itself first."""
+    manifest = binary.resolve().parent / "manifest.json"
+    if manifest.is_file() and json.loads(manifest.read_text()).get("incremental"):
+        raise ValueError(f"{kind} pin is an incremental build (more codegen units, less cross-unit inlining): "
+                         "performance windows need pin-release --no-incremental")
+
+
 def dump(path: Path, value: Any) -> None:
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
@@ -48,10 +59,12 @@ def proc_sample(pid: int) -> dict[str, Any]:
     }
 
 
-def http_json(url: str, timeout: float) -> dict[str, Any]:
+def http_json(url: str, timeout: float, bearer_token: str | None = None) -> dict[str, Any]:
     # Loopback must not be routed through an operator's HTTP proxy.
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-    with opener.open(url, timeout=timeout) as response:
+    headers = {"Authorization": f"Bearer {bearer_token}"} if bearer_token is not None else {}
+    request = urllib.request.Request(url, headers=headers)
+    with opener.open(request, timeout=timeout) as response:
         value = json.load(response)
     if not isinstance(value, dict):
         raise RuntimeError(f"non-object dashboard response at {url}")

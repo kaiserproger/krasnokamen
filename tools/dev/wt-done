@@ -1,0 +1,253 @@
+#!/usr/bin/env python3
+"""Archive and remove an agent worktree: wt-done <Name> [--drop-untracked].
+
+Owner-host tool (see tools/dev/README.md). Saves everything the worktree holds
+that is not in its base as <work>/receipts/<Name>/final.patch (+ .sha256), proves
+the patch applies to a fresh checkout of the base and reproduces the same tree,
+and only then removes the worktree and its target/home directories. If anything
+cannot be verified nothing is removed.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+import wtlib as w  # noqa: E402
+
+MAX_UNTRACKED_BYTES = 100 * 1024 * 1024
+# Ignored content that is reproducible (build outputs, extracted vanilla data) or
+# gate evidence handled by keep_evidence; everything else ignored needs a decision.
+REPRODUCIBLE = (":(exclude,glob)**/target/**", ":(exclude,glob)**/__pycache__/**",
+                ":(exclude,glob)**/.gradle/**", ":(exclude,glob)**/build/**",
+                ":(exclude)data/vanilla", ":(exclude,glob)data/vanilla-*/**", ":(exclude).wt-env",
+                ":(exclude,glob)**/.analysis/**")
+# Gate evidence under .analysis/ kept per the disk rule (reports, logs, result.json,
+# patches, screenshots) plus repro drivers and scripts; worlds, caches and binaries
+# there are dropped.
+EVIDENCE_EXT = {".json", ".jsonl", ".log", ".md", ".txt", ".yaml", ".yml", ".toml",
+                ".patch", ".diff", ".png", ".jpg", ".jpeg", ".webp", ".svg", ".html",
+                ".tsv", ".csv", ".sha256",
+                ".py", ".sh", ".rs", ".js", ".java", ".kt", ".mcfunction"}
+
+
+def find_base(name: str, key: str, path: Path) -> str:
+    meta = w.RECEIPTS / name / "wt.json"
+    if meta.is_file():
+        info = json.loads(meta.read_text())
+        base = str(w.git(path, "rev-parse", "--verify", "--quiet", f"{info.get('base', '')}^{{commit}}", check=False))
+        if info.get("repo") == key and base:
+            return base
+    ref = w.default_branch_ref(key)
+    base = str(w.git(path, "merge-base", "HEAD", ref, check=False))
+    if not base:
+        raise w.ToolError(f"no recorded base (receipts/{name}/wt.json) and no merge-base with {ref}")
+    print(f"wt-done: no recorded base; using merge-base with {ref}: {base[:12]}", file=sys.stderr)
+    return base
+
+
+def verify_patch(key_repo: Path, base: str, patch: Path, expected_tree: str, name: str) -> None:
+    """Apply `patch` to a fresh checkout of base in a temporary worktree; the tree must match."""
+    w.TMP.mkdir(parents=True, exist_ok=True)
+    scratch = Path(tempfile.mkdtemp(prefix=f"wt-done-{name}-", dir=w.TMP))
+    try:
+        w.git(key_repo, "worktree", "add", "-q", "--detach", str(scratch), base)
+        if patch.stat().st_size:
+            w.git(scratch, "apply", "--binary", "--whitespace=nowarn", str(patch))
+        w.git(scratch, "add", "-A")
+        got = str(w.git(scratch, "write-tree"))
+        if got != expected_tree:
+            raise w.ToolError(f"patch does not reproduce the worktree: rebuilt tree {got}, expected {expected_tree}")
+    finally:
+        w.git(key_repo, "worktree", "remove", "--force", str(scratch), check=False)
+        w.git(key_repo, "worktree", "prune", check=False)
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def unknown_ignored(path: Path) -> list[str]:
+    """Ignored files that are neither reproducible nor .analysis evidence."""
+    raw = w.git(path, "ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--",
+                *REPRODUCIBLE, binary=True)
+    return [item.decode(errors="replace") for item in raw.split(b"\0") if item]
+
+
+def keep_evidence(path: Path, receipts: Path) -> tuple[int, int]:
+    """Copy evidence files of every .analysis dir into receipts/<Name>/analysis/<path>."""
+    raw = w.git(path, "ls-files", "--others", "--ignored", "--exclude-standard", "-z", "--",
+                ":(glob)**/.analysis/**", binary=True)
+    files = size = 0
+    for item in (entry.decode(errors="replace") for entry in raw.split(b"\0") if entry):
+        source = path / item
+        if source.is_symlink() or not source.is_file() or source.suffix.lower() not in EVIDENCE_EXT:
+            continue
+        target = receipts / "analysis" / item
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        files += 1
+        size += source.stat().st_size
+    return files, size
+
+
+def remove_dir(path: Path, within: Path) -> str:
+    if not os.path.lexists(path):
+        return "absent"
+    if path.is_symlink() or not w.is_under(path, within):
+        raise w.ToolError(f"refusing to remove {path}: not a plain directory under {within}")
+    shutil.rmtree(path)
+    return "removed"
+
+
+def check_in_use(name: str, wt: Path, force: str | None, registry: Path | None = None) -> list[dict]:
+    """Marks other owners hold on the worktree (or on paths inside it). Refuses, naming
+    the owners, unless `force` gives a reason; an override is logged in the registry.
+    The worktree's own mark (owner = its name, written by wt-new) never blocks."""
+    others = [m for m in w.marks_under(wt, w.in_use_marks(registry)) if m["owner"] != name]
+    if not others:
+        return []
+    shown = "; ".join(f"{m['owner']} ({m['kind']}: {m['path']}, since {m['since']})" for m in others)
+    if not force:
+        raise w.ToolError(f"{wt} is in use by {shown}; ask the owner to finish "
+                          f"(`in-use remove <path> --owner <owner>`), or override with --force \"<reason>\"")
+    w.in_use_append({"op": "force", "by": "wt-done", "path": w.norm_path(wt), "reason": force,
+                     "owners": sorted({m["owner"] for m in others})}, registry)
+    print(f"wt-done: --force: removing {wt} although in use by {shown} (reason logged: {force})", file=sys.stderr)
+    return others
+
+
+def release_marks(wt: Path, registry: Path | None = None) -> int:
+    """After the removal: drop every mark on the worktree, whoever holds it."""
+    marks = w.marks_under(wt, w.in_use_marks(registry))
+    for m in marks:
+        w.in_use_remove(m["path"], m["owner"], registry)
+    return len(marks)
+
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Archive and remove an agent worktree.")
+    parser.add_argument("name")
+    parser.add_argument("--drop-untracked", action="store_true",
+                        help="leave untracked (not in the index, not ignored) files out of the patch and discard them")
+    parser.add_argument("--drop-ignored", action="store_true",
+                        help="discard ignored files that are neither reproducible nor .analysis evidence")
+    parser.add_argument("--force", metavar="REASON", default=None,
+                        help="remove although another owner registered the worktree in use (the reason is logged)")
+    args = parser.parse_args()
+    if args.force is not None and not args.force.strip():
+        raise w.ToolError("--force needs a reason")
+    w.check_host()
+
+    name = args.name
+    wt = w.WT / name
+    if os.path.islink(wt) or not wt.is_dir() or "/" in name or name in (".", ".."):
+        raise w.ToolError(f"{wt} is not a worktree directory")
+    key = w.repo_of_worktree(wt)
+    repo = w.REPOS[key]
+    entry = next((e for e in w.worktree_entries(key) if e["path"].resolve() == wt.resolve()), None)
+    if entry is None:
+        raise w.ToolError(f"{wt} is not a registered linked worktree of {repo}")
+    if entry["locked"]:
+        raise w.ToolError(f"{wt} is locked (git worktree unlock first)")
+    check_in_use(name, wt, args.force)
+
+    head = str(w.git(wt, "rev-parse", "HEAD"))
+    base = find_base(name, key, wt)
+    branch = str(w.git(wt, "symbolic-ref", "-q", "--short", "HEAD", check=False))
+    tree, untracked = w.working_state(wt, include_untracked=not args.drop_untracked)
+    unknown = unknown_ignored(wt)
+    if unknown and not args.drop_ignored:
+        shown = ", ".join(unknown[:20]) + (f" ... ({len(unknown)} files)" if len(unknown) > 20 else "")
+        raise w.ToolError(f"ignored files that are not reproducible and not .analysis evidence: {shown}; "
+                          "copy what is needed out, then rerun (or pass --drop-ignored to discard them)")
+    if untracked and not args.drop_untracked:
+        size = sum(os.lstat(wt / item).st_size for item in untracked if os.path.lexists(wt / item))
+        if size > MAX_UNTRACKED_BYTES:
+            raise w.ToolError(f"{len(untracked)} untracked files total {w.human_bytes(size)} (> 100M); "
+                              "move them out or pass --drop-untracked")
+    patch = w.diff_between(wt, base, tree)
+
+    receipts = w.RECEIPTS / name
+    receipts.mkdir(parents=True, exist_ok=True)
+    staged = receipts / "final.patch.tmp"
+    staged.write_bytes(patch)
+    try:
+        verify_patch(repo, base, staged, tree, name)
+    except BaseException:
+        staged.unlink(missing_ok=True)
+        raise
+    digest = w.sha256_bytes(patch)
+    os.replace(staged, receipts / "final.patch")
+    (receipts / "final.patch.sha256").write_text(f"{digest}  final.patch\n")
+    commits = str(w.git(wt, "log", "--format=%H %s", f"{base}..HEAD"))
+    (receipts / "final.commits.txt").write_text(commits + "\n" if commits else "")
+    dropped = untracked if args.drop_untracked else []
+    dropped_file = receipts / "final.dropped-untracked.txt"
+    if dropped:
+        dropped_file.write_text("\n".join(dropped) + "\n")
+    else:
+        dropped_file.unlink(missing_ok=True)
+    (receipts / "final.json").write_text(json.dumps({
+        "name": name, "repo": key, "branch": branch or None, "base": base, "head": head, "tree": tree,
+        "patch_bytes": len(patch), "patch_sha256": digest, "commits": len(commits.splitlines()),
+        "untracked_included": 0 if args.drop_untracked else len(untracked), "untracked_dropped": len(dropped),
+        "verified": "applies to a fresh checkout of base and reproduces the tree",
+        "finished_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }, indent=2) + "\n")
+
+    # Commits that no other ref holds must survive the worktree: keep the branch, or pin a detached HEAD.
+    # (`--all` would also count the worktree's own HEAD, so refs are matched by glob.)
+    def unique_commit(tip: str, own_branch: str | None) -> str:
+        exclude = [f"--exclude=refs/heads/{own_branch}"] if own_branch else []
+        return str(w.git(repo, "rev-list", "-n", "1", tip, "--not", *exclude, "--glob=refs/*"))
+
+    kept = []
+    unique = unique_commit(head, branch)
+    if unique and branch:
+        kept.append(f"branch {branch}")
+    elif unique:
+        ref = f"refs/archive/wt/{name}"
+        w.git(repo, "update-ref", ref, head)
+        kept.append(f"ref {ref}")
+
+    evidence_files, evidence_bytes = keep_evidence(wt, receipts)
+    if unknown:
+        (receipts / "final.dropped-ignored.txt").write_text("\n".join(unknown) + "\n")
+    w.git(repo, "worktree", "remove", "--force", str(wt))
+    w.git(repo, "worktree", "prune", check=False)
+    if wt.exists():
+        raise w.ToolError(f"worktree registration removed but {wt} is still on disk; patch is safe in {receipts}")
+    target = remove_dir(w.TARGETS / name, w.TARGETS)
+    home = remove_dir(w.HOMES / name, w.HOMES)
+    released = release_marks(wt)
+    own = f"wt/{name}"  # the branch wt-new made: dropped only when it holds nothing that no other ref holds
+    if w.git_ok(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{own}"):
+        if unique_commit(f"refs/heads/{own}", own):
+            if f"branch {own}" not in kept:
+                kept.append(f"branch {own}")
+        else:
+            w.git(repo, "branch", "-D", own)
+            kept.append(f"(branch {own} held no unique commits and was deleted)")
+    kept = kept or ["nothing needed (no commits outside other refs)"]
+
+    print(f"patch:     {receipts / 'final.patch'} ({len(patch)} bytes, sha256 {digest})")
+    print(f"verified:  applies to a fresh checkout of base {base[:12]} and reproduces tree {tree[:12]}")
+    print(f"contents:  {len(commits.splitlines())} commits, {0 if args.drop_untracked else len(untracked)} untracked files included"
+          + (f", {len(dropped)} untracked dropped (listed in {dropped_file.name})" if dropped else ""))
+    print(f"removed:   {wt}; target {target}; home {home}")
+    if released:
+        print(f"in-use:    dropped {released} registry marks on {wt}")
+    print(f"kept:      {'; '.join(kept)}")
+    print(f"evidence:  {evidence_files} .analysis files ({w.human_bytes(evidence_bytes)}) kept in {receipts / 'analysis'}")
+    if unknown:
+        print(f"dropped:   {len(unknown)} ignored files (listed in final.dropped-ignored.txt)")
+
+
+if __name__ == "__main__":
+    w.run_tool(main)

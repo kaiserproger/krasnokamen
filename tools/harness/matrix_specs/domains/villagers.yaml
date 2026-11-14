@@ -1,0 +1,1653 @@
+schema: solaris-domain-spec-1
+domain: villagers
+minecraft_version: 26.1.2
+executable_interface: tools/harness/matrix_api.py; plain Python adapters; this YAML is specification only, not an
+  interpreter/runner
+server_source_root: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/
+vanilla_data_root: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/
+query_capabilities:
+  data_get_entity: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_blocks.rs:245-259
+    (absent in original frozen server; DataCommands implementation pending)
+  data_get_block: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_blocks.rs:282-287
+    (only command-block NBT in original frozen server)
+  execute_store: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_context.rs:473
+  execute_if_entity: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_context.rs:217
+  execute_if_block: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/command_context.rs:218-230
+  settlement_economy_snapshot: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/economy_commands.rs:84-104
+    (only aggregate status counts exposed, not job/quote/payroll/shipment fields)
+context_contract:
+- Driver applies every matrix context factor before setup.
+- Do not override selected mode,dimension,op level,difficulty in fixtures; explicit tested difficulty transition
+  is action.
+- Every real adapter invokes ctx.boundary once after acknowledgement.
+- Only live receipt checks establish coverage; presence of spec or adapter never sets pass.
+- Random-spawn observation with no positive sample remains inconclusive unless fixture proves every admission precondition.
+- Fixtures use Y200 outside full-set shop auto-open Y60..100; driver residency is fenced by actual received chunks.
+subjects:
+- subject: villagers.profession_Armorer
+  scenario_ids:
+  - pw:villagers.profession_Armorer/fabric_solaris_loader/adventure/overworld/easy/2/disconnect_during_menu/hot_backup_during_action/op_1
+  preconditions:
+  - &id001
+    console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
+  - &id002
+    console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
+  - &id003
+    console: execute in ${dimension} run tp ${actor} 0.5 200 0.5
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:armorer",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 blast_furnace
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:armorer
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Armorer trades
+    source: https://minecraft.wiki/w/Trading#Armorer
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Butcher
+  scenario_ids:
+  - pw:villagers.profession_Butcher/forge_solaris_loader/creative/overworld/easy/N8/disconnect_during_menu/hot_backup_during_action/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:butcher",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 smoker
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:butcher
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Butcher trades
+    source: https://minecraft.wiki/w/Trading#Butcher
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Cartographer
+  scenario_ids:
+  - pw:villagers.profession_Cartographer/fabric_distant_horizons/survival/the_nether/normal/N8/duplicate_login/clean_restart_mid_action/op_1
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:cartographer",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 cartography_table
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:cartographer
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Cartographer trades
+    source: https://minecraft.wiki/w/Trading#Cartographer
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Cleric
+  scenario_ids:
+  - bl:villagers.profession_Cleric/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:cleric",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 brewing_stand
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:cleric
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Cleric trades
+    source: https://minecraft.wiki/w/Trading#Cleric
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Farmer
+  scenario_ids:
+  - bl:villagers.profession_Farmer/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:farmer",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 composter
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:farmer
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Farmer trades
+    source: https://minecraft.wiki/w/Trading#Farmer
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Fisherman
+  scenario_ids:
+  - bl:villagers.profession_Fisherman/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:fisherman",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 barrel
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:fisherman
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Fisherman trades
+    source: https://minecraft.wiki/w/Trading#Fisherman
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Fletcher
+  scenario_ids:
+  - bl:villagers.profession_Fletcher/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:fletcher",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 fletching_table
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:fletcher
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Fletcher trades
+    source: https://minecraft.wiki/w/Trading#Fletcher
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Leatherworker
+  scenario_ids:
+  - bl:villagers.profession_Leatherworker/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:leatherworker",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 cauldron
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:leatherworker
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Leatherworker trades
+    source: https://minecraft.wiki/w/Trading#Leatherworker
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Librarian
+  scenario_ids:
+  - bl:villagers.profession_Librarian/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:librarian",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 lectern
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:librarian
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Librarian trades
+    source: https://minecraft.wiki/w/Trading#Librarian
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Mason
+  scenario_ids:
+  - bl:villagers.profession_Mason/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:mason",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 stonecutter
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:mason
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Mason trades
+    source: https://minecraft.wiki/w/Trading#Mason
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Shepherd
+  scenario_ids:
+  - bl:villagers.profession_Shepherd/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:shepherd",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 loom
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:shepherd
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Shepherd trades
+    source: https://minecraft.wiki/w/Trading#Shepherd
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Toolsmith
+  scenario_ids:
+  - bl:villagers.profession_Toolsmith/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:toolsmith",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 smithing_table
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:toolsmith
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Toolsmith trades
+    source: https://minecraft.wiki/w/Trading#Toolsmith
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Weaponsmith
+  scenario_ids:
+  - bl:villagers.profession_Weaponsmith/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:weaponsmith",level:1,type:"minecraft:plains"}}
+  - console: setblock 4 200 0 grindstone
+  - console: time set 2000
+  - console: give ${actor} emerald 64
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  - verb: select_trade
+    index: 0
+  - verb: click_slot
+    kind: pickup
+    slot: 2
+    button: 0
+  - verb: close_container
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:weaponsmith
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: trade_table
+    query: data get entity @e[name=MatrixVillager,limit=1] Offers.Recipes
+    operator: all_in
+    expected: 26.1.2 novice Weaponsmith trades
+    source: https://minecraft.wiki/w/Trading#Weaponsmith
+  - name: exact_custody
+    query: actor inventory after-before and offer.uses after-before
+    operator: equals
+    expected: selected input1/input2 debited once; selected output credited once; uses incremented1
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_None
+  scenario_ids:
+  - bl:villagers.profession_None/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:none",level:1,type:"minecraft:plains"}}
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:none
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: no_merchant
+    query: received merchant_open events after interaction
+    operator: equals
+    expected: []
+    source: https://minecraft.wiki/w/Villager#Professions
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Nitwit
+  scenario_ids:
+  - bl:villagers.profession_Nitwit/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"MatrixVillager",VillagerData:{profession:"minecraft:nitwit",level:1,type:"minecraft:plains"}}
+  actions:
+  - verb: interact_entity
+    target: MatrixVillager
+  oracle:
+  - name: profession
+    query: data get entity @e[name=MatrixVillager,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:nitwit
+    source: https://minecraft.wiki/w/Villager#Professions
+  - name: no_merchant
+    query: received merchant_open events after interaction
+    operator: equals
+    expected: []
+    source: https://minecraft.wiki/w/Villager#Professions
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  source:
+  - https://minecraft.wiki/w/Villager#Professions
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: real_but_partial
+  remaining_oracle_clauses:
+  - Exact vanilla trade-table identity and work-loop evidence; server-advertised recipe custody alone is not the
+    full oracle.
+- subject: villagers.profession_Miner
+  scenario_ids:
+  - bl:villagers.profession_Miner/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {VillagerData:{profession:"solaris:miner"}}
+  - console: settlement bind MatrixTown
+  - console: give ${actor} iron_pickaxe 1
+  actions:
+  - verb: equip_resident
+    item: iron_pickaxe
+  - verb: assign_work_target
+    target: stone
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: work_progress
+    query: authoritative target state and resident carried inventory before/after
+    operator: changes_to
+    expected: cobblestone
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/mining.rs
+  - name: persistence
+    query: resident profession,job,target,inventory after restart
+    operator: equals
+    expected: pre-save snapshot
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/mining.rs
+  required_capabilities:
+  - clean_restart
+  - resident_equipment_fixture
+  - resident_job_query
+  - settlement_building_fixture
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/mining.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: Solaris extension; these professions do not exist in vanilla. Expected behaviour sourced from cited
+      native module, never labelled vanilla.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.profession_Lumberjack
+  scenario_ids:
+  - bl:villagers.profession_Lumberjack/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {VillagerData:{profession:"solaris:lumberjack"}}
+  - console: settlement bind MatrixTown
+  - console: give ${actor} iron_axe 1
+  actions:
+  - verb: equip_resident
+    item: iron_axe
+  - verb: assign_work_target
+    target: oak_log
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: work_progress
+    query: authoritative target state and resident carried inventory before/after
+    operator: changes_to
+    expected: oak_log
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/lumber.rs
+  - name: persistence
+    query: resident profession,job,target,inventory after restart
+    operator: equals
+    expected: pre-save snapshot
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/lumber.rs
+  required_capabilities:
+  - clean_restart
+  - resident_equipment_fixture
+  - resident_job_query
+  - settlement_building_fixture
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/lumber.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: Solaris extension; these professions do not exist in vanilla. Expected behaviour sourced from cited
+      native module, never labelled vanilla.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.profession_Builder
+  scenario_ids:
+  - pw:villagers.profession_Builder/native_linux/creative/overworld/peaceful/2/slow_reader_backpressure/steady/op_3
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {VillagerData:{profession:"solaris:builder"}}
+  - console: settlement bind MatrixTown
+  - console: give ${actor} oak_planks 1
+  actions:
+  - verb: equip_resident
+    item: oak_planks
+  - verb: assign_work_target
+    target: air
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: work_progress
+    query: authoritative target state and resident carried inventory before/after
+    operator: changes_to
+    expected: oak_planks
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/building.rs
+  - name: persistence
+    query: resident profession,job,target,inventory after restart
+    operator: equals
+    expected: pre-save snapshot
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/building.rs
+  required_capabilities:
+  - clean_restart
+  - resident_equipment_fixture
+  - resident_job_query
+  - settlement_building_fixture
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/building.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: Solaris extension; these professions do not exist in vanilla. Expected behaviour sourced from cited
+      native module, never labelled vanilla.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.profession_Soldier
+  scenario_ids:
+  - bl:villagers.profession_Soldier/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: settlement create MatrixTown 48
+  - console: summon villager 3 200 0 {VillagerData:{profession:"solaris:soldier"}}
+  - console: settlement bind MatrixTown
+  - console: give ${actor} iron_sword 1
+  actions:
+  - verb: equip_resident
+    item: iron_sword
+  - verb: assign_work_target
+    target: zombie
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  - verb: save_all
+  - verb: clean_restart
+  oracle:
+  - name: work_progress
+    query: authoritative target state and resident carried inventory before/after
+    operator: changes_to
+    expected: damage
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/soldier.rs
+  - name: persistence
+    query: resident profession,job,target,inventory after restart
+    operator: equals
+    expected: pre-save snapshot
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/soldier.rs
+  required_capabilities:
+  - clean_restart
+  - resident_equipment_fixture
+  - resident_job_query
+  - settlement_building_fixture
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/soldier.rs
+  server_gap: []
+  vanilla_26_1_2:
+    applicable: false
+    reason: Solaris extension; these professions do not exist in vanilla. Expected behaviour sourced from cited
+      native module, never labelled vanilla.
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.job_site_claim
+  scenario_ids:
+  - pw:villagers.job_site_claim/fabric_svc/spectator/the_end/hard/N8/malformed_or_stale_packet/pause_when_empty_resume/op_4
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"Unemployed"}
+  - console: summon villager 8 200 0 {CustomName:"Nitwit",VillagerData:{profession:"minecraft:nitwit"}}
+  - console: setblock 4 200 0 composter
+  - console: setblock 9 200 0 composter
+  - console: time set 2000
+  actions:
+  - verb: wait_ticks
+    ticks: 1200
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: claim
+    query: data get entity @e[name=Unemployed,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:farmer
+    source: https://minecraft.wiki/w/Villager#Job_site_blocks
+  - name: nitwit_refuses
+    query: data get entity @e[name=Nitwit,limit=1] VillagerData.profession
+    operator: equals
+    expected: minecraft:nitwit
+    source: https://minecraft.wiki/w/Villager#Job_site_blocks
+  required_capabilities:
+  - data_get_entity
+  source:
+  - https://minecraft.wiki/w/Villager#Job_site_blocks
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+- subject: villagers.lightning_to_witch
+  scenario_ids:
+  - pw:villagers.lightning_to_witch/protocol_bot/survival/the_nether/normal/2/slow_reader_backpressure/clean_restart_mid_action/op_4
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 4 200 0 {CustomName:"LightningSubject"}
+  actions:
+  - console: summon lightning_bolt 4 200 0
+  - verb: wait_ticks
+    ticks: 20
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: converted
+    query: execute if entity @e[type=witch,name=LightningSubject] run say Converted
+    operator: marker_present
+    expected:
+      context.difficulty == peaceful: false
+      otherwise: true
+    source: '/run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomMobs-Villager.javap :: thunderHit
+      offsets0-66; PEACEFUL branches to superclass hit at60'
+  - name: original_absent
+    query: execute unless entity @e[type=villager,name=LightningSubject] run say Gone
+    operator: marker_present
+    expected:
+      context.difficulty == peaceful: false
+      otherwise: true
+    source: '/run/media/kaiserroman/games/solaris-work/scenarios/domains/evidence/DomMobs-Villager.javap :: thunderHit
+      offsets0-66; PEACEFUL branches to superclass hit at60'
+  required_capabilities:
+  - entity_count
+  source:
+  - https://minecraft.wiki/w/Villager#Lightning
+  server_gap: []
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+- subject: villagers.villager_breeding
+  scenario_ids:
+  - bl:villagers.villager_breeding/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0
+  - console: summon villager 5 200 0
+  - console: setblock 3 200 3 red_bed[part=foot,facing=south]
+  - console: setblock 3 200 4 red_bed[part=head,facing=south]
+  - console: setblock 5 200 3 red_bed[part=foot,facing=south]
+  - console: setblock 5 200 4 red_bed[part=head,facing=south]
+  - console: setblock 7 200 3 red_bed[part=foot,facing=south]
+  - console: setblock 7 200 4 red_bed[part=head,facing=south]
+  - console: give ${actor} bread 6
+  actions:
+  - verb: drop
+    all: true
+    position:
+    - 4
+    - 200
+    - 0
+  - verb: wait_ticks
+    ticks: 1200
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: birth
+    query: villager entity count
+    operator: equals
+    expected: 3
+    source: https://minecraft.wiki/w/Villager#Breeding
+  - name: age
+    query: data get entity babyUUID Age
+    operator: between
+    expected:
+    - -24000
+    - -22800
+    source: https://minecraft.wiki/w/Villager#Breeding
+  required_capabilities:
+  - data_get_entity
+  - entity_count
+  source:
+  - https://minecraft.wiki/w/Villager#Breeding
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: tools/harness/matrix_domains/villagers.py
+  status: adapter_requires_live_validation
+  adapter_completeness: complete_subject_oracle
+- subject: villagers.farmer_harvest
+  scenario_ids:
+  - pw:villagers.farmer_harvest/neoforge_solaris_loader/creative/the_end/hard/1/duplicate_login/crash_kill9_wal_replay/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {VillagerData:{profession:"minecraft:farmer"}}
+  - console: setblock 4 200 0 composter
+  - console: fill 5 199 0 8 199 3 farmland
+  - console: fill 5 200 0 8 200 3 wheat[age=7]
+  - console: time set 2000
+  - console: gamerule mobGriefing true
+  actions:
+  - verb: wait_ticks
+    ticks: 1200
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: harvest
+    query: farmer inventory wheat count
+    operator: greater_than
+    expected: 0
+    source: https://minecraft.wiki/w/Villager#Farming
+  - name: replant
+    query: count wheat[age=0] in crop patch
+    operator: greater_than
+    expected: 0
+    source: https://minecraft.wiki/w/Villager#Farming
+  - name: share
+    query: nearby hungry villager inventory food count after farmer surplus
+    operator: greater_than
+    expected: 0
+    source: https://minecraft.wiki/w/Villager#Farming
+  required_capabilities:
+  - data_get_entity
+  - item_entity_stacks
+  source:
+  - https://minecraft.wiki/w/Villager#Farming
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.schedule_sleep_work
+  scenario_ids:
+  - bl:villagers.schedule_sleep_work/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {VillagerData:{profession:"minecraft:farmer"}}
+  - console: setblock 4 200 0 composter
+  - console: setblock 8 200 0 bell
+  - console: setblock 3 200 3 red_bed[part=foot,facing=south]
+  - console: setblock 3 200 4 red_bed[part=head,facing=south]
+  actions:
+  - console: time set 2000
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  - console: time set 9000
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  - console: time set 13000
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: work
+    query: villager daytime distance to workstation
+    operator: less_or_equal
+    expected: 2
+    source: https://minecraft.wiki/w/Villager#Schedules
+  - name: meeting
+    query: villager gather distance to bell
+    operator: less_or_equal
+    expected: 6
+    source: https://minecraft.wiki/w/Villager#Schedules
+  - name: sleep
+    query: villager received pose at night
+    operator: equals
+    expected: sleeping
+    source: https://minecraft.wiki/w/Villager#Schedules
+  required_capabilities:
+  - entity_pose
+  - entity_trajectory
+  source:
+  - https://minecraft.wiki/w/Villager#Schedules
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.zombie_conversion_cure
+  scenario_ids:
+  - bl:villagers.zombie_conversion_cure/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {VillagerData:{profession:"minecraft:farmer",level:2}}
+  - console: summon zombie 4 200 0
+  - console: give ${actor} golden_apple 1
+  actions:
+  - verb: wait_ticks
+    ticks: 1200
+    clock: dashboard.simulation_tick
+  - console: effect give @e[type=zombie_villager,limit=1] weakness 600 0
+  - verb: interact_entity
+    target: zombie_villager
+    holding: golden_apple
+  - verb: wait_ticks
+    ticks: 6000
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: infection_hard
+    query: conversion after zombie lethal hit in hard difficulty
+    operator: equals
+    expected: true
+    source: https://minecraft.wiki/w/Zombie_Villager#Curing
+  - name: infection_peaceful_easy
+    query: zombie conversion count
+    operator: equals
+    expected: 0
+    source: https://minecraft.wiki/w/Zombie_Villager#Curing
+  - name: profession_preserved
+    query: data get entity curedUUID VillagerData.profession
+    operator: equals
+    expected: minecraft:farmer
+    source: https://minecraft.wiki/w/Zombie_Villager#Curing
+  - name: discount
+    query: cured villager selected recipe special_price_diff
+    operator: less_than
+    expected: 0
+    source: https://minecraft.wiki/w/Zombie_Villager#Curing
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - merchant_offers
+  source:
+  - https://minecraft.wiki/w/Zombie_Villager#Curing
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.iron_golem_spawn_defend
+  scenario_ids:
+  - pw:villagers.iron_golem_spawn_defend/native_windows/spectator/the_end/peaceful/N8/normal/steady/op_3
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0
+    repeat: 3
+  - verb: place_beds
+    count: 3
+    position:
+    - 3
+    - 200
+    - 3
+  - console: time set 13000
+  actions:
+  - verb: wait_ticks
+    ticks: 1200
+    clock: dashboard.simulation_tick
+  - console: time set 0
+  - console: summon zombie 5 200 0
+  - verb: wait_ticks
+    ticks: 1200
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: summon
+    query: iron_golem count within16 blocks
+    operator: greater_or_equal
+    expected: 1
+    source: https://minecraft.wiki/w/Iron_Golem#Villages
+  - name: defense
+    query: zombie health after golem attack
+    operator: less_than
+    expected: before
+    source: https://minecraft.wiki/w/Iron_Golem#Villages
+  - name: reputation
+    query: naturally spawned golem attacks actor with reputation<=-100
+    operator: equals
+    expected: true
+    source: https://minecraft.wiki/w/Iron_Golem#Villages
+  required_capabilities:
+  - data_get_entity
+  - entity_health
+  - reputation_fixture
+  source:
+  - https://minecraft.wiki/w/Iron_Golem#Villages
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.snow_golem
+  scenario_ids:
+  - bl:villagers.snow_golem/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: setblock 4 200 0 snow_block
+  - console: setblock 4 201 0 snow_block
+  - console: give ${actor} carved_pumpkin 1
+  actions:
+  - verb: use_item_on
+    position:
+    - 4
+    - 201
+    - 0
+    face: up
+  - console: summon blaze 10 200 0
+  - verb: wait_ticks
+    ticks: 100
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: built
+    query: snow_golem count
+    operator: equals
+    expected: 1
+    source: https://minecraft.wiki/w/Snow_Golem
+  - name: attack
+    query: blaze health change per snowball hit
+    operator: equals
+    expected: -3
+    source: https://minecraft.wiki/w/Snow_Golem
+  - name: trail
+    query: snow block state on golem traversed cold ground
+    operator: equals
+    expected: minecraft:snow
+    source: https://minecraft.wiki/w/Snow_Golem
+  - name: heat
+    query: snow golem health delta in hot biome/nether
+    operator: less_than
+    expected: 0
+    source: https://minecraft.wiki/w/Snow_Golem
+  required_capabilities:
+  - biome_fixture
+  - data_get_entity
+  - entity_combat_events
+  source:
+  - https://minecraft.wiki/w/Snow_Golem
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.copper_golem
+  scenario_ids:
+  - pw:villagers.copper_golem/vanilla_java_26_1_2/survival/the_nether/normal/N8/reconnect_mid_action/save_all_checkpoint/op_2
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: setblock 4 200 0 copper_block
+  - console: setblock 6 200 0 copper_chest
+  - console: setblock 10 200 0 chest
+  - console: give ${actor} carved_pumpkin 1
+  - console: give ${actor} stone 16
+  actions:
+  - verb: use_item_on
+    position:
+    - 4
+    - 200
+    - 0
+    face: up
+  - verb: open_container
+    position:
+    - 6
+    - 200
+    - 0
+  - verb: click_slot
+    kind: quick_move
+    slot: stone inventory stack
+    button: 0
+  - verb: close_container
+  - verb: wait_ticks
+    ticks: 2400
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: sorting
+    query: copper chest Items + destination chest Items + golem held count
+    operator: equals
+    expected: 16
+    source: https://minecraft.wiki/w/Copper_Golem
+  - name: delivered
+    query: destination chest stone count
+    operator: greater_than
+    expected: 0
+    source: https://minecraft.wiki/w/Copper_Golem
+  - name: oxidation
+    query: golem oxidation state sequence
+    operator: equals
+    expected:
+    - unaffected
+    - exposed
+    - weathered
+    - oxidized
+    - statue
+    source: https://minecraft.wiki/w/Copper_Golem
+  required_capabilities:
+  - data_get_block
+  - golem_inventory_query
+  - seeded_oxidation_fixture
+  source:
+  - https://minecraft.wiki/w/Copper_Golem
+  server_gap:
+  - QUERY-BLOCK-DATA
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.raid_start
+  scenario_ids:
+  - bl:villagers.raid_start/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - verb: place_beds
+    count: 1
+    position:
+    - 3
+    - 200
+    - 3
+  - console: summon villager 3 200 0
+  - console: effect give ${actor} bad_omen 300 0
+  actions:
+  - verb: teleport_to
+    position:
+    - 3
+    - 200
+    - 0
+  - verb: wait_ticks
+    ticks: 601
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: omen_delay
+    query: raid_omen duration on entering village
+    operator: equals
+    expected: 600
+    source: https://minecraft.wiki/w/Raid#Starting
+  - name: bossbar
+    query: received bossbar name contains Raid
+    operator: equals
+    expected: true
+    source: https://minecraft.wiki/w/Raid#Starting
+  - name: raiders
+    query: raid member entity count
+    operator: greater_than
+    expected: 0
+    source: https://minecraft.wiki/w/Raid#Starting
+  required_capabilities:
+  - bossbars
+  - effects_snapshot
+  - raid_members
+  source:
+  - https://minecraft.wiki/w/Raid#Starting
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.raid_waves_victory
+  scenario_ids:
+  - bl:villagers.raid_waves_victory/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  - tr.restart_x_inflight.clean_restart_mid_action:villagers.raid_waves_victory/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+  - tr.restart_x_inflight.crash_kill9_wal_replay:villagers.raid_waves_victory/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - verb: setup
+    reference: villagers.raid_start
+  actions:
+  - verb: attack
+    target: each current-wave raider
+    repeat_until: raid victory
+    maximum_ticks: 24000
+  oracle:
+  - name: waves
+    query: completed normal waves
+    operator: equals_by_difficulty
+    expected:
+      easy: 3
+      normal: 5
+      hard: 7
+    source: https://minecraft.wiki/w/Raid#Raid_wave_composition
+  - name: victory
+    query: actor active_effects contains hero_of_the_village
+    operator: equals
+    expected: true
+    source: https://minecraft.wiki/w/Raid#Raid_wave_composition
+  - name: discount
+    query: villager price after victory
+    operator: less_than
+    expected: pre-raid price
+    source: https://minecraft.wiki/w/Raid#Raid_wave_composition
+  required_capabilities:
+  - effects_snapshot
+  - merchant_offers
+  - raid_members
+  source:
+  - https://minecraft.wiki/w/Raid#Raid_wave_composition
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.raid_loss
+  scenario_ids:
+  - bl:villagers.raid_loss/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  - tr.restart_x_inflight.clean_restart_mid_action:villagers.raid_loss/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
+  - tr.restart_x_inflight.crash_kill9_wal_replay:villagers.raid_loss/protocol_bot/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - verb: setup
+    reference: villagers.raid_start
+  actions:
+  - verb: wait_ticks
+    ticks: 24000
+    clock: dashboard.simulation_tick
+    until: raiders kill last villager
+  oracle:
+  - name: lost
+    query: raid status
+    operator: equals
+    expected: loss
+    source: https://minecraft.wiki/w/Raid#Ending
+  - name: bossbar_end
+    query: received raid bossbar after loss display expires
+    operator: equals
+    expected: null
+    source: https://minecraft.wiki/w/Raid#Ending
+  - name: no_reward
+    query: actor active_effects hero_of_the_village
+    operator: equals
+    expected: null
+    source: https://minecraft.wiki/w/Raid#Ending
+  required_capabilities:
+  - bossbars
+  - effects_snapshot
+  - raid_members
+  - raid_status
+  source:
+  - https://minecraft.wiki/w/Raid#Ending
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.solaris_professions
+  scenario_ids:
+  - bl:villagers.solaris_professions/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - verb: setup
+    reference: each villagers.profession_Miner/Lumberjack/Builder/Soldier
+  actions:
+  - verb: wait_ticks
+    ticks: 600
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: each_worker
+    query: native job progress counter per job
+    operator: greater_than
+    expected: 0
+    source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/mod.rs
+  required_capabilities:
+  - resident_job_query
+  source:
+  - /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/villager/mod.rs
+  server_gap: []
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
+- subject: villagers.trade_level_restock
+  scenario_ids:
+  - bl:villagers.trade_level_restock/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  - tr.disconnect_x_transient_state.reconnect_mid_action:villagers.trade_level_restock/protocol_bot/survival/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+  - tr.disconnect_x_transient_state.duplicate_login:villagers.trade_level_restock/vanilla_java_26_1_2/survival/overworld/normal/1/duplicate_login/steady/non_op_0
+  preconditions:
+  - *id001
+  - *id002
+  - *id003
+  - console: summon villager 3 200 0 {CustomName:"Trader",VillagerData:{profession:"minecraft:farmer",level:1}}
+  - console: setblock 4 200 0 composter
+  - console: time set 2000
+  - console: give ${actor} wheat 640
+  actions:
+  - verb: interact_entity
+    target: Trader
+  - verb: select_trade
+    index: wheat-for-emerald novice offer
+  - verb: click_slot
+    kind: quick_move
+    slot: 2
+    button: 0
+    repeat_until: offer exhausted
+  - verb: close_container
+  - verb: wait_ticks
+    ticks: 1200
+    clock: dashboard.simulation_tick
+  - verb: interact_entity
+    target: Trader
+  - verb: select_trade
+    index: same offer
+  - verb: click_slot
+    kind: quick_move
+    slot: 2
+    button: 0
+    repeat_until: offer exhausted
+  - verb: close_container
+  - verb: wait_ticks
+    ticks: 1200
+    clock: dashboard.simulation_tick
+  oracle:
+  - name: tier_unlock
+    query: data get entity @e[name=Trader,limit=1] VillagerData.level
+    operator: greater_or_equal
+    expected: 2
+    source: https://minecraft.wiki/w/Trading
+  - name: restock_limit
+    query: data get entity @e[name=Trader,limit=1] RestocksToday
+    operator: less_or_equal
+    expected: 2
+    source: https://minecraft.wiki/w/Villager#Working
+  - name: restock_resets_uses
+    query: data get entity @e[name=Trader,limit=1] Offers.Recipes[0].uses after work
+    operator: equals
+    expected: 0
+    source: https://minecraft.wiki/w/Villager#Working
+  - name: custody
+    query: wheat delta,emerald delta,completed trades
+    operator: equals
+    expected: input_amount*trades debited; output_amount*trades credited; no duplicate result
+    source: https://minecraft.wiki/w/Trading
+  required_capabilities:
+  - data_get_entity
+  - interact_entity
+  - inventory_snapshot
+  - merchant_offers
+  - select_trade
+  source:
+  - https://minecraft.wiki/w/Villager#Working
+  server_gap:
+  - QUERY-ENTITY-DATA
+  adapter: null
+  status: blocked_missing_observation_or_fixture_capability
+  adapter_completeness: spec_only
