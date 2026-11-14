@@ -49,7 +49,7 @@ all existing versions**, never replacing the previous profile. See
    singleplayer content bundle and re-pin it in the launcher
    ([releases](release-and-tags.md#client-release-and-the-singleplayer-content-bundle)).
 
-## Native client (`solaris-client`)
+## Native client (`krasnokamen-client`)
 
 1. One test asserting that every packet id the client dispatches or sends
    (Login, Configuration, Play, both directions) equals `packets.json` by name.
@@ -85,13 +85,13 @@ all existing versions**, never replacing the previous profile. See
    holder-typed serializers encode id + 1 with 0 meaning an inline value.
 5. Strict clippy: compare diagnostics by (lint, path) against the baseline
    commit, not totals.
-6. Bump `SOLARIS_REVISION` in the client's `release.yml` to the pushed
+6. Bump `KRASNOKAMEN_REVISION` in the client's `release.yml` to the pushed
    new-protocol core commit and smoke the packaged singleplayer.
 
-## Gates (release server binary as `SOLARIS_SERVER_BINARY`)
+## Gates (release server binary as `KRASNOKAMEN_SERVER_BINARY`)
 
 - Java, new version: `run core-client|inventory|survival|entities --client java`
-  with `SOLARIS_LOADER_ROOT` pointing at a Loader checkout for the new version.
+  with `KRASNOKAMEN_LOADER_ROOT` pointing at a Loader checkout for the new version.
   Prewarm Gradle once (`:fabric-agent:classes`) or the first runs time out.
 - Java, **every retained version**: the same gate with that version's Loader
   automation checkout and the automatically installed endpoint caches. An

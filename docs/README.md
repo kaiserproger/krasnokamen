@@ -1,19 +1,19 @@
-# Solaris documentation
+# Krasnokamen documentation
 
-Solaris 1.0.0-rc.5 "Pauline" is the current release candidate for Solaris 1.0,
+Krasnokamen 1.0.0-rc.5 "Pauline" is the current release candidate for Krasnokamen 1.0,
 for Minecraft Java 26.3 (26.1.2 clients can still join with a retained cache; see
 the [operating guide](OPERATING.md)). Start with the [project README](../README.md)
 for installation and a source quick start, and [project status](STATUS.md) for
 priorities, the work queue and known gaps before 1.0.
 
-## Running and extending Solaris
+## Running and extending Krasnokamen
 
 - [Operating guide](OPERATING.md): configuration, content, console, backups and world conversion.
 - [Migration from vanilla or Paper](MIGRATION.md): configuration mapping, offline import, preservation limits and rollback.
 - [Settlements player guide](SETTLEMENTS_GUIDE.md): `/settlement guide`, villager jobs and membership.
 - [Server-driven dialogs](DIALOGS.md): `show_dialog` UI API and where clicks arrive.
 - [Plugins](PLUGINS.md): Wasmtime package deployment and authoring.
-- [Solaris Loader](SOLARIS_LOADER.md): optional client adapters and client bundles.
+- [Krasnokamen Loader](KRASNOKAMEN_LOADER.md): optional client adapters and client bundles.
 - [Project scope](PROJECT_SPEC.md) and [village generation](VILLAGE_GENERATION.md).
 - [Release notes](releases/README.md): one page per tag, not current configuration reference.
 

@@ -13,7 +13,7 @@
 //! click actions as untrusted too), so owners MUST validate permission, range and
 //! state again in the tick before acting.
 //!
-//! Action ids are `solaris:<owner>/<action>`; [`route_click`] dispatches on `<owner>`.
+//! Action ids are `krasnokamen:<owner>/<action>`; [`route_click`] dispatches on `<owner>`.
 //! New owners add one arm there.
 use crate::boundary::{ChangeSet, ConnectionId, PlayerChange};
 use crate::tick::TickState;
@@ -670,7 +670,7 @@ impl<'a> ClickPayload<'a> {
     }
 }
 
-/// Deliver a click to its owner by the `<owner>` of `solaris:<owner>/<action>`.
+/// Deliver a click to its owner by the `<owner>` of `krasnokamen:<owner>/<action>`.
 /// Unknown ids are ignored (logged at debug): the client may be stale or hostile.
 pub(crate) fn route_click(
     state: &mut TickState,
@@ -681,7 +681,7 @@ pub(crate) fn route_click(
 ) {
     let payload = ClickPayload(payload);
     let owner_action = id
-        .strip_prefix("solaris:")
+        .strip_prefix("krasnokamen:")
         .and_then(|rest| rest.split_once('/'));
     match owner_action {
         Some((probe::OWNER, action)) => probe::click(state, connection, action, payload),
@@ -694,7 +694,7 @@ pub(crate) fn route_click(
     }
 }
 
-/// End-to-end test hook: with `SOLARIS_DIALOG_PROBE` set, every joining player is
+/// End-to-end test hook: with `KRASNOKAMEN_DIALOG_PROBE` set, every joining player is
 /// shown a multi_action dialog (text input + number slider) and the click payload
 /// is logged. Used by the real-client gate; inert otherwise.
 pub(crate) mod probe {
@@ -706,7 +706,7 @@ pub(crate) mod probe {
 
     pub(crate) fn enabled() -> bool {
         static ENABLED: std::sync::LazyLock<bool> =
-            std::sync::LazyLock::new(|| std::env::var_os("SOLARIS_DIALOG_PROBE").is_some());
+            std::sync::LazyLock::new(|| std::env::var_os("KRASNOKAMEN_DIALOG_PROBE").is_some());
         *ENABLED
     }
 
@@ -714,9 +714,9 @@ pub(crate) mod probe {
         Dialog::multi_action(
             "Dialog probe",
             vec![
-                Button::custom("Submit", "solaris:dialog_probe/submit")
+                Button::custom("Submit", "krasnokamen:dialog_probe/submit")
                     .with("source", Tag::String("probe".into())),
-                Button::custom("Second", "solaris:dialog_probe/second"),
+                Button::custom("Second", "krasnokamen:dialog_probe/second"),
             ],
         )
         .text("Server-driven dialog: type a name and pick a radius.")

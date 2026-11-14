@@ -5,7 +5,7 @@ fn spawn_egg_embedded_defaults_match_all_88_vanilla_reports() {
     let reports = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../data/vanilla/reports/minecraft/components/item");
     let full = load_item_facts(reports).unwrap();
-    let embedded = solaris_required_item_facts();
+    let embedded = krasnokamen_required_item_facts();
     let mut eggs = 0;
     for (item, facts) in &full.items {
         if !item.path().ends_with("_spawn_egg") {
