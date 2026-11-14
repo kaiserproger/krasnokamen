@@ -167,8 +167,8 @@ post-images; `krasnokamen:Faction` (`TAG_Int`, checked as 0–65535) is the
 checkpoint projection. Both omit zero, leaving unaffiliated entity bytes unchanged.
 Missing allegiance is zero; a wrong NBT type, out-of-range value or malformed WAL
 value refuses decoding. Recovery and `/summon` use the same setter.
-The internal key remains hidden from `/data` and NBT selectors; no wire metadata
-or protocol change is needed. Allegiance travels with the body on transfer and
+The key is visible to `/data` and NBT selectors while allegiance is nonzero;
+no wire metadata or protocol change is needed. Allegiance travels with the body on transfer and
 dense compaction. Restart restores allegiance, not runtime battle targets or timers.
 The native checkpoint/WAL/restart regression is
 `battle_faction_survives_native_checkpoint_wal_and_restart`; see ADR 0020's

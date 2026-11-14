@@ -297,7 +297,7 @@ Zero is omitted from both formats, so unaffiliated entities add no disk bytes.
 Absent allegiance decodes as zero; malformed or out-of-range state fails closed.
 `set_faction` marks touched + changed custody through normal body mutation,
 including a reset to zero. Recovery and authored summon use that setter.
-The key stays hidden from `/data` and NBT selectors, with no wire metadata.
+The key is visible to `/data` and NBT selectors while nonzero, with no wire metadata.
 The derived runtime battle membership index contains native slots and is not
 persisted. No battle membership table, journal domain, checkpoint fence or
 alternate persistence owner is introduced here. Targets and battle timers remain transient.

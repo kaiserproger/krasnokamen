@@ -30,7 +30,10 @@ fn summon_faction_is_native() {
     let Tag::Compound(public) = crate::command_data::entity(&state, id).unwrap() else {
         panic!("expected public entity compound");
     };
-    assert!(public.iter().all(|(key, _)| key != "krasnokamen:Faction"));
+    assert_eq!(
+        mc_data::item_nbt::field(&public, "krasnokamen:Faction"),
+        Some(&Tag::Int(65535))
+    );
     assert_eq!(
         crate::command_data::command(
             &mut state,
@@ -38,7 +41,7 @@ fn summon_faction_is_native() {
             id,
             &format!("data get entity {uuid} \"krasnokamen:Faction\""),
         ),
-        crate::command_execution::CommandResult::Failed
+        crate::command_execution::CommandResult::Success(65535)
     );
     assert_eq!(
         crate::command_data::command(

@@ -81,15 +81,24 @@ pub(crate) fn entity_image(state: &TickState, id: EntityId) -> Result<Vec<(Strin
     } else {
         let record =
             crate::core::entity_data_record(state, slot).ok_or("Entity has no vanilla data")?;
-        mc_data::entity_nbt::entity_to_fields(&state.registry.items, &record)
-            .map_err(|e| e.to_string())?
+        let mut fields = mc_data::entity_nbt::entity_to_fields(&state.registry.items, &record)
+            .map_err(|e| e.to_string())?;
+        let body = state.entities.body(slot);
+        if matches!(body.kind, crate::entities::EntityKind::Mob { .. }) && body.faction != 0 {
+            put(
+                &mut fields,
+                "krasnokamen:Faction",
+                Tag::Int(i32::from(body.faction)),
+            );
+        }
+        fields
     })
 }
 
 /// An entity's public NBT, as `data get entity` shows it.
 pub(crate) fn entity(state: &TickState, id: EntityId) -> Result<Tag, String> {
     let mut fields = entity_image(state, id)?;
-    public_fields(&mut fields);
+    fields.retain(|(key, _)| key == "krasnokamen:Faction" || !private_field(key));
     // EntityDataAccessor uses NbtPredicate -> saveWithoutId, not a disk entity root.
     fields.retain(|(key, _)| key != "id");
     Ok(Tag::Compound(fields))
