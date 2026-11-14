@@ -53,6 +53,8 @@ pub struct Body {
     pub burn_ticks: u32,
     pub alive: bool,
     pub movement: MovementClass,
+    /// Native allegiance; zero is unaffiliated. Write through `set_faction`.
+    pub faction: u16,
     pub air_supply: i32,
     pub pickup_delay: u32,
     /// Ticks until this mob may melee again (vanilla `MeleeAttackGoal`).
@@ -644,6 +646,7 @@ impl EntityStore {
             height: cold.height,
             burn_ticks: 0,
             movement: cold.movement,
+            faction: 0,
             air_supply: 300,
             pickup_delay: cold.pickup_delay,
             attack_cooldown: 0,
@@ -1735,6 +1738,13 @@ impl EntityStore {
             self.rider_members.insert(slot);
         } else {
             self.rider_members.remove(&slot);
+        }
+    }
+
+    /// Set native allegiance with WAL and incremental-checkpoint custody.
+    pub fn set_faction(&mut self, slot: EntitySlot, faction: u16) {
+        if self.body(slot).faction != faction {
+            self.body_mut(slot).faction = faction;
         }
     }
 

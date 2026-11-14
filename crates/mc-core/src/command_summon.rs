@@ -232,6 +232,7 @@ pub(crate) fn supports(state: &TickState, type_id: u32, name: &str, key: &str) -
             c.behavior.physical_simulation
                 == mc_data::entity_types::PhysicalSimulationClass::ExperienceOrb
         }),
+        "krasnokamen:Faction" => true,
         "CustomName" | "CustomNameVisible" | "Invulnerable" | "NoGravity" | "Motion"
         | "Rotation" | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
         _ => return None,
@@ -773,6 +774,7 @@ pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     state
         .entities
         .set_entity_life(slot, image.state.entity_life);
+    state.entities.set_faction(slot, image.state.faction);
     let (body, row) = state.entities.parts_mut(slot);
     row.health = native.health;
     row.age = image.state.age;
