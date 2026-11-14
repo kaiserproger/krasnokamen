@@ -22,7 +22,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use fixture::component_bytes;
-use mc_plugin_host::bindings::exports::solaris::plugin::lifecycle::{
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::lifecycle::{
     ClayRules, ItemDefinition, PlacementRules, SpawnEntry as ContributionEntry, SpawnGroup,
     SpawnRules, StartupContribution, TreeRules,
 };
@@ -215,7 +215,7 @@ fn physical_profile_admission_preserves_carrier_gate_and_closes_consumption() {
         ..no_categories()
     };
     let admitted = convert_startup_contribution("ruby-live", &contribution(item.clone())).unwrap();
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let facts = mc_data::item_components::ItemFactsTable::default()
         .with_custom_items(admitted.items().iter().cloned(), &items)
         .unwrap();

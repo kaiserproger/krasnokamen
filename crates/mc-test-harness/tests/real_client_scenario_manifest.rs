@@ -14,7 +14,7 @@ fn m78_real_client_scenario_names_required_evidence() {
 
     assert_eq!(
         manifest.get("schema").and_then(Value::as_str),
-        Some("solaris.real_client_scenario.v1"),
+        Some("krasnokamen.real_client_scenario.v1"),
         "M78 scenario schema drifted"
     );
     assert!(
@@ -22,7 +22,7 @@ fn m78_real_client_scenario_names_required_evidence() {
         "M78 scenario must not expose a free-form real-client command env hook"
     );
     // Adapter command is Main-owned shared-manifest text; the loader workspace
-    // lives at SOLARIS_LOADER_ROOT (default ../solaris-loader) and `-p` is
+    // lives at KRASNOKAMEN_LOADER_ROOT (default ../solaris-loader) and `-p` is
     // required when Gradle is launched from the core cwd.
     assert_eq!(
         manifest.pointer("/client/adapter").and_then(Value::as_str),

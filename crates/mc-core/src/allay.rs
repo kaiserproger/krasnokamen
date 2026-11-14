@@ -153,7 +153,7 @@ pub(crate) fn from_record(
             }
         }
     }
-    if let Some(tag) = field(fields, "solaris:AllayDancing")? {
+    if let Some(tag) = field(fields, "krasnokamen:AllayDancing")? {
         let Tag::Byte(v @ (0 | 1)) = tag else {
             return Err(fail("Allay.dancing", "expected boolean byte"));
         };
@@ -231,7 +231,7 @@ pub(crate) fn to_fields(value: &AllayState, items: &ItemRegistry) -> Vec<(String
             ]),
         ),
         (
-            "solaris:AllayDancing".into(),
+            "krasnokamen:AllayDancing".into(),
             Tag::Byte(i8::from(value.dancing)),
         ),
     ]

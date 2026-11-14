@@ -1,6 +1,6 @@
 [server]
-name = "solaris-loader-live-gate"
-motd = "Solaris Loader two-owner live gate"
+name = "krasnokamen-loader-live-gate"
+motd = "Krasnokamen Loader two-owner live gate"
 view_distance = 4
 simulation_distance = 4
 

@@ -24,7 +24,7 @@ subjects:
         - doDaylightCycle
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:advance_time false
@@ -51,7 +51,7 @@ subjects:
         - doWeatherCycle
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:advance_weather false
@@ -63,7 +63,7 @@ subjects:
       post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
   - id: gamerules.allow_entering_nether_using_portals
     matrix_ids:
-      - pw:gamerules.allow_entering_nether_using_portals/fabric_solaris_loader/survival/overworld/peaceful/2/duplicate_login/pause_when_empty_resume/op_2
+      - pw:gamerules.allow_entering_nether_using_portals/fabric_krasnokamen_loader/survival/overworld/peaceful/2/duplicate_login/pause_when_empty_resume/op_2
     adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.allow_entering_nether_using_portals]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -78,7 +78,7 @@ subjects:
         - allowEnteringNetherUsingPortals
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:allow_entering_nether_using_portals false
@@ -105,7 +105,7 @@ subjects:
         - doTileDrops
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:block_drops false
@@ -117,7 +117,7 @@ subjects:
       post_action_canonical_query: must still equal assigned nondefault value after all behavioral actions
   - id: gamerules.block_explosion_drop_decay
     matrix_ids:
-      - pw:gamerules.block_explosion_drop_decay/forge_solaris_loader/adventure/overworld/peaceful/1/reconnect_mid_action/hot_backup_during_action/op_3
+      - pw:gamerules.block_explosion_drop_decay/forge_krasnokamen_loader/adventure/overworld/peaceful/1/reconnect_mid_action/hot_backup_during_action/op_3
     adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.block_explosion_drop_decay]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -132,7 +132,7 @@ subjects:
         - blockExplosionDropDecay
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:block_explosion_drop_decay false
@@ -151,7 +151,7 @@ subjects:
       coverage"
   - id: gamerules.command_block_output
     matrix_ids:
-      - pw:gamerules.command_block_output/neoforge_solaris_loader/adventure/the_end/hard/2/duplicate_login/clean_restart_mid_action/non_op_0
+      - pw:gamerules.command_block_output/neoforge_krasnokamen_loader/adventure/the_end/hard/2/duplicate_login/clean_restart_mid_action/non_op_0
     adapter: tools.harness.matrix_domains.gamerules:ADAPTERS[gamerules.command_block_output]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -166,7 +166,7 @@ subjects:
         - commandBlockOutput
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:command_block_output false
@@ -199,7 +199,7 @@ subjects:
         - commandBlocksEnabled
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:command_blocks_work false
@@ -228,7 +228,7 @@ subjects:
         - drowningDamage
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:drowning_damage false
@@ -255,7 +255,7 @@ subjects:
         - disableElytraMovementCheck
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:elytra_movement_check false
@@ -289,7 +289,7 @@ subjects:
         - enderPearlsVanishOnDeath
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:ender_pearls_vanish_on_death false
@@ -321,7 +321,7 @@ subjects:
         - doEntityDrops
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:entity_drops false
@@ -348,7 +348,7 @@ subjects:
         - fallDamage
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:fall_damage false
@@ -375,7 +375,7 @@ subjects:
         - fireDamage
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:fire_damage false
@@ -401,7 +401,7 @@ subjects:
       aliases: []
       min: -1
       max: 2147483647
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:fire_spread_radius_around_player 0
@@ -428,7 +428,7 @@ subjects:
         - forgiveDeadPlayers
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:forgive_dead_players false
@@ -460,7 +460,7 @@ subjects:
         - freezeDamage
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:freeze_damage false
@@ -487,7 +487,7 @@ subjects:
         - globalSoundEvents
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:global_sound_events false
@@ -519,7 +519,7 @@ subjects:
         - doImmediateRespawn
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:immediate_respawn true
@@ -546,7 +546,7 @@ subjects:
         - keepInventory
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:keep_inventory true
@@ -575,7 +575,7 @@ subjects:
         - lavaSourceConversion
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:lava_source_conversion true
@@ -602,7 +602,7 @@ subjects:
         - doLimitedCrafting
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:limited_crafting true
@@ -636,7 +636,7 @@ subjects:
         - locatorBar
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:locator_bar false
@@ -668,7 +668,7 @@ subjects:
         - logAdminCommands
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:log_admin_commands false
@@ -700,7 +700,7 @@ subjects:
         - commandModificationBlockLimit
       min: 1
       max: 2147483647
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:max_block_modifications 1
@@ -727,7 +727,7 @@ subjects:
         - maxCommandForkCount
       min: 0
       max: 2147483647
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:max_command_forks 1
@@ -760,7 +760,7 @@ subjects:
         - maxCommandChainLength
       min: 0
       max: 2147483647
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:max_command_sequence_length 1
@@ -797,7 +797,7 @@ subjects:
         - maxEntityCramming
       min: 0
       max: 2147483647
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:max_entity_cramming 0
@@ -828,7 +828,7 @@ subjects:
         - snowAccumulationHeight
       min: 0
       max: 8
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:max_snow_accumulation_height 0
@@ -860,7 +860,7 @@ subjects:
         - doMobLoot
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:mob_drops false
@@ -887,7 +887,7 @@ subjects:
         - mobExplosionDropDecay
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:mob_explosion_drop_decay false
@@ -919,7 +919,7 @@ subjects:
         - mobGriefing
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:mob_griefing false
@@ -951,7 +951,7 @@ subjects:
         - naturalRegeneration
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:natural_health_regeneration false
@@ -982,7 +982,7 @@ subjects:
         - disablePlayerMovementCheck
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:player_movement_check false
@@ -1014,7 +1014,7 @@ subjects:
         - playersNetherPortalCreativeDelay
       min: 0
       max: 2147483647
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:players_nether_portal_creative_delay 20
@@ -1041,7 +1041,7 @@ subjects:
         - playersNetherPortalDefaultDelay
       min: 0
       max: 2147483647
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:players_nether_portal_default_delay 20
@@ -1069,7 +1069,7 @@ subjects:
         - playersSleepingPercentage
       min: 0
       max: 2147483647
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:players_sleeping_percentage 101
@@ -1108,7 +1108,7 @@ subjects:
         - projectilesCanBreakBlocks
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:projectiles_can_break_blocks false
@@ -1141,7 +1141,7 @@ subjects:
       aliases: []
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:pvp false
@@ -1182,7 +1182,7 @@ subjects:
         - disableRaids
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:raids false
@@ -1214,7 +1214,7 @@ subjects:
         - randomTickSpeed
       min: 0
       max: 2147483647
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:random_tick_speed 0
@@ -1241,7 +1241,7 @@ subjects:
         - reducedDebugInfo
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:reduced_debug_info true
@@ -1268,7 +1268,7 @@ subjects:
         - spawnRadius
       min: 0
       max: 2147483647
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:respawn_radius 0
@@ -1303,7 +1303,7 @@ subjects:
         - sendCommandFeedback
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:send_command_feedback false
@@ -1333,7 +1333,7 @@ subjects:
         - announceAdvancements
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:show_advancement_messages false
@@ -1360,7 +1360,7 @@ subjects:
         - showDeathMessages
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:show_death_messages false
@@ -1387,7 +1387,7 @@ subjects:
         - spawnerBlocksEnabled
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:spawner_blocks_work false
@@ -1419,7 +1419,7 @@ subjects:
         - doMobSpawning
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:spawn_mobs false
@@ -1453,7 +1453,7 @@ subjects:
         - spawnMonsters
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:spawn_monsters false
@@ -1485,7 +1485,7 @@ subjects:
         - doPatrolSpawning
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:spawn_patrols false
@@ -1517,7 +1517,7 @@ subjects:
         - doInsomnia
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:spawn_phantoms false
@@ -1549,7 +1549,7 @@ subjects:
         - doTraderSpawning
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:spawn_wandering_traders false
@@ -1581,7 +1581,7 @@ subjects:
         - doWardenSpawning
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:spawn_wardens false
@@ -1613,7 +1613,7 @@ subjects:
         - spectatorsGenerateChunks
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:spectators_generate_chunks false
@@ -1645,7 +1645,7 @@ subjects:
         - doVinesSpread
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:spread_vines false
@@ -1672,7 +1672,7 @@ subjects:
         - tntExplodes
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:tnt_explodes false
@@ -1699,7 +1699,7 @@ subjects:
         - tntExplosionDropDecay
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:tnt_explosion_drop_decay true
@@ -1732,7 +1732,7 @@ subjects:
         - universalAnger
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:universal_anger true
@@ -1773,7 +1773,7 @@ subjects:
         - waterSourceConversion
       min: null
       max: null
-      legacy_alias_scope: Solaris compatibility extension, not vanilla command syntax requirement
+      legacy_alias_scope: Krasnokamen compatibility extension, not vanilla command syntax requirement
     actions:
       - verb: command
         text: gamerule minecraft:water_source_conversion false
