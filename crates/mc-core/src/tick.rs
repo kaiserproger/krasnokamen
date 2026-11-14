@@ -586,6 +586,8 @@ pub struct TickState {
     pub(crate) command_storage_dirty: bool,
     pub maps: crate::maps::Maps,
     pub scoreboard_dirty: bool,
+    /// Last published [`WorldSnapshot::team_names`] (`scoreboard::snapshot_team_names`).
+    pub(crate) team_names: Arc<Vec<String>>,
     pub bossbars_dirty: bool,
     pub(crate) dimension_globals: crate::dimensions::globals::Globals,
     pub(crate) villager_pois: crate::settlements::allocator::PoiCache,
@@ -814,6 +816,7 @@ impl TickState {
             command_storage_dirty: false,
             maps: Default::default(),
             scoreboard_dirty: false,
+            team_names: Arc::default(),
             bossbars_dirty: false,
             bossbars: Default::default(),
             dimension_globals: Default::default(),
@@ -1981,6 +1984,8 @@ fn run_dimension_tick_inner<'a>(
         entities: views,
         raid_bars: crate::raids::bars(state),
         settlement_labels: crate::settlements::presentation::snapshot(state),
+        player_factions: crate::battle::live_players::player_factions(state),
+        team_names: crate::scoreboard::snapshot_team_names(state),
     });
     let output = TickOutput {
         tick: state.tick,

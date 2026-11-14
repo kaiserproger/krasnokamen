@@ -669,6 +669,7 @@ fn entity(id: i32, pos: [f64; 3]) -> EntityView {
         pitch: 0.0,
         head_yaw: 0.0,
         on_ground: true,
+        faction: 0,
         appearance: Arc::new(EntityAppearance::default()),
     }
 }
@@ -3753,6 +3754,7 @@ fn dimension_change_removes_boss_bars_the_client_still_shows() {
             pitch: 0.0,
             head_yaw: 0.0,
             on_ground: false,
+            faction: 0,
             appearance: Arc::new(mc_core::boundary::EntityAppearance {
                 health: 200.0,
                 ..Default::default()

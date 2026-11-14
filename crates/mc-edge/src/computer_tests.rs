@@ -186,6 +186,7 @@ async fn computer_worker_reopen_and_close_reopen_at_capacity() {
         pitch: 0.0,
         head_yaw: 0.0,
         on_ground: true,
+        faction: 0,
         appearance: Arc::new(EntityAppearance {
             health: 20.0,
             ..Default::default()
@@ -325,6 +326,7 @@ fn computer_target_requires_live_player_loaded_carrier_and_reach() {
         pitch: 0.0,
         head_yaw: 0.0,
         on_ground: true,
+        faction: 0,
         appearance: Arc::new(EntityAppearance {
             health: 20.0,
             ..Default::default()

@@ -34,6 +34,8 @@ pub(crate) struct TickPlanIndex {
     // a known entity that crossed out of the viewer square before its event.
     event_subjects: HashMap<EntityId, SubjectEvents>,
     chunk_delta: Option<Arc<ChunkDelta>>,
+    /// Faction memberships this continuous step changed (`None`: no step).
+    factions: Option<crate::faction_teams::FactionDelta>,
 }
 
 impl TickPlanIndex {
@@ -46,6 +48,10 @@ impl TickPlanIndex {
 
     pub(super) fn chunk_delta(&self) -> Option<&ChunkDelta> {
         self.chunk_delta.as_deref()
+    }
+
+    pub(crate) fn faction_delta(&self) -> Option<&crate::faction_teams::FactionDelta> {
+        self.factions.as_ref()
     }
 
     /// Add the anti-xray reveals of this tick's block changes (computed once
@@ -132,9 +138,11 @@ impl TickPlanIndex {
             index.entity_base = Some(previous.revision());
         } else if previous.revision() == entities.base_revision() {
             index.entity_base = Some(previous.revision());
+            let mut factions = crate::faction_teams::FactionDelta::new(previous.revision());
             for &id in entities.changed() {
                 let old = previous.get(id);
                 let new = entities.get(id);
+                factions.observe(old, new);
                 let old_chunk = old.map(|entity| entity_chunk(entity.position));
                 let chunk = new.map(|entity| entity_chunk(entity.position));
                 let contract = new.and_then(|entity| {
@@ -166,6 +174,7 @@ impl TickPlanIndex {
                     index.entity_chunks.entry(chunk).or_default().push(delta);
                 }
             }
+            index.factions = Some(factions.finish());
         }
         index
     }

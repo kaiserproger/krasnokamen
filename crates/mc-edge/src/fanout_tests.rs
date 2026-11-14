@@ -241,6 +241,7 @@ fn mooshroom_to_cow_fanout_removes_then_respawns_the_same_identity_for_every_vie
         pitch: 0.0,
         head_yaw: 0.0,
         on_ground: true,
+        faction: 0,
         appearance: Arc::new(EntityAppearance {
             extra: vec![(18, EntityDataValue::VarInt(1))],
             ..Default::default()
@@ -393,6 +394,7 @@ fn mounted_spawn_burst_links_ride_the_world_queue_without_reliable_overflow() {
             pitch: 0.0,
             head_yaw: 0.0,
             on_ground: true,
+            faction: 0,
             appearance: Arc::new(appearance),
         };
         rows.push(row(

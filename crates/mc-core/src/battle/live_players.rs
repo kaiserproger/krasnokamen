@@ -84,6 +84,32 @@ pub(crate) struct LiveState {
     /// Living holders this tick (entity, side): candidates for enemy
     /// soldiers' swings (`in_reach`).
     targets: Vec<(EntityId, u16)>,
+    /// `(name, side)` of every hold, sorted by name: the published
+    /// [`crate::boundary::WorldSnapshot::player_factions`].
+    factions: std::sync::Arc<Vec<(String, u16)>>,
+}
+
+/// The snapshot's player sides ([`crate::boundary::WorldSnapshot::player_factions`]):
+/// every hold's `(name, side)` sorted by name, rebuilt only when the holds
+/// changed, so an unchanged battle publishes the same `Arc`.
+pub(crate) fn player_factions(state: &mut TickState) -> std::sync::Arc<Vec<(String, u16)>> {
+    let live = &mut state.hostile.battle.live;
+    let same = live.factions.len() == live.holds.len()
+        && live.holds.iter().all(|hold| {
+            live.factions
+                .binary_search_by(|(name, _)| name.as_str().cmp(&hold.name))
+                .is_ok_and(|index| live.factions[index].1 == hold.side)
+        });
+    if !same {
+        let mut factions: Vec<_> = live
+            .holds
+            .iter()
+            .map(|hold| (hold.name.clone(), hold.side))
+            .collect();
+        factions.sort_unstable();
+        live.factions = std::sync::Arc::new(factions);
+    }
+    std::sync::Arc::clone(&live.factions)
 }
 
 pub(crate) fn valid_name(name: &str) -> bool {
@@ -219,6 +245,18 @@ pub(super) fn holder_side(live: &LiveState, id: EntityId) -> Option<u16> {
         .iter()
         .find(|&&(player, _)| player == id)
         .map(|&(_, side)| side)
+}
+
+/// The side of the slot `name` holds, online or not.
+pub(crate) fn held_side(state: &TickState, name: &str) -> Option<u16> {
+    state
+        .hostile
+        .battle
+        .live
+        .holds
+        .iter()
+        .find(|hold| hold.name == name)
+        .map(|hold| hold.side)
 }
 
 /// The impact of a soldier's swing at a holder (`combat`): an ordinary melee
@@ -652,6 +690,7 @@ pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<Strin
         return Err("no staged formation; setup required".into());
     }
     let player = player_named(state, name).ok_or_else(|| format!("{name} is not online"))?;
+    crate::scoreboard::require_no_team(&state.scoreboard, name)?;
     if is_dead(state, player) {
         return Err(format!("{name} is dead; placed again on respawn"));
     }

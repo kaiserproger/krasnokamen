@@ -157,6 +157,7 @@ fn projectile_spawn_preserves_retained_owner_data() {
         pitch: 0.0,
         head_yaw: 0.0,
         on_ground: false,
+        faction: 0,
         appearance: Arc::new(EntityAppearance {
             spawn_data: 123,
             ..Default::default()

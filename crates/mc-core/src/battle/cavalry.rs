@@ -89,6 +89,8 @@ pub fn mount(state: &mut TickState, rider: EntityId, horse: EntityId) -> Result<
     }
     let uuid = rider_row.uuid;
     let faction = rider_body.faction;
+    crate::scoreboard::require_no_team(&state.scoreboard, &horse_row.uuid.to_string())
+        .map_err(|refusal| CoreError::Storage(format!("battle mount {horse:?}: {refusal}")))?;
     state.entities.set_faction(horse_slot, faction);
     state.entities.set_rider(horse_slot, Some(uuid));
     let horse_row = state.entities.row_mut(horse_slot);

@@ -45,6 +45,7 @@ pub mod dashboard;
 pub mod decode;
 mod dh;
 mod dimensions;
+pub(crate) mod faction_teams;
 pub mod fanout;
 pub mod handshake;
 mod host_telemetry;

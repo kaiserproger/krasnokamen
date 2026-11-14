@@ -464,6 +464,7 @@ mod tests {
             pitch: 0.0,
             head_yaw: 0.0,
             on_ground: true,
+            faction: 0,
             appearance: Arc::default(),
         };
         let (tx, ticks) = tokio::sync::broadcast::channel(4);

@@ -356,6 +356,7 @@ fn view_eq(a: &EntityView, b: &EntityView) -> bool {
         pitch,
         head_yaw,
         on_ground,
+        faction,
         appearance,
     } = a;
     *id == b.id
@@ -367,6 +368,7 @@ fn view_eq(a: &EntityView, b: &EntityView) -> bool {
         && *pitch == b.pitch
         && *head_yaw == b.head_yaw
         && *on_ground == b.on_ground
+        && *faction == b.faction
         && (Arc::ptr_eq(appearance, &b.appearance) || **appearance == *b.appearance)
 }
 

@@ -214,6 +214,50 @@ fn experience_orb_summon_enters_native_pickup_processing() {
     );
 }
 
+/// Entry-free rule (`scoreboard::require_no_team`): a summon with an explicit
+/// `UUID` and a battle faction refuses an entry already in a `/team` team (the
+/// edge's faction team would move it out, and a later `/team leave` would
+/// disconnect its viewers). Without the team the same summon spawns it.
+#[test]
+fn summon_with_uuid_and_faction_refuses_an_entry_in_a_team() {
+    let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
+    let entry = uuid::Uuid::from_u128(7).to_string();
+    let team = |state: &mut TickState, args: &[&str]| {
+        let command = crate::scoreboard::ScoreboardCommand::parse("team", args).unwrap();
+        crate::scoreboard::execute(state, actor, &command);
+    };
+    team(&mut state, &["add", "allies"]);
+    team(&mut state, &["join", "allies", &entry]);
+    let summon = |state: &mut TickState| {
+        let parsed = crate::commands::parse(
+            "summon zombie ~ ~ ~ {UUID:[I;0,0,0,7],\"krasnokamen:Faction\":1}",
+            true,
+        )
+        .unwrap();
+        let mut changes = ChangeSet::default();
+        state.outbox.clear();
+        crate::command_execution::execute(state, ConnectionId(1), actor, &parsed, &mut changes);
+        changes.entities_spawned
+    };
+    assert!(summon(&mut state).is_empty());
+    let text = format!(
+        "{entry} is in team allies; an entry in a team cannot join a battle faction (team leave {entry} first)"
+    );
+    assert!(
+        state.outbox.values().flatten().any(
+            |change| matches!(change, PlayerChange::Chat { message } if message.contains(&text))
+        ),
+        "{:?}",
+        state.outbox
+    );
+    team(&mut state, &["leave", &entry]);
+    let spawned = summon(&mut state);
+    assert_eq!(spawned.len(), 1);
+    let slot = state.entities.slot_of(spawned[0]).unwrap();
+    assert_eq!(state.entities.row(slot).uuid.to_string(), entry);
+    assert_eq!(state.entities.body(slot).faction, 1);
+}
+
 #[test]
 fn negative_experience_orb_pickup_preserves_xp_and_native_mending_damage() {
     for (nbt, expected_damage) in [

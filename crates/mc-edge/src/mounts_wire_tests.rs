@@ -191,6 +191,7 @@ fn leash_knot_wire_spawn_uses_integer_attachment_not_render_position() {
         pitch: 0.0,
         head_yaw: 0.0,
         on_ground: false,
+        faction: 0,
         appearance: Arc::new(EntityAppearance::default()),
     };
     assert_eq!(entity_spawn_position(&entity), [1.0, 65.0, -3.0]);

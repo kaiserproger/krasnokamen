@@ -670,6 +670,15 @@ pub struct WorldSnapshot {
     pub raid_bars: Vec<crate::raids::RaidBar>,
     /// Derived POI labels sorted by unique anchor; never persisted gameplay entities.
     pub settlement_labels: Arc<Vec<crate::settlements::presentation::SettlementLabel>>,
+    /// Battle side of each live player holding a slot (`battle live`), sorted
+    /// by name: derived from the battle's holds, never persisted. A player's
+    /// own `faction` stays 0; the edge projects these names into faction
+    /// teams. The same `Arc` while the holds are unchanged.
+    pub player_factions: Arc<Vec<(String, u16)>>,
+    /// Names of the scoreboard's `/team` teams, ascending; the same `Arc`
+    /// while they are unchanged. The edge never projects a faction team over
+    /// one of these names.
+    pub team_names: Arc<Vec<String>>,
 }
 
 /// One resident chunk in a snapshot.
@@ -697,6 +706,8 @@ pub struct EntityView {
     pub pitch: f32,
     pub head_yaw: f32,
     pub on_ground: bool,
+    /// Native allegiance (`Body::faction`); zero is unaffiliated.
+    pub faction: u16,
     /// Rarely changing state shared with the previous snapshot until it changes.
     pub appearance: Arc<EntityAppearance>,
 }

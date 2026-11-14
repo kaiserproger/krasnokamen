@@ -339,6 +339,27 @@ fn wire_views_preserve_sparse_signed_ids_and_duplicate_after_images() {
     assert_eq!(retained.len(), ids.len());
 }
 
+/// The edge's faction teams read `EntityView::faction`: `set_faction` alone
+/// (no motion, same appearance) publishes a changed row carrying it.
+#[test]
+fn set_faction_publishes_a_new_wire_view() {
+    let mut store = EntityStore::default();
+    let slot = store.spawn(
+        EntityId(1),
+        Uuid::from_u128(1),
+        EntityKind::Mob { type_id: 30 },
+        wire_fields([0.0, 64.0, 0.0]),
+    );
+    let before = store.views();
+    assert_eq!(before.get(EntityId(1)).unwrap().faction, 0);
+    store.set_faction(slot, 2);
+    let after = store.views();
+    assert_eq!(after.base_revision(), before.revision());
+    assert_eq!(after.changed(), &[EntityId(1)]);
+    assert_eq!(after.get(EntityId(1)).unwrap().faction, 2);
+    assert_eq!(before.get(EntityId(1)).unwrap().faction, 0);
+}
+
 #[test]
 fn wire_views_page_boundaries_reuse_slots_without_changing_retained_images() {
     let mut store = EntityStore::default();
