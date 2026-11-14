@@ -1536,7 +1536,7 @@ fn opaque_item_owner_refuses_unloadable_replay(kind: &str) {
         .to_fields(&registry.items)
     } else {
         vec![(
-            "solaris:ominous_item".into(),
+            "krasnokamen:ominous_item".into(),
             Tag::Compound(vec![
                 (
                     "uuid".into(),

@@ -49,7 +49,7 @@ const IMPORTED: TableDefinition<&[u8], &[u8]> = TableDefinition::new("imported_c
 const OVERLAYS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("section_overlays");
 const METADATA: TableDefinition<&[u8], &[u8]> = TableDefinition::new("chunk_metadata");
 const APPLIED: TableDefinition<&[u8], u64> = TableDefinition::new("applied_lsn");
-/// Baselines the Solaris generator produced (pregeneration, LOD fill, lazy
+/// Baselines the Krasnokamen generator produced (pregeneration, LOD fill, lazy
 /// checkpoint bases). Anvil imports are not listed. Rows from builds before this
 /// table existed are unlisted too, so offline pruning never treats them as
 /// regenerable. Created on first use in an existing world; absent means empty.
@@ -73,7 +73,7 @@ pub enum NativeError {
     #[error("native source: {0}")]
     Source(String),
     /// The stored global domains are not the set this build reads (a world written by
-    /// another Solaris storage format); callers turn this into operator guidance.
+    /// another Krasnokamen storage format); callers turn this into operator guidance.
     #[error("native global: unknown or missing required domain")]
     GlobalDomains,
     #[error("unsupported native schema {0}; explicit offline conversion required")]
@@ -501,7 +501,7 @@ impl NativeStore {
 
     /// Imported full chunks, including all-air chunks, are canonical durable
     /// baseline records, not overlay/cache entries. Never overwrites coverage.
-    /// W0 accepts normalized Solaris compact chunks, not arbitrary Java saves.
+    /// W0 accepts normalized Krasnokamen compact chunks, not arbitrary Java saves.
     pub fn import_chunk(
         &self,
         dimension: u32,

@@ -78,7 +78,7 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]):
                         len(set(current)) == index and set(expected).issubset(current))
             expected = current
     # The fifth attempt has no positive event to wait for, and the public NBT
-    # view hides solaris:Riders. The fourth rider's dismount below is a later
+    # view hides krasnokamen:Riders. The fourth rider's dismount below is a later
     # event in the same ordered passenger stream, so a fifth passenger id could
     # only appear before it; the check after it proves refusal.
     _capture(steps, "four-riders-mounted")

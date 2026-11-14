@@ -2,9 +2,9 @@ const { firefox } = require('playwright-core');
 
 const path = require('path');
 const fs = require('fs');
-const FIREFOX = process.env.SOLARIS_WINGUI_FIREFOX || path.join(process.env.HOME, '.cache/ms-playwright/firefox-1555/firefox/firefox');
-const URL = process.env.SOLARIS_WINGUI_URL || 'http://localhost:8006/';
-const SHOTS = process.env.SOLARIS_WINGUI_SHOTS || '.analysis/winqa-shots';
+const FIREFOX = process.env.KRASNOKAMEN_WINGUI_FIREFOX || path.join(process.env.HOME, '.cache/ms-playwright/firefox-1555/firefox/firefox');
+const URL = process.env.KRASNOKAMEN_WINGUI_URL || 'http://localhost:8006/';
+const SHOTS = process.env.KRASNOKAMEN_WINGUI_SHOTS || '.analysis/winqa-shots';
 const readline = require('readline');
 
 let browser = null, page = null;

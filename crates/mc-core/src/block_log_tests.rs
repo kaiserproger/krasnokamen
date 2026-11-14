@@ -251,7 +251,7 @@ fn restored_sensor_retains_its_frequency_and_active_deadline() {
         ),
         ("last_vibration_frequency".into(), mc_nbt::Tag::Int(7)),
         (
-            "solaris:phase_until".into(),
+            "krasnokamen:phase_until".into(),
             mc_nbt::Tag::Long((rig.state.tick + 20) as i64),
         ),
     ]);
@@ -505,7 +505,7 @@ fn retention_prunes_by_count_then_age() {
 }
 
 fn required_blocks() -> mc_world::BlockRegistry {
-    mc_world::BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+    mc_world::BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
         .expect("required blocks")
 }
 
@@ -520,7 +520,7 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
         mc_world::native::NativeStore::create(&directory.path().join("state.redb"), [7; 32])
             .expect("store");
     let blocks = required_blocks();
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let now = unix_now();
     let stone = |seq| Record {
         change: Change::Block {
@@ -659,7 +659,7 @@ fn block_log_tick_survives_wal_and_old_records_are_unknown() {
     assert_eq!(value.records[0].tick, None);
 
     let blocks = required_blocks();
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let old_row = old_format_row(&blocks, &items);
     assert_eq!(
         decode_record(&old_row, 1, &blocks, &items)
@@ -703,7 +703,7 @@ fn wal_tick_that_is_present_must_be_a_tick() {
 #[test]
 fn row_tick_must_be_a_nonnegative_long() {
     let blocks = required_blocks();
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let row = |tick: mc_nbt::Tag| {
         let (_, mut root) =
             mc_nbt::read_named(&mut old_format_row(&blocks, &items).as_slice()).expect("row nbt");
@@ -732,7 +732,7 @@ fn row_tick_must_be_a_nonnegative_long() {
 #[test]
 fn row_tick_beyond_an_nbt_long_is_not_encoded() {
     let blocks = required_blocks();
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut huge = record(1, 99);
     huge.tick = Some(u64::MAX);
     huge.change = Change::Block {
@@ -840,7 +840,7 @@ fn replayed_wal_tail_survives_the_checkpoint_that_prunes_it() {
 /// still reads them back as the same blocks and items.
 #[test]
 fn table_rows_survive_runtime_id_reordering() {
-    let report = mc_data::blocks::solaris_required_blocks_report();
+    let report = mc_data::blocks::krasnokamen_required_blocks_report();
     let old = mc_world::BlockRegistry::from_report(&report).expect("blocks");
     let mut next = 0;
     let renumbered: Vec<_> = report
@@ -979,9 +979,9 @@ fn table_row_with_unknown_name_fails_load() {
     let store =
         mc_world::native::NativeStore::create(&directory.path().join("state.redb"), [7; 32])
             .expect("store");
-    let report = mc_data::blocks::solaris_required_blocks_report();
+    let report = mc_data::blocks::krasnokamen_required_blocks_report();
     let blocks = mc_world::BlockRegistry::from_report(&report).expect("blocks");
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let diamond = items.id_of(&id("minecraft:diamond")).expect("diamond");
     let chest = blocks
         .block(&id("minecraft:chest"))

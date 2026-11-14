@@ -72,9 +72,9 @@ def write_pack(world: Path) -> Path:
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
-    if not override or not os.environ.get("SOLARIS_CLIENT_BINARY"):
-        raise RuntimeError("datapack-reload requires prebuilt SOLARIS_SERVER_BINARY and SOLARIS_CLIENT_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
+    if not override or not os.environ.get("KRASNOKAMEN_CLIENT_BINARY"):
+        raise RuntimeError("datapack-reload requires prebuilt KRASNOKAMEN_SERVER_BINARY and KRASNOKAMEN_CLIENT_BINARY")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing server binary: {binary}")
@@ -85,8 +85,8 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     plugins.mkdir()
     config = artifact / "datapack-reload.toml"
     # The server's own content cache, as client_probes uses it; the client's
-    # SOLARIS_CLIENT_DATA_DIR is not a server content cache.
-    vanilla = os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR", "data/vanilla")
+    # KRASNOKAMEN_CLIENT_DATA_DIR is not a server content cache.
+    vanilla = os.environ.get("KRASNOKAMEN_SERVER_VANILLA_DATA_DIR", "data/vanilla")
     source = (runtime.REPO_ROOT / "playable.toml").read_text()
     token = 'vanilla_data_dir = "data/vanilla"'
     if source.count(token) != 1:

@@ -160,8 +160,8 @@ fn at_boundary() -> ! {
 #[ignore = "re-executed only by SIGKILL boundary parents"]
 fn crash_child() {
     let directory =
-        std::path::PathBuf::from(std::env::var_os("SOLARIS_PERSIST_CRASH_DIR").unwrap());
-    let boundary = std::env::var("SOLARIS_PERSIST_CRASH_BOUNDARY").unwrap();
+        std::path::PathBuf::from(std::env::var_os("KRASNOKAMEN_PERSIST_CRASH_DIR").unwrap());
+    let boundary = std::env::var("KRASNOKAMEN_PERSIST_CRASH_BOUNDARY").unwrap();
     let config = config(&directory);
     let mut state = recovered_world(&config);
     join(&mut state);
@@ -230,8 +230,8 @@ fn kill_at(directory: &std::path::Path, boundary: &str) {
     let mut child = CrashChild(
         std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", CHILD, "--ignored", "--nocapture"])
-            .env("SOLARIS_PERSIST_CRASH_DIR", directory)
-            .env("SOLARIS_PERSIST_CRASH_BOUNDARY", boundary)
+            .env("KRASNOKAMEN_PERSIST_CRASH_DIR", directory)
+            .env("KRASNOKAMEN_PERSIST_CRASH_BOUNDARY", boundary)
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .spawn()

@@ -427,14 +427,14 @@ fn legacy_plugin_state_is_refused_not_wiped() {
 
     // Legacy registry root key under the real owner.
     state.plugins.apply_storage(
-        "solaris-settlements",
+        "krasnokamen-settlements",
         &[
             mc_script::ScriptStorageMutation::compare_and_swap("settlement-root-v2", None, "{}")
                 .unwrap(),
         ],
     );
     let error = refuse_legacy_plugin_state(&state).unwrap_err().to_string();
-    assert!(error.contains("solaris-settlements"), "{error}");
+    assert!(error.contains("krasnokamen-settlements"), "{error}");
     assert!(error.contains("refusing"), "{error}");
 }
 
@@ -468,7 +468,7 @@ fn legacy_settlement_owned_npc_custody_is_refused() {
     custody.insert(
         "11111111-1111-1111-1111-111111111111".to_owned(),
         (
-            "solaris-settlements".to_owned(),
+            "krasnokamen-settlements".to_owned(),
             "settlement-handle-1".to_owned(),
         ),
     );
@@ -483,7 +483,7 @@ fn legacy_settlement_owned_npc_custody_is_refused() {
         serde_json::json!({"handle": "settlement-handle-1"}),
     );
     let error = refuse_legacy_plugin_state(&state).unwrap_err().to_string();
-    assert!(error.contains("solaris-settlements"), "{error}");
+    assert!(error.contains("krasnokamen-settlements"), "{error}");
     assert!(error.contains("refusing"), "{error}");
 }
 
@@ -1283,7 +1283,7 @@ fn district_plan_uses_touched_native_wal_and_checkpoint_not_saved_readiness() {
         buildings: vec![mc_script::ScriptSettlementBuildingRef::new(
             "worksite".into(),
             "retained-certificate".into(),
-            "solaris:market".into(),
+            "krasnokamen:market".into(),
         )],
     };
     let record = state.settlements.get_mut(id).unwrap();

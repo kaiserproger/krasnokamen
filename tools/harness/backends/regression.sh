@@ -6,31 +6,31 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
-MANIFEST="${SOLARIS_REAL_CLIENT_MANIFEST:-$REPO_ROOT/docs/real-client-regression/manifests/m94-regression-pack.json}"
-RUN_ROOT="${SOLARIS_REAL_CLIENT_RUN_ROOT:-$REPO_ROOT/.analysis/real-client-runs}"
+MANIFEST="${KRASNOKAMEN_REAL_CLIENT_MANIFEST:-$REPO_ROOT/docs/real-client-regression/manifests/m94-regression-pack.json}"
+RUN_ROOT="${KRASNOKAMEN_REAL_CLIENT_RUN_ROOT:-$REPO_ROOT/.analysis/real-client-runs}"
 # The Loader beside the main checkout, also from a linked worktree (as tools/harness/runtime.py sibling_root).
 MAIN_CHECKOUT="$(dirname "$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || echo "$REPO_ROOT/.git")")"
-AGENT_ROOT="${SOLARIS_LOADER_ROOT:-$(dirname "$MAIN_CHECKOUT")/solaris-loader}"
+AGENT_ROOT="${KRASNOKAMEN_LOADER_ROOT:-$(dirname "$MAIN_CHECKOUT")/solaris-loader}"
 GRADLE_RUNCLIENT_TASK=":fabric-agent:runClientAgent"
 CLIENT_ADAPTER_SOURCE="auto-gradle-runclient"
 CLIENT_KIND="gradle-runclient"
 SECOND_CLIENT_ADAPTER_SOURCE="auto-gradle-runclient"
 SECOND_CLIENT_KIND="gradle-runclient"
-CLIENT_TIMEOUT_SECONDS="${SOLARIS_REAL_CLIENT_TIMEOUT_SECONDS:-180}"
-SERVER_READY_TIMEOUT_SECONDS="${SOLARIS_REAL_CLIENT_SERVER_READY_TIMEOUT_SECONDS:-120}"
-SERVER_CONFIG="${SOLARIS_REAL_CLIENT_SERVER_CONFIG:-example.toml}"
-FRESH_WORLD="${SOLARIS_REAL_CLIENT_FRESH_WORLD:-0}"
-SERVER_SEED="${SOLARIS_REAL_CLIENT_SERVER_SEED:-}"
-SERVER_ADDR="${SOLARIS_REAL_CLIENT_SERVER_ADDR:-127.0.0.1:25565}"
+CLIENT_TIMEOUT_SECONDS="${KRASNOKAMEN_REAL_CLIENT_TIMEOUT_SECONDS:-180}"
+SERVER_READY_TIMEOUT_SECONDS="${KRASNOKAMEN_REAL_CLIENT_SERVER_READY_TIMEOUT_SECONDS:-120}"
+SERVER_CONFIG="${KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG:-example.toml}"
+FRESH_WORLD="${KRASNOKAMEN_REAL_CLIENT_FRESH_WORLD:-0}"
+SERVER_SEED="${KRASNOKAMEN_REAL_CLIENT_SERVER_SEED:-}"
+SERVER_ADDR="${KRASNOKAMEN_REAL_CLIENT_SERVER_ADDR:-127.0.0.1:25565}"
 SCENARIO_SERVER_PORT="${SCENARIO_SERVER_PORT:-}"
-AGENT_DRIVER="${SOLARIS_REAL_CLIENT_AGENT_DRIVER:-$REPO_ROOT/tools/harness/backends/driver.py}"
-AGENT_BRIDGE_URL="${SOLARIS_REAL_CLIENT_AGENT_BRIDGE_URL:-}"
-AGENT_SECRET="${SOLARIS_REAL_CLIENT_AGENT_SECRET:-}"
-AGENT_PORT="${SOLARIS_REAL_CLIENT_AGENT_PORT:-}"
-AGENT_SCENARIO="${SOLARIS_REAL_CLIENT_AGENT_SCENARIO:-m94-02b-rejected-block-resync}"
-SECOND_AGENT_SECRET="${SOLARIS_REAL_CLIENT_SECOND_AGENT_SECRET:-}"
-SECOND_AGENT_PORT="${SOLARIS_REAL_CLIENT_SECOND_AGENT_PORT:-}"
-SECOND_AGENT_BRIDGE_URL="${SOLARIS_REAL_CLIENT_SECOND_AGENT_BRIDGE_URL:-}"
+AGENT_DRIVER="${KRASNOKAMEN_REAL_CLIENT_AGENT_DRIVER:-$REPO_ROOT/tools/harness/backends/driver.py}"
+AGENT_BRIDGE_URL="${KRASNOKAMEN_REAL_CLIENT_AGENT_BRIDGE_URL:-}"
+AGENT_SECRET="${KRASNOKAMEN_REAL_CLIENT_AGENT_SECRET:-}"
+AGENT_PORT="${KRASNOKAMEN_REAL_CLIENT_AGENT_PORT:-}"
+AGENT_SCENARIO="${KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO:-m94-02b-rejected-block-resync}"
+SECOND_AGENT_SECRET="${KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_SECRET:-}"
+SECOND_AGENT_PORT="${KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_PORT:-}"
+SECOND_AGENT_BRIDGE_URL="${KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_BRIDGE_URL:-}"
 MODE="prepare"
 VALIDATE_RUN_DIR=""
 SCENARIO_NO_DEBUG="0"
@@ -42,13 +42,13 @@ Usage: python3 -m tools.harness run regression [--check|--prepare|--run|--valida
 Environment:
 	  Primary client adapter is auto-selected as the repo-native
 	                                Gradle runClient adapter:
-	                                <main checkout>/../solaris-loader/gradlew (SOLARIS_LOADER_ROOT selects another)
+	                                <main checkout>/../solaris-loader/gradlew (KRASNOKAMEN_LOADER_ROOT selects another)
 	                                --no-daemon --no-configuration-cache :fabric-agent:runClientAgent.
-  SOLARIS_REAL_CLIENT_MANIFEST  Regression pack manifest path.
-  SOLARIS_REAL_CLIENT_RUN_ROOT  Local-only artifact root. Defaults to .analysis/real-client-runs.
-  SOLARIS_REAL_CLIENT_SERVER_CONFIG
+  KRASNOKAMEN_REAL_CLIENT_MANIFEST  Regression pack manifest path.
+  KRASNOKAMEN_REAL_CLIENT_RUN_ROOT  Local-only artifact root. Defaults to .analysis/real-client-runs.
+  KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG
                                 Server config path. Defaults to example.toml.
-  SOLARIS_REAL_CLIENT_FRESH_WORLD
+  KRASNOKAMEN_REAL_CLIENT_FRESH_WORLD
                                 If 1, copy the server config into the run dir
                                 and point data.world_dir at a fresh per-run world.
                                 --run always uses a per-run server.toml that
@@ -56,38 +56,38 @@ Environment:
                                 access for local debug commands, except
                                 playable-46-generated-ruin-cache which uses
                                 no operators.
-  SOLARIS_REAL_CLIENT_SERVER_SEED
+  KRASNOKAMEN_REAL_CLIENT_SERVER_SEED
                                 Optional signed decimal integer used to override
                                 data.seed in the prepared server config.
-  SOLARIS_REAL_CLIENT_SERVER_ADDR
+  KRASNOKAMEN_REAL_CLIENT_SERVER_ADDR
                                 Server address passed to the in-client agent driver.
                                 Defaults to 127.0.0.1:25565.
-  SOLARIS_REAL_CLIENT_TIMEOUT_SECONDS
+  KRASNOKAMEN_REAL_CLIENT_TIMEOUT_SECONDS
                                 Timeout for the Gradle runClient adapter.
                                 Defaults to 180.
-  SOLARIS_REAL_CLIENT_AGENT_BRIDGE_URL
+  KRASNOKAMEN_REAL_CLIENT_AGENT_BRIDGE_URL
                                 Loopback JSON bridge URL inside the real client.
-  SOLARIS_REAL_CLIENT_AGENT_SECRET
+  KRASNOKAMEN_REAL_CLIENT_AGENT_SECRET
                                 Per-run bridge secret. Required for agent-driver mode.
-  SOLARIS_REAL_CLIENT_AGENT_PORT
+  KRASNOKAMEN_REAL_CLIENT_AGENT_PORT
                                 Java agent bridge port. Defaults to a free
                                 loopback port selected per run.
-  SOLARIS_REAL_CLIENT_AGENT_DRIVER
+  KRASNOKAMEN_REAL_CLIENT_AGENT_DRIVER
                                 Internal driver path. Defaults to tools/harness/backends/driver.py.
-  SOLARIS_REAL_CLIENT_AGENT_SCENARIO
+  KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO
                                 Scenario id. Defaults to m94-02b-rejected-block-resync.
-  SOLARIS_REAL_CLIENT_SECOND_AGENT_SECRET
+  KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_SECRET
                                 Separate per-run bridge secret for the second client.
-  SOLARIS_REAL_CLIENT_SECOND_AGENT_PORT
+  KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_PORT
                                 Second Java agent bridge port. Defaults to a
                                 free loopback port selected per run.
-  SOLARIS_REAL_CLIENT_SECOND_AGENT_BRIDGE_URL
+  KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_BRIDGE_URL
                                 Optional explicit loopback bridge URL for the second client.
 
 Modes:
   --check         Validate that the Gradle runClient adapter is available.
   --prepare       Create a local run directory and observation templates.
-  --run           Start Solaris, launch Gradle runClient, and record logs.
+  --run           Start Krasnokamen, launch Gradle runClient, and record logs.
   --validate-run  Check that a run directory has the required artifact shape.
 
 Protocol bots, wire-probe, mc-test-harness clients, and mocks are rejected.
@@ -138,7 +138,7 @@ if value < -(1 << 63) or value > (1 << 63) - 1:
 print(value)
 PY
 )"; then
-    printf 'error: SOLARIS_REAL_CLIENT_SERVER_SEED must be a signed 64-bit decimal integer\n' >&2
+    printf 'error: KRASNOKAMEN_REAL_CLIENT_SERVER_SEED must be a signed 64-bit decimal integer\n' >&2
     exit 2
   fi
 fi
@@ -203,8 +203,8 @@ fi
 
 if [[ "$MODE" == "run" ]]; then
   client_adapter_status >/dev/null
-  if [[ -n "${SOLARIS_SERVER_BINARY:-}" && ! -x "$SOLARIS_SERVER_BINARY" ]]; then
-    printf 'error: frozen server override is not executable: %s\n' "$SOLARIS_SERVER_BINARY" >&2
+  if [[ -n "${KRASNOKAMEN_SERVER_BINARY:-}" && ! -x "$KRASNOKAMEN_SERVER_BINARY" ]]; then
+    printf 'error: frozen server override is not executable: %s\n' "$KRASNOKAMEN_SERVER_BINARY" >&2
     exit 1
   fi
   if [[ "$CLIENT_KIND" == "gradle-runclient" && -z "$AGENT_SECRET" ]]; then
@@ -240,12 +240,12 @@ PY
   {
     printf 'server_config_source=%s\n' "$server_config_source"
     printf 'server_config_effective=%s\n' "$server_config"
-    if [[ -n "${SOLARIS_SERVER_BINARY:-}" ]]; then
-      printf 'server_command_effective=%s\n' "$SOLARIS_SERVER_BINARY --config $server_config"
-      printf 'server_binary_effective=%s\n' "$SOLARIS_SERVER_BINARY"
-      printf 'server_binary_sha256_effective=%s\n' "$(sha256sum -- "$SOLARIS_SERVER_BINARY" | cut -d ' ' -f 1)"
+    if [[ -n "${KRASNOKAMEN_SERVER_BINARY:-}" ]]; then
+      printf 'server_command_effective=%s\n' "$KRASNOKAMEN_SERVER_BINARY --config $server_config"
+      printf 'server_binary_effective=%s\n' "$KRASNOKAMEN_SERVER_BINARY"
+      printf 'server_binary_sha256_effective=%s\n' "$(sha256sum -- "$KRASNOKAMEN_SERVER_BINARY" | cut -d ' ' -f 1)"
     else
-      printf 'server_command_effective=%s\n' "cargo run --bin solaris-v2 -p mc-edge -- --config $server_config"
+      printf 'server_command_effective=%s\n' "cargo run --bin krasnokamen -p mc-edge -- --config $server_config"
     fi
     if [[ "$SCENARIO_NO_DEBUG" == "1" ]]; then
       printf 'server_op_users=NONE\n'
@@ -287,16 +287,16 @@ PY
     (
       cd "$REPO_ROOT"
       # Prefer the caller's immutable binary over rebuilding the frozen tree.
-      if [[ -n "${SOLARIS_SERVER_BINARY:-}" ]]; then
-        exec "$SOLARIS_SERVER_BINARY" --config "$server_config"
+      if [[ -n "${KRASNOKAMEN_SERVER_BINARY:-}" ]]; then
+        exec "$KRASNOKAMEN_SERVER_BINARY" --config "$server_config"
       else
-        exec cargo run --bin solaris-v2 -p mc-edge -- --config "$server_config"
+        exec cargo run --bin krasnokamen -p mc-edge -- --config "$server_config"
       fi
     ) > >(
       ready_sent=0
       while IFS= read -r line; do
         printf '%s\n' "$line" >> "$run_dir/server.log"
-        if [[ "$ready_sent" -eq 0 && "$line" == *"Solaris is listening"* ]]; then
+        if [[ "$ready_sent" -eq 0 && "$line" == *"Krasnokamen is listening"* ]]; then
           printf 'ready\n' > "$ready_fifo"
           ready_sent=1
         fi
@@ -534,25 +534,25 @@ PY
     printf 'client_username_%s=%s\n' "$label" "$client_username" >> "$run_dir/automation-driver.txt"
     (
       cd "$AGENT_ROOT"
-      SOLARIS_CLIENT_AGENT_SECRET="$secret" \
-        SOLARIS_CLIENT_AGENT_PORT="$port" \
-        SOLARIS_CLIENT_AGENT_RUN_DIR="$run_dir" \
-        SOLARIS_CLIENT_AGENT_GAME_DIR="$client_game_dir" \
-        SOLARIS_CLIENT_AGENT_USERNAME="$client_username" \
+      KRASNOKAMEN_CLIENT_AGENT_SECRET="$secret" \
+        KRASNOKAMEN_CLIENT_AGENT_PORT="$port" \
+        KRASNOKAMEN_CLIENT_AGENT_RUN_DIR="$run_dir" \
+        KRASNOKAMEN_CLIENT_AGENT_GAME_DIR="$client_game_dir" \
+        KRASNOKAMEN_CLIENT_AGENT_USERNAME="$client_username" \
         JDK_JAVA_OPTIONS="$jdk_options" \
         ./gradlew --no-daemon --no-configuration-cache "$GRADLE_RUNCLIENT_TASK" \
-          -Psolaris.clientAgent.secret="$secret" \
-          -Psolaris.clientAgent.port="$port" \
-          -Psolaris.clientAgent.runDir="$run_dir" \
-          -Psolaris.clientAgent.gameDir="$client_game_dir" \
-          -Psolaris.clientAgent.runtimeProvenanceFile="$runtime_provenance_file" \
-          -Psolaris.clientAgent.username="$client_username"
+          -Pkrasnokamen.clientAgent.secret="$secret" \
+          -Pkrasnokamen.clientAgent.port="$port" \
+          -Pkrasnokamen.clientAgent.runDir="$run_dir" \
+          -Pkrasnokamen.clientAgent.gameDir="$client_game_dir" \
+          -Pkrasnokamen.clientAgent.runtimeProvenanceFile="$runtime_provenance_file" \
+          -Pkrasnokamen.clientAgent.username="$client_username"
     ) > >(
       ready_sent=0
       while IFS= read -r line; do
         printf '%s\n' "$line" >> "$log_file"
         if [[ "$ready_sent" -eq 0 \
-          && "$line" == *"Solaris client agent bridge listening on http://127.0.0.1:$port/rpc"* ]]; then
+          && "$line" == *"Krasnokamen client agent bridge listening on http://127.0.0.1:$port/rpc"* ]]; then
           printf 'ready\n' > "$ready_fifo"
           ready_sent=1
         fi
@@ -596,7 +596,7 @@ PY
   start_server "initial"
   if [[ -n "$AGENT_BRIDGE_URL" || -n "$AGENT_SECRET" ]]; then
     if [[ -z "$AGENT_BRIDGE_URL" || -z "$AGENT_SECRET" ]]; then
-      printf 'error: agent-driver mode requires SOLARIS_REAL_CLIENT_AGENT_SECRET plus SOLARIS_REAL_CLIENT_AGENT_BRIDGE_URL or SOLARIS_REAL_CLIENT_AGENT_PORT\n' >&2
+      printf 'error: agent-driver mode requires KRASNOKAMEN_REAL_CLIENT_AGENT_SECRET plus KRASNOKAMEN_REAL_CLIENT_AGENT_BRIDGE_URL or KRASNOKAMEN_REAL_CLIENT_AGENT_PORT\n' >&2
       exit 1
     fi
     require_file "$AGENT_DRIVER"

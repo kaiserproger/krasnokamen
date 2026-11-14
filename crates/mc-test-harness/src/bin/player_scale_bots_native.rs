@@ -368,7 +368,7 @@ pub(super) fn native_control_snapshot(world: &Path, spec: &Value) -> Result<Valu
         .context("native snapshot requires explicit native_worldgen_revision")?;
     // Native format identity contract; opening validates it against the database.
     let mut identity = [0_u8; 32];
-    identity[..16].copy_from_slice(b"SolarisV2Native\0");
+    identity[..16].copy_from_slice(b"KrasnoV2Native\0\0");
     identity[16..24].copy_from_slice(&seed.to_be_bytes());
     identity[24..].copy_from_slice(&revision.to_be_bytes());
     let path = world.join("native/state.redb");
