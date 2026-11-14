@@ -105,7 +105,9 @@ fn set_camel_dashing(state: &mut TickState, slot: EntitySlot, dashing: bool) {
     let appearance = Arc::make_mut(&mut row.appearance);
     let value = crate::boundary::EntityDataValue::Boolean(dashing);
     if let Some((_, old)) = appearance.extra.iter_mut().find(|(index, _)| *index == 19) {
-        if *old == value { return; }
+        if *old == value {
+            return;
+        }
         *old = value;
     } else {
         appearance.extra.push((19, value));
@@ -114,8 +116,12 @@ fn set_camel_dashing(state: &mut TickState, slot: EntitySlot, dashing: bool) {
 }
 
 pub(crate) fn riding_jump(state: &mut TickState, connection: ConnectionId, power: i32) {
-    let Some(actor) = state.connections.entity_of(connection) else { return; };
-    let Some(slot) = vehicle(state, actor) else { return; };
+    let Some(actor) = state.connections.entity_of(connection) else {
+        return;
+    };
+    let Some(slot) = vehicle(state, actor) else {
+        return;
+    };
     if name(state, slot) != "minecraft:camel"
         || rider(state, slot).is_none_or(|rider| state.entities.body(rider).id != actor)
         || state.entities.row(slot).loot.saddle.is_none()
@@ -125,19 +131,28 @@ pub(crate) fn riding_jump(state: &mut TickState, connection: ConnectionId, power
     {
         return;
     }
-    let charge = if power >= 90 { 1.0 } else { 0.4 + 0.4 * f64::from(power) / 90.0 };
+    let charge = if power >= 90 {
+        1.0
+    } else {
+        0.4 + 0.4 * f64::from(power) / 90.0
+    };
     let yaw = f64::from(state.entities.rot(slot)[0]).to_radians();
     let speed = 22.2222_f64 * charge * f64::from(state.entities.row(slot).speed);
     let velocity = state.entities.vel(slot);
     let dash_x = -f64::from(mc_physics::mth::sin(yaw)) * speed;
     let dash_z = f64::from(mc_physics::mth::cos(yaw)) * speed;
     let impulse = state.entities.horizontal_impulse(slot);
-    state.entities.set_horizontal_impulse(slot, [impulse[0] + dash_x, impulse[1] + dash_z]);
-    state.entities.set_vel(slot, [
-        velocity[0] + dash_x,
-        velocity[1] + 1.4285 * charge * f64::from(0.42_f32) * 20.0,
-        velocity[2] + dash_z,
-    ]);
+    state
+        .entities
+        .set_horizontal_impulse(slot, [impulse[0] + dash_x, impulse[1] + dash_z]);
+    state.entities.set_vel(
+        slot,
+        [
+            velocity[0] + dash_x,
+            velocity[1] + 1.4285 * charge * f64::from(0.42_f32) * 20.0,
+            velocity[2] + dash_z,
+        ],
+    );
     state.entities.set_ground(slot, false);
     state.entities.row_mut(slot).entity_life.mount.dash_cooldown = 55;
     set_camel_dashing(state, slot, true);
@@ -210,7 +225,9 @@ fn action(
         if kind == "minecraft:happy_ghast"
             && row.loot.body_armor.is_none()
             && state.registry.tags.contains_raw_id(
-                "minecraft:item", "minecraft:harnesses", held.item_id as i32,
+                "minecraft:item",
+                "minecraft:harnesses",
+                held.item_id as i32,
             )
         {
             return Some(Action::Armor);
@@ -465,7 +482,13 @@ pub(crate) fn apply(state: &mut TickState, actor: EntityId, plan: &Plan) {
         }
         Action::Ride => {
             if state.entities.row(slot).entity_life.mount.rider.is_some() {
-                state.entities.row_mut(slot).entity_life.mount.passengers.push(uuid);
+                state
+                    .entities
+                    .row_mut(slot)
+                    .entity_life
+                    .mount
+                    .passengers
+                    .push(uuid);
             } else {
                 state.entities.set_rider(slot, Some(uuid));
             }
@@ -621,7 +644,10 @@ pub(crate) fn dismount(state: &mut TickState, actor: EntityId) {
     let Some(slot) = vehicle(state, actor) else {
         return;
     };
-    let uuid = state.entities.row(state.entities.slot_of(actor).expect("rider")).uuid;
+    let uuid = state
+        .entities
+        .row(state.entities.slot_of(actor).expect("rider"))
+        .uuid;
     remove_passenger(state, slot, uuid);
     if let Some(rider) = state.entities.slot_of(actor) {
         let pos = state.entities.pos(slot);
@@ -655,8 +681,16 @@ pub(crate) fn dismount(state: &mut TickState, actor: EntityId) {
 pub(crate) fn sync_rider(state: &mut TickState, slot: EntitySlot) {
     let mount = &state.entities.row(slot).entity_life.mount;
     let mut passengers = [None; 4];
-    for (index, uuid) in mount.rider.into_iter().chain(mount.passengers.iter().copied()).take(4).enumerate() {
-        passengers[index] = state.entities.slot_of_uuid(uuid)
+    for (index, uuid) in mount
+        .rider
+        .into_iter()
+        .chain(mount.passengers.iter().copied())
+        .take(4)
+        .enumerate()
+    {
+        passengers[index] = state
+            .entities
+            .slot_of_uuid(uuid)
             .filter(|rider| !state.entity_session_locked(state.entities.body(*rider).id));
     }
     let ids = passengers.map(|rider| rider.map(|rider| state.entities.body(rider).id));
@@ -666,7 +700,13 @@ pub(crate) fn sync_rider(state: &mut TickState, slot: EntitySlot) {
         }
     }
     let (body, row) = state.entities.parts_mut(slot);
-    if !row.appearance.passengers.iter().copied().eq(ids.into_iter().flatten()) {
+    if !row
+        .appearance
+        .passengers
+        .iter()
+        .copied()
+        .eq(ids.into_iter().flatten())
+    {
         Arc::make_mut(&mut row.appearance).passengers = ids.into_iter().flatten().collect();
         state.appearance_changed.push(body.id);
     }
@@ -701,7 +741,10 @@ fn sync_passenger(state: &mut TickState, slot: EntitySlot, rider: EntitySlot, in
         } else if name(state, slot) == "minecraft:happy_ghast" {
             (3.4, [1.7, 0.0, -1.7, 0.0][index.min(3)])
         } else if name(state, slot) == "minecraft:camel" {
-            (state.entities.body(slot).height * 0.75, if index == 0 { 0.5 } else { -0.7 })
+            (
+                state.entities.body(slot).height * 0.75,
+                if index == 0 { 0.5 } else { -0.7 },
+            )
         } else {
             (state.entities.body(slot).height * 0.75, 0.0)
         };
@@ -717,7 +760,8 @@ fn sync_passenger(state: &mut TickState, slot: EntitySlot, rider: EntitySlot, in
             pos[0] - forward * f64::from(mc_physics::mth::sin(yaw))
                 + side * f64::from(mc_physics::mth::cos(yaw)),
             pos[1] + height,
-            pos[2] + forward * f64::from(mc_physics::mth::cos(yaw))
+            pos[2]
+                + forward * f64::from(mc_physics::mth::cos(yaw))
                 + side * f64::from(mc_physics::mth::sin(yaw)),
         ],
     );
@@ -950,9 +994,19 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         if cooldown > 0 {
             state.entities.row_mut(slot).entity_life.mount.dash_cooldown = cooldown - 1;
         }
-        let dashing = state.entities.row(slot).appearance.extra.iter().any(|(index, value)|
-            *index == 19 && matches!(value, crate::boundary::EntityDataValue::Boolean(true)));
-        if dashing && cooldown < 50 && (state.entities.ground(slot) || crate::tick::elytra::in_fluid(state, slot)) {
+        let dashing = state
+            .entities
+            .row(slot)
+            .appearance
+            .extra
+            .iter()
+            .any(|(index, value)| {
+                *index == 19 && matches!(value, crate::boundary::EntityDataValue::Boolean(true))
+            });
+        if dashing
+            && cooldown < 50
+            && (state.entities.ground(slot) || crate::tick::elytra::in_fluid(state, slot))
+        {
             set_camel_dashing(state, slot, false);
         }
     }
@@ -971,7 +1025,13 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         }
         let mount = &state.entities.row(slot).entity_life.mount;
         let mut passengers = [None; 4];
-        for (index, uuid) in mount.rider.into_iter().chain(mount.passengers.iter().copied()).take(4).enumerate() {
+        for (index, uuid) in mount
+            .rider
+            .into_iter()
+            .chain(mount.passengers.iter().copied())
+            .take(4)
+            .enumerate()
+        {
             passengers[index] = Some(uuid);
         }
         for uuid in passengers.into_iter().flatten() {
@@ -979,8 +1039,11 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             // removes custody; an absent UUID alone must not erase saved riders.
             let invalid = state.entities.slot_of_uuid_any(uuid).is_some_and(|r| {
                 let body = state.entities.body(r);
-                !body.alive || state.players.get(&body.id)
-                    .is_some_and(|p| p.spectator() || p.vitals.is_dead())
+                !body.alive
+                    || state
+                        .players
+                        .get(&body.id)
+                        .is_some_and(|p| p.spectator() || p.vitals.is_dead())
             });
             if invalid {
                 remove_passenger(state, slot, uuid);

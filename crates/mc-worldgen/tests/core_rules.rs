@@ -14,7 +14,7 @@ use mc_worldgen::{
 
 fn generator() -> (TerrainGenerator, Arc<BlockRegistry>, BiomeRules) {
     let registry = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     let biomes = BiomeRules::vanilla_overworld();
     let generator =
@@ -220,7 +220,7 @@ fn sampled_land_contains_tree_shapes() {
 #[test]
 fn generated_tree_trunks_are_supported_by_stable_terrain() {
     let registry = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     let air = default_state(&registry, "minecraft:air");
     let water = default_state(&registry, "minecraft:water");
@@ -274,7 +274,7 @@ fn generated_tree_trunks_are_supported_by_stable_terrain() {
 #[test]
 fn seed_driven_spawn_locator_finds_distinct_natural_land() {
     let registry = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     let seeds = [
         0, 712_816, -1, 1, 2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610, 987, 1_597, 2_584,

@@ -191,7 +191,10 @@ pub fn extend_blueprints(
                     },
                     speed: speed as f32,
                     attack_damage: facts.attributes.attack_damage.unwrap_or(
-                        if hostile || profile.combat == MobCombatPolicy::Arrow || crate::frog::is_frog(type_id) {
+                        if hostile
+                            || profile.combat == MobCombatPolicy::Arrow
+                            || crate::frog::is_frog(type_id)
+                        {
                             supplemental.2
                         } else {
                             0.0

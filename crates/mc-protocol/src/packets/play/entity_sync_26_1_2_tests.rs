@@ -30,7 +30,10 @@ fn decode_exact<P: Packet>(bytes: &[u8]) -> P {
 fn sniffer_state_uses_serializer_35() {
     let packet = ClientboundSetEntityData {
         entity_id: 1,
-        values: vec![EntityDataValue::SnifferState { index: 18, value: 5 }],
+        values: vec![EntityDataValue::SnifferState {
+            index: 18,
+            value: 5,
+        }],
     };
     let bytes = encode(&packet);
     assert_eq!(bytes, vec![1, 18, 35, 5, 255]);

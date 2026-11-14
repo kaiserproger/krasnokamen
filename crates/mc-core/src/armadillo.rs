@@ -76,7 +76,8 @@ pub(crate) fn avoidance_target(
                 let dy = at[1] - pos[1];
                 let dz = at[2] - pos[2];
                 let distance = dx * dx + dz * dz;
-                if distance <= 36.0 && dy.abs() <= 3.0
+                if distance <= 36.0
+                    && dy.abs() <= 3.0
                     && nearest.is_none_or(|(id, best, _)| {
                         distance < best || (distance == best && body.id < id)
                     })

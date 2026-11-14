@@ -106,16 +106,20 @@ pub(crate) fn loot_entity(state: &TickState, entity: EntityId) -> Option<EntityL
         let variant = mc_nbt::read_named(&mut row.opaque_entity_fields.as_slice())
             .ok()
             .and_then(|(_, tag)| match tag {
-                mc_nbt::Tag::Compound(fields) => fields.into_iter().find_map(|(key, value)| {
-                    match (key.as_str(), value) {
-                        ("variant", mc_nbt::Tag::String(name)) => Some(name),
-                        _ => None,
-                    }
-                }),
+                mc_nbt::Tag::Compound(fields) => {
+                    fields
+                        .into_iter()
+                        .find_map(|(key, value)| match (key.as_str(), value) {
+                            ("variant", mc_nbt::Tag::String(name)) => Some(name),
+                            _ => None,
+                        })
+                }
                 _ => None,
             })
             .unwrap_or_else(|| "minecraft:temperate".into());
-        result.components.insert(id("minecraft:frog/variant"), variant);
+        result
+            .components
+            .insert(id("minecraft:frog/variant"), variant);
     }
     let held = state
         .players
@@ -904,7 +908,7 @@ pub(crate) fn to_fields(state: &EntityLootState) -> Vec<(String, mc_nbt::Tag)> {
             }),
         ),
         (
-            "solaris:entity_loot".into(),
+            "krasnokamen:entity_loot".into(),
             Tag::String(serde_json::to_string(state).expect("finite native loot state")),
         ),
         (
@@ -943,7 +947,7 @@ pub(crate) fn from_fields(
             .find(|(key, _)| key == name)
             .map(|(_, tag)| tag)
     };
-    let mut state = if let Some(Tag::String(json)) = find("solaris:entity_loot") {
+    let mut state = if let Some(Tag::String(json)) = find("krasnokamen:entity_loot") {
         serde_json::from_str(json)
             .map_err(|error| crate::config::CoreError::Storage(format!("entity loot: {error}")))?
     } else {

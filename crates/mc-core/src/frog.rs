@@ -17,12 +17,21 @@ pub(crate) struct Hunt {
 const TONGUE_TARGET_INDEX: u8 = 19;
 const USING_TONGUE_POSE: u8 = 9;
 
-fn tongue_metadata(state: &mut TickState, slot: EntitySlot, target: Option<EntityId>, shooting: bool) {
+fn tongue_metadata(
+    state: &mut TickState,
+    slot: EntitySlot,
+    target: Option<EntityId>,
+    shooting: bool,
+) {
     let row = state.entities.row_mut(slot);
     let appearance = Arc::make_mut(&mut row.appearance);
     appearance.pose = if shooting { USING_TONGUE_POSE } else { 0 };
     let value = EntityDataValue::OptionalUnsignedInt(target.map(|id| id.0 as u32));
-    if let Some((_, old)) = appearance.extra.iter_mut().find(|(index, _)| *index == TONGUE_TARGET_INDEX) {
+    if let Some((_, old)) = appearance
+        .extra
+        .iter_mut()
+        .find(|(index, _)| *index == TONGUE_TARGET_INDEX)
+    {
         *old = value;
     } else {
         appearance.extra.push((TONGUE_TARGET_INDEX, value));
@@ -32,10 +41,14 @@ fn tongue_metadata(state: &mut TickState, slot: EntitySlot, target: Option<Entit
 
 fn edible(state: &TickState, slot: EntitySlot) -> bool {
     let body = state.entities.body(slot);
-    let EntityKind::Mob { type_id } = body.kind else { return false; };
+    let EntityKind::Mob { type_id } = body.kind else {
+        return false;
+    };
     body.alive
         && state.registry.tags.contains_raw_id(
-            "minecraft:entity_type", "minecraft:frog_food", type_id as i32,
+            "minecraft:entity_type",
+            "minecraft:frog_food",
+            type_id as i32,
         )
         && state.entities.row(slot).loot.slime_size.unwrap_or(1) == 1
 }
@@ -46,19 +59,30 @@ fn prey(state: &TickState, frog: EntitySlot) -> Option<EntityId> {
     let mut best: Option<(EntityId, f64)> = None;
     for z in chunk(at[2] - 10.0)..=chunk(at[2] + 10.0) {
         for x in chunk(at[0] - 10.0)..=chunk(at[0] + 10.0) {
-            state.entities.for_each_slot_in_chunk(crate::boundary::ChunkPos { x, z }, |slot| {
-                if !edible(state, slot) { return; }
-                let pos = state.entities.pos(slot);
-                let distance = (0..3).map(|i| (at[i] - pos[i]).powi(2)).sum::<f64>();
-                let id = state.entities.body(slot).id;
-                if distance <= 100.0
-                    && best.is_none_or(|(old, d)| distance < d || (distance == d && id < old))
-                    && crate::hostile::sight_clear(state, [at[0], at[1] + 0.5, at[2]],
-                        [pos[0], pos[1] + state.entities.body(slot).height * 0.5, pos[2]])
-                {
-                    best = Some((id, distance));
-                }
-            });
+            state
+                .entities
+                .for_each_slot_in_chunk(crate::boundary::ChunkPos { x, z }, |slot| {
+                    if !edible(state, slot) {
+                        return;
+                    }
+                    let pos = state.entities.pos(slot);
+                    let distance = (0..3).map(|i| (at[i] - pos[i]).powi(2)).sum::<f64>();
+                    let id = state.entities.body(slot).id;
+                    if distance <= 100.0
+                        && best.is_none_or(|(old, d)| distance < d || (distance == d && id < old))
+                        && crate::hostile::sight_clear(
+                            state,
+                            [at[0], at[1] + 0.5, at[2]],
+                            [
+                                pos[0],
+                                pos[1] + state.entities.body(slot).height * 0.5,
+                                pos[2],
+                            ],
+                        )
+                    {
+                        best = Some((id, distance));
+                    }
+                });
         }
     }
     best.map(|(id, _)| id)
@@ -67,17 +91,27 @@ fn prey(state: &TickState, frog: EntitySlot) -> Option<EntityId> {
 fn sound(state: &mut TickState, slot: EntitySlot, name: &str) {
     let pos = state.entities.pos(slot);
     let sound = mc_data::Identifier::parse(name).expect("frog sound");
-    let listeners: Vec<_> = state.players.iter().filter_map(|(id, player)| {
-        let listener = state.entities.slot_of(*id)?;
-        let at = state.entities.pos(listener);
-        ((0..3).map(|i| (at[i] - pos[i]).powi(2)).sum::<f64>() <= 1024.0)
-            .then_some(player.connection)
-    }).collect();
+    let listeners: Vec<_> = state
+        .players
+        .iter()
+        .filter_map(|(id, player)| {
+            let listener = state.entities.slot_of(*id)?;
+            let at = state.entities.pos(listener);
+            ((0..3).map(|i| (at[i] - pos[i]).powi(2)).sum::<f64>() <= 1024.0)
+                .then_some(player.connection)
+        })
+        .collect();
     for connection in listeners {
-        state.push_player(connection, crate::boundary::PlayerChange::CommandSound {
-            sound: sound.clone(), source: 5, position: pos.map(|v| (v * 8.0).floor() as i32),
-            volume: 2.0, pitch: 1.0,
-        });
+        state.push_player(
+            connection,
+            crate::boundary::PlayerChange::CommandSound {
+                sound: sound.clone(),
+                source: 5,
+                position: pos.map(|v| (v * 8.0).floor() as i32),
+                volume: 2.0,
+                pitch: 1.0,
+            },
+        );
     }
 }
 
@@ -90,7 +124,14 @@ pub(crate) fn is_frog(type_id: u32) -> bool {
 
 pub(crate) fn drive(row: &ColdRow) -> Option<([f64; 3], f64)> {
     if let Some(hunt) = &row.entity_life.frog_hunt {
-        return Some((hunt.target_pos, if hunt.animation.is_none() { f64::from(row.speed) * 2.0 } else { 0.0 }));
+        return Some((
+            hunt.target_pos,
+            if hunt.animation.is_none() {
+                f64::from(row.speed) * 2.0
+            } else {
+                0.0
+            },
+        ));
     }
     if !row.entity_life.frog_pregnant {
         return None;
@@ -168,7 +209,9 @@ fn hunt(state: &mut TickState, slot: EntitySlot, intents: &mut Vec<Intent>) {
             tongue_metadata(state, slot, Some(target), false);
         }
     }
-    let Some(mut hunt) = current else { return; };
+    let Some(mut hunt) = current else {
+        return;
+    };
     let target_slot = state.entities.slot_of(hunt.target);
     let valid = target_slot.is_some_and(|target| edible(state, target))
         && state.tick.saturating_sub(hunt.started) <= 100;
@@ -188,7 +231,9 @@ fn hunt(state: &mut TickState, slot: EntitySlot, intents: &mut Vec<Intent>) {
     match hunt.animation {
         None if distance < 1.75 => {
             let scale = if distance > 0.0 { 15.0 / distance } else { 0.0 };
-            state.entities.set_vel(target_slot, delta.map(|v| v * scale));
+            state
+                .entities
+                .set_vel(target_slot, delta.map(|v| v * scale));
             hunt.animation = Some(0);
             tongue_metadata(state, slot, Some(hunt.target), true);
             sound(state, slot, "minecraft:entity.frog.tongue");
@@ -203,12 +248,19 @@ fn hunt(state: &mut TickState, slot: EntitySlot, intents: &mut Vec<Intent>) {
                     amount: state.entities.row(slot).attack_damage,
                     kind: crate::survival::DamageKind::Melee,
                     source: Some(DamageSource::Melee {
-                        attacker: id, position: pos, yaw: state.entities.rot(slot)[0],
-                        bonus_knockback: 0.0, sweep: false, fire_ticks: 0, bane_ticks: 0,
+                        attacker: id,
+                        position: pos,
+                        yaw: state.entities.rot(slot)[0],
+                        bonus_knockback: 0.0,
+                        sweep: false,
+                        fire_ticks: 0,
+                        bane_ticks: 0,
                     }),
                 },
                 footprint: Footprint {
-                    entity_reads: vec![id], entity_writes: vec![hunt.target], ..Default::default()
+                    entity_reads: vec![id],
+                    entity_writes: vec![hunt.target],
+                    ..Default::default()
                 },
             });
             hunt.animation = Some(7);

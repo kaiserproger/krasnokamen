@@ -574,7 +574,11 @@ pub fn load_vanilla(root: &Path) -> Result<ChestLootCatalog, String> {
         collect_tables(&directory, &data.join("minecraft/loot_table"), &mut ids)?;
     }
     for name in ["gameplay/cat_morning_gift", "gameplay/sniffer_digging"] {
-        if data.join("minecraft/loot_table").join(format!("{name}.json")).is_file() {
+        if data
+            .join("minecraft/loot_table")
+            .join(format!("{name}.json"))
+            .is_file()
+        {
             ids.push(Identifier::parse(format!("minecraft:{name}")).expect("vanilla loot id"));
         }
     }
@@ -644,7 +648,10 @@ impl ChestLootCatalog {
             let expected = if id.path().starts_with("archaeology/") {
                 "minecraft:archaeology"
             } else if id.path().starts_with("gameplay/hero_of_the_village/")
-                || matches!(id.path(), "gameplay/cat_morning_gift" | "gameplay/sniffer_digging")
+                || matches!(
+                    id.path(),
+                    "gameplay/cat_morning_gift" | "gameplay/sniffer_digging"
+                )
             {
                 "minecraft:gift"
             } else {

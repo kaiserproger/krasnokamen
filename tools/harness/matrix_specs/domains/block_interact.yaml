@@ -1,4 +1,4 @@
-schema: solaris-domain-adapter-index/1
+schema: krasnokamen-domain-adapter-index/1
 domain: block_interact
 subjects_specified: 29
 vanilla_provenance: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/version.json
@@ -25,7 +25,7 @@ subjects:
       - https://minecraft.wiki/w/Door
       - https://minecraft.wiki/w/Adventure#Possible_interactions
       - https://minecraft.wiki/w/Spectator#Usage
-    solaris_sources: &id001
+    krasnokamen_sources: &id001
       - core:tick/input/interact.rs
       - core:placement.rs
     adapter:
@@ -69,7 +69,7 @@ subjects:
       - https://minecraft.wiki/w/Button
       - https://minecraft.wiki/w/Adventure#Possible_interactions
       - https://minecraft.wiki/w/Spectator#Usage
-    solaris_sources:
+    krasnokamen_sources:
       - core:redstone/signal.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -113,7 +113,7 @@ subjects:
       - https://minecraft.wiki/w/Note_Block
       - https://minecraft.wiki/w/Adventure#Possible_interactions
       - https://minecraft.wiki/w/Spectator#Usage
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
       function: note_block_tune
@@ -151,7 +151,7 @@ subjects:
       - https://minecraft.wiki/w/Redstone_Repeater
       - https://minecraft.wiki/w/Adventure#Possible_interactions
       - https://minecraft.wiki/w/Spectator#Usage
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
       function: repeater_comparator_daylight
@@ -191,7 +191,7 @@ subjects:
     expected: has_record true; disc ejected as one stack; comparator output
     vanilla_source:
       - https://minecraft.wiki/w/Jukebox
-    solaris_sources:
+    krasnokamen_sources:
       - core:jukebox.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -233,7 +233,7 @@ subjects:
     expected: text stored; color/glow applied; wax prevents edit
     vanilla_source:
       - https://minecraft.wiki/w/Sign
-    solaris_sources:
+    krasnokamen_sources:
       - core:signs.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -285,7 +285,7 @@ subjects:
     expected: per-player reward once; repeat use refused
     vanilla_source:
       - https://minecraft.wiki/w/Vault
-    solaris_sources:
+    krasnokamen_sources:
       - core:vault.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -325,7 +325,7 @@ subjects:
     expected: fire placed / TNT primed / candle lit / portal lit; durability or charge consumed
     vanilla_source:
       - https://minecraft.wiki/w/Flint_and_Steel
-    solaris_sources:
+    krasnokamen_sources:
       - core:fire.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -376,7 +376,7 @@ subjects:
       - https://minecraft.wiki/w/Axe
       - https://minecraft.wiki/w/Adventure#Possible_interactions
       - https://minecraft.wiki/w/Spectator#Usage
-    solaris_sources:
+    krasnokamen_sources:
       - core:block_tools.rs
       - core:copper.rs
     adapter:
@@ -415,7 +415,7 @@ subjects:
       - https://minecraft.wiki/w/Shovel
       - https://minecraft.wiki/w/Adventure#Possible_interactions
       - https://minecraft.wiki/w/Spectator#Usage
-    solaris_sources:
+    krasnokamen_sources:
       - core:block_tools.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -453,7 +453,7 @@ subjects:
       - https://minecraft.wiki/w/Hoe
       - https://minecraft.wiki/w/Adventure#Possible_interactions
       - https://minecraft.wiki/w/Spectator#Usage
-    solaris_sources:
+    krasnokamen_sources:
       - core:block_tools.rs
       - core:farming.rs
     adapter:
@@ -491,7 +491,7 @@ subjects:
     expected: growth stage advances / feature generates; item consumed
     vanilla_source:
       - https://minecraft.wiki/w/Bone_Meal
-    solaris_sources:
+    krasnokamen_sources:
       - core:farming.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -526,14 +526,14 @@ subjects:
       - creative
   - subject: block_interact.beehive_harvest
     matrix_ids:
-      - pw:block_interact.beehive_harvest/forge_solaris_loader/creative/overworld/hard/2/malformed_or_stale_packet/steady/op_3
+      - pw:block_interact.beehive_harvest/forge_krasnokamen_loader/creative/overworld/hard/2/malformed_or_stale_packet/steady/op_3
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: honeycomb/honey bottle; bees angry without campfire
     vanilla_source:
       - https://minecraft.wiki/w/Beehive
-    solaris_sources:
+    krasnokamen_sources:
       - core:bees.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -577,7 +577,7 @@ subjects:
     expected: Bucket/bottle level exchange conserves items; Java washes dyed leather (does not dye it in cauldrons).
     vanilla_source:
       - https://minecraft.wiki/w/Cauldron
-    solaris_sources:
+    krasnokamen_sources:
       - core:bottles.rs
       - core:fluid_buckets.rs
     adapter:
@@ -626,7 +626,7 @@ subjects:
     expected: cooks after 30s; item pops; no duplicate on break
     vanilla_source:
       - https://minecraft.wiki/w/Campfire
-    solaris_sources:
+    krasnokamen_sources:
       - core:campfire.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -669,7 +669,7 @@ subjects:
     expected: level increases by chance; level 8 -> bone meal
     vanilla_source:
       - https://minecraft.wiki/w/Composter
-    solaris_sources:
+    krasnokamen_sources:
       - core:composter.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -701,7 +701,7 @@ subjects:
       - survival
   - subject: block_interact.armor_stand_use
     matrix_ids:
-      - pw:block_interact.armor_stand_use/neoforge_solaris_loader/creative/overworld/hard/2/duplicate_login/crash_kill9_wal_replay/op_4
+      - pw:block_interact.armor_stand_use/neoforge_krasnokamen_loader/creative/overworld/hard/2/duplicate_login/crash_kill9_wal_replay/op_4
       - tr.dupe.two_players_take_same_tick:block_interact.armor_stand_use/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
       - tr.dupe.destroy_during_interaction:block_interact.armor_stand_use/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
       - tr.dupe.restart_after_interaction:block_interact.armor_stand_use/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
@@ -714,7 +714,7 @@ subjects:
     expected: equipment custody exact; stand drops on two punches
     vanilla_source:
       - https://minecraft.wiki/w/Armor_Stand
-    solaris_sources:
+    krasnokamen_sources:
       - core:armor_stand.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -764,7 +764,7 @@ subjects:
     expected: item displayed; rotation 0-7; drop exactly once; comparator reads rotation
     vanilla_source:
       - https://minecraft.wiki/w/Item_Frame
-    solaris_sources:
+    krasnokamen_sources:
       - core:item_frame.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -809,7 +809,7 @@ subjects:
     expected: spawner type changes; ground spawns mob
     vanilla_source:
       - https://minecraft.wiki/w/Spawn_Egg
-    solaris_sources:
+    krasnokamen_sources:
       - core:spawn_egg.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -847,7 +847,7 @@ subjects:
     expected: leash knot created; mob tethered
     vanilla_source:
       - https://minecraft.wiki/w/Lead
-    solaris_sources:
+    krasnokamen_sources:
       - core:leash.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -887,7 +887,7 @@ subjects:
     expected: map marker added
     vanilla_source:
       - https://minecraft.wiki/w/Banner
-    solaris_sources:
+    krasnokamen_sources:
       - core:maps/banner.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -931,7 +931,7 @@ subjects:
     expected: shelf slots swap with hotbar; contents conserved
     vanilla_source:
       - https://minecraft.wiki/w/Shelf
-    solaris_sources:
+    krasnokamen_sources:
       - core:shelf.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -966,7 +966,7 @@ subjects:
     expected: per-player inventory; contents follow player
     vanilla_source:
       - https://minecraft.wiki/w/Ender_Chest
-    solaris_sources:
+    krasnokamen_sources:
       - core:ender_chest.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -1012,7 +1012,7 @@ subjects:
     expected: food restored per slice; candle cake lit
     vanilla_source:
       - https://minecraft.wiki/w/Cake
-    solaris_sources:
+    krasnokamen_sources:
       - core:consumables.rs
       - core:fire.rs
     adapter:
@@ -1055,7 +1055,7 @@ subjects:
     expected: waxed stops aging; random ticks age; lightning scrapes
     vanilla_source:
       - https://minecraft.wiki/w/Block_of_Copper
-    solaris_sources:
+    krasnokamen_sources:
       - core:copper.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -1101,7 +1101,7 @@ subjects:
     expected: eye=true; 12 eyes activate portal
     vanilla_source:
       - https://minecraft.wiki/w/End_Portal
-    solaris_sources:
+    krasnokamen_sources:
       - core:end_portals.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -1138,7 +1138,7 @@ subjects:
     expected: crystal entity spawned; refused elsewhere
     vanilla_source:
       - https://minecraft.wiki/w/End_Crystal
-    solaris_sources:
+    krasnokamen_sources:
       - core:end_fight.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -1174,7 +1174,7 @@ subjects:
     expected: charges 0..4; sets spawn in nether; explodes in overworld/end
     vanilla_source:
       - https://minecraft.wiki/w/Respawn_Anchor
-    solaris_sources:
+    krasnokamen_sources:
       - core:dimensions_rules.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -1207,13 +1207,13 @@ subjects:
       - creative
   - subject: block_interact.block_log_inspect_click
     matrix_ids:
-      - pw:block_interact.block_log_inspect_click/fabric_solaris_loader/creative/overworld/peaceful/N8/normal/save_all_checkpoint/op_3
+      - pw:block_interact.block_log_inspect_click/fabric_krasnokamen_loader/creative/overworld/peaceful/N8/normal/save_all_checkpoint/op_3
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: history of block shown, block not changed
     vanilla_source: []
-    solaris_sources:
+    krasnokamen_sources:
       - core:block_log.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_interact.py
@@ -1238,7 +1238,7 @@ subjects:
     context_note:
       Driver owns factors. Unimplemented mode oracles and concurrent actor schedules fail closed; they
       are adapter coverage gaps, not evidence of a server bug. Registration does not mean executed coverage.
-    reference_kind: Solaris extension, not a vanilla command
+    reference_kind: Krasnokamen extension, not a vanilla command
     reference_source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/block_log.rs
     implemented_modes: see cited adapter branch
 fixture_location: Arena floor y=143, interactions y=144; outside shop auto-open y=60..100. All ten plugins retained.

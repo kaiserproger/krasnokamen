@@ -40,7 +40,7 @@ def normalize(value, path=''):
     if isinstance(value, dict):
         out = {}
         for key, child in value.items():
-            if key.startswith(('Solaris', 'solaris:')) or key == 'LastUpdate':
+            if key.startswith(('Krasnokamen', 'krasnokamen:')) or key == 'LastUpdate':
                 continue
             if key in ('block_states', 'biomes'):
                 count, minimum = (4096, 4) if key == 'block_states' else (64, 1)
@@ -186,7 +186,7 @@ def main():
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     receipt = {'passed': False, 'scope': 'headless interchange, not client/gameplay parity',
-               'commands': [], 'checks': {}, 'normalizations': ['compound order and numeric NBT widths', 'palette encoding/order', 'LastUpdate and Solaris bookkeeping', 'added codec defaults enumerated separately']}
+               'commands': [], 'checks': {}, 'normalizations': ['compound order and numeric NBT widths', 'palette encoding/order', 'LastUpdate and Krasnokamen bookkeeping', 'added codec defaults enumerated separately']}
     processes = []
     try:
         if 'eula=true' not in args.eula_file.read_text().splitlines():
@@ -204,7 +204,7 @@ def main():
             else:
                 cmd = [str(args.binary), '--config', str(config)]
             oracle = VanillaOracle(home, seed=42, jar=args.jar, use_mem_run=False, timeout=180)
-            oracle.log_path = home / ('vanilla.log' if java else 'solaris.log')
+            oracle.log_path = home / ('vanilla.log' if java else 'krasnokamen.log')
             receipt['commands'].append(cmd)
             oracle.process = subprocess.Popen(cmd, cwd=home, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1, start_new_session=True)
             processes.append(oracle.process)
@@ -272,12 +272,12 @@ def main():
         (args.output / 'normalized-diff.json').write_text(json.dumps(comparison, indent=2) + '\n')
         receipt['checks']['source-field-roundtrip'] = {'passed': not diff, 'difference_count': len(diff), 'omitted_protochunks': len(omitted_protochunks)}
         # Native gameplay is a separate leg, never folded into unchanged-world diff.
-        solaris = launch(args.output / 'native-server', java=False, config=config)
-        solaris.send('setblock 14 101 14 minecraft:emerald_block')
-        solaris.send('save-all')
-        solaris.expect('Saved the game')
-        solaris.stop()
-        if solaris.process.returncode != 0:
+        krasnokamen = launch(args.output / 'native-server', java=False, config=config)
+        krasnokamen.send('setblock 14 101 14 minecraft:emerald_block')
+        krasnokamen.send('save-all')
+        krasnokamen.expect('Saved the game')
+        krasnokamen.stop()
+        if krasnokamen.process.returncode != 0:
             raise RuntimeError('native server failed to stop cleanly')
         home = args.output / 'java-reopen'
         home.mkdir()

@@ -47,7 +47,7 @@ pub(crate) fn from_fields(
     fields: &[(String, Tag)],
 ) -> Result<(), CoreError> {
     let mut result = life.clone();
-    for key in ["Owner", "LoveCause", "solaris:Rider"] {
+    for key in ["Owner", "LoveCause", "krasnokamen:Rider"] {
         if let Some(tag) = field(fields, key)? {
             let value = uuid(tag, key)?;
             match key {
@@ -63,18 +63,21 @@ pub(crate) fn from_fields(
             }
         }
     }
-    if let Some(tag) = field(fields, "solaris:Passengers")? {
+    if let Some(tag) = field(fields, "krasnokamen:Passengers")? {
         let Tag::List(list) = tag else {
-            return Err(invalid("solaris:Passengers"));
+            return Err(invalid("krasnokamen:Passengers"));
         };
-        if list.element_type != tag_type::INT_ARRAY || list.elements.len() > 3 || result.mount.rider.is_none() {
-            return Err(invalid("solaris:Passengers"));
+        if list.element_type != tag_type::INT_ARRAY
+            || list.elements.len() > 3
+            || result.mount.rider.is_none()
+        {
+            return Err(invalid("krasnokamen:Passengers"));
         }
         let mut passengers = Vec::with_capacity(list.elements.len());
         for tag in &list.elements {
-            let passenger = uuid(tag, "solaris:Passengers")?;
+            let passenger = uuid(tag, "krasnokamen:Passengers")?;
             if result.mount.rider == Some(passenger) || passengers.contains(&passenger) {
-                return Err(invalid("solaris:Passengers"));
+                return Err(invalid("krasnokamen:Passengers"));
             }
             passengers.push(passenger);
         }
@@ -132,9 +135,9 @@ pub(crate) fn from_fields(
             _ => return Err(invalid("leash")),
         });
     }
-    if let Some(tag) = field(fields, "solaris:TameRolls")? {
+    if let Some(tag) = field(fields, "krasnokamen:TameRolls")? {
         let Tag::Long(rolls) = tag else {
-            return Err(invalid("solaris:TameRolls"));
+            return Err(invalid("krasnokamen:TameRolls"));
         };
         result.taming.rolls = *rolls as u64;
     }
@@ -237,12 +240,12 @@ pub(crate) fn to_fields(life: &EntityLifeState) -> Vec<(String, Tag)> {
         fields.push(("Trusting".into(), Tag::Byte(1)));
     }
     if pet.rolls != 0 {
-        fields.push(("solaris:TameRolls".into(), Tag::Long(pet.rolls as i64)));
+        fields.push(("krasnokamen:TameRolls".into(), Tag::Long(pet.rolls as i64)));
     }
     for (key, uuid) in [
         ("Owner", pet.owner),
         ("LoveCause", pet.love_cause),
-        ("solaris:Rider", life.mount.rider),
+        ("krasnokamen:Rider", life.mount.rider),
     ] {
         if let Some(uuid) = uuid {
             fields.push((key.into(), uuid_tag(uuid)));
@@ -250,10 +253,16 @@ pub(crate) fn to_fields(life: &EntityLifeState) -> Vec<(String, Tag)> {
     }
     if !life.mount.passengers.is_empty() {
         fields.push((
-            "solaris:Passengers".into(),
+            "krasnokamen:Passengers".into(),
             Tag::List(ListTag {
                 element_type: tag_type::INT_ARRAY,
-                elements: life.mount.passengers.iter().copied().map(uuid_tag).collect(),
+                elements: life
+                    .mount
+                    .passengers
+                    .iter()
+                    .copied()
+                    .map(uuid_tag)
+                    .collect(),
             }),
         ));
     }
@@ -281,14 +290,10 @@ pub(crate) fn to_fields(life: &EntityLifeState) -> Vec<(String, Tag)> {
 }
 
 pub(crate) fn validate_replay(replay: &crate::journal::Replay) -> Result<(), CoreError> {
-    if !replay
-        .entities
-        .values()
-        .any(|entity| {
-            let mount = &entity.state.entity_life.mount;
-            mount.rider.is_some() || !mount.passengers.is_empty()
-        })
-    {
+    if !replay.entities.values().any(|entity| {
+        let mount = &entity.state.entity_life.mount;
+        mount.rider.is_some() || !mount.passengers.is_empty()
+    }) {
         return Ok(());
     }
     let entity_uuids = replay
@@ -300,9 +305,13 @@ pub(crate) fn validate_replay(replay: &crate::journal::Replay) -> Result<(), Cor
     for (id, entity) in &replay.entities {
         let mount = &entity.state.entity_life.mount;
         if mount.passengers.len() > 3 || (!mount.passengers.is_empty() && mount.rider.is_none()) {
-            return Err(invalid("solaris:Passengers"));
+            return Err(invalid("krasnokamen:Passengers"));
         }
-        for rider in mount.rider.into_iter().chain(mount.passengers.iter().copied()) {
+        for rider in mount
+            .rider
+            .into_iter()
+            .chain(mount.passengers.iter().copied())
+        {
             if let Some(previous) = riders.insert(rider, *id) {
                 return Err(CoreError::Storage(format!(
                     "invalid mounted passenger {rider}: vehicles {previous} and {id}"

@@ -355,7 +355,7 @@ impl OreRules {
     }
 
     #[must_use]
-    pub fn solaris_default(
+    pub fn krasnokamen_default(
         registry: &BlockRegistry,
         _biomes: &BiomeRules,
         fallback: BlockStateId,

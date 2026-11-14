@@ -19,7 +19,7 @@ def stage_server(server: Path, stage: Path, artifact: Path, *, slow: bool = True
     process_pidfile = artifact / "server-process.pid"
     quota = artifact / "slow-server-cpu.max"
     if not slow:
-        wrapper = stage / "solaris-v2"
+        wrapper = stage / "krasnokamen"
         wrapper.write_text(
             "#!/bin/sh\n"
             f"printf '%s\\n' \"$$\" > {shlex.quote(str(pidfile))}\n"
@@ -31,7 +31,7 @@ def stage_server(server: Path, stage: Path, artifact: Path, *, slow: bool = True
     child = ('set -e; printf "%s\\n" "$$" > "$1"; shift; '
              'IFS=: read -r _ _ group < /proc/self/cgroup; '
              'cat "/sys/fs/cgroup$group/cpu.max" > "$1"; shift; exec "$@"')
-    wrapper = stage / "solaris-v2"
+    wrapper = stage / "krasnokamen"
     wrapper.write_text(
         "#!/bin/sh\n"
         f"printf '%s\\n' \"$$\" > {shlex.quote(str(pidfile))}\n"

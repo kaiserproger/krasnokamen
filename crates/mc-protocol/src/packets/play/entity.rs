@@ -441,7 +441,7 @@ impl Packet for EntityEvent {
 }
 
 /// 26.3 `ClientboundMoveEntityPacket` properties VarInt:
-/// `onGround | stepCount << 1`. Solaris always sends linear deltas
+/// `onGround | stepCount << 1`. Krasnokamen always sends linear deltas
 /// (`stepCount` 0), i.e. three i16 deltas follow.
 fn write_linear_move_properties<B: BufMut>(buf: &mut B, on_ground: bool) {
     buf.write_varint(i32::from(on_ground));
@@ -792,7 +792,10 @@ pub enum EntityDataValue {
         value: u32,
     },
     /// Vanilla sniffer animation state, serializer 35 and ordinal 0..=6.
-    SnifferState { index: u8, value: u8 },
+    SnifferState {
+        index: u8,
+        value: u8,
+    },
     /// CopperGolem enum serializers, javap EntityDataSerializers 26.1.2:
     /// state = 37, weathering = 38; both use VarInt ordinal codecs.
     CopperGolemState {
@@ -916,7 +919,9 @@ impl PartialEq for EntityDataValue {
                 Self::ChickenVariant { value: left, .. },
                 Self::ChickenVariant { value: right, .. },
             ) => left == right,
-            (Self::SnifferState { value: left, .. }, Self::SnifferState { value: right, .. }) => left == right,
+            (Self::SnifferState { value: left, .. }, Self::SnifferState { value: right, .. }) => {
+                left == right
+            }
             (Self::Byte { value: left, .. }, Self::Byte { value: right, .. }) => left == right,
             (
                 Self::CopperGolemState { value: left, .. },
@@ -1101,7 +1106,9 @@ impl EntityDataValue {
                 buf.write_varint(wire);
             }
             Self::SnifferState { value, .. } => {
-                if *value > 6 { return Err(CodecError::NotSupported("invalid sniffer state")); }
+                if *value > 6 {
+                    return Err(CodecError::NotSupported("invalid sniffer state"));
+                }
                 buf.write_varint(i32::from(*value));
             }
             Self::Byte { value, .. } => buf.write_i8(*value),
@@ -1358,7 +1365,10 @@ impl EntityDataValue {
                 if !(0..=6).contains(&value) {
                     return Err(CodecError::NotSupported("invalid sniffer state"));
                 }
-                Self::SnifferState { index, value: value as u8 }
+                Self::SnifferState {
+                    index,
+                    value: value as u8,
+                }
             }
             37 | 38 => {
                 let value = buf.read_varint()?;

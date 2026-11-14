@@ -1020,8 +1020,15 @@ fn riding_jump_command_keeps_charge() {
             data: 67,
         }),
         &mut s,
-    ).unwrap();
-    assert_eq!(input, vec![PlayerInput::RidingJump { connection: conn(), power: 67 }]);
+    )
+    .unwrap();
+    assert_eq!(
+        input,
+        vec![PlayerInput::RidingJump {
+            connection: conn(),
+            power: 67
+        }]
+    );
 }
 
 #[test]
