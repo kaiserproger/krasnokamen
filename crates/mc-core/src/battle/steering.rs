@@ -19,6 +19,14 @@ const CELL_CAP: usize = 8;
 pub(crate) const MIN_SPACING: f64 = 0.65;
 const SENSE: f64 = 1.5;
 const DRIVE_CHUNK: usize = 256;
+/// Height apart, in blocks, within which bodies see each other: a body walks off
+/// a drop of up to MAX_DROP blocks, from a one-block step down or from the top of
+/// a step-up (its feet rest a little above the block: 64.02, 64.17), so one that
+/// much lower stands where it may land. At exactly MAX_DROP, fugitives stepping
+/// off a terrace ledge fell onto one point (111 in a terrace corner of
+/// rehearsal-06198df4), and with it, from 2.02 above into a gully end (58-62 in
+/// the rehearsals of 07222297).
+pub(crate) const LEVELS: f64 = super::ground::MAX_DROP + 1.0;
 
 /// CSR over occupied two-block cells. `member_cell[bi]` and the nine adjacent
 /// cell ranges are prepared once; steering never hashes or searches cell keys.
@@ -153,11 +161,7 @@ impl SeparationGrid {
                 }
                 examined += 1;
                 let m = &members[other];
-                // A body walks off a drop of up to MAX_DROP blocks, so one that
-                // far below stands where it may land: unseen, the fugitives
-                // stepping off a terrace ledge fell onto one point, 111 in a
-                // terrace corner of rehearsal-06198df4.
-                if (actor.pos[1] - m.pos[1]).abs() > super::ground::MAX_DROP {
+                if (actor.pos[1] - m.pos[1]).abs() > LEVELS {
                     continue;
                 }
                 let d2 = (actor.pos[0] - m.pos[0]).powi(2) + (actor.pos[2] - m.pos[2]).powi(2);

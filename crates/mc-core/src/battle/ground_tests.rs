@@ -1047,13 +1047,14 @@ fn densest(points: &[[f64; 3]]) -> usize {
         .unwrap_or(0)
 }
 
-/// 48 foot of the second side, placed in rows of twelve from real (x, z)
+/// 48 foot of the second side, placed in rows of `wide` from real (x, z)
 /// `from` (shifted by `shift`), break and flee for `ticks` real ticks.
 /// Returns the most bodies within 0.5 blocks of one (and its tick), the
 /// median distance fled toward +z and the end positions.
 fn rout_from(
     state: &mut TickState,
     from: [f64; 2],
+    wide: usize,
     shift: [i32; 3],
     ticks: u64,
 ) -> ((usize, u64), f64, Vec<[f64; 3]>) {
@@ -1077,8 +1078,8 @@ fn rout_from(
         .collect();
     assert!(ids.len() >= 40, "too few foot: {}", ids.len());
     for (k, &id) in ids.iter().enumerate() {
-        let x = from[0] + f64::from(shift[0]) + (k % 12) as f64;
-        let z = from[1] + f64::from(shift[2]) + (k / 12) as f64;
+        let x = from[0] + f64::from(shift[0]) + (k % wide) as f64;
+        let z = from[1] + f64::from(shift[2]) + (k / wide) as f64;
         let Some(Ok(y)) = support(&state.world, &state.registry, [x, 0.0, z], 0.3) else {
             panic!("no ground at {x} {z}");
         };
@@ -1127,7 +1128,7 @@ fn fugitives_pressed_into_a_cliff_notch_do_not_heap_on_one_point() {
     stage(&mut state, 100);
     // South-west of the notch, as the G2 fugitives came: real x -123..-112,
     // z 246..250.
-    let (worst, fled, end) = rout_from(&mut state, [-123.5, 246.5], G2_LEDGE_SHIFT, 800);
+    let (worst, fled, end) = rout_from(&mut state, [-123.5, 246.5], 12, G2_LEDGE_SHIFT, 800);
     assert!(
         fled >= 5.0,
         "the fugitives did not run to the cliff: {end:?}"
@@ -1150,10 +1151,95 @@ fn fugitives_in_a_terrace_corner_do_not_heap_on_one_point() {
     patch(&mut state, &G2R_CORNER, [-110, 302], G2R_CORNER_SHIFT);
     stage(&mut state, 100);
     // South-east of the corner, as the rehearsal's fugitives came.
-    let (worst, fled, end) = rout_from(&mut state, [-101.5, 303.5], G2R_CORNER_SHIFT, 800);
+    let (worst, fled, end) = rout_from(&mut state, [-101.5, 303.5], 12, G2R_CORNER_SHIFT, 800);
     assert!(
         fled >= 5.0,
         "the fugitives did not run to the terraces: {end:?}"
+    );
+    assert!(
+        worst.0 <= 4,
+        "fugitives heaped: {} bodies within 0.5 blocks of one at tick {}: {end:?}",
+        worst.0,
+        worst.1
+    );
+}
+
+/// First air above the ground round the end of a one-block gully at
+/// (20.2, 91, 244.9) where 48-62 fleeing blue foot stood within half a
+/// block in the rehearsals of 07222297 (receipts/BvHorseStack): columns
+/// x 12..=28, rows z 234..=250, from the site-935 scan. The gully (x 20, 89-91)
+/// ends at z 245 below a 97 wall to the east and the 92-93 slope to the west.
+const G2R_GULLY: [[i32; 17]; 17] = [
+    [
+        96, 95, 94, 93, 92, 92, 91, 90, 89, 97, 98, 99, 100, 100, 101, 101, 101,
+    ],
+    [
+        96, 95, 94, 93, 92, 92, 91, 90, 89, 97, 98, 99, 100, 100, 101, 101, 101,
+    ],
+    [
+        96, 95, 94, 93, 93, 92, 91, 90, 89, 88, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        96, 95, 94, 94, 93, 92, 91, 90, 89, 90, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        96, 96, 95, 94, 93, 92, 91, 90, 89, 92, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        97, 96, 95, 94, 93, 92, 91, 90, 89, 93, 98, 99, 99, 100, 100, 101, 101,
+    ],
+    [
+        97, 96, 95, 94, 93, 93, 92, 91, 89, 93, 98, 99, 99, 100, 100, 101, 101,
+    ],
+    [
+        97, 97, 96, 95, 94, 93, 92, 91, 90, 97, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        97, 97, 97, 96, 95, 94, 92, 91, 90, 97, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        97, 97, 97, 96, 95, 94, 93, 92, 90, 97, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        97, 97, 97, 97, 96, 95, 94, 92, 90, 97, 98, 99, 100, 100, 101, 101, 101,
+    ],
+    [
+        97, 97, 97, 97, 97, 97, 95, 93, 91, 97, 98, 99, 100, 100, 101, 101, 102,
+    ],
+    [
+        97, 97, 97, 97, 97, 97, 97, 96, 93, 97, 98, 99, 100, 100, 101, 102, 102,
+    ],
+    [
+        97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 98, 99, 100, 100, 101, 102, 103,
+    ],
+    [
+        98, 97, 97, 97, 97, 97, 97, 97, 97, 98, 98, 99, 100, 100, 101, 102, 103,
+    ],
+    [
+        98, 98, 98, 98, 97, 97, 97, 97, 97, 98, 99, 100, 100, 101, 102, 103, 104,
+    ],
+    [
+        99, 98, 98, 98, 98, 97, 97, 97, 97, 98, 99, 100, 102, 103, 104, 105, 105,
+    ],
+];
+
+/// Real (x, y, z) + this shift.
+const G2R_GULLY_SHIFT: [i32; 3] = [100, -28, -100];
+
+/// Fugitives that come down the slope into the end of a one-block gully keep
+/// apart there: from the top of a step-up (feet at 92.02-92.17) the bodies two
+/// blocks below were out of sight, and each one stepping off landed on the
+/// last (rehearsals of 07222297: up to 62 within half a block).
+#[test]
+fn fugitives_stepping_into_a_gully_end_do_not_heap_on_one_point() {
+    let mut state = relief_fixture();
+    patch(&mut state, &G2R_GULLY, [12, 234], G2R_GULLY_SHIFT);
+    stage(&mut state, 100);
+    // North-west of the gully end, on the slope and in the gully.
+    let (worst, fled, end) = rout_from(&mut state, [13.5, 235.5], 8, G2R_GULLY_SHIFT, 1200);
+    assert!(
+        fled >= 3.0,
+        "the fugitives did not run to the gully end: {end:?}"
     );
     assert!(
         worst.0 <= 4,
