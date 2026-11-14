@@ -122,9 +122,48 @@ def count_time_sets(commands: list[str]) -> int:
     return sum(1 for command in commands if command.startswith("time set "))
 
 
+def building_zone(lo: tuple[int, int, int], hi: tuple[int, int, int],
+                  pos: tuple[float, float, float]) -> str:
+    """`in` (interior), `wall` (the wall ring, door cell included) or `out` for a body position."""
+    x, y, z = pos
+    if not lo[1] - 0.5 <= y < hi[1] + 1 or not (lo[0] <= x < hi[0] + 1 and lo[2] <= z < hi[2] + 1):
+        return "out"
+    return "in" if lo[0] + 1 <= x < hi[0] and lo[2] + 1 <= z < hi[2] else "wall"
+
+
+class BuildingCrossings:
+    """Door crossings from inside/outside flips of buildings sealed except for their one door.
+
+    A body seen inside at one observation and outside at a later one has passed through that
+    door however far apart the observations are, so a villager that walks several blocks
+    between two entity lists cannot slip through unseen (a door-plane flip sample can miss it).
+    """
+
+    def __init__(self, footprints: dict[tuple[int, int, int],
+                                        tuple[tuple[int, int, int], tuple[int, int, int]]]) -> None:
+        self.footprints = dict(footprints)
+        self.zone: dict[tuple[str, tuple[int, int, int]], str] = {}
+
+    def observe(self, villagers: dict[str, tuple[float, float, float]]
+                ) -> list[tuple[str, tuple[int, int, int], str]]:
+        """New `(uuid, door, direction)` crossings since the previous observation."""
+        crossed = []
+        for uuid, pos in villagers.items():
+            for door, (lo, hi) in self.footprints.items():
+                zone = building_zone(lo, hi, pos)
+                if zone == "wall":
+                    continue
+                before = self.zone.get((uuid, door))
+                self.zone[(uuid, door)] = zone
+                if before is not None and before != zone:
+                    crossed.append((uuid, door, zone))
+        return crossed
+
+
 def all_behaviours_pass(behaviour: dict[str, str]) -> bool:
     required = ("door_walk", "sleep_return", "night_door", "farmer_harvest", "miner_deposit", "lumberjack")
-    return all(behaviour.get(name) == "PASS" for name in required)
+    return all(behaviour.get(name) == "PASS" for name in required) and all(
+        state == "PASS" for state in behaviour.values())
 
 
 def trees_separated(soils: list[tuple[int, int, int]], min_gap: int = 5) -> bool:
