@@ -137,7 +137,9 @@ reopened row leaves the list in the same edit).
 evidence) and record `fix_commit`: the one commit with the fix (the test may
 be in it or earlier, never only in later commits), or the `patch:<sha256>` of
 step 1 for a forward-ported fix, a fix in several commits or a guard older
-than the finding. They do not edit `status` or
+than the finding - and keep that patch committed at
+`docs/bugs/fix-patches/<ID>.patch`, so the promote that later runs needs no
+receipt outside the tree. They do not edit `status` or
 `promotion`, and they do not decide that a row is fixed: a green test that also
 passes without the fix proves nothing, which is why the script, not the
 worker, runs the negative control.
