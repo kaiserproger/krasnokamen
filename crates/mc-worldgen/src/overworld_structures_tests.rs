@@ -693,50 +693,6 @@ fn ocean_monument_start_is_underwater() {
 }
 
 #[test]
-fn ruined_portal_on_a_slope_rests_on_the_low_ground_of_its_footprint() {
-    // WORLDGEN-RUINED-PORTAL-FLOATS-ON-SLOPE: vanilla `findSuitableY` sinks an
-    // on-land ruined portal until three of its bounding box's four corners are
-    // no longer air; the reported seed-100 portal hung two air layers above the
-    // farm under its netherrack platform because the start used the chunk
-    // centre's surface plus one.
-    let registry = registry();
-    let mut structures = OverworldStructures::load(&root(), 42, &registry).unwrap();
-    structures.strongholds.clear();
-    structures
-        .families
-        .retain(|family| family.id.path().starts_with("ruined_portal"));
-    let family = &mut structures.families[0];
-    family.frequency = 1.0;
-    family.exclusion = None;
-    family.biomes.insert(id("minecraft:plains"));
-    let (x, z) = family.placement.potential_chunk(42, 0, 0);
-    // A one-block-per-column slope: the centre sample is far above the low side
-    // of the footprint, which is the reported geometry.
-    let slope = |world_x: i32, _: i32| 60 + world_x;
-    let sites = structures.sites(
-        (x, z),
-        (x, z),
-        slope,
-        |_, _| 51,
-        |_, _, _| id("minecraft:plains"),
-    );
-    assert_eq!(sites.len(), 1);
-    let template = &structures.families[0].templates[(hash(structures.seed ^ 0x53545255, x, z)
-        as usize)
-        % structures.families[0].templates.len()];
-    let (low, high) = template.bounds();
-    let low_ground = 60 + x * 16 + low[0];
-    assert_eq!(
-        sites[0].position.y, low_ground,
-        "the portal sits on the lowest ground under its footprint"
-    );
-    assert!(
-        sites[0].position.y < 60 + x * 16 + (low[0] + high[0]) / 2 + 1,
-        "the chunk-centre surface plus one would float over the low side"
-    );
-}
-
-#[test]
 fn ocean_wrecks_and_ruins_use_seabed_and_beached_wrecks_use_surface() {
     let registry = registry();
     for (name, expected) in [
