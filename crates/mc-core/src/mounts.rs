@@ -72,10 +72,6 @@ fn capabilities(state: &TickState, slot: EntitySlot) -> crate::blueprint::Capabi
         .map(|blueprint| blueprint.capabilities)
         .unwrap_or_default()
 }
-fn contains_passenger(mount: &MountState, uuid: Uuid) -> bool {
-    mount.riders.contains(&uuid)
-}
-
 pub(crate) fn vehicle(state: &TickState, actor: EntityId) -> Option<EntitySlot> {
     let actor = state.entities.row(state.entities.slot_of(actor)?);
     let slot = state
