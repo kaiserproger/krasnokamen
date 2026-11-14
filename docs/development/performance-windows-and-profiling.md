@@ -67,7 +67,7 @@ shutdown to the real server; bots and the battle recorder are not sampled.
 python3 -m tools.harness run server-load-profile -- \
   --kind coreperf --budget-ms 50 -- \
   python3 -m tools.coreperf.profiles native-100 \
-  --server-bin /absolute/server-pin/solaris-v2 \
+  --server-bin /absolute/server-pin/krasnokamen \
   --bots-bin /absolute/bots-pin/player-scale-bots \
   --build-receipt /absolute/server-pin/manifest.json \
   --fixture-cache /absolute/prepared-cache \
@@ -111,8 +111,8 @@ capacity claim from the profiled run.
 - **Frame-pointer release build** for attribution:
   `CARGO_TARGET_DIR=<work>/targets/fp RUSTFLAGS="-C force-frame-pointers=yes"
   CARGO_PROFILE_RELEASE_DEBUG=line-tables-only <work>/solaris/tools/dev/mem-run.sh -m 12G env
-  RUSTC_WRAPPER= cargo build --release --bin solaris-v2 --bin player-scale-bots`;
-  record the SHA-256 of `solaris-v2`.
+  RUSTC_WRAPPER= cargo build --release --bin krasnokamen --bin player-scale-bots`;
+  record the SHA-256 of `krasnokamen`.
 - **perf:** `perf report -i perf.data --no-children --comm mc-core-tick --sort sym
   --stdio -g none --no-inline` for self time, `--children` for inclusive.
   Inlined frames mislead attribution (a 100-row collect once looked like 9 ms);

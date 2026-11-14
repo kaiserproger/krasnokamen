@@ -86,7 +86,7 @@ threading.Thread(target=server.serve_forever, daemon=True).start()
 threading.Thread(target=ticker, daemon=True).start()
 if os.environ.get('FAKE_IGNORE_KEY'):
     print('2026-11-11T00:00:00Z  WARN mc_edge::config: ignoring unknown config key origin=/r/server.toml key=data.checkpoint_every_ticks', flush=True)
-print('Solaris is listening (edge v2)', flush=True)
+print('Krasnokamen is listening (edge v2)', flush=True)
 for line in sys.stdin:
     words = line.split()
     with cond:

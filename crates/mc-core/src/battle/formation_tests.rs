@@ -249,7 +249,10 @@ fn front_only_strikes_during_charge_pulse_ranks_press_up_and_withdraw_holds_file
     assert!(!runtime.can_attack(EntityId(6)));
     let (front, second) = (runtime.members[0].pos[2], runtime.members[5].pos[2]);
     assert!(front > 0.8, "front {front}");
-    assert!(second > -1.5 && second < front - 0.5, "front {front} second rank {second}");
+    assert!(
+        second > -1.5 && second < front - 0.5,
+        "front {front} second rank {second}"
+    );
     runtime.set_order(0, Order::Withdraw);
     let origin = runtime.regiments[0].spec.origin;
     for tick in 30..80 {

@@ -1,7 +1,7 @@
 use super::*;
 use crate::Identifier;
 fn registry() -> ItemRegistry {
-    crate::items::solaris_required_items()
+    crate::items::krasnokamen_required_items()
 }
 #[test]
 fn crafter_exact_nbt_roundtrip_retains_components_and_disabled_indices() {

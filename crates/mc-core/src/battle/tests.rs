@@ -332,7 +332,7 @@ fn faction_fields_reject_invalid_native_and_json_values() {
     ] {
         let record = mc_data::entity_nbt::VanillaEntity {
             id: "minecraft:zombie".into(),
-            extra_fields: vec![("solaris:Faction".into(), tag)],
+            extra_fields: vec![("krasnokamen:Faction".into(), tag)],
             ..Default::default()
         };
         assert!(crate::journal::EntityStateImage::from_record(&state.registry, &record).is_err());
@@ -1092,7 +1092,9 @@ fn melee_contact(battle: &BattleState) -> bool {
     })
 }
 
-pub(super) fn native_battle_losses(state: &crate::tick::TickState) -> ([usize; 2], [usize; 2], usize) {
+pub(super) fn native_battle_losses(
+    state: &crate::tick::TickState,
+) -> ([usize; 2], [usize; 2], usize) {
     let mut dead = [0; 2];
     let mut removed = [0; 2];
     let mut native_wounds = 0;
@@ -1579,7 +1581,13 @@ fn melee_range_follows_the_held_items_attack_range_as_for_a_mob() {
         )
     };
     let spear = range_of(&state, "minecraft:iron_spear");
-    assert_eq!(spear, mc_melee_range::MeleeReach { min: 1.0, max: 2.25 });
+    assert_eq!(
+        spear,
+        mc_melee_range::MeleeReach {
+            min: 1.0,
+            max: 2.25
+        }
+    );
     let sword = range_of(&state, "minecraft:iron_sword");
     assert_eq!(sword, mc_melee_range::MeleeReach::mob(None));
     assert!((sword.max - (2.04_f32.sqrt() as f64 - 0.6)).abs() < 1e-6);
@@ -1598,13 +1606,26 @@ fn melee_range_follows_the_held_items_attack_range_as_for_a_mob() {
         (2.9, false, false), // past both
     ] {
         state.entities.set_pos(t, [4.0 + dx, 100.0, 4.0]);
-        assert_eq!(faction::in_melee_range(&state.entities, a, t, spear), spear_hits, "spear dx={dx}");
-        assert_eq!(faction::in_melee_range(&state.entities, a, t, sword), sword_hits, "sword dx={dx}");
+        assert_eq!(
+            faction::in_melee_range(&state.entities, a, t, spear),
+            spear_hits,
+            "spear dx={dx}"
+        );
+        assert_eq!(
+            faction::in_melee_range(&state.entities, a, t, sword),
+            sword_hits,
+            "sword dx={dx}"
+        );
     }
 }
 
 /// One battle tick of the decision pipeline at `tick`, as the tick owner runs it.
-fn battle_tick(state: &crate::tick::TickState, battle: &mut BattleState, out: &mut Output, tick: u64) {
+fn battle_tick(
+    state: &crate::tick::TickState,
+    battle: &mut BattleState,
+    out: &mut Output,
+    tick: u64,
+) {
     let frame = Frame {
         entities: &state.entities,
         registry: &state.registry,
@@ -1641,7 +1662,10 @@ fn spearman_with_the_nearest_enemy_inside_his_minimum_reaches_a_farther_one() {
         .columns
         .index(state.entities.slot_of(red).unwrap())
         .unwrap();
-    battle.combat.fighters[bi].range = mc_melee_range::MeleeReach { min: 1.0, max: 2.25 };
+    battle.combat.fighters[bi].range = mc_melee_range::MeleeReach {
+        min: 1.0,
+        max: 2.25,
+    };
     let mut combat_state = std::mem::take(&mut battle.combat);
     let frame = Frame {
         entities: &state.entities,
@@ -1681,7 +1705,10 @@ fn first_blow_waits_for_a_human_reaction() {
                 .columns
                 .index(state.entities.slot_of(*id).unwrap())
                 .unwrap();
-            if matches!(battle.combat.fighters[bi].action, combat::Action::Windup { .. }) {
+            if matches!(
+                battle.combat.fighters[bi].action,
+                combat::Action::Windup { .. }
+            ) {
                 first_windup[i].get_or_insert(tick);
             }
         }
@@ -1709,16 +1736,29 @@ fn husk_rides_at_the_vanilla_seat_and_strikes_from_it() {
     let seat = f64::from(1.443_75_f32) - f64::from(0.7_f32);
     let (rp, hp) = (state.entities.pos(r), state.entities.pos(h));
     assert_eq!([rp[0], rp[2]], [hp[0], hp[2]]);
-    assert!((rp[1] - hp[1] - seat).abs() < 1e-12, "seat {}", rp[1] - hp[1]);
+    assert!(
+        (rp[1] - hp[1] - seat).abs() < 1e-12,
+        "seat {}",
+        rp[1] - hp[1]
+    );
     let reach = mc_melee_range::MeleeReach::mob(None);
     // 1.6 blocks from the horse's centre: past the husk's own box grown by
     // the reach (0.3 + 0.83), within the horse's (0.7 + 0.83).
-    let level = spawn(&mut state, 2, "minecraft:zombie", [6.5 + 1.6, hp[1] + seat, 6.5]);
+    let level = spawn(
+        &mut state,
+        2,
+        "minecraft:zombie",
+        [6.5 + 1.6, hp[1] + seat, 6.5],
+    );
     let level = state.entities.slot_of(level).unwrap();
     assert!(faction::in_melee_range(&state.entities, r, level, reach));
     // A man 1.96 lower: his box (1.95 tall) ends under the rider's seat.
-    state.entities.set_pos(level, [6.5 + 1.0, hp[1] + seat - 1.96, 6.5]);
+    state
+        .entities
+        .set_pos(level, [6.5 + 1.0, hp[1] + seat - 1.96, 6.5]);
     assert!(!faction::in_melee_range(&state.entities, r, level, reach));
-    state.entities.set_pos(level, [6.5 + 1.0, hp[1] + seat - 1.9, 6.5]);
+    state
+        .entities
+        .set_pos(level, [6.5 + 1.0, hp[1] + seat - 1.9, 6.5]);
     assert!(faction::in_melee_range(&state.entities, r, level, reach));
 }
