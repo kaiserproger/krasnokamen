@@ -179,42 +179,110 @@ fn a_corrupted_cache_falls_back_to_recompiling() {
 /// parent process's environment. The count goes to `ENGINE_CACHE_OUT` because
 /// the test harness captures a passing test's stdout.
 fn engine_cache_child(cache_home: &Path, out: &Path) {
-    let before = cache_entries(cache_home);
+    let before = cache_entry_paths(cache_home);
     let limits = PluginLimits::default();
     let bytes = component_bytes();
     let production = engine(&limits).expect("the production engine builds");
     let compiled = CompiledPlugin::compile(&production, &bytes, &limits, "0.9.0")
         .expect("the fixture compiles on a production engine");
     assert_eq!(compiled.api_version(), "0.9.0");
-    std::fs::write(
-        out,
-        cache_entries(cache_home).saturating_sub(before).to_string(),
-    )
-    .expect("the child reports its new entries");
+    let after = cache_entry_paths(cache_home);
+    let mut added: Vec<String> = after
+        .difference(&before)
+        .map(|path| path.display().to_string())
+        .collect();
+    added.sort();
+    // First line: the count the parent asserts on. Following lines: exactly which
+    // entries appeared, so a race names the file instead of only the number.
+    let mut report = added.len().to_string();
+    for path in added {
+        report.push('\n');
+        report.push_str(&path);
+    }
+    std::fs::write(out, report).expect("the child reports its new entries");
 }
 
-/// Cache entries below `cache_home`, wherever the platform puts them: the
-/// Wasmtime cache lives under its own directory, and the engine revision
-/// directory nests deeper still. `*.stats` sidecars are skipped: the cache
-/// worker writes them asynchronously, so counting them would race the worker
-/// thread, while module files are written synchronously during compilation.
-fn cache_entries(cache_home: &Path) -> usize {
-    fn walk(root: &Path, count: &mut usize) {
+/// Cache entry files below `cache_home`, as paths relative to it, wherever the
+/// platform puts them: the Wasmtime cache lives under its own directory, and
+/// the engine revision directory nests deeper still.
+fn cache_entry_paths(cache_home: &Path) -> std::collections::BTreeSet<PathBuf> {
+    fn walk(root: &Path, prefix: &Path, out: &mut std::collections::BTreeSet<PathBuf>) {
         let Ok(entries) = std::fs::read_dir(root) else {
             return;
         };
         for entry in entries.flatten() {
             let path = entry.path();
+            let relative = prefix.join(entry.file_name());
             if path.is_dir() {
-                walk(&path, count);
-            } else if path.is_file() && path.extension().is_none_or(|ext| ext != "stats") {
-                *count += 1;
+                walk(&path, &relative, out);
+            } else if path.is_file() && is_module_entry(&relative) {
+                out.insert(relative);
             }
         }
     }
-    let mut count = 0;
-    walk(cache_home, &mut count);
-    count
+    let mut out = std::collections::BTreeSet::new();
+    walk(cache_home, Path::new(""), &mut out);
+    out
+}
+
+/// Whether `relative` is a compiled module entry, by Wasmtime's own layout.
+///
+/// `wasmtime-internal-cache` 36.0.15 writes a module as
+/// `<cache dir>/modules/<compiler dir>/<hash>` where `hash` is the 32-byte
+/// cache key in unpadded base64url — 43 characters, no dot
+/// (`lib.rs:257` `cache.directory().join("modules").join(compiler_dir)`,
+/// `lib.rs:262-273` `root_path.join(hash)`).
+///
+/// Everything else in that tree is bookkeeping written by the cache worker
+/// thread, asynchronously, after the compile that produced it returned — and it
+/// must never be counted as a new entry:
+///
+/// * `<hash>.stats` — per-entry usage statistics (`worker.rs:273`, `:413`);
+/// * `<hash>.wip-atomic-write-<reason>` — the staging file of the atomic
+///   write that publishes the file above, renamed into place on success
+///   (`lib.rs:327-342`). The *stats* write stages as
+///   `<hash>.wip-atomic-write-stats`, which the old `*.stats` filter missed: it
+///   was the file this test counted under load (1 of 100, then 3 of 100);
+/// * `<path>.wip-<pid>` — cleanup/compression task locks (`worker.rs:837`);
+/// * `<cache dir>/.cleanup` — the cleanup-task marker (`worker.rs:425`).
+fn is_module_entry(relative: &Path) -> bool {
+    let is_modules_child = relative
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::file_name)
+        .is_some_and(|dir| dir == "modules");
+    let Some(name) = relative.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    // 43 base64url characters, no dot: the module hash and nothing else.
+    is_modules_child
+        && name.len() == 43
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+}
+
+#[test]
+fn the_counter_sees_module_entries_and_not_the_workers_async_writes() {
+    // The exact file name this test counted under load
+    // (`wasmtime/modules/wasmtime--1794681568745/<hash>.wip-atomic-write-stats`),
+    // plus every other file Wasmtime's cache directory can hold.
+    let module = Path::new(
+        "wasmtime/modules/wasmtime--1794681568745/5P-Dzair9udw094-2sFFLB1geexthDk2VBZvP4Soskg",
+    );
+    assert!(is_module_entry(module), "a module entry is what the oracle counts");
+    for not_an_entry in [
+        "wasmtime/modules/wasmtime--1794681568745/5P-Dzair9udw094-2sFFLB1geexthDk2VBZvP4Soskg.wip-atomic-write-stats",
+        "wasmtime/modules/wasmtime--1794681568745/5P-Dzair9udw094-2sFFLB1geexthDk2VBZvP4Soskg.stats",
+        "wasmtime/modules/wasmtime--1794681568745/5P-Dzair9udw094-2sFFLB1geexthDk2VBZvP4Soskg.wip-4242",
+        "wasmtime/.cleanup",
+        "wasmtime/modules/wasmtime--1794681568745/not-a-hash",
+    ] {
+        assert!(
+            !is_module_entry(Path::new(not_an_entry)),
+            "{not_an_entry} is cache bookkeeping, not an entry"
+        );
+    }
 }
 
 #[test]
@@ -228,7 +296,9 @@ fn the_production_engine_reuses_its_cache_across_restarts() {
     }
     let home = tempfile::tempdir().expect("an isolated cache home");
     let exe = std::env::current_exe().expect("this test binary");
-    let run_child = |extra_env: Option<(&str, &Path)>| -> usize {
+    // `(count, the entry paths that appeared)`: the paths make a race name the
+    // file it counted instead of only the number.
+    let run_child = |extra_env: Option<(&str, &Path)>| -> (usize, Vec<String>) {
         let out = tempfile::NamedTempFile::new().expect("a child report file");
         let mut command = std::process::Command::new(&exe);
         command
@@ -249,27 +319,33 @@ fn the_production_engine_reuses_its_cache_across_restarts() {
             "a production engine child compiles",
         );
         // `NamedTempFile` unlinks on drop, so read before it goes out of scope.
-        std::fs::read_to_string(out.path())
-            .expect("the child reports its new entries")
+        let report = std::fs::read_to_string(out.path())
+            .expect("the child reports its new entries");
+        let mut lines = report.lines();
+        let count = lines
+            .next()
+            .expect("the child reports a count")
             .trim()
             .parse()
-            .expect("the child reports a count")
+            .expect("the child reports a count");
+        (count, lines.map(str::to_owned).collect())
     };
     // A fallback `HOME` for platforms without `XDG_CACHE_HOME`: only consulted
     // when the primary run leaves the cache home empty.
     for fallback in [None, Some(("HOME", home.path()))] {
-        let first_new = run_child(fallback);
+        let (first_new, _) = run_child(fallback);
         if first_new == 0 {
             continue;
         }
-        let second_new = run_child(fallback);
+        let (second_new, added) = run_child(fallback);
         // Without the cache the current production `engine()` is this test's
         // red: no shared directory is consulted, so the second compile writes
         // as many files as the first. With the cache attached the second
         // engine reuses the first one's entries and writes nothing new.
         assert_eq!(
             second_new, 0,
-            "the second production engine reuses the first one's cache instead of recompiling"
+            "the second production engine reuses the first one's cache instead of recompiling; \
+             it counted {added:?}"
         );
         return;
     }
