@@ -622,6 +622,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="the native player receives house certification despite absent breeding headroom",
         limits="certification only; villager sleep and breeding are not checked",
     ),
+    "issue1-19-hostile-motion": _entry(
+        id="issue1-19-hostile-motion", summary="A spider and a zombie move at the Java 26.3 gaits (ISSUE-1-19)",
+        owner="core:harness", evidence="graphical", profile="scene-shot",
+        scenario_id="issue1-19-hostile-motion", requires=("xvfb",),
+        sources=("tools/harness/issue1_19_hostile_motion_scene.json",),
+        fixture="private native client on a grass pad, frozen day, one spider and one zombie spawned with NoAI toggled for the capture, third-person camera",
+        proves="the received spider and zombie poses and the measured motion between two observed frames match the Java gaits instead of the wrong standstill/hover poses",
+        limits="one spider and one zombie on a flat pad; does not cover other hostiles or terrain",
+    ),
     "native-village-idle-stroll": _entry(
         id="native-village-idle-stroll", summary="Idle residents stay bound to the village and swim up out of deep water",
         owner="core:harness", evidence="graphical", profile="scene-shot",

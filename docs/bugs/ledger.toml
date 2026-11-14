@@ -2633,7 +2633,9 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval", "cargo:mc-core:hostile_tests::zombie_chase_publishes_and_clears_aggressive_pose_metadata", "cargo:mc-core:journal_touched::tests::zombie_chase_pose_is_journaled_and_repaired_after_recovery"]
+regression = ["cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval", "cargo:mc-core:hostile_tests::zombie_chase_publishes_and_clears_aggressive_pose_metadata", "cargo:mc-core:journal_touched::tests::zombie_chase_pose_is_journaled_and_repaired_after_recovery", "harness:scene-shot:issue1-19-hostile-motion"]
+fix_commit = "client:9a645aa9"
+repro_check = "scene authored by Stage2Client (receipts/Stage2Client/scenes/issue1_19_spider_zombie_motion_scene.json); red on client pin 55d8b2c6 (receipts/Stage2Client/run-red-19_spider_zombie_motion.log), green on 9a645aa9 + server b620e3333; fix_commit provisional per Main, Stage2Client is identifying the real client fix commit; the gate run itself happens in stage 3"
 failing_first = "reported"
 
 [[bug]]
