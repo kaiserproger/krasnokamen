@@ -98,7 +98,7 @@ class ProfilesTests(unittest.TestCase):
             root = Path(directory)
             pin = root / "pin"
             pin.mkdir()
-            binary = pin / "solaris-v2"
+            binary = pin / "krasnokamen"
             binary.write_bytes(b"server")
             manifest = {"repo": "core", "kind": "server", "binary": str(binary),
                         "head": "abc", "diff_sha256": "def", "command": "cargo build",

@@ -28,7 +28,7 @@ fn workshop(f: &mut Fixture) -> mc_script::ScriptSettlementBuildingRef {
     mc_script::ScriptSettlementBuildingRef::new(
         "building".into(),
         bid.0.to_string(),
-        format!("solaris:{}", kind.name()),
+        format!("krasnokamen:{}", kind.name()),
     )
 }
 
@@ -39,7 +39,7 @@ fn production_request(
     production::Request::Start {
         job: "caravan-exclusive".into(),
         worker: f.carrier_uuid,
-        recipe: "solaris-settlements:bread".into(),
+        recipe: "krasnokamen-settlements:bread".into(),
         count: 1,
         station: [8, 201, 20],
         stand_at: [8, 201, 21],

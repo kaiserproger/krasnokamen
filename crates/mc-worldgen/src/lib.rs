@@ -2,12 +2,12 @@
 //!
 //! Generation pipeline, biomes, structures.
 //!
-//! Solaris-owned density-routed terrain with data-fed biomes, caves, aquifers,
+//! Krasnokamen-owned density-routed terrain with data-fed biomes, caves, aquifers,
 //! ores, decorations, and optional structures. The overworld applies aquifers
 //! on the CPU after both CPU and GPU solid-grid generation. Generation is
 //! deterministic from seed and coordinates, independent of chunk order.
 //! Aquifer boundary fluids are not yet scheduled for vanilla postprocessing;
-//! Solaris has no generation-time hook that consumes those marks.
+//! Krasnokamen has no generation-time hook that consumes those marks.
 
 pub mod blueprint;
 pub mod earth;
@@ -74,7 +74,7 @@ pub use terrain::{
 #[cfg(feature = "worldgen-counters")]
 pub use terrain::{HeightContextStats, height_context_stats, reset_height_context_stats};
 
-/// Changes whenever Solaris intentionally changes newly generated terrain.
+/// Changes whenever Krasnokamen intentionally changes newly generated terrain.
 ///
 /// 22: core generates vanilla jigsaw villages —
 /// jigsaw-assembled pieces with their processors, and their

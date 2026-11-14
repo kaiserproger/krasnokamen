@@ -620,7 +620,7 @@ fn state(t: &Tables, id: i32) -> Result<i32> {
     })
 }
 
-/// `ItemCost`: item id, count, exact component predicate (Solaris sends none).
+/// `ItemCost`: item id, count, exact component predicate (Krasnokamen sends none).
 fn item_cost(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
     w.write_varint(t.items.get(r.read_varint()?).unwrap_or(1));
     w.write_varint(r.read_varint()?);
@@ -959,15 +959,26 @@ fn particle_options(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<bool> 
             let (_, _, _, target) = PARTICLE_POLYFILLS
                 .iter()
                 .find(|(upper, lower, source, _)| {
-                    (*upper, *lower) == (t.formats.upper, t.formats.lower)
-                        && *source == bare_name
+                    (*upper, *lower) == (t.formats.upper, t.formats.lower) && *source == bare_name
                 })
-                .with_context(|| format!("no particle mapping for {name} in {} -> {}", t.formats.upper, t.formats.lower))?;
-            let source_id = t.particle_names.iter().position(|candidate| {
-                candidate.strip_prefix("minecraft:").unwrap_or(candidate) == *target
-            }).with_context(|| format!("particle stand-in {target} missing from source registry"))?;
-            t.particles.get(source_id as i32)
-                .with_context(|| format!("particle stand-in {target} missing from target registry"))?
+                .with_context(|| {
+                    format!(
+                        "no particle mapping for {name} in {} -> {}",
+                        t.formats.upper, t.formats.lower
+                    )
+                })?;
+            let source_id = t
+                .particle_names
+                .iter()
+                .position(|candidate| {
+                    candidate.strip_prefix("minecraft:").unwrap_or(candidate) == *target
+                })
+                .with_context(|| {
+                    format!("particle stand-in {target} missing from source registry")
+                })?;
+            t.particles.get(source_id as i32).with_context(|| {
+                format!("particle stand-in {target} missing from target registry")
+            })?
         }
     };
     let mut payload = Vec::new();

@@ -115,7 +115,7 @@ class ProfileRunTests(unittest.TestCase):
             args = argparse.Namespace(fixture_cache=root / "cache", warmup_seconds=2,
                                       measure_seconds=5, readiness_seconds=60,
                                       prepare_memory="6G", slice_name=None, smoke=True)
-            source = {"server_bin": str(root / "server-pin" / "solaris-v2"),
+            source = {"server_bin": str(root / "server-pin" / "krasnokamen"),
                       "bots_bin": str(root / "bots-pin" / "player-scale-bots")}
             ctx = entry.make_context(args, root, [0], source, root, {"mem_total_gib": 8})
             command = profile_runs.profile_command(ctx, "idle", root / "run",
@@ -171,7 +171,7 @@ class FirstViewTests(unittest.TestCase):
                 "status": "passed", "details": {"first_view_seconds": 12.5}}))
 
             def measured(command, log):
-                self.assertEqual(command[1], f"SOLARIS_SERVER_BINARY={ctx.server_bin}")
+                self.assertEqual(command[1], f"KRASNOKAMEN_SERVER_BINARY={ctx.server_bin}")
                 self.assertEqual(command[-6:], ["--server-cpus", "0", "--client-cpus", "1", "--memory", "2G"])
                 log.write_text(f"[harness] PASS artifact={artifact} in 13s\n")
                 return 0, None

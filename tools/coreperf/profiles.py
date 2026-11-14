@@ -395,7 +395,7 @@ def add_damage_fixture(recipe: dict[str, Any], victims: int, *, smoke: bool) -> 
     recipe["variant"] = recipe["variant"].replace(
         f"noncanonical-scale-{old_residents}-",
         f"noncanonical-scale-{recipe['population']['resident_requested']}-", 1)
-    selector = "@e[type=minecraft:cow,name=solaris-coreperf-fixture]"
+    selector = "@e[type=minecraft:cow,name=krasnokamen-coreperf-fixture]"
     recipe["stress"] = {"kind": "damage", "regions": groups, "requested_victims": victims,
                         "target_initial_health": 100, "dispenser_capacity": capacity,
                         "pulse_interval_ms": 3000,
@@ -722,7 +722,7 @@ async def measure(args: argparse.Namespace, directory: Path, world: Path,
         args.metrics_bearer_token = secrets.token_urlsafe(32)
         args.server_wrapper = " ".join(filter(None, [
             args.server_wrapper,
-            "env", shlex.quote(f"SOLARIS_COREPERF_REGIONS={region_file}")]))
+            "env", shlex.quote(f"KRASNOKAMEN_COREPERF_REGIONS={region_file}")]))
     config, url, game = load.config(args, directory, world, args.clients, operators=True)
     # Idle measures simulation, not the default pause-when-empty policy.
     config.write_text(config.read_text().replace("[server]\n", "[server]\npause_when_empty_seconds = -1\n", 1))
