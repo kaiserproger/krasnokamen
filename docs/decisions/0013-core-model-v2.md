@@ -61,6 +61,12 @@ field are refused outright, so an old image fails the load instead of silently
 unseating its rider. Deploy this build after a clean stop: an unclean WAL tail
 written by an older build still carries `rider` and is refused at startup.
 
+A recovered rider UUID remains vehicle-owned while the player has no live body.
+An unrelated join or an idle tick must not erase that seat before its passenger
+reconnects; `mounts::join` rebuilds the reverse link. Explicit leave/dismount,
+death, or a known dead/invalid passenger clears the relation. The WAL recovery
+regression is `happy_ghast_admission_leave_and_reconnect_survive_wal_recovery`.
+
 ## Threads and backpressure
 
 Long-lived core workers perform parallel gameplay work; edge socket and fanout
