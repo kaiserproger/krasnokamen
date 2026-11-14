@@ -377,7 +377,7 @@ fn mounted_spawn_burst_links_ride_the_world_queue_without_reliable_overflow() {
         sky: Some(mc_world::chunk::LightSection::uniform(0xFF)),
     });
     let mut output = chunk_tick(1, Arc::new(chunk), None);
-    let horses = OUTBOUND_QUEUE_BOUND + 88;
+    let horses = RELIABLE_QUEUE_BOUND + 88;
     let mut rows = Vec::with_capacity(2 * horses);
     for i in 0..horses {
         let horse = EntityId(10 + 2 * i as i32);

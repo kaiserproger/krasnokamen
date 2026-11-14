@@ -161,7 +161,7 @@ async fn queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer() {
 /// resumes once the writer drains it.
 #[tokio::test]
 async fn byte_full_world_queue_routes_no_world_frame_until_drained() {
-    let (server, _dir) = fixture();
+    let (server, dir) = fixture();
     let server = Arc::new(server);
     let id = server.connections.joining_id();
     let (reliable_tx, _reliable_rx) = mpsc::channel(32);
@@ -214,6 +214,8 @@ async fn byte_full_world_queue_routes_no_world_frame_until_drained() {
         !world_rx.is_empty(),
         "drained bytes admit world frames again"
     );
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]

@@ -96,7 +96,7 @@ async fn client_view_distance_join_grow_and_shrink() {
     wait_for_join(
         &server,
         id,
-        "View",
+        false,
         4,
         "en_us",
         mc_core::boundary::ChatVisibility::Full,
@@ -268,7 +268,7 @@ async fn play_client_information_admits_the_client_locale() {
     wait_for_join(
         &server,
         id,
-        "Locale",
+        false,
         4,
         "en_us",
         mc_core::boundary::ChatVisibility::Full,
@@ -326,9 +326,16 @@ async fn recorder_takes_the_server_radius_and_players_keep_their_own() {
                 Default::default(),
             ),
         );
-        wait_for_join(&server, id, is_recorder, 4, "en_us")
-            .await
-            .unwrap();
+        wait_for_join(
+            &server,
+            id,
+            is_recorder,
+            4,
+            "en_us",
+            mc_core::boundary::ChatVisibility::Full,
+        )
+        .await
+        .unwrap();
     }
     let radius = |id| {
         server
@@ -400,7 +407,7 @@ async fn client_chat_setting_is_admitted_at_join_and_on_play_changes() {
     server
         .connections
         .stash_join(id, (EntityId(1), [8.0, 64.0, 8.0], 0, Default::default()));
-    wait_for_join(&server, id, "Chat", 4, "en_us", Setting::System)
+    wait_for_join(&server, id, false, 4, "en_us", Setting::System)
         .await
         .unwrap();
     assert_eq!(chat_setting(&server, id), Some(Setting::System));
@@ -439,11 +446,11 @@ async fn edge_sent_feedback_follows_the_clients_chat_setting() {
     server
         .connections
         .stash_join(id, (EntityId(1), [8.0, 64.0, 8.0], 0, Default::default()));
-    wait_for_join(&server, id, "Chat", 4, "en_us", Setting::Full)
+    wait_for_join(&server, id, false, 4, "en_us", Setting::Full)
         .await
         .unwrap();
     let (reliable_tx, mut reliable_rx) = mpsc::channel(16);
-    let (world_tx, _world_rx) = mpsc::channel(16);
+    let (world_tx, _world_rx) = world_queue(16, WORLD_QUEUE_BYTES);
     server
         .connections
         .register(
@@ -470,11 +477,11 @@ async fn edge_sent_feedback_follows_the_clients_chat_setting() {
                 .await
                 .unwrap()
         );
-        drain(&mut reliable_rx);
+        drain(|| reliable_rx.try_recv().ok());
         server
             .feedback(id, "Unknown or incomplete command")
             .unwrap();
-        let frames = drain(&mut reliable_rx);
+        let frames = drain(|| reliable_rx.try_recv().ok());
         let texts = frames
             .iter()
             .filter(|frame| frame.id == ClientboundSystemChat::ID)
@@ -496,11 +503,11 @@ async fn list_obeys_the_send_command_feedback_rule() {
     server
         .connections
         .stash_join(id, (EntityId(1), [8.0, 64.0, 8.0], 0, Default::default()));
-    wait_for_join(&server, id, "Lister", 4, "en_us", Setting::Full)
+    wait_for_join(&server, id, false, 4, "en_us", Setting::Full)
         .await
         .unwrap();
     let (reliable_tx, mut reliable_rx) = mpsc::channel(16);
-    let (world_tx, _world_rx) = mpsc::channel(16);
+    let (world_tx, _world_rx) = world_queue(16, WORLD_QUEUE_BYTES);
     server
         .connections
         .register(
@@ -535,10 +542,10 @@ async fn list_obeys_the_send_command_feedback_rule() {
             rule == "true",
             "the core published the rule after the console command"
         );
-        drain(&mut reliable_rx);
+        drain(|| reliable_rx.try_recv().ok());
         for command in ["list", "list uuids", "help"] {
             assert!(server.handle_admin_command(id, command).await.unwrap());
-            let shown = drain(&mut reliable_rx)
+            let shown = drain(|| reliable_rx.try_recv().ok())
                 .iter()
                 .filter(|frame| frame.id == ClientboundSystemChat::ID)
                 .count();

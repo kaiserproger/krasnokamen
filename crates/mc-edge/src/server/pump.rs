@@ -51,6 +51,9 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         // resync, and recompute forever without ever routing. The cache
         // makes re-plans O(1) per chunk; block changes evict their chunk.
         let mut chunk_cache = crate::plan::ChunkPacketCache::with_anti_xray(anti_xray);
+        // Latest routed global roster; seeds fresh viewers' player profiles
+        // so a first routed Roster never mass-removes tracked entities.
+        let mut latest_roster: Arc<[mc_core::dimensions::RosterPlayer]> = Arc::from(Vec::new());
         let coreperf = std::env::var_os("KRASNOKAMEN_COREPERF_REGIONS").is_some();
         loop {
             let out = match rx.recv().await {
@@ -414,10 +417,10 @@ pub(super) async fn publish_and_route(
     connections: &mut HashMap<ConnectionId, ConnectionHandles>,
 ) {
     viewers.retain(|id, _| connections.contains_key(id));
-    // Planning spends this credit, but it is not exclusive: an LOD tile
-    // (`lod.rs`) also takes world-queue slots, at any time from this read
-    // until the send, which is the whole planning time of every viewer, so a
-    // planned frame can still find the queue full below.
+    // Planning spends this credit (slots and bytes), but it is not exclusive:
+    // an LOD tile (`lod.rs`) also takes world-queue slots, at any time from
+    // this read until the send, which is the whole planning time of every
+    // viewer, so a planned frame can still find the queue full below.
     {
         let registry = server.connections.inner.lock();
         for (id, viewer) in viewers.iter_mut() {
@@ -492,69 +495,6 @@ pub(super) async fn publish_and_route(
     flush_setup_world_fences(server, viewers, connections, out, view_distance);
     // Last: `/telemetry.jsonl` serves a tick only once its fanout is done.
     server.dashboard.record_fanout_tick(out.tick, recorders);
-}
-
-/// Broadcast tab-list latencies at vanilla cadence: every
-/// [`LATENCY_BROADCAST_INTERVAL_TICKS`] ticks one batched
-/// `PlayerInfoUpdate(UPDATE_LATENCY)` frame with every measured player goes
-/// to every connection. That is one reliable-queue slot per interval per
-/// connection, not one slot per other connection per keepalive reply: the
-/// per-reply fan-out filled the 512-slot reliable queue of a slow reader in
-/// seconds and the delivery policy disconnected it.
-pub(super) fn broadcast_latencies(
-    registry: &ConnectionRegistry,
-    net_counters: &NetCounters,
-    connections: &mut HashMap<ConnectionId, ConnectionHandles>,
-    tick: u64,
-) {
-    use mc_protocol::packets::Packet as _;
-    if tick % LATENCY_BROADCAST_INTERVAL_TICKS != 0 {
-        return;
-    }
-    let entries = registry.latencies();
-    if entries.is_empty() {
-        return;
-    }
-    let update = mc_protocol::packets::play::PlayerInfoUpdate {
-        actions: mc_protocol::packets::play::PlayerInfoActions::UPDATE_LATENCY,
-        entries: entries
-            .into_iter()
-            .map(
-                |(profile_id, latency)| mc_protocol::packets::play::PlayerInfoEntry {
-                    profile_id,
-                    name: String::new(),
-                    properties: Vec::new(),
-                    listed: false,
-                    latency,
-                    game_mode: 0,
-                    list_order: 0,
-                    show_hat: false,
-                },
-            )
-            .collect(),
-    };
-    let mut body = Vec::new();
-    if update.encode(&mut body).is_err() {
-        return;
-    }
-    let mut frame = bytes::BytesMut::new();
-    if mc_protocol::frame::append_frame(
-        &mut frame,
-        mc_protocol::packets::play::PlayerInfoUpdate::ID,
-        &body,
-        mc_protocol::frame::Compression::Threshold(256),
-    )
-    .is_err()
-    {
-        return;
-    }
-    let frame = frame.freeze();
-    for (id, handles) in connections.iter() {
-        if handles.reliable_tx.try_send(frame.clone()).is_err() {
-            registry.remove(*id);
-            net_counters.reliable_drops.fetch_add(1, Ordering::Relaxed);
-        }
-    }
 }
 
 /// Broadcast tab-list latencies at vanilla cadence: every
@@ -810,7 +750,7 @@ mod roster_seed_tests {
         bound: usize,
     ) -> mpsc::Receiver<bytes::Bytes> {
         let (reliable_tx, reliable_rx) = mpsc::channel(bound);
-        let (world_tx, _world_rx) = mpsc::channel(bound);
+        let (world_tx, _world_rx) = world_queue(bound, WORLD_QUEUE_BYTES);
         server
             .connections
             .register(
@@ -835,7 +775,7 @@ mod roster_seed_tests {
         let root = tempfile::tempdir().unwrap();
         let server = test_server(root.path());
         let a = server.connections.joining_id();
-        let _a_rx = register(&server, a, crate::fanout::OUTBOUND_QUEUE_BOUND);
+        let _a_rx = register(&server, a, crate::fanout::RELIABLE_QUEUE_BOUND);
 
         let players: Arc<[RosterPlayer]> = (1..=600i32)
             .map(|i| RosterPlayer {

@@ -312,7 +312,7 @@ impl EntityInterest {
         let entity = snapshot.entities.get(id).filter(|entity| {
             let chunk = entity_chunk(entity.position);
             if viewer.loaded_chunks.contains_key(&chunk)
-                && let Some(range) = tracking_range(entity.type_id, distance)
+                && let Some(range) = tracking_range(entity.type_id, distance, viewer.recorder)
                 && !self.ranges.contains(&range)
             {
                 self.ranges.push(range);

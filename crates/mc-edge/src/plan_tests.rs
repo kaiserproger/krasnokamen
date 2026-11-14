@@ -1556,6 +1556,7 @@ fn entity_events_map() {
             mc_protocol::packets::play::SwingAnimationType::Stab
         );
         assert_eq!(swing.duration, 23);
+        assert!(!swing.off_hand);
         assert!(
             packets
                 .iter()

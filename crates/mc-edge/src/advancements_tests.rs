@@ -232,24 +232,29 @@ fn reloaded_recipes_are_announced_once_and_feed_the_next_book() {
         .retain(|recipe| !matches!(recipe.kind, mc_data::recipes::RecipeKind::Stonecutting(_)));
     drop(core);
     std::fs::remove_dir_all(dir).unwrap();
-    assert!(!before.update.stonecutter_recipes.is_empty());
+    assert!(!before.catalog.update.stonecutter_recipes.is_empty());
 
     let reload = mc_core::boundary::RegistryReload::new(Arc::new(reloaded));
     let old = before;
     let mut viewer = crate::plan::ViewerState::new(ConnectionId(7), EntityId(1), [0.0; 3]);
     viewer.advancements = Arc::clone(&old.advancements);
-    let name = old.advancements.recipes.keys().next().unwrap().clone();
+    let name = old.catalog.entries.keys().next().unwrap().clone();
     let changes = [
         PlayerChange::RecipesReloaded {
             reload: reload.clone(),
         },
         PlayerChange::RecipesUnlocked {
+            registry: mc_core::boundary::RecipeSource(Arc::clone(&reload.registry)),
             recipes: vec![name],
             replace: true,
         },
     ];
     let packets = crate::plan::plan_player_changes(&changes, &mut viewer);
-    assert_eq!(packets.len(), 2, "the new recipes, then the book");
+    assert_eq!(
+        packets.len(),
+        2,
+        "the new recipes once, then the book without a second catalog"
+    );
     let update =
         mc_protocol::packets::play::ClientboundUpdateRecipes::decode(&mut &body(&packets[0])[..])
             .unwrap();
@@ -257,7 +262,7 @@ fn reloaded_recipes_are_announced_once_and_feed_the_next_book() {
         update.stonecutter_recipes.is_empty(),
         "the client gets the reloaded recipes"
     );
-    assert_ne!(update, old.update);
+    assert_ne!(update, old.catalog.update);
     ClientboundRecipeBookAdd::decode(&mut &body(&packets[1])[..]).unwrap();
 
     // Every connection's copy of the announcement shares one build, which
@@ -269,7 +274,7 @@ fn reloaded_recipes_are_announced_once_and_feed_the_next_book() {
         &crate::recipes::for_join(&reload.registry).unwrap(),
         &built
     ));
-    assert!(built.update.stonecutter_recipes.is_empty());
+    assert!(built.catalog.update.stonecutter_recipes.is_empty());
 }
 #[test]
 fn displayed_tree_layout_uses_depth_and_distinct_leaf_rows() {

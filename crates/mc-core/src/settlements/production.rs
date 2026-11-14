@@ -26,6 +26,8 @@ use crate::tick::TickState;
 const MANUAL: &str = "paused";
 /// Retry delay for paused jobs: causal, never backfills missed portions.
 const RETRY_TICKS: u64 = 20;
+/// Auto-pause while the job's worker is gone; [`retake`] clears it.
+const MISSING_WORKER: &str = "missing worker";
 /// Largest autocraft chain one order may admit.
 pub(super) const MAX_ORDER_STEPS: usize = 32;
 
@@ -1238,8 +1240,12 @@ pub(crate) fn execute(
             Ok(true)
         }
         Request::Resume { job } => {
-            if let Some(entry) = state.jobs.get(&job) {
-                worker_slot(world, settlement, entry.worker)?;
+            if let Some(worker) = state.jobs.get(&job).map(|entry| entry.worker)
+                && let Err(failure) = worker_slot(world, settlement, worker)
+                && !(matches!(failure, Failure::NotFound)
+                    && retake(world, settlement, state, &[worker]))
+            {
+                return Err(failure);
             }
             let tick = world.tick;
             let Some(entry) = state.jobs.get_mut(&job) else {
@@ -1394,6 +1400,7 @@ fn tick_job(
 pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut State) -> bool {
     let tick_now = world.tick;
     let mut finished = Vec::new();
+    let mut gone = Vec::new();
     let changed = state.cursor.run(
         &mut state.jobs,
         |job| {
@@ -1403,8 +1410,11 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut 
                 && job.next_due <= tick_now
         },
         |_, job| {
-            if worker_slot(world, settlement, job.worker).is_err() {
-                return park(job, "missing worker", tick_now.saturating_add(RETRY_TICKS)).into();
+            if let Err(failure) = worker_slot(world, settlement, job.worker) {
+                if matches!(failure, Failure::NotFound) && !gone.contains(&job.worker) {
+                    gone.push(job.worker);
+                }
+                return park(job, MISSING_WORKER, tick_now.saturating_add(RETRY_TICKS)).into();
             }
             let produced_before = job.done;
             match tick_job(world, settlement, job) {
@@ -1438,7 +1448,69 @@ pub(crate) fn tick(world: &mut TickState, settlement: SettlementId, state: &mut 
         }
     }
     state.completed = state.completed.saturating_add(finished.len() as u64);
-    changed || !finished.is_empty()
+    let retaken = retake(world, settlement, state, &gone);
+    changed || retaken || !finished.is_empty()
+}
+
+/// A worker that died or no longer exists can never finish its jobs. Every
+/// unfinished job it held (its whole order) passes to the nearest free
+/// resident, so the order resumes instead of parking on a dead uuid. Output
+/// owed from the old carry is not forged: its delivery check then reports the
+/// loss and asks for a cancel.
+fn retake(world: &TickState, settlement: SettlementId, state: &mut State, gone: &[Uuid]) -> bool {
+    let mut changed = false;
+    for &dead in gone {
+        let Some(stand) = state
+            .jobs
+            .values()
+            .find(|job| job.unfinished() && job.worker == dead)
+            .map(|job| job.stand_at)
+        else {
+            continue;
+        };
+        let replacement = world
+            .entities
+            .slots()
+            .filter(|&slot| {
+                world
+                    .entities
+                    .row(slot)
+                    .villager
+                    .as_ref()
+                    .is_some_and(|v| v.settlement == Some(settlement))
+            })
+            .map(|slot| {
+                (
+                    reach(world.entities.pos(slot), stand),
+                    world.entities.row(slot).uuid,
+                )
+            })
+            .filter(|&(_, uuid)| {
+                worker_slot(world, settlement, uuid).is_ok()
+                    && !state
+                        .jobs
+                        .values()
+                        .any(|job| job.unfinished() && job.worker == uuid)
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+        let Some((_, worker)) = replacement else {
+            continue;
+        };
+        for job in state
+            .jobs
+            .values_mut()
+            .filter(|job| job.unfinished() && job.worker == dead)
+        {
+            job.worker = worker;
+            job.fetch_at = None;
+            if job.paused.as_deref() == Some(MISSING_WORKER) {
+                job.paused = None;
+                job.next_due = world.tick;
+            }
+            changed = true;
+        }
+    }
+    changed
 }
 
 /// Any nonterminal, noncancelled, ungated job needing tick. Auto-paused jobs

@@ -945,9 +945,6 @@ impl PartialEq for EntityDataValue {
                 left == right
             }
             (Self::Byte { value: left, .. }, Self::Byte { value: right, .. }) => left == right,
-            (Self::SnifferState { value: left, .. }, Self::SnifferState { value: right, .. }) => {
-                left == right
-            }
             (
                 Self::CopperGolemState { value: left, .. },
                 Self::CopperGolemState { value: right, .. },
@@ -1146,9 +1143,9 @@ impl EntityDataValue {
                 buf.write_varint(i32::from(*value));
             }
             Self::Byte { value, .. } => buf.write_i8(*value),
-            Self::SnifferState { value, .. }
-            | Self::CopperGolemState { value, .. }
-            | Self::WeatheringCopper { value, .. } => buf.write_varint(i32::from(*value)),
+            Self::CopperGolemState { value, .. } | Self::WeatheringCopper { value, .. } => {
+                buf.write_varint(i32::from(*value));
+            }
             Self::Int { value, .. } => buf.write_varint(*value),
             Self::Long { value, .. } => buf.write_varlong(*value),
             Self::Float { value, .. } => buf.write_f32(*value),

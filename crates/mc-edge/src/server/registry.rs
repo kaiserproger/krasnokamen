@@ -29,6 +29,9 @@ pub(super) struct RegistryInner {
     /// Chat setting last admitted to the core (`ClientInformation.chat_visibility`);
     /// deduplicates Play updates and is cleared on disconnect.
     pub(super) chat_visibilities: HashMap<ConnectionId, mc_core::boundary::ChatVisibility>,
+    /// Measured tab-list latency and profile id per connection, recorded on
+    /// keepalive replies and broadcast batched by the pump; cleared on disconnect.
+    pub(super) latencies: HashMap<ConnectionId, (uuid::Uuid, i32)>,
     pub(super) roster_dirty: bool,
     // Join state and its waiters share the queue registry's atomic removal.
     pub(super) pending_joins: HashMap<ConnectionId, JoinedSpawn>,
@@ -295,6 +298,7 @@ impl ConnectionRegistry {
             }
             inner.locales.remove(&id);
             inner.chat_visibilities.remove(&id);
+            inner.latencies.remove(&id);
             inner.closers.remove(&id)
         };
         if let Some(closer) = closer {

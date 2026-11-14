@@ -254,7 +254,7 @@ fn vanilla_headless_world_roundtrip() {
     println!("KRASNOKAMEN_VANILLA_ROUNDTRIP_{}_OK", phase.to_uppercase());
 }
 
-fn save(root: &Path, path: &str, tag: &Tag) {
+pub(super) fn save(root: &Path, path: &str, tag: &Tag) {
     let path = root.join(path);
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     if path.exists() {
@@ -279,7 +279,7 @@ fn falcons_border(dimension: Dimension) -> mc_core::command_border::Border {
     }
 }
 
-fn modern_fixture(root: &Path, config: &CoreConfig) {
+pub(super) fn modern_fixture(root: &Path, config: &CoreConfig) {
     let registry = crate::test_support::registry().unwrap();
     let mut manifest = CheckpointManifest {
         tick: 79,

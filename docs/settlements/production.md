@@ -39,6 +39,8 @@ The following use `/settlement production <name>` as the prefix. `status` is pub
 
 `start` admits a single job. The worker must be bound to the settlement; the live station must match the recipe and lie inside the building, with a valid adjacent stand. The building token can identify a native production building or a district certificate; a matching district certificate takes precedence. Use `/settlement building list` for native buildings.
 
+A job whose worker dies or no longer exists pauses as `missing worker` and passes, with every unfinished step of its order, to the bound resident nearest its stand who can work and holds no other unfinished job. `resume` on a held job does the same. Output still owed from the dead worker's carry is not replaced: its delivery reports the changed cargo and needs a cancel. With no free resident the job stays paused until one is.
+
 The core command handler also recognizes these operations, but the Minecraft client command tree does **not** advertise their literals; do not assume they are available through the vanilla client command interface:
 
 ```text
