@@ -2363,8 +2363,9 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
-
+regression = ["harness:scene-shot:issue1-01-villager-leg"]
+fix_commit = "client:97e988d2"
+repro_check = "red/green pair on the fixed scene: client pin 97e988d2^ with the era server be41f092 FAILs at villager-leg-opaque_pixels (receipts/Stage2Client/run-redfix-01.log), client 34a85940c8f7 PASSes (run-green2-01_villager_leg.log); the pixel window over the leg columns comes from the matched green frames. Candidate for stage 3 - ledger promote reruns the registered scenario on its own pinned binaries"
 [[bug]]
 id = "ISSUE-1-02"
 title = "Held tool floats rather than sitting in hand"
@@ -2374,7 +2375,7 @@ severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = []
-
+repro_check = "note only: green PASS on the current client with no discriminating red yet - Mistral round 2 is building fix-hunk-reversal pins"
 [[bug]]
 id = "ISSUE-1-03"
 title = "F3 drawn-index count rises sharply with camera direction; verify it stays bounded rather than accumulating"
@@ -2384,7 +2385,7 @@ severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = []
-
+repro_check = "note only: green PASS on the current client with no discriminating red yet - the scene must move from key.keyboard.f3 to toggle_debug_overlay + assert_render_bounded before it can discriminate; Mistral round 2 owns the scene"
 [[bug]]
 id = "ISSUE-1-04"
 title = "Settlement UI absent or inconvenient"
@@ -2649,8 +2650,9 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
-
+regression = ["harness:scene-shot:issue1-18-sheep-goat"]
+fix_commit = "client:b7c48e1c"
+repro_check = "red/green pair: client pin b7c48e1c^ FAILs goat_horns_upright (receipts/Stage2Client/run-redfix-18_sheep_goat.log), the fixed client PASSes (run-green2-18_sheep_goat.log). Candidate for stage 3"
 [[bug]]
 id = "ISSUE-1-19"
 title = "Spider and zombie movement animation and speed wrong"
@@ -2661,7 +2663,7 @@ status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = ["cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval", "cargo:mc-core:hostile_tests::zombie_chase_publishes_and_clears_aggressive_pose_metadata", "cargo:mc-core:journal_touched::tests::zombie_chase_pose_is_journaled_and_repaired_after_recovery", "harness:scene-shot:issue1-19-hostile-motion"]
 fix_commit = "client:9a645aa9"
-repro_check = "scene authored by Stage2Client (receipts/Stage2Client/scenes/issue1_19_spider_zombie_motion_scene.json); red on client pin 55d8b2c6 (receipts/Stage2Client/run-red-19_spider_zombie_motion.log), green on 9a645aa9 + server b620e3333; fix_commit provisional per Main, Stage2Client is identifying the real client fix commit; the gate run itself happens in stage 3"
+repro_check = "scene authored by Stage2Client (receipts/Stage2Client/scenes/issue1_19_spider_zombie_motion_scene.json); red on client pin 55d8b2c6 (receipts/Stage2Client/run-red-19_spider_zombie_motion.log), green on 9a645aa9 + server b620e3333; fix_commit provisional per Main, Stage2Client is identifying the real client fix commit; the gate run itself happens in stage 3; note only: the scene-shot pair is flaky on AI wander (the specimen can walk out of the measured window between frames), so red/green is not yet discriminating; Stage2Client round 3 owns the stabilisation"
 failing_first = "reported"
 
 [[bug]]
@@ -2686,7 +2688,7 @@ severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = []
-
+repro_check = "note only: green PASS on the current client with no discriminating red yet - Mistral round 2 is building fix-hunk-reversal pins"
 [[bug]]
 id = "ISSUE-1-22"
 title = "Recursive automatic crafting missing"
@@ -2709,7 +2711,7 @@ severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = []
-
+repro_check = "note only: green PASS on the current client with no discriminating red yet - the two pixel windows (emerald green, redstone red) land with Mistral round 2"
 [[bug]]
 id = "ISSUE-1-24"
 title = "Settlement UI fails to open by bell"
