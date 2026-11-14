@@ -303,6 +303,8 @@ struct LoadWindow {
     #[serde(default)]
     command_interval_ms: Option<u64>,
     #[serde(default)]
+    command_fence: bool,
+    #[serde(default)]
     chat_hz: u32,
     #[serde(default)]
     commands: Vec<String>,
@@ -3040,6 +3042,10 @@ impl Bot {
                             .await?;
                         self.metrics.commands_sent += 1;
                         self.metrics.windows[index].command.writes_completed += 1;
+                        if window.command_fence {
+                            self.setup_fence(client, &format!("run_command_{index}_{slot}"), false).await?;
+                            self.metrics.windows[index].command.completed += 1;
+                        }
                     }
                     _ => {
                         if self.pending_chats.len() >= ACTION_CAP {
@@ -3256,7 +3262,10 @@ fn aggregate(
                 "movement": totals.movement.json(offered(window.movement_hz, u64::from(args.clients))),
                 "edit": totals.edit.json(offered(window.edit_hz, u64::from(args.clients))),
                 "edit_unavailable": totals.edit_unavailable,
-                "command": totals.command.json(if args.mechanic_read_only { 0 } else { local.map_or(0, |local| window.command_slots(local)) }),
+                "command": totals.command.json(if args.mechanic_read_only { 0 } else {
+                    local.map_or(0, |local| window.command_slots(
+                        local.min(duration.saturating_sub(Duration::from_nanos(1)))))
+                }),
                 "chat": totals.chat.json(offered(window.chat_hz, u64::from(args.clients))),
                 "received": totals.received,
                 "automatic_respawn": {"requests": totals.automatic_respawn_requests, "deferred": totals.automatic_respawn_deferred},
@@ -3294,7 +3303,7 @@ fn aggregate(
             "queue_capacity": 0, "pending_edit_capacity_per_bot": ACTION_CAP,
             "pending_chat_capacity_per_bot": ACTION_CAP, "poll_ms": 10,
             "slot_accounting": "wall elapsed, slots at n/rate for n>=1; missed slots are not replayed",
-            "completed_scope": "edit: matching observed block update; chat: exact own server echo; movement/command: no completion oracle (zero)",
+            "completed_scope": "edit: matching observed block update; chat: exact own server echo; fenced command: input-ordered echo, not mechanic completion; movement and unfenced command: no completion oracle",
             "receipt_scope": "actual receive window; admission and sends are not mechanic completion",
             "windows": windows, "bots": bots,
         }));
