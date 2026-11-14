@@ -70,7 +70,7 @@ REQUIRED_TOOLS = frozenset({
 
 
 def _package_source() -> Path:
-    override = os.environ.get("SOLARIS_CHISEL_PACKAGE")
+    override = os.environ.get("KRASNOKAMEN_CHISEL_PACKAGE")
     if override:
         return Path(override).expanduser().resolve()
     return (runtime.REPO_ROOT.parent / "solaris-default-plugins" / "chisel").resolve()
@@ -81,7 +81,7 @@ def _copy_package(source: Path, target: Path) -> dict[str, Any]:
     if not source.is_dir():
         raise RuntimeError(
             f"chisel package is missing: {source} "
-            "(build ../solaris-default-plugins/chisel or set SOLARIS_CHISEL_PACKAGE)"
+            "(build ../solaris-default-plugins/chisel or set KRASNOKAMEN_CHISEL_PACKAGE)"
         )
     missing = [name for name in ("plugin.toml", "plugin.wasm") if not (source / name).is_file()]
     bundle = source / "client" / "chisel-content.zip"
@@ -172,9 +172,9 @@ def validate_args(ctx: ProfileContext) -> float:
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
-        raise RuntimeError("chisel requires SOLARIS_SERVER_BINARY (a solaris-v2 built from this tree)")
+        raise RuntimeError("chisel requires KRASNOKAMEN_SERVER_BINARY (a krasnokamen built from this tree)")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing executable server binary: {binary}")
@@ -207,7 +207,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     try:
         server_log = server_log_path.open("wb")
         env = os.environ.copy()
-        env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+        env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
         server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                                   cwd=runtime.REPO_ROOT, stdout=server_log,
                                   stderr=subprocess.STDOUT, start_new_session=True, env=env)
@@ -218,7 +218,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             xvfb, display, _ = runtime.start_xvfb(artifact)
             ctx.logs.append(str(artifact / "xvfb.log"))
         if ctx.client == "java":
-            # The plain profile has the observation agent but no Solaris Loader.
+            # The plain profile has the observation agent but no Krasnokamen Loader.
             client_process, client_log, mcp = scene_shot.start_java(
                 ctx, artifact, address, USERNAME, timeout, display, 8, 70, plain=True)
             with ProbeSteps(mcp, artifact / "chisel", timeout, "java-chisel-admission") as probe:
@@ -235,7 +235,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             return {"scenario": probe.report, "verdicts": {"vanilla_optional_admission": True}}
         # The local opt-in a player would configure: chisel's permissions plus the
         # server's built-in native settlements view bundle, which the native client also receives.
-        os.environ["SOLARIS_CLIENT_LOADER_PERMISSIONS"] = (
+        os.environ["KRASNOKAMEN_CLIENT_LOADER_PERMISSIONS"] = (
             "present_views,send_view_actions,load_assets,register_items")
         client_process, _client_log, mcp = native_client.start(
             ctx, native_client.resolve_binary(ctx), address, USERNAME, timeout, display=display)

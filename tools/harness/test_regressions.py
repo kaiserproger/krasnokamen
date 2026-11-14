@@ -242,10 +242,10 @@ regression = ["harness:entities:native-v2-craft-drag"]
             receipt.mkdir()
             (receipt / 'result.json').write_text('{"status":"prepared"}')
             def run_child(argv, ctx, name, **kwargs):
-                self.assertNotIn('SOLARIS_FIRST_START_RECOVERY_BINARY', kwargs['env'])
+                self.assertNotIn('KRASNOKAMEN_FIRST_START_RECOVERY_BINARY', kwargs['env'])
                 (root / name).write_text(f'[harness] artifact={receipt}\n')
             ctx = profiles.ProfileContext(root, include_regression_client=True)
-            with patch.dict('os.environ', {'SOLARIS_FIRST_START_RECOVERY_BINARY': '/mutation'}), patch.object(regressions, 'REPO_ROOT', root), patch.object(profiles, '_run_command', run_child), patch.object(regressions, '_release_server', return_value=root / 'server'):
+            with patch.dict('os.environ', {'KRASNOKAMEN_FIRST_START_RECOVERY_BINARY': '/mutation'}), patch.object(regressions, 'REPO_ROOT', root), patch.object(profiles, '_run_command', run_child), patch.object(regressions, '_release_server', return_value=root / 'server'):
                 with self.assertRaisesRegex(RuntimeError, 'VISIBLE.*prepared'):
                     regressions.run(ctx)
             (receipt / 'result.json').write_text('{"status":"passed","details":{"server_binary_sha256":"wrong"}}')
@@ -365,7 +365,7 @@ regression = ["cargo:mc-core:module::other"]
     def test_release_server_is_pinned_outside_the_target(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            built = root / 'target/release/solaris-v2'
+            built = root / 'target/release/krasnokamen'
             built.parent.mkdir(parents=True)
             built.write_bytes(b'candidate')
             ctx = profiles.ProfileContext(root)
@@ -385,10 +385,10 @@ regression = ["cargo:mc-core:module::other"]
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             target = root / 'target'
-            binary = target / 'release/solaris-v2'
+            binary = target / 'release/krasnokamen'
             binary.parent.mkdir(parents=True)
             binary.write_bytes(b'candidate')
-            marker = target / '.solaris-tree'
+            marker = target / '.krasnokamen-tree'
             marker.write_text(str(root))
             original_link = os.link
             def switch_tree(src, dst):
@@ -518,7 +518,7 @@ class LedgerToolTests(unittest.TestCase):
             registry = root / '.analysis/ledger-builds'
             registry.mkdir(parents=True, exist_ok=True)
             (registry / 'abc.json').write_text(json.dumps({'sha256': 'abc', 'tree': {'head': tree['head'], 'sha256': tree['sha256']}}))
-        # The scenarios run whatever SOLARIS_SERVER_BINARY names: a binary the tooling did not build from
+        # The scenarios run whatever KRASNOKAMEN_SERVER_BINARY names: a binary the tooling did not build from
         # the candidate (pinned or foreign), or built from an older HEAD, proves nothing about this source.
         with self.assertRaisesRegex(ledger.Refused, 'names no server binary built from the candidate'):
             self.promote(root, runner, client_receipt=receipt(now))
@@ -892,7 +892,7 @@ class LedgerToolTests(unittest.TestCase):
         tree_a.mkdir(parents=True)
         tree_b.mkdir(parents=True)
         slot = base / 'targets/slot-x'
-        binary = slot / 'release/solaris-v2'
+        binary = slot / 'release/krasnokamen'
         binary.parent.mkdir(parents=True)
         binary.write_bytes(b'candidate')
         calls = []
@@ -905,10 +905,10 @@ class LedgerToolTests(unittest.TestCase):
                 patch.object(profiles, '_run_command', run_command), \
                 patch.dict('os.environ', {'CARGO_TARGET_DIR': str(base / 'targets/slot-a')}):
             # A slot marked for tree A must not be accepted for a build of tree B.
-            (slot / '.solaris-tree').write_text(str(tree_a))
+            (slot / '.krasnokamen-tree').write_text(str(tree_a))
             with self.assertRaisesRegex(RuntimeError, 'does not belong'):
                 regressions._release_server(ctx, profiles, tree_b)
-            (slot / '.solaris-tree').write_text(str(tree_b.resolve()))
+            (slot / '.krasnokamen-tree').write_text(str(tree_b.resolve()))
             pinned = regressions._release_server(ctx, profiles, tree_b)
         self.assertEqual(pinned.read_bytes(), b'candidate')
         argv, cwd, env = calls[-1]
