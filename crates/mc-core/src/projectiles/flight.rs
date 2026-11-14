@@ -32,10 +32,19 @@ pub(super) struct Hittable {
     item: bool,
 }
 
+#[cfg(test)]
 fn hittables(state: &TickState, bodies: &mut Vec<Hittable>) {
+    hittables_from_slots(state, bodies, state.entities.slots());
+}
+
+fn hittables_from_slots(
+    state: &TickState,
+    bodies: &mut Vec<Hittable>,
+    slots: impl Iterator<Item = EntitySlot>,
+) {
     bodies.clear();
     let include_items = crate::projectiles::active_hook_present(state);
-    bodies.extend(state.entities.slots().filter_map(|slot| {
+    bodies.extend(slots.filter_map(|slot| {
         let body = state.entities.body(slot);
         let row = state.entities.row(slot);
         if crate::end_fight::is_dragon(state, slot) {
@@ -142,9 +151,46 @@ pub(crate) fn swept_slots(
     slots.dedup();
 }
 
-/// Freeze broad-phase membership at the same post-move version as `hittables`.
-/// Later payloads can teleport bodies, remove rows or swap slots. Neither those
-/// changes nor a newly spawned drop may change another shot's frozen candidates.
+/// Collect conservative membership for one projectile at the post-move version.
+fn shot_slots(
+    state: &TickState,
+    id: EntityId,
+    slots: &mut Vec<EntitySlot>,
+) -> bool {
+    slots.clear();
+    let Some(slot) = state.entities.slot_of(id) else {
+        return false;
+    };
+    let Some(record) = state.entities.row(slot).projectile.as_deref() else {
+        return false;
+    };
+    if record.stuck || record.kind == ProjectileKind::EyeOfEnder {
+        return false;
+    }
+    let pos = state.entities.pos(slot);
+    let velocity = state.entities.vel(slot).map(|v| v / 20.0);
+    let radius = crate::physical_attacks::projectile_profile(state, slot)
+        .map_or(0.3, |profile| profile.collision_radius);
+    if pos.iter().any(|v| !v.is_finite()) || !radius.is_finite() || !(0.0..=128.0).contains(&radius)
+    {
+        return false;
+    }
+    let (start, end) = if matches!(record.data, super::ProjectileData::Homing { .. }) {
+        // Homing may observe a target teleported by an earlier payload. Every
+        // segment accepted by first_solid is inside this conservative envelope.
+        (pos.map(|v| v - 128.0), pos.map(|v| v + 128.0))
+    } else {
+        if velocity.iter().any(|v| !v.is_finite() || v.abs() > 128.0) {
+            return false;
+        }
+        (pos, std::array::from_fn(|axis| pos[axis] + velocity[axis]))
+    };
+    swept_slots(state, start, end, radius, slots);
+    true
+}
+
+#[cfg(test)]
+/// Freeze membership before any projectile payload can mutate the world.
 fn shot_candidates(
     state: &TickState,
     id: EntityId,
@@ -153,34 +199,9 @@ fn shot_candidates(
     slots: &mut Vec<EntitySlot>,
     candidates: &mut Vec<usize>,
 ) {
-    let Some(slot) = state.entities.slot_of(id) else {
-        return;
-    };
-    let Some(record) = state.entities.row(slot).projectile.as_deref() else {
-        return;
-    };
-    if record.stuck || record.kind == ProjectileKind::EyeOfEnder {
+    if !shot_slots(state, id, slots) {
         return;
     }
-    let pos = state.entities.pos(slot);
-    let velocity = state.entities.vel(slot).map(|v| v / 20.0);
-    let radius = crate::physical_attacks::projectile_profile(state, slot)
-        .map_or(0.3, |profile| profile.collision_radius);
-    if pos.iter().any(|v| !v.is_finite()) || !radius.is_finite() || !(0.0..=128.0).contains(&radius)
-    {
-        return;
-    }
-    let (start, end) = if matches!(record.data, super::ProjectileData::Homing { .. }) {
-        // Homing may observe a target teleported by an earlier payload. Every
-        // segment accepted by first_solid is inside this conservative envelope.
-        (pos.map(|v| v - 128.0), pos.map(|v| v + 128.0))
-    } else {
-        if velocity.iter().any(|v| !v.is_finite() || v.abs() > 128.0) {
-            return;
-        }
-        (pos, std::array::from_fn(|axis| pos[axis] + velocity[axis]))
-    };
-    swept_slots(state, start, end, radius, slots);
     candidates.extend(slots.iter().filter_map(|slot| {
         bodies
             .binary_search_by_key(&slot.0, |body| body.slot.map_or(u32::MAX, |slot| slot.0))
@@ -464,17 +485,27 @@ pub(super) fn run(
     }
     let mut bodies = std::mem::take(&mut state.projectiles.bodies);
     bodies.clear();
-    if ids.iter().any(|id| {
-        state.entities.slot_of(*id).is_some_and(|slot| {
-            state
-                .entities
-                .row(slot)
-                .projectile
-                .as_deref()
-                .is_some_and(|record| !record.stuck && record.kind != ProjectileKind::EyeOfEnder)
-        })
-    }) {
-        hittables(state, &mut bodies);
+    let mut slots = Vec::new();
+    // Capture each broad phase before payloads can move/remove rows. Keep the
+    // per-shot slots so constructing the union does not repeat spatial queries.
+    let mut shot_members = Vec::new();
+    let mut shot_ranges = Vec::with_capacity(ids.len());
+    for &id in &ids {
+        let start = shot_members.len();
+        let valid = shot_slots(state, id, &mut slots);
+        shot_members.extend_from_slice(&slots);
+        shot_ranges.push(valid.then_some(start..shot_members.len()));
+    }
+    if shot_ranges.iter().any(Option::is_some) {
+        // Deployed planes can extend outside an armor stand's body bounds.
+        let mut selected = state.entities.mob_slots_matching(|type_id| {
+            state.registry.blueprint(type_id)
+                .is_some_and(|blueprint| blueprint.name == "minecraft:armor_stand")
+        });
+        selected.extend_from_slice(&shot_members);
+        selected.sort_unstable();
+        selected.dedup();
+        hittables_from_slots(state, &mut bodies, selected.into_iter());
     }
     let exceptional: Vec<_> = bodies
         .iter()
@@ -483,19 +514,18 @@ pub(super) fn run(
             (body.slot.is_none() || body.deployed_candidate).then_some(index)
         })
         .collect();
-    let mut slots = Vec::new();
     let mut candidates = Vec::new();
     let mut ranges = Vec::with_capacity(ids.len());
-    for &id in &ids {
+    for query in shot_ranges {
         let start = candidates.len();
-        shot_candidates(
-            state,
-            id,
-            &bodies,
-            &exceptional,
-            &mut slots,
-            &mut candidates,
-        );
+        if let Some(query) = query {
+            candidates.extend(shot_members[query].iter().filter_map(|slot| {
+                bodies.binary_search_by_key(&slot.0, |body| {
+                    body.slot.map_or(u32::MAX, |slot| slot.0)
+                }).ok()
+            }));
+            candidates.extend_from_slice(&exceptional);
+        }
         candidates[start..].sort_unstable();
         // Each query has unique slots, but exceptional stands may also be local.
         let mut end = start;
