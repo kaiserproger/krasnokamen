@@ -1,6 +1,6 @@
 """Server-driven dialog proof for the native client (`show_dialog` -> `custom_click_action`).
 
-Starts the server with `SOLARIS_DIALOG_PROBE=1` (core `dialog::probe`: every joining player is
+Starts the server with `KRASNOKAMEN_DIALOG_PROBE=1` (core `dialog::probe`: every joining player is
 shown a `multi_action` dialog with a text input, a number slider and a checkbox, and a click is
 logged and echoed), launches the native client through the ordinary connect path, then through
 the ordinary screen tools: matches the dialog screen class + title, types the text input,
@@ -27,7 +27,7 @@ from .probe_steps import ProbeSteps
 DIALOG_CLASS = "net.minecraft.client.gui.screens.dialog.MultiButtonDialogScreen"
 DIALOG_TITLE = "Dialog probe"
 USERNAME = "DialogProof"
-TYPED_NAME = "Solaris"
+TYPED_NAME = "Krasnokamen"
 
 
 def _node(state: dict[str, Any], node_id: str) -> dict[str, Any] | None:
@@ -48,9 +48,9 @@ def validate_args(ctx: ProfileContext) -> float:
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
-        raise RuntimeError("dialogs requires SOLARIS_SERVER_BINARY (a solaris-v2 built from this tree)")
+        raise RuntimeError("dialogs requires KRASNOKAMEN_SERVER_BINARY (a krasnokamen built from this tree)")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing executable server binary: {binary}")
@@ -82,8 +82,8 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     try:
         server_log = server_log_path.open("wb")
         env = os.environ.copy()
-        env["SOLARIS_DIALOG_PROBE"] = "1"
-        env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+        env["KRASNOKAMEN_DIALOG_PROBE"] = "1"
+        env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
         server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                                   cwd=runtime.REPO_ROOT, stdout=server_log,
                                   stderr=subprocess.STDOUT, start_new_session=True, env=env)
@@ -123,7 +123,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             probe.call("minecraft_click_screen_button", {**screen, "button_label": "Submit"})
             closed = probe.wait(lambda s: s["screen"].get("class") in (None, "none"), "dialog_closed_after_action")
             probe.check("dialog_state_closed", closed["dialog"]["open"] is False)
-            expected = ('dialog probe: action=submit name=Some("Solaris") radius=Some(9.0) '
+            expected = ('dialog probe: action=submit name=Some("Krasnokamen") radius=Some(9.0) '
                         'walls=Some(true) source=Some("probe")')
 
             def logged() -> tuple[bool, str]:
