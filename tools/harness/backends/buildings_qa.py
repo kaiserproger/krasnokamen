@@ -965,32 +965,50 @@ def _break_placed_house_cell(probe: ProbeSteps, sub: dict[str, Any], tag: str) -
     probe.fixture("gamemode creative @s")
 
 
+# Answers that end the question: another identical order cannot change them.
+_ORDER_TERMINAL = ("No blueprint upgrade available", "Unknown blueprint.", "Busy.",
+                   "not enough:", "Blueprint has no first level.")
+
+
 def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str, level: int,
                       order_cmd: str, use_dialog: bool, ctx: ProfileContext,
                       dialog_fn=None, upgrade_bid: int | None = None) -> bool:
-    """Issue one order; never infer admission from stale chat or an unrelated project."""
-    if use_dialog and ctx.windowed and dialog_fn is not None:
-        message = dialog_fn()
-    else:
-        state = _send_fresh(
-            probe, order_cmd,
-            (f"Started {bp} ", f"Queued {bp}", "No blueprint upgrade available",
-             "Unknown blueprint.", "Busy.", "not enough:"))
-        message = " | ".join(_chat_lines(state, 12))
-    sub[f"L{level}_order_attempt1"] = message[:300]
-    if f"started {PROJECT_LABEL.get(bp, bp)} construction.".lower() in message.lower() or \
-            f"started {bp} construction.".lower() in message.lower():
-        return True
-    # Do not replace a queued owner order with a second attempt while it waits.
-    if "queued " in message.lower():
-        for _ in range(20):
-            if _project_active_quiet(probe, sub, tag, bp, level, upgrade_bid=upgrade_bid):
-                return True
-            if _current_certificate(probe, sub, tag, bp, level) is not None:
-                return False
-            probe.call("minecraft_wait_ticks", {"ticks": 200})
-    elif _project_active_quiet(probe, sub, tag, bp, level, upgrade_bid=upgrade_bid):
-        return True
+    """Issue one order; never infer admission from stale chat or an unrelated project.
+
+    A refusal is usually transient planner contention, so retry up to three times about a
+    minute apart and re-check admission after each attempt."""
+    for attempt in range(1, 4):
+        state: dict[str, Any] = {}
+        if use_dialog and ctx.windowed and dialog_fn is not None:
+            try:
+                dialog_fn()
+                message = ""
+            except Exception as exc:
+                message = f"dialog failed: {exc}"
+        else:
+            state = _send_fresh(
+                probe, order_cmd,
+                (f"Started {bp} ", f"Queued {bp}", "No blueprint upgrade available",
+                 "Unknown blueprint.", "Busy.", "not enough:"))
+            message = " | ".join(_chat_lines(state, 12))
+        sub[f"L{level}_order_attempt{attempt}"] = message[:300]
+        if f"started {PROJECT_LABEL.get(bp, bp)} construction.".lower() in message.lower() or \
+                f"started {bp} construction.".lower() in message.lower():
+            return True
+        probe.call("minecraft_wait_ticks", {"ticks": 20})
+        if _project_active_quiet(probe, sub, tag, bp, level, upgrade_bid=upgrade_bid):
+            # The planner admitted this level while our order was refused: follow its build.
+            return True
+        if any(prefix in message for prefix in _ORDER_TERMINAL):
+            # A terminal answer is checked against the live project once, never retried:
+            # another identical order cannot change it. The caller's `_admitted_or_caught`
+            # still credits a certificate the planner produced on its own.
+            return False
+        if _current_certificate(probe, sub, tag, bp, level) is not None:
+            return False
+        # One MCP wait request accepts at most 255 ticks: split the minute.
+        for ticks in (255, 255, 255, 255, 180):
+            probe.call("minecraft_wait_ticks", {"ticks": ticks})
     return False
 
 

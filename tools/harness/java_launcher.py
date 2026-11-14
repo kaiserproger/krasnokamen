@@ -22,6 +22,8 @@ from typing import Any
 from .matrix_api import MissingCapability
 
 VERSION = "26.1.2"
+# Release versions a plain (unmodded) Java client can be launched for: the canonical chain.
+PLAIN_VERSIONS = ("26.1.2", "26.2", "26.3")
 
 
 def allowed(entry: dict[str, Any]) -> bool:
@@ -80,7 +82,7 @@ def vanilla_command(*, game_dir: Path, username: str, agent_jar: Path,
                     metadata_path: Path | None = None, assets_root: Path | None = None,
                     gradle_home: Path | None = None, library_roots: list[Path] | None = None) -> list[str]:
     version = os.environ.get("KRASNOKAMEN_JAVA_VERSION", VERSION)
-    if version not in ("26.1.2", "26.3"):
+    if version not in PLAIN_VERSIONS:
         raise MissingCapability(f"unsupported plain Java version: {version}")
     gradle_home = gradle_home or Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
     cache = gradle_home / "caches/fabric-loom"

@@ -25,6 +25,27 @@ from typing import Any, Callable
 
 from PIL import Image, ImageChops
 
+
+def nearest_scale(image: Image.Image, width: int, height: int) -> Image.Image:
+    """Nearest-neighbour resample without `Image.resize`.
+
+    Pillow 12.1.1 on this host raises SystemError from `ImagingCore.resize` whenever an
+    explicit resample is passed, and both the glyph mask and the frame search need exact
+    nearest scaling. The images are glyph-sized, so a pure-Python sample is enough."""
+    source_width, source_height = image.size
+    if width <= 0 or height <= 0 or source_width <= 0 or source_height <= 0:
+        raise ValueError("nearest_scale needs positive sizes")
+    data = list(image.getdata())
+    rows = []
+    for y in range(height):
+        source_y = min(source_height - 1, y * source_height // height)
+        line = data[source_y * source_width:(source_y + 1) * source_width]
+        rows.extend(line[min(source_width - 1, x * source_width // width)] for x in range(width))
+    out = Image.new(image.mode, (width, height))
+    out.putdata(rows)
+    return out
+
+
 from .. import runtime
 from ..profiles import ProfileContext
 from . import scene_shot
@@ -61,8 +82,8 @@ def _label_bitmap(label: str, client_jar: Path) -> Image.Image:
                             box = alpha.getbbox()
                             if box:
                                 advance = int(box[2] * height / cell_height + 0.5) + 1
-                                mask = alpha.resize((round(cell_width * height / cell_height), height),
-                                                    Image.Resampling.NEAREST).point(lambda value: 255 if value else 0)
+                                mask = nearest_scale(alpha, round(cell_width * height / cell_height),
+                                                     height).point(lambda value: 255 if value else 0)
                                 glyphs[char] = mask, advance, provider["ascent"]
         providers("minecraft:default")
     if any(char not in glyphs for char in label):
@@ -86,7 +107,7 @@ def _label_points(path: str, bitmap: Image.Image, scale: int) -> list[tuple[int,
         bright = Image.new("L", source.size)
         bright.putdata([255 if min(pixel) >= 200 and max(pixel) - min(pixel) <= 8 else 0
                         for pixel in source.getdata()])
-    needle = bitmap.resize((bitmap.width * scale, bitmap.height * scale), Image.Resampling.NEAREST)
+    needle = nearest_scale(bitmap, bitmap.width * scale, bitmap.height * scale)
     width, height = needle.size
     row = needle.tobytes()[:width]
     pixels = bright.tobytes()
