@@ -2,54 +2,54 @@
 
 The owner runs one public test server on a small VPS. Its address is never
 written in the repository: scripts and commands take it from the environment
-variable `SOLARIS_TEST_HOST` (SSH destination, user included); the owner holds
+variable `KRASNOKAMEN_TEST_HOST` (SSH destination, user included); the owner holds
 the value, SSH access and every credential. Server operation in general is
 documented in [OPERATING.md](../OPERATING.md); this page is the
 deployment routine for that host. Deploying needs owner authorization;
 deploys are batched until the owner says deploy.
 
 **Owner-only.** Everything here needs access only the owner holds:
-`SOLARIS_TEST_HOST`, an SSH key for it, a host-side RCON helper and `/root` on
+`KRASNOKAMEN_TEST_HOST`, an SSH key for it, a host-side RCON helper and `/root` on
 the host. A contributor without them can read the routine and rehearse it on a
 local machine, but cannot run it. Never copy a real host address, SSH detail,
 password or owner-specific receipt path into a tracked file; use
-`SOLARIS_TEST_HOST` and placeholders. The scripts and their environment
+`KRASNOKAMEN_TEST_HOST` and placeholders. The scripts and their environment
 variables are described in
 [`tools/dev/test-server/README.md`](../../tools/dev/test-server/README.md).
 
 ## Host
 
 - Debian 13, 2 vCPUs (AVX2), about 4 GB RAM, no swap, glibc 2.41 or newer,
-  JDK 25. Use `ssh -o LogLevel=ERROR "$SOLARIS_TEST_HOST"` to silence
+  JDK 25. Use `ssh -o LogLevel=ERROR "$KRASNOKAMEN_TEST_HOST"` to silence
   post-quantum key warnings. The agent `ssh://` file route does not work with
   this host; use plain `ssh`.
-- `/opt/solaris/` is owned by the system user `solaris` (`HOME=/opt/solaris`):
-  `solaris-v2`, `server.toml`, `plugins/`, `world/`, `metrics/`, the metrics
+- `/opt/solaris/` is owned by the system user `krasnokamen` (`HOME=/opt/solaris`):
+  `krasnokamen`, `server.toml`, `plugins/`, `world/`, `metrics/`, the metrics
   collector. Unit: [`tools/dev/test-server/solaris.service`](../../tools/dev/test-server/solaris.service)
   (`--no-console`, `MemoryMax=3G`, `Restart=on-failure`), plus a drop-in setting
   `RUST_BACKTRACE=1`. A startup failure loops restarts: stop the unit before
   debugging.
-- Content cache: `/opt/solaris/.local/share/solaris/content/<version>`.
+- Content cache: `/opt/solaris/.local/share/krasnokamen/content/<version>`.
   Import as the service user:
-  `runuser -u solaris -- env HOME=/opt/solaris ./solaris-v2 content import
+  `runuser -u solaris -- env HOME=/opt/solaris ./krasnokamen content import
   --config server.toml --version <ver> --download` (about 80 s); verify with
   `content verify --config server.toml` (no `--version`).
 - `server.toml`: `motd` names the RC (bump it with each deploy); view distance
   16, simulation distance 6; bind `0.0.0.0:25565`; `online_mode = false` by owner
-  decision (the native client needs offline mode) with the `solaris-auth` plugin
+  decision (the native client needs offline mode) with the `krasnokamen-auth` plugin
   and `[auth] require_plugin_login = true`; dashboard on `127.0.0.1:25580`, never
   public. No operator grants for bots.
 - RCON listens on loopback only; run commands through the host's RCON helper
   over SSH. `ops.json` is read only at startup, so grant operator with the
   `op` command over RCON instead of editing the file.
 - A static file server (Caddy, port 8080, root `/srv`) serves
-  `/srv/static/`: the client content manifest `solaris-content.json` and the
-  bundles `solaris-content-<ver>-r<N>.tar.zst` (see
+  `/srv/static/`: the client content manifest `krasnokamen-content.json` and the
+  bundles `krasnokamen-content-<ver>-r<N>.tar.zst` (see
   [releases](release-and-tags.md#client-release-and-the-singleplayer-content-bundle)).
 
 ## Redeploy, keeping the world
 
-1. Build locally with `cargo build --release --locked -p mc-edge --bin solaris-v2`,
+1. Build locally with `cargo build --release --locked -p mc-edge --bin krasnokamen`,
    and check the glibc requirement:
    `objdump -T <bin> | grep -oE "GLIBC_[0-9.]+" | sort -Vu | tail -1`.
 2. Smoke locally **with the exact plugin set you will deploy**: a temp dir with
@@ -60,21 +60,21 @@ variables are described in
    fail with `failed to convert function to given type`.
 3. Keep a copy of the deployed binary named by SHA under ignored
    `.analysis/deploy-test-server/`.
-4. Upload as `solaris-v2.next`, then in **one** SSH command on the host: flush
+4. Upload as `krasnokamen.next`, then in **one** SSH command on the host: flush
    metrics (`systemctl start solaris-metrics.service`), stop the unit, back up
    the world (`tar czf /root/world-backup-<stamp>.tgz world`), keep the previous
-   binary as `solaris-v2.prev`, move `.next` into place, `chown solaris:`, bump
+   binary as `krasnokamen.prev`, move `.next` into place, `chown krasnokamen:`, bump
    the MOTD, start, and wait for readiness on the new process only:
    `timeout 400 journalctl -u solaris -f -n 0 -o cat | grep -m1 -E
    "is listening|panic|failed to start"`. Plugins swap the same way
    (`plugins.prev`, extract into `plugins.next`, swap).
 5. Verify from outside with a status ping (handshake with the current protocol,
    next state 1): version and description; the plugin count in the log. With
-   `solaris-auth` deployed, the plugin repository's `tools/auth_live_check.py`
+   `krasnokamen-auth` deployed, the plugin repository's `tools/auth_live_check.py`
    helpers drive a raw-protocol probe that expects the register prompt and then
    a successful login (it needs an absolute `--output-dir` and an
    `XDG_DATA_HOME` containing a content cache).
-6. On failure restore `solaris-v2.prev` immediately and restart, then fix
+6. On failure restore `krasnokamen.prev` immediately and restart, then fix
    forward.
 
 Cold start with a fresh plugin JIT cache takes about 80 s; warm restarts take
@@ -88,7 +88,7 @@ Only with explicit owner approval, and only after a verified backup.
 runs on the host with `set -euo pipefail`: stop, assert inactive, back up and
 `tar tzf` the backup, remove the world, swap binaries, start, wait for
 readiness. Also remove `metrics/.cursor`. A fresh world wipes every
-`solaris-auth` account.
+`krasnokamen-auth` account.
 
 Release-to-release upgrades (new required content files, `WORLDGEN_REVISION`
 bumps) are in [releases](release-and-tags.md#core-release-cut) step 4; on this
@@ -127,7 +127,7 @@ host run `world upgrade-worldgen` as the service user.
 ## Clients and bots against the server
 
 - Agents use the native client headless
-  (`play --headless --profile offline-test --server "${SOLARIS_TEST_HOST#*@}:25565" --username
+  (`play --headless --profile offline-test --server "${KRASNOKAMEN_TEST_HOST#*@}:25565" --username
   <unique, <=16> --automation --mcp-http 127.0.0.1:0 --artifact-dir <dir>`):
   no Xvfb or GPU, about 2% CPU and 170 MB idle. Windowed only for captures, on a
   private Xvfb display. Launch as a long-lived service, not `&` in a one-shot

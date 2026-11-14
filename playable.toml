@@ -1,6 +1,6 @@
 [server]
-name = "solaris-playable"
-motd = "Solaris playable spike"
+name = "krasnokamen-playable"
+motd = "Krasnokamen playable spike"
 # Playable spike profile: keep the real-client join loop fast. This is not
 # the view-distance-8 replacement-readiness profile.
 view_distance = 4

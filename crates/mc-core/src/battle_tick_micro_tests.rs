@@ -77,7 +77,7 @@ fn summarize(label: &str, rows: &[[u64; 13]], touched: &[usize], entries: &[usiz
 /// 600) and `BATTLE_PLAYERS` (default 1: the ladder's recorder, a survival
 /// player at world spawn, joined before setup; protected so the scene stays
 /// fixed). Each phase prints mean/p50/p95 milliseconds per window.
-/// `SOLARIS_TRACE_ROW_MUT=1` adds `row_mut` caller attribution (it slows
+/// `KRASNOKAMEN_TRACE_ROW_MUT=1` adds `row_mut` caller attribution (it slows
 /// `row_mut`, so never combine it with timing runs). Correctness switches
 /// (never timing runs: they warm every row between ticks): `BATTLE_WAL_CRC=1`
 /// prints each window's CRC-32 and size of its WAL payload (every entry's
