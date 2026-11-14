@@ -303,7 +303,9 @@ fn a_soldier_hurt_by_two_enemies_hands_both_on() {
 /// attacker.
 #[test]
 fn soldier_blows_between_soldiers_turn_nobody_from_the_nearest_enemy() {
-    let mut state = crate::battle::tests::staged_flat_fixture(100);
+    // The calibrated removal rate is below one percent per landed blow.
+    // Exercise a full front, not a tiny skirmish with no nonfatal removals.
+    let mut state = crate::battle::tests::staged_flat_fixture(1_000);
     crate::battle::staging::execute(
         &mut state,
         &mut crate::boundary::ChangeSet::default(),
@@ -312,11 +314,15 @@ fn soldier_blows_between_soldiers_turn_nobody_from_the_nearest_enemy() {
     )
     .unwrap();
     let (mut remembered, mut contact) = (0, 0);
+    let (mut wounded, mut killed, mut admitted) = (0, 0, 0);
     for _ in 0..2400 {
         run_tick(&mut state, &[]);
         let battle = &state.hostile.battle;
         contact += usize::from(battle.combat.work.in_weapon_reach > 0);
         remembered = remembered.max(battle.retaliation.work.remembered);
+        wounded += battle.combat.work.wounded;
+        killed += battle.combat.work.killed;
+        admitted += battle.retaliation.work.blows;
         for &id in &battle.columns.ids {
             assert_eq!(
                 battle.retaliation.answering(id),
@@ -334,7 +340,10 @@ fn soldier_blows_between_soldiers_turn_nobody_from_the_nearest_enemy() {
         removed.iter().sum::<usize>() > 0,
         "no blow landed: dead {dead:?}"
     );
-    assert!(remembered > 0, "no soldier's blow reached retaliation");
+    assert!(
+        remembered > 0,
+        "no soldier's blow reached retaliation; wounded={wounded}, killed={killed}, admitted={admitted}"
+    );
 }
 
 /// Soldiers answering `attacker` as helpers.

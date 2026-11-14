@@ -891,6 +891,156 @@ fn battle_arrow_real_checkpoint_wal_restart_matches_uninterrupted_expiry() {
 }
 
 #[test]
+fn battle_arrow_support_loss_clears_anchor_across_checkpoint_and_wal_restart() {
+    let (mut live, arrow, landed_at) = landed_battle_arrow();
+    for _ in 0..37 {
+        let (output, _, _) = crate::tick::run_tick(&mut live, &[]);
+        crate::core::journal_entries_for_tick(&mut live, &output);
+    }
+    let checkpoint_tick = live.tick;
+    let slot = live.entities.slot_of(arrow).unwrap();
+    let pos = live.entities.pos(slot);
+    let support = [
+        pos[0].floor() as i32,
+        (pos[1] - 0.1).floor() as i32,
+        pos[2].floor() as i32,
+    ];
+    let open_support = |state: &mut crate::tick::TickState| {
+        state.world.set_block(
+            support[0],
+            support[1],
+            support[2],
+            state.registry.states.air,
+        );
+        state.world.set_block(
+            support[0],
+            support[1] - 2,
+            support[2],
+            state.registry.states.stone,
+        );
+        state.world.fold_overlay();
+    };
+    open_support(&mut live);
+    let entity = crate::core::entity_data_record(&live, slot).unwrap();
+    let fields = mc_data::entity_nbt::entity_to_fields(&live.registry.items, &entity).unwrap();
+    let mut base = Replay {
+        tick: checkpoint_tick,
+        ..Default::default()
+    };
+    crate::native_checkpoint::hydrate_entity(
+        &live.registry,
+        &mut base,
+        &Tag::Compound(fields),
+        checkpoint_tick,
+    )
+    .unwrap();
+    base.sim_debt.extend(
+        live.world
+            .debt_checkpoint(checkpoint_tick)
+            .into_iter()
+            .map(|image| (image.chunk, image)),
+    );
+    let directory = tempfile::tempdir().unwrap();
+    let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
+    let (output, _, _) = crate::tick::run_tick(&mut live, &[]);
+    let entries = crate::core::journal_entries_for_tick(&mut live, &output);
+    writer.append(output.tick, output.tick, &entries).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+    let slot = live.entities.slot_of(arrow).unwrap();
+    let record = live.entities.row(slot).projectile.as_ref().unwrap();
+    assert!(
+        !record.stuck,
+        "an unsupported arrow must leave the idle fast path"
+    );
+    assert_eq!(
+        record.grounded_at_age, None,
+        "falling custody cannot retain a ground clock"
+    );
+    assert_eq!(record.age, 0);
+
+    // The real post-fall checkpoint image must also be admissible, independently
+    // of the pre-fall checkpoint plus the actual journal producer's WAL tail.
+    let entity = crate::core::entity_data_record(&live, slot).unwrap();
+    let fields = mc_data::entity_nbt::entity_to_fields(&live.registry.items, &entity).unwrap();
+    let mut falling = Replay {
+        tick: live.tick,
+        ..Default::default()
+    };
+    crate::native_checkpoint::hydrate_entity(
+        &live.registry,
+        &mut falling,
+        &Tag::Compound(fields),
+        live.tick,
+    )
+    .unwrap();
+    assert_eq!(
+        falling.entities[&arrow.0]
+            .projectile
+            .as_ref()
+            .unwrap()
+            .grounded_at_age,
+        None
+    );
+    let batches =
+        read_complete_batches_after(&directory.path().join("journal"), checkpoint_tick).unwrap();
+    assert_eq!(batches.len(), 1);
+    assert!(!batches[0].2.is_empty());
+    let replay = replay_batches(base, &batches);
+    let saved = &replay.entities[&arrow.0];
+    assert!(!saved.projectile.as_ref().unwrap().stuck);
+    assert_eq!(saved.projectile.as_ref().unwrap().grounded_at_age, None);
+    let (mut restarted, _, _) = super::super::flight_tests::setup();
+    open_support(&mut restarted);
+    restarted.tick = replay.tick;
+    restarted.world.restore_sim_debt(&replay, None).unwrap();
+    crate::core::restore_entity(&mut restarted, arrow.0, saved).unwrap();
+    let mut relanded_at = None;
+    let mut removed_at = None;
+    for _ in 0..140 {
+        crate::tick::run_tick(&mut live, &[]);
+        crate::tick::run_tick(&mut restarted, &[]);
+        assert_eq!(live.tick, restarted.tick);
+        let live_slot = live.entities.slot_of(arrow);
+        let restarted_slot = restarted.entities.slot_of(arrow);
+        assert_eq!(
+            live_slot.is_some(),
+            restarted_slot.is_some(),
+            "tick {}",
+            live.tick
+        );
+        if let (Some(live_slot), Some(restarted_slot)) = (live_slot, restarted_slot) {
+            assert_eq!(
+                live.entities.pos(live_slot),
+                restarted.entities.pos(restarted_slot)
+            );
+            let record = live.entities.row(live_slot).projectile.as_ref().unwrap();
+            let restored = restarted
+                .entities
+                .row(restarted_slot)
+                .projectile
+                .as_ref()
+                .unwrap();
+            assert_eq!(record, restored, "tick {}", live.tick);
+            if record.stuck {
+                relanded_at.get_or_insert(live.tick);
+                assert!(record.grounded_at_age.is_some());
+            }
+        } else {
+            removed_at = Some(live.tick);
+            break;
+        }
+    }
+    let relanded_at = relanded_at.expect("the lower landing pad must catch the falling arrow");
+    assert!(relanded_at > checkpoint_tick);
+    assert_eq!(removed_at, Some(relanded_at + 100));
+    assert!(
+        removed_at.unwrap() > landed_at + 100,
+        "the former ground clock must not expire the new landing"
+    );
+}
+
+#[test]
 fn lazy_ground_clock_survives_native_checkpoint_wal_active_pause_and_age_wrap() {
     let state = live_state();
     let items = &state.registry.items;

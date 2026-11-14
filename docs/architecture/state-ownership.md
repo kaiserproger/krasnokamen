@@ -76,7 +76,7 @@ The sole kernel tree is `mc-core/src/battle`, restored from the F battle
 line; `hostile` retains its runtime state, not another implementation.
 
 Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
-An unparried blow removes about two times in five on the authored
+An unparried blow removes about eight times in a thousand on the authored
 deterministic roll; seven removals in ten die on the spot and the rest
 withdraw wounded through the ranks. Any landed blow finishes a wounded man, and
 pursuit removes nearly every landed blow, nine in ten fatally. Front ranks
@@ -110,6 +110,15 @@ place round its target (golden-angle rings 1.2-3.6 blocks out), so riders that
 chose the same foe do not pile onto one block. The work counters bound visits,
 target checks, reaction checks, strikes, arc iterations and charge decisions;
 they are not a 20-TPS performance measurement.
+Mounted terrain turns are retained for up to 60 ticks, including while pursuing a
+target or formation slot. A side slide must retain the headroom required by
+steps in its projected direction; otherwise steering weighs another direction
+instead of pressing into a canopy-blocked step. The bounded detour prevents
+the slot from pulling the horse back into the same obstacle on its next tick.
+The ten-second stall census runs after target validation. A soldier holding a
+live enemy within six blocks is in contact, not advancing, even when its virtual
+leader is farther ahead. An invalid retained target cannot hide a blocked soldier;
+the census is derived telemetry and never changes motion.
 
 Large projectile batches (at least 16 shots) derive a reusable, counting-sorted
 two-block XZ grid from the frozen native body snapshot. Conservative half-extent
@@ -128,9 +137,15 @@ Pickup, expiry and physical-profile custody changes still use native owners.
 native `krasnokamen:LifetimeAge`; vanilla `life` projects the effective ground age.
 Hydration refuses an anchored projectile without a native lifetime-age long;
 retained lifetimes accept only 1,201, or 100 for Arrow/SpectralArrow.
+Block impact establishes the native-age anchor. Loss of support exits the idle
+path and clears both the anchor and ground age before falling; a later landing
+starts a fresh ground lifetime, including across checkpoint/WAL recovery.
 Active-clock WAL replay, frozen chunks and wrapping entity age retain elapsed
 time without one arrow image per tick. Loyalty tridents keep their dynamic
 return path and are not treated as idle arrows.
+
+Native mob NBT writes `krasnokamen:Faction` exactly once for a nonzero faction;
+ordinary faction-zero mobs carry no faction key.
 
 Mob riders use the same horse-owned UUID relation as player riders. Staging
 uses `battle::cavalry::mount`, requires a nonzero rider faction and copies it to
@@ -200,63 +215,6 @@ armor stands leave the store at once. Differences from vanilla:
   itself through `hurtServer(generic, getHealth())`, an ordinary death.
 
 Persistence: [corpses](persistence.md#corpses).
-
-### Staged battle actions
-
-`battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
-regiment volley clocks, and `cavalry.rs` owns charge/refusal timers. Fighters
-and charge state share the formation-aligned dense execution index; a cold
-identity remap preserves actions and ammunition when roster layout changes.
-These are runtime battle state: pause holds their clock; restart restores
-bodies and mount custody, not an in-progress battle. The native projectile
-owner alone moves arrows and resolves hits.
-
-Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
-Unblocked contact attempts remove 1.3% on the authored deterministic roll,
-nine wounded per death; shield parries reduce actual removals. Wounded soldiers
-withdraw via formation membership rather than being killed. Pursuit increases
-fatality; film pacing changes lulls, never swing speed. These are simulation
-choices based on [Sabin](https://gwern.net/doc/history/2000-sabin.pdf), not
-measured historical per-swing probabilities. Volleys use 220 ticks sustained
-and 60 arrows per archer.
-Each regiment has an absolute staggered phase, including after wavering/rejoin;
-the soldiers within that regiment still draw and release together. The staged
-battle uses sustained cadence; there is no unused opening-burst control.
-Horses refuse steady frontal ranks and run out to a flank; accepted charge
-bonus decays over 260 ticks. The work counters bound visits, target checks,
-reaction checks, strikes, arc iterations and charge decisions; they are not a
-20-TPS performance measurement.
-
-Large projectile batches (at least 16 shots) derive a reusable, counting-sorted
-two-block XZ grid from the frozen native body snapshot. Conservative half-extent
-expansion covers wide bodies, Y bounds reject other heights, and canonical
-candidate sorting preserves hit order. Dragon/deployed geometry remains an
-explicit exceptional superset. Sparse world spans fall back to the existing
-native chunk query before allocating empty-world cells (maximum 1,048,576).
-Differential flight tests exercise both paths against exhaustive collision.
-
-Battle arrow/spectral-arrow ground lifetime is captured at launch as 100 admitted
-ticks, independent of later owner death. Ordinary arrows retain their previous
-1,201-tick expiry. Settled arrows anchor to native entity lifetime age; idle
-projectile ticks neither take `row_mut` nor publish appearance merely to age.
-Pickup, expiry and physical-profile custody changes still use native owners.
-`grounded_at_age` and `ground_lifetime` persist in projectile state, paired with
-native `krasnokamen:LifetimeAge`; vanilla `life` projects the effective ground age.
-Hydration refuses an anchored projectile without a native lifetime-age long;
-retained lifetimes accept only 1,201, or 100 for Arrow/SpectralArrow.
-Active-clock WAL replay, frozen chunks and wrapping entity age retain elapsed
-time without one arrow image per tick. Loyalty tridents keep their dynamic
-return path and are not treated as idle arrows.
-
-Mob riders use the same horse-owned UUID relation as player riders. Staging
-uses `battle::cavalry::mount`, requires a nonzero rider faction and copies it to
-the horse so native battle motion is not suppressed as ordinary tamed AI.
-Recovery allows a live mob passenger rather than requiring a player UUID,
-rejects item/boat/dead/nested passengers, and rebuilds reverse links/appearance.
-Native regressions include checkpoint/WAL mount custody, real mounted movement,
-100-tick grounded expiry, idle no-touch pickup, native lazy-clock replay, and
-matching uninterrupted/restarted expiry through actual checkpoint and WAL producers.
-Protocol and persistence changes require Main's independent review.
 
 ### Battle factions on the wire
 

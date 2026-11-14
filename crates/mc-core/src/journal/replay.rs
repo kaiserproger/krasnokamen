@@ -554,10 +554,6 @@ impl EntityStateImage {
         }
         fields.extend([
             (
-                "krasnokamen:Faction".into(),
-                mc_nbt::Tag::Int(i32::from(self.faction)),
-            ),
-            (
                 "krasnokamen:LifetimeAge".into(),
                 mc_nbt::Tag::Long(i64::from(self.age)),
             ),
@@ -958,6 +954,43 @@ pub(crate) fn apply_batch_images(
                         replay.entity_changes.insert(*id);
                     } else {
                         remove_replay_entity(&mut replay, *id);
+                    }
+                }
+                JournalEntry::ItemMotion {
+                    id,
+                    pos,
+                    vel,
+                    yaw,
+                    pitch,
+                    ground,
+                    age,
+                    pickup_delay,
+                    tick,
+                } => {
+                    if let Some(record) = replay.entities.get_mut(id) {
+                        if record.item.is_none() || *tick < record.tick {
+                            continue;
+                        }
+                        let elapsed = replay
+                            .simulation_clocks
+                            .get(&replay_entity_chunk(record.pos))
+                            .map_or(0, |clock| clock.between(record.tick, *tick));
+                        record.state.advance_clocks(
+                            record.type_id,
+                            record.appearance.baby,
+                            elapsed,
+                        );
+                        record.age = *age;
+                        record.state.age = *age;
+                        record.breed_cooldown = record.state.breed_cooldown;
+                        record.pickup_delay = *pickup_delay;
+                        record.pos = *pos;
+                        record.vel = *vel;
+                        record.yaw = *yaw;
+                        record.pitch = *pitch;
+                        record.ground = *ground;
+                        record.tick = *tick;
+                        replay.entity_changes.insert(*id);
                     }
                 }
                 JournalEntry::EntityState { id, state, tick } => {

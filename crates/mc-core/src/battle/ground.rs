@@ -309,6 +309,19 @@ pub(crate) fn audit(
     census.floating += usize::from(!inside && !rest);
 }
 
+fn leading_cells(pos: [f64; 3], half_width: f64, dir: [f64; 2]) -> [(i32, i32); 3] {
+    let reach = half_width + LOOKAHEAD;
+    let ahead = [pos[0] + dir[0] * reach, pos[2] + dir[1] * reach];
+    let right = [dir[1], -dir[0]];
+    let edge = half_width - CONTACT;
+    [0.0, edge, -edge].map(|lateral| {
+        (
+            (ahead[0] + right[0] * lateral).floor() as i32,
+            (ahead[1] + right[1] * lateral).floor() as i32,
+        )
+    })
+}
+
 /// A step ahead is crossable when, across the body's whole width just past
 /// its leading edge, the cell at head height above the feet is free, if the
 /// feet cell holds a step the cell above the step too (vanilla jump
@@ -328,21 +341,14 @@ fn crossable(
     half_width: f64,
     dir: [f64; 2],
 ) -> bool {
-    let reach = half_width + LOOKAHEAD;
-    let ahead = [pos[0] + dir[0] * reach, pos[2] + dir[1] * reach];
-    let right = [dir[1], -dir[0]];
-    let edge = half_width - CONTACT;
     let feet = (pos[1] + CONTACT).floor() as i32;
-    let mut probed = [(i32::MIN, i32::MIN); 3];
+    let cells = leading_cells(pos, half_width, dir);
     let mut rise = None;
     let mut here = None;
-    for (i, lateral) in [0.0, edge, -edge].into_iter().enumerate() {
-        let x = (ahead[0] + right[0] * lateral).floor() as i32;
-        let z = (ahead[1] + right[1] * lateral).floor() as i32;
-        if probed[..i].contains(&(x, z)) {
+    for (i, (x, z)) in cells.into_iter().enumerate() {
+        if cells[..i].contains(&(x, z)) {
             continue;
         }
-        probed[i] = (x, z);
         let Some(step) = footing(world, registry, x, z, feet) else {
             return false;
         };
@@ -483,14 +489,17 @@ fn free_above(
 /// Drop a drive component that presses into a trunk or wall touching the
 /// body's side at head height: physics refuses a step-up jump whose raised
 /// sweep is clipped on either axis, so a horse grazing a trunk never climbed
-/// the terrace ahead. A drive that touches nothing is returned exactly.
+/// the terrace ahead.
+/// A drive that touches nothing is returned exactly; a projected drive must
+/// retain the headroom needed for a step in its new direction.
 fn slide(
     world: &ChunkWorld,
     registry: &CoreRegistry,
     pos: [f64; 3],
     half_width: f64,
     mut drive: [f64; 2],
-) -> [f64; 2] {
+) -> Option<[f64; 2]> {
+    let wanted = drive;
     const TOUCH: f64 = 0.05;
     let feet = (pos[1] + CONTACT).floor() as i32;
     let (xs, zs) = footprint(pos, half_width);
@@ -518,7 +527,23 @@ fn slide(
             drive[component] = 0.0;
         }
     }
-    drive
+    if drive == wanted {
+        return Some(drive);
+    }
+    let length = mc_physics::mth::length2(drive[0], drive[1]);
+    if length < 1e-9 {
+        return None;
+    }
+    let mut step = false;
+    let cells = leading_cells(pos, half_width, drive.map(|v| v / length));
+    for (i, (x, z)) in cells.into_iter().enumerate() {
+        if cells[..i].contains(&(x, z)) {
+            continue;
+        }
+        let block = world.physics_block_at(x, feet, z)?;
+        step |= registry.materials.classify(block) == BlockMaterial::Solid;
+    }
+    (!step || free_above(world, registry, pos, half_width, feet + 2)).then_some(drive)
 }
 
 /// Steer a horizontal drive around a trunk or a wall of two or more blocks.
@@ -532,6 +557,7 @@ fn slide(
 /// dressing cannot pull a detouring body back behind the wall. When both
 /// ways are crossable and nothing touches the body's side the drive is
 /// returned exactly, so flat ground and one-block steps are unchanged.
+#[cfg(test)]
 pub(crate) fn deflect(
     world: &ChunkWorld,
     registry: &CoreRegistry,
@@ -544,7 +570,7 @@ pub(crate) fn deflect(
     steer(world, registry, pos, half_width, drive, heading, side).unwrap_or_else(|boxed| boxed)
 }
 
-/// [`deflect`] for a body on foot. Boxed in (no way ahead and no turn of up
+/// [`steer`] for a body on foot. Boxed in (no way ahead and no turn of up
 /// to 90 degrees crossable) it stands instead of keeping its drive: physics
 /// walked that drive into the cave mouths and over the edges the rules had
 /// just refused (r7: a blue pile at a sinkhole's tunnel mouth stepped in and
@@ -575,13 +601,10 @@ pub(crate) struct Escape {
     until: u64,
 }
 
-/// [`deflect`] for a mounted body. A horse is boxed in where every way
-/// ahead and to the sides is refused: the dead end of a gully it ran up (in
-/// the G1 rehearsals 20-40 fleeing riders stood pressed into one gully end
-/// from t 90 to the end of the take). It then turns back (135 degrees, then
-/// 180) and keeps that way for [`ESCAPE_TICKS`], steered round obstacles as
-/// usual, so it climbs out instead of turning straight back in; boxed in
-/// again, it turns back again. `escape` holds the way between ticks.
+/// Mounted terrain turns persist for [`ESCAPE_TICKS`], so a formation slot
+/// behind a canopy-blocked step cannot pull a horse straight back into it.
+/// When every forward or lateral way is refused, try 135 then 180 degrees.
+/// The retained way still goes through the ordinary obstacle steering.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn deflect_mounted(
     world: &ChunkWorld,
@@ -613,7 +636,21 @@ pub(crate) fn deflect_mounted(
         *escape = None;
     }
     let boxed = match steer(world, registry, pos, half_width, drive, heading, side) {
-        Ok(out) => return out,
+        Ok(out) => {
+            if out == drive {
+                return out;
+            }
+            let moved = mc_physics::mth::length2(out[0], out[1]);
+            // Retain a terrain turn of the requested velocity, not the
+            // difference between a formation heading and crowd dressing.
+            if moved > 1e-9 && out[0] * drive[0] + out[1] * drive[1] < moved * speed * 0.75 {
+                *escape = Some(Escape {
+                    way: out.map(|v| v / moved),
+                    until: tick + ESCAPE_TICKS,
+                });
+            }
+            return out;
+        }
         Err(boxed) if speed < 1e-9 => return boxed,
         Err(boxed) => boxed,
     };
@@ -638,19 +675,21 @@ pub(crate) fn deflect_mounted(
         for turn in [side, -side] {
             let s = sin * turn;
             let way = [axis[0] * cos - axis[1] * s, axis[0] * s + axis[1] * cos];
-            if crossable(world, registry, pos, half_width, way) {
+            if crossable(world, registry, pos, half_width, way)
+                && let Some(out) = slide(world, registry, pos, half_width, way.map(|v| v * speed))
+            {
                 *escape = Some(Escape {
                     way,
                     until: tick + ESCAPE_TICKS,
                 });
-                return slide(world, registry, pos, half_width, way.map(|v| v * speed));
+                return out;
             }
         }
     }
     boxed
 }
 
-/// [`deflect`]'s turn, or `Err` with the drive to keep when the body is
+/// A terrain turn, or `Err` with the drive to keep when the body is
 /// boxed in (no way ahead, no turn of up to 90 degrees crossable).
 fn steer(
     world: &ChunkWorld,
@@ -681,17 +720,15 @@ fn steer(
         heading.map(|v| v / length)
     };
     if crossable(world, registry, pos, half_width, dir) {
-        if crossable(world, registry, pos, half_width, drive.map(|v| v / speed)) {
-            return Ok(slide(world, registry, pos, half_width, drive));
+        let wanted = if crossable(world, registry, pos, half_width, drive.map(|v| v / speed)) {
+            drive
+        } else {
+            // Crowd pushes into an obstacle: go the clear way instead.
+            dir.map(|v| v * speed)
+        };
+        if let Some(out) = slide(world, registry, pos, half_width, wanted) {
+            return Ok(out);
         }
-        // Crowd pushes into an obstacle: go the clear way instead.
-        return Ok(slide(
-            world,
-            registry,
-            pos,
-            half_width,
-            dir.map(|v| v * speed),
-        ));
     }
     // A positive turn rotates toward the left of the heading. Blocks are
     // axis-aligned, so the search and the turns run on the grid axis nearest
@@ -735,14 +772,11 @@ fn steer(
         for turn in [side, -side] {
             let s = sin * turn;
             let turned = [axis[0] * cos - axis[1] * s, axis[0] * s + axis[1] * cos];
-            if crossable(world, registry, pos, half_width, turned) {
-                return Ok(slide(
-                    world,
-                    registry,
-                    pos,
-                    half_width,
-                    turned.map(|v| v * speed),
-                ));
+            if crossable(world, registry, pos, half_width, turned)
+                && let Some(out) =
+                    slide(world, registry, pos, half_width, turned.map(|v| v * speed))
+            {
+                return Ok(out);
             }
         }
     }

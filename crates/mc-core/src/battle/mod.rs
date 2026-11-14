@@ -380,6 +380,9 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     battle.formation.finish_preparation();
     timings.formation_us = phase_us(&mut mark);
     targeting::update(&frame, &mut battle);
+    if frame.tick.is_multiple_of(formation::STALL_TICKS) {
+        battle.formation.census_stalls(&frame, &battle.columns);
+    }
     timings.targeting_us = phase_us(&mut mark);
     retaliation::step(&frame, &mut battle);
     timings.retaliation_us = phase_us(&mut mark);

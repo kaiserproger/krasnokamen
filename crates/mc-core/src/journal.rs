@@ -232,9 +232,9 @@ pub enum JournalEntry {
         #[serde(default, deserialize_with = "deserialize_optional_projectile_image")]
         projectile: Option<Box<crate::projectiles::ProjectileState>>,
         tick: u64,
-        /// Birth coordinates for mobs; current coordinates for projectiles.
+        /// Birth coordinates for ordinary mobs; current pose for motion-tracked bodies.
         pos: [f64; 3],
-        /// Core blocks/second. Only projectile replay advances this value.
+        /// Core blocks/second, retained with the full-image pose.
         #[serde(default)]
         vel: [f64; 3],
         /// Spawn yaw (same rule as `pos`).
@@ -257,6 +257,18 @@ pub enum JournalEntry {
         id: i32,
         health: f32,
         alive: bool,
+        tick: u64,
+    },
+    /// Dropped-item pose and lifecycle clocks; no repeated stack/appearance image.
+    ItemMotion {
+        id: i32,
+        pos: [f64; 3],
+        vel: [f64; 3],
+        yaw: f32,
+        pitch: f32,
+        ground: bool,
+        age: u32,
+        pickup_delay: u32,
         tick: u64,
     },
     /// Removal tombstone.
