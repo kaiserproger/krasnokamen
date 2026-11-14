@@ -39,10 +39,67 @@ fn preset_has_exact_homogeneous_mix_and_spaced_horse_flanks() {
             assert_eq!((slot_position(spec, 1)[0] - slot_position(spec, 0)[0]).abs(), 2.0);
         }
         if *kind == Kind::Archer {
-            assert_eq!(spec.origin[2], -125.0);
+            assert_eq!(spec.origin[2], -120.0);
             assert_eq!(spec.order, Order::Hold);
         }
     }
+}
+
+#[test]
+fn widened_front_preserves_population_bounds_and_distinct_spawn_slots() {
+    for seed in [42, 43] {
+        for count in [100, 1_000, 10_000] {
+            for origin in [[0.0, 80.0, 0.0], [15.0, 80.0, 15.0]] {
+                let mut positions = std::collections::HashSet::new();
+                for side in [1, 2] {
+                    let planned = plan(seed, count, origin, side);
+                    assert_eq!(planned.iter().map(|(_, _, size)| size).sum::<usize>(), count);
+                    let front: Vec<_> = planned.iter().filter(|(_, kind, _)| matches!(kind, Kind::Infantry | Kind::Spear)).collect();
+                    if count == 10_000 {
+                        assert_eq!(front.iter().map(|(spec, _, _)| usize::from(spec.files)).sum::<usize>(), 322);
+                        assert!(front.iter().all(|(spec, _, _)| spec.files == 46));
+                    }
+                    for (spec, _, size) in planned {
+                        for index in 0..size {
+                            let position = slot_position(&spec, index);
+                            assert!((-176.0..=192.0).contains(&position[0]), "{position:?}");
+                            assert!((-176.0..=192.0).contains(&position[2]), "{position:?}");
+                            assert!(positions.insert(((position[0] * 2.0) as i64, (position[2] * 2.0) as i64)), "overlapping slot {position:?}, side {side}, count {count}");
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn scenario_pursues_only_routing_enemies_and_resumes_fighting_afterward() {
+    let mut state = fixture();
+    let mut changes = ChangeSet::default();
+    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 42, 100).unwrap();
+    let formation = &mut state.hostile.battle.formation;
+    let melee = formation.regiments.iter().position(|r| r.spec.order == Order::Advance).unwrap();
+    let archers = formation.regiments.iter().position(|r| r.spec.order == Order::Hold).unwrap();
+    update_orders(formation);
+    assert_eq!(formation.regiments[melee].spec.order, Order::Advance);
+    formation.regiments[melee].sections[0].pulse_until = 100;
+    formation.regiments[melee].enemy_routing = true;
+    formation.regiments[archers].enemy_routing = true;
+    update_orders(formation);
+    assert_eq!(formation.regiments[melee].spec.order, Order::Pursue);
+    assert_eq!(formation.regiments[melee].sections[0].pulse_until, 0);
+    let front = formation.regiments[melee].start;
+    assert!(formation.can_attack_at(front), "pursuit must permit an out-of-pulse strike");
+    assert_eq!(formation.regiments[archers].spec.order, Order::Hold);
+    formation.regiments[melee].enemy_routing = false;
+    update_orders(formation);
+    assert_eq!(formation.regiments[melee].spec.order, Order::Advance);
+    assert!(!formation.can_attack_at(front), "ordinary contact must wait for a pulse");
+    formation.regiments[melee].enemy_routing = true;
+    formation.regiments[melee].morale.broken = true;
+    update_orders(formation);
+    assert_eq!(formation.regiments[melee].spec.order, Order::Advance);
 }
 
 #[test]
