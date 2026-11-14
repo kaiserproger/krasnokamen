@@ -136,7 +136,7 @@ def _run_client(ctx, tests, root):
             results[(crate, name)] = (UNRUNNABLE, 'no test summary (build error?)')
             continue
         passed, failed = int(summary.group(2)), int(summary.group(3))
-        if passed == 0:
+        if passed + failed == 0:
             results[(crate, name)] = (UNRUNNABLE, 'ran no matching test')
         elif failed or not ok:
             results[(crate, name)] = (RED, f'{failed} failed of {passed + failed}')
@@ -154,14 +154,18 @@ def _run_python(ctx, tests, tree):
     for module, test in sorted(tests):
         argv = [sys.executable, '-m', 'unittest', f'{module}.{test}']
         ok, text = _exec(ctx, argv, f'python-{test.rsplit(".", 1)[-1][:24]}', tree, None)
-        if ok:
+        summary = re.search(r'(?m)^Ran (\d+) tests? in ', text)
+        skipped = re.search(r'\bskipped=(\d+)', text)
+        count = int(summary.group(1)) if summary else 0
+        skipped_count = int(skipped.group(1)) if skipped else 0
+        if not summary or count <= skipped_count or re.search(r'(?m)^ERROR:', text):
+            results[(module, test)] = (UNRUNNABLE, 'no executed test or unittest error; see log')
+        elif ok and re.search(r'(?m)^OK(?: \(|$)', text):
             results[(module, test)] = (GREEN, '')
-            continue
-        detail = 'test failed' if re.search(r'(?m)^(FAIL|ERROR):', text) else 'test did not run (import error, unknown test?)'
-        if 'ModuleNotFoundError' in text or 'AttributeError' in text and 'has no attribute' in text:
-            results[(module, test)] = (UNRUNNABLE, 'module or test not found in this tree')
+        elif not ok and re.search(r'(?m)^FAIL:', text):
+            results[(module, test)] = (RED, 'test assertion failed')
         else:
-            results[(module, test)] = (RED, detail)
+            results[(module, test)] = (UNRUNNABLE, 'no conclusive unittest result; see log')
     return results
 
 
@@ -756,7 +760,7 @@ def client_contains(root, client_head, fix_full):
     return code == 0
 
 
-def _failed_assertion(details):
+def _failed_assertion(details, proving):
     """Name of the first assertion a scenario report records as false, or None when it recorded none."""
     def assertion_maps(node, depth=0):
         if depth > 3 or not isinstance(node, dict):
@@ -770,12 +774,12 @@ def _failed_assertion(details):
 
     for assertions in assertion_maps(details):
         for name, passed in assertions.items():
-            if passed is False:
+            if name == proving and passed is False:
                 return name
     return None
 
 
-def _client_ref_states(receipt, graphical_refs):
+def _client_ref_states(receipt, graphical_refs, proving_assertions=None):
     """{ref: GREEN|RED|None} for the row's real-client refs in one receipt; None means it never reported it."""
     from . import regressions, scenarios
 
@@ -793,7 +797,7 @@ def _client_ref_states(receipt, graphical_refs):
                 # RED is "the scenario ran and an assertion of it failed". A timeout, a launch error or
                 # a crashed client never observed the bug, so it cannot stand as the negative control.
                 states[ref] = RED if (receipt.get('status') == 'failed'
-                                      and _failed_assertion(details) is not None) else None
+                                      and _failed_assertion(details, (proving_assertions or {}).get(ref)) is not None) else None
             continue
         try:
             regressions._profile_verdict(receipt, profile, check)
@@ -824,7 +828,7 @@ def _receipt_identity(root, receipt_path, tree):
     return receipt, path, server, recorded
 
 
-def check_client_control_receipt(root, receipt_path, graphical_refs, fix_full, tree):
+def check_client_control_receipt(root, receipt_path, graphical_refs, fix_full, tree, proving_assertions):
     """Validate the negative control of a `client:<sha>` row -> info dict.
 
     The control is a real-client receipt of the *pre-fix* client (one that does not contain the fix)
@@ -832,7 +836,7 @@ def check_client_control_receipt(root, receipt_path, graphical_refs, fix_full, t
     receipt, path, server, recorded = _receipt_identity(root, receipt_path, tree)
     if not graphical_refs:
         raise Refused('a client:<sha> fix_commit needs a real-client ref to carry the control')
-    states = _client_ref_states(receipt, graphical_refs)
+    states = _client_ref_states(receipt, graphical_refs, proving_assertions)
     red = [ref for ref, state in states.items() if state == RED]
     if not red:
         raise Refused(f"client receipt {path} is not red on any of the row's real-client refs ("
@@ -915,11 +919,8 @@ def _mark_fixed(text, ident, promotion):
     raise Refused(f'{ident}: row not found in ledger.toml')
 
 
-def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client_receipt, client_control_receipt):
-    """A `client:<sha>` row: control red on the pre-fix client, restore green on the client containing it.
-
-    The server side is the tree being promoted in both receipts (the fix is not a server change), and
-    no worktree, patch reversal or ref run is involved: the receipts are the evidence."""
+def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client_receipt, client_control_receipt, runner):
+    """A client fix needs a real-client red/green pair and all candidate refs green."""
     fix_full = client_fix_commit(fix, root)
     refs = row['regression']
     if not refs:
@@ -939,17 +940,26 @@ def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client
     if not client_receipt:
         raise Refused(f'{ident}: fix_commit {fix} needs the restore (--client-receipt <result.json>): a passed '
                       'receipt of the client that contains the fix with the same ref green')
-    control = check_client_control_receipt(root, client_control_receipt, graphical, fix_full, tree_now)
+    control = check_client_control_receipt(root, client_control_receipt, graphical, fix_full, tree_now,
+                                           row.get('proving_assertions', {}))
     restored_info = check_client_restore_receipt(root, client_receipt, graphical, fix_full, tree_now)
     if not set(control['red']) & set(restored_info['green']):
         raise Refused(f"{ident}: the control's red refs {control['red']} and the restore's green refs "
                       f"{restored_info['green']} do not overlap: the same check has to flip")
+    remaining = [ref for ref in refs if ref not in restored_info['green']]
+    checked = runner(ctx, remaining, root, True) if remaining else {}
+    bad = {ref: checked.get(ref, {'state': UNRUNNABLE, 'detail': 'no result'})
+           for ref in remaining if checked.get(ref, {}).get('state') != GREEN}
+    if bad:
+        raise Refused(f'{ident}: candidate refs not green: ' + '; '.join(
+            f"{ref}={entry['state']} ({entry['detail']})" for ref, entry in bad.items()))
     receipt = {
         'id': ident, 'verdict': 'promoted', 'fix_commit': fix, 'fix_commit_full': fix_full,
         'promoted_at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
         'tree_head': tree_now['head'], 'tree_dirty': tree_now['dirty'], 'tree_sha256': tree_now['sha256'],
         'client_fix': True, 'control_tree': 'client',
         'negative_control': control, 'restored': restored_info, 'client_receipt': restored_info,
+        'candidate_refs': checked,
         'artifact_dir': str(ctx.artifact_dir),
     }
     (ctx.artifact_dir / 'promote.json').write_text(json.dumps(receipt, indent=2) + '\n')
@@ -991,7 +1001,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
     if fix.startswith('client:'):
         return _promote_client_fix(ident, row=row, fix=fix, root=root, tree_now=tree_now, dry_run=dry_run,
                                    ctx=ctx, client_receipt=client_receipt,
-                                   client_control_receipt=client_control_receipt)
+                                   client_control_receipt=client_control_receipt, runner=runner)
     if client_control_receipt:
         raise Refused(f'{ident}: --client-control-receipt is only for a fix_commit of the form client:<sha>')
     patch_mode = fix.startswith('patch:')

@@ -793,6 +793,8 @@ class LedgerToolTests(unittest.TestCase):
         fix = f'client:{client_sha}' if client_sha else ''
         text = (root / 'docs/bugs/ledger.toml').read_text().replace(
             f'fix_commit = "{self.fix}"', f'fix_commit = "{fix}"')
+        if ref == 'harness:entities:native-v2-craft-drag':
+            text += '\nproving_assertions = { "harness:entities:native-v2-craft-drag" = "initial_drag_keeps_server_cursor" }\n'
         (root / 'docs/bugs/ledger.toml').write_text(text)
         self.git(root, 'commit', '-qam', 'client row')
         return root
@@ -848,11 +850,16 @@ class LedgerToolTests(unittest.TestCase):
         state = out['python:tools.harness.test_plan:InnovationTests.test_new_workspace_dependency_is_innovation']['state']
         self.assertIn(state, (ledger.UNRUNNABLE, ledger.RED))
 
-    def test_client_fix_commit_promotes_on_a_red_control_and_a_green_restore(self):
+    def test_client_fix_rejects_unrelated_assertion_and_accepts_proving_assertion(self):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
+        wrong = self.client_receipt(root, self.client_base, verdict=False,
+                                    assertions={'native-v2-ledger-painting': False})
+        restore = self.client_receipt(root, self.client_fix, verdict=True)
+        with self.assertRaisesRegex(ledger.Refused, 'not red on any of the row'):
+            self.promote(root, self.runner(), client_control_receipt=wrong, client_receipt=restore, dry_run=True)
         control = self.client_receipt(root, self.client_base, verdict=False,
-                                      assertions={'native-v2-ledger-painting': False})
+                                      assertions={'initial_drag_keeps_server_cursor': False})
         restore = self.client_receipt(root, self.client_fix, verdict=True)
         receipt = self.promote(root, self.runner(), client_control_receipt=control,
                               client_receipt=restore, dry_run=True)
@@ -878,7 +885,7 @@ class LedgerToolTests(unittest.TestCase):
         root = self.client_row(client_sha=self.client_fix[:12])
         with self.assertRaisesRegex(ledger.Refused, 'already contains the fix'):
             self.promote(root, self.runner(),
-                         client_control_receipt=self.client_receipt(root, self.client_fix, verdict=False, assertions={'native-v2-ledger-painting': False}),
+                         client_control_receipt=self.client_receipt(root, self.client_fix, verdict=False, assertions={'initial_drag_keeps_server_cursor': False}),
                          client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
 
     def test_client_restore_on_the_pre_fix_client_is_refused(self):
@@ -886,7 +893,7 @@ class LedgerToolTests(unittest.TestCase):
         root = self.client_row(client_sha=self.client_fix[:12])
         with self.assertRaisesRegex(ledger.Refused, 'does not contain the fix'):
             self.promote(root, self.runner(),
-                         client_control_receipt=self.client_receipt(root, self.client_base, verdict=False, assertions={'native-v2-ledger-painting': False}),
+                         client_control_receipt=self.client_receipt(root, self.client_base, verdict=False, assertions={'initial_drag_keeps_server_cursor': False}),
                          client_receipt=self.client_receipt(root, self.client_base), dry_run=True)
 
     def test_unknown_client_commit_is_refused(self):
@@ -899,7 +906,7 @@ class LedgerToolTests(unittest.TestCase):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
         control = self.client_receipt(root, self.client_base, verdict=False,
-                                      assertions={'native-v2-ledger-painting': False})
+                                      assertions={'initial_drag_keeps_server_cursor': False})
         body = json.loads(control.read_text())
         body.pop('client_binary')
         control.write_text(json.dumps(body))
@@ -911,7 +918,7 @@ class LedgerToolTests(unittest.TestCase):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
         control = self.client_receipt(root, self.client_base, verdict=False, manifest=False,
-                                      assertions={'native-v2-ledger-painting': False})
+                                      assertions={'initial_drag_keeps_server_cursor': False})
         with self.assertRaisesRegex(ledger.Refused, r'records no client pin manifest|pin manifest .* unreadable'):
             self.promote(root, self.runner(), client_control_receipt=control,
                          client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
@@ -921,7 +928,7 @@ class LedgerToolTests(unittest.TestCase):
         root = self.client_row(client_sha=self.client_fix[:12])
         # The receipt ran one binary; its pin manifest describes another (a stale or hand-edited pin).
         control = self.client_receipt(root, self.client_base, verdict=False, pin_binary_sha='a' * 64,
-                                      assertions={'native-v2-ledger-painting': False},
+                                      assertions={'initial_drag_keeps_server_cursor': False},
                                       pin_override={'repo': 'client', 'kind': 'client', 'head': self.client_base,
                                                     'dirty': False, 'binary_sha256': 'b' * 64})
         with self.assertRaisesRegex(ledger.Refused, 'does not describe the client that ran'):
@@ -932,7 +939,7 @@ class LedgerToolTests(unittest.TestCase):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
         control = self.client_receipt(root, self.client_base, verdict=False, dirty=True,
-                                      assertions={'native-v2-ledger-painting': False})
+                                      assertions={'initial_drag_keeps_server_cursor': False})
         with self.assertRaisesRegex(ledger.Refused, 'is dirty'):
             self.promote(root, self.runner(), client_control_receipt=control,
                          client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)

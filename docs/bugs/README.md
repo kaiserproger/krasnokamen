@@ -166,11 +166,14 @@ worker, runs the negative control.
    pins another binary than the one that ran, a `dirty` pin, or a pin without a
    head. The ancestry checks use the pinned head: the control's head must not
    contain `<sha>`, the restore's must. **Red is an observed assertion failure**:
-   the control receipt has to be `status = "failed"` with the scenario's own
-   assertion recorded false. A `timeout`, a launch error, a preflight failure or
-   a crashed client never observed the bug and is refused as a control. No
-   worktree, patch reversal or ref run is involved, and a row whose only refs are
-   unit tests cannot use this form. The candidate is the
+   the control receipt has to be `status = "failed"` with the registered proving
+   assertion recorded false. For a named scenario, record it on the row as an
+   inline map, for example `proving_assertions = { "harness:entities:native-v2-craft-drag" = "initial_drag_keeps_server_cursor" }`.
+   Choose the assertion that proves this row's symptom, not a setup assertion.
+   A missing mapping, timeout, launch error or crash cannot carry the control.
+   The restore receipt covers only its reported refs; every other registered ref
+   must run green on the candidate. A row whose only refs are unit tests cannot
+   use this form. The candidate is the
    exact tree: `HEAD` plus its uncommitted diff and untracked files
    (`docs/bugs/` aside), identified by a fingerprint; no commit is needed. The
    control and the restore worktrees reproduce it, verified by that fingerprint.
