@@ -45,8 +45,8 @@ fn simulate(runtime: &mut FormationRuntime, tick: u64) {
         .map(|i| steering::movement(runtime, i))
         .collect();
     for (member, drive) in runtime.members.iter_mut().zip(drives) {
-        for axis in 0..3 {
-            member.pos[axis] += drive[axis] * mc_physics::TICK_SECONDS;
+        for (position, velocity) in member.pos.iter_mut().zip(drive) {
+            *position += velocity * mc_physics::TICK_SECONDS;
         }
     }
     runtime.update_morale(tick);
@@ -119,11 +119,11 @@ fn wounded_front_man_crawls_back_and_next_rank_takes_his_slot() {
 }
 
 #[test]
-fn seeded_surge_gate_matches_configured_two_percent_rate() {
+fn seeded_surge_gate_matches_configured_film_rate() {
     let starts = (0..100_000)
         .filter(|&decision| roll(41, 0, decision * 10) < SURGE_PROBABILITY)
         .count();
-    assert!((1850..2150).contains(&starts), "starts={starts}");
+    assert!((9500..10500).contains(&starts), "starts={starts}");
     let mut runtime = FormationRuntime::default();
     add(&mut runtime, spec(0, 1, 0.0, 20, Order::Hold), 1, 20);
     add(&mut runtime, spec(1, 2, 4.0, 20, Order::Hold), 21, 20);
@@ -149,10 +149,38 @@ fn seeded_surge_gate_matches_configured_two_percent_rate() {
         starts += runtime.regiments[0].sections[0].starts - before;
     }
     let rate = starts as f64 / f64::from(decisions);
-    assert!(
-        (0.015..0.025).contains(&rate),
-        "{starts}/{decisions}={rate}"
-    );
+    assert!((0.09..0.11).contains(&rate), "{starts}/{decisions}={rate}");
+}
+
+#[test]
+fn film_fatigue_leaves_contact_time_between_human_speed_bursts() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 20, Order::Hold), 1, 20);
+    {
+        let regiment = &mut runtime.regiments[0];
+        regiment.gap = 4.0;
+        regiment.enemy = Some([0.0, 64.0, 4.0]);
+        regiment.sections[0].pulse_until = 200;
+    }
+    runtime.update_sections(0);
+    assert_eq!(runtime.regiments[0].stamina, 99.25);
+    {
+        let regiment = &mut runtime.regiments[0];
+        regiment.sections[0].pulse_until = 0;
+        regiment.sections[0].cooldown_until = 1000;
+    }
+    runtime.tick = 10;
+    runtime.update_sections(0);
+    assert_eq!(runtime.regiments[0].stamina, 99.5);
+    {
+        let regiment = &mut runtime.regiments[0];
+        regiment.stamina = 29.75;
+        regiment.sections[0].pulse_until = 200;
+        regiment.sections[0].cooldown_until = 0;
+    }
+    runtime.tick = 20;
+    runtime.update_sections(0);
+    assert_eq!(runtime.regiments[0].sections[0].pulse_until, 20);
 }
 
 #[test]

@@ -120,12 +120,22 @@ conflict. Floating-point sums cannot become unordered parallel reductions.
 
 Faction battle preparation is ordered owner work before EntityStep admission,
 not another independently scheduled graph node. Its frozen `Frame` feeds
-formation update, dense-column preparation, target pairing, steering, combat
-(including archery/cavalry), morale, then native-slot drive projection.
+dense-column/member snapshot, formation decisions, target pairing, steering,
+combat (including archery/cavalry), morale, then native-slot drive projection.
 The formation roster supplies the stable battle-index prefix; unregistered
 faction bodies and horses occupy a derived tail. Targets, classification and
 drive share this index. Slot caches are refreshed before consumers; native
 compaction/removal never gives a cached row authority over another identity.
+
+Production kernels consume indexed contexts and columns directly. Stable-ID
+query adapters, explicit withdrawal/interval controls and diagnostic rank
+fields used only by the regression fixtures are compiled only under `cfg(test)`;
+the production battle API does not retain unused compatibility entry points.
+Order transitions remain production-owned: the staged scenario's guarded
+advance/pursue policy uses the same transition side effects as explicit orders.
+An inactive battle clears the lengths of its native-slot projections without
+resizing or filling them against the world's population; missing entries mean
+zero drive/no look, preserving the ordinary world's sparse fast path.
 
 Workers read slot-indexed drive/look arrays, not ID hash maps. A battle row
 with zero thrust may use the existing rest proof only while grounded, motionless

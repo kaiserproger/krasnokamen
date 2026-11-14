@@ -1681,6 +1681,24 @@ impl EntityStore {
         &self.touched
     }
 
+    /// Read-only mutation witnesses before `views` drains its pending queue.
+    /// Motion may also appear here; consumers must invalidate conservatively.
+    /// Slot hints are checked because an earlier removal may have compacted rows.
+    pub(crate) fn pending_wire_changes(&self) -> impl Iterator<Item = (EntityId, EntitySlot)> + '_ {
+        self.wire_pending.iter().filter_map(|&(id, hint)| {
+            let slot = if self
+                .bodies
+                .get(hint.0 as usize)
+                .is_some_and(|body| body.id == id)
+            {
+                Some(hint)
+            } else {
+                self.id_index.get(&id).copied()
+            };
+            slot.map(|slot| (id, slot))
+        })
+    }
+
     /// Rows spawned, transferred in or mutably borrowed since the last call.
     /// Every live row is either in the journal's baseline maps or in this set.
     pub(crate) fn take_touched(&mut self) -> Vec<EntityId> {

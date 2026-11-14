@@ -346,13 +346,16 @@ fn kill(state: &mut TickState, id: EntityId) {
 fn item_uuids(state: &TickState) -> BTreeSet<uuid::Uuid> {
     worlds(state)
         .flat_map(|world| {
-            world.entities.slots().filter_map(move |slot| {
-                matches!(
-                    world.entities.body(slot).kind,
-                    crate::entities::EntityKind::Item { .. }
-                )
-                .then(|| world.entities.row(slot).uuid)
-            })
+            world
+                .entities
+                .slots()
+                .filter(move |&slot| {
+                    matches!(
+                        world.entities.body(slot).kind,
+                        crate::entities::EntityKind::Item { .. }
+                    )
+                })
+                .map(move |slot| world.entities.row(slot).uuid)
         })
         .collect()
 }
@@ -941,6 +944,104 @@ fn unblocked_arrow_wear_break_removes_the_stand_without_stale_arrow_slot() {
         "the arrow kept a valid slot after the stand's removal"
     );
     assert_eq!(pavises(&world.state), 0, "the worn-out item broke");
+}
+
+#[test]
+fn battle_restart_reset_removes_checkpoint_roster_and_ticket_durably() {
+    use crate::battle::staging::{BattleCommand, execute};
+    use crate::boundary::ChangeSet;
+    const OWNER: &str = "krasnokamen:battle";
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let mut changes = ChangeSet::default();
+    execute(
+        &mut world.state,
+        &mut changes,
+        [0.0, 80.0, 0.0],
+        &BattleCommand::Setup {
+            seed: 42,
+            count: 100,
+        },
+    )
+    .unwrap();
+    let roster: BTreeSet<_> = changes
+        .entities_spawned
+        .iter()
+        .map(|id| {
+            world
+                .state
+                .entities
+                .row(world.state.entities.slot_of(*id).unwrap())
+                .uuid
+        })
+        .collect();
+    assert_eq!(roster.len(), 220);
+    world.checkpoint();
+    let config = world.config.clone();
+    drop(world);
+    let mut world = World::open(config);
+    assert!(
+        roster
+            .iter()
+            .all(|uuid| world.state.entities.slot_of_uuid(*uuid).is_some())
+    );
+    assert!(world.state.tickets.contains_key(OWNER));
+    let mut changes = ChangeSet::default();
+    let error = execute(
+        &mut world.state,
+        &mut changes,
+        [0.0; 3],
+        &BattleCommand::Start,
+    )
+    .unwrap_err();
+    assert!(error.contains("setup required"), "{error}");
+    assert!(!world.state.hostile.battle.running);
+    execute(
+        &mut world.state,
+        &mut changes,
+        [0.0; 3],
+        &BattleCommand::Reset,
+    )
+    .unwrap();
+    assert!(
+        roster
+            .iter()
+            .all(|uuid| world.state.entities.slot_of_uuid(*uuid).is_none())
+    );
+    assert_eq!(changes.entities_removed.len(), roster.len());
+    assert!(!world.state.tickets.contains_key(OWNER));
+
+    let (mut output, _, _) = crate::tick::run_tick(&mut world.state, &[]);
+    std::sync::Arc::get_mut(&mut output.changes)
+        .unwrap()
+        .entities_removed
+        .extend(changes.entities_removed);
+    let entries = journal_entries_for_tick(&mut world.state, &output);
+    world
+        .writer
+        .append(output.tick, output.tick, &entries)
+        .unwrap();
+    world.checkpoint();
+    let config = world.config.clone();
+    drop(world);
+    let mut world = World::open(config);
+    assert!(
+        roster
+            .iter()
+            .all(|uuid| world.state.entities.slot_of_uuid(*uuid).is_none())
+    );
+    assert!(world.state.entities.battle_slots().next().is_none());
+    assert!(!world.state.tickets.contains_key(OWNER));
+    assert!(
+        execute(
+            &mut world.state,
+            &mut ChangeSet::default(),
+            [0.0; 3],
+            &BattleCommand::Roster
+        )
+        .is_err()
+    );
 }
 
 /// UUIDs of every row a capture presents.

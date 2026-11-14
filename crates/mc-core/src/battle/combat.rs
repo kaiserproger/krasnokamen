@@ -2,6 +2,7 @@
 //! Calibration: BattleVideo/research-combat-behavior.md §§4.4–4.7 (Sabin/Ilerda).
 use rustc_hash::FxHashMap;
 
+use super::formation::{DECISION_TICKS, EXHAUSTED_STAMINA, STANDING_RECOVERY, SURGE_FATIGUE};
 use super::{BattleIntent, BattleState, Frame, Output};
 use crate::boundary::{EntityEvent, EntityId, Hand};
 use crate::entities::EntitySlot;
@@ -263,7 +264,10 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         let id = battle.columns.ids[bi];
         combat.work.visited += 1;
         let fighter = &mut combat.fighters[bi];
-        classify(frame, slot, fighter, battle.columns.ranged[bi]);
+        if battle.columns.equipment_dirty[bi] || fighter.equipment.is_none() {
+            classify(frame, slot, fighter, battle.columns.ranged[bi]);
+            battle.columns.equipment_dirty[bi] = false;
+        }
         if matches!(fighter.action, Action::Wounded) {
             continue;
         }
@@ -347,14 +351,18 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             continue;
         }
         // Three cautious soldiers in four; decisions once/20t, not per frame.
-        if (frame.tick + id.0 as u64) % 20 != 0 {
+        if !(frame.tick + id.0 as u64).is_multiple_of(ATTACK_DECISION_TICKS) {
             continue;
         }
         fighter.action = Action::Guard {
-            until: frame.tick + 20,
+            until: frame.tick + ATTACK_DECISION_TICKS,
         };
-        let probability = if roll(id, 0, 1) < 2500 { 8000 } else { 2000 };
-        if roll(id, frame.tick / 20, 2) >= probability {
+        let probability = if roll(id, 0, 1) < AGGRESSIVE_FIGHTERS {
+            AGGRESSIVE_ATTEMPTS
+        } else {
+            CAUTIOUS_ATTEMPTS
+        };
+        if roll(id, frame.tick / ATTACK_DECISION_TICKS, 2) >= probability {
             continue;
         }
         fighter.action = Action::Windup {
@@ -457,7 +465,7 @@ pub(super) fn outcome(roll: u32, routing: bool, charge: f32, scale: f32) -> Outc
     let multiplier = (1.0 + charge) * scale;
     if (roll as f32) < fatal * multiplier {
         Outcome::Kill
-    } else if (roll as f32) < removal * multiplier {
+    } else if (roll as f32) < removal {
         Outcome::Wound
     } else {
         Outcome::Glance

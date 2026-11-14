@@ -53,7 +53,7 @@ fn nearest_enemy_matches_exhaustive_oracle_and_stable_id_ties() {
         unit(9, 2, -3.0, 64.0, 0.0),
         unit(2, 3, -5.0, 64.0, 0.0),
     ];
-    let mut seed = 0xb177_1e_u64;
+    let mut seed = 0x00b1_771e_u64;
     let mut next = || {
         seed ^= seed << 13;
         seed ^= seed >> 7;
@@ -227,7 +227,13 @@ fn native_target_update_is_sliced_and_rechecks_dead_factions_and_range() {
             world: &state.world,
             tick,
         };
-        battle.columns.prepare(&frame, &battle.formation);
+        battle.columns.prepare(
+            &frame,
+            &mut battle.formation,
+            &mut battle.output.counters,
+            &mut battle.population,
+        );
+        battle.formation.finish_preparation();
         targeting::update(&frame, battle);
     };
     let due = i64::from(actor.0).rem_euclid(10) as u64;
@@ -277,7 +283,13 @@ fn archers_target_with_attack_range_not_melee_or_follow_range() {
         world: &state.world,
         tick: i64::from(archer.0).rem_euclid(10) as u64,
     };
-    battle.columns.prepare(&frame, &battle.formation);
+    battle.columns.prepare(
+        &frame,
+        &mut battle.formation,
+        &mut battle.output.counters,
+        &mut battle.population,
+    );
+    battle.formation.finish_preparation();
     targeting::update(&frame, &mut battle);
     assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
     assert_eq!(battle.columns.target(slot).unwrap().distance, 10.0);
@@ -338,6 +350,7 @@ fn faction_fields_reject_invalid_native_and_json_values() {
 #[test]
 fn paused_battle_keeps_its_clock_and_clears_motion() {
     let mut state = fixture();
+    spawn(&mut state, 0, "minecraft:cow", [1.0, 100.0, 1.0]);
     state.hostile.battle.elapsed_ticks = 41;
     state
         .hostile
@@ -345,23 +358,24 @@ fn paused_battle_keeps_its_clock_and_clears_motion() {
         .columns
         .drive_by_slot
         .push([1.0, 0.0, 0.0]);
+    state
+        .hostile
+        .battle
+        .columns
+        .look_by_slot
+        .push(Some([1.0; 3]));
     assert!(step(&mut state).is_empty());
     assert_eq!(state.hostile.battle.elapsed_ticks, 41);
-    assert!(
-        state
-            .hostile
-            .battle
-            .columns
-            .drive_by_slot
-            .iter()
-            .all(|drive| *drive == [0.0; 3])
-    );
+    assert!(state.hostile.battle.columns.drive_by_slot.is_empty());
+    assert!(state.hostile.battle.columns.look_by_slot.is_empty());
     state.hostile.battle.running = true;
     assert!(step(&mut state).is_empty());
     assert_eq!(state.hostile.battle.elapsed_ticks, 42);
     state.hostile.battle.running = false;
     assert!(step(&mut state).is_empty());
     assert_eq!(state.hostile.battle.elapsed_ticks, 42);
+    assert!(state.hostile.battle.columns.drive_by_slot.is_empty());
+    assert!(state.hostile.battle.columns.look_by_slot.is_empty());
 }
 
 #[test]
@@ -438,6 +452,62 @@ fn published_population_recounts_post_merge_state_and_keeps_zero_alive_factions(
 }
 
 #[test]
+fn population_cache_reads_changed_health_and_keeps_corpses_until_removal() {
+    let mut state = fixture();
+    spawn(&mut state, 0, "minecraft:husk", [1.5, 64.0, 1.5]);
+    assert!(publication_counts(&mut state).is_none());
+    assert!(
+        state.hostile.battle.population.health.is_empty(),
+        "ordinary worlds must not allocate a population cache"
+    );
+    let actor = spawn(&mut state, 1, "minecraft:husk", [4.5, 64.0, 4.5]);
+    let enemy = spawn(&mut state, 2, "minecraft:husk", [12.5, 64.0, 12.5]);
+    let _ = state.entities.views();
+    publication_counts(&mut state).unwrap();
+    let reads = state.hostile.battle.population.health_reads;
+    assert_eq!(reads, 2);
+    publication_counts(&mut state).unwrap();
+    assert_eq!(
+        state.hostile.battle.population.health_reads, reads,
+        "an unchanged population reread cold health"
+    );
+
+    let enemy_slot = state.entities.slot_of(enemy).unwrap();
+    state.entities.row_mut(enemy_slot).health = 0.0;
+    let _ = drain_entity_views(&mut state);
+    let counts = publication_counts(&mut state).unwrap();
+    assert_eq!(counts.alive, vec![(1, 1), (2, 0)]);
+    assert_eq!(state.hostile.battle.population.health_reads, reads + 1);
+
+    let actor_slot = state.entities.slot_of(actor).unwrap();
+    state.entities.body_mut(actor_slot).alive = false;
+    state.entities.begin_dying(actor_slot);
+    let _ = drain_entity_views(&mut state);
+    let counts = publication_counts(&mut state).unwrap();
+    assert_eq!(counts.units, 2, "the corpse is still a native row");
+    assert_eq!(counts.alive, vec![(1, 0), (2, 0)]);
+    assert_eq!(
+        state.hostile.battle.population.health_reads,
+        reads + 1,
+        "a dead hot body does not need cold health"
+    );
+
+    state.entities.remove(actor_slot);
+    let counts = publication_counts(&mut state).unwrap();
+    assert_eq!(counts.units, 1);
+    assert_eq!(counts.alive, vec![(2, 0)]);
+    assert_eq!(
+        state.hostile.battle.population.health_reads,
+        reads + 2,
+        "slot compaction must refresh the moved identity"
+    );
+    state
+        .entities
+        .set_faction(state.entities.slot_of(enemy).unwrap(), 0);
+    assert!(publication_counts(&mut state).is_none());
+}
+
+#[test]
 fn dense_slot_projection_survives_compaction_and_classification_changes() {
     let mut state = fixture();
     let removed = spawn(&mut state, 1, "minecraft:zombie", [1.0, 100.0, 1.0]);
@@ -459,7 +529,13 @@ fn dense_slot_projection_survives_compaction_and_classification_changes() {
             world: &state.world,
             tick: 0,
         };
-        battle.columns.prepare(&frame, &battle.formation);
+        battle.columns.prepare(
+            &frame,
+            &mut battle.formation,
+            &mut battle.output.counters,
+            &mut battle.population,
+        );
+        battle.formation.finish_preparation();
     }
     let bi = battle.columns.index(slot).unwrap();
     assert_eq!(battle.columns.ids[bi], actor);
@@ -478,9 +554,243 @@ fn dense_slot_projection_survives_compaction_and_classification_changes() {
         world: &state.world,
         tick: 1,
     };
-    battle.columns.prepare(&frame, &battle.formation);
+    battle.columns.prepare(
+        &frame,
+        &mut battle.formation,
+        &mut battle.output.counters,
+        &mut battle.population,
+    );
+    battle.formation.finish_preparation();
     assert!(battle.columns.ranged[bi]);
     assert_eq!(battle.columns.drive_by_slot[slot.0 as usize], [0.0; 3]);
+}
+
+fn native_cache_fixture() -> (crate::tick::TickState, EntityId, EntityId) {
+    let mut state = fixture();
+    state.tickets.insert(
+        "battle-cache-regression".into(),
+        (crate::boundary::ChunkPos { x: 0, z: 0 }, 0),
+    );
+    let rider = spawn(&mut state, 1, "minecraft:husk", [4.5, 64.0, 4.5]);
+    let horse = spawn(&mut state, 1, "minecraft:horse", [12.5, 64.0, 12.5]);
+    for id in [rider, horse] {
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.row_mut(slot).persistent = true;
+    }
+    state
+        .hostile
+        .battle
+        .formation
+        .add_regiment(
+            formation::RegimentSpec {
+                id: 1,
+                faction: 1,
+                origin: [4.5, 64.0, 4.5],
+                facing: [0.0, 1.0],
+                files: 1,
+                frontage: 1.0,
+                order: formation::Order::Hold,
+            },
+            &[rider],
+        )
+        .unwrap();
+    state.hostile.battle.running = true;
+    for _ in 0..3 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    (state, rider, horse)
+}
+
+#[test]
+fn native_cached_facts_invalidate_no_ai_between_ticks() {
+    let (mut state, rider, _) = native_cache_fixture();
+    let slot = state.entities.slot_of(rider).unwrap();
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(state.hostile.battle.columns.active[bi]);
+    state.entities.row_mut(slot).controls.no_ai = true;
+    crate::tick::run_tick(&mut state, &[]);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(!state.hostile.battle.columns.active[bi]);
+}
+
+#[test]
+fn native_cached_facts_invalidate_equipment_and_latch_inactive_changes() {
+    let (mut state, rider, _) = native_cache_fixture();
+    let slot = state.entities.slot_of(rider).unwrap();
+    state.entities.row_mut(slot).controls.no_ai = true;
+    crate::tick::run_tick(&mut state, &[]);
+    let bow = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:bow").unwrap())
+        .unwrap();
+    std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).equipment[0] =
+        Some(mc_data::ItemStack::new(bow, 1));
+    crate::tick::run_tick(&mut state, &[]);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(state.hostile.battle.columns.ranged[bi]);
+    assert!(state.hostile.battle.columns.equipment_dirty[bi]);
+    state.entities.row_mut(slot).controls.no_ai = false;
+    crate::tick::run_tick(&mut state, &[]);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert_eq!(
+        state.hostile.battle.combat.fighters[bi].weapon,
+        combat::Weapon::Bow
+    );
+    assert!(!state.hostile.battle.columns.equipment_dirty[bi]);
+}
+
+#[test]
+fn native_cached_facts_invalidate_mounts_between_ticks() {
+    let (mut state, rider, horse) = native_cache_fixture();
+    let slot = state.entities.slot_of(horse).unwrap();
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(!state.hostile.battle.columns.carried[bi]);
+    cavalry::mount(&mut state, rider, horse).unwrap();
+    crate::tick::run_tick(&mut state, &[]);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(state.hostile.battle.columns.carried[bi]);
+}
+
+#[test]
+fn late_wire_fact_invalidation_precedes_the_views_drain() {
+    let (mut state, rider, _) = native_cache_fixture();
+    step(&mut state);
+    let slot = state.entities.slot_of(rider).unwrap();
+    // A canonical late-phase write after the frozen battle frame. Its wire
+    // notification will be gone at the next battle frame, just as in run_tick.
+    state.entities.row_mut(slot).controls.no_ai = true;
+    let _ = drain_entity_views(&mut state);
+    step(&mut state);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(!state.hostile.battle.columns.active[bi]);
+}
+
+#[test]
+fn deferred_multi_dimension_commands_invalidate_facts_before_the_travel_drain() {
+    let (mut state, rider, _) = native_cache_fixture();
+    // A second dimension defers player commands to travel::finish, after the
+    // tick's own publication drain; its refresh drains the wire feed again.
+    let registry = std::sync::Arc::clone(&state.registry);
+    let mut nether = crate::tick::TickState::new(
+        std::sync::Arc::clone(&registry),
+        crate::horde_bench::flat_world(&registry),
+        2,
+        512,
+    );
+    nether.dimension = crate::dimensions::Dimension::Nether;
+    state
+        .other_dimensions
+        .insert(crate::dimensions::Dimension::Nether, Box::new(nether));
+    let connection = crate::boundary::ConnectionId(1);
+    crate::tick::run_tick(
+        &mut state,
+        &[crate::boundary::PlayerInput::Join {
+            connection,
+            uuid: uuid::Uuid::from_u128(7),
+            name: "battle-op".into(),
+            permission_level: 2,
+        }],
+    );
+    let slot = state.entities.slot_of(rider).unwrap();
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(!state.hostile.battle.columns.ranged[bi]);
+    let command = |command: &str| crate::boundary::PlayerInput::Command {
+        connection,
+        command: command.into(),
+        permission_level: 2,
+    };
+    // The spawn makes the deferred work publish entity changes, so refresh
+    // drains the rider's equipment notification together with it.
+    crate::tick::run_tick(
+        &mut state,
+        &[
+            command(
+                "item replace entity @e[type=minecraft:husk] weapon.mainhand with minecraft:bow",
+            ),
+            command("summon minecraft:pig 12 64 4"),
+        ],
+    );
+    let slot = state.entities.slot_of(rider).unwrap();
+    let bow = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:bow").unwrap())
+        .unwrap();
+    assert_eq!(
+        state.entities.row(slot).appearance.equipment[0]
+            .as_ref()
+            .map(|stack| stack.item_id),
+        Some(bow),
+        "the deferred command ran this tick"
+    );
+    crate::tick::run_tick(&mut state, &[]);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(
+        state.hostile.battle.columns.ranged[bi],
+        "the travel drain consumed the equipment change without invalidating battle facts"
+    );
+}
+
+#[test]
+fn fused_population_matches_the_native_sparse_scan_after_roster_changes() {
+    let (mut state, rider, horse) = native_cache_fixture();
+    let dead = spawn(&mut state, 1, "minecraft:husk", [6.5, 64.0, 6.5]);
+    let zero = spawn(&mut state, 2, "minecraft:husk", [7.5, 64.0, 7.5]);
+    let mismatch = spawn(&mut state, 2, "minecraft:husk", [9.5, 64.0, 9.5]);
+    let gone = spawn(&mut state, 1, "minecraft:husk", [10.5, 64.0, 10.5]);
+    state
+        .hostile
+        .battle
+        .formation
+        .add_regiment(
+            formation::RegimentSpec {
+                id: 11,
+                faction: 1,
+                origin: [6.5, 64.0, 6.5],
+                facing: [0.0, 1.0],
+                files: 4,
+                frontage: 1.0,
+                order: formation::Order::Hold,
+            },
+            &[dead, zero, mismatch, gone],
+        )
+        .unwrap();
+    state
+        .entities
+        .body_mut(state.entities.slot_of(dead).unwrap())
+        .alive = false;
+    state
+        .entities
+        .row_mut(state.entities.slot_of(zero).unwrap())
+        .health = 0.0;
+    state.entities.remove(state.entities.slot_of(gone).unwrap());
+    let tail_dead = spawn(&mut state, 3, "minecraft:husk", [13.5, 64.0, 13.5]);
+    state
+        .entities
+        .body_mut(state.entities.slot_of(tail_dead).unwrap())
+        .alive = false;
+    spawn(&mut state, 3, "minecraft:husk", [14.5, 64.0, 14.5]);
+    spawn(&mut state, 0, "minecraft:husk", [15.5, 64.0, 15.5]);
+    let mut expected = UnitCounters::default();
+    for round in 0..3 {
+        if round == 1 {
+            state
+                .entities
+                .set_faction(state.entities.slot_of(rider).unwrap(), 0);
+            state
+                .entities
+                .set_faction(state.entities.slot_of(horse).unwrap(), 2);
+        } else if round == 2 {
+            state
+                .entities
+                .remove(state.entities.slot_of(mismatch).unwrap());
+        }
+        state.tick += 1;
+        step(&mut state);
+        expected.sample(&state.entities, state.tick);
+        assert_eq!(unit_counters(&state.hostile), &expected, "round {round}");
+    }
 }
 
 #[test]
@@ -524,8 +834,13 @@ fn twenty_thousand_registered_archers_use_one_regiment_candidate_per_decision() 
             world: &state.world,
             tick,
         };
-        formation::update(&frame, &mut battle);
-        battle.columns.prepare(&frame, &battle.formation);
+        battle.columns.prepare(
+            &frame,
+            &mut battle.formation,
+            &mut battle.output.counters,
+            &mut battle.population,
+        );
+        battle.formation.finish_preparation();
         targeting::update(&frame, &mut battle);
         assert_eq!(battle.work.retargeted, 2000);
         assert!(battle.work.examined <= battle.work.retargeted);

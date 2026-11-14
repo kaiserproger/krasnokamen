@@ -127,6 +127,37 @@ fn data_player_queries_read_live_inventory_vitals_and_absent_paths() {
     );
     assert_eq!(state.players[&id].inventory.slots[0].count, 7);
 }
+
+#[test]
+fn data_mob_faction_is_public_only_while_affiliated() {
+    let (mut state, _, context) = fixture();
+    let kind = state.registry.entity_type_id("minecraft:cow").unwrap();
+    let id = state.spawn_mob(kind, [2.0, 60.0, 2.0], 20.0);
+    let slot = state.entities.slot_of(id).unwrap();
+    let selector =
+        crate::commands::target_of("@e[type=minecraft:cow,nbt={\"krasnokamen:Faction\":7}]")
+            .unwrap();
+    let path = format!(
+        "data get entity {} \"krasnokamen:Faction\"",
+        state.entities.row(slot).uuid
+    );
+    assert!(get(&entity(&state, id).unwrap(), "\"krasnokamen:Faction\"").is_err());
+    assert!(query(&mut state, context, &path).is_err());
+    state.entities.set_faction(slot, 7);
+    assert_eq!(
+        *get(&entity(&state, id).unwrap(), "\"krasnokamen:Faction\"").unwrap(),
+        Tag::Int(7)
+    );
+    assert_eq!(query(&mut state, context, &path).unwrap(), 7);
+    assert_eq!(
+        crate::command_execution::resolve_target(&state, id, &selector),
+        vec![id]
+    );
+    state.entities.set_faction(slot, 0);
+    assert!(get(&entity(&state, id).unwrap(), "\"krasnokamen:Faction\"").is_err());
+    assert!(query(&mut state, context, &path).is_err());
+    assert!(crate::command_execution::resolve_target(&state, id, &selector).is_empty());
+}
 #[test]
 fn data_block_accepts_every_registered_block_entity_kind() {
     let (mut state, _, context) = fixture();
