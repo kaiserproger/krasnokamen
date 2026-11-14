@@ -171,7 +171,7 @@ fn item_frame_generation_support_and_wal_recovery() {
         ..Default::default()
     });
     let entries = crate::core::journal_entries_for_tick(&mut state, &output);
-    let root = std::env::temp_dir().join(format!("solaris-frame-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("krasnokamen-frame-{}", uuid::Uuid::new_v4()));
     let mut writer = JournalWriter::open(&root, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
@@ -312,21 +312,32 @@ fn invulnerable_frame_keeps_display_on_melee_and_arrow_but_creative_bypasses() {
     state.players.get_mut(&actor).unwrap().inventory.slots[0] = stack.clone();
     click(&mut state, frame);
     state.entities.row_mut(slot).controls.invulnerable = true;
-    let attack = PlayerInput::Attack { connection: ConnectionId(1), target: frame };
+    let attack = PlayerInput::Attack {
+        connection: ConnectionId(1),
+        target: frame,
+    };
     let (output, _, _) = run_tick(&mut state, std::slice::from_ref(&attack));
     assert!(state.entities.slot_of(frame).is_some());
     assert_eq!(displayed(&state, slot), Some(&stack));
     assert!(output.changes.entities_spawned.is_empty());
-    let owner = state.entities.row(state.entities.slot_of(actor).unwrap()).uuid;
+    let owner = state
+        .entities
+        .row(state.entities.slot_of(actor).unwrap())
+        .uuid;
     let arrow = crate::projectiles::ProjectileState::new(
-        crate::projectiles::ProjectileKind::Arrow, Some(owner), item(&state, "minecraft:arrow", 1),
+        crate::projectiles::ProjectileKind::Arrow,
+        Some(owner),
+        item(&state, "minecraft:arrow", 1),
     );
     crate::projectiles::launch(&mut state, arrow, [6.6, 65.8, 8.5], [2.0, 0.0, 0.0]).unwrap();
     let (output, _, _) = run_tick(&mut state, &[]);
     assert!(state.entities.slot_of(frame).is_some());
     assert_eq!(displayed(&state, slot), Some(&stack));
     assert!(!output.changes.entities_spawned.iter().any(|id| {
-        state.entities.slot_of(*id).and_then(|slot| state.entities.row(slot).item.as_ref())
+        state
+            .entities
+            .slot_of(*id)
+            .and_then(|slot| state.entities.row(slot).item.as_ref())
             .is_some_and(|drop| drop.full_stack() == stack)
     }));
     state.players.get_mut(&actor).unwrap().game_mode = crate::commands::GameMode::Creative;

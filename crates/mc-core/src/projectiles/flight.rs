@@ -670,7 +670,8 @@ fn step(
                         ..Default::default()
                     },
                 });
-            } else if record.kind.arrow() && crate::item_frame::eject_on_projectile(state, body.id, owner)
+            } else if record.kind.arrow()
+                && crate::item_frame::eject_on_projectile(state, body.id, owner)
             {
                 // Vanilla occupied frame: first non-explosive hit ejects the
                 // displayed item and leaves the frame attached. The arrow is

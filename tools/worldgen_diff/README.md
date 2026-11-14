@@ -6,15 +6,15 @@ local stock Minecraft **26.1.2** server. This remains the gameplay oracle for th
 
 Prerequisites: Python 3.11+, NumPy, Pillow, Java 25+, a locally obtained Mojang
 26.1.2 server bundle (`server.jar`), an imported content cache (the 26.3 cache
-from `solaris-v2 content import --version 26.3 --download`, which carries the
-26.1.2 gameplay pack; see `docs/OPERATING.md`), and a release `solaris-v2` binary.
+from `krasnokamen content import --version 26.3 --download`, which carries the
+26.1.2 gameplay pack; see `docs/OPERATING.md`), and a release `krasnokamen` binary.
 Neither this tool nor its reports redistribute the bundle, content cache, or saved
 worlds. Run from the repository root:
 
 ```sh
 tools/dev/mem-run.sh -m 6G \
   python3 -m tools.worldgen_diff \
-  --server-bin /absolute/path/to/release/solaris-v2 \
+  --server-bin /absolute/path/to/release/krasnokamen \
   --vanilla-jar /absolute/path/to/server.jar \
   --data-dir /absolute/path/to/data/vanilla \
   --out .analysis/worldgen-diff/run
@@ -25,14 +25,14 @@ and writes `report.json`, `report.md`, and six PNGs. Each rectangle is centered
 on the **vanilla spawn chunk**, not the origin: seed 81, for example, spawns at
 X −576, Z 432. A cached one-chunk bootstrap obtains each world's spawn before
 the full rectangle is generated. Both implementations compare the same
-absolute coordinates; this does not claim Solaris selects the same spawn.
+absolute coordinates; this does not claim Krasnokamen selects the same spawn.
 Each seed's receipt records the actual spawn and chunk bounds. `--seeds` and
 `--chunks` select a smaller diagnostic run; committed results state their scope.
 
 `--out` must not already exist. Oracle worlds are cached by seed and rectangle
 under `--vanilla-cache` (default `.analysis/worldgen-diff/vanilla-cache`); their
 bundle SHA-256 must match, otherwise use a fresh cache directory. Bundled jars
-are unpacked locally into a content-addressed runtime cache. Solaris always
+are unpacked locally into a content-addressed runtime cache. Krasnokamen always
 pregenerates a new native world and exports it to Anvil. Keep these ignored
 worlds if comparing before/after implementations; do not stage them.
 
@@ -64,7 +64,7 @@ Vanilla is tick-frozen by a datapack load function before world ticks, confirmed
 then force-loads the requested rectangle. An event-driven console/datapack
 probe waits for all requested chunks to reach FULL before `save-all flush` and
 `stop`. Vanilla also generates a FULL halo outside the rectangle; its requested
-chunks/s therefore is **not raw generator throughput**. Solaris's CLI timings
+chunks/s therefore is **not raw generator throughput**. Krasnokamen's CLI timings
 include lighting and native storage but exclude reported setup time. Shared
 host timings in the diff report are descriptive, not a controlled A/B benchmark.
 

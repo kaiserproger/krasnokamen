@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use crate::{Identifier, ItemEnchantment};
-mod station_nbt;
 pub mod death_protection;
+mod station_nbt;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct StewEffect {

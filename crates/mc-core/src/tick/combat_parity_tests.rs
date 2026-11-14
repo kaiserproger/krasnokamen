@@ -35,13 +35,18 @@ fn damage_observer_counts_real_admitted_victims_and_thorns_reaction() {
         100.0,
     );
     let target_slot = state.entities.slot_of(target).unwrap();
-    let item = state.registry.items.id_of(&Identifier::parse("minecraft:diamond_chestplate").unwrap()).unwrap();
+    let item = state
+        .registry
+        .items
+        .id_of(&Identifier::parse("minecraft:diamond_chestplate").unwrap())
+        .unwrap();
     let mut armor = ItemStack::new(item, 1);
     armor.enchantments.push(ItemEnchantment {
         id: Identifier::parse("minecraft:thorns").unwrap(),
         level: 10,
     });
-    std::sync::Arc::make_mut(&mut state.entities.row_mut(target_slot).appearance).equipment[4] = Some(armor);
+    std::sync::Arc::make_mut(&mut state.entities.row_mut(target_slot).appearance).equipment[4] =
+        Some(armor);
     let blocked = state.spawn_mob(
         state.registry.zombie_type_id,
         [pos[0] + 2.0, pos[1], pos[2]],
@@ -50,16 +55,33 @@ fn damage_observer_counts_real_admitted_victims_and_thorns_reaction() {
     let blocked_slot = state.entities.slot_of(blocked).unwrap();
     state.entities.row_mut(blocked_slot).controls.invulnerable = true;
     let source = DamageSource::Melee {
-        attacker: actor, position: pos, yaw: 0.0, bonus_knockback: 0.0,
-        sweep: false, fire_ticks: 0, bane_ticks: 0,
+        attacker: actor,
+        position: pos,
+        yaw: 0.0,
+        bonus_knockback: 0.0,
+        sweep: false,
+        fire_ticks: 0,
+        bane_ticks: 0,
     };
     hit(&mut state, target, DamageKind::Melee, Some(source));
     hit(&mut state, blocked, DamageKind::Melee, Some(source));
     let mut observed = Vec::new();
     state.commit_damage(Some(&mut |_, slot, fact| observed.push((slot, fact))));
-    assert_eq!(observed.iter().filter(|(_, fact)| *fact == DamageObservation::AcceptedReactive).count(), 1);
+    assert_eq!(
+        observed
+            .iter()
+            .filter(|(_, fact)| *fact == DamageObservation::AcceptedReactive)
+            .count(),
+        1
+    );
     assert!(observed.contains(&(actor_slot, DamageObservation::AcceptedReactive)));
-    assert_eq!(observed.iter().filter(|(_, fact)| *fact == DamageObservation::AcceptedVictim).count(), 2);
+    assert_eq!(
+        observed
+            .iter()
+            .filter(|(_, fact)| *fact == DamageObservation::AcceptedVictim)
+            .count(),
+        2
+    );
     assert!(observed.contains(&(actor_slot, DamageObservation::AcceptedVictim)));
     assert!(observed.contains(&(target_slot, DamageObservation::AcceptedVictim)));
     assert!(!observed.iter().any(|(slot, _)| *slot == blocked_slot));
@@ -477,10 +499,14 @@ fn custom_death_protection_removes_only_effects_in_named_tag() {
     use crate::effects::{ActiveEffect, EffectId};
     let (mut state, player, _) = flat_player_fixture();
     let registry = std::sync::Arc::make_mut(&mut state.registry);
-    std::sync::Arc::make_mut(&mut registry.tags).registries
+    std::sync::Arc::make_mut(&mut registry.tags)
+        .registries
         .entry(mc_data::Identifier::parse("minecraft:mob_effect").unwrap())
         .or_default()
-        .insert(mc_data::Identifier::parse("example:cleansed").unwrap(), vec![EffectId::Poison as i32]);
+        .insert(
+            mc_data::Identifier::parse("example:cleansed").unwrap(),
+            vec![EffectId::Poison as i32],
+        );
     let stack = ItemArgument::parse(
         "stick[death_protection={death_effects:[{type:'minecraft:remove_effects',effects:'#example:cleansed'}]}]",
     ).unwrap().stack(&state.registry.items).unwrap();
@@ -504,7 +530,11 @@ fn death_protection_rescue_wal_replays_health_effects_and_inventory_custody_toge
         "stick[death_protection={death_effects:[{type:'minecraft:apply_effects',effects:[{id:'minecraft:regeneration',duration:120}]}]}]",
     ).unwrap().stack(&state.registry.items).unwrap();
     protection.count = 2;
-    let diamond = state.registry.items.id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap()).unwrap();
+    let diamond = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+        .unwrap();
     let actor = state.players.get_mut(&player).unwrap();
     actor.inventory.slots[0] = protection.clone();
     actor.inventory_menu.carried = mc_data::ItemStack::new(diamond, 3);
@@ -512,10 +542,14 @@ fn death_protection_rescue_wal_replays_health_effects_and_inventory_custody_toge
     let slot = state.entities.slot_of(player).unwrap();
     state.entities.row_mut(slot).protected_until = 0;
     let uuid = state.entities.row(slot).uuid.to_string();
-    let (output, _, _) = run_tick(&mut state, &[PlayerInput::Command {
-        connection: ConnectionId(1), permission_level: 4,
-        command: "damage @s 30 minecraft:fall".into(),
-    }]);
+    let (output, _, _) = run_tick(
+        &mut state,
+        &[PlayerInput::Command {
+            connection: ConnectionId(1),
+            permission_level: 4,
+            command: "damage @s 30 minecraft:fall".into(),
+        }],
+    );
     let expected = crate::core::player_record_for(&state, player, output.tick).unwrap();
     assert_eq!(expected.health, 1.0);
     assert!(expected.active_effects.has(EffectId::Regeneration));
@@ -548,7 +582,10 @@ fn death_protection_changes_fire_admission_before_the_next_same_tick_hit() {
         };
         let item = ItemArgument::parse(&format!(
             "stick[death_protection={{death_effects:[{action}]}}]"
-        )).unwrap().stack(&state.registry.items).unwrap();
+        ))
+        .unwrap()
+        .stack(&state.registry.items)
+        .unwrap();
         let actor = state.players.get_mut(&player).unwrap();
         actor.inventory.slots[0] = item;
         if clear {
@@ -557,9 +594,16 @@ fn death_protection_changes_fire_admission_before_the_next_same_tick_hit() {
         let slot = state.entities.slot_of(player).unwrap();
         state.entities.row_mut(slot).protected_until = 0;
         for (kind, amount) in [(DamageKind::Fall, 30.0), (DamageKind::Lava, 40.0)] {
-            state.merge_damage.push((slot, DamagePiece {
-                amount, kind, source: None, physical: None, custom_armor: false,
-            }));
+            state.merge_damage.push((
+                slot,
+                DamagePiece {
+                    amount,
+                    kind,
+                    source: None,
+                    physical: None,
+                    custom_armor: false,
+                },
+            ));
         }
         let (deaths, events, _, _) = state.commit_merge_effects();
         assert_eq!(deaths.contains(&player), clear, "clear={clear}");
@@ -568,7 +612,11 @@ fn death_protection_changes_fire_admission_before_the_next_same_tick_hit() {
         assert_eq!(actor.active_effects.has(EffectId::FireResistance), !clear);
         if !clear {
             assert_eq!(actor.vitals.health, 1.0);
-            assert_eq!(state.entities.row(slot).last_hurt, 30.0, "resisted lava must not enter hurt admission");
+            assert_eq!(
+                state.entities.row(slot).last_hurt,
+                30.0,
+                "resisted lava must not enter hurt admission"
+            );
             assert!(!events.iter().any(|event| matches!(event,
                 crate::boundary::EntityEvent::Damage { entity, source_type_id, .. }
                 if *entity == player && *source_type_id == DamageKind::Lava.type_id(None, false)
@@ -604,18 +652,31 @@ fn death_teleport_keeps_mount_on_failure_and_dismounts_only_on_success() {
     use crate::command_items::ItemArgument;
     for succeeds in [false, true] {
         let (mut state, player, origin) = flat_player_fixture();
-        let boat_type = state.registry.entity_types.id_of(
-            &mc_data::Identifier::parse("minecraft:oak_boat").unwrap()).unwrap();
+        let boat_type = state
+            .registry
+            .entity_types
+            .id_of(&mc_data::Identifier::parse("minecraft:oak_boat").unwrap())
+            .unwrap();
         let boat = state.spawn_mob(boat_type, [origin[0], origin[1], origin[2] + 1.0], 20.0);
-        run_tick(&mut state, &[PlayerInput::InteractEntity {
-            connection: ConnectionId(1), target: boat, hand: Hand::Main, location: [0.0; 3],
-        }]);
+        run_tick(
+            &mut state,
+            &[PlayerInput::InteractEntity {
+                connection: ConnectionId(1),
+                target: boat,
+                hand: Hand::Main,
+                location: [0.0; 3],
+            }],
+        );
         let player_slot = state.entities.slot_of(player).unwrap();
         let boat_slot = state.entities.slot_of(boat).unwrap();
         assert_eq!(crate::mounts::vehicle(&state, player), Some(boat_slot));
         if !succeeds {
-            state.entities.set_pos(player_slot, [10_000.5, 90.0, 10_000.5]);
-            state.entities.set_pos(boat_slot, [10_000.5, 89.0, 10_000.5]);
+            state
+                .entities
+                .set_pos(player_slot, [10_000.5, 90.0, 10_000.5]);
+            state
+                .entities
+                .set_pos(boat_slot, [10_000.5, 89.0, 10_000.5]);
         }
         let old = state.entities.pos(player_slot);
         state.outbox.clear();
@@ -636,9 +697,13 @@ fn death_teleport_keeps_mount_on_failure_and_dismounts_only_on_success() {
         } else {
             assert_eq!(crate::mounts::vehicle(&state, player), Some(boat_slot));
             assert_eq!(destination, old);
-            assert!(!state.outbox.values().flatten().any(|change| matches!(
-                change, PlayerChange::PositionCorrected { .. }
-            )));
+            assert!(
+                !state
+                    .outbox
+                    .values()
+                    .flatten()
+                    .any(|change| matches!(change, PlayerChange::PositionCorrected { .. }))
+            );
         }
     }
 }

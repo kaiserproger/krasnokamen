@@ -4,7 +4,7 @@ use super::Retained;
 use crate::config::CoreError;
 use mc_nbt::Tag;
 use serde::Deserialize;
-const KEY: &str = "solaris:SpecialMob";
+const KEY: &str = "krasnokamen:SpecialMob";
 
 pub(crate) fn validate(value: &Retained) -> Result<(), &'static str> {
     match value {

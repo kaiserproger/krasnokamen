@@ -16,14 +16,24 @@ use crate::tick::TickState;
 pub(crate) fn stalagmite_at(state: &TickState, position: [f64; 3]) -> bool {
     let Some(block) = state
         .world
-        .block_at(position[0].floor() as i32, (position[1] - 0.01).floor() as i32, position[2].floor() as i32)
+        .block_at(
+            position[0].floor() as i32,
+            (position[1] - 0.01).floor() as i32,
+            position[2].floor() as i32,
+        )
         .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
     else {
         return false;
     };
     block.block.id.path() == "pointed_dripstone"
-        && block.properties.iter().any(|(key, value)| key == "vertical_direction" && value == "up")
-        && block.properties.iter().any(|(key, value)| key == "thickness" && value == "tip")
+        && block
+            .properties
+            .iter()
+            .any(|(key, value)| key == "vertical_direction" && value == "up")
+        && block
+            .properties
+            .iter()
+            .any(|(key, value)| key == "thickness" && value == "tip")
 }
 
 /// Account one mob move; returns the fall damage owed on a landing.
@@ -100,9 +110,12 @@ pub(crate) fn after_move(
         return (0.0, false);
     }
     let distance = std::mem::take(&mut row.controls.fall_distance);
-    (if stalagmite {
-        crate::survival::stalagmite_damage(distance)
-    } else {
-        crate::survival::fall_damage(distance)
-    }, stalagmite)
+    (
+        if stalagmite {
+            crate::survival::stalagmite_damage(distance)
+        } else {
+            crate::survival::fall_damage(distance)
+        },
+        stalagmite,
+    )
 }

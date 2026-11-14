@@ -126,7 +126,11 @@ fn malformed_sculk_fill_refuses_before_replacing_container_custody() {
     let (mut state, actor) = crate::crafter::tests::fixture(None);
     command(&mut state, actor, "setblock 8 201 8 minecraft:chest");
     crate::tick::run_tick(&mut state, &[]);
-    let diamond = state.registry.items.id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap()).unwrap();
+    let diamond = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+        .unwrap();
     let expected = mc_data::ItemStack::new(diamond, 3);
     state.block_entities.get_mut(&(8, 201, 8)).unwrap().slots[0] = expected.clone();
     let before = state.world.block_at(8, 201, 8);
@@ -137,7 +141,11 @@ fn malformed_sculk_fill_refuses_before_replacing_container_custody() {
         ("calibrated_sculk_sensor", "{last_vibration_frequency:16}"),
         ("sculk_catalyst", "{cursors:1}"),
     ] {
-        command(&mut state, actor, &format!("fill 8 201 8 9 201 8 {name}{nbt}"));
+        command(
+            &mut state,
+            actor,
+            &format!("fill 8 201 8 9 201 8 {name}{nbt}"),
+        );
         assert!(state.merge_block_writes.is_empty(), "{name}");
         assert_eq!(state.world.block_at(8, 201, 8), before);
         assert_eq!(state.block_entities[&(8, 201, 8)].slots[0], expected);

@@ -217,7 +217,8 @@ fn actual_checkpoint_regions_restore_persistence_idle_air_fire_and_child_size() 
     let expected_child =
         EntityStateImage::from_row(state.entities.body(child), state.entities.row(child));
     let (_, regions, _) = checkpoint_data_for(&state, 1);
-    let dir = std::env::temp_dir().join(format!("solaris-spawn-state-{}", uuid::Uuid::new_v4()));
+    let dir =
+        std::env::temp_dir().join(format!("krasnokamen-spawn-state-{}", uuid::Uuid::new_v4()));
     mc_world::anvil::entity_regions::write_entity_regions(&dir, &state.registry.items, &regions, 1)
         .unwrap();
     let regions =
@@ -305,8 +306,10 @@ fn compact_timer_postimages_replay_without_appearance_or_birth_motion_changes() 
             |entry| matches!(entry, JournalEntry::Entity { id: entity, .. } if *entity == id.0)
         )
     );
-    let dir =
-        std::env::temp_dir().join(format!("solaris-spawn-state-wal-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!(
+        "krasnokamen-spawn-state-wal-{}",
+        uuid::Uuid::new_v4()
+    ));
     let mut writer = JournalWriter::open(&dir, 1).unwrap();
     writer.append(1, 1, &birth).unwrap();
     writer.append(2, 2, &tail).unwrap();
@@ -338,34 +341,73 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     state.entities.row_mut(slot).persistent = true;
     state.entities.row_mut(slot).controls.no_ai = true;
     let (mut birth_output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    Arc::get_mut(&mut birth_output.changes).unwrap().entities_spawned.push(id);
+    Arc::get_mut(&mut birth_output.changes)
+        .unwrap()
+        .entities_spawned
+        .push(id);
     let birth = journal_entries_for_tick(&mut state, &birth_output);
     assert!(birth.iter().any(|entry| matches!(entry,
         JournalEntry::Entity { id: entity, .. } if *entity == id.0)));
     let checkpoint_tick = birth_output.tick;
-    let dir = std::env::temp_dir().join(format!("solaris-controls-wal-{}", uuid::Uuid::new_v4()));
+    let dir =
+        std::env::temp_dir().join(format!("krasnokamen-controls-wal-{}", uuid::Uuid::new_v4()));
     let mut writer = JournalWriter::open(&dir, 1).unwrap();
-    writer.append(checkpoint_tick, checkpoint_tick, &birth).unwrap();
+    writer
+        .append(checkpoint_tick, checkpoint_tick, &birth)
+        .unwrap();
     writer.gate(0, checkpoint_tick).unwrap();
     let (_, regions, _) = checkpoint_data_for(&state, checkpoint_tick);
-    mc_world::anvil::entity_regions::write_entity_regions(&dir, &state.registry.items, &regions, checkpoint_tick.try_into().unwrap()).unwrap();
-    let regions = mc_world::anvil::entity_regions::read_entity_regions(&dir, &state.registry.items).unwrap();
-    let native = regions.values().flat_map(|chunk| &chunk.entities)
-        .find(|entity| entity.wire_id == id.0).unwrap();
-    let checkpoint = mc_nbt::Tag::Compound(mc_data::entity_nbt::entity_to_fields(&state.registry.items, native).unwrap());
+    mc_world::anvil::entity_regions::write_entity_regions(
+        &dir,
+        &state.registry.items,
+        &regions,
+        checkpoint_tick.try_into().unwrap(),
+    )
+    .unwrap();
+    let regions =
+        mc_world::anvil::entity_regions::read_entity_regions(&dir, &state.registry.items).unwrap();
+    let native = regions
+        .values()
+        .flat_map(|chunk| &chunk.entities)
+        .find(|entity| entity.wire_id == id.0)
+        .unwrap();
+    let checkpoint = mc_nbt::Tag::Compound(
+        mc_data::entity_nbt::entity_to_fields(&state.registry.items, native).unwrap(),
+    );
     let mut replay = Replay::default();
-    crate::native_checkpoint::hydrate_entity(&state.registry, &mut replay, &checkpoint, checkpoint_tick).unwrap();
+    crate::native_checkpoint::hydrate_entity(
+        &state.registry,
+        &mut replay,
+        &checkpoint,
+        checkpoint_tick,
+    )
+    .unwrap();
     state.entities.row_mut(slot).controls.invulnerable = true;
     let (invulnerable_output, _, _) = crate::tick::run_tick(&mut state, &[]);
     let invulnerable_tail = journal_entries_for_tick(&mut state, &invulnerable_output);
     assert!(invulnerable_tail.iter().any(|entry| matches!(entry,
         JournalEntry::EntityState { id: entity, state: image, .. }
             if *entity == id.0 && image.controls.invulnerable && !image.controls.no_gravity)));
-    writer.append(invulnerable_output.tick, invulnerable_output.tick, &invulnerable_tail).unwrap();
+    writer
+        .append(
+            invulnerable_output.tick,
+            invulnerable_output.tick,
+            &invulnerable_tail,
+        )
+        .unwrap();
     writer.flush().unwrap();
     let mut intermediate = Replay::default();
-    crate::native_checkpoint::hydrate_entity(&state.registry, &mut intermediate, &checkpoint, checkpoint_tick).unwrap();
-    let intermediate = replay_batches(intermediate, &read_complete_batches_after(&dir.join("journal"), checkpoint_tick).unwrap());
+    crate::native_checkpoint::hydrate_entity(
+        &state.registry,
+        &mut intermediate,
+        &checkpoint,
+        checkpoint_tick,
+    )
+    .unwrap();
+    let intermediate = replay_batches(
+        intermediate,
+        &read_complete_batches_after(&dir.join("journal"), checkpoint_tick).unwrap(),
+    );
     assert!(intermediate.entities[&id.0].state.controls.invulnerable);
     assert!(!intermediate.entities[&id.0].state.controls.no_gravity);
     crate::entity_controls::set_no_gravity(&mut state, slot, true);
@@ -378,7 +420,10 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     writer.append(output.tick, output.tick, &tail).unwrap();
     writer.flush().unwrap();
     drop(writer);
-    let replay = replay_batches(replay, &read_complete_batches_after(&dir.join("journal"), checkpoint_tick).unwrap());
+    let replay = replay_batches(
+        replay,
+        &read_complete_batches_after(&dir.join("journal"), checkpoint_tick).unwrap(),
+    );
     let record = &replay.entities[&id.0];
     assert_eq!(record.state, expected);
     assert!(record.state.controls.no_gravity && record.state.controls.invulnerable);
@@ -386,9 +431,15 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     assert_eq!(record.health, 7.0);
     let mut restored = fixture();
     restore_entity(&mut restored, id.0, record).unwrap();
-    let row = restored.entities.row(restored.entities.slot_of(id).unwrap());
+    let row = restored
+        .entities
+        .row(restored.entities.slot_of(id).unwrap());
     assert!(row.controls.no_gravity && row.controls.invulnerable);
-    assert!(row.appearance.extra.contains(&(5, crate::boundary::EntityDataValue::Boolean(true))));
+    assert!(
+        row.appearance
+            .extra
+            .contains(&(5, crate::boundary::EntityDataValue::Boolean(true)))
+    );
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -453,7 +504,11 @@ fn native_no_gravity_restore_rehydrates_wire_metadata_and_motion() {
     let slot = state.entities.slot_of(EntityId(42)).unwrap();
     let row = state.entities.row(slot);
     assert!(row.controls.no_gravity);
-    assert!(row.appearance.extra.contains(&(5, crate::boundary::EntityDataValue::Boolean(true))));
+    assert!(
+        row.appearance
+            .extra
+            .contains(&(5, crate::boundary::EntityDataValue::Boolean(true)))
+    );
     for _ in 0..5 {
         crate::tick::run_tick(&mut state, &[]);
     }

@@ -9,7 +9,11 @@ static NAMES: LazyLock<Vec<String>> = LazyLock::new(|| {
         .expect("embedded 26.3 sound index")
 });
 static IDS: LazyLock<HashMap<&'static str, u32>> = LazyLock::new(|| {
-    NAMES.iter().enumerate().map(|(id, name)| (name.as_str(), id as u32)).collect()
+    NAMES
+        .iter()
+        .enumerate()
+        .map(|(id, name)| (name.as_str(), id as u32))
+        .collect()
 });
 
 pub fn names() -> &'static [String] {

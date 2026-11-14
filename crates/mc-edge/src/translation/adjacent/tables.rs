@@ -509,7 +509,9 @@ impl Tables {
             ensure!(
                 report_sounds.len() == names.len()
                     && names.iter().enumerate().all(|(id, name)| {
-                        report_sounds.get(name).is_some_and(|entry| entry.protocol_id == id as i32)
+                        report_sounds
+                            .get(name)
+                            .is_some_and(|entry| entry.protocol_id == id as i32)
                     }),
                 "777 sound report does not match the 26.3 built-in sound index"
             );
@@ -518,7 +520,10 @@ impl Tables {
             let names = names_by_id(report_sounds);
             ensure!(
                 names.iter().enumerate().all(|(id, name)| {
-                    !name.is_empty() && report_sounds.get(name).is_some_and(|entry| entry.protocol_id == id as i32)
+                    !name.is_empty()
+                        && report_sounds
+                            .get(name)
+                            .is_some_and(|entry| entry.protocol_id == id as i32)
                 }),
                 "source sound report has non-dense or duplicate protocol ids"
             );
@@ -581,7 +586,10 @@ impl Tables {
                 .get("minecraft:decorated_pot")
                 .map(|entry| entry.protocol_id),
             sounds: IdMap::by_name(
-                sound_names.iter().enumerate().map(|(id, name)| (name.as_str(), id as u32)),
+                sound_names
+                    .iter()
+                    .enumerate()
+                    .map(|(id, name)| (name.as_str(), id as u32)),
                 entries(legacy.registry("minecraft:sound_event")?),
                 &none,
             ),
