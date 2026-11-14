@@ -32,6 +32,48 @@ pub(crate) struct Tracer {
     waiting_for_result: bool,
     /// The commanding connection: its command feedback is traced, not sent.
     pub(crate) connection: ConnectionId,
+    pub(crate) awaiting: Option<(usize, String)>,
+    completion: Option<crate::command_context::CompletionId>,
+    report: Option<(String, usize, usize)>,
+    truncated: bool,
+}
+
+/// Only the I/O worker writes a prepared trace.
+#[derive(Debug)]
+pub(crate) struct Report {
+    pub feedback: &'static str,
+    pub arguments: Vec<mc_nbt::Tag>,
+    pub result: i32,
+    pub success: bool,
+    name: String,
+    content: String,
+}
+
+impl Report {
+    pub(crate) fn write(&self, root: &std::path::Path) -> Result<(), String> {
+        use std::io::Write;
+        let directory = root
+            .parent()
+            .and_then(std::path::Path::parent)
+            .ok_or("No server directory configured")?
+            .join("debug");
+        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        let path = directory.join(&self.name);
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(|error| error.to_string())?;
+        if let Err(error) = file
+            .write_all(self.content.as_bytes())
+            .and_then(|()| file.sync_all())
+        {
+            drop(file);
+            let _ = std::fs::remove_file(path);
+            return Err(error.to_string());
+        }
+        Ok(())
+    }
 }
 
 impl Tracer {
@@ -41,6 +83,10 @@ impl Tracer {
             last_indent: 0,
             waiting_for_result: false,
             connection,
+            awaiting: None,
+            completion: None,
+            report: None,
+            truncated: false,
         }
     }
 
@@ -63,6 +109,10 @@ impl Tracer {
     }
 
     pub(crate) fn on_command(&mut self, depth: usize, command: &str) {
+        if self.out.len().saturating_add(command.len()) > 16 * 1024 * 1024 {
+            self.truncated = true;
+            return;
+        }
         self.new_line();
         self.indent_and_save(depth);
         self.out.push_str("[C]");
@@ -230,17 +280,13 @@ pub(crate) fn trace_function(
         );
         return CommandResult::Failed;
     }
-    // A trace needs the function queue to itself: from inside a running
-    // function its frames would run after the trace was finished.
-    if state.datapacks.running {
-        crate::command_execution::feedback(
-            state,
-            connection,
-            "commands.debug.function.traceFailed",
-            Vec::new(),
-        );
-        return CommandResult::Failed;
-    }
+    let completion = match state.command_context.completion_id() {
+        Ok(id) => id,
+        Err(error) => {
+            crate::command_execution::error(state, connection, error);
+            return CommandResult::Failed;
+        }
+    };
     let canonical = |raw: &str| {
         if raw.contains(':') {
             raw.to_owned()
@@ -281,27 +327,98 @@ pub(crate) fn trace_function(
                 .map_or(0, |lines| lines.len())
         })
         .sum();
-    state.debug_trace = Some(Tracer::new(connection));
-    crate::datapacks::run_functions(state, connection, executor, name, changes);
-    let tracer = state.debug_trace.take().expect("trace installed above");
+    let mut tracer = Tracer::new(connection);
+    tracer.completion = Some(completion);
+    tracer.report = Some((
+        functions
+            .first()
+            .cloned()
+            .unwrap_or_else(|| name.to_owned()),
+        functions.len(),
+        commands,
+    ));
+    state.debug_trace = Some(tracer);
+    let stop_depth = crate::datapacks::pending_depth(state);
+    if let Err(error) = crate::datapacks::enqueue(state, name, connection, executor) {
+        state.debug_trace = None;
+        crate::command_execution::error(state, connection, error);
+        return CommandResult::Failed;
+    }
+    crate::datapacks::drain_until(state, changes, stop_depth);
+    if !state.command_context.waiting()
+        && let Err(error) = finish_trace(state)
+    {
+        crate::command_execution::error(state, connection, error);
+        return CommandResult::Failed;
+    }
+    CommandResult::Deferred(completion)
+}
+
+pub(crate) fn swap_runtime(left: &mut TickState, right: &mut TickState) {
+    std::mem::swap(&mut left.debug_profiler, &mut right.debug_profiler);
+    std::mem::swap(&mut left.debug_trace, &mut right.debug_trace);
+}
+
+pub(crate) fn trace_budget_exhausted(state: &mut TickState) {
+    if let Some(trace) = &mut state.debug_trace {
+        trace.on_error("Function command budget exceeded");
+        trace.truncated = true;
+    }
+}
+
+pub(crate) fn trace_result(state: &mut TickState, _success: bool, result: i32) {
+    if let Some(trace) = &mut state.debug_trace
+        && let Some((depth, line)) = trace.awaiting.take()
+    {
+        trace.on_return(depth, &line, result);
+    }
+}
+
+pub(crate) fn trace_waiting_for(
+    state: &TickState,
+    id: crate::command_context::CompletionId,
+) -> bool {
+    state
+        .debug_trace
+        .as_ref()
+        .is_some_and(|trace| trace.completion == Some(id))
+}
+
+pub(crate) fn finish_trace(state: &mut TickState) -> Result<(), String> {
+    let trace = state.debug_trace.take().ok_or("No active function trace")?;
+    let (name, functions, commands) = trace.report.ok_or("No trace report identity")?;
     let file = format!("debug-trace-{}.txt", file_stamp((state.wall_clock)()));
-    state.datapacks.write_trace(connection, &file, tracer.out);
-    let arguments = if functions.len() == 1 {
-        vec![text(commands), text(&functions[0]), text(&file)]
-    } else {
-        vec![text(commands), text(functions.len()), text(&file)]
-    };
-    crate::command_execution::success_feedback(
-        state,
-        connection,
-        if functions.len() == 1 {
+    let report = Report {
+        feedback: if trace.truncated {
+            "Function trace budget exceeded; see the debug trace report"
+        } else if functions == 1 {
             "commands.debug.function.success.single"
         } else {
             "commands.debug.function.success.multiple"
         },
-        arguments,
-    );
-    CommandResult::Success(commands as i32)
+        arguments: if trace.truncated {
+            Vec::new()
+        } else {
+            vec![
+                text(commands),
+                text(if functions == 1 {
+                    name
+                } else {
+                    functions.to_string()
+                }),
+                text(&file),
+            ]
+        },
+        result: if trace.truncated { 0 } else { commands as i32 },
+        success: !trace.truncated,
+        name: file,
+        content: trace.out,
+    };
+    state.datapacks.request_debug_report(
+        trace.connection,
+        trace.completion.ok_or("No trace completion identity")?,
+        report,
+    )
 }
 
 #[cfg(test)]

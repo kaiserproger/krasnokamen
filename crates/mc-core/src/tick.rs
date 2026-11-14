@@ -871,6 +871,10 @@ impl TickState {
         if change.is_text()
             && let Some(trace) = &mut self.debug_trace
             && trace.connection == connection
+            && self
+                .command_context
+                .current
+                .is_some_and(|context| context.connection == connection)
         {
             // The traced source is the trace file, not the player.
             trace.on_message(&match &change {
@@ -913,7 +917,6 @@ impl TickState {
         {
             return;
         }
-        crate::command_debug::trace_message(self, connection, &change);
         crate::vibration::menu(self, connection, &change);
         let queue = self.outbox.entry(connection).or_default();
         if change.is_text() {
@@ -2050,44 +2053,10 @@ fn run_dimension_tick_inner<'a>(
             entity_life_time.as_secs_f64() * 1000.0,
             entity_species_time.as_secs_f64() * 1000.0,
         );
-        // Stages of `input`, in order; they partition `input_time`.
-        let ms = |span: std::time::Duration| span.as_secs_f64() * 1000.0;
-        eprintln!(
-            "input ms: tick={} dimension={:?} prelude={:.2} natural_spawn={:.2} sim_owners={:.2} inputs={:.2} players={:.2} effects={:.2} contact_classify={:.2} contact_serial={:.2} contact_cauldron={:.2} tail={:.2}",
-            state.tick,
-            state.dimension,
-            ms(stage_spawn - input_start),
-            ms(stage_sim_owners - stage_spawn),
-            ms(stage_inputs - stage_sim_owners),
-            ms(stage_players - stage_inputs),
-            ms(stage_effects - stage_players),
-            ms(stage_contact - stage_effects),
-            ms(contact.classify),
-            ms(contact.serial),
-            ms(contact.cauldron),
-            ms(input_time.saturating_sub(stage_tail - input_start)),
-        );
-        // Stages of `input`, in order; they partition `input_time`.
-        let ms = |span: std::time::Duration| span.as_secs_f64() * 1000.0;
-        eprintln!(
-            "input ms: tick={} dimension={:?} prelude={:.2} natural_spawn={:.2} sim_owners={:.2} inputs={:.2} players={:.2} effects={:.2} contact_classify={:.2} contact_serial={:.2} contact_cauldron={:.2} tail={:.2}",
-            state.tick,
-            state.dimension,
-            ms(stage_spawn - input_start),
-            ms(stage_sim_owners - stage_spawn),
-            ms(stage_inputs - stage_sim_owners),
-            ms(stage_players - stage_inputs),
-            ms(stage_effects - stage_players),
-            ms(stage_contact - stage_effects),
-            ms(contact.classify),
-            ms(contact.serial),
-            ms(contact.cauldron),
-            ms(input_time.saturating_sub(stage_tail - input_start)),
-        );
         log.logging = log_start.elapsed();
     }
     let battle_counts_start = std::time::Instant::now();
-    let battle = crate::hostile::battle::publication_counts(state);
+    let battle = crate::battle::publication_counts(state);
     let battle_counts_time = battle_counts_start.elapsed();
     let times = TickTimes {
         input_us: input_time.as_micros() as u64,

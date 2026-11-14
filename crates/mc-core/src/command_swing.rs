@@ -1,81 +1,102 @@
-//! Operator `/swing <targets> <mainhand|offhand> <none|whack|stab> <ticks>`: makes living
-//! entities play an attack presentation through the ordinary `EntityEvent::Swing`, which
-//! the edge sends as the 26.3 `swing_animation` packet. Krasnokamen staging and QA aid (battle
-//! video clips are chosen client-side from hand, type and duration); vanilla has no such
-//! command. It changes no gameplay state.
+//! Vanilla operator `/swing`, emitted as a transient entity event.
 use crate::boundary::{ChangeSet, EntityEvent, EntityId, Hand, SwingKind};
 use crate::commands::{CommandError, Target, target_of};
+use crate::entities::EntityKind;
 use crate::tick::TickState;
 
-const USAGE: &str = "swing <targets> <mainhand|offhand> <none|whack|stab> <ticks>";
-/// Upper bound of one presentation: one minute.
-const MAX_TICKS: u16 = 1200;
+const USAGE: &str = "swing [<targets> [mainhand|offhand [<animation> [<duration>]]]]";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SwingCommand {
     pub(crate) target: Target,
     hand: Hand,
     animation: SwingKind,
-    duration_ticks: u16,
+    duration_ticks: i32,
 }
 
 pub(crate) fn parse(args: &[&str]) -> Result<SwingCommand, CommandError> {
-    let [target, hand, animation, ticks] = args else {
+    if args.len() > 4 {
         return Err(CommandError::Usage(USAGE));
+    }
+    let target = match args.first() {
+        Some(target) => target_of(target)?,
+        None => Target::Executor,
     };
-    let hand = match *hand {
-        "mainhand" => Hand::Main,
-        "offhand" => Hand::Off,
+    let hand = match args.get(1).copied() {
+        None | Some("mainhand") => Hand::Main,
+        Some("offhand") => Hand::Off,
         _ => return Err(CommandError::Usage(USAGE)),
     };
-    let animation = match *animation {
-        "none" => SwingKind::None,
-        "whack" => SwingKind::Whack,
-        "stab" => SwingKind::Stab,
+    let animation = match args.get(2).copied() {
+        None | Some("whack") => SwingKind::Whack,
+        Some("stab") => SwingKind::Stab,
+        Some("none") => SwingKind::None,
         _ => return Err(CommandError::Usage(USAGE)),
     };
-    let duration_ticks = ticks
-        .parse::<u16>()
-        .ok()
-        .filter(|ticks| (1..=MAX_TICKS).contains(ticks))
-        .ok_or(CommandError::Usage(USAGE))?;
+    let duration_ticks = if let Some(word) = args.get(3) {
+        let (number, scale) = match word.as_bytes().last() {
+            Some(b'd') => (&word[..word.len() - 1], 24_000.0_f32),
+            Some(b's') => (&word[..word.len() - 1], 20.0),
+            Some(b't') => (&word[..word.len() - 1], 1.0),
+            _ => (*word, 1.0),
+        };
+        if number.is_empty()
+            || !number
+                .bytes()
+                .all(|b| b.is_ascii_digit() || b == b'.' || b == b'-')
+        {
+            return Err(CommandError::Usage(USAGE));
+        }
+        let value: f32 = number.parse().map_err(|_| CommandError::Usage(USAGE))?;
+        let ticks = (value * scale + 0.5).floor() as i32;
+        if ticks < 1 {
+            return Err(CommandError::Usage(USAGE));
+        }
+        ticks
+    } else {
+        6
+    };
     Ok(SwingCommand {
-        target: target_of(target)?,
+        target,
         hand,
         animation,
         duration_ticks,
     })
 }
 
-/// Emits one swing per living target; returns how many swung.
 pub(crate) fn execute(
     state: &TickState,
     executor: EntityId,
     command: &SwingCommand,
     changes: &mut ChangeSet,
 ) -> Result<i32, CommandError> {
-    let living: Vec<EntityId> =
-        crate::command_execution::resolve_target(state, executor, &command.target)
-            .into_iter()
-            .filter(|&id| {
-                state
-                    .entities
-                    .slot_of_any(id)
-                    .is_some_and(|slot| state.entities.body(slot).alive)
-            })
-            .collect();
-    if living.is_empty() {
-        return Err(CommandError::Message("No entity was found".into()));
-    }
-    for &entity in &living {
+    let mut count = 0;
+    for entity in crate::command_execution::resolve_target(state, executor, &command.target)
+        .map_err(CommandError::Message)?
+    {
+        if !state.entities.slot_of_any(entity).is_some_and(|slot| {
+            let body = state.entities.body(slot);
+            body.alive
+                && matches!(
+                    body.kind,
+                    EntityKind::Player { .. } | EntityKind::Mob { .. }
+                )
+        }) {
+            continue;
+        }
         changes.entity_events.push(EntityEvent::Swing {
             entity,
             hand: command.hand,
             animation: command.animation,
             duration_ticks: command.duration_ticks,
         });
+        count += 1;
     }
-    Ok(living.len() as i32)
+    if count == 0 {
+        Err(CommandError::Message("No living entity was found".into()))
+    } else {
+        Ok(count)
+    }
 }
 
 #[cfg(test)]

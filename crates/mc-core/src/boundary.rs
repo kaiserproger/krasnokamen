@@ -951,6 +951,16 @@ pub enum BossBarChange {
 
 /// The registry a datapack reload installed, shared by every connection's
 /// [`PlayerChange::RecipesReloaded`].
+/// Immutable catalog revision retained by a reliable recipe event.
+#[derive(Debug, Clone)]
+pub struct RecipeSource(pub Arc<crate::registry::CoreRegistry>);
+
+impl PartialEq for RecipeSource {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 #[derive(Clone)]
 pub struct RegistryReload {
     pub registry: Arc<crate::registry::CoreRegistry>,

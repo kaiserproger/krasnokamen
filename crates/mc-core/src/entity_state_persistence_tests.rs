@@ -530,6 +530,7 @@ fn native_no_gravity_restore_rehydrates_wire_metadata_and_motion() {
     let target = crate::commands::target_of("@e[type=minecraft:cow,nbt={NoGravity:1b}]").unwrap();
     assert!(
         crate::command_execution::resolve_target(&state, EntityId(42), &target)
+            .unwrap()
             .contains(&EntityId(42))
     );
     assert!(

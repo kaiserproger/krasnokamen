@@ -103,14 +103,15 @@ fn command_custody_data_preflights_exact_revision_capacity_before_health_or_equi
         let body = *state.entities.body(slot);
         let plugins = state.plugins.clone();
         let journal = state.appearance_changed.clone();
-        let result = crate::command_data::mutate(
+        let result = crate::command_data::command(
             &mut state,
-            context,
+            context.connection,
+            id,
             "data merge entity @s {Health:7.0f,equipment:{mainhand:{id:'minecraft:emerald',count:3}}}",
         );
         if exhausted_equipment {
             assert!(
-                result.is_err(),
+                matches!(result, crate::command_execution::CommandResult::Failed),
                 "changed image must not exceed the script revision range"
             );
             assert_eq!(state.entities.row(slot), &row);
@@ -122,7 +123,7 @@ fn command_custody_data_preflights_exact_revision_capacity_before_health_or_equi
             assert_eq!(state.appearance_changed, journal);
         } else {
             assert!(
-                result.is_ok(),
+                matches!(result, crate::command_execution::CommandResult::Success(_)),
                 "unchanged carry image at capacity must not reject equipment: {result:?}"
             );
             assert_eq!(state.entities.row(slot).health, 7.0);

@@ -136,12 +136,8 @@ fn happy_ghast_admission_leave_and_reconnect_survive_wal_recovery() {
             );
         }
         assert_eq!(
-            state.entities.row(ghast_slot).entity_life.mount.rider,
-            Some(first_uuid)
-        );
-        assert_eq!(
-            state.entities.row(ghast_slot).entity_life.mount.passengers,
-            vec![second_uuid]
+            state.entities.row(ghast_slot).entity_life.mount.riders,
+            vec![first_uuid, second_uuid]
         );
         let (baseline, _, _) = run_tick(&mut state, &[]);
         let initial = journal_entries_for_tick(&mut state, &baseline);
@@ -158,17 +154,8 @@ fn happy_ghast_admission_leave_and_reconnect_survive_wal_recovery() {
             first_uuid
         };
         assert_eq!(
-            state.entities.row(ghast_slot).entity_life.mount.rider,
-            Some(expected)
-        );
-        assert!(
-            state
-                .entities
-                .row(ghast_slot)
-                .entity_life
-                .mount
-                .passengers
-                .is_empty()
+            state.entities.row(ghast_slot).entity_life.mount.riders,
+            vec![expected]
         );
         let dir = tempfile::tempdir().unwrap();
         let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
@@ -181,14 +168,18 @@ fn happy_ghast_admission_leave_and_reconnect_survive_wal_recovery() {
         let batches = read_complete_batches_after(&dir.path().join("journal"), 0).unwrap();
         let replay = replay_batches(Replay::default(), &batches);
         let record = &replay.entities[&ghast.0];
-        assert_eq!(record.state.entity_life.mount.rider, Some(expected));
-        assert!(record.state.entity_life.mount.passengers.is_empty());
+        assert_eq!(record.state.entity_life.mount.riders, vec![expected]);
         let (mut restored, _, _) = fixture();
         restore_entity(&mut restored, ghast.0, record).unwrap();
         let restored_slot = slot(&restored, ghast);
         assert_eq!(
-            restored.entities.row(restored_slot).entity_life.mount.rider,
-            Some(expected)
+            restored
+                .entities
+                .row(restored_slot)
+                .entity_life
+                .mount
+                .riders,
+            vec![expected]
         );
         let uuid = if leaving == 1 {
             first_uuid
@@ -207,8 +198,13 @@ fn happy_ghast_admission_leave_and_reconnect_survive_wal_recovery() {
         let rejoined = restored.connections.entity_of(ConnectionId(20)).unwrap();
         assert!(crate::mounts::vehicle(&restored, rejoined).is_none());
         assert_eq!(
-            restored.entities.row(restored_slot).entity_life.mount.rider,
-            Some(expected)
+            restored
+                .entities
+                .row(restored_slot)
+                .entity_life
+                .mount
+                .riders,
+            vec![expected]
         );
     }
 }

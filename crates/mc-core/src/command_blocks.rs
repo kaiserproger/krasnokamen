@@ -228,100 +228,165 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
                 schedule(state, start);
                 continue;
             }
-            let mut pos = start;
-            loop {
-                if remaining == 0 {
-                    break;
-                }
-                remaining -= 1;
-                let Some(path) = kind(state, pos) else {
-                    break;
-                };
-                let repeating = path == "repeating_command_block";
-                let chain = path == "chain_command_block";
-                let mut fields = match read(state, pos) {
-                    Ok(fields) => fields,
-                    Err(error) => {
-                        crate::block_drop_context::reject(
-                            state,
-                            pos,
-                            crate::CoreError::Storage(error),
-                        );
-                        break;
-                    }
-                };
-                let enabled = flag(&fields, "auto") || flag(&fields, "powered");
-                if repeating && enabled {
-                    schedule(state, pos);
-                }
-                if ((!chain && !repeating) || enabled)
-                    && conditional(state, pos)
-                    && !condition_met(state, pos)
-                {
-                    put(&mut fields, "SuccessCount", Tag::Int(0));
-                    save(state, pos, fields);
-                    if !chain {
-                        break;
-                    }
-                } else if (!chain && !repeating) || enabled {
-                    if matches!(mc_data::item_nbt::field(&fields,"LastExecution"),Some(Tag::Long(tick)) if *tick == state.tick as i64)
-                    {
-                        break;
-                    }
-                    let command = match mc_data::item_nbt::field(&fields, "Command") {
-                        Some(Tag::String(command)) => Some(command.clone()),
-                        _ => None,
-                    };
-                    put(&mut fields, "LastExecution", Tag::Long(state.tick as i64));
-                    put(&mut fields, "SuccessCount", Tag::Int(0));
-                    save(state, pos, fields);
-                    if let Some(command) = command {
-                        let previous = state.datapacks.origin.replace([
-                            pos.x as f64 + 0.5,
-                            pos.y as f64 + 0.5,
-                            pos.z as f64 + 0.5,
-                        ]);
-                        let mut context = crate::command_context::Context::source(
-                            state,
-                            crate::command_console::CONNECTION,
-                            crate::command_console::EXECUTOR,
-                            2,
-                        );
-                        context.command_block = true;
-                        let successes = crate::command_context::run(
-                            state,
-                            command.trim_start_matches('/'),
-                            context,
-                            changes,
-                        );
-                        if let Ok(mut fields) = read(state, pos) {
-                            put(&mut fields, "SuccessCount", Tag::Int(successes));
-                            save(state, pos, fields);
-                        }
-                        state.datapacks.origin = previous;
-                    }
-                }
-                let Some((x, y, z)) = direction(state, pos) else {
-                    break;
-                };
-                let Some(next) = pos
-                    .x
-                    .checked_add(x)
-                    .zip(pos.y.checked_add(y))
-                    .zip(pos.z.checked_add(z))
-                    .map(|((x, y), z)| BlockPos { x, y, z })
-                else {
-                    break;
-                };
-                if kind(state, next) != Some("chain_command_block") {
-                    break;
-                }
-                pos = next;
-            }
+            remaining = run_chain(state, changes, start, remaining);
         }
     }
     due.clear();
     state.command_blocks_due = due;
+}
+
+fn run_chain(
+    state: &mut TickState,
+    changes: &mut ChangeSet,
+    start: BlockPos,
+    mut remaining: usize,
+) -> usize {
+    let mut pos = start;
+    loop {
+        if remaining == 0 {
+            break;
+        }
+        remaining -= 1;
+        let Some(path) = kind(state, pos) else {
+            break;
+        };
+        let repeating = path == "repeating_command_block";
+        let chain = path == "chain_command_block";
+        let mut fields = match read(state, pos) {
+            Ok(fields) => fields,
+            Err(error) => {
+                crate::block_drop_context::reject(state, pos, crate::CoreError::Storage(error));
+                break;
+            }
+        };
+        let enabled = flag(&fields, "auto") || flag(&fields, "powered");
+        if repeating && enabled {
+            schedule(state, pos);
+        }
+        if ((!chain && !repeating) || enabled)
+            && conditional(state, pos)
+            && !condition_met(state, pos)
+        {
+            put(&mut fields, "SuccessCount", Tag::Int(0));
+            save(state, pos, fields);
+            if !chain {
+                break;
+            }
+        } else if (!chain && !repeating) || enabled {
+            if matches!(mc_data::item_nbt::field(&fields,"LastExecution"),Some(Tag::Long(tick)) if *tick == state.tick as i64)
+            {
+                break;
+            }
+            let command = match mc_data::item_nbt::field(&fields, "Command") {
+                Some(Tag::String(command)) => Some(command.clone()),
+                _ => None,
+            };
+            put(&mut fields, "LastExecution", Tag::Long(state.tick as i64));
+            put(&mut fields, "SuccessCount", Tag::Int(0));
+            save(state, pos, fields);
+            if let Some(command) = command {
+                let previous = state.datapacks.origin.replace([
+                    pos.x as f64 + 0.5,
+                    pos.y as f64 + 0.5,
+                    pos.z as f64 + 0.5,
+                ]);
+                let mut context = crate::command_context::Context::source(
+                    state,
+                    crate::command_console::CONNECTION,
+                    crate::command_console::EXECUTOR,
+                    2,
+                );
+                context.command_block = true;
+                let successes = crate::command_context::run(
+                    state,
+                    command.trim_start_matches('/'),
+                    context,
+                    changes,
+                );
+                state.datapacks.origin = previous;
+                if state.command_context.waiting() {
+                    state.command_context.suspend_block(Continuation {
+                        dimension: state.dimension,
+                        pos,
+                        command,
+                        tick: state.tick,
+                        remaining,
+                    });
+                    break;
+                }
+                if let Ok(mut fields) = read(state, pos) {
+                    put(&mut fields, "SuccessCount", Tag::Int(successes));
+                    save(state, pos, fields);
+                }
+            }
+        }
+        let Some(next) = next_chain(state, pos) else {
+            break;
+        };
+        pos = next;
+    }
+    remaining
+}
+
+fn next_chain(state: &TickState, pos: BlockPos) -> Option<BlockPos> {
+    let (x, y, z) = direction(state, pos)?;
+    let next = BlockPos {
+        x: pos.x.checked_add(x)?,
+        y: pos.y.checked_add(y)?,
+        z: pos.z.checked_add(z)?,
+    };
+    (kind(state, next) == Some("chain_command_block")).then_some(next)
+}
+
+pub(crate) struct Continuation {
+    pub dimension: crate::dimensions::Dimension,
+    pos: BlockPos,
+    command: String,
+    tick: u64,
+    remaining: usize,
+}
+
+pub(crate) enum Invocation {
+    Start(BlockPos),
+    Resume(Continuation, i32),
+}
+
+pub(crate) fn invoke(state: &mut TickState, changes: &mut ChangeSet, invocation: Invocation) {
+    match invocation {
+        Invocation::Start(pos) => {
+            state.command_blocks_due.push(pos);
+            run(state, changes);
+        }
+        Invocation::Resume(pending, successes) => {
+            if !state.enable_command_block || kind(state, pending.pos).is_none() {
+                return;
+            }
+            let Ok(mut fields) = read(state, pending.pos) else {
+                return;
+            };
+            if !matches!(mc_data::item_nbt::field(&fields, "Command"), Some(Tag::String(command)) if *command == pending.command)
+                || !matches!(mc_data::item_nbt::field(&fields, "LastExecution"), Some(Tag::Long(tick)) if *tick == pending.tick as i64)
+            {
+                return;
+            }
+            put(&mut fields, "SuccessCount", Tag::Int(successes));
+            save(state, pending.pos, fields);
+            if let Some(next) = next_chain(state, pending.pos) {
+                run_chain(state, changes, next, pending.remaining);
+            }
+        }
+    }
+}
+
+/// A live data edit preserves the same auto-edge scheduling as placement/UI edits.
+pub(crate) fn data_updated(state: &mut TickState, pos: BlockPos, old_auto: bool) {
+    let start = !old_auto
+        && read(state, pos).is_ok_and(|fields| flag(&fields, "auto"))
+        && kind(state, pos) == Some("command_block");
+    changed(state, pos);
+    if state.enable_command_block && start {
+        schedule(state, pos);
+    }
 }
 
 /// Apply a `data` edit (`previous` public image to `edited`) to the command

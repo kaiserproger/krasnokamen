@@ -2,9 +2,11 @@
 //! per tick by count/prefix/scatter; queries never mutate shared state.
 
 use crate::boundary::EntityId;
+use rayon::prelude::*;
 use rustc_hash::FxHashMap;
 
 pub const CELL_BLOCKS: f64 = 4.0;
+const TARGET_CHUNK: usize = 256;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Unit {
@@ -272,76 +274,39 @@ pub fn engagement_reach(ranged: bool, attack_reach: f32) -> f64 {
     }
 }
 
-fn eligible(battle: &super::BattleState, bi: usize) -> bool {
-    if !battle.columns.active[bi] || battle.columns.carried[bi] {
+pub(super) fn eligible(
+    formation: &super::formation::FormationRuntime,
+    columns: &super::Columns,
+    bi: usize,
+) -> bool {
+    if !columns.active[bi] || columns.carried[bi] {
         return false;
     }
-    if bi >= battle.formation.members.len() {
+    if bi >= formation.members.len() {
         return true;
     }
-    let context = battle.formation.context_at(bi);
-    !context.routing && (battle.columns.ranged[bi] || context.front_rank)
+    // Every steady soldier looks for an opponent within reach, whatever his
+    // rank: mixing, flanks and gaps bring enemies to rear ranks, and a man
+    // with an enemy at his shoulder who never strikes is no fighter (G2 had
+    // 0.13 melee swings/s per fighter in contact). Fugitives search only at
+    // bay against the battle bounds.
+    !formation.context_at(bi).routing || formation.cornered_at(bi)
 }
-
-/// Ticks between looks for a better enemy while a fighter is in contact.
-pub const CONTACT_RETARGET_TICKS: u64 = 4;
-/// Ticks a fighter keeps looking every tick after he last held a target.
-const CONTACT_HOLD_TICKS: u64 = 20;
-
-fn fast_due(id: EntityId, tick: u64) -> bool {
-    tick % CONTACT_RETARGET_TICKS
-        == i64::from(id.0).rem_euclid(CONTACT_RETARGET_TICKS as i64) as u64
-}
-
-/// A fighter looks faster only within this many blocks of the enemy regiment's block.
-const NEAR_CONTACT_BLOCKS: f64 = 12.0;
-
-/// The fighter himself stands in or next to the enemy regiment he faces: his distance to that
-/// regiment's live centre is at most the block's half diagonal plus [`NEAR_CONTACT_BLOCKS`].
-/// A regiment's signed `gap` along its facing says nothing about a rider far to the side or
-/// an enemy far behind, so it is not used.
-fn near_contact(formation: &super::formation::FormationRuntime, bi: usize) -> bool {
-    let Some(m) = formation.members.get(bi) else {
-        return false;
-    };
-    let Some(enemy) = formation.regiments[m.regiment]
-        .enemy_regiment
-        .map(|e| &formation.regiments[e])
-    else {
-        return false;
-    };
-    if enemy.live_count == 0 {
-        return false;
-    }
-    let centre = enemy.live_sum.map(|x| x / enemy.live_count as f64);
-    let half_diagonal = 0.5
-        * mc_physics::mth::length2(
-            f64::from(enemy.spec.files) * enemy.interval,
-            2.0 * f64::from(enemy.ranks),
-        );
-    mc_physics::mth::length2(m.pos[0] - centre[0], m.pos[2] - centre[2])
-        <= half_diagonal + NEAR_CONTACT_BLOCKS
-}
-
-/// A rider or pursuer keeps a man a few blocks beyond the reach that took him: at the edge of
-/// the reach the target came and went every few ticks and the horse turned with it.
-const LOOSE_RETAIN_BLOCKS: f64 = 4.0;
 
 fn retained(
-    frame: &super::Frame<'_>,
+    entities: &crate::entities::EntityStore,
     columns: &super::Columns,
     bi: usize,
     target: EntityId,
-    slack: f64,
 ) -> Option<EnemyTarget> {
-    let slot = frame.entities.slot_of(target)?;
+    let slot = entities.slot_of(target)?;
     let enemy = columns.index(slot)?;
     if !columns.targetable[enemy] || !super::enemies(columns.factions[bi], columns.factions[enemy])
     {
         return None;
     }
     let distance = distance_squared(columns.positions[bi], columns.positions[enemy]).sqrt();
-    (distance <= columns.reach[bi] + slack).then_some(EnemyTarget {
+    (distance <= columns.reach[bi]).then_some(EnemyTarget {
         id: target,
         pos: columns.positions[enemy],
         distance,
@@ -352,7 +317,6 @@ fn retained(
 /// Retained opponents are O(1)-validated every tick and replaced only on the
 /// assigned phase. Fugitives and carried mounts do not pay for search.
 pub(crate) fn update(frame: &super::Frame<'_>, battle: &mut super::BattleState) {
-    battle.work = Work::default();
     battle
         .grid
         .rebuild((0..battle.columns.ids.len()).filter_map(|bi| {
@@ -362,36 +326,63 @@ pub(crate) fn update(frame: &super::Frame<'_>, battle: &mut super::BattleState) 
                 pos: battle.columns.positions[bi],
             })
         }));
-    for bi in 0..battle.columns.ids.len() {
-        if !eligible(battle, bi) {
-            battle.columns.targets[bi] = None;
-            continue;
+    let mut targets = std::mem::take(&mut battle.columns.targets);
+    let columns = &battle.columns;
+    let formation = &battle.formation;
+    let grid = &battle.grid;
+    let entities = frame.entities;
+    let tick = frame.tick;
+    let sample = |(chunk_index, chunk): (usize, &mut [Option<EnemyTarget>])| {
+        let mut work = Work::default();
+        for (offset, target) in chunk.iter_mut().enumerate() {
+            let bi = chunk_index * TARGET_CHUNK + offset;
+            if !eligible(formation, columns, bi) {
+                *target = None;
+                continue;
+            }
+            let id = columns.ids[bi];
+            if !retarget_due(id, tick) {
+                *target = (*target).and_then(|target| retained(entities, columns, bi, target.id));
+                continue;
+            }
+            work.retargeted += 1;
+            *target = if columns.ranged[bi] && bi < formation.members.len() {
+                let roll = super::combat::roll(id, tick / RETARGET_TICKS, 0x4152_4348) as u64;
+                formation.archer_target(bi, roll).and_then(|target| {
+                    work.examined += 1;
+                    retained(entities, columns, bi, target)
+                })
+            } else {
+                let query = grid.nearest_enemy(
+                    Unit {
+                        id,
+                        faction: columns.factions[bi],
+                        pos: columns.positions[bi],
+                    },
+                    columns.reach[bi],
+                );
+                work.examined += query.examined;
+                query.target
+            };
         }
-        let id = battle.columns.ids[bi];
-        if !retarget_due(id, frame.tick) {
-            battle.columns.targets[bi] = battle.columns.targets[bi]
-                .and_then(|target| retained(frame, &battle.columns, bi, target.id));
-            continue;
-        }
-        battle.work.retargeted += 1;
-        let selected = if battle.columns.ranged[bi] && bi < battle.formation.members.len() {
-            let roll = super::combat::roll(id, frame.tick / RETARGET_TICKS, 0x4152_4348) as u64;
-            battle.formation.archer_target(bi, roll).and_then(|target| {
-                battle.work.examined += 1;
-                retained(frame, &battle.columns, bi, target)
-            })
-        } else {
-            let query = battle.grid.nearest_enemy(
-                Unit {
-                    id,
-                    faction: battle.columns.factions[bi],
-                    pos: battle.columns.positions[bi],
-                },
-                battle.columns.reach[bi],
-            );
-            battle.work.examined += query.examined;
-            query.target
-        };
-        battle.columns.targets[bi] = selected;
-    }
+        work
+    };
+    let merge = |a: Work, b: Work| Work {
+        retargeted: a.retargeted + b.retargeted,
+        examined: a.examined + b.examined,
+    };
+    battle.work = if targets.len() >= TARGET_CHUNK * 2 && rayon::current_num_threads() > 1 {
+        targets
+            .par_chunks_mut(TARGET_CHUNK)
+            .enumerate()
+            .map(sample)
+            .reduce(Work::default, merge)
+    } else {
+        targets
+            .chunks_mut(TARGET_CHUNK)
+            .enumerate()
+            .map(sample)
+            .fold(Work::default(), merge)
+    };
+    battle.columns.targets = targets;
 }

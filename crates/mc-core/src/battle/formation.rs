@@ -3,7 +3,6 @@
 //! Decisions are staggered at 10 ticks; motion and membership liveness are not.
 
 use super::morale::{Morale, Pressure, nerve};
-use super::{BattleState, Frame};
 use crate::boundary::EntityId;
 use crate::entities::EntitySlot;
 use mc_physics::mth;
@@ -11,11 +10,65 @@ use rustc_hash::FxHashMap;
 
 pub(crate) const DECISION_TICKS: u64 = 10;
 pub(crate) const SECTION_SIZE: usize = 20;
-pub(crate) const STANDOFF: f64 = 4.0;
-pub(crate) const SURGE_PROBABILITY: f64 = 0.02;
+/// Foot fronts in contact stand this close (front to front): every front-rank
+/// man has his opponent within the vanilla mob melee reach (0.6-wide boxes
+/// grown by sqrt(2.04) - 0.6, so centres under 1.43 apart), and the lulls
+/// between pulses are a cautious exchange at close quarters, not a stand-off
+/// out of reach.
+pub(crate) const STANDOFF: f64 = 1.2;
+/// A line closer than this gives ground.
+const GIVE_GROUND: f64 = 0.8;
+/// Foot in contact closes its ranks into a press: ranks behind the front stand
+/// this far apart instead of the two-block marching depth, so the second rank
+/// stands within striking distance of the enemy front.
+pub(crate) const PRESS_RANK_SPACING: f64 = 0.75;
+/// Foot fighting interval of the staged battle. The two sides stand half an
+/// interval apart laterally (0.7 blocks, above the 0.65-block body spacing),
+/// so two lines meeting head-on mesh file between file: every man in the
+/// meshed band has an enemy at his shoulder instead of one front rank each.
+pub(crate) const MESH_INTERVAL: f64 = 1.4;
+/// How far each meshing front passes the enemy front (blocks).
+const MESH_DEPTH: f64 = 6.0;
+/// Rank spacing of a meshed press: one block keeps two bodies per side in a
+/// two-block steering cell well below its cap.
+const MESH_RANK_SPACING: f64 = 1.0;
+// Film lulls compress to a five-second base wait; action clocks stay human-speed.
+pub(crate) const SURGE_PROBABILITY: f64 = 0.1;
 pub(crate) const SURGE_TICKS: u64 = 200;
+pub(crate) const SURGE_FATIGUE: f32 = 0.75;
+pub(crate) const STANDING_RECOVERY: f32 = 0.25;
+pub(crate) const EXHAUSTED_STAMINA: f32 = 30.0;
+/// Below this morale sections neither start nor keep a pulse. It sits just
+/// above the break (17) so a worn regiment fights on until it breaks; a wider
+/// gap froze touching fronts with neither losses nor flight.
+pub(crate) const PULSE_MORALE_FLOOR: f32 = 20.0;
 const MAX_REGIMENTS: usize = 128;
+/// A fugitive this close to the battle bounds can flee no further.
+const AT_BAY_BLOCKS: f64 = 2.0;
 const MAX_SOLDIERS: usize = 20_000;
+/// Window of the operator's stall census: ten seconds of advancing.
+pub(crate) const STALL_TICKS: u64 = 200;
+/// Share of hit knockback a staged soldier shrugs off (vanilla knockback resistance 0..1).
+pub(crate) const SOLDIER_KNOCKBACK_RESISTANCE: f64 = 0.8;
+/// Pursuers close with ranks this share of the marching depth apart (a block, not two).
+const PURSUIT_RANK_SQUEEZE: f64 = 0.5;
+/// A soldier stepping in on an attacker he answers (`Member::close_on`) moves
+/// at a pressing file's surge pace (blocks per tick), as a pulse does.
+const CLOSE_STEP: f64 = 0.10;
+
+/// Whether `pos` lies within `margin` blocks of the battle bounds, or past them.
+pub(crate) fn near_bounds(
+    bounds: Option<([f64; 2], [f64; 2])>,
+    pos: [f64; 3],
+    margin: f64,
+) -> bool {
+    bounds.is_some_and(|(min, max)| {
+        pos[0] - min[0] < margin
+            || max[0] - pos[0] < margin
+            || pos[2] - min[1] < margin
+            || max[1] - pos[2] < margin
+    })
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Order {
@@ -133,6 +186,14 @@ pub(crate) struct Member {
     pub routing: bool,
     pub wavering: bool,
     pub nerve: f32,
+    /// A rider who fled to the edge of the field and rallied there: he fights
+    /// on until he falls, whatever his regiment's morale.
+    pub rallied: bool,
+    /// Position at the start of the current stall window, (x, z).
+    pub anchor: [f64; 2],
+    /// Where he steps to strike an attacker he answers (retaliation.rs),
+    /// instead of his slot; set for one tick at a time.
+    pub close_on: Option<[f64; 3]>,
 }
 
 #[derive(Debug)]
@@ -166,6 +227,11 @@ pub(crate) struct Regiment {
     pub broke_now: bool,
     pub evacuating: Vec<bool>,
     pub live_members: Vec<usize>,
+    /// Virtual leader at the start of the current stall window, (x, z).
+    pub anchor: [f64; 2],
+    /// Meshing file between file with its enemy front (`meshes`), as of the
+    /// last leader move.
+    pub meshing: bool,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -191,6 +257,15 @@ pub(crate) struct FormationRuntime {
     pub tick: u64,
     pub neighbours: super::steering::SeparationGrid,
     pub bounds: Option<([f64; 2], [f64; 2])>,
+    /// Last stall census: live, steady members of regiments whose leader
+    /// advanced at least four blocks in the window and is not in melee reach
+    /// (gap > 6), and those of them that moved less than one block (blocked
+    /// by terrain or crowd).
+    pub advancing: usize,
+    pub stalled: usize,
+    /// (regiment, file) whose rank 0 a live player holds: that file's
+    /// soldiers rank from 1 back (live_players.rs).
+    pub held: Vec<(usize, usize)>,
 }
 
 impl FormationRuntime {
@@ -291,6 +366,7 @@ impl FormationRuntime {
         let ranks = ids.len().div_ceil(files) as u16;
         for (slot, &id) in ids.iter().enumerate() {
             let rank = (slot / files) as u16;
+            let pos = slot_position(&spec, slot);
             self.index.insert(id, self.members.len());
             self.members.push(Member {
                 id,
@@ -298,7 +374,7 @@ impl FormationRuntime {
                 file: slot % files,
                 original_rank: rank,
                 rank,
-                pos: slot_position(&spec, slot),
+                pos,
                 slot: None,
                 alive: true,
                 wounded: false,
@@ -306,6 +382,9 @@ impl FormationRuntime {
                 routing: false,
                 wavering: false,
                 nerve: nerve(id.0, rank, ranks),
+                rallied: false,
+                anchor: [pos[0], pos[2]],
+                close_on: None,
             });
         }
         self.regiments.push(Regiment {
@@ -337,6 +416,8 @@ impl FormationRuntime {
             broke_now: false,
             evacuating: vec![false; files],
             live_members: Vec::with_capacity(ids.len()),
+            anchor: [spec.origin[0], spec.origin[2]],
+            meshing: false,
         });
         Ok(())
     }
@@ -349,7 +430,13 @@ impl FormationRuntime {
             r.charge_started = None;
         }
         r.spec.order = order;
-        if matches!(order, Order::Withdraw | Order::Pursue) {
+        let stops_pulses = match order {
+            #[cfg(test)]
+            Order::Withdraw => true,
+            Order::Pursue => true,
+            _ => false,
+        };
+        if stops_pulses {
             for section in &mut r.sections {
                 section.pulse_until = 0;
             }
@@ -357,7 +444,6 @@ impl FormationRuntime {
         true
     }
 
-    #[cfg(test)]
     /// Polybius fighting interval: 1..2 blocks per man. Staging must leave the
     /// corresponding regiment intervals; this never changes rank spacing.
     pub fn set_fighting_interval(
@@ -433,17 +519,23 @@ impl FormationRuntime {
         self.can_attack_at(index)
     }
 
+    /// Front-rank pulses, or loose order: mounted files and pursuers fight
+    /// from any rank wherever they meet an enemy.
     pub(crate) fn can_attack_at(&self, index: usize) -> bool {
         let c = self.context_at(index);
-        let r = &self.regiments[self.members[index].regiment];
-        let pursuing = r.spec.order == Order::Pursue && r.enemy_routing;
-        c.front_rank && (c.pulsing || pursuing) && !c.routing && !c.wavering
+        !c.routing && !c.wavering && ((c.front_rank && c.pulsing) || self.loose_order_at(index))
     }
 
-    pub fn is_wounded(&self, id: EntityId) -> bool {
-        self.index
-            .get(&id)
-            .is_some_and(|&i| self.members[i].wounded)
+    pub(crate) fn loose_order_at(&self, index: usize) -> bool {
+        let r = &self.regiments[self.members[index].regiment];
+        r.spec.frontage > 1.0 || (r.spec.order == Order::Pursue && r.enemy_routing)
+    }
+
+    /// A fugitive pinned against the battle bounds turns at bay and fights;
+    /// otherwise both sides' routers pile into one corner and only touch.
+    pub(crate) fn cornered_at(&self, index: usize) -> bool {
+        let m = &self.members[index];
+        m.routing && m.alive && !m.wounded && near_bounds(self.bounds, m.pos, AT_BAY_BLOCKS)
     }
 
     pub fn mark_wounded(&mut self, id: EntityId) {
@@ -483,13 +575,26 @@ impl FormationRuntime {
         p.panicking = p.panicking.saturating_add(pressure.panicking);
     }
 
-    /// One O(N) liveness/position pass; lookup is the entity store's O(1) id
-    /// index. Tests feed the same kernel explicit frozen oracle snapshots.
+    /// Frozen snapshots and native columns use the same ordered fold.
+    #[cfg(test)]
     pub fn prepare(
         &mut self,
         tick: u64,
         mut lookup: impl FnMut(EntityId) -> Option<SoldierSample>,
     ) {
+        self.begin_preparation(tick);
+        for bi in 0..self.members.len() {
+            let sample = lookup(self.members[bi].id);
+            self.sample_member(bi, sample);
+        }
+        self.finish_preparation();
+    }
+
+    pub fn has_member(&self, id: EntityId) -> bool {
+        self.index.contains_key(&id)
+    }
+
+    pub fn begin_preparation(&mut self, tick: u64) {
         self.tick = tick;
         self.work = Work::default();
         for r in &mut self.regiments {
@@ -497,35 +602,40 @@ impl FormationRuntime {
             r.live_count = 0;
             r.live_members.clear();
         }
-        for (bi, m) in self.members.iter_mut().enumerate() {
-            self.work.soldiers += 1;
-            let expected = self.regiments[m.regiment].spec.faction;
-            m.slot = None;
-            m.alive = lookup(m.id).is_some_and(|sample| {
-                m.pos = sample.pos;
-                m.slot = sample
-                    .slot
-                    .filter(|_| sample.health > 0.0 && sample.faction == expected);
-                sample.health > 0.0 && sample.faction == expected
-            });
-            if m.alive {
-                let r = &mut self.regiments[m.regiment];
-                r.live_count += 1;
-                if !m.wounded {
-                    r.live_members.push(bi);
-                }
-                for axis in 0..3 {
-                    r.live_sum[axis] += m.pos[axis];
-                }
+    }
+
+    pub fn sample_member(&mut self, bi: usize, sample: Option<SoldierSample>) {
+        self.work.soldiers += 1;
+        let m = &mut self.members[bi];
+        let expected = self.regiments[m.regiment].spec.faction;
+        m.slot = None;
+        m.alive = sample.is_some_and(|sample| {
+            m.pos = sample.pos;
+            m.slot = sample
+                .slot
+                .filter(|_| sample.health > 0.0 && sample.faction == expected);
+            sample.health > 0.0 && sample.faction == expected
+        });
+        if m.alive {
+            let r = &mut self.regiments[m.regiment];
+            r.live_count += 1;
+            if !m.wounded {
+                r.live_members.push(bi);
+            }
+            for axis in 0..3 {
+                r.live_sum[axis] += m.pos[axis];
             }
         }
+    }
+
+    pub fn finish_preparation(&mut self) {
         for r in &mut self.regiments {
             if r.morale.broken && r.live_count > 0 {
                 r.spec.origin = r.live_sum.map(|x| x / r.live_count as f64);
             }
         }
         for i in 0..self.regiments.len() {
-            if tick % DECISION_TICKS == u64::from(self.regiments[i].spec.id) % DECISION_TICKS {
+            if self.tick % DECISION_TICKS == u64::from(self.regiments[i].spec.id) % DECISION_TICKS {
                 self.work.regiments += 1;
                 self.rotate_wounded(i);
                 let (enemy_regiment, enemy, routing, examined) =
@@ -537,6 +647,35 @@ impl FormationRuntime {
             }
             self.update_sections(i);
             self.move_leader(i);
+        }
+        if self.tick % STALL_TICKS == 0 {
+            self.census_stalls();
+        }
+    }
+
+    /// Ten-second stall census for operators and relief takes. O(N) once
+    /// per window; motion never reads it.
+    fn census_stalls(&mut self) {
+        self.advancing = 0;
+        self.stalled = 0;
+        for r in &mut self.regiments {
+            // A line in melee reach stops by design: it is not advancing.
+            let advanced = mth::length2(
+                r.spec.origin[0] - r.anchor[0],
+                r.spec.origin[2] - r.anchor[1],
+            ) >= 4.0
+                && !r.morale.broken
+                && r.gap > 6.0;
+            r.anchor = [r.spec.origin[0], r.spec.origin[2]];
+            for m in &mut self.members[r.start..r.start + r.len] {
+                if advanced && m.alive && !m.wounded && !m.routing {
+                    self.advancing += 1;
+                    self.stalled += usize::from(
+                        mth::length2(m.pos[0] - m.anchor[0], m.pos[2] - m.anchor[1]) < 1.0,
+                    );
+                }
+                m.anchor = [m.pos[0], m.pos[2]];
+            }
         }
     }
 
@@ -577,15 +716,19 @@ impl FormationRuntime {
             let leader = &self.members[r.start + s * SECTION_SIZE];
             let section = &mut r.sections[s];
             let active = section.pulse_until > self.tick;
-            if active && (section.exchange <= -3 || r.stamina < 30.0 || r.morale.value < 30.0) {
+            if active
+                && (section.exchange <= -3
+                    || r.stamina < EXHAUSTED_STAMINA
+                    || r.morale.value < PULSE_MORALE_FLOOR)
+            {
                 section.pulse_until = self.tick;
                 section.cooldown_until = self.tick + 40;
             }
             if !contact
                 || section.pulse_until > self.tick
                 || section.cooldown_until > self.tick
-                || r.morale.value < 30.0
-                || r.stamina < 20.0
+                || r.morale.value < PULSE_MORALE_FLOOR
+                || r.stamina < EXHAUSTED_STAMINA
                 || r.morale.broken
                 || s * SECTION_SIZE >= usize::from(r.spec.files)
                 || match r.spec.order {
@@ -602,8 +745,9 @@ impl FormationRuntime {
                 0.3
             } else {
                 SURGE_PROBABILITY
-            } * f64::from(((r.morale.value - 30.0) / 50.0).clamp(0.0, 1.0))
-                * f64::from(r.stamina / 100.0)
+            } * f64::from(
+                ((r.morale.value - PULSE_MORALE_FLOOR) / 50.0).clamp(0.0, 1.0),
+            ) * f64::from(r.stamina / 100.0)
                 * if leader.alive && !leader.wounded {
                     1.0
                 } else {
@@ -616,16 +760,24 @@ impl FormationRuntime {
                 section.starts += 1;
             }
         }
-        let fighting = r.sections.iter().any(|s| s.pulse_until > self.tick);
+        // Fatigue follows the share of the front that is fighting: resting
+        // sections recover while their neighbours surge, so a long contact
+        // settles into rotating pulses instead of an exhausted standstill.
+        let front = usize::from(r.spec.files)
+            .div_ceil(SECTION_SIZE)
+            .min(r.sections.len());
+        let pulsing = r.sections[..front]
+            .iter()
+            .filter(|s| s.pulse_until > self.tick)
+            .count();
         if self.tick % DECISION_TICKS == u64::from(r.spec.id) % DECISION_TICKS {
-            let delta = if fighting {
-                -1.25
+            let share = pulsing as f32 / front.max(1) as f32;
+            let delta = if pulsing > 0 {
+                -SURGE_FATIGUE * share + STANDING_RECOVERY * (1.0 - share)
             } else if matches!(r.spec.order, Order::Charge | Order::Pursue) {
                 -0.4
-            } else if r.speed == 0.0 {
-                0.25
             } else {
-                -0.025
+                STANDING_RECOVERY
             };
             r.stamina = (r.stamina + delta).clamp(0.0, 100.0);
         }
@@ -736,6 +888,8 @@ impl FormationRuntime {
                     r.morale.pressure.rear |= dot < -0.5;
                 }
             }
+            r.morale.pressure.engaged |= r.gap <= 6.0 && r.enemy.is_some() && !r.enemy_routing;
+            r.morale.pressure.enemy_broken |= r.enemy_routing;
             let (removed, ranged) = self.members[r.start..r.start + r.len].iter().fold(
                 (0, 0),
                 |(removed, ranged), m| {
@@ -753,10 +907,26 @@ impl FormationRuntime {
             r.morale.update(tick, r.len, r.removed, r.stamina, charging);
             r.broke_now = !was_broken && r.morale.broken;
             let mut new_panics = 0_u16;
+            // A rider who fled to the edge of the field rallies there and rides
+            // back into the fight until he falls, even when his regiment has
+            // broken: mounted regiments broke at 25-40 % losses in the G1
+            // rehearsals and their fled riders (groups of 100-175) stood idle
+            // on the bounds from t 150 to the end. Foot fugitives stay.
+            let mounted = r.spec.frontage > 1.0;
+            let bounds = self.bounds;
             for m in &mut self.members[r.start..r.start + r.len] {
+                if mounted
+                    && m.routing
+                    && m.alive
+                    && !m.wounded
+                    && near_bounds(bounds, m.pos, AT_BAY_BLOCKS)
+                {
+                    m.routing = false;
+                    m.rallied = true;
+                }
                 let was_routing = m.routing;
-                m.wavering = r.morale.value < m.nerve + 15.0;
-                m.routing |= r.morale.value < m.nerve || r.morale.broken;
+                m.wavering = !m.rallied && r.morale.value < m.nerve + 15.0;
+                m.routing |= !m.rallied && (r.morale.value < m.nerve || r.morale.broken);
                 new_panics += u16::from(!was_routing && m.routing);
             }
             r.morale.pressure.panicking = new_panics;
@@ -797,19 +967,34 @@ impl FormationRuntime {
                 [m.pos[0] - source[0], m.pos[2] - source[2]],
                 [-r.spec.facing[0], -r.spec.facing[1]],
             );
-            return (
-                [
-                    m.pos[0] + away[0] * 20.0,
-                    m.pos[1],
-                    m.pos[2] + away[1] * 20.0,
-                ],
-                0.25,
-            );
-        }
-        if let Some(at) = m.close_on
-            && !m.wounded
-        {
-            return ([at[0], m.pos[1], at[2]], CLOSE_STEP);
+            // Inside a meshed enemy line a fugitive is past its front point,
+            // and fleeing from that point would take him deeper into the enemy
+            // army: the way out runs along the enemy's facing.
+            if let Some(e) = r.enemy_regiment {
+                let f = self.regiments[e].spec.facing;
+                let along = away[0] * f[0] + away[1] * f[1];
+                if along < 0.0 {
+                    away[0] -= 2.0 * along * f[0];
+                    away[1] -= 2.0 * along * f[1];
+                }
+            }
+            let mut target = [
+                m.pos[0] + away[0] * 20.0,
+                m.pos[1],
+                m.pos[2] + away[1] * 20.0,
+            ];
+            // A fugitive that has reached an edge of the battle stays where it
+            // met it. Running on along the edge herded whole regiments into the
+            // corners, where they stood in heaps until the end of the take.
+            if let Some((min, max)) = self.bounds {
+                if m.pos[0] - min[0] < AT_BAY_BLOCKS || max[0] - m.pos[0] < AT_BAY_BLOCKS {
+                    target[2] = m.pos[2];
+                }
+                if m.pos[2] - min[1] < AT_BAY_BLOCKS || max[1] - m.pos[2] < AT_BAY_BLOCKS {
+                    target[0] = m.pos[0];
+                }
+            }
+            return (target, 0.2);
         }
         if let Some(at) = m.close_on
             && !m.wounded
@@ -821,11 +1006,26 @@ impl FormationRuntime {
             && !m.wounded
             && let Some(enemy) = r.enemy
         {
-            return (enemy, 0.28);
+            // The regiment closes as a block: each pursuer keeps its file and its
+            // place in the depth, ranks a block apart. One shared point piled every
+            // pursuer of a regiment onto the same few blocks.
+            let slot = position(&r.spec, m.file, m.rank, r.spec.frontage);
+            let behind = (slot[0] - r.spec.origin[0]) * r.spec.facing[0]
+                + (slot[2] - r.spec.origin[2]) * r.spec.facing[1];
+            let squeeze = behind * (1.0 - PURSUIT_RANK_SQUEEZE);
+            return (
+                [
+                    enemy[0] + slot[0] - r.spec.origin[0] - r.spec.facing[0] * squeeze,
+                    m.pos[1],
+                    enemy[2] + slot[2] - r.spec.origin[2] - r.spec.facing[1] * squeeze,
+                ],
+                0.28,
+            );
         }
-        let engaged = r.gap <= 6.0;
-        let interval = if engaged { r.interval } else { r.spec.frontage };
-        let mut target = position(&r.spec, m.file, m.rank, interval);
+        let mut target = slot_target(r, m.file, m.rank);
+        // The leader's height is meaningless on relief; a slot is on the
+        // ground the soldier walks on.
+        target[1] = m.pos[1];
         if m.wounded {
             // Opposite .35-block lanes give .7 passing distance within a
             // one-block file. Dress sideways FIRST; aiming at a far rear slot
@@ -858,6 +1058,22 @@ impl FormationRuntime {
             },
         )
     }
+
+    /// Where terrain detours aim: the formation slot without lanes, pulses or
+    /// wavering, so a body dressing sideways is still steered past a wall;
+    /// routing, wounded and pursuing members aim at their destination.
+    pub fn heading_target(&self, index: usize) -> [f64; 3] {
+        let m = &self.members[index];
+        let r = &self.regiments[m.regiment];
+        if m.routing
+            || m.wounded
+            || m.close_on.is_some()
+            || (r.spec.order == Order::Pursue && r.enemy_routing)
+        {
+            return self.destination(index).0;
+        }
+        slot_target(r, m.file, m.rank)
+    }
 }
 
 fn passing_lane(m: &Member, spec: &RegimentSpec, mut target: [f64; 3], offset: f64) -> [f64; 3] {
@@ -879,18 +1095,6 @@ pub(crate) fn roll(regiment: u32, section: usize, tick: u64) -> f64 {
     x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
     x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
     (x ^ (x >> 31)) as f64 / u64::MAX as f64
-}
-
-pub(crate) fn update(frame: &Frame<'_>, battle: &mut BattleState) {
-    battle.formation.prepare(frame.tick, |id| {
-        let slot = frame.entities.slot_of(id)?;
-        Some(SoldierSample {
-            slot: Some(slot),
-            pos: frame.entities.pos(slot),
-            health: frame.entities.row(slot).health,
-            faction: frame.entities.body(slot).faction,
-        })
-    });
 }
 
 #[cfg(test)]

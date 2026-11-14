@@ -772,7 +772,6 @@ impl EntityStore {
             height: cold.height,
             burn_ticks: 0,
             movement: cold.movement,
-            faction: 0,
             air_supply: 300,
             pickup_delay: cold.pickup_delay,
             attack_cooldown: 0,
@@ -874,7 +873,6 @@ impl EntityStore {
         }
         self.orbs.remove(&removed_id);
         self.tnt.remove(&removed_id);
-        self.battle_members.remove(&removed_id);
         self.unregister_warden(removed_id);
         self.dying.remove(&removed_id);
         self.pos.swap_remove(idx);
@@ -958,9 +956,6 @@ impl EntityStore {
         self.uuid_index.remove(&uuid);
         let orb = self.orbs.remove(&id);
         let tnt = self.tnt.remove(&id);
-        if self.battle_members.remove(&id) {
-            destination.battle_members.insert(id);
-        }
         let warden = self.unregister_warden(id);
         let dying = self.dying.remove(&id);
         if index != self.bodies.len() {
@@ -1941,13 +1936,6 @@ impl EntityStore {
             self.rider_members.insert(slot);
         } else {
             self.rider_members.remove(&slot);
-        }
-    }
-
-    /// Set native allegiance with WAL and incremental-checkpoint custody.
-    pub fn set_faction(&mut self, slot: EntitySlot, faction: u16) {
-        if self.body(slot).faction != faction {
-            self.body_mut(slot).faction = faction;
         }
     }
 

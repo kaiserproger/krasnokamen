@@ -1,5 +1,9 @@
-//! Horses refuse solid fronts; mounted pursuit is not an infantry damage buff.
+//! Horses refuse solid foot fronts; mounted pursuit is not an infantry damage
+//! buff. Once their own foot is in contact, unengaged riders swing wide round
+//! the nearest enemy foot block and turn into its rear.
 use super::combat::{Action, CombatRuntime};
+use super::formation::Regiment;
+use super::steering::NEIGHBOURS;
 use super::{BattleState, Frame};
 use crate::boundary::EntityId;
 use crate::entities::EntityKind;
@@ -8,6 +12,297 @@ use mc_physics::mth;
 
 pub const CHARGE_DECAY_TICKS: u64 = 260;
 const REFORM_TICKS: u64 = 400;
+/// Lateral clearance outside the enemy's end file while swinging round it.
+const FLANK_CLEARANCE: f64 = 14.0;
+/// Blocks per second of catch-up speed a rider gains for every block he stands from his place.
+const SLOT_CATCH_UP: f64 = 3.0;
+/// Horses closer than this push apart (a horse is 1.4 blocks wide), at most
+/// `HORSE_PUSH` blocks per second.
+const HORSE_SPACING: f64 = 1.5;
+const HORSE_PUSH: f64 = 3.0;
+/// How far a rider looks for horses: the spacing plus a gallop step
+/// (6.4 blocks per second) of each of two horses closing head on, so none is
+/// first seen already inside the spacing. The candidate window ends at 2.
+const HORSE_SENSE: f64 = 2.0;
+/// Golden angle: consecutive riders' attack places round one target never line up.
+const ATTACK_ANGLE: f64 = 2.399_963_229_728_653;
+/// Fugitives whose live centre is this close to the bounds have reached the
+/// edge of the field: the chase ends and the riders rejoin the fight. Chasers
+/// stood on the enemy's rear edge for 100 s in the G1 rehearsal.
+const CHASE_EDGE_BLOCKS: f64 = 8.0;
+
+/// One mounted regiment's wide approach round one enemy foot regiment, in that
+/// regiment's frame: `side` is the lateral unit vector of the chosen flank.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) struct Flank {
+    origin: [f64; 3],
+    facing: [f64; 2],
+    side: [f64; 2],
+    half_width: f64,
+    depth: f64,
+}
+
+impl Flank {
+    /// Heading for a rider at `pos`: out past the flank, round behind the last
+    /// rank, then into the rear half. Pure in the rider's own position.
+    pub(super) fn heading(&self, pos: [f64; 3]) -> [f64; 2] {
+        let delta = [pos[0] - self.origin[0], pos[2] - self.origin[2]];
+        let lateral = delta[0] * self.side[0] + delta[1] * self.side[1];
+        let ahead = delta[0] * self.facing[0] + delta[1] * self.facing[1];
+        let (l, a) = if ahead <= -(self.depth + 4.0) {
+            (self.half_width * 0.3, -self.depth * 0.5)
+        } else if lateral < self.half_width + FLANK_CLEARANCE * 0.5 {
+            (self.half_width + FLANK_CLEARANCE, ahead.max(6.0))
+        } else {
+            (self.half_width + FLANK_CLEARANCE * 0.5, -(self.depth + 8.0))
+        };
+        [
+            self.origin[0] + self.side[0] * l + self.facing[0] * a - pos[0],
+            self.origin[2] + self.side[1] * l + self.facing[1] * a - pos[2],
+        ]
+    }
+}
+
+/// What the unengaged riders of one mounted regiment ride for this tick.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(super) enum Sweep {
+    /// Ride down the fugitives of the nearest broken foot regiment.
+    Chase([f64; 3]),
+    /// Swing round an unbroken foot regiment into its rear.
+    Flank(Flank),
+}
+
+impl Sweep {
+    fn heading(&self, pos: [f64; 3]) -> [f64; 2] {
+        match self {
+            Self::Chase(at) => [at[0] - pos[0], at[2] - pos[2]],
+            Self::Flank(flank) => flank.heading(pos),
+        }
+    }
+}
+
+/// The swing starts while the foot lines close, so riders reach the flank
+/// about when the fronts meet rather than after the first regiment breaks.
+fn foot_closing(regiment: &Regiment) -> bool {
+    regiment.spec.frontage <= 1.0
+        && !regiment.morale.broken
+        && regiment.enemy.is_some()
+        && regiment.gap <= 24.0
+}
+
+fn nearest_enemy_foot<'a>(
+    battle: &'a BattleState,
+    own: &Regiment,
+    broken: bool,
+) -> Option<&'a Regiment> {
+    battle
+        .formation
+        .regiments
+        .iter()
+        .filter(|e| {
+            e.spec.faction != own.spec.faction
+                && e.spec.frontage <= 1.0
+                && e.morale.broken == broken
+                && e.live_count > 0
+                && (broken || !battle.columns.ranged.get(e.start).copied().unwrap_or(true))
+                && !(broken
+                    && super::formation::near_bounds(
+                        battle.formation.bounds,
+                        live_centre(e),
+                        CHASE_EDGE_BLOCKS,
+                    ))
+        })
+        .min_by(|a, b| {
+            let d = |e: &&Regiment| {
+                let (p, q) = (live_centre(e), live_centre(own));
+                mth::length2(p[0] - q[0], p[2] - q[2])
+            };
+            d(a).total_cmp(&d(b)).then(a.spec.id.cmp(&b.spec.id))
+        })
+}
+
+/// Where a regiment's living soldiers stand. On relief the virtual leader
+/// (`spec.origin`) marches on while files lag behind slopes and trees, so a
+/// swing laid round the leader's line could end on empty ground: in the G1
+/// rehearsals a red cavalry regiment waited there for 100 s with no foe within
+/// reach.
+fn live_centre(r: &Regiment) -> [f64; 3] {
+    if r.live_count > 0 {
+        r.live_sum.map(|x| x / r.live_count as f64)
+    } else {
+        r.spec.origin
+    }
+}
+
+fn flank_round(own: &Regiment, e: &Regiment) -> Flank {
+    let (from, origin) = (live_centre(own), live_centre(e));
+    let right = [e.spec.facing[1], -e.spec.facing[0]];
+    let lateral = (from[0] - origin[0]) * right[0] + (from[2] - origin[2]) * right[1];
+    let sign = if lateral >= 0.0 { 1.0 } else { -1.0 };
+    Flank {
+        origin,
+        facing: e.spec.facing,
+        side: [right[0] * sign, right[1] * sign],
+        half_width: f64::from(e.spec.files.saturating_sub(1)) * e.interval * 0.5,
+        depth: 2.0 * f64::from(e.ranks.saturating_sub(1)),
+    }
+}
+
+/// Per-tick plan, bounded by regiments squared (at most 128²), never per rider.
+/// A broken regiment's origin is its live centroid, so a chase follows the rout
+/// until the fugitives reach the edge of the field. A broken mounted regiment
+/// keeps its plan: only its rallied riders, no longer routing, ride it.
+fn plan_sweeps(battle: &BattleState, plans: &mut Vec<Option<Sweep>>) {
+    let regiments = &battle.formation.regiments;
+    plans.clear();
+    for own in regiments {
+        let plan = if own.spec.frontage <= 1.0 {
+            None
+        } else if let Some(fugitives) = nearest_enemy_foot(battle, own, true) {
+            Some(Sweep::Chase(fugitives.spec.origin))
+        } else if regiments
+            .iter()
+            .any(|r| r.spec.faction == own.spec.faction && foot_closing(r))
+        {
+            nearest_enemy_foot(battle, own, false).map(|e| Sweep::Flank(flank_round(own, e)))
+        } else {
+            None
+        };
+        plans.push(plan);
+    }
+}
+
+/// The horses nearest a rider within [`HORSE_SENSE`]. In a melee the five
+/// nearest bodies were often all foot, so a horse overlapping another one was
+/// never pushed off it.
+fn horses_near(
+    formation: &super::formation::FormationRuntime,
+    bi: usize,
+) -> [(f64, usize); NEIGHBOURS] {
+    if bi >= formation.members.len() {
+        return [(f64::INFINITY, usize::MAX); NEIGHBOURS];
+    }
+    let regiments = &formation.regiments;
+    formation
+        .neighbours
+        .nearest_where(bi, &formation.members, HORSE_SENSE, |m| {
+            regiments[m.regiment].spec.frontage > 1.0
+        })
+        .0
+}
+
+/// Push of the nearest horses on a rider, blocks per second. Riders closing on a
+/// foe or riding a plan steer without the foot separation, and rode onto one
+/// block: six horses stood on one place at the foot line in the battle census.
+fn horse_push(
+    formation: &super::formation::FormationRuntime,
+    bi: usize,
+    near: &[(f64, usize); NEIGHBOURS],
+) -> [f64; 2] {
+    let Some(me) = formation.members.get(bi) else {
+        return [0.0; 2];
+    };
+    let mut push = [0.0; 2];
+    for &(distance, other) in near {
+        if other == usize::MAX || distance >= HORSE_SPACING * HORSE_SPACING {
+            continue;
+        }
+        let contact = &formation.members[other];
+        let away = [me.pos[0] - contact.pos[0], me.pos[2] - contact.pos[2]];
+        let length = distance.sqrt();
+        let way = if length < 1e-8 {
+            // Coincident horses part symmetrically by id.
+            if me.id < contact.id {
+                [-1.0, 0.0]
+            } else {
+                [1.0, 0.0]
+            }
+        } else {
+            away.map(|v| v / length)
+        };
+        let strength = (1.0 - length / HORSE_SPACING) * HORSE_PUSH;
+        push[0] += way[0] * strength;
+        push[1] += way[1] * strength;
+    }
+    push
+}
+
+/// A horse's final velocity never closes on a horse within
+/// [`HORSE_SPACING`], and on one farther off by at most half the free gap a
+/// tick. The terrain turn replaces the drive and its push with the clear way
+/// at the drive's speed, and the push never held off the gallop at a place
+/// round the target: in the G2 take 7 horses overlapped at the foot of a
+/// cliff for 35 s and a quarter of all live horses stood within half a block
+/// of another. One pass over the neighbours can turn the step into another
+/// one (horses on both sides), so the passes repeat; a step still closing on
+/// one after them is dropped.
+fn horse_gap(
+    formation: &super::formation::FormationRuntime,
+    bi: usize,
+    near: &[(f64, usize); NEIGHBOURS],
+    position: [f64; 3],
+    velocity: [f64; 3],
+) -> [f64; 3] {
+    if bi >= formation.members.len() {
+        return velocity;
+    }
+    let tick = mc_physics::TICK_SECONDS;
+    let step = [velocity[0] * tick, velocity[2] * tick];
+    let mut kept = step;
+    for _ in 0..NEIGHBOURS {
+        let next = super::steering::keep_gap(&formation.members, bi, near, HORSE_SPACING, kept);
+        if next == kept {
+            break;
+        }
+        kept = next;
+    }
+    if kept == step {
+        return velocity;
+    }
+    if super::steering::keep_gap(&formation.members, bi, near, HORSE_SPACING, kept) != kept {
+        kept = [0.0; 2];
+    }
+    formation.constrain_velocity(position, [kept[0] / tick, velocity[1], kept[1] / tick])
+}
+
+/// Unengaged steady riders of a regiment with a plan take its heading as their
+/// drive; the mounted pass below scales it to horse speed. The regiment rides
+/// the plan as a block: each rider follows the plan from its own slot, i.e. as
+/// if it were the leader shifted by its file/rank offset. One shared point for
+/// every rider piled a whole regiment onto one block wherever it arrived with
+/// no foe in reach, and the pile then rode as one body.
+fn sweep_drives(battle: &mut BattleState, combat: &mut CombatRuntime) {
+    let mut plans = std::mem::take(&mut combat.sweeps);
+    plan_sweeps(battle, &mut plans);
+    for (r, plan) in battle.formation.regiments.iter().zip(&plans) {
+        let Some(plan) = plan else { continue };
+        for bi in r.start..r.start + r.len {
+            let m = &battle.formation.members[bi];
+            if !m.alive
+                || m.wounded
+                || m.routing
+                || !battle.columns.active[bi]
+                || battle.columns.targets[bi].is_some()
+                || matches!(combat.fighters[bi].action, Action::Wounded)
+            {
+                continue;
+            }
+            let slot = super::formation::slot_position(
+                &r.spec,
+                usize::from(m.rank) * usize::from(r.spec.files) + m.file,
+            );
+            let pos = battle.columns.positions[bi];
+            let leader = [
+                pos[0] - (slot[0] - r.spec.origin[0]),
+                pos[1],
+                pos[2] - (slot[2] - r.spec.origin[2]),
+            ];
+            let heading = plan.heading(leader);
+            battle.columns.drive[bi] = [heading[0], 0.0, heading[1]];
+        }
+    }
+    combat.sweeps = plans;
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Contact {
@@ -38,14 +333,8 @@ pub fn impact_bonus(elapsed: u64) -> f32 {
 #[derive(Debug, Default)]
 pub(super) struct Charge {
     impact: Option<u64>,
-    pub(super) refused: bool,
-    /// Flank a refusing rider runs out to (+1/-1), kept for the whole refusal: the nearer side
-    /// flipped as he passed the target's axis, and he turned back with it.
-    side: f64,
+    refused: bool,
     reform_until: u64,
-    /// Last run-out drive and the tick until which an untargeted refuser keeps it.
-    run: [f64; 3],
-    run_until: u64,
 }
 
 impl Charge {
@@ -81,18 +370,16 @@ pub fn mount(state: &mut TickState, rider: EntityId, horse: EntityId) -> Result<
         || rider_row.health <= 0.0
         || horse_row.health <= 0.0
         || rider_row.entity_life.mount.vehicle.is_some()
-        || rider_row.entity_life.mount.rider.is_some()
+        || !rider_row.entity_life.mount.riders.is_empty()
         || horse_row.entity_life.mount.vehicle.is_some()
-        || horse_row.entity_life.mount.rider.is_some()
+        || !horse_row.entity_life.mount.riders.is_empty()
     {
         return Err(invalid());
     }
     let uuid = rider_row.uuid;
     let faction = rider_body.faction;
-    crate::scoreboard::require_no_team(&state.scoreboard, &horse_row.uuid.to_string())
-        .map_err(|refusal| CoreError::Storage(format!("battle mount {horse:?}: {refusal}")))?;
     state.entities.set_faction(horse_slot, faction);
-    state.entities.set_rider(horse_slot, Some(uuid));
+    state.entities.set_riders(horse_slot, vec![uuid]);
     let horse_row = state.entities.row_mut(horse_slot);
     horse_row.persistent = true;
     horse_row.entity_life.mounted = true;
@@ -103,13 +390,15 @@ pub fn mount(state: &mut TickState, rider: EntityId, horse: EntityId) -> Result<
 }
 
 pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut CombatRuntime) {
+    sweep_drives(battle, combat);
     for horse in frame.entities.rider_slots() {
         let row = frame.entities.row(horse);
         let Some(rider) = row
             .entity_life
             .mount
-            .rider
-            .and_then(|uuid| frame.entities.slot_of_uuid(uuid))
+            .riders
+            .first()
+            .and_then(|&uuid| frame.entities.slot_of_uuid(uuid))
         else {
             continue;
         };
@@ -125,31 +414,12 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
         let wounded = matches!(combat.fighters[bi].action, Action::Wounded);
         let near = horses_near(&battle.formation, bi);
         let routing = super::combat::context(battle, bi).is_some_and(|c| c.routing);
-        let running_out = !wounded && !routing && battle.columns.targets[bi].is_none() && {
-            let charge = &combat.fighters[bi].charge;
-            charge.refused && frame.tick < charge.run_until
-        };
-        if running_out {
-            let position = frame.entities.pos(horse);
-            let run = combat.fighters[bi].charge.run;
-            let velocity = battle.formation.constrain_velocity(position, run);
-            let velocity = super::steering::around_obstacles(
-                frame,
-                &battle.formation,
-                horse,
-                velocity,
-                [velocity[0], velocity[2]],
-                super::steering::Mover::Rider,
-            );
-            battle.columns.drive[horse_bi] = velocity;
-            battle.columns.drive[bi] = [0.0; 3];
-            continue;
-        }
         if wounded || routing || battle.columns.targets[bi].is_none() {
             // Carry the formation's approach/withdrawal/rout direction on the
             // horse, never override a routing rider with an enemy pursuit.
             let mut velocity = battle.columns.drive[bi];
             let speed = mth::length2(velocity[0], velocity[2]);
+            let position = frame.entities.pos(horse);
             if speed > 0.001 {
                 let mut mounted_speed: f64 = if wounded {
                     0.8
@@ -180,9 +450,31 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
                 velocity[0] *= mounted_speed / speed;
                 velocity[2] *= mounted_speed / speed;
             }
-            let velocity = battle
-                .formation
-                .constrain_velocity(frame.entities.pos(horse), velocity);
+            if !wounded && !routing {
+                let push = horse_push(&battle.formation, bi, &near);
+                velocity[0] += push[0];
+                velocity[2] += push[1];
+            }
+            let velocity = battle.formation.constrain_velocity(position, velocity);
+            // A rider in the formation heads for its slot; another keeps its drive.
+            let formation = &battle.formation;
+            let heading = if bi < formation.members.len() {
+                let slot = formation.heading_target(bi);
+                [slot[0] - position[0], slot[2] - position[2]]
+            } else {
+                [velocity[0], velocity[2]]
+            };
+            // Only a fugitive turns back out of a pocket: a rider with a target
+            // or a slot keeps pressing toward it, as before.
+            let mover = if routing {
+                super::steering::Mover::Fugitive(&mut battle.columns.escape[horse_bi])
+            } else {
+                super::steering::Mover::Rider
+            };
+            let velocity = super::steering::around_obstacles(
+                frame, formation, horse, velocity, heading, mover,
+            );
+            let velocity = horse_gap(&battle.formation, bi, &near, position, velocity);
             battle.columns.drive[horse_bi] = velocity;
             battle.columns.drive[bi] = [0.0; 3];
             continue;
@@ -195,16 +487,24 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             continue;
         }
         let toward = [delta[0] / distance, delta[1] / distance];
-        let context = frame
+        let target_bi = frame
             .entities
             .slot_of(target.id)
-            .and_then(|slot| battle.columns.index(slot))
-            .and_then(|bi| super::combat::context(battle, bi));
+            .and_then(|slot| battle.columns.index(slot));
+        let context = target_bi.and_then(|bi| super::combat::context(battle, bi));
+        // Horsemen close with other horsemen; only a steady FOOT front refuses.
+        let mounted = target_bi.is_some_and(|bi| {
+            battle
+                .formation
+                .members
+                .get(bi)
+                .is_some_and(|m| battle.formation.regiments[m.regiment].spec.frontage > 1.0)
+        });
         let frontal =
             context.is_some_and(|c| -(toward[0] * c.facing[0] + toward[1] * c.facing[1]) > 0.5);
         let contact = if context.is_some_and(|c| c.routing) {
             Contact::Pursuit
-        } else if !frontal {
+        } else if !frontal || mounted {
             Contact::Flank
         } else if context.is_some_and(|c| c.wavering || c.morale < 50.0) {
             Contact::Wavering
@@ -215,7 +515,6 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
         if distance > 46.0 && frame.tick >= charge.reform_until {
             charge.impact = None;
             charge.refused = false;
-            charge.side = 0.0;
         }
         if distance <= 6.0 && charge.impact.is_none() && !charge.refused {
             combat.work.charge_checks += 1;
@@ -231,29 +530,44 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             // Run out toward the nearer flank; never steer through the steady line.
             let facing = context.map_or([-toward[0], -toward[1]], |c| c.facing);
             let right = [-facing[1], facing[0]];
-            if charge.side == 0.0 {
-                charge.side = if -delta[0] * right[0] - delta[1] * right[1] >= 0.0 {
-                    1.0
-                } else {
-                    -1.0
-                };
-            }
-            let side = charge.side;
-            let run = [
+            let side = if -delta[0] * right[0] - delta[1] * right[1] >= 0.0 {
+                1.0
+            } else {
+                -1.0
+            };
+            [
                 (right[0] * side - toward[0]) * 3.8,
                 0.0,
                 (right[1] * side - toward[1]) * 3.8,
-            ];
-            charge.run = run;
-            charge.run_until = frame.tick + RUN_OUT_TICKS;
-            run
+            ]
         } else {
-            let speed = if distance <= 46.0 { 6.4 } else { 4.6 };
-            [toward[0] * speed, 0.0, toward[1] * speed]
+            // Each rider closes on its own place round its target: angle from
+            // its column index, four rings 1.2..3.6 blocks out. Riding at the
+            // target itself piled every rider that chose the same foe onto
+            // one block (76 riders on two foot in the G1 rehearsal).
+            let (sin, cos) = (bi as f64 * ATTACK_ANGLE).sin_cos();
+            let ring = 1.2 + 0.8 * (bi % 4) as f64;
+            let place = [
+                target.pos[0] + cos * ring - position[0],
+                target.pos[2] + sin * ring - position[2],
+            ];
+            let gap = mth::length2(place[0], place[1]);
+            let way = super::steering::unit(place, toward);
+            let speed = (if distance <= 46.0 { 6.4 } else { 4.6 }) * (gap / 0.5).min(1.0);
+            [way[0] * speed, 0.0, way[1] * speed]
         };
         let push = horse_push(&battle.formation, bi, &near);
         let velocity = [velocity[0] + push[0], velocity[1], velocity[2] + push[1]];
         let velocity = battle.formation.constrain_velocity(position, velocity);
+        let velocity = super::steering::around_obstacles(
+            frame,
+            &battle.formation,
+            horse,
+            velocity,
+            [velocity[0], velocity[2]],
+            super::steering::Mover::Rider,
+        );
+        let velocity = horse_gap(&battle.formation, bi, &near, position, velocity);
         battle.columns.drive[horse_bi] = velocity;
         battle.columns.drive[bi] = [0.0; 3];
     }

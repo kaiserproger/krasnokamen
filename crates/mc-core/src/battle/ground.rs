@@ -314,17 +314,13 @@ pub(crate) fn audit(
 /// feet cell holds a step the cell above the step too (vanilla jump
 /// headroom) and the cell two above the feet over the body's own footprint
 /// (a jump first lifts the body where it stands: a canopy over a terrace
-/// edge stops it), ground lies within [`MAX_DROP`] blocks below the ground of
-/// the column under the body's centre (a cave opening or sinkhole is an
-/// obstacle; water is no ground), and the cell has no more rock overhead
-/// than the body's own column (from open sky a cave mouth or overhang is an
-/// obstacle: fugitives walked down a ravine ramp into a cave and vanished
-/// underground; a body already under rock never goes deeper). Slots sit on
-/// block boundaries, so one body often straddles two columns and stands on
-/// the higher: measured from there, a staircase of two-block steps one block
-/// wide read three deep and horses never rode down it (r8/r9: 15-17 blue
-/// horses on the notch terrace above their foe in the gully). Unknown blocks
-/// are obstacles.
+/// edge stops it), ground lies within [`MAX_DROP`] blocks below the feet
+/// (a cave opening or sinkhole is an obstacle; water is no ground), and the
+/// cell has no more rock overhead than the body's own column (from open sky
+/// a cave mouth or overhang is an obstacle: fugitives walked down a ravine
+/// ramp into a cave and vanished underground; a body already under rock
+/// never goes deeper). Slots sit on block boundaries, so one body often
+/// straddles two columns. Unknown blocks are obstacles.
 fn crossable(
     world: &ChunkWorld,
     registry: &CoreRegistry,
@@ -337,10 +333,6 @@ fn crossable(
     let right = [dir[1], -dir[0]];
     let edge = half_width - CONTACT;
     let feet = (pos[1] + CONTACT).floor() as i32;
-    let (cx, cz) = (pos[0].floor() as i32, pos[2].floor() as i32);
-    let low = (1..=MAX_DROP as i32 + 1)
-        .find(|&depth| solid(world, registry, cx, feet - depth, cz))
-        .map_or(feet, |depth| feet + 1 - depth);
     let mut probed = [(i32::MIN, i32::MIN); 3];
     let mut rise = None;
     let mut here = None;
@@ -351,7 +343,7 @@ fn crossable(
             continue;
         }
         probed[i] = (x, z);
-        let Some(step) = footing(world, registry, x, z, feet, low) else {
+        let Some(step) = footing(world, registry, x, z, feet) else {
             return false;
         };
         if step
@@ -380,35 +372,23 @@ fn crossable(
 
 /// Whether a body with its feet at `feet` can stand in column (x, z): no
 /// block at head height, a step of at most one block with room above it, and
-/// ground within [`MAX_DROP`] blocks below `low`, the ground the body stands
-/// on at its centre (water is no ground). `Some(step)` when it can. Unknown
-/// blocks are obstacles.
-fn footing(
-    world: &ChunkWorld,
-    registry: &CoreRegistry,
-    x: i32,
-    z: i32,
-    feet: i32,
-    low: i32,
-) -> Option<bool> {
-    let solid = |y| solid(world, registry, x, y, z);
+/// ground within [`MAX_DROP`] blocks below (water is no ground). `Some(step)`
+/// when it can. Unknown blocks are obstacles.
+fn footing(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32, feet: i32) -> Option<bool> {
+    let solid = |y| {
+        world
+            .physics_block_at(x, y, z)
+            .is_none_or(|state| registry.materials.classify(state) == BlockMaterial::Solid)
+    };
     let step = solid(feet);
     if solid(feet + 1) || (step && solid(feet + 2)) {
         return None;
     }
     // On level ground the cell under the feet is solid: one read.
-    if !solid(feet - 1) && (2..=feet - low + MAX_DROP as i32 + 1).all(|depth| !solid(feet - depth))
-    {
+    if !solid(feet - 1) && (2..=MAX_DROP as i32 + 1).all(|depth| !solid(feet - depth)) {
         return None;
     }
     Some(step)
-}
-
-/// Whether cell (x, y, z) holds a solid block; unknown blocks count as solid.
-fn solid(world: &ChunkWorld, registry: &CoreRegistry, x: i32, y: i32, z: i32) -> bool {
-    world
-        .physics_block_at(x, y, z)
-        .is_none_or(|state| registry.materials.classify(state) == BlockMaterial::Solid)
 }
 
 /// Terrain blocks (not trees) over column (x, z) at or above `y`: 0 under
@@ -470,7 +450,7 @@ fn exit(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3]) -> Option<[f
             .filter(|(dx, dz)| dx.abs().max(dz.abs()) == radius)
             .find(|&(dx, dz)| {
                 cover(world, registry, x + dx, z + dz, feet + 2) == 0
-                    && footing(world, registry, x + dx, z + dz, feet, feet).is_some()
+                    && footing(world, registry, x + dx, z + dz, feet).is_some()
             })
             .map(|(dx, dz)| {
                 [
@@ -552,23 +532,6 @@ fn slide(
 /// dressing cannot pull a detouring body back behind the wall. When both
 /// ways are crossable and nothing touches the body's side the drive is
 /// returned exactly, so flat ground and one-block steps are unchanged.
-///
-/// This is a rider's steering. A rider that has stalled against terrain takes
-/// a local path instead ([`route`]) and holds it in `detour` between ticks.
-/// Stalled means it drives at [`STALL_SPEED`] or more and has moved less than
-/// [`STALL_DISTANCE`] in [`STALL_TICKS`], while terrain turns or boxes its
-/// drive or no axis of the steered drive is [`crossable`] (rocking at the r-tree
-/// corner alternated turns that each looked open). A rider pressed by a crowd
-/// on open ground keeps its drive unturned and keeps its steering. The check
-/// costs a distance per tick, and the terrain test and search run at most once
-/// per [`STALL_TICKS`] for each stalled rider.
-///
-/// In the b31c2540 rehearsals 17-24 rallied riders stood from t 117 to the end
-/// of the take in site935's corner at (22.7, 94, 314.7), between a trunk and a
-/// one-block step under its canopy. Every tick they were steered along the
-/// trunk into the step, and no lateral walk from there reached ground they
-/// could climb.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn deflect(
     world: &ChunkWorld,
     registry: &CoreRegistry,
@@ -577,326 +540,8 @@ pub(crate) fn deflect(
     drive: [f64; 2],
     heading: [f64; 2],
     side: f64,
-    detour: &mut Option<Detour>,
-    tick: u64,
 ) -> [f64; 2] {
-    let speed = mc_physics::mth::length2(drive[0], drive[1]);
-    let state = detour.get_or_insert(Detour {
-        anchor: [pos[0], pos[2]],
-        since: tick,
-        leg: None,
-        goal: [0; 2],
-        until: 0,
-    });
-    if let Some(leg) = state.leg {
-        if mc_physics::mth::length2(pos[0] - state.anchor[0], pos[2] - state.anchor[1])
-            > STALL_DISTANCE
-        {
-            state.anchor = [pos[0], pos[2]];
-            state.since = tick;
-        }
-        // A path is given up at `until`, or when the rider stalls on it too.
-        if tick < state.until && tick < state.since + STALL_TICKS && speed >= 1e-9 {
-            let next =
-                if mc_physics::mth::length2(leg[0] - pos[0], leg[1] - pos[2]) > DETOUR_REACHED {
-                    Some(leg)
-                } else if [leg[0].round() as i32, leg[1].round() as i32] == state.goal {
-                    None
-                } else {
-                    route(world, registry, pos, half_width, [0.0; 2], Some(state.goal))
-                        .map(|(leg, _)| leg)
-                };
-            if let Some(leg) = next {
-                state.leg = Some(leg);
-                return ride(world, registry, pos, half_width, leg, speed, side);
-            }
-        }
-        state.leg = None;
-        state.anchor = [pos[0], pos[2]];
-        state.since = tick;
-    }
-    if speed < STALL_SPEED
-        || mc_physics::mth::length2(pos[0] - state.anchor[0], pos[2] - state.anchor[1])
-            > STALL_DISTANCE
-    {
-        state.anchor = [pos[0], pos[2]];
-        state.since = tick;
-    }
-    let out = steer(world, registry, pos, half_width, drive, heading, side);
-    if tick < state.since + STALL_TICKS {
-        return out.unwrap_or_else(|boxed| boxed);
-    }
-    state.since = tick;
-    let stuck = match out {
-        Ok(out) => out != drive || !moves(world, registry, pos, half_width, out),
-        Err(_) => true,
-    };
-    if !stuck {
-        return out.unwrap_or_else(|boxed| boxed);
-    }
-    let length = mc_physics::mth::length2(heading[0], heading[1]);
-    let dir = if length < 1e-9 {
-        drive.map(|v| v / speed)
-    } else {
-        heading.map(|v| v / length)
-    };
-    let Some((leg, goal)) = route(world, registry, pos, half_width, dir, None) else {
-        return out.unwrap_or_else(|boxed| boxed);
-    };
-    state.leg = Some(leg);
-    state.goal = goal;
-    state.until = tick + DETOUR_TICKS;
-    state.anchor = [pos[0], pos[2]];
-    ride(world, registry, pos, half_width, leg, speed, side)
-}
-
-/// Least drive, in blocks per second, of a rider that can stall: a walking or
-/// wounded rider and one closing on its place by a foe never do.
-const STALL_SPEED: f64 = 2.0;
-/// Distance, in blocks, a rider must move in [`STALL_TICKS`] not to stall. A
-/// rider driving at [`STALL_SPEED`] covers two blocks in that time, and one
-/// rocking in place never gets this far.
-const STALL_DISTANCE: f64 = 0.5;
-/// Ticks of a stall before the terrain test and the search, and between them.
-const STALL_TICKS: u64 = 20;
-/// Ticks a rider follows a local path out of a pocket at most.
-const DETOUR_TICKS: u64 = 200;
-/// How much further along its heading than the rider, in blocks, a path's
-/// goal lies.
-const DETOUR_GAIN: f64 = 1.0;
-/// Distance, in blocks, at which a rider has reached a path node: more than
-/// one tick's ride (0.23 blocks at 4.6 blocks per second), so it never rides
-/// past one.
-const DETOUR_REACHED: f64 = 0.3;
-/// Path nodes per side of the search window, [`AROUND`] blocks each way.
-const DETOUR_SPAN: usize = 2 * AROUND as usize + 1;
-
-/// A rider's stall watch and its local path out of a pocket ([`deflect`]),
-/// held between ticks.
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct Detour {
-    /// Where the rider stood at tick `since`, the start of the watch.
-    anchor: [f64; 2],
-    since: u64,
-    /// The node it rides to next (the end of the path's first straight run)
-    /// while it follows a path.
-    leg: Option<[f64; 2]>,
-    /// The path's last node, where the rider has gained on its heading.
-    goal: [i32; 2],
-    /// The tick the path is given up.
-    until: u64,
-}
-
-/// Whether a steered drive moves the body along at least one of its axes.
-/// Physics resolves the axes in turn, so an oblique drive slides along a wall
-/// on its open axis; an oblique [`crossable`] probe misses a column the
-/// footprint enters.
-fn moves(
-    world: &ChunkWorld,
-    registry: &CoreRegistry,
-    pos: [f64; 3],
-    half_width: f64,
-    out: [f64; 2],
-) -> bool {
-    (out[0] != 0.0 && crossable(world, registry, pos, half_width, [out[0].signum(), 0.0]))
-        || (out[1] != 0.0 && crossable(world, registry, pos, half_width, [0.0, out[1].signum()]))
-}
-
-/// The drive toward a path node, steered round obstacles as usual.
-fn ride(
-    world: &ChunkWorld,
-    registry: &CoreRegistry,
-    pos: [f64; 3],
-    half_width: f64,
-    leg: [f64; 2],
-    speed: f64,
-    side: f64,
-) -> [f64; 2] {
-    let to = [leg[0] - pos[0], leg[1] - pos[2]];
-    let length = mc_physics::mth::length2(to[0], to[1]);
-    if length < 1e-9 {
-        return [0.0; 2];
-    }
-    let way = to.map(|v| v / length);
-    steer(
-        world,
-        registry,
-        pos,
-        half_width,
-        way.map(|v| v * speed),
-        way,
-        side,
-    )
-    .unwrap_or_else(|boxed| boxed)
-}
-
-/// Breadth-first local path for a body at `pos`, over nodes at block corners
-/// within [`AROUND`] blocks. A node centres a body of up to two blocks' width
-/// on the corner of four columns, so its footprint is whole columns. A move
-/// is one block along a grid axis that [`crossable`] allows: footing, a step
-/// with room to rise where the body stands, a drop of at most [`MAX_DROP`].
-/// The body reaches its first nodes, the corners round it, by one such move
-/// along each axis in either order. Oblique moves are never taken: physics
-/// resolves the axes in turn, and an oblique probe misses a column the
-/// footprint enters (the r-tree corner). The goal is `goal`, or else the
-/// nearest node [`DETOUR_GAIN`] blocks further along `dir` than the body.
-/// Returns the leg to ride and the goal. The leg is the first node, or, once
-/// the body stands there, the end of the straight run from it.
-fn route(
-    world: &ChunkWorld,
-    registry: &CoreRegistry,
-    pos: [f64; 3],
-    half_width: f64,
-    dir: [f64; 2],
-    goal: Option<[i32; 2]>,
-) -> Option<([f64; 2], [i32; 2])> {
-    const N: usize = DETOUR_SPAN;
-    const UNSEEN: u16 = u16::MAX;
-    let (ox, oz) = (
-        pos[0].round() as i32 - AROUND,
-        pos[2].round() as i32 - AROUND,
-    );
-    let index = |x: i32, z: i32| {
-        let (i, k) = (x - ox, z - oz);
-        ((0..N as i32).contains(&i) && (0..N as i32).contains(&k))
-            .then(|| k as usize * N + i as usize)
-    };
-    let node = |n: usize| [ox + (n % N) as i32, oz + (n / N) as i32];
-    let mut parent = [UNSEEN; N * N];
-    let mut feet = [0.0_f64; N * N];
-    let mut queue = [0_u16; N * N];
-    let mut tail = 0;
-    // Up to four first nodes and their feet heights.
-    let mut seeds = [(usize::MAX, 0.0_f64); 4];
-    if goal.is_some() {
-        // On a path the rider stands at its leg's node: the path goes on from there,
-        // never back through another corner round it.
-        if let Some(n) = index(pos[0].round() as i32, pos[2].round() as i32) {
-            seeds[0] = (n, pos[1]);
-        }
-    } else {
-        let corners = [pos[0].floor() as i32, pos[0].ceil() as i32]
-            .into_iter()
-            .flat_map(|x| [pos[2].floor() as i32, pos[2].ceil() as i32].map(|z| (x, z)));
-        for (i, (x, z)) in corners.enumerate() {
-            let Some(n) = index(x, z) else {
-                continue;
-            };
-            if seeds[..i].iter().any(|&(m, _)| m == n) {
-                continue;
-            }
-            let to = [f64::from(x), f64::from(z)];
-            let by = |mid: [f64; 2]| {
-                let y = walk(world, registry, pos, half_width, mid)?;
-                walk(world, registry, [mid[0], y, mid[1]], half_width, to)
-            };
-            if let Some(y) = by([to[0], pos[2]]).or_else(|| by([pos[0], to[1]])) {
-                seeds[i] = (n, y);
-            }
-        }
-    }
-    for (n, y) in seeds {
-        if n != usize::MAX {
-            parent[n] = n as u16;
-            feet[n] = y;
-            queue[tail] = n as u16;
-            tail += 1;
-        }
-    }
-    let gain = |n: usize| {
-        let [x, z] = node(n);
-        (f64::from(x) - pos[0]) * dir[0] + (f64::from(z) - pos[2]) * dir[1]
-    };
-    let mut head = 0;
-    let found = loop {
-        if head == tail {
-            return None;
-        }
-        let n = usize::from(queue[head]);
-        head += 1;
-        if goal.map_or(gain(n) >= DETOUR_GAIN, |goal| node(n) == goal) {
-            break n;
-        }
-        let [x, z] = node(n);
-        for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-            let Some(m) = index(x + dx, z + dz) else {
-                continue;
-            };
-            if parent[m] != UNSEEN {
-                continue;
-            }
-            let from = [f64::from(x), feet[n], f64::from(z)];
-            if let Some(y) = walk(
-                world,
-                registry,
-                from,
-                half_width,
-                [f64::from(x + dx), f64::from(z + dz)],
-            ) {
-                parent[m] = n as u16;
-                feet[m] = y;
-                queue[tail] = m as u16;
-                tail += 1;
-            }
-        }
-    };
-    // The path from its first node: `path[len - 1]` is that node, `path[0]` the goal.
-    let mut path = [0_u16; N * N];
-    let mut len = 0;
-    let mut n = found;
-    loop {
-        path[len] = n as u16;
-        len += 1;
-        let up = usize::from(parent[n]);
-        if up == n {
-            break;
-        }
-        n = up;
-    }
-    let at = |i: usize| node(usize::from(path[i]));
-    let first = at(len - 1);
-    let mut end = len - 1;
-    if len >= 2
-        && mc_physics::mth::length2(f64::from(first[0]) - pos[0], f64::from(first[1]) - pos[2])
-            <= DETOUR_REACHED
-    {
-        let step = |i: usize| [at(i - 1)[0] - at(i)[0], at(i - 1)[1] - at(i)[1]];
-        let run = step(len - 1);
-        end = len - 2;
-        while end >= 1 && step(end) == run {
-            end -= 1;
-        }
-    }
-    let leg = at(end);
-    Some(([f64::from(leg[0]), f64::from(leg[1])], node(found)))
-}
-
-/// Feet height after a body moves from `from` straight along a grid axis to
-/// `to` (one coordinate unchanged), if [`crossable`] allows the move.
-fn walk(
-    world: &ChunkWorld,
-    registry: &CoreRegistry,
-    from: [f64; 3],
-    half_width: f64,
-    to: [f64; 2],
-) -> Option<f64> {
-    let delta = [to[0] - from[0], to[1] - from[2]];
-    let dir = if delta[0] != 0.0 {
-        [delta[0].signum(), 0.0]
-    } else if delta[1] != 0.0 {
-        [0.0, delta[1].signum()]
-    } else {
-        return Some(from[1]);
-    };
-    if !crossable(world, registry, from, half_width, dir) {
-        return None;
-    }
-    let (xs, zs) = footprint([to[0], from[1], to[1]], half_width);
-    Some(
-        xs.flat_map(|x| zs.clone().map(move |z| (x, z)))
-            .map(|(x, z)| stand(world, registry, f64::from(x), f64::from(z), from[1]))
-            .fold(f64::NEG_INFINITY, f64::max),
-    )
+    steer(world, registry, pos, half_width, drive, heading, side).unwrap_or_else(|boxed| boxed)
 }
 
 /// [`deflect`] for a body on foot. Boxed in (no way ahead and no turn of up
@@ -1062,38 +707,20 @@ fn steer(
     let left = [-axis[1], axis[0]];
     // A side counts only while the body can walk along the obstacle to the
     // probe: a dead end (a canopy over a terrace edge, another trunk) closes
-    // it, so a body is not sent toward an end it cannot reach and back. The
-    // choice must hold while the body walks to it, or it rocks in place: the
-    // walk follows the ground it steps onto (probed at the body's own feet, an
-    // end one step up read two blocks high), and probes stand on column
-    // centres (stepped from the body's own offset, a one-block-wide end was
-    // seen from some positions in a column and missed from others). In r11
-    // both flipped the choice at the foot of a riser at (-174, 99, 316), where
-    // 143 blue foot and 22 horses ended between its open ends.
+    // it, so a body is not sent toward an end it cannot reach and back.
     let mut open = [true; 2];
-    let mut level = [pos[1]; 2];
-    let mut base = pos;
-    if left[0] == 0.0 {
-        base[2] = pos[2].floor() + 0.5;
-    } else {
-        base[0] = pos[0].floor() + 0.5;
-    }
     let side = (1..=AROUND)
         .find_map(|offset| {
             [side, -side].into_iter().enumerate().find_map(|(i, turn)| {
                 let lateral = [left[0] * turn, left[1] * turn];
                 let from = f64::from(offset - 1);
                 let at = [
-                    base[0] + lateral[0] * from,
-                    level[i],
-                    base[2] + lateral[1] * from,
+                    pos[0] + lateral[0] * from,
+                    pos[1],
+                    pos[2] + lateral[1] * from,
                 ];
                 open[i] = open[i] && crossable(world, registry, at, half_width, lateral);
-                let (x, z) = (at[0] + lateral[0], at[2] + lateral[1]);
-                if open[i] {
-                    level[i] = stand(world, registry, x, z, level[i]);
-                }
-                let probe = [x, level[i], z];
+                let probe = [at[0] + lateral[0], pos[1], at[2] + lateral[1]];
                 (open[i] && crossable(world, registry, probe, half_width, axis)).then_some(turn)
             })
         })
@@ -1108,33 +735,18 @@ fn steer(
         for turn in [side, -side] {
             let s = sin * turn;
             let turned = [axis[0] * cos - axis[1] * s, axis[0] * s + axis[1] * cos];
-            if !crossable(world, registry, pos, half_width, turned) {
-                continue;
+            if crossable(world, registry, pos, half_width, turned) {
+                return Ok(slide(
+                    world,
+                    registry,
+                    pos,
+                    half_width,
+                    turned.map(|v| v * speed),
+                ));
             }
-            let out = slide(world, registry, pos, half_width, turned.map(|v| v * speed));
-            // A 45 degree turn away from the chosen side is taken for its way
-            // ahead; with that stripped by a wall at head height it only runs
-            // back along the obstacle, and the body rocked between the two
-            // (r11 riser, a body standing on the higher of two columns).
-            if turn != side && cos > 0.0 && out[0] * axis[0] + out[1] * axis[1] <= 0.0 {
-                continue;
-            }
-            return Ok(out);
         }
     }
     Err(drive)
-}
-
-/// Feet height of a body that walks onto the column under (x, z) from feet
-/// at `from`: the free cell over the ground within a step up or [`MAX_DROP`]
-/// down, else `from`.
-fn stand(world: &ChunkWorld, registry: &CoreRegistry, x: f64, z: f64, from: f64) -> f64 {
-    let (x, z) = (x.floor() as i32, z.floor() as i32);
-    let feet = (from + CONTACT).floor() as i32;
-    (feet - MAX_DROP as i32..=feet + 1)
-        .rev()
-        .find(|&y| !solid(world, registry, x, y, z) && solid(world, registry, x, y - 1, z))
-        .map_or(from, f64::from)
 }
 
 #[cfg(test)]

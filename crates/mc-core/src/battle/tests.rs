@@ -227,7 +227,13 @@ fn native_target_update_is_sliced_and_rechecks_dead_factions_and_range() {
             world: &state.world,
             tick,
         };
-        battle.columns.prepare(&frame, &battle.formation);
+        battle.columns.prepare(
+            &frame,
+            &mut battle.formation,
+            &mut battle.output.counters,
+            &mut battle.population,
+        );
+        battle.formation.finish_preparation();
         targeting::update(&frame, battle);
     };
     let due = i64::from(actor.0).rem_euclid(10) as u64;
@@ -243,14 +249,11 @@ fn native_target_update_is_sliced_and_rechecks_dead_factions_and_range() {
     update(&state, &mut battle, due + 2);
     assert!(battle.columns.target(slot).is_none());
     state.entities.set_faction(enemy_slot, 2);
-    // A fighter who held a man a moment ago looks again at once: the enemy that came back
-    // into view is taken on the next tick, not at the next decision of the ten-tick grid.
     update(&state, &mut battle, due + 3);
-    assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
-    state.entities.set_faction(enemy_slot, 1);
-    update(&state, &mut battle, due + 4);
-    assert!(battle.columns.target(slot).is_none());
-    state.entities.set_faction(enemy_slot, 2);
+    assert!(
+        battle.columns.target(slot).is_none(),
+        "no off-slice reacquisition"
+    );
     update(&state, &mut battle, due + 10);
     assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
     state.entities.row_mut(enemy_slot).health = 0.0;
@@ -264,53 +267,6 @@ fn native_target_update_is_sliced_and_rechecks_dead_factions_and_range() {
         "no 35-block follow-range targeting"
     );
     assert!(retained_enemy(&state.entities, slot, enemy, 6.0).is_none());
-}
-
-/// A fighter outside contact (never held a man) searches only on his own slice of the
-/// ten-tick grid: the fast look is for men at the line, so far ranks add no search.
-#[test]
-fn fighter_without_a_recent_man_searches_only_on_his_slice() {
-    let mut state = fixture();
-    let actor = spawn(&mut state, 1, "minecraft:zombie", [4.0, 100.0, 4.0]);
-    let enemy = spawn(&mut state, 2, "minecraft:zombie", [7.0, 100.0, 4.0]);
-    let slot = state.entities.slot_of(actor).unwrap();
-    let mut battle = BattleState::default();
-    let due = i64::from(actor.0).rem_euclid(10) as u64;
-    for tick in due + 11..due + 20 {
-        let frame = Frame {
-            entities: &state.entities,
-            registry: &state.registry,
-            world: &state.world,
-            tick,
-        };
-        battle.columns.prepare(
-            &frame,
-            &mut battle.formation,
-            &mut battle.output.counters,
-            &mut battle.population,
-        );
-        battle.formation.finish_preparation();
-        targeting::update(&frame, &mut battle);
-        assert!(
-            battle.columns.target(slot).is_none(),
-            "off-slice search at tick {tick}"
-        );
-    }
-    let frame = Frame {
-        entities: &state.entities,
-        registry: &state.registry,
-        world: &state.world,
-        tick: due + 20,
-    };
-    battle.columns.prepare(
-        &frame,
-        &mut battle.formation,
-        &mut battle.output.counters,
-        &mut battle.population,
-    );
-    battle.formation.finish_preparation();
-    targeting::update(&frame, &mut battle);
-    assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
 }
 
 #[test]
@@ -327,7 +283,13 @@ fn archers_target_with_attack_range_not_melee_or_follow_range() {
         world: &state.world,
         tick: i64::from(archer.0).rem_euclid(10) as u64,
     };
-    battle.columns.prepare(&frame, &battle.formation);
+    battle.columns.prepare(
+        &frame,
+        &mut battle.formation,
+        &mut battle.output.counters,
+        &mut battle.population,
+    );
+    battle.formation.finish_preparation();
     targeting::update(&frame, &mut battle);
     assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
     assert_eq!(battle.columns.target(slot).unwrap().distance, 10.0);
@@ -490,6 +452,62 @@ fn published_population_recounts_post_merge_state_and_keeps_zero_alive_factions(
 }
 
 #[test]
+fn population_cache_reads_changed_health_and_keeps_corpses_until_removal() {
+    let mut state = fixture();
+    spawn(&mut state, 0, "minecraft:husk", [1.5, 64.0, 1.5]);
+    assert!(publication_counts(&mut state).is_none());
+    assert!(
+        state.hostile.battle.population.health.is_empty(),
+        "ordinary worlds must not allocate a population cache"
+    );
+    let actor = spawn(&mut state, 1, "minecraft:husk", [4.5, 64.0, 4.5]);
+    let enemy = spawn(&mut state, 2, "minecraft:husk", [12.5, 64.0, 12.5]);
+    let _ = state.entities.views();
+    publication_counts(&mut state).unwrap();
+    let reads = state.hostile.battle.population.health_reads;
+    assert_eq!(reads, 2);
+    publication_counts(&mut state).unwrap();
+    assert_eq!(
+        state.hostile.battle.population.health_reads, reads,
+        "an unchanged population reread cold health"
+    );
+
+    let enemy_slot = state.entities.slot_of(enemy).unwrap();
+    state.entities.row_mut(enemy_slot).health = 0.0;
+    let _ = drain_entity_views(&mut state);
+    let counts = publication_counts(&mut state).unwrap();
+    assert_eq!(counts.alive, vec![(1, 1), (2, 0)]);
+    assert_eq!(state.hostile.battle.population.health_reads, reads + 1);
+
+    let actor_slot = state.entities.slot_of(actor).unwrap();
+    state.entities.body_mut(actor_slot).alive = false;
+    state.entities.begin_dying(actor_slot);
+    let _ = drain_entity_views(&mut state);
+    let counts = publication_counts(&mut state).unwrap();
+    assert_eq!(counts.units, 2, "the corpse is still a native row");
+    assert_eq!(counts.alive, vec![(1, 0), (2, 0)]);
+    assert_eq!(
+        state.hostile.battle.population.health_reads,
+        reads + 1,
+        "a dead hot body does not need cold health"
+    );
+
+    state.entities.remove(actor_slot);
+    let counts = publication_counts(&mut state).unwrap();
+    assert_eq!(counts.units, 1);
+    assert_eq!(counts.alive, vec![(2, 0)]);
+    assert_eq!(
+        state.hostile.battle.population.health_reads,
+        reads + 2,
+        "slot compaction must refresh the moved identity"
+    );
+    state
+        .entities
+        .set_faction(state.entities.slot_of(enemy).unwrap(), 0);
+    assert!(publication_counts(&mut state).is_none());
+}
+
+#[test]
 fn dense_slot_projection_survives_compaction_and_classification_changes() {
     let mut state = fixture();
     let removed = spawn(&mut state, 1, "minecraft:zombie", [1.0, 100.0, 1.0]);
@@ -511,7 +529,13 @@ fn dense_slot_projection_survives_compaction_and_classification_changes() {
             world: &state.world,
             tick: 0,
         };
-        battle.columns.prepare(&frame, &battle.formation);
+        battle.columns.prepare(
+            &frame,
+            &mut battle.formation,
+            &mut battle.output.counters,
+            &mut battle.population,
+        );
+        battle.formation.finish_preparation();
     }
     let bi = battle.columns.index(slot).unwrap();
     assert_eq!(battle.columns.ids[bi], actor);
@@ -530,9 +554,243 @@ fn dense_slot_projection_survives_compaction_and_classification_changes() {
         world: &state.world,
         tick: 1,
     };
-    battle.columns.prepare(&frame, &battle.formation);
+    battle.columns.prepare(
+        &frame,
+        &mut battle.formation,
+        &mut battle.output.counters,
+        &mut battle.population,
+    );
+    battle.formation.finish_preparation();
     assert!(battle.columns.ranged[bi]);
     assert_eq!(battle.columns.drive_by_slot[slot.0 as usize], [0.0; 3]);
+}
+
+fn native_cache_fixture() -> (crate::tick::TickState, EntityId, EntityId) {
+    let mut state = fixture();
+    state.tickets.insert(
+        "battle-cache-regression".into(),
+        (crate::boundary::ChunkPos { x: 0, z: 0 }, 0),
+    );
+    let rider = spawn(&mut state, 1, "minecraft:husk", [4.5, 64.0, 4.5]);
+    let horse = spawn(&mut state, 1, "minecraft:horse", [12.5, 64.0, 12.5]);
+    for id in [rider, horse] {
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.row_mut(slot).persistent = true;
+    }
+    state
+        .hostile
+        .battle
+        .formation
+        .add_regiment(
+            formation::RegimentSpec {
+                id: 1,
+                faction: 1,
+                origin: [4.5, 64.0, 4.5],
+                facing: [0.0, 1.0],
+                files: 1,
+                frontage: 1.0,
+                order: formation::Order::Hold,
+            },
+            &[rider],
+        )
+        .unwrap();
+    state.hostile.battle.running = true;
+    for _ in 0..3 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    (state, rider, horse)
+}
+
+#[test]
+fn native_cached_facts_invalidate_no_ai_between_ticks() {
+    let (mut state, rider, _) = native_cache_fixture();
+    let slot = state.entities.slot_of(rider).unwrap();
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(state.hostile.battle.columns.active[bi]);
+    state.entities.row_mut(slot).controls.no_ai = true;
+    crate::tick::run_tick(&mut state, &[]);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(!state.hostile.battle.columns.active[bi]);
+}
+
+#[test]
+fn native_cached_facts_invalidate_equipment_and_latch_inactive_changes() {
+    let (mut state, rider, _) = native_cache_fixture();
+    let slot = state.entities.slot_of(rider).unwrap();
+    state.entities.row_mut(slot).controls.no_ai = true;
+    crate::tick::run_tick(&mut state, &[]);
+    let bow = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:bow").unwrap())
+        .unwrap();
+    std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).equipment[0] =
+        Some(mc_data::ItemStack::new(bow, 1));
+    crate::tick::run_tick(&mut state, &[]);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(state.hostile.battle.columns.ranged[bi]);
+    assert!(state.hostile.battle.columns.equipment_dirty[bi]);
+    state.entities.row_mut(slot).controls.no_ai = false;
+    crate::tick::run_tick(&mut state, &[]);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert_eq!(
+        state.hostile.battle.combat.fighters[bi].weapon,
+        combat::Weapon::Bow
+    );
+    assert!(!state.hostile.battle.columns.equipment_dirty[bi]);
+}
+
+#[test]
+fn native_cached_facts_invalidate_mounts_between_ticks() {
+    let (mut state, rider, horse) = native_cache_fixture();
+    let slot = state.entities.slot_of(horse).unwrap();
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(!state.hostile.battle.columns.carried[bi]);
+    cavalry::mount(&mut state, rider, horse).unwrap();
+    crate::tick::run_tick(&mut state, &[]);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(state.hostile.battle.columns.carried[bi]);
+}
+
+#[test]
+fn late_wire_fact_invalidation_precedes_the_views_drain() {
+    let (mut state, rider, _) = native_cache_fixture();
+    step(&mut state);
+    let slot = state.entities.slot_of(rider).unwrap();
+    // A canonical late-phase write after the frozen battle frame. Its wire
+    // notification will be gone at the next battle frame, just as in run_tick.
+    state.entities.row_mut(slot).controls.no_ai = true;
+    let _ = drain_entity_views(&mut state);
+    step(&mut state);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(!state.hostile.battle.columns.active[bi]);
+}
+
+#[test]
+fn deferred_multi_dimension_commands_invalidate_facts_before_the_travel_drain() {
+    let (mut state, rider, _) = native_cache_fixture();
+    // A second dimension defers player commands to travel::finish, after the
+    // tick's own publication drain; its refresh drains the wire feed again.
+    let registry = std::sync::Arc::clone(&state.registry);
+    let mut nether = crate::tick::TickState::new(
+        std::sync::Arc::clone(&registry),
+        crate::horde_bench::flat_world(&registry),
+        2,
+        512,
+    );
+    nether.dimension = crate::dimensions::Dimension::Nether;
+    state
+        .other_dimensions
+        .insert(crate::dimensions::Dimension::Nether, Box::new(nether));
+    let connection = crate::boundary::ConnectionId(1);
+    crate::tick::run_tick(
+        &mut state,
+        &[crate::boundary::PlayerInput::Join {
+            connection,
+            uuid: uuid::Uuid::from_u128(7),
+            name: "battle-op".into(),
+            permission_level: 2,
+        }],
+    );
+    let slot = state.entities.slot_of(rider).unwrap();
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(!state.hostile.battle.columns.ranged[bi]);
+    let command = |command: &str| crate::boundary::PlayerInput::Command {
+        connection,
+        command: command.into(),
+        permission_level: 2,
+    };
+    // The spawn makes the deferred work publish entity changes, so refresh
+    // drains the rider's equipment notification together with it.
+    crate::tick::run_tick(
+        &mut state,
+        &[
+            command(
+                "item replace entity @e[type=minecraft:husk] weapon.mainhand with minecraft:bow",
+            ),
+            command("summon minecraft:pig 12 64 4"),
+        ],
+    );
+    let slot = state.entities.slot_of(rider).unwrap();
+    let bow = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:bow").unwrap())
+        .unwrap();
+    assert_eq!(
+        state.entities.row(slot).appearance.equipment[0]
+            .as_ref()
+            .map(|stack| stack.item_id),
+        Some(bow),
+        "the deferred command ran this tick"
+    );
+    crate::tick::run_tick(&mut state, &[]);
+    let bi = state.hostile.battle.columns.index(slot).unwrap();
+    assert!(
+        state.hostile.battle.columns.ranged[bi],
+        "the travel drain consumed the equipment change without invalidating battle facts"
+    );
+}
+
+#[test]
+fn fused_population_matches_the_native_sparse_scan_after_roster_changes() {
+    let (mut state, rider, horse) = native_cache_fixture();
+    let dead = spawn(&mut state, 1, "minecraft:husk", [6.5, 64.0, 6.5]);
+    let zero = spawn(&mut state, 2, "minecraft:husk", [7.5, 64.0, 7.5]);
+    let mismatch = spawn(&mut state, 2, "minecraft:husk", [9.5, 64.0, 9.5]);
+    let gone = spawn(&mut state, 1, "minecraft:husk", [10.5, 64.0, 10.5]);
+    state
+        .hostile
+        .battle
+        .formation
+        .add_regiment(
+            formation::RegimentSpec {
+                id: 11,
+                faction: 1,
+                origin: [6.5, 64.0, 6.5],
+                facing: [0.0, 1.0],
+                files: 4,
+                frontage: 1.0,
+                order: formation::Order::Hold,
+            },
+            &[dead, zero, mismatch, gone],
+        )
+        .unwrap();
+    state
+        .entities
+        .body_mut(state.entities.slot_of(dead).unwrap())
+        .alive = false;
+    state
+        .entities
+        .row_mut(state.entities.slot_of(zero).unwrap())
+        .health = 0.0;
+    state.entities.remove(state.entities.slot_of(gone).unwrap());
+    let tail_dead = spawn(&mut state, 3, "minecraft:husk", [13.5, 64.0, 13.5]);
+    state
+        .entities
+        .body_mut(state.entities.slot_of(tail_dead).unwrap())
+        .alive = false;
+    spawn(&mut state, 3, "minecraft:husk", [14.5, 64.0, 14.5]);
+    spawn(&mut state, 0, "minecraft:husk", [15.5, 64.0, 15.5]);
+    let mut expected = UnitCounters::default();
+    for round in 0..3 {
+        if round == 1 {
+            state
+                .entities
+                .set_faction(state.entities.slot_of(rider).unwrap(), 0);
+            state
+                .entities
+                .set_faction(state.entities.slot_of(horse).unwrap(), 2);
+        } else if round == 2 {
+            state
+                .entities
+                .remove(state.entities.slot_of(mismatch).unwrap());
+        }
+        state.tick += 1;
+        step(&mut state);
+        expected.sample(&state.entities, state.tick);
+        assert_eq!(unit_counters(&state.hostile), &expected, "round {round}");
+    }
 }
 
 #[test]
@@ -576,8 +834,13 @@ fn twenty_thousand_registered_archers_use_one_regiment_candidate_per_decision() 
             world: &state.world,
             tick,
         };
-        formation::update(&frame, &mut battle);
-        battle.columns.prepare(&frame, &battle.formation);
+        battle.columns.prepare(
+            &frame,
+            &mut battle.formation,
+            &mut battle.output.counters,
+            &mut battle.population,
+        );
+        battle.formation.finish_preparation();
         targeting::update(&frame, &mut battle);
         assert_eq!(battle.work.retargeted, 2000);
         assert!(battle.work.examined <= battle.work.retargeted);
@@ -632,25 +895,99 @@ fn tick_metrics_publish_staged_battle_counts_and_clear_them_after_reset() {
     assert!(times.battle.is_none());
 }
 
-/// In-process native tick diagnostic, not a paced/networked TPS or checkpoint
-/// gate. Build in the ordinary lane; run its frozen release test binary in -p
-/// with MC_CORE_PHASE_LOG=1 and retain host load alongside the receipt.
 #[test]
-#[ignore = "release battle phase diagnostic; run in the perf lane"]
-fn battle_phase_micro() {
-    assert!(std::env::var_os("MC_CORE_PHASE_LOG").is_some());
-    let side =
-        std::env::var("BATTLE_UNITS_PER_SIDE").map_or(10_000, |value| value.parse().unwrap());
-    let ticks =
-        std::env::var("BATTLE_MICRO_TICKS").map_or(200, |value| value.parse::<usize>().unwrap());
-    assert!(ticks > 0);
+fn native_battle_arrows_clear_allied_ranks_without_changing_unaffiliated_hits() {
+    for (owner_faction, near_faction, near_hit, player) in [
+        (1, 1, false, false),
+        (1, 2, true, false),
+        (0, 0, true, false),
+        (1, 1, true, true),
+    ] {
+        let mut state = fixture();
+        let chunks = (0..=8)
+            .map(|z| (crate::boundary::ChunkPos { x: 0, z }, 0))
+            .collect();
+        state.world.ensure_blocking(&chunks);
+        for z in 0..=8 {
+            state.tickets.insert(
+                format!("battle-arrow-regression-{z}"),
+                (crate::boundary::ChunkPos { x: 0, z }, 0),
+            );
+        }
+        state.refresh_active_chunks(state.tick);
+        let owner = spawn(
+            &mut state,
+            owner_faction,
+            "minecraft:husk",
+            [8.5, 64.0, 8.5],
+        );
+        let near = if player {
+            let connection = crate::boundary::ConnectionId(1);
+            crate::tick::run_tick(
+                &mut state,
+                &[crate::boundary::PlayerInput::Join {
+                    connection,
+                    uuid: uuid::Uuid::new_v4(),
+                    name: "battle-arrow-player".into(),
+                    permission_level: 0,
+                }],
+            );
+            let id = state.connections.entity_of(connection).unwrap();
+            let slot = state.entities.slot_of(id).unwrap();
+            state.entities.set_pos(slot, [8.5, 64.0, 10.5]);
+            state.entities.set_faction(slot, near_faction);
+            state.entities.row_mut(slot).protected_until = 0;
+            id
+        } else {
+            spawn(
+                &mut state,
+                near_faction,
+                "minecraft:husk",
+                [8.5, 64.0, 10.5],
+            )
+        };
+        let enemy = spawn(&mut state, 2, "minecraft:husk", [8.5, 64.0, 128.5]);
+        for id in [owner, near, enemy] {
+            let slot = state.entities.slot_of(id).unwrap();
+            let row = state.entities.row_mut(slot);
+            row.controls.no_ai = true;
+            row.persistent = true;
+        }
+        let owner_slot = state.entities.slot_of(owner).unwrap();
+        let mut from = state.entities.pos(owner_slot);
+        from[1] += state.entities.body(owner_slot).height * 0.85;
+        let (velocity, _) = archery::aimed_arc(from, [8.5, 64.8, 128.5]).unwrap();
+        crate::hostile::launch_arrow(&mut state, owner, from, velocity, 2.0).unwrap();
+        let mut near_damage = 0;
+        let mut enemy_damage = 0;
+        for _ in 0..90 {
+            let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+            for event in &output.changes.entity_events {
+                if let crate::boundary::EntityEvent::Damage { entity, .. } = event {
+                    near_damage += usize::from(*entity == near);
+                    enemy_damage += usize::from(*entity == enemy);
+                }
+            }
+        }
+        assert_eq!(
+            near_damage > 0,
+            near_hit,
+            "owner={owner_faction} near={near_faction}"
+        );
+        assert_eq!(
+            enemy_damage > 0,
+            !near_hit,
+            "owner={owner_faction} near={near_faction}"
+        );
+    }
+}
+
+pub(super) fn staged_flat_fixture(side: usize) -> crate::tick::TickState {
     let mut state = fixture();
-    let mut changes = crate::boundary::ChangeSet::default();
-    let origin = [8.5, 64.0, 8.5];
     staging::execute(
         &mut state,
-        &mut changes,
-        origin,
+        &mut crate::boundary::ChangeSet::default(),
+        [8.5, 64.0, 8.5],
         &staging::BattleCommand::Setup {
             seed: 42,
             count: side,
@@ -663,6 +1000,287 @@ fn battle_phase_micro() {
     for _ in 0..8 {
         crate::tick::run_tick(&mut state, &[]);
     }
+    state
+}
+
+#[test]
+fn native_tick_pursues_routed_enemies_only_for_the_staged_scenario() {
+    use formation::Order;
+    for staged in [true, false] {
+        let mut state = staged_flat_fixture(100);
+        staging::execute(
+            &mut state,
+            &mut crate::boundary::ChangeSet::default(),
+            [8.5, 64.0, 8.5],
+            &staging::BattleCommand::Start,
+        )
+        .unwrap();
+        if !staged {
+            state.tickets.remove(staging::OWNER);
+        }
+        let regiment_id = state
+            .hostile
+            .battle
+            .formation
+            .regiments
+            .iter()
+            .filter(|regiment| regiment.spec.faction == 1 && regiment.spec.order == Order::Advance)
+            .max_by_key(|regiment| regiment.len)
+            .unwrap()
+            .spec
+            .id;
+        // A controlled native morale state, not a mocked staging callback.
+        for regiment in &mut state.hostile.battle.formation.regiments {
+            if regiment.spec.faction == 2 {
+                regiment.morale.broken = true;
+            }
+        }
+        for _ in 0..21 {
+            crate::tick::run_tick(&mut state, &[]);
+        }
+        let regiment = state
+            .hostile
+            .battle
+            .formation
+            .regiments
+            .iter()
+            .find(|regiment| regiment.spec.id == regiment_id)
+            .unwrap();
+        assert!(regiment.enemy_routing);
+        assert_eq!(
+            regiment.spec.order,
+            if staged {
+                Order::Pursue
+            } else {
+                Order::Advance
+            }
+        );
+        assert!(
+            state
+                .hostile
+                .battle
+                .formation
+                .regiments
+                .iter()
+                .any(|regiment| regiment.spec.faction == 1 && regiment.spec.order == Order::Hold),
+            "holding archers lost their order"
+        );
+    }
+}
+
+fn melee_contact(battle: &BattleState) -> bool {
+    battle.formation.regiments.iter().any(|regiment| {
+        !battle.columns.ranged[regiment.start]
+            && regiment.enemy.is_some()
+            && regiment.gap <= 6.0
+            && !regiment.morale.broken
+            && regiment.live_count > 0
+    })
+}
+
+pub(super) fn native_battle_losses(
+    state: &crate::tick::TickState,
+) -> ([usize; 2], [usize; 2], usize) {
+    let mut dead = [0; 2];
+    let mut removed = [0; 2];
+    let mut native_wounds = 0;
+    for member in &state.hostile.battle.formation.members {
+        let faction = state.hostile.battle.formation.regiments[member.regiment]
+            .spec
+            .faction;
+        let i = usize::from(faction - 1);
+        let health = state
+            .entities
+            .slot_of(member.id)
+            .map(|slot| state.entities.row(slot).health)
+            .filter(|health| *health > 0.0);
+        dead[i] += usize::from(health.is_none());
+        removed[i] += usize::from(health.is_none() || member.wounded);
+        native_wounds += usize::from(member.wounded && health.is_some_and(|health| health < 20.0));
+    }
+    (dead, removed, native_wounds)
+}
+
+fn log_attrition(state: &crate::tick::TickState, elapsed: usize, engaged_ticks: u64) {
+    let (dead, removed, native_wounds) = native_battle_losses(state);
+    let minutes = engaged_ticks as f64 / (20.0 * 60.0);
+    if minutes > 0.0 {
+        eprintln!(
+            "BATTLE_ATTRITION elapsed={elapsed} engaged_ticks={engaged_ticks} native_deaths={dead:?} removed={removed:?} native_wounds={native_wounds} deaths_per_engaged_minute={:?} removals_per_engaged_minute={:?}",
+            dead.map(|count| count as f64 / minutes),
+            removed.map(|count| count as f64 / minutes)
+        );
+    }
+}
+
+#[test]
+#[ignore = "20k native three-minute contact curve; run explicitly in release"]
+fn battle20k_reaches_melee_attrition_and_a_timed_first_break() {
+    let mut state = staged_flat_fixture(10_000);
+    staging::execute(
+        &mut state,
+        &mut crate::boundary::ChangeSet::default(),
+        [8.5, 64.0, 8.5],
+        &staging::BattleCommand::Start,
+    )
+    .unwrap();
+    let mut contact = None;
+    let mut first_break = None;
+    let mut frontline = Vec::new();
+    let mut strikes = 0;
+    let mut parries = 0;
+    let mut routing_at_150 = None;
+    let mut active_front_ticks = vec![0u64; state.hostile.battle.formation.regiments.len()];
+    let mut melee_kills = 0;
+    let mut wounds = 0;
+    let mut previous_losses = vec![(0, 0); state.hostile.battle.formation.regiments.len()];
+    for _ in 0..6000 {
+        crate::tick::run_tick(&mut state, &[]);
+        let battle = &state.hostile.battle;
+        let tick = battle.elapsed_ticks;
+        melee_kills += battle.combat.work.killed;
+        wounds += battle.combat.work.wounded;
+        strikes += battle.combat.work.strikes;
+        parries += battle.combat.work.parries;
+        if first_break.is_none()
+            && let Some((index, _)) = battle
+                .formation
+                .regiments
+                .iter()
+                .enumerate()
+                .find(|(_, regiment)| regiment.morale.broken)
+        {
+            first_break = Some((tick, index, active_front_ticks[index]));
+        }
+        if contact.is_none() && melee_contact(battle) {
+            contact = Some(tick);
+            for (bi, member) in battle.formation.members.iter().enumerate() {
+                let regiment = &battle.formation.regiments[member.regiment];
+                if member.rank == 0
+                    && !battle.columns.ranged[bi]
+                    && regiment.gap <= 6.0
+                    && !member.wounded
+                    && state.entities.slot_of(member.id).is_some()
+                {
+                    frontline.push((bi, None));
+                }
+            }
+        }
+        if let Some(start) = contact {
+            let elapsed = tick - start;
+            for (bi, member) in battle.formation.members.iter().enumerate() {
+                if !battle.columns.ranged[bi]
+                    && battle.formation.can_attack_at(bi)
+                    && battle.columns.targets[bi].is_some()
+                {
+                    active_front_ticks[member.regiment] += 1;
+                }
+            }
+            if elapsed == 3000 {
+                routing_at_150 = Some(
+                    battle
+                        .formation
+                        .members
+                        .iter()
+                        .filter(|member| {
+                            member.routing
+                                && !member.wounded
+                                && state
+                                    .entities
+                                    .slot_of(member.id)
+                                    .is_some_and(|slot| state.entities.row(slot).health > 0.0)
+                        })
+                        .count(),
+                );
+            }
+            for (bi, removed_at) in &mut frontline {
+                let member = &battle.formation.members[*bi];
+                if removed_at.is_none()
+                    && (member.wounded || state.entities.slot_of(member.id).is_none())
+                {
+                    *removed_at = Some(elapsed);
+                }
+            }
+            if elapsed.is_multiple_of(200) {
+                log_regiment_activity(&state, elapsed as usize, &mut previous_losses);
+            }
+            if elapsed == 3600 {
+                break;
+            }
+        }
+    }
+    let contact = contact.expect("native armies never reached melee contact");
+    let elapsed = state.hostile.battle.elapsed_ticks - contact;
+    assert_eq!(elapsed, 3600, "did not capture three contact minutes");
+    let (first_break, first_regiment, first_active_ticks) =
+        first_break.expect("no regiment broke within three contact minutes");
+    let break_after_contact = first_break.saturating_sub(contact);
+    assert!(!frontline.is_empty(), "no real native frontline samples");
+    // Restricted mean: survivors are censored at the shot's end, so this is a
+    // lower bound on wall-clock survival, not a claim about uncensored lifetimes.
+    let mean_frontline_seconds = frontline
+        .iter()
+        .map(|(_, removed_at)| removed_at.unwrap_or(elapsed) as f64 / 20.0)
+        .sum::<f64>()
+        / frontline.len() as f64;
+    let (dead, removed, native_wounds) = native_battle_losses(&state);
+    let first_regiment = &state.hostile.battle.formation.regiments[first_regiment];
+    let first_active_seconds =
+        first_active_ticks as f64 / (20.0 * f64::from(first_regiment.spec.files));
+    let routing_at_150 = routing_at_150.expect("missing 150-second routing sample");
+    eprintln!(
+        "BATTLE_FILM contact_tick={contact} first_break_tick={first_break} break_contact_ticks={break_after_contact} frontline_samples={} restricted_mean_frontline_seconds={mean_frontline_seconds} melee_kills={melee_kills} wounds={wounds} native_deaths={dead:?} native_removed={removed:?} native_wounds={native_wounds} strikes={strikes} parries={parries} first_regiment={} pulse_target_front_seconds_at_break={first_active_seconds} routing_at_150={routing_at_150} routing_fraction_at_150={}",
+        frontline.len(),
+        first_regiment.spec.id,
+        routing_at_150 as f64 / 20_000.0
+    );
+    for (regiment, ticks) in state
+        .hostile
+        .battle
+        .formation
+        .regiments
+        .iter()
+        .zip(active_front_ticks)
+    {
+        eprintln!(
+            "BATTLE_EXPOSURE id={} side={} pulse_target_front_seconds={}",
+            regiment.spec.id,
+            regiment.spec.faction,
+            ticks as f64 / (20.0 * f64::from(regiment.spec.files))
+        );
+    }
+    assert!(
+        (1200..=1800).contains(&break_after_contact),
+        "first break after {} contact seconds",
+        break_after_contact as f64 / 20.0
+    );
+    assert!(mean_frontline_seconds >= 8.0, "{mean_frontline_seconds}");
+    assert!(melee_kills >= 200, "melee_kills={melee_kills}");
+    assert!(
+        melee_kills + wounds >= 800,
+        "melee removals={}",
+        melee_kills + wounds
+    );
+    assert!(native_wounds >= 100, "native_wounds={native_wounds}");
+    assert!(dead.into_iter().all(|count| count >= 50), "{dead:?}");
+    assert!(removed.into_iter().all(|count| count >= 200), "{removed:?}");
+}
+
+/// In-process native tick diagnostic, not a paced/networked TPS or checkpoint
+/// gate. Build in the ordinary lane; run its frozen release test binary in -p
+/// with MC_CORE_PHASE_LOG=1 and retain host load alongside the receipt.
+#[test]
+#[ignore = "release battle phase diagnostic; run in the perf lane"]
+fn battle_phase_micro() {
+    assert!(std::env::var_os("MC_CORE_PHASE_LOG").is_some());
+    let side =
+        std::env::var("BATTLE_UNITS_PER_SIDE").map_or(10_000, |value| value.parse().unwrap());
+    let ticks =
+        std::env::var("BATTLE_MICRO_TICKS").map_or(200, |value| value.parse::<usize>().unwrap());
+    assert!(ticks > 0);
+    let mut state = staged_flat_fixture(side);
+    let mut changes = crate::boundary::ChangeSet::default();
+    let origin = [8.5, 64.0, 8.5];
     for running in [false, true] {
         if running {
             staging::execute(
@@ -673,9 +1291,61 @@ fn battle_phase_micro() {
             )
             .unwrap();
         }
-        let mut samples = Vec::with_capacity(ticks);
-        for _ in 0..ticks {
-            crate::tick::run_tick(&mut state, &[]);
+        let phase_ticks = if running { ticks } else { ticks.min(100) };
+        let mut samples = Vec::with_capacity(phase_ticks);
+        let mut swings = 0;
+        let mut strikes = 0;
+        let mut kills = 0;
+        let mut arrows = 0;
+        let mut parries = 0;
+        let mut wounds = 0;
+        let mut friendly_hits = 0;
+        let mut enemy_hits = 0;
+        let mut engaged_ticks = 0;
+        let mut previous_losses = vec![(0, 0); state.hostile.battle.formation.regiments.len()];
+        for elapsed in 1..=phase_ticks {
+            let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+            for event in &output.changes.entity_events {
+                let crate::boundary::EntityEvent::Damage {
+                    entity,
+                    cause: Some(cause),
+                    ..
+                } = event
+                else {
+                    continue;
+                };
+                let Some(victim) = state.entities.slot_of_any(*entity) else {
+                    continue;
+                };
+                let Some(attacker) = state.entities.slot_of_any(*cause) else {
+                    continue;
+                };
+                let a = state.entities.body(attacker).faction;
+                let b = state.entities.body(victim).faction;
+                if a != 0 && b != 0 {
+                    friendly_hits += u64::from(a == b);
+                    enemy_hits += u64::from(a != b);
+                }
+            }
+            let work = state.hostile.battle.combat.work;
+            swings += work.swings;
+            strikes += work.strikes;
+            kills += work.killed;
+            arrows += work.arrows;
+            parries += work.parries;
+            wounds += work.wounded;
+            if running {
+                engaged_ticks += u64::from(melee_contact(&state.hostile.battle));
+            }
+            if elapsed % 200 == 0 || elapsed == phase_ticks {
+                eprintln!(
+                    "BATTLE_ACTIVITY running={running} elapsed={elapsed} swings={swings} strikes={strikes} parries={parries} melee_kills={kills} wounds={wounds} arrows={arrows} friendly_hits={friendly_hits} enemy_hits={enemy_hits}"
+                );
+                if running {
+                    log_regiment_activity(&state, elapsed, &mut previous_losses);
+                    log_attrition(&state, elapsed, engaged_ticks);
+                }
+            }
             samples.push(state.hostile.battle.timings);
         }
         let percentile = |pick: fn(Timings) -> u64, percentile: usize| {
@@ -684,7 +1354,7 @@ fn battle_phase_micro() {
             values[((values.len() - 1) * percentile) / 100]
         };
         eprintln!(
-            "BATTLE_MICRO side={side} running={running} ticks={ticks} units={} total_us_p50={} total_us_p95={} total_us_p99={} counters_us_p95={} formation_us_p95={} columns_us_p95={} targets_us_p95={} steering_us_p95={} combat_us_p95={} morale_us_p95={} projection_us_p95={} emit_us_p95={}",
+            "BATTLE_MICRO side={side} running={running} ticks={phase_ticks} units={} total_us_p50={} total_us_p95={} total_us_p99={} counters_us_p95={} formation_us_p95={} columns_us_p95={} targets_us_p95={} steering_us_p95={} combat_us_p95={} morale_us_p95={} projection_us_p95={} emit_us_p95={}",
             unit_counters(&state.hostile).units,
             percentile(|t| t.total_us, 50),
             percentile(|t| t.total_us, 95),
@@ -700,4 +1370,381 @@ fn battle_phase_micro() {
             percentile(|t| t.emit_us, 95),
         );
     }
+}
+
+fn log_regiment_activity(
+    state: &crate::tick::TickState,
+    elapsed: usize,
+    previous_losses: &mut [(usize, usize)],
+) {
+    let battle = &state.hostile.battle;
+    for (ri, regiment) in battle.formation.regiments.iter().enumerate() {
+        let mut alive = 0;
+        let mut moving = 0;
+        let mut targets = 0;
+        let mut resting = 0;
+        let mut front = [0.0; 3];
+        let mut front_count = 0;
+        let mut ammunition = 0_u64;
+        let mut wounded = 0;
+        for bi in regiment.start..regiment.start + regiment.len {
+            let member = &battle.formation.members[bi];
+            let Some(slot) = state.entities.slot_of(member.id) else {
+                continue;
+            };
+            if state.entities.row(slot).health <= 0.0 {
+                continue;
+            }
+            alive += 1;
+            moving += usize::from(state.entities.vel(slot).iter().any(|v| *v != 0.0));
+            resting +=
+                usize::from(state.entities.motion_flags(slot) & crate::entities::MOTION_REST != 0);
+            targets += usize::from(battle.columns.targets.get(bi).is_some_and(Option::is_some));
+            wounded += usize::from(member.wounded);
+            ammunition += u64::from(battle.combat.fighters[bi].arrows);
+            if member.rank == 0 {
+                let pos = state.entities.pos(slot);
+                for axis in 0..3 {
+                    front[axis] += pos[axis];
+                }
+                front_count += 1;
+            }
+        }
+        if front_count != 0 {
+            front = front.map(|v| v / front_count as f64);
+        }
+        let pulsing = regiment
+            .sections
+            .iter()
+            .filter(|section| section.pulse_until > battle.elapsed_ticks)
+            .count();
+        eprintln!(
+            "BATTLE_REGIMENT elapsed={elapsed} id={} side={} order={:?} alive={alive} dead={} moving={moving} rest_hint={resting} targets={targets} wounded={wounded} ammunition={ammunition} origin={:?} front={front:?} gap={} enemy={:?} speed={} stamina={} morale={} broken={} pulsing={pulsing}",
+            regiment.spec.id,
+            regiment.spec.faction,
+            regiment.spec.order,
+            regiment.len - alive,
+            regiment.spec.origin,
+            regiment.gap,
+            regiment.enemy_regiment,
+            regiment.speed,
+            regiment.stamina,
+            regiment.morale.value,
+            regiment.morale.broken
+        );
+        let dead = regiment.len - alive;
+        let removed = dead + wounded;
+        eprintln!(
+            "BATTLE_WINDOW elapsed={elapsed} id={} side={} deaths={} removals={}",
+            regiment.spec.id,
+            regiment.spec.faction,
+            dead as i64 - previous_losses[ri].0 as i64,
+            removed as i64 - previous_losses[ri].1 as i64
+        );
+        previous_losses[ri] = (dead, removed);
+    }
+}
+
+/// G2 contact rework: a steady rear-rank man with an enemy at his shoulder
+/// (mixing, flanks, gaps) takes that enemy as his target and counts as
+/// fighting; before it only the front rank searched and rear ranks stood idle
+/// next to the enemy.
+#[test]
+fn rear_rank_soldier_with_an_enemy_in_reach_targets_it_and_counts_as_fighting() {
+    let mut state = fixture();
+    let mut battle = BattleState::default();
+    // Two files, three ranks two blocks apart: z 4 (front), 2, 0.
+    let red: Vec<_> = (0..6)
+        .map(|i| {
+            let pos = [4.0 + (i % 2) as f64, 100.0, 4.0 - 2.0 * (i / 2) as f64];
+            spawn(&mut state, 1, "minecraft:zombie", pos)
+        })
+        .collect();
+    battle
+        .formation
+        .add_regiment(
+            formation::RegimentSpec {
+                id: 1,
+                faction: 1,
+                origin: [4.5, 100.0, 4.0],
+                facing: [0.0, 1.0],
+                files: 2,
+                frontage: 1.0,
+                order: formation::Order::Advance,
+            },
+            &red,
+        )
+        .unwrap();
+    // A lone enemy among the last rank, half a block ahead of it and between
+    // its two men (inside the fixture's active chunk), 3.5 blocks from the
+    // front; the rank ahead stands 1.5 blocks from him, out of reach.
+    let blue = spawn(&mut state, 2, "minecraft:zombie", [4.5, 100.0, 0.5]);
+    let rear = state.entities.slot_of(red[5]).unwrap();
+    let mut out = Output::default();
+    for tick in 0..RETARGET_TICKS {
+        let frame = Frame {
+            entities: &state.entities,
+            registry: &state.registry,
+            world: &state.world,
+            tick,
+        };
+        battle.columns.prepare(
+            &frame,
+            &mut battle.formation,
+            &mut battle.output.counters,
+            &mut battle.population,
+        );
+        battle.formation.finish_preparation();
+        targeting::update(&frame, &mut battle);
+        combat::step(&frame, &mut battle, &mut out);
+        // red[4], red[5] and blue are within the vanilla mob melee reach
+        // (boxes grown by sqrt(2.04) - 0.6) on every tick, with or without a
+        // target acquired yet; the rank in front (two blocks) is not.
+        assert_eq!(battle.combat.work.in_weapon_reach, 3, "tick {tick}");
+    }
+    assert_eq!(
+        battle.formation.context(red[5]).map(|c| c.front_rank),
+        Some(false)
+    );
+    let target = battle
+        .columns
+        .target(rear)
+        .expect("a rear-rank man searches for the enemy beside him");
+    assert_eq!(target.id, blue);
+    let work = battle.combat.work;
+    assert_eq!(work.fighting, 3, "{work:?}");
+    // A wavering man standing guard (shield up) fights; a fugitive does not;
+    // a parried stagger stays inside the fight window, a long one leaves it.
+    let member = |id| {
+        battle
+            .formation
+            .members
+            .iter()
+            .position(|m| m.id == id)
+            .unwrap()
+    };
+    let (wavering, fugitive) = (member(red[5]), member(red[4]));
+    battle.formation.members[wavering].wavering = true;
+    battle.formation.members[fugitive].routing = true;
+    let mut combat_state = std::mem::take(&mut battle.combat);
+    for (tick, stagger, fighting) in [
+        (RETARGET_TICKS, false, 2),
+        (RETARGET_TICKS + 1, true, 2),
+        (RETARGET_TICKS + 40, true, 0),
+    ] {
+        if stagger {
+            for fighter in &mut combat_state.fighters {
+                fighter.action = combat::Action::Stagger { until: u64::MAX };
+            }
+        }
+        let frame = Frame {
+            entities: &state.entities,
+            registry: &state.registry,
+            world: &state.world,
+            tick,
+        };
+        combat::count_fighting(&frame, &battle, &mut combat_state);
+        assert_eq!(combat_state.work.in_weapon_reach, 3, "tick {tick}");
+        assert_eq!(combat_state.work.fighting, fighting, "tick {tick}");
+    }
+}
+
+/// Vanilla 26.3 mob melee reach (`Mob.isWithinMeleeAttackRange`, local javap):
+/// an iron spear (attack_range 2..4.5, mob factor 0.5) reaches a target whose
+/// box lies beyond the soldier's box grown by 1 and within it grown by 2.25; a
+/// sword, without the component, reaches within the box grown by the mob
+/// default sqrt(2.04) - 0.6. Decision, impact and telemetry share this test.
+#[test]
+fn melee_range_follows_the_held_items_attack_range_as_for_a_mob() {
+    let mut state = fixture();
+    let range_of = |state: &crate::tick::TickState, item: &str| {
+        faction::melee_reach(
+            state
+                .registry
+                .item_facts
+                .get(&mc_data::Identifier::parse(item).unwrap())
+                .and_then(|facts| facts.attack_range),
+        )
+    };
+    let spear = range_of(&state, "minecraft:iron_spear");
+    assert_eq!(
+        spear,
+        mc_melee_range::MeleeReach {
+            min: 1.0,
+            max: 2.25
+        }
+    );
+    let sword = range_of(&state, "minecraft:iron_sword");
+    assert_eq!(sword, mc_melee_range::MeleeReach::mob(None));
+    assert!((sword.max - (2.04_f32.sqrt() as f64 - 0.6)).abs() < 1e-6);
+    let actor = spawn(&mut state, 1, "minecraft:zombie", [4.0, 100.0, 4.0]);
+    let target = spawn(&mut state, 2, "minecraft:zombie", [5.0, 100.0, 4.0]);
+    let (a, t) = (
+        state.entities.slot_of(actor).unwrap(),
+        state.entities.slot_of(target).unwrap(),
+    );
+    // Centre distance along x; 0.3-block half-widths on both sides.
+    for (dx, spear_hits, sword_hits) in [
+        (1.0, false, true),  // inside the spear's minimum, inside sword reach
+        (1.5, false, false), // 1.5 < 0.6 + 1.0: still inside the spear's minimum
+        (2.0, true, false),  // inside the spear window, past sword reach
+        (2.8, true, false),  // 2.8 < 0.6 + 2.25
+        (2.9, false, false), // past both
+    ] {
+        state.entities.set_pos(t, [4.0 + dx, 100.0, 4.0]);
+        assert_eq!(
+            faction::in_melee_range(&state.entities, a, t, spear),
+            spear_hits,
+            "spear dx={dx}"
+        );
+        assert_eq!(
+            faction::in_melee_range(&state.entities, a, t, sword),
+            sword_hits,
+            "sword dx={dx}"
+        );
+    }
+}
+
+/// One battle tick of the decision pipeline at `tick`, as the tick owner runs it.
+fn battle_tick(
+    state: &crate::tick::TickState,
+    battle: &mut BattleState,
+    out: &mut Output,
+    tick: u64,
+) {
+    let frame = Frame {
+        entities: &state.entities,
+        registry: &state.registry,
+        world: &state.world,
+        tick,
+    };
+    battle.columns.prepare(
+        &frame,
+        &mut battle.formation,
+        &mut battle.output.counters,
+        &mut battle.population,
+    );
+    battle.formation.finish_preparation();
+    targeting::update(&frame, battle);
+    combat::step(&frame, battle, out);
+}
+
+/// The in-reach counter takes any enemy within the melee range, not only the
+/// nearest: a spearman whose nearest enemy stands inside his minimum still
+/// reaches a farther one in his window.
+#[test]
+fn spearman_with_the_nearest_enemy_inside_his_minimum_reaches_a_farther_one() {
+    let mut state = fixture();
+    let mut battle = BattleState::default();
+    let red = spawn(&mut state, 1, "minecraft:zombie", [4.0, 100.0, 4.0]);
+    // Nearest: one block beside him, inside the spear's minimum (0.6 + 1.0).
+    spawn(&mut state, 2, "minecraft:zombie", [5.0, 100.0, 4.0]);
+    // Farther: two blocks ahead, inside the spear window (0.6 + 2.25), past
+    // the sword default (0.6 + 0.83).
+    spawn(&mut state, 2, "minecraft:zombie", [4.0, 100.0, 6.0]);
+    let mut out = Output::default();
+    battle_tick(&state, &mut battle, &mut out, 0);
+    let bi = battle
+        .columns
+        .index(state.entities.slot_of(red).unwrap())
+        .unwrap();
+    battle.combat.fighters[bi].range = mc_melee_range::MeleeReach {
+        min: 1.0,
+        max: 2.25,
+    };
+    let mut combat_state = std::mem::take(&mut battle.combat);
+    let frame = Frame {
+        entities: &state.entities,
+        registry: &state.registry,
+        world: &state.world,
+        tick: 1,
+    };
+    combat::count_fighting(&frame, &battle, &mut combat_state);
+    // The spearman and the near enemy (sword reach); the far one reaches no one.
+    assert_eq!(combat_state.work.in_weapon_reach, 2);
+}
+
+/// Human reaction: a man who first finds an enemy within reach stands guard at
+/// least four ticks before his first decision, whatever his decision phase.
+#[test]
+fn first_blow_waits_for_a_human_reaction() {
+    let mut state = fixture();
+    let mut battle = BattleState::default();
+    // Forty pairs one block apart inside the fixture's active chunk (pairs two
+    // blocks apart sideways, three between rows, out of each other's reach):
+    // every decision phase of the 20-tick cadence is held by some man.
+    let men: Vec<_> = (0..40)
+        .flat_map(|i| {
+            let (x, z) = (1.0 + 2.0 * f64::from(i % 8), 1.0 + 3.0 * f64::from(i / 8));
+            [
+                spawn(&mut state, 1, "minecraft:zombie", [x, 100.0, z]),
+                spawn(&mut state, 2, "minecraft:zombie", [x, 100.0, z + 1.0]),
+            ]
+        })
+        .collect();
+    let mut out = Output::default();
+    let mut first_windup = vec![None; men.len()];
+    for tick in 0..60 {
+        battle_tick(&state, &mut battle, &mut out, tick);
+        for (i, id) in men.iter().enumerate() {
+            let bi = battle
+                .columns
+                .index(state.entities.slot_of(*id).unwrap())
+                .unwrap();
+            if matches!(
+                battle.combat.fighters[bi].action,
+                combat::Action::Windup { .. }
+            ) {
+                first_windup[i].get_or_insert(tick);
+            }
+        }
+    }
+    let swung: Vec<u64> = first_windup.iter().flatten().copied().collect();
+    assert!(swung.len() >= 10, "{first_windup:?}");
+    assert!(swung.iter().all(|&tick| tick >= 4), "{first_windup:?}");
+}
+
+/// Vanilla 26.3 `Entity.positionRider`: a husk on a horse sits at the horse's
+/// PASSENGER point (1.44375) less his VEHICLE point (`ridingOffset(-0.7)`),
+/// 0.74375 above the horse's feet. His strike box joins the horse's sideways
+/// at his own height: an enemy whose box ends below his seat is out of reach
+/// however close, one level with him is in reach from the horse's flank.
+#[test]
+fn husk_rides_at_the_vanilla_seat_and_strikes_from_it() {
+    let mut state = fixture();
+    let rider = spawn(&mut state, 1, "minecraft:husk", [4.5, 100.0, 4.5]);
+    let horse = spawn(&mut state, 1, "minecraft:horse", [6.5, 100.0, 6.5]);
+    cavalry::mount(&mut state, rider, horse).unwrap();
+    let (r, h) = (
+        state.entities.slot_of(rider).unwrap(),
+        state.entities.slot_of(horse).unwrap(),
+    );
+    let seat = f64::from(1.443_75_f32) - f64::from(0.7_f32);
+    let (rp, hp) = (state.entities.pos(r), state.entities.pos(h));
+    assert_eq!([rp[0], rp[2]], [hp[0], hp[2]]);
+    assert!(
+        (rp[1] - hp[1] - seat).abs() < 1e-12,
+        "seat {}",
+        rp[1] - hp[1]
+    );
+    let reach = mc_melee_range::MeleeReach::mob(None);
+    // 1.6 blocks from the horse's centre: past the husk's own box grown by
+    // the reach (0.3 + 0.83), within the horse's (0.7 + 0.83).
+    let level = spawn(
+        &mut state,
+        2,
+        "minecraft:zombie",
+        [6.5 + 1.6, hp[1] + seat, 6.5],
+    );
+    let level = state.entities.slot_of(level).unwrap();
+    assert!(faction::in_melee_range(&state.entities, r, level, reach));
+    // A man 1.96 lower: his box (1.95 tall) ends under the rider's seat.
+    state
+        .entities
+        .set_pos(level, [6.5 + 1.0, hp[1] + seat - 1.96, 6.5]);
+    assert!(!faction::in_melee_range(&state.entities, r, level, reach));
+    state
+        .entities
+        .set_pos(level, [6.5 + 1.0, hp[1] + seat - 1.9, 6.5]);
+    assert!(faction::in_melee_range(&state.entities, r, level, reach));
 }

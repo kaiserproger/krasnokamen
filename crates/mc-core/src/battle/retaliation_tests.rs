@@ -336,3 +336,292 @@ fn soldier_blows_between_soldiers_turn_nobody_from_the_nearest_enemy() {
     );
     assert!(remembered > 0, "no soldier's blow reached retaliation");
 }
+
+/// Soldiers answering `attacker` as helpers.
+fn helpers_of(state: &TickState, attacker: EntityId) -> Vec<EntityId> {
+    let battle = &state.hostile.battle;
+    battle
+        .columns
+        .ids
+        .iter()
+        .copied()
+        .filter(|&id| battle.retaliation.answering(id) == Some((attacker, true)))
+        .collect()
+}
+
+/// PovRed at `spot` jabs `victim`, held at `at`, every 20 ticks for `ticks`.
+fn jab_held(
+    state: &mut TickState,
+    player: EntityId,
+    victim: EntityId,
+    at: [f64; 3],
+    spot: [f64; 3],
+    ticks: u64,
+) {
+    for tick in 0..ticks {
+        ready(state, player, victim, spot);
+        put(state, victim, at);
+        let input = if tick % 20 == 0 {
+            vec![jab()]
+        } else {
+            Vec::new()
+        };
+        run_tick(state, &input);
+    }
+}
+
+/// Fable F1: PovRed leaves the crew he drew (he goes 18+ blocks along the
+/// line to jab another soldier who cannot reach him). The helpers left behind
+/// can no longer answer him, so they leave his crew at once, and idle men near
+/// his new place take it over, still at most two.
+#[test]
+fn helpers_left_behind_give_the_crew_to_friends_near_his_new_place() {
+    let (mut state, player, blue, at) = facing_blue();
+    stand_fast(&mut state, blue);
+    let spot = [at[0], at[1], at[2] - 3.5];
+    recharge(&mut state, player, blue, spot, at);
+    jab_held(&mut state, player, blue, at, spot, 100);
+    let left = helpers_of(&state, player);
+    assert_eq!(left.len(), HELPERS, "no crew at his first place");
+    let (other, other_at) = {
+        let formation = &state.hostile.battle.formation;
+        formation
+            .members
+            .iter()
+            .filter(|m| {
+                let spec = &formation.regiments[m.regiment].spec;
+                spec.faction == 2 && spec.frontage == 1.0 && m.rank == 0
+            })
+            .map(|m| {
+                (
+                    m.id,
+                    state.entities.pos(state.entities.slot_of(m.id).unwrap()),
+                )
+            })
+            .find(|(_, p)| (18.0..40.0).contains(&(p[0] - at[0]).hypot(p[2] - at[2])))
+            .expect("a blue front-rank soldier 18-40 blocks along the line")
+    };
+    stand_fast(&mut state, other);
+    let other_spot = [other_at[0], other_at[1], other_at[2] - 3.5];
+    jab_held(&mut state, player, other, other_at, other_spot, 100);
+    for id in &left {
+        assert_eq!(
+            state.hostile.battle.retaliation.answering(*id),
+            None,
+            "{id:?} still helps against PovRed 18+ blocks away"
+        );
+    }
+    let crew = helpers_of(&state, player);
+    assert_eq!(
+        crew.len(),
+        HELPERS,
+        "no new crew at his new place: {crew:?}"
+    );
+    assert!(
+        crew.iter().all(|id| !left.contains(id)),
+        "{crew:?} vs {left:?}"
+    );
+}
+
+/// Fable F5 / H5: a jabbed rider answers through his horse. PovRed is no
+/// battle column, so `cavalry` steers the targeted rider at him as at a flank.
+/// The jab's knockback can carry the horse past 6 blocks (from 4 to about
+/// 6.2 here), so the rider takes PovRed exactly at his first re-pick that
+/// finds him within [`MELEE_ENGAGEMENT_REACH`], not before and not later; the
+/// horse closes on him, and within the three seconds PovRed is inside the
+/// rider's weapon reach (combat strikes an answered holder in reach first)
+/// or, when the horses' spacing keeps him out of it, is handed on.
+#[test]
+fn a_jabbed_rider_turns_his_horse_on_the_holder() {
+    let (mut state, player, _, _) = facing_blue();
+    let (rider, horse) = {
+        let formation = &state.hostile.battle.formation;
+        formation
+            .members
+            .iter()
+            .filter(|m| {
+                let spec = &formation.regiments[m.regiment].spec;
+                spec.faction == 2 && spec.frontage > 1.0 && m.rank == 0
+            })
+            .find_map(|m| {
+                let slot = state.entities.slot_of(m.id)?;
+                Some((m.id, state.entities.row(slot).entity_life.mount.vehicle?))
+            })
+            .expect("a blue rider in the front rank")
+    };
+    stand_fast(&mut state, rider);
+    let horse_at = state.entities.pos(state.entities.slot_of(horse).unwrap());
+    let spot = [horse_at[0], horse_at[1], horse_at[2] - 4.0];
+    // The spear's charge comes back while the horse (the rider sits on it)
+    // stands where it stood.
+    for _ in 0..20 {
+        ready(&mut state, player, rider, spot);
+        put(&mut state, horse, horse_at);
+        run_tick(&mut state, &[]);
+    }
+    ready(&mut state, player, rider, spot);
+    put(&mut state, horse, horse_at);
+    let (output, ..) = run_tick(&mut state, &[jab()]);
+    assert_jab_hurt(&state, &output, player, rider);
+    let start = distance(&state, player, horse);
+    let (mut turned, mut nearest, mut reached) = (None, start, false);
+    for tick in 1..=60_u64 {
+        ready(&mut state, player, rider, spot);
+        // What this tick's re-pick sees: the rider where the last tick left
+        // him, PovRed at `spot`.
+        let away = {
+            let rider_at = state.entities.pos(state.entities.slot_of(rider).unwrap());
+            crate::target_grid::distance(rider_at, spot)
+        };
+        let due = crate::battle::retarget_due(rider, state.hostile.battle.elapsed_ticks);
+        run_tick(&mut state, &[]);
+        nearest = nearest.min(distance(&state, player, horse));
+        if turned.is_none() {
+            let takes = column_target(&state, rider) == Some(player);
+            assert_eq!(
+                takes,
+                due && away <= MELEE_ENGAGEMENT_REACH,
+                "tick {tick}: re-pick due {due}, PovRed {away:.2} blocks off, taken {takes}"
+            );
+            if takes {
+                turned = Some(tick);
+            }
+            continue;
+        }
+        let battle = &state.hostile.battle;
+        let slot = state.entities.slot_of(rider).unwrap();
+        let bi = battle.columns.index(slot).unwrap();
+        let range = battle.combat.fighters[bi].range;
+        reached |= crate::battle::live_players::in_reach(
+            battle,
+            &state.entities,
+            slot,
+            range,
+            Some(player),
+        )
+        .is_some();
+    }
+    turned.expect("the rider never took PovRed as his target");
+    assert!(
+        nearest < start - 0.5,
+        "his horse never closed: {start:.2} -> {nearest:.2}"
+    );
+    let handed = !helpers_of(&state, player).is_empty();
+    assert!(
+        reached || handed,
+        "PovRed never came into the rider's reach and was not handed on"
+    );
+}
+
+/// Fable F5: PovRed dies while a soldier answers him. The soldier lets him go
+/// on the next battle tick (no target, no step toward him) and never swings at
+/// the body.
+#[test]
+fn a_soldier_lets_a_dead_holder_go_at_once() {
+    let (mut state, player, blue, at) = facing_blue();
+    stand_fast(&mut state, blue);
+    let spot = [at[0], at[1], at[2] - 3.5];
+    recharge(&mut state, player, blue, spot, at);
+    ready(&mut state, player, blue, spot);
+    put(&mut state, blue, at);
+    let (output, ..) = run_tick(&mut state, &[jab()]);
+    assert_jab_hurt(&state, &output, player, blue);
+    let mut answering = false;
+    for _ in 0..=RETARGET_TICKS {
+        ready(&mut state, player, blue, spot);
+        run_tick(&mut state, &[]);
+        answering |= column_target(&state, blue) == Some(player);
+    }
+    assert!(answering, "the soldier never answered PovRed");
+    run_tick(
+        &mut state,
+        &[PlayerInput::Command {
+            connection: ConnectionId(1),
+            command: "kill".into(),
+            permission_level: 2,
+        }],
+    );
+    assert!(
+        state.players[&player].vitals.is_dead(),
+        "PovRed survived the kill"
+    );
+    run_tick(&mut state, &[]);
+    assert_ne!(
+        column_target(&state, blue),
+        Some(player),
+        "he still targets the dead PovRed"
+    );
+    assert_eq!(state.hostile.battle.retaliation.answering(blue), None);
+    let index = state
+        .hostile
+        .battle
+        .formation
+        .members
+        .iter()
+        .position(|m| m.id == blue)
+        .unwrap();
+    assert_eq!(state.hostile.battle.formation.members[index].close_on, None);
+    for _ in 0..40 {
+        run_tick(&mut state, &[]);
+        let battle = &state.hostile.battle;
+        let bi = battle
+            .columns
+            .index(state.entities.slot_of(blue).unwrap())
+            .unwrap();
+        assert!(
+            !matches!(battle.combat.fighters[bi].action, Action::Windup { target, .. } if target == player),
+            "he swings at the dead PovRed"
+        );
+    }
+}
+
+/// Fable F3: only a blow that can lead to an answer or a hand-off is
+/// remembered. An enemy beyond [`HELP_RADIUS`] (a far archer's arrow) can be
+/// neither answered nor handed on, and a horse is no soldier: neither blow
+/// leaves a grudge, so the 20k pass stays small.
+#[test]
+fn blows_that_can_lead_nowhere_are_not_remembered() {
+    let (mut state, player, blue, at) = facing_blue();
+    let far = {
+        let formation = &state.hostile.battle.formation;
+        formation
+            .members
+            .iter()
+            .filter(|m| formation.regiments[m.regiment].spec.faction == 1)
+            .map(|m| m.id)
+            .find(|&id| distance(&state, id, blue) > HELP_RADIUS + 1.0)
+            .expect("a red soldier beyond the help radius")
+    };
+    let horse = state
+        .entities
+        .rider_slots()
+        .find(|&slot| state.entities.body(slot).faction == 2)
+        .expect("a blue horse");
+    let horse_at = state.entities.pos(horse);
+    let spot = [at[0], at[1], at[2] - 3.5];
+    ready(&mut state, player, blue, spot);
+    put(
+        &mut state,
+        player,
+        [horse_at[0], horse_at[1], horse_at[2] - 3.0],
+    );
+    let slot = state.entities.slot_of(blue).unwrap();
+    hurt(&mut state, slot, far);
+    hurt(&mut state, horse, player);
+    run_tick(&mut state, &[]);
+    let retaliation = &state.hostile.battle.retaliation;
+    assert!(
+        retaliation.work.blows >= 2,
+        "blows {}",
+        retaliation.work.blows
+    );
+    assert!(
+        !retaliation.grudges.contains_key(&blue),
+        "the far blow was remembered"
+    );
+    let horse_id = state.entities.body(horse).id;
+    assert!(
+        !retaliation.grudges.contains_key(&horse_id),
+        "the horse's blow was remembered"
+    );
+}

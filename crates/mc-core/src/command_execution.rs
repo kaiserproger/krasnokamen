@@ -357,11 +357,8 @@ pub(crate) fn execute(
 ) -> CommandResult {
     match command {
         Command::Battle(command) => {
-            if matches!(
-                command,
-                crate::battle::staging::BattleCommand::Roster
-                    | crate::battle::staging::BattleCommand::Trace { .. }
-            ) && connection != crate::command_console::CONNECTION
+            if matches!(command, crate::battle::staging::BattleCommand::Roster)
+                && connection != crate::command_console::CONNECTION
             {
                 error(
                     state,
@@ -372,7 +369,7 @@ pub(crate) fn execute(
             }
             let origin = crate::command_console::pose(state, executor)
                 .map_or_else(|| state.world.world_spawn_position(), |(pos, _)| pos);
-            return match crate::hostile::battle::staging::execute(state, changes, origin, command) {
+            return match crate::battle::staging::execute(state, changes, origin, command) {
                 Ok(message) => {
                     if accepts_success(state, connection) {
                         state.push_player(connection, PlayerChange::Chat { message });
@@ -1064,7 +1061,14 @@ pub(crate) fn execute(
                         return Failed;
                     }
                 };
-                let id = crate::experience_orbs::summon(state, type_id, at, value);
+                let id = crate::experience_orbs::spawn(
+                    state,
+                    type_id,
+                    at,
+                    (i32::from(value), 1),
+                    [0.0; 3],
+                    0.0,
+                );
                 changes.entities_spawned.push(id);
                 success_feedback(
                     state,

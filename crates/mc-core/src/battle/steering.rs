@@ -1,18 +1,32 @@
 //! Sparse per-team regiment distance samples plus bounded local steering.
-//! The filmed battlefield is flat: no per-soldier path search is needed.
+//! The battlefield is natural relief: soldiers keep the formation's
+//! horizontal drive, physics jumps one-block steps and gravity takes them down
+//! slopes; a drive into a trunk or a wall of two or more blocks turns aside
+//! ([`super::ground::deflect`]). There is no per-soldier path search.
 //! Nearest front points are shared for ten ticks (AoE4 virtual-leader pattern).
 //! Separation: PSCrowd's five nearest neighbours, capped cell inspection;
 //! impulses use the existing mc-physics contact kernel, never mutate neighbours.
 
 use super::formation::{FormationRuntime, Member, Regiment};
 use super::{BattleState, Frame, Output};
+use crate::entities::EntitySlot;
 use mc_physics::entity_collision_26_1_2::{EntityPushInput, PushRecipient, vanilla_push_impulse};
 use mc_physics::mth;
+use rayon::prelude::*;
 
 pub(crate) const NEIGHBOURS: usize = 5;
 const CELL_CAP: usize = 8;
 pub(crate) const MIN_SPACING: f64 = 0.65;
 const SENSE: f64 = 1.5;
+const DRIVE_CHUNK: usize = 256;
+/// Height apart, in blocks, within which bodies see each other: a body walks off
+/// a drop of up to MAX_DROP blocks, from a one-block step down or from the top of
+/// a step-up (its feet rest a little above the block: 64.02, 64.17), so one that
+/// much lower stands where it may land. At exactly MAX_DROP, fugitives stepping
+/// off a terrace ledge fell onto one point (111 in a terrace corner of
+/// rehearsal-06198df4), and with it, from 2.02 above into a gully end (58-62 in
+/// the rehearsals of 07222297).
+pub(crate) const LEVELS: f64 = super::ground::MAX_DROP + 1.0;
 
 /// CSR over occupied two-block cells. `member_cell[bi]` and the nine adjacent
 /// cell ranges are prepared once; steering never hashes or searches cell keys.
@@ -107,6 +121,19 @@ impl SeparationGrid {
         &self,
         index: usize,
         members: &[Member],
+    ) -> ([(f64, usize); NEIGHBOURS], u64) {
+        self.nearest_where(index, members, SENSE, |_| true)
+    }
+
+    /// [`Self::nearest`] within `radius` (at most 2 blocks, the candidate
+    /// window) among the bodies `keep` accepts: the horses round a rider in a
+    /// melee, where the five nearest bodies are often all foot.
+    pub(super) fn nearest_where(
+        &self,
+        index: usize,
+        members: &[Member],
+        radius: f64,
+        keep: impl Fn(&Member) -> bool,
     ) -> ([(f64, usize); NEIGHBOURS], u64) {
         let actor = &members[index];
         let mut best = [(f64::INFINITY, usize::MAX); NEIGHBOURS];
@@ -211,6 +238,7 @@ pub(crate) fn nearest_front(
     (selected, nearest, routing, examined)
 }
 
+#[cfg(test)]
 pub(crate) fn movement(runtime: &mut FormationRuntime, index: usize) -> [f64; 3] {
     if !runtime.members[index].alive {
         return [0.0; 3];
@@ -219,12 +247,111 @@ pub(crate) fn movement(runtime: &mut FormationRuntime, index: usize) -> [f64; 3]
     movement_with_neighbours(runtime, index, near, examined)
 }
 
+#[cfg(test)]
 fn movement_with_neighbours(
     runtime: &mut FormationRuntime,
     index: usize,
     near: [(f64, usize); NEIGHBOURS],
     examined: u64,
 ) -> [f64; 3] {
+    let (drive, pushes) = drive_with_neighbours(runtime, index, near);
+    runtime.work.separation_candidates += examined;
+    runtime.work.push_calls += pushes;
+    drive
+}
+
+/// A rider is turned through its horse in cavalry (its own feet are a seat,
+/// not the ground); every body on foot, a dismounted rider too, here.
+fn sample_movement(
+    frame: &Frame<'_>,
+    runtime: &FormationRuntime,
+    index: usize,
+) -> ([f64; 3], u64, u64) {
+    let m = &runtime.members[index];
+    if !m.alive {
+        return ([0.0; 3], 0, 0);
+    }
+    let (near, examined) = runtime.neighbours.nearest(index, &runtime.members);
+    let (mut drive, pushes) = drive_with_neighbours(runtime, index, near);
+    if let Some(slot) = m.slot
+        && frame.entities.row(slot).entity_life.mount.vehicle.is_none()
+    {
+        let target = runtime.heading_target(index);
+        let heading = [target[0] - m.pos[0], target[2] - m.pos[2]];
+        let turned = around_obstacles(frame, runtime, slot, drive, heading, Mover::Foot);
+        // A terrain turn (the clear way along a wall, at the drive's speed)
+        // replaces the drive the gap was kept for. Keep it again, or every body
+        // following one wall walks into the one ahead and the wall's end gathers
+        // them on one point: 87 fugitives stood within 0.22 blocks of a cliff
+        // notch in the G2 take. Under rock the walk out toward open sky comes
+        // first: a pile packed into a tunnel would never leave it.
+        drive = if turned == drive
+            || super::ground::under_rock(frame.world, frame.registry, frame.entities.pos(slot))
+        {
+            turned
+        } else {
+            let tick = mc_physics::TICK_SECONDS;
+            let step = keep_gap(
+                &runtime.members,
+                index,
+                &near,
+                MIN_SPACING,
+                [turned[0] * tick, turned[2] * tick],
+            );
+            runtime.constrain_velocity(m.pos, [step[0] / tick, turned[1], step[1] / tick])
+        };
+    }
+    (drive, examined, pushes)
+}
+
+/// Which terrain rules turn a body ([`around_obstacles`]).
+pub(crate) enum Mover<'a> {
+    /// On foot: boxed in, it stands ([`super::ground::deflect_foot`]).
+    Foot,
+    /// A horse with a target or a slot ([`super::ground::deflect`]).
+    Rider,
+    /// A fleeing horse and its way out of a pocket
+    /// ([`super::ground::deflect_mounted`]).
+    Fugitive(&'a mut Option<super::ground::Escape>),
+}
+
+/// Terrain turn for a final physics velocity; `heading` is where the body is
+/// going without crowd pushes or lateral dressing. Bounds are re-applied only
+/// when the drive turned, so an unobstructed drive stays bit-identical.
+pub(crate) fn around_obstacles(
+    frame: &Frame<'_>,
+    runtime: &FormationRuntime,
+    slot: EntitySlot,
+    velocity: [f64; 3],
+    heading: [f64; 2],
+    mover: Mover<'_>,
+) -> [f64; 3] {
+    let pos = frame.entities.pos(slot);
+    let drive = [velocity[0], velocity[2]];
+    let half_width = frame.entities.body(slot).half_width;
+    let (world, registry) = (frame.world, frame.registry);
+    let turned = match mover {
+        Mover::Foot => {
+            super::ground::deflect_foot(world, registry, pos, half_width, drive, heading, 1.0)
+        }
+        Mover::Rider => {
+            super::ground::deflect(world, registry, pos, half_width, drive, heading, 1.0)
+        }
+        Mover::Fugitive(escape) => super::ground::deflect_mounted(
+            world, registry, pos, half_width, drive, heading, 1.0, escape, frame.tick,
+        ),
+    };
+    if turned == drive {
+        return velocity;
+    }
+    runtime.constrain_velocity(pos, [turned[0], velocity[1], turned[1]])
+}
+
+fn drive_with_neighbours(
+    runtime: &FormationRuntime,
+    index: usize,
+    near: [(f64, usize); NEIGHBOURS],
+) -> ([f64; 3], u64) {
     let m = &runtime.members[index];
     let (mut target, max_step) = runtime.destination(index);
     if let Some((min, max)) = runtime.bounds {
@@ -234,7 +361,7 @@ fn movement_with_neighbours(
     let delta = [target[0] - m.pos[0], target[2] - m.pos[2]];
     let length = mth::length2(delta[0], delta[1]);
     let mut drive = delta.map(|v| v * (max_step / length.max(max_step)).min(1.0));
-    runtime.work.separation_candidates += examined;
+    let mut pushes = 0;
     for &(distance, other) in &near {
         if other == usize::MAX || distance >= MIN_SPACING * MIN_SPACING {
             continue;
@@ -261,7 +388,7 @@ fn movement_with_neighbours(
             recipient_is_vehicle: false,
         })
         .expect("finite battle snapshot contact");
-        runtime.work.push_calls += 1;
+        pushes += 1;
         drive[0] += impulse.x;
         drive[1] += impulse.z;
     }
@@ -270,12 +397,7 @@ fn movement_with_neighbours(
     if speed > max_step {
         drive = drive.map(|v| v * max_step / speed);
     }
-    let mut drive = keep_gap(&runtime.members, index, &near, MIN_SPACING, drive);
-    let moving = mth::length2(drive[0], drive[1]);
-    if settling && !packed && moving > 0.0 {
-        let kept = (moving - CROWD_BRAKE).max(0.0) / moving;
-        drive = drive.map(|v| v * kept);
-    }
+    let drive = keep_gap(&runtime.members, index, &near, MIN_SPACING, drive);
     // Physics drive is blocks/SECOND, whereas all battle tuning is blocks/tick.
     (
         runtime.constrain_velocity(
@@ -319,26 +441,43 @@ pub(super) fn keep_gap(
             drive[1] -= towards[1] * (closing - allowed);
         }
     }
-    // Physics drive is blocks/SECOND, whereas all battle tuning is blocks/tick.
-    runtime.constrain_velocity(
-        m.pos,
-        [
-            drive[0] / mc_physics::TICK_SECONDS,
-            0.0,
-            drive[1] / mc_physics::TICK_SECONDS,
-        ],
-    )
+    drive
 }
 
-pub(crate) fn step(_frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {
+pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {
     battle
         .formation
         .neighbours
         .rebuild(&battle.formation.members);
-    for i in 0..battle.formation.members.len() {
-        let drive = movement(&mut battle.formation, i);
-        battle.columns.drive[i] = drive;
-    }
+    let formation = &battle.formation;
+    let drives = &mut battle.columns.drive[..formation.members.len()];
+    let sample = |(chunk_index, chunk): (usize, &mut [[f64; 3]])| {
+        let mut work = (0_u64, 0_u64);
+        for (offset, drive) in chunk.iter_mut().enumerate() {
+            let (value, examined, pushes) =
+                sample_movement(frame, formation, chunk_index * DRIVE_CHUNK + offset);
+            *drive = value;
+            work.0 += examined;
+            work.1 += pushes;
+        }
+        work
+    };
+    let merge = |a: (u64, u64), b: (u64, u64)| (a.0 + b.0, a.1 + b.1);
+    let work = if drives.len() >= DRIVE_CHUNK * 2 && rayon::current_num_threads() > 1 {
+        drives
+            .par_chunks_mut(DRIVE_CHUNK)
+            .enumerate()
+            .map(sample)
+            .reduce(|| (0, 0), merge)
+    } else {
+        drives
+            .chunks_mut(DRIVE_CHUNK)
+            .enumerate()
+            .map(sample)
+            .fold((0, 0), merge)
+    };
+    battle.formation.work.separation_candidates += work.0;
+    battle.formation.work.push_calls += work.1;
 }
 
 #[cfg(test)]

@@ -32,7 +32,6 @@ mod books;
 pub mod bossbar;
 mod bottles;
 pub mod boundary;
-pub mod battle;
 mod brewing;
 pub mod build_precommit;
 mod campfire;
@@ -398,7 +397,6 @@ mod interact_parity_tests;
 
 mod brushing;
 mod painting;
-mod parrot;
 mod spawn_protection;
 mod special_storage;
 mod sponge;

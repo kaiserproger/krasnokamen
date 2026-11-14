@@ -70,13 +70,17 @@ pub(crate) const HAZARD_SOUL_CAMPFIRE: u8 = 0x80;
 
 /// Everything the tick reads but never writes. Cloned only to install a
 /// datapack reload's recipes and loot.
-#[derive(Clone)]
+#[cfg_attr(not(test), derive(Clone))]
 pub struct CoreRegistry {
     stable: Arc<RegistryTables>,
     /// Crafting/furnace recipes, index = recipe display id (contract).
     pub recipes: Vec<mc_data::recipes::Recipe>,
     /// First native iron-smelting recipe, resolved when registry content changes.
     pub(crate) iron_smelting: Option<crate::villager::smelting::IronSmelting>,
+    /// Ordered recipe-dependent construction candidates.
+    pub(crate) construction_crafting: Arc<crate::settlements::construction_crafting::Index>,
+    /// Reloadable datapack selector predicates.
+    pub(crate) predicates: std::collections::BTreeMap<String, serde_json::Value>,
     /// Block loot tables used by native block breaks.
     pub loot: mc_data::loot::LootTables,
 }
@@ -125,12 +129,6 @@ pub struct RegistryTables {
     pub tags: Arc<mc_data::tags::TagsData>,
     /// View over the already-loaded registry/tag data; no worldgen reload or copy.
     pub(crate) worldgen_tags: Option<Arc<mc_worldgen::vanilla_features::CacheTags>>,
-    /// Crafting/furnace recipes, index = recipe display id (contract).
-    pub recipes: Vec<mc_data::recipes::Recipe>,
-    /// Ordered construction candidates, compiled once with recipes, items and tags.
-    pub(crate) construction_crafting: Arc<crate::settlements::construction_crafting::Index>,
-    /// First native iron-smelting recipe, resolved when registry content changes.
-    pub(crate) iron_smelting: Option<crate::villager::smelting::IronSmelting>,
     pub advancements: Arc<mc_data::advancements::AdvancementTree>,
     /// Immutable advancement block properties/tags, populated once per state.
     pub(crate) advancement_blocks: Vec<std::sync::OnceLock<serde_json::Value>>,
@@ -188,9 +186,6 @@ pub struct RegistryTables {
     pub(crate) paintings: Vec<crate::painting::Variant>,
     /// Plugin Loader blocks stored on reserved vanilla carrier states (ADR 0018).
     pub(crate) carrier_blocks: crate::carrier_blocks::CarrierBlocks,
-    /// Datapack loot predicates by `namespace:path` (selector `predicate=`);
-    /// validated at load to hold only evaluable conditions.
-    pub(crate) predicates: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 impl std::ops::Deref for CoreRegistry {
@@ -215,6 +210,8 @@ impl Clone for CoreRegistry {
             recipes: self.recipes.clone(),
             iron_smelting: self.iron_smelting,
             loot: self.loot.clone(),
+            construction_crafting: Arc::clone(&self.construction_crafting),
+            predicates: self.predicates.clone(),
         }
     }
 }
@@ -228,6 +225,18 @@ impl std::fmt::Debug for CoreRegistry {
 }
 
 impl CoreRegistry {
+    /// Copy only reloadable catalogs; immutable startup tables stay shared.
+    pub(crate) fn prepare_content(&self) -> Self {
+        Self {
+            stable: Arc::clone(&self.stable),
+            recipes: self.recipes.clone(),
+            iron_smelting: self.iron_smelting,
+            construction_crafting: Arc::clone(&self.construction_crafting),
+            predicates: self.predicates.clone(),
+            loot: self.loot.clone(),
+        }
+    }
+
     pub(crate) fn refresh_recipe_indexes(&mut self) {
         self.iron_smelting =
             resolve_iron_smelting(&self.items, &self.item_facts, &self.tags, &self.recipes);
@@ -582,25 +591,56 @@ impl CoreRegistry {
             recipes,
             construction_crafting,
             iron_smelting,
-            advancements,
-            advancement_blocks,
-            advancement_reward_loot,
-            enchantments,
-            farming,
-            hazard_flags,
-            mob_interactable_doors,
-            washed_by_fluids,
-            fire_states,
-            plugin_rules: None,
-            plugin_ore_profile: None,
-            plugin_client_bundles: Vec::new(),
-            plugin_item_ids: Vec::new(),
-            plugin_work_recipe_ids: Vec::new(),
-            plugin_crafting_recipes: Vec::new(),
-            block_tools: crate::block_tools::BlockToolTable::default(),
-            paintings: crate::painting::load(root)?,
-            carrier_blocks: crate::carrier_blocks::CarrierBlocks::default(),
+            loot,
             predicates: std::collections::BTreeMap::new(),
+            stable: Arc::new(RegistryTables {
+                blocks,
+                shears_item,
+                items: Arc::new(items),
+                entity_loot,
+                entity_loot_lookups,
+                chest_loot,
+                fishing_loot,
+                trial_loot,
+                mining,
+                explosion,
+                light,
+                map_colors: map_colors.into(),
+                entity_types,
+                materials,
+                collision_boxes,
+                outlines,
+                max_collision_box_y,
+                max_collision_boxes_per_cell,
+                states,
+                blueprint_index: index_blueprints(&blueprints),
+                blueprints,
+                biome_spawns,
+                item_type_id,
+                cow_type_id,
+                zombie_type_id,
+                item_facts,
+                tags,
+                worldgen_tags,
+                advancements,
+                advancement_blocks,
+                advancement_reward_loot,
+                enchantments,
+                farming,
+                hazard_flags,
+                mob_interactable_doors,
+                washed_by_fluids,
+                fire_states,
+                plugin_rules: None,
+                plugin_ore_profile: None,
+                plugin_client_bundles: Vec::new(),
+                plugin_item_ids: Vec::new(),
+                plugin_work_recipe_ids: Vec::new(),
+                plugin_crafting_recipes: Vec::new(),
+                block_tools: crate::block_tools::BlockToolTable::default(),
+                paintings: crate::painting::load(root)?,
+                carrier_blocks: crate::carrier_blocks::CarrierBlocks::default(),
+            }),
         })
     }
 
