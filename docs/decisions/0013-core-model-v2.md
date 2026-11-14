@@ -81,11 +81,10 @@ frame slots and bytes, so a slow viewer's backlog is bounded in bytes and its
 nearest, longest-waiting entity updates go first. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
-Datapack reloads and `/debug function` trace-file writes each run on one
-short-lived thread of their own (`datapack-worker`, `datapack-trace`;
-`crates/mc-core/src/datapacks.rs:1272-1277` and `:1288-1316`), handing the
-result back over a bounded `sync_channel(1)`, so they execute outside the
-tick and never hold it.
+Datapack reloads and `/debug function` trace-file writes run as jobs on a
+short-lived `datapack-worker` thread (`crates/mc-core/src/datapacks.rs:1391-1395`),
+handing the result back over a bounded `sync_channel(1)`, so they execute
+outside the tick and never hold it.
 
 Durable plugin events are bounded by their own queue, and one slow guest
 callback stalls every plugin's delivery. The core therefore refuses new plugin

@@ -825,6 +825,12 @@ configuration, back up before changing binaries or world identity, and never
 bypass identity validation by hand-editing saved metadata. Anvil is a
 compatibility format, not a live fallback or dual-write store.
 
+When upgrading from a build with the old scalar rider format, stop it cleanly
+before deploying: an old unclean WAL tail containing `rider` is refused at
+startup. A checkpoint containing the old `krasnokamen:Rider` key is also
+refused, even after a clean stop. Back up the world and test opening a copy with
+the new binary before deployment. See [ADR 0013](decisions/0013-core-model-v2.md).
+
 Convert only stopped worlds; the destination must not exist, the source is left
 unchanged and a receipt is written:
 
