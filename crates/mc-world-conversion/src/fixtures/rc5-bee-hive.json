@@ -1,0 +1,142 @@
+{
+  "uuid": "00000000-0000-0000-0000-000000000bee",
+  "type_id": 11,
+  "pos": [
+    4.5,
+    201.0,
+    4.5
+  ],
+  "vel": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "yaw": 0.0,
+  "pitch": 0.0,
+  "ground": false,
+  "health": 7.0,
+  "alive": true,
+  "age": 0,
+  "breed_cooldown": 0,
+  "pickup_delay": 0,
+  "item": null,
+  "appearance": {
+    "item": null,
+    "experience_orb": null,
+    "spawn_data": 0,
+    "equipment": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "baby": false,
+    "pose": 0,
+    "shared_flags": 0,
+    "health": 7.0,
+    "custom_name": null,
+    "custom_name_visible": false,
+    "extra": []
+  },
+  "active_effects": {
+    "entries": [],
+    "absorption": 0.0
+  },
+  "villager": null,
+  "state": {
+    "opaque_entity_fields": [],
+    "age": 0,
+    "protected_until": 0,
+    "persistent": false,
+    "no_action_time": 0,
+    "air_supply": 300,
+    "burn_ticks": 0,
+    "love": 0,
+    "breed_cooldown": 0,
+    "entity_life": {
+      "child_ticks": 0,
+      "age_lock": {
+        "locked": false,
+        "cooldown_until": 0,
+        "tadpole_age": 0
+      },
+      "harvest_ticks": 0,
+      "tamed": false,
+      "sitting": false,
+      "taming": {
+        "owner": null,
+        "temper": 0,
+        "collar": 14,
+        "trusting": false,
+        "trusted": [],
+        "love_cause": null,
+        "rolls": 0
+      },
+      "mount": {
+        "rider": null,
+        "cargo": [],
+        "chested": false,
+        "strength": 0
+      },
+      "leash": null,
+      "vehicle": null,
+      "brown_mooshroom": false,
+      "charged_lightning": false,
+      "stew_effects": [],
+      "portal": {
+        "elapsed": 0,
+        "cooldown": 0
+      },
+      "dolphin": null,
+      "armadillo": null
+    },
+    "loot": {
+      "attributes": [],
+      "slime_size": null,
+      "player_credit": null,
+      "death_handled": false,
+      "can_pick_up_loot": false,
+      "drop_chances": [
+        0.085,
+        0.085,
+        0.085,
+        0.085,
+        0.085,
+        0.085
+      ],
+      "body_armor": null,
+      "saddle": null,
+      "extra_drop_chances": [
+        2.0,
+        2.0
+      ]
+    },
+    "controls": {
+      "no_ai": true,
+      "invulnerable": false,
+      "ignited": false,
+      "fall_distance": 0.0
+    },
+    "falling": null,
+    "tnt": null,
+    "special_mob": null,
+    "bee": {
+      "hive": null,
+      "flower": null,
+      "nectar": false,
+      "stung": false,
+      "anger_end": -1,
+      "angry_at": null,
+      "pollination": 0,
+      "ticks_since_pollination": 0,
+      "cannot_enter": 0,
+      "crops": 0,
+      "sting_ticks": 0
+    },
+    "allay": null
+  },
+  "projectile": null,
+  "tick": 1
+}

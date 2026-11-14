@@ -246,8 +246,11 @@ chunk, block-entity or metadata compounds to this build's `krasnokamen:*` and
 `normalizations`). Foreign keys and opaque nested compounds are not renamed,
 even if their names contain `solaris` or match a legacy key owned elsewhere.
 Typed item-stack envelopes also enter the vanilla `minecraft:bees` component's
-`entity_data`, including inventories, containers and dropped items, so legacy
-native hive images survive placement and release. Unrelated components stay opaque.
+`entity_data`, including inventories, containers, dropped items, player equipment,
+the carried cursor and crafting grid. The owned `HiveEntity` JSON image also
+migrates RC5's scalar mount `rider` to `riders`, so native bees survive placement
+and release. Conflicting rider forms refuse import; current native schema checks
+remain strict. Unrelated components and JSON strings stay opaque.
 A player rider stored on a vehicle as `solaris:Rider` becomes
 `krasnokamen:Riders`. A field present under both names refuses the import.
 String values in the old `solaris:` namespace stay as they are and are listed under `known_gaps`. Plugin

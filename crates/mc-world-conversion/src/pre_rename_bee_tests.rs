@@ -4,6 +4,121 @@ use mc_core::native_checkpoint as bridge;
 use mc_data::Identifier;
 use std::sync::Arc;
 
+// Serialized by v1.0.0-rc.5 (d3d2abdfbd8f5b6277e71a5708a000721c452ab2),
+// dimensions::recovery::hydrate_entity -> serde_json::to_string(ReplayEntity).
+const RC5_BEE: &str = include_str!("fixtures/rc5-bee-hive.json");
+
+fn current_bee_image() -> String {
+    let mut image: serde_json::Value = serde_json::from_str(RC5_BEE).unwrap();
+    let mount = image["state"]["entity_life"]["mount"]
+        .as_object_mut()
+        .unwrap();
+    assert_eq!(mount.remove("rider"), Some(serde_json::Value::Null));
+    mount.insert("riders".into(), serde_json::json!([]));
+    serde_json::to_string(&image).unwrap()
+}
+
+#[test]
+fn captured_rc5_bee_image_requires_migration_and_keeps_strict_current_schema() {
+    let error = serde_json::from_str::<mc_core::journal::ReplayEntity>(RC5_BEE).unwrap_err();
+    assert!(error.to_string().contains("rider"), "{error}");
+    let mut record = compound(vec![("solaris:HiveEntity", Tag::String(RC5_BEE.into()))]);
+    PreRename::default()
+        .rename(&mut record, Owner::Entity, &|| "captured RC5 bee".into())
+        .unwrap();
+    assert_eq!(
+        record,
+        compound(vec![(
+            "krasnokamen:HiveEntity",
+            Tag::String(current_bee_image())
+        )])
+    );
+    let bee: mc_core::journal::ReplayEntity = serde_json::from_str(&current_bee_image()).unwrap();
+    assert!(bee.state.controls.no_ai);
+    assert_eq!(bee.health, 7.0);
+    let mut unknown: serde_json::Value = serde_json::from_str(&current_bee_image()).unwrap();
+    unknown["state"]["entity_life"]["mount"]["unknown_native_field"] = true.into();
+    assert!(serde_json::from_value::<mc_core::journal::ReplayEntity>(unknown).is_err());
+}
+
+#[test]
+fn hive_image_rejects_conflicting_and_invalid_legacy_riders() {
+    for (rider, conflict) in [
+        (serde_json::json!(7), false),
+        (serde_json::Value::Null, true),
+    ] {
+        let mut image: serde_json::Value = serde_json::from_str(RC5_BEE).unwrap();
+        image["state"]["entity_life"]["mount"]["rider"] = rider;
+        if conflict {
+            image["state"]["entity_life"]["mount"]["riders"] = serde_json::json!([]);
+        }
+        let mut record = compound(vec![(
+            "solaris:HiveEntity",
+            Tag::String(serde_json::to_string(&image).unwrap()),
+        )]);
+        let error = PreRename::default()
+            .rename(&mut record, Owner::Entity, &|| "bad RC5 hive".into())
+            .unwrap_err();
+        assert!(error.to_string().contains("bad RC5 hive"), "{error}");
+    }
+}
+
+fn check_player_item(input: Tag, expected: Tag) {
+    let mut input = input;
+    PreRename::default()
+        .rename(&mut input, Owner::Player, &|| "player custody".into())
+        .unwrap();
+    assert_eq!(input, expected);
+}
+
+#[test]
+fn player_equipment_hive_items_are_owned() {
+    for slot in ["head", "chest", "legs", "feet", "mainhand", "offhand"] {
+        check_player_item(
+            compound(vec![(
+                "equipment",
+                compound(vec![(slot, hive_item(RC5_BEE.into(), true))]),
+            )]),
+            compound(vec![(
+                "equipment",
+                compound(vec![(slot, hive_item(current_bee_image(), false))]),
+            )]),
+        );
+    }
+}
+
+#[test]
+fn player_carried_hive_items_are_owned() {
+    for key in ["solaris:Carried", "krasnokamen:Carried"] {
+        check_player_item(
+            compound(vec![(key, hive_item(RC5_BEE.into(), true))]),
+            compound(vec![(
+                "krasnokamen:Carried",
+                hive_item(current_bee_image(), false),
+            )]),
+        );
+    }
+}
+
+#[test]
+fn player_crafting_hive_items_are_owned() {
+    for key in ["solaris:CraftingGrid", "krasnokamen:CraftingGrid"] {
+        let grid = |item| {
+            Tag::List(ListTag {
+                element_type: tag_type::COMPOUND,
+                elements: vec![item],
+            })
+        };
+        check_player_item(
+            compound(vec![(key, grid(hive_item(RC5_BEE.into(), true)))]),
+            compound(vec![(
+                "krasnokamen:CraftingGrid",
+                grid(hive_item(current_bee_image(), false)),
+            )]),
+        );
+    }
+}
+
 fn occupants(image: String, legacy: bool) -> Tag {
     Tag::List(ListTag {
         element_type: tag_type::COMPOUND,
@@ -49,31 +164,18 @@ fn bee_item_components_are_owned_inside_inventories_containers_and_item_entities
         (Owner::BlockEntity, "Items"),
         (Owner::Entity, "Item"),
     ] {
-        let mut item = hive_item("native image".into(), true);
+        let item = hive_item(RC5_BEE.into(), true);
         let original = item.clone();
         let mut record = compound(vec![(key, item.clone())]);
         let mut report = PreRename::default();
         report
             .rename(&mut record, owner, &|| "typed item".into())
             .unwrap();
-        assert_eq!(report.keys, 1);
-        let Tag::Compound(fields) = &mut item else {
-            unreachable!()
-        };
-        let (_, Tag::Compound(components)) = &mut fields[2] else {
-            unreachable!()
-        };
-        let (_, Tag::List(bees)) = &mut components[0] else {
-            unreachable!()
-        };
-        let Tag::Compound(bee) = &mut bees.elements[0] else {
-            unreachable!()
-        };
-        let (_, Tag::Compound(data)) = &mut bee[0] else {
-            unreachable!()
-        };
-        data[1].0 = "krasnokamen:HiveEntity".into();
-        assert_eq!(record, compound(vec![(key, item)]));
+        assert_eq!(report.keys, 2);
+        assert_eq!(
+            record,
+            compound(vec![(key, hive_item(current_bee_image(), false))])
+        );
         // The same shape under an unrelated component is not an entity owner.
         let mut opaque = compound(vec![("my_mod:inventory", original)]);
         let expected = opaque.clone();
@@ -134,27 +236,9 @@ async fn rc5_hive_item_export_import_place_release_preserves_native_bee() {
         replay.tick = 1;
     }
     let overworld = recovered.dimensions.get_mut(&Dimension::Overworld).unwrap();
-    let bee = mc_data::entity_nbt::VanillaEntity {
-        id: "minecraft:bee".into(),
-        uuid: uuid::Uuid::from_u128(0xbee),
-        wire_id: 1,
-        pos: [4.5, 201.0, 4.5],
-        health: 7.0,
-        extra_fields: vec![("NoAI".into(), Tag::Byte(1))],
-        ..Default::default()
-    };
-    bridge::hydrate_entity(
-        &registry,
-        overworld,
-        &Tag::Compound(mc_data::entity_nbt::entity_to_fields(&registry.items, &bee).unwrap()),
-        1,
-    )
-    .unwrap();
-    let image = overworld.entities.values().next().unwrap().clone();
-    overworld.entities.clear();
-    // Construct current native custody first; export then downgrade only the
-    // known RC5 field name, as an RC5 world export would write it.
-    let item = hive_item(serde_json::to_string(&image).unwrap(), false);
+    // The native stack carries actual RC5 serializer output, not a current
+    // image disguised only by its outer NBT key. Export keeps this JSON opaque.
+    let item = hive_item(RC5_BEE.into(), false);
     let Tag::Compound(item_fields) = item else {
         unreachable!()
     };

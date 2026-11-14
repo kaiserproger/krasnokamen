@@ -2,7 +2,8 @@
 //!
 //! Owner contexts follow Anvil envelopes and native NBT readers, including
 //! vanilla bee entity data inside typed item stacks. Opaque compounds and
-//! foreign components are never field namespaces. String values stay unchanged.
+//! foreign components are never field namespaces. Only the owned HiveEntity
+//! JSON image changes string content; other string values stay unchanged.
 
 use super::fail;
 use mc_core::CoreError;
@@ -21,6 +22,7 @@ pub(crate) enum Owner {
     RootVehicle,
     BlockEntity,
     Bees,
+    HiveImage,
     VillagerRuntime,
     ItemStack,
     ItemComponents,
@@ -64,11 +66,18 @@ impl Owner {
             }
             (Player, "RootVehicle") => RootVehicle,
             (Entity, "krasnokamen:VillagerRuntime") => VillagerRuntime,
-            (Player, "Inventory" | "EnderItems" | "SelectedItem")
+            (
+                Player,
+                "Inventory"
+                | "EnderItems"
+                | "SelectedItem"
+                | "krasnokamen:Carried"
+                | "krasnokamen:CraftingGrid",
+            )
             | (Entity, "Inventory" | "Items" | "HandItems" | "ArmorItems")
             | (Entity, "Item" | "item" | "SaddleItem" | "ArmorItem" | "DecorItem")
             | (BlockEntity, "Items" | "RecordItem" | "Book" | "item") => ItemStack,
-            (Entity, "equipment") => Equipment,
+            (Player | Entity, "equipment") => Equipment,
             (
                 Equipment,
                 "head" | "chest" | "legs" | "feet" | "mainhand" | "offhand" | "body" | "saddle",
@@ -82,6 +91,7 @@ impl Owner {
             }
             (BlockEntity, "Bees" | "bees") => Bees,
             (Bees, "EntityData" | "entity_data") => Entity,
+            (Entity, "krasnokamen:HiveEntity") => HiveImage,
             (Raids, "data") => RaidsData,
             (RaidsData, "Raids" | "raids") => Raid,
             _ => Opaque,
@@ -144,6 +154,11 @@ impl PreRename {
             Tag::List(list) => {
                 for element in &mut list.elements {
                     self.walk(element, owner, record, field)?;
+                }
+            }
+            Tag::String(value) if matches!(owner, Owner::HiveImage) => {
+                if migrate_hive_image(value, record)? {
+                    self.keys += 1;
                 }
             }
             Tag::String(value) if value.starts_with("solaris:") => {
@@ -226,6 +241,44 @@ fn current_name(owner: Owner, key: &str) -> Option<String> {
         _ => return None,
     };
     Some(name.into())
+}
+
+/// RC5 retained a scalar rider in the private JSON image, not just in NBT.
+/// Leave foreign JSON and all other fields to their existing typed readers.
+fn migrate_hive_image(value: &mut String, record: &dyn Fn() -> String) -> Result<bool, CoreError> {
+    let invalid = |error| {
+        fail(format!(
+            "{} field krasnokamen:HiveEntity: {error}",
+            record()
+        ))
+    };
+    let mut image: serde_json::Value =
+        serde_json::from_str(value).map_err(|error| invalid(error.to_string()))?;
+    let Some(mount) = image
+        .pointer_mut("/state/entity_life/mount")
+        .and_then(serde_json::Value::as_object_mut)
+    else {
+        return Ok(false);
+    };
+    let Some(rider) = mount.remove("rider") else {
+        return Ok(false);
+    };
+    if mount.contains_key("riders") {
+        return Err(invalid("both rider and riders are present".into()));
+    }
+    let rider: Option<uuid::Uuid> =
+        serde_json::from_value(rider).map_err(|error| invalid(error.to_string()))?;
+    mount.insert(
+        "riders".into(),
+        serde_json::Value::Array(
+            rider
+                .into_iter()
+                .map(|id| serde_json::Value::String(id.to_string()))
+                .collect(),
+        ),
+    );
+    *value = serde_json::to_string(&image).map_err(|error| invalid(error.to_string()))?;
+    Ok(true)
 }
 
 /// RC5's single player rider as the current ordered rider list.
