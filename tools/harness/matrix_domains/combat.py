@@ -281,8 +281,11 @@ def projectile_pickup(ctx):
 
 
 def mob_targets(ctx):
-    mob = summon(ctx, 'zombie', pos='8.5 180 0.5')
+    # The baseline must predate the summon: a mob at melee range can land its
+    # first hit before its spawn receipt arrives, and a baseline read after the
+    # summon then misses the very damage the probe waits for.
     before = health(ctx)
+    mob = summon(ctx, 'zombie', pos='8.5 180 0.5')
     if ctx.factors['difficulty'] == 'peaceful' or ctx.factors['game_mode'] in ('creative', 'spectator'):
         ticks(ctx, 80)
         check(ctx, 'hostile_context_immunity', health(ctx), before, source=WIKI + 'Zombie')
