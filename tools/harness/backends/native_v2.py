@@ -5,6 +5,7 @@ never a local dispatch acknowledgement. Windowed runs retain the shared capture.
 """
 from __future__ import annotations
 
+import os
 import math
 import uuid
 from pathlib import Path
@@ -1205,6 +1206,11 @@ def run(client: Any, artifact: Path, timeout: float, scenario: str) -> dict[str,
         raise ValueError(f"unknown native v2 scenario: {scenario}")
     require_tools(client.list_tools(), REQUIRED_TOOLS, scenario)
     with ProbeSteps(client, artifact / scenario, timeout, scenario) as steps:
+        if os.environ.get("BREAK_DL_AUTH"):
+            # BREAK_DL_AUTH breaker glue (not for merge): unlock the first session before fixtures.
+            steps.call("minecraft_send_chat", {"message": "register hunter2-pass hunter2-pass", "command": True})
+            steps.wait(lambda state: any("Successfully registered" in line for line in state["recent_chat"]),
+                       "break_auth_registered")
         origin = _prepare(steps)
         RUNNERS[scenario](steps, origin)
         final = _echo(steps, "final_ordered_server_chat_receipt")

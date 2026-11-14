@@ -24,6 +24,7 @@ FIRST = "native-world-first-start-interrupted"
 LEASE = "native-sp-relaunch-lease-race"
 SLOW = "native-sp-slow-machine"
 WEAK = "native-sp-weak-hardware"
+DISCONNECTED = "net.minecraft.client.gui.screens.DisconnectedScreen"
 
 
 def _click(probe, state, label):
@@ -245,12 +246,57 @@ def run(ctx: ProfileContext) -> dict:
                     probe.report["recovery_server"] = str(replacement)
                     with replacement.open("rb") as executable:
                         probe.report["recovery_server_sha256"] = hashlib.file_digest(executable, "sha256").hexdigest()
-                state = probe.wait(lambda s: s["screen"].get("class") in (SELECT, TITLE_CLASS), "interrupted_menu")
                 if state["screen"]["class"] == TITLE_CLASS:
                     _click(probe, state, "Singleplayer")
                     state = probe.wait(lambda s: s["screen"].get("class") == SELECT, "reopen_world_list")
                 _select_world(probe, state)
-                _play(probe, state)
+                if attack in ("term", "listening"):
+                    # A clean stop leaves a stale disconnect reason that ends minecraft_wait_for_play
+                    # at once; wait for the start screen, then for Play or a failure screen.
+                    _click(probe, state, "Play Selected World")
+                    def epoch_wait(predicate, label):
+                        for retry in range(6):
+                            try:
+                                return probe.wait(predicate, label)
+                            except RuntimeError as error:
+                                if "stale_connection_epoch" not in str(error) or retry == 5:
+                                    raise
+                    epoch_wait(lambda s: s.get("in_play") is True
+                               or s["screen"].get("class") == "net.minecraft.client.gui.screens.GenericMessageScreen",
+                               "recovery_starting")
+                    final = epoch_wait(lambda s: s.get("in_play") is True
+                                       or s["screen"].get("class") in (SELECT, TITLE_CLASS, DISCONNECTED),
+                                       "recovery_outcome")
+                    probe.report["attack"]["recovery_outcome"] = {"in_play": final.get("in_play"),
+                                                                  "screen": final["screen"],
+                                                                  "disconnect_reason": final.get("disconnect_reason", "")[:300]}
+                    probe.check("entered_world", final.get("in_play") is True)
+                else:
+                    _play(probe, state)
+                if attack:
+                    # Then play: a persisted change survives a clean quit and reopen of the recovered world.
+                    probe.call("minecraft_look", {"yaw_deg": 77, "pitch_deg": 13})
+                    probe.wait(lambda s: abs(s["player"]["yaw"] - 77) < 0.5, "recovered_world_look")
+                    start_pos = probe.call("minecraft_observe")["player"]
+                    probe.call("minecraft_press_inputs", {"keys": ["forward"], "ticks": 20})
+                    probe.call("minecraft_wait_ticks", {"ticks": 40})
+                    turned = probe.call("minecraft_observe")
+                    probe.report["attack"]["start_pos"] = {k: start_pos[k] for k in ("x", "y", "z")}
+                    probe.report["attack"]["before_quit"] = {k: turned["player"][k] for k in ("x", "y", "z", "yaw", "pitch")}
+                    probe.call("minecraft_disconnect", {})
+                    state = probe.wait(lambda s: s["screen"].get("class") in (SELECT, TITLE_CLASS), "quit_menu")
+                    probe.report["attack"]["marker_after_quit"] = marker.exists()
+                    if state["screen"]["class"] == TITLE_CLASS:
+                        _click(probe, state, "Singleplayer")
+                        state = probe.wait(lambda s: s["screen"].get("class") == SELECT, "reopen_after_quit")
+                    _select_world(probe, state)
+                    _play(probe, state)
+                    again = probe.call("minecraft_observe")["player"]
+                    probe.report["attack"]["after_reopen"] = {k: again[k] for k in ("x", "y", "z", "yaw", "pitch")}
+                    probe.check("recovered_world_marker_cleared", not probe.report["attack"]["marker_after_quit"])
+                    probe.check("recovered_world_keeps_player_state",
+                                abs((again["yaw"] - 77 + 180) % 360 - 180) < 1 and math.dist(
+                                    [again[k] for k in "xyz"], [turned["player"][k] for k in "xyz"]) < 1.5)
             else:
                 _play(probe, state)
                 native_client.capture(mcp, artifact, "singleplayer-before-relaunch")
