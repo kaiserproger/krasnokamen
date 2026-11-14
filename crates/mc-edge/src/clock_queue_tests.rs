@@ -24,7 +24,7 @@ async fn queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer() {
     let server = Arc::new(server);
     let id = server.connections.joining_id();
     let (reliable_tx, mut reliable_rx) = mpsc::channel(32);
-    let (world_tx, mut world_rx) = mpsc::channel(32);
+    let (world_tx, mut world_rx) = world_queue(32, WORLD_QUEUE_BYTES);
     server
         .connections
         .register(
@@ -156,6 +156,66 @@ async fn queued_heartbeat_then_dirty_jump_is_fifo_at_the_play_writer() {
     );
 }
 
+/// The pump plans within the world queue's free bytes: a queue whose bytes
+/// are full routes no world frame even with free slots, and routing
+/// resumes once the writer drains it.
+#[tokio::test]
+async fn byte_full_world_queue_routes_no_world_frame_until_drained() {
+    let (server, _dir) = fixture();
+    let server = Arc::new(server);
+    let id = server.connections.joining_id();
+    let (reliable_tx, _reliable_rx) = mpsc::channel(32);
+    let (world_tx, mut world_rx) = world_queue(64, 100);
+    world_tx
+        .try_send(bytes::Bytes::from(vec![0_u8; 100]))
+        .unwrap();
+    server
+        .connections
+        .register(
+            id,
+            ConnectionHandles {
+                reliable_tx,
+                world_tx,
+            },
+        )
+        .unwrap();
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .unwrap();
+    let mut viewers = HashMap::default();
+    viewers.insert(
+        id,
+        crate::plan::ViewerState::new(id, EntityId(1), [8.0, 64.0, 8.0]),
+    );
+    let mut cache = crate::plan::ChunkPacketCache::new();
+    let (mut connections, _) = server.connections.routing_snapshot();
+    publish_and_route(
+        &server,
+        &pool,
+        &mut viewers,
+        &clock_output(10, 1010),
+        &mut cache,
+        &mut connections,
+    )
+    .await;
+    assert_eq!(world_rx.len(), 1, "only the frame that filled the bytes");
+    assert_eq!(world_rx.try_recv().unwrap().len(), 100);
+    publish_and_route(
+        &server,
+        &pool,
+        &mut viewers,
+        &clock_output(11, 1011),
+        &mut cache,
+        &mut connections,
+    )
+    .await;
+    assert!(
+        !world_rx.is_empty(),
+        "drained bytes admit world frames again"
+    );
+}
+
 #[test]
 fn setup_world_fence_follows_queued_geometry_and_a_later_tick() {
     use mc_protocol::packets::play::{BlockUpdate, ClientboundCustomPayload};
@@ -163,7 +223,7 @@ fn setup_world_fence_follows_queued_geometry_and_a_later_tick() {
     let (server, dir) = fixture();
     let id = server.connections.joining_id();
     let (reliable_tx, mut reliable_rx) = mpsc::channel(4);
-    let (world_tx, mut world_rx) = mpsc::channel(4);
+    let (world_tx, mut world_rx) = world_queue(4, WORLD_QUEUE_BYTES);
     server
         .connections
         .register(
@@ -332,7 +392,7 @@ async fn routing_snapshot_drops_overflow_victim_before_any_later_packets() {
     let server = Arc::new(server);
     let id = server.connections.joining_id();
     let (reliable_tx, mut reliable_rx) = mpsc::channel(1);
-    let (world_tx, mut world_rx) = mpsc::channel(8);
+    let (world_tx, mut world_rx) = world_queue(8, WORLD_QUEUE_BYTES);
     reliable_tx
         .try_send(bytes::Bytes::from_static(b"already queued"))
         .unwrap();

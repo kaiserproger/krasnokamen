@@ -56,9 +56,9 @@ fn information_chat(language: &str, distance: i8, chat_visibility: ChatVisibilit
     body
 }
 
-fn drain(rx: &mut mpsc::Receiver<bytes::Bytes>) -> Vec<RawFrame> {
+fn drain(mut next: impl FnMut() -> Option<bytes::Bytes>) -> Vec<RawFrame> {
     let mut frames = Vec::new();
-    while let Ok(data) = rx.try_recv() {
+    while let Some(data) = next() {
         frames.push(
             try_decode_frame(
                 &mut bytes::BytesMut::from(data.as_ref()),
@@ -104,7 +104,7 @@ async fn client_view_distance_join_grow_and_shrink() {
     .await
     .unwrap();
     let (reliable_tx, mut reliable_rx) = mpsc::channel(512);
-    let (world_tx, mut world_rx) = mpsc::channel(512);
+    let (world_tx, mut world_rx) = world_queue(512, WORLD_QUEUE_BYTES);
     server
         .connections
         .register(
@@ -181,8 +181,8 @@ async fn client_view_distance_join_grow_and_shrink() {
                 &mut connections,
             )
             .await;
-            radius_packets.extend(radii(&drain(&mut reliable_rx)));
-            for frame in drain(&mut world_rx) {
+            radius_packets.extend(radii(&drain(|| reliable_rx.try_recv().ok())));
+            for frame in drain(|| world_rx.try_recv().ok()) {
                 if frame.id == LevelChunkWithLight::ID {
                     let packet = LevelChunkWithLight::decode(&mut &frame.body[..]).unwrap();
                     assert!(
@@ -229,9 +229,9 @@ async fn client_view_distance_join_grow_and_shrink() {
         &mut connections,
     )
     .await;
-    assert!(radii(&drain(&mut reliable_rx)).is_empty());
+    assert!(radii(&drain(|| reliable_rx.try_recv().ok())).is_empty());
     assert!(
-        drain(&mut world_rx)
+        drain(|| world_rx.try_recv().ok())
             .iter()
             .all(|frame| frame.id != LevelChunkWithLight::ID)
     );
@@ -297,6 +297,71 @@ async fn play_client_information_admits_the_client_locale() {
 
     server.connections.remove(id);
     assert_eq!(locale(&server, id), None);
+    server.hub.shutdown();
+}
+
+/// A recorder always holds the server-wide radius whatever its client asks,
+/// and its viewer is built in recorder mode; a player beside it keeps its
+/// own request and normal mode. Disconnect forgets the recorder mark.
+#[tokio::test]
+async fn recorder_takes_the_server_radius_and_players_keep_their_own() {
+    let root = tempfile::tempdir().unwrap();
+    let server = server(root.path());
+    let recorder = server.connections.joining_id();
+    let player = server.connections.joining_id();
+    for (id, is_recorder) in [(recorder, true), (player, false)] {
+        server.connections.stash_join(
+            id,
+            (
+                EntityId(id.0 as i32),
+                [8.0, 64.0, 8.0],
+                0,
+                Default::default(),
+            ),
+        );
+        wait_for_join(&server, id, is_recorder, 4, "en_us")
+            .await
+            .unwrap();
+    }
+    let radius = |id| {
+        server
+            .connections
+            .inner
+            .lock()
+            .view_distances
+            .get(&id)
+            .copied()
+    };
+    assert_eq!((radius(recorder), radius(player)), (Some(16), Some(4)));
+    for id in [recorder, player] {
+        assert!(
+            server
+                .handle_edge_frame(id, ServerboundClientInformation::ID, &information(2))
+                .await
+                .unwrap()
+        );
+    }
+    assert_eq!((radius(recorder), radius(player)), (Some(16), Some(2)));
+    let viewer = |id| {
+        configured_viewer(
+            &server,
+            id,
+            EntityId(1),
+            [8.0, 64.0, 8.0],
+            Default::default(),
+        )
+    };
+    assert!(viewer(recorder).recorder);
+    assert!(!viewer(player).recorder);
+    server.connections.remove(recorder);
+    assert!(
+        !server
+            .connections
+            .inner
+            .lock()
+            .recorders
+            .contains(&recorder)
+    );
     server.hub.shutdown();
 }
 

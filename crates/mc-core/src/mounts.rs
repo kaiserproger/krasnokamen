@@ -1103,8 +1103,14 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                     serde_json::json!({ "entity": entity }),
                 );
             }
+            // A failed roll dismounts: resolve the rider again.
+            sync_rider(state, slot);
+            continue;
         }
-        sync_rider(state, slot);
+        // `live` resolved this rider; nothing above moved or removed a row.
+        if let Some(rider) = rider_slot {
+            seat_rider(state, slot, rider);
+        }
     }
     slots.clear();
     state.serial_entity_slots = slots;

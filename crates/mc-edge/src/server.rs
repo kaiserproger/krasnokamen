@@ -11,17 +11,19 @@
 //! # Slow-consumer rule (per-connection half; the core owns the journal
 //! # write-ahead + `TickOutput` delivery shape)
 //!
-//! Each connection owns **two** bounded mpsc queues, both sized
-//! [`OUTBOUND_QUEUE_BOUND`]:
+//! Each connection owns **two** bounded mpsc queues:
 //!
-//! - **reliable**: [`PlayerChange`](mc_core::boundary::PlayerChange)-derived
+//! - **reliable** ([`RELIABLE_QUEUE_BOUND`] items):
+//!   [`PlayerChange`](mc_core::boundary::PlayerChange)-derived
 //!   packets (join-burst tail, block acks, menus, health, chat, syncpos
 //!   corrections, disconnect). In order, never dropped; on overflow the
 //!   connection is **disconnected** rather than stalling the tick.
-//! - **world**: chunk/entity/block packets. Before each publish the pump
-//!   reads the queue's free slots as the viewer's credit; the plan emits at
-//!   most that many frames, so nothing planned is dropped, and what did not
-//!   fit stays unsent in the viewer cache for a newer snapshot to carry.
+//! - **world** ([`world_queue()`], bounded in frames and bytes):
+//!   chunk/entity/block packets. Before each publish the pump reads the
+//!   queue's free slots and bytes as the viewer's credit; the plan emits at
+//!   most that many frames and stops once the bytes run out, so nothing
+//!   planned is dropped, and what did not fit stays unsent in the viewer
+//!   cache for a newer snapshot to carry.
 //!
 //! Reliable-overflow disconnect is the only drop. The writer task drains
 //! reliable first, then world.
@@ -63,8 +65,9 @@ use crate::dashboard::{
 };
 use mc_protocol::packets::Packet;
 
-/// Per-connection outbound queue bound (reliable and world queues alike).
-pub use crate::fanout::OUTBOUND_QUEUE_BOUND;
+pub use crate::fanout::RELIABLE_QUEUE_BOUND;
+mod world_queue;
+pub use world_queue::*;
 mod registry;
 pub use registry::*;
 mod connection;
@@ -701,11 +704,12 @@ impl EdgeServer {
             let mut input = body;
             let request = ServerboundClientInformation::decode(&mut input)?;
             anyhow::ensure!(input.is_empty(), "trailing client information data");
+            let mut registry = self.connections.inner.lock();
             let view_distance = effective_view_distance(
                 request.information.view_distance,
                 self.cfg.server.view_distance,
+                registry.recorders.contains(&id),
             );
-            let mut registry = self.connections.inner.lock();
             if registry.view_distances.get(&id) != Some(&view_distance) {
                 anyhow::ensure!(
                     self.hub.submit(PlayerInput::SetViewDistance {
@@ -1560,14 +1564,17 @@ pub async fn serve_with_console(
 const WRITE_BATCH_BYTES: usize = 64 * 1024;
 
 /// Independent, cheap telemetry consumer: world fanout may lag without losing
-/// timing samples. Its bounded broadcast still reports any actual loss.
+/// timing samples. Its bounded broadcast still reports any actual loss. Host
+/// samples (a few procfs/cgroup reads, once per 20 ticks) ride the same
+/// stream so they carry the tick they join.
 fn spawn_load_metrics(server: &Arc<EdgeServer>) -> tokio::task::JoinHandle<()> {
     let mut rx = server.hub.subscribe_tick_times();
     let dashboard = Arc::clone(&server.dashboard);
+    let mut host = crate::host_telemetry::HostSampler::new();
     tokio::spawn(async move {
         loop {
             match rx.recv().await {
-                Ok((tick, times)) => dashboard.record_load_tick(tick, times),
+                Ok((tick, times)) => dashboard.record_core_tick(&mut host, tick, times),
                 Err(broadcast::error::RecvError::Lagged(skipped)) => {
                     dashboard.record_load_skipped(skipped);
                 }
@@ -1617,6 +1624,7 @@ pub fn core_config(cfg: &EdgeConfig) -> mc_core::config::CoreConfig {
     core.spawn_protection = cfg.server.spawn_protection;
     core.input_log = cfg.server.input_log;
     core.worldgen_gpu = cfg.server.worldgen_gpu;
+    core.checkpoint_every_ticks = cfg.data.checkpoint_every_ticks;
     core.mob_griefing = mc_core::config::MobGriefingRules {
         creeper_block_damage: cfg.mob_griefing.creeper_block_damage,
         ghast_block_damage: cfg.mob_griefing.ghast_block_damage,

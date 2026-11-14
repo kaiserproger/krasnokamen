@@ -19,6 +19,10 @@ use crate::world::ChunkWorld;
 #[path = "merge_cost_tests.rs"]
 pub(crate) mod merge_cost_tests;
 
+#[cfg(test)]
+#[path = "battle_tick_micro_tests.rs"]
+mod battle_tick_micro_tests;
+
 /// Flat, prelit terrain for tests of gameplay rather than world generation.
 /// Each loader still produces its own owned chunk, but identical columns need
 /// neither repeated terrain routing nor repeated isolated light baking.

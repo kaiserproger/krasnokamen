@@ -33,7 +33,7 @@ async fn core_halt_routes_terminal_disconnect_reason() {
     let core = Arc::clone(&server.hub);
     let id = server.connections.joining_id();
     let (reliable_tx, mut reliable_rx) = mpsc::channel(256);
-    let (world_tx, _world_rx) = mpsc::channel(256);
+    let (world_tx, _world_rx) = world_queue(256, WORLD_QUEUE_BYTES);
     server
         .connections
         .register(

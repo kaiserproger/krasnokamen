@@ -294,10 +294,19 @@ async fn run_connection(
     // The radius and locale precede Join on the reliable queue: the first
     // residency reconciliation never expands this client to the server-wide
     // maximum, and a dialog opened right after join already reads the client
-    // language.
+    // language. A recorder always takes the server-wide maximum.
+    let recorder = server.cfg.recorder.grants(
+        &outcome.name,
+        stream_peer_ip(&peer),
+        server.cfg.proxy.mode != crate::config::ProxyMode::None,
+    );
+    if !recorder && server.cfg.recorder.is_recorder(&outcome.name) {
+        warn!(%peer, name = %outcome.name, "recorder name from a remote or proxied peer joins as a player; set [recorder] allow_remote to grant it");
+    }
     let view_distance = effective_view_distance(
         config_outcome.client_view_distance,
         server.cfg.server.view_distance,
+        recorder,
     );
     let ip = outcome
         .remote_address
@@ -319,7 +328,7 @@ async fn run_connection(
     let (entity, spawn, game_mode, dimension) = match wait_for_join(
         &server,
         id,
-        &outcome.name,
+        recorder,
         config_outcome.client_view_distance,
         &config_outcome.client_language,
         config_outcome.client_chat_visibility,
@@ -402,8 +411,8 @@ async fn run_connection(
     // --- Replay it in order through the same `plan_player_changes` mapping
     // --- so a rejoining player gets the authoritative inventory/XP sync.
     let (reliable_tx, reliable_rx) =
-        mpsc::channel::<bytes::Bytes>(crate::fanout::OUTBOUND_QUEUE_BOUND);
-    let (world_tx, world_rx) = mpsc::channel::<bytes::Bytes>(crate::fanout::OUTBOUND_QUEUE_BOUND);
+        mpsc::channel::<bytes::Bytes>(crate::fanout::RELIABLE_QUEUE_BOUND);
+    let (world_tx, world_rx) = world_queue_for(&server.cfg.recorder, recorder);
     let operator_guard = server.operator_updates.lock().await;
     let stashed = server.connections.register(
         id,
@@ -891,7 +900,7 @@ pub(super) async fn await_play_operation<F: Future>(
 
 pub(super) struct PlayReceivers {
     pub(super) reliable: mpsc::Receiver<bytes::Bytes>,
-    pub(super) world: mpsc::Receiver<bytes::Bytes>,
+    pub(super) world: WorldReceiver,
     pub(super) dh: mpsc::Receiver<crate::dh::Outbound>,
     pub(super) keepalive: mpsc::Receiver<i64>,
 }

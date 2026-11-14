@@ -11,7 +11,7 @@ use mc_protocol::packets::play::{GameEvent, LightData, LightUpdate};
 use mc_world::chunk::{Chunk, SectionLight};
 use rustc_hash::FxHashMap;
 
-use crate::plan::{PlannedPacket, push_best_effort, push_reliable, try_push};
+use crate::plan::{PlannedPacket, WorldCredit, push_best_effort, push_reliable, try_push};
 
 /// Encode authoritative baked light; refuse an unbaked snapshot without panic.
 pub(crate) fn chunk_light(chunk: &Chunk) -> LightData {
@@ -92,7 +92,7 @@ impl LightBaseline {
         revision: u64,
         connection: ConnectionId,
         out: &mut Vec<PlannedPacket>,
-        credit: &mut usize,
+        credit: &mut WorldCredit,
     ) -> bool {
         let Some(state) = self.sent.get_mut(&pos) else {
             return true;
@@ -100,7 +100,7 @@ impl LightBaseline {
         if state.verified == Some(revision) {
             return true;
         }
-        if *credit == 0 {
+        if credit.spent() {
             return false;
         }
         if state.sent == chunk.section_lights {

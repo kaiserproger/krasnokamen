@@ -82,6 +82,7 @@ pub struct HostileState {
     /// persisted or used as a wake subscription.
     pub(crate) targets: rustc_hash::FxHashMap<EntityId, (crate::target_grid::Target, f64)>,
     pub(crate) native: crate::special_mobs::Runtime,
+    pub(crate) battle: crate::battle::BattleState,
     pub(crate) events: Vec<crate::boundary::EntityEvent>,
     /// Blasts committed this tick (drained into the change set).
     pub(crate) explosions: Vec<ExplosionEvent>,
@@ -122,6 +123,9 @@ pub(crate) fn refresh_targets(state: &mut TickState) {
             let EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
                 return false;
             };
+            if state.entities.body(slot).faction != 0 {
+                return false; // BattleState is the sole battle target owner.
+            }
             let Some(blueprint) = state.registry.blueprint(type_id) else {
                 return false;
             };
@@ -198,6 +202,10 @@ pub(crate) fn retaliate(state: &mut TickState, victim: EntitySlot, attacker: Ent
     let EntityKind::Mob { type_id } = body.kind else {
         return;
     };
+    // Battle allegiance owns targeting, including after friendly projectile hits.
+    if body.faction != 0 {
+        return;
+    }
     let Some(blueprint) = state.registry.blueprint(type_id) else {
         return;
     };
@@ -400,6 +408,11 @@ fn nearest(
     from: [f64; 3],
     reach: f64,
 ) -> Option<([f64; 3], f64)> {
+    if let Some(slot) = state.entities.slot_of(actor)
+        && state.entities.body(slot).faction != 0
+    {
+        return None; // Battle archery owns faction shots and cadence.
+    }
     if let Some(&((target, _), _)) = state.hostile.targets.get(&actor) {
         let slot = state.entities.slot_of(target)?;
         let at = state.entities.pos(slot);

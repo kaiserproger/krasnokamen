@@ -95,3 +95,24 @@ Use the shared-machine runner described in [heavy commands](heavy-commands-and-m
 and the [real-client gates](real-client-gates.md) for changed client-visible
 behavior. Passing codec tests or a wire capture alone does not prove rendering,
 gameplay, or real-client compatibility.
+
+## Timed battle swings (26.3)
+
+The core `EntityEvent::Swing` carries a hand, `SwingKind` and `duration_ticks`;
+edge projects all three to the existing `ClientboundSwingAnimation` codec,
+not its six-tick default. Ordinary settlement swings retain that default.
+Battle packets start at windup, with full cycle durations 21/23/25 and contact
+offsets 10/11/12 for sword/spear/mace. The native clip owner uses the exact
+contact fraction, not a generic midpoint. Bow draw is 30 ticks in a 40-tick
+clip (crossbow presentation 30/75); off-hand shield cover uses 10 ticks and
+parried attacks emit type NONE for 12/18 ticks of stagger.
+
+Metadata was inspected locally with `javap -p -c` against the 26.3 server jar:
+`ClientboundSwingAnimationPacket` composes entity VAR_INT, `InteractionHand`
+id mapper, then `world.item.component.SwingAnimation`; the latter composes
+`SwingAnimationType` id mapper (NONE=0, WHACK=1, STAB=2) and duration VAR_INT.
+No new packet ID or layout is introduced. The local command receipt is
+`receipts/BvCombatActions/protocol-evidence.txt` in the work root, outside Git.
+Adjacent 26.1.2/26.2 clients retain their existing generic-swing downgrade;
+only 26.3 carries these timing/type semantics. NONE is omitted for 26.1.2/26.2
+because their generic arm animation cannot represent a no-swing stagger.

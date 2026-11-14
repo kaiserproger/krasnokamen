@@ -63,6 +63,9 @@ pub struct EdgeConfig {
     /// Proximity voice relay for native clients.
     #[serde(default)]
     pub voice: crate::voice::VoiceConfig,
+    /// Connections that record the server stream (battle video).
+    #[serde(default)]
+    pub recorder: crate::recorder::RecorderSection,
     /// Startup-only import; explicit TOML leaves override imported properties.
     #[serde(default)]
     pub properties: PropertiesSection,
@@ -269,6 +272,12 @@ pub struct DataSection {
     /// the command is refused while unset.
     #[serde(default)]
     pub backup_dir: Option<PathBuf>,
+    /// Periodic native checkpoint cadence in ticks (default 1200, one minute).
+    /// Each capture runs on the tick thread; a longer cadence trades fewer
+    /// capture ticks for a longer journal to replay after a crash. Stop and the
+    /// empty-server pause still checkpoint. Zero counts as one.
+    #[serde(default = "default_checkpoint_every_ticks")]
+    pub checkpoint_every_ticks: u64,
 }
 
 impl Default for DataSection {
@@ -278,6 +287,7 @@ impl Default for DataSection {
             seed: 0,
             vanilla_data_dir: default_vanilla_data_dir(),
             backup_dir: None,
+            checkpoint_every_ticks: default_checkpoint_every_ticks(),
         }
     }
 }
@@ -600,6 +610,10 @@ fn default_pause_when_empty_seconds() -> i32 {
 fn default_spawn_protection() -> u32 {
     16
 }
+fn default_checkpoint_every_ticks() -> u64 {
+    // mc-core's `CoreConfig::new` cadence.
+    1200
+}
 fn default_bind_address() -> String {
     "127.0.0.1".to_owned()
 }
@@ -699,6 +713,10 @@ impl EdgeConfig {
             (1..=128).contains(&cfg.distant_horizons.radius_chunks),
             "distant_horizons.radius_chunks must be in 1..=128"
         );
+        anyhow::ensure!(
+            cfg.recorder.world_queue_bytes > 0,
+            "recorder.world_queue_bytes must be positive"
+        );
         Ok(cfg)
     }
 
@@ -730,6 +748,7 @@ const KNOWN_SECTIONS: &[&str] = &[
     "rcon",
     "query",
     "resource_pack",
+    "recorder",
 ];
 
 /// Unknown leaf keys (`section.key`) under a known section, depth-first.
@@ -764,7 +783,13 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
         ),
         (
             "data",
-            &["world_dir", "seed", "vanilla_data_dir", "backup_dir"],
+            &[
+                "world_dir",
+                "seed",
+                "vanilla_data_dir",
+                "backup_dir",
+                "checkpoint_every_ticks",
+            ],
         ),
         ("auth", &["online_mode", "require_plugin_login"]),
         ("proxy", &["mode", "secret"]),
@@ -838,6 +863,10 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
             "resource_pack",
             &["url", "sha1", "required", "prompt", "id"],
         ),
+        (
+            "recorder",
+            &["players", "world_queue_bytes", "allow_remote"],
+        ),
     ];
     for (section, keys) in KNOWN {
         let Some(toml::Value::Table(inner)) = table.get(*section) else {
@@ -886,6 +915,15 @@ mod tests {
         let negative =
             EdgeConfig::from_toml("[server]\npause_when_empty_seconds = -1\n", None).unwrap();
         assert_eq!(negative.server.pause_when_empty_seconds, -1);
+    }
+
+    #[test]
+    fn checkpoint_cadence_defaults_to_core_and_parses() {
+        let default = EdgeConfig::from_toml("", None).unwrap();
+        assert_eq!(default.data.checkpoint_every_ticks, 1200);
+        let long =
+            EdgeConfig::from_toml("[data]\ncheckpoint_every_ticks = 1000000\n", None).unwrap();
+        assert_eq!(long.data.checkpoint_every_ticks, 1_000_000);
     }
 
     #[test]

@@ -955,6 +955,23 @@ pub(crate) fn tree(op_level: u8, plugins: &[(String, u8)]) -> ClientboundCommand
             t.argument(qualified, "value", parser, true);
         }
     }
+    if let Some(root) = t.root("battle", false) {
+        t.literals(root, &["start", "pause", "reset", "status"]);
+        let setup = t.literal(root, "setup", false);
+        let seed = t.argument(
+            setup,
+            "seed",
+            Parser::Long {
+                min: Some(0),
+                max: None,
+            },
+            false,
+        );
+        for preset in ["field-100", "field-1k", "field-10k"] {
+            let scenario = t.literal(seed, preset, true);
+            t.argument(scenario, "count", integer(Some(1), Some(10_000)), true);
+        }
+    }
     if let Some(root) = t.root("summon", false) {
         let entity = t.suggested(
             root,

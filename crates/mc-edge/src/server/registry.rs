@@ -19,6 +19,8 @@ pub(super) struct RegistryInner {
     pub(super) handles: HashMap<ConnectionId, ConnectionHandles>,
     pub(super) names: HashMap<ConnectionId, String>,
     pub(super) view_distances: HashMap<ConnectionId, i32>,
+    /// Recorder connections ([`crate::recorder`]), fixed at join.
+    pub(super) recorders: HashSet<ConnectionId>,
     /// One operator-requested world-queue fence per connection: (tick, nonce).
     pub(super) setup_world_fences: HashMap<ConnectionId, (u64, u64)>,
     /// Client locale last admitted to the core (`ClientInformation.language`);
@@ -40,8 +42,9 @@ pub(super) struct RegistryInner {
 pub struct ConnectionHandles {
     /// Reliable queue sender (join tail, acks, menus, health, chat, syncpos, disconnect).
     pub reliable_tx: mpsc::Sender<bytes::Bytes>,
-    /// World queue sender (pre-framed chunk/entity packets).
-    pub world_tx: mpsc::Sender<bytes::Bytes>,
+    /// World queue sender (pre-framed chunk/entity packets), bounded in
+    /// frames and bytes.
+    pub world_tx: WorldSender,
 }
 
 impl ConnectionRegistry {
@@ -125,12 +128,19 @@ impl ConnectionRegistry {
         let mut reliable = LoadQueueGauge::default();
         let mut world = LoadQueueGauge::default();
         for handles in inner.handles.values() {
-            for (gauge, sender) in [
-                (&mut reliable, &handles.reliable_tx),
-                (&mut world, &handles.world_tx),
+            for (gauge, capacity, free) in [
+                (
+                    &mut reliable,
+                    handles.reliable_tx.max_capacity(),
+                    handles.reliable_tx.capacity(),
+                ),
+                (
+                    &mut world,
+                    handles.world_tx.max_capacity(),
+                    handles.world_tx.capacity(),
+                ),
             ] {
-                let capacity = sender.max_capacity();
-                let occupied = capacity.saturating_sub(sender.capacity());
+                let occupied = capacity.saturating_sub(free);
                 gauge.capacity_slots += capacity;
                 gauge.queued_or_reserved_slots += occupied;
                 gauge.max_viewer_queued_or_reserved_slots =
@@ -278,6 +288,7 @@ impl ConnectionRegistry {
             inner.join_waiters.remove(&id);
             inner.disconnect_reasons.remove(&id);
             inner.view_distances.remove(&id);
+            inner.recorders.remove(&id);
             inner.setup_world_fences.remove(&id);
             if inner.setup_world_fences.is_empty() {
                 self.setup_fences_pending.store(false, Ordering::Release);

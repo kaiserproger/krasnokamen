@@ -606,6 +606,19 @@ pub struct TickTimes {
     pub total_us: u64,
     /// Optional opt-in workload counters paired with this exact source tick.
     pub coreperf: Option<Arc<CorePerfTick>>,
+    /// Post-merge battle counts of this tick; `None` without battle rows.
+    pub battle: Option<Arc<BattleCounts>>,
+}
+
+/// Battle population of one tick (`battle` module), counted after merge;
+/// present while battle rows exist (staged, paused or running).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BattleCounts {
+    /// Battle rows (nonzero faction) in the entity store this tick.
+    pub units: u32,
+    /// Alive battle rows per faction, ascending faction; a faction with
+    /// battle rows but none alive keeps a zero entry.
+    pub alive: Vec<(u16, u32)>,
 }
 
 /// Immutable world state after a tick. Shared read-only; never mutated after

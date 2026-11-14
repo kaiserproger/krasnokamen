@@ -67,7 +67,7 @@ fn register(
     let id = server.connections.joining_id();
     let uuid = crate::crypto::offline_uuid(name);
     let (reliable_tx, reliable_rx) = mpsc::channel(64);
-    let (world_tx, _) = mpsc::channel(64);
+    let (world_tx, _) = world_queue(64, WORLD_QUEUE_BYTES);
     server
         .connections
         .register(

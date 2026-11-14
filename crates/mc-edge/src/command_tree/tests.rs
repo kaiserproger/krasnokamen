@@ -120,6 +120,20 @@ fn map_command_trees_and_suggestions_match_implemented_paths() {
 }
 
 #[test]
+fn battle_tree_is_operator_only_and_matches_preset_grammar() {
+    assert!(!permitted("battle start", 1, &[]));
+    assert!(permitted("battle start", 2, &[]));
+    let packet = tree(2, &[]);
+    for action in ["start", "pause", "reset", "status"] {
+        assert!(node(&packet, &["battle", action]).executable);
+    }
+    for preset in ["field-100", "field-1k", "field-10k"] {
+        assert!(node(&packet, &["battle", "setup", "seed", preset]).executable);
+        assert!(node(&packet, &["battle", "setup", "seed", preset, "count"]).executable);
+    }
+}
+
+#[test]
 fn damage_tree_and_permission_match_native_grammar() {
     let packet = tree(2, &[]);
     assert!(!permitted("damage @s 1", 1, &[]));

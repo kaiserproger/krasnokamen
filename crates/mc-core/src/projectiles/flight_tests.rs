@@ -61,6 +61,72 @@ fn arrow_stack(state: &TickState) -> ItemStack {
 }
 
 #[test]
+fn battle_arrows_expire_at_one_hundred_ground_ticks_even_after_owner_removal() {
+    let (mut state, _, centre) = setup();
+    let kind = state
+        .registry
+        .entity_types
+        .id_of(&Identifier::parse("minecraft:husk").unwrap())
+        .unwrap();
+    let owner = state.spawn_mob(kind, centre, 20.0);
+    let owner_slot = state.entities.slot_of(owner).unwrap();
+    state.entities.set_faction(owner_slot, 1);
+    state.entities.row_mut(owner_slot).controls.no_ai = true;
+    let uuid = state.entities.row(owner_slot).uuid;
+    let mut arrows = Vec::new();
+    for (offset, kind) in [ProjectileKind::Arrow, ProjectileKind::SpectralArrow]
+        .into_iter()
+        .enumerate()
+    {
+        let record = ProjectileState::new(kind, Some(uuid), ItemStack::EMPTY);
+        arrows.push(
+            launch(
+                &mut state,
+                record,
+                [centre[0] + 4.0, centre[1] + 0.5, centre[2] + offset as f64],
+                [0.0, -1.0, 0.0],
+            )
+            .unwrap(),
+        );
+    }
+    let ordinary = launch(
+        &mut state,
+        ProjectileState::new(ProjectileKind::Arrow, None, ItemStack::EMPTY),
+        [centre[0] + 6.0, centre[1] + 0.5, centre[2]],
+        [0.0, -1.0, 0.0],
+    )
+    .unwrap();
+    run_tick(&mut state, &[]);
+    for &id in &arrows {
+        let record = state
+            .entities
+            .row(state.entities.slot_of(id).unwrap())
+            .projectile
+            .as_deref()
+            .unwrap();
+        assert!(record.stuck && record.grounded_at_age.is_some());
+        assert_eq!(record.ground_lifetime, 100);
+    }
+    state
+        .entities
+        .remove(state.entities.slot_of(owner).unwrap());
+    for elapsed in 1..=100 {
+        run_tick(&mut state, &[]);
+        for &id in &arrows {
+            assert_eq!(
+                state.entities.slot_of(id).is_some(),
+                elapsed < 100,
+                "ground tick {elapsed}"
+            );
+        }
+        assert!(
+            state.entities.slot_of(ordinary).is_some(),
+            "ordinary arrow lifetime changed"
+        );
+    }
+}
+
+#[test]
 fn weak_arrow_removes_fresh_armor_stand() {
     // ARMOR-STAND-PROJECTILE-BREAK through the existing arrow flight path:
     // a low-damage unenchanted arrow must break a fresh stand outright.

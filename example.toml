@@ -59,6 +59,16 @@ port = 8080
 # Non-loopback binds additionally require allow_remote = true.
 # allow_remote = false
 
+[recorder]
+# Login names that join as stream recorders (a camera client recording the
+# server stream for offline replay): the full view_distance, every entity
+# type tracked to it, a 16 MiB world queue and a `krasnokamen:tick` marker per
+# tick. Granted only to a direct loopback peer; allow_remote = true grants it
+# from any address or proxy (offline-mode auth lets anyone claim a name).
+# See docs/OPERATING.md. Empty: no recorders.
+players = []
+# allow_remote = false
+
 # server.properties beside this TOML is imported at startup if present.
 # Explicit TOML keys win. See OPERATING.md for the supported-key table.
 # [properties]
@@ -153,6 +163,10 @@ world_dir = "world"
 # vanilla_data_dir = "data/vanilla"
 # Console `backup` copies the running world here (see docs/OPERATING.md).
 # backup_dir = "backups"
+# Periodic checkpoint cadence in ticks. Each capture runs on the tick thread;
+# a longer cadence means fewer capture ticks but a longer journal replay after a
+# crash. Stop and the empty-server pause still checkpoint.
+# checkpoint_every_ticks = 1200
 # Changing the seed requires a fresh world directory.
 seed = 0
 

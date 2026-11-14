@@ -68,6 +68,12 @@ pub(crate) fn after_move(
     {
         return (0.0, false);
     }
+    // Vanilla LivingEntity.rideTick resets a passenger's fall distance every
+    // tick: the vehicle positions it, so a snap back to the seat is no fall.
+    if state.entities.row(slot).entity_life.mount.vehicle.is_some() {
+        reset(state, slot);
+        return (0.0, false);
+    }
     let feet = [
         new[0].floor() as i32,
         new[1].floor() as i32,

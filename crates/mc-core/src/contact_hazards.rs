@@ -30,7 +30,8 @@ fn count_work(index: usize, amount: usize) {
     });
 }
 
-/// Candidates, exact-scan rows, quiet rows, exact samples, cauldron samples.
+/// Candidates, exact-scan rows, quiet rows with a live burn clock or bit,
+/// exact samples, cauldron samples (classified candidates in the tick path).
 #[cfg(test)]
 pub(crate) fn take_work_counts() -> [usize; 5] {
     WORK.with(|work| work.replace([0; 5]))
@@ -209,8 +210,19 @@ fn retained_burn(
 
 /// A bounded body scan; missing chunks never manufacture hazard or support.
 /// Berry damage requires actual horizontal displacement, not packet cadence.
-pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
-    run_with(state, intents, MIN_PARALLEL_ROWS);
+pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) -> StageTimes {
+    run_with(state, intents, MIN_PARALLEL_ROWS)
+}
+
+/// Wall time of the three stages of one contact pass (phase-log attribution).
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct StageTimes {
+    /// Cache resets and the pure per-row classifier.
+    pub(crate) classify: std::time::Duration,
+    /// Exact serial scans and retained burns, in row order.
+    pub(crate) serial: std::time::Duration,
+    /// Cauldron contents tail over the classified candidates.
+    pub(crate) cauldron: std::time::Duration,
 }
 
 /// Rows per rayon job; sized so a job amortizes its small result vector.
@@ -693,52 +705,18 @@ pub(crate) fn cauldron_contact(state: &mut TickState, intents: &mut Vec<Intent>)
         if fx < 0.125 || fx > 0.875 || fz < 0.125 || fz > 0.875 {
             continue;
         }
-        let cell = (
-            pos[0].floor() as i32,
-            pos[1].floor() as i32,
-            pos[2].floor() as i32,
-        );
-        // Feet must be within the cauldron's height, not standing on top.
-        if pos[1] - (cell.1 as f64) >= 1.0 || pos[1] - (cell.1 as f64) < 0.0 {
-            continue;
+        "powder_snow_cauldron" if level > 0 && body.burn_ticks > 0 => {
+            let (body, row) = state.entities.parts_mut(slot);
+            body.burn_ticks = 0;
+            Arc::make_mut(&mut row.appearance).shared_flags &= !1;
+            state.appearance_changed.push(id);
+            lower_cauldron(state, (cell.0, cell.1, cell.2), current, level, true);
         }
-        #[cfg(test)]
-        count_work(4, 1);
-        let Some(current) = state.world.block_at(cell.0, cell.1, cell.2) else {
-            continue;
-        };
-        let Some(block) = state.registry.blocks.by_id(mc_world::BlockStateId(current)) else {
-            continue;
-        };
-        let name = block.block.id.path().to_owned();
-        let level = block
-            .properties
-            .iter()
-            .find(|(key, _)| key == "level")
-            .and_then(|(_, value)| value.parse::<u8>().ok())
-            .unwrap_or(0);
-        let id = body.id;
-        match name.as_str() {
-            "water_cauldron" if level > 0 && body.burn_ticks > 0 => {
-                let (body, row) = state.entities.parts_mut(slot);
-                body.burn_ticks = 0;
-                Arc::make_mut(&mut row.appearance).shared_flags &= !1;
-                state.appearance_changed.push(id);
-                lower_cauldron(state, (cell.0, cell.1, cell.2), current, level, false);
-            }
-            "powder_snow_cauldron" if level > 0 && body.burn_ticks > 0 => {
-                let (body, row) = state.entities.parts_mut(slot);
-                body.burn_ticks = 0;
-                Arc::make_mut(&mut row.appearance).shared_flags &= !1;
-                state.appearance_changed.push(id);
-                lower_cauldron(state, (cell.0, cell.1, cell.2), current, level, true);
-            }
-            "lava_cauldron" => {
-                damage(state, id, DamageKind::Lava, 4.0, intents);
-                ignite(state, id, 300);
-            }
-            _ => {}
+        "lava_cauldron" => {
+            damage(state, id, DamageKind::Lava, 4.0, intents);
+            ignite(state, id, 300);
         }
+        _ => {}
     }
 }
 

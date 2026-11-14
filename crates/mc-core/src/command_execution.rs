@@ -353,6 +353,32 @@ pub(crate) fn execute(
     changes: &mut ChangeSet,
 ) -> CommandResult {
     match command {
+        Command::Battle(command) => {
+            if matches!(command, crate::battle::staging::BattleCommand::Roster)
+                && connection != crate::command_console::CONNECTION
+            {
+                error(
+                    state,
+                    connection,
+                    "battle roster is available only to the console",
+                );
+                return Failed;
+            }
+            let origin = crate::command_console::pose(state, executor)
+                .map_or_else(|| state.world.world_spawn_position(), |(pos, _)| pos);
+            return match crate::battle::staging::execute(state, changes, origin, command) {
+                Ok(message) => {
+                    if accepts_success(state, connection) {
+                        state.push_player(connection, PlayerChange::Chat { message });
+                    }
+                    CommandResult::Completed
+                }
+                Err(message) => {
+                    error(state, connection, format!("Battle error: {message}"));
+                    Failed
+                }
+            };
+        }
         Command::Attribute(command) => {
             return match crate::command_attribute::execute(state, connection, executor, command) {
                 Ok(value) => Success(value),

@@ -264,7 +264,14 @@ fn viewer_light_baseline_shares_nibble_storage_until_snapshot_mutation() {
     );
     assert!(baseline.observe((0, 0), &next));
     let mut packets = Vec::new();
-    baseline.update((0, 0), &next, 2, ConnectionId(7), &mut packets, &mut 0);
+    baseline.update(
+        (0, 0),
+        &next,
+        2,
+        ConnectionId(7),
+        &mut packets,
+        &mut WorldCredit::frames(0),
+    );
     assert!(packets.is_empty());
     assert_eq!(
         baseline.sent[&(0, 0)].sent[8]
@@ -274,9 +281,23 @@ fn viewer_light_baseline_shares_nibble_storage_until_snapshot_mutation() {
             .shared_allocation(),
         allocation
     );
-    baseline.update((0, 0), &next, 2, ConnectionId(7), &mut packets, &mut 1);
+    baseline.update(
+        (0, 0),
+        &next,
+        2,
+        ConnectionId(7),
+        &mut packets,
+        &mut WorldCredit::frames(1),
+    );
     assert_eq!(updates(&packets)[0].light, wire_light(&next));
-    baseline.update((0, 0), &next, 3, ConnectionId(7), &mut packets, &mut 1);
+    baseline.update(
+        (0, 0),
+        &next,
+        3,
+        ConnectionId(7),
+        &mut packets,
+        &mut WorldCredit::frames(1),
+    );
     assert_eq!(updates(&packets).len(), 1);
 }
 
@@ -290,18 +311,53 @@ fn viewer_light_baseline_diffs_a_chunk_only_when_its_revision_moves() {
     let mut packets = Vec::new();
     // Core bumps the revision on every light change: the same revision is
     // never diffed, so this (deliberately inconsistent) input sends nothing.
-    baseline.update((0, 0), &next, 1, ConnectionId(7), &mut packets, &mut 1);
+    baseline.update(
+        (0, 0),
+        &next,
+        1,
+        ConnectionId(7),
+        &mut packets,
+        &mut WorldCredit::frames(1),
+    );
     assert!(packets.is_empty());
     // A new revision with identical light is diffed once, sends nothing and
     // is then remembered as verified: a changed chunk at that revision is skipped.
-    baseline.update((0, 0), source, 2, ConnectionId(7), &mut packets, &mut 1);
+    baseline.update(
+        (0, 0),
+        source,
+        2,
+        ConnectionId(7),
+        &mut packets,
+        &mut WorldCredit::frames(1),
+    );
     assert!(packets.is_empty());
-    baseline.update((0, 0), &next, 2, ConnectionId(7), &mut packets, &mut 1);
+    baseline.update(
+        (0, 0),
+        &next,
+        2,
+        ConnectionId(7),
+        &mut packets,
+        &mut WorldCredit::frames(1),
+    );
     assert!(packets.is_empty());
     // Real light change at a new revision, without credit: not lost.
-    baseline.update((0, 0), &next, 3, ConnectionId(7), &mut packets, &mut 0);
+    baseline.update(
+        (0, 0),
+        &next,
+        3,
+        ConnectionId(7),
+        &mut packets,
+        &mut WorldCredit::frames(0),
+    );
     assert!(packets.is_empty());
-    baseline.update((0, 0), &next, 3, ConnectionId(7), &mut packets, &mut 1);
+    baseline.update(
+        (0, 0),
+        &next,
+        3,
+        ConnectionId(7),
+        &mut packets,
+        &mut WorldCredit::frames(1),
+    );
     assert_eq!(updates(&packets).len(), 1);
     assert_eq!(updates(&packets)[0].light, wire_light(&next));
 }

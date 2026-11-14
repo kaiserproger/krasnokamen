@@ -316,27 +316,60 @@ pub struct PlannedPacket {
 /// state relative moves are encoded against.
 type MoveBaseline = ([f64; 3], f32, f32, f32);
 
-/// Keep the best-effort frames `push` adds only if they fit `credit`
-/// (free outbound world-queue slots), so a planned world packet is never
-/// dropped and the viewer cache is exactly what the client receives. A
-/// group that does not fit is removed and planned again from a newer
-/// snapshot.
+/// One publish's world-queue room ([`crate::server::WorldSender`]): free
+/// frame slots, a hard limit, and free bytes, a soft one. Any remaining byte
+/// credit admits one more packet group, so the queue overshoots its byte
+/// bound by at most one group and a group larger than the bound still goes
+/// out once the queue drains. Chunk cache misses are framed after planning
+/// and charged by the next publish's credit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct WorldCredit {
+    pub(crate) frames: usize,
+    pub(crate) bytes: usize,
+}
+
+impl WorldCredit {
+    /// Frame-slot credit without a byte limit.
+    #[cfg(test)]
+    pub(crate) const fn frames(frames: usize) -> Self {
+        Self {
+            frames,
+            bytes: usize::MAX,
+        }
+    }
+
+    /// No further world frame fits this publish.
+    pub(crate) const fn spent(self) -> bool {
+        self.frames == 0 || self.bytes == 0
+    }
+
+    fn charge(&mut self, packets: &[PlannedPacket]) {
+        self.frames -= packets.len();
+        self.bytes = self
+            .bytes
+            .saturating_sub(packets.iter().map(|packet| packet.data.len()).sum());
+    }
+}
+
+/// Keep the best-effort frames `push` adds only if they fit `credit`, so a
+/// planned world packet is never dropped and the viewer cache is exactly
+/// what the client receives. A group that does not fit is removed and
+/// planned again from a newer snapshot.
 pub(super) fn try_push(
     out: &mut Vec<PlannedPacket>,
-    credit: &mut usize,
+    credit: &mut WorldCredit,
     push: impl FnOnce(&mut Vec<PlannedPacket>),
 ) -> bool {
-    if *credit == 0 {
+    if credit.spent() {
         return false;
     }
     let before = out.len();
     push(out);
-    let used = out.len() - before;
-    if used > *credit {
+    if out.len() - before > credit.frames {
         out.truncate(before);
         return false;
     }
-    *credit -= used;
+    credit.charge(&out[before..]);
     true
 }
 
@@ -367,7 +400,7 @@ pub(crate) struct TrackedEntity {
 }
 
 impl TrackedEntity {
-    fn new(entity: &EntityView, seen: u64) -> Self {
+    fn new(entity: &EntityView, seen: u64, round: u64) -> Self {
         Self {
             type_id: entity.type_id,
             baseline: (entity.position, entity.yaw, entity.pitch, entity.head_yaw),
@@ -463,8 +496,8 @@ pub struct ViewerState {
     /// never reached this viewer, so every chunk whose revision moved on is
     /// sent again.
     pub skipped: bool,
-    /// Free outbound world-queue slots, refreshed by the pump before each
-    /// publish: the plan emits at most this many best-effort frames.
+    /// Free outbound world-queue frame slots, refreshed by the pump before
+    /// each publish: the plan emits at most this many best-effort frames.
     pub world_credit: usize,
     /// Entities whose frames the last plan queued; the pump reports a frame
     /// of that plan that the world queue refused ([`Self::world_frame_unsent`]).
@@ -652,7 +685,7 @@ impl ViewerState {
 fn forget_everything(
     viewer: &mut ViewerState,
     out: &mut Vec<PlannedPacket>,
-    credit: &mut usize,
+    credit: &mut WorldCredit,
     scratch: &mut PlanScratch,
 ) -> bool {
     if !clear_seats(viewer, out, credit) {
@@ -736,10 +769,10 @@ const CHUNKS_PER_TICK: usize = 16;
 /// Best-effort frames are bounded by [`ViewerState::world_credit`], in
 /// priority order: one-shot explosions, chunk forgets, block updates, light
 /// updates, chunks (nearest first), entity removals, spawns (nearest first),
-/// appearance/moves (rotating), visual events. Explosions have no snapshot
-/// image to reconcile, so they precede even pending respawn forgets. Other
-/// work that does not fit stays unsent in the viewer
-/// cache and is planned again from a newer snapshot.
+/// appearance/moves (most overdue, nearest first), visual events.
+/// Explosions have no snapshot image to reconcile, so they precede even
+/// pending respawn forgets. Other work that does not fit stays unsent in the
+/// viewer cache and is planned again from a newer snapshot.
 #[cfg(test)]
 pub(crate) fn plan_viewer(
     output: &TickOutput,
@@ -1142,7 +1175,7 @@ fn plan_viewer_inner(
         if !viewer.loaded_chunks.contains_key(&chunk) || viewer.chunk_repairs.contains(&chunk) {
             continue;
         }
-        if credit == 0 {
+        if credit.spent() {
             viewer.pending_blocks.extend(positions.iter().copied());
             continue;
         }
@@ -1191,7 +1224,7 @@ fn plan_viewer_inner(
             if !viewer.loaded_chunks.contains_key(&chunk) || viewer.chunk_repairs.contains(&chunk) {
                 continue;
             }
-            if credit == 0 || viewer.pending_blocks.contains(&pos) {
+            if credit.spent() || viewer.pending_blocks.contains(&pos) {
                 viewer.pending_block_entities.insert(pos);
                 continue;
             }
@@ -1290,7 +1323,7 @@ fn plan_viewer_inner(
             } {
                 continue;
             }
-            if chunks_left == 0 || credit == 0 {
+            if chunks_left == 0 || credit.spent() {
                 admission_debt = true;
                 break;
             }
@@ -1315,7 +1348,7 @@ fn plan_viewer_inner(
                 chunk: Some(pos),
                 chunk_dimension: snapshot.dimension,
             });
-            credit -= 1;
+            credit.charge(&out[out.len() - 1..]);
             viewer.loaded_chunks.insert(pos, resident.revision);
             viewer.chunk_repairs.remove(&pos);
             viewer
@@ -1410,14 +1443,41 @@ fn entity_trackable(entity: &EntityView, viewer: &ViewerState, view_distance: i3
     if entity.id == viewer.entity_id {
         return true;
     }
-    let Some(contract) =
-        mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(entity.type_id)
+    let Some(range) =
+        entity_interest::tracking_range(entity.type_id, view_distance, viewer.recorder)
     else {
         return false;
     };
-    let range = f64::from(i32::from(contract.tracking_range).min(view_distance.max(0)) * 16);
+    let range = f64::from(range * 16);
     (entity.position[0] - viewer.position[0]).abs() <= range
         && (entity.position[2] - viewer.position[2]).abs() <= range
+}
+
+/// Horizontal distance at which a pending entity update weighs half as much
+/// as one at the viewer.
+const UPDATE_PRIORITY_HALF_BLOCKS: f64 = 32.0;
+
+/// Priority of a pending entity update under limited world credit, in the
+/// spirit of a priority accumulator: entity plans waited since its last
+/// delivery, weighted down with horizontal distance. Near units keep their
+/// vanilla cadence; far units wait longer but never starve, because
+/// waiting raises their priority every publish.
+fn update_priority(waited: u64, entity: [f64; 3], viewer: [f64; 3]) -> f64 {
+    let distance = (entity[0] - viewer[0]).hypot(entity[2] - viewer[2]);
+    (waited as f64 + 1.0) * UPDATE_PRIORITY_HALF_BLOCKS / (UPDATE_PRIORITY_HALF_BLOCKS + distance)
+}
+
+/// One entity's pending update for this publish, ranked by [`update_priority`].
+#[derive(Debug)]
+struct EntityUpdate {
+    /// Canonical (chunk/id) visit order, the tie-break between priorities.
+    order: usize,
+    id: EntityId,
+    priority: f64,
+    stale: bool,
+    due: bool,
+    movement: Option<shared_moves::SharedMove>,
+    head: Option<u8>,
 }
 
 fn entity_movement_due(entity: &EntityView, tick: u64, previous_tick: Option<u64>) -> bool {
@@ -1433,7 +1493,11 @@ fn entity_movement_due(entity: &EntityView, tick: u64, previous_tick: Option<u64
     )
 }
 
-fn clear_seats(viewer: &mut ViewerState, out: &mut Vec<PlannedPacket>, credit: &mut usize) -> bool {
+fn clear_seats(
+    viewer: &mut ViewerState,
+    out: &mut Vec<PlannedPacket>,
+    credit: &mut WorldCredit,
+) -> bool {
     while let Some((&rider, &(seat, _))) = viewer.seats.iter().next() {
         if !try_push(out, credit, |out| {
             push_best_effort(
@@ -1459,7 +1523,7 @@ fn clear_seats(viewer: &mut ViewerState, out: &mut Vec<PlannedPacket>, credit: &
     true
 }
 
-fn plan_seats(viewer: &mut ViewerState, out: &mut Vec<PlannedPacket>, credit: &mut usize) {
+fn plan_seats(viewer: &mut ViewerState, out: &mut Vec<PlannedPacket>, credit: &mut WorldCredit) {
     loop {
         let removed = viewer.seats.iter().find_map(|(&rider, &(id, pos))| {
             (viewer
@@ -1498,7 +1562,7 @@ fn plan_seats(viewer: &mut ViewerState, out: &mut Vec<PlannedPacket>, credit: &m
         if viewer.seats.contains_key(&rider) {
             continue;
         }
-        if *credit < 3 {
+        if credit.spent() || credit.frames < 3 {
             return;
         }
         let Some(id) = viewer.labels.alloc() else {
@@ -1573,13 +1637,23 @@ fn plan_entities(
     scratch: &mut PlanScratch,
     index: &TickPlanIndex,
     out: &mut Vec<PlannedPacket>,
-    credit: &mut usize,
+    credit: &mut WorldCredit,
 ) {
     let conn = viewer.connection;
     let mut tally = item_probe::Tally::new();
     let previous_tick = viewer.entity_tick.replace(snapshot.tick);
+    viewer.entity_round += 1;
+    let round = viewer.entity_round;
     let mut interest = std::mem::take(&mut viewer.entity_interest);
-    interest.prepare(snapshot, viewer, view_distance, index, scratch, *credit);
+    let spawn_credit = if credit.spent() { 0 } else { credit.frames };
+    interest.prepare(
+        snapshot,
+        viewer,
+        view_distance,
+        index,
+        scratch,
+        spawn_credit,
+    );
     viewer.boss_baseline.sync(
         conn,
         scratch
@@ -1609,6 +1683,7 @@ fn plan_entities(
             entity_ids: std::mem::take(&mut scratch.removed),
         };
         if try_push(out, credit, |out| push_best_effort(out, conn, &packet)) {
+            removals_deferred = 0;
             for &id in &packet.entity_ids {
                 let id = EntityId(id);
                 viewer.untrack(id);
@@ -1651,11 +1726,15 @@ fn plan_entities(
 
     // Spawns, nearest first, as many as the credit carries.
     let nearest = |a: &(EntityId, f64), b: &(EntityId, f64)| a.1.total_cmp(&b.1);
-    if *credit == 0 {
+    let spawn_candidates = scratch.pending_spawns;
+    let mut spawns_sent = 0;
+    if credit.spent() {
         scratch.spawns.clear();
-    } else if scratch.spawns.len() > *credit {
-        scratch.spawns.select_nth_unstable_by(*credit, nearest);
-        scratch.spawns.truncate(*credit);
+    } else if scratch.spawns.len() > credit.frames {
+        scratch
+            .spawns
+            .select_nth_unstable_by(credit.frames, nearest);
+        scratch.spawns.truncate(credit.frames);
     }
     scratch.spawns.sort_unstable_by(nearest);
     for &(id, _) in &scratch.spawns {
@@ -1741,18 +1820,19 @@ fn plan_entities(
         viewer.track(entity);
         viewer.world_entities.push(id);
         interest.spawned(entity.id);
+        spawns_sent += 1;
     }
 
-    // Visit changed rows and retained delivery/cadence debt in canonical
-    // chunk/id order, resuming at the first credit-blocked entity.
-    let count = scratch.visible.len();
-    let start = interest.start(&scratch.visible, snapshot);
-    for offset in (start..count).chain(0..start) {
-        let id = scratch.visible[offset];
+    // Changed rows and retained delivery/cadence debt, most overdue and
+    // nearest first while the credit lasts; canonical chunk/id order breaks
+    // ties. An update left without credit keeps its debt and gains priority
+    // every publish until sent.
+    scratch.updates.clear();
+    for &id in &scratch.visible {
         if id == viewer.entity_id {
             continue;
         }
-        let Some(tracked) = viewer.tracked_entities.get_mut(&id) else {
+        let Some(tracked) = viewer.tracked_entities.get(&id) else {
             continue;
         };
         let entity = snapshot.entities.get(id).expect("visible entity");
@@ -1791,17 +1871,17 @@ fn plan_entities(
             if stale || resend {
                 push_appearance(out, conn, entity, Some(baseline));
             }
-            if let Some(packet) = &movement {
+            if let Some(packet) = &update.movement {
                 out.push(PlannedPacket {
                     connection: conn,
                     id: packet.id,
                     reliable: false,
                     data: packet.data.clone(),
                     chunk: None,
-                    chunk_dimension: viewer.dimension,
+                    chunk_dimension: dimension,
                 });
             }
-            if turned {
+            if update.head.is_some() {
                 let (id, data) = index.moves.head(entity);
                 out.push(PlannedPacket {
                     connection: conn,
@@ -1809,14 +1889,12 @@ fn plan_entities(
                     reliable: false,
                     data,
                     chunk: None,
-                    chunk_dimension: viewer.dimension,
+                    chunk_dimension: dimension,
                 });
             }
         });
         if !sent {
-            interest.blocked(entity);
-            viewer.entity_interest = interest;
-            return;
+            break;
         }
         if item {
             tally.updated(
@@ -1841,11 +1919,13 @@ fn plan_entities(
         if let Some(packet) = movement {
             tracked.baseline = packet.next;
         }
-        if turned {
-            tracked.head_yaw = packed_head;
+        if let Some(head) = update.head {
+            tracked.head_yaw = head;
         }
         interest.completed(entity, tracked, snapshot.tick, due, moved);
     }
+    viewer.deferred_updates =
+        removals_deferred + (spawn_candidates - spawns_sent) + (pending_updates - updates_sent);
     viewer.entity_interest = interest;
 }
 

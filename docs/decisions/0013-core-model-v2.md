@@ -76,7 +76,9 @@ system-message lines are bounded at their source (the sender's spam budget, the
 command sequence budget), so a connection's trailing run of them compacts into
 one `TextBurst` entry at the cap instead of disconnecting a recipient, and the
 edge queues the burst's frames as one item. World fanout
-may reconcile to a newer snapshot. See
+may reconcile to a newer snapshot; it plans within each world queue's free
+frame slots and bytes, so a slow viewer's backlog is bounded in bytes and its
+nearest, longest-waiting entity updates go first. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
 Datapack reloads and `/debug function` trace-file writes each run on one

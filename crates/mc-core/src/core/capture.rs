@@ -602,9 +602,9 @@ pub(super) fn entity_capture_record(
         record
             .extra_fields
             .retain(|(key, _)| !crate::projectiles::persistence::owns_field(projectile.kind, key));
-        record.age = projectile.age.min(i32::MAX as u32) as i32;
+        record.age = projectile.ground_age(row.age).min(i32::MAX as u32) as i32;
         for (key, value) in
-            crate::projectiles::persistence::to_fields(projectile, &view.registry.items)
+            crate::projectiles::persistence::to_fields(projectile, &view.registry.items, row.age)
         {
             if key == "Item" {
                 record.item = Some(projectile.stack.clone());

@@ -96,6 +96,18 @@ pub fn hydrate_entity(
     } else {
         None
     };
+    if projectile
+        .as_ref()
+        .is_some_and(|projectile| projectile.grounded_at_age.is_some())
+        && !record
+            .extra_fields
+            .iter()
+            .any(|(name, value)| name == "krasnokamen:LifetimeAge" && matches!(value, Tag::Long(_)))
+    {
+        return Err(invalid(
+            "anchored projectile requires krasnokamen:LifetimeAge long".into(),
+        ));
+    }
     let ageable = registry.blueprint(type_id).is_some_and(|blueprint| {
         blueprint
             .goals

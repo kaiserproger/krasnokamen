@@ -948,6 +948,7 @@ fn full_step_with_period(
         rows: std::slice::from_ref(&row),
         entities: &state.entities,
         retained_targets: &state.hostile.targets,
+        battle: &state.hostile.battle,
         players: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
         passive: passive_follow::Context {
             players: crate::target_grid::TargetGrid::for_consumers(&targets, 0),
