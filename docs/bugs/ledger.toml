@@ -1157,7 +1157,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-FOOD"
-regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_auto_criteria_accept_authoritative_values"]
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_auto_criteria_accept_authoritative_values", "harness:entities:native-v2-score-food"]
+fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
 
 [[bug]]
 id = "SCORE-CRITERIA-WRITABLE"
@@ -1168,6 +1169,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-CRITERIA-WRITABLE"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_counter_criteria_allow_writes_and_swap_sources", "harness:entities:native-v2-command-score-store"]
+fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
 
 [[bug]]
 id = "SCORE-TOTAL-KILLS"
@@ -1178,6 +1180,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-TOTAL-KILLS"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_actual_mob_and_player_deaths_credit_distinct_kill_counters_once", "harness:entities:native-v2-command-score-store"]
+fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
 
 [[bug]]
 id = "TEAM-DEATH-VISIBILITY"
@@ -1275,7 +1278,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-QUERY"
-regression = ["cargo:mc-core:command_data::tests::data_player_queries_read_live_inventory_vitals_and_absent_paths", "cargo:mc-core:command_data::tests::data_block_accepts_every_registered_block_entity_kind"]
+regression = ["cargo:mc-core:command_data::tests::data_player_queries_read_live_inventory_vitals_and_absent_paths", "cargo:mc-core:command_data::tests::data_block_accepts_every_registered_block_entity_kind", "harness:entities:native-v2-data-query"]
+fix_commit = "0c6f68d84c1d2500bdd5ab7f016ae12887006730"
 
 [[bug]]
 id = "EXECUTE-STORE"
@@ -1286,6 +1290,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#EXECUTE-STORE"
 regression = ["cargo:mc-core:command_data::tests::execute_store_give_and_clear_execute_once_and_return_real_counts", "harness:entities:native-v2-command-score-store"]
+fix_commit = "0c6f68d84c1d2500bdd5ab7f016ae12887006730"
 
 [[bug]]
 id = "P1"
@@ -1654,6 +1659,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DAMAGE-COMMAND"
 regression = ["cargo:mc-core:command_damage::tests::damage_command_commits_default_damage_and_reports_actual_rejection", "harness:entities:native-v2-command-score-store"]
+fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
 
 [[bug]]
 id = "HC-4"
@@ -1703,7 +1709,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-AGE"
-regression = ["cargo:mc-core:command_summon::age_tests::summon_age_water_families", "cargo:mc-core:command_summon::age_tests::summon_age_horse_families"]
+regression = ["cargo:mc-core:command_summon::age_tests::summon_age_water_families", "cargo:mc-core:command_summon::age_tests::summon_age_horse_families", "harness:entities:native-v2-summon-age"]
+fix_commit = "69650602b181121c5d47b1cf082d91654505612d"
 
 [[bug]]
 id = "SUMMON-ISBABY"
@@ -1713,7 +1720,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-ISBABY"
-regression = ["cargo:mc-core:command_summon::age_tests::summon_is_baby_zombie_family", "cargo:mc-core:command_summon::age_tests::summon_is_baby_piglin_and_zoglin"]
+regression = ["cargo:mc-core:command_summon::age_tests::summon_is_baby_zombie_family", "cargo:mc-core:command_summon::age_tests::summon_is_baby_piglin_and_zoglin", "harness:entities:native-v2-summon-age"]
+fix_commit = "69650602b181121c5d47b1cf082d91654505612d"
 
 [[bug]]
 id = "DEATH-PROTECTION-COMPONENT"
@@ -4664,8 +4672,9 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "VisualWorldM scene runs 2026-11-11 (receipts/VisualWorldClient/rows.yaml, batch-fx2 scene uojfjhnq/wh9f5dcu): the server refused the fields identically for native and Java clients."
-regression = []
+regression = ["cargo:mc-core:command_summon::tests::summon_tnt_accepts_fuse_and_explosion_power_and_applies_them", "cargo:mc-core:command_summon::tests::summon_falling_block_accepts_block_state_and_time_and_defaults_to_sand", "cargo:mc-core:command_summon::tests::summon_rejects_tnt_and_falling_block_fields_on_wrong_entities_and_bad_values", "harness:entities:native-v2-summon-nbt"]
 failing_first = "reported"
+fix_commit = "patch:39fc05d0cdfc4522b94663dfc4d755f126328424e1594e136a8e90c002ce147c"
 
 [[bug]]
 id = "KELP-ITEMS-SPAWN-ON-OCEAN-FLOOR"

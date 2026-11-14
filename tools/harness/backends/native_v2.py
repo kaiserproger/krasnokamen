@@ -196,6 +196,46 @@ def _ledger_setblock_snbt(steps: ProbeSteps, origin: tuple[int, int, int]) -> No
     steps.call("minecraft_close_screen")
 
 
+def _ledger_summon_nbt(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    import re
+
+    from .native_p1 import _capture, _rows
+
+    x, y, z = origin
+    steps.fixture("gamerule spawn_mobs false")
+    _echo(steps, "summon_nbt_fixtures_ordered")
+    steps.fixture(f"summon minecraft:tnt {x + .5} {y + 1} {z + 2.5} {{fuse:1000s}}")
+    steps.fixture(f"summon minecraft:falling_block {x + .5} {y + 2} {z + 5.5} "
+                  '{BlockState:{Name:"minecraft:sand"},NoGravity:1b}')
+
+    def received(kind: str, px: float, pz: float) -> dict:
+        found: dict = {}
+
+        def hit(_: dict) -> bool:
+            row = next((row for row in _rows(steps, 16) if row["entity_type"] == kind
+                        and abs(row["x"] - px) < .6 and abs(row["z"] - pz) < .6), None)
+            if row is None:
+                return False
+            found.update(row)
+            return True
+
+        steps.wait(hit, f"received_{kind}_{px}_{pz}")
+        return found
+
+    tnt = received("minecraft:tnt", x + .5, z + 2.5)
+    falling = received("minecraft:falling_block", x + .5, z + 5.5)
+    _capture(steps, "summon-nbt-entities")
+    steps.fixture(f"data get entity {tnt['entity_uuid']} fuse")
+    steps.wait(lambda s: any((m := re.search(r"fuse:\s*(\d+)", line)) and int(m.group(1)) == 1000
+                             for line in s["recent_chat"]),
+               "tnt_authored_fuse_read_back", timeout_seconds=20)
+    steps.fixture(f"data get entity {falling['entity_uuid']} BlockState")
+    steps.wait(lambda s: any("BlockState" in line and "minecraft:sand" in line
+                             for line in s["recent_chat"]),
+               "falling_block_authored_block_state_read_back", timeout_seconds=20)
+    steps.report["summon_nbt"] = {"tnt": tnt["entity_uuid"], "falling_block": falling["entity_uuid"]}
+
+
 def _ledger_crafting_pickup(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     point = _point(origin)
     _set(steps, point, "minecraft:crafting_table")
@@ -922,6 +962,7 @@ RUNNERS = {
     "native-v2-ledger-axe": _ledger_axe,
     "native-v2-ledger-sponge": _ledger_sponge,
     "native-v2-ledger-setblock-snbt": _ledger_setblock_snbt,
+    "native-v2-summon-nbt": _ledger_summon_nbt,
     "native-v2-ledger-crafting-pickup": _ledger_crafting_pickup,
     "native-v2-map-frame-waypoint": _promotion_maps,
     "native-v2-map-banner-removal": _promotion_maps,

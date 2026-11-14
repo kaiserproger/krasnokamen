@@ -1099,3 +1099,99 @@ fn climate_variant_summons_reject_wrong_registry_and_type_before_allocation() {
     rejected_tag_in_state(&mut state, "zombie_nautilus", "variant", "'minecraft:cold'");
     rejected_tag_in_state(&mut state, "sheep", "variant", "'minecraft:warm'");
 }
+#[test]
+fn summon_tnt_accepts_fuse_and_explosion_power_and_applies_them() {
+    for (nbt, fuse, power) in [
+        ("{fuse:7s}", 7, 4.0_f32),
+        ("{fuse:10}", 10, 4.0_f32),
+        ("{fuse:7s,explosion_power:2.5f}", 7, 2.5_f32),
+        ("{}", 80, 4.0_f32),
+    ] {
+        let (mut state, id) = summon("tnt", nbt);
+        let slot = state.entities.slot_of(id).unwrap();
+        let row = state.entities.row(slot);
+        let record = row.tnt.as_ref().expect("primed tnt state");
+        assert_eq!(record.fuse, fuse, "{nbt}");
+        assert_eq!(record.explosion_power, power, "{nbt}");
+        assert_eq!(
+            row.appearance
+                .extra
+                .iter()
+                .find(|(index, _)| *index == crate::tnt::FUSE_INDEX),
+            Some(&(crate::tnt::FUSE_INDEX, EntityDataValue::VarInt(fuse as i32))),
+            "{nbt}"
+        );
+        let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+        let native = chunks
+            .values()
+            .flat_map(|c| &c.entities)
+            .find(|entity| entity.uuid == row.uuid)
+            .unwrap();
+        let image = EntityStateImage::from_record(&state.registry, native).unwrap();
+        let record = image.tnt.expect("tnt checkpoint image");
+        assert_eq!(record.fuse, fuse, "{nbt}");
+        assert_eq!(record.explosion_power, power, "{nbt}");
+        state.remove_entity(slot);
+    }
+}
+
+#[test]
+fn summon_falling_block_accepts_block_state_and_time_and_defaults_to_sand() {
+    let (probe, ..) = crate::hostile_tests::setup(8.0);
+    let sand = probe.registry.states.sand;
+    let gravel = probe
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:gravel").unwrap())
+        .unwrap()
+        .default
+        .0;
+    for (nbt, block_state, age) in [
+        ("{BlockState:{Name:\"minecraft:sand\"}}", sand, 0),
+        (
+            "{BlockState:{Name:\"minecraft:gravel\"},Time:9}",
+            gravel,
+            9,
+        ),
+        ("{}", sand, 0),
+    ] {
+        let (mut state, id) = summon("falling_block", nbt);
+        let slot = state.entities.slot_of(id).unwrap();
+        let row = state.entities.row(slot);
+        let falling = row.falling.as_ref().expect("falling block state");
+        assert_eq!(falling.block_state, block_state, "{nbt}");
+        assert_eq!(falling.age, age, "{nbt}");
+        assert_eq!(row.appearance.spawn_data, block_state as i32, "{nbt}");
+        let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+        let native = chunks
+            .values()
+            .flat_map(|c| &c.entities)
+            .find(|entity| entity.uuid == row.uuid)
+            .unwrap();
+        let image = EntityStateImage::from_record(&state.registry, native).unwrap();
+        let falling = image.falling.expect("falling checkpoint image");
+        assert_eq!(falling.block_state, block_state, "{nbt}");
+        assert_eq!(falling.age, age, "{nbt}");
+        state.remove_entity(slot);
+    }
+}
+
+#[test]
+fn summon_rejects_tnt_and_falling_block_fields_on_wrong_entities_and_bad_values() {
+    let mut state = rejected_tag_fixture();
+    // fuse belongs to primed TNT only.
+    rejected_tag_in_state(&mut state, "zombie", "fuse", "5s");
+    rejected_tag_in_state(&mut state, "falling_block", "fuse", "5s");
+    // BlockState belongs to falling blocks only.
+    rejected_tag_in_state(&mut state, "tnt", "BlockState", "{Name:\"minecraft:sand\"}");
+    // A non-gravity block is not a valid falling block state.
+    rejected_tag_in_state(&mut state, "falling_block", "BlockState", "{Name:\"minecraft:stone\"}");
+    rejected_tag_in_state(
+        &mut state,
+        "falling_block",
+        "BlockState",
+        "{Name:\"minecraft:not_a_block\"}",
+    );
+    // Negative Time is invalid.
+    rejected_tag_in_state(&mut state, "falling_block", "Time", "-1");
+}

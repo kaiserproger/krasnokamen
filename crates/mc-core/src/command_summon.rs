@@ -234,6 +234,8 @@ pub(crate) fn supports(state: &TickState, type_id: u32, name: &str, key: &str) -
         }),
         "CustomName" | "CustomNameVisible" | "Invulnerable" | "NoGravity" | "Motion"
         | "Rotation" | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
+        "fuse" | "explosion_power" | "block_state" => name == "minecraft:tnt",
+        "BlockState" | "Time" => name == "minecraft:falling_block",
         _ => return None,
     })
 }
@@ -528,6 +530,23 @@ fn authored_fields(
                 }
                 value.clone()
             }
+            "fuse" => Tag::Short(number(value, key)?.clamp(0.0, f64::from(i16::MAX)) as i16),
+            "explosion_power" => {
+                Tag::Float(number(value, key)?.clamp(0.0, 128.0) as f32)
+            }
+            "Time" => {
+                let v = number(value, key)?;
+                if v.fract() != 0.0 || !(0.0..=f64::from(i32::MAX)).contains(&v) {
+                    return Err(error("Invalid Time: expected nonnegative integer"));
+                }
+                Tag::Int(v as i32)
+            }
+            "block_state" | "BlockState" => {
+                if !matches!(value, Tag::Compound(_)) {
+                    return Err(error(format!("Invalid {key}: expected compound")));
+                }
+                value.clone()
+            }
             _ => value.clone(),
         };
         fields.push((key.clone(), value));
@@ -558,6 +577,15 @@ pub(crate) fn prepare(
                 Tag::String(crate::painting::DEFAULT_VARIANT.into()),
             ));
         }
+    }
+    if name == "minecraft:falling_block" && !fields.iter().any(|(key, _)| key == "BlockState") {
+        // Vanilla FallingBlock defaults to sand when BlockState is absent.
+        let sand = state.registry.blocks.by_id(mc_world::BlockStateId(state.registry.states.sand));
+        let name = sand.expect("sand state registered").block.id.as_str().to_owned();
+        fields.push((
+            "BlockState".into(),
+            Tag::Compound(vec![("Name".into(), Tag::String(name))]),
+        ));
     }
     let equipment_authored = authored.iter().any(|(key, _)| key == "equipment");
     let mut image = decode(
@@ -841,6 +869,22 @@ pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     if baby != was_baby {
         let half_width = body.half_width * if baby { 0.5 } else { 2.0 };
         state.entities.set_half_width(slot, half_width);
+    }
+    // Authored primed-TNT and falling-block payloads replace the spawn defaults.
+    if image.state.tnt.is_some() || image.state.falling.is_some() {
+        let row = state.entities.row_mut(slot);
+        if let Some(record) = image.state.tnt {
+            row.tnt = Some(record);
+        }
+        if let Some(falling) = image.state.falling {
+            row.falling = Some(falling);
+        }
+    }
+    if image.state.tnt.is_some() {
+        crate::tnt::restore(state, slot);
+    }
+    if image.state.falling.is_some() {
+        crate::falling::configure(state, id);
     }
     crate::entity_loot::restore(state, slot);
     crate::armor_stand::restore(state, slot);

@@ -111,6 +111,14 @@ SCENARIOS: dict[str, Scenario] = {
         requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
         limits="One chest with seven diamonds in slot zero; privileged setup.",
     ),
+    "native-v2-summon-nbt": _entry(
+        id="native-v2-summon-nbt", summary="Summon tnt {fuse} and falling_block {BlockState} with their vanilla NBT",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-summon-nbt",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        fixture="operator pad; one primed TNT with an authored 1000-tick fuse and one NoGravity falling sand with an authored BlockState",
+        proves="both summons are accepted, both entities appear, and data get returns the authored fuse and BlockState",
+        limits="tnt fuse and falling_block BlockState only; no explosion or landing claim",
+    ),
     "native-v2-ledger-crafting-pickup": _entry(
         id="native-v2-ledger-crafting-pickup", summary="Crafting table remains open on the first inventory pickup",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-ledger-crafting-pickup",
