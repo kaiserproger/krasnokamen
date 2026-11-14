@@ -1053,7 +1053,7 @@ pub fn to_fields(life: &EntityLifeState, love: u32) -> Vec<(String, mc_nbt::Tag)
             Tag::Byte(i8::from(life.age_lock.locked)),
         ),
         (
-            "solaris:AgeLockCooldownUntil".into(),
+            "krasnokamen:AgeLockCooldownUntil".into(),
             Tag::Long(life.age_lock.cooldown_until.min(i64::MAX as u64) as i64),
         ),
     ];
@@ -1062,7 +1062,7 @@ pub fn to_fields(life: &EntityLifeState, love: u32) -> Vec<(String, mc_nbt::Tag)
         fields.push(("has_egg".into(), Tag::Byte(i8::from(turtle.has_egg))));
     }
     if life.frog_pregnant {
-        fields.push(("solaris:FrogPregnant".into(), Tag::Byte(1)));
+        fields.push(("krasnokamen:FrogPregnant".into(), Tag::Byte(1)));
     }
     if life.time_in_overworld != 0 || life.immune_to_zombification {
         fields.push((
@@ -1198,7 +1198,7 @@ pub fn from_record(
                     turtle.has_egg = *has_egg != 0;
                 }
             }
-            ("solaris:FrogPregnant", Tag::Byte(value)) if record.id == "minecraft:frog" => {
+            ("krasnokamen:FrogPregnant", Tag::Byte(value)) if record.id == "minecraft:frog" => {
                 life.frog_pregnant = *value != 0;
             }
             ("Type", Tag::String(kind)) => life.brown_mooshroom = kind == "brown",

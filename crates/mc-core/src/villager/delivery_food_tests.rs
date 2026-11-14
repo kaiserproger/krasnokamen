@@ -18,7 +18,7 @@ fn paused_output_obligation_survives_sharing_and_courtship_consumption() {
         .registry
         .item_facts
         .work_recipes()
-        .find(|recipe| recipe.id.as_str() == "solaris-settlements:bread")
+        .find(|recipe| recipe.id.as_str() == "krasnokamen-settlements:bread")
         .unwrap()
         .clone();
     recipe.id = mc_data::Identifier::parse("test:delivery_food").unwrap();

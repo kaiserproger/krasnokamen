@@ -552,7 +552,10 @@ fn moved_mob_in_clean_sections_is_proven_quiet_without_a_serial_scan() {
     assert!(!sample(&mut state, mob, DamageKind::Cactus));
     let counts = crate::contact_hazards::take_work_counts();
     // The fixture player is always exactly scanned: one scan means no mob scan.
-    assert_eq!(counts[1], 1, "fresh mob in clean sections needs no serial scan");
+    assert_eq!(
+        counts[1], 1,
+        "fresh mob in clean sections needs no serial scan"
+    );
     assert_eq!(counts[2], 1);
     let stamp = state.contact_hazards_scratch.negative[slot.0 as usize].expect("banked stamp");
     assert_eq!(stamp.position, at);
@@ -561,12 +564,22 @@ fn moved_mob_in_clean_sections_is_proven_quiet_without_a_serial_scan() {
     state.entities.set_pos(slot, moved);
     assert!(!sample(&mut state, mob, DamageKind::Cactus));
     let counts = crate::contact_hazards::take_work_counts();
-    assert_eq!(counts[1], 1, "moved mob in clean sections needs no serial scan");
+    assert_eq!(
+        counts[1], 1,
+        "moved mob in clean sections needs no serial scan"
+    );
     let stamp = state.contact_hazards_scratch.negative[slot.0 as usize].expect("rebanked stamp");
     assert_eq!(stamp.position, moved);
     // A hazard in a covered section keeps the exact scan and its damage.
-    place(&mut state, [moved[0] + 3.0, moved[1], moved[2]], "cactus", &[]);
-    state.entities.set_pos(slot, [moved[0] + 3.0, moved[1], moved[2]]);
+    place(
+        &mut state,
+        [moved[0] + 3.0, moved[1], moved[2]],
+        "cactus",
+        &[],
+    );
+    state
+        .entities
+        .set_pos(slot, [moved[0] + 3.0, moved[1], moved[2]]);
     assert!(sample(&mut state, mob, DamageKind::Cactus));
     assert_eq!(crate::contact_hazards::take_work_counts()[1], 2);
 }

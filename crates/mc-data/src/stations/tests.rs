@@ -6,8 +6,8 @@ fn stack(items: &ItemRegistry, name: &str, count: i32) -> ItemStack {
 
 #[test]
 fn smithing_advertised_inputs_match_server_slot_admission() {
-    let items = crate::items::solaris_required_items();
-    let mut tags = crate::tags::solaris_required_item_tags(&items);
+    let items = crate::items::krasnokamen_required_items();
+    let mut tags = crate::tags::krasnokamen_required_item_tags(&items);
     let custom = stack(&items, "minecraft:stick", 1);
     tags.registries
         .entry(identifier(crate::tags::ITEM_REGISTRY))
@@ -30,7 +30,7 @@ fn smithing_advertised_inputs_match_server_slot_admission() {
 
 #[test]
 fn station_brewing_transforms_contents_and_container_without_inventing_invalid_mix() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let mut bottle = stack(&items, "minecraft:potion", 1);
     bottle.extended_mut().potion = Some(identifier("minecraft:water"));
     let awkward =
@@ -61,9 +61,9 @@ fn station_brewing_transforms_contents_and_container_without_inventing_invalid_m
 
 #[test]
 fn station_loom_appends_color_and_pattern_preserving_banner_and_rejects_seventh_layer() {
-    let items = crate::items::solaris_required_items();
-    let blocks = crate::blocks::solaris_required_blocks_report();
-    let tags = crate::tags::solaris_required_client_tags(&items, &blocks);
+    let items = crate::items::krasnokamen_required_items();
+    let blocks = crate::blocks::krasnokamen_required_blocks_report();
+    let tags = crate::tags::krasnokamen_required_client_tags(&items, &blocks);
     let mut input = std::array::from_fn(|_| ItemStack::EMPTY);
     input[0] = stack(&items, "minecraft:white_banner", 2).with_custom_name("Flag");
     input[1] = stack(&items, "minecraft:red_dye", 3);
@@ -89,9 +89,9 @@ fn station_loom_appends_color_and_pattern_preserving_banner_and_rejects_seventh_
 
 #[test]
 fn station_anvil_material_repair_and_rename_preserve_enchantments_and_charge_actual_materials() {
-    let items = crate::items::solaris_required_items();
-    let facts = crate::item_components::solaris_required_item_facts();
-    let tags = crate::tags::solaris_required_item_tags(&items);
+    let items = crate::items::krasnokamen_required_items();
+    let facts = crate::item_components::krasnokamen_required_item_facts();
+    let tags = crate::tags::krasnokamen_required_item_tags(&items);
     let left = stack(&items, "minecraft:diamond_sword", 1)
         .with_damage(800)
         .with_enchantment(identifier("minecraft:sharpness"), 2);
@@ -143,7 +143,7 @@ fn station_loom_sidecar_resolves_button_through_actual_sent_registry_and_tag_vec
         }],
     );
     let tags = crate::tags::load(dir.path(), &data).unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let sent_registry = data.registry("banner_pattern").unwrap();
     let sent_tags = &tags.registries[&identifier("minecraft:banner_pattern")];
     let sent_ids = &sent_tags[&identifier("minecraft:no_item_required")];
@@ -180,9 +180,9 @@ fn station_loom_sidecar_resolves_button_through_actual_sent_registry_and_tag_vec
 
 #[test]
 fn station_loom_missing_registry_binding_and_invalid_tag_ids_fail_closed() {
-    let items = crate::items::solaris_required_items();
-    let blocks = crate::blocks::solaris_required_blocks_report();
-    let mut tags = crate::tags::solaris_required_client_tags(&items, &blocks);
+    let items = crate::items::krasnokamen_required_items();
+    let blocks = crate::blocks::krasnokamen_required_blocks_report();
+    let mut tags = crate::tags::krasnokamen_required_client_tags(&items, &blocks);
     let mut input = std::array::from_fn(|_| ItemStack::EMPTY);
     input[0] = stack(&items, "minecraft:white_banner", 1);
     input[1] = stack(&items, "minecraft:red_dye", 1);

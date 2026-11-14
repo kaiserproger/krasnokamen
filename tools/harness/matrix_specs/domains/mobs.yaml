@@ -1,4 +1,4 @@
-schema: solaris-domain-spec-1
+schema: krasnokamen-domain-spec-1
 domain: mobs
 minecraft_version: 26.1.2
 executable_interface: tools/harness/matrix_api.py; plain Python adapters; this YAML is specification only, not an
@@ -130,7 +130,7 @@ subjects:
     entity trajectory/rotation/velocity/combat observations; generic displacement or projectile presence is insufficient.
 - subject: mobs.armadillo
   scenario_ids:
-  - pw:mobs.armadillo/fabric_solaris_loader/creative/overworld/normal/1/reconnect_mid_action/steady/non_op_0
+  - pw:mobs.armadillo/fabric_krasnokamen_loader/creative/overworld/normal/1/reconnect_mid_action/steady/non_op_0
   preconditions:
   - *id001
   - *id002
@@ -332,7 +332,7 @@ subjects:
     entity trajectory/rotation/velocity/combat observations; generic displacement or projectile presence is insufficient.
 - subject: mobs.axolotl
   scenario_ids:
-  - pw:mobs.axolotl/neoforge_solaris_loader/adventure/the_nether/peaceful/N8/malformed_or_stale_packet/clean_restart_mid_action/op_3
+  - pw:mobs.axolotl/neoforge_krasnokamen_loader/adventure/the_nether/peaceful/N8/malformed_or_stale_packet/clean_restart_mid_action/op_3
   preconditions:
   - *id001
   - *id002
@@ -846,7 +846,7 @@ subjects:
     entity trajectory/rotation/velocity/combat observations; generic displacement or projectile presence is insufficient.
 - subject: mobs.breeze
   scenario_ids:
-  - pw:mobs.breeze/forge_solaris_loader/adventure/overworld/normal/N8/duplicate_login/crash_kill9_wal_replay/op_3
+  - pw:mobs.breeze/forge_krasnokamen_loader/adventure/overworld/normal/N8/duplicate_login/crash_kill9_wal_replay/op_3
   preconditions:
   - *id001
   - *id002

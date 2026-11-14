@@ -22,7 +22,7 @@ HERE = Path(__file__).resolve().parent
 BOUND = 60  # seconds; only a failure ever waits this long
 STUB = '''#!/usr/bin/env python3
 import os, subprocess, sys
-print(f"run {os.environ.get('SOLARIS_BUILD_TOKEN', '-')} {os.getpid()}", flush=True)
+print(f"run {os.environ.get('KRASNOKAMEN_BUILD_TOKEN', '-')} {os.getpid()}", flush=True)
 for line in sys.stdin:
     if line.strip() == "nest":  # a nested compile through the runner, like the ledger's cargo nextest
         out = subprocess.run([os.environ["TEST_RUNNER"], "-m", "1G", "cargo", "build"],
@@ -73,9 +73,9 @@ class BuildTokenTests(unittest.TestCase):
         self.tree = self.root / 'wt'
         self.tree.mkdir()
         self.env = {key: value for key, value in os.environ.items()
-                    if key not in ('SOLARIS_BUILD_TOKEN', 'SOLARIS_BUILD_TOKEN_PID', 'SOLARIS_SCENE_SLOT')}
+                    if key not in ('KRASNOKAMEN_BUILD_TOKEN', 'KRASNOKAMEN_BUILD_TOKEN_PID', 'KRASNOKAMEN_SCENE_SLOT')}
         self.env.update(PATH=f'{bin_dir}:{os.environ["PATH"]}', CARGO_TARGET_DIR=str(self.root / 'target'),
-                        SOLARIS_SLOT_TARGETS=str(self.root / 'targets'), SOLARIS_SLOT_MIN_FREE_GB='0',
+                        KRASNOKAMEN_SLOT_TARGETS=str(self.root / 'targets'), KRASNOKAMEN_SLOT_MIN_FREE_GB='0',
                         TEST_RUNNER=str(self.runner))
         self.count = 0
 
@@ -86,7 +86,7 @@ class BuildTokenTests(unittest.TestCase):
         log = self.root / f'runner-{self.count}.log'
         with open(log, 'w') as stderr:
             proc = subprocess.Popen([str(self.runner), '-m', '1G', *command], cwd=self.tree,
-                                    env=self.env | {'SOLARIS_BUILD_TOKEN_READY_FD': str(ready_w)}, pass_fds=(ready_w,),
+                                    env=self.env | {'KRASNOKAMEN_BUILD_TOKEN_READY_FD': str(ready_w)}, pass_fds=(ready_w,),
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=stderr, text=True)
         os.close(ready_w)
         cmd = Command(proc, ready_r, log)
@@ -212,7 +212,7 @@ class BuildTokenTests(unittest.TestCase):
     def test_nested_compile_and_gate_run_while_all_tokens_are_held(self):
         running, _ = self.hold_three()
         # A gate on a pinned binary takes no token.
-        gate = subprocess.run([str(self.runner), '-m', '1G', 'sh', '-c', 'echo "gate ${SOLARIS_BUILD_TOKEN:-none}"'],
+        gate = subprocess.run([str(self.runner), '-m', '1G', 'sh', '-c', 'echo "gate ${KRASNOKAMEN_BUILD_TOKEN:-none}"'],
                               cwd=self.tree, env=self.env, capture_output=True, text=True, timeout=BOUND)
         self.assertEqual(gate.returncode, 0, gate.stderr)
         self.assertEqual(gate.stdout.strip(), 'gate none')
@@ -230,7 +230,7 @@ class BuildTokenTests(unittest.TestCase):
             self.finish(cmd)
 
     def test_background_lane_leaves_token_three_for_priority_compiles(self):
-        background = self.env | {'SOLARIS_BUILD_LANE': 'background'}
+        background = self.env | {'KRASNOKAMEN_BUILD_LANE': 'background'}
         saved, self.env = self.env, background
         try:
             cmds = [self.start('cargo', 'build', '-p', f'bg{n}') for n in range(3)]

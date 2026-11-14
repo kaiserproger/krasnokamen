@@ -33,11 +33,11 @@ from typing import Any
 from .profiles import LOADER_PLATFORMS, ProfileContext, list_profiles
 from .runtime import REPO_ROOT, USERNAME_RE, port_open, sibling_root
 
-ARTIFACT_ROOT = Path(os.environ.get("SOLARIS_VALIDATION_ROOT", REPO_ROOT / ".analysis" / "validation"))
+ARTIFACT_ROOT = Path(os.environ.get("KRASNOKAMEN_VALIDATION_ROOT", REPO_ROOT / ".analysis" / "validation"))
 
 CLIENT_DEFAULT_PORT = 39095
-CLIENT_DEFAULT_USERNAME = "SolarisMcp"
-LOADER_DEFAULT_USERNAME = "SolarisLoader"
+CLIENT_DEFAULT_USERNAME = "KrasnoMcp"
+LOADER_DEFAULT_USERNAME = "KrasnoLoader"
 
 
 # ------------------------------------------------------------ client settings
@@ -47,32 +47,32 @@ def resolve_client_settings(platform: str | None) -> dict[str, Any]:
     """Validate token/port/game-dir/username, mirroring the old launchers."""
     if platform is not None and platform not in LOADER_PLATFORMS:
         raise ValueError(f"unknown Loader platform: {platform}")
-    token = os.environ.get("SOLARIS_CLIENT_MCP_TOKEN", "")
+    token = os.environ.get("KRASNOKAMEN_CLIENT_MCP_TOKEN", "")
     if not token:
-        raise RuntimeError("set SOLARIS_CLIENT_MCP_TOKEN to a random bearer token")
-    raw_port = os.environ.get("SOLARIS_CLIENT_MCP_PORT", str(CLIENT_DEFAULT_PORT))
+        raise RuntimeError("set KRASNOKAMEN_CLIENT_MCP_TOKEN to a random bearer token")
+    raw_port = os.environ.get("KRASNOKAMEN_CLIENT_MCP_PORT", str(CLIENT_DEFAULT_PORT))
     try:
         port = int(raw_port, 10)
     except ValueError:
-        raise RuntimeError(f"invalid SOLARIS_CLIENT_MCP_PORT: {raw_port!r}") from None
+        raise RuntimeError(f"invalid KRASNOKAMEN_CLIENT_MCP_PORT: {raw_port!r}") from None
     if not 1 <= port <= 65535:
-        raise RuntimeError(f"invalid SOLARIS_CLIENT_MCP_PORT: {raw_port!r}")
+        raise RuntimeError(f"invalid KRASNOKAMEN_CLIENT_MCP_PORT: {raw_port!r}")
     default_game_dir = (
         str(REPO_ROOT / ".analysis" / "minecraft-loader-mcp" / platform)
         if platform is not None
         else str(sibling_root("loader") / "fabric-agent" / "run-mcp")
     )
-    raw_game_dir = os.environ.get("SOLARIS_CLIENT_MCP_GAME_DIR", default_game_dir)
+    raw_game_dir = os.environ.get("KRASNOKAMEN_CLIENT_MCP_GAME_DIR", default_game_dir)
     game_dir = (
         Path(raw_game_dir)
         if Path(raw_game_dir).is_absolute()
         else REPO_ROOT / raw_game_dir
     )
     default_username = LOADER_DEFAULT_USERNAME if platform is not None else CLIENT_DEFAULT_USERNAME
-    username = os.environ.get("SOLARIS_CLIENT_MCP_USERNAME", default_username)
+    username = os.environ.get("KRASNOKAMEN_CLIENT_MCP_USERNAME", default_username)
     if not USERNAME_RE.match(username or ""):
         raise RuntimeError(
-            "invalid SOLARIS_CLIENT_MCP_USERNAME: "
+            "invalid KRASNOKAMEN_CLIENT_MCP_USERNAME: "
             "use 1..16 ASCII letters, digits, or underscores"
         )
     return {
@@ -126,12 +126,12 @@ def client_check_commands(
                 "--no-configuration-cache",
                 "-p",
                 str(loader),
-                f"-Psolaris.clientMcp.gameDir={game_dir}",
-                f"-Psolaris.clientMcp.username={username}",
+                f"-Pkrasnokamen.clientMcp.gameDir={game_dir}",
+                f"-Pkrasnokamen.clientMcp.username={username}",
                 ":fabric-agent:validateClientMcpRunProperties",
                 ":bridge-core:test",
                 "--tests",
-                "dev.solaris.agent.mcp.McpHttpServerTest",
+                "dev.krasnokamen.agent.mcp.McpHttpServerTest",
             ]
         ]
     return [
@@ -140,8 +140,8 @@ def client_check_commands(
             "--no-configuration-cache",
             "-p",
             str(loader),
-            f"-Psolaris.clientMcp.gameDir={game_dir}",
-            f"-Psolaris.clientMcp.username={username}",
+            f"-Pkrasnokamen.clientMcp.gameDir={game_dir}",
+            f"-Pkrasnokamen.clientMcp.username={username}",
             ":validateLoaderClientMcpRunProperties",
             ":java-agent:jar",
         ],
@@ -151,8 +151,8 @@ def client_check_commands(
             "--dry-run",
             "-p",
             str(loader),
-            f"-Psolaris.clientMcp.gameDir={game_dir}",
-            f"-Psolaris.clientMcp.username={username}",
+            f"-Pkrasnokamen.clientMcp.gameDir={game_dir}",
+            f"-Pkrasnokamen.clientMcp.username={username}",
             f":loader-{platform}:runClientMcp",
         ],
     ]
@@ -170,8 +170,8 @@ def client_launch_command(
         "--no-configuration-cache",
         "-p",
         str(loader),
-        f"-Psolaris.clientMcp.gameDir={game_dir}",
-        f"-Psolaris.clientMcp.username={username}",
+        f"-Pkrasnokamen.clientMcp.gameDir={game_dir}",
+        f"-Pkrasnokamen.clientMcp.username={username}",
         task,
     ]
 
@@ -217,10 +217,10 @@ def run_client(platform: str | None, check: bool) -> int:
     env = os.environ.copy()
     env.update(
         {
-            "SOLARIS_CLIENT_MCP_TOKEN": str(settings["token"]),
-            "SOLARIS_CLIENT_MCP_PORT": str(port),
-            "SOLARIS_CLIENT_MCP_GAME_DIR": str(game_dir),
-            "SOLARIS_CLIENT_MCP_USERNAME": str(settings["username"]),
+            "KRASNOKAMEN_CLIENT_MCP_TOKEN": str(settings["token"]),
+            "KRASNOKAMEN_CLIENT_MCP_PORT": str(port),
+            "KRASNOKAMEN_CLIENT_MCP_GAME_DIR": str(game_dir),
+            "KRASNOKAMEN_CLIENT_MCP_USERNAME": str(settings["username"]),
         }
     )
     if platform is not None:
@@ -301,7 +301,7 @@ def cmd_run(argv: list[str]) -> int:
         argv = ([] if scenario is None else [scenario.profile, *argv[2:]])
     # The harness captures stdout into per-run server.log and observes readiness
     # there. Ordinary server launches keep tracing exclusively in log files.
-    os.environ["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+    os.environ["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
 
     parser = argparse.ArgumentParser(prog="python3 -m tools.harness run")
     parser.add_argument("profile")
@@ -314,7 +314,7 @@ def cmd_run(argv: list[str]) -> int:
     parser.add_argument("--windowed", action="store_true",
                         help="native graphical validation under owned Xvfb, with GPU capture")
     parser.add_argument("--server-bin", type=Path, default=None,
-                        help="immutable solaris-v2 executable (loader-live or matrix profiles)")
+                        help="immutable krasnokamen executable (loader-live or matrix profiles)")
     if scenario_error is None:
         args, extra = parser.parse_known_args(argv)
         profile = args.profile
@@ -559,19 +559,19 @@ def cmd_run(argv: list[str]) -> int:
     return finish(status, spec["scope"], details, None, artifact_dir, 0, ctx)
 
 
-CPU_SCOPE_ENV = "SOLARIS_HARNESS_CPU_SCOPE"
-CPU_QUOTA_ENV = "SOLARIS_HARNESS_CPU_QUOTA"
-MEMORY_HIGH_ENV = "SOLARIS_HARNESS_MEMORY_HIGH"
-MEMORY_MAX_ENV = "SOLARIS_HARNESS_MEMORY_MAX"
-MEMORY_SWAP_ENV = "SOLARIS_HARNESS_MEMORY_SWAP_MAX"
+CPU_SCOPE_ENV = "KRASNOKAMEN_HARNESS_CPU_SCOPE"
+CPU_QUOTA_ENV = "KRASNOKAMEN_HARNESS_CPU_QUOTA"
+MEMORY_HIGH_ENV = "KRASNOKAMEN_HARNESS_MEMORY_HIGH"
+MEMORY_MAX_ENV = "KRASNOKAMEN_HARNESS_MEMORY_MAX"
+MEMORY_SWAP_ENV = "KRASNOKAMEN_HARNESS_MEMORY_SWAP_MAX"
 """What one harness run may use, as systemd cgroup properties. Concurrent libtest
 cases can each own a server and component host; unbounded, those allocations
 evict the desktop into swap. Every ``run``/``client`` invocation is placed in
 one bounded scope first. Each knob takes a systemd value or ``off``:
-``SOLARIS_HARNESS_CPU_QUOTA`` (default: every physical core),
-``SOLARIS_HARNESS_MEMORY_HIGH`` (default ``off``), ``SOLARIS_HARNESS_MEMORY_MAX``
+``KRASNOKAMEN_HARNESS_CPU_QUOTA`` (default: every physical core),
+``KRASNOKAMEN_HARNESS_MEMORY_HIGH`` (default ``off``), ``KRASNOKAMEN_HARNESS_MEMORY_MAX``
 (default ``12G`` for ``test``/``correctness``, ``4G`` for other profiles/clients),
-``SOLARIS_HARNESS_MEMORY_SWAP_MAX`` (default ``1G``).
+``KRASNOKAMEN_HARNESS_MEMORY_SWAP_MAX`` (default ``1G``).
 
 The cap has to leave the session room, not just bound the run: ``systemd-oomd``
 monitors the whole ``user@1000.service`` tree with a memory-pressure limit (50%
