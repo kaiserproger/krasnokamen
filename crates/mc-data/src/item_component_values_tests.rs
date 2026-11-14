@@ -4,19 +4,42 @@ use crate::item_nbt::{stack_from_component_patch, stack_from_fields, stack_to_fi
 
 #[test]
 fn equippable_accepts_asset_and_rejects_malformed_fields() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let item = Identifier::parse("minecraft:iron_chestplate").unwrap();
-    let patch = |fields| stack_from_component_patch(&items, &item,
-        &[("minecraft:equippable".into(), Tag::Compound(fields))]);
+    let patch = |fields| {
+        stack_from_component_patch(
+            &items,
+            &item,
+            &[("minecraft:equippable".into(), Tag::Compound(fields))],
+        )
+    };
     let slot = ("slot".into(), Tag::String("chest".into()));
-    assert!(patch(vec![slot.clone(), ("asset_id".into(), Tag::String("solaris_battle:holy".into()))]).is_ok());
+    assert!(
+        patch(vec![
+            slot.clone(),
+            (
+                "asset_id".into(),
+                Tag::String("krasnokamen_battle:holy".into())
+            )
+        ])
+        .is_ok()
+    );
     for invalid in [
         vec![],
         vec![("slot".into(), Tag::String("cape".into()))],
-        vec![slot.clone(), ("asset_id".into(), Tag::String("INVALID".into()))],
+        vec![
+            slot.clone(),
+            ("asset_id".into(), Tag::String("INVALID".into())),
+        ],
         vec![slot.clone(), ("swappable".into(), Tag::Byte(2))],
         vec![slot.clone(), slot.clone()],
-        vec![slot.clone(), ("allowed_entities".into(), Tag::String("minecraft:missing".into()))],
+        vec![
+            slot.clone(),
+            (
+                "allowed_entities".into(),
+                Tag::String("minecraft:missing".into()),
+            ),
+        ],
     ] {
         assert!(patch(invalid).is_err());
     }
@@ -24,7 +47,7 @@ fn equippable_accepts_asset_and_rejects_malformed_fields() {
 
 #[test]
 fn new_26_3_components_survive_command_admission_and_durable_inventory_storage() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let text = |value: &str| Tag::String(value.into());
     let fields = |values: Vec<(&str, Tag)>| {
         Tag::Compound(values.into_iter().map(|(k, v)| (k.into(), v)).collect())
@@ -88,7 +111,7 @@ fn new_26_3_components_survive_command_admission_and_durable_inventory_storage()
 
 #[test]
 fn new_26_3_component_classes_reject_invalid_command_shapes() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     for (name, value) in [
         ("waxed", Tag::Byte(1)),
         ("cushion/color", Tag::String("infrared".into())),

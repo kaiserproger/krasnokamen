@@ -497,7 +497,7 @@ impl NetherStructures {
 
     fn write_fortress(&self, generator: &NetherGenerator, chunk: &mut Chunk, x: i32, z: i32) {
         // Connected cross bridges with four end rooms. The layout is deliberately
-        // Solaris-owned; it supplies the vanilla progression contents without
+        // Krasnokamen-owned; it supplies the vanilla progression contents without
         // copying the procedural Mojang fortress piece implementation.
         for lx in 0..16 {
             for lz in 0..16 {

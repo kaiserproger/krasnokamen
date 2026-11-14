@@ -143,7 +143,7 @@ creates an entity tombstone. Checkpoint marks are independent of WAL and wire
 marks.
 
 **Battle allegiance extension (2026-11-09).** Native `Body.faction: u16`
-is captured in the existing entity NBT payload as `solaris:Faction`
+is captured in the existing entity NBT payload as `krasnokamen:Faction`
 (`TAG_Int`, u16 range checked) and in `EntityStateImage.faction` for WAL.
 `set_faction` marks touched + changed custody through the normal body mutation
 path and maintains a sparse native-slot membership index (no battle scan for
