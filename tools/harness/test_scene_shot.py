@@ -809,9 +809,76 @@ class SceneShotTests(unittest.TestCase):
                     ]},
                 }))
             scene_shot.execute(probe, root, [{
-                "mob_motion": {"samples": ["a", "b", "c"], "name": "motion"},
+                "mob_motion": {"samples": ["a", "b", "c"], "name": "motion",
+                               "types": ["minecraft:zombie", "minecraft:spider"]},
             }])
         self.assertEqual(probe.checks, {"mob_moved_zombie": False, "mob_moved_spider": False})
+
+    def test_mob_motion_gate_ignores_a_kind_the_window_does_not_drive(self):
+        """ISSUE-1-19: the spider window left the zombie standing and the gate
+        reported its standstill as a client defect."""
+        class Probe:
+            def __init__(self):
+                self.checks = {}
+            def check(self, name, value):
+                self.checks[name] = value
+        probe = Probe()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name, tick, spider in zip(("a", "b", "c"), (100, 120, 140), (0., 1., 2.)):
+                (root / f"{name}.json").write_text(json.dumps({
+                    "game_time": tick,
+                    "snapshot": {"entities": [
+                        {"entity_type": "minecraft:zombie", "entity_uuid": "z", "x": 4., "z": 4.},
+                        {"entity_type": "minecraft:spider", "entity_uuid": "s", "x": spider, "z": 0.},
+                    ]},
+                }))
+            scene_shot.execute(probe, root, [{
+                "mob_motion": {"samples": ["a", "b", "c"], "name": "spider-walk",
+                               "types": ["minecraft:spider"]},
+            }])
+        self.assertEqual(probe.checks, {"mob_moved_spider": True})
+
+    def test_mob_motion_gate_bounds_each_segment_speed(self):
+        """ISSUE-1-19: displacement alone passed a trajectory whose pace was
+        outside the row's range; every segment's rate must sit inside it."""
+        class Probe:
+            def __init__(self):
+                self.checks = {}
+            def check(self, name, value):
+                self.checks[name] = value
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # 1 block per 20 client ticks: 0.05 blocks/tick in both segments.
+            for name, tick, x in zip(("a", "b", "c"), (100, 120, 140), (0., 1., 2.)):
+                (root / f"{name}.json").write_text(json.dumps({
+                    "game_time": tick,
+                    "snapshot": {"entities": [
+                        {"entity_type": "minecraft:zombie", "entity_uuid": "z", "x": x, "z": 0},
+                    ]},
+                }))
+            step = {"mob_motion": {"samples": ["a", "b", "c"], "name": "motion",
+                                   "types": [{"id": "minecraft:zombie",
+                                              "min_speed": 0.04, "max_speed": 0.06}]}}
+            probe = Probe()
+            scene_shot.execute(probe, root, [step])
+            self.assertEqual(probe.checks, {"mob_moved_zombie": True, "mob_speed_zombie": True})
+            probe = Probe()
+            scene_shot.execute(probe, root, [{"mob_motion": {
+                "samples": ["a", "b", "c"], "name": "motion",
+                "types": [{"id": "minecraft:zombie", "min_speed": 0.06, "max_speed": 0.09}],
+            }}])
+            self.assertEqual(probe.checks, {"mob_moved_zombie": True, "mob_speed_zombie": False})
+
+    def test_mob_motion_gate_requires_the_kinds_it_measures(self):
+        step = {"mob_motion": {"samples": ["a", "b", "c"], "name": "motion"}}
+        with self.assertRaises(ValueError):
+            scene_shot.validate_steps([step], "native")
+        for bad in ([], ["zombie"], [1], "minecraft:zombie"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                scene_shot.validate_steps([{"mob_motion": {**step["mob_motion"], "types": bad}}], "native")
+        scene_shot.validate_steps(
+            [{"mob_motion": {**step["mob_motion"], "types": ["minecraft:zombie"]}}], "native")
 
     def test_entity_snapshot_requires_same_thread_game_time(self):
         class Probe:
