@@ -3,9 +3,9 @@
 Native client, isolated world, server from KRASNOKAMEN_SERVER_BINARY (release build).
 The operator player levels a pad and certifies a storage hut (one chest) and a
 cartographer workshop (cartography table + crafting table; a cartographer never
-bakes or deposits). It binds two summoned villagers (the planner's free street
-work makes one a Builder, which is busy for orders; the order dialog offers the
-other) and puts 3 hay blocks into the chest through the chest menu. Then, only through the server-driven
+bakes or deposits). It binds two summoned villagers so one can take an order
+while the other does temporary street work, and puts 3 hay blocks into the
+chest through the chest menu. Then, only through the server-driven
 /settlement menus (Production orders menu -> New order -> recipe icon -> order
 dialog, with the default craft count 8 and "Craft missing ingredients" set ON
 explicitly: the box is unchecked by default, so the gate clicks it):
@@ -117,7 +117,8 @@ def parse_json_line(line: str) -> dict[str, Any]:
 def job_state(line: str) -> dict[str, Any]:
     """`job` readback -> the fields this gate asserts."""
     job = parse_json_line(line)
-    return {"id": job["id"], "recipe": job["recipe"], "count": job["count"], "done": job["done"],
+    return {"id": job["id"], "worker": job["worker"],
+            "recipe": job["recipe"], "count": job["count"], "done": job["done"],
             "order": job.get("order"), "after": job.get("after"),
             "cancelled": job["cancelled"], "paused": job.get("paused"),
             "delivery_complete": job.get("delivery_complete"),
@@ -131,6 +132,12 @@ def carry_counts(line: str) -> dict[str, int]:
         if slot:
             totals[slot["item"]] = totals.get(slot["item"], 0) + int(slot["stack"]["count"])
     return totals
+
+
+def worker_matches_form(form: dict[str, Any], worker: str, tags: dict[str, str]) -> bool:
+    """Check the admitted UUID against the selected name, without treating names as unique IDs."""
+    tag = tags.get(worker)
+    return tag is not None and f"Resident: {tag.split(' · ')[0]}" in _labels(form)
 
 
 def building_id(lines: list[str], kind: str) -> int | None:
@@ -307,8 +314,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     detail["chest_before"] = stocked
     probe.check("chest_holds_hay", stocked.get("minecraft:hay_block") == HAY)
 
-    # Two residents: the planner's free street work turns one resident into a Builder, and a Builder
-    # is busy for production orders (production.rs worker_slot). The order goes to the other one.
+    # Two residents leave one available while the planner borrows the other for street work.
     before = {str(row.get("entity_uuid")) for row in _villagers(probe)}
     player = probe.observe()["player"]
     for _ in range(RESIDENTS):
@@ -326,8 +332,8 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
         return {str(row["entity_uuid"]): str((row.get("received_metadata") or {}).get("2", {}).get("value"))
                 for row in _villagers(probe) if str(row.get("entity_uuid")) in residents}
 
-    # The planner's street work picks its Builder within a few seconds; order only after it has, so the
-    # resident the dialog offers cannot turn into the Builder between the dialog and its submit.
+    # Let the planner take its initial Builder. That employment is temporary:
+    # completing a street can change the next dialog's eligible residents.
     try:
         _bwait(probe, lambda _s: any(BUILDER_TAG in tag for tag in nametags().values()),
                "street_builder_assigned", timeout=60.0)
@@ -335,19 +341,6 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
         detail["street_builder"] = str(error)
     detail["nametags_before_order"] = nametags()
 
-    def resident_for(form: dict[str, Any]) -> str:
-        """The uuid of the form's `Resident: <name>` option. Villager names are random, so two summoned
-        residents can share one; the dialog only offers a resident that is not a Builder (production.rs
-        worker_slot), so the match is the non-Builder whose nametag starts with that name."""
-        label = next(label for label in _labels(form) if label.startswith("Resident: "))
-        name = label.removeprefix("Resident: ")
-        tags = nametags()
-        detail["resident_nametags"] = tags
-        matching = [uuid for uuid, tag in tags.items()
-                    if tag.split(" · ")[0] == name and BUILDER_TAG not in tag]
-        if len(matching) != 1:
-            raise RuntimeError(f"autocraft-qa: Resident {name!r} matches {matching} in {tags}")
-        return matching[0]
 
     # --- settlement menus and the order dialog only from here on ---
     def menu(title: str, label: str) -> dict[str, Any]:
@@ -371,8 +364,8 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
         form = _bwait(probe, lambda s: (s.get("screen") or {}).get("class") == DIALOG
                       and (s["screen"].get("title") or "") == "New production order",
                       f"order_dialog_{recipe}")
-        if "worker" in detail:
-            probe.check(f"same_resident_{recipe}", resident_for(form) == detail["worker"])
+        detail.setdefault("resident_options", {})[recipe] = [
+            label for label in _labels(form) if label.startswith("Resident: ")]
         auto = next((label for label in _labels(form) if label.startswith(AUTO_LABEL)), None)
         probe.check(f"autocraft_checkbox_present_{recipe}", auto is not None)
         detail.setdefault("form_labels", _labels(form))
@@ -388,8 +381,6 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
         return _readback(probe, f"settlement production {SETTLEMENT} status", "Production: jobs=")
 
     form = order_form("saddle")
-    worker = resident_for(form)
-    detail["worker"] = worker
     labels = _labels(form)
     probe.check("autocraft_checkbox_on", f"{AUTO_LABEL}: ON" in labels)
     probe.check(f"quantity_defaults_to_{COUNT}", f"Craft count: {COUNT}" in labels)
@@ -411,7 +402,8 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     _press(probe, "Close")
     probe.check("cycle_refusal_admits_nothing", "jobs=0" in admitted())
 
-    planned = submit(order_form("bread"))
+    form = order_form("bread")
+    planned = submit(form)
     detail["planned"] = planned
     probe.check("chain_planned", "Order ui-1 planned: open_hay x3 -> bread x8." in planned)
     shot("planned")
@@ -420,10 +412,16 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     # --- the real villager runs the chain ---
     first = job("ui-1")
     detail["product_admitted"] = first
+    worker = first["worker"]
+    detail["worker"] = worker
+    tags = nametags()
+    detail["resident_nametags"] = tags
+    probe.check("admitted_worker_matches_bread_dialog", worker_matches_form(form, worker, tags))
     probe.check("product_gated_on_dependency",
                 first["after"] == "ui-1-1" and first["order"] == "ui-1" and first["done"] == 0)
     dependency = wait_done("ui-1-1", 3, 300.0)
     detail["dependency_done"] = dependency
+    probe.check("dependency_uses_selected_worker", dependency["worker"] == worker)
     probe.check("dependency_crafted_three_times",
                 dependency["done"] == 3 and dependency["receipts"] == 3 and not dependency["cancelled"])
     released = job("ui-1")
@@ -436,6 +434,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     probe.check("restart_keeps_order_and_progress",
                 resumed["order"] == "ui-1" and resumed["after"] is None
                 and resumed["receipts"] == resumed["done"] >= released["done"])
+    probe.check("restart_keeps_selected_worker", resumed["worker"] == worker)
     probe.check("restart_keeps_dependency_receipts", job("ui-1-1")["receipts"] == 3)
 
     product = wait_done("ui-1", COUNT, 600.0)
