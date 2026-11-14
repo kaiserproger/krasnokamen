@@ -63,7 +63,7 @@ const COLOURED_SHAPES: &[(&str, &str)] = &[
     ("white", "quartz"),
     ("light_gray", "stone"),
     ("gray", "andesite"),
-    ("black", "stone"),
+    ("black", "blackstone"),
     ("brown", "spruce"),
     ("red", "red_nether_brick"),
     ("orange", "acacia"),
