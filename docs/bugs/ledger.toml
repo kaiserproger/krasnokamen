@@ -4426,7 +4426,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "tools/coreperf/profiles.py pinned_binary unconditionally required the owner's absolute pin store. The relocated-pin regression failed before correction. Owner-host store and exact manifest path checks remain strict; other hosts verify the original manifest, binary name and SHA-256. Both host-boundary tests and a real release idle CLI lifecycle passed with the owner-host marker absent in a controlled local simulation, not on a second machine. Formal ledger promotion remains pending."
-regression = []
+regression = ["python:tools.coreperf.test_profiles:ProfilesTests.test_remote_host_accepts_relocated_pin_and_checks_manifest_and_hash", "python:tools.coreperf.test_profiles:ProfilesTests.test_incremental_pin_is_refused_but_pre_field_and_full_pins_pass", "python:tools.coreperf.test_profiles:ProfilesTests.test_capacity_ladder_refuses_incremental_or_mismatched_pins_before_any_rung"]
 failing_first = "reported"
 fix_commit = "80191f115bc889838a5620b554b2a84cb7d84cb0"
 
