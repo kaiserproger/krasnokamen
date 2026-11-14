@@ -787,6 +787,21 @@ fn contact_field(
         let spot = at(index * 7, 0);
         place(&mut state, [spot[0], spot[1] + 0.5, spot[2]], name, props);
     }
+    // Cauldron interiors under many burning/non-burning mobs: debits are
+    // order-dependent, so the flagged-row pass must match the all-rows pass.
+    let cauldron_spots: Vec<[f64; 3]> = [
+        (8, "water_cauldron", &[("level", "3")][..]),
+        (9, "powder_snow_cauldron", &[("level", "2")]),
+        (10, "lava_cauldron", &[]),
+        (12, "water_cauldron", &[("level", "1")]),
+    ]
+    .iter()
+    .map(|&(index, name, props)| {
+        let spot = at(index * 7, 0);
+        place(&mut state, [spot[0], spot[1] + 0.5, spot[2]], name, props);
+        spot
+    })
+    .collect();
     for (index, id) in ids.iter().enumerate() {
         let slot = state.entities.slot_of(*id).unwrap();
         if index % 53 == 0 {
@@ -840,8 +855,17 @@ fn contact_field(
                 body.id, body.burn_ticks, row.appearance.shared_flags, stamp
             );
         }
+        let cauldrons: Vec<_> = cauldron_spots
+            .iter()
+            .map(|spot| {
+                let cell = |value: f64| value.floor() as i32;
+                state
+                    .world
+                    .block_at(cell(spot[0]), cell(spot[1] + 0.5), cell(spot[2]))
+            })
+            .collect();
         transcript.push(format!(
-            "{intents:?}\n{:?}\n{rows}",
+            "{intents:?}\n{:?}\n{cauldrons:?}\n{rows}",
             state.appearance_changed
         ));
     }
