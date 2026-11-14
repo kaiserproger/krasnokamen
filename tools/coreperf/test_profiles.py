@@ -99,7 +99,7 @@ class ProfilesTests(unittest.TestCase):
             store = root / "absent-owner-host" / "pins"
             pin = root / "remote-artifacts" / "pin"
             pin.mkdir(parents=True)
-            binary = pin / "solaris-v2"
+            binary = pin / "krasnokamen"
             binary.write_bytes(b"server")
             manifest = {"repo": "core", "kind": "server",
                         "binary": str(store / "original-pin" / binary.name),
@@ -130,7 +130,7 @@ class ProfilesTests(unittest.TestCase):
             runner.touch()
             pin = store / "pin"
             pin.mkdir(parents=True)
-            binary = pin / "solaris-v2"
+            binary = pin / "krasnokamen"
             binary.write_bytes(b"server")
             manifest = {"repo": "core", "kind": "server", "binary": str(binary),
                         "head": "abc", "diff_sha256": "def", "command": "cargo build --release",

@@ -83,8 +83,8 @@ fn save(
 #[test]
 fn native_noop_save_twice_keeps_chunks_and_size() {
     let temporary = tempfile::tempdir().unwrap();
-    let existing = std::env::var_os("SOLARIS_NOOP_ROOT").map(std::path::PathBuf::from);
-    let seed = std::env::var("SOLARIS_NOOP_SEED")
+    let existing = std::env::var_os("KRASNOKAMEN_NOOP_ROOT").map(std::path::PathBuf::from);
+    let seed = std::env::var("KRASNOKAMEN_NOOP_SEED")
         .map(|seed| seed.parse::<i64>().unwrap())
         .unwrap_or(42);
     let config = CoreConfig::new(
