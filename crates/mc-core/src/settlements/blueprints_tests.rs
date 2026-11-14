@@ -527,11 +527,12 @@ fn production_and_workshops_reach_level_three() {
             blueprint.levels[2].entrance, blueprint.levels[1].entrance,
             "{id} L3 keeps the L1 entrance"
         );
-        let (settlement, building) = build(&mut state, id, blueprint, 2);
+        // Settlement names are unique: each build founds its own.
+        let (settlement, building) = build(&mut state, &format!("{id}_l2"), blueprint, 2);
         let before = state.settlements.get(settlement).unwrap().buildings[&building]
             .work_points
             .len();
-        let (settlement, building) = build(&mut state, id, blueprint, 3);
+        let (settlement, building) = build(&mut state, &format!("{id}_l3"), blueprint, 3);
         let record = &state.settlements.get(settlement).unwrap().buildings[&building];
         assert_eq!(record.level, 3, "{id}");
         if id == "storage" {
