@@ -31,7 +31,10 @@ KINDS = {
     # The release mc-core lib test executable (`cargo test --release --no-run`), for a frozen
     # workload such as core::checkpoint_cost_bench::checkpoint_cost_ladder under `mem-run -x`:
     # cargo names it `mc_core-<hash>`, so the artifact comes from cargo's JSON report.
-    "core-tests": {"repo": "core", "package": "mc-core", "bin": "", "env": "KRASNOKAMEN_CORE_TESTS_BINARY", "test": True},
+    # 12G, not 6G: the release mc-core lib test build was killed (exit 143) under the 6G
+    # cap in a CAF-04 BASE pin (2026-11-15).
+    "core-tests": {"repo": "core", "package": "mc-core", "bin": "", "env": "KRASNOKAMEN_CORE_TESTS_BINARY", "test": True,
+                   "mem": "12G"},
 }
 # Everything a server or bots release build reads: Cargo workspace files, every crate, the guest SDK
 # and the Java sources mc-edge embeds with include_str! (crates/mc-edge/src/content_import.rs, the
@@ -310,7 +313,7 @@ def build(top: Path, kind: str, rust_target: str | None, incremental: bool,
     CARGO_INCREMENTAL is set explicitly (the runner's own default would also be on in its normal
     lane) so the manifest records exactly what was built."""
     spec = KINDS[kind]
-    cmd = [str(w.MEM_RUN), "-m", "6G", "env", f"CARGO_INCREMENTAL={int(incremental)}"]
+    cmd = [str(w.MEM_RUN), "-m", spec.get("mem", "6G"), "env", f"CARGO_INCREMENTAL={int(incremental)}"]
     if target is not None:
         cmd.append(f"CARGO_TARGET_DIR={target}")
     if spec.get("test"):
