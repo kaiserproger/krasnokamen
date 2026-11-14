@@ -1203,6 +1203,24 @@ fn data_modify_and_merge_edit_any_block_entity_through_its_native_owner() {
 }
 
 #[test]
+fn data_block_metadata_edit_preserves_live_brewing_owner() {
+    let (mut state, _, context) = fixture();
+    place(&mut state, context, "brewing_stand");
+    let mut brewing = crate::brewing::BrewingState::default();
+    brewing.brew_time = 123;
+    brewing.fuel = 8;
+    state.brewing.insert((4, 60, 4), brewing.clone());
+
+    assert_eq!(
+        data(&mut state, context, "data merge block 4 60 4 {CustomName:'test'}"),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert_eq!(state.brewing.get(&(4, 60, 4)), Some(&brewing));
+}
+
+#[test]
 fn data_block_edits_are_refused_without_changing_anything() {
     let (mut state, _, context) = fixture();
     place(&mut state, context, "chest");
