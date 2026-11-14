@@ -1,6 +1,6 @@
 [package]
 name = "mc-world-tools"
-description = "Offline pregeneration, maintenance and generation-contract upgrades for Solaris worlds."
+description = "Offline pregeneration, maintenance and generation-contract upgrades for Krasnokamen worlds."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

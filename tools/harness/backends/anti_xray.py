@@ -102,9 +102,9 @@ def validate_args(ctx: ProfileContext) -> float:
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
-        raise RuntimeError("anti-xray requires SOLARIS_SERVER_BINARY (a solaris-v2 built from this tree)")
+        raise RuntimeError("anti-xray requires KRASNOKAMEN_SERVER_BINARY (a krasnokamen built from this tree)")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing executable server binary: {binary}")
@@ -113,7 +113,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     config = artifact / "anti-xray.toml"
     (artifact / "plugins").mkdir(exist_ok=True)
     # playable.toml leaves [anti_xray] at its defaults: on for overworld and nether.
-    # SOLARIS_ANTI_XRAY_CONTROL=1 switches it off: the gate must then FAIL at
+    # KRASNOKAMEN_ANTI_XRAY_CONTROL=1 switches it off: the gate must then FAIL at
     # hidden_ore_a_is_stone, which proves the assertion discriminates.
     text = rewrite_config(
         (runtime.REPO_ROOT / "playable.toml").read_text(),
@@ -122,7 +122,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         plugins=str(artifact / "plugins"),
         seed=SEED,
     )
-    if os.environ.get("SOLARIS_ANTI_XRAY_CONTROL") == "1":
+    if os.environ.get("KRASNOKAMEN_ANTI_XRAY_CONTROL") == "1":
         text += "\n[anti_xray]\noverworld = false\nnether = false\n"
     config.write_text(text)
     prepare_operator_fixture(ctx, [USERNAME])
@@ -138,7 +138,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     try:
         server_log = server_log_path.open("wb")
         env = os.environ.copy()
-        env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+        env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
         server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                                   cwd=runtime.REPO_ROOT, stdout=server_log,
                                   stderr=subprocess.STDOUT, start_new_session=True, env=env)

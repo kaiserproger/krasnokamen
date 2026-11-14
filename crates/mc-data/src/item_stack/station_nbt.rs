@@ -453,7 +453,7 @@ mod tests {
 
     #[test]
     fn custom_potion_contents_round_trip_with_hidden_details_and_without_base_potion() {
-        let items = crate::items::solaris_required_items();
+        let items = crate::items::krasnokamen_required_items();
         let effect = PotionEffect {
             id: Identifier::parse("minecraft:poison").unwrap(),
             amplifier: 255,
@@ -487,7 +487,7 @@ mod tests {
 
     #[test]
     fn potion_effect_nbt_defaults_and_bounds_match_vanilla() {
-        let items = crate::items::solaris_required_items();
+        let items = crate::items::krasnokamen_required_items();
         let fields = vec![(
             "minecraft:potion_contents".into(),
             Tag::Compound(vec![(
