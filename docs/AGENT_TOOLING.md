@@ -91,6 +91,14 @@ JSON step contracts are checked before startup. Failed receipts include
 `details.failure` with available binary hashes, logs and child exit or signal;
 `phase: unknown` means the failing backend has not identified its phase.
 
+Real-client and functional-native runs check prerequisites before their
+profile launches: set `KRASNOKAMEN_SERVER_BINARY` to a pinned executable and, for
+native clients, `KRASNOKAMEN_CLIENT_BINARY` and the client data paths described in
+the real-client guide. Pooled `targets/slot-*` binary paths are refused. Scene
+JSON step contracts are checked before startup. Failed receipts include
+`details.failure` with available binary hashes, logs and child exit or signal;
+`phase: unknown` means the failing backend has not identified its phase.
+
 The shared Java client launcher sets both `HOME` and JVM `user.home` to `.home`
 inside that client's game directory. Forge's home-derived Minecraft assets
 therefore use that private directory; provision assets there when needed.
