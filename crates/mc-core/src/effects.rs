@@ -525,8 +525,9 @@ impl crate::player::PlayerState {
 
 pub(crate) fn parse_command(
     args: &[&str],
-) -> Result<crate::commands::Command, crate::commands::CommandError> {
-    use crate::commands::{Command, CommandError, Target, target_of};
+) -> Result<crate::commands::Command, crate::command_args::CommandError> {
+    use crate::command_args::CommandError;
+    use crate::commands::{Command, Target, target_of};
     let usage = CommandError::Usage(
         "effect give <targets> <effect> [<seconds>|infinite] [<amplifier>] [<hideParticles>] | effect clear [<targets>] [<effect>]",
     );

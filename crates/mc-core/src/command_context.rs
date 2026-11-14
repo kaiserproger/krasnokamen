@@ -66,7 +66,7 @@ impl Context {
 }
 pub(crate) fn resolve_coords(
     state: &TickState,
-    coords: [crate::commands::Coord; 3],
+    coords: [crate::command_args::Coord; 3],
     origin: [f64; 3],
     rotation: [f32; 2],
 ) -> [f64; 3] {
@@ -542,7 +542,7 @@ fn execute_branches(
                 };
             }
             if !crate::commands::root_permitted("execute", context.permission) {
-                return Err(crate::commands::CommandError::Unknown.message());
+                return Err(crate::command_args::CommandError::Unknown.message());
             }
             if !continuation {
                 text = rest;
@@ -616,10 +616,10 @@ fn execute_branches(
                         context.position = coordinates(&mut text, context)?;
                         context.eyes = false;
                     } else {
-                        let yaw = crate::commands::coord(word(&mut text)?)
+                        let yaw = crate::command_args::coord(word(&mut text)?)
                             .filter(|value| !value.local)
                             .ok_or("Invalid yaw")?;
-                        let pitch = crate::commands::coord(word(&mut text)?)
+                        let pitch = crate::command_args::coord(word(&mut text)?)
                             .filter(|value| !value.local)
                             .ok_or("Invalid pitch")?;
                         context.rotation = [
@@ -791,9 +791,9 @@ pub(crate) fn native(
     let root = text
         .split_whitespace()
         .next()
-        .ok_or_else(|| crate::commands::CommandError::Unknown.message())?;
+        .ok_or_else(|| crate::command_args::CommandError::Unknown.message())?;
     if !crate::commands::root_permitted(root, context.permission) {
-        return Err(crate::commands::CommandError::Unknown.message());
+        return Err(crate::command_args::CommandError::Unknown.message());
     }
     if context.dimension != state.dimension {
         return crate::dimensions::travel::execute_context(state, text, context, require_result);
@@ -801,19 +801,19 @@ pub(crate) fn native(
     state.command_context.current = Some(context);
     if text.split_whitespace().next() == Some("tag") {
         if context.permission < 2 {
-            return Err(crate::commands::CommandError::Unknown.message());
+            return Err(crate::command_args::CommandError::Unknown.message());
         }
         return Ok(crate::command_tag::execute(state, context, text));
     }
     if text.split_whitespace().next() == Some("playsound") {
         if context.permission < 2 {
-            return Err(crate::commands::CommandError::Unknown.message());
+            return Err(crate::command_args::CommandError::Unknown.message());
         }
         return Ok(crate::command_sound::execute(state, context, text));
     }
     if text.split_whitespace().next() == Some("particle") {
         if context.permission < 2 {
-            return Err(crate::commands::CommandError::Unknown.message());
+            return Err(crate::command_args::CommandError::Unknown.message());
         }
         return Ok(crate::command_particle::execute(state, context, text));
     }

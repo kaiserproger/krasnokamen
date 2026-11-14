@@ -3,7 +3,8 @@
 //! still owns their journal and container transactions.
 
 use crate::boundary::{BlockPos, ChangeSet, ConnectionId, EntityId, PlayerChange};
-use crate::commands::{CommandError, Coord, Target, coord, coords, target_of};
+use crate::command_args::{CommandError, Coord, coord};
+use crate::commands::{Target, coords, target_of};
 use crate::tick::TickState;
 use mc_data::Identifier;
 use mc_world::{BlockRegistry, BlockStateId};

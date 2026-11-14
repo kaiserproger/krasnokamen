@@ -128,7 +128,7 @@ fn dispatch(
         ["datapack", "create", id, description] => {
             if permission(state) < 4 {
                 return Err(Failure::Text(
-                    crate::commands::CommandError::Unknown.message(),
+                    crate::command_args::CommandError::Unknown.message(),
                 ));
             }
             create(state, connection, id, description)

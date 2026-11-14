@@ -5,7 +5,7 @@ use crate::battle::ids::{EntityType, KitItem};
 use crate::battle::live_players;
 use crate::battle::weapons::Pair;
 use crate::boundary::{ChangeSet, ChunkPos, EntityId};
-use crate::commands::CommandError;
+use crate::command_args::CommandError;
 use crate::tick::TickState;
 use mc_nbt::{ListTag, Tag, tag_type};
 

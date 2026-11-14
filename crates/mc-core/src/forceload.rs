@@ -12,7 +12,7 @@
 //! and loads chunks through distance two.
 
 use crate::boundary::ChunkPos;
-use crate::commands::{CommandError, Coord, coord};
+use crate::command_args::{CommandError, Coord, coord};
 use crate::tick::TickState;
 
 /// Owner prefix of persisted forced chunks, shared with `chunk_tickets.dat`.

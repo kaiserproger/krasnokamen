@@ -194,7 +194,7 @@ fn admitted(state: &mut TickState, connection: ConnectionId) -> bool {
     crate::command_execution::error(
         state,
         connection,
-        crate::commands::CommandError::Unknown.message(),
+        crate::command_args::CommandError::Unknown.message(),
     );
     false
 }

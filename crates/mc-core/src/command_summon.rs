@@ -3,7 +3,7 @@
 //! Experience orbs retain native `Value`/positive `Count` and spawn directly into
 //! the orb index, rather than being allocated as mobs.
 use crate::boundary::{EntityDataValue, EntityId};
-use crate::commands::CommandError;
+use crate::command_args::CommandError;
 use crate::journal::EntityStateImage;
 use crate::tick::TickState;
 use mc_data::entity_nbt::VanillaEntity;

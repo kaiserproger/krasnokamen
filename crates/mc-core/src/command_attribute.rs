@@ -1,6 +1,7 @@
 //! Operator attribute commands over retained mob attribute state.
 use crate::boundary::{ConnectionId, EntityId};
-use crate::commands::{CommandError, Target};
+use crate::command_args::CommandError;
+use crate::commands::Target;
 use crate::entities::EntityKind;
 use crate::entity_loot::{EntityAttribute, EntityAttributeModifier};
 use crate::tick::TickState;

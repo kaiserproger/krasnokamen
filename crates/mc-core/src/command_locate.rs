@@ -19,7 +19,7 @@ use std::sync::mpsc::{Receiver, Sender, SyncSender, TrySendError};
 
 use crate::boundary::{ConnectionId, EntityId, PlayerChange};
 use crate::command_feedback::{text, translated};
-use crate::commands::CommandError;
+use crate::command_args::CommandError;
 use crate::tick::TickState;
 use mc_data::Identifier;
 use mc_nbt::{ListTag, Tag};
