@@ -3,6 +3,7 @@
 //! the nearest enemy foot block and turn into its rear.
 use super::combat::{Action, CombatRuntime};
 use super::formation::Regiment;
+use super::steering::NEIGHBOURS;
 use super::{BattleState, Frame};
 use crate::boundary::EntityId;
 use crate::entities::EntityKind;
@@ -19,6 +20,10 @@ const SLOT_CATCH_UP: f64 = 3.0;
 /// `HORSE_PUSH` blocks per second.
 const HORSE_SPACING: f64 = 1.5;
 const HORSE_PUSH: f64 = 3.0;
+/// How far a rider looks for horses: the spacing plus a gallop step
+/// (6.4 blocks per second) of each of two horses closing head on, so none is
+/// first seen already inside the spacing. The candidate window ends at 2.
+const HORSE_SENSE: f64 = 2.0;
 /// Golden angle: consecutive riders' attack places round one target never line up.
 const ATTACK_ANGLE: f64 = 2.399_963_229_728_653;
 /// Fugitives whose live centre is this close to the bounds have reached the
@@ -167,23 +172,42 @@ fn plan_sweeps(battle: &BattleState, plans: &mut Vec<Option<Sweep>>) {
     }
 }
 
+/// The horses nearest a rider within [`HORSE_SENSE`]. In a melee the five
+/// nearest bodies were often all foot, so a horse overlapping another one was
+/// never pushed off it.
+fn horses_near(
+    formation: &super::formation::FormationRuntime,
+    bi: usize,
+) -> [(f64, usize); NEIGHBOURS] {
+    if bi >= formation.members.len() {
+        return [(f64::INFINITY, usize::MAX); NEIGHBOURS];
+    }
+    let regiments = &formation.regiments;
+    formation
+        .neighbours
+        .nearest_where(bi, &formation.members, HORSE_SENSE, |m| {
+            regiments[m.regiment].spec.frontage > 1.0
+        })
+        .0
+}
+
 /// Push of the nearest horses on a rider, blocks per second. Riders closing on a
 /// foe or riding a plan steer without the foot separation, and rode onto one
 /// block: six horses stood on one place at the foot line in the battle census.
-fn horse_push(formation: &super::formation::FormationRuntime, bi: usize) -> [f64; 2] {
+fn horse_push(
+    formation: &super::formation::FormationRuntime,
+    bi: usize,
+    near: &[(f64, usize); NEIGHBOURS],
+) -> [f64; 2] {
     let Some(me) = formation.members.get(bi) else {
         return [0.0; 2];
     };
-    let (near, _) = formation.neighbours.nearest(bi, &formation.members);
     let mut push = [0.0; 2];
-    for (distance, other) in near {
+    for &(distance, other) in near {
         if other == usize::MAX || distance >= HORSE_SPACING * HORSE_SPACING {
             continue;
         }
         let contact = &formation.members[other];
-        if formation.regiments[contact.regiment].spec.frontage <= 1.0 {
-            continue;
-        }
         let away = [me.pos[0] - contact.pos[0], me.pos[2] - contact.pos[2]];
         let length = distance.sqrt();
         let way = if length < 1e-8 {
@@ -197,6 +221,44 @@ fn horse_push(formation: &super::formation::FormationRuntime, bi: usize) -> [f64
         push[1] += way[1] * strength;
     }
     push
+}
+
+/// A horse's final velocity never closes on a horse within
+/// [`HORSE_SPACING`], and on one farther off by at most half the free gap a
+/// tick. The terrain turn replaces the drive and its push with the clear way
+/// at the drive's speed, and the push never held off the gallop at a place
+/// round the target: in the G2 take 7 horses overlapped at the foot of a
+/// cliff for 35 s and a quarter of all live horses stood within half a block
+/// of another. One pass over the neighbours can turn the step into another
+/// one (horses on both sides), so the passes repeat; a step still closing on
+/// one after them is dropped.
+fn horse_gap(
+    formation: &super::formation::FormationRuntime,
+    bi: usize,
+    near: &[(f64, usize); NEIGHBOURS],
+    position: [f64; 3],
+    velocity: [f64; 3],
+) -> [f64; 3] {
+    if bi >= formation.members.len() {
+        return velocity;
+    }
+    let tick = mc_physics::TICK_SECONDS;
+    let step = [velocity[0] * tick, velocity[2] * tick];
+    let mut kept = step;
+    for _ in 0..NEIGHBOURS {
+        let next = super::steering::keep_gap(&formation.members, bi, near, HORSE_SPACING, kept);
+        if next == kept {
+            break;
+        }
+        kept = next;
+    }
+    if kept == step {
+        return velocity;
+    }
+    if super::steering::keep_gap(&formation.members, bi, near, HORSE_SPACING, kept) != kept {
+        kept = [0.0; 2];
+    }
+    formation.constrain_velocity(position, [kept[0] / tick, velocity[1], kept[1] / tick])
 }
 
 /// Unengaged steady riders of a regiment with a plan take its heading as their
@@ -345,6 +407,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             continue;
         }
         let wounded = matches!(combat.fighters[bi].action, Action::Wounded);
+        let near = horses_near(&battle.formation, bi);
         let routing = super::combat::context(battle, bi).is_some_and(|c| c.routing);
         if wounded || routing || battle.columns.targets[bi].is_none() {
             // Carry the formation's approach/withdrawal/rout direction on the
@@ -379,7 +442,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
                 velocity[2] *= mounted_speed / speed;
             }
             if !wounded && !routing {
-                let push = horse_push(&battle.formation, bi);
+                let push = horse_push(&battle.formation, bi, &near);
                 velocity[0] += push[0];
                 velocity[2] += push[1];
             }
@@ -400,6 +463,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
                 super::steering::Mover::Rider
             };
             let velocity = super::steering::around_obstacles(frame, formation, horse, velocity, heading, mover);
+            let velocity = horse_gap(&battle.formation, bi, &near, position, velocity);
             battle.columns.drive[horse_bi] = velocity;
             battle.columns.drive[bi] = [0.0; 3];
             continue;
@@ -481,7 +545,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             let speed = (if distance <= 46.0 { 6.4 } else { 4.6 }) * (gap / 0.5).min(1.0);
             [way[0] * speed, 0.0, way[1] * speed]
         };
-        let push = horse_push(&battle.formation, bi);
+        let push = horse_push(&battle.formation, bi, &near);
         let velocity = [velocity[0] + push[0], velocity[1], velocity[2] + push[1]];
         let velocity = battle.formation.constrain_velocity(position, velocity);
         let velocity = super::steering::around_obstacles(
@@ -492,6 +556,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             [velocity[0], velocity[2]],
             super::steering::Mover::Rider,
         );
+        let velocity = horse_gap(&battle.formation, bi, &near, position, velocity);
         battle.columns.drive[horse_bi] = velocity;
         battle.columns.drive[bi] = [0.0; 3];
     }

@@ -800,3 +800,451 @@ fn a_boxed_in_body_on_foot_stands_at_a_cave_mouth() {
     assert_eq!(deflect_foot(world, registry, pos, 0.3, north, north, 1.0), [0.0, 0.0], "walked into the mouth");
     assert_eq!(deflect(world, registry, pos, 0.3, north, north, 1.0), north, "a rider keeps pressing");
 }
+
+/// First air above the ground round the G2 take's cliff notch, where 87
+/// fleeing blue foot stood within 0.22 blocks of (-113.3, 94, 257.3) from
+/// t 232 to the end of the take (receipts/BvHorseStack): columns x
+/// -126..=-98 (left to right), rows z 244..=268 (top to bottom), from the
+/// `battle_site_scan detail` columns of site 935 (no overhangs; the trees
+/// below the cliff are left out). The upper field (94-95) ends in a cliff
+/// four to six blocks high; at x -114 a one-block notch (94) juts out one
+/// row further than the cliff to its west.
+const G2_LEDGE: [[i32; 29]; 25] = [
+    [
+        94, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 95, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 95, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        95, 95, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 94,
+        95, 95, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95,
+        95, 95, 95, 95, 95, 95,
+    ],
+    [
+        87, 87, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95,
+        95, 95, 95, 95, 95, 95,
+    ],
+    [
+        91, 89, 88, 89, 89, 89, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95,
+        95, 95, 95, 95, 95, 95,
+    ],
+    [
+        94, 93, 91, 89, 90, 90, 90, 90, 90, 90, 90, 89, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 94, 94, 94, 94,
+    ],
+    [
+        95, 95, 95, 95, 94, 92, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 89, 89, 89, 93, 93,
+        93, 93, 93, 93, 93, 92,
+    ],
+    [
+        95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 93, 92, 91, 91, 91, 91, 91, 91, 90, 90, 90, 89, 89,
+        88, 92, 92, 92, 91, 91,
+    ],
+    [
+        95, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 93, 93, 92, 92, 92, 92, 92, 92, 91, 90, 90,
+        89, 89, 88, 88, 88, 87,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 92, 91, 91, 91, 91, 91, 91, 91, 90, 90,
+        90, 90, 89, 88, 88, 88,
+    ],
+    [
+        94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 92, 92, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90,
+        90, 90, 90, 89, 88, 88,
+    ],
+    [
+        94, 93, 93, 93, 92, 92, 92, 92, 92, 92, 92, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 89, 89,
+        89, 89, 89, 90, 89, 88,
+    ],
+    [
+        93, 93, 92, 92, 91, 91, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 89, 89, 89, 89, 89,
+        89, 89, 89, 89, 89, 89,
+    ],
+    [
+        93, 93, 92, 92, 92, 91, 91, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 89, 89, 89, 89,
+        89, 89, 89, 89, 89, 89,
+    ],
+    [
+        93, 93, 92, 92, 92, 92, 91, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 90, 89, 89, 89,
+        89, 89, 89, 89, 89, 89,
+    ],
+    [
+        93, 93, 92, 92, 92, 92, 92, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 90, 90, 89, 89,
+        89, 89, 89, 89, 89, 89,
+    ],
+    [
+        94, 93, 92, 92, 92, 92, 92, 92, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 90, 89, 89,
+        89, 89, 89, 89, 89, 89,
+    ],
+];
+
+/// Real (x, y, z) to fixture: the notch (-113.3, 94, 257.3) lands at
+/// (6.7, 66, 100.3), behind the second side, which flees +z.
+const G2_LEDGE_SHIFT: [i32; 3] = [120, -28, -157];
+
+const G2R_CORNER: [[i32; 21]; 21] = [
+    [
+        96, 96, 96, 96, 96, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 97, 98, 99, 99,
+    ],
+    [
+        96, 96, 96, 96, 96, 96, 95, 95, 95, 95, 96, 96, 96, 96, 96, 97, 97, 98, 99, 100, 100,
+    ],
+    [
+        97, 97, 96, 96, 96, 96, 95, 96, 96, 96, 96, 96, 96, 96, 97, 97, 98, 99, 100, 100, 101,
+    ],
+    [
+        99, 99, 98, 98, 97, 97, 96, 96, 96, 96, 96, 97, 97, 98, 98, 99, 99, 100, 100, 101, 101,
+    ],
+    [
+        100, 100, 100, 99, 99, 98, 98, 98, 98, 98, 98, 98, 99, 99, 99, 99, 100, 100, 100, 101, 102,
+    ],
+    [
+        101, 101, 101, 100, 100, 100, 99, 99, 99, 99, 99, 99, 100, 100, 100, 100, 100, 101, 101,
+        101, 102,
+    ],
+    [
+        102, 102, 101, 101, 101, 101, 100, 100, 100, 100, 100, 100, 100, 101, 101, 101, 101, 101,
+        101, 102, 102,
+    ],
+    [
+        102, 102, 102, 102, 102, 102, 102, 101, 101, 101, 101, 101, 101, 102, 102, 102, 102, 102,
+        102, 102, 103,
+    ],
+    [
+        103, 103, 103, 103, 103, 103, 102, 102, 102, 102, 102, 102, 102, 102, 102, 102, 102, 103,
+        103, 103, 103,
+    ],
+    [
+        103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103,
+        103, 103, 103,
+    ],
+    [
+        104, 104, 104, 104, 104, 104, 104, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103,
+        104, 104, 104,
+    ],
+    [
+        104, 104, 104, 104, 104, 104, 104, 104, 104, 104, 103, 103, 104, 104, 104, 104, 104, 104,
+        104, 104, 104,
+    ],
+    [
+        105, 105, 105, 106, 106, 106, 106, 106, 105, 104, 104, 104, 104, 104, 104, 104, 104, 104,
+        104, 104, 104,
+    ],
+    [
+        106, 106, 106, 107, 107, 108, 108, 107, 106, 104, 104, 104, 104, 104, 104, 104, 104, 104,
+        104, 105, 105,
+    ],
+    [
+        107, 107, 107, 108, 108, 109, 109, 108, 108, 106, 104, 104, 104, 104, 104, 104, 104, 105,
+        105, 106, 106,
+    ],
+    [
+        108, 108, 109, 109, 110, 110, 110, 110, 109, 109, 107, 107, 107, 107, 106, 107, 107, 107,
+        108, 108, 108,
+    ],
+    [
+        109, 109, 110, 110, 110, 111, 111, 111, 110, 110, 109, 109, 109, 108, 108, 108, 109, 109,
+        109, 109, 109,
+    ],
+    [
+        110, 110, 110, 111, 111, 111, 112, 111, 111, 111, 110, 110, 110, 109, 109, 109, 110, 110,
+        110, 110, 110,
+    ],
+    [
+        110, 111, 111, 111, 111, 112, 112, 112, 112, 111, 111, 111, 111, 110, 110, 110, 111, 111,
+        111, 111, 111,
+    ],
+    [
+        111, 111, 111, 112, 112, 112, 112, 112, 112, 112, 112, 112, 112, 111, 111, 111, 111, 112,
+        112, 112, 112,
+    ],
+    [
+        111, 111, 112, 112, 112, 113, 114, 114, 113, 113, 112, 112, 112, 112, 112, 112, 112, 112,
+        112, 112, 112,
+    ],
+];
+
+/// First air above the ground round the corner of two terrace faces at
+/// (-99.6, 104, 316.6) where 111 fleeing blue foot stood within one block
+/// in rehearsal-06198df4 (receipts/BvHorseStack): columns x -110..=-90,
+/// rows z 302..=322, from the site-935 scan. Real (x, y, z) + this shift.
+const G2R_CORNER_SHIFT: [i32; 3] = [120, -28, -157];
+
+/// Stone up to each column's first air of `rows` (real columns from
+/// `real`: x of the first column, z of the first row), air above.
+fn patch<const W: usize>(
+    state: &mut TickState,
+    rows: &[[i32; W]],
+    real: [i32; 2],
+    shift: [i32; 3],
+) {
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    for (dz, row) in rows.iter().enumerate() {
+        for (dx, &top) in row.iter().enumerate() {
+            let (x, z) = (
+                real[0] + dx as i32 + shift[0],
+                real[1] + dz as i32 + shift[2],
+            );
+            let top = top + shift[1];
+            for y in 55..top + 10 {
+                state
+                    .world
+                    .set_block(x, y, z, if y < top { stone } else { air });
+            }
+        }
+    }
+    state.world.fold_overlay();
+}
+
+/// Most bodies within 0.5 blocks (horizontal, same level) of one of them.
+fn densest(points: &[[f64; 3]]) -> usize {
+    points
+        .iter()
+        .map(|a| {
+            points
+                .iter()
+                .filter(|b| {
+                    (a[1] - b[1]).abs() < 1.5
+                        && mc_physics::mth::length2(a[0] - b[0], a[2] - b[2]) < 0.5
+                })
+                .count()
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+/// 48 foot of the second side, placed in rows of `wide` from real (x, z)
+/// `from` (shifted by `shift`), break and flee for `ticks` real ticks.
+/// Returns the most bodies within 0.5 blocks of one (and its tick), the
+/// median distance fled toward +z and the end positions.
+fn rout_from(
+    state: &mut TickState,
+    from: [f64; 2],
+    wide: usize,
+    shift: [i32; 3],
+    ticks: u64,
+) -> ((usize, u64), f64, Vec<[f64; 3]>) {
+    let formation = &state.hostile.battle.formation;
+    let regiments: Vec<usize> = formation
+        .regiments
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.spec.faction == 2 && r.spec.frontage <= 1.0)
+        .map(|(i, _)| i)
+        .collect();
+    let ids: Vec<_> = regiments
+        .iter()
+        .flat_map(|&i| {
+            let r = &formation.regiments[i];
+            formation.members[r.start..r.start + r.len]
+                .iter()
+                .map(|m| m.id)
+        })
+        .take(48)
+        .collect();
+    assert!(ids.len() >= 40, "too few foot: {}", ids.len());
+    for (k, &id) in ids.iter().enumerate() {
+        let x = from[0] + f64::from(shift[0]) + (k % wide) as f64;
+        let z = from[1] + f64::from(shift[2]) + (k / wide) as f64;
+        let Some(Ok(y)) = support(&state.world, &state.registry, [x, 0.0, z], 0.3) else {
+            panic!("no ground at {x} {z}");
+        };
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.set_pos(slot, [x, y, z]);
+    }
+    let formation = &mut state.hostile.battle.formation;
+    for &i in &regiments {
+        formation.regiments[i].morale.broken = true;
+        let r = &formation.regiments[i];
+        for m in &mut formation.members[r.start..r.start + r.len] {
+            m.routing = true;
+        }
+    }
+    let positions = |state: &TickState| -> Vec<[f64; 3]> {
+        ids.iter()
+            .filter_map(|&id| {
+                state
+                    .entities
+                    .slot_of(id)
+                    .map(|slot| state.entities.pos(slot))
+            })
+            .collect()
+    };
+    let start: Vec<f64> = positions(state).iter().map(|p| p[2]).collect();
+    let mut worst = (0, 0);
+    for tick in 1..=ticks {
+        run_tick(state, &[]);
+        if tick % 50 == 0 {
+            worst = worst.max((densest(&positions(state)), tick));
+        }
+    }
+    let end = positions(state);
+    let mut fled: Vec<f64> = end.iter().zip(&start).map(|(p, z)| p[2] - z).collect();
+    fled.sort_by(f64::total_cmp);
+    (worst, fled[fled.len() / 2], end)
+}
+
+/// Fugitives on foot that run into the G2 cliff and along it into the notch
+/// keep apart there: in the G2 take 87 stood on one point for the last
+/// 25 s, one body for the camera that was meant to film them.
+#[test]
+fn fugitives_pressed_into_a_cliff_notch_do_not_heap_on_one_point() {
+    let mut state = relief_fixture();
+    patch(&mut state, &G2_LEDGE, [-126, 244], G2_LEDGE_SHIFT);
+    stage(&mut state, 100);
+    // South-west of the notch, as the G2 fugitives came: real x -123..-112,
+    // z 246..250.
+    let (worst, fled, end) = rout_from(&mut state, [-123.5, 246.5], 12, G2_LEDGE_SHIFT, 800);
+    assert!(
+        fled >= 5.0,
+        "the fugitives did not run to the cliff: {end:?}"
+    );
+    assert!(
+        worst.0 <= 4,
+        "fugitives heaped: {} bodies within 0.5 blocks of one at tick {}: {end:?}",
+        worst.0,
+        worst.1
+    );
+}
+
+/// Fugitives that climb a slope and step off a two-block ledge into the
+/// corner of two terrace faces keep apart there: unseen from the ledge, the
+/// bodies below were landed on (rehearsal-06198df4: 111 within one block of
+/// (-99.6, 104, 316.6)).
+#[test]
+fn fugitives_in_a_terrace_corner_do_not_heap_on_one_point() {
+    let mut state = relief_fixture();
+    patch(&mut state, &G2R_CORNER, [-110, 302], G2R_CORNER_SHIFT);
+    stage(&mut state, 100);
+    // South-east of the corner, as the rehearsal's fugitives came.
+    let (worst, fled, end) = rout_from(&mut state, [-101.5, 303.5], 12, G2R_CORNER_SHIFT, 800);
+    assert!(
+        fled >= 5.0,
+        "the fugitives did not run to the terraces: {end:?}"
+    );
+    assert!(
+        worst.0 <= 4,
+        "fugitives heaped: {} bodies within 0.5 blocks of one at tick {}: {end:?}",
+        worst.0,
+        worst.1
+    );
+}
+
+/// First air above the ground round the end of a one-block gully at
+/// (20.2, 91, 244.9) where 48-62 fleeing blue foot stood within half a
+/// block in the rehearsals of 07222297 (receipts/BvHorseStack): columns
+/// x 12..=28, rows z 234..=250, from the site-935 scan. The gully (x 20, 89-91)
+/// ends at z 245 below a 97 wall to the east and the 92-93 slope to the west.
+const G2R_GULLY: [[i32; 17]; 17] = [
+    [
+        96, 95, 94, 93, 92, 92, 91, 90, 89, 97, 98, 99, 100, 100, 101, 101, 101,
+    ],
+    [
+        96, 95, 94, 93, 92, 92, 91, 90, 89, 97, 98, 99, 100, 100, 101, 101, 101,
+    ],
+    [
+        96, 95, 94, 93, 93, 92, 91, 90, 89, 88, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        96, 95, 94, 94, 93, 92, 91, 90, 89, 90, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        96, 96, 95, 94, 93, 92, 91, 90, 89, 92, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        97, 96, 95, 94, 93, 92, 91, 90, 89, 93, 98, 99, 99, 100, 100, 101, 101,
+    ],
+    [
+        97, 96, 95, 94, 93, 93, 92, 91, 89, 93, 98, 99, 99, 100, 100, 101, 101,
+    ],
+    [
+        97, 97, 96, 95, 94, 93, 92, 91, 90, 97, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        97, 97, 97, 96, 95, 94, 92, 91, 90, 97, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        97, 97, 97, 96, 95, 94, 93, 92, 90, 97, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        97, 97, 97, 97, 96, 95, 94, 92, 90, 97, 98, 99, 100, 100, 101, 101, 101,
+    ],
+    [
+        97, 97, 97, 97, 97, 97, 95, 93, 91, 97, 98, 99, 100, 100, 101, 101, 102,
+    ],
+    [
+        97, 97, 97, 97, 97, 97, 97, 96, 93, 97, 98, 99, 100, 100, 101, 102, 102,
+    ],
+    [
+        97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 98, 99, 100, 100, 101, 102, 103,
+    ],
+    [
+        98, 97, 97, 97, 97, 97, 97, 97, 97, 98, 98, 99, 100, 100, 101, 102, 103,
+    ],
+    [
+        98, 98, 98, 98, 97, 97, 97, 97, 97, 98, 99, 100, 100, 101, 102, 103, 104,
+    ],
+    [
+        99, 98, 98, 98, 98, 97, 97, 97, 97, 98, 99, 100, 102, 103, 104, 105, 105,
+    ],
+];
+
+/// Real (x, y, z) + this shift.
+const G2R_GULLY_SHIFT: [i32; 3] = [100, -28, -100];
+
+/// Fugitives that come down the slope into the end of a one-block gully keep
+/// apart there: from the top of a step-up (feet at 92.02-92.17) the bodies two
+/// blocks below were out of sight, and each one stepping off landed on the
+/// last (rehearsals of 07222297: up to 62 within half a block).
+#[test]
+fn fugitives_stepping_into_a_gully_end_do_not_heap_on_one_point() {
+    let mut state = relief_fixture();
+    patch(&mut state, &G2R_GULLY, [12, 234], G2R_GULLY_SHIFT);
+    stage(&mut state, 100);
+    // North-west of the gully end, on the slope and in the gully.
+    let (worst, fled, end) = rout_from(&mut state, [13.5, 235.5], 8, G2R_GULLY_SHIFT, 1200);
+    assert!(
+        fled >= 3.0,
+        "the fugitives did not run to the gully end: {end:?}"
+    );
+    assert!(
+        worst.0 <= 4,
+        "fugitives heaped: {} bodies within 0.5 blocks of one at tick {}: {end:?}",
+        worst.0,
+        worst.1
+    );
+}
