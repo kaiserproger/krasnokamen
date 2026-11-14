@@ -35,7 +35,9 @@ class SceneSlot(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.dir = tmp.name
-        self.env = {**os.environ, "KRASNOKAMEN_SCENE_SLOT_DIR": self.dir}
+        self.env = {**os.environ, "KRASNOKAMEN_SCENE_SLOT_DIR": self.dir,
+                    # The -x lock order is the subject; the measurement-window schedule is not.
+                    "KRASNOKAMEN_WINDOW_OVERRIDE": "1", "KRASNOKAMEN_RELEASE_BUILD_ALLOW": "1"}
 
     def lock_path(self, slot: str) -> str:
         return f"{self.dir}/solaris-scene-slot-{slot}.lock"

@@ -64,7 +64,8 @@ class BuildTokenTests(unittest.TestCase):
         self.runner = self.root / 'mem-run.sh'
         self.runner.write_text(source)
         self.runner.chmod(0o755)
-        for name in ('slot-select.sh', 'heavy-watchdog.py', 'mem-run-guard.py', 'slot-lock.py', 'sccache.sh'):
+        for name in ('slot-select.sh', 'heavy-watchdog.py', 'mem-run-guard.py', 'slot-lock.py', 'sccache.sh',
+                     'release-build-policy.sh', 'measurement-window.py', 'measurement-windows'):
             shutil.copy(HERE / name, self.root)
         bin_dir = self.root / 'bin'
         bin_dir.mkdir()
@@ -76,7 +77,10 @@ class BuildTokenTests(unittest.TestCase):
                     if key not in ('KRASNOKAMEN_BUILD_TOKEN', 'KRASNOKAMEN_BUILD_TOKEN_PID', 'KRASNOKAMEN_SCENE_SLOT')}
         self.env.update(PATH=f'{bin_dir}:{os.environ["PATH"]}', CARGO_TARGET_DIR=str(self.root / 'target'),
                         KRASNOKAMEN_SLOT_TARGETS=str(self.root / 'targets'), KRASNOKAMEN_SLOT_MIN_FREE_GB='0',
-                        TEST_RUNNER=str(self.runner))
+                        TEST_RUNNER=str(self.runner),
+                        # Token admission is the subject; the measurement-window schedule and the
+                        # release-pin policy are not, so this test opts into both.
+                        KRASNOKAMEN_WINDOW_OVERRIDE='1', KRASNOKAMEN_RELEASE_BUILD_ALLOW='1')
         self.count = 0
 
     def start(self, *command: str) -> Command:

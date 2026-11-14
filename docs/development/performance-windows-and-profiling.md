@@ -19,6 +19,10 @@ commands are in [PROFILES.md](../performance/PROFILES.md) and
    [heavy commands](heavy-commands-and-memory.md)); `-x` commands run one at a
    time. No GO or announcement is needed. A rustc on the bot CPUs once
    contaminated a MIX replay; that is why measurements never run outside `-x`.
+   `-x` itself opens only inside a scheduled window (owner, 2026-11-15:
+   `tools/dev/measurement-windows`, default `01:00-02:30`, which ends before the
+   nightly fuzz); outside one the runner refuses and names the next window, and
+   only Main may override a run with `KRASNOKAMEN_WINDOW_OVERRIDE=1`.
 3. Run the canonical scene **unshortened**.
 4. Report gate status, p50/p95/p99, stage breakdown, CPU time per tick and the
    profile path in the result.
@@ -108,11 +112,16 @@ capacity claim from the profiled run.
 
 ## Profiling recipes
 
-- **Frame-pointer release build** for attribution:
-  `CARGO_TARGET_DIR=<work>/targets/fp RUSTFLAGS="-C force-frame-pointers=yes"
-  CARGO_PROFILE_RELEASE_DEBUG=line-tables-only <work>/solaris/tools/dev/mem-run.sh -m 12G env
-  CARGO_INCREMENTAL=0 cargo build --release --bin krasnokamen --bin player-scale-bots`;
-  record the SHA-256 of `krasnokamen`.
+- **Frame-pointer release build** for attribution: the runner refuses an ad-hoc
+  `cargo build --release` (owner, 2026-11-15: one release binary per integrated
+  commit, from `tools/dev/pin-release`), so pin the tree with the instrumentation
+  environment instead: `CARGO_TARGET_DIR=<work>/targets/fp
+  RUSTFLAGS="-C force-frame-pointers=yes" CARGO_PROFILE_RELEASE_DEBUG=line-tables-only
+  <work>/solaris/tools/dev/pin-release <tree> --no-incremental` (the
+  environment is part of the pin's fingerprint, so this build gets its own pin;
+  `--bots` pins `player-scale-bots` the same way). The pin prints the
+  `KRASNOKAMEN_SERVER_BINARY` line and its `manifest.json` records the binary's
+  SHA-256; record that hash.
 - **perf:** `perf report -i perf.data --no-children --comm mc-core-tick --sort sym
   --stdio -g none --no-inline` for self time, `--children` for inclusive.
   Inlined frames mislead attribution (a 100-row collect once looked like 9 ms);

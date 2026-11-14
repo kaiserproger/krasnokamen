@@ -255,6 +255,9 @@ def build(top: Path, kind: str, rust_target: str | None, incremental: bool,
         cmd += ["--target", rust_target]
     cmd += ["-p", spec["package"], "--bin", spec["bin"], "--message-format=json-render-diagnostics"]
     env = build_env(incremental)
+    # mem-run refuses a release build outside this tool (owner 2026-11-15): the pin is
+    # the one place a release binary is built, and its manifest is the provenance.
+    env["KRASNOKAMEN_PIN_RELEASE"] = "1"
     say(f"building: {shlex.join(cmd)} (cwd {top})")
     artifact = None
     with subprocess.Popen(cmd, cwd=top, env=env, stdout=subprocess.PIPE, text=True) as proc:

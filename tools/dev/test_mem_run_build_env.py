@@ -31,12 +31,16 @@ class BuildEnvTests(unittest.TestCase):
         self.source = self.source.replace('dir=/tmp/solaris-mem-slots', f'dir={self.root}/state', 1)
         self.source = self.source.replace('slice=solaris-heavy.slice', f'slice={slice_name}', 1)
         self.source = self.source.replace('solaris-heavy-watchdog', self.watchdog)
-        for name in ('slot-select.sh', 'heavy-watchdog.py', 'mem-run-guard.py', 'sccache.sh'):
+        for name in ('slot-select.sh', 'heavy-watchdog.py', 'mem-run-guard.py', 'sccache.sh',
+                     'release-build-policy.sh', 'measurement-window.py', 'measurement-windows'):
             if (HERE / name).exists():
                 shutil.copy(HERE / name, self.root)
         (self.root / 'targets' / 'slot-a').mkdir(parents=True)
         self.env = os.environ | {'CARGO_TARGET_DIR': str(self.root / 'targets' / 'slot-a'),
-                                 'KRASNOKAMEN_SLOT_TARGETS': str(self.root / 'targets'), 'KRASNOKAMEN_SLOT_MIN_FREE_GB': '0'}
+                                 'KRASNOKAMEN_SLOT_TARGETS': str(self.root / 'targets'), 'KRASNOKAMEN_SLOT_MIN_FREE_GB': '0',
+                                 # This test measures the -x lane and the release lanes themselves, not the
+                                 # schedule or the pin policy that gate them: opt in explicitly.
+                                 'KRASNOKAMEN_WINDOW_OVERRIDE': '1', 'KRASNOKAMEN_RELEASE_BUILD_ALLOW': '1'}
 
     def start_unit(self):
         unit = f'memenv{os.getpid()}-sccache'
