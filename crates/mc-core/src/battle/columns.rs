@@ -13,6 +13,9 @@ pub(crate) struct Columns {
     pub factions: Vec<u16>,
     pub positions: Vec<[f64; 3]>,
     pub targets: Vec<Option<EnemyTarget>>,
+    /// Battle tick until which a fighter counts as in contact: set whenever he holds a target,
+    /// so a man who lost his enemy keeps looking every tick for a while.
+    pub contact_until: Vec<u64>,
     pub drive: Vec<[f64; 3]>,
     pub ranged: Vec<bool>,
     pub reach: Vec<f64>,
@@ -32,6 +35,7 @@ impl Columns {
         self.factions.push(0);
         self.positions.push([0.0; 3]);
         self.targets.push(None);
+        self.contact_until.push(0);
         self.drive.push([0.0; 3]);
         self.ranged.push(false);
         self.reach.push(0.0);
@@ -53,6 +57,7 @@ impl Columns {
         }
         if self.ids[bi] != id {
             self.targets[bi] = None;
+            self.contact_until[bi] = 0;
             self.classification[bi] = None;
         }
         self.ids[bi] = id;
@@ -124,6 +129,7 @@ impl Columns {
         self.factions.truncate(len);
         self.positions.truncate(len);
         self.targets.truncate(len);
+        self.contact_until.truncate(len);
         self.drive.truncate(len);
         self.ranged.truncate(len);
         self.reach.truncate(len);

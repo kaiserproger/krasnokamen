@@ -67,6 +67,8 @@ pub(super) struct Fighter {
     block: Option<(EntityId, u64)>,
     reaction_checked: bool,
     pub(super) arrows: u16,
+    /// Target of the last decision: a different one is answered off the grid.
+    aimed: Option<EntityId>,
     pub(super) charge: super::cavalry::Charge,
 }
 
@@ -82,6 +84,7 @@ impl Default for Fighter {
             block: None,
             reaction_checked: false,
             arrows: 60,
+            aimed: None,
             charge: Default::default(),
         }
     }
@@ -248,7 +251,21 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             } => {
                 let impact = start + u64::from(weapon.windup());
                 if frame.tick == impact {
-                    combat.strikes.push((id, target, weapon, start));
+                    // The man may have stepped out of reach during the windup: the blow
+                    // falls on the enemy now in reach, at his present position, unless
+                    // another blow already lands on him this tick (one man is never
+                    // struck twice in a tick because the attackers' targets converged).
+                    let aim = if super::retained_enemy(frame.entities, slot, target, weapon.reach())
+                        .is_some()
+                    {
+                        target
+                    } else {
+                        battle.columns.targets[bi]
+                            .map(|t| t.id)
+                            .filter(|new| !combat.strikes.iter().any(|strike| strike.1 == *new))
+                            .unwrap_or(target)
+                    };
+                    combat.strikes.push((id, aim, weapon, start));
                     fighter.action = Action::Recover {
                         until: start + u64::from(weapon.cycle()),
                     };
@@ -332,6 +349,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         if !(frame.tick + id.0 as u64).is_multiple_of(20) {
             continue;
         }
+        fighter.aimed = current;
         fighter.action = Action::Guard {
             until: frame.tick + 20,
         };

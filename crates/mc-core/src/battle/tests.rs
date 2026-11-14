@@ -243,11 +243,14 @@ fn native_target_update_is_sliced_and_rechecks_dead_factions_and_range() {
     update(&state, &mut battle, due + 2);
     assert!(battle.columns.target(slot).is_none());
     state.entities.set_faction(enemy_slot, 2);
+    // A fighter who held a man a moment ago looks again at once: the enemy that came back
+    // into view is taken on the next tick, not at the next decision of the ten-tick grid.
     update(&state, &mut battle, due + 3);
-    assert!(
-        battle.columns.target(slot).is_none(),
-        "no off-slice reacquisition"
-    );
+    assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
+    state.entities.set_faction(enemy_slot, 1);
+    update(&state, &mut battle, due + 4);
+    assert!(battle.columns.target(slot).is_none());
+    state.entities.set_faction(enemy_slot, 2);
     update(&state, &mut battle, due + 10);
     assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
     state.entities.row_mut(enemy_slot).health = 0.0;
@@ -261,6 +264,53 @@ fn native_target_update_is_sliced_and_rechecks_dead_factions_and_range() {
         "no 35-block follow-range targeting"
     );
     assert!(retained_enemy(&state.entities, slot, enemy, 6.0).is_none());
+}
+
+/// A fighter outside contact (never held a man) searches only on his own slice of the
+/// ten-tick grid: the fast look is for men at the line, so far ranks add no search.
+#[test]
+fn fighter_without_a_recent_man_searches_only_on_his_slice() {
+    let mut state = fixture();
+    let actor = spawn(&mut state, 1, "minecraft:zombie", [4.0, 100.0, 4.0]);
+    let enemy = spawn(&mut state, 2, "minecraft:zombie", [7.0, 100.0, 4.0]);
+    let slot = state.entities.slot_of(actor).unwrap();
+    let mut battle = BattleState::default();
+    let due = i64::from(actor.0).rem_euclid(10) as u64;
+    for tick in due + 11..due + 20 {
+        let frame = Frame {
+            entities: &state.entities,
+            registry: &state.registry,
+            world: &state.world,
+            tick,
+        };
+        battle.columns.prepare(
+            &frame,
+            &mut battle.formation,
+            &mut battle.output.counters,
+            &mut battle.population,
+        );
+        battle.formation.finish_preparation();
+        targeting::update(&frame, &mut battle);
+        assert!(
+            battle.columns.target(slot).is_none(),
+            "off-slice search at tick {tick}"
+        );
+    }
+    let frame = Frame {
+        entities: &state.entities,
+        registry: &state.registry,
+        world: &state.world,
+        tick: due + 20,
+    };
+    battle.columns.prepare(
+        &frame,
+        &mut battle.formation,
+        &mut battle.output.counters,
+        &mut battle.population,
+    );
+    battle.formation.finish_preparation();
+    targeting::update(&frame, &mut battle);
+    assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
 }
 
 #[test]

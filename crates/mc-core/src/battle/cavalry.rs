@@ -38,8 +38,14 @@ pub fn impact_bonus(elapsed: u64) -> f32 {
 #[derive(Debug, Default)]
 pub(super) struct Charge {
     impact: Option<u64>,
-    refused: bool,
+    pub(super) refused: bool,
+    /// Flank a refusing rider runs out to (+1/-1), kept for the whole refusal: the nearer side
+    /// flipped as he passed the target's axis, and he turned back with it.
+    side: f64,
     reform_until: u64,
+    /// Last run-out drive and the tick until which an untargeted refuser keeps it.
+    run: [f64; 3],
+    run_until: u64,
 }
 
 impl Charge {
@@ -117,6 +123,26 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
         let wounded = matches!(combat.fighters[bi].action, Action::Wounded);
         let near = horses_near(&battle.formation, bi);
         let routing = super::combat::context(battle, bi).is_some_and(|c| c.routing);
+        let running_out = !wounded && !routing && battle.columns.targets[bi].is_none() && {
+            let charge = &combat.fighters[bi].charge;
+            charge.refused && frame.tick < charge.run_until
+        };
+        if running_out {
+            let position = frame.entities.pos(horse);
+            let run = combat.fighters[bi].charge.run;
+            let velocity = battle.formation.constrain_velocity(position, run);
+            let velocity = super::steering::around_obstacles(
+                frame,
+                &battle.formation,
+                horse,
+                velocity,
+                [velocity[0], velocity[2]],
+                super::steering::Mover::Rider,
+            );
+            battle.columns.drive[horse_bi] = velocity;
+            battle.columns.drive[bi] = [0.0; 3];
+            continue;
+        }
         if wounded || routing || battle.columns.targets[bi].is_none() {
             // Carry the formation's approach/withdrawal/rout direction on the
             // horse, never override a routing rider with an enemy pursuit.
@@ -187,6 +213,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
         if distance > 46.0 && frame.tick >= charge.reform_until {
             charge.impact = None;
             charge.refused = false;
+            charge.side = 0.0;
         }
         if distance <= 6.0 && charge.impact.is_none() && !charge.refused {
             combat.work.charge_checks += 1;
@@ -202,16 +229,22 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             // Run out toward the nearer flank; never steer through the steady line.
             let facing = context.map_or([-toward[0], -toward[1]], |c| c.facing);
             let right = [-facing[1], facing[0]];
-            let side = if -delta[0] * right[0] - delta[1] * right[1] >= 0.0 {
-                1.0
-            } else {
-                -1.0
-            };
-            [
+            if charge.side == 0.0 {
+                charge.side = if -delta[0] * right[0] - delta[1] * right[1] >= 0.0 {
+                    1.0
+                } else {
+                    -1.0
+                };
+            }
+            let side = charge.side;
+            let run = [
                 (right[0] * side - toward[0]) * 3.8,
                 0.0,
                 (right[1] * side - toward[1]) * 3.8,
-            ]
+            ];
+            charge.run = run;
+            charge.run_until = frame.tick + RUN_OUT_TICKS;
+            run
         } else {
             let speed = if distance <= 46.0 { 6.4 } else { 4.6 };
             [toward[0] * speed, 0.0, toward[1] * speed]

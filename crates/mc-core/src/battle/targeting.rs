@@ -254,11 +254,56 @@ fn eligible(battle: &super::BattleState, bi: usize) -> bool {
     !context.routing && (battle.columns.ranged[bi] || context.front_rank)
 }
 
+/// Ticks between looks for a better enemy while a fighter is in contact.
+pub const CONTACT_RETARGET_TICKS: u64 = 4;
+/// Ticks a fighter keeps looking every tick after he last held a target.
+const CONTACT_HOLD_TICKS: u64 = 20;
+
+fn fast_due(id: EntityId, tick: u64) -> bool {
+    tick % CONTACT_RETARGET_TICKS
+        == i64::from(id.0).rem_euclid(CONTACT_RETARGET_TICKS as i64) as u64
+}
+
+/// A fighter looks faster only within this many blocks of the enemy regiment's block.
+const NEAR_CONTACT_BLOCKS: f64 = 12.0;
+
+/// The fighter himself stands in or next to the enemy regiment he faces: his distance to that
+/// regiment's live centre is at most the block's half diagonal plus [`NEAR_CONTACT_BLOCKS`].
+/// A regiment's signed `gap` along its facing says nothing about a rider far to the side or
+/// an enemy far behind, so it is not used.
+fn near_contact(formation: &super::formation::FormationRuntime, bi: usize) -> bool {
+    let Some(m) = formation.members.get(bi) else {
+        return false;
+    };
+    let Some(enemy) = formation.regiments[m.regiment]
+        .enemy_regiment
+        .map(|e| &formation.regiments[e])
+    else {
+        return false;
+    };
+    if enemy.live_count == 0 {
+        return false;
+    }
+    let centre = enemy.live_sum.map(|x| x / enemy.live_count as f64);
+    let half_diagonal = 0.5
+        * mc_physics::mth::length2(
+            f64::from(enemy.spec.files) * enemy.interval,
+            2.0 * f64::from(enemy.ranks),
+        );
+    mc_physics::mth::length2(m.pos[0] - centre[0], m.pos[2] - centre[2])
+        <= half_diagonal + NEAR_CONTACT_BLOCKS
+}
+
+/// A rider or pursuer keeps a man a few blocks beyond the reach that took him: at the edge of
+/// the reach the target came and went every few ticks and the horse turned with it.
+const LOOSE_RETAIN_BLOCKS: f64 = 4.0;
+
 fn retained(
     frame: &super::Frame<'_>,
     columns: &super::Columns,
     bi: usize,
     target: EntityId,
+    slack: f64,
 ) -> Option<EnemyTarget> {
     let slot = frame.entities.slot_of(target)?;
     let enemy = columns.index(slot)?;
@@ -267,7 +312,7 @@ fn retained(
         return None;
     }
     let distance = distance_squared(columns.positions[bi], columns.positions[enemy]).sqrt();
-    (distance <= columns.reach[bi]).then_some(EnemyTarget {
+    (distance <= columns.reach[bi] + slack).then_some(EnemyTarget {
         id: target,
         pos: columns.positions[enemy],
         distance,

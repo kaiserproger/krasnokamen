@@ -159,6 +159,28 @@ fn marching_soldiers_hold_rank_and_file_under_arrow_fire() {
     assert!(dead[0] + dead[1] > 0, "the arrows must still kill");
 }
 
+/// The faster look of fighters in contact must not spread to the marching ranks: before the lines
+/// meet, the retargets per tick stay within the ordinary one-in-ten cadence of the eligible men
+/// (front rank, loose order, archers), so far riders and back ranks add no search.
+#[test]
+fn marching_fighters_keep_the_ordinary_retarget_cadence_before_contact() {
+    let mut state = started(1000);
+    let (mut retargeted, mut eligible) = (0_u64, 0_u64);
+    for _ in 0..300 {
+        crate::tick::run_tick(&mut state, &[]);
+        let battle = &state.hostile.battle;
+        retargeted += battle.work.retargeted;
+        eligible += (0..battle.columns.ids.len())
+            .filter(|&bi| super::targeting::eligible(&battle.formation, &battle.columns, bi))
+            .count() as u64;
+    }
+    assert!(eligible > 100_000, "{eligible}");
+    assert!(
+        retargeted * 10 <= eligible * 11,
+        "retargeted {retargeted} of {eligible} eligible fighter-ticks"
+    );
+}
+
 fn dead(state: &crate::tick::TickState) -> usize {
     let (dead, _, _) = super::tests::native_battle_losses(state);
     dead[0] + dead[1]
@@ -280,4 +302,322 @@ fn foot_and_horse_do_not_heap_through_contact_and_pursuit() {
     assert!(foot < 3.0, "foot heap {foot}%");
     assert!(horse < 15.0, "horse heap {horse}%");
     assert!(dead(&state) > 300, "contact must still kill");
+}
+
+/// Reaction of melee fighters to a moving enemy, in ticks, on real native ticks:
+/// - `idle`: consecutive ticks a front fighter of a regiment in or next to contact has no target
+///   although a living enemy stands within his reach (reach 6): the delay before he turns to an
+///   enemy that came into reach (target left, stepped aside or fell);
+/// - `swing`: ticks from taking a new target to the start of his windup, for the fighters that swing
+///   at that man before the target changes (cautious fighters swing rarely by design).
+/// Prints mean and p95 of both. BATTLE_UNITS_PER_SIDE, BATTLE_RANKS_TICKS.
+#[test]
+#[ignore = "diagnostic; run explicitly"]
+fn reaction_latency_table() {
+    use super::combat::Action;
+    let side = std::env::var("BATTLE_UNITS_PER_SIDE").map_or(1000, |v| v.parse().unwrap());
+    let ticks = std::env::var("BATTLE_RANKS_TICKS").map_or(2500, |v| v.parse::<usize>().unwrap());
+    let mut state = started(side);
+    let mut idle_run: Vec<u32> = Vec::new();
+    let mut idle: Vec<u32> = Vec::new();
+    let mut aimed: Vec<Option<(crate::boundary::EntityId, u64, bool)>> = Vec::new();
+    let mut swing: Vec<u32> = Vec::new();
+    let mut fresh_targets = 0_usize;
+    // Back-and-forth: three-tick displacement vectors that turn more than 90 degrees.
+    let mut history: Vec<[[f64; 2]; 3]> = Vec::new();
+    let mut last_target: Vec<Option<crate::boundary::EntityId>> = Vec::new();
+    // [foot, horse] x [samples, reversals, reversals with a target change, with target lost]
+    let mut turns = [[0_u64; 4]; 2];
+    // horse reversals by state: [targeted close (<3 blocks), targeted far, sweeping, slot/other]
+    let mut horse_state = [0_u64; 4];
+    let mut refused_turns = 0_u64;
+    // Direct reaction: from the tick a fighter's man leaves his reach (alive, now beyond 6 blocks)
+    // to the first tick he FACES (yaw within 30 degrees of) the man or his new target, and to the
+    // first tick he STEPS towards him (more than 0.02 blocks along the bearing).
+    // watch = (start tick, old target); results (turn latency, step latency), None = not within 40 ticks.
+    let mut watch: Vec<Option<(u64, crate::boundary::EntityId, Option<u64>, Option<u64>)>> =
+        Vec::new();
+    let mut prev_target: Vec<Option<crate::boundary::EntityId>> = Vec::new();
+    let mut prev_pos: Vec<[f64; 2]> = Vec::new();
+    let mut direct: Vec<(Option<u64>, Option<u64>)> = Vec::new();
+    for t in 1..=ticks as u64 {
+        crate::tick::run_tick(&mut state, &[]);
+        let battle = &state.hostile.battle;
+        let columns = &battle.columns;
+        let f = &battle.formation;
+        if idle_run.len() != columns.ids.len() {
+            idle_run = vec![0; columns.ids.len()];
+            aimed = vec![None; columns.ids.len()];
+        }
+        if t % 3 == 0 {
+            if history.len() != f.members.len() {
+                history = vec![[[f64::NAN; 2]; 3]; f.members.len()];
+                last_target = vec![None; f.members.len()];
+            }
+            for (bi, m) in f.members.iter().enumerate() {
+                let now = [m.pos[0], m.pos[2]];
+                let h = &mut history[bi];
+                let (a, b) = (h[1], h[2]);
+                *h = [h[1], h[2], now];
+                let target = columns.targets.get(bi).and_then(|x| x.map(|x| x.id));
+                let before = std::mem::replace(&mut last_target[bi], target);
+                if !m.alive || m.routing || m.wounded || a[0].is_nan() {
+                    continue;
+                }
+                let (v1, v2) = ([b[0] - a[0], b[1] - a[1]], [now[0] - b[0], now[1] - b[1]]);
+                let (l1, l2) = (v1[0].hypot(v1[1]), v2[0].hypot(v2[1]));
+                if l1 < 0.25 || l2 < 0.25 {
+                    continue;
+                }
+                let class = usize::from(f.regiments[m.regiment].spec.frontage > 1.0);
+                turns[class][0] += 1;
+                if (v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2) < 0.0 {
+                    turns[class][1] += 1;
+                    turns[class][2] +=
+                        u64::from(target.is_some() && before.is_some() && target != before);
+                    turns[class][3] += u64::from(before.is_some() && target.is_none());
+                    if class == 1 {
+                        let close = columns
+                            .targets
+                            .get(bi)
+                            .copied()
+                            .flatten()
+                            .map(|x| x.distance);
+                        let k = match close {
+                            Some(d) if d < 3.0 => 0,
+                            Some(_) => 1,
+                            None if battle
+                                .combat
+                                .sweeps
+                                .get(m.regiment)
+                                .is_some_and(Option::is_some) =>
+                            {
+                                2
+                            }
+                            None => 3,
+                        };
+                        horse_state[k] += 1;
+                        refused_turns +=
+                            u64::from(k == 1 && battle.combat.fighters[bi].charge.refused);
+                    }
+                }
+            }
+        }
+        if watch.len() != columns.ids.len() {
+            watch = vec![None; columns.ids.len()];
+            prev_target = vec![None; columns.ids.len()];
+            prev_pos = vec![[f64::NAN; 2]; columns.ids.len()];
+        }
+        for bi in 0..f.members.len().min(columns.ids.len()) {
+            let m = &f.members[bi];
+            let now = [columns.positions[bi][0], columns.positions[bi][2]];
+            let moved = if prev_pos[bi][0].is_nan() {
+                [0.0; 2]
+            } else {
+                [now[0] - prev_pos[bi][0], now[1] - prev_pos[bi][1]]
+            };
+            prev_pos[bi] = now;
+            let current = columns.targets[bi].map(|x| x.id);
+            let before = std::mem::replace(&mut prev_target[bi], current);
+            let steady = !battle.combat.fighters[bi].charge.refused
+                && columns.active[bi]
+                && !columns.carried[bi]
+                && !columns.ranged[bi]
+                && m.alive
+                && !m.routing
+                && !m.wounded;
+            if !steady {
+                watch[bi] = None;
+                continue;
+            }
+            let position_of = |id: crate::boundary::EntityId| {
+                state
+                    .entities
+                    .slot_of(id)
+                    .filter(|s| state.entities.body(*s).alive)
+                    .map(|s| state.entities.pos(s))
+            };
+            if watch[bi].is_none()
+                && let Some(old) = before
+                && current != Some(old)
+                && let Some(p) = position_of(old)
+                && (p[0] - now[0]).hypot(p[2] - now[1]) > 6.0
+                && (p[0] - now[0]).hypot(p[2] - now[1]) < 12.0
+            {
+                watch[bi] = Some((t, old, None, None));
+            }
+            if let Some((start, old, mut turn, mut step)) = watch[bi] {
+                let want = current.and_then(position_of).or_else(|| position_of(old));
+                if let Some(p) = want {
+                    let (dx, dz) = (p[0] - now[0], p[2] - now[1]);
+                    let length = dx.hypot(dz).max(1e-9);
+                    let yaw = state.entities.slot_of(columns.ids[bi]).map_or(0.0, |s| {
+                        f64::from(state.entities.rotations()[s.0 as usize][0])
+                    });
+                    let bearing = -mc_physics::mth::atan2(dx, dz) * 180.0 / std::f64::consts::PI;
+                    let error = ((yaw - bearing + 540.0).rem_euclid(360.0) - 180.0).abs();
+                    if turn.is_none() && error <= 30.0 {
+                        turn = Some(t - start);
+                    }
+                    if step.is_none() && (moved[0] * dx + moved[1] * dz) / length > 0.02 {
+                        step = Some(t - start);
+                    }
+                }
+                watch[bi] = Some((start, old, turn, step));
+                if (turn.is_some() && step.is_some()) || t - start >= 40 {
+                    direct.push((turn, step));
+                    watch[bi] = None;
+                }
+            }
+        }
+        let mut cells: FxHashMap<(u16, i32, i32), Vec<usize>> = FxHashMap::default();
+        for bi in 0..columns.ids.len() {
+            if columns.targetable[bi] {
+                cells
+                    .entry((
+                        columns.factions[bi],
+                        (columns.positions[bi][0] / 6.0).floor() as i32,
+                        (columns.positions[bi][2] / 6.0).floor() as i32,
+                    ))
+                    .or_default()
+                    .push(bi);
+            }
+        }
+        for bi in 0..f.members.len().min(columns.ids.len()) {
+            let m = &f.members[bi];
+            let r = &f.regiments[m.regiment];
+            let melee_front = columns.active[bi]
+                && !columns.carried[bi]
+                && !columns.ranged[bi]
+                && !battle.combat.fighters[bi].charge.refused
+                && m.alive
+                && !m.routing
+                && !m.wounded
+                && m.rank == 0
+                && r.enemy.is_some()
+                && r.gap <= 12.0;
+            if !melee_front {
+                if idle_run[bi] > 0 {
+                    idle.push(idle_run[bi]);
+                    idle_run[bi] = 0;
+                }
+                aimed[bi] = None;
+                continue;
+            }
+            let p = columns.positions[bi];
+            let (cx, cz) = ((p[0] / 6.0).floor() as i32, (p[2] / 6.0).floor() as i32);
+            let enemy_in_reach = (-1..=1).any(|dx| {
+                (-1..=1).any(|dz| {
+                    [1_u16, 2]
+                        .into_iter()
+                        .filter(|&fac| fac != columns.factions[bi])
+                        .any(|fac| {
+                            cells.get(&(fac, cx + dx, cz + dz)).is_some_and(|list| {
+                                list.iter().any(|&o| {
+                                    let q = columns.positions[o];
+                                    (q[0] - p[0]).hypot(q[2] - p[2]) <= 6.0
+                                        && (q[1] - p[1]).abs() < 2.0
+                                })
+                            })
+                        })
+                })
+            });
+            if enemy_in_reach && columns.targets[bi].is_none() {
+                idle_run[bi] += 1;
+            } else if idle_run[bi] > 0 {
+                idle.push(idle_run[bi]);
+                idle_run[bi] = 0;
+            }
+            let current = columns.targets[bi].map(|x| x.id);
+            match (current, aimed[bi]) {
+                (Some(id), Some((old, _, _))) if id == old => {}
+                (Some(id), _) => {
+                    aimed[bi] = Some((id, t, false));
+                    fresh_targets += 1;
+                }
+                (None, _) => aimed[bi] = None,
+            }
+            if let Some((id, since, done)) = aimed[bi]
+                && !done
+                && let Action::Windup { target, start, .. } = battle.combat.fighters[bi].action
+                && target == id
+                && start >= since
+            {
+                swing.push((start - since) as u32);
+                aimed[bi] = Some((id, since, true));
+            }
+        }
+    }
+    let stat = |v: &mut Vec<u32>| {
+        v.sort_unstable();
+        let mean = v.iter().map(|&x| f64::from(x)).sum::<f64>() / v.len().max(1) as f64;
+        let p95 = v
+            .get(((v.len().max(1) - 1) as f64 * 0.95) as usize)
+            .copied()
+            .unwrap_or(0);
+        (
+            v.len(),
+            mean,
+            p95,
+            v.get((v.len().max(1) - 1) / 2).copied().unwrap_or(0),
+        )
+    };
+    {
+        let stat = |v: &mut Vec<u64>| {
+            v.sort_unstable();
+            let mean = v.iter().sum::<u64>() as f64 / v.len().max(1) as f64;
+            (
+                v.len(),
+                mean,
+                v.get(((v.len().max(1) - 1) as f64 * 0.95) as usize)
+                    .copied()
+                    .unwrap_or(0),
+                v.get((v.len().max(1) - 1) / 2).copied().unwrap_or(0),
+            )
+        };
+        let mut turns_l: Vec<u64> = direct.iter().filter_map(|d| d.0).collect();
+        let mut steps_l: Vec<u64> = direct.iter().filter_map(|d| d.1).collect();
+        let mut turns_c: Vec<u64> = direct.iter().map(|d| d.0.unwrap_or(40)).collect();
+        let mut steps_c: Vec<u64> = direct.iter().map(|d| d.1.unwrap_or(40)).collect();
+        let (n, mean, p95, p50) = stat(&mut turns_c);
+        eprintln!("REACT censored(40) turn_to_him events={n} mean {mean:.2} p50 {p50} p95 {p95}");
+        let (n, mean, p95, p50) = stat(&mut steps_c);
+        eprintln!(
+            "REACT censored(40) step_toward_him events={n} mean {mean:.2} p50 {p50} p95 {p95}"
+        );
+        let (n, mean, p95, p50) = stat(&mut turns_l);
+        eprintln!(
+            "REACT direct man-left-reach events={} turn_to_him: reacted {n} mean {mean:.2} p50 {p50} p95 {p95} not within 40 ticks {}",
+            direct.len(),
+            direct.len() - n
+        );
+        let (n, mean, p95, p50) = stat(&mut steps_l);
+        eprintln!(
+            "REACT direct man-left-reach events={} step_toward_him: reacted {n} mean {mean:.2} p50 {p50} p95 {p95} not within 40 ticks {}",
+            direct.len(),
+            direct.len() - n
+        );
+    }
+    let (n, mean, p95, p50) = stat(&mut idle);
+    eprintln!(
+        "REACT idle_with_enemy_in_reach runs={n} mean_ticks={mean:.2} p50_ticks={p50} p95_ticks={p95}"
+    );
+    for (name, c) in ["foot", "horse"].into_iter().zip(turns) {
+        eprintln!(
+            "REACT turns {name}: moving samples (3-tick vectors >0.25) {} reversals(>90deg) {} ({:.2}%) with target change {} target lost {}",
+            c[0],
+            c[1],
+            100.0 * c[1] as f64 / c[0].max(1) as f64,
+            c[2],
+            c[3]
+        );
+    }
+    eprintln!(
+        "REACT horse reversals by state: targeted<3 {} targeted>=3 {} sweeping {} slot/other {} (of targeted>=3, charge refused: {})",
+        horse_state[0], horse_state[1], horse_state[2], horse_state[3], refused_turns
+    );
+    let (n, mean, p95, p50) = stat(&mut swing);
+    eprintln!(
+        "REACT new_target_to_windup swings={n} of {fresh_targets} new targets mean_ticks={mean:.2} p50_ticks={p50} p95_ticks={p95}"
+    );
 }
