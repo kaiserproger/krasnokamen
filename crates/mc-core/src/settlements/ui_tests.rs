@@ -102,13 +102,13 @@ impl Shown {
     fn has(&self, action: &str) -> bool {
         self.actions
             .iter()
-            .any(|(_, id)| id == &format!("solaris:settlement/{action}"))
+            .any(|(_, id)| id == &format!("krasnokamen:settlement/{action}"))
     }
     fn label_of(&self, action: &str) -> &str {
         &self
             .actions
             .iter()
-            .find(|(_, id)| id == &format!("solaris:settlement/{action}"))
+            .find(|(_, id)| id == &format!("krasnokamen:settlement/{action}"))
             .unwrap()
             .0
     }
@@ -167,7 +167,7 @@ fn click(
         state,
         &[PlayerInput::DialogClick {
             connection: CONN,
-            id: format!("solaris:settlement/{action}"),
+            id: format!("krasnokamen:settlement/{action}"),
             payload: Some(Tag::Compound(entries)),
         }],
     )
@@ -443,12 +443,12 @@ fn stale_or_foreign_ids_never_panic_or_leak() {
         &[
             PlayerInput::DialogClick {
                 connection: CONN,
-                id: "solaris:settlement/buildings".into(),
+                id: "krasnokamen:settlement/buildings".into(),
                 payload: Some(Tag::Compound(vec![("s".into(), string("nope"))])),
             },
             PlayerInput::DialogClick {
                 connection: CONN,
-                id: "solaris:settlement/ghost".into(),
+                id: "krasnokamen:settlement/ghost".into(),
                 payload: None,
             },
         ],
@@ -816,7 +816,7 @@ fn production_autocraft_order_plans_missing_ingredients_or_says_why_not() {
         &mut state,
         id,
         "order_create",
-        &create("solaris-settlements:sugar"),
+        &create("krasnokamen-settlements:sugar"),
     ));
     assert!(
         missing.body.contains(
@@ -829,7 +829,7 @@ fn production_autocraft_order_plans_missing_ingredients_or_says_why_not() {
         &mut state,
         id,
         "order_create",
-        &create("solaris-settlements:hay_block"),
+        &create("krasnokamen-settlements:hay_block"),
     ));
     assert!(
         cycle
@@ -844,7 +844,7 @@ fn production_autocraft_order_plans_missing_ingredients_or_says_why_not() {
         &mut state,
         id,
         "order_create",
-        &create("solaris-settlements:bread"),
+        &create("krasnokamen-settlements:bread"),
     ));
     assert!(
         planned
@@ -921,7 +921,7 @@ fn autonomous_main_page_keeps_claim_first_and_fits_a_small_window() {
     let page = last_dialog(&command(&mut state, "settlement"));
     assert_eq!(
         page.actions.first().map(|(_, action)| action.as_str()),
-        Some("solaris:settlement/claim"),
+        Some("krasnokamen:settlement/claim"),
         "the primary action must not be placed below the other navigation buttons"
     );
     assert!(
@@ -1064,9 +1064,10 @@ fn projects_screen_offers_every_blueprint_order_to_the_owner() {
     assert_eq!(expected.len(), 10);
     for label in expected {
         assert!(
-            page.actions.iter().any(
-                |(text, action)| text == &label && action == "solaris:settlement/project_order"
-            ),
+            page.actions
+                .iter()
+                .any(|(text, action)| text == &label
+                    && action == "krasnokamen:settlement/project_order"),
             "{label}"
         );
     }
@@ -1184,7 +1185,7 @@ fn projects_screen_shows_upgrade_only_for_blueprint_built_buildings() {
             .any(|(text, action)| text.contains(&format!("#{seq}"))
                 && text.contains("House L1")
                 && text.starts_with("Upgrade")
-                && action == "solaris:settlement/project_upgrade"),
+                && action == "krasnokamen:settlement/project_upgrade"),
         "{:?}",
         page.actions
     );
@@ -1270,7 +1271,7 @@ fn projects_screen_shows_upgrade_only_for_blueprint_built_buildings() {
         !page
             .actions
             .iter()
-            .any(|(_, action)| action == "solaris:settlement/project_upgrade"),
+            .any(|(_, action)| action == "krasnokamen:settlement/project_upgrade"),
         "{:?}",
         page.actions
     );
@@ -1288,7 +1289,7 @@ fn projects_screen_keeps_every_order_button_above_the_status_lines() {
     assert_eq!(page.body, "", "no status line may precede the grid");
     assert_eq!(
         page.actions.first().map(|(_, action)| action.as_str()),
-        Some("solaris:settlement/project_order"),
+        Some("krasnokamen:settlement/project_order"),
         "{:?}",
         page.actions
     );
@@ -1569,11 +1570,10 @@ fn projects_clicks_are_read_only_for_visitors_and_forged_payloads_start_nothing(
     let page = last_dialog(&click(&mut state, id, "projects", &[]));
     assert!(page.body.contains("View only"));
     assert!(
-        !page
-            .actions
-            .iter()
-            .any(|(_, action)| action == "solaris:settlement/project_order"
-                || action == "solaris:settlement/project_upgrade"),
+        !page.actions.iter().any(
+            |(_, action)| action == "krasnokamen:settlement/project_order"
+                || action == "krasnokamen:settlement/project_upgrade"
+        ),
         "{:?}",
         page.actions
     );

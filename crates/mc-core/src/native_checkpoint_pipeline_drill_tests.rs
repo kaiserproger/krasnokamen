@@ -283,7 +283,7 @@ fn successful_transfer_checkpoint_acknowledges_and_prunes_only_covered_wal() {
 
 #[test]
 fn abrupt_stop_at_core_checkpoint_boundaries_keeps_whole_item_placement() {
-    const CHILD: &str = "SOLARIS_ITEM_CHECKPOINT_DRILL_PATH";
+    const CHILD: &str = "KRASNOKAMEN_ITEM_CHECKPOINT_DRILL_PATH";
     const STAGES: [&str; 6] = [
         "wal_gated",
         "before_native_commit",
@@ -294,7 +294,7 @@ fn abrupt_stop_at_core_checkpoint_boundaries_keeps_whole_item_placement() {
     ];
     if let Some(path) = std::env::var_os(CHILD) {
         let path = PathBuf::from(path);
-        let stage = std::env::var("SOLARIS_ITEM_CHECKPOINT_DRILL_STAGE").unwrap();
+        let stage = std::env::var("KRASNOKAMEN_ITEM_CHECKPOINT_DRILL_STAGE").unwrap();
         let stop = STAGES
             .into_iter()
             .find(|candidate| *candidate == stage)
@@ -345,7 +345,7 @@ fn abrupt_stop_at_core_checkpoint_boundaries_keeps_whole_item_placement() {
         drop(drill);
         let status = std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "core::native_checkpoint_crash_tests::persistence_drills::checkpoint_pipeline::abrupt_stop_at_core_checkpoint_boundaries_keeps_whole_item_placement", "--nocapture"])
-            .env(CHILD, directory.path()).env("SOLARIS_ITEM_CHECKPOINT_DRILL_STAGE", stage).status().unwrap();
+            .env(CHILD, directory.path()).env("KRASNOKAMEN_ITEM_CHECKPOINT_DRILL_STAGE", stage).status().unwrap();
         assert_eq!(status.code(), Some(39), "{stage}");
         actual_stops += 1;
         let receipt =

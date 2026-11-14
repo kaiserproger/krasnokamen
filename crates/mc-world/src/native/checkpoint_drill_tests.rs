@@ -51,7 +51,7 @@ fn write_image(store: &NativeStore, tick: u64) -> Result<(), NativeError> {
         generated_slot: Some([3; 32]),
         journal_lsn: tick,
         payload: Some(Tag::Compound(vec![
-            ("solaris:WireId".into(), Tag::Int(9)),
+            ("krasnokamen:WireId".into(), Tag::Int(9)),
             ("Health".into(), Tag::Float(tick as f32)),
         ])),
     };
@@ -106,7 +106,7 @@ fn assert_image(store: &NativeStore, tick: u64) {
     assert_eq!(
         image.entities[0].payload.as_ref().unwrap(),
         &Tag::Compound(vec![
-            ("solaris:WireId".into(), Tag::Int(9)),
+            ("krasnokamen:WireId".into(), Tag::Int(9)),
             ("Health".into(), Tag::Float(tick as f32))
         ])
     );
@@ -141,10 +141,10 @@ fn assert_image(store: &NativeStore, tick: u64) {
 
 #[test]
 fn abrupt_stop_at_every_checkpoint_stage_never_mixes_domains() {
-    const CHILD: &str = "SOLARIS_CHECKPOINT_DRILL_PATH";
+    const CHILD: &str = "KRASNOKAMEN_CHECKPOINT_DRILL_PATH";
     const STAGES: [&str; 5] = ["globals", "chunks", "entities", "players", "committed"];
     if let Some(path) = std::env::var_os(CHILD) {
-        let stage = std::env::var("SOLARIS_CHECKPOINT_DRILL_STAGE").unwrap();
+        let stage = std::env::var("KRASNOKAMEN_CHECKPOINT_DRILL_STAGE").unwrap();
         let stage = STAGES.into_iter().find(|value| *value == stage).unwrap();
         let store = NativeStore::open(std::path::Path::new(&path), [1; 32]).unwrap();
         STOP_AT.set(Some(stage));
@@ -159,7 +159,7 @@ fn abrupt_stop_at_every_checkpoint_stage_never_mixes_domains() {
         drop(store);
         let status = std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "native::checkpoint::drill_tests::abrupt_stop_at_every_checkpoint_stage_never_mixes_domains", "--nocapture"])
-            .env(CHILD, &path).env("SOLARIS_CHECKPOINT_DRILL_STAGE", stage).status().unwrap();
+            .env(CHILD, &path).env("KRASNOKAMEN_CHECKPOINT_DRILL_STAGE", stage).status().unwrap();
         assert_eq!(status.code(), Some(39), "stage {stage}");
         let store = NativeStore::open(&path, [1; 32]).unwrap();
         assert_image(&store, if stage == "committed" { 7 } else { 0 });

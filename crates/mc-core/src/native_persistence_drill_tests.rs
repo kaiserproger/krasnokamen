@@ -803,14 +803,14 @@ mod checkpoint_pipeline;
 
 #[test]
 fn abrupt_stop_at_each_wal_publication_stage_conserves_transferred_items() {
-    const CHILD: &str = "SOLARIS_ITEM_WAL_DRILL_PATH";
+    const CHILD: &str = "KRASNOKAMEN_ITEM_WAL_DRILL_PATH";
     const STAGES: [&str; 5] = ["created", "written", "synced", "published", "durable"];
     if let Some(path) = std::env::var_os(CHILD) {
         let mut config = CoreConfig::new(path.into(), 42);
         config.view_distance = 0;
         config.simulation_distance = 0;
         let mut drill = Drill::open(config);
-        let stage = std::env::var("SOLARIS_ITEM_WAL_DRILL_STAGE").unwrap();
+        let stage = std::env::var("KRASNOKAMEN_ITEM_WAL_DRILL_STAGE").unwrap();
         let stage = STAGES.into_iter().find(|value| *value == stage).unwrap();
         // The parent checkpointed an open chest, but runtime menus do not survive
         // recovery. Reopen first, then checkpoint preparation before the transfer.
@@ -838,7 +838,7 @@ fn abrupt_stop_at_each_wal_publication_stage_conserves_transferred_items() {
         drop(drill);
         let status = std::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact", "core::native_checkpoint_crash_tests::persistence_drills::abrupt_stop_at_each_wal_publication_stage_conserves_transferred_items", "--nocapture"])
-            .env(CHILD, directory.path()).env("SOLARIS_ITEM_WAL_DRILL_STAGE", stage).status().unwrap();
+            .env(CHILD, directory.path()).env("KRASNOKAMEN_ITEM_WAL_DRILL_STAGE", stage).status().unwrap();
         assert_eq!(status.code(), Some(39), "{stage}");
         actual_stops += 1;
         let published = matches!(stage, "published" | "durable");

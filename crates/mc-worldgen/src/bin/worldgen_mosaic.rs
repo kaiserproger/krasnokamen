@@ -36,7 +36,7 @@ fn main() -> ExitCode {
 fn run() -> Result<(), String> {
     let args = parse_args(env::args().skip(1))?;
     let registry = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
             .map_err(|error| format!("failed to build production block registry: {error}"))?,
     );
     let world = Arc::new(
