@@ -92,6 +92,7 @@ _WINDOWED_PROFILES = frozenset({
     'composter-chance', 'chat-visibility', 'datapack-reload', 'village-qa', 'village-autonomy-qa',
     'civilization-seed-qa', 'village-owner-order-qa', 'scene-shot',
     'settlement-map-qa', 'claim-only-qa', 'buildings-qa', 'army-qa', 'autocraft-qa', 'screen-share',
+    'screens-voice-qa',
 })
 _AUTONOMY_VERDICTS = frozenset({
     'walk_to_village', 'ownerless_settlement', 'founding_chest_empty',
@@ -131,6 +132,14 @@ _PROFILE_VERDICTS = {
         'door_walk', 'sleep_return', 'night_door', 'farmer_harvest', 'miner_deposit', 'lumberjack',
     })),
     'village-autonomy-qa': ('autonomy_acceptance', _AUTONOMY_VERDICTS),
+    # backends/screens_voice_qa.py verdicts: consent, audio, respawn and SVC proximity/group voice.
+    'screens-voice-qa': ('screens_voice', frozenset({
+        'native_loads_computer_monitor', 'owner_consent_names_app_audio', 'owner_deny_sends_no_audio',
+        'owner_allow_streams_picture_and_audio', 'fabric_loader_plays_screen_audio',
+        'viewer_keeps_screen_after_same_dimension_respawn', 'native_voice_resets_on_non_voice_server',
+        'svc_proximity_fabric_to_fabric', 'svc_proximity_fabric_and_native', 'svc_group_fabric_to_fabric',
+        'native_outsider_hears_no_group_audio', 'all',
+    })),
     'claim-only-qa': ('claim_acceptance', frozenset({
         'ownerless_settlement', 'claim_via_dialog_button', 'second_claim_refused',
         'owner_orders_building', 'restart_resume',

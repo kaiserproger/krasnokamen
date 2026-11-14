@@ -608,6 +608,39 @@ regression = ["{ref}"]
 {extra}'''
 
 
+class LedgerRefContractTests(unittest.TestCase):
+    """Every ref in the real ledger resolves: a ref nobody can run is not a regression guard."""
+
+    def test_every_ledger_ref_parses(self):
+        import tomllib
+        from pathlib import Path
+
+        ledger = Path(__file__).resolve().parents[2] / 'docs/bugs/ledger.toml'
+        rows = tomllib.loads(ledger.read_text())['bug']
+        broken = []
+        for row in rows:
+            for ref in row['regression']:
+                try:
+                    regressions._parse_ref(ref)
+                except ValueError as error:
+                    broken.append(f"{row['id']}: {ref}: {error}")
+        self.assertEqual(broken, [], "unresolvable ledger refs: " + '; '.join(broken))
+
+    def test_screens_voice_qa_is_a_runnable_profile_with_its_recorded_verdicts(self):
+        # The profile and its backend always existed; the resolver tables did not, so all 17
+        # harness:screens-voice-qa:* refs in the ledger were unrunnable.
+        from pathlib import Path
+
+        self.assertIn('screens-voice-qa', regressions._WINDOWED_PROFILES)
+        verdicts = regressions._PROFILE_VERDICTS['screens-voice-qa'][1]
+        source = (Path(__file__).parent / 'backends' / 'screens_voice_qa.py').read_text()
+        recorded = set(re.findall(r'verdicts\["([a-z0-9_]+)"\]', source))
+        self.assertTrue(recorded)
+        self.assertEqual(recorded - verdicts, set(), "verdicts the backend records but the resolver rejects")
+        for verdict in sorted(recorded):
+            regressions._profile_command('screens-voice-qa', verdict)
+
+
 class LedgerToolTests(unittest.TestCase):
     def git(self, root, *args):
         done = subprocess.run(['git', '-C', str(root), *args], check=True, capture_output=True, text=True, env={**os.environ, **GIT_ENV})
