@@ -32,6 +32,9 @@ def replay(ctx, row, directory):
     if ctx.plugins_dir is not None:
         argv += ['--plugins-dir', str(ctx.plugins_dir)]
     env = dict(os.environ, SOLARIS_VALIDATION_ROOT=str(directory / 'receipts'))
+    mem_run = env.pop('SOLARIS_RANDOM_REPLAY_MEM_RUN', None)
+    if mem_run:
+        argv = [mem_run, '-m', '6G', 'nice', '-n', '19', 'ionice', '-c', '3', *argv]
     log = directory / 'replay.log'
     ctx.commands.append(argv)
     ctx.cwds.append(str(runtime.REPO_ROOT))
@@ -95,6 +98,14 @@ def shrink(ctx, report):
 
 def run(ctx):
     try:
+        if os.environ.get('SOLARIS_RANDOM_REPLAY_MEM_RUN') and '--shrink' in ctx.extra_args:
+            script = Path(ctx.extra_args[ctx.extra_args.index('--script') + 1])
+            row = json.loads(script.read_text())
+            report, _, _ = replay(ctx, row, ctx.artifact_dir / 'initial')
+            ctx.client_evidence['protocol_matrix'] = report
+            if report.get('status') != 'pass':
+                raise RuntimeError(report.get('note', 'random scenario replay failed'))
+            return {'protocol_matrix': report}
         result = run_protocol_matrix(ctx, random_mode=True)
         if '--differential' in ctx.extra_args:
             from ..quirk_parity.player import run_player_script, compare_player_states

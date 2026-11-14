@@ -134,6 +134,45 @@ class RandomMatrixTests(unittest.TestCase):
             self.assertIn('--vanilla-jar /vanilla.jar', result['repro_command'])
             self.assertIn('--plugins-dir /plugins', result['repro_command'])
             self.assertIn(result['minimal_script'], result['repro_command'])
+    def test_nightly_shrink_runs_each_replay_in_separate_scope(self):
+        row = player_scenario(1, 1, 2)
+        report = {'status': 'fail', 'note': 'random:conservation:step=0: planted', 'row': row}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = root / 'input.json'
+            script.write_text(json.dumps(row))
+            ctx = SimpleNamespace(artifact_dir=root / 'outer', extra_args=['--script', str(script), '--shrink'],
+                                  server_bin=Path('/pin/server'), plugins_dir=None, timeout_seconds=600,
+                                  commands=[], cwds=[], logs=[], exits=[], client_evidence={})
+            ctx.artifact_dir.mkdir()
+            launches = []
+
+            def launch(argv, *, cwd, env, stdout, stderr, timeout):
+                launches.append(argv)
+                self.assertEqual(argv[:9], ['/mem-run', '-m', '6G', 'nice', '-n', '19',
+                                             'ionice', '-c', '3'])
+                self.assertNotIn('SOLARIS_RANDOM_REPLAY_MEM_RUN', env)
+                receipt = Path(env['SOLARIS_VALIDATION_ROOT']) / 'run' / 'result.json'
+                receipt.parent.mkdir(parents=True)
+                receipt.write_text(json.dumps({'details': {'protocol_matrix': report}}))
+                return SimpleNamespace(returncode=1)
+
+            with patch.dict('os.environ', {'SOLARIS_RANDOM_REPLAY_MEM_RUN': '/mem-run'}), \
+                    patch.object(matrix_random.shutil, 'disk_usage',
+                                 return_value=SimpleNamespace(free=100 * 1024**3)), \
+                    patch.object(matrix_random.subprocess, 'run', side_effect=launch), \
+                    patch.object(matrix_random, 'run_protocol_matrix') as unscoped:
+                with self.assertRaisesRegex(RuntimeError, 'planted'):
+                    matrix_random.run(ctx)
+            unscoped.assert_not_called()
+            self.assertGreaterEqual(len(launches), 5)
+            self.assertEqual(ctx.commands, launches)
+            result = json.loads((ctx.artifact_dir / 'shrink' / 'result.json').read_text())
+            self.assertEqual(result['status'], 'reproduced')
+            self.assertEqual(len(result['confirmations']), 3)
+            self.assertTrue(all(Path(item['receipt']).is_file()
+                                for item in result['trials'] + result['confirmations']))
+
     def test_reduction_refuses_world_launch_below_disk_floor(self):
         with tempfile.TemporaryDirectory() as directory:
             ctx = SimpleNamespace(extra_args=[], server_bin=Path('/pin/server'), plugins_dir=None,

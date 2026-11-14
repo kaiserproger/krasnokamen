@@ -53,6 +53,45 @@ class ScenarioNightlyTests(unittest.TestCase):
             self.assertEqual(result['failures'][0]['status'], 'failed')
             self.assertFalse((Path(result['passed_seeds'][0]['original_receipt'])).exists())
             self.assertTrue(Path(result['failures'][0]['receipt']).exists())
+    def test_reduction_orchestrator_is_outside_scope(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            binary = root / 'server'
+            binary.write_bytes(b'server')
+            (root / 'manifest.json').write_text(json.dumps({'head': 'server-head'}))
+            args = SimpleNamespace(receipts=root / 'campaigns', server_bin=binary, repo=root,
+                                   vanilla_data=root, seeds=1, start_seed=0, steps=3, bots=2,
+                                   max_bytes=1000000, budget_seconds=60, port=27380)
+            args.receipts.mkdir()
+            launches = []
+
+            def run(argv, *, cwd, env, stdout, stderr, timeout):
+                launches.append((argv, env))
+                receipt = Path(env['SOLARIS_VALIDATION_ROOT']) / 'run'
+                receipt.mkdir(parents=True)
+                if '--shrink' in argv:
+                    (receipt / 'shrink').mkdir()
+                    (receipt / 'shrink' / 'result.json').write_text('{}')
+                else:
+                    (receipt / 'random-script.json').write_text('{}')
+                    (receipt / 'result.json').write_text(json.dumps({
+                        'status': 'failed', 'details': {'protocol_matrix': {
+                            'status': 'fail', 'note': 'random:conservation:step=0: failure'}}}))
+                return SimpleNamespace(returncode=1)
+
+            with patch('tools.harness.ledger.tree_fingerprint', return_value={}), \
+                    patch.object(nightly.shutil, 'disk_usage',
+                                 return_value=SimpleNamespace(free=nightly.MIN_FREE_BYTES)), \
+                    patch.object(nightly.subprocess, 'run', side_effect=run):
+                self.assertEqual(nightly.run_campaign(args), 1)
+            seed, reduction = launches
+            self.assertEqual(seed[0][0], str(nightly.MEM_RUN))
+            self.assertNotIn('RUSTC_WRAPPER=', seed[0])
+            self.assertNotIn(str(nightly.MEM_RUN), reduction[0])
+            self.assertEqual(reduction[1]['SOLARIS_RANDOM_REPLAY_MEM_RUN'], str(nightly.MEM_RUN))
+            result = json.loads(next(args.receipts.glob('campaign-*/result.json')).read_text())
+            self.assertTrue(Path(result['reductions']['random:conservation']).is_file())
+
     def test_campaign_refuses_seed_below_disk_floor(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
