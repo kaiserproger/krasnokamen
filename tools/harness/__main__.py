@@ -341,7 +341,7 @@ def cmd_run(argv: list[str]) -> int:
                 env_server = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
                 args.server_bin = Path(env_server) if env_server else None
     spec = catalog.PROFILES.get(profile)
-    split_profiles = {"buildings-qa", "civilization-seed-qa"}
+    split_profiles = {"buildings-qa", "civilization-seed-qa", "screens-voice-qa"}
     if scenario_error is None and args.parts < 1:
         scenario_error = "--parts must be at least 1"
     elif scenario_error is None and args.parts > 1 and profile not in split_profiles:

@@ -165,7 +165,10 @@ class SplitPartsTests(unittest.TestCase):
         with patch("sys.stderr", new_callable=io.StringIO) as error, \
                 patch("sys.stdout", new_callable=io.StringIO):
             self.assertNotEqual(cli.cmd_run(["scene-shot", "--parts", "2"]), 0)
-        self.assertIn("has no independent parts", error.getvalue())
+        message = error.getvalue()
+        self.assertIn("has no independent parts", message)
+        for profile in ("buildings-qa", "civilization-seed-qa", "screens-voice-qa"):
+            self.assertIn(profile, message)
 
     def test_the_cli_refuses_zero_parts(self):
         from tools.harness import __main__ as cli
