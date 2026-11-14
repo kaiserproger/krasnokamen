@@ -36,7 +36,7 @@ else:
             cargo.chmod(0o755)
             env = os.environ.copy()
             env.update(PATH=f'{root}:' + env['PATH'], TEST_READY=str(fifo),
-                       SOLARIS_VALIDATION_ROOT=str(root / 'receipts'))
+                       KRASNOKAMEN_VALIDATION_ROOT=str(root / 'receipts'))
             proc = subprocess.Popen([str(RUNNER), '-m', '1G',
                                      'python3', '-m', 'tools.harness', 'run', 'test', '-p', 'mc-core', '--lib'],
                                     cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
