@@ -47,7 +47,10 @@ pub(super) fn census(battle: &BattleState) -> Census {
             .or_default()
             .push(bi);
         *density
-            .entry([(m.pos[0] / 2.0).floor() as i32, (m.pos[2] / 2.0).floor() as i32])
+            .entry([
+                (m.pos[0] / 2.0).floor() as i32,
+                (m.pos[2] / 2.0).floor() as i32,
+            ])
             .or_default() += 1;
         let horse = f.regiments[m.regiment].spec.frontage > 1.0;
         if horse {
@@ -69,9 +72,7 @@ pub(super) fn census(battle: &BattleState) -> Census {
                 if let Some(list) = cells.get(&[key[0] + dx, key[1] + dz]) {
                     for &other in list {
                         let o = &f.members[other];
-                        if other != bi
-                            && (o.pos[0] - m.pos[0]).hypot(o.pos[2] - m.pos[2]) < HEAP
-                        {
+                        if other != bi && (o.pos[0] - m.pos[0]).hypot(o.pos[2] - m.pos[2]) < HEAP {
                             heaped = true;
                             break 'near;
                         }
@@ -110,7 +111,10 @@ pub(super) fn census(battle: &BattleState) -> Census {
                 c.horse_error_sum += error;
             }
             if m.rank == 0 && r.spec.frontage <= 1.0 {
-                front.push((m.pos[0] - slot[0]) * r.spec.facing[0] + (m.pos[2] - slot[2]) * r.spec.facing[1]);
+                front.push(
+                    (m.pos[0] - slot[0]) * r.spec.facing[0]
+                        + (m.pos[2] - slot[2]) * r.spec.facing[1],
+                );
             }
         }
         if front.len() > 1 {
@@ -178,14 +182,22 @@ fn rank_and_heap_table() {
     for t in 1..=ticks {
         crate::tick::run_tick(&mut state, &[]);
         let battle = &state.hostile.battle;
-        contact_ticks += usize::from(battle.formation.regiments.iter().any(|r| r.gap <= 6.0 && r.enemy.is_some()));
+        contact_ticks += usize::from(
+            battle
+                .formation
+                .regiments
+                .iter()
+                .any(|r| r.gap <= 6.0 && r.enemy.is_some()),
+        );
         if t % 100 == 0 {
             let c = census(battle);
             eprintln!(
                 "RANKS {t} {} {:.1} {:.2} {:.1} {:.2} {:.2} {:.2} {:.2} {} {} {}",
                 c.marching,
-                100.0 * (c.off_slot - c.horse_off_slot) as f64 / (c.marching - c.horse_marching).max(1) as f64,
-                (c.slot_error_sum - c.horse_error_sum) / (c.marching - c.horse_marching).max(1) as f64,
+                100.0 * (c.off_slot - c.horse_off_slot) as f64
+                    / (c.marching - c.horse_marching).max(1) as f64,
+                (c.slot_error_sum - c.horse_error_sum)
+                    / (c.marching - c.horse_marching).max(1) as f64,
                 100.0 * c.horse_off_slot as f64 / c.horse_marching.max(1) as f64,
                 c.horse_error_sum / c.horse_marching.max(1) as f64,
                 c.front_wobble,
@@ -202,8 +214,15 @@ fn rank_and_heap_table() {
             let mut text = String::new();
             for m in battle.formation.members.iter().filter(|m| m.alive) {
                 let r = &battle.formation.regiments[m.regiment];
-                let kind = if r.spec.frontage > 1.0 { "horse" } else { "foot" };
-                text += &format!("{} {kind} {:.2} {:.2}\n", r.spec.faction, m.pos[0], m.pos[2]);
+                let kind = if r.spec.frontage > 1.0 {
+                    "horse"
+                } else {
+                    "foot"
+                };
+                text += &format!(
+                    "{} {kind} {:.2} {:.2}\n",
+                    r.spec.faction, m.pos[0], m.pos[2]
+                );
             }
             std::fs::write(std::path::Path::new(&dir).join(format!("t{t}.csv")), text).unwrap();
         }

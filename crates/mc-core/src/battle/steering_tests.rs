@@ -457,11 +457,7 @@ fn pressed_block(side: usize, slot_spacing: f64) -> FormationRuntime {
                         frontage: 1.0,
                         id: id as u32,
                         faction: 1,
-                        origin: [
-                            file as f64 * slot_spacing,
-                            64.0,
-                            row as f64 * slot_spacing,
-                        ],
+                        origin: [file as f64 * slot_spacing, 64.0, row as f64 * slot_spacing],
                         facing: [1.0, 0.0],
                         files: 1,
                         order: Order::Hold,
@@ -512,7 +508,10 @@ fn pressed_ranks_stand_still_instead_of_trading_pushes_and_pulls() {
     let mut closest = f64::INFINITY;
     for (a, first) in runtime.members.iter().enumerate() {
         for second in &runtime.members[a + 1..] {
-            closest = closest.min(mth::length2(first.pos[0] - second.pos[0], first.pos[2] - second.pos[2]));
+            closest = closest.min(mth::length2(
+                first.pos[0] - second.pos[0],
+                first.pos[2] - second.pos[2],
+            ));
         }
     }
     assert!(closest >= 0.4, "closest pair {closest}");
@@ -531,7 +530,11 @@ fn separation_push_ramps_in_from_the_body_spacing() {
         runtime.neighbours.rebuild(&runtime.members);
         movement(&mut runtime, 0)[0].abs() * mc_physics::TICK_SECONDS
     };
-    assert!(push_at(MIN_SPACING - 0.005) < 0.005, "{}", push_at(MIN_SPACING - 0.005));
+    assert!(
+        push_at(MIN_SPACING - 0.005) < 0.005,
+        "{}",
+        push_at(MIN_SPACING - 0.005)
+    );
     assert!(push_at(MIN_SPACING - 0.08) > 0.0);
     assert!(push_at(MIN_SPACING - 0.08) < push_at(MIN_SPACING - 0.15));
     assert!(push_at(0.4) > 0.02);

@@ -342,18 +342,14 @@ pub(crate) fn around_obstacles(
     let half_width = frame.entities.body(slot).half_width;
     let (world, registry) = (frame.world, frame.registry);
     let turned = match mover {
-        Mover::Foot => super::ground::deflect_foot(world, registry, pos, half_width, drive, heading, 1.0),
-        Mover::Rider => super::ground::deflect(world, registry, pos, half_width, drive, heading, 1.0),
+        Mover::Foot => {
+            super::ground::deflect_foot(world, registry, pos, half_width, drive, heading, 1.0)
+        }
+        Mover::Rider => {
+            super::ground::deflect(world, registry, pos, half_width, drive, heading, 1.0)
+        }
         Mover::Fugitive(escape) => super::ground::deflect_mounted(
-            world,
-            registry,
-            pos,
-            half_width,
-            drive,
-            heading,
-            1.0,
-            escape,
-            frame.tick,
+            world, registry, pos, half_width, drive, heading, 1.0, escape, frame.tick,
         ),
     };
     if turned == drive {
@@ -522,7 +518,8 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Outpu
     dbg_cycles(&battle.formation);
 }
 
-static DBG: std::sync::Mutex<(Vec<[[f64; 2]; 4]>, Vec<u32>, u32)> = std::sync::Mutex::new((Vec::new(), Vec::new(), 0));
+static DBG: std::sync::Mutex<(Vec<[[f64; 2]; 4]>, Vec<u32>, u32)> =
+    std::sync::Mutex::new((Vec::new(), Vec::new(), 0));
 
 fn dbg_cycles(runtime: &FormationRuntime) {
     let mut g = DBG.lock().unwrap();
@@ -550,14 +547,33 @@ fn dbg_cycles(runtime: &FormationRuntime) {
             let r = &runtime.regiments[m.regiment];
             eprintln!(
                 "JITDBG id={} bi={} pos={:?} prev={:?} wounded={} routing={} wavering={} order={:?} gap={:.2} target={:?} max_step={} drive={:?} heading={:?} bounds={:?}",
-                m.id.0, bi, m.pos, h[1], m.wounded, m.routing, m.wavering, r.spec.order, r.gap, target, max_step, drive, runtime.heading_target(bi), runtime.bounds
+                m.id.0,
+                bi,
+                m.pos,
+                h[1],
+                m.wounded,
+                m.routing,
+                m.wavering,
+                r.spec.order,
+                r.gap,
+                target,
+                max_step,
+                drive,
+                runtime.heading_target(bi),
+                runtime.bounds
             );
             for (dist, other) in near {
                 if other != usize::MAX {
                     let o = &runtime.members[other];
                     eprintln!(
                         "JITDBG   near d={:.3} id={} dpos=({:.3},{:.3},{:.3}) wounded={} routing={} enemy={}",
-                        dist.sqrt(), o.id.0, o.pos[0] - m.pos[0], o.pos[1] - m.pos[1], o.pos[2] - m.pos[2], o.wounded, o.routing,
+                        dist.sqrt(),
+                        o.id.0,
+                        o.pos[0] - m.pos[0],
+                        o.pos[1] - m.pos[1],
+                        o.pos[2] - m.pos[2],
+                        o.wounded,
+                        o.routing,
                         runtime.regiments[o.regiment].spec.faction != r.spec.faction
                     );
                 }
@@ -565,7 +581,6 @@ fn dbg_cycles(runtime: &FormationRuntime) {
         }
     }
 }
-
 
 #[cfg(test)]
 #[path = "steering_tests.rs"]

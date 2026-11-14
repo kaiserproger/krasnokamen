@@ -14,7 +14,7 @@
       "gamemode survival {name}",
       "difficulty normal"
     ],
-    "notes": "sword must land in hotbar slot 0, stick in slot 1; verify via ContainerSetContent. Summon NBT identical on both servers (Solaris rejects Silent/Tags); handshake guarantees chunks loaded so absolute coords work.",
+    "notes": "sword must land in hotbar slot 0, stick in slot 1; verify via ContainerSetContent. Summon NBT identical on both servers (Krasnokamen rejects Silent/Tags); handshake guarantees chunks loaded so absolute coords work.",
     "victim_live_resummon": false
   },
   "cases": [
@@ -25,6 +25,6 @@
   ],
   "tolerance": {
     "kind": "exact_swap_semantics",
-    "rule": "same-tick damage must equal the OLD held item's full-strength damage on the oracle; Solaris passes iff its same-tick damages match vanilla's within 0.01"
+    "rule": "same-tick damage must equal the OLD held item's full-strength damage on the oracle; Krasnokamen passes iff its same-tick damages match vanilla's within 0.01"
   }
 }

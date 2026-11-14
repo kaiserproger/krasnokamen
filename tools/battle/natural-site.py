@@ -141,7 +141,7 @@ def checksum_list(world):
 def prepare(a):
     root = a.run_dir.resolve()
     root.mkdir(parents=True, exist_ok=False)
-    binary = a.pin / "solaris-v2" if a.pin.is_dir() else a.pin
+    binary = a.pin / "krasnokamen" if a.pin.is_dir() else a.pin
     world = root / "world"
     network, dashboard, rcon_port = free_ports(3)
     password = "natural-site-prep-only"
@@ -356,7 +356,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="mode", required=True)
     p = sub.add_parser("prepare", help="pregenerate and prepare the stopped world")
-    p.add_argument("--pin", type=Path, required=True, help="server pin directory or solaris-v2 binary")
+    p.add_argument("--pin", type=Path, required=True, help="server pin directory or krasnokamen binary")
     p.add_argument("--cache", type=Path, required=True, help="vanilla content cache")
     p.add_argument("--run-dir", type=Path, required=True, help="new directory; the world is <run-dir>/world")
     p.add_argument("--world-seed", type=int, required=True)

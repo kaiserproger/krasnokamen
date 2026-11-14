@@ -133,7 +133,7 @@ fn summarize_post(label: &str, rows: &[[u64; 13]], posts: &[PostTimes]) {
 /// `BATTLE_TICK_CSV=<absolute path>` appends one line per tick: window, index,
 /// total, entity, post and its stages (microseconds), projectile rows and
 /// settled arrows.
-/// `SOLARIS_TRACE_ROW_MUT=1` adds `row_mut` caller attribution (it slows
+/// `KRASNOKAMEN_TRACE_ROW_MUT=1` adds `row_mut` caller attribution (it slows
 /// `row_mut`, so never combine it with timing runs). Correctness switches
 /// (never timing runs: they warm every row between ticks): `BATTLE_WAL_CRC=1`
 /// prints each window's CRC-32 and size of its WAL payload (every entry's

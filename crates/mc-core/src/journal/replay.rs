@@ -402,12 +402,15 @@ impl EntityStateImage {
         )?;
         for (key, tag) in &record.extra_fields {
             match (key.as_str(), tag) {
-                ("solaris:Faction", mc_nbt::Tag::Int(value)) => {
-                    image.faction = u16::try_from(*value)
-                        .map_err(|_| CoreError::Storage("solaris:Faction: expected u16".into()))?;
+                ("krasnokamen:Faction", mc_nbt::Tag::Int(value)) => {
+                    image.faction = u16::try_from(*value).map_err(|_| {
+                        CoreError::Storage("krasnokamen:Faction: expected u16".into())
+                    })?;
                 }
-                ("solaris:Faction", _) => {
-                    return Err(CoreError::Storage("solaris:Faction: expected int".into()));
+                ("krasnokamen:Faction", _) => {
+                    return Err(CoreError::Storage(
+                        "krasnokamen:Faction: expected int".into(),
+                    ));
                 }
                 ("CustomNameVisible", mc_nbt::Tag::Byte(_)) => {}
                 ("CustomNameVisible", _) => {
@@ -415,26 +418,26 @@ impl EntityStateImage {
                         "CustomNameVisible: expected byte".into(),
                     ));
                 }
-                ("solaris:LifetimeAge", mc_nbt::Tag::Long(value)) => {
+                ("krasnokamen:LifetimeAge", mc_nbt::Tag::Long(value)) => {
                     image.age = u32::try_from(*value).map_err(|_| {
-                        CoreError::Storage("solaris:LifetimeAge: expected u32".into())
+                        CoreError::Storage("krasnokamen:LifetimeAge: expected u32".into())
                     })?;
                 }
-                ("solaris:LifetimeAge", _) => {
+                ("krasnokamen:LifetimeAge", _) => {
                     return Err(CoreError::Storage(
-                        "solaris:LifetimeAge: expected long".into(),
+                        "krasnokamen:LifetimeAge: expected long".into(),
                     ));
                 }
-                ("solaris:ProtectedUntil", mc_nbt::Tag::Long(value)) => {
+                ("krasnokamen:ProtectedUntil", mc_nbt::Tag::Long(value)) => {
                     image.protected_until = *value as u64;
                 }
-                ("solaris:ProtectedUntil", _) => {
+                ("krasnokamen:ProtectedUntil", _) => {
                     return Err(CoreError::Storage(
-                        "solaris:ProtectedUntil: expected long".into(),
+                        "krasnokamen:ProtectedUntil: expected long".into(),
                     ));
                 }
                 ("PersistenceRequired", mc_nbt::Tag::Byte(value)) => image.persistent = *value != 0,
-                ("solaris:NoActionTime", mc_nbt::Tag::Long(value)) => {
+                ("krasnokamen:NoActionTime", mc_nbt::Tag::Long(value)) => {
                     image.no_action_time = u32::try_from(*value)
                         .map_err(|_| CoreError::Storage("invalid entity idle timer".into()))?;
                 }
@@ -468,7 +471,7 @@ impl EntityStateImage {
                         .is_some_and(|kind| crate::projectiles::persistence::owns_field(kind, key))
                     || villager && crate::villager::persistence::owns_field(key)
                     || key == "IsBaby" && crate::entity_life::uses_is_baby(&record.id)
-                    || record.id == "minecraft:frog" && key == "solaris:FrogPregnant"
+                    || record.id == "minecraft:frog" && key == "krasnokamen:FrogPregnant"
                     || image.entity_life.vehicle.is_some() && key == "Items"
                     || crate::mounts::persistence::owns_cargo_field(&record.id, key)
                     || matches!(
@@ -519,15 +522,15 @@ impl EntityStateImage {
         }
         fields.extend([
             (
-                "solaris:Faction".into(),
+                "krasnokamen:Faction".into(),
                 mc_nbt::Tag::Int(i32::from(self.faction)),
             ),
             (
-                "solaris:LifetimeAge".into(),
+                "krasnokamen:LifetimeAge".into(),
                 mc_nbt::Tag::Long(i64::from(self.age)),
             ),
             (
-                "solaris:ProtectedUntil".into(),
+                "krasnokamen:ProtectedUntil".into(),
                 mc_nbt::Tag::Long(self.protected_until as i64),
             ),
             (
@@ -539,7 +542,7 @@ impl EntityStateImage {
                 mc_nbt::Tag::Byte(i8::from(self.persistent)),
             ),
             (
-                "solaris:NoActionTime".into(),
+                "krasnokamen:NoActionTime".into(),
                 mc_nbt::Tag::Long(i64::from(self.no_action_time)),
             ),
             (
