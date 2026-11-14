@@ -21,7 +21,7 @@ from ..java_clients import client_group
 from ..java_matrix_client import JavaMatrixClient
 from ..matrix_api import MatrixContext, MissingCapability, load_adapter
 from ..matrix_execution import copy_plugins, plugin_set_fingerprint, prepare_access, run_subject, select_plugin_profile
-from .protocol_lifecycle import Blocked, ProtocolServer
+from .protocol_lifecycle import Blocked, ProtocolServer, reserve_matrix_port
 
 JAVA_KINDS = frozenset({"vanilla_java_26_1_2", "fabric_solaris_loader", "fabric_svc",
                         "fabric_distant_horizons", "neoforge_solaris_loader", "forge_solaris_loader"})
@@ -78,13 +78,20 @@ def receipt_dir(root: Path, scenario_id: str) -> Path:
 def server_instance(args: argparse.Namespace, directory: Path, count: int,
                     permission: str = "non_op_0", lifecycle: str = "steady",
                     excluded_plugins: set[str] | None = None):
-    """Reuse the shared release-server primitive on this driver's own 262xx ports."""
+    """Reuse the shared release-server primitive on this driver's own 262xx ports.
+
+    Ports are bind-probed per instance, never hardcoded: concurrent harness
+    runs on the shared host would otherwise collide and the loser's clients
+    would join the winner's server.
+    """
     directory.mkdir(parents=True, exist_ok=True)
     plugin_dir = directory / "plugins"
     enabled_plugins = copy_plugins(args.plugins_dir, plugin_dir, excluded_plugins or set())
     prepare_access(directory, [f"JMatrix{index:02d}" for index in range(count)], permission)
-    server = ProtocolServer(binary=args.server_bin, run_dir=directory, port=26200,
-                            dashboard_port=26201, port_range=PORT_RANGE,
+    port = reserve_matrix_port(port_range=PORT_RANGE)
+    server = ProtocolServer(binary=args.server_bin, run_dir=directory, port=port,
+                            dashboard_port=reserve_matrix_port(exclude=port, port_range=PORT_RANGE),
+                            port_range=PORT_RANGE,
                             vanilla_data=args.data_dir, seed=81, plugins_dir=plugin_dir,
                             server_name="RunJava", pause_when_empty_seconds=1 if lifecycle == "pause_when_empty_resume" else 0,
                             startup_timeout_seconds=args.timeout_seconds)
