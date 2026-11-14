@@ -112,13 +112,13 @@ class PreflightTests(unittest.TestCase):
 
     def test_missing_native_data_refuses_before_profile(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(cli, 'ARTIFACT_ROOT', Path(tmp)):
-            env = {'SOLARIS_CLIENT_DATA_DIR': str(Path(tmp) / 'missing'),
-                   'SOLARIS_SERVER_BINARY': '/bin/true', 'SOLARIS_CLIENT_BINARY': '/bin/true'}
+            env = {'KRASNOKAMEN_CLIENT_DATA_DIR': str(Path(tmp) / 'missing'),
+                   'KRASNOKAMEN_SERVER_BINARY': '/bin/true', 'KRASNOKAMEN_CLIENT_BINARY': '/bin/true'}
             with mock.patch.dict(os.environ, env, clear=True), mock.patch.dict(profiles.PROFILES['survival'], {'run': mock.Mock()}):
                 self.assertEqual(cli.cmd_run(['survival', '--client', 'native']), 1)
                 profiles.PROFILES['survival']['run'].assert_not_called()
             receipt = json.loads(next(Path(tmp).glob('*/result.json')).read_text())
-            self.assertIn('SOLARIS_CLIENT_DATA_DIR', receipt['error'])
+            self.assertIn('KRASNOKAMEN_CLIENT_DATA_DIR', receipt['error'])
             self.assertEqual(receipt['details']['failure']['phase'], 'preflight')
 
     def test_invalid_scene_step_refused_before_profile(self):
@@ -144,7 +144,7 @@ class PreflightTests(unittest.TestCase):
             link.symlink_to(binary)
             with mock.patch.object(preflight, '_POOL', pool):
                 with self.assertRaisesRegex(ValueError, 'pooled target'):
-                    preflight._binary('SOLARIS_SERVER_BINARY', str(link), {}, 'server_binary')
+                    preflight._binary('KRASNOKAMEN_SERVER_BINARY', str(link), {}, 'server_binary')
 
     def test_headless_root_links_template_and_restores_environment(self):
         from . import preflight
@@ -155,12 +155,12 @@ class PreflightTests(unittest.TestCase):
             (root / 'template' / 'facts').mkdir()
             (root / 'template' / 'resources' / 'assets').mkdir(parents=True)
             ctx = profiles.ProfileContext(root, client='native')
-            with mock.patch.dict(os.environ, {'SOLARIS_CLIENT_DATA_DIR': str(data),
+            with mock.patch.dict(os.environ, {'KRASNOKAMEN_CLIENT_DATA_DIR': str(data),
                                              'XDG_DATA_HOME': '/original'}):
                 with preflight.client_data_root(ctx):
                     xdg = Path(os.environ['XDG_DATA_HOME'])
-                    self.assertTrue((xdg / 'solaris-client' / 'facts').is_symlink())
-                    self.assertEqual((xdg / 'solaris-client' / 'resources').resolve(),
+                    self.assertTrue((xdg / 'krasnokamen-client' / 'facts').is_symlink())
+                    self.assertEqual((xdg / 'krasnokamen-client' / 'resources').resolve(),
                                      (root / 'template' / 'resources').resolve())
                 self.assertFalse(xdg.exists())
                 self.assertEqual(os.environ['XDG_DATA_HOME'], '/original')

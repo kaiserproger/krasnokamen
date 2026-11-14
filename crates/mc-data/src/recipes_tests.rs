@@ -348,7 +348,7 @@ fn missing_recipe_directory_loads_empty() {
 
 #[test]
 fn embedded_required_recipes_cover_basic_wood_and_stone_tools() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     for id in [
         "minecraft:wooden_pickaxe",
         "minecraft:wooden_axe",
@@ -372,7 +372,7 @@ fn embedded_required_recipes_cover_basic_wood_and_stone_tools() {
 
 #[test]
 fn embedded_required_recipes_turn_one_bone_into_three_bone_meal() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let recipe = recipes
         .iter()
         .find(|recipe| recipe.id.as_str() == "minecraft:bone_meal")
@@ -394,7 +394,7 @@ fn embedded_required_recipes_turn_one_bone_into_three_bone_meal() {
 
 #[test]
 fn embedded_required_recipes_cover_charcoal_from_logs() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let recipe = recipes
         .iter()
         .find(|recipe| recipe.id.as_str() == "minecraft:charcoal")
@@ -417,7 +417,7 @@ fn embedded_required_recipes_cover_charcoal_from_logs() {
 
 #[test]
 fn embedded_required_recipes_cover_playable_cooked_passive_food() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     for (raw_item, cooked_item) in [
         ("minecraft:beef", "minecraft:cooked_beef"),
         ("minecraft:porkchop", "minecraft:cooked_porkchop"),
@@ -446,7 +446,7 @@ fn embedded_required_recipes_cover_playable_cooked_passive_food() {
 
 #[test]
 fn embedded_required_recipes_cover_playable_chest_from_planks() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let recipe = recipes
         .iter()
         .find(|recipe| recipe.id.as_str() == "minecraft:chest")
@@ -469,7 +469,7 @@ fn embedded_required_recipes_cover_playable_chest_from_planks() {
 
 #[test]
 fn embedded_required_recipes_cover_playable_white_bed() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
 
     let recipe = recipes
         .iter()
@@ -499,7 +499,7 @@ fn embedded_required_recipes_cover_playable_white_bed() {
 
 #[test]
 fn embedded_required_recipes_cover_playable_wooden_doors() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let display_id = |id: &str| {
         recipes
             .iter()
@@ -534,7 +534,7 @@ fn embedded_required_recipes_cover_playable_wooden_doors() {
 
 #[test]
 fn embedded_required_recipes_cover_playable_wooden_signs() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let display_id = |id: &str| {
         recipes
             .iter()
@@ -576,7 +576,7 @@ fn embedded_required_recipes_cover_playable_wooden_signs() {
 
 #[test]
 fn embedded_required_recipes_cover_playable_campfire() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let display_id = |id: &str| {
         recipes
             .iter()
@@ -650,7 +650,7 @@ fn embedded_required_recipes_cover_playable_campfire() {
 
 #[test]
 fn embedded_required_recipes_cover_playable_iron_sword() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let display_id = |id: &str| {
         recipes
             .iter()
@@ -729,7 +729,7 @@ fn embedded_required_recipes_cover_playable_iron_sword() {
 
 #[test]
 fn embedded_required_recipes_cover_playable_bread() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let display_id = |id: &str| {
         recipes
             .iter()
@@ -757,7 +757,7 @@ fn embedded_required_recipes_cover_playable_bread() {
 
 #[test]
 fn embedded_required_recipes_cover_playable_iron_pickaxe() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let display_id = |id: &str| {
         recipes
             .iter()
@@ -786,7 +786,7 @@ fn embedded_required_recipes_cover_playable_iron_pickaxe() {
 
 #[test]
 fn embedded_required_recipes_cover_core_diamond_tools() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let recipe = |id: &str, output: &str, pattern: &[&str]| {
         let display_id = recipes
             .iter()
@@ -833,7 +833,7 @@ fn embedded_required_recipes_cover_core_diamond_tools() {
 
 #[test]
 fn embedded_required_recipes_cover_playable_bucket() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let recipe_id = "minecraft:zz_playable_zzzzzzzz_bucket";
     let display_id = recipes
         .iter()
@@ -860,7 +860,7 @@ fn embedded_required_recipes_cover_playable_bucket() {
 
 #[test]
 fn embedded_required_recipes_complete_playable_iron_tier_after_bucket() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
 
     for (id, output, pattern, uses_stick) in [
         (
@@ -937,7 +937,7 @@ fn embedded_required_recipes_complete_playable_iron_tier_after_bucket() {
 
 #[test]
 fn embedded_required_recipes_complete_playable_diamond_tier_after_iron() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
 
     for (id, output, pattern, uses_stick) in [
         (
@@ -1020,7 +1020,7 @@ fn embedded_required_recipes_complete_playable_diamond_tier_after_iron() {
 
 #[test]
 fn embedded_required_recipes_turn_spider_string_into_a_bow() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let display_id = recipes
         .iter()
         .position(|recipe| recipe.id.as_str() == "minecraft:zzzz_playable_bow")
@@ -1042,7 +1042,7 @@ fn embedded_required_recipes_turn_spider_string_into_a_bow() {
 
 #[test]
 fn embedded_required_recipes_add_shears_after_existing_display_ids() {
-    let recipes = solaris_required_recipes();
+    let recipes = krasnokamen_required_recipes();
     let display_id = recipes
         .iter()
         .position(|recipe| recipe.id.as_str() == "minecraft:zzzzz_playable_shears")

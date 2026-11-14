@@ -13,7 +13,7 @@ use mc_script::{
 };
 use wasm_encoder::reencode::{Error as ReencodeError, Reencode};
 
-const CLEANUP: &str = "cabi_post_solaris:plugin/events@0.8.0#on-events";
+const CLEANUP: &str = "cabi_post_krasnokamen:plugin/events@0.9.0#on-events";
 const PLAYER: &str = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
 
 struct TrapCleanup {
@@ -70,7 +70,7 @@ impl Reencode for TrapCleanup {
 fn component_with_trapping_cleanup() -> Vec<u8> {
     let bytes = std::fs::read(
         fixture::target_directory(&fixture::repo_root().join("sdk/rust"))
-            .join("wasm32-unknown-unknown/release/solaris_hello_plugin.wasm"),
+            .join("wasm32-unknown-unknown/release/krasnokamen_hello_plugin.wasm"),
     )
     .unwrap();
     let mut imports = 0;

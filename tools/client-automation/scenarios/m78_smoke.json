@@ -1,17 +1,17 @@
 {
-  "schema": "solaris.real_client_scenario.v1",
+  "schema": "krasnokamen.real_client_scenario.v1",
   "id": "m78_smoke",
   "title": "M78 real-client smoke: join, chunks, move, edit, container, disconnect",
   "quality_label": "draft",
   "client_evidence_requirement": "real vanilla 26.1.2 client or PrismLauncher-launched instance only",
   "server": {
-    "command": "cargo run -p mc-edge --bin solaris-v2 -- --config example.toml",
+    "command": "cargo run -p mc-edge --bin krasnokamen -- --config example.toml",
     "config": "example.toml",
     "host": "127.0.0.1",
     "port": 25565
   },
   "preconditions": {
-    "world_prep": "Use example.toml with .analysis/test-world. Before starting Solaris, prepare spawn so the player can stand at (0, 64, 0), target dirt is present at (0, 64, 1), air is clear at (0, 65, 1), and a chest is placed at (2, 64, 0) with air above it.",
+    "world_prep": "Use example.toml with .analysis/test-world. Before starting Krasnokamen, prepare spawn so the player can stand at (0, 64, 0), target dirt is present at (0, 64, 1), air is clear at (0, 65, 1), and a chest is placed at (2, 64, 0) with air above it.",
     "gamemode": "survival",
     "spawn_position": [
       0,
@@ -50,7 +50,7 @@
   "client": {
     "version": "26.1.2",
     "launcher": "repo-native Gradle runClient adapter",
-    "offline_user": "SolarisPrimary",
+    "offline_user": "KrasnoPrimary",
     "adapter": "../solaris-loader/gradlew -p ../solaris-loader --no-configuration-cache :fabric-agent:runClientAgent",
     "adapter_source": "auto-gradle-runclient"
   },
