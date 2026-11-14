@@ -119,6 +119,23 @@ fn flow_into_refuses_plants_and_still_washes_tagged_decoration() {
     }
 }
 
+#[test]
+fn lava_bucket_can_replace_aquatic_plants_that_refuse_spread() {
+    let (mut state, _, centre) = setup();
+    for name in ["kelp", "kelp_plant", "seagrass", "tall_seagrass"] {
+        for plant in column(&state, name) {
+            place(&mut state, centre, plant);
+            assert!(
+                matches!(
+                    crate::fluids::flow_into(&state, centre, crate::fluids::Fluid::Lava),
+                    Some(crate::fluids::Flow::Wash(id)) if id == plant
+                ),
+                "{name}"
+            );
+        }
+    }
+}
+
 /// One kelp-growth write (the writes of `plants_growth::extend`) in a still pool wakes the
 /// water around it; the wake-up must neither wash the grown column nor walk on to a neighbour.
 #[test]

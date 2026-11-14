@@ -69,6 +69,9 @@ inventory reservations, unopened loot and live clocks must survive an unrelated
 metadata edit. Placement installation is for replacing a block entity, not
 editing one in place.
 
+Fluid spread cannot wash kelp or seagrass because their liquid containers
+refuse it; lava bucket placement may replace those non-solid blocks instead.
+
 ## Commit, publication and restart
 
 Tick changes become one journaled change set and an immutable published snapshot.
