@@ -14182,7 +14182,7 @@ dimensions:
         name: chisel_loader_bundle
         do: join the live set (chisel bundle required = false) with a Krasnokamen client (native, Fabric/NeoForge/Forge Loader) and with vanilla
         expect: 'Krasnokamen client that consents gets the chisel item definition/model/texture; vanilla completes configuration without the bundle (edge configuration.rs: optional bundles are negotiated
-          only after a Loader hello) and sees chisel:chisel as its minecraft:stick carrier; the chisel README sentence ''vanilla is refused'' is stale vs plugin.toml required = false'
+          only after a Loader hello) and sees chisel:chisel as its minecraft:stick carrier; the shipped manifest (plugin.toml required = false) is authoritative and its README now says the same (it read ''a vanilla client is refused'' until the plugins repository corrected it in 2ed597a1)'
         caps:
         - command_send
         - plugin_deploy
@@ -47240,7 +47240,7 @@ scenarios:
   - 'Lifecycle (crash_kill9_wal_replay): SIGKILL the server between action steps; restart replays tick WAL from last checkpoint'
   oracle:
   - 'reference: Krasnokamen client that consents gets the chisel item definition/model/texture; vanilla completes configuration without the bundle (edge configuration.rs: optional bundles are negotiated
-    only after a Loader hello) and sees chisel:chisel as its minecraft:stick carrier; the chisel README sentence ''vanilla is refused'' is stale vs plugin.toml required = false'
+    only after a Loader hello) and sees chisel:chisel as its minecraft:stick carrier; the shipped manifest (plugin.toml required = false) is authoritative and its README now says the same (it read ''a vanilla client is refused'' until the plugins repository corrected it in 2ed597a1)'
   - out-of-reach/illegal/malformed input is rejected (BlockChangedAck + block update / correction teleport / protocol disconnect) without state change; a stale container state_id is applied once and followed
     by a full-state resync (vanilla handleContainerClick); never duplicated; server keeps running
   - 'after SIGKILL + restart (no wait for a published WAL fence) the world equals a consistent prefix of the committed transactions: every transaction is all-or-nothing (no torn/split/half-moved stacks),
