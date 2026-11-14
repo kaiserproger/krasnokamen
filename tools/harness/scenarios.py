@@ -126,6 +126,51 @@ SCENARIOS: dict[str, Scenario] = {
         limits="One first pickup from 16 fixture-supplied planks; not the disconnect path.",
     ),
 
+    "native-v2-ledger-spawn-protection": _entry(
+        id="native-v2-ledger-spawn-protection",
+        summary="A non-operator's break and place inside the spawn radius are refused while an operator's break succeeds",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-spawn-protection",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One break and one place refusal at the world-spawn radius; the radius edge itself is not probed.",
+    ),
+
+    "native-v2-ledger-dragon-egg": _entry(
+        id="native-v2-ledger-dragon-egg",
+        summary="Using a dragon egg teleports it exactly once out of the clicked cell",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-dragon-egg",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One teleport inside the vanilla sample range; the falling-block path is not probed.",
+    ),
+
+    "native-v2-ledger-brush": _entry(
+        id="native-v2-ledger-brush",
+        summary="Held brushing of suspicious sand completes to sand and drops the loot item",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-brush",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One desert-pyramid suspicious sand with a fixed loot seed; the dropped item is seen, not identified.",
+    ),
+
+    "native-v2-ledger-infiniburn": _entry(
+        id="native-v2-ledger-infiniburn",
+        summary="Age-15 fire survives on netherrack while the same fire expires on stone",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-infiniburn",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="Netherrack infiniburn against a stone control; magma and End bedrock are covered by the cargo test.",
+    ),
+
+    "native-v2-ledger-pot-shelf": _entry(
+        id="native-v2-ledger-pot-shelf",
+        summary="A decorated pot stores one held item and a shelf stores a held book, both read from the block entity",
+        owner="core:harness", evidence="graphical", profile="entities",
+        scenario_id="native-v2-ledger-pot-shelf",
+        requires=("xvfb",), sources=("tools/harness/backends/native_v2.py",),
+        limits="One insertion per block, proven by data get block; extraction and restart persistence are not probed.",
+    ),
+
     "native-world-first-start-interrupted": _entry(
         id="native-world-first-start-interrupted",
         summary="Recover a singleplayer world interrupted during its first start",

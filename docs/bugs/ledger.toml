@@ -625,6 +625,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-OBSTRUCTED-ENTRY"
 regression = ["cargo:mc-core:sleep::tests::sealed_bed_refuses_entry_as_obstructed"]
 failing_first = "not recorded"
+fix_commit = "c2647d08bd3ca0f6d651663eb9580b9dbcdbc4c9"
 
 [[bug]]
 id = "BED-SLEEP-REACH"
@@ -981,7 +982,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#INTERACT-001"
-regression = ["cargo:mc-core:interact_parity_tests::interact_parity_axes_preserve_properties_and_wear"]
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_axes_preserve_properties_and_wear", "harness:entities:native-v2-ledger-axe"]
+fix_commit = "35308579c93ab0313e0366d1d0975957a4ff9eb0"
 
 [[bug]]
 id = "PLACE-001"
@@ -991,7 +993,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PLACE-001"
-regression = ["cargo:mc-core:interact_parity_tests::interact_parity_spawn_protection_with_operator"]
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_spawn_protection_with_operator", "harness:entities:native-v2-ledger-spawn-protection"]
+fix_commit = "35308579c93ab0313e0366d1d0975957a4ff9eb0"
 
 [[bug]]
 id = "FALL-001"
@@ -1001,7 +1004,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FALL-001"
-regression = ["cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_use_teleports", "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_conserves_block_before_falling"]
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_use_teleports", "cargo:mc-core:interact_parity_tests::interact_parity_dragon_egg_conserves_block_before_falling", "harness:entities:native-v2-ledger-dragon-egg"]
+fix_commit = "35308579c93ab0313e0366d1d0975957a4ff9eb0"
 
 [[bug]]
 id = "FALL-002"
@@ -1011,7 +1015,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FALL-002"
-regression = ["cargo:mc-core:interact_parity_tests::interact_parity_brushing_completes_once"]
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_brushing_completes_once", "harness:entities:native-v2-ledger-brush"]
+fix_commit = "35308579c93ab0313e0366d1d0975957a4ff9eb0"
 
 [[bug]]
 id = "FIRE-001"
@@ -1021,7 +1026,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FIRE-001"
-regression = ["cargo:mc-core:interact_parity_tests::interact_parity_eternal_fire_magma_and_end_bedrock"]
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_eternal_fire_magma_and_end_bedrock", "harness:entities:native-v2-ledger-infiniburn"]
+fix_commit = "35308579c93ab0313e0366d1d0975957a4ff9eb0"
 
 [[bug]]
 id = "SPECIAL-001"
@@ -1031,7 +1037,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPECIAL-001"
-regression = ["cargo:mc-core:interact_parity_tests::interact_parity_decorated_pot_stores_one_item", "cargo:mc-core:shelf::tests::shelf_checkpoint_native_chunk_restart_preserves_stacks_and_alignment"]
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_decorated_pot_stores_one_item", "cargo:mc-core:shelf::tests::shelf_checkpoint_native_chunk_restart_preserves_stacks_and_alignment", "harness:entities:native-v2-ledger-pot-shelf"]
+fix_commit = "35308579c93ab0313e0366d1d0975957a4ff9eb0"
 
 [[bug]]
 id = "SPONGE"
@@ -1041,7 +1048,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPONGE"
-regression = ["cargo:mc-core:interact_parity_tests::interact_parity_sponge_absorbs_adjacent_water"]
+regression = ["cargo:mc-core:interact_parity_tests::interact_parity_sponge_absorbs_adjacent_water", "harness:entities:native-v2-ledger-sponge"]
+fix_commit = "35308579c93ab0313e0366d1d0975957a4ff9eb0"
 
 [[bug]]
 id = "PAINTINGS"
@@ -1099,6 +1107,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TOTEM"
 regression = ["cargo:mc-core:tick_tests::combat_parity_tests::fix_mobs_totem_intercepts_lethal_damage_in_either_hand_but_not_void", "harness:entities:native-v2-command-score-store"]
+fix_commit = "de780c8823e3359fe426621a331c13ab58ccc127"
 
 [[bug]]
 id = "KILL-TYPE"
@@ -1147,7 +1156,8 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-NOTIFY"
-regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_death_notification_ignores_broadcast_rule"]
+regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_death_notification_ignores_broadcast_rule", "harness:entities:native-v2-death-messages"]
+fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
 
 [[bug]]
 id = "SCORE-FOOD"
