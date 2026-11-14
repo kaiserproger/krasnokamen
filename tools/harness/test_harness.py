@@ -222,7 +222,9 @@ class RunTestPolicyTests(unittest.TestCase):
     def test_profile_memory_defaults_match_admission_and_scope(self) -> None:
         env = {key: value for key, value in os.environ.items()
                if key not in {cli.CPU_SCOPE_ENV, cli.MEMORY_MAX_ENV}}
-        for profile, expected in [("test", "12G"), ("correctness", "12G"), ("check", "4G"), (None, "4G")]:
+        for profile, expected in [("test", "12G"), ("correctness", "12G"), ("check", "4G"),
+                                  ("java-battle-functional", "12G"), ("scene-shot", "12G"),
+                                  ("regressions", "4G"), (None, "4G")]:
             with self.subTest(profile=profile), mock.patch.dict(os.environ, env, clear=True):
                 with mock.patch.object(cli, "_default_cpu_quota", return_value="600%"):
                     with mock.patch.object(cli, "_available_bytes", return_value=16 * 1024**3):

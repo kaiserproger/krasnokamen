@@ -630,6 +630,9 @@ DEFAULT_MEMORY_HIGH = "off"
 DEFAULT_MEMORY_MAX = "4G"
 DEFAULT_TEST_MEMORY_MAX = "12G"
 DEFAULT_MEMORY_SWAP_MAX = "1G"
+# A real Java client, its Xvfb and the release server do not fit 4G: java-battle-functional was
+# killed by the scope on 2/2 runs of receipts/JavaGateBreaker, so these get the test-wide cap.
+MEMORY_HEAVY_PROFILES = {"java-battle-functional", "java", "loader-live", "scene-shot"}
 _OFF = {"", "off", "none", "0", "max"}
 
 _MEMORY_UNITS = {"K": 1024, "M": 1024**2, "G": 1024**3, "T": 1024**4}
@@ -723,7 +726,11 @@ def _exec_in_scope(profile: str | None) -> int | None:
     quota = os.environ.get(CPU_QUOTA_ENV, _default_cpu_quota()).strip()
     if quota.lower() in _OFF:
         return None
-    default_memory = DEFAULT_TEST_MEMORY_MAX if profile in {"test", "correctness"} else DEFAULT_MEMORY_MAX
+    default_memory = (
+        DEFAULT_TEST_MEMORY_MAX
+        if profile in {"test", "correctness"} or profile in MEMORY_HEAVY_PROFILES
+        else DEFAULT_MEMORY_MAX
+    )
     memory_max = os.environ.get(MEMORY_MAX_ENV, default_memory)
     # A run that cannot fit in the machine's free memory is not bounded by its
     # own cap: the kernel reclaims the rest of the session instead, and
