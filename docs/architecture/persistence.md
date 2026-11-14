@@ -52,6 +52,11 @@ Explicit saves queue behind the current checkpoint. Shutdown requests a final
 checkpoint. See [ADR 0020](../decisions/0020-entity-checkpoints-at-one-million.md)
 for the entity checkpoint design.
 
+Disk-full checkpoint drills wrap the real lease-holding native file backend.
+The injected writer and `NativeStore` retain the same `Arc<File>`, as the
+production database and its backup reader do; failure injection never reopens
+the leased database through a second handle.
+
 Container WAL post-images can restore live custody without loading their chunk.
 Before freezing a checkpoint's container snapshot, materialize their dirty chunks
 and hydrate their complete persisted inventories. Clean evicted chunks stay unloaded.
