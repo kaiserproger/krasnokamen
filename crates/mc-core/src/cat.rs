@@ -30,4 +30,3 @@ pub(crate) fn drive(relax: Option<&Relax>, speed: f32) -> Option<([f64; 3], f64)
         },
     ))
 }
-

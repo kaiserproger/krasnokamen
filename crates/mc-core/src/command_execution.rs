@@ -1,7 +1,9 @@
 //! Tick-owned vanilla command execution and target selection.
 use crate::boundary::{ChangeSet, ConnectionId, EntityId, PlayerChange};
 use crate::command_feedback::{text, translated};
-use crate::commands::{Command, Destination, Selector, SelectorKind, SelectorSort, Target, Weather};
+use crate::commands::{
+    Command, Destination, Selector, SelectorKind, SelectorSort, Target, Weather,
+};
 use crate::entities::EntityKind;
 use crate::tick::{DamagePiece, TickState};
 use mc_nbt::Tag;

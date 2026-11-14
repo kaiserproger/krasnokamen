@@ -250,9 +250,9 @@ pub(crate) fn parse_title(
 /// Vanilla `TimeArgument` for title times: bare ticks or `<float>d|s|t`,
 /// rounded, clamped to `i32`, min 0 (negative is a usage error).
 fn title_time(word: &str) -> Result<i32, crate::command_args::CommandError> {
-    let ticks = crate::commands::time_ticks(word).ok_or(crate::command_args::CommandError::Message(
-        format!("Invalid time '{word}'"),
-    ))?;
+    let ticks = crate::commands::time_ticks(word).ok_or(
+        crate::command_args::CommandError::Message(format!("Invalid time '{word}'")),
+    )?;
     i32::try_from(ticks)
         .map_err(|_| crate::command_args::CommandError::Message(format!("Invalid time '{word}'")))
         .and_then(|ticks| {
@@ -268,7 +268,10 @@ fn title_time(word: &str) -> Result<i32, crate::command_args::CommandError> {
 /// `command_bossbar::tail_after` but local to this module so BossBar need not
 /// expose its helper). `command_words` keeps balanced `{..}`/`[..]`/quoted
 /// text as one word, so component JSON survives intact here.
-fn tail_after(command: &str, leading: &[&str]) -> Result<String, crate::command_args::CommandError> {
+fn tail_after(
+    command: &str,
+    leading: &[&str],
+) -> Result<String, crate::command_args::CommandError> {
     use crate::command_args::CommandError;
     let mut rest = command.trim_start();
     rest = rest.strip_prefix('/').unwrap_or(rest);

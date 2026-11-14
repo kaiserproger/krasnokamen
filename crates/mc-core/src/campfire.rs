@@ -41,8 +41,7 @@ fn recipe<'a>(rules: &ItemRules<'a>, stack: &ItemStack) -> Option<&'a Recipe> {
 }
 
 fn is_campfire(id: &mc_data::Identifier) -> bool {
-    id.namespace() == "minecraft"
-        && BlockEntityKind::Campfire.block_paths().contains(&id.path())
+    id.namespace() == "minecraft" && BlockEntityKind::Campfire.block_paths().contains(&id.path())
 }
 
 fn lit(state: &TickState, pos: BlockPos) -> Option<bool> {

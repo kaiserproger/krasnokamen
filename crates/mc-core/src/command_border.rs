@@ -240,11 +240,7 @@ pub(crate) fn parse(args: &[&str]) -> Result<BorderCommand, CommandError> {
         _ => Err(invalid()),
     }
 }
-pub(crate) fn execute(
-    border: &mut Border,
-    command: BorderCommand,
-    origin: [f64; 3],
-) -> String {
+pub(crate) fn execute(border: &mut Border, command: BorderCommand, origin: [f64; 3]) -> String {
     match command {
         BorderCommand::Get => return format!("The world border is {} blocks wide", border.size),
         BorderCommand::Center([x, z]) => {
