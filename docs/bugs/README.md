@@ -114,8 +114,10 @@ match the row's `id` and `fix_commit`. The only rows exempt are those already
 reopened row leaves the list in the same edit).
 
 **What workers do:** add `regression` refs (and `repro_check`, `failing_first`
-evidence) and record `fix_commit` (the one commit with the fix; the test may be
-in it or earlier, never only in later commits). They do not edit `status` or
+evidence) and record `fix_commit`: the one commit with the fix (the test may
+be in it or earlier, never only in later commits), or the `patch:<sha256>` of
+step 1 for a forward-ported fix, a fix in several commits or a guard older
+than the finding. They do not edit `status` or
 `promotion`, and they do not decide that a row is fixed: a green test that also
 passes without the fix proves nothing, which is why the script, not the
 worker, runs the negative control.
@@ -130,6 +132,44 @@ worker, runs the negative control.
    exact tree: `HEAD` plus its uncommitted diff and untracked files
    (`docs/bugs/` aside), identified by a fingerprint; no commit is needed. The
    control and the restore worktrees reproduce it, verified by that fingerprint.
+
+   Patch mode also covers a committed fix whose hunks no longer reverse-apply
+   on the candidate and whose `fix_commit` tree cannot build a control (its
+   tests need the fix's new API, or the registered refs came later). The patch
+   is then the fix's non-test hunks forward-ported to the candidate: the HEAD
+   equivalent of each original hunk, nothing else. It is committed beside the
+   promotion receipt as `promotions/<ID>.patch` (a re-audit passes it as
+   `--fix-patch`), and `promotions/<ID>.hunks.md` maps it: the original
+   commit(s), each original hunk and its HEAD equivalent, and every original
+   hunk left out with one of these reasons:
+
+   - (a) it is another row's or owner's behaviour (its reversal would turn
+     the control red on someone else's assertion);
+   - (b) it is API the kept tests call (reversing it stops the control from
+     compiling);
+   - (c) a later commit rewrote that code, so no HEAD equivalent exists.
+
+   Any other omission refuses the patch. Further rules:
+
+   - **a/-side adaptation.** Leaving out a (b) hunk can force the reversed
+     code to construct the kept API (for example an empty field). That line
+     is the only a/-side text allowed outside the original pre-image. It must
+     not change behaviour, and `hunks.md` names it.
+   - **Proving ref.** `promote.json` records every red ref as plain `FAIL`.
+     So `hunks.md` names the ref and `file:line` whose assertion is the row's
+     symptom. A ref that goes red only on an assertion of the kept API
+     (emptied by the adaptation) is listed as not evidence.
+   - **Fix in several commits.** When the path the row describes was closed
+     by more than one commit (a later commit completing it), the patch
+     carries the non-test hunks of each of them. `hunks.md` lists every
+     commit, says which part of the row's path each one closes, and records
+     the control of any commit reversed on its own.
+   - **Guard older than the finding.** When the code that keeps the bug out
+     predates the row (the finding was a missing test, not a missing fix),
+     there is no fix commit. `hunks.md` says so and names the commit that
+     introduced the guard (`git blame -C -C`). The patch is exactly the
+     guarding hunks at HEAD. The control must go red on the row's own
+     loss/panic assertion, not on a refusal or a precondition.
 2. The row has at least one registered check.
 3. For `area = "client"` or `repro` in `manual`/`client`: a graphical harness
    ref, and `--client-receipt <result.json>` of a real-client run whose status

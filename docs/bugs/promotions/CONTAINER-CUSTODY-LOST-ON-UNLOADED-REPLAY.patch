@@ -1,0 +1,42 @@
+diff --git a/crates/mc-core/src/core/journal.rs b/crates/mc-core/src/core/journal.rs
+index 3077955..97bab95 100644
+--- a/crates/mc-core/src/core/journal.rs
++++ b/crates/mc-core/src/core/journal.rs
+@@ -107,6 +107,17 @@ pub(super) fn start_checkpoint_with_reply(
+     reply: Option<std::sync::mpsc::Sender<bool>>,
+ ) -> bool {
+     let capture_start = std::time::Instant::now();
++    if !prepare_container_checkpoint(state)
++        || !state
++            .other_dimensions
++            .values_mut()
++            .all(|world| prepare_container_checkpoint(world))
++    {
++        if let Some(reply) = reply {
++            let _ = reply.send(false);
++        }
++        return false;
++    }
+     // Writes from here on stamp above `tick`, so whatever this capture misses
+     // stays dirty after its acknowledgement (ADR 0020).
+     state.entities.checkpoint_captured(tick);
+diff --git a/crates/mc-core/src/core/recovery.rs b/crates/mc-core/src/core/recovery.rs
+index b43640b..f10468b 100644
+--- a/crates/mc-core/src/core/recovery.rs
++++ b/crates/mc-core/src/core/recovery.rs
+@@ -278,6 +278,15 @@ pub(super) fn load_dimension_state(
+                     }
+                 }),
+             });
++        // Replay may be the only live inventory in this chunk. Checkpoint
++        // preparation loads and hydrates its neighbours before freezing slots.
++        tick_state
++            .world
++            .mark_block_entity_dirty(crate::boundary::BlockPos {
++                x: pos.0,
++                y: pos.1,
++                z: pos.2,
++            });
+     }
+     let _ = max_wire_id;
+     for (owner, (chunk, (_, radius))) in &replay.tickets {

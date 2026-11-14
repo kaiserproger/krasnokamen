@@ -1884,6 +1884,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#JUKEBOX-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:8887a3a2c197a934cb14cff0393707e3196698a1f2440bd1abed36b9e8dd87a1"
 
 [[bug]]
 id = "DISPENSER-MINECART-VARIANTS"
@@ -1906,6 +1907,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHELF-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:c29154548538efd11a21492d8c45a7399b6b7f204b584af41ccc687b917e5e9c"
 
 [[bug]]
 id = "CRAFTER-HYDRATE-PANIC"
@@ -1917,6 +1919,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CRAFTER-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::corrupt_block_entity_rejects_its_chunk_instead_of_panicking", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:4509ca4c3986c84fca5a2a4e66964aa1596a0d00da53d05785a0e884c9ea5e5c"
 
 [[bug]]
 id = "VILLAGER-CURE-SPEEDUP"
@@ -1994,6 +1997,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONDUIT-RUNTIME-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:b4d2de2e4c6b42baf2b7b316d2186080140bfd565e765b5a533d3ec5f8f4f825"
 
 [[bug]]
 id = "BEACON-RUNTIME-PANIC"
@@ -2005,6 +2009,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BEACON-RUNTIME-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:c83e5cc831c4ea2804935279a476838d750ac17c933730c55f35305c2ec934e1"
 
 ingress_proof = [
   "mc-core/src/world.rs:841-888: the only writers of a resident chunk's opaque records (set_opaque_block_entity, install_command_block_entity; git grep 'chunk.block_entities.insert') both end in mark_block_entity_dirty -> bump_storage_revision -> hydration_pending (world.rs:679-687, 581-585), so the next hydration sync re-validates the chunk with beacon::validate_chunk (tick/hydration.rs:66) before any per-tick reader sees the record",
@@ -2022,6 +2027,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHRIEKER-HYDRATE-PANIC"
 regression = ["cargo:mc-core:tick::hydration::tests::corrupt_target_block_entities_are_rejected_before_ticks", "cargo:mc-core:tick::hydration::tests::runtime_readers_refuse_the_chunk_of_an_unvalidated_record", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:eedff8b85ba150da7b9973ea563bd9c13212821eedcccc9ad1e9f5a094b358f9"
 
 [[bug]]
 id = "GOAT-RAM-ABSENT"
@@ -3670,6 +3676,7 @@ status = "open"
 source = "CoreBlockers: capture.load_error from the failed-chunk map (world/capture.rs, core/journal.rs); server.log of native-v2-corrupt-block-entities showed no 'checkpoint committed' after the refusal."
 regression = ["cargo:mc-core:chunk_loader::tests::refused_chunk_never_blocks_other_chunks_and_stays_refused", "cargo:mc-core:chunk_loader::tests::refusing_a_resident_chunk_keeps_custody_of_its_unsaved_edits", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:ae9b3c453c1f32ffffa901dbfbc56d7670f8ae05051fbe61b94126972a0deb90"
 
 [[bug]]
 id = "NATIVE-INPLAY-BLOCKED-BY-MISSING-CHUNK"
@@ -3689,8 +3696,9 @@ area = "gameplay"
 repro = "source"
 severity = "major"
 status = "open"
-source = "Independent review, 2026-11-07 (not reproduced). Recovery refuses to open on chunk load error and retains the WAL; the registered test exercises that path. A negative control removing the recovery guard failed at the recovery assertion (receipts/CoreBlockers/custody-replay-negative-control.log outside the repository). Disposition pending."
+source = "Independent review, 2026-11-07. The guard that makes recovery refuse a world whose WAL replays into a chunk refused at load (core/recovery.rs load_errors check) dates from the initial import 1ada2ceb, before the finding, so no revision lost custody this way; there is no fix commit. With only that guard removed the registered test loses the campfire's item for good (recovery opens, a checkpoint skips the refused chunk and prunes the WAL); fix identity is the guard as a forward patch (docs/bugs/promotions/OPAQUE-CUSTODY-LOST-ON-REFUSED-REPLAY.hunks.md)."
 regression = ["cargo:mc-core:core::checkpoint_custody_tests::opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal"]
+fix_commit = "patch:9208d0d2a9339c83d370cfecaa968a1f2c5b67cbee0c8b7f70d0631dc195184d"
 
 [[bug]]
 id = "CONTAINER-CUSTODY-LOST-ON-UNLOADED-REPLAY"
@@ -3734,7 +3742,7 @@ regression = [
 ]
 repro_check = ["cargo:mc-core:core::checkpoint_custody_tests::chest::container_transfer_replay_holds_unloadable_chunk_and_wal", "cargo:mc-core:core::checkpoint_custody_tests::chest::container_transfer_replay_materializes_full_healthy_chunk"]
 failing_first = "reported"
-fix_commit = "aa3e10f6"
+fix_commit = "patch:449d7c4619a7acd234f38c056b01cae551efe32514d4728e9b03bf00481942f8"
 
 [[bug]]
 id = "COMMAND-SCULK-RECORD-UNVALIDATED"
@@ -3785,11 +3793,12 @@ title = "Books in a chiseled bookshelf disappear on interaction after restart"
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "RC5 review of fe965d1c; contributing factors and failed defenses: docs/architecture/persistence.md#quarantined-chunks."
 regression = ["cargo:mc-core:core::checkpoint_custody_tests::chiseled_bookshelf_old_save_interaction_preserves_all_books"]
 failing_first = "not recorded"
 fix_commit = "fe965d1c"
+promotion = "docs/bugs/promotions/CHISELED-BOOKSHELF-RESTART-DATA-LOSS.json"
 
 [[bug]]
 id = "CIVILIZATION-NATURAL-FOREST-SITE-PREPARATION"

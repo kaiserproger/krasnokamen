@@ -1,0 +1,378 @@
+diff --git a/crates/mc-core/src/world/capture.rs b/crates/mc-core/src/world/capture.rs
+index e51bda4..1fa7816 100644
+--- a/crates/mc-core/src/world/capture.rs
++++ b/crates/mc-core/src/world/capture.rs
+@@ -28,6 +28,56 @@ impl ChunkWorld {
+         complete
+     }
+ 
++    /// List every quarantined chunk not yet in `known` and count its unsaved
++    /// entries (pending block writes, block-entity records of this checkpoint,
++    /// edited sections of a chunk that was resident). A chunk with none is
++    /// skipped: its stored record stays untouched and the checkpoint proceeds.
++    /// A chunk with some declines the checkpoint (the caller sets `load_error`),
++    /// because committing the rest of the world while its edits stay unwritten
++    /// could duplicate custody (an item taken from a chest of that chunk would
++    /// exist in the player's inventory and, after restart, in the old chest).
++    fn quarantine(
++        &mut self,
++        block_entities: &crate::core::CheckpointBlockEntities,
++        known: &mut Vec<RefusedChunk>,
++    ) {
++        let mut fresh: Vec<ChunkPos> = self
++            .failed
++            .keys()
++            .copied()
++            .filter(|pos| !known.iter().any(|entry| entry.error.pos == *pos))
++            .collect();
++        fresh.sort_by_key(|pos| (pos.x, pos.z));
++        for pos in fresh {
++            let in_chunk = |x: i32, z: i32| {
++                ChunkPos {
++                    x: x.div_euclid(16),
++                    z: z.div_euclid(16),
++                } == pos
++            };
++            let writes = self
++                .overlay
++                .keys()
++                .filter(|(x, _, z)| in_chunk(*x, *z))
++                .count();
++            let records = block_entities
++                .keys()
++                .filter(|(x, _, z)| in_chunk(*x, *z))
++                .count();
++            // Container edits and removals (their records are stale or gone, so
++            // only the mark remembers them) and edited sections are custody.
++            // Plain `dirty` also carries debt/light/inhabited bookkeeping and
++            // is not counted.
++            let edited = self.block_entity_dirty.contains(&pos)
++                || self.dirty_sections.get(&pos).is_some_and(|mask| *mask != 0);
++            known.push(RefusedChunk {
++                error: self.failed[&pos].clone(),
++                unsaved: writes + records + usize::from(edited),
++                scheduled: 0,
++            });
++        }
++    }
++
+     /// Inject checkpoint block-entity storage into a chunk's typed maps
+     /// (cleared first for this chunk's columns so removals persist).
+     pub(super) fn inject_block_entities(
+@@ -181,12 +231,20 @@ impl ChunkWorld {
+         block_entities: &crate::core::CheckpointBlockEntities,
+     ) -> ChunkCapture {
+         let capture_start = std::time::Instant::now();
++        // Quarantined chunks are never loaded or rewritten. One without unsaved
++        // entries is skipped; one with some declines the checkpoint.
++        let mut refused = Vec::new();
++        self.quarantine(block_entities, &mut refused);
++        let declined = refused
++            .iter()
++            .find(|chunk| chunk.unsaved > 0)
++            .map(|chunk| chunk.error.clone());
+         let mut capture = ChunkCapture {
+             source: Arc::clone(&self.source),
+             chunks: Vec::new(),
+             deferred: HashMap::default(),
+-            load_error: None,
+-            refused: Vec::new(),
++            load_error: declined,
++            refused,
+             generated_bases: false,
+         };
+         // Fold resident intervals only at checkpoint; absent images are frozen
+@@ -194,7 +252,9 @@ impl ChunkWorld {
+         let inhabited: Vec<_> = self
+             .inhabited_time
+             .iter()
+-            .filter_map(|(pos, counter)| counter.dirty.then_some(*pos))
++            .filter_map(|(pos, counter)| {
++                (counter.dirty && !self.failed.contains_key(pos)).then_some(*pos)
++            })
+             .collect();
+         for pos in inhabited {
+             if let Some(chunk) = self.chunks.get_mut(&pos) {
+@@ -225,9 +285,7 @@ impl ChunkWorld {
+             .filter(|pos| !self.chunks.contains_key(pos))
+             .collect();
+         for pos in homeless {
+-            if !self.materialize(pos) {
+-                capture.load_error = self.failed.get(&pos).cloned();
+-            }
++            self.materialize(pos);
+         }
+         self.fold_overlay();
+         // Absent chunks with pending block-entity changes: make them
+@@ -236,11 +294,21 @@ impl ChunkWorld {
+         for pos in std::mem::take(&mut self.dirty_absent) {
+             if self.materialize(pos) {
+                 self.dirty.insert(pos);
+-            } else {
+-                capture.load_error = self.failed.get(&pos).cloned();
++            } else if !self.failed.contains_key(&pos) {
++                // A transient failure retries; a quarantined chunk is counted
++                // from `block_entity_dirty` instead.
+                 self.dirty_absent.insert(pos);
+             }
+         }
++        // Chunks that failed to load just now are quarantined too.
++        self.quarantine(block_entities, &mut capture.refused);
++        capture.load_error = capture.load_error.take().or_else(|| {
++            capture
++                .refused
++                .iter()
++                .find(|chunk| chunk.unsaved > 0)
++                .map(|chunk| chunk.error.clone())
++        });
+         let materialize_time = capture_start.elapsed();
+         // Changed debt rides the chunk checkpoint. Clean live anchors and
+         // unchanged nonzero debt already ride the manifest; advancing live
+@@ -252,6 +320,9 @@ impl ChunkWorld {
+             .filter_map(|(pos, debt)| debt.dirty.then_some(*pos))
+             .collect();
+         for pos in debt {
++            if self.failed.contains_key(&pos) {
++                continue;
++            }
+             if !self.chunks.contains_key(&pos) {
+                 // Non-resident debt rides the deferred path (frozen image,
+                 // journal-thread application, revision-fenced ACK) — never
+@@ -301,6 +372,11 @@ impl ChunkWorld {
+         let dirty: Vec<ChunkPos> = self.dirty.iter().copied().collect();
+         for pos in dirty {
+             if !self.chunks.contains_key(&pos) {
++                if self.failed.contains_key(&pos) {
++                    // Metadata of a quarantined chunk is not written.
++                    self.dirty.remove(&pos);
++                    continue;
++                }
+                 if let Some(counter) = self.inhabited_time.get(&pos) {
+                     let image = crate::journal::InhabitedTimeImage {
+                         value: counter.image.value_at(self.inhabited_tick),
+@@ -366,6 +442,7 @@ impl ChunkWorld {
+             if self.revisions.get(pos) == Some(revision) {
+                 self.dirty.remove(pos);
+                 self.dirty_sections.remove(pos);
++                self.block_entity_dirty.remove(pos);
+                 if let Some(debt) = self.sim_debt.get_mut(pos) {
+                     debt.dirty = false;
+                 }
+diff --git a/crates/mc-core/src/world.rs b/crates/mc-core/src/world.rs
+index faeb415..cf89559 100644
+--- a/crates/mc-core/src/world.rs
++++ b/crates/mc-core/src/world.rs
+@@ -76,6 +76,11 @@ pub struct ChunkWorld {
+     /// resident (load-native-or-generate) and writes them; eviction
+     /// retains them until flushed.
+     dirty_absent: HashSet<ChunkPos>,
++    /// Chunks whose block-entity custody changed (edit or removal) since their
++    /// last committed checkpoint. Unlike `dirty` it carries no metadata dirt
++    /// (debt, light, inhabited time), so a quarantined chunk can tell real
++    /// unsaved container edits from bookkeeping.
++    block_entity_dirty: HashSet<ChunkPos>,
+     /// 001 slice0 active-only catch-up debt authority (001-d/e): per-chunk
+     /// `{ last_sim, remaining }`. `active` membership is parent-managed via
+     /// [`Self::set_active_chunks`]; strict empty default (never implicit).
+@@ -487,6 +492,7 @@ impl ChunkWorld {
+             route_touched: Vec::new(),
+             dirty: HashSet::default(),
+             dirty_absent: HashSet::default(),
++            block_entity_dirty: HashSet::default(),
+             dirty_sections: HashMap::default(),
+             inhabited_time: HashMap::default(),
+             inhabited_tick: 0,
+@@ -666,6 +672,7 @@ impl ChunkWorld {
+             x: pos.x.div_euclid(16),
+             z: pos.z.div_euclid(16),
+         };
++        self.block_entity_dirty.insert(chunk);
+         if self.chunks.contains_key(&chunk) {
+             self.dirty.insert(chunk);
+             self.bump_storage_revision(chunk);
+@@ -715,8 +722,16 @@ impl ChunkWorld {
+         pos: ChunkPos,
+         capture: &'a mut ChunkCapture,
+     ) -> Option<&'a mut DeferredChunkCapture> {
+-        if let Some(error) = self.failed.get(&pos) {
+-            capture.load_error = Some(error.clone());
++        if self.failed.contains_key(&pos) {
++            // Quarantined: the chunk-local projection of its scheduled work cannot be
++            // written; the manifest scheduler image keeps the queues. Counted.
++            if let Some(entry) = capture
++                .refused
++                .iter_mut()
++                .find(|entry| entry.error.pos == pos)
++            {
++                entry.scheduled += 1;
++            }
+             return None;
+         }
+         self.in_flight.remove(&pos);
+diff --git a/crates/mc-core/src/world/residency.rs b/crates/mc-core/src/world/residency.rs
+index dff6e7b..ba00ecf 100644
+--- a/crates/mc-core/src/world/residency.rs
++++ b/crates/mc-core/src/world/residency.rs
+@@ -282,7 +282,7 @@ impl ChunkWorld {
+             entry.insert(error);
+         }
+     }
+-    /// Quarantine invalid resident metadata without losing checkpoint custody.
++    /// Quarantine invalid resident metadata: the chunk is unloaded and never rewritten.
+     /// Clears a live `active` flag at this mutation boundary with the same
+     /// frozen-boundary authority as [`Self::refresh_active_clock`]
+     /// deactivation, so the single debt flag in [`Self::is_active`] never
+@@ -298,9 +298,12 @@ impl ChunkWorld {
+         self.light.remove(pos);
+         self.published = None;
+         self.generated.retain(|captured| captured.pos != pos);
++        // Unsaved container edits stay in `block_entity_dirty` and edited
++        // sections in `dirty_sections`: they decline the next checkpoint
++        // (capture's quarantine step counts them); a chunk refused as freshly
++        // loaded has none and is skipped.
+         self.dirty.remove(&pos);
+-        self.dirty_sections.remove(&pos);
+-        self.dirty_absent.insert(pos);
++        self.dirty_absent.remove(&pos);
+         if was_resident {
+             self.active_revision += 1;
+             self.poi_revisions.insert(pos);
+diff --git a/crates/mc-core/src/core/journal.rs b/crates/mc-core/src/core/journal.rs
+index 05b30ce..97bab95 100644
+--- a/crates/mc-core/src/core/journal.rs
++++ b/crates/mc-core/src/core/journal.rs
+@@ -152,16 +152,46 @@ pub(super) fn start_checkpoint_with_reply(
+     let dimensions = crate::dimensions::checkpoint::capture(state, tick);
+     let tombstones = checkpoint_tombstones(state);
+     let dimensions_time = capture_start.elapsed();
+-    if regions.load_error().is_some()
+-        || dimensions
++    let refused: Vec<&crate::world::RefusedChunk> = regions
++        .refused()
++        .iter()
++        .chain(
++            dimensions
++                .values()
++                .flat_map(|capture| capture.regions.refused()),
++        )
++        .collect();
++    let blocked = regions.load_error().or_else(|| {
++        dimensions
+             .values()
+-            .any(|capture| capture.regions.load_error().is_some())
+-    {
++            .find_map(|capture| capture.regions.load_error())
++    });
++    if let Some(error) = blocked {
++        tracing::error!(
++            tick,
++            %error,
++            chunks = %refused.iter().map(|chunk| chunk.to_string()).collect::<Vec<_>>().join("; "),
++            "checkpoint declined: a chunk cannot be written and holds unsaved state; the journal is retained"
++        );
+         if let Some(reply) = reply {
+             let _ = reply.send(false);
+         }
+         return false;
+     }
++    if !refused.is_empty() {
++        // The checkpoint commits without these chunks: their stored records
++        // stay byte-identical and they stay refused until repaired.
++        tracing::error!(
++            tick,
++            count = refused.len(),
++            chunks = %refused
++                .iter()
++                .map(|error| error.to_string())
++                .collect::<Vec<_>>()
++                .join("; "),
++            "checkpoint skipped quarantined chunks; repair required"
++        );
++    }
+     let job = CheckpointJob {
+         tick,
+         globals: state
+@@ -578,7 +608,7 @@ pub(super) enum NativeWork {
+         job: Box<CheckpointJob>,
+         plugins: Result<Box<crate::plugin::PluginState>, CoreError>,
+     },
+-    SaveGenerated(crate::world::ChunkCapture),
++    SaveGenerated(Box<crate::world::ChunkCapture>),
+     /// Copy the last committed checkpoint and the WAL after it (hot backup).
+     Backup {
+         job: BackupJob,
+diff --git a/crates/mc-core/src/core.rs b/crates/mc-core/src/core.rs
+index 1725d49..58b4a47 100644
+--- a/crates/mc-core/src/core.rs
++++ b/crates/mc-core/src/core.rs
+@@ -212,7 +212,7 @@ enum JournalWork {
+     Checkpoint(Box<CheckpointJob>),
+     /// Save generated chunks into their still-empty slots. Forwarded to the
+     /// native writer so the native DB has one writer, ordered with checkpoints.
+-    SaveGenerated(crate::world::ChunkCapture),
++    SaveGenerated(Box<crate::world::ChunkCapture>),
+     /// Stop the thread.
+     Shutdown,
+     /// Copy the native database and WAL after the last committed checkpoint into
+diff --git a/crates/mc-core/src/core/tick_loop.rs b/crates/mc-core/src/core/tick_loop.rs
+index b929643..5946e6d 100644
+--- a/crates/mc-core/src/core/tick_loop.rs
++++ b/crates/mc-core/src/core/tick_loop.rs
+@@ -300,7 +300,9 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
+             channels
+                 .generated_busy
+                 .store(true, std::sync::atomic::Ordering::Release);
+-            let _ = channels.work_tx.send(JournalWork::SaveGenerated(batch));
++            let _ = channels
++                .work_tx
++                .send(JournalWork::SaveGenerated(Box::new(batch)));
+         }
+         // Timings ride in the output they describe (never a shared
+         // last-tick slot a reader could pair with the wrong tick).
+@@ -599,7 +601,10 @@ pub(super) fn send_shutdown(
+         "core tick owner stopping"
+     );
+     while let Some(batch) = crate::dimensions::checkpoint::take_generated(state, 0) {
+-        if work_tx.send(JournalWork::SaveGenerated(batch)).is_err() {
++        if work_tx
++            .send(JournalWork::SaveGenerated(Box::new(batch)))
++            .is_err()
++        {
+             tracing::error!(
+                 cause = "journal work channel closed",
+                 "core shutdown could not save generated chunks"
+diff --git a/crates/mc-world/src/anvil/chunk_nbt.rs b/crates/mc-world/src/anvil/chunk_nbt.rs
+index a1c5a49..7539ea8 100644
+--- a/crates/mc-world/src/anvil/chunk_nbt.rs
++++ b/crates/mc-world/src/anvil/chunk_nbt.rs
+@@ -369,6 +369,30 @@ fn chunk_from_nbt_with_items_impl(
+             let by = get_int(cmp, "y")?;
+             let bz = get_int(cmp, "z")?;
+             let block_entity_id = get_string(cmp, "id").ok();
++            // The block owns its record: crafters, shelves, shulker boxes and
++            // conduits are validated by the block they belong to, never by an
++            // id the record merely claims.
++            if let Some(kind) = chunk
++                .get_block(bx.rem_euclid(16) as u8, by, bz.rem_euclid(16) as u8)
++                .and_then(|id| registry.by_id(id))
++                .and_then(|state| {
++                    mc_data::block_entity_kinds::BlockEntityKind::for_block(state.block.id.path())
++                })
++                && matches!(
++                    kind,
++                    mc_data::block_entity_kinds::BlockEntityKind::Crafter
++                        | mc_data::block_entity_kinds::BlockEntityKind::Shelf
++                        | mc_data::block_entity_kinds::BlockEntityKind::ShulkerBox
++                        | mc_data::block_entity_kinds::BlockEntityKind::Conduit
++                )
++                && block_entity_id.map(String::as_str) != Some(kind.vanilla_id())
++            {
++                return Err(ChunkNbtError::InvalidBlockEntity(format!(
++                    "block entity at ({bx},{by},{bz}): record id {} does not belong to its block (expected {})",
++                    block_entity_id.map_or("<missing>", String::as_str),
++                    kind.vanilla_id(),
++                )));
++            }
+             if block_entity_id.is_some_and(|id| id == "minecraft:conduit") {
+                 mc_data::conduit_nbt::target(cmp).map_err(ChunkNbtError::InvalidBlockEntity)?;
+             }
