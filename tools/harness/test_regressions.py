@@ -793,6 +793,8 @@ class LedgerToolTests(unittest.TestCase):
         fix = f'client:{client_sha}' if client_sha else ''
         text = (root / 'docs/bugs/ledger.toml').read_text().replace(
             f'fix_commit = "{self.fix}"', f'fix_commit = "{fix}"')
+        if ref == 'harness:entities:native-v2-craft-drag':
+            text += '\nproving_assertions = { "harness:entities:native-v2-craft-drag" = "initial_drag_keeps_server_cursor" }\n'
         (root / 'docs/bugs/ledger.toml').write_text(text)
         self.git(root, 'commit', '-qam', 'client row')
         return root
@@ -848,11 +850,16 @@ class LedgerToolTests(unittest.TestCase):
         state = out['python:tools.harness.test_plan:InnovationTests.test_new_workspace_dependency_is_innovation']['state']
         self.assertIn(state, (ledger.UNRUNNABLE, ledger.RED))
 
-    def test_client_fix_commit_promotes_on_a_red_control_and_a_green_restore(self):
+    def test_client_fix_rejects_unrelated_assertion_and_accepts_proving_assertion(self):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
+        wrong = self.client_receipt(root, self.client_base, verdict=False,
+                                    assertions={'native-v2-ledger-painting': False})
+        restore = self.client_receipt(root, self.client_fix, verdict=True)
+        with self.assertRaisesRegex(ledger.Refused, 'not red on any of the row'):
+            self.promote(root, self.runner(), client_control_receipt=wrong, client_receipt=restore, dry_run=True)
         control = self.client_receipt(root, self.client_base, verdict=False,
-                                      assertions={'native-v2-ledger-painting': False})
+                                      assertions={'initial_drag_keeps_server_cursor': False})
         restore = self.client_receipt(root, self.client_fix, verdict=True)
         receipt = self.promote(root, self.runner(), client_control_receipt=control,
                               client_receipt=restore, dry_run=True)
@@ -866,6 +873,33 @@ class LedgerToolTests(unittest.TestCase):
         self.promote(root, self.runner(), client_control_receipt=control, client_receipt=restore)
         self.assertIn('status = "fixed"', (root / 'docs/bugs/ledger.toml').read_text())
 
+    def test_client_control_is_candidate_with_only_fix_reversed(self):
+        client = self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        (client / 'later.txt').write_text('later change\n')
+        self.git(client, 'add', 'later.txt')
+        self.git(client, 'commit', '-qm', 'later candidate')
+        candidate = self.git(client, 'rev-parse', 'HEAD')
+        self.git(client, 'revert', '--no-edit', self.client_fix)
+        exact_control = self.git(client, 'rev-parse', 'HEAD')
+        restore = self.client_receipt(root, candidate)
+        def promote_with(control_head):
+            control = self.client_receipt(root, control_head, verdict=False,
+                                          assertions={'initial_drag_keeps_server_cursor': False})
+            return self.promote(root, self.runner(), client_control_receipt=control,
+                                client_receipt=restore, dry_run=True)
+        receipt = promote_with(exact_control)
+        self.assertEqual(receipt['negative_control']['client_head'], exact_control)
+        self.assertTrue(receipt['client_control_delta']['fix_patch_id'])
+        with self.assertRaisesRegex(ledger.Refused, 'extra paths: later.txt'):
+            promote_with(self.client_base)
+        (client / 'unrelated.txt').write_text('unrelated\n')
+        self.git(client, 'add', 'unrelated.txt')
+        self.git(client, 'commit', '-qm', 'unrelated control change')
+        unrelated = self.git(client, 'rev-parse', 'HEAD')
+        with self.assertRaisesRegex(ledger.Refused, 'extra paths: unrelated.txt'):
+            promote_with(unrelated)
+
     def test_client_control_that_stays_green_is_refused(self):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
@@ -876,9 +910,9 @@ class LedgerToolTests(unittest.TestCase):
     def test_client_control_that_already_has_the_fix_is_refused(self):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
-        with self.assertRaisesRegex(ledger.Refused, 'already contains the fix'):
+        with self.assertRaisesRegex(ledger.Refused, 'more than the fix non-test hunks'):
             self.promote(root, self.runner(),
-                         client_control_receipt=self.client_receipt(root, self.client_fix, verdict=False, assertions={'native-v2-ledger-painting': False}),
+                         client_control_receipt=self.client_receipt(root, self.client_fix, verdict=False, assertions={'initial_drag_keeps_server_cursor': False}),
                          client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
 
     def test_client_restore_on_the_pre_fix_client_is_refused(self):
@@ -886,7 +920,7 @@ class LedgerToolTests(unittest.TestCase):
         root = self.client_row(client_sha=self.client_fix[:12])
         with self.assertRaisesRegex(ledger.Refused, 'does not contain the fix'):
             self.promote(root, self.runner(),
-                         client_control_receipt=self.client_receipt(root, self.client_base, verdict=False, assertions={'native-v2-ledger-painting': False}),
+                         client_control_receipt=self.client_receipt(root, self.client_base, verdict=False, assertions={'initial_drag_keeps_server_cursor': False}),
                          client_receipt=self.client_receipt(root, self.client_base), dry_run=True)
 
     def test_unknown_client_commit_is_refused(self):
@@ -899,7 +933,7 @@ class LedgerToolTests(unittest.TestCase):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
         control = self.client_receipt(root, self.client_base, verdict=False,
-                                      assertions={'native-v2-ledger-painting': False})
+                                      assertions={'initial_drag_keeps_server_cursor': False})
         body = json.loads(control.read_text())
         body.pop('client_binary')
         control.write_text(json.dumps(body))
@@ -911,7 +945,7 @@ class LedgerToolTests(unittest.TestCase):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
         control = self.client_receipt(root, self.client_base, verdict=False, manifest=False,
-                                      assertions={'native-v2-ledger-painting': False})
+                                      assertions={'initial_drag_keeps_server_cursor': False})
         with self.assertRaisesRegex(ledger.Refused, r'records no client pin manifest|pin manifest .* unreadable'):
             self.promote(root, self.runner(), client_control_receipt=control,
                          client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
@@ -921,7 +955,7 @@ class LedgerToolTests(unittest.TestCase):
         root = self.client_row(client_sha=self.client_fix[:12])
         # The receipt ran one binary; its pin manifest describes another (a stale or hand-edited pin).
         control = self.client_receipt(root, self.client_base, verdict=False, pin_binary_sha='a' * 64,
-                                      assertions={'native-v2-ledger-painting': False},
+                                      assertions={'initial_drag_keeps_server_cursor': False},
                                       pin_override={'repo': 'client', 'kind': 'client', 'head': self.client_base,
                                                     'dirty': False, 'binary_sha256': 'b' * 64})
         with self.assertRaisesRegex(ledger.Refused, 'does not describe the client that ran'):
@@ -932,7 +966,7 @@ class LedgerToolTests(unittest.TestCase):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
         control = self.client_receipt(root, self.client_base, verdict=False, dirty=True,
-                                      assertions={'native-v2-ledger-painting': False})
+                                      assertions={'initial_drag_keeps_server_cursor': False})
         with self.assertRaisesRegex(ledger.Refused, 'is dirty'):
             self.promote(root, self.runner(), client_control_receipt=control,
                          client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
@@ -1068,6 +1102,36 @@ class LedgerToolTests(unittest.TestCase):
         self.assertEqual(reversed_files, ['src/lib.rs'])
         self.assertIn('-    1\n+    2\n', patch_text)
         self.assertNotIn('assert_eq', patch_text)
+
+    def test_inline_test_module_before_later_production(self):
+        root = self.scratch()
+        filler = ''.join(f'// filler {n}\n' for n in range(12))
+        source = ('#[cfg(test)]\nmod tests {\n'
+                  '    const BRACES: &str = r#"} { /*"#;\n'
+                  '    /* { nested /* } */ { */\n'
+                  '    fn test_it() { assert!(true); }\n}\n'
+                  + filler + 'fn later() -> u8 {\n    1\n}\n')
+        (root / 'src/lib.rs').write_text(source)
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'test module before production')
+        changed = source.replace('assert!(true)', 'assert!(false)').replace('    1\n', '    2\n')
+        (root / 'src/lib.rs').write_text(changed)
+        self.git(root, 'commit', '-qam', 'change test and production')
+        patch_text, reversed_files, _ = ledger.non_test_patch(root, self.git(root, 'rev-parse', 'HEAD'))
+        self.assertEqual(reversed_files, ['src/lib.rs'])
+        self.assertIn('-    1\n+    2\n', patch_text)
+        self.assertNotIn('assert!(false)', patch_text)
+
+    def test_deletion_before_test_module_refuses_ambiguous_boundary(self):
+        root = self.scratch()
+        source = 'fn removed_production() {}\n#[cfg(test)]\nmod tests {\n    fn it() {}\n}\n'
+        (root / 'src/lib.rs').write_text(source)
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'production before test')
+        (root / 'src/lib.rs').write_text(source.replace('fn removed_production() {}\n', ''))
+        self.git(root, 'commit', '-qam', 'delete production')
+        with self.assertRaisesRegex(ledger.Refused, 'deletion.*module boundary'):
+            ledger.non_test_patch(root, self.git(root, 'rev-parse', 'HEAD'))
 
     def test_hunk_straddling_the_test_module_is_refused(self):
         root = self.scratch()
