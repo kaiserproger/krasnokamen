@@ -791,6 +791,8 @@ pub enum EntityDataValue {
         index: u8,
         value: u32,
     },
+    /// Vanilla sniffer animation state, serializer 35 and ordinal 0..=6.
+    SnifferState { index: u8, value: u8 },
     /// CopperGolem enum serializers, javap EntityDataSerializers 26.1.2:
     /// state = 37, weathering = 38; both use VarInt ordinal codecs.
     CopperGolemState {
@@ -914,6 +916,7 @@ impl PartialEq for EntityDataValue {
                 Self::ChickenVariant { value: left, .. },
                 Self::ChickenVariant { value: right, .. },
             ) => left == right,
+            (Self::SnifferState { value: left, .. }, Self::SnifferState { value: right, .. }) => left == right,
             (Self::Byte { value: left, .. }, Self::Byte { value: right, .. }) => left == right,
             (
                 Self::CopperGolemState { value: left, .. },
@@ -1018,6 +1021,7 @@ impl EntityDataValue {
             Self::Byte { index, .. }
             | Self::PaintingVariant { index, .. }
             | Self::ChickenVariant { index, .. }
+            | Self::SnifferState { index, .. }
             | Self::CopperGolemState { index, .. }
             | Self::WeatheringCopper { index, .. }
             | Self::Int { index, .. }
@@ -1049,6 +1053,7 @@ impl EntityDataValue {
         match self {
             Self::PaintingVariant { .. } => 34,
             Self::ChickenVariant { .. } => 30,
+            Self::SnifferState { .. } => 35,
             Self::Byte { .. } => ENTITY_DATA_BYTE_SERIALIZER_ID,
             Self::CopperGolemState { .. } => 37,
             Self::WeatheringCopper { .. } => 38,
@@ -1094,6 +1099,10 @@ impl EntityDataValue {
                     .and_then(|value| value.checked_add(1))
                     .ok_or(CodecError::NotSupported("painting variant id out of range"))?;
                 buf.write_varint(wire);
+            }
+            Self::SnifferState { value, .. } => {
+                if *value > 6 { return Err(CodecError::NotSupported("invalid sniffer state")); }
+                buf.write_varint(i32::from(*value));
             }
             Self::Byte { value, .. } => buf.write_i8(*value),
             Self::CopperGolemState { value, .. } | Self::WeatheringCopper { value, .. } => {
@@ -1343,6 +1352,13 @@ impl EntityDataValue {
                     index,
                     value: (wire - 1) as u32,
                 }
+            }
+            35 => {
+                let value = buf.read_varint()?;
+                if !(0..=6).contains(&value) {
+                    return Err(CodecError::NotSupported("invalid sniffer state"));
+                }
+                Self::SnifferState { index, value: value as u8 }
             }
             37 | 38 => {
                 let value = buf.read_varint()?;

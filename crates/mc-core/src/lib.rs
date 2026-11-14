@@ -35,6 +35,7 @@ pub mod boundary;
 mod brewing;
 pub mod build_precommit;
 mod campfire;
+mod cat;
 pub(crate) mod carrier_blocks;
 #[cfg(test)]
 mod carrier_blocks_tests;
@@ -198,6 +199,7 @@ mod shulker;
 mod signs;
 mod singleplayer_pause;
 pub mod sleep;
+mod sniffer;
 mod spawn_egg;
 pub mod special_mobs;
 pub mod species;
@@ -385,6 +387,7 @@ mod interact_parity_tests;
 
 mod brushing;
 mod painting;
+mod parrot;
 mod spawn_protection;
 mod special_storage;
 mod sponge;

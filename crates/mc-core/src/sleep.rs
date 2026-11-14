@@ -256,6 +256,7 @@ pub(crate) fn use_bed(
 /// Get `entity` out of its bed (leave-bed command, morning, hit, death).
 pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
     if let Some(sleeper) = state.sleepers.remove(&entity) {
+        crate::cat::wake(state, entity, sleeper.ticks);
         if let Some(slot) = state.entities.slot_of(entity) {
             let [yaw, pitch, _] = state.entities.rot(slot);
             if let Some(exit) = bed_exit(state, sleeper.bed, yaw) {

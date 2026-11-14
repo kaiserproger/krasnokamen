@@ -26,7 +26,7 @@ fn usable(state: &TickState, entity: EntityId) -> bool {
             .is_some_and(|max| i64::from(max) - i64::from(stack.damage.unwrap_or(0)) > 1)
 }
 
-fn in_fluid(state: &TickState, slot: EntitySlot) -> bool {
+pub(crate) fn in_fluid(state: &TickState, slot: EntitySlot) -> bool {
     let [x, y, z] = state.entities.pos(slot);
     let row = state.entities.body(slot);
     // Check the body, not only its feet: a glider can enter water sideways.

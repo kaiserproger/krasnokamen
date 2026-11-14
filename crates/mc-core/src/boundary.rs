@@ -205,6 +205,8 @@ pub enum PlayerInput {
     },
     /// Full vanilla input bitset, retained by the rider for vehicle control.
     VehicleInput { connection: ConnectionId, flags: u8 },
+    /// Charged riding jump from the vanilla player-command packet.
+    RidingJump { connection: ConnectionId, power: i32 },
     MoveVehicle {
         connection: ConnectionId,
         position: [f64; 3],
@@ -392,6 +394,7 @@ impl PlayerInput {
             | Self::InteractEntity { connection, .. }
             | Self::InteractEntitySecondary { connection, .. }
             | Self::VehicleInput { connection, .. }
+            | Self::RidingJump { connection, .. }
             | Self::MoveVehicle { connection, .. }
             | Self::SelectSlot { connection, .. }
             | Self::SelectBundleItem { connection, .. }
@@ -635,6 +638,7 @@ pub enum EntityDataValue {
     Boolean(bool),
     WeatheringCopper(u8),
     CopperGolemState(u8),
+    SnifferState(u8),
     Direction(u8),
     PaintingVariant(u32),
     String(String),

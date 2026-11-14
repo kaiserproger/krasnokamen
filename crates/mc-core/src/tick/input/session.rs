@@ -395,6 +395,10 @@ pub(in crate::tick) fn leave(
         .and_then(|entity| state.connections.name_of(entity))
         .filter(|_| !state.session_locked(*connection))
         .map(str::to_owned);
+    if let Some(entity) = state.connections.by_connection.get(connection).copied() {
+        crate::mounts::dismount(state, entity);
+        crate::mounts::reset_player(state, entity);
+    }
     // Capture the final player image BEFORE removing the live
     // player: Join restores only from `offline_players`, so a
     // disconnect/reconnect without this image resets inventory,

@@ -47,6 +47,7 @@ pub(super) struct ReadRow {
     pub(super) is_slime_size_one: bool,
     /// Blueprint locomotion capabilities read by the motion step.
     pub(super) climbs_walls: bool,
+    pub(super) avoids_armadillos: bool,
     pub(super) aquatic_control: crate::species::AquaticControl,
     /// Resolved from the blueprint's goal set (data, not type names).
     pub(super) chaser: bool,
@@ -142,6 +143,13 @@ pub(super) fn early_entity_rest(
             && crate::turtle::drive(view.entities.row(slot)).is_some()
         || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::frog::is_frog(type_id))
             && crate::frog::drive(view.entities.row(slot)).is_some()
+        || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::cat::is_cat(type_id))
+            && crate::cat::drive(view.entities.row(slot)).is_some()
+        || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::sniffer::is_sniffer(type_id))
+            && crate::sniffer::drive(view.entities.row(slot)).is_some()
+        || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id }
+            if view.registry.blueprint(type_id).is_some_and(|bp| bp.capabilities.avoids_armadillos))
+            && crate::armadillo::avoidance_target(view.entities, view.world, view.registry, view.positions[slot.0 as usize]).is_some()
         || !special_idle
         || (motion_thinks(view.tick, flags, period)
             && flags & crate::entities::MOTION_WANDER_REST == 0
@@ -728,6 +736,8 @@ pub(super) fn read_row(
         hunts_living: blueprint.is_some_and(|bp| bp.capabilities.hunts_living),
         is_slime_size_one,
         climbs_walls: blueprint.is_some_and(|blueprint| blueprint.capabilities.climbs_walls),
+        avoids_armadillos: blueprint
+            .is_some_and(|blueprint| blueprint.capabilities.avoids_armadillos),
         aquatic_control: blueprint.map_or(crate::species::AquaticControl::Other, |blueprint| {
             blueprint.capabilities.aquatic
         }),
@@ -1413,6 +1423,15 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
             row.pos,
             panic_source,
         );
+    } else if row.avoids_armadillos
+        && let Some(threat) = crate::armadillo::avoidance_target(ctx.entities, ctx.world, ctx.registry, row.pos)
+    {
+        let target = [
+            row.pos[0] + row.pos[0] - threat[0],
+            row.pos[1],
+            row.pos[2] + row.pos[2] - threat[2],
+        ];
+        vel = crate::entity_motion::steer(row.movement, row.pos, target, f64::from(row.speed) * 1.2);
     } else if crate::goat::is_goat(row.type_id)
         && let Some((target, speed)) = crate::goat::drive(ctx.entities.row(row.slot))
     {
@@ -1425,6 +1444,16 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
         look_target = Some(target);
     } else if crate::frog::is_frog(row.type_id)
         && let Some((target, speed)) = crate::frog::drive(ctx.entities.row(row.slot))
+    {
+        vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
+        look_target = Some(target);
+    } else if crate::cat::is_cat(row.type_id)
+        && let Some((target, speed)) = crate::cat::drive(ctx.entities.row(row.slot))
+    {
+        vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
+        look_target = Some(target);
+    } else if crate::sniffer::is_sniffer(row.type_id)
+        && let Some((target, speed)) = crate::sniffer::drive(ctx.entities.row(row.slot))
     {
         vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
         look_target = Some(target);

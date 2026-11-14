@@ -189,6 +189,74 @@ impl Rig {
     }
 }
 
+#[test]
+fn tamed_cat_relaxes_and_waking_rolls_gift_table() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    rig.use_bed(1);
+    let owner = rig.state.entities.row(rig.state.entities.slot_of(rig.player).unwrap()).uuid;
+    let cat = crate::mounts::tests::spawn(
+        &mut rig.state,
+        "cat",
+        [f64::from(rig.head.x) + 0.5, f64::from(rig.head.y), f64::from(rig.head.z) + 0.5],
+    );
+    let slot = rig.state.entities.slot_of(cat).unwrap();
+    {
+        let row = rig.state.entities.row_mut(slot);
+        row.entity_life.tamed = true;
+        row.entity_life.taming.owner = Some(owner);
+        while {
+            let mut probe = row.clone();
+            crate::taming::roll(&mut probe, 10) >= 7
+        } {
+            row.entity_life.taming.rolls += 1;
+        }
+    }
+    crate::cat::run(&mut rig.state);
+    assert!(rig.state.entities.row(slot).entity_life.cat_relax.is_some());
+    rig.state.sleepers.get_mut(&rig.player).unwrap().ticks = 100;
+    rig.state.day_time = 0;
+    let (output, _, _) = run_tick(&mut rig.state, &[]);
+    assert!(rig.state.entities.row(slot).entity_life.cat_relax.is_none());
+    let gifts: Vec<_> = rig.state.entities.slots().filter_map(|s| {
+        rig.state.entities.row(s).item.as_ref().map(|item| (rig.state.entities.body(s).id, item.full_stack()))
+    }).collect();
+    assert_eq!(gifts.len(), 1, "gift must spawn in the wake tick");
+    let entries = crate::core::journal_entries_for_tick(&mut rig.state, &output);
+    let dir = tempfile::tempdir().unwrap();
+    let mut writer = crate::journal::JournalWriter::open(dir.path(), 1).unwrap();
+    writer.append(1, rig.state.tick, &entries).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+    let batches = crate::journal::read_complete_batches_after(&dir.path().join("journal"), 0).unwrap();
+    let replay = crate::journal::replay_batches(crate::journal::Replay::default(), &batches);
+    assert_eq!(replay.entities[&gifts[0].0.0].item.as_ref(), Some(&gifts[0].1));
+    let mut restarted = test_state();
+    crate::core::restore_entity(&mut restarted, gifts[0].0.0, &replay.entities[&gifts[0].0.0]).unwrap();
+    let restored = restarted.entities.slot_of(gifts[0].0).unwrap();
+    assert_eq!(restarted.entities.row(restored).item.as_ref().map(|item| item.full_stack()), Some(gifts[0].1.clone()));
+}
+
+#[test]
+fn sitting_cat_does_not_join_sleeping_owner() {
+    let mut rig = Rig::new();
+    rig.state.day_time = NIGHT;
+    rig.use_bed(1);
+    let owner = rig.state.entities.row(rig.state.entities.slot_of(rig.player).unwrap()).uuid;
+    let cat = crate::mounts::tests::spawn(
+        &mut rig.state,
+        "cat",
+        [f64::from(rig.head.x) + 0.5, f64::from(rig.head.y), f64::from(rig.head.z) + 0.5],
+    );
+    let slot = rig.state.entities.slot_of(cat).unwrap();
+    let row = rig.state.entities.row_mut(slot);
+    row.entity_life.tamed = true;
+    row.entity_life.taming.owner = Some(owner);
+    row.entity_life.sitting = true;
+    crate::cat::run(&mut rig.state);
+    assert!(rig.state.entities.row(slot).entity_life.cat_relax.is_none());
+}
+
 fn said(drains: &[(ConnectionId, Vec<PlayerChange>)], text: &str) -> bool {
     drains
         .iter()

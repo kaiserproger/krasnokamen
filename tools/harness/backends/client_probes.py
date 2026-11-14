@@ -464,13 +464,14 @@ seed = 81
                     mcp.promotion_mount_export_reimport = export_reimport
             result = native_v2.run(mcp, artifact, timeout, ctx.scenario_id)
         elif p5_scenario:
-            from . import java_craft_drag
+            from . import java_craft_drag, java_parrot
 
             runners = {
                 "java-v2-p5-towns": java_p5.run_towns,
                 "java-v2-p5-parity": java_p5.run_parity,
                 "java-v2-p5-cursor": java_p5.run_cursor,
                 "java-v2-p5-craft-drag": java_craft_drag.run,
+                "java-parrot-jukebox": java_parrot.run,
                 "java-v2-p5-craft-drag-paced": java_craft_drag.run_paced,
             }
             result = runners[ctx.scenario_id](mcp, artifact, timeout)
