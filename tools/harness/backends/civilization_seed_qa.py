@@ -28,6 +28,65 @@ def acceptance_verdict(stages: dict[str, bool], *, stalled: bool) -> dict[str, b
     return verdict
 
 
+SPLIT_SEEDS_ENV = "KRASNOKAMEN_SPLIT_SEEDS"
+
+
+def split_seeds(value: str | None) -> list[tuple[int, str]]:
+    """`KRASNOKAMEN_SPLIT_SEEDS`: `seed` or `seed:x,y,z` entries, `;`-separated.
+
+    The stages are milestones of one village observed over time, so the only
+    independent axis is the observation world: every part runs the whole gate on
+    its own seed. A seed without a verified village center would fail for
+    worldgen reasons, so the operator names both.
+    """
+    entries = [entry.strip() for entry in (value or "").split(";") if entry.strip()]
+    if not entries:
+        raise ValueError(
+            f"a civilization-seed-qa split needs {SPLIT_SEEDS_ENV}: "
+            "'seed' or 'seed:x,y,z' entries separated by ';' (verified village centers)")
+    seeds: list[tuple[int, str]] = []
+    for entry in entries:
+        seed_text, _, center = entry.partition(":")
+        try:
+            seed = int(seed_text)
+        except ValueError:
+            raise ValueError(f"{SPLIT_SEEDS_ENV} entry {entry!r} is not seed[:x,y,z]") from None
+        if center:
+            try:
+                if len([int(part) for part in center.split(",")]) != 3:
+                    raise ValueError
+            except ValueError:
+                raise ValueError(f"{SPLIT_SEEDS_ENV} center {center!r} is not x,y,z") from None
+        seeds.append((seed, center))
+    if len({seed for seed, _ in seeds}) != len(seeds):
+        raise ValueError(f"{SPLIT_SEEDS_ENV} repeats a seed: {value!r}")
+    return seeds
+
+
+def split_label(seed: int, center: str) -> str:
+    """A part label that names its observation world and is a safe path element."""
+    return f"seed{seed}" + ("" if not center else "-" + center.replace(",", "_"))
+
+
+def merge_seed_parts(blocks: list[dict[str, Any]],
+                     seeds: list[tuple[int, str]]) -> dict[str, Any]:
+    """One gate verdict from per-seed parts: every stage of every part must hold."""
+    if len(blocks) != len(seeds):
+        raise RuntimeError(f"split returned {len(blocks)} part reports for {len(seeds)} seeds")
+    parts = []
+    for (seed, center), block in zip(seeds, blocks, strict=True):
+        verdicts = dict((block.get("details") or {}).get("verdicts") or {})
+        parts.append({"label": block.get("label"), "seed": seed, "center": center or None,
+                      "status": block.get("status"), "verdicts": verdicts})
+    stages = {name: all(part["verdicts"].get(name) is True for part in parts) for name in STAGES}
+    complete = all(part["verdicts"].get(stage) is not None
+                   for part in parts for stage in (*STAGES, "all"))
+    return {"mode": "civilization-seed-split", "parts": parts,
+            "stages_all_parts": stages, "verdicts_complete": complete,
+            "all": complete and all(stages.values())
+                   and all(part["verdicts"].get("all") is True for part in parts)}
+
+
 def stall_signature(status: dict[str, Any]) -> tuple[Any, ...]:
     """What must change within a day: the active project's own progress and the buildings.
 

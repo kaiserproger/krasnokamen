@@ -338,7 +338,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
             ctx = SimpleNamespace(
                 client="native", extra_args=[], platform=None, windowed=True,
                 timeout_seconds=10, artifact_dir=artifact, client_evidence={},
-                commands=[], cwds=[], exits=[], logs=[],
+                commands=[], cwds=[], exits=[], logs=[], parts=1,
             )
             server = Mock(pid=101, returncode=0)
             primary = Mock(pid=102, returncode=0)
@@ -387,7 +387,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
 
 
     def test_early_civilization_failure_retains_false_verdicts(self) -> None:
-        ctx = SimpleNamespace(client="java", client_evidence={})
+        ctx = SimpleNamespace(client="java", client_evidence={}, parts=1)
         with self.assertRaisesRegex(ValueError, "requires --client native"):
             qa.run(ctx, civilization=True)
         self.assertEqual(ctx.client_evidence["verdicts"], {
@@ -414,7 +414,8 @@ class VillageAutonomyQaTests(unittest.TestCase):
             binary = Path(folder) / "server"
             binary.write_bytes(b"test server")
             ctx = SimpleNamespace(client="native", extra_args=[], platform=None, windowed=True,
-                                  timeout_seconds=10, artifact_dir=Path(folder), client_evidence={})
+                                  timeout_seconds=10, artifact_dir=Path(folder), client_evidence={},
+                                  parts=1)
             with (patch.dict(qa.os.environ, {"KRASNOKAMEN_SERVER_BINARY": str(binary), "KRASNOKAMEN_SNAPSHOT_BINARY": ""}),
                   patch.object(qa.subprocess, "Popen") as launch,
                   self.assertRaisesRegex(RuntimeError, "absolute KRASNOKAMEN_SNAPSHOT_BINARY")):
@@ -466,7 +467,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
             ctx = SimpleNamespace(
                 client="native", extra_args=[], platform=None, windowed=True,
                 timeout_seconds=10, artifact_dir=artifact, client_evidence={},
-                commands=[], cwds=[], exits=[], logs=[],
+                commands=[], cwds=[], exits=[], logs=[], parts=1,
             )
             server, primary, primary_log = Mock(pid=101, returncode=0), Mock(pid=102, returncode=0), Mock()
             mcp = Mock(token="")
@@ -510,7 +511,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
             snapshot_binary.chmod(0o755)
             ctx = SimpleNamespace(client="native", extra_args=[], platform=None, windowed=True,
                                   timeout_seconds=10, artifact_dir=artifact, client_evidence={},
-                                  commands=[], cwds=[], exits=[], logs=[])
+                                  commands=[], cwds=[], exits=[], logs=[], parts=1)
             server, primary, primary_log, mcp = Mock(pid=101, returncode=0), Mock(pid=102, returncode=0), Mock(), Mock(token="")
             mcp.call_tool.return_value = {"in_play": True}
             def start_primary(*args, **kwargs):

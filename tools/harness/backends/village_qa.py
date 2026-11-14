@@ -462,6 +462,9 @@ def validate_args(ctx: ProfileContext) -> float:
         raise ValueError("village-qa requires --client native")
     if ctx.extra_args or ctx.platform is not None:
         raise ValueError("village-qa accepts only --client, --windowed and --timeout-seconds")
+    if ctx.parts > 1:
+        raise ValueError("village-qa has no independent parts: every verdict observes the same "
+                         "village in one client session; use --parts 1")
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 600.0
     if not 0 < timeout <= 600:
         raise ValueError("village-qa --timeout-seconds must be in (0, 600]")

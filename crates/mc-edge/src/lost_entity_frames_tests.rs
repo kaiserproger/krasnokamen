@@ -155,7 +155,9 @@ fn entity_frames(world_rx: &mut WorldReceiver) -> Vec<String> {
 
 struct Pump {
     server: Arc<EdgeServer>,
-    dir: std::path::PathBuf,
+    /// The fixture's world: `TempDir` removes it when this harness drops, on a
+    /// passing test and on a panic before `finish()`.
+    dir: tempfile::TempDir,
     id: ConnectionId,
     viewers: HashMap<ConnectionId, crate::plan::ViewerState>,
     connections: HashMap<ConnectionId, ConnectionHandles>,
@@ -167,7 +169,7 @@ struct Pump {
 
 impl Pump {
     fn new() -> Self {
-        let (server, dir) = fixture();
+        let (server, dir) = fixture_in_temp_dir();
         let server = Arc::new(server);
         let id = server.connections.joining_id();
         let (reliable_tx, reliable_rx) = mpsc::channel(512);
@@ -237,8 +239,30 @@ impl Pump {
     fn finish(self) {
         self.server.connections.remove(self.id);
         self.server.hub.shutdown();
-        std::fs::remove_dir_all(self.dir).unwrap();
+        // `self.dir` drops here and removes the world, exactly as a panic does.
     }
+}
+
+/// A panic before `finish()` must not leave the world behind.
+#[test]
+fn a_panicking_pump_leaves_no_temp_dir() {
+    let mut created = None;
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let pump = Pump::new();
+        created = Some(pump.dir.path().to_path_buf());
+        assert!(pump.dir.path().is_dir(), "the pump's world exists during the test");
+        panic!("simulated assertion failure before finish()");
+    }));
+    std::panic::set_hook(previous);
+    assert!(outcome.is_err(), "the simulated test must fail");
+    let created = created.expect("the pump ran");
+    assert!(
+        !created.exists(),
+        "a panicking pump test left {} behind",
+        created.display()
+    );
 }
 
 /// A spawn whose frames the queue refused is sent again: the viewer had

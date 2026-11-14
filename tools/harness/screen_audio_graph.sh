@@ -4,6 +4,12 @@
 # features are disabled and the script aborts if any alsa_/bluez_ node is visible, so
 # nothing can reach the desktop's speakers, headset or microphone.
 # Example: tools/screen_audio_graph.sh cargo test --lib computer::audio -- --ignored
+#
+# Concurrent invocations are independent by construction: every run gets its own
+# mktemp runtime directory, its own D-Bus session, its own PipeWire/WirePlumber
+# instance and therefore its own null sink, so split gate parts (one
+# screens-voice-qa leg each) never share an audio sink. The directory is removed
+# on exit, which is why this script must not exec its child.
 set -eu
 root=$(mktemp -d "${SA_SCRATCH:-/tmp}/solaris-pw.XXXXXX")
 trap 'rm -rf "$root"' EXIT
@@ -22,7 +28,10 @@ export KRASNOKAMEN_PW_ROOT="$root"
 # user's systemd manager through $XDG_RUNTIME_DIR/systemd/private: link only that directory into the private runtime.
 host_runtime=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}
 if [ -d "$host_runtime/systemd" ]; then ln -s "$host_runtime/systemd" "$root/systemd"; fi
-exec dbus-run-session -- sh -c '
+# Do not exec: replacing this shell drops the EXIT trap above and leaks the
+# private graph directory (a run left thousands of /tmp/solaris-pw.* behind).
+status=0
+dbus-run-session -- sh -c '
   export XDG_RUNTIME_DIR="$KRASNOKAMEN_PW_ROOT" PIPEWIRE_RUNTIME_DIR="$KRASNOKAMEN_PW_ROOT" \
     XDG_CONFIG_HOME="$KRASNOKAMEN_PW_ROOT/config" XDG_STATE_HOME="$KRASNOKAMEN_PW_ROOT/state" \
     XDG_DATA_HOME="$KRASNOKAMEN_PW_ROOT/data" HOME="$KRASNOKAMEN_PW_ROOT/home"
@@ -62,4 +71,5 @@ exec dbus-run-session -- sh -c '
   status=0
   "$@" || status=$?
   exit $status
-' sh "$@"
+' sh "$@" || status=$?
+exit $status

@@ -362,6 +362,9 @@ def verdicts_from_assertions(assertions: dict[str, Any], language: str) -> dict[
 
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
+    if ctx.parts > 1:
+        raise ValueError("settlement-map-qa has no independent parts: its dialog walk shares one "
+                         "town and one client session; use --parts 1")
     parser = argparse.ArgumentParser(prog="settlement-map-qa")
     parser.add_argument("--gui-scale", type=int, choices=(2, 3), default=3)
     parser.add_argument("--language", choices=("en_us", "ru_ru"), default="en_us")

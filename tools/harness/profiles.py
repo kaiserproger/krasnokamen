@@ -59,6 +59,113 @@ class ProfileContext:
     # A scenario that failed after starting: its own report (assertions, fixture commands) so the
     # failure receipt can say which assertion failed, not only that the run failed.
     failure_scenario: dict[str, Any] | None = None
+    # `--parts N` for a gate that has N independent parts; 1 keeps the single lifecycle.
+    parts: int = 1
+
+
+SPLIT_PART_ENV = "KRASNOKAMEN_SPLIT_PART"
+
+
+@dataclass(frozen=True)
+class SplitPart:
+    """One independent part of a split gate: a label plus its selector environment."""
+
+    label: str
+    env: dict[str, str] = field(default_factory=dict)
+
+
+def split_part_label() -> str | None:
+    """The part this process was started as, or None for the parent run."""
+    return os.environ.get(SPLIT_PART_ENV) or None
+
+
+def profile_argv(ctx: ProfileContext) -> list[str]:
+    """The parent's own profile options, so each child runs the same gate."""
+    argv: list[str] = []
+    if ctx.release:
+        argv.append("--release")
+    argv += ["--client", ctx.client]
+    if ctx.windowed:
+        argv.append("--windowed")
+    if ctx.timeout_seconds is not None:
+        argv += ["--timeout-seconds", str(ctx.timeout_seconds)]
+    if ctx.platform is not None:
+        argv += ["--platform", ctx.platform]
+    if ctx.plugins_dir is not None:
+        argv += ["--plugins-dir", str(ctx.plugins_dir)]
+    if ctx.server_bin is not None:
+        argv += ["--server-bin", str(ctx.server_bin)]
+    argv += list(ctx.extra_args)
+    return argv
+
+
+def _spawn_split(argv: list[str], env: dict[str, str],
+                 log_path: Path) -> subprocess.Popen[Any]:
+    """Start one split child; its stdout/stderr belong to its own log file."""
+    with log_path.open("wb") as handle:
+        return subprocess.Popen(argv, cwd=REPO_ROOT, env=env, stdout=handle,
+                                stderr=subprocess.STDOUT, start_new_session=True)
+
+
+def run_split(ctx: ProfileContext, profile: str, parts: list[SplitPart]) -> list[dict[str, Any]]:
+    """Run every part as its own `tools.harness run <profile>` child, then judge them.
+
+    All children start before any is awaited, so the parts run concurrently, each
+    with its own artifact root (therefore its own server, client and Xvfb
+    display). The combined verdict is the whole point: a part that fails, exits
+    nonzero, writes no receipt or writes more than one fails the split gate.
+    """
+    if not parts:
+        raise ValueError("a split gate needs at least one part")
+    parts_root = ctx.artifact_dir / "parts"
+    parts_root.mkdir(parents=True, exist_ok=True)
+    base_argv = [sys.executable, "-m", "tools.harness", "run", profile, *profile_argv(ctx)]
+    children = []
+    for part in parts:
+        root = parts_root / part.label
+        root.mkdir(parents=True, exist_ok=True)
+        env = dict(os.environ)
+        env.update(part.env)
+        env[SPLIT_PART_ENV] = part.label
+        env["KRASNOKAMEN_VALIDATION_ROOT"] = str(root)
+        log_path = parts_root / (part.label + ".log")
+        children.append((part, root, log_path, _spawn_split(base_argv, env, log_path)))
+    deadline = time.monotonic() + (ctx.timeout_seconds or 3600.0)
+    blocks: list[dict[str, Any]] = []
+    failures: list[str] = []
+    for part, root, log_path, proc in children:
+        remaining = max(1.0, deadline - time.monotonic())
+        try:
+            exit_code = proc.wait(timeout=remaining)
+        except subprocess.TimeoutExpired:
+            stop_process(proc)
+            exit_code = None
+            failures.append(f"{part.label}: timed out with {remaining:.0f}s left")
+        receipts = sorted(root.glob("*/result.json"))
+        block: dict[str, Any] = {"label": part.label, "log": str(log_path), "artifact": None,
+                                 "status": "missing", "exit": exit_code, "error": None,
+                                 "details": {}}
+        if not receipts:
+            failures.append(f"{part.label}: no result.json under {root}")
+        elif len(receipts) > 1:
+            failures.append(f"{part.label}: {len(receipts)} result.json under {root}")
+        else:
+            block["artifact"] = str(receipts[0].parent)
+            try:
+                receipt = json.loads(receipts[0].read_text())
+            except (OSError, ValueError) as error:
+                failures.append(f"{part.label}: unreadable result.json: {error}")
+            else:
+                block.update(status=receipt.get("status"), error=receipt.get("error"),
+                             details=receipt.get("details") or {})
+                if receipt.get("status") != "passed":
+                    failures.append(f"{part.label}: {receipt.get('status')}: {receipt.get('error')}")
+                elif exit_code != 0:
+                    failures.append(f"{part.label}: exit {exit_code}")
+        blocks.append(block)
+    if failures:
+        raise RuntimeError("split part(s) failed: " + "; ".join(failures))
+    return blocks
 
 
 def _kill_stage_tree(proc: subprocess.Popen[Any]) -> None:
