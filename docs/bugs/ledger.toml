@@ -2281,7 +2281,7 @@ promotion = "docs/bugs/promotions/STRIDER-COLD-ABSENT.json"
 
 [[bug]]
 id = "PARROT-DANCE-ABSENT"
-title = "Parrots never dance to music: no `dance/Dance` logic exists in core. Vanilla parrots dance when a jukebox plays nearby, and imitate hostile mob sounds. (Hunt-only filing per freeze; no fix requested.)"
+title = "Verify Java parrot dancing on jukebox events; parrots do not imitate nearby hostile mob sounds."
 area = "gameplay"
 repro = "source"
 severity = "major"

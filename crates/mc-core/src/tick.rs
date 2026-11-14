@@ -1861,6 +1861,8 @@ fn run_dimension_tick_inner<'a>(
     } else if state.dimension.has_weather() {
         crate::weather::advance_cycle(state);
         crate::sleep::run(state);
+        // Sleep consumes the cat's gift state; spawn its item in the same journal batch.
+        crate::entity_life::commit_drops(state, &mut changes.entities_spawned);
         crate::weather::fade_and_publish(state, previous_weather);
     } else {
         state.weather = (crate::commands::Weather::Clear, 0);

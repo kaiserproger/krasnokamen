@@ -274,6 +274,14 @@ even where vanilla sends it. The `mc-world` wire privacy and registry tests and
 the `mc-edge` direct-packet tests cover the fields in their fixtures; they do not
 establish exhaustive coverage of every nested value or every real-client path.
 
+## Java parrot probe
+
+The `java-parrot-jukebox` scenario uses the vanilla Java client's local
+`isPartyParrot` state to check record start, stop, and leaving the jukebox
+radius. Vanilla 26.1.2 uses level events rather than a dancing metadata
+accessor; the probe requires the Loader Java-agent observation of that state.
+It does not cover hostile-mob sound imitation or the native client.
+
 ## Native promotion probes
 
 The `entities` profile includes windowed native-client probes:

@@ -191,7 +191,10 @@ pub fn extend_blueprints(
                     },
                     speed: speed as f32,
                     attack_damage: facts.attributes.attack_damage.unwrap_or(
-                        if hostile || profile.combat == MobCombatPolicy::Arrow {
+                        if hostile
+                            || profile.combat == MobCombatPolicy::Arrow
+                            || crate::frog::is_frog(type_id)
+                        {
                             supplemental.2
                         } else {
                             0.0
@@ -299,7 +302,7 @@ fn parameters(name: &str) -> (f64, f64, f64) {
         "minecraft:dolphin" => (10.0, 1.2, 3.0),
         "minecraft:nautilus" | "minecraft:zombie_nautilus" => (15.0, 0.8, 3.0),
         "minecraft:axolotl" => (14.0, 0.8, 2.0),
-        "minecraft:frog" => (10.0, 1.0, 0.0),
+        "minecraft:frog" => (10.0, 1.0, 10.0),
         "minecraft:turtle" => (30.0, 0.8, 0.0),
         "minecraft:husk" | "minecraft:drowned" | "minecraft:zombified_piglin" => (20.0, 2.3, 3.0),
         "minecraft:stray" | "minecraft:parched" => (20.0, 2.5, 2.0),

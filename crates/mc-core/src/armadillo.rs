@@ -44,6 +44,57 @@ pub(crate) fn is_armadillo(state: &TickState, type_id: u32) -> bool {
         .blueprint(type_id)
         .is_some_and(|b| b.name == "minecraft:armadillo")
 }
+/// Find the closest unrolled armadillo within the spider avoidance volume.
+pub(crate) fn avoidance_target(
+    entities: &crate::entities::EntityStore,
+    world: &crate::world::ChunkWorld,
+    registry: &crate::registry::CoreRegistry,
+    at: [f64; 3],
+) -> Option<[f64; 3]> {
+    static TYPE: std::sync::LazyLock<u32> = std::sync::LazyLock::new(|| {
+        crate::piglin::type_id_of("minecraft:armadillo").expect("armadillo type")
+    });
+    let chunk = |v: f64| mc_physics::mth::floor_i32(v).div_euclid(16);
+    let mut nearest: Option<(EntityId, f64, [f64; 3])> = None;
+    for z in chunk(at[2] - 6.0)..=chunk(at[2] + 6.0) {
+        for x in chunk(at[0] - 6.0)..=chunk(at[0] + 6.0) {
+            entities.for_each_slot_in_chunk(crate::boundary::ChunkPos { x, z }, |slot| {
+                let body = entities.body(slot);
+                if !body.alive
+                    || body.kind != (EntityKind::Mob { type_id: *TYPE })
+                    || entities
+                        .row(slot)
+                        .entity_life
+                        .armadillo
+                        .as_ref()
+                        .is_some_and(|a| a.rolled)
+                {
+                    return;
+                }
+                let pos = entities.pos(slot);
+                let dx = at[0] - pos[0];
+                let dy = at[1] - pos[1];
+                let dz = at[2] - pos[2];
+                let distance = dx * dx + dz * dz;
+                if distance <= 36.0
+                    && dy.abs() <= 3.0
+                    && nearest.is_none_or(|(id, best, _)| {
+                        distance < best || (distance == best && body.id < id)
+                    })
+                    && crate::hostile::sight_clear_in(
+                        world,
+                        registry,
+                        [at[0], at[1] + 0.5, at[2]],
+                        [pos[0], pos[1] + body.height * 0.5, pos[2]],
+                    )
+                {
+                    nearest = Some((body.id, distance, pos));
+                }
+            });
+        }
+    }
+    nearest.map(|(_, _, pos)| pos)
+}
 
 /// Spider's avoidance predicate is `!Armadillo.isScared`, not the curled state.
 pub(crate) fn flee_target(

@@ -48,6 +48,7 @@ pub(super) struct ReadRow {
     pub(super) is_slime_size_one: bool,
     /// Blueprint locomotion capabilities read by the motion step.
     pub(super) climbs_walls: bool,
+    pub(super) avoids_armadillos: bool,
     pub(super) aquatic_control: crate::species::AquaticControl,
     /// Resolved from the blueprint's goal set (data, not type names).
     pub(super) chaser: bool,
@@ -1211,6 +1212,8 @@ pub(super) fn read_row(
         hunts_living: blueprint.is_some_and(|bp| bp.capabilities.hunts_living),
         is_slime_size_one,
         climbs_walls: blueprint.is_some_and(|blueprint| blueprint.capabilities.climbs_walls),
+        avoids_armadillos: blueprint
+            .is_some_and(|blueprint| blueprint.capabilities.avoids_armadillos),
         aquatic_control: blueprint.map_or(crate::species::AquaticControl::Other, |blueprint| {
             blueprint.capabilities.aquatic
         }),
@@ -2271,6 +2274,17 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
             row.pos,
             panic_source,
         );
+    } else if row.avoids_armadillos
+        && let Some(threat) =
+            crate::armadillo::avoidance_target(ctx.entities, ctx.world, ctx.registry, row.pos)
+    {
+        let target = [
+            row.pos[0] + row.pos[0] - threat[0],
+            row.pos[1],
+            row.pos[2] + row.pos[2] - threat[2],
+        ];
+        vel =
+            crate::entity_motion::steer(row.movement, row.pos, target, f64::from(row.speed) * 1.2);
     } else if crate::goat::is_goat(row.type_id)
         && let Some((target, speed)) = crate::goat::drive(ctx.entities.row(row.slot))
     {

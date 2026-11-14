@@ -3196,6 +3196,11 @@ fn world_border_init_changes_and_credit_deferral_use_vanilla_packet() {
 }
 
 #[test]
+fn frog_tongue_pose_maps_to_wire_pose() {
+    assert_eq!(pose_of(9), EntityPose::UsingTongue);
+}
+
+#[test]
 fn warden_emerging_spawn_data_and_all_warden_poses_use_verified_ordinals() {
     with_cache(|cache| {
         for (pose, expected) in [

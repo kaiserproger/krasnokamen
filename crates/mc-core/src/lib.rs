@@ -39,6 +39,7 @@ mod campfire;
 pub(crate) mod carrier_blocks;
 #[cfg(test)]
 mod carrier_blocks_tests;
+mod cat;
 mod cauldron_wash;
 #[cfg(test)]
 #[path = "cauldron_wash_tests.rs"]
@@ -397,6 +398,7 @@ mod interact_parity_tests;
 
 mod brushing;
 mod painting;
+mod parrot;
 mod spawn_protection;
 mod special_storage;
 mod sponge;

@@ -357,24 +357,34 @@ pub fn decode_play_frame(
                 lines: p.lines,
             });
         }
-        ServerboundPlayerCommand::ID => match read::<ServerboundPlayerCommand>(body)?.action {
-            PlayerCommandAction::StopSleeping => {
-                out.push(PlayerInput::LeaveBed { connection: conn });
+        ServerboundPlayerCommand::ID => {
+            let command = read::<ServerboundPlayerCommand>(body)?;
+            match command.action {
+                PlayerCommandAction::StopSleeping => {
+                    out.push(PlayerInput::LeaveBed { connection: conn });
+                }
+                PlayerCommandAction::OpenInventory => {
+                    out.push(PlayerInput::OpenMountInventory { connection: conn });
+                }
+                PlayerCommandAction::StartRidingJump => {
+                    out.push(PlayerInput::RidingJump {
+                        connection: conn,
+                        power: command.data,
+                    });
+                }
+                action @ (PlayerCommandAction::StartSprinting
+                | PlayerCommandAction::StopSprinting) => {
+                    out.push(PlayerInput::Sprint {
+                        connection: conn,
+                        sprinting: action == PlayerCommandAction::StartSprinting,
+                    });
+                }
+                PlayerCommandAction::StartFallFlying => {
+                    out.push(PlayerInput::StartFallFlying { connection: conn });
+                }
+                PlayerCommandAction::StopRidingJump => {}
             }
-            PlayerCommandAction::OpenInventory => {
-                out.push(PlayerInput::OpenMountInventory { connection: conn });
-            }
-            action @ (PlayerCommandAction::StartSprinting | PlayerCommandAction::StopSprinting) => {
-                out.push(PlayerInput::Sprint {
-                    connection: conn,
-                    sprinting: action == PlayerCommandAction::StartSprinting,
-                });
-            }
-            PlayerCommandAction::StartFallFlying => {
-                out.push(PlayerInput::StartFallFlying { connection: conn });
-            }
-            _ => {}
-        },
+        }
         ServerboundPlayerInput::ID => {
             let input = read::<ServerboundPlayerInput>(body)?.input;
             out.extend([

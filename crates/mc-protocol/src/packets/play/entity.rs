@@ -941,6 +941,9 @@ impl PartialEq for EntityDataValue {
                 Self::ZombieNautilusVariant { value: left, .. },
                 Self::ZombieNautilusVariant { value: right, .. },
             ) => left == right,
+            (Self::SnifferState { value: left, .. }, Self::SnifferState { value: right, .. }) => {
+                left == right
+            }
             (Self::Byte { value: left, .. }, Self::Byte { value: right, .. }) => left == right,
             (Self::SnifferState { value: left, .. }, Self::SnifferState { value: right, .. }) => {
                 left == right
@@ -1135,6 +1138,12 @@ impl EntityDataValue {
                     .and_then(|value| value.checked_add(1))
                     .ok_or(CodecError::NotSupported("painting variant id out of range"))?;
                 buf.write_varint(wire);
+            }
+            Self::SnifferState { value, .. } => {
+                if *value > 6 {
+                    return Err(CodecError::NotSupported("invalid sniffer state"));
+                }
+                buf.write_varint(i32::from(*value));
             }
             Self::Byte { value, .. } => buf.write_i8(*value),
             Self::SnifferState { value, .. }

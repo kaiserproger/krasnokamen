@@ -23,6 +23,7 @@ REQUIRED_TOOLS = frozenset({
     "minecraft_click_container_slot", "minecraft_quick_move_container_slot",
     "minecraft_click_screen_button", "minecraft_read_recipe_book", "minecraft_screenshot",
     "minecraft_list_entities", "minecraft_break_block", "minecraft_wait_for_health_below",
+    "minecraft_wait_for_visible_entity",
     "minecraft_drop_selected_item", "minecraft_attack_entity_once",
 })
 

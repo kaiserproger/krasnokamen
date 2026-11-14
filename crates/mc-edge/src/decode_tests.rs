@@ -1010,6 +1010,28 @@ fn ignore_list_returns_empty() {
     }
 }
 #[test]
+fn riding_jump_command_keeps_charge() {
+    let mut s = state();
+    let input = decode(
+        ServerboundPlayerCommand::ID,
+        body(&ServerboundPlayerCommand {
+            entity_id: 1,
+            action: PlayerCommandAction::StartRidingJump,
+            data: 67,
+        }),
+        &mut s,
+    )
+    .unwrap();
+    assert_eq!(
+        input,
+        vec![PlayerInput::RidingJump {
+            connection: conn(),
+            power: 67
+        }]
+    );
+}
+
+#[test]
 fn sprint_and_sign_updates_become_authoritative_inputs() {
     let mut s = state();
     for (action, sprinting) in [

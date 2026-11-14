@@ -632,6 +632,7 @@ seed = 81
                 "java-v2-p5-parity": java_p5.run_parity,
                 "java-v2-p5-cursor": java_p5.run_cursor,
                 "java-v2-p5-craft-drag": java_craft_drag.run,
+                "java-parrot-jukebox": java_parrot.run,
                 "java-v2-p5-craft-drag-paced": java_craft_drag.run_paced,
                 "java-v2-p5-shift-double-click": shift_matrix.run_java,
             }

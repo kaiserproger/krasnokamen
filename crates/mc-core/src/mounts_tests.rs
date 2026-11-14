@@ -352,6 +352,151 @@ fn saddle_equip_revalidation_strip_and_death_do_not_duplicate() {
     );
 }
 #[test]
+fn camel_dash_requires_rider_saddle_ground_and_cooldown() {
+    let (mut state, actor, pos) = fixture();
+    let camel = spawn(&mut state, "camel", pos);
+    let camel_slot = slot(&state, camel);
+    equip(&mut state, actor, camel, "saddle");
+    run_tick(&mut state, &[use_entity(camel)]);
+    assert_eq!(vehicle(&state, actor), Some(camel_slot));
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(2),
+            uuid: Uuid::new_v4(),
+            name: "second".into(),
+            permission_level: 0,
+        }],
+    );
+    let second = state.connections.entity_of(ConnectionId(2)).unwrap();
+    let second_slot = slot(&state, second);
+    let camel_pos = state.entities.pos(camel_slot);
+    state.entities.set_pos(second_slot, camel_pos);
+    run_tick(
+        &mut state,
+        &[PlayerInput::InteractEntity {
+            connection: ConnectionId(2),
+            target: camel,
+            hand: Hand::Main,
+            location: [0.0; 3],
+        }],
+    );
+    assert_eq!(
+        state.entities.row(camel_slot).appearance.passengers,
+        vec![actor, second]
+    );
+    assert_eq!(vehicle(&state, second), Some(camel_slot));
+    state.entities.set_ground(camel_slot, true);
+    state.entities.set_vel(camel_slot, [0.0; 3]);
+    let before = state.entities.pos(camel_slot);
+    run_tick(
+        &mut state,
+        &[PlayerInput::RidingJump {
+            connection: ConnectionId(1),
+            power: 90,
+        }],
+    );
+    let after = state.entities.pos(camel_slot);
+    assert!(
+        (after[0] - before[0]).hypot(after[2] - before[2]) > 0.01,
+        "dash must move the camel through the full entity phase"
+    );
+    assert!(state.entities.vel(camel_slot)[1] > 0.0);
+    assert!(
+        state
+            .entities
+            .row(camel_slot)
+            .entity_life
+            .mount
+            .dash_cooldown
+            > 0
+    );
+    assert!(
+        state
+            .entities
+            .row(camel_slot)
+            .appearance
+            .extra
+            .contains(&(19, crate::boundary::EntityDataValue::Boolean(true)))
+    );
+    let velocity = state.entities.vel(camel_slot);
+    state.entities.set_ground(camel_slot, true);
+    riding_jump(&mut state, ConnectionId(1), 90);
+    assert_eq!(
+        state.entities.vel(camel_slot),
+        velocity,
+        "cooldown forbids repeat dash"
+    );
+    state
+        .entities
+        .row_mut(camel_slot)
+        .entity_life
+        .mount
+        .dash_cooldown = 0;
+    state
+        .entities
+        .set_pos(camel_slot, [pos[0], pos[1] + 20.0, pos[2]]);
+    state.entities.set_ground(camel_slot, false);
+    let mut changes = crate::boundary::ChangeSet::default();
+    tick(&mut state, &mut changes);
+    assert!(
+        state
+            .entities
+            .row(camel_slot)
+            .appearance
+            .extra
+            .contains(&(19, crate::boundary::EntityDataValue::Boolean(true))),
+        "airborne dash survives cooldown expiration"
+    );
+    state.entities.set_ground(camel_slot, true);
+    tick(&mut state, &mut changes);
+    assert!(
+        state
+            .entities
+            .row(camel_slot)
+            .appearance
+            .extra
+            .contains(&(19, crate::boundary::EntityDataValue::Boolean(false))),
+        "delayed landing clears dash"
+    );
+    state.entities.set_ground(camel_slot, true);
+    riding_jump(&mut state, ConnectionId(1), 90);
+    assert!(
+        state
+            .entities
+            .row(camel_slot)
+            .appearance
+            .extra
+            .contains(&(19, crate::boundary::EntityDataValue::Boolean(true))),
+        "next dash publishes true again"
+    );
+    state
+        .entities
+        .row_mut(camel_slot)
+        .entity_life
+        .mount
+        .dash_cooldown = 49;
+    state.entities.set_ground(camel_slot, false);
+    let at = state.entities.pos(camel_slot);
+    state.world.set_block(
+        at[0].floor() as i32,
+        at[1].floor() as i32,
+        at[2].floor() as i32,
+        state.registry.states.water,
+    );
+    tick(&mut state, &mut changes);
+    assert!(
+        state
+            .entities
+            .row(camel_slot)
+            .appearance
+            .extra
+            .contains(&(19, crate::boundary::EntityDataValue::Boolean(false))),
+        "liquid clears dash"
+    );
+}
+
+#[test]
 fn mounted_move_commits_rider_snap_and_rejects_overspeed_with_correction() {
     let (mut state, actor, pos) = fixture();
     let pig = spawn(&mut state, "pig", pos);
@@ -482,6 +627,106 @@ fn wolf_body_armor_repair_and_strip_transfer_one_stack() {
             .count(),
         1
     );
+}
+
+#[test]
+fn happy_ghast_harness_uses_body_equipment_and_consumes_one() {
+    let (mut state, actor, pos) = fixture();
+    let ghast = spawn(&mut state, "happy_ghast", pos);
+    let ghast_slot = slot(&state, ghast);
+    hold(&mut state, actor, "red_harness", 2);
+    let held = &state.players[&actor].inventory.slots[0];
+    assert!(
+        state.registry.tags.contains_raw_id(
+            "minecraft:item",
+            "minecraft:harnesses",
+            held.item_id as i32
+        ),
+        "embedded harnesses tag must contain red harness"
+    );
+    run_tick(&mut state, &[use_entity(ghast)]);
+    let equipped = state
+        .entities
+        .row(ghast_slot)
+        .loot
+        .body_armor
+        .as_deref()
+        .unwrap();
+    assert_eq!(equipped.count, 1);
+    assert_eq!(
+        state
+            .registry
+            .items
+            .name_of(equipped.item_id)
+            .unwrap()
+            .as_str(),
+        "minecraft:red_harness"
+    );
+    assert_eq!(state.players[&actor].inventory.slots[0].count, 1);
+    assert_eq!(
+        state
+            .entities
+            .row(ghast_slot)
+            .appearance
+            .body_armor
+            .as_ref(),
+        Some(equipped)
+    );
+}
+
+#[test]
+fn happy_ghast_four_passengers_keep_distinct_custody() {
+    let (mut state, actor, pos) = fixture();
+    let ghast = spawn(&mut state, "happy_ghast", pos);
+    let ghast_slot = slot(&state, ghast);
+    equip(&mut state, actor, ghast, "red_harness");
+    let mut actors = vec![actor];
+    for number in 2..=5 {
+        let connection = ConnectionId(number);
+        run_tick(
+            &mut state,
+            &[PlayerInput::Join {
+                connection,
+                uuid: Uuid::new_v4(),
+                name: format!("passenger{number}"),
+                permission_level: 0,
+            }],
+        );
+        actors.push(state.connections.entity_of(connection).unwrap());
+    }
+    for (index, passenger) in actors.iter().copied().enumerate() {
+        let passenger_slot = slot(&state, passenger);
+        state.entities.set_pos(passenger_slot, pos);
+        run_tick(
+            &mut state,
+            &[PlayerInput::InteractEntity {
+                connection: ConnectionId(index as u64 + 1),
+                target: ghast,
+                hand: Hand::Main,
+                location: [0.0; 3],
+            }],
+        );
+    }
+    assert_eq!(
+        state.entities.row(ghast_slot).appearance.passengers,
+        actors[..4]
+    );
+    assert!(vehicle(&state, actors[4]).is_none());
+    let life = state.entities.row(ghast_slot).entity_life.clone();
+    let fields = persistence::to_fields(&life);
+    let mut restored = crate::entity_life::EntityLifeState::default();
+    persistence::from_fields(&mut restored, &fields).unwrap();
+    assert_eq!(restored.mount.rider, life.mount.rider);
+    assert_eq!(restored.mount.passengers, life.mount.passengers);
+    dismount(&mut state, actors[1]);
+    assert_eq!(
+        state.entities.row(ghast_slot).appearance.passengers,
+        vec![actors[0], actors[2], actors[3]]
+    );
+    assert!(vehicle(&state, actors[1]).is_none());
+    for actor in [actors[0], actors[2], actors[3]] {
+        assert_eq!(vehicle(&state, actor), Some(ghast_slot));
+    }
 }
 
 #[test]
@@ -916,6 +1161,61 @@ fn armadillo_curls_against_undead_and_halves_melee_damage() {
         "curled armadillo must take (10 - 1) / 2 damage, took {}",
         before - after
     );
+}
+
+#[test]
+fn spiders_flee_unrolled_but_not_rolled_armadillos() {
+    for kind in ["spider", "cave_spider"] {
+        let (mut state, actor, pos) = fixture();
+        let actor_slot = slot(&state, actor);
+        state
+            .entities
+            .set_pos(actor_slot, [pos[0] - 2.0, pos[1], pos[2]]);
+        let armadillo = spawn(&mut state, "armadillo", pos);
+        let spider = spawn(&mut state, kind, [pos[0] + 3.0, pos[1], pos[2]]);
+        let a = slot(&state, armadillo);
+        let s = slot(&state, spider);
+        state.entities.row_mut(a).controls.no_ai = true;
+        state.entities.row_mut(a).entity_life.armadillo =
+            Some(crate::armadillo::ArmadilloState::default());
+        state.entities.row_mut(s).last_player_hit = Some((actor, state.tick));
+        state
+            .entities
+            .row_mut(a)
+            .entity_life
+            .armadillo
+            .as_mut()
+            .unwrap()
+            .rolled = true;
+        let before = state.entities.pos(s)[0];
+        for _ in 0..10 {
+            run_tick(&mut state, &[]);
+        }
+        let s = slot(&state, spider);
+        assert!(
+            state.entities.pos(s)[0] < before,
+            "{kind} must not flee a rolled armadillo"
+        );
+        state.entities.set_pos(s, [pos[0] + 3.0, pos[1], pos[2]]);
+        state.entities.set_vel(s, [0.0; 3]);
+        state
+            .entities
+            .row_mut(a)
+            .entity_life
+            .armadillo
+            .as_mut()
+            .unwrap()
+            .rolled = false;
+        let before = state.entities.pos(s)[0];
+        for _ in 0..10 {
+            run_tick(&mut state, &[]);
+        }
+        let after = state.entities.pos(slot(&state, spider))[0];
+        assert!(
+            after > before,
+            "{kind} must move away from an unrolled armadillo"
+        );
+    }
 }
 
 #[test]

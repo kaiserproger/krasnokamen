@@ -357,6 +357,9 @@ impl EntityStateImage {
         if record.id == "minecraft:armor_stand" {
             crate::armor_stand::validate_fields(&record.extra_fields)?;
         }
+        if record.id == "minecraft:sniffer" {
+            crate::sniffer::validate_fields(&record.extra_fields)?;
+        }
         let ageable = registry
             .entity_type_id(&record.id)
             .and_then(|id| registry.blueprint(id))

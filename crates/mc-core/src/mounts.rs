@@ -23,6 +23,8 @@ pub struct MountState {
     pub riders: Vec<Uuid>,
     #[serde(skip)]
     pub input: u8,
+    #[serde(skip)]
+    pub dash_cooldown: u8,
     /// Reverse link is restart-local; the retained vehicle owns its rider UUID.
     #[serde(skip)]
     pub vehicle: Option<EntityId>,
@@ -72,6 +74,10 @@ fn capabilities(state: &TickState, slot: EntitySlot) -> crate::blueprint::Capabi
         .map(|blueprint| blueprint.capabilities)
         .unwrap_or_default()
 }
+fn contains_passenger(mount: &MountState, uuid: Uuid) -> bool {
+    mount.rider == Some(uuid) || mount.passengers.contains(&uuid)
+}
+
 pub(crate) fn vehicle(state: &TickState, actor: EntityId) -> Option<EntitySlot> {
     let actor = state.entities.row(state.entities.slot_of(actor)?);
     let slot = state
@@ -240,6 +246,16 @@ fn action(
             && row.entity_life.tamed
             && owner
             && row.loot.body_armor.is_none()
+        {
+            return Some(Action::Armor);
+        }
+        if kind == "minecraft:happy_ghast"
+            && row.loot.body_armor.is_none()
+            && state.registry.tags.contains_raw_id(
+                "minecraft:item",
+                "minecraft:harnesses",
+                held.item_id as i32,
+            )
         {
             return Some(Action::Armor);
         }
@@ -566,6 +582,7 @@ pub(crate) fn death(state: &mut TickState, slot: EntitySlot) {
             clear_rider(state, slot, uuid);
         }
     }
+    clear_rider(state, slot);
     let position = state.entities.pos(slot);
     let mount = &mut state.entities.row_mut(slot).entity_life.mount;
     let chested = std::mem::take(&mut mount.chested);
@@ -599,7 +616,7 @@ fn clear_rider(state: &mut TickState, slot: EntitySlot, uuid: Uuid) {
             player.vehicle_airtime_ticks = 0;
             player.vehicle_last_reported_y = None;
         }
-        let mount = &mut state.entities.row_mut(rider).entity_life.mount;
+        let mount = &mut state.entities.row_mut(passenger).entity_life.mount;
         mount.vehicle = None;
         mount.input = 0;
     }
@@ -785,6 +802,12 @@ fn controllable(state: &TickState, slot: EntitySlot, actor: EntityId) -> bool {
         return kind == crate::vehicles::VehicleKind::Boat;
     }
     let row = state.entities.row(slot);
+    if rider(state, slot).is_none_or(|rider| state.entities.body(rider).id != actor) {
+        return false;
+    }
+    if name(state, slot) == "minecraft:happy_ghast" {
+        return row.loot.body_armor.is_some();
+    }
     let capabilities = capabilities(state, slot);
     if (row.loot.saddle.is_none() && name(state, slot) != "minecraft:happy_ghast")
         || capabilities.riding == crate::blueprint::RidingProfile::Unsteered

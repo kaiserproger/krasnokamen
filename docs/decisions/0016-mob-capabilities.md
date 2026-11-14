@@ -70,6 +70,25 @@ The type lists moved, unedited, into one function, `blueprint::vanilla_capabilit
 Vanilla blaze, snow golem and strider are also water-sensitive, but they did not
 take water damage before this change. Turning on `hurt_by_water` for them is a
 separate parity change.
+Frog tongue hunting selects visible, size-one members of the `frog_food`
+entity tag, publishes the target and tongue pose, pulls the prey and submits
+ordinary melee damage after the catch animation. The target and pose clear
+when the attack ends or its target becomes invalid.
+
+Happy ghast harnesses occupy the body-equipment slot. Passenger custody keeps
+the controlling rider first and up to three further UUIDs; only the first can
+steer, and dismount removes only the departing passenger. The additional
+passengers are retained in `krasnokamen:Passengers` in the animal NBT.
+
+Saddled camels admit two players; the controlling rider's charged jump
+starts a dash with a 55-tick cooldown and a vanilla dash-state metadata bit.
+Sniffers search diggable block tags, publish their sniffing/digging/rising
+states using serializer 35, roll the data-loaded `sniffer_digging` loot
+table and retain cooldown and explored sites. Tamed standing cats can relax
+by sleeping owners and roll `cat_morning_gift` on an eligible wake.
+Parrots occasionally imitate sounds of nearby mapped mobs; their jukebox
+dance remains client-local and is driven by vanilla level events.
+
 
 Wall-climbing contact is an ephemeral movement result, not a new persistent
 entity flag. `entity_motion::step` reports a real loaded horizontal obstacle

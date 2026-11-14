@@ -26,6 +26,20 @@ fn decode_exact<P: Packet>(bytes: &[u8]) -> P {
     packet
 }
 
+#[test]
+fn sniffer_state_uses_serializer_35() {
+    let packet = ClientboundSetEntityData {
+        entity_id: 1,
+        values: vec![EntityDataValue::SnifferState {
+            index: 18,
+            value: 5,
+        }],
+    };
+    let bytes = encode(&packet);
+    assert_eq!(bytes, vec![1, 18, 35, 5, 255]);
+    assert_eq!(decode_exact::<ClientboundSetEntityData>(&bytes), packet);
+}
+
 fn assert_every_truncated_prefix_fails<P: Packet>(bytes: &[u8]) {
     for end in 0..bytes.len() {
         let mut cursor = &bytes[..end];
