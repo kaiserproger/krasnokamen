@@ -26,6 +26,46 @@ fn tables(names: &[&str]) -> Tables {
 }
 
 #[test]
+fn equippable_remaps_sound_and_entity_holders_on_both_adjacent_steps() {
+    for (lower, upper) in [(775, 776), (776, 777)] {
+        let mut t = tables(&["equippable"]);
+        t.formats.lower = lower;
+        t.formats.upper = upper;
+        t.sounds = IdMap::by_name(
+            [("equip", 5), ("shear", 6)],
+            [("equip", 7), ("shear", 8)],
+            |_| None,
+        );
+        t.entities = IdMap::by_name([("zombie", 2)], [("zombie", 9)], |_| None);
+        for named in [false, true] {
+            let mut source = vec![1, 10, 1, 0, 0, 4, 6, 1];
+            source
+                .write_string("krasnokamen_battle:holy", 32767)
+                .unwrap();
+            source.extend([0, 1]);
+            if named {
+                source.write_varint(0);
+                source.write_string("minecraft:test", 32767).unwrap();
+            } else {
+                source.extend([2, 2]);
+            }
+            source.extend([1, 1, 1, 0, 0, 7]);
+            let mut legacy = Vec::new();
+            let mut input = source.as_slice();
+            stack(&t, To::Legacy, &mut input, &mut legacy).unwrap();
+            assert!(input.is_empty());
+            let mut restored = Vec::new();
+            let mut input = legacy.as_slice();
+            stack(&t, To::Canonical, &mut input, &mut restored).unwrap();
+            assert!(input.is_empty());
+            assert_eq!(restored, source);
+            assert_eq!(legacy[6], 8);
+            assert_eq!(*legacy.last().unwrap(), 9);
+        }
+    }
+}
+
+#[test]
 fn nested_templates_are_item_first_not_optional_slots() {
     let t = tables(&["use_remainder", "bundle_contents", "container"]);
     for (component, payload, expected) in [

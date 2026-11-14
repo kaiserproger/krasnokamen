@@ -67,6 +67,18 @@ packets actually observed; absence in a short capture does not establish an ID.
 A probe is not a graphical-client acceptance test. Scenario details and paired
 capture examples are in [physics oracles](../physics-oracles.md).
 
+## Equippable item components
+
+The 775, 776 and 777 `Equippable` stream layouts have the same field order:
+slot, equip sound holder, optional asset ID, optional camera overlay, optional
+entity holder set, five booleans (dispensable, swappable, damage on hurt,
+equip on interact, can be sheared), then shearing sound holder. Slot IDs are
+wire IDs, not enum ordinals. Adjacent translation maps registered sound and
+entity IDs; inline sounds and named entity sets retain their identifiers.
+Inspect `net.minecraft.world.item.equipment.Equippable`,
+`net.minecraft.world.entity.EquipmentSlot`, and `net.minecraft.sounds.SoundEvent`
+in each version's jar when changing this codec.
+
 ## Implement and test
 
 Packet types and IDs are under `crates/mc-protocol/src/packets/`; shared codecs

@@ -44,6 +44,32 @@ fn optional(
     }
     Ok(())
 }
+fn sound(t: &Tables, to: To, r: &mut &[u8], w: &mut Vec<u8>, lossy: &mut bool) -> Result<()> {
+    let holder = r.read_varint()?;
+    ensure!(holder >= 0, "invalid sound holder");
+    if holder == 0 {
+        w.write_varint(0);
+        string(r, w)?;
+        optional(r, w, |r, w| {
+            w.write_f32(r.read_f32()?);
+            Ok(())
+        })?;
+    } else if let Some(mapped) = map(&t.sounds, to, holder - 1) {
+        *lossy |= to == To::Legacy && t.sounds.back(mapped) != Some(holder - 1);
+        w.write_varint(mapped + 1);
+    } else if to == To::Legacy {
+        let name = t
+            .sound_names
+            .get((holder - 1) as usize)
+            .context("unknown sound holder")?;
+        w.write_varint(0);
+        w.write_string(name, 32767)?;
+        w.write_bool(false);
+    } else {
+        bail!("unmapped sound holder {holder}");
+    }
+    Ok(())
+}
 
 fn filtered(r: &mut &[u8], w: &mut Vec<u8>, text: bool) -> Result<()> {
     if text {
@@ -68,6 +94,39 @@ pub(super) fn extra(
     lossy: &mut bool,
 ) -> Result<()> {
     match shape {
+        Payload::Equippable => {
+            let slot = r.read_varint()?;
+            ensure!((0..8).contains(&slot), "invalid equipment slot");
+            w.write_varint(slot);
+            sound(t, to, r, w, lossy)?;
+            for _ in 0..2 {
+                optional(r, w, string)?;
+            }
+            optional(r, w, |r, w| {
+                let count = r.read_varint()?;
+                ensure!(
+                    (0..=MAX_LIST + 1).contains(&count),
+                    "entity holder set size"
+                );
+                w.write_varint(count);
+                if count == 0 {
+                    string(r, w)?;
+                } else {
+                    for _ in 1..count {
+                        let source = r.read_varint()?;
+                        let target =
+                            map(&t.entities, to, source).context("unmapped entity holder")?;
+                        *lossy |= to == To::Legacy && t.entities.back(target) != Some(source);
+                        w.write_varint(target);
+                    }
+                }
+                Ok(())
+            })?;
+            for _ in 0..5 {
+                w.write_bool(r.read_bool()?);
+            }
+            sound(t, to, r, w, lossy)?;
+        }
         Payload::Container => {
             let n = list_len(r, w)?;
             for _ in 0..n {
@@ -166,31 +225,7 @@ pub(super) fn extra(
                     }
                     2 => {}
                     3 => w.write_f32(r.read_f32()?),
-                    4 => {
-                        let holder = r.read_varint()?;
-                        ensure!(holder >= 0, "invalid sound holder");
-                        if holder == 0 {
-                            w.write_varint(0);
-                            string(r, w)?;
-                            optional(r, w, |r, w| {
-                                w.write_f32(r.read_f32()?);
-                                Ok(())
-                            })?;
-                        } else if let Some(mapped) = map(&t.sounds, to, holder - 1) {
-                            *lossy |= to == To::Legacy && t.sounds.back(mapped) != Some(holder - 1);
-                            w.write_varint(mapped + 1);
-                        } else if to == To::Legacy {
-                            let name = t
-                                .sound_names
-                                .get((holder - 1) as usize)
-                                .context("unknown sound holder")?;
-                            w.write_varint(0);
-                            w.write_string(name, 32767)?;
-                            w.write_bool(false);
-                        } else {
-                            bail!("unmapped sound holder {holder}");
-                        }
-                    }
+                    4 => sound(t, to, r, w, lossy)?,
                     _ => bail!("unsupported consume effect type {canonical}"),
                 }
             }
