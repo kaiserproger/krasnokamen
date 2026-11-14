@@ -62,7 +62,7 @@ async fn writer_pair() -> (
     let task = tokio::spawn(play_writer(
         writer,
         Arc::new(NetCounters::new()),
-        Arc::new(ConnectionRegistry::new()),
+        Arc::clone(&registry),
         ConnectionId(1),
         uuid::Uuid::nil(),
         PlayReceivers {
@@ -79,30 +79,37 @@ async fn writer_pair() -> (
         reply_tx,
         reliable_tx,
         world_tx,
+        registry,
     )
 }
 
 #[tokio::test]
-async fn keepalive_round_trip_reaches_player_info_wire() {
-    use mc_protocol::packets::play::{ClientboundKeepAlive, PlayerInfoActions, PlayerInfoUpdate};
-    let (mut client, _reader, _task, replies, _reliable, _world) = writer_pair().await;
+async fn keepalive_reply_records_latency_for_the_batched_broadcast() {
+    use mc_protocol::packets::play::ClientboundKeepAlive;
+    let (mut client, _reader, _task, replies, _reliable, _world, registry) = writer_pair().await;
     tokio::time::pause();
-    let challenge = client.read_frame_play().await.unwrap();
-    let challenge = ClientboundKeepAlive::decode(&mut &challenge.body[..]).unwrap();
+    let frame = client.read_frame_play().await.unwrap();
+    let challenge = ClientboundKeepAlive::decode(&mut &frame.body[..]).unwrap();
     tokio::time::advance(Duration::from_millis(160)).await;
     replies.send(challenge.id).await.unwrap();
     tokio::task::yield_now().await;
-    let frame = client.read_frame_play().await.unwrap();
-    assert_eq!(frame.id, PlayerInfoUpdate::ID);
-    let update = PlayerInfoUpdate::decode(&mut &frame.body[..]).unwrap();
-    assert_eq!(update.actions, PlayerInfoActions::UPDATE_LATENCY);
-    assert_eq!(update.entries.len(), 1);
-    assert!(update.entries[0].latency >= 40);
-    assert_eq!(update.entries[0].profile_id, uuid::Uuid::nil());
+    // A keepalive reply only records the smoothed latency for the pump's
+    // batched broadcast (vanilla PlayerList cadence); it writes no per-reply
+    // PlayerInfoUpdate to the socket.
+    let latencies = registry.latencies();
+    assert_eq!(latencies.len(), 1);
+    assert_eq!(latencies[0].0, uuid::Uuid::nil());
+    assert!(latencies[0].1 >= 40);
+    assert!(
+        tokio::time::timeout(Duration::ZERO, client.read_frame_play())
+            .await
+            .is_err(),
+        "no per-reply player-info frame on the wire"
+    );
 }
 
 #[tokio::test]
-async fn measured_latency_is_broadcast_to_other_players() {
+async fn keepalive_reply_does_not_fan_out_latency_per_reply() {
     use mc_protocol::frame::{Compression, try_decode_frame};
     use mc_protocol::packets::play::{ClientboundKeepAlive, PlayerInfoActions, PlayerInfoUpdate};
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -112,8 +119,20 @@ async fn measured_latency_is_broadcast_to_other_players() {
     let (socket, _) = listener.accept().await.unwrap();
     let (_, writer) = crate::connection::Connection::new(socket).into_play_halves();
     let registry = Arc::new(ConnectionRegistry::new());
+    let self_id = registry.joining_id();
+    let (self_tx, mut self_rx) = mpsc::channel(4);
+    registry
+        .register(
+            self_id,
+            ConnectionHandles {
+                reliable_tx: self_tx,
+                world_tx: mpsc::channel(1).0,
+            },
+        )
+        .unwrap();
     let other = registry.joining_id();
     let (other_tx, mut other_rx) = mpsc::channel(4);
+    let filler_tx = other_tx.clone();
     registry
         .register(
             other,
@@ -130,8 +149,8 @@ async fn measured_latency_is_broadcast_to_other_players() {
     let _task = tokio::spawn(play_writer(
         writer,
         Arc::new(NetCounters::new()),
-        registry,
-        ConnectionId(99),
+        Arc::clone(&registry),
+        self_id,
         profile,
         PlayReceivers {
             reliable: reliable_rx,
@@ -147,16 +166,92 @@ async fn measured_latency_is_broadcast_to_other_players() {
     tokio::time::advance(Duration::from_millis(160)).await;
     replies.send(challenge.id).await.unwrap();
     tokio::task::yield_now().await;
-    let wire = other_rx.recv().await.unwrap();
-    let mut wire = bytes::BytesMut::from(&wire[..]);
-    let frame = try_decode_frame(&mut wire, Compression::Threshold(256))
-        .unwrap()
+    // Regression fence: a keepalive reply must not fan a PlayerInfoUpdate out
+    // to other connections' reliable queues — at 1000 players that per-reply
+    // fan-out filled the 512-slot reliable bound of a slow reader in seconds
+    // and the delivery policy disconnected it.
+    assert!(other_rx.try_recv().is_err());
+    assert!(self_rx.try_recv().is_err());
+}
+
+#[test]
+fn measured_latency_broadcasts_batched_at_vanilla_cadence() {
+    use mc_protocol::frame::{Compression, try_decode_frame};
+    use mc_protocol::packets::play::{PlayerInfoActions, PlayerInfoUpdate};
+    let registry = Arc::new(ConnectionRegistry::new());
+    let a = registry.joining_id();
+    let (a_tx, mut a_rx) = mpsc::channel(4);
+    registry
+        .register(
+            a,
+            ConnectionHandles {
+                reliable_tx: a_tx,
+                world_tx: mpsc::channel(1).0,
+            },
+        )
         .unwrap();
-    assert_eq!(frame.id, PlayerInfoUpdate::ID);
-    let update = PlayerInfoUpdate::decode(&mut &frame.body[..]).unwrap();
-    assert_eq!(update.actions, PlayerInfoActions::UPDATE_LATENCY);
-    assert_eq!(update.entries[0].profile_id, profile);
-    assert!(update.entries[0].latency >= 40);
+    let b = registry.joining_id();
+    let (b_tx, mut b_rx) = mpsc::channel(4);
+    let filler_tx = b_tx.clone();
+    registry
+        .register(
+            b,
+            ConnectionHandles {
+                reliable_tx: b_tx,
+                world_tx: mpsc::channel(1).0,
+            },
+        )
+        .unwrap();
+    let (pa, pb) = (uuid::Uuid::from_u128(42), uuid::Uuid::from_u128(43));
+    let counters = NetCounters::new();
+    let mut connections = std::collections::HashMap::new();
+    connections.insert(a, registry.get(a).unwrap());
+    connections.insert(b, registry.get(b).unwrap());
+    let entries = |rx: &mut mpsc::Receiver<bytes::Bytes>| {
+        let wire = rx.try_recv().unwrap();
+        let mut wire = bytes::BytesMut::from(&wire[..]);
+        let frame = try_decode_frame(&mut wire, Compression::Threshold(256))
+            .unwrap()
+            .unwrap();
+        assert_eq!(frame.id, PlayerInfoUpdate::ID);
+        let update = PlayerInfoUpdate::decode(&mut &frame.body[..]).unwrap();
+        assert_eq!(update.actions, PlayerInfoActions::UPDATE_LATENCY);
+        update
+            .entries
+            .iter()
+            .map(|entry| (entry.profile_id, entry.latency))
+            .collect::<Vec<_>>()
+    };
+    // Vanilla 26.3 PlayerList.tick: one UPDATE_LATENCY listing every player
+    // per 601 ticks, to every player, whether or not a latency changed.
+    registry.set_latency(a, pa, 41);
+    registry.set_latency(b, pb, 50);
+    broadcast_latencies(&registry, &counters, &mut connections, 600);
+    assert!(b_rx.try_recv().is_err(), "off-cadence tick sends nothing");
+    broadcast_latencies(&registry, &counters, &mut connections, 601);
+    for rx in [&mut a_rx, &mut b_rx] {
+        assert_eq!(entries(rx), vec![(pa, 41), (pb, 50)]);
+        assert!(rx.try_recv().is_err(), "one frame per interval");
+    }
+    broadcast_latencies(&registry, &counters, &mut connections, 1202);
+    assert_eq!(entries(&mut a_rx), vec![(pa, 41), (pb, 50)]);
+    assert_eq!(entries(&mut b_rx), vec![(pa, 41), (pb, 50)]);
+
+    // A full reliable queue still disconnects the victim (policy unchanged).
+    for _ in 0..4 {
+        filler_tx
+            .try_send(bytes::Bytes::from_static(b"filler"))
+            .unwrap();
+    }
+    broadcast_latencies(&registry, &counters, &mut connections, 1803);
+    assert!(registry.get(b).is_none(), "overflow victim disconnects");
+    assert_eq!(
+        counters
+            .reliable_drops
+            .load(std::sync::atomic::Ordering::Relaxed),
+        1
+    );
+    assert!(a_rx.try_recv().is_ok(), "healthy connections still receive");
 }
 
 #[test]
@@ -167,7 +262,7 @@ fn keepalive_latency_uses_weighted_round_trip() {
 
 #[tokio::test]
 async fn keepalive_requires_matching_echo_and_times_out_quiet_readers() {
-    let (mut client, _reader, task, replies, _reliable, _world) = writer_pair().await;
+    let (mut client, _reader, task, replies, _reliable, _world, _registry) = writer_pair().await;
     tokio::time::pause();
     let frame = client.read_frame_play().await.unwrap();
     assert_eq!(
@@ -177,8 +272,8 @@ async fn keepalive_requires_matching_echo_and_times_out_quiet_readers() {
     let mut body = frame.body;
     let first = mc_protocol::packets::play::ClientboundKeepAlive::decode(&mut body).unwrap();
     replies.send(first.id).await.unwrap();
-    let update = client.read_frame_play().await.unwrap();
-    assert_eq!(update.id, mc_protocol::packets::play::PlayerInfoUpdate::ID);
+    // A reply only records latency for the batched broadcast; no per-reply
+    // PlayerInfoUpdate is written, so the next wire frame is the next challenge.
     let frame = client.read_frame_play().await.unwrap();
     let mut body = frame.body;
     let second = mc_protocol::packets::play::ClientboundKeepAlive::decode(&mut body).unwrap();
@@ -193,7 +288,7 @@ async fn keepalive_requires_matching_echo_and_times_out_quiet_readers() {
 
 #[tokio::test]
 async fn keepalive_rejects_unsolicited_reply() {
-    let (_client, _reader, task, replies, _reliable, _world) = writer_pair().await;
+    let (_client, _reader, task, replies, _reliable, _world, _registry) = writer_pair().await;
     replies.send(99).await.unwrap();
     assert_eq!(task.await.unwrap().0, "keepalive-invalid-reply");
 }
@@ -203,7 +298,8 @@ async fn checkpoint_wait_keeps_play_echoes_live_and_preserves_queued_input_order
     use mc_protocol::packets::play::{
         ClientboundKeepAlive, ServerboundChatCommand, ServerboundKeepAlive,
     };
-    let (mut client, mut reader, writer, replies, _reliable, _world) = writer_pair().await;
+    let (mut client, mut reader, writer, replies, _reliable, _world, _registry) =
+        writer_pair().await;
     tokio::time::pause();
     let (finish, completion) = tokio::sync::oneshot::channel::<()>();
     let waiting = tokio::spawn(async move {
@@ -242,8 +338,8 @@ async fn checkpoint_wait_keeps_play_echoes_live_and_preserves_queued_input_order
             .send_packet(&ServerboundKeepAlive { id: challenge.id })
             .await
             .unwrap();
-        let update = client.read_frame_play().await.unwrap();
-        assert_eq!(update.id, mc_protocol::packets::play::PlayerInfoUpdate::ID);
+        // The reply only records latency for the pump's batched broadcast;
+        // no per-reply PlayerInfoUpdate is written to the socket.
         tokio::time::pause();
     }
     finish.send(()).unwrap();
@@ -263,7 +359,8 @@ async fn checkpoint_wait_keeps_play_echoes_live_and_preserves_queued_input_order
 #[tokio::test]
 async fn completed_admin_operation_does_not_prefetch_play_input() {
     use mc_protocol::packets::play::ServerboundChatCommand;
-    let (mut client, mut reader, writer, replies, _reliable, _world) = writer_pair().await;
+    let (mut client, mut reader, writer, replies, _reliable, _world, _registry) =
+        writer_pair().await;
     client
         .send_packet(&ServerboundChatCommand {
             command: "next".into(),
@@ -294,7 +391,8 @@ async fn completed_admin_operation_does_not_prefetch_play_input() {
 #[tokio::test]
 async fn pending_admin_input_budget_fails_explicitly_instead_of_dropping_frames() {
     use mc_protocol::packets::play::ServerboundChatCommand;
-    let (mut client, mut reader, writer, replies, _reliable, _world) = writer_pair().await;
+    let (mut client, mut reader, writer, replies, _reliable, _world, _registry) =
+        writer_pair().await;
     let waiting = tokio::spawn(async move {
         let mut pending = PendingPlayFrames::default();
         let mut limiter = PacketLimiter::new(&Default::default());

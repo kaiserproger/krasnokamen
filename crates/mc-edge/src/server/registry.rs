@@ -354,6 +354,18 @@ impl ConnectionRegistry {
         }
     }
 
+    /// Record a keepalive-measured latency for the pump's batched broadcast.
+    pub fn set_latency(&self, id: ConnectionId, profile: uuid::Uuid, latency: i32) {
+        self.inner.lock().latencies.insert(id, (profile, latency));
+    }
+
+    /// Every connection's last measured latency, sorted by profile id.
+    pub(super) fn latencies(&self) -> Vec<(uuid::Uuid, i32)> {
+        let mut latencies: Vec<_> = self.inner.lock().latencies.values().copied().collect();
+        latencies.sort_by_key(|(profile, _)| *profile);
+        latencies
+    }
+
     /// Sorted roster names for the dashboard.
     pub fn roster(&self) -> Vec<String> {
         let mut names: Vec<_> = self.inner.lock().names.values().cloned().collect();
