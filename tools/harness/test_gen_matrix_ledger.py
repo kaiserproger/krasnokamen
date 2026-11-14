@@ -14,8 +14,8 @@ from tools.harness.matrix_execution import plugin_set_fingerprint
 
 REPO = Path(__file__).resolve().parents[2]
 GEN = REPO / "tools" / "harness" / "matrix_specs" / "gen_matrix.py"
-WORK = Path(os.environ.get("SOLARIS_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
-LIVE = Path(os.environ.get("SOLARIS_MATRIX_DATA", WORK / "scenarios")) / "live-plugins"
+WORK = Path(os.environ.get("KRASNOKAMEN_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
+LIVE = Path(os.environ.get("KRASNOKAMEN_MATRIX_DATA", WORK / "scenarios")) / "live-plugins"
 # Frozen wave-1 ids (MATRIX_FREEZE.json); both use the full live set.
 OUTDATED_ID = "bl:commands.msg/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/non_op_0@live"
 CURRENT_ID = "bl:death_respawn.keep_inventory_false/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0@live"

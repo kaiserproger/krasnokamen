@@ -38,7 +38,7 @@ pub(crate) async fn send_channel_register(conn: &mut Connection) -> anyhow::Resu
 }
 
 /// Ask whether the client speaks the Loader. Vanilla clients ignore the unknown
-/// configuration payload; a Loader client answers `solaris:loader/hello`.
+/// configuration payload; a Loader client answers `krasnokamen:loader/hello`.
 pub(crate) async fn send_probe(conn: &mut Connection) -> anyhow::Result<()> {
     conn.send_packet(&ClientboundCustomPayload {
         payload: CustomPayload::Unknown {
@@ -74,7 +74,7 @@ pub(crate) async fn negotiate(
     let result = negotiate_inner(conn, manifest, prefs).await;
     if let Err(error) = &result {
         let reason = format!(
-            "This server requires the Solaris Loader client mod. Install it and reconnect. \
+            "This server requires the Krasnokamen Loader client mod. Install it and reconnect. \
              (Loader negotiation failed: {error})"
         );
         if let Ok(reason_nbt) = text_component_nbt(&reason) {
