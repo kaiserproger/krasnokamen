@@ -126,10 +126,10 @@ class Gui:
         self.input = Input(owned)
         self.capture = scene_shot.capture_java if client == "java" else scene_shot.capture_native
         home = Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
-        version = os.environ.get("SOLARIS_JAVA_VERSION", "26.1.2")
-        metadata = Path(os.environ.get("SOLARIS_JAVA_VERSION_METADATA",
+        version = os.environ.get("KRASNOKAMEN_JAVA_VERSION", "26.1.2")
+        metadata = Path(os.environ.get("KRASNOKAMEN_JAVA_VERSION_METADATA",
                                       home / "caches/fabric-loom" / version / "mojang_minecraft_info.json"))
-        self.jar = Path(os.environ.get("SOLARIS_CLIENT_JAR", metadata.parent / "minecraft-client.jar"))
+        self.jar = Path(os.environ.get("KRASNOKAMEN_CLIENT_JAR", metadata.parent / "minecraft-client.jar"))
         self.labels: dict[str, Image.Image] = {}
         self.serial = 0
 

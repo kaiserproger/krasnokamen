@@ -110,7 +110,7 @@ fn data_player_queries_read_live_inventory_vitals_and_absent_paths() {
         *get(&tag, "Dimension").unwrap(),
         Tag::String("minecraft:overworld".into())
     );
-    assert!(get(&tag, "SolarisStatistics").is_err());
+    assert!(get(&tag, "KrasnokamenStatistics").is_err());
     assert!(query(&mut state, context, "data get entity @s Pos 2").is_err());
     assert!(query(&mut state, context, "data get entity @s Missing").is_err());
     assert!(query(&mut state, context, "data get entity @a Health").is_err());

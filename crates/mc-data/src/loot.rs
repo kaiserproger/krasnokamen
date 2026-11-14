@@ -905,14 +905,14 @@ impl RawDropList {
     }
 }
 
-/// Solaris survival tables with the vanilla mining-enchantment and
+/// Krasnokamen survival tables with the vanilla mining-enchantment and
 /// block-entity-custody rules compiled explicitly from `root`.
 pub fn load_builtin(root: &Path) -> Result<LootTables, LootError> {
     let mut tables = from_str(
         BUILTIN_SURVIVAL_LOOT,
         Path::new("crates/mc-data/data/survival_loot.json"),
     )
-    .expect("built-in Solaris survival loot JSON is valid");
+    .expect("built-in Krasnokamen survival loot JSON is valid");
     embedded_enchantments::apply(&mut tables, root)?;
     embedded_block_components::apply(&mut tables, root)?;
     Ok(tables)
@@ -1817,7 +1817,7 @@ fn supported_count_from_functions(
             }
             // With no looting enchantment these functions do not change the count.
             Some("minecraft:enchanted_count_increase") => {}
-            // Solaris currently evaluates baseline raw drops. A conditional smelt
+            // Krasnokamen currently evaluates baseline raw drops. A conditional smelt
             // therefore leaves the item unchanged when no burning context is supplied.
             Some("minecraft:furnace_smelt") if function.get("conditions").is_some() => {}
             // The baseline block-loot context has Fortune level zero and no explosion.

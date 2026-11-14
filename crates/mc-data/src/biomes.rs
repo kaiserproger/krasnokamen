@@ -1,4 +1,4 @@
-//! Minimal biome JSON reader for spawn rules used by Solaris worldgen.
+//! Minimal biome JSON reader for spawn rules used by Krasnokamen worldgen.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -301,7 +301,7 @@ impl BiomeSpawnRules {
 
 /// Repo-owned spawn baseline used when biome JSON is absent.
 #[must_use]
-pub fn solaris_required_biome_spawn_rules() -> BiomeSpawnRules {
+pub fn krasnokamen_required_biome_spawn_rules() -> BiomeSpawnRules {
     let raw: BTreeMap<String, BTreeMap<String, Vec<RawSpawnEntry>>> =
         serde_json::from_str(REQUIRED_BIOME_SPAWNS)
             .expect("embedded required biome spawn JSON is valid");

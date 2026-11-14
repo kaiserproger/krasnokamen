@@ -67,7 +67,6 @@ mod diag {
     }
 }
 
-
 #[derive(Default)]
 pub(crate) struct RedstoneState {
     loaded: HashSet<ChunkPos>,
@@ -528,7 +527,10 @@ pub(crate) fn run(
     if n_plate + n_rail + n_button > 0 {
         let started = std::time::Instant::now();
         entity_query.rebuild(state);
-        diag::rebuilt(started.elapsed().as_nanos() as u64, state.entities.len() as u64);
+        diag::rebuilt(
+            started.elapsed().as_nanos() as u64,
+            state.entities.len() as u64,
+        );
     }
     diag::pass(due.len() as u64, n_plate, n_rail, n_button, state.tick);
     for tick in due {

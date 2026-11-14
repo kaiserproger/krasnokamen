@@ -1,6 +1,6 @@
 use mc_data::Identifier;
-use mc_data::blocks::solaris_required_blocks_report;
-use mc_data::items::solaris_required_items;
+use mc_data::blocks::krasnokamen_required_blocks_report;
+use mc_data::items::krasnokamen_required_items;
 
 use super::*;
 use crate::{BlockStateId, ChunkSection};
@@ -22,8 +22,8 @@ fn empty(blocks: &BlockRegistry, position: ChunkPos) -> Chunk {
 
 #[test]
 fn dense_all_air_is_a_replacement_not_an_absent_override() {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
-    let items = solaris_required_items();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
+    let items = krasnokamen_required_items();
     let air = state(&blocks, "minecraft:air");
     let stone = state(&blocks, "minecraft:stone");
     let directory = tempfile::tempdir().unwrap();
@@ -70,8 +70,8 @@ fn dense_all_air_is_a_replacement_not_an_absent_override() {
 #[test]
 fn decorated_pot_26_3_native_reopen_migrates_old_sherds_without_losing_items() {
     use mc_nbt::{ListTag, Tag, tag_type};
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
-    let items = solaris_required_items();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
+    let items = krasnokamen_required_items();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("pot.redb");
     let baseline = empty(&blocks, ChunkPos { x: 0, z: 0 });
@@ -200,8 +200,8 @@ fn decorated_pot_26_3_native_reopen_migrates_old_sherds_without_losing_items() {
 #[test]
 fn failed_participant_rolls_back_every_overlay_and_watermark() {
     let temp = tempfile::tempdir().unwrap();
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
-    let items = solaris_required_items();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
+    let items = krasnokamen_required_items();
     let store = NativeStore::create(&temp.path().join("state.redb"), [1; 32]).unwrap();
     let first = empty(&blocks, ChunkPos { x: -3, z: 7 });
     let second = empty(&blocks, ChunkPos { x: 9, z: -4 });
@@ -261,8 +261,8 @@ fn failed_participant_rolls_back_every_overlay_and_watermark() {
 #[test]
 fn stale_lsn_cannot_restore_old_blocks_and_revert_keeps_scheduled_history() {
     let temp = tempfile::tempdir().unwrap();
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
-    let items = solaris_required_items();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
+    let items = krasnokamen_required_items();
     let path = temp.path().join("state.redb");
     let store = NativeStore::create(&path, [2; 32]).unwrap();
     let baseline = empty(&blocks, ChunkPos { x: 0, z: 0 });
@@ -339,9 +339,9 @@ fn stale_lsn_cannot_restore_old_blocks_and_revert_keeps_scheduled_history() {
 
 #[test]
 fn sparse_stable_states_survive_registry_reordering_and_unknown_states_fail_closed() {
-    let report = solaris_required_blocks_report();
+    let report = krasnokamen_required_blocks_report();
     let blocks = BlockRegistry::from_report(&report).unwrap();
-    let items = solaris_required_items();
+    let items = krasnokamen_required_items();
     let temp = tempfile::tempdir().unwrap();
     let store = NativeStore::create(&temp.path().join("state.redb"), [3; 32]).unwrap();
     let baseline = empty(&blocks, ChunkPos { x: 0, z: 0 });
@@ -393,7 +393,7 @@ fn sparse_stable_states_survive_registry_reordering_and_unknown_states_fail_clos
         .iter_mut()
         .find(|block| block.id.as_str() == "minecraft:water")
         .unwrap();
-    water.id = Identifier::parse("solaris:missing_water").unwrap();
+    water.id = Identifier::parse("krasnokamen:missing_water").unwrap();
     let unknown = BlockRegistry::from_report(&unknown).unwrap();
     assert!(
         store
@@ -413,8 +413,8 @@ fn missing_database_wrong_identity_and_imported_source_switch_fail_closed() {
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("state.redb");
     assert!(NativeStore::open(&path, [4; 32]).is_err());
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
-    let items = solaris_required_items();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
+    let items = krasnokamen_required_items();
     let store = NativeStore::create(&path, [4; 32]).unwrap();
     assert!(NativeStore::create(&path, [4; 32]).is_err());
     let chunk = empty(&blocks, ChunkPos { x: -1, z: -1 });
@@ -450,8 +450,8 @@ fn closed_store_releases_its_lease_while_a_forked_child_holds_the_descriptor() {
 
 #[test]
 fn native_save_reopen_preserves_both_boundary_light_sections() {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
-    let items = solaris_required_items();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
+    let items = krasnokamen_required_items();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.redb");
     let baseline = empty(&blocks, ChunkPos { x: 0, z: 0 });

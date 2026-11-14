@@ -6,7 +6,7 @@ fn fresh_v2_sites_describe_generated_villagers_from_the_same_plans() {
     let directory = tempfile::tempdir().unwrap();
     let mut config = CoreConfig::new(directory.path().to_owned(), 81);
     config.vanilla_data_dir = Some(
-        std::env::var_os("SOLARIS_CONTENT_CACHE")
+        std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
             .map(PathBuf::from)
             .unwrap_or_else(|| {
                 PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")

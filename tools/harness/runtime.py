@@ -31,8 +31,8 @@ from .matrix_api import MissingCapability
 REPO_ROOT = Path(__file__).resolve().parents[2]
 # The sibling repositories beside the core checkout, and the variable that names another checkout of each.
 SIBLING_NAMES = {"client": "solaris-client", "loader": "solaris-loader", "plugins": "solaris-default-plugins"}
-SIBLING_ENV = {"client": "SOLARIS_CLIENT_ROOT", "loader": "SOLARIS_LOADER_ROOT",
-               "plugins": "SOLARIS_DEFAULT_PLUGINS_ROOT"}
+SIBLING_ENV = {"client": "KRASNOKAMEN_CLIENT_ROOT", "loader": "KRASNOKAMEN_LOADER_ROOT",
+               "plugins": "KRASNOKAMEN_DEFAULT_PLUGINS_ROOT"}
 
 
 @functools.lru_cache(maxsize=None)
@@ -83,7 +83,7 @@ def _default_mod_jar_dir(profile: str) -> Path:
 
 
 def _mod_env_override(profile: str) -> str | None:
-    override = os.environ.get({"svc": "SOLARIS_SVC_JAR", "dh": "SOLARIS_DH_JAR"}[profile])
+    override = os.environ.get({"svc": "KRASNOKAMEN_SVC_JAR", "dh": "KRASNOKAMEN_DH_JAR"}[profile])
     return override or None
 
 
@@ -166,7 +166,7 @@ def _stage_profile_mods(profile: str, platform: str, game_dir: Path) -> list[str
     if not staged.is_file() or _hash_file(staged, "sha512") != entry["sha512"]:
         shutil.copy2(jar, staged)
     _verify_mod_jar(profile, entry, staged)
-    marker = game_dir / "solaris-profile.json"
+    marker = game_dir / "krasnokamen-profile.json"
     marker.write_text(json.dumps({
         "client_profile": profile,
         "platform": platform,
@@ -230,8 +230,8 @@ def _resolve_profile_task(profile: str | None, platform: str | None) -> dict[str
     requires an explicit platform and uses the matching Loader task.
     ``svc``/``dh`` reuse the real ``:loader-fabric:runClientMcp`` launch with
     the pinned publisher jar staged into the run's mods dir — that lane also
-    carries the Solaris Loader, so receipts must record the full composition
-    (``solaris-loader`` + the mod) and never claim a Loader-free mod-only
+    carries the Krasnokamen Loader, so receipts must record the full composition
+    (``krasnokamen-loader`` + the mod) and never claim a Loader-free mod-only
     client. Exact voice/DH behavior additionally needs runtime negotiation,
     not just jar presence.
     """
@@ -240,7 +240,7 @@ def _resolve_profile_task(profile: str | None, platform: str | None) -> dict[str
             return _resolve_profile_task("loader", platform)
         return {"platform": None, "task": ":fabric-agent:runClientMcp",
                 "label": "legacy no-Loader Fabric agent task (NeoForge mod; not vanilla Minecraft)",
-                "composition": ["solaris-agent-neoforge-mod"]}
+                "composition": ["krasnokamen-agent-neoforge-mod"]}
     if profile == "vanilla":
         if platform is not None:
             raise ValueError("vanilla client_profile takes no platform; pass platform=None")
@@ -252,13 +252,13 @@ def _resolve_profile_task(profile: str | None, platform: str | None) -> dict[str
             raise ValueError("loader client_profile requires platform fabric|neoforge|forge")
         return {"platform": platform, "task": f":loader-{platform}:runClientMcp",
                 "label": f"Loader {platform}",
-                "composition": [f"solaris-loader-{platform}"]}
+                "composition": [f"krasnokamen-loader-{platform}"]}
     if profile in ("svc", "dh"):
         if platform is not None and platform != "fabric":
             raise ValueError(f"{profile} client_profile is Fabric-only; got platform={platform!r}")
         return {"platform": "fabric", "task": ":loader-fabric:runClientMcp",
-                "label": f"Solaris Loader (Fabric) + {profile}",
-                "composition": ["solaris-loader-fabric", profile]}
+                "label": f"Krasnokamen Loader (Fabric) + {profile}",
+                "composition": ["krasnokamen-loader-fabric", profile]}
     raise ValueError(f"client_profile must be one of {CLIENT_PROFILES}, got {profile!r}")
 
 
@@ -871,7 +871,7 @@ def wait_client_ready_for_connect(client: Any, timeout_seconds: float) -> dict[s
 
 def _agent_jar_path() -> Path:
     """Locate the built java-agent jar (built once via mem-run, never here)."""
-    override = os.environ.get("SOLARIS_JAVA_AGENT_JAR")
+    override = os.environ.get("KRASNOKAMEN_JAVA_AGENT_JAR")
     if override:
         return Path(override).expanduser()
     candidates = sorted(sibling_root("loader").glob("java-agent/build/libs/*.jar"))
@@ -936,7 +936,7 @@ def start_client(
     game_dir = REPO_ROOT / game_dir if not game_dir.is_absolute() else game_dir
     game_dir.mkdir(parents=True, exist_ok=True)
     options = game_dir / "options.txt"
-    audio_options = {"soundDevice": "SolarisAgentsNull",
+    audio_options = {"soundDevice": "KrasnokamenAgentsNull",
                      "soundCategory_master": "0.0", "soundCategory_music": "0.0"}
     lines = options.read_text().splitlines() if options.exists() else ["version:4790", "onboardAccessibility:false"]
     lines = [line for line in lines if line.partition(":")[0] not in audio_options]
@@ -969,10 +969,10 @@ def start_client(
             "XDG_SESSION_TYPE": "x11",
             "PIPEWIRE_NODE": "agents-null",
             "PULSE_SINK": "agents-null",
-            "SOLARIS_CLIENT_MCP_TOKEN": token,
-            "SOLARIS_CLIENT_MCP_PORT": str(mcp_port),
-            "SOLARIS_CLIENT_MCP_GAME_DIR": str(game_dir),
-            "SOLARIS_CLIENT_MCP_USERNAME": username,
+            "KRASNOKAMEN_CLIENT_MCP_TOKEN": token,
+            "KRASNOKAMEN_CLIENT_MCP_PORT": str(mcp_port),
+            "KRASNOKAMEN_CLIENT_MCP_GAME_DIR": str(game_dir),
+            "KRASNOKAMEN_CLIENT_MCP_USERNAME": username,
         }
     )
     env.setdefault("JDK_JAVA_OPTIONS", _CLIENT_MAX_HEAP)
@@ -1009,8 +1009,8 @@ def start_client(
                     "--no-configuration-cache",
                     "-p",
                     str(loader_root),
-                    f"-Psolaris.clientMcp.gameDir={game_dir}",
-                    f"-Psolaris.clientMcp.username={username}",
+                    f"-Pkrasnokamen.clientMcp.gameDir={game_dir}",
+                    f"-Pkrasnokamen.clientMcp.username={username}",
                     task,
                 ],
                 cwd=REPO_ROOT,
