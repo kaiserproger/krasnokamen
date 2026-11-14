@@ -1,7 +1,7 @@
 //! Advance the watchdog while the guest is in a host import: no sleeps or CPU races.
 mod fixture;
 
-use mc_plugin_host::bindings::exports::solaris::plugin::{events, lifecycle};
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::{events, lifecycle};
 use mc_plugin_host::{
     CompiledPlugin, HostError, HostServices, LogLevel, PluginInstance, PluginLimits,
 };

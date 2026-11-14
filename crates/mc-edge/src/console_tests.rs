@@ -81,7 +81,7 @@ async fn console_runs_native_and_admin_commands_and_stop_checkpoints() {
 
 #[test]
 fn console_stop_has_no_error_logs_and_keeps_checkpoint() {
-    const CHILD: &str = "SOLARIS_CONSOLE_STOP_LOG_CHILD";
+    const CHILD: &str = "KRASNOKAMEN_CONSOLE_STOP_LOG_CHILD";
     if std::env::var_os(CHILD).is_some() {
         tracing_subscriber::fmt()
             .without_time()

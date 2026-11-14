@@ -28,49 +28,49 @@ def entity_counts(entities: list[dict], spec: dict) -> Counter:
     return counts
 
 
-def block_diff(vanilla: dict, solaris: dict, ignore: list[str]) -> list[dict]:
+def block_diff(vanilla: dict, krasnokamen: dict, ignore: list[str]) -> list[dict]:
     diffs = []
-    for pos in sorted(set(vanilla) | set(solaris)):
-        a, b = vanilla.get(pos), solaris.get(pos)
+    for pos in sorted(set(vanilla) | set(krasnokamen)):
+        a, b = vanilla.get(pos), krasnokamen.get(pos)
         if a == b:
             continue
         if any(a and a.startswith(prefix) or b and b.startswith(prefix) for prefix in ignore):
             continue
-        diffs.append({"pos": pos, "vanilla": a, "solaris": b})
+        diffs.append({"pos": pos, "vanilla": a, "krasnokamen": b})
     return diffs
 
 
-def compare_snapshot(spec: dict, vanilla: dict, solaris: dict) -> dict[str, Any]:
+def compare_snapshot(spec: dict, vanilla: dict, krasnokamen: dict) -> dict[str, Any]:
     """Compare one snapshot; multi-cell snapshots are compared cell by cell."""
-    if "cells" in vanilla and "cells" in solaris:
+    if "cells" in vanilla and "cells" in krasnokamen:
         cells = {}
-        for index, (va, so) in enumerate(zip(vanilla["cells"], solaris["cells"])):
+        for index, (va, so) in enumerate(zip(vanilla["cells"], krasnokamen["cells"])):
             diff = compare_cell(spec, va, so)
             if diff:
                 cells[str(index)] = diff
         return {"cells": cells} if cells else {}
-    return compare_cell(spec, vanilla, solaris)
+    return compare_cell(spec, vanilla, krasnokamen)
 
 
-def compare_cell(spec: dict, vanilla: dict, solaris: dict) -> dict[str, Any]:
+def compare_cell(spec: dict, vanilla: dict, krasnokamen: dict) -> dict[str, Any]:
     out: dict[str, Any] = {}
     if spec.get("blocks", "exact") == "exact":
-        diffs = block_diff(vanilla["blocks"], solaris["blocks"], spec.get("ignore_blocks", []))
+        diffs = block_diff(vanilla["blocks"], krasnokamen["blocks"], spec.get("ignore_blocks", []))
         if diffs:
             out["blocks"] = {"count": len(diffs), "first": diffs[:MAX_DIFFS]}
     if spec.get("entities", "counts") == "counts":
         a = entity_counts(vanilla["entities"], spec)
-        b = entity_counts(solaris["entities"], spec)
+        b = entity_counts(krasnokamen["entities"], spec)
         tolerance = spec.get("entity_tolerance", 0)
         rows = {}
         for key in sorted(set(a) | set(b)):
             if abs(a[key] - b[key]) > tolerance:
-                rows[key] = {"vanilla": a[key], "solaris": b[key]}
+                rows[key] = {"vanilla": a[key], "krasnokamen": b[key]}
         if rows:
             out["entities"] = rows
     if spec.get("containers", "exact") == "exact":
-        a, b = vanilla.get("containers", {}), solaris.get("containers", {})
-        rows = {pos: {"vanilla": a.get(pos), "solaris": b.get(pos)}
+        a, b = vanilla.get("containers", {}), krasnokamen.get("containers", {})
+        rows = {pos: {"vanilla": a.get(pos), "krasnokamen": b.get(pos)}
                 for pos in sorted(set(a) | set(b)) if a.get(pos) != b.get(pos)}
         if rows:
             out["containers"] = rows
@@ -79,26 +79,26 @@ def compare_cell(spec: dict, vanilla: dict, solaris: dict) -> dict[str, Any]:
         epsilon = positions.get("epsilon", 0.01)
         want = set(positions["types"])
         pa = sorted(tuple(round(c, 6) for c in e["pos"]) for e in vanilla["entities"] if e["type"] in want)
-        pb = sorted(tuple(round(c, 6) for c in e["pos"]) for e in solaris["entities"] if e["type"] in want)
+        pb = sorted(tuple(round(c, 6) for c in e["pos"]) for e in krasnokamen["entities"] if e["type"] in want)
         if len(pa) != len(pb) or any(
                 any(abs(x - y) > epsilon for x, y in zip(u, v)) for u, v in zip(pa, pb)):
-            out["entity_positions"] = {"vanilla": pa[:MAX_DIFFS], "solaris": pb[:MAX_DIFFS]}
+            out["entity_positions"] = {"vanilla": pa[:MAX_DIFFS], "krasnokamen": pb[:MAX_DIFFS]}
     return out
 
 
-def compare_scenario(scenario: dict, vanilla: dict, solaris: dict) -> dict[str, Any]:
+def compare_scenario(scenario: dict, vanilla: dict, krasnokamen: dict) -> dict[str, Any]:
     """Return {"phases": {name: diff}, "match": bool}."""
     spec = scenario.get("compare", {})
     only = set(spec.get("phases", []))
     phases: dict[str, Any] = {}
-    by_name = {phase["name"]: phase for phase in solaris["phases"]}
+    by_name = {phase["name"]: phase for phase in krasnokamen["phases"]}
     for phase in vanilla["phases"]:
         name = phase["name"]
         if only and name not in only:
             continue
         other = by_name.get(name)
         if other is None:
-            phases[name] = {"error": "phase missing from Solaris receipt"}
+            phases[name] = {"error": "phase missing from Krasnokamen receipt"}
             continue
         diff = compare_snapshot(spec, phase["snapshot"], other["snapshot"])
         if spec.get("trace") and "trace" in phase and "trace" in other:
@@ -171,10 +171,10 @@ def _mean_sd(values: list[float]) -> tuple[float, float]:
     return mean, (sum((v - mean) ** 2 for v in values) / (len(values) - 1)) ** 0.5
 
 
-def rate_verdict(scenario: dict, vanilla_runs: list[dict], solaris_runs: list[dict]) -> dict[str, Any]:
-    """Farm-rate parity: mean production per run, Solaris vs vanilla, over several seeds.
+def rate_verdict(scenario: dict, vanilla_runs: list[dict], krasnokamen_runs: list[dict]) -> dict[str, Any]:
+    """Farm-rate parity: mean production per run, Krasnokamen vs vanilla, over several seeds.
 
-    Passes when Solaris' mean is within `tolerance_pct` of vanilla's, or the gap is
+    Passes when Krasnokamen' mean is within `tolerance_pct` of vanilla's, or the gap is
     inside 2 standard errors of the difference (seed noise), whichever is wider.
     `"direction": "drop"` measures consumption instead (baseline minus end value).
     A farm that produces nothing in vanilla is a scenario bug, not a pass.
@@ -194,11 +194,11 @@ def rate_verdict(scenario: dict, vanilla_runs: list[dict], solaris_runs: list[di
             values.append(-delta if spec.get("direction") == "drop" else delta)
         return values
 
-    v, s = totals(vanilla_runs), totals(solaris_runs)
+    v, s = totals(vanilla_runs), totals(krasnokamen_runs)
     (vm, vsd), (sm, ssd) = _mean_sd(v), _mean_sd(s)
     out: dict[str, Any] = {
         "metric": spec["metric"], "window": [names[base_index], names[index]],
-        "vanilla": {"runs": v, "mean": vm, "sd": vsd}, "solaris": {"runs": s, "mean": sm, "sd": ssd},
+        "vanilla": {"runs": v, "mean": vm, "sd": vsd}, "krasnokamen": {"runs": s, "mean": sm, "sd": ssd},
     }
     if vm < spec.get("min_vanilla", 1):
         out["error"] = f"vanilla production {vm} below min_vanilla {spec.get('min_vanilla', 1)}: scenario does not run the farm"
