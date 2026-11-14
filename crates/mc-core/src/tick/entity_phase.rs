@@ -1400,8 +1400,6 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     };
     laps.lap("battle");
     laps.lap("pre");
-    let prep_start = std::time::Instant::now();
-    let pre_time = prep_start.duration_since(pre_start);
     state.entities.prepare_motion_hints(&state.registry);
     laps.lap("motion_hints");
     let unchanged_since = state.entity_phase_revision;
@@ -1740,7 +1738,6 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     zoglin_grid.batch(searches.filter(|row| row.hunts_living).map(query));
     laps.lap("target_grids");
     let cows_ref = &cow_cells;
-    let scope_start = std::time::Instant::now();
     // Work-stealing over the core's long-lived rayon workers (no threads
     // spawned per tick); `collect` keeps slot order.
     let ctx = StepCtx {
@@ -1775,7 +1772,6 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     };
     system_graph::run(&ctx, &mut ordered);
     laps.lap("step_scope");
-    let scope_time = scope_start.elapsed();
     #[cfg(all(test, debug_assertions))]
     {
         let grids = [
@@ -1790,9 +1786,6 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             grids.iter().map(|grid| grid.batch_count()).sum(),
         ));
     }
-    let prep_time = scope_start.duration_since(prep_start);
-    let commit_start = std::time::Instant::now();
-    let resting_count = resting.len();
     let mut seq = std::mem::take(&mut state.seq_counter);
     let mut intents = battle_intents;
     let physical_profiles = state.registry.item_facts.has_physical_profiles();
@@ -1956,15 +1949,10 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     }
     laps.lap("ordered_writeback");
     state.seq_counter = seq;
-    let item_merge_start = std::time::Instant::now();
-    let merge_items = if sim {
-        crate::item_motion::merge_neighbours(state)
-    } else {
-        0
-    };
-    let item_merge_time = item_merge_start.elapsed();
+    if sim {
+        crate::item_motion::merge_neighbours(state);
+    }
     laps.lap("item_merge");
-    let commit_time = commit_start.elapsed();
     let post_start = std::time::Instant::now();
     state.projectiles.post = crate::projectiles::PostTimes::default();
     // Pickup intents: players collect mature item entities in reach.

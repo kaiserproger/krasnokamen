@@ -71,7 +71,7 @@ decides it):
 - Tick system graph ([ADR 0017](decisions/0017-tick-system-graph.md)): a
   prototype with one system, `EntityStep`
   (`crates/mc-core/src/tick/system_graph.rs`, called once from
-  `tick/entity_phase.rs:1776`). The ADR is not approval to migrate the rest
+  `tick/entity_phase.rs:1773`). The ADR is not approval to migrate the rest
   of the tick; each of steps 2–5 needs the owner's approval and a measured
   benefit. The existing tick is the current path, not an old side.
 - Earth WorldPlan ([ADR 0012](decisions/0012-earth-worldplan-and-native-overlay.md)):

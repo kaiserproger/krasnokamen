@@ -1422,7 +1422,6 @@ fn run_dimension_tick_inner<'a>(
         crate::datapacks::tick(state, &mut changes);
         input_laps.lap("datapacks");
     }
-    let stage_spawn = std::time::Instant::now();
     if sim {
         crate::natural_spawn::advance_ages_and_run(state, &mut changes);
         input_laps.lap("natural_spawn");
@@ -1433,7 +1432,6 @@ fn run_dimension_tick_inner<'a>(
         crate::plugin_npcs::advance(state);
         input_laps.lap("plugin_npcs");
     }
-    let stage_inputs = std::time::Instant::now();
     changes.entities_spawned.append(&mut state.plugin_spawned);
     state
         .merge_block_writes
@@ -1466,14 +1464,12 @@ fn run_dimension_tick_inner<'a>(
         crate::shrieker::run(state);
         input_laps.lap("shrieker");
     }
-    let stage_players = std::time::Instant::now();
     tick_players(state, &mut changes, &mut intents);
     input_laps.lap("tick_players");
     if sim {
         crate::raids::raid_omens(state);
         input_laps.lap("raid_omens");
     }
-    let stage_effects = std::time::Instant::now();
     crate::effects::run(state, &mut intents);
     input_laps.lap("effects");
     let contact_times = crate::contact_hazards::run(state, &mut intents);
