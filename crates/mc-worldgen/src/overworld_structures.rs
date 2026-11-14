@@ -301,14 +301,45 @@ impl OverworldStructures {
                     }) {
                         continue;
                     }
+                    let template = &family.templates[(hash(self.seed ^ 0x53545255, x, z) as usize)
+                        % family.templates.len()];
+                    let (low, high) = template.bounds();
+                    // Vanilla samples the base height at the rotated template's
+                    // bounding-box centre, not at the chunk centre.
+                    let center = (
+                        x * 16 + (low[0] + high[0]) / 2,
+                        z * 16 + (low[2] + high[2]) / 2,
+                    );
                     let h = match family.height {
-                        Height::OceanFloor | Height::Monument => {
-                            ocean_floor(x * 16 + 8, z * 16 + 8)
-                        }
-                        _ => surface(x * 16 + 8, z * 16 + 8),
+                        Height::OceanFloor | Height::Monument => ocean_floor(center.0, center.1),
+                        _ => surface(center.0, center.1),
                     };
                     let y = match family.height {
                         Height::Underground => (h - 28).clamp(-40, 32),
+                        // `RuinedPortalStructure.findSuitableY`: an on-land start
+                        // sits at the centre column's top block and descends until
+                        // three of its bounding box's four corners are no longer
+                        // air, so a template on a slope cuts into the hill instead
+                        // of hanging over the ground below its footprint.
+                        Height::Surface if family.id.path().starts_with("ruined_portal") => {
+                            let corners = [
+                                (x * 16 + low[0], z * 16 + low[2]),
+                                (x * 16 + high[0], z * 16 + low[2]),
+                                (x * 16 + low[0], z * 16 + high[2]),
+                                (x * 16 + high[0], z * 16 + high[2]),
+                            ];
+                            let mut y = h;
+                            while y > mc_world::chunk::MIN_Y + 15
+                                && corners
+                                    .iter()
+                                    .filter(|(cx, cz)| surface(*cx, *cz) >= y)
+                                    .count()
+                                    < 3
+                            {
+                                y -= 1;
+                            }
+                            y
+                        }
                         Height::Surface | Height::OceanFloor => h + 1,
                         Height::Monument => h.min(crate::terrain::SEA_LEVEL - 17),
                         Height::Buried(depth) => h - depth,
@@ -324,8 +355,7 @@ impl OverworldStructures {
                             y,
                             z: z * 16,
                         },
-                        &family.templates[(hash(self.seed ^ 0x53545255, x, z) as usize)
-                            % family.templates.len()],
+                        template,
                     );
                 }
             }
