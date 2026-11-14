@@ -315,6 +315,12 @@ the source. Historical release horde measurements with 10k zombies, 5k
 villagers and 100 players reported entity-phase p50 74.1 to 13.5 ms; host load
 varied, and this is not a whole-server throughput guarantee.
 
+Ordinary melee hostile target memory belongs to `hostile.targets`, not the
+battle roster. The zombie/shared melee blueprint does not schedule fire panic:
+vanilla `Zombie.registerGoals`/`addBehaviourGoals` has no `PanicGoal`. Daylight
+burning must leave normal survival-player acquisition and pursuit eligible;
+animal panic and explicitly authored fire-fleeing goals remain independent.
+
 ## Recurring allocator and farming projections
 
 Villager threat and pickup projection visits entity bodies only in neighboring

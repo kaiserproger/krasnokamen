@@ -68,6 +68,48 @@ pub(crate) fn setup(offset: f64) -> (TickState, EntityId, [f64; 3]) {
     (state, player, centre)
 }
 
+#[test]
+fn daylight_zombie_acquires_and_damages_a_player_eight_blocks_away() {
+    let (mut state, player, centre) = setup(8.0);
+    state.difficulty = crate::survival::Difficulty::Normal;
+    state.players.get_mut(&player).unwrap().vitals.food = 17;
+    let zombie = state.spawn_mob(type_id(&state, "minecraft:zombie"), centre, 20.0);
+    let slot = state.entities.slot_of(zombie).unwrap();
+    std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).equipment[5] = None;
+    let mut acquired = None;
+    let mut burned = false;
+    for elapsed in 1..=160 {
+        run_tick(&mut state, &[]);
+        let Some(slot) = state.entities.slot_of(zombie) else {
+            break;
+        };
+        burned |= state.entities.body(slot).burn_ticks > 0;
+        if state
+            .hostile
+            .targets
+            .get(&zombie)
+            .is_some_and(|((id, _), _)| *id == player)
+        {
+            acquired.get_or_insert(elapsed);
+        }
+        if health(&state, player) < 20.0 {
+            break;
+        }
+    }
+    assert!(
+        burned,
+        "exercise daylight panic, not only nighttime acquisition"
+    );
+    assert!(
+        acquired.is_some_and(|elapsed| elapsed <= 4),
+        "daylight must not preempt ordinary target acquisition: {acquired:?}"
+    );
+    assert!(
+        health(&state, player) < 20.0,
+        "an eight-block approach must culminate in a real committed melee hit"
+    );
+}
+
 fn health(state: &TickState, player: EntityId) -> f32 {
     state.players[&player].vitals.health
 }

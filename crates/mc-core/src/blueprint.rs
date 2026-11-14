@@ -50,7 +50,7 @@ pub struct Goal {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GoalKind {
-    /// Flee when burning (all living mobs).
+    /// Panic movement when burning or recently hurt.
     FleeFire,
     /// Melee-chase the nearest visible player within follow range.
     MeleeChase,
@@ -730,11 +730,10 @@ impl MobBlueprint {
     }
 }
 
+// Vanilla Zombie.registerGoals/addBehaviourGoals has no PanicGoal (26.2 javap).
+// The shared melee presets must not flee daylight fire instead of acquiring
+// and pursuing their normal target.
 const ZOMBIE_GOALS: &[Goal] = &[
-    Goal {
-        priority: 0,
-        kind: GoalKind::FleeFire,
-    },
     Goal {
         priority: 1,
         kind: GoalKind::MeleeAttack,
