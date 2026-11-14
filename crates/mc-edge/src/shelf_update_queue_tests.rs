@@ -259,6 +259,28 @@ impl Wire {
     }
 }
 
+/// A panic before `finish()` must not leave the world behind.
+#[test]
+fn a_panicking_shelf_test_leaves_no_temp_dir() {
+    let mut created = None;
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let wire = Wire::new();
+        created = Some(wire.dir.path().to_path_buf());
+        assert!(wire.dir.path().is_dir(), "the wire's world exists during the test");
+        panic!("simulated assertion failure before finish()");
+    }));
+    std::panic::set_hook(previous);
+    assert!(outcome.is_err(), "the simulated test must fail");
+    let created = created.expect("the wire ran");
+    assert!(
+        !created.exists(),
+        "a panicking shelf test left {} behind",
+        created.display()
+    );
+}
+
 #[tokio::test]
 async fn shelf_update_cannot_be_lost_to_a_chunk_still_queued_for_the_client() {
     let mut wire = Wire::new();

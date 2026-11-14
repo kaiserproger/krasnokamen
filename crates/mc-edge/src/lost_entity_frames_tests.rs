@@ -243,6 +243,28 @@ impl Pump {
     }
 }
 
+/// A panic before `finish()` must not leave the world behind.
+#[test]
+fn a_panicking_pump_leaves_no_temp_dir() {
+    let mut created = None;
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let pump = Pump::new();
+        created = Some(pump.dir.path().to_path_buf());
+        assert!(pump.dir.path().is_dir(), "the pump's world exists during the test");
+        panic!("simulated assertion failure before finish()");
+    }));
+    std::panic::set_hook(previous);
+    assert!(outcome.is_err(), "the simulated test must fail");
+    let created = created.expect("the pump ran");
+    assert!(
+        !created.exists(),
+        "a panicking pump test left {} behind",
+        created.display()
+    );
+}
+
 /// A spawn whose frames the queue refused is sent again: the viewer had
 /// recorded the horse and its rider as delivered, so without a repair the
 /// client never sees the mob, or the rider mounted.
