@@ -158,8 +158,9 @@ impl Columns {
             facts.valid = true;
         }
         let facts = &mut self.facts[bi];
-        let member_visible =
-            expected_faction.is_none_or(|expected| facts.health > 0.0 && body.faction == expected);
+        let member_visible = expected_faction.is_none_or(|expected| {
+            facts.health > 0.0 && super::relation(body.faction, expected) == super::Relation::Same
+        });
         if !member_visible || (expected_faction.is_none() && facts.health <= 0.0) {
             facts.valid = false;
             self.targets[bi] = None;
@@ -170,7 +171,8 @@ impl Columns {
         self.positions[bi] = frame.entities.pos(slot);
         self.factions[bi] = body.faction;
         self.carried[bi] = facts.carried;
-        self.targetable[bi] = body.faction != 0 && facts.health > 0.0 && facts.targetable;
+        self.targetable[bi] =
+            super::battle_row(body.faction) && facts.health > 0.0 && facts.targetable;
         let chunk = frame.entities.chunk_of(slot);
         self.active[bi] =
             self.targetable[bi] && !facts.no_ai && frame.world.is_active_position(chunk.x, chunk.z);

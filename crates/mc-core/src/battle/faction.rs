@@ -5,14 +5,39 @@ use mc_melee_range::{Aabb, MeleeReach, attack_box};
 
 use super::{EnemyTarget, Unit};
 
+/// Allegiance is independent of whether battle AI owns a native row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Relation {
+    Same,
+    Enemy,
+    Neutral,
+}
+
+pub(crate) fn relation(a: u16, b: u16) -> Relation {
+    if a == 0 || b == 0 {
+        Relation::Neutral
+    } else if a == b {
+        Relation::Same
+    } else {
+        Relation::Enemy
+    }
+}
+
+/// Roster/AI ownership marker, not a relation to another faction.
+/// Today nonzero factions enroll a row; keep that policy separate from
+/// allegiance so settlement membership need not acquire battle AI.
+pub(crate) fn battle_row(faction: u16) -> bool {
+    faction != 0
+}
+
 /// Zero is unaffiliated, not an enemy army.
 pub fn enemies(a: u16, b: u16) -> bool {
-    a != 0 && b != 0 && a != b
+    relation(a, b) == Relation::Enemy
 }
 
 pub(crate) fn live_unit(entities: &EntityStore, slot: EntitySlot) -> Option<Unit> {
     let body = entities.body(slot);
-    (body.faction != 0
+    (battle_row(body.faction)
         && body.alive
         && matches!(body.kind, EntityKind::Mob { .. })
         && entities.row(slot).health > 0.0
@@ -97,5 +122,9 @@ pub(crate) fn special(
     faction: u16,
     special: Option<crate::hostile::Special>,
 ) -> Option<crate::hostile::Special> {
-    special.filter(|_| faction == 0)
+    special.filter(|_| !battle_row(faction))
 }
+
+#[cfg(test)]
+#[path = "faction_tests.rs"]
+mod tests;

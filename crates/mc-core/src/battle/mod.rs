@@ -19,7 +19,7 @@ mod targeting;
 // Two main weapons per soldier: swap decisions (combat.rs), kit (staging.rs).
 mod weapons;
 
-pub(crate) use faction::special;
+pub(crate) use faction::{Relation, battle_row, relation, special};
 pub use faction::{enemies, retained_enemy};
 pub use targeting::{
     CELL_BLOCKS, EnemyTarget, MELEE_ENGAGEMENT_REACH, Query, RETARGET_TICKS, TargetGrid, Unit,
@@ -127,7 +127,7 @@ impl UnitCounters {
     }
 
     fn record(&mut self, faction: u16, alive: bool) {
-        if faction == 0 {
+        if !battle_row(faction) {
             return;
         }
         self.units += 1;
