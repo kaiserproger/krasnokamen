@@ -137,7 +137,7 @@ fn ancient(age_ma: f64) -> Province {
 /// Fixture evidence is opt-in and deterministic. The CSV contains the complete
 /// physical grid; SVG contains both a height map and a signed cross-section.
 fn evidence(name: &str, grid: &Grid, plan: &TectonicPlan) {
-    let Some(directory) = std::env::var_os("SOLARIS_W2_ARTIFACT_DIR") else {
+    let Some(directory) = std::env::var_os("KRASNOKAMEN_W2_ARTIFACT_DIR") else {
         return;
     };
     let directory = std::path::PathBuf::from(directory);

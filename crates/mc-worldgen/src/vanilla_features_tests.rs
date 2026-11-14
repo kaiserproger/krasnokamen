@@ -1,6 +1,6 @@
 //! Executor tests for the checkpoint A1 vanilla placed-feature layer.
 //!
-//! These exercise the partial layer end to end with synthetic Solaris fixtures
+//! These exercise the partial layer end to end with synthetic Krasnokamen fixtures
 //! and in-memory levels, plus one loud-skipping live proof against a real local
 //! vanilla content cache. Nothing here activates a runtime path.
 
@@ -30,7 +30,7 @@ fn identifier(value: &str) -> Identifier {
 }
 
 fn registry() -> BlockRegistry {
-    BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap()
+    BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap()
 }
 
 /// Resolve a state by name, filling the block's required properties with the
@@ -1272,15 +1272,15 @@ fn compile_fails_closed_for_unmodelled_block_behaviour() {
 
 // -------------------------------------------------------------- live proof
 
-/// `<SOLARIS_CONTENT_CACHE>`, then `<workspace>/data/vanilla`.
+/// `<KRASNOKAMEN_CONTENT_CACHE>`, then `<workspace>/data/vanilla`.
 fn content_cache_dir() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var("SOLARIS_CONTENT_CACHE") {
+    if let Ok(dir) = std::env::var("KRASNOKAMEN_CONTENT_CACHE") {
         let dir = PathBuf::from(dir);
         if live_worldgen_dir(&dir).is_some() {
             return Some(dir);
         }
         println!(
-            "SKIP live proof: SOLARIS_CONTENT_CACHE={} has no data/minecraft/worldgen",
+            "SKIP live proof: KRASNOKAMEN_CONTENT_CACHE={} has no data/minecraft/worldgen",
             dir.display()
         );
         return None;
@@ -1299,13 +1299,13 @@ fn live_worldgen_dir(cache: &Path) -> Option<PathBuf> {
 /// whole village decor closure, then repeats the run to prove determinism.
 ///
 /// Loud skip, never a silent pass: without a cache the test prints why it did
-/// not run. Point it at a cache with `SOLARIS_CONTENT_CACHE=/path/to/cache`.
+/// not run. Point it at a cache with `KRASNOKAMEN_CONTENT_CACHE=/path/to/cache`.
 #[test]
 fn village_decor_closure_places_from_the_real_cache() {
     let Some(cache) = content_cache_dir() else {
         println!(
             "SKIP village_decor_closure_places_from_the_real_cache: \
-             no vanilla content cache found (set SOLARIS_CONTENT_CACHE)"
+             no vanilla content cache found (set KRASNOKAMEN_CONTENT_CACHE)"
         );
         return;
     };
@@ -1560,7 +1560,7 @@ fn block_lines(
     lines
 }
 
-/// Synthetic Solaris-authored tree configurations mirroring the four reachable
+/// Synthetic Krasnokamen-authored tree configurations mirroring the four reachable
 /// village pairs. Expected block sets under each are the real 26.1.2
 /// `TreeFeature` output for the same configuration, seed and floor (produced by
 /// running the bundled decompiled `minecraft:tree` against a stub world).

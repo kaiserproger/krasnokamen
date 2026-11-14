@@ -39,7 +39,7 @@ impl Data {
         );
         // Golden apples take their vanilla consumable effects from the
         // embedded component catalog, as the real registry does.
-        let required = mc_data::item_components::solaris_required_item_facts();
+        let required = mc_data::item_components::krasnokamen_required_item_facts();
         let facts =
             mc_data::item_components::ItemFactsTable::from_entries(names.iter().map(|name| {
                 let name = id(&format!("minecraft:{name}"));

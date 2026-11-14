@@ -1,4 +1,4 @@
-//! Edge v2 server configuration: TOML `--config server.toml` for `solaris-v2`.
+//! Edge v2 server configuration: TOML `--config server.toml` for `krasnokamen`.
 //!
 //! Reads the server configuration shared with the harness, restricted to the
 //! keys the edge actually uses. Unknown keys are ignored with a one-line
@@ -51,7 +51,7 @@ pub struct EdgeConfig {
     /// Upstream proxy trust: Velocity modern forwarding.
     #[serde(default)]
     pub proxy: ProxySection,
-    /// Far-terrain LOD for the native Solaris client.
+    /// Far-terrain LOD for the native Krasnokamen client.
     #[serde(default)]
     pub lod: LodSection,
     /// Optional Distant Horizons protocol-16 service for Java clients.
@@ -570,10 +570,10 @@ fn default_msmp_port() -> u16 {
 }
 
 fn default_name() -> String {
-    "solaris-edge".to_owned()
+    "krasnokamen-edge".to_owned()
 }
 fn default_motd() -> String {
-    "Solaris edge v2".to_owned()
+    "Krasnokamen edge v2".to_owned()
 }
 fn default_max_players() -> u32 {
     20
@@ -866,7 +866,7 @@ mod tests {
     #[test]
     fn empty_config_takes_defaults() {
         let cfg = EdgeConfig::from_toml("", None).unwrap();
-        assert_eq!(cfg.server.name, "solaris-edge");
+        assert_eq!(cfg.server.name, "krasnokamen-edge");
         assert_eq!(cfg.network.port, 25565);
         assert!(!cfg.auth.online_mode);
         assert!(!cfg.auth.require_plugin_login);
