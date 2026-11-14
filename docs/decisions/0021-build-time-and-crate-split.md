@@ -20,7 +20,7 @@ on, mold, no sccache, and one run each. Receipts are in
 
 | Scenario | Wall time |
 |---|---|
-| Cold server binary (`-p mc-edge --bin solaris-v2`) | 6m32s |
+| Cold server binary (`-p mc-edge --bin krasnokamen`) | 6m32s |
 | Cold `mc-core` unit-test binary, after the above | 4m22s |
 | One-line `mc-core` edit → server binary | 59–71 s |
 | One-line `mc-core` edit → `mc-core` unit-test binary | 76–99 s |

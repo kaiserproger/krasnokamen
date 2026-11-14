@@ -536,15 +536,15 @@ def _verdict(
         detail["repro"][name] = repro
 
 def _snapshot_binary() -> tuple[Path, str]:
-    raw = os.environ.get("SOLARIS_SNAPSHOT_BINARY", "")
+    raw = os.environ.get("KRASNOKAMEN_SNAPSHOT_BINARY", "")
     if not raw or not os.path.isabs(raw):
-        raise RuntimeError("civilization-seed-qa requires an absolute SOLARIS_SNAPSHOT_BINARY")
+        raise RuntimeError("civilization-seed-qa requires an absolute KRASNOKAMEN_SNAPSHOT_BINARY")
     binary = Path(raw).resolve()
     if any(part == "targets" and i + 1 < len(binary.parts) and binary.parts[i + 1].startswith("slot-")
            for i, part in enumerate(binary.parts)):
-        raise RuntimeError("SOLARIS_SNAPSHOT_BINARY must be pinned outside pooled targets/slot-*")
+        raise RuntimeError("KRASNOKAMEN_SNAPSHOT_BINARY must be pinned outside pooled targets/slot-*")
     if not binary.is_file() or not os.access(binary, os.X_OK):
-        raise RuntimeError(f"SOLARIS_SNAPSHOT_BINARY is not an executable file: {binary}")
+        raise RuntimeError(f"KRASNOKAMEN_SNAPSHOT_BINARY is not an executable file: {binary}")
     with binary.open("rb") as executable:
         return binary, hashlib.file_digest(executable, "sha256").hexdigest()
 
@@ -553,7 +553,7 @@ def _birth_snapshot(ctx: ProfileContext, binary: Path, expected_hash: str, artif
                     world: Path, timeout: float) -> dict[str, Any]:
     with binary.open("rb") as executable:
         if hashlib.file_digest(executable, "sha256").hexdigest() != expected_hash:
-            raise RuntimeError("SOLARIS_SNAPSHOT_BINARY changed after preflight")
+            raise RuntimeError("KRASNOKAMEN_SNAPSHOT_BINARY changed after preflight")
     revision_source = (runtime.REPO_ROOT / "crates/mc-worldgen/src/lib.rs").read_text()
     match = re.search(r"pub const WORLDGEN_REVISION: u32 = (\d+);", revision_source)
     if match is None:
@@ -602,9 +602,9 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
     resume_world = os.environ.get("VILLAGE_AUTONOMY_RESUME_WORLD", "")
     if civilization and resume_world:
         raise ValueError("civilization-seed-qa requires a fresh world for the server game-time baseline")
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
-        raise RuntimeError("village-autonomy-qa requires SOLARIS_SERVER_BINARY")
+        raise RuntimeError("village-autonomy-qa requires KRASNOKAMEN_SERVER_BINARY")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing executable server binary: {binary}")
@@ -676,7 +676,7 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
     try:
         server_log = server_log_path.open("wb")
         env = os.environ.copy()
-        env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+        env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
         if civilization:
             env["RUST_LOG"] = (env.get("RUST_LOG") or "info") + ",settlement_audit=info"
         server = subprocess.Popen(

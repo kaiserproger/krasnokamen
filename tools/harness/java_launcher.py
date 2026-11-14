@@ -81,7 +81,7 @@ def vanilla_command(*, game_dir: Path, username: str, agent_jar: Path,
                     gradle_home: Path | None = None, library_roots: list[Path] | None = None) -> list[str]:
     gradle_home = gradle_home or Path(os.environ.get("GRADLE_USER_HOME", Path.home() / ".gradle"))
     cache = gradle_home / "caches/fabric-loom"
-    metadata_path = metadata_path or Path(os.environ.get("SOLARIS_JAVA_VERSION_METADATA", cache / VERSION / "mojang_minecraft_info.json"))
+    metadata_path = metadata_path or Path(os.environ.get("KRASNOKAMEN_JAVA_VERSION_METADATA", cache / VERSION / "mojang_minecraft_info.json"))
     if not metadata_path.is_file():
         raise MissingCapability(f"java_version_metadata:{VERSION}:{metadata_path}; prepare the canonical Loader Java build cache")
     metadata = json.loads(metadata_path.read_text())
@@ -97,10 +97,10 @@ def vanilla_command(*, game_dir: Path, username: str, agent_jar: Path,
     ]
     classpath = [library_path(item, gradle_home, roots) for item in metadata["libraries"]
                  if allowed(item) and "artifact" in item.get("downloads", {})]
-    client_override = os.environ.get("SOLARIS_CLIENT_JAR")
+    client_override = os.environ.get("KRASNOKAMEN_CLIENT_JAR")
     client = Path(client_override) if client_override else metadata_path.parent / "minecraft-client.jar"
     classpath.append(verified(client, metadata["downloads"]["client"], VERSION + " client"))
-    assets_root = assets_root or Path(os.environ.get("SOLARIS_JAVA_ASSETS_ROOT", cache / "assets"))
+    assets_root = assets_root or Path(os.environ.get("KRASNOKAMEN_JAVA_ASSETS_ROOT", cache / "assets"))
     pin = metadata["assetIndex"]
     choices = [assets_root / "indexes" / (pin["id"] + ".json"),
                assets_root / "indexes" / (VERSION + "-" + pin["id"] + ".json")]
@@ -119,7 +119,7 @@ def vanilla_command(*, game_dir: Path, username: str, agent_jar: Path,
             "--enable-native-access=ALL-UNNAMED", f"-javaagent:{agent_jar.resolve()}",
             f"-Djava.library.path={natives}", f"-Djna.tmpdir={natives}",
             f"-Dorg.lwjgl.system.SharedLibraryExtractPath={natives}",
-            f"-Dio.netty.native.workdir={natives}", "-Dminecraft.launcher.brand=SolarisHarness",
+            f"-Dio.netty.native.workdir={natives}", "-Dminecraft.launcher.brand=KrasnokamenHarness",
             "-Dminecraft.launcher.version=1", "-cp", os.pathsep.join(map(str, classpath)),
             metadata["mainClass"], "--username", username, "--version", VERSION,
             "--gameDir", str(game_dir), "--assetsDir", str(assets_root),
@@ -155,13 +155,13 @@ def prepare_fabric_launch(artifact_dir: Path, agent_root: Path, timeout_seconds:
     manifest = artifact_dir / "fabric-java-launch.json"
     game = artifact_dir / "prepared-game"
     env = os.environ.copy()
-    env.update(SOLARIS_CLIENT_LAUNCH_MANIFEST=str(manifest),
-               SOLARIS_CLIENT_MCP_TOKEN="prepared-command-not-a-listening-token",
-               SOLARIS_CLIENT_MCP_PORT="26299")
+    env.update(KRASNOKAMEN_CLIENT_LAUNCH_MANIFEST=str(manifest),
+               KRASNOKAMEN_CLIENT_MCP_TOKEN="prepared-command-not-a-listening-token",
+               KRASNOKAMEN_CLIENT_MCP_PORT="26299")
     command = [str(agent_root / "gradlew"), "--no-daemon", "--no-configuration-cache",
                "--max-workers=2", "-p", str(agent_root),
-               f"-Psolaris.clientMcp.gameDir={game}",
-               "-Psolaris.clientMcp.username=PreparedJava",
+               f"-Pkrasnokamen.clientMcp.gameDir={game}",
+               "-Pkrasnokamen.clientMcp.username=PreparedJava",
                ":loader-fabric:runClientMcp"]
     log_path = artifact_dir / "fabric-prepare.log"
     with log_path.open("wb") as log:

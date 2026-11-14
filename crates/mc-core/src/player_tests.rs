@@ -66,8 +66,8 @@ fn teleport_sequence_survives_respawn_wraps_like_vanilla_and_resets_on_reconnect
 }
 #[test]
 fn selecting_wooden_sword_and_empty_slot_diffs_attributes() {
-    let items = mc_data::items::solaris_required_items();
-    let facts = mc_data::item_components::solaris_required_item_facts();
+    let items = mc_data::items::krasnokamen_required_items();
+    let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = TagsData::default();
     let rules = ItemRules {
         items: &items,
@@ -574,8 +574,8 @@ fn rejected_current_window_click_restores_slots_and_cursor_in_one_authoritative_
 
 #[test]
 fn use_equippable_swaps_armor_and_preserves_creative_hand() {
-    let items = mc_data::items::solaris_required_items();
-    let facts = mc_data::item_components::solaris_required_item_facts();
+    let items = mc_data::items::krasnokamen_required_items();
+    let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = TagsData::default();
     let rules = ItemRules {
         items: &items,
@@ -622,8 +622,8 @@ fn use_equippable_swaps_armor_and_preserves_creative_hand() {
 
 #[test]
 fn use_equippable_refuses_binding_and_identical_components() {
-    let items = mc_data::items::solaris_required_items();
-    let facts = mc_data::item_components::solaris_required_item_facts();
+    let items = mc_data::items::krasnokamen_required_items();
+    let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = TagsData::default();
     let rules = ItemRules {
         items: &items,
@@ -678,7 +678,7 @@ fn use_equippable_refuses_binding_and_identical_components() {
 
 #[test]
 fn use_stacked_equippable_consumes_one_and_returns_or_drops_old() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let facts = ItemFactsTable::from_entries([(
         id("minecraft:stone"),
         ItemFacts {
@@ -721,7 +721,7 @@ fn use_stacked_equippable_consumes_one_and_returns_or_drops_old() {
 
 #[test]
 fn use_equippable_checks_swappable_slot_and_allowed_entities() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let tags = TagsData::default();
     for (slot, swappable, allowed, equips) in [
         ("head", true, None, true),

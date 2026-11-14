@@ -105,7 +105,7 @@ fn compound_list(elements: Vec<Tag>) -> Tag {
     })
 }
 
-/// Solaris worker cursors ride the runtime compound as compact JSON strings;
+/// Krasnokamen worker cursors ride the runtime compound as compact JSON strings;
 /// the NBT path is cold, so the serde allocation stays off the hot tick.
 /// Absent means default; any present-but-undecodable value fails closed.
 fn progress_to_tag<T: Default + PartialEq + serde::Serialize>(
@@ -209,7 +209,7 @@ pub(crate) fn validate_state(state: &VillagerState) -> Result<()> {
         return Err(VillagerNbtError::Invalid("villager counters"));
     }
     if state.mining_progress.layer > 2 {
-        return Err(VillagerNbtError::Invalid("SolarisMiningProgress.layer"));
+        return Err(VillagerNbtError::Invalid("KrasnokamenMiningProgress.layer"));
     }
     if (state.data.profession == VillagerProfession::Soldier) != state.soldier.is_some()
         || state.soldier.as_ref().is_some_and(|soldier| {
@@ -219,7 +219,7 @@ pub(crate) fn validate_state(state: &VillagerState) -> Result<()> {
                     .is_none_or(|id| soldier.barracks.0 >> 32 != id.0)
         })
     {
-        return Err(VillagerNbtError::Invalid("SolarisSoldier"));
+        return Err(VillagerNbtError::Invalid("KrasnokamenSoldier"));
     }
     if ![
         &state.job_site_dimension,
@@ -684,7 +684,7 @@ pub(crate) fn villager_to_fields(
                 .into(),
             ),
         ),
-        // Vanilla compact Inventory omits holes, but Solaris retains exact custody slots.
+        // Vanilla compact Inventory omits holes, but Krasnokamen retains exact custody slots.
         (
             "inventory_slots".into(),
             Tag::IntArray(
@@ -754,17 +754,17 @@ pub(crate) fn villager_to_fields(
     if let Some(seed) = state.trade_seed {
         runtime.push(("trade_seed".into(), Tag::Long(seed as i64)));
     }
-    if let Some(tag) = progress_to_tag(&state.mining_progress, "SolarisMiningProgress")? {
-        runtime.push(("SolarisMiningProgress".into(), tag));
+    if let Some(tag) = progress_to_tag(&state.mining_progress, "KrasnokamenMiningProgress")? {
+        runtime.push(("KrasnokamenMiningProgress".into(), tag));
     }
-    if let Some(tag) = progress_to_tag(&state.lumber_progress, "SolarisLumberProgress")? {
-        runtime.push(("SolarisLumberProgress".into(), tag));
+    if let Some(tag) = progress_to_tag(&state.lumber_progress, "KrasnokamenLumberProgress")? {
+        runtime.push(("KrasnokamenLumberProgress".into(), tag));
     }
-    if let Some(tag) = progress_to_tag(&state.smelting, "SolarisSmelting")? {
-        runtime.push(("SolarisSmelting".into(), tag));
+    if let Some(tag) = progress_to_tag(&state.smelting, "KrasnokamenSmelting")? {
+        runtime.push(("KrasnokamenSmelting".into(), tag));
     }
-    if let Some(tag) = progress_to_tag(&state.soldier, "SolarisSoldier")? {
-        runtime.push(("SolarisSoldier".into(), tag));
+    if let Some(tag) = progress_to_tag(&state.soldier, "KrasnokamenSoldier")? {
+        runtime.push(("KrasnokamenSoldier".into(), tag));
     }
     if matches!(
         state.data.profession,
@@ -843,7 +843,7 @@ pub(crate) fn villager_to_fields(
             "Brain".into(),
             Tag::Compound(vec![("memories".into(), Tag::Compound(memories))]),
         ),
-        ("solaris:VillagerRuntime".into(), Tag::Compound(runtime)),
+        ("krasnokamen:VillagerRuntime".into(), Tag::Compound(runtime)),
     ];
     if state.wandering {
         fields.push((
@@ -887,7 +887,7 @@ pub(crate) fn owns_field(key: &str) -> bool {
             | "LastGossipDecay"
             | "Inventory"
             | "Brain"
-            | "solaris:VillagerRuntime"
+            | "krasnokamen:VillagerRuntime"
             | "DespawnDelay"
             | "sleeping_pos"
             | "ConversionTime"
@@ -962,8 +962,8 @@ pub(crate) fn villager_from_fields(
     if stacks.len() > 8 {
         return Err(VillagerNbtError::Invalid("Inventory"));
     }
-    let runtime = field(fields, "solaris:VillagerRuntime")?
-        .map(|tag| compound(tag, "solaris:VillagerRuntime"))
+    let runtime = field(fields, "krasnokamen:VillagerRuntime")?
+        .map(|tag| compound(tag, "krasnokamen:VillagerRuntime"))
         .transpose()?
         .unwrap_or(&[]);
     if let Some(tag) = field(runtime, "profession")? {
@@ -974,7 +974,7 @@ pub(crate) fn villager_from_fields(
             Tag::String(role) if role == "soldier" => VillagerProfession::Soldier,
             _ => {
                 return Err(VillagerNbtError::Invalid(
-                    "solaris:VillagerRuntime.profession",
+                    "krasnokamen:VillagerRuntime.profession",
                 ));
             }
         };
@@ -1149,10 +1149,10 @@ pub(crate) fn villager_from_fields(
     if field(runtime, "partner")?.is_some() {
         state.partner = Some(EntityId(integer(runtime, "partner", 0)?));
     }
-    state.mining_progress = progress_from_tag(runtime, "SolarisMiningProgress")?;
-    state.lumber_progress = progress_from_tag(runtime, "SolarisLumberProgress")?;
-    state.smelting = progress_from_tag(runtime, "SolarisSmelting")?;
-    state.soldier = progress_from_tag(runtime, "SolarisSoldier")?;
+    state.mining_progress = progress_from_tag(runtime, "KrasnokamenMiningProgress")?;
+    state.lumber_progress = progress_from_tag(runtime, "KrasnokamenLumberProgress")?;
+    state.smelting = progress_from_tag(runtime, "KrasnokamenSmelting")?;
+    state.soldier = progress_from_tag(runtime, "KrasnokamenSoldier")?;
     if field(fields, "ConversionTime")?.is_some() {
         state.conversion_time = Some(integer(fields, "ConversionTime", -1)?);
     }

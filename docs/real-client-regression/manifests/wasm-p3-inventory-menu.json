@@ -3,7 +3,7 @@
   "pack_id": "wasm-p3-inventory-menu",
   "quality_label": "draft",
   "minecraft_version": "26.1.2",
-  "server_command": "cargo run -p mc-edge --bin solaris-v2 -- --config <run-dir>/server.toml (prepared from SOLARIS_REAL_CLIENT_SERVER_CONFIG)",
+  "server_command": "cargo run -p mc-edge --bin krasnokamen -- --config <run-dir>/server.toml (prepared from KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG)",
   "artifact_root": ".analysis/real-client-runs",
   "deployment": {
     "server_config": ".analysis/codex-logs/wasm-p3-menu-20260916/server.toml",
@@ -19,9 +19,9 @@
         "inventory_menus"
       ]
     },
-    "operator_env": "SOLARIS_REAL_CLIENT_MANIFEST=docs/real-client-regression/manifests/wasm-p3-inventory-menu.json SOLARIS_REAL_CLIENT_AGENT_SCENARIO=wasm-p3-inventory-menu SOLARIS_REAL_CLIENT_SERVER_CONFIG=.analysis/codex-logs/wasm-p3-menu-20260916/server.toml SOLARIS_REAL_CLIENT_SERVER_ADDR=127.0.0.1:43654 SOLARIS_REAL_CLIENT_FRESH_WORLD=1 python3 -m tools.harness run regression --timeout-seconds 600"
+    "operator_env": "KRASNOKAMEN_REAL_CLIENT_MANIFEST=docs/real-client-regression/manifests/wasm-p3-inventory-menu.json KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO=wasm-p3-inventory-menu KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG=.analysis/codex-logs/wasm-p3-menu-20260916/server.toml KRASNOKAMEN_REAL_CLIENT_SERVER_ADDR=127.0.0.1:43654 KRASNOKAMEN_REAL_CLIENT_FRESH_WORLD=1 python3 -m tools.harness run regression --timeout-seconds 600"
   },
-  "client_requirement": "A real graphical Minecraft Java Edition 26.1.2 client must execute this scenario through the repo-native Gradle runClient adapter (:fabric-agent:runClientAgent, net.neoforged.moddev). That client carries the repo's JVM client-agent bridge for observation and input only and deliberately does NOT load the Solaris Loader mod, so every /trade answer and every menu window arrives over the ordinary play protocol; it is a no-Loader development client, not an uninstrumented production binary. Protocol bots, wire probes and mock clients do not satisfy this gate. The scenario dispatches its menu clicks through the bridge's real container-click action: it never forges a click packet, a stale session or a stale window.",
+  "client_requirement": "A real graphical Minecraft Java Edition 26.1.2 client must execute this scenario through the repo-native Gradle runClient adapter (:fabric-agent:runClientAgent, net.neoforged.moddev). That client carries the repo's JVM client-agent bridge for observation and input only and deliberately does NOT load the Krasnokamen Loader mod, so every /trade answer and every menu window arrives over the ordinary play protocol; it is a no-Loader development client, not an uninstrumented production binary. Protocol bots, wire probes and mock clients do not satisfy this gate. The scenario dispatches its menu clicks through the bridge's real container-click action: it never forges a click packet, a stale session or a stale window.",
   "forbidden_client_evidence": [
     "wire-probe",
     "mc_vanilla::wire_client::Client",
@@ -45,19 +45,19 @@
     "agent_driver": "tools/harness/backends/driver.py",
     "client_adapter": "../solaris-loader/gradlew -p ../solaris-loader --no-configuration-cache :fabric-agent:runClientAgent",
     "client_adapter_source": "auto-gradle-runclient",
-    "client_isolation": "The primary Gradle runClient uses a per-run game directory and the fixed offline username SolarisPrimary.",
+    "client_isolation": "The primary Gradle runClient uses a per-run game directory and the fixed offline username KrasnoPrimary.",
     "modes": [
       "--check",
       "--prepare",
       "--run",
       "--validate-run"
     ],
-    "agent_scenario_env": "SOLARIS_REAL_CLIENT_AGENT_SCENARIO",
-    "agent_secret_env": "SOLARIS_REAL_CLIENT_AGENT_SECRET",
-    "agent_port_env": "SOLARIS_REAL_CLIENT_AGENT_PORT",
-    "agent_server_addr_env": "SOLARIS_REAL_CLIENT_SERVER_ADDR",
-    "server_config_env": "SOLARIS_REAL_CLIENT_SERVER_CONFIG",
-    "fresh_world_env": "SOLARIS_REAL_CLIENT_FRESH_WORLD",
+    "agent_scenario_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO",
+    "agent_secret_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_SECRET",
+    "agent_port_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_PORT",
+    "agent_server_addr_env": "KRASNOKAMEN_REAL_CLIENT_SERVER_ADDR",
+    "server_config_env": "KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG",
+    "fresh_world_env": "KRASNOKAMEN_REAL_CLIENT_FRESH_WORLD",
     "default_agent_scenario": "wasm-p3-inventory-menu",
     "prepared_status": "prepared-owner-run",
     "passing_gate": "agent-run real-client"
@@ -74,8 +74,8 @@
       "bounded_time_minutes": 16,
       "screenshots_required": true,
       "steps": [
-        "Start Solaris from a fresh world with runtime = \"wasm\", strict = true, expected = [\"inventory-compat\"], and explicit storage/inventory_storage_transactions/inventory_menus grants. The package declares player_commands = [\"trade\"], events = [\"player.joined\", \"player.left\", \"inventory.menu.clicked\"], and config.toml mode = \"inventory-storage\"; this mode reuses that fixture and its /trade actions. The trade-ledger key must start absent.",
-        "Launch the real graphical 26.1.2 client through the repo-native Gradle runClient adapter (no Solaris Loader mod) and let the agent driver connect it to the loopback server address.",
+        "Start Krasnokamen from a fresh world with runtime = \"wasm\", strict = true, expected = [\"inventory-compat\"], and explicit storage/inventory_storage_transactions/inventory_menus grants. The package declares player_commands = [\"trade\"], events = [\"player.joined\", \"player.left\", \"inventory.menu.clicked\"], and config.toml mode = \"inventory-storage\"; this mode reuses that fixture and its /trade actions. The trade-ledger key must start absent.",
+        "Launch the real graphical 26.1.2 client through the repo-native Gradle runClient adapter (no Krasnokamen Loader mod) and let the agent driver connect it to the loopback server address.",
         "Operator fixture setup, declared debug and never claimed as no-debug survival: gamemode survival, /give minecraft:emerald 4, /give minecraft:diamond_pickaxe 1, /summon minecraft:pig beside the player, select the pickaxe, and land one real survival attack so the pickaxe carries a non-zero client-visible damage component.",
         "For each trade: submit /trade menu, require the request marker P3_MENU open-requested and then the real window, left-click the window's slot 0 (primary) to buy or right-click it (secondary) to refund, and require the guest's P3_TRADE marker together with the emerald/apple counts it implies. A buy takes 2 emeralds and grants 1 apple; a refund reverses that.",
         "Buy twice (ledger 1 then 2, emeralds 4 -> 2 -> 0, apples 0 -> 1 -> 2), then left-click slot 0 with zero emeralds and require P3_TRADE buy refused ledger=2 with a byte-identical client inventory (the insufficient-items adversarial check), then right-click slot 0 and require P3_TRADE refund committed ledger=1 (the right-click refund).",
@@ -100,7 +100,7 @@
       "wasm_inventory_menu_expectation": {
         "package_id": "inventory-compat",
         "mode": "inventory-storage",
-        "player_username": "SolarisPrimary",
+        "player_username": "KrasnoPrimary",
         "command_root": "trade",
         "ledger_key": "trade-ledger",
         "marker_prefix": "P3_TRADE",

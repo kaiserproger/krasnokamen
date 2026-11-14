@@ -1,6 +1,6 @@
 [package]
-name = "solaris-plugin-sdk"
-description = "Guest SDK for Solaris plugins, generated from the repository's WIT contract."
+name = "krasnokamen-plugin-sdk"
+description = "Guest SDK for Krasnokamen plugins, generated from the repository's WIT contract."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

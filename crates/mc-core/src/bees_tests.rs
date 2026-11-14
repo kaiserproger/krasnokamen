@@ -388,7 +388,7 @@ fn native_elapsed_pollination_timer_is_not_flower_progress() {
     let mut original = state(None);
     let fields = vec![
         ("TicksSincePollination".into(), Tag::Int(1234)),
-        ("solaris:BeePollinationTicks".into(), Tag::Int(399)),
+        ("krasnokamen:BeePollinationTicks".into(), Tag::Int(399)),
         ("flower_pos".into(), pos_tag(POS)),
     ];
     let value = from_fields(&fields).unwrap();
@@ -417,10 +417,10 @@ fn native_elapsed_pollination_timer_is_not_flower_progress() {
     assert_eq!(value.pollination, 17);
     assert_eq!(value.ticks_since_pollination, 43);
     assert_eq!(from_fields(&to_fields(value)).unwrap(), **value);
-    let error = from_fields(&[("solaris:BeePollinationTicks".into(), Tag::Int(401))])
+    let error = from_fields(&[("krasnokamen:BeePollinationTicks".into(), Tag::Int(401))])
         .unwrap_err()
         .to_string();
-    assert!(error.contains("Bee.solaris:BeePollinationTicks: expected 0..=400"));
+    assert!(error.contains("Bee.krasnokamen:BeePollinationTicks: expected 0..=400"));
 }
 
 #[test]

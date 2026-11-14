@@ -76,7 +76,7 @@ class VanillaLauncherTest(unittest.TestCase):
         manifest = self.root / "fabric.json"
         manifest.write_text(json.dumps({
             "java": "/java", "main_class": "net.fabricmc.devlaunchinjector.Main",
-            "classpath": [str(self.agent)], "jvm_args": ["-Xmx4G", "-Dsolaris.loader.cacheDir=/prepared/game/cache"],
+            "classpath": [str(self.agent)], "jvm_args": ["-Xmx4G", "-Dkrasnokamen.loader.cacheDir=/prepared/game/cache"],
             "args": ["--username", "PreparedJava", "--gameDir", "/prepared/game"],
             "game_dir": "/prepared/game", "username": "PreparedJava"}))
         command = launcher.prepared_fabric_command(manifest, self.game, "JMatrix07")
@@ -84,7 +84,7 @@ class VanillaLauncherTest(unittest.TestCase):
         self.assertIn("-Xmx512M", command)
         self.assertIn("JMatrix07", command)
         self.assertIn(str(self.game), command)
-        self.assertIn("-Dsolaris.loader.cacheDir=" + str(self.game / "cache"), command)
+        self.assertIn("-Dkrasnokamen.loader.cacheDir=" + str(self.game / "cache"), command)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Index of EXISTING tests that run against a real solaris-v2 server process.
+"""Index of EXISTING tests that run against a real krasnokamen server process.
 
 Sources (read 2026-10-24): tools/harness/scenarios.py catalog, tools/harness/backends/*,
 `python3 -m tools.harness list`, ../solaris-loader java-agent scenario ids,
@@ -14,7 +14,7 @@ Fields: clients (client_kind ids), players (1|2|N8), network, lifecycle.
 J = "vanilla_java_26_1_2"
 N = "native_linux"
 P = "protocol_bot"
-LDR = ["fabric_solaris_loader", "neoforge_solaris_loader", "forge_solaris_loader"]
+LDR = ["fabric_krasnokamen_loader", "neoforge_krasnokamen_loader", "forge_krasnokamen_loader"]
 
 
 def t(id, runner, source, clients, subjects, players="1", network="normal", lifecycle=("steady",), note=""):
@@ -141,7 +141,7 @@ E2E = [
     t("m94-06-save-restart-two-client-visibility", "harness run regression", JA, J, ["persistence.player_data_roundtrip"], players="2", lifecycle=("clean_restart",)),
     t("m94-07/07a-route-deep-water", "harness run regression", JA, J, ["movement.swim_and_sink", "world_chunks.fresh_generation"]),
     t("m94-08-enchanting-efficiency", "harness run regression", JA, J, ["containers.enchanting_table", "crafting.enchanting_offers"]),
-    t("m94-colony-villager-live-qa", "harness run regression", "tools/harness/backends/driver_colony.py", J, ["settlements.bind", "villagers.solaris_professions"]),
+    t("m94-colony-villager-live-qa", "harness run regression", "tools/harness/backends/driver_colony.py", J, ["settlements.bind", "villagers.krasnokamen_professions"]),
     # ---- other real-client harness profiles
     t("admin-commands", "harness run admin-commands", "tools/harness/backends/admin_commands.py", N,
       ["commands.tellraw", "commands.title", "commands.bossbar", "commands.tick", "commands.locate", "ui_presentation.title_actionbar",
@@ -161,7 +161,7 @@ E2E = [
     t("graves", "harness run graves --plugins-dir <graves>", "tools/harness/backends/graves.py", P,
       ["plugins.graves_custody", "death_respawn.keep_inventory_false"], lifecycle=("clean_restart",)),
     t("item-merge", "harness run item-merge", "tools/harness/backends/item_merge.py", P, ["inventory.item_entity_merge", "containers.hopper", "containers.chest"]),
-    t("loader-v2-settlements-smoke", "harness run loader-live --platform fabric", "tools/harness/loader.py", ["fabric_solaris_loader"],
+    t("loader-v2-settlements-smoke", "harness run loader-live --platform fabric", "tools/harness/loader.py", ["fabric_krasnokamen_loader"],
       ["loader_content.bundle_handshake_cache", "loader_content.loader_view_request", "settlements.create", "settlements.list", "settlements.info", "settlements.menu"]),
     t("logical-native", "harness run logical-native", "tools/harness/backends/native_logical.py", N, ["movement.walk_sprint_jump", "block_place.rejected_resync"]),
     t("native-lifecycle", "harness run native-lifecycle --client native|java", "tools/harness/backends/native_lifecycle.py", [N, J],
@@ -176,14 +176,14 @@ E2E = [
       ["block_break.tool_tier_required", "inventory.pickup_item_entity", "block_place.full_block"]),
     t("title-connect", "harness run title-connect", "tools/harness/backends/title_connect.py", N, ["session.join_fresh_spawn"]),
     t("village-qa", "harness run village-qa", "tools/harness/backends/village_qa.py", N,
-      ["settlements.building", "settlements.bind", "villagers.schedule_sleep_work", "villagers.farmer_harvest", "villagers.solaris_professions"]),
+      ["settlements.building", "settlements.bind", "villagers.schedule_sleep_work", "villagers.farmer_harvest", "villagers.krasnokamen_professions"]),
     t("village-autonomy-qa", "harness run village-autonomy-qa", "tools/harness/backends/village_autonomy_qa.py", N, ["settlements.claim", "settlements.building"]),
     t("constantinople", "harness run constantinople", "tools/harness/__main__.py (fixture)", P, ["world_chunks.world_import_export_anvil", "persistence.entities_roundtrip"], lifecycle=("clean_restart",)),
     t("vanilla-world-roundtrip", "python3 -m tools.harness.vanilla_world_roundtrip", "tools/harness/vanilla_world_roundtrip.py", P, ["world_chunks.world_import_export_anvil"], lifecycle=("clean_restart",)),
     t("wasm-p2/p3-plugin-menus", "harness run regression (wasm manifests)", "docs/real-client-regression/manifests/wasm-p*.json", J,
       ["plugins.basic_economy_shop", "containers.plugin_chest_menu"]),
-    # ---- plugin sibling gates (real solaris-v2)
-    t("standard-pack", "harness run standard-pack (SOLARIS_DEFAULT_PLUGINS_ROOT)", "../solaris-default-plugins/tools/run_integration.py + standard_pack_client.py", J,
+    # ---- plugin sibling gates (real krasnokamen)
+    t("standard-pack", "harness run standard-pack (KRASNOKAMEN_DEFAULT_PLUGINS_ROOT)", "../solaris-default-plugins/tools/run_integration.py + standard_pack_client.py", J,
       ["~plugins.perm_groups_user_set", "~plugins.essentials_homes", "~plugins.economy_money_pay", "~plugins.towns_create_info", "~plugins.audit_queries", "plugins.plugin_command_tree"],
       note="one ordinary command per package"),
     t("auth-live-check", "python3 ../solaris-default-plugins/tools/auth_live_check.py", "../solaris-default-plugins/tools/auth_live_check.py", P,
