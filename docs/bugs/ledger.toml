@@ -1357,9 +1357,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "The launcher wrote the resource pack into the game directory incrementally and treated an existing manifest as proof the pack was current, so upgrading the client left a 26.1.2 pack in place: 26.3 content the client needs (template_sign_* block models, entity/cushion and entity/sulfur_cube textures) never appeared, and the client's model-texture walk fails on the missing files."
-regression = ["client:krasnokamen-launcher:bootstrap::tests::a_manifest_claim_does_not_make_a_stale_pack_current", "client:krasnokamen-launcher:bootstrap::tests::a_stale_resource_pack_is_replaced_instead_of_merged"]
-fix_commit = "client:1ea6d127"
-repro_check = "controls receipts/XClientBlocks/17-* and 18-*: with the fix reverted the manifest claim keeps the stale pack and the extracted set lacks the 26.3 files. The launcher python side (client tools.test_resources) also covers the extracted inventory but has no ref form yet - client refs run cargo only, recorded here instead. area=client, so candidate: real-client check required; the launcher refs become runnable after Main merges wt/XClientBlocks 109ec84a."
+regression = ["client:krasnokamen-launcher:bootstrap::tests::a_manifest_claim_does_not_make_a_stale_pack_current", "client:krasnokamen-launcher:bootstrap::tests::a_stale_resource_pack_is_replaced_instead_of_merged", "client:krasnokamen-launcher:bootstrap::tests::an_installation_whose_pack_lost_its_marker_is_not_ready", "client:krasnokamen-launcher:ui::tests::ordinary_play_repairs_an_installation_whose_pack_lost_its_marker", "client:krasnokamen-launcher:bootstrap::tests::a_failed_pack_swap_keeps_the_previous_pack"]
+fix_commit = "client:3fa63044"
+repro_check = "candidate: area=client. fix client:3fa63044 (which contains 1ea6d127) makes readiness require the pack marker to match the local jar, so ordinary Play on an existing install repairs a stale pack, and a failed swap restores the old pack. Control receipts/XClientBlocks/27-ready-negative-control.log: an_installation_whose_pack_lost_its_marker_is_not_ready and ordinary_play_repairs_an_installation_whose_pack_lost_its_marker are red with the fix reverted (94 passed, 2 failed); a_failed_pack_swap_keeps_the_previous_pack stayed green in that same run, so for the swap claim the control is not yet shown and it must not be cited as proof. Real-client check required: the gate is a client install upgraded across a pack change"
 
 [[bug]]
 id = "STORAGE-L3-SEALED-CORNER-CHEST"
@@ -1394,7 +1394,7 @@ area = "gameplay"
 repro = "cargo"
 severity = "minor"
 status = "open"
-source = "Found by Stage2Edge while auditing the mc-edge datapack reload path: the reload handler sent the recipe catalog once for the datapack event and once more after re-projecting it (crates/mc-edge/src/advancements.rs)."
+source = "Found by Stage2Edge while auditing the mc-edge datapack reload path: the reload handler sent the recipe catalog once for the datapack event and once more after re-projecting it; the fix is in crates/mc-edge/src/plan/player_changes.rs and the ref lives in crates/mc-edge/src/advancements_tests.rs, declared as advancements::tests."
 regression = ["cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book"]
 failing_first = "reported"
 fix_commit = "patch:8b8ac42337fbd5b2de83f105991a134dc367b2a1bc00aa46908815ce676f2973"
@@ -3275,7 +3275,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:100"
 regression = []
-
+repro_check = "parked by Main after stage 2: the shared renderer scale affects about ten model families and needs a design decision from the owner, so no row work here"
 [[bug]]
 id = "MODEL-OPUS-7"
 title = "Creeper has no pre-explosion swell or white flash, and no charged aura."
@@ -3337,8 +3337,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:156"
-regression = ["harness:scene-shot:native-entity-visuals"]
-
+regression = ["harness:scene-shot:native-entity-visuals", "client:krasnokamen-client:entities::krasnokamen_models::tests::post_rc4_reauthored_rigs_keep_their_reference_silhouettes"]
+fix_commit = "client:ee258651"
+repro_check = "round 6 (client:ee258651): the rig is exact against 26.3 (receipts/XHarnessGates/models263/audit-r6-before.json) and the ref is red with the fix reverted - receipts/XHarnessGates/client-r6-revert-red.log (320 passed, 3 failed, this ref among them). candidate: area=client, real-client check required"
 [[bug]]
 id = "MODEL-OPUS-13"
 title = "Banner flags are too short."
@@ -3378,8 +3379,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:174"
-regression = ["harness:scene-shot:native-entity-visuals"]
-
+regression = ["harness:scene-shot:native-entity-visuals", "client:krasnokamen-client:entities::krasnokamen_models::tests::post_rc4_reauthored_rigs_keep_their_reference_silhouettes"]
+fix_commit = "client:ee258651"
+repro_check = "round 6 (client:ee258651): the rig is exact against 26.3 (receipts/XHarnessGates/models263/audit-r6-before.json) and the ref is red with the fix reverted - receipts/XHarnessGates/client-r6-revert-red.log (320 passed, 3 failed, this ref among them). candidate: area=client, real-client check required"
 [[bug]]
 id = "MODEL-OPUS-N1"
 title = "Baby chestplates have see-through shoulders. This affects every family and every material, and is confirmed at runtime."
@@ -3420,8 +3422,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:115"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::animation_tests::camel_back_and_saddle_carry_the_received_standing_and_sitting_seat"]
+fix_commit = "client:ee258651"
+repro_check = "round 6 (client:ee258651): the camel and camel_husk rigs are exact against 26.3 (receipts/XHarnessGates/models263/audit-r6-before.json) and the ref is red with the fix reverted - receipts/XHarnessGates/client-r6-revert-red.log (this ref among the three failures). candidate: area=client, real-client check required"
 [[bug]]
 id = "MODEL-OPUS-N5"
 title = "With boots on, baby leggings are hidden or nearly hidden."
@@ -3482,7 +3485,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:156"
 regression = []
-
+repro_check = "round 6 note only: the surface audit is still a minor mismatch, so there is no fix to reverse and no ref; needs the owner's renderer-scale decision (see MODEL-OPUS-6)"
 [[bug]]
 id = "MODEL-PLAYER-HEAD-PROFILE"
 title = "`player_head` items ignore the `profile` component (GUI, hand, ground, frame, worn): always Steve"
@@ -3657,14 +3660,15 @@ fix_commit = "client:e8fe40c2"
 repro_check = "real-hunk control receipts/XClientUi/controls-2.log: reversing ebed661d's only non-test hunk gives 16 vs 8 vertices (two bars per stack) in the real append_stack_item path. Bars are e8fe40c2, one-bar-per-stack is ebed661d; area=client, candidate: real-client check required"
 [[bug]]
 id = "MODEL-SHIELD-GUI"
-title = "Shield GUI cell narrow: runtime corroboration of Opus S3 (10×16) on rig bytes = W `273a83141a8f`"
+title = "Shield GUI cell narrow: the in-tree shield plate was 10x16 at uv(0,6), not the vanilla 26.3 ShieldModel (12x22 plate plus a handle), so the item drew a squashed shield"
 area = "client"
 repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:92"
-regression = []
-repro_check = "blocked on rig content: needs assets/krasnokamen/models/entity/shield.json (owner: entity/model rigs). The in-tree plate is origin [-5,-8,-0.5] size [10,16,1] at uv(0,6) while vanilla 26.3 ShieldModel is addBox(-6,-11,-2,12,22,1) at texOffs(0,0) plus a handle addBox(-1,-3,-1,2,6,6) at texOffs(26,0) (decompiled in solaris-client/.analysis/entity-render-special/source/.../ShieldModel.java); the GUI display matrix is already vanilla (scale 0.65 from minecraft:item/shield). XClientUi round 2 re-authors shield.json; evidence receipts/XClientUi/MODEL-SHIELD-GUI-gap.md. The cited vanilla geometry is recorded here for that authoring"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::shield_plate_and_handle_match_the_vanilla_263_model"]
+repro_check = "round 2 (XClientUi f2c3a0f8): the shield rig is now the vanilla 26.3 ShieldModel - the plate addBox(-6,-11,-2,12,22,1) at texOffs(0,0) plus the handle addBox(-1,-3,-1,2,6,6) at texOffs(26,0) - and the ref asserts the authored 12 layer quads against it. The earlier 'blocked on rig content' line is closed: the rig exists. Control receipts/XClientUi/shield-control.log: with f2c3a0f8 reverted the ref is red (17 passed, 1 failed). candidate: area=client, real-client check required - the narrow 16x16 GUI cell is the stage-3 visual gate"
+fix_commit = "client:f2c3a0f8"
 [[bug]]
 id = "COPPER-WEATHERING"
 title = "Weathering did not cover the vanilla copper families"
@@ -3981,9 +3985,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/BvDeathTilt (native scene-shot base vs candidate, death-tilt-base-vs-candidate.png; fix death-tilt.patch 642165ec on client wt/ClientBattleIntegration 45ceeaf with entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve and entities::crowd::tests::dying_crowd_instances_tilt_about_the_feet_like_the_cpu_pose)"
-regression = ["harness:scene-shot:native-death-tilt"]
+regression = ["harness:scene-shot:native-death-tilt", "client:krasnokamen-client:entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve"]
 failing_first = "reported"
-
+repro_check = "implemented in the tree (commit 45ceeafb, carried by wt/XClientMobs); the ref is green and the death tilt turns about the feet on the vanilla curve, but no negative control has been run yet, so this row is not promotable before one exists (the tilt landed as 45ceeafb, which is the fix_commit to record once the control is run). candidate: area=client, real-client check required"
 [[bug]]
 id = "NATIVE-POTION-IMPACT-EFFECT"
 title = "The native client ignores splash/lingering potion impact level events (2002/2007): src/session/packets.rs:518 routes LevelEvent to present_block_break and block_effects.rs:10 accepts only 2001, so impact particles and custom colors never appear."
