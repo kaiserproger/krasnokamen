@@ -2,6 +2,8 @@
 import os
 from pathlib import Path
 import shutil
+import signal
+import sys
 import subprocess
 import tempfile
 from types import SimpleNamespace
@@ -129,23 +131,64 @@ class SingleplayerRegressionTests(unittest.TestCase):
                 sp._wait_path(database, 30)
             self.assertEqual(seen, [world, world / "native", database])
 
+    def exec_child(self, binary: Path) -> int:
+        """Fork and exec `binary 30`; return its pid once the exec has completed.
+
+        Fork and exec `binary` (a copy of this interpreter) with a 30 s sleep: the pid is
+        returned once the exec has completed.
+
+        `write_fd` is close-on-exec, so the parent's read returns EOF exactly when the child
+        execs (or dies trying): the exact event, no sleep and no polling. Reading /proc/<pid>/exe
+        right after `subprocess.Popen` is the race this replaces — a forked-but-not-yet-execed
+        child still points at the test process's own image."""
+        read_fd, write_fd = os.pipe()  # the write end closes at exec: the parent reads EOF then
+        os.set_inheritable(write_fd, False)
+        pid = os.fork()
+        if pid == 0:  # pragma: no cover - the child never returns here
+            try:
+                os.close(read_fd)
+                # A copy of this interpreter under the server's name: it stays alive for 30 s
+                # whatever its path is called (this host's /usr/bin/sleep is a uutils multi-call
+                # that intermittently dispatches on the exe name and exits instead of sleeping).
+                os.execv(str(binary), ["python3", "-c", "import time; time.sleep(30)"])
+            finally:
+                os._exit(127)
+        os.close(write_fd)
+        try:
+            os.read(read_fd, 1)
+        finally:
+            os.close(read_fd)
+        self.assertIsNone(os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG),
+                          "the child exited instead of exec'ing the binary")
+        return pid
+
     def test_owned_server_is_matched_by_binary_not_by_file_name(self):
         # The ledger tooling hard-links the server it built as `krasnokamen-<sha256>`.
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             server = root / "krasnokamen-0123abcd"
             other = root / "unrelated-binary"
-            shutil.copy2("/usr/bin/sleep", server)
-            shutil.copy2("/usr/bin/sleep", other)
+            shutil.copy2(sys.executable, server)
+            shutil.copy2(sys.executable, other)
             owner = SimpleNamespace(pid=os.getpid())
-            child = subprocess.Popen([str(server), "30"])
+            spawned = []
             try:
-                self.assertEqual(sp._server_child(owner, server.resolve()), child.pid)
+                spawned.append(self.exec_child(server))
+                self.assertEqual(sp._server_child(owner, server.resolve()), spawned[0])
+                # `other` is copied but never started: asking for it must find no owned server.
                 with self.assertRaisesRegex(RuntimeError, "expected one owned singleplayer server"):
                     sp._server_child(owner, other.resolve())
             finally:
-                child.kill()
-                child.wait()
+                for pid in spawned:
+                    try:
+                        os.kill(pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                for pid in spawned:
+                    try:
+                        os.waitpid(pid, 0)
+                    except ChildProcessError:
+                        pass
 
 
 if __name__ == "__main__":
