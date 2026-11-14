@@ -144,6 +144,9 @@ Active-clock WAL replay, frozen chunks and wrapping entity age retain elapsed
 time without one arrow image per tick. Loyalty tridents keep their dynamic
 return path and are not treated as idle arrows.
 
+Native mob NBT writes `krasnokamen:Faction` exactly once for a nonzero faction;
+ordinary faction-zero mobs carry no faction key.
+
 Mob riders use the same horse-owned UUID relation as player riders. Staging
 uses `battle::cavalry::mount`, requires a nonzero rider faction and copies it to
 the horse so native battle motion is not suppressed as ordinary tamed AI.
