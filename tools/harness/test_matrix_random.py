@@ -149,8 +149,9 @@ class RandomMatrixTests(unittest.TestCase):
 
             def launch(argv, *, cwd, env, stdout, stderr, timeout):
                 launches.append(argv)
-                self.assertEqual(argv[:9], ['/mem-run', '-m', '6G', 'nice', '-n', '19',
-                                             'ionice', '-c', '3'])
+                self.assertEqual(argv[:11], ['/mem-run', '-m', '6G', 'timeout', '600',
+                                              'nice', '-n', '19', 'ionice', '-c', '3'])
+                self.assertIsNone(timeout)
                 self.assertNotIn('SOLARIS_RANDOM_REPLAY_MEM_RUN', env)
                 receipt = Path(env['SOLARIS_VALIDATION_ROOT']) / 'run' / 'result.json'
                 receipt.parent.mkdir(parents=True)
@@ -173,10 +174,29 @@ class RandomMatrixTests(unittest.TestCase):
             self.assertTrue(all(Path(item['receipt']).is_file()
                                 for item in result['trials'] + result['confirmations']))
 
+    def test_unwrapped_replay_keeps_subprocess_timeout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            ctx = SimpleNamespace(extra_args=[], server_bin=Path('/pin/server'), plugins_dir=None,
+                                  timeout_seconds=37, commands=[], cwds=[], logs=[], exits=[])
+
+            def launch(argv, *, cwd, env, stdout, stderr, timeout):
+                self.assertEqual(timeout, 37)
+                receipt = Path(env['SOLARIS_VALIDATION_ROOT']) / 'run' / 'result.json'
+                receipt.parent.mkdir(parents=True)
+                receipt.write_text(json.dumps({'details': {'protocol_matrix': {'status': 'pass'}}}))
+                return SimpleNamespace(returncode=0)
+
+            with patch.dict('os.environ', {}, clear=True), \
+                    patch.object(matrix_random.shutil, 'disk_usage',
+                                 return_value=SimpleNamespace(free=100 * 1024**3)), \
+                    patch.object(matrix_random.subprocess, 'run', side_effect=launch):
+                report, _, _ = matrix_random.replay(ctx, {}, Path(directory) / 'trial')
+            self.assertEqual(report['status'], 'pass')
+
     def test_reduction_refuses_world_launch_below_disk_floor(self):
         with tempfile.TemporaryDirectory() as directory:
             ctx = SimpleNamespace(extra_args=[], server_bin=Path('/pin/server'), plugins_dir=None,
-                                  commands=[], cwds=[], logs=[], exits=[])
+                                  timeout_seconds=600, commands=[], cwds=[], logs=[], exits=[])
             owner = Path('/run/media/kaiserroman/games/solaris-work/wt/scenario')
             with patch.object(matrix_random.runtime, 'REPO_ROOT', owner), \
                     patch.object(matrix_random.shutil, 'disk_usage',

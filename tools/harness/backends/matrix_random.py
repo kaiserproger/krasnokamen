@@ -33,8 +33,10 @@ def replay(ctx, row, directory):
         argv += ['--plugins-dir', str(ctx.plugins_dir)]
     env = dict(os.environ, SOLARIS_VALIDATION_ROOT=str(directory / 'receipts'))
     mem_run = env.pop('SOLARIS_RANDOM_REPLAY_MEM_RUN', None)
+    timeout = ctx.timeout_seconds or 600
     if mem_run:
-        argv = [mem_run, '-m', '6G', 'nice', '-n', '19', 'ionice', '-c', '3', *argv]
+        argv = [mem_run, '-m', '6G', 'timeout', str(timeout),
+                'nice', '-n', '19', 'ionice', '-c', '3', *argv]
     log = directory / 'replay.log'
     ctx.commands.append(argv)
     ctx.cwds.append(str(runtime.REPO_ROOT))
@@ -45,7 +47,7 @@ def replay(ctx, row, directory):
         raise RuntimeError('scenario reduction refused: games disk has less than 100 GiB free')
     with log.open('w') as output:
         result = subprocess.run(argv, cwd=runtime.REPO_ROOT, env=env, stdout=output,
-                                stderr=subprocess.STDOUT, timeout=ctx.timeout_seconds or 600)
+                                stderr=subprocess.STDOUT, timeout=None if mem_run else timeout)
     ctx.exits[-1] = result.returncode
     receipts = list((directory / 'receipts').glob('*/result.json'))
     if len(receipts) != 1:
