@@ -721,9 +721,9 @@ fn ruined_portal_on_a_slope_rests_on_the_low_ground_of_its_footprint() {
         |_, _, _| id("minecraft:plains"),
     );
     assert_eq!(sites.len(), 1);
-    let template = &structures.families[0].templates
-        [(hash(structures.seed ^ 0x53545255, x, z) as usize)
-            % structures.families[0].templates.len()];
+    let template = &structures.families[0].templates[(hash(structures.seed ^ 0x53545255, x, z)
+        as usize)
+        % structures.families[0].templates.len()];
     let (low, high) = template.bounds();
     let low_ground = 60 + x * 16 + low[0];
     assert_eq!(

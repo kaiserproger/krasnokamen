@@ -301,8 +301,8 @@ impl OverworldStructures {
                     }) {
                         continue;
                     }
-                    let template = &family.templates[(hash(self.seed ^ 0x53545255, x, z) as usize)
-                        % family.templates.len()];
+                    let template = &family.templates
+                        [(hash(self.seed ^ 0x53545255, x, z) as usize) % family.templates.len()];
                     let (low, high) = template.bounds();
                     // Vanilla samples the base height at the rotated template's
                     // bounding-box centre, not at the chunk centre.
