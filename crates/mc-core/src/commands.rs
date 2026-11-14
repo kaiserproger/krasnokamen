@@ -1,4 +1,4 @@
-//! Slash commands (ADR 0013): a typed parse of the vanilla subset Solaris
+//! Slash commands (ADR 0013): a typed parse of the vanilla subset Krasnokamen
 //! supports, and the player-local effects. World-level commands (teleport,
 //! time, weather, summon, difficulty, game rules) are typed here and executed
 //! by the tick against world state.
@@ -396,7 +396,7 @@ pub enum Command {
     Seed,
     Tick(crate::command_tick::TickCommand),
     Locate(crate::command_locate::LocateCommand),
-    /// Solaris test fixture: put `count` of `item` into hotbar slot.
+    /// Krasnokamen test fixture: put `count` of `item` into hotbar slot.
     DebugGive {
         item: crate::command_items::ItemArgument,
         count: i32,
@@ -1342,7 +1342,7 @@ pub fn give(
     dropped
 }
 
-/// Solaris `debug give`: sets a hotbar slot outright (count 0 clears it,
+/// Krasnokamen `debug give`: sets a hotbar slot outright (count 0 clears it,
 /// at most 255).
 pub fn debug_give(
     inventory: &mut PlayerInventory,

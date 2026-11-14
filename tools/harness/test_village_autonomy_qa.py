@@ -359,7 +359,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
                 raise RuntimeError("second-player check failed")
 
             with (
-                patch.dict(qa.os.environ, {"SOLARIS_SERVER_BINARY": str(binary)}),
+                patch.dict(qa.os.environ, {"KRASNOKAMEN_SERVER_BINARY": str(binary)}),
                 patch.object(qa.subprocess, "Popen", side_effect=start_server),
                 patch.object(qa.runtime, "reserve_port", return_value=25566),
                 patch.object(qa.runtime, "wait_port"),

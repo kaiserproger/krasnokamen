@@ -34,7 +34,7 @@ pub(crate) fn prepare(
                 && record
                     .snapshot
                     .blueprint_id
-                    .strip_prefix("solaris-settlements:")
+                    .strip_prefix("krasnokamen-settlements:")
                     == Some(blueprint.as_str()))
     }) {
         return Err(Failure::Blocked);
@@ -87,7 +87,7 @@ pub(crate) fn prepare(
     }
     let snapshot = ScriptStructureSnapshot::new(
         id.clone(),
-        format!("solaris-settlements:{blueprint}"),
+        format!("krasnokamen-settlements:{blueprint}"),
         state.dimension.name().into(),
         ScriptStructureState::Prepared,
         revision,
@@ -433,7 +433,7 @@ fn same_site(state: &TickState, record: &Structure, origin: [i32; 3]) -> bool {
     let Some(blueprint) = record
         .snapshot
         .blueprint_id
-        .strip_prefix("solaris-settlements:")
+        .strip_prefix("krasnokamen-settlements:")
         .and_then(|id| crate::settlements::blueprints::get(&state.registry, id))
     else {
         return false;
@@ -467,7 +467,7 @@ pub(crate) fn furnace_workstation(
     }
     let snapshot = record.get("snapshot")?;
     if snapshot.get("dimension")?.as_str()? != state.dimension.name()
-        || snapshot.get("blueprint_id")?.as_str()? != "solaris-settlements:furnace"
+        || snapshot.get("blueprint_id")?.as_str()? != "krasnokamen-settlements:furnace"
         || ScriptStructureState::deserialize(snapshot.get("state")?).ok()?
             != ScriptStructureState::Committed
         || <[i32; 3]>::deserialize(snapshot.get("reserved_footprint")?).ok()? != [1, 1, 1]
@@ -489,7 +489,7 @@ pub(crate) fn built_at(
                 && record
                     .snapshot
                     .blueprint_id
-                    .strip_prefix("solaris-settlements:")
+                    .strip_prefix("krasnokamen-settlements:")
                     == Some(blueprint)
                 && same_site(state, record, origin)
                 && record.snapshot.state == ScriptStructureState::Committed

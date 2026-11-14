@@ -129,10 +129,10 @@ regression = ["harness:entities:native-v2-craft-drag"]
             receipt.mkdir()
             (receipt / 'result.json').write_text('{"status":"prepared"}')
             def run_child(argv, ctx, name, **kwargs):
-                self.assertNotIn('SOLARIS_FIRST_START_RECOVERY_BINARY', kwargs['env'])
+                self.assertNotIn('KRASNOKAMEN_FIRST_START_RECOVERY_BINARY', kwargs['env'])
                 (root / name).write_text(f'[harness] artifact={receipt}\n')
             ctx = profiles.ProfileContext(root, include_regression_client=True)
-            with patch.dict('os.environ', {'SOLARIS_FIRST_START_RECOVERY_BINARY': '/mutation'}), patch.object(regressions, 'REPO_ROOT', root), patch.object(profiles, '_run_command', run_child), patch.object(regressions, '_release_server', return_value=root / 'server'):
+            with patch.dict('os.environ', {'KRASNOKAMEN_FIRST_START_RECOVERY_BINARY': '/mutation'}), patch.object(regressions, 'REPO_ROOT', root), patch.object(profiles, '_run_command', run_child), patch.object(regressions, '_release_server', return_value=root / 'server'):
                 with self.assertRaisesRegex(RuntimeError, 'VISIBLE.*prepared'):
                     regressions.run(ctx)
             (receipt / 'result.json').write_text('{"status":"passed","details":{"server_binary_sha256":"wrong"}}')
@@ -252,7 +252,7 @@ regression = ["cargo:mc-core:module::other"]
     def test_release_server_identity_is_recorded(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            binary = root / 'release/solaris-v2'
+            binary = root / 'release/krasnokamen'
             binary.parent.mkdir()
             binary.write_bytes(b'candidate')
             ctx = profiles.ProfileContext(root)

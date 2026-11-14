@@ -1,6 +1,6 @@
 # Architecture Decision Index
 
-The current server is `mc-edge`/`solaris-v2` over `mc-core`: [ADR 0013](0013-core-model-v2.md).
+The current server is `mc-edge`/`krasnokamen` over `mc-core`: [ADR 0013](0013-core-model-v2.md).
 Later explicit supersession takes priority over historical descriptions. See also
 [architecture](../ARCHITECTURE.md). For a practical packet workflow, see
 [protocol changes](../development/protocol-changes.md).
@@ -16,7 +16,7 @@ Later explicit supersession takes priority over historical descriptions. See als
 | [0007](0007-connection-liveness-under-outbound-pressure.md) | Liveness principle retained; v1 implementation historical | investigating outbound pressure and keepalive liveness |
 | [0008](0008-overworld-density-router.md) | Accepted | changing worldgen authority or its revision fence |
 | [0009](0009-regional-plugin-boundary.md) | Isolation/value/admission principles retained; v1 implementation superseded | understanding plugin isolation and admission rationale |
-| [0010](0010-solaris-loader-contract.md) | Accepted; staged implementation | changing client bundles, Loader negotiation or trust |
+| [0010](0010-krasnokamen-loader-contract.md) | Accepted; staged implementation | changing client bundles, Loader negotiation or trust |
 | [0011](0011-core-crate-topology-and-threading.md) | V1 topology, threading and durability superseded by 0013/0014 | tracing retired v1 crate and thread ownership |
 | [0012](0012-earth-worldplan-and-native-overlay.md) | Proposed for native v2; not ported | evaluating the Earth WorldPlan proposal, not a current serving mode |
 | [0013](0013-core-model-v2.md) | Accepted; sole current core model | changing native state authority, tick, persistence, plugins or tickets |

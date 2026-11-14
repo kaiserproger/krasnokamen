@@ -73,7 +73,7 @@ One read-only reviewer per major completed phase; it neither edits nor
 delegates, and fixing its findings does not trigger another reviewer. The
 negative-code checks it must include are in
 [AGENT_TOOLING.md](../AGENT_TOOLING.md) "Negative-code gate". Rubric used for
-Solaris reviews:
+Krasnokamen reviews:
 
 - Review exactly one candidate: the task, its acceptance items read literally,
   the path-limited diff and compact validation evidence. No parent history, no
@@ -130,11 +130,11 @@ replace the severe/moderate/mild scale used then.
    `packaging/stage-singleplayer.sh` output plus the release server) into one
    package dir; record each binary's SHA-256; never rebuild during the hunt.
 2. **Local CDN mirror** when the real one is unpublished: one
-   `solaris-content.json` listing both the facts bundle and the content bundle
+   `krasnokamen-content.json` listing both the facts bundle and the content bundle
    with the SHA and size from the launcher pins, served by
    `python3 -m http.server <port> --bind 127.0.0.1` as a named service. Canary
    with `env -i HOME=... XDG_DATA_HOME=<fresh> PATH=/usr/bin:/bin
-   solaris-launcher --headless-bootstrap --manifest <mirror>` (expect
+   krasnokamen-launcher --headless-bootstrap --manifest <mirror>` (expect
    `Game content ready`, about 650 MB). Copy that data dir as `template-data/`
    with a `launcher.json` naming the mirror (`--manifest` is not persisted);
    workers copy it instead of downloading.
@@ -144,7 +144,7 @@ replace the severe/moderate/mild scale used then.
    venv; the system Python has no pip); Xvfb has no window manager, so set input
    focus on the mapped top-level window first or clicks only hover. Take a fresh
    screenshot after acting.
-4. `solaris-launcher --play` defaults to the public test server: always pass
+4. `krasnokamen-launcher --play` defaults to the public test server: always pass
    `--server 127.0.0.1:<port>` or use Direct Connect/Singleplayer.
 5. **One brief file every worker reads first:** bug blindness
    (<https://danluu.com/bug-blind/>; the oracle is a normal player or admin plus
@@ -174,7 +174,7 @@ alone and does not ask the owner what the committee can decide.
 Member prompt (one definition per member, read-only tools: read, grep, glob,
 language server):
 
-> You are committee member `<m>` of the Solaris Core Committee (members: …;
+> You are committee member `<m>` of the Krasnokamen Core Committee (members: …;
 > Main orchestrates and records decisions; decisions are collective, no single
 > member decides). READ-ONLY: never edit, write or run mutating commands. Read
 > the repository AGENTS.md first. Answer the assigned question independently,
@@ -215,11 +215,11 @@ subagents.
 
 ## Worker role prompt
 
-All Solaris implementation workers share this prompt (bounded, long-slice and
+All Krasnokamen implementation workers share this prompt (bounded, long-slice and
 fast variants differ only in model and in whether they may spawn the fast
 worker):
 
-> You are a Solaris implementation worker. Execute the assigned slice end to
+> You are a Krasnokamen implementation worker. Execute the assigned slice end to
 > end: read the repository AGENTS.md first and follow it (no commits, heavy
 > Cargo via Main's `<work>/solaris/tools/dev/mem-run.sh`, measurement windows only on Main's GO), make
 > the smallest correct change, add failing-first regression tests for behaviour

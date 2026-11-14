@@ -8,7 +8,7 @@
 
 `mc-core` is authoritative and version-independent; `mc-edge` already owns each
 connection's state, Configuration exchange, packet decoding and presentation
-planning. At the initial investigation (2026-10-21), Solaris published only
+planning. At the initial investigation (2026-10-21), Krasnokamen published only
 26.1.2 (775). The 26.3 cutover now makes 777 canonical while retaining 775
 sessions at the edge. Other Login versions receive vanilla's
 `multiplayer.disconnect.incompatible` reason.
@@ -28,7 +28,7 @@ jars. The raw registrations and record-field output are retained at:
 - `.analysis/vanilla-26.3/protocol-26.1.2-to-26.3.diff`
 
 `net.minecraft.SharedConstants` in the 26.3 client reports release network
-protocol **777** and world version **5023**, versus Solaris' protocol 775 and
+protocol **777** and world version **5023**, versus Krasnokamen' protocol 775 and
 world version 4790. The registration/record diff is not an ID-only shift:
 
 - The Configuration catalog grows from 30 to 31 entries: one clientbound
@@ -106,7 +106,7 @@ field. It lives in `crates/mc-edge/src/legacy/` and follows points 1-5 above:
 - **Data.** The profile is loaded at startup from a second content cache: the
   26.1.2 cache beside the canonical one (`.../content/26.1.2` next to
   `.../content/26.3`, or `data/vanilla-26.1.2` next to `data/vanilla`;
-  `SOLARIS_LEGACY_CONTENT_CACHE` overrides). Only its datagen reports
+  `KRASNOKAMEN_LEGACY_CONTENT_CACHE` overrides). Only its datagen reports
   (`packets.json`, `blocks.json`, `registries.json`), synced registry names,
   captured `reports/registry_network_nbt` and tags are used. A missing or
   unusable cache logs the reason and disables 775 logins, not 777 sessions.
@@ -168,7 +168,7 @@ field. It lives in `crates/mc-edge/src/legacy/` and follows points 1-5 above:
   world update. Explicitly new-only presentation packets (`post_effects`,
   `add_transient_block`) and unsupported new particles are omitted; registry
   entries with no representation (new attributes/statistics/block entities)
-  are filtered at entry level. Item walkers cover every component Solaris
+  are filtered at entry level. Item walkers cover every component Krasnokamen
   admits for wire emission; arbitrary components beyond native admission are
   not a compatibility claim.
 - **Reconfiguration limit.** The edge does not emit a Play-to-Configuration
@@ -211,17 +211,17 @@ memory runner as required by `AGENTS.md`):
 cargo test -p mc-edge --lib legacy::
 cargo test -p mc-edge --lib legacy::join_tests::legacy_client_joins_and_sees_polyfilled_chunk -- --ignored --exact
 cargo clippy -p mc-edge --lib --tests -- -D warnings
-cargo build --release -p mc-edge --bin solaris-v2
-SOLARIS_SERVER_BINARY="$PWD/target/release/solaris-v2" python3 -m tools.harness run survival --client java --timeout-seconds 120
-SOLARIS_SERVER_BINARY="$PWD/target/release/solaris-v2" python3 -m tools.harness run inventory --client java --timeout-seconds 120
+cargo build --release -p mc-edge --bin krasnokamen
+KRASNOKAMEN_SERVER_BINARY="$PWD/target/release/krasnokamen" python3 -m tools.harness run survival --client java --timeout-seconds 120
+KRASNOKAMEN_SERVER_BINARY="$PWD/target/release/krasnokamen" python3 -m tools.harness run inventory --client java --timeout-seconds 120
 ```
 
 The ignored TCP gate requires the canonical 26.3 cache at `data/vanilla` and
 the retained 26.1.2 cache selected as above; absent caches are an error, not
 a skipped/pass result. Ordinary translation unit tests use synthetic reports
 and do not require Mojang data.
-Set `SOLARIS_SERVER_BINARY` to the actual Cargo target path if
-`CARGO_TARGET_DIR` is overridden, and `SOLARIS_LOADER_ROOT` to the checkout
+Set `KRASNOKAMEN_SERVER_BINARY` to the actual Cargo target path if
+`CARGO_TARGET_DIR` is overridden, and `KRASNOKAMEN_LOADER_ROOT` to the checkout
 containing the 26.1.2 graphical automation agent.
 
 ## Canonical 26.3 Play wire acceptance (2026-10-28)
@@ -255,6 +255,6 @@ the explicitly enabled legacy TCP join/chunk test, and strict Clippy
 `-p mc-protocol -p mc-edge --all-targets -- -D warnings` passed.
 Failing-first logs and local-jar disassembly evidence are retained under
 `.analysis/codex-logs/Wire263/`. Reproduce using the commands above with the
-26.3 automation checkout in `SOLARIS_LOADER_ROOT` and the actual release binary
-in `SOLARIS_SERVER_BINARY`; the legacy TCP test used
-`SOLARIS_LEGACY_CONTENT_CACHE=/home/kaiserroman/solaris/data/vanilla`.
+26.3 automation checkout in `KRASNOKAMEN_LOADER_ROOT` and the actual release binary
+in `KRASNOKAMEN_SERVER_BINARY`; the legacy TCP test used
+`KRASNOKAMEN_LEGACY_CONTENT_CACHE=/home/kaiserroman/solaris/data/vanilla`.

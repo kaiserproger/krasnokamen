@@ -36,7 +36,7 @@ to keep that from happening again without idling the machine.
 - **Scope properties.** `MemoryMax=<cap>`, `MemorySwapMax=1G`,
   `CPUQuota=<physical cores x 100>%`, `CPUWeight=50`, `nice 19`. These are the
   harness's own scope properties, so harness runs keep their canonical CPU
-  budget. The runner exports `SOLARIS_HARNESS_CPU_SCOPE=1`; without it the
+  budget. The runner exports `KRASNOKAMEN_HARNESS_CPU_SCOPE=1`; without it the
   harness re-runs itself in its own scope outside the slice and escapes the cap.
 - **`tools/dev/heavy-watchdog.py`** (user unit `solaris-heavy-watchdog`,
   started by the runner) is the only thing that pauses work. On real memory
@@ -58,7 +58,7 @@ to keep that from happening again without idling the machine.
   compilers instead of `nproc` each.
 - **Pooled target dirs.** A command that sets `CARGO_TARGET_DIR` keeps it.
   Otherwise it gets a free shared dir `<work>/targets/slot-a..slot-z`
-  (`SOLARIS_SLOT_TARGETS` overrides the root), preferring the slot its source
+  (`KRASNOKAMEN_SLOT_TARGETS` overrides the root), preferring the slot its source
   tree used last. On a tree switch every tracked file of the new tree is
   touched so its workspace crates rebuild (see the 2026-11-04 entry in
   [lessons](lessons.md)). With all 26 busy the command is refused.
@@ -157,7 +157,7 @@ code, start the unit (agents' runner calls may restart it in between).
 
 Owner-approved response (2026-10-24), adjusted for the current runner: renice
 running rustc/cargo/java/qemu to 19, start new heavy commands with a lower
-`SOLARIS_MEM_RUN_CPU_QUOTA` (e.g. `400`), and tell agents to use
+`KRASNOKAMEN_MEM_RUN_CPU_QUOTA` (e.g. `400`), and tell agents to use
 `-m 6G nice -n 19 env RUSTC_WRAPPER= cargo ... -j 2`, `--test-threads 2`,
 focused `-p` crates only. A slice-level `CPUQuota` does not hold: the runner
 clears it on every call (a forgotten one held every heavy command to 2 CPUs
@@ -182,7 +182,7 @@ Cleanup while agents run:
 - **Worktrees:** removable only if its agent finished, it has no tracked
   changes (a stray `.pyc` aside) and its HEAD is in a branch
   (`git branch --contains`). Check handoffs/configs for absolute paths into it
-  first (e.g. an ALSA pkg-config shim, a `SOLARIS_LOADER_ROOT`). Move its
+  first (e.g. an ALSA pkg-config shim, a `KRASNOKAMEN_LOADER_ROOT`). Move its
   `.analysis/` to `<work>/receipts/<wt>-analysis` and publish outputs to
   `<work>/release-artifacts/` (call them "built", never "published"), then
   `git worktree remove --force` and `git worktree prune`.

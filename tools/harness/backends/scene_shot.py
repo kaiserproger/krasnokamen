@@ -379,9 +379,9 @@ def run(
         settings["graphics_preset"] = preset.lower()
     if "render_distance" in settings and (type(settings["render_distance"]) is not int or not 2 <= settings["render_distance"] <= 32):
         raise ValueError("render_distance must be in 2..32")
-    binary_text = os.environ.get("SOLARIS_SERVER_BINARY")
+    binary_text = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not binary_text:
-        raise RuntimeError("scene-shot requires SOLARIS_SERVER_BINARY")
+        raise RuntimeError("scene-shot requires KRASNOKAMEN_SERVER_BINARY")
     binary = Path(binary_text).expanduser().resolve()
     if not binary.is_file() or not os.access(binary, os.X_OK):
         raise RuntimeError(f"missing executable server binary: {binary}")
@@ -409,8 +409,8 @@ def run(
     if operator:
         prepare_operator_fixture(ctx, [username])
     xdg = artifact / "xdg"
-    settings_path = xdg / "solaris-client" / "client-settings.json"
-    source_root = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "solaris-client"
+    settings_path = xdg / "krasnokamen-client" / "client-settings.json"
+    source_root = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "krasnokamen-client"
     settings_path.parent.mkdir(parents=True)
     if source_root.is_dir():
         # Downloaded content is read-only and ~650 MB: link it. Copy the rest
@@ -423,11 +423,11 @@ def run(
                 shutil.copytree(entry, target, ignore_dangling_symlinks=True)
             elif entry.exists():
                 shutil.copy2(entry, target)
-    original = os.environ.get("SOLARIS_CLIENT_SETTINGS")
+    original = os.environ.get("KRASNOKAMEN_CLIENT_SETTINGS")
     if original and Path(original).is_file():
         base = json.loads(Path(original).read_text())
     else:
-        base_path = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "solaris-client" / "client-settings.json"
+        base_path = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "krasnokamen-client" / "client-settings.json"
         base = json.loads(base_path.read_text()) if base_path.is_file() else {}
     # The owner's personal fov must not leak into a reference comparison.
     base.update({"fov": NATIVE_FOV, **settings})
@@ -452,10 +452,10 @@ def run(
         xvfb, display, _ = runtime.start_xvfb(artifact)
         ctx.logs.append(str(artifact / "xvfb.log"))
         old_xdg = os.environ.get("XDG_DATA_HOME")
-        old_settings = os.environ.get("SOLARIS_CLIENT_SETTINGS")
+        old_settings = os.environ.get("KRASNOKAMEN_CLIENT_SETTINGS")
         try:
             os.environ["XDG_DATA_HOME"] = str(xdg)
-            os.environ["SOLARIS_CLIENT_SETTINGS"] = str(settings_path)
+            os.environ["KRASNOKAMEN_CLIENT_SETTINGS"] = str(settings_path)
             if ctx.client == "java":
                 client, client_log, mcp = start_java(
                     ctx, artifact, f"127.0.0.1:{client_port}", username, timeout, display,
@@ -463,7 +463,7 @@ def run(
             else:
                 client, client_log, mcp = native_client.start(ctx, native_client.resolve_binary(ctx), f"127.0.0.1:{client_port}", username, timeout, display=display)
         finally:
-            for key, old in (("XDG_DATA_HOME", old_xdg), ("SOLARIS_CLIENT_SETTINGS", old_settings)):
+            for key, old in (("XDG_DATA_HOME", old_xdg), ("KRASNOKAMEN_CLIENT_SETTINGS", old_settings)):
                 if old is None:
                     os.environ.pop(key, None)
                 else:

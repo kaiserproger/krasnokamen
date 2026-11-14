@@ -1,12 +1,12 @@
 """Player-quirk parity orchestrator: attribute-swap + diagonal-speed.
 
 For each scenario: start VanillaOracle (void world), run quirk-probe against
-it, stop; start solaris-v2 (isolated temp world dir/config, stdin console,
+it, stop; start krasnokamen (isolated temp world dir/config, stdin console,
 wait for the ready log line), run the same setup + quirk-probe, stop; compare
 the two JSON observations with the scenario tolerance and write receipt.json.
 
 CLI: python3 -m tools.harness.quirk_parity.player --out DIR [--scenario ID]
-     [--solaris-bin PATH]
+     [--krasnokamen-bin PATH]
 """
 from __future__ import annotations
 
@@ -235,10 +235,10 @@ def setup_console(oracle: VanillaOracle, spec: dict, name: str, vanilla: bool) -
     return notes
 
 
-# -- solaris side ----------------------------------------------------------
+# -- krasnokamen side ----------------------------------------------------------
 
-class SolarisServer:
-    """Launch solaris-v2 with an isolated world dir + stdin console.
+class KrasnokamenServer:
+    """Launch krasnokamen with an isolated world dir + stdin console.
 
     Launch is detached via setsid so the server survives the spawning
     tool-call scope (background children of a tool call are reaped when the
@@ -252,7 +252,7 @@ class SolarisServer:
         self.port = port
         self.process: subprocess.Popen | None = None
         self.lines: queue.Queue[str | None] = queue.Queue()
-        self.log_path = workdir / "solaris.log"
+        self.log_path = workdir / "krasnokamen.log"
         self._sync = 0
         self._stopped = False
         self._fifo: object = None
@@ -282,7 +282,7 @@ class SolarisServer:
         run_sh.write_text(
             "#!/bin/bash\n"
             f"cd {self.workdir}\n"
-            f"exec {self.binary} --config quirk.toml < stdin.fifo > solaris.log 2>&1\n"
+            f"exec {self.binary} --config quirk.toml < stdin.fifo > krasnokamen.log 2>&1\n"
         )
         run_sh.chmod(0o755)
         if fifo.exists():
@@ -298,7 +298,7 @@ class SolarisServer:
         self._fifo = open(fifo, "w", buffering=1)
 
         def collect():
-            # solaris.log is written by the detached server; tail it into the
+            # krasnokamen.log is written by the detached server; tail it into the
             # line queue (poll-free: blocking readline on a growing file).
             assert self.log_path is not None
             while True:
@@ -320,7 +320,7 @@ class SolarisServer:
 
         self._stopped = False
         threading.Thread(target=collect, daemon=True).start()
-        self.expect("Solaris is listening", timeout=180)
+        self.expect("Krasnokamen is listening", timeout=180)
 
     def stop(self) -> None:
         self._stopped = True
@@ -365,7 +365,7 @@ class SolarisServer:
                 continue
             if line is None:
                 raise RuntimeError(
-                    f"solaris exited waiting for {fragment!r}; see {self.log_path}")
+                    f"krasnokamen exited waiting for {fragment!r}; see {self.log_path}")
             if fragment in line:
                 return line
 
@@ -420,12 +420,12 @@ class SolarisServer:
         return collected[-8:]
 
 
-def solaris_run(spec: dict, workdir: Path, binary: Path, probe_bin: Path, name: str) -> dict:
+def krasnokamen_run(spec: dict, workdir: Path, binary: Path, probe_bin: Path, name: str) -> dict:
     port = free_port()
-    server = SolarisServer(workdir, binary, port)
+    server = KrasnokamenServer(workdir, binary, port)
     server.start()
     try:
-        notes = solaris_setup(server, spec, name)
+        notes = krasnokamen_setup(server, spec, name)
         out = workdir / f"{spec['id']}.probe.json"
         obs = run_probe(probe_bin, f"127.0.0.1:{port}", name, spec["id"], out)
         return {"observations": obs["observations"],
@@ -435,8 +435,8 @@ def solaris_run(spec: dict, workdir: Path, binary: Path, probe_bin: Path, name: 
         server.stop()
 
 
-def solaris_setup(server: SolarisServer, spec: dict, name: str) -> dict:
-    """Console setup on Solaris. Player must be connected for tp/give to hit;
+def krasnokamen_setup(server: KrasnokamenServer, spec: dict, name: str) -> dict:
+    """Console setup on Krasnokamen. Player must be connected for tp/give to hit;
     retry those after the probe joins is handled by the probe itself, so here
     do world prep + static commands and best-effort player commands."""
     notes: dict = {}
@@ -464,13 +464,13 @@ def solaris_setup(server: SolarisServer, spec: dict, name: str) -> dict:
     return notes
 
 
-def solaris_post_setup(server: SolarisServer, spec: dict, name: str) -> dict:
+def krasnokamen_post_setup(server: KrasnokamenServer, spec: dict, name: str) -> dict:
     notes: dict = {}
     setup = spec.get("setup", {})
     notes["items"] = [server.run(c.replace("{name}", name)) for c in setup.get("items", [])]
     if "player_tp" in setup:
         notes["tp"] = server.run(setup["player_tp"].replace("{name}", name))
-    # Summon the victim LIVE (post-join): pre-join summons fail on Solaris
+    # Summon the victim LIVE (post-join): pre-join summons fail on Krasnokamen
     # ("Position is not loaded" — spawn chunks not ready with no player
     # online). Use the ABSOLUTE arena coords (vanilla form); the "~" form
     # broke vanilla (no executor position pre-join). Vanilla keeps its
@@ -482,10 +482,10 @@ def solaris_post_setup(server: SolarisServer, spec: dict, name: str) -> dict:
 
 # -- comparison ------------------------------------------------------------
 
-def compare(spec: dict, vanilla: dict, solaris: dict) -> dict:
+def compare(spec: dict, vanilla: dict, krasnokamen: dict) -> dict:
     sid = spec["id"]
     v = vanilla["observations"]
-    s = solaris["observations"]
+    s = krasnokamen["observations"]
     if sid == "attribute-swap":
         keys = ["damage_no_swap_sword", "damage_swap_wait_stick",
                 "damage_same_tick_sword_then_stick", "damage_same_tick_stick_then_sword"]
@@ -494,10 +494,10 @@ def compare(spec: dict, vanilla: dict, solaris: dict) -> dict:
         for k in keys:
             a, b = v.get(k), s.get(k)
             if a is None or b is None:
-                diffs[k] = {"vanilla": a, "solaris": b, "note": "missing"}
+                diffs[k] = {"vanilla": a, "krasnokamen": b, "note": "missing"}
                 ok = False
             elif abs(a - b) > 0.01:
-                diffs[k] = {"vanilla": a, "solaris": b, "delta": b - a}
+                diffs[k] = {"vanilla": a, "krasnokamen": b, "delta": b - a}
                 ok = False
         # Quirk check on the oracle itself: same-tick damage must equal OLD item.
         oracle_quirk = None
@@ -509,7 +509,7 @@ def compare(spec: dict, vanilla: dict, solaris: dict) -> dict:
             }
         return {"status": "pass" if ok else "fail", "diffs": diffs,
                 "oracle_quirk": oracle_quirk,
-                "vanilla": v, "solaris": s}
+                "vanilla": v, "krasnokamen": s}
     if sid == "diagonal-speed":
         diffs = {}
         ok = True
@@ -517,26 +517,26 @@ def compare(spec: dict, vanilla: dict, solaris: dict) -> dict:
             vc = (v.get(traj) or {}).get("corrections")
             sc = (s.get(traj) or {}).get("corrections")
             if vc is None or sc is None:
-                diffs[traj] = {"vanilla": vc, "solaris": sc, "note": "missing"}
+                diffs[traj] = {"vanilla": vc, "krasnokamen": sc, "note": "missing"}
                 ok = False
             elif traj in ("straight", "diagonal") and vc == 0 and sc != 0:
-                diffs[traj] = {"vanilla": vc, "solaris": sc,
-                               "note": "Solaris corrects a trajectory vanilla accepts"}
+                diffs[traj] = {"vanilla": vc, "krasnokamen": sc,
+                               "note": "Krasnokamen corrects a trajectory vanilla accepts"}
                 ok = False
             elif traj == "diagonal_fast10" and vc is not None and sc is not None and sc < vc:
-                diffs[traj] = {"vanilla": vc, "solaris": sc,
-                               "note": "Solaris more lenient than vanilla on fast control"}
+                diffs[traj] = {"vanilla": vc, "krasnokamen": sc,
+                               "note": "Krasnokamen more lenient than vanilla on fast control"}
         return {"status": "pass" if ok else "fail", "diffs": diffs,
-                "vanilla": v, "solaris": s}
+                "vanilla": v, "krasnokamen": s}
     return {"status": "fail", "diffs": {"unknown": spec["id"]},
-            "vanilla": v, "solaris": s}
+            "vanilla": v, "krasnokamen": s}
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", required=True)
     parser.add_argument("--scenario", default=None)
-    parser.add_argument("--solaris-bin", default=None)
+    parser.add_argument("--krasnokamen-bin", default=None)
     parser.add_argument("--probe-bin", default=None)
     args = parser.parse_args(argv)
 
@@ -549,13 +549,13 @@ def main(argv: list[str] | None = None) -> int:
 
     probe_bin = Path(args.probe_bin) if args.probe_bin else (
         REPO_ROOT / "target" / "debug" / "quirk-probe")
-    solaris_bin = Path(args.solaris_bin) if args.solaris_bin else (
-        REPO_ROOT / "target" / "debug" / "solaris-v2")
+    krasnokamen_bin = Path(args.krasnokamen_bin) if args.krasnokamen_bin else (
+        REPO_ROOT / "target" / "debug" / "krasnokamen")
     if not probe_bin.is_file():
         print(f"missing probe binary: {probe_bin} (build it first)", file=sys.stderr)
         return 2
-    if not solaris_bin.is_file():
-        print(f"missing solaris binary: {solaris_bin} (build it first)", file=sys.stderr)
+    if not krasnokamen_bin.is_file():
+        print(f"missing krasnokamen binary: {krasnokamen_bin} (build it first)", file=sys.stderr)
         return 2
 
     results = []
@@ -572,8 +572,8 @@ def main(argv: list[str] | None = None) -> int:
             except Exception:
                 pass
         (out / f"{spec['id']}.vanilla.json").write_text(json.dumps(vanilla, indent=2))
-        print(f"=== {spec['id']}: solaris ===", flush=True)
-        with tempfile.TemporaryDirectory(prefix=f"quirk-solaris-{spec['id']}-") as tmp:
+        print(f"=== {spec['id']}: krasnokamen ===", flush=True)
+        with tempfile.TemporaryDirectory(prefix=f"quirk-krasnokamen-{spec['id']}-") as tmp:
             # Two-phase: world prep, then join probe in background? Simpler:
             # start server, run world prep, connect a setup ping via probe is
             # already joined... Instead: start server here manually so we can
@@ -586,7 +586,7 @@ def main(argv: list[str] | None = None) -> int:
             import threading as _threading
             import time as _time
             port = free_port()
-            server = SolarisServer(Path(tmp) / "srv", solaris_bin, port)
+            server = KrasnokamenServer(Path(tmp) / "srv", krasnokamen_bin, port)
             server.start()
             try:
                 setup = spec.get("setup", {})
@@ -594,7 +594,7 @@ def main(argv: list[str] | None = None) -> int:
 
                 def _setup_after_ready():
                     # Handshake: probe joined + 20 ClientTickEnd pumped, so the
-                    # chunks around the player are loaded - but Solaris spawns the
+                    # chunks around the player are loaded - but Krasnokamen spawns the
                     # player on real worldgen far from the vanilla arena at the
                     # origin, and its console refuses edits in unloaded chunks
                     # ("Position is not loaded"). Force-load the arena, retry every
@@ -622,24 +622,24 @@ def main(argv: list[str] | None = None) -> int:
                         notes["victim"] = run_loaded(setup["victim"])
                     if "player_tp" in setup:
                         notes["player_tp"] = run_loaded(setup["player_tp"].replace("{name}", name))
-                    print(f"solaris {spec['id']}: setup applied post-ready", flush=True)
+                    print(f"krasnokamen {spec['id']}: setup applied post-ready", flush=True)
                     return notes
 
                 res = run_probe_handshake(probe_bin, f"127.0.0.1:{port}", name,
                                           spec["id"], real,
                                           on_ready=_setup_after_ready)
                 obs = res["obs"]
-                solaris = {"observations": obs["observations"],
+                krasnokamen = {"observations": obs["observations"],
                            "frame_counts": obs.get("frame_counts", {}),
                            "setup_notes": res.get("setup_notes", {})}
             finally:
                 server.stop()
                 try:
-                    shutil.copy(Path(tmp) / "srv" / "solaris.log",
-                                logdir / f"{spec['id']}.solaris.log")
+                    shutil.copy(Path(tmp) / "srv" / "krasnokamen.log",
+                                logdir / f"{spec['id']}.krasnokamen.log")
                 except Exception:
                     pass
-        entry = {"id": spec["id"], **compare(spec, vanilla, solaris)}
+        entry = {"id": spec["id"], **compare(spec, vanilla, krasnokamen)}
         results.append(entry)
         if entry["status"] != "pass":
             overall = "fail"

@@ -50,11 +50,11 @@ def _failed_ids(text, cargo):
 
 
 def _release_server(ctx, profiles):
-    profiles._run_command(['cargo', 'build', '--release', '-p', 'mc-edge', '--bin', 'solaris-v2'], ctx, 'regressions-client-server-build.log')
+    profiles._run_command(['cargo', 'build', '--release', '-p', 'mc-edge', '--bin', 'krasnokamen'], ctx, 'regressions-client-server-build.log')
     target = Path(os.environ.get('CARGO_TARGET_DIR', str(REPO_ROOT / 'target')))
     if not target.is_absolute():
         target = REPO_ROOT / target
-    binary = target / 'release' / 'solaris-v2'
+    binary = target / 'release' / 'krasnokamen'
     digest = hashlib.sha256()
     with binary.open('rb') as file:
         for chunk in iter(lambda: file.read(1024 * 1024), b''):
@@ -155,8 +155,8 @@ def run(ctx):
         else:
             env = os.environ.copy()
             # A mutation control must never replace the binary in a ledger gate.
-            env.pop('SOLARIS_FIRST_START_RECOVERY_BINARY', None)
-            env['SOLARIS_SERVER_BINARY'] = str(binary)
+            env.pop('KRASNOKAMEN_FIRST_START_RECOVERY_BINARY', None)
+            env['KRASNOKAMEN_SERVER_BINARY'] = str(binary)
             for ref, bug_ids in sorted(clients.items()):
                 _, profile, scenario = ref.split(':', 2)
                 try:

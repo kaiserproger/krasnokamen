@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use clap::{Args, Parser, Subcommand};
 
 #[derive(Debug, Parser)]
-#[command(name = "solaris-v2")]
+#[command(name = "krasnokamen")]
 pub struct Cli {
     /// Server configuration file (TOML).
     #[arg(long, global = true, default_value = "server.toml")]
