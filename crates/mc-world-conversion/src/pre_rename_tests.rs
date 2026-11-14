@@ -453,3 +453,21 @@ fn rc5_export_with_a_player_rider_keeps_its_fields_and_the_rider() {
         }))
     );
 }
+
+// Apply pre_rename_unscoped_control.patch at the repository root, then run only
+// this test: RED must explicitly show the foreign key changed, without a Rider.
+#[test]
+fn foreign_key_is_preserved_without_a_legacy_rider() {
+    let original = compound(vec![(
+        "my_mod:payload",
+        compound(vec![("my_mod:solaris_flag", Tag::Int(7))]),
+    )]);
+    let mut tag = original.clone();
+    PreRename::default()
+        .rename(&mut tag, Owner::Player, &|| "foreign key".into())
+        .unwrap();
+    assert_eq!(tag, original, "foreign key was renamed");
+}
+
+#[path = "pre_rename_bee_tests.rs"]
+mod bee_items;

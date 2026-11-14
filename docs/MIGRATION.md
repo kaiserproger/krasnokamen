@@ -245,6 +245,9 @@ chunk, block-entity or metadata compounds to this build's `krasnokamen:*` and
 `Krasnokamen*` names (counted as `pre_rename_keys` and listed under
 `normalizations`). Foreign keys and opaque nested compounds are not renamed,
 even if their names contain `solaris` or match a legacy key owned elsewhere.
+Typed item-stack envelopes also enter the vanilla `minecraft:bees` component's
+`entity_data`, including inventories, containers and dropped items, so legacy
+native hive images survive placement and release. Unrelated components stay opaque.
 A player rider stored on a vehicle as `solaris:Rider` becomes
 `krasnokamen:Riders`. A field present under both names refuses the import.
 String values in the old `solaris:` namespace stay as they are and are listed under `known_gaps`. Plugin

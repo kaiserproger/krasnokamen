@@ -1,0 +1,81 @@
+diff --git a/crates/mc-world-conversion/src/pre_rename.rs b/crates/mc-world-conversion/src/pre_rename.rs
+index 69b5c4823..58b5fc3f4 100644
+--- a/crates/mc-world-conversion/src/pre_rename.rs
++++ b/crates/mc-world-conversion/src/pre_rename.rs
+@@ -159,73 +159,9 @@ impl PreRename {
+ }
+ 
+ /// Exact legacy keys, scoped to the compound their native reader owns.
+-fn current_name(owner: Owner, key: &str) -> Option<String> {
+-    use Owner::*;
+-    let name = match (owner, key) {
+-        (LevelData, "SolarisTerrainEpoch") => "KrasnokamenTerrainEpoch",
+-        (LevelData, "SolarisEntitySalt") => "KrasnokamenEntitySalt",
+-        (Chunk, "SolarisJournalLsn") => "KrasnokamenJournalLsn",
+-        (Chunk, "SolarisGeneratedEntities") => "KrasnokamenGeneratedEntities",
+-        (Chunk, "SolarisSimLastTick") => "KrasnokamenSimLastTick",
+-        (Chunk, "SolarisSimDebt") => "KrasnokamenSimDebt",
+-        (StructureStart, "SolarisLocatePos") => "KrasnokamenLocatePos",
+-        (Player, "SolarisGameplaySeed") => "KrasnokamenGameplaySeed",
+-        (Player, "SolarisWardenWarning") => "KrasnokamenWardenWarning",
+-        (Player, "SolarisStatistics") => "KrasnokamenStatistics",
+-        (Player, "SolarisAdvancements") => "KrasnokamenAdvancements",
+-        (Player, "SolarisUnlockedRecipes") => "KrasnokamenUnlockedRecipes",
+-        (Player, "solaris:RespawnState") => "krasnokamen:RespawnState",
+-        (Player, "solaris:Respawn") => "krasnokamen:Respawn",
+-        (Player, "solaris:Tick") => "krasnokamen:Tick",
+-        (Player, "solaris:BurnTicks") => "krasnokamen:BurnTicks",
+-        (Player, "solaris:Carried") => "krasnokamen:Carried",
+-        (Player, "solaris:CraftingGrid") => "krasnokamen:CraftingGrid",
+-        (Player | Entity, "solaris:PortalTime") => "krasnokamen:PortalTime",
+-        (Entity, "solaris:WireId") => "krasnokamen:WireId",
+-        (Entity, "solaris:BreedCooldown") => "krasnokamen:BreedCooldown",
+-        (Entity, "solaris:Rider") => "krasnokamen:Riders",
+-        (Entity, "solaris:Riders") => "krasnokamen:Riders",
+-        (Entity, "solaris:TameRolls") => "krasnokamen:TameRolls",
+-        (Entity, "solaris:CamelDashCooldown") => "krasnokamen:CamelDashCooldown",
+-        (Entity, "solaris:AgeLockCooldownUntil") => "krasnokamen:AgeLockCooldownUntil",
+-        (Entity, "solaris:FrogPregnant") => "krasnokamen:FrogPregnant",
+-        (Entity, "solaris:AllayDancing") => "krasnokamen:AllayDancing",
+-        (Entity, "solaris:BeePollinationTicks") => "krasnokamen:BeePollinationTicks",
+-        (Entity, "solaris:BeeStingTicks") => "krasnokamen:BeeStingTicks",
+-        (Entity, "solaris:HiveEntity") => "krasnokamen:HiveEntity",
+-        (Entity, "solaris:entity_loot") => "krasnokamen:entity_loot",
+-        (Entity, "solaris:Faction") => "krasnokamen:Faction",
+-        (Entity, "solaris:LifetimeAge") => "krasnokamen:LifetimeAge",
+-        (Entity, "solaris:ProtectedUntil") => "krasnokamen:ProtectedUntil",
+-        (Entity, "solaris:NoActionTime") => "krasnokamen:NoActionTime",
+-        (Entity, "solaris:Presentation") => "krasnokamen:Presentation",
+-        (Entity, "solaris:MobBlueprint") => "krasnokamen:MobBlueprint",
+-        (Entity, "solaris:ProjectileRuntime") => "krasnokamen:ProjectileRuntime",
+-        (Entity, "solaris:SpecialMob") => "krasnokamen:SpecialMob",
+-        (Entity, "solaris:Sniffer") => "krasnokamen:Sniffer",
+-        (Entity, "solaris:VillagerRuntime") => "krasnokamen:VillagerRuntime",
+-        (Entity, "solaris:VehicleTransferCooldown") => "krasnokamen:VehicleTransferCooldown",
+-        (Entity, "SolarisTouchedWater") => "KrasnokamenTouchedWater",
+-        (VillagerRuntime, "SolarisMiningProgress") => "KrasnokamenMiningProgress",
+-        (VillagerRuntime, "SolarisLumberProgress") => "KrasnokamenLumberProgress",
+-        (VillagerRuntime, "SolarisSmelting") => "KrasnokamenSmelting",
+-        (VillagerRuntime, "SolarisSoldier") => "KrasnokamenSoldier",
+-        (BlockEntity, "solaris:CooldownUntil") => "krasnokamen:CooldownUntil",
+-        (BlockEntity, "solaris:TransferCooldownUntil") => "krasnokamen:TransferCooldownUntil",
+-        (BlockEntity, "solaris:brewing_ingredient") => "krasnokamen:brewing_ingredient",
+-        (BlockEntity, "solaris:spawn_deadline") => "krasnokamen:spawn_deadline",
+-        (BlockEntity, "solaris:ominous_item") => "krasnokamen:ominous_item",
+-        (BlockEntity, "solaris:phase_until") => "krasnokamen:phase_until",
+-        (BlockEntity, "solaris:bloom_until") => "krasnokamen:bloom_until",
+-        (BlockEntity, "solaris:shriek_until") => "krasnokamen:shriek_until",
+-        (BlockEntity, "solaris:event_arrival") => "krasnokamen:event_arrival",
+-        (RaidsData, "solaris:clock_tick") => "krasnokamen:clock_tick",
+-        (RaidsData, "solaris:pending_omens") => "krasnokamen:pending_omens",
+-        (Raid, "solaris:members") => "krasnokamen:members",
+-        (FightData, "SolarisFightState") => "KrasnokamenFightState",
+-        _ => return None,
+-    };
+-    Some(name.into())
++fn current_name(_owner: Owner, key: &str) -> Option<String> {
++    let renamed = key.replace("Solaris", "Krasnokamen").replace("solaris", "krasnokamen");
++    (renamed != key).then_some(renamed)
+ }
+ 
+ /// RC5's single player rider as the current ordered rider list.

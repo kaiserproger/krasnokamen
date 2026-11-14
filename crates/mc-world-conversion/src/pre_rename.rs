@@ -1,8 +1,8 @@
 //! Normalize only server-owned fields of a pre-Krasnokamen Anvil export.
 //!
-//! Owner contexts follow the Anvil envelopes and native NBT readers; opaque
-//! compounds and item components are not server field namespaces. String values
-//! are never rewritten. The old scalar vehicle rider becomes the rider list.
+//! Owner contexts follow Anvil envelopes and native NBT readers, including
+//! vanilla bee entity data inside typed item stacks. Opaque compounds and
+//! foreign components are never field namespaces. String values stay unchanged.
 
 use super::fail;
 use mc_core::CoreError;
@@ -22,6 +22,10 @@ pub(crate) enum Owner {
     BlockEntity,
     Bees,
     VillagerRuntime,
+    ItemStack,
+    ItemComponents,
+    ItemContainer,
+    Equipment,
     Structures,
     Starts,
     StructureStart,
@@ -60,6 +64,22 @@ impl Owner {
             }
             (Player, "RootVehicle") => RootVehicle,
             (Entity, "krasnokamen:VillagerRuntime") => VillagerRuntime,
+            (Player, "Inventory" | "EnderItems" | "SelectedItem")
+            | (Entity, "Inventory" | "Items" | "HandItems" | "ArmorItems")
+            | (Entity, "Item" | "item" | "SaddleItem" | "ArmorItem" | "DecorItem")
+            | (BlockEntity, "Items" | "RecordItem" | "Book" | "item") => ItemStack,
+            (Entity, "equipment") => Equipment,
+            (
+                Equipment,
+                "head" | "chest" | "legs" | "feet" | "mainhand" | "offhand" | "body" | "saddle",
+            ) => ItemStack,
+            (ItemStack, "components") => ItemComponents,
+            (ItemComponents, "minecraft:bees") => Bees,
+            (ItemComponents, "minecraft:container") => ItemContainer,
+            (ItemContainer, "item")
+            | (ItemComponents, "minecraft:bundle_contents" | "minecraft:charged_projectiles") => {
+                ItemStack
+            }
             (BlockEntity, "Bees" | "bees") => Bees,
             (Bees, "EntityData" | "entity_data") => Entity,
             (Raids, "data") => RaidsData,
