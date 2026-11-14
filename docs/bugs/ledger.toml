@@ -5882,7 +5882,7 @@ source = "Stage2X SLICES.md:176,180"
 repro = "cargo"
 regression = ["cargo:mc-core:core::mounts_persistence_tests::happy_ghast_admission_leave_and_reconnect_survive_wal_recovery"]
 fix_commit = "94f312783"
-repro_check = "Introduced by 7d30f2991: the first tick after WAL recovery pruned the absent player's UUID before reconnect. Recovery preserved the mount image, but tick reconciliation treated a disconnected rider as invalid; the missing recovery-and-reconnect test failed to catch their interaction. The fix retains absent UUIDs, and the WAL recovery test provides a regression defense. Fix-reverted red receipts/M3FixState/product-negative-controls.log. Independent persistence review pending."
+repro_check = "Introduced by 7d30f2991: the first tick after WAL recovery pruned the absent player's UUID before reconnect. Recovery preserved the mount image, but tick reconciliation treated a disconnected rider as invalid; the missing recovery-and-reconnect test failed to catch their interaction. The fix retains absent UUIDs, and the WAL recovery test provides a regression defense. Fix-reverted red receipts/M3FixState/product-negative-controls.log. Independent persistence review (receipts/Stage2Review/fable-mounts.md) found that a retained absent claim could block a vehicle forever and allow double seating; follow-up f8cdf9468 makes absent claims not consume seats, releases them on a new Ride, steers by the first live passenger and reconciles the actor out of other vehicles (regressions mounts::tests::absent_single_seat_rider_can_be_replaced_and_the_vehicle_steered, mounts::tests::first_live_passenger_steers_past_an_absent_primary_claim, core::mounts_persistence_tests::mounts_new_ride_reconciles_other_vehicle_claim_and_native_recovery, core::mounts_persistence_tests::mounts_plugin_unlock_restores_pending_seat_without_waiting_for_active_tick; reds receipts/M3FixState/r2/red.log). A clean Core shutdown also keeps the absent rider's UUID; with the follow-up it no longer blocks the seat."
 failing_first = "reported"
 
 [[bug]]
@@ -5910,3 +5910,16 @@ regression = []
 fix_commit = "602c20cfd"
 repro_check = "The fix spans 259a078ef and 602c20cfd on wt/XEdgeEvents, not merged into wt/M3Server at filing. Legacy minecraft:bees item components and scalar rider images require typed migration, including player equipment, cursor and crafting custody. The initial normalizer skipped these owned components and the first fixture used a current image, masking RC5 rider incompatibility. The round-3 fixture is synthetic, not a real RC5 save: a test added to an RC5 source checkout builds a bee and serializes its native image with RC5 code (receipts/XEdgeEvents/rc5-capture-source.diff:258-283); the regression embeds that image in a current player export and renames the outer key to solaris:HiveEntity (pre_rename_bee_tests.rs:239-299), then imports, places and releases the bee. Branch check cargo:mc-world-conversion:pre_rename::tests::bee_items::rc5_hive_item_export_import_place_release_preserves_native_bee; green receipts/XEdgeEvents/round3-conversion.log, red receipts/XEdgeEvents/round3-image-red-rc5_hive_item_export_import_place_release_preserves_native_bee.log and round3-player-red-exits.log. Real proof pending: import of an actual RC5 world with a hive item in player custody. Multi-commit promotion needs a committed fix patch after integration."
 failing_first = "not recorded"
+
+[[bug]]
+id = "MOUNT-PORTAL-DROPS-CHEST-CARGO"
+title = "A chested donkey crossing a portal arrives without its chest and drops chest and cargo in the source world"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage2Review/fable-mounts.md action 5; Stage2X SLICES.md:189"
+repro = "cargo"
+regression = ["cargo:mc-core:portals::tests::donkey_portal_transfer_keeps_chest_and_exact_cargo_without_source_drops"]
+fix_commit = "f8cdf9468"
+repro_check = "dimensions_travel.rs::move_between ejected riders through mounts::death, which also detaches the chest and commits the chest and cargo as drops in the source world. The fix splits a seating-only mounts::eject for dimension transfer; real death still ejects and drops cargo. The regression requires exactly one destination donkey, all 15 cargo slots unchanged, no item entities in any dimension and no deferred life drops. Red at base with the test and without the fix: receipts/M3FixState/r2/red.log. Introducing commit not traced."
+failing_first = "reported"
