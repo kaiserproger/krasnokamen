@@ -831,8 +831,8 @@ def _receipt_identity(root, receipt_path, tree):
 def check_client_control_receipt(root, receipt_path, graphical_refs, fix_full, tree, proving_assertions):
     """Validate the negative control of a `client:<sha>` row -> info dict.
 
-    The control is a real-client receipt of the *pre-fix* client (one that does not contain the fix)
-    on the same server tree, in which the row's ref is red: it shows the fix is what the check sees."""
+    The control is a pinned client on the same server tree with the row's proving ref red.
+    Its exact difference from the restored client is checked after both receipts are read."""
     receipt, path, server, recorded = _receipt_identity(root, receipt_path, tree)
     if not graphical_refs:
         raise Refused('a client:<sha> fix_commit needs a real-client ref to carry the control')
@@ -843,9 +843,6 @@ def check_client_control_receipt(root, receipt_path, graphical_refs, fix_full, t
                       + ', '.join(f'{ref}={states[ref] or "unreported"}' for ref in graphical_refs)
                       + '): a control that stays green does not test the fix')
     client_head = _client_pin_of_receipt(root, receipt, path)
-    if client_contains(root, client_head, fix_full):
-        raise Refused(f'client receipt {path} ran the client at {client_head[:12]}, which already contains the '
-                      f'fix {fix_full[:12]}: the control has to be the pre-fix client (e.g. {fix_full[:12]}^)')
     return {'path': str(path), 'client_head': client_head, 'server_binary_sha256': server,
             'red': red, 'states': states}
 
@@ -906,6 +903,26 @@ def check_client_restore_receipt(root, receipt_path, graphical_refs, fix_full, t
             'tree_dirty': bool(recorded.get('dirty')), 'tree_sha256': recorded['sha256']}
 
 
+def _check_client_control_delta(root, control_head, restore_head, fix_full):
+    """Require the control-to-restore production patch to be exactly the fix's production patch."""
+    repo = client_repo(root)
+    fix_patch, fix_paths, _ = non_test_patch(repo, fix_full)
+    _, delta = _git(repo, 'diff', '--no-renames', '--no-color', control_head, restore_head)
+    actual, actual_paths, _ = _split_non_test(delta, lambda path: _git(repo, 'show', f'{restore_head}:{path}')[1])
+    def patch_id(patch):
+        if not patch:
+            return None
+        code, output = _git(repo, 'patch-id', '--verbatim', stdin=patch.encode(errors='surrogateescape'), check=False)
+        return output.split()[0] if code == 0 and output.split() else None
+    expected_id, actual_id = patch_id(fix_patch), patch_id(actual)
+    if expected_id is None or expected_id != actual_id:
+        extra = sorted(set(actual_paths) - set(fix_paths))
+        changed = sorted(set(actual_paths) | set(fix_paths))
+        raise Refused('client control differs from the restore by more than the fix non-test hunks; '
+                      f'extra paths: {", ".join(extra) or "(none; changed hunks in " + ", ".join(changed) + ")"}')
+    return {'fix_patch_id': expected_id, 'paths': fix_paths}
+
+
 def _mark_fixed(text, ident, promotion):
     blocks = re.split(r'(?m)^(?=\[\[bug\]\][ \t]*$)', text)
     for index, block in enumerate(blocks):
@@ -943,6 +960,7 @@ def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client
     control = check_client_control_receipt(root, client_control_receipt, graphical, fix_full, tree_now,
                                            row.get('proving_assertions', {}))
     restored_info = check_client_restore_receipt(root, client_receipt, graphical, fix_full, tree_now)
+    delta = _check_client_control_delta(root, control['client_head'], restored_info['client_head'], fix_full)
     if not set(control['red']) & set(restored_info['green']):
         raise Refused(f"{ident}: the control's red refs {control['red']} and the restore's green refs "
                       f"{restored_info['green']} do not overlap: the same check has to flip")
@@ -959,6 +977,7 @@ def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client
         'tree_head': tree_now['head'], 'tree_dirty': tree_now['dirty'], 'tree_sha256': tree_now['sha256'],
         'client_fix': True, 'control_tree': 'client',
         'negative_control': control, 'restored': restored_info, 'client_receipt': restored_info,
+        'client_control_delta': delta,
         'candidate_refs': checked,
         'artifact_dir': str(ctx.artifact_dir),
     }

@@ -873,6 +873,33 @@ class LedgerToolTests(unittest.TestCase):
         self.promote(root, self.runner(), client_control_receipt=control, client_receipt=restore)
         self.assertIn('status = "fixed"', (root / 'docs/bugs/ledger.toml').read_text())
 
+    def test_client_control_is_candidate_with_only_fix_reversed(self):
+        client = self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        (client / 'later.txt').write_text('later change\n')
+        self.git(client, 'add', 'later.txt')
+        self.git(client, 'commit', '-qm', 'later candidate')
+        candidate = self.git(client, 'rev-parse', 'HEAD')
+        self.git(client, 'revert', '--no-edit', self.client_fix)
+        exact_control = self.git(client, 'rev-parse', 'HEAD')
+        restore = self.client_receipt(root, candidate)
+        def promote_with(control_head):
+            control = self.client_receipt(root, control_head, verdict=False,
+                                          assertions={'initial_drag_keeps_server_cursor': False})
+            return self.promote(root, self.runner(), client_control_receipt=control,
+                                client_receipt=restore, dry_run=True)
+        receipt = promote_with(exact_control)
+        self.assertEqual(receipt['negative_control']['client_head'], exact_control)
+        self.assertTrue(receipt['client_control_delta']['fix_patch_id'])
+        with self.assertRaisesRegex(ledger.Refused, 'extra paths: later.txt'):
+            promote_with(self.client_base)
+        (client / 'unrelated.txt').write_text('unrelated\n')
+        self.git(client, 'add', 'unrelated.txt')
+        self.git(client, 'commit', '-qm', 'unrelated control change')
+        unrelated = self.git(client, 'rev-parse', 'HEAD')
+        with self.assertRaisesRegex(ledger.Refused, 'extra paths: unrelated.txt'):
+            promote_with(unrelated)
+
     def test_client_control_that_stays_green_is_refused(self):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
@@ -883,7 +910,7 @@ class LedgerToolTests(unittest.TestCase):
     def test_client_control_that_already_has_the_fix_is_refused(self):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
-        with self.assertRaisesRegex(ledger.Refused, 'already contains the fix'):
+        with self.assertRaisesRegex(ledger.Refused, 'more than the fix non-test hunks'):
             self.promote(root, self.runner(),
                          client_control_receipt=self.client_receipt(root, self.client_fix, verdict=False, assertions={'initial_drag_keeps_server_cursor': False}),
                          client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)

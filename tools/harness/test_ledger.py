@@ -74,12 +74,13 @@ regression = []
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             ctx = profiles.ProfileContext(root)
-            control = {'red': [refs[0]]}
-            restore = {'green': [refs[0]]}
+            control = {'red': [refs[0]], 'client_head': 'before'}
+            restore = {'green': [refs[0]], 'client_head': 'after'}
             tree = {'head': 'a', 'dirty': False, 'sha256': 'b'}
             with patch.object(ledger, 'client_fix_commit', return_value='a'), \
                  patch.object(ledger, 'check_client_control_receipt', return_value=control), \
-                 patch.object(ledger, 'check_client_restore_receipt', return_value=restore):
+                 patch.object(ledger, 'check_client_restore_receipt', return_value=restore), \
+                 patch.object(ledger, '_check_client_control_delta', return_value={}):
                 def runner(ctx, selected, tree, client):
                     self.assertEqual(selected, refs[1:])
                     return {refs[1]: {'state': ledger.RED, 'detail': 'failed'}}

@@ -155,17 +155,19 @@ worker, runs the negative control.
    the core checkout), resolved there and refused when unknown. It is a client
    behaviour change, so it is proved by receipts, not by reversing server
    hunks: `--client-control-receipt` is a real-client `result.json` of the
-   **pre-fix** client (one that does not contain `<sha>`, e.g. `<sha>^`) whose
-   client ref is **red**, and `--client-receipt` is a `passed` one of the client
-   that contains `<sha>` with the same ref **green**. Both ran on the tree being
+   candidate client with only the fix's non-test hunks reversed, whose client ref
+   is **red**; `--client-receipt` is a `passed` one of the client that contains
+   `<sha>` with the same ref **green**. Their pinned clean commits must differ by
+   exactly the fix's non-test patch (verbatim patch ID); an unrelated change, even
+   on the same path, refuses. Both ran on the tree being
    promoted (the same `tree` identity and server-binary registry checks as rule
    3). The client is bound to its source through the pin-release manifest, not
    the checkout beside it: each receipt records `client_binary` at run start
    (the binary's sha256, hashed then, its `manifest.json`, and the manifest's
    `head`/`dirty`), and promotion refuses a receipt without it, a manifest that
    pins another binary than the one that ran, a `dirty` pin, or a pin without a
-   head. The ancestry checks use the pinned head: the control's head must not
-   contain `<sha>`, the restore's must. **Red is an observed assertion failure**:
+   head. The restore's pinned head must contain `<sha>`; the control may be a
+   descendant with a committed reversal. **Red is an observed assertion failure**:
    the control receipt has to be `status = "failed"` with the registered proving
    assertion recorded false. For a named scenario, record it on the row as an
    inline map, for example `proving_assertions = { "harness:entities:native-v2-craft-drag" = "initial_drag_keeps_server_cursor" }`.
