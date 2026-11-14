@@ -1808,11 +1808,14 @@ fn run_dimension_tick_inner<'a>(
     }
     if sim {
         merchant::maintain(state, &mut changes);
+        commit_laps.lap("merchant");
         crate::mounts::tick(state, &mut changes);
+        commit_laps.lap("mounts");
         crate::allay::run(state, &mut changes);
+        commit_laps.lap("allay");
         crate::mob_equipment_pickup::run(state, &mut changes);
+        commit_laps.lap("equipment_pickup");
     }
-    commit_laps.lap("merchant_mounts_allay");
     crate::entity_life::commit_drops(state, &mut changes.entities_spawned);
     commit_laps.lap("commit_drops");
     if sim {

@@ -101,6 +101,8 @@ pub(super) struct EntityPhaseScratch {
     pub(super) resting: Vec<EntitySlot>,
     pub(super) coreperf: Option<std::sync::Arc<crate::boundary::CorePerfTick>>,
     pub(super) rest_proofs: RestProofs,
+    /// Zombie-arms decisions of the serial writeback (capacity reused tick to tick).
+    pub(super) arms: Vec<Option<(EntityId, i8)>>,
 }
 
 /// Memo of the idle-rest physics proof ([`idle_wander_motion_unchanged`]).
@@ -1389,6 +1391,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         mut resting,
         coreperf: _,
         mut rest_proofs,
+        mut arms,
     } = std::mem::take(&mut state.entity_phase_scratch);
     periods.resize(state.entities.len(), 0);
     rest_proofs.begin(state.entities.len(), state.entity_phase_revision);
@@ -1585,6 +1588,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             resting,
             coreperf,
             rest_proofs,
+            arms,
         };
         return Vec::new();
     }
@@ -1780,22 +1784,59 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             slot,
             [0.0; 2],
             body.air_supply,
-            body.pickup_delay.saturating_sub(1),
+            crate::entities::tick_pickup_delay(body.pickup_delay),
             body.attack_cooldown.saturating_sub(1),
         );
     }
     laps.lap("resting_writeback");
-    for (write, mut raw) in ordered.drain(..).flatten() {
+    // Zombie arms (PerfEntity2). Bottleneck: the serial writeback read the body,
+    // cold row and appearance of every stepped zombie to learn that nothing
+    // changes (3 ms of 12 at 48,000 rows in the native-100-like micro). Boundary:
+    // the decision only; the writes below stay serial and in row order. Fence:
+    // `zombie_arms_update` is a pure read of the store and the target table;
+    // a row's own earlier target insert is folded in as `chase_target.is_some()`
+    // and no other row's writeback touches this row's appearance or id, so the
+    // decision equals the in-loop one. Removal path: call `set_zombie_aggressive`
+    // per row as the small-population path below does.
+    if ordered.len() >= PARALLEL_PREP_MIN {
+        use rayon::prelude::*;
+        let (entities, registry, targets) =
+            (&state.entities, &*state.registry, &state.hostile.targets);
+        ordered
+            .par_iter()
+            .map(|entry| {
+                let (write, _) = entry.as_ref()?;
+                crate::hostile::zombie_arms_update(
+                    entities,
+                    registry,
+                    write.slot,
+                    write.chase_target.is_some()
+                        || targets.contains_key(&entities.body(write.slot).id),
+                )
+            })
+            .collect_into_vec(&mut arms);
+    } else {
+        arms.clear();
+    }
+    for (index, entry) in ordered.drain(..).enumerate() {
+        let Some((write, mut raw)) = entry else {
+            continue;
+        };
         if let Some(target) = write.chase_target {
             state
                 .hostile
                 .targets
                 .insert(state.entities.body(write.slot).id, target);
-            crate::hostile::set_zombie_aggressive(state, write.slot, true);
-        } else {
-            let id = state.entities.body(write.slot).id;
-            let aggressive = state.hostile.targets.contains_key(&id);
+        }
+        if arms.is_empty() {
+            let aggressive = write.chase_target.is_some()
+                || state
+                    .hostile
+                    .targets
+                    .contains_key(&state.entities.body(write.slot).id);
             crate::hostile::set_zombie_aggressive(state, write.slot, aggressive);
+        } else if let Some((id, next)) = arms[index] {
+            crate::hostile::set_zombie_arms(state, write.slot, id, next);
         }
         let attack_cooldown = raw
             .iter()
@@ -1939,6 +1980,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         resting,
         coreperf,
         rest_proofs,
+        arms,
     };
     let _ = tick;
     intents

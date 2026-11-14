@@ -578,6 +578,8 @@ pub(super) fn entity_capture_record(
             } else {
                 row.breed_cooldown.min(i32::MAX as u32) as i32
             }
+        } else if row.age == crate::entities::ITEM_AGE_NEVER {
+            i32::from(i16::MIN)
         } else {
             row.age.min(i32::MAX as u32) as i32
         },

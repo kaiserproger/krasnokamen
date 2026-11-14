@@ -146,7 +146,13 @@ pub(crate) fn prepare_item(state: &TickState, nbt: &Tag) -> Result<ItemSummon, C
                 pickup_delay = Some(number(value, key)?.clamp(0.0, 32767.0) as u32);
             }
             "Age" => {
-                age = Some(number(value, key)?.clamp(0.0, 6000.0) as u32);
+                let value = number(value, key)?;
+                // Vanilla `INFINITE_LIFETIME`: the clock never advances.
+                age = Some(if value == f64::from(i16::MIN) {
+                    crate::entities::ITEM_AGE_NEVER
+                } else {
+                    value.clamp(0.0, 6000.0) as u32
+                });
             }
             "Motion" => {
                 let Tag::List(list) = value else {

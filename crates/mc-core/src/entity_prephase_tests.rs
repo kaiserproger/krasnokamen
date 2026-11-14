@@ -140,6 +140,23 @@ fn native100_like_entity_phase_micro() {
             .persistent = true;
     }
     assert_eq!(state.entities.len(), mobs + villagers + 100);
+    let items: usize = std::env::var("N100_ITEMS")
+        .map(|value| value.parse().unwrap())
+        .unwrap_or(0);
+    let kelp = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:kelp").unwrap())
+        .unwrap();
+    for _ in 0..items {
+        let mut at = position();
+        at[1] = 64.5;
+        let id = crate::tick::spawn_item_entity(&mut state, at, mc_data::ItemStack::new(kelp, 1));
+        state
+            .entities
+            .body_mut(state.entities.slot_of(id).unwrap())
+            .pickup_delay = 0;
+    }
     for _ in 0..60 {
         let start = std::time::Instant::now();
         crate::tick::run_tick(&mut state, &[]);

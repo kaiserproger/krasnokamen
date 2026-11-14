@@ -217,7 +217,7 @@ fn despawn_candidate(
     no_players: bool,
 ) -> bool {
     match body.kind {
-        EntityKind::Item { .. } => row.age >= ITEM_LIFESPAN,
+        EntityKind::Item { .. } => item_expired(row.age),
         // Vanilla EnderDragon.checkDespawn is a no-op, even on Peaceful.
         EntityKind::Mob { type_id } => {
             !crate::end_fight::dragon_type(type_id)
@@ -226,6 +226,12 @@ fn despawn_candidate(
         }
         _ => false,
     }
+}
+
+/// Whether an item's lifetime clock has run out. `Age: -32768` (vanilla
+/// `INFINITE_LIFETIME`) never does.
+fn item_expired(age: u32) -> bool {
+    age >= ITEM_LIFESPAN && age != crate::entities::ITEM_AGE_NEVER
 }
 
 /// Whether [`despawn`] will have a player to measure against: the observers
@@ -302,7 +308,7 @@ pub(crate) fn advance_ages_reference(state: &mut TickState, changes: &mut Change
             continue;
         };
         let row = state.entities.body(slot);
-        if matches!(row.kind, EntityKind::Item { .. }) && age >= ITEM_LIFESPAN {
+        if matches!(row.kind, EntityKind::Item { .. }) && item_expired(age) {
             changes.entities_removed.push(row.id);
             state.remove_entity(slot);
         }
@@ -609,7 +615,7 @@ fn despawn(
     for &slot in &candidates {
         let row = state.entities.row(slot);
         if matches!(state.entities.body(slot).kind, EntityKind::Item { .. }) {
-            if row.age >= ITEM_LIFESPAN {
+            if item_expired(row.age) {
                 gone.push(slot);
             }
             continue;

@@ -1163,6 +1163,83 @@ fn checkpoint_item_age_5999_expires_on_the_next_live_tick_after_empty_replay() {
     assert!(output.changes.entities_removed.contains(&id));
 }
 
+/// Anvil import, native checkpoint load, WAL replay (both projection sites) and
+/// restore keep an item's infinite pickup delay and `Age: -32768`.
+#[test]
+fn infinite_item_clocks_survive_anvil_import_wal_replay_and_restore() {
+    let mut state = fixture();
+    let item = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:stone").unwrap())
+        .unwrap();
+    let id = crate::tick::spawn_item_entity(
+        &mut state,
+        [8.5, 65.0, 8.5],
+        mc_data::ItemStack::new(item, 1),
+    );
+    let slot = state.entities.slot_of(id).unwrap();
+    state.entities.row_mut(slot).age = crate::entities::ITEM_AGE_NEVER;
+    state.entities.body_mut(slot).pickup_delay = crate::entities::PICKUP_DELAY_NEVER;
+    let (_, chunks, _) = checkpoint_data_for(&state, 200);
+    let dir = tempfile::tempdir().unwrap();
+    mc_world::anvil::write_entity_regions(dir.path(), &state.registry.items, &chunks, 1).unwrap();
+    let saved = mc_world::anvil::read_entity_regions(dir.path(), &state.registry.items).unwrap();
+    let native = &saved[&(0, 0)].entities[0];
+    assert_eq!(native.age, i32::from(i16::MIN));
+    assert_eq!(native.pickup_delay, 32767);
+    // A vanilla world carries no krasnokamen keys: the vanilla fields alone load.
+    let mut vanilla = native.clone();
+    vanilla
+        .extra_fields
+        .retain(|(key, _)| key != "krasnokamen:LifetimeAge");
+    assert_eq!(
+        EntityStateImage::from_record(&state.registry, &vanilla)
+            .unwrap()
+            .age,
+        crate::entities::ITEM_AGE_NEVER
+    );
+    let mut record = replay_record(&state, native);
+    record.tick = 200;
+    assert_eq!(record.age, crate::entities::ITEM_AGE_NEVER);
+    assert_eq!(record.pickup_delay, 32767);
+    let batches = [
+        (
+            201,
+            250,
+            vec![JournalEntry::EntityVitals {
+                id: id.0,
+                health: 1.0,
+                alive: true,
+                tick: 230,
+            }],
+        ),
+        (251, 300, vec![]),
+    ];
+    let replay = replay_batches(
+        Replay {
+            tick: 200,
+            entities: std::collections::BTreeMap::from([(id.0, record)]),
+            sim_debt: active_clock(200),
+            ..Default::default()
+        },
+        &batches,
+    );
+    let replayed = &replay.entities[&id.0];
+    assert_eq!(replayed.age, crate::entities::ITEM_AGE_NEVER);
+    assert_eq!(replayed.state.age, crate::entities::ITEM_AGE_NEVER);
+    assert_eq!(replayed.pickup_delay, 32767);
+    let mut restored = fixture();
+    restored.tick = replay.tick;
+    restore_entity(&mut restored, id.0, replayed).unwrap();
+    let slot = restored.entities.slot_of(id).unwrap();
+    assert_eq!(
+        restored.entities.row(slot).age,
+        crate::entities::ITEM_AGE_NEVER
+    );
+    assert_eq!(restored.entities.body(slot).pickup_delay, 32767);
+}
+
 #[test]
 fn lifetime_clock_advances_excluded_families_once_without_changing_payload_timers() {
     let mut state = fixture();

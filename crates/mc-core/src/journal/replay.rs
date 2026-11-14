@@ -369,7 +369,15 @@ impl EntityStateImage {
             });
         let (entity_life, love) = crate::entity_life::from_record(record, ageable);
         let mut image = Self {
-            age: if ageable { 0 } else { record.age.max(0) as u32 },
+            age: if ageable {
+                0
+            } else if record.age == i32::from(i16::MIN)
+                && registry.entity_type_id(&record.id) == Some(registry.item_type_id)
+            {
+                crate::entities::ITEM_AGE_NEVER
+            } else {
+                record.age.max(0) as u32
+            },
             entity_life,
             love,
             breed_cooldown: record
@@ -994,7 +1002,8 @@ pub(crate) fn apply_batch_images(
                                 clock.advance_villager(villager, record.tick, *tick);
                             }
                             record.breed_cooldown = record.state.breed_cooldown;
-                            record.age = record.age.wrapping_add(elapsed as u32);
+                            record.age =
+                                crate::entities::advance_lifetime_age(record.age, elapsed as u32);
                             record.state.age = record.age;
                             record.health = *health;
                             record.appearance.health = *health;
@@ -1077,7 +1086,7 @@ pub(crate) fn advance_replay_clocks(replay: &mut Replay) {
                 villager_advanced = clock.advance_villager(villager, record.tick, replay.tick);
             }
             record.breed_cooldown = record.state.breed_cooldown;
-            record.age = record.age.wrapping_add(elapsed as u32);
+            record.age = crate::entities::advance_lifetime_age(record.age, elapsed as u32);
             record.tick = replay.tick;
             // A frozen row projects nothing and still equals its stored row.
             if elapsed != 0 || villager_advanced {

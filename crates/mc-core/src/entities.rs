@@ -245,6 +245,11 @@ pub(crate) const MOTION_WANDER_REST: u16 = 1 << 9;
 pub(crate) const MOTION_TARGETLESS_WANDER_REST: u16 = 1 << 10;
 pub(crate) const MOTION_ARMORED: u16 = 1 << 11;
 pub(crate) const MOTION_QUIET_TIMERS: u16 = 1 << 12;
+/// Alive adult chicken: its egg clock runs ([`EntityStore::advance_egg_clocks`]).
+pub(crate) const MOTION_EGG: u16 = 1 << 13;
+/// Alive, AI-driven mob of an equipment-pickup type that can pick up loot
+/// (`mob_equipment_pickup::run` collectors).
+pub(crate) const MOTION_ITEM_COLLECTOR: u16 = 1 << 14;
 
 /// Derived motion inputs, refreshed only for dirty entities. Authoritative
 /// identity, dimensions and hurt time live exclusively in `Body`.
@@ -269,6 +274,34 @@ pub(crate) struct MotionResult {
     pub(crate) attack_cooldown: Option<u32>,
 }
 
+/// Vanilla `ItemEntity.INFINITE_PICKUP_DELAY`: a delay of 32767 never counts down
+/// and the item is never pickable (or mergeable).
+pub(crate) const PICKUP_DELAY_NEVER: u32 = 32767;
+
+/// Vanilla `ItemEntity.INFINITE_LIFETIME` (`Age: -32768`). The native clock is
+/// unsigned, so the retained value is the maximum; the Anvil boundary maps the
+/// vanilla short to and from it, and no lifetime step touches it.
+pub(crate) const ITEM_AGE_NEVER: u32 = u32::MAX;
+
+/// A lifetime age advanced by `elapsed` record ticks (WAL replay projection):
+/// [`ITEM_AGE_NEVER`] stays.
+pub(crate) fn advance_lifetime_age(age: u32, elapsed: u32) -> u32 {
+    if age == ITEM_AGE_NEVER {
+        age
+    } else {
+        age.wrapping_add(elapsed)
+    }
+}
+
+/// One tick of a pickup delay: it counts down to zero, except 32767, which stays.
+pub(crate) fn tick_pickup_delay(delay: u32) -> u32 {
+    if delay == PICKUP_DELAY_NEVER {
+        delay
+    } else {
+        delay.saturating_sub(1)
+    }
+}
+
 /// Motion-owned scalar writeback cannot read retained cold state. The caller
 /// applies custody marks: air is durable, the other clocks are transient.
 fn apply_motion_state(
@@ -278,7 +311,7 @@ fn apply_motion_state(
     result: &MotionResult,
 ) -> (bool, bool) {
     let body = &mut bodies[index];
-    let pickup_delay = body.pickup_delay.saturating_sub(1);
+    let pickup_delay = tick_pickup_delay(body.pickup_delay);
     let attack_cooldown = result
         .attack_cooldown
         .unwrap_or_else(|| body.attack_cooldown.saturating_sub(1));
@@ -443,7 +476,9 @@ impl EntityStore {
         }
         self.mark_changed(index);
         let row = &mut self.cold[index];
-        row.age = row.age.wrapping_add(1);
+        if row.age != ITEM_AGE_NEVER {
+            row.age = row.age.wrapping_add(1);
+        }
         Some(row.age)
     }
 
@@ -477,7 +512,7 @@ impl EntityStore {
             }
             // Dead rows keep their clock but are still probed, as the separate
             // despawn sweep probed every admitted row.
-            let expired = body.alive && {
+            let expired = body.alive && row.age != ITEM_AGE_NEVER && {
                 row.age = row.age.wrapping_add(1);
                 *changed = stamp;
                 row.age >= item_limit && matches!(body.kind, EntityKind::Item { .. })
@@ -525,6 +560,90 @@ impl EntityStore {
             }
         }
         (expired, flagged)
+    }
+
+    /// Egg countdown of every alive adult chicken in an active column, one tick,
+    /// on the pool (rows are independent). Egg countdowns are deterministic replay
+    /// projections, not hint or wire inputs: the cold row gets a checkpoint stamp
+    /// only when the value changes, and the lifecycle owner marks laying and reset
+    /// events. Rows are selected from the `MOTION_EGG`/`MOTION_LIFE` flag snapshot
+    /// (a chick that just grew up has the latter); the caller must have run
+    /// `prepare_motion_hints`. Returns, ascending, the rows whose clock reached its
+    /// event, with `true` when an egg is laid (the clock was 1) and `false` when it
+    /// was 0 and only got its first interval; the caller owns custody of those rows.
+    pub(crate) fn advance_egg_clocks(
+        &mut self,
+        chicken: u32,
+        min_parallel: usize,
+        active: impl Fn(i32, i32) -> bool + Sync,
+        interval: impl Fn(EntityId) -> u32 + Sync,
+    ) -> Vec<(EntitySlot, bool)> {
+        let stamp = self.captured_tick + 1;
+        let step = |index: usize,
+                    flags: u16,
+                    body: &Body,
+                    pos: &[f64; 3],
+                    row: &mut ColdRow,
+                    changed: &mut u64|
+         -> Option<(EntitySlot, bool)> {
+            // `MOTION_EGG` already says "alive adult chicken" (refreshed by
+            // `prepare_motion_hints`, which the caller ran and nothing since has
+            // invalidated), so the common row reads neither body nor appearance.
+            if flags & MOTION_EGG == 0
+                && (flags & MOTION_LIFE == 0
+                    || !body.alive
+                    || !matches!(body.kind, EntityKind::Mob { type_id } if type_id == chicken)
+                    || !crate::entity_life::adult(row))
+            {
+                return None;
+            }
+            if !active(
+                mc_physics::mth::floor_i32(pos[0]).div_euclid(16),
+                mc_physics::mth::floor_i32(pos[2]).div_euclid(16),
+            ) {
+                return None;
+            }
+            let remaining = row.entity_life.harvest_ticks;
+            let next = if remaining <= 1 {
+                interval(body.id)
+            } else {
+                remaining - 1
+            };
+            if remaining != next {
+                row.entity_life.harvest_ticks = next;
+                *changed = stamp;
+            }
+            (remaining <= 1).then_some((EntitySlot(index as u32), remaining == 1))
+        };
+        debug_assert_eq!(self.flags.len(), self.cold.len());
+        debug_assert_eq!(self.bodies.len(), self.cold.len());
+        if self.cold.len() < min_parallel {
+            self.cold
+                .iter_mut()
+                .zip(&mut self.changed_tick)
+                .zip(&self.flags)
+                .zip(&self.bodies)
+                .zip(&self.pos)
+                .enumerate()
+                .filter_map(|(index, ((((row, changed), &flags), body), pos))| {
+                    step(index, flags, body, pos, row, changed)
+                })
+                .collect()
+        } else {
+            use rayon::prelude::*;
+            self.cold
+                .par_iter_mut()
+                .zip(self.changed_tick.par_iter_mut())
+                .zip(self.flags.par_iter())
+                .zip(self.bodies.par_iter())
+                .zip(self.pos.par_iter())
+                .with_min_len(2048)
+                .enumerate()
+                .filter_map(|(index, ((((row, changed), &flags), body), pos))| {
+                    step(index, flags, body, pos, row, changed)
+                })
+                .collect()
+        }
     }
 
     /// Clock projection is not a gameplay dirty mark. Schedule/event changes
@@ -1245,17 +1364,6 @@ impl EntityStore {
         }
     }
 
-    /// Egg countdowns are deterministic replay projections, not hint or wire
-    /// inputs. The lifecycle owner separately marks initialization/reset events.
-    pub(crate) fn set_harvest_ticks(&mut self, slot: EntitySlot, ticks: u32) {
-        let index = slot.0 as usize;
-        let life = &mut self.cold[index].entity_life;
-        if life.harvest_ticks != ticks {
-            life.harvest_ticks = ticks;
-            self.mark_changed(index);
-        }
-    }
-
     /// Mutable row custody. Taking it marks the row touched for the journal:
     /// the journal compares/emits only touched rows. Equality of the row with
     /// its last journaled image stays the final arbiter, so a conservative
@@ -1927,7 +2035,7 @@ fn motion_effects(body: &Body, row: &ColdRow) -> bool {
         || row.appearance.shared_flags & 0x60 != 0
 }
 
-fn motion_life(body: &Body, row: &ColdRow, chicken: Option<u32>, tadpole: Option<u32>) -> bool {
+fn motion_life(body: &Body, row: &ColdRow, tadpole: Option<u32>) -> bool {
     let EntityKind::Mob { type_id } = body.kind else {
         return row.appearance.arrow_count > 0 || row.appearance.stinger_count > 0;
     };
@@ -1937,8 +2045,7 @@ fn motion_life(body: &Body, row: &ColdRow, chicken: Option<u32>, tadpole: Option
     let mob_clock = row.breed_cooldown > 0
         || row.love > 0
         || (!row.entity_life.age_lock.locked
-            && (row.entity_life.child_ticks > 0 || Some(type_id) == tadpole))
-        || (Some(type_id) == chicken && crate::entity_life::adult(row));
+            && (row.entity_life.child_ticks > 0 || Some(type_id) == tadpole));
     mob_clock || row.appearance.arrow_count > 0 || row.appearance.stinger_count > 0
 }
 
@@ -1994,15 +2101,32 @@ fn motion_flags_for(
     if motion_effects(body, row) {
         flags |= MOTION_EFFECTS;
     }
-    if motion_life(body, row, chicken, tadpole) {
+    if motion_life(body, row, tadpole) {
         flags |= MOTION_LIFE;
+    }
+    if body.alive
+        && matches!(body.kind, EntityKind::Mob { type_id } if Some(type_id) == chicken)
+        && crate::entity_life::adult(row)
+    {
+        flags |= MOTION_EGG;
+    }
+    if body.alive
+        && !row.controls.no_ai
+        && row.loot.can_pick_up_loot
+        && matches!(body.kind, EntityKind::Mob { type_id }
+            if registry.blueprint(type_id).is_some_and(|bp| bp.capabilities.equipment_pickup))
+    {
+        flags |= MOTION_ITEM_COLLECTOR;
     }
     if !matches!(body.kind, EntityKind::Player { .. })
         && row.appearance.equipment[2..6].iter().any(Option::is_some)
     {
         flags |= MOTION_ARMORED;
     }
-    if body.pickup_delay == 0 && body.attack_cooldown == 0 && impulse == [0.0; 2] {
+    if matches!(body.pickup_delay, 0 | PICKUP_DELAY_NEVER)
+        && body.attack_cooldown == 0
+        && impulse == [0.0; 2]
+    {
         flags |= MOTION_QUIET_TIMERS;
     }
     flags

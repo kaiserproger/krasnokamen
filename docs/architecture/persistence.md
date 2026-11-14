@@ -104,6 +104,13 @@ admitted hostile evaluation after restart, and a changed appearance is
 journaled as usual. A checkpoint-only restart instead reconstructs the default
 pose and the hostile tick derives it again from live targeting.
 
+An item entity with `Age: -32768` (vanilla `INFINITE_LIFETIME`) never ages or
+despawns, and one with `PickupDelay: 32767` never becomes pickable or mergeable.
+The native lifetime clock is unsigned, so it holds the never value as `u32::MAX`:
+checkpoint and Anvil records carry the vanilla short -32768 (an import of a vanilla
+world maps it back), the WAL carries `u32::MAX` in the entity image age and
+`krasnokamen:LifetimeAge`, and replay never advances it.
+
 Cow, pig, chicken and zombie-nautilus variants (from `/summon ... {variant:...}`)
 are persisted. The checkpoint stores the vanilla string `variant` field of the
 entity record; the WAL stores a typed appearance value at the species' metadata

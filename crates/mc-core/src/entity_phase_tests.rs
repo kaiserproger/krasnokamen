@@ -122,6 +122,48 @@ fn pickup_lanes_use_current_liveness_delay_and_post_move_slot_order() {
     assert!(intents.is_empty());
 }
 
+/// Vanilla `ItemEntity.tick` counts `pickupDelay` down only while it is above
+/// zero and not 32767 (`INFINITE_PICKUP_DELAY`): such an item is never pickable and
+/// its row is never rewritten for a countdown.
+#[test]
+fn item_pickup_delay_32767_never_counts_down_or_marks_the_row_changed() {
+    let (mut state, anchor) = resting_cow();
+    let pos = state.entities.pos(anchor);
+    let mut item = |delay: u32| {
+        let id = spawn_item_entity(&mut state, pos, mc_data::ItemStack::new(1, 1));
+        let slot = state.entities.slot_of(id).unwrap();
+        crate::entity_controls::set_no_gravity(&mut state, slot, true);
+        state.entities.set_vel(slot, [0.0; 3]);
+        state.entities.body_mut(slot).pickup_delay = delay;
+        slot
+    };
+    let never = item(crate::entities::PICKUP_DELAY_NEVER);
+    let finite = item(3);
+    for _ in 0..3 {
+        run_entity_phase(&mut state, true);
+        state.tick += 1;
+    }
+    // The control item ran its countdown to zero: items do step in this phase.
+    assert_eq!(state.entities.body(finite).pickup_delay, 0);
+    state.entities.checkpoint_captured(state.tick);
+    state.entities.checkpoint_acknowledged(state.tick);
+    for _ in 0..5 {
+        run_entity_phase(&mut state, true);
+        state.tick += 1;
+    }
+    assert_eq!(
+        state.entities.body(never).pickup_delay,
+        crate::entities::PICKUP_DELAY_NEVER
+    );
+    assert!(
+        !state
+            .entities
+            .checkpoint_changed_slots()
+            .any(|slot| slot == never),
+        "an item with an infinite pickup delay was rewritten every tick"
+    );
+}
+
 fn can_early_rest(state: &mut TickState, slot: EntitySlot) -> bool {
     !phase_admitted(state, slot, MOB_FAR_PERIOD as u8)
 }

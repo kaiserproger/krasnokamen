@@ -163,6 +163,8 @@ fn collectable_item_chunks(state: &TickState) -> Option<HashSet<ChunkPos>> {
     let chunk = |coordinate: f64| mc_physics::mth::floor_i32(coordinate).div_euclid(16);
     let widest = state.entities.max_half_width();
     let mut chunks = HashSet::default();
+    // Items dropped together share a range: an equal range inserts nothing new.
+    let mut previous = None;
     for slot in state.entities.item_slots() {
         let body = state.entities.body(slot);
         if !body.alive || body.pickup_delay != 0 {
@@ -170,8 +172,17 @@ fn collectable_item_chunks(state: &TickState) -> Option<HashSet<ChunkPos>> {
         }
         let at = state.entities.pos(slot);
         let margin = widest + 1.0 + body.half_width;
-        for z in chunk(at[2] - margin)..=chunk(at[2] + margin) {
-            for x in chunk(at[0] - margin)..=chunk(at[0] + margin) {
+        let range = (
+            chunk(at[0] - margin),
+            chunk(at[0] + margin),
+            chunk(at[2] - margin),
+            chunk(at[2] + margin),
+        );
+        if previous.replace(range) == Some(range) {
+            continue;
+        }
+        for z in range.2..=range.3 {
+            for x in range.0..=range.1 {
                 chunks.insert(ChunkPos { x, z });
             }
         }
@@ -186,24 +197,30 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
     if !crate::command_rules::boolean(state, crate::command_rules::BoolRule::MOB_GRIEFING) {
         return;
     }
+    // Bottleneck 2 (PerfEntity2): the collector list came from a BTreeSet walk of
+    // every equipment-capable mob plus a sort, then a cold-row read per mob
+    // (0.9 to 1.2 ms serial at native-100 whenever an item lay on the ground).
+    // Boundary: collector selection only. Fence: `MOTION_ITEM_COLLECTOR` is the
+    // conjunction the filter below used to read (alive mob of an
+    // equipment-pickup type, AI on, can pick up loot), recomputed from the row
+    // for every dirty slot by `prepare_motion_hints`, called here so edits since
+    // the entity phase are included; the flag scan yields ascending slots, the
+    // old walk's order. Removal path: `mob_slots_matching` with the same tests.
+    state.entities.prepare_motion_hints(&state.registry);
+    let candidates: Vec<EntitySlot> = state
+        .entities
+        .motion_slots(crate::entities::MOTION_ITEM_COLLECTOR)
+        .collect();
+    if candidates.is_empty() {
+        return;
+    }
     let Some(near_items) = collectable_item_chunks(state) else {
         return;
     };
-    let collectors: Vec<_> = state
-        .entities
-        .mob_slots_matching(|type_id| {
-            state
-                .registry
-                .blueprint(type_id)
-                .is_some_and(|bp| bp.capabilities.equipment_pickup)
-        })
+    let collectors: Vec<_> = candidates
         .into_iter()
         .filter(|&slot| near_items.contains(&state.entities.chunk_of(slot)))
-        .filter_map(|slot| {
-            let body = state.entities.body(slot);
-            let row = state.entities.row(slot);
-            (body.alive && !row.controls.no_ai && row.loot.can_pick_up_loot).then_some(body.id)
-        })
+        .map(|slot| state.entities.body(slot).id)
         .collect();
     if collectors.is_empty() {
         return;

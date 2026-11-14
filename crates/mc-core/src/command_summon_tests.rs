@@ -1049,6 +1049,59 @@ fn summon_equipment_rejects_the_same_unsupported_components_as_give() {
 }
 
 #[test]
+fn item_summon_with_age_minus_32768_sets_the_never_clock() {
+    let (state, id) = summon(
+        "item",
+        "{Item:{id:'minecraft:carrot',count:1},Age:-32768s,PickupDelay:32767s}",
+    );
+    let slot = state.entities.slot_of(id).unwrap();
+    assert_eq!(
+        state.entities.row(slot).age,
+        crate::entities::ITEM_AGE_NEVER
+    );
+    assert_eq!(state.entities.body(slot).pickup_delay, 32767);
+}
+
+/// The checkpoint (Anvil) record of an item whose clock is the never value holds
+/// the vanilla short, and the pickup delay 32767.
+fn plain_item_record(
+    state: &TickState,
+    id: crate::boundary::EntityId,
+) -> mc_data::entity_nbt::VanillaEntity {
+    let uuid = state.entities.row(state.entities.slot_of(id).unwrap()).uuid;
+    let (_, chunks, _) = crate::core::checkpoint_data_for(state, state.tick);
+    chunks
+        .values()
+        .flat_map(|chunk| &chunk.entities)
+        .find(|entity| entity.uuid == uuid)
+        .unwrap()
+        .clone()
+}
+
+#[test]
+fn item_never_clock_exports_as_minus_32768_in_the_checkpoint_record() {
+    let (mut state, id) = summon("item", "{Item:{id:'minecraft:carrot',count:1}}");
+    let slot = state.entities.slot_of(id).unwrap();
+    state.entities.row_mut(slot).age = crate::entities::ITEM_AGE_NEVER;
+    state.entities.body_mut(slot).pickup_delay = crate::entities::PICKUP_DELAY_NEVER;
+    let record = plain_item_record(&state, id);
+    assert_eq!(record.age, i32::from(i16::MIN));
+    assert_eq!(record.pickup_delay, 32767);
+}
+
+#[test]
+fn vanilla_item_age_minus_32768_imports_as_the_never_clock() {
+    let (state, id) = summon("item", "{Item:{id:'minecraft:carrot',count:1}}");
+    let mut record = plain_item_record(&state, id);
+    record.age = i32::from(i16::MIN);
+    record
+        .extra_fields
+        .retain(|(key, _)| key != "krasnokamen:LifetimeAge");
+    let restored = EntityStateImage::from_record(&state.registry, &record).unwrap();
+    assert_eq!(restored.age, crate::entities::ITEM_AGE_NEVER);
+}
+
+#[test]
 fn item_entity_summon_carries_stack_pickup_delay_age_and_motion() {
     let (state, id) = summon(
         "item",

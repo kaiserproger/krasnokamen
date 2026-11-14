@@ -283,6 +283,15 @@ fn merge_amount(
 ) -> Option<(i32, u32, u32, crate::boundary::EntityId)> {
     let receiver_body = state.entities.body(receiver);
     let source_body = state.entities.body(source);
+    // Vanilla `ItemEntity.isMergable`: neither an infinite pickup delay nor an
+    // infinite lifetime takes part in a merge.
+    let frozen = |slot: EntitySlot, body: &crate::entities::Body| {
+        body.pickup_delay == crate::entities::PICKUP_DELAY_NEVER
+            || state.entities.row(slot).age == crate::entities::ITEM_AGE_NEVER
+    };
+    if frozen(receiver, receiver_body) || frozen(source, source_body) {
+        return None;
+    }
     let receiver_item = state.entities.row(receiver).item.as_ref()?;
     let source_item = state.entities.row(source).item.as_ref()?;
     let receiver_stack = receiver_item.stack.as_ref()?;
