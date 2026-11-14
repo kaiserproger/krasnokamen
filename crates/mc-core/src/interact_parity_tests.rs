@@ -1,4 +1,4 @@
-use crate::boundary::{BlockPos, ConnectionId, EntityId, Hand, PlayerInput};
+use crate::boundary::{BlockPos, ConnectionId, DigAction, EntityId, Hand, PlayerInput};
 use crate::farming_tests::{Y, block, put, setup};
 use crate::tick::{TickState, run_tick};
 use mc_data::{Identifier, ItemStack};
@@ -491,6 +491,27 @@ fn interact_parity_spawn_protection_with_operator() {
         }],
     );
     let actor = state.connections.entity_of(ConnectionId(1)).unwrap();
+    // PLACE-001: a non-operator inside the radius is protected, so the dig
+    // path refuses and the block survives.
+    assert!(
+        crate::spawn_protection::protected(&state, actor, POS),
+        "a non-operator inside the spawn radius is protected"
+    );
+    let stone = state.registry.states.stone;
+    put(&mut state, POS.x, POS.y, POS.z, stone);
+    let dig = PlayerInput::Dig {
+        connection: ConnectionId(1),
+        position: POS,
+        action: DigAction::Finish,
+        sequence: 1,
+    };
+    assert!(crate::tick::client_build_refused(&state, actor, &dig));
+    run_tick(&mut state, &[dig]);
+    assert_eq!(
+        state.world.block_at(POS.x, POS.y, POS.z),
+        Some(stone),
+        "spawn protection refuses the break"
+    );
     assert!(crate::tick::client_build_refused(
         &state,
         actor,

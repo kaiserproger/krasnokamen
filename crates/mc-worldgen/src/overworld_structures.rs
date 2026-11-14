@@ -40,6 +40,15 @@ pub(crate) struct OverworldStructures {
     stronghold: StructureTemplate,
     stronghold_eye_states: [(BlockStateId, BlockStateId); 4],
     stronghold_portal: BlockStateId,
+    /// `air`, `cave_air` and `void_air`, the cells a support column may fill.
+    air: Vec<BlockStateId>,
+    /// Every state of the blocks the terrain generator lays down as ground:
+    /// a support column continues one of these downwards.
+    ground: HashSet<BlockStateId>,
+    /// The overworld's base filler state, for a gap whose floor is not natural
+    /// ground (a structure's own block, a fluid, a village farm cell) or lies
+    /// past the support depth.
+    filler: BlockStateId,
     families: Vec<Family>,
     features: Vec<features::Feature>,
     reach_before: [i32; 2],
@@ -249,11 +258,116 @@ impl OverworldStructures {
             stronghold,
             stronghold_eye_states: stronghold_eye_states(blocks)?,
             stronghold_portal: state(blocks, "minecraft:end_portal")?,
+            air: ["minecraft:air", "minecraft:cave_air", "minecraft:void_air"]
+                .into_iter()
+                .filter_map(|name| state(blocks, name).ok())
+                .collect(),
+            // The blocks `TerrainGenerator::fill_column` and its surface rules
+            // can put in a column: stone/deepslate, the soil fill and every
+            // biome's surface cap. Structures, fluids, crops and block entities
+            // are deliberately absent, so they are never continued upwards.
+            ground: [
+                "minecraft:stone",
+                "minecraft:deepslate",
+                "minecraft:dirt",
+                "minecraft:coarse_dirt",
+                "minecraft:grass_block",
+                "minecraft:podzol",
+                "minecraft:mycelium",
+                "minecraft:mud",
+                "minecraft:clay",
+                "minecraft:sand",
+                "minecraft:red_sand",
+                "minecraft:gravel",
+                "minecraft:snow_block",
+                "minecraft:terracotta",
+                "minecraft:orange_terracotta",
+                "minecraft:yellow_terracotta",
+                "minecraft:brown_terracotta",
+                "minecraft:red_terracotta",
+                "minecraft:white_terracotta",
+            ]
+            .into_iter()
+            .filter_map(|name| blocks.block(&id(name)))
+            .flat_map(|block| block.states.iter().copied())
+            .collect(),
+            filler: state(blocks, "minecraft:stone")?,
             families,
             features: features::load(root, blocks)?,
             reach_before,
             reach_after,
         })
+    }
+
+    fn is_surface_family(&self, structure: &Identifier) -> bool {
+        self.families
+            .iter()
+            .any(|family| &family.id == structure && matches!(family.height, Height::Surface))
+    }
+
+    /// Rest a `Height::Surface` template on the ground under its own footprint.
+    ///
+    /// Vanilla descends the start until three of the template bounding box's
+    /// four corners are no longer air (`RuinedPortalStructure.findSuitableY`),
+    /// which needs the raw terrain column; this generator pastes villages before
+    /// structures, so descending sinks a ruin into a village instead
+    /// (WORLDGEN-RUINED-PORTAL-FLOATS-ON-SLOPE).
+    ///
+    /// The support column keeps the origin and fills the air gap under a
+    /// footprint column's lowest template cell with the column's *terrain*
+    /// material, never the template's own block: `portal_6` column (2,2) has
+    /// netherrack at its bottom and `gold_block` above it, so a template copy
+    /// filled four gold blocks under the platform. The material is the natural
+    /// ground block the gap lands on; when that block is not natural ground (a
+    /// structure's own block, a fluid, a village farm cell) or the gap runs past
+    /// the support depth, it is the dimension filler instead. Nothing with a
+    /// block entity, fluid, crop or decoration can be selected, because none of
+    /// them is in `ground`. Air only, and bounded so a ruin over a chasm does
+    /// not grow a pillar.
+    fn support_columns(&self, chunk: &mut Chunk, template: &StructureTemplate, origin: BlockPos) {
+        const DEPTH: i32 = 4;
+        let chunk_pos = chunk.pos;
+        let mut lowest: BTreeMap<(i32, i32), i32> = BTreeMap::new();
+        for block in template.blocks() {
+            if self.air.contains(&block.state) {
+                continue;
+            }
+            lowest
+                .entry((block.pos[0], block.pos[2]))
+                .and_modify(|base| *base = (*base).min(block.pos[1]))
+                .or_insert(block.pos[1]);
+        }
+        for ((local_x, local_z), base) in lowest {
+            let x = origin.x + local_x - chunk_pos.x * 16;
+            let z = origin.z + local_z - chunk_pos.z * 16;
+            if !(0..16).contains(&x) || !(0..16).contains(&z) {
+                continue;
+            }
+            let (x, z) = (x as u8, z as u8);
+            let base_y = origin.y + base;
+            // Descend the gap without material: the block that stops the walk
+            // (or the first one past the depth bound) is what the fill continues.
+            let mut floor_y = base_y - 1;
+            let mut depth = 0;
+            while depth < DEPTH
+                && chunk
+                    .get_block(x, floor_y, z)
+                    .is_some_and(|id| self.air.contains(&id))
+            {
+                floor_y -= 1;
+                depth += 1;
+            }
+            if depth == 0 {
+                continue;
+            }
+            let material = chunk
+                .get_block(x, floor_y, z)
+                .filter(|id| self.ground.contains(id))
+                .unwrap_or(self.filler);
+            for y in floor_y + 1..base_y {
+                chunk.set_block(x, y, z, material);
+            }
+        }
     }
 
     fn visit(
@@ -396,6 +510,9 @@ impl OverworldStructures {
                 );
                 let eyes = (structure.path() == "stronghold")
                     .then_some((&self.stronghold_eye_states, self.stronghold_portal));
+                if self.is_surface_family(structure) {
+                    self.support_columns(chunk, template, origin);
+                }
                 let changed = paste_template_with_eyes(chunk, template, origin, self.seed, eyes);
                 for (t, c) in touched.iter_mut().zip(changed) {
                     *t |= c;
