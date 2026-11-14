@@ -564,3 +564,68 @@ fn every_blueprint_fits_the_street_lot_across_its_front() {
         );
     }
 }
+
+/// Every container of every storage level can be used from a floor cell that
+/// the entrance reaches. A walled-in chest is stock no resident can fetch: the
+/// level-three storage once sealed its corner chest behind a barrel, and as
+/// the first storage point it made every Builder look trapped.
+#[test]
+fn every_storage_container_is_reachable_from_the_entrance() {
+    use std::collections::{HashMap, HashSet, VecDeque};
+    let state = test_state();
+    let storage = get(&state.registry, "storage").unwrap();
+    let path = |id: BlockStateId| {
+        state
+            .registry
+            .blocks
+            .by_id(id)
+            .unwrap()
+            .block
+            .id
+            .path()
+            .to_owned()
+    };
+    // A level lists only its diff against the previous one; replay the diffs
+    // so each level is checked against its complete picture.
+    let mut blocks: HashMap<[i8; 3], String> = HashMap::new();
+    for (n, level) in storage.levels.iter().enumerate() {
+        let rotated = level.rotated(Rotation(0));
+        for at in &rotated.removals {
+            blocks.remove(at);
+        }
+        blocks.extend(rotated.blocks.iter().map(|&(at, id)| (at, path(id))));
+        let [sx, _, sz] = rotated.size.map(i8::try_from).map(Result::unwrap);
+        let open = |at: [i8; 3]| blocks.get(&at).is_none_or(|name| name.ends_with("_door"));
+        let entrance = rotated.entrance;
+        let floor = entrance[1];
+        let mut reached = HashSet::from([entrance]);
+        let mut queue = VecDeque::from([entrance]);
+        while let Some([x, y, z]) = queue.pop_front() {
+            for [dx, dz] in [[1, 0], [-1, 0], [0, 1], [0, -1]] {
+                let next = [x + dx, y, z + dz];
+                if (0..sx).contains(&next[0])
+                    && (0..sz).contains(&next[2])
+                    && open(next)
+                    && open([next[0], y + 1, next[2]])
+                    && reached.insert(next)
+                {
+                    queue.push_back(next);
+                }
+            }
+        }
+        // Reach is the route search's goal: one block away on every axis.
+        for (at, name) in &blocks {
+            if !(name.ends_with("chest") || name == "barrel") {
+                continue;
+            }
+            assert!(
+                (at[1] - floor).abs() <= 1
+                    && reached
+                        .iter()
+                        .any(|r| (r[0] - at[0]).abs() <= 1 && (r[2] - at[2]).abs() <= 1),
+                "storage level {}: the {name} at {at:?} cannot be reached from the entrance",
+                n + 1
+            );
+        }
+    }
+}
