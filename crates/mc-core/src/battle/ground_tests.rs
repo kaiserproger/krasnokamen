@@ -294,6 +294,46 @@ fn deflection_keeps_open_ground_and_steps_but_turns_at_trunks_and_walls() {
 }
 
 #[test]
+fn projected_horse_turns_leave_canopy_blocked_terrace_pockets() {
+    let state = relief_fixture();
+    for (pos, drive) in [
+        (
+            [-23.301_757_812_5, 65.0, -83.726_464_392_744_49],
+            [-3.252, 0.0],
+        ),
+        ([41.7, 65.0, -70.698_242_187_5], [0.0, 3.252]),
+    ] {
+        let mut escape = None;
+        let out = deflect_mounted(
+            &state.world,
+            &state.registry,
+            pos,
+            0.698_242_187_5,
+            drive,
+            drive,
+            1.0,
+            &mut escape,
+            0,
+        );
+        let speed = mc_physics::mth::length2(out[0], out[1]);
+        assert!(
+            escape.is_some(),
+            "terrain detour was not retained at {pos:?}: {out:?}"
+        );
+        assert!(
+            crossable(
+                &state.world,
+                &state.registry,
+                pos,
+                0.698_242_187_5,
+                out.map(|v| v / speed),
+            ),
+            "projected turn cannot be walked at {pos:?}: {out:?}"
+        );
+    }
+}
+
+#[test]
 fn staged_bodies_stand_on_natural_relief_never_inside_floating_or_wet() {
     let mut state = relief_fixture();
     let reply = stage(&mut state, 100);

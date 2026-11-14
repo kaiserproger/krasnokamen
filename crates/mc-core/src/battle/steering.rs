@@ -308,11 +308,9 @@ fn sample_movement(
 pub(crate) enum Mover<'a> {
     /// On foot: boxed in, it stands ([`super::ground::deflect_foot`]).
     Foot,
-    /// A horse with a target or a slot ([`super::ground::deflect`]).
-    Rider,
-    /// A fleeing horse and its way out of a pocket
+    /// A mounted body and its bounded way out of a terrain pocket
     /// ([`super::ground::deflect_mounted`]).
-    Fugitive(&'a mut Option<super::ground::Escape>),
+    Mounted(&'a mut Option<super::ground::Escape>),
 }
 
 /// Terrain turn for a final physics velocity; `heading` is where the body is
@@ -334,10 +332,7 @@ pub(crate) fn around_obstacles(
         Mover::Foot => {
             super::ground::deflect_foot(world, registry, pos, half_width, drive, heading, 1.0)
         }
-        Mover::Rider => {
-            super::ground::deflect(world, registry, pos, half_width, drive, heading, 1.0)
-        }
-        Mover::Fugitive(escape) => super::ground::deflect_mounted(
+        Mover::Mounted(escape) => super::ground::deflect_mounted(
             world, registry, pos, half_width, drive, heading, 1.0, escape, frame.tick,
         ),
     };

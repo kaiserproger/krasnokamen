@@ -1060,6 +1060,13 @@ fn grounded_arrow(
         crate::plugin::fail_native(state);
         return true;
     }
+    if should_fall(
+        state,
+        state.entities.pos(slot),
+        authored.map_or(0.0, |profile| profile.collision_radius),
+    ) {
+        return false;
+    }
     if record.ground_age(row.age) >= record.ground_lifetime {
         super::remove(state, id);
         return true;
@@ -1295,6 +1302,7 @@ fn step(
         ) {
             record.stuck = false;
             record.age = 0;
+            record.grounded_at_age = None;
             state.entities.set_ground(slot, false);
             set_in_ground(state, slot, false);
             return false;
@@ -1604,6 +1612,12 @@ fn step(
         record.stuck = true;
         record.critical = false;
         record.age = 0;
+        if matches!(
+            record.kind,
+            ProjectileKind::Arrow | ProjectileKind::SpectralArrow
+        ) {
+            record.grounded_at_age = Some(state.entities.row(slot).age);
+        }
         // Vanilla AbstractArrow.onHitBlock retracts the stuck position by
         // signum(deltaMovement) * 0.05 per axis (26.3 javap:
         // setPos(position().subtract(signum.scale(0.05)))), so the entity sits in

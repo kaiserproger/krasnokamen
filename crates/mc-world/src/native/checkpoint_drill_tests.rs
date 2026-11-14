@@ -1,6 +1,7 @@
 //! Real subprocess stops and redb backend ENOSPC; no graceful shutdown can commit.
 use super::super::checkpoint_tests::{globals, registries};
 use super::*;
+use crate::native::NativeFile;
 use redb::StorageBackend;
 use std::cell::Cell;
 use std::sync::{
@@ -173,7 +174,7 @@ fn abrupt_stop_at_every_checkpoint_stage_never_mixes_domains() {
 
 #[derive(Debug)]
 struct FullDisk {
-    file: redb::backends::FileBackend,
+    file: NativeFile,
     writes_left: Arc<AtomicI64>,
 }
 impl StorageBackend for FullDisk {
@@ -221,16 +222,19 @@ fn enospc_checkpoint_backend_refuses_and_recovers_last_durable_image() {
             .write(true)
             .open(&path)
             .unwrap();
+        let backend = NativeFile::acquire(file).unwrap();
+        let file = Arc::clone(&backend.0);
         let database = redb::Database::builder()
             .set_cache_size(1024 * 1024)
             .create_with_backend(FullDisk {
-                file: redb::backends::FileBackend::new(file).unwrap(),
+                file: backend,
                 writes_left: writes_left.clone(),
             })
             .unwrap();
         let store = NativeStore {
             database,
             identity: [1; 32],
+            file,
         };
         writes_left.store(cut, Ordering::SeqCst);
         let result = write_image(&store, 7);
