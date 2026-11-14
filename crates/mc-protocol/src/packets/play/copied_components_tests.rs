@@ -75,46 +75,71 @@ fn nbt(value: &Tag) -> Vec<u8> {
 fn equippable_preserves_asset_and_entity_set_on_wire_and_storage() {
     let value = fields(vec![
         ("slot", text("chest")),
-        ("asset_id", text("solaris_battle:holy")),
-        ("allowed_entities", make_list(vec![text("minecraft:zombie"), text("minecraft:skeleton")])),
+        ("asset_id", text("krasnokamen_battle:holy")),
+        (
+            "allowed_entities",
+            make_list(vec![text("minecraft:zombie"), text("minecraft:skeleton")]),
+        ),
     ]);
     let mut payload = Vec::new();
     payload.write_varint(3);
-    payload.write_varint(registry_id("sound_event", "minecraft:item.armor.equip_generic").unwrap() + 1);
+    payload.write_varint(
+        registry_id("sound_event", "minecraft:item.armor.equip_generic").unwrap() + 1,
+    );
     payload.write_bool(true);
-    payload.write_identifier(&Identifier::parse("solaris_battle:holy").unwrap()).unwrap();
+    payload
+        .write_identifier(&Identifier::parse("krasnokamen_battle:holy").unwrap())
+        .unwrap();
     payload.write_bool(false);
     payload.write_bool(true);
     payload.write_varint(3);
     payload.write_varint(registry_id("entity_type", "minecraft:zombie").unwrap());
     payload.write_varint(registry_id("entity_type", "minecraft:skeleton").unwrap());
-    for flag in [true, true, true, false, false] { payload.write_bool(flag); }
+    for flag in [true, true, true, false, false] {
+        payload.write_bool(flag);
+    }
     payload.write_varint(registry_id("sound_event", "minecraft:item.shears.snip").unwrap() + 1);
     fixture("minecraft:equippable", value.clone(), payload);
-    mc_data::item_nbt::stack_from_component_patch(items(), &Identifier::parse("minecraft:iron_chestplate").unwrap(),
-        &[("minecraft:equippable".into(), value)]).unwrap();
+    mc_data::item_nbt::stack_from_component_patch(
+        items(),
+        &Identifier::parse("minecraft:iron_chestplate").unwrap(),
+        &[("minecraft:equippable".into(), value)],
+    )
+    .unwrap();
 }
 
 #[test]
 fn equippable_direct_sounds_and_named_entity_set_roundtrip() {
     let value = fields(vec![
         ("slot", text("head")),
-        ("equip_sound", fields(vec![("sound_id", text("example:horn")), ("range", Tag::Float(12.0))])),
+        (
+            "equip_sound",
+            fields(vec![
+                ("sound_id", text("example:horn")),
+                ("range", Tag::Float(12.0)),
+            ]),
+        ),
         ("allowed_entities", text("#minecraft:skeletons")),
         ("swappable", Tag::Byte(0)),
     ]);
     let mut payload = Vec::new();
     payload.write_varint(4);
     payload.write_varint(0);
-    payload.write_identifier(&Identifier::parse("example:horn").unwrap()).unwrap();
+    payload
+        .write_identifier(&Identifier::parse("example:horn").unwrap())
+        .unwrap();
     payload.write_bool(true);
     payload.write_f32(12.0);
     payload.write_bool(false);
     payload.write_bool(false);
     payload.write_bool(true);
     payload.write_varint(0);
-    payload.write_identifier(&Identifier::parse("minecraft:skeletons").unwrap()).unwrap();
-    for flag in [true, false, true, false, false] { payload.write_bool(flag); }
+    payload
+        .write_identifier(&Identifier::parse("minecraft:skeletons").unwrap())
+        .unwrap();
+    for flag in [true, false, true, false, false] {
+        payload.write_bool(flag);
+    }
     payload.write_varint(registry_id("sound_event", "minecraft:item.shears.snip").unwrap() + 1);
     fixture("minecraft:equippable", value, payload);
 }
@@ -123,16 +148,32 @@ fn equippable_direct_sounds_and_named_entity_set_roundtrip() {
 fn equippable_wire_slot_ids_match_vanilla_equipment_slot_ids() {
     // EquipmentSlot-26.3.javap.txt lines 250-330, 346-349: STREAM_CODEC uses id, not ordinal.
     for (slot, id) in [
-        ("mainhand", 0), ("feet", 1), ("legs", 2), ("chest", 3),
-        ("head", 4), ("offhand", 5), ("body", 6), ("saddle", 7),
+        ("mainhand", 0),
+        ("feet", 1),
+        ("legs", 2),
+        ("chest", 3),
+        ("head", 4),
+        ("offhand", 5),
+        ("body", 6),
+        ("saddle", 7),
     ] {
         let mut payload = Vec::new();
         payload.write_varint(id);
-        payload.write_varint(registry_id("sound_event", "minecraft:item.armor.equip_generic").unwrap() + 1);
-        for present in [false, false, false] { payload.write_bool(present); }
-        for flag in [true, true, true, false, false] { payload.write_bool(flag); }
+        payload.write_varint(
+            registry_id("sound_event", "minecraft:item.armor.equip_generic").unwrap() + 1,
+        );
+        for present in [false, false, false] {
+            payload.write_bool(present);
+        }
+        for flag in [true, true, true, false, false] {
+            payload.write_bool(flag);
+        }
         payload.write_varint(registry_id("sound_event", "minecraft:item.shears.snip").unwrap() + 1);
-        fixture("minecraft:equippable", fields(vec![("slot", text(slot))]), payload);
+        fixture(
+            "minecraft:equippable",
+            fields(vec![("slot", text(slot))]),
+            payload,
+        );
     }
 }
 
@@ -145,9 +186,14 @@ fn equippable_accepts_unnamespaced_registered_sounds_on_wire() {
     ]);
     let mut payload = Vec::new();
     payload.write_varint(3);
-    payload.write_varint(registry_id("sound_event", "minecraft:item.armor.equip_iron").unwrap() + 1);
-    for present in [false, false, false] { payload.write_bool(present); }
-    for flag in [true, true, true, false, false] { payload.write_bool(flag); }
+    payload
+        .write_varint(registry_id("sound_event", "minecraft:item.armor.equip_iron").unwrap() + 1);
+    for present in [false, false, false] {
+        payload.write_bool(present);
+    }
+    for flag in [true, true, true, false, false] {
+        payload.write_bool(flag);
+    }
     payload.write_varint(registry_id("sound_event", "minecraft:item.shears.snip").unwrap() + 1);
     fixture("minecraft:equippable", value, payload);
 }

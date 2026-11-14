@@ -2,7 +2,7 @@
 //!
 //! Block states, chunk format, world storage.
 //!
-//! Part of the Solaris engine.
+//! Part of the Krasnokamen engine.
 
 pub mod anvil;
 pub mod atomic_file;

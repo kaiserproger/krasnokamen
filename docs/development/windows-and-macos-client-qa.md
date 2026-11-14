@@ -14,14 +14,14 @@ Create once:
 
 ```sh
 mkdir -p ~/winvm/storage ~/winvm/shared
-docker create --name solaris-win --dns 1.1.1.1 --dns 8.8.8.8 \
+docker create --name krasnokamen-win --dns 1.1.1.1 --dns 8.8.8.8 \
   --device=/dev/kvm --device=/dev/net/tun --cap-add NET_ADMIN \
   -p 127.0.0.1:8006:8006 -p 127.0.0.1:13389:3389/tcp -p 127.0.0.1:13389:3389/udp \
   -e VERSION=11 -e RAM_SIZE=8G -e CPU_CORES=4 -e DISK_SIZE=64G \
   -e USERNAME=<vm-user> -e PASSWORD=<vm-password> \
   -v ~/winvm/storage:/storage -v ~/winvm/shared:/data \
   --stop-timeout 120 dockurr/windows
-docker start solaris-win
+docker start krasnokamen-win
 ```
 
 - `docker run -d` with the device flags failed silently: create, then start.
@@ -38,7 +38,7 @@ docker start solaris-win
 - Screen: noVNC at `http://127.0.0.1:8006`, or RDP at `127.0.0.1:13389`. The
   host's `~/winvm/shared` is `\\host.lan\Data` inside the guest.
 - The VM costs about 8 GB RAM and CPU: stop it when done
-  (`docker stop -t 30 solaris-win`), and before a host reboot. The VM may stay on
+  (`docker stop -t 30 krasnokamen-win`), and before a host reboot. The VM may stay on
   the root disk (owner exception).
 
 ## Building the Windows client
@@ -72,8 +72,8 @@ PATH=<mingw>/bin:$PATH RUSTC_WRAPPER= \
   The ignored copy sits under the core checkout's `.analysis/mingw`; recreate it
   the same way if you cannot install packages.
 - The exes import only system DLLs. Package them in the previous release zip
-  layout (`LICENSE`, `README`, `icon.png`, `plugins/`, `solaris-v2.exe`) with the
-  new `solaris-client.exe` and `solaris-launcher.exe` swapped in. A mingw build is
+  layout (`LICENSE`, `README`, `icon.png`, `plugins/`, `krasnokamen.exe`) with the
+  new `krasnokamen-client.exe` and `krasnokamen-launcher.exe` swapped in. A mingw build is
   a QA artifact, not the release artifact.
 
 ## Driving the guest
@@ -106,15 +106,15 @@ the QA protocol's "Windows-guest driver":
   applies as for real users. For 150% scaling set 1920x1080 first; at 1280x800
   Windows offers only 100/125%.
 - Launch from `cmd` with stderr captured
-  (`solaris-client.exe --username <name> 2> client-err.txt`).
-- The test server runs `solaris-auth`: `/register <pw> <pw>` within 60 s of the
+  (`krasnokamen-client.exe --username <name> 2> client-err.txt`).
+- The test server runs `krasnokamen-auth`: `/register <pw> <pw>` within 60 s of the
   first join or the server kicks with "Authentication timeout" (not a network
   bug); later joins `/login <pw>`. Server-side evidence: the unit journal on the
   test host, grep the username; `exit=keepalive-timeout` versus a clean EOF.
 - The VM has no GPU: D3D11 hardware device creation fails and the client falls
   back to WARP (check that capture creates a device before deeper QA). Software
   GL lags 5-10 s and loses press-and-release in one frame: confirm input failures
-  on Linux before calling them product bugs. `solaris-launcher.exe` needs
+  on Linux before calling them product bugs. `krasnokamen-launcher.exe` needs
   OpenGL 2+ and fails in the VM; skip the launcher check there.
 
 Minimum gate before a Windows build goes to players:

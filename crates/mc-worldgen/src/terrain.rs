@@ -928,7 +928,7 @@ impl TerrainGenerator {
         biomes: BiomeRules,
     ) -> Result<Self, TerrainGeneratorError> {
         let stone = try_resolve_block(registry.as_ref(), "minecraft:stone")?;
-        let ores = OreRules::solaris_default(registry.as_ref(), &biomes, stone);
+        let ores = OreRules::krasnokamen_default(registry.as_ref(), &biomes, stone);
         Self::try_with_rules(seed, registry, biomes, ores)
     }
 
@@ -982,7 +982,7 @@ impl TerrainGenerator {
     /// validation errors instead of panicking.
     ///
     /// Required terrain blocks fail construction when absent. Optional surface,
-    /// fluid, and decoration blocks keep Solaris' existing fallback behavior so
+    /// fluid, and decoration blocks keep Krasnokamen' existing fallback behavior so
     /// reduced test registries can still exercise generation.
     ///
     /// # Errors
