@@ -147,11 +147,19 @@ worker, runs the negative control.
    **pre-fix** client (one that does not contain `<sha>`, e.g. `<sha>^`) whose
    client ref is **red**, and `--client-receipt` is a `passed` one of the client
    that contains `<sha>` with the same ref **green**. Both ran on the tree being
-   promoted (the same `tree`/`client_tree` identity and server-binary registry
-   checks as rule 3; the receipt must record `client_tree`, written by the
-   harness at run start, or it is refused). No worktree, patch reversal or ref
-   run is involved, and a row whose only refs are unit tests cannot use this
-   form. The candidate is the
+   promoted (the same `tree` identity and server-binary registry checks as rule
+   3). The client is bound to its source through the pin-release manifest, not
+   the checkout beside it: each receipt records `client_binary` at run start
+   (the binary's sha256, hashed then, its `manifest.json`, and the manifest's
+   `head`/`dirty`), and promotion refuses a receipt without it, a manifest that
+   pins another binary than the one that ran, a `dirty` pin, or a pin without a
+   head. The ancestry checks use the pinned head: the control's head must not
+   contain `<sha>`, the restore's must. **Red is an observed assertion failure**:
+   the control receipt has to be `status = "failed"` with the scenario's own
+   assertion recorded false. A `timeout`, a launch error, a preflight failure or
+   a crashed client never observed the bug and is refused as a control. No
+   worktree, patch reversal or ref run is involved, and a row whose only refs are
+   unit tests cannot use this form. The candidate is the
    exact tree: `HEAD` plus its uncommitted diff and untracked files
    (`docs/bugs/` aside), identified by a fingerprint; no commit is needed. The
    control and the restore worktrees reproduce it, verified by that fingerprint.

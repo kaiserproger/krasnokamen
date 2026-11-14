@@ -608,24 +608,109 @@ def client_fix_commit(fix, root=REPO_ROOT):
     return full.strip()
 
 
-def _recorded_client_commit(root, receipt, path):
-    """The client revision a receipt ran (its `client_tree` head); Refused when it recorded none."""
-    recorded = receipt.get('client_tree')
-    if not isinstance(recorded, dict) or not re.fullmatch(r'[0-9a-f]{40}', str(recorded.get('head', ''))):
-        raise Refused(f'client receipt {path} records no client tree (the harness writes client_tree at run '
-                      'start): rerun the gate on a client candidate with this tooling')
-    repo = client_repo(root)
-    code, known = _git(repo, 'cat-file', '-e', f"{recorded['head']}^{{commit}}", check=False)
+def client_pin(binary_path):
+    """`{path, sha256, manifest_path, head, dirty}` of the client binary a run launches.
+
+    The binary is hashed here, now, and bound to its source only through the pin-release manifest
+    beside it: a checkout HEAD beside the binary says nothing about what that binary was built from.
+    Missing pieces stay missing (`head`/`dirty` None, `error` says why) so promotion can refuse."""
+    from . import runtime
+
+    info = {'path': str(binary_path) if binary_path else None, 'sha256': None,
+            'manifest_path': None, 'head': None, 'dirty': None}
+    if not binary_path:
+        info['error'] = 'KRASNOKAMEN_CLIENT_BINARY is not set: no client ran under this receipt'
+        return info
+    path = Path(binary_path).expanduser()
+    if not path.is_absolute():
+        path = runtime.sibling_root('client') / path
+    info['path'] = str(path)
+    try:
+        with path.open('rb') as binary:
+            info['sha256'] = hashlib.file_digest(binary, 'sha256').hexdigest()
+    except OSError as error:
+        info['error'] = f'client binary {path} unreadable: {error}'
+        return info
+    manifest = path.parent / 'manifest.json'
+    info['manifest_path'] = str(manifest)
+    try:
+        pin = json.loads(manifest.read_text())
+    except (OSError, ValueError) as error:
+        info['error'] = f'no client pin manifest beside {path}: {error}'
+        return info
+    if pin.get('kind') != 'client' or pin.get('repo') != 'client':
+        info['error'] = f'{manifest} is not a client pin (kind {pin.get("kind")!r}, repo {pin.get("repo")!r})'
+        return info
+    info['head'] = pin.get('head')
+    info['dirty'] = pin.get('dirty')
+    if pin.get('binary_sha256') != info['sha256']:
+        info['error'] = (f'{manifest} pins a different binary ({str(pin.get("binary_sha256"))[:12]}) than the '
+                         f'one that ran ({str(info["sha256"])[:12]})')
+    return info
+
+
+def _client_pin_of_receipt(root, receipt, path):
+    """The pin head a receipt's client ran, Refused unless the receipt's pin is complete and clean."""
+    recorded = receipt.get('client_binary')
+    if not isinstance(recorded, dict):
+        raise Refused(f'client receipt {path} records no client binary (the harness writes client_binary at '
+                      'run start): rerun the gate on a pinned client')
+    if recorded.get('error'):
+        raise Refused(f'client receipt {path}: {recorded["error"]}')
+    if not re.fullmatch(r'[0-9a-f]{64}', str(recorded.get('sha256', ''))):
+        raise Refused(f'client receipt {path} records no sha256 of the client binary that ran')
+    manifest_path = recorded.get('manifest_path')
+    if not manifest_path:
+        raise Refused(f'client receipt {path} records no client pin manifest: a binary without its source '
+                      'pin proves nothing about the fix')
+    try:
+        pin = json.loads(Path(manifest_path).read_text())
+    except (OSError, ValueError) as error:
+        raise Refused(f'client receipt {path}: client pin manifest {manifest_path} unreadable: {error}')
+    if pin.get('kind') != 'client' or pin.get('repo') != 'client':
+        raise Refused(f'client receipt {path}: {manifest_path} is not a client pin')
+    if pin.get('binary_sha256') != recorded['sha256']:
+        raise Refused(f"client receipt {path}: the manifest pins binary {str(pin.get('binary_sha256'))[:12]}, "
+                      f"the receipt ran {recorded['sha256'][:12]}: the pin does not describe the client that ran")
+    if pin.get('dirty') is not False:
+        raise Refused(f"client receipt {path}: client pin {manifest_path} is dirty ({pin.get('dirty')!r}); a "
+                      'dirty client tree has no reliable source revision')
+    head = pin.get('head')
+    if not re.fullmatch(r'[0-9a-f]{40}', str(head or '')):
+        raise Refused(f'client receipt {path}: client pin {manifest_path} records no head')
+    if recorded.get('head') is not None and recorded['head'] != head:
+        raise Refused(f'client receipt {path}: records client head {str(recorded["head"])[:12]} but its pin '
+                      f'says {head[:12]}')
+    code, _ = _git(client_repo(root), 'cat-file', '-e', f'{head}^{{commit}}', check=False)
     if code:
-        raise Refused(f"client receipt {path} ran a client revision {recorded['head'][:12]} that the client "
-                      f'repository {repo} does not have')
-    return recorded['head']
+        raise Refused(f'client receipt {path} ran a client revision {head[:12]} that the client repository '
+                      f'{client_repo(root)} does not have')
+    return head
 
 
 def client_contains(root, client_head, fix_full):
     """True when the client revision contains the fix commit."""
     code, _ = _git(client_repo(root), 'merge-base', '--is-ancestor', fix_full, client_head, check=False)
     return code == 0
+
+
+def _failed_assertion(details):
+    """Name of the first assertion a scenario report records as false, or None when it recorded none."""
+    def assertion_maps(node, depth=0):
+        if depth > 3 or not isinstance(node, dict):
+            return
+        assertions = node.get('assertions')
+        if isinstance(assertions, dict):
+            yield assertions
+        for key in ('scenario', 'named_scenario'):
+            if key in node:
+                yield from assertion_maps(node[key], depth + 1)
+
+    for assertions in assertion_maps(details):
+        for name, passed in assertions.items():
+            if passed is False:
+                return name
+    return None
 
 
 def _client_ref_states(receipt, graphical_refs):
@@ -638,7 +723,15 @@ def _client_ref_states(receipt, graphical_refs):
         _, profile, check = ref.split(':', 2)
         if check in scenarios.SCENARIOS:
             named = details.get('named_scenario', {})
-            states[ref] = (GREEN if receipt.get('status') == 'passed' else RED) if named.get('id') == check else None
+            if named.get('id') != check:
+                states[ref] = None
+            elif receipt.get('status') == 'passed':
+                states[ref] = GREEN
+            else:
+                # RED is "the scenario ran and an assertion of it failed". A timeout, a launch error or
+                # a crashed client never observed the bug, so it cannot stand as the negative control.
+                states[ref] = RED if (receipt.get('status') == 'failed'
+                                      and _failed_assertion(details) is not None) else None
             continue
         try:
             regressions._profile_verdict(receipt, profile, check)
@@ -683,7 +776,7 @@ def check_client_control_receipt(root, receipt_path, graphical_refs, fix_full, t
         raise Refused(f"client receipt {path} is not red on any of the row's real-client refs ("
                       + ', '.join(f'{ref}={states[ref] or "unreported"}' for ref in graphical_refs)
                       + '): a control that stays green does not test the fix')
-    client_head = _recorded_client_commit(root, receipt, path)
+    client_head = _client_pin_of_receipt(root, receipt, path)
     if client_contains(root, client_head, fix_full):
         raise Refused(f'client receipt {path} ran the client at {client_head[:12]}, which already contains the '
                       f'fix {fix_full[:12]}: the control has to be the pre-fix client (e.g. {fix_full[:12]}^)')
@@ -738,7 +831,7 @@ def check_client_restore_receipt(root, receipt_path, graphical_refs, fix_full, t
     if not green:
         raise Refused(f"client receipt {path} does not pass any of the row's real-client refs ("
                       + ', '.join(f'{ref}={states[ref] or "unreported"}' for ref in graphical_refs) + ')')
-    client_head = _recorded_client_commit(root, receipt, path)
+    client_head = _client_pin_of_receipt(root, receipt, path)
     if not client_contains(root, client_head, fix_full):
         raise Refused(f'client receipt {path} ran the client at {client_head[:12]}, which does not contain the fix '
                       f'{fix_full[:12]}: the restore has to run the fixed client')

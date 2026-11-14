@@ -739,16 +739,32 @@ class LedgerToolTests(unittest.TestCase):
         self.git(root, 'commit', '-qam', 'client row')
         return root
 
-    def client_receipt(self, root, client_head, *, verdict=True, status=None, register=True, server_tree=None):
+    def client_receipt(self, root, client_head, *, verdict=True, status=None, register=True, server_tree=None,
+                       pin_binary_sha='d' * 64, pin_head=None, dirty=False, manifest=True,
+                       assertions=None, client_binary=True, pin_override=None):
+        """A real-client result.json: its client binary bound to its own pin manifest with `client_head`."""
         tree = server_tree or ledger.tree_fingerprint(root)
-        path = root / f'.analysis/validation/{abs(hash((client_head, verdict, status)))}-x/result.json'
+        stamp = abs(hash((client_head, verdict, status, dirty, pin_binary_sha)))
+        pin_dir = root.parent / f'pin-{stamp}'
+        path = root / f'.analysis/validation/{stamp}-x/result.json'
         path.parent.mkdir(parents=True, exist_ok=True)
+        details = {'named_scenario': {'id': 'native-v2-craft-drag'},
+                   'verdicts': {'native-v2-craft-drag': verdict}, 'server_binary_sha256': 'abc'}
+        if assertions is not None:
+            details['scenario'] = {'scenario': {'id': 'native-v2-craft-drag', 'assertions': assertions}}
         body = {'status': status or ('passed' if verdict else 'failed'), 'profile': 'entities',
-                'ended_at': '2999-01-01T00:00:00+00:00',
-                'details': {'named_scenario': {'id': 'native-v2-craft-drag'},
-                            'verdicts': {'native-v2-craft-drag': verdict}, 'server_binary_sha256': 'abc'},
-                'tree': tree, 'client_tree': {'head': client_head, 'dirty': False, 'sha256': 'c' * 64}}
+                'ended_at': '2999-01-01T00:00:00+00:00', 'details': details, 'tree': tree}
+        if client_binary:
+            body['client_binary'] = {'path': str(pin_dir / 'solaris-client'), 'sha256': pin_binary_sha,
+                                     'manifest_path': str(pin_dir / 'manifest.json'),
+                                     'head': pin_head or client_head, 'dirty': dirty}
         path.write_text(json.dumps(body))
+        if manifest:
+            pin = pin_override or {'repo': 'client', 'kind': 'client', 'head': client_head, 'dirty': dirty,
+                                   'diff_sha256': 'e' * 64, 'binary': str(pin_dir / 'solaris-client'),
+                                   'binary_sha256': pin_binary_sha}
+            pin_dir.mkdir(exist_ok=True)
+            (pin_dir / 'manifest.json').write_text(json.dumps(pin))
         if register:
             registry = root / '.analysis/ledger-builds'
             registry.mkdir(parents=True, exist_ok=True)
@@ -759,7 +775,8 @@ class LedgerToolTests(unittest.TestCase):
     def test_client_fix_commit_promotes_on_a_red_control_and_a_green_restore(self):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
-        control = self.client_receipt(root, self.client_base, verdict=False)
+        control = self.client_receipt(root, self.client_base, verdict=False,
+                                      assertions={'native-v2-ledger-painting': False})
         restore = self.client_receipt(root, self.client_fix, verdict=True)
         receipt = self.promote(root, self.runner(), client_control_receipt=control,
                               client_receipt=restore, dry_run=True)
@@ -785,7 +802,7 @@ class LedgerToolTests(unittest.TestCase):
         root = self.client_row(client_sha=self.client_fix[:12])
         with self.assertRaisesRegex(ledger.Refused, 'already contains the fix'):
             self.promote(root, self.runner(),
-                         client_control_receipt=self.client_receipt(root, self.client_fix, verdict=False),
+                         client_control_receipt=self.client_receipt(root, self.client_fix, verdict=False, assertions={'native-v2-ledger-painting': False}),
                          client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
 
     def test_client_restore_on_the_pre_fix_client_is_refused(self):
@@ -793,7 +810,7 @@ class LedgerToolTests(unittest.TestCase):
         root = self.client_row(client_sha=self.client_fix[:12])
         with self.assertRaisesRegex(ledger.Refused, 'does not contain the fix'):
             self.promote(root, self.runner(),
-                         client_control_receipt=self.client_receipt(root, self.client_base, verdict=False),
+                         client_control_receipt=self.client_receipt(root, self.client_base, verdict=False, assertions={'native-v2-ledger-painting': False}),
                          client_receipt=self.client_receipt(root, self.client_base), dry_run=True)
 
     def test_unknown_client_commit_is_refused(self):
@@ -802,14 +819,64 @@ class LedgerToolTests(unittest.TestCase):
         with self.assertRaisesRegex(ledger.Refused, 'not a commit of the client repository'):
             self.promote(root, self.runner(), dry_run=True)
 
-    def test_receipt_without_a_client_tree_is_refused(self):
+    def test_receipt_without_a_client_binary_is_refused(self):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])
-        control = self.client_receipt(root, self.client_base, verdict=False)
+        control = self.client_receipt(root, self.client_base, verdict=False,
+                                      assertions={'native-v2-ledger-painting': False})
         body = json.loads(control.read_text())
-        body.pop('client_tree')
+        body.pop('client_binary')
         control.write_text(json.dumps(body))
-        with self.assertRaisesRegex(ledger.Refused, 'records no client tree'):
+        with self.assertRaisesRegex(ledger.Refused, 'records no client binary'):
+            self.promote(root, self.runner(), client_control_receipt=control,
+                         client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+
+    def test_receipt_without_a_pin_manifest_is_refused(self):
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        control = self.client_receipt(root, self.client_base, verdict=False, manifest=False,
+                                      assertions={'native-v2-ledger-painting': False})
+        with self.assertRaisesRegex(ledger.Refused, r'records no client pin manifest|pin manifest .* unreadable'):
+            self.promote(root, self.runner(), client_control_receipt=control,
+                         client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+
+    def test_client_binary_that_the_pin_does_not_describe_is_refused(self):
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        # The receipt ran one binary; its pin manifest describes another (a stale or hand-edited pin).
+        control = self.client_receipt(root, self.client_base, verdict=False, pin_binary_sha='a' * 64,
+                                      assertions={'native-v2-ledger-painting': False},
+                                      pin_override={'repo': 'client', 'kind': 'client', 'head': self.client_base,
+                                                    'dirty': False, 'binary_sha256': 'b' * 64})
+        with self.assertRaisesRegex(ledger.Refused, 'does not describe the client that ran'):
+            self.promote(root, self.runner(), client_control_receipt=control,
+                         client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+
+    def test_dirty_client_pin_is_refused(self):
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        control = self.client_receipt(root, self.client_base, verdict=False, dirty=True,
+                                      assertions={'native-v2-ledger-painting': False})
+        with self.assertRaisesRegex(ledger.Refused, 'is dirty'):
+            self.promote(root, self.runner(), client_control_receipt=control,
+                         client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+
+    def test_a_timed_out_control_is_not_a_red_observation(self):
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        # status=timeout never observed the bug: only a failed run with a failed assertion is red.
+        control = self.client_receipt(root, self.client_base, status='timeout',
+                                      assertions={'native-v2-ledger-painting': False})
+        with self.assertRaisesRegex(ledger.Refused, 'not red on any of the row'):
+            self.promote(root, self.runner(), client_control_receipt=control,
+                         client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
+
+    def test_a_failed_run_without_a_failed_assertion_is_not_red(self):
+        self.client_repo()
+        root = self.client_row(client_sha=self.client_fix[:12])
+        control = self.client_receipt(root, self.client_base, verdict=False,
+                                      assertions={'native-v2-ledger-painting': True})
+        with self.assertRaisesRegex(ledger.Refused, 'not red on any of the row'):
             self.promote(root, self.runner(), client_control_receipt=control,
                          client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
 
@@ -820,10 +887,10 @@ class LedgerToolTests(unittest.TestCase):
             self.promote(root, self.runner(), client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
         with self.assertRaisesRegex(ledger.Refused, 'needs the restore'):
             self.promote(root, self.runner(),
-                         client_control_receipt=self.client_receipt(root, self.client_base, verdict=False), dry_run=True)
+                         client_control_receipt=self.client_receipt(root, self.client_base, verdict=False, assertions={'native-v2-ledger-painting': False}), dry_run=True)
         plain = self.client_row(client_sha=self.client_fix[:12], ref='cargo:mc-core:mod::t')
         with self.assertRaisesRegex(ledger.Refused, 'real-client harness ref'):
-            self.promote(plain, self.runner(), client_control_receipt=self.client_receipt(root, self.client_base, verdict=False),
+            self.promote(plain, self.runner(), client_control_receipt=self.client_receipt(root, self.client_base, verdict=False, assertions={'native-v2-ledger-painting': False}),
                          client_receipt=self.client_receipt(root, self.client_fix), dry_run=True)
 
     def test_client_control_supplied_to_a_server_fix_commit_is_refused(self):

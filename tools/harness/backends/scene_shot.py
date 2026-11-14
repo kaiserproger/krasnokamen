@@ -1396,7 +1396,7 @@ def run(
     if ctx.client == "java" and "graphics_preset" in settings:
         raise ValueError("graphics_preset is a native-client setting; the Java client keeps its default")
     settings_path.write_text(json.dumps(base, indent=2) + "\n")
-    server = client = xvfb = mcp = log = client_log = proxy = None
+    server = client = xvfb = mcp = log = client_log = proxy = probe = None
     server_index = len(ctx.commands)
     server_command = [str(binary), "--config", str(config), "--no-console"]
     ctx.commands.append(server_command)
@@ -1475,6 +1475,12 @@ def run(
             elif ctx.scenario_id == "native-dynamic-context":
                 check_dynamic_context(probe, artifact)
         result = {"screenshots": shots, "scenario": probe.report, "seed": seed, "settings": settings, "client_latency_ms": client_latency_ms}
+    except Exception as error:
+        # Keep the scenario's own report for the failure receipt: `assertions` says whether an
+        # assertion failed, which a promotion control must tell apart from a timeout or a crash.
+        if probe is not None:
+            ctx.failure_scenario = {"scenario": dict(probe.report), "error": str(error)}
+        raise
     finally:
         (artifact / "lifecycle-progress.json").write_text(json.dumps({"phase": "teardown", "started_unix": time.time()}) + "\n")
         (artifact / "teardown-progress.json").write_text(json.dumps({"component": "mcp", "timeout_seconds": getattr(mcp, "request_timeout_seconds", 0), "started_unix": time.time()}) + "\n")

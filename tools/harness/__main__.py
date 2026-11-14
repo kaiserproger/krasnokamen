@@ -349,15 +349,16 @@ def cmd_run(argv: list[str]) -> int:
         run_tree = ledger.tree_fingerprint(REPO_ROOT)
     except Exception as error:
         run_tree = {"head": "unavailable", "dirty": True, "error": str(error)}
-    # The client checkout the run's client binary came from. A client-surface row is promoted on a
-    # `client:<sha>` fix_commit (docs/bugs/README.md): its negative control is a receipt whose client
-    # is the pre-fix one, so the receipt has to say which client ran. Never fatal.
+    # The client binary this run launches, bound to its source through the pin-release manifest beside
+    # it: a client-surface row is promoted on a `client:<sha>` fix_commit, and its negative control is
+    # a receipt of the pre-fix client, so the receipt has to say which client ran, not which checkout
+    # happened to be beside this one. Never fatal: the receipt records the reason instead.
     try:
-        from . import ledger, runtime
+        from . import ledger
 
-        client_tree = ledger.tree_fingerprint(runtime.sibling_root("client"))
+        client_binary = ledger.client_pin(os.environ.get("KRASNOKAMEN_CLIENT_BINARY"))
     except Exception as error:
-        client_tree = {"head": "unavailable", "dirty": True, "error": str(error)}
+        client_binary = {"path": os.environ.get("KRASNOKAMEN_CLIENT_BINARY"), "error": str(error)}
     start_epoch = time.time()
     named_scenario: dict[str, Any] | None = None
     if scenario is not None:
@@ -445,7 +446,7 @@ def cmd_run(argv: list[str]) -> int:
             "duration_seconds": round(time.time() - start_epoch, 3),
             "details": details,
             "tree": run_tree,
-            "client_tree": client_tree,
+            "client_binary": client_binary,
             "error": error,
         }
         (artifact_dir / "result.json").write_text(
@@ -543,7 +544,12 @@ def cmd_run(argv: list[str]) -> int:
         observed = observed_phase(error)
         if observed != "unknown":
             failure_phase = observed
-        return finish("failed", spec["scope"], {}, str(error), artifact_dir, 1, ctx)
+        failed = {}
+        if getattr(ctx, "failure_scenario", None) is not None:
+            # A failed scenario still records its own assertions: a promotion control has to tell a
+            # failed assertion from a timeout or a crashed client (ledger._client_ref_states).
+            failed["scenario"] = ctx.failure_scenario
+        return finish("failed", spec["scope"], failed, str(error), artifact_dir, 1, ctx)
     finally:
         for sig, handler in previous_handlers.items():
             signal.signal(sig, handler)

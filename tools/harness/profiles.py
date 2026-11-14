@@ -56,6 +56,9 @@ class ProfileContext:
     windowed: bool = False
     # loader-live can exercise an immutable v2 candidate without building it.
     server_bin: Path | None = None
+    # A scenario that failed after starting: its own report (assertions, fixture commands) so the
+    # failure receipt can say which assertion failed, not only that the run failed.
+    failure_scenario: dict[str, Any] | None = None
 
 
 def _kill_stage_tree(proc: subprocess.Popen[Any]) -> None:
