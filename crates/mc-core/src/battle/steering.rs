@@ -18,6 +18,17 @@ pub(crate) const NEIGHBOURS: usize = 5;
 const CELL_CAP: usize = 8;
 pub(crate) const MIN_SPACING: f64 = 0.65;
 const SENSE: f64 = 1.5;
+/// A body is crowded when another stands within this distance (blocks).
+const CROWDED: f64 = 0.8;
+/// A crowded body does not pull toward a slot this close (blocks); beyond it
+/// the pull grows from zero.
+const DEAD_ZONE: f64 = 0.15;
+/// A crowded body gives up this much speed (blocks per tick) and so stands
+/// rather than creep: its drive shrinks by it, to nothing below it.
+const CROWD_BRAKE: f64 = 0.01;
+/// Depth inside MIN_SPACING (blocks) over which the separation push grows from
+/// nothing to its full vanilla strength. A body this deep in another is packed.
+const SEPARATION_RAMP: f64 = 0.2;
 const DRIVE_CHUNK: usize = 256;
 /// Height apart, in blocks, within which bodies see each other: a body walks off
 /// a drop of up to MAX_DROP blocks, from a one-block step down or from the top of
@@ -364,8 +375,24 @@ fn drive_with_neighbours(
     }
     let delta = [target[0] - m.pos[0], target[2] - m.pos[2]];
     let length = mth::length2(delta[0], delta[1]);
-    let mut drive = delta.map(|v| v * (max_step / length.max(max_step)).min(1.0));
+    // A soldier with a neighbour inside CROWDED does not chase a slot closer
+    // than DEAD_ZONE (no pull inside it, a ramp outside) and stands rather
+    // than creep under CROWD_BRAKE. Routers and the wounded dress to exact spots.
+    let settling = !m.routing
+        && !m.wounded
+        && near
+            .iter()
+            .any(|&(distance, other)| other != usize::MAX && distance < CROWDED * CROWDED);
+    let mut drive = if settling {
+        let pull = (length - DEAD_ZONE).clamp(0.0, max_step);
+        delta.map(|v| v * pull / length.max(f64::MIN_POSITIVE))
+    } else {
+        delta.map(|v| v * (max_step / length.max(max_step)).min(1.0))
+    };
     let mut pushes = 0;
+    // Inside the whole ramp: a heap or an overlap, which must keep unstacking
+    // however slowly.
+    let mut packed = false;
     for &(distance, other) in &near {
         if other == usize::MAX || distance >= MIN_SPACING * MIN_SPACING {
             continue;
@@ -393,15 +420,25 @@ fn drive_with_neighbours(
         })
         .expect("finite battle snapshot contact");
         pushes += 1;
-        drive[0] += impulse.x;
-        drive[1] += impulse.z;
+        // Nothing at the body spacing, all of it SEPARATION_RAMP deeper: a step
+        // here made a body pressed against its neighbours trade a push and a
+        // pull every tick.
+        let ease = ((MIN_SPACING - distance.sqrt()) / SEPARATION_RAMP).min(1.0);
+        packed |= ease >= 1.0;
+        drive[0] += impulse.x * ease;
+        drive[1] += impulse.z * ease;
     }
     let max_step = max_step.max(0.05);
     let speed = mth::length2(drive[0], drive[1]);
     if speed > max_step {
         drive = drive.map(|v| v * max_step / speed);
     }
-    let drive = keep_gap(&runtime.members, index, &near, MIN_SPACING, drive);
+    let mut drive = keep_gap(&runtime.members, index, &near, MIN_SPACING, drive);
+    let moving = mth::length2(drive[0], drive[1]);
+    if settling && !packed && moving > 0.0 {
+        let kept = (moving - CROWD_BRAKE).max(0.0) / moving;
+        drive = drive.map(|v| v * kept);
+    }
     // Physics drive is blocks/SECOND, whereas all battle tuning is blocks/tick.
     (
         runtime.constrain_velocity(
