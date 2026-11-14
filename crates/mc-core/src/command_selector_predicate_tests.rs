@@ -125,6 +125,13 @@ fn missing_and_unsupported_predicates_fail_without_mutating_targets() {
             json!({"condition":"minecraft:entity_properties","entity":"this","predicate":{"type":"minecraft:player"}}),
         )],
     );
+    // Vanilla parses the `predicate=` option without touching a registry
+    // (`EntitySelectorOptions.lambda$bootStrap$55`: `Identifier.read`,
+    // `ResourceKey.create`) and only at evaluation looks the key up
+    // (`lambda$bootStrap$56` offsets 32-60: `lookup().get(key)` then
+    // `Optional.isEmpty -> return false`) *before* the invert `ixor`
+    // (offsets 128-145). A predicate no datapack defines therefore selects
+    // nobody, and `!` does not rescue it.
     for input in [
         "@a[predicate=test:missing]",
         "@a[predicate=!test:missing]",
@@ -132,9 +139,8 @@ fn missing_and_unsupported_predicates_fail_without_mutating_targets() {
     ] {
         let target = crate::commands::target_of(input).unwrap();
         assert!(
-            resolve_target(&state, alice, &target)
-                .unwrap_err()
-                .contains("Unknown predicate test:missing")
+            resolve_target(&state, alice, &target).unwrap().is_empty(),
+            "{input} selects nobody"
         );
     }
     command(
@@ -142,7 +148,7 @@ fn missing_and_unsupported_predicates_fail_without_mutating_targets() {
         alice,
         "kill @a[predicate=test:player,predicate=!test:missing]",
     );
-    assert!(chat_contains(&state, "Unknown predicate test:missing"));
+    assert!(!chat_contains(&state, "Unknown predicate"));
     for entity in [alice, bob] {
         assert!(
             state
@@ -151,6 +157,11 @@ fn missing_and_unsupported_predicates_fail_without_mutating_targets() {
                 .alive
         );
     }
+    // `/execute if predicate <id>` is the argument form that does resolve at
+    // parse time in vanilla (`ResourceOrIdArgument.lootPredicate`,
+    // `argument.resource_or_id.no_such_element`); this tree has no such
+    // condition at all (`condition()` in command_context.rs covers entity,
+    // block, score and blocks), so it can never silently match here either.
     for predicate in [
         json!({"condition":"minecraft:any_of","terms":[{"condition":"minecraft:entity_properties","entity":"this","predicate":{}},{"condition":"test:unknown"}]}),
         json!({"condition":"minecraft:inverted","term":{"condition":"test:unknown"}}),

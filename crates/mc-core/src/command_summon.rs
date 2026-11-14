@@ -43,27 +43,55 @@ fn error(text: impl Into<String>) -> CommandError {
     CommandError::Message(text.into())
 }
 
-/// Vanilla loads Value as a signed short, defaulting to zero.
-pub(crate) fn experience_orb_value(nbt: &Tag) -> Result<i16, CommandError> {
+/// Vanilla experience-orb summon: a signed `Value` (short, default zero), a
+/// positive `Count` (default one) and the universal entity fields (`Motion`,
+/// `Pos`, `id`, `UUID`, ...), which the orb spawn applies. Any other field is
+/// refused rather than silently dropped.
+pub(crate) fn experience_orb(nbt: &Tag) -> Result<(i16, i32, [f64; 3]), CommandError> {
     let Tag::Compound(fields) = nbt else {
         return Err(error("Summon NBT must be a compound"));
     };
-    let mut value = None;
+    let (mut value, mut count, mut motion) = (0i16, 1i32, [0.0f64; 3]);
+    let mut seen: std::collections::BTreeSet<&str> = std::collections::BTreeSet::new();
     for (key, tag) in fields {
-        if key != "Value" || value.is_some() {
+        if !seen.insert(key.as_str()) {
             return Err(error(format!(
                 "Unsupported or duplicate orb summon NBT field {key}"
             )));
         }
-        value = Some(match tag {
-            Tag::Byte(n) => i16::from(*n),
-            Tag::Short(n) => *n,
-            Tag::Int(n) => *n as i16,
-            Tag::Long(n) => *n as i16,
-            _ => return Err(error("Invalid orb Value: expected integer")),
-        });
+        match (key.as_str(), tag) {
+            ("Value", Tag::Byte(n)) => value = i16::from(*n),
+            ("Value", Tag::Short(n)) => value = *n,
+            ("Value", Tag::Int(n)) => value = *n as i16,
+            ("Value", Tag::Long(n)) => value = *n as i16,
+            ("Value", _) => return Err(error("Invalid orb Value: expected integer")),
+            ("Count", Tag::Byte(n)) => count = i32::from(*n),
+            ("Count", Tag::Short(n)) => count = i32::from(*n),
+            ("Count", Tag::Int(n)) => count = *n,
+            ("Count", Tag::Long(n)) => count = *n as i32,
+            ("Count", _) => return Err(error("Invalid orb Count: expected integer")),
+            ("Motion", Tag::List(list)) if list.elements.len() == 3 => {
+                for (axis, element) in list.elements.iter().enumerate() {
+                    motion[axis] = number(element, "Motion")?;
+                }
+            }
+            ("Motion", _) => return Err(error("Invalid Motion: expected three numbers")),
+            (
+                "Pos" | "id" | "UUID" | "CustomName" | "CustomNameVisible" | "Invulnerable"
+                | "NoGravity" | "Rotation" | "OnGround" | "Fire" | "FallDistance",
+                _,
+            ) => {}
+            _ => {
+                return Err(error(format!(
+                    "Unsupported or duplicate orb summon NBT field {key}"
+                )));
+            }
+        }
     }
-    Ok(value.unwrap_or(0))
+    if count <= 0 {
+        return Err(error("Invalid orb Count: expected a positive integer"));
+    }
+    Ok((value, count, motion))
 }
 fn number(tag: &Tag, key: &str) -> Result<f64, CommandError> {
     let value = match tag {
