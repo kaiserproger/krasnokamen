@@ -259,7 +259,9 @@ def scenario(probe: ProbeSteps, artifact: Path, world: Path) -> None:
             probe.wait(lambda s: chat_says_after(s.get("recent_chat", []), after, *markers), label, timeout_seconds=30)
         except TimeoutError:
             probe.report.setdefault("chat_at_timeout", {})[label] = probe.observe().get("recent_chat", [])
-            raise
+            # A named assertion, not a bare timeout: the ledger reads a failed assertion of the
+            # scenario as the check going red (a timeout is an unrunnable run, not evidence).
+            probe.check(label, False)
 
     def fenced(marker: str) -> None:
         probe.fixture(f'tellraw @s {{"text":"{marker}"}}')

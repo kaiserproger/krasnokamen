@@ -1,0 +1,19 @@
+diff --git a/crates/mc-core/src/datapacks.rs b/crates/mc-core/src/datapacks.rs
+index 66ab1ed1..37725f0a 100644
+--- a/crates/mc-core/src/datapacks.rs
++++ b/crates/mc-core/src/datapacks.rs
+@@ -951,11 +951,9 @@ impl PackSet {
+                 ));
+             }
+         }
+-        for line in &self.skipped {
+-            if previous.is_none_or(|previous| !previous.skipped.contains(line)) {
+-                warnings.push(line.clone());
+-            }
+-        }
++        // A skipped new pack is stated by every start and `/reload` that finds it still
++        // broken (only those loads skip packs), so it is never silent the second time.
++        warnings.extend(self.skipped.iter().cloned());
+         for name in &self.not_packs {
+             if previous.is_none_or(|previous| !previous.not_packs.contains(name)) {
+                 warnings.push(format!(
