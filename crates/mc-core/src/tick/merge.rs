@@ -803,10 +803,12 @@ impl TickState {
             .collect();
         crate::projectiles::queue_owned_pearls_on_deaths(self, &deaths, &mut dead_slots);
         crate::vehicles::queue_expired_removals(self, &mut dead_slots);
-        // Dead mobs/items leave the store (tombstoned via `removed`); dead
-        // PLAYERS stay addressable (alive=false row kept) so Respawn can
-        // revive and persistence journals the emptied post-image. Their
-        // drops still spawned above; only the row removal is skipped.
+        // Dead living mobs stay as corpses for vanilla `deathTime`
+        // (`super::dying`); other dead non-players (vehicles, frames, armor
+        // stands) leave the store, tombstoned via `removed`. Dead PLAYERS stay
+        // addressable (alive=false row kept) so Respawn can revive and
+        // persistence journals the emptied post-image. Drops of every death
+        // spawned above; only the row removal differs.
         for id in &deaths {
             let Some(slot) = self.entities.slot_of_any(*id) else {
                 continue;
@@ -816,6 +818,10 @@ impl TickState {
                 crate::entities::EntityKind::Player { .. }
             );
             if is_player {
+                continue;
+            }
+            if super::dying::keeps_corpse(self, slot) {
+                self.entities.begin_dying(slot);
                 continue;
             }
             dead_slots.push(slot);

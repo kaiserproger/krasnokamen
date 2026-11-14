@@ -70,10 +70,192 @@ fn preset_has_exact_homogeneous_mix_and_spaced_horse_flanks() {
             );
         }
         if *kind == Kind::Archer {
-            assert_eq!(spec.origin[2], -125.0);
+            assert_eq!(spec.origin[2], -120.0);
             assert_eq!(spec.order, Order::Hold);
         }
     }
+}
+
+#[test]
+fn widened_front_preserves_population_bounds_and_distinct_spawn_slots() {
+    for seed in [42, 43] {
+        for count in [100, 1_000, 10_000] {
+            for origin in [[0.0, 80.0, 0.0], [15.0, 80.0, 15.0]] {
+                let mut positions = std::collections::HashSet::new();
+                for side in [1, 2] {
+                    let planned = plan(seed, count, origin, side);
+                    assert_eq!(
+                        planned.iter().map(|(_, _, size)| size).sum::<usize>(),
+                        count
+                    );
+                    let front: Vec<_> = planned
+                        .iter()
+                        .filter(|(_, kind, _)| matches!(kind, Kind::Infantry | Kind::Spear))
+                        .collect();
+                    if count == 10_000 {
+                        assert_eq!(
+                            front
+                                .iter()
+                                .map(|(spec, _, _)| usize::from(spec.files))
+                                .sum::<usize>(),
+                            322
+                        );
+                        assert!(front.iter().all(|(spec, _, _)| spec.files == 46));
+                    }
+                    for (spec, _, size) in planned {
+                        for index in 0..size {
+                            let position = slot_position(&spec, index);
+                            assert!((-176.0..=192.0).contains(&position[0]), "{position:?}");
+                            assert!((-176.0..=192.0).contains(&position[2]), "{position:?}");
+                            assert!(
+                                positions.insert((
+                                    (position[0] * 2.0) as i64,
+                                    (position[2] * 2.0) as i64
+                                )),
+                                "overlapping slot {position:?}, side {side}, count {count}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn scenario_pursues_only_routing_enemies_and_resumes_fighting_afterward() {
+    let mut state = fixture();
+    let mut changes = ChangeSet::default();
+    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 42, 100).unwrap();
+    let formation = &mut state.hostile.battle.formation;
+    let melee = formation
+        .regiments
+        .iter()
+        .position(|r| r.spec.order == Order::Advance)
+        .unwrap();
+    let archers = formation
+        .regiments
+        .iter()
+        .position(|r| r.spec.order == Order::Hold)
+        .unwrap();
+    update_orders(formation);
+    assert_eq!(formation.regiments[melee].spec.order, Order::Advance);
+    formation.regiments[melee].sections[0].pulse_until = 100;
+    formation.regiments[melee].enemy_routing = true;
+    formation.regiments[archers].enemy_routing = true;
+    update_orders(formation);
+    assert_eq!(formation.regiments[melee].spec.order, Order::Pursue);
+    assert_eq!(formation.regiments[melee].sections[0].pulse_until, 0);
+    let front = formation.regiments[melee].start;
+    assert!(
+        formation.can_attack_at(front),
+        "pursuit must permit an out-of-pulse strike"
+    );
+    assert_eq!(formation.regiments[archers].spec.order, Order::Hold);
+    formation.regiments[melee].enemy_routing = false;
+    update_orders(formation);
+    assert_eq!(formation.regiments[melee].spec.order, Order::Advance);
+    assert!(
+        !formation.can_attack_at(front),
+        "ordinary contact must wait for a pulse"
+    );
+    formation.regiments[melee].enemy_routing = true;
+    formation.regiments[melee].morale.broken = true;
+    update_orders(formation);
+    assert_eq!(formation.regiments[melee].spec.order, Order::Advance);
+}
+
+#[test]
+fn staged_equipment_exposes_authored_assets_for_both_sides_and_all_kinds() {
+    let mut state = fixture();
+    let mut changes = ChangeSet::default();
+    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 42, 100).unwrap();
+    let mut seen = [[false; 5]; 2];
+    for id in changes.entities_spawned {
+        let slot = state.entities.slot_of(id).unwrap();
+        let body = state.entities.body(slot);
+        let side = usize::from(body.faction - 1);
+        let row = state.entities.row(slot);
+        let equippable = |stack: &mc_data::ItemStack, expected: &str, expected_slot: &str| {
+            let fields = mc_data::item_nbt::stack_to_fields(&state.registry.items, stack).unwrap();
+            let Some(Tag::Compound(components)) = mc_data::item_nbt::field(&fields, "components")
+            else {
+                panic!("missing components")
+            };
+            let Some(Tag::Compound(value)) =
+                mc_data::item_nbt::field(components, "minecraft:equippable")
+            else {
+                panic!("missing equippable")
+            };
+            assert_eq!(
+                mc_data::item_nbt::field(value, "slot"),
+                Some(&Tag::String(expected_slot.into()))
+            );
+            assert_eq!(
+                mc_data::item_nbt::field(value, "asset_id"),
+                Some(&Tag::String(expected.into()))
+            );
+        };
+        let Some(weapon) = row.appearance.equipment[0].as_ref() else {
+            let armor = row.loot.body_armor.as_ref().unwrap();
+            equippable(
+                armor,
+                if side == 0 {
+                    "krasnokamen_battle:red_caparison"
+                } else {
+                    "krasnokamen_battle:blue_caparison"
+                },
+                "body",
+            );
+            seen[side][4] = true;
+            continue;
+        };
+        let item = state
+            .registry
+            .items
+            .name_of(weapon.item_id)
+            .unwrap()
+            .as_str();
+        let (kind, model) = match (item, row.entity_life.mount.vehicle.is_some()) {
+            ("minecraft:trident", _) => (1, "krasnokamen_battle:iron_spear"),
+            ("minecraft:bow", _) => (2, "krasnokamen_battle:iron_longbow_standby"),
+            ("minecraft:iron_sword", true) => (3, "krasnokamen_battle:iron_lance"),
+            ("minecraft:iron_sword", false) => (0, "krasnokamen_battle:iron_longsword"),
+            _ => panic!("unexpected battle weapon {item}"),
+        };
+        seen[side][kind] = true;
+        assert_eq!(weapon.item_model.as_ref().unwrap().as_str(), model);
+        equippable(
+            row.appearance.equipment[5].as_ref().unwrap(),
+            if kind == 3 {
+                "krasnokamen_battle:crested_helm"
+            } else {
+                "krasnokamen_battle:iron_plate"
+            },
+            "head",
+        );
+        equippable(
+            row.appearance.equipment[4].as_ref().unwrap(),
+            if side == 0 {
+                "krasnokamen_battle:red_surcoat"
+            } else {
+                "krasnokamen_battle:blue_surcoat"
+            },
+            "chest",
+        );
+        if kind != 2 {
+            let shield = row.appearance.equipment[1].as_ref().unwrap();
+            assert_eq!(
+                shield.item_model.as_ref().unwrap().as_str(),
+                if side == 0 {
+                    "krasnokamen_battle:red_heater_shield"
+                } else {
+                    "krasnokamen_battle:blue_heater_shield"
+                }
+            );
+        }
+    }
+    assert_eq!(seen, [[true; 5]; 2]);
 }
 
 #[test]
@@ -231,5 +413,77 @@ fn commands_require_operator_and_enforce_count_bounds() {
             &mut changes
         ),
         crate::command_execution::CommandResult::Failed
+    );
+}
+
+#[test]
+fn status_counts_a_corpse_as_dead_until_its_body_leaves() {
+    let mut state = fixture();
+    let mut changes = ChangeSet::default();
+    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 9, 100).unwrap();
+    let victim = state.hostile.battle.formation.members[0].id;
+    let slot = state.entities.slot_of(victim).unwrap();
+    let side = state.entities.body(slot).faction;
+    let before = crate::battle::publication_counts(&mut state).unwrap();
+    let alive_on = |counts: &crate::boundary::BattleCounts| {
+        counts
+            .alive
+            .iter()
+            .find(|(faction, _)| *faction == side)
+            .map(|(_, alive)| *alive)
+    };
+    state.merge_damage.push((
+        slot,
+        crate::tick::DamagePiece {
+            amount: 1000.0,
+            kind: crate::survival::DamageKind::GenericKill,
+            source: None,
+            physical: None,
+            custom_armor: false,
+        },
+    ));
+    state.commit_merge_effects();
+    assert!(
+        state.entities.slot_of_any(victim).is_some(),
+        "the body lies 20 ticks"
+    );
+    let sides = if side == 1 {
+        "side1=99 side2=100"
+    } else {
+        "side1=100 side2=99"
+    };
+    let status = execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Status).unwrap();
+    assert!(
+        status.contains(sides) && status.ends_with("dead=1"),
+        "{status}"
+    );
+    let counts = crate::battle::publication_counts(&mut state).unwrap();
+    assert_eq!(counts.units, before.units, "the corpse is a retained unit");
+    assert_eq!(
+        alive_on(&counts),
+        alive_on(&before).map(|alive| alive - 1),
+        "{:?}",
+        counts.alive
+    );
+    state.hostile.battle.running = true;
+    crate::battle::step(&mut state);
+    let member = state
+        .hostile
+        .battle
+        .formation
+        .members
+        .iter()
+        .find(|member| member.id == victim)
+        .unwrap();
+    assert!(!member.alive, "a corpse does not keep fighting");
+    state.hostile.battle.running = false;
+    for _ in 0..20 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    assert!(state.entities.slot_of_any(victim).is_none());
+    let status = execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Status).unwrap();
+    assert!(
+        status.contains(sides) && status.ends_with("dead=0"),
+        "{status}"
     );
 }

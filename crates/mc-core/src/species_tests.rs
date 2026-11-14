@@ -193,10 +193,8 @@ fn every_assigned_species_spawns_locomotes_and_dies_through_native_merge() {
         assert_eq!(state.merge(&mut intents), 1, "{name} hit admitted");
         let (deaths, _, spawned, _) = state.commit_merge_effects();
         assert!(deaths.contains(&id), "{name} lethal damage");
-        assert!(
-            state.entities.slot_of_any(id).is_none(),
-            "{name} death tombstone"
-        );
+        // The body lies dead for vanilla `deathTime` (`tick::dying`).
+        assert!(state.entities.slot_of(id).is_none(), "{name} death");
         for item in spawned {
             if let Some(item_slot) = state.entities.slot_of(item) {
                 assert!(matches!(

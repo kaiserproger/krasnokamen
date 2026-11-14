@@ -75,7 +75,8 @@ fn effect_trigger_oozing_births_two_medium_slimes_once_and_survives_wal_and_chec
             Some(2)
         );
     }
-    assert!(state.entities.slot_of_any(victim).is_none());
+    // The cow's body lies dead for `deathTime`; its death is the removal.
+    assert!(state.entities.slot_of(victim).is_none());
     let entries = crate::core::journal_entries_for_tick(&mut state, &output);
     let replay = crate::journal::replay_batches(
         crate::journal::Replay::default(),

@@ -161,8 +161,8 @@ pub(crate) fn entity_images(
         // velocity.
         let row = state.entities.row(slot);
         // Other bodies carry a full image only when crossing chunk-clock
-        // authority; intra-chunk movement stays checkpoint-only. The move
-        // itself marks the row touched (`EntityStore::set_pos`).
+        // authority; intra-chunk movement stays checkpoint-only. A chunk-crossing
+        // move marks the row touched (`EntityStore::set_pos`).
         let chunk = chunk_position(state, slot);
         let crossed = state
             .journaled_entity_state

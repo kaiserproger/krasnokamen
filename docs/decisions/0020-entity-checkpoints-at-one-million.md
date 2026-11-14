@@ -106,7 +106,8 @@ keeps `durable_tick`, the last ACKed checkpoint.
 - **Capture.** At `c`, select slots with `changed_tick > durable_tick`, plus
   rules 2–3, and build them with the same `entity_capture_record`. Tombstone a
   logged UUID newer than `durable_tick` only if it is live in no dimension at
-  `c`, so transfers and rebirths become upserts.
+  `c`, so transfers and rebirths become upserts. A corpse (a row on the dying
+  clock) is not live.
 - **Commit.** In the same transaction the writer upserts and writes explicit
   tombstones. A tombstone with no stored live row is skipped, so short-lived
   items never reach the DB. The full-table omission scan is deleted; per-row
@@ -137,6 +138,7 @@ state without WAL marks. Each must set `changed_tick`:
   previous UUID as a removal.
 - **`remove` (665) and `transfer_to` (727–828):** log the UUID, move the mark
   with the swapped slot, and mark the destination.
+- **`begin_dying`:** logs the UUID of a killed living mob at death.
 
 Chunk eviction (`world.rs` 624–667) removes chunks, not entities, so it never
 creates an entity tombstone. Checkpoint marks are independent of WAL and wire

@@ -746,6 +746,79 @@ fn seated_mob_rider_accrues_no_fall_distance_and_lands_unhurt() {
     assert_eq!(state.entities.row(husk_slot).health, health);
 }
 
+/// A steady ridden mount is a no-op per tick: neither row is re-listed for the
+/// journal or motion hints (a 2,000-horse cavalry once re-listed 4,000 rows
+/// every tick), and the rider still follows its mount.
+#[test]
+fn steady_mob_rider_takes_no_row_custody_per_tick() {
+    let (mut state, _actor, pos) = fixture();
+    let horse = spawn(&mut state, "horse", pos);
+    let husk = spawn(&mut state, "husk", pos);
+    let (horse_slot, husk_slot) = (slot(&state, horse), slot(&state, husk));
+    let rider_uuid = state.entities.row(husk_slot).uuid;
+    state.entities.set_rider(horse_slot, Some(rider_uuid));
+    state.refresh_active_chunks(state.tick);
+    tick(&mut state, &mut ChangeSet::default());
+    assert!(state.entities.row(horse_slot).entity_life.mounted);
+    assert_eq!(
+        state.entities.row(husk_slot).entity_life.mount.vehicle,
+        Some(horse)
+    );
+    assert_eq!(
+        state.entities.row(horse_slot).appearance.passengers,
+        vec![husk]
+    );
+    let seat_y = pos[1] + state.entities.body(horse_slot).height * 0.75;
+    assert_eq!(state.entities.pos(husk_slot), [pos[0], seat_y, pos[2]]);
+    state.entities.take_touched();
+    state.entities.prepare_motion_hints(&state.registry);
+    tick(&mut state, &mut ChangeSet::default());
+    let touched = state.entities.touched_ids();
+    assert!(
+        !touched.contains(&horse) && !touched.contains(&husk),
+        "steady pair re-listed: {touched:?}"
+    );
+    assert_eq!(state.entities.dirty_ids_len_for_test(), 0);
+    state
+        .entities
+        .set_pos(horse_slot, [pos[0] + 0.25, pos[1], pos[2]]);
+    tick(&mut state, &mut ChangeSet::default());
+    assert_eq!(
+        state.entities.pos(husk_slot),
+        [pos[0] + 0.25, seat_y, pos[2]]
+    );
+}
+
+/// Vanilla `LivingEntity.rideTick` resets a passenger's fall distance every
+/// tick, so snapping back to the seat never reads as a fall: a long ride must
+/// not end in a lethal landing when the rider gets off (a dead mount in battle).
+#[test]
+fn seated_mob_rider_accrues_no_fall_distance_and_lands_unhurt() {
+    let (mut state, _actor, pos) = fixture();
+    let at = [pos[0] + 4.0, pos[1], pos[2] + 4.0];
+    let horse = spawn(&mut state, "horse", at);
+    let husk = spawn(&mut state, "husk", at);
+    let (horse_slot, husk_slot) = (slot(&state, horse), slot(&state, husk));
+    let rider_uuid = state.entities.row(husk_slot).uuid;
+    state.entities.set_rider(horse_slot, Some(rider_uuid));
+    state.refresh_active_chunks(state.tick);
+    for _ in 0..100 {
+        run_tick(&mut state, &[]);
+    }
+    assert_eq!(
+        state.entities.row(husk_slot).entity_life.mount.vehicle,
+        Some(horse)
+    );
+    assert_eq!(state.entities.row(husk_slot).controls.fall_distance, 0.0);
+    let health = state.entities.row(husk_slot).health;
+    dismount(&mut state, husk);
+    for _ in 0..40 {
+        run_tick(&mut state, &[]);
+    }
+    assert!(state.entities.ground(husk_slot), "the rider landed");
+    assert_eq!(state.entities.row(husk_slot).health, health);
+}
+
 #[test]
 fn started_riding_evidence_follows_successful_mount_only() {
     use mc_data::advancements::{AdvancementDefinition, AdvancementTree, Criterion};

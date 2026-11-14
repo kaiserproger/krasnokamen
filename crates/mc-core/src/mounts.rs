@@ -1059,7 +1059,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         }
         let uuid = state.entities.row(slot).entity_life.mount.riders[0];
         let equine = capabilities(state, slot).taming.equine()
-            && rider(state, slot)
+            && rider_slot
                 .is_some_and(|r| matches!(state.entities.body(r).kind, EntityKind::Player { .. }));
         if !state.entities.row(slot).entity_life.mounted {
             state.entities.row_mut(slot).entity_life.mounted = true;

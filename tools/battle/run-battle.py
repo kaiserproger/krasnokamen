@@ -64,6 +64,8 @@ def read_pin(pin):
     manifest = json.loads((pin / 'manifest.json').read_text())
     if manifest.get('kind') != 'server':
         raise ValueError('pin manifest is not a server pin')
+    if manifest.get('incremental'):
+        raise ValueError('server pin is an incremental build; a battle measurement needs pin-release --no-incremental')
     binary = Path(manifest['binary']).resolve(strict=True)
     digest = sha256_file(binary)
     if digest != manifest['binary_sha256']:

@@ -5876,7 +5876,9 @@ fn mob_drops_rule_suppresses_death_loot_without_suppressing_death() {
     let (deaths, _, spawned, removed) = state.commit_merge_effects();
     assert_eq!(deaths, vec![mob]);
     assert!(spawned.is_empty());
-    assert!(removed.contains(&mob));
+    // The body lies dead for vanilla `deathTime` (`tick::dying`).
+    assert!(!removed.contains(&mob));
+    assert!(state.entities.slot_of(mob).is_none());
 }
 
 #[test]

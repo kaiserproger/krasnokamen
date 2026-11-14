@@ -38,6 +38,7 @@ mod book_actions;
 mod container_access;
 pub(crate) mod damage;
 mod death_message;
+mod dying;
 mod elytra;
 mod entity_lifecycle;
 mod entity_phase;
@@ -1548,6 +1549,7 @@ fn run_dimension_tick_inner<'a>(
     let mut entity_laps = Laps::new(phase_log.is_some(), entity_start);
     let mut entity_life_time = std::time::Duration::ZERO;
     if sim {
+        dying::tick(state, &mut changes);
         crate::entity_life::advance(state);
         entity_laps.lap("entity_life");
         entity_life_time = entity_start.elapsed();
@@ -2039,6 +2041,23 @@ fn run_dimension_tick_inner<'a>(
             log.allocator_us as f64 / 1000.0,
             entity_life_time.as_secs_f64() * 1000.0,
             entity_species_time.as_secs_f64() * 1000.0,
+        );
+        // Stages of `input`, in order; they partition `input_time`.
+        let ms = |span: std::time::Duration| span.as_secs_f64() * 1000.0;
+        eprintln!(
+            "input ms: tick={} dimension={:?} prelude={:.2} natural_spawn={:.2} sim_owners={:.2} inputs={:.2} players={:.2} effects={:.2} contact_classify={:.2} contact_serial={:.2} contact_cauldron={:.2} tail={:.2}",
+            state.tick,
+            state.dimension,
+            ms(stage_spawn - input_start),
+            ms(stage_sim_owners - stage_spawn),
+            ms(stage_inputs - stage_sim_owners),
+            ms(stage_players - stage_inputs),
+            ms(stage_effects - stage_players),
+            ms(stage_contact - stage_effects),
+            ms(contact.classify),
+            ms(contact.serial),
+            ms(contact.cauldron),
+            ms(input_time.saturating_sub(stage_tail - input_start)),
         );
         // Stages of `input`, in order; they partition `input_time`.
         let ms = |span: std::time::Duration| span.as_secs_f64() * 1000.0;

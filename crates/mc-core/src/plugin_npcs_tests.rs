@@ -274,6 +274,7 @@ fn deployed_item_keeps_exact_custody_across_permit_and_capacity_refusals() {
             .revision,
         *retracted_revision
     );
+    let slot = owned_slot(&state, "owner", &npc.handle).unwrap();
     assert_eq!(
         state.entities.row(slot).appearance.equipment[0],
         Some(stack)

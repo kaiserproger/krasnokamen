@@ -60,7 +60,7 @@ enum Kind {
     Cavalry,
 }
 
-// One table owns the vanilla equipment until the asset slice replaces it.
+// Vanilla item identities retain their combat behaviour; components select authored visuals.
 fn equipment(kind: Kind) -> &'static [(&'static str, &'static str)] {
     match kind {
         Kind::Infantry => &[
@@ -130,19 +130,21 @@ fn plan(seed: u64, count: usize, origin: [f64; 3], side: u16) -> Vec<(RegimentSp
         };
         result.push((spec, kind, size));
     };
-    let flank = front.len() as f64 * 15.0 + 25.0;
-    add(Kind::Cavalry, cavalry / 2, -flank, 36.0, 20);
+    // Fit 322 front files inside the existing ticket even at a chunk edge;
+    // mounted files remain on the flanks, just behind the shallower foot.
+    let flank = front.len().saturating_sub(1) as f64 * 23.0 + 4.0;
+    add(Kind::Cavalry, cavalry / 2, -flank, 84.0, 20);
     for (index, &(kind, size)) in front.iter().enumerate() {
-        let x = (index as f64 - (front.len() - 1) as f64 / 2.0) * 30.0;
-        add(kind, size, x, 36.0, 25);
+        let x = (index as f64 - (front.len() - 1) as f64 / 2.0) * 46.0;
+        add(kind, size, x, 36.0, 46);
     }
     let archer_regiments = archers.div_ceil(1000);
     for index in 0..archer_regiments {
         let size = (archers - index * 1000).min(1000);
         let x = (index as f64 - (archer_regiments - 1) as f64 / 2.0) * 52.0;
-        add(Kind::Archer, size, x, 125.0, 50);
+        add(Kind::Archer, size, x, 120.0, 50);
     }
-    add(Kind::Cavalry, cavalry - cavalry / 2, flank, 36.0, 20);
+    add(Kind::Cavalry, cavalry - cavalry / 2, flank, 84.0, 20);
     result
 }
 
@@ -193,7 +195,7 @@ fn reset(state: &mut TickState, changes: &mut ChangeSet) -> usize {
     ids.len()
 }
 
-fn summon_tag(kind: Option<Kind>) -> Tag {
+fn summon_tag(kind: Option<Kind>, side: u16) -> Tag {
     let mut fields = vec![("PersistenceRequired".into(), Tag::Byte(1))];
     if let Some(kind) = kind {
         let slots = equipment(kind)
@@ -272,11 +274,21 @@ fn setup(
     state.tickets.insert(OWNER.into(), (centre, TICKET_RADIUS));
     let result = (|| {
         for side in 1..=2_u16 {
+            let horse_loadout = summon_tag(None, side);
             for (spec, kind, size) in plan(seed, count, origin, side) {
+                let loadout = summon_tag(Some(kind), side);
                 let mut members = Vec::with_capacity(size);
                 for index in 0..size {
                     let pos = slot_position(&spec, index);
-                    let id = spawn(state, changes, "minecraft:husk", pos, Some(kind), &tag)?;
+                    let id = spawn(
+                        state,
+                        changes,
+                        "minecraft:husk",
+                        pos,
+                        Some(kind),
+                        &loadout,
+                        &tag,
+                    )?;
                     let slot = state.entities.slot_of(id).expect("battle unit");
                     state.entities.set_faction(slot, side);
                     if kind == Kind::Cavalry {
