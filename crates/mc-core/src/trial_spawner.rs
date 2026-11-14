@@ -158,6 +158,10 @@ pub(crate) fn persist(
     }
 }
 impl Spawner {
+    pub(crate) fn preserve_pending(&self, next: &mut Self) {
+        next.pending = self.pending.clone();
+    }
+
     fn new() -> Self {
         let mut data = SpawnerData::default();
         nbt::set(
@@ -210,7 +214,7 @@ impl Spawner {
         };
         Ok(Self { data, pending })
     }
-    fn fields(&self, items: &mc_data::items::ItemRegistry) -> Fields {
+    pub(crate) fn fields(&self, items: &mc_data::items::ItemRegistry) -> Fields {
         let mut fields = self.data.to_fields();
         fields.retain(|(name, _)| name != "solaris:ominous_item");
         if let Some(pending) = &self.pending {

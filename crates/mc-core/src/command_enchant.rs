@@ -75,7 +75,13 @@ pub(crate) fn execute(
 ) -> CommandResult {
     use CommandResult::{Failed, Success};
 
-    let targets = resolve_target(state, executor, &enchant_command.target);
+    let targets = match resolve_target(state, executor, &enchant_command.target) {
+        Ok(targets) => targets,
+        Err(message) => {
+            crate::command_execution::error(state, connection, message);
+            return Failed;
+        }
+    };
     if targets.is_empty() {
         feedback(
             state,

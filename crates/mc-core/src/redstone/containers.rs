@@ -29,6 +29,17 @@ pub(crate) struct ContainerState {
 }
 
 impl ContainerState {
+    pub(crate) fn data_cooldown(&self, pos: BlockPos, tick: u64) -> Option<i32> {
+        self.cooldowns.get(&key(pos)).map(|deadline|
+            deadline.saturating_sub(tick).min(8) as i32)
+    }
+
+    pub(crate) fn apply_data_cooldown(&mut self, pos: BlockPos, ticks: i32, tick: u64) {
+        self.hoppers.insert(key(pos));
+        self.sleeping.remove(&key(pos));
+        self.set_cooldown(key(pos), ticks.clamp(0, 8) as u64, tick);
+    }
+
     fn remaining(&self, pos: (i32, i32, i32), tick: u64) -> i32 {
         self.cooldowns
             .get(&pos)

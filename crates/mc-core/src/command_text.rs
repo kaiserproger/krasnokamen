@@ -82,7 +82,7 @@ fn resolve_compound(
                 ("color".into(), Tag::String("gray".into())),
             ]),
         };
-        for (index, entity) in crate::command_execution::resolve_target(state, executor, &target)
+        for (index, entity) in crate::command_execution::resolve_target(state, executor, &target)?
             .into_iter()
             .enumerate()
         {
@@ -100,7 +100,7 @@ fn resolve_compound(
         };
         let holder = if name.starts_with('@') {
             let target = crate::commands::target_of(name).map_err(|error| error.message())?;
-            let found = crate::command_execution::resolve_target(state, executor, &target);
+            let found = crate::command_execution::resolve_target(state, executor, &target)?;
             match found.as_slice() {
                 [entity] => state.connections.name_of(*entity).map(str::to_owned),
                 _ => None,
@@ -300,7 +300,13 @@ pub(crate) fn execute_tellraw(
     target: &crate::commands::Target,
     message: &mc_nbt::Tag,
 ) -> crate::command_execution::CommandResult {
-    let targets = crate::command_execution::player_targets(state, executor, target);
+    let targets = match crate::command_execution::player_targets(state, executor, target) {
+        Ok(targets) => targets,
+        Err(message) => {
+            error_text(state, connection, message);
+            return crate::command_execution::CommandResult::Failed;
+        }
+    };
     if targets.is_empty() {
         crate::command_execution::feedback(
             state,
@@ -340,7 +346,13 @@ pub(crate) fn execute_title(
     target: &crate::commands::Target,
     action: &TitleAction,
 ) -> crate::command_execution::CommandResult {
-    let targets = crate::command_execution::player_targets(state, executor, target);
+    let targets = match crate::command_execution::player_targets(state, executor, target) {
+        Ok(targets) => targets,
+        Err(message) => {
+            error_text(state, connection, message);
+            return crate::command_execution::CommandResult::Failed;
+        }
+    };
     if targets.is_empty() {
         crate::command_execution::feedback(
             state,

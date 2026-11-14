@@ -238,7 +238,7 @@ fn repeating_auto_uses_durable_ticks_and_disable_gate() {
     assert_eq!(state.day_time, 2);
 }
 #[test]
-fn data_merge_admits_only_supported_fields_and_requires_operator() {
+fn data_merge_validates_native_fields_and_requires_operator() {
     let mut state = fixture();
     let pos = place(
         &mut state,
@@ -266,11 +266,17 @@ fn data_merge_admits_only_supported_fields_and_requires_operator() {
     );
     advance(&mut state);
     assert_eq!(state.day_time, 7);
+    crate::command_console::execute(
+        &mut state, connection,
+        "data merge block 0 60 0 {SuccessCount:12}",
+        2, &mut ChangeSet::default(),
+    );
+    assert!(matches!(mc_data::item_nbt::field(&read(&state, pos).unwrap(), "SuccessCount"), Some(Tag::Int(12))));
     let before = read(&state, pos).unwrap();
     crate::command_console::execute(
         &mut state,
         connection,
-        "data merge block 0 60 0 {Command:\"time set 0\",SuccessCount:12}",
+        "data merge block 0 60 0 {Command:\"time set 0\",SuccessCount:'invalid'}",
         2,
         &mut ChangeSet::default(),
     );

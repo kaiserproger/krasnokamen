@@ -60,6 +60,10 @@ pub(crate) fn accepts(state: &TickState, stack: &ItemStack) -> bool {
     song(&state.registry.items, stack).is_some()
 }
 impl Jukebox {
+    pub(crate) fn record(&self) -> &ItemStack {
+        &self.record
+    }
+
     pub(crate) fn decode(
         mut bytes: &[u8],
         items: &mc_data::items::ItemRegistry,
@@ -208,18 +212,39 @@ fn changed(
     record: ItemStack,
     writes: &mut Vec<(BlockPos, u32)>,
 ) {
-    if value.elapsed.is_some() {
+    let next = Jukebox {
+        elapsed: song(&state.registry.items, &record).map(|_| 0),
+        record,
+    };
+    publish_transition(state, pos, value, &next, writes);
+    *value = next;
+    persist(state, pos, value);
+}
+
+pub(crate) fn apply_data(state: &mut TickState, pos: BlockPos, next: Jukebox) {
+    let previous = state.jukeboxes.remove(&key(pos)).unwrap_or_default();
+    let mut writes = std::mem::take(&mut state.merge_block_writes);
+    publish_transition(state, pos, &previous, &next, &mut writes);
+    state.merge_block_writes = writes;
+    state.jukeboxes.insert(key(pos), next);
+}
+
+fn publish_transition(
+    state: &mut TickState,
+    pos: BlockPos,
+    previous: &Jukebox,
+    value: &Jukebox,
+    writes: &mut Vec<(BlockPos, u32)>,
+) {
+    let record_changed = previous.record != value.record;
+    if previous.elapsed.is_some() && (record_changed || value.elapsed.is_none()) {
         event(state, pos, 1011, 0);
     }
-    value.record = record;
-    value.elapsed = None;
-    if let Some((name, _, _)) = song(&state.registry.items, &value.record) {
+    if value.elapsed.is_some() && (record_changed || previous.elapsed.is_none()) {
+        let (name, _, _) = song(&state.registry.items, &value.record).expect("admitted playing record");
         let registry_id = mc_data::required_registry_entry_id(
-            "jukebox_song",
-            &Identifier::parse(format!("minecraft:{name}")).unwrap(),
-        )
-        .expect("embedded song registry");
-        value.elapsed = Some(0);
+            "jukebox_song", &Identifier::parse(format!("minecraft:{name}")).unwrap(),
+        ).expect("embedded song registry");
         event(state, pos, 1010, registry_id as i32);
     }
     if let Some(next) = property(
@@ -235,6 +260,9 @@ fn changed(
     {
         state.world.set_block(pos.x, pos.y, pos.z, next);
         writes.push((pos, next));
+    }
+    if !record_changed && previous.elapsed.is_some() == value.elapsed.is_some() {
+        return;
     }
     for (dx, dy, dz) in [
         (0, 0, 0),
@@ -256,7 +284,6 @@ fn changed(
             0,
         );
     }
-    persist(state, pos, value);
 }
 pub(crate) fn use_on(
     state: &mut TickState,

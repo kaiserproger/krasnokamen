@@ -65,10 +65,13 @@ async fn join_burst_carries_load_start_before_center() {
     let data = mc_data::solaris_required_data();
     let out = empty_output();
     let recipes = crate::recipes::RecipePackets {
-        update: mc_protocol::packets::play::ClientboundUpdateRecipes {
-            item_sets: Vec::new(),
-            stonecutter_recipes: Vec::new(),
-        },
+        catalog: std::sync::Arc::new(crate::recipes::RecipeCatalog {
+            update: mc_protocol::packets::play::ClientboundUpdateRecipes {
+                item_sets: Vec::new(),
+                stonecutter_recipes: Vec::new(),
+            },
+            entries: Default::default(),
+        }),
         book: mc_protocol::packets::play::ClientboundRecipeBookAdd {
             entries: Vec::new(),
             replace: true,

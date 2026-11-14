@@ -60,7 +60,7 @@ fn resolve(
             target: Target::Executor,
         },
     };
-    let selected = crate::dimensions::commands::resolve(state, &query, &target, origin);
+    let selected = crate::dimensions::commands::resolve(state, &query, &target, origin)?;
     Ok(selected
         .into_iter()
         .filter_map(|entity| {

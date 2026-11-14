@@ -25,7 +25,68 @@ pub(crate) struct BrewingState {
     cancelled_time: Option<i16>,
 }
 
+pub(crate) fn apply_data(state: &mut TickState, pos: BlockPos, next: BrewingState) {
+    let properties = next.properties();
+    let cell = (pos.x, pos.y, pos.z);
+    state.brewing.insert(cell, next);
+    for (viewer, open) in &state.open_containers {
+        if *open != cell { continue; }
+        let Some(player) = state.players.get(viewer) else { continue; };
+        let Some(menu) = player.open.as_ref()
+            .filter(|menu| menu.kind == crate::inventory::MenuKind::BrewingStand) else { continue; };
+        let queue = state.outbox.entry(player.connection).or_default();
+        for (property, value) in properties.into_iter().enumerate() {
+            queue.push(PlayerChange::MenuProperty {
+                window: menu.window, property: property as i16, value,
+            });
+        }
+    }
+}
+
 impl BrewingState {
+    fn fence_slots(&mut self, slots: &[ItemStack]) {
+        if self.ingredient.is_some_and(|id| slots.get(3)
+            .is_none_or(|ingredient| ingredient.is_empty() || ingredient.item_id != id)) {
+            self.cancelled_time.get_or_insert(self.brew_time);
+            self.brew_time = 0;
+            self.ingredient = None;
+        }
+    }
+
+    pub(crate) fn with_data(
+        &self,
+        fields: &[(String, Tag)],
+        slots: &[ItemStack],
+    ) -> Result<Self, String> {
+        let brew_time = match field(fields, "BrewTime") {
+            None => 0,
+            Some(Tag::Short(value)) => (*value).clamp(0, 400),
+            _ => return Err("BrewTime: expected Short".into()),
+        };
+        let fuel = match field(fields, "Fuel") {
+            None => 0,
+            Some(Tag::Byte(value)) => i16::from(*value).clamp(0, 20),
+            _ => return Err("Fuel: expected Byte".into()),
+        };
+        let mut next = self.clone();
+        if brew_time != self.brew_time {
+            next.ingredient = (brew_time > 0).then(|| slots.get(3))
+                .flatten().filter(|stack| !stack.is_empty()).map(|stack| stack.item_id);
+            next.cancelled_time = None;
+        }
+        next.brew_time = brew_time;
+        next.fuel = fuel;
+        next.fence_slots(slots);
+        Ok(next)
+    }
+
+    pub(crate) fn retain_ingredient(&self, fields: &mut Vec<(String, Tag)>, items: &ItemRegistry) {
+        fields.retain(|(name, _)| name != "solaris:brewing_ingredient");
+        if let Some(name) = self.ingredient.and_then(|id| items.name_of(id)) {
+            fields.push(("solaris:brewing_ingredient".into(), Tag::String(name.as_str().into())));
+        }
+    }
+
     fn properties(&self) -> [i16; 2] {
         [self.brew_time, self.fuel]
     }
@@ -120,7 +181,7 @@ impl BrewingState {
         bytes
     }
 
-    fn decode(mut bytes: &[u8], items: &ItemRegistry) -> Option<(Self, Vec<ItemStack>)> {
+    pub(crate) fn decode(mut bytes: &[u8], items: &ItemRegistry) -> Option<(Self, Vec<ItemStack>)> {
         let Tag::Compound(fields) = mc_nbt::read_network(&mut bytes).ok()? else {
             return None;
         };
@@ -274,15 +335,7 @@ pub(crate) fn slots_replaced(
     let Some(stand) = stands.get_mut(&key) else {
         return;
     };
-    if stand.ingredient.is_some_and(|id| {
-        slots
-            .get(3)
-            .is_none_or(|ingredient| ingredient.is_empty() || ingredient.item_id != id)
-    }) {
-        stand.cancelled_time.get_or_insert(stand.brew_time);
-        stand.brew_time = 0;
-        stand.ingredient = None;
-    }
+    stand.fence_slots(slots);
 }
 
 pub(crate) fn opened(

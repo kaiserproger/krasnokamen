@@ -329,7 +329,7 @@ pub struct TickState {
     pub(crate) debug_profiler: crate::DebugProfiler,
     /// Whether a `/debug function` trace is executing (recursive traces refuse).
     pub(crate) debug_tracing: bool,
-    /// Completed function-trace artifacts, oldest first.
+    /// At most one active bounded trace; completed reports are written to disk.
     pub(crate) debug_traces: Vec<crate::DebugTraceArtifact>,
     pub world: ChunkWorld,
     /// This world's dimension; other worlds share its tick owner and WAL.
@@ -812,6 +812,7 @@ impl TickState {
         {
             return;
         }
+        crate::command_debug::trace_message(self, connection, &change);
         crate::vibration::menu(self, connection, &change);
         let queue = self.outbox.entry(connection).or_default();
         if change.is_text() {

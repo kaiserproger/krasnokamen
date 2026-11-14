@@ -1,5 +1,5 @@
 //! Event-driven command blocks. Opaque NBT and scheduled ticks are native WAL owners.
-use crate::boundary::{BlockPos, ChangeSet, ChunkPos, ConnectionId, EntityId, PlayerChange};
+use crate::boundary::{BlockPos, ChangeSet, ChunkPos, EntityId};
 use crate::tick::TickState;
 use mc_nbt::Tag;
 use mc_world::{BlockStateId, ScheduledBlockTick};
@@ -187,7 +187,9 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
     if state.enable_command_block {
         let mut remaining = 1024;
         for start in due.drain(..) {
-            if state.dimension_globals.active && !state.command_context.shared {
+            if (state.dimension_globals.active && !state.command_context.shared)
+                || state.command_context.waiting()
+            {
                 if state.command_context.jobs.len() < crate::command_context::LIMIT {
                     let context = crate::command_context::Context::source(
                         state,
@@ -202,6 +204,7 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
                             text: String::new(),
                             context,
                             block: Some(start),
+                            source: None,
                         });
                 }
                 continue;
@@ -210,6 +213,14 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
                 schedule(state, start);
                 continue;
             }
+            remaining = run_chain(state, changes, start, remaining);
+        }
+    }
+    due.clear();
+    state.command_blocks_due = due;
+}
+
+fn run_chain(state: &mut TickState, changes: &mut ChangeSet, start: BlockPos, mut remaining: usize) -> usize {
             let mut pos = start;
             loop {
                 if remaining == 0 {
@@ -275,121 +286,87 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
                             context,
                             changes,
                         );
+                        state.datapacks.origin = previous;
+                        if state.command_context.waiting() {
+                            state.command_context.suspend_block(Continuation {
+                                dimension: state.dimension,
+                                pos,
+                                command,
+                                tick: state.tick,
+                                remaining,
+                            });
+                            break;
+                        }
                         if let Ok(mut fields) = read(state, pos) {
                             put(&mut fields, "SuccessCount", Tag::Int(successes));
                             save(state, pos, fields);
                         }
-                        state.datapacks.origin = previous;
                     }
                 }
-                let Some((x, y, z)) = direction(state, pos) else {
+                let Some(next) = next_chain(state, pos) else {
                     break;
                 };
-                let Some(next) = pos
-                    .x
-                    .checked_add(x)
-                    .zip(pos.y.checked_add(y))
-                    .zip(pos.z.checked_add(z))
-                    .map(|((x, y), z)| BlockPos { x, y, z })
-                else {
-                    break;
-                };
-                if kind(state, next) != Some("chain_command_block") {
-                    break;
-                }
                 pos = next;
             }
-        }
-    }
-    due.clear();
-    state.command_blocks_due = due;
+    remaining
 }
 
-/// Restricted /data merge block surface; other NBT owners are never bypassed.
-pub(crate) fn data(
-    state: &mut TickState,
-    connection: ConnectionId,
-    executor: EntityId,
-    text: &str,
-) -> crate::command_execution::CommandResult {
-    let result = (|| -> Result<String, String> {
-        let mut words = text.split_whitespace();
-        words.next();
-        let mode = words.next().ok_or("Expected merge")?;
-        if mode != "merge" || words.next() != Some("block") {
-            return Err(
-                "Supported writes: data merge block <x> <y> <z> <compound> (command blocks only)"
-                    .into(),
-            );
-        }
-        let coords = [
-            words.next().ok_or("Missing x")?,
-            words.next().ok_or("Missing y")?,
-            words.next().ok_or("Missing z")?,
-        ];
-        let parsed = crate::commands::coords(&coords).ok_or("Invalid coordinates")?;
-        let (origin, rotation) =
-            crate::command_console::pose(state, executor).ok_or("Missing command source")?;
-        let [x, y, z] = crate::command_context::resolve_coords(state, parsed, origin, rotation);
-        if [x, y, z]
-            .iter()
-            .any(|value| !value.is_finite() || *value < i32::MIN as f64 || *value > i32::MAX as f64)
-        {
-            return Err("Invalid coordinates".into());
-        }
-        let pos = BlockPos {
-            x: x.floor() as i32,
-            y: y.floor() as i32,
-            z: z.floor() as i32,
-        };
-        if kind(state, pos).is_none() {
-            return Err("Data editing currently supports command blocks only".into());
-        }
-        let mut fields = read(state, pos)?;
-        let raw = &text[text.find('{').ok_or("Expected NBT compound")?..];
-        let Tag::Compound(patch) = crate::command_snbt::parse(raw).map_err(str::to_owned)? else {
-            return Err("Expected NBT compound".into());
-        };
-        for (index, (key, value)) in patch.iter().enumerate() {
-            if patch[..index].iter().any(|(old, _)| old == key) {
-                return Err("Duplicate NBT field".into());
-            }
-            match (key.as_str(), value) {
-                ("Command", Tag::String(value)) if value.len() <= 32767 => {}
-                ("auto", Tag::Byte(0 | 1)) => {}
-                _ => return Err(format!("Unsupported command block field {key}")),
-            }
-        }
-        if !patch.iter().any(|(key, value)| {
-            fields
-                .iter()
-                .find(|(name, _)| name == key)
-                .is_none_or(|(_, old)| old != value)
-        }) {
-            return Err("The target block's data did not change".into());
-        }
-        let old_auto = flag(&fields, "auto");
-        for (key, value) in patch {
-            put(&mut fields, &key, value);
-        }
-        let start = !old_auto && flag(&fields, "auto") && kind(state, pos) == Some("command_block");
-        save(state, pos, fields);
-        changed(state, pos);
-        if state.enable_command_block && start {
-            schedule(state, pos);
-        }
-        Ok("Command block data updated".into())
-    })();
-    let (message, outcome) = match result {
-        Ok(message) => (message, crate::command_execution::CommandResult::Success(1)),
-        Err(message) => (message, crate::command_execution::CommandResult::Failed),
+fn next_chain(state: &TickState, pos: BlockPos) -> Option<BlockPos> {
+    let (x, y, z) = direction(state, pos)?;
+    let next = BlockPos {
+        x: pos.x.checked_add(x)?,
+        y: pos.y.checked_add(y)?,
+        z: pos.z.checked_add(z)?,
     };
-    if outcome == crate::command_execution::CommandResult::Failed
-        || crate::command_execution::accepts_success(state, connection)
-    {
-        state.push_player(connection, PlayerChange::Chat { message });
+    (kind(state, next) == Some("chain_command_block")).then_some(next)
+}
+
+pub(crate) struct Continuation {
+    pub dimension: crate::dimensions::Dimension,
+    pos: BlockPos,
+    command: String,
+    tick: u64,
+    remaining: usize,
+}
+
+pub(crate) enum Invocation {
+    Start(BlockPos),
+    Resume(Continuation, i32),
+}
+
+pub(crate) fn invoke(state: &mut TickState, changes: &mut ChangeSet, invocation: Invocation) {
+    match invocation {
+        Invocation::Start(pos) => {
+            state.command_blocks_due.push(pos);
+            run(state, changes);
+        }
+        Invocation::Resume(pending, successes) => {
+            if !state.enable_command_block || kind(state, pending.pos).is_none() {
+                return;
+            }
+            let Ok(mut fields) = read(state, pending.pos) else { return };
+            if !matches!(mc_data::item_nbt::field(&fields, "Command"), Some(Tag::String(command)) if *command == pending.command)
+                || !matches!(mc_data::item_nbt::field(&fields, "LastExecution"), Some(Tag::Long(tick)) if *tick == pending.tick as i64)
+            {
+                return;
+            }
+            put(&mut fields, "SuccessCount", Tag::Int(successes));
+            save(state, pending.pos, fields);
+            if let Some(next) = next_chain(state, pending.pos) {
+                run_chain(state, changes, next, pending.remaining);
+            }
+        }
     }
-    outcome
+}
+
+/// A live data edit preserves the same auto-edge scheduling as placement/UI edits.
+pub(crate) fn data_updated(state: &mut TickState, pos: BlockPos, old_auto: bool) {
+    let start = !old_auto && read(state, pos).is_ok_and(|fields| flag(&fields, "auto"))
+        && kind(state, pos) == Some("command_block");
+    changed(state, pos);
+    if state.enable_command_block && start {
+        schedule(state, pos);
+    }
 }
 
 #[cfg(test)]

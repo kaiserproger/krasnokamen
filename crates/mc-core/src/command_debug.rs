@@ -2,46 +2,200 @@
 //!
 //! DEBUG-PROFILER: `/debug start` begins tick-time profiling, `/debug stop`
 //! ends it and reports elapsed ticks, wall time and average TPS. Starting
-//! twice or stopping without a session errors like vanilla; a stale session
-//! (older than 30 minutes of ticks) is discarded on start. `start` returns 0,
-//! `stop` returns the floored average TPS.
+//! twice or stopping without a session errors like vanilla. `start` returns
+//! 0; `stop` returns the floored average TPS.
 //!
-//! DEBUG-FUNCTION-TRACE: `/debug function <id|#tag>` executes the function
-//! through the datapack worker path and appends one trace artifact capturing
-//! the command count plus per-command command/message/error/result content,
-//! including nested function calls. Missing functions and recursive traces
-//! (a traced function invoking a traced function, or `return run`) refuse
-//! before mutation. Permission level 3 is required, matching vanilla.
+//! `/debug function <id|#tag>` uses the ordinary function interpreter, including
+//! its command budget and deferred completions. The I/O worker writes the final
+//! trace; success is published only after that write. Recursive traces refuse.
+//! Permission level 3 is required, matching vanilla.
 use super::command_execution::CommandResult;
 use crate::boundary::{ChangeSet, ConnectionId, EntityId};
 use crate::tick::TickState;
 
-const STALE_TICKS: u64 = 20 * 60 * 30;
-
 #[derive(Default)]
 pub(crate) struct Profiler {
-    start_tick: Option<u64>,
-    start_nanos: Option<u128>,
+    session: Option<(u64, std::time::Instant)>,
 }
 
-/// Trace artifact for one `/debug function` execution.
-#[derive(Debug, Clone, Default)]
+/// Prepared on the tick owner; only the existing I/O worker writes the artifact.
+pub(crate) struct Report {
+    pub feedback: &'static str,
+    pub arguments: Vec<mc_nbt::Tag>,
+    pub result: i32,
+    pub success: bool,
+    name: String,
+    content: String,
+}
+
+impl Report {
+    pub(crate) fn write(&self, datapack_root: &std::path::Path) -> Result<(), String> {
+        use std::io::Write;
+        let directory = datapack_root
+            .parent()
+            .ok_or("Datapack root has no world directory")?
+            .join("debug");
+        std::fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
+        let path = directory.join(&self.name);
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+            .map_err(|error| error.to_string())?;
+        if let Err(error) = file.write_all(self.content.as_bytes()).and_then(|()| file.sync_all()) {
+            drop(file);
+            let _ = std::fs::remove_file(path);
+            return Err(error.to_string());
+        }
+        Ok(())
+    }
+}
+
+/// One active trace; completed traces live on disk, not in an unbounded history.
+#[derive(Debug, Default)]
 pub(crate) struct TraceArtifact {
-    /// Function or tag id traced.
-    pub name: String,
-    /// Total commands executed, including nested function calls.
-    pub commands: usize,
-    /// Per-command trace lines: `command`, `message`, `error`, `result`,
-    /// and `nested <id>` entries.
-    pub lines: Vec<String>,
+    name: String,
+    connection: Option<ConnectionId>,
+    completion: Option<crate::command_context::CompletionId>,
+    commands: usize,
+    functions: usize,
+    content: String,
+    truncated: bool,
 }
 
-fn wall_nanos() -> u128 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or(0)
+const MAX_TRACE_BYTES: usize = 16 * 1024 * 1024;
+
+impl std::fmt::Write for TraceArtifact {
+    fn write_str(&mut self, text: &str) -> std::fmt::Result {
+        if self.content.len().saturating_add(text.len()) > MAX_TRACE_BYTES {
+            return Err(std::fmt::Error);
+        }
+        self.content.push_str(text);
+        Ok(())
+    }
 }
+
+impl TraceArtifact {
+    fn record(&mut self, line: std::fmt::Arguments<'_>) {
+        use std::fmt::Write;
+        if self.truncated {
+            return;
+        }
+        if self.write_fmt(line).and_then(|()| self.write_char('\n')).is_err() {
+            self.content.push_str("\n[ERROR] Function trace output budget exceeded (16 MiB)\n");
+            self.truncated = true;
+        }
+    }
+}
+
+pub(crate) fn trace_budget_exhausted(state: &mut TickState) {
+    if state.debug_tracing && let Some(trace) = state.debug_traces.last_mut() {
+        trace.record(format_args!("[ERROR] Function command budget exceeded"));
+        trace.truncated = true;
+    }
+}
+
+pub(crate) fn swap_runtime(left: &mut TickState, right: &mut TickState) {
+    std::mem::swap(&mut left.debug_profiler, &mut right.debug_profiler);
+    std::mem::swap(&mut left.debug_tracing, &mut right.debug_tracing);
+    std::mem::swap(&mut left.debug_traces, &mut right.debug_traces);
+}
+
+pub(crate) fn trace_enter(state: &mut TickState, name: &str, lines: usize) {
+    if state.debug_tracing && let Some(trace) = state.debug_traces.last_mut() {
+        if trace.content.is_empty() {
+            trace.name = name.to_owned();
+        }
+        trace.record(format_args!("[F] {name} size={lines}"));
+    }
+}
+
+pub(crate) fn trace_command(state: &mut TickState, text: &str) {
+    if state.debug_tracing && let Some(trace) = state.debug_traces.last_mut() {
+        trace.commands += 1;
+        trace.record(format_args!("[C] {text}"));
+    }
+}
+
+pub(crate) fn trace_result(state: &mut TickState, success: bool, value: i32) {
+    if state.debug_tracing && let Some(trace) = state.debug_traces.last_mut() {
+        trace.record(format_args!("[R] success={success} result={value}"));
+    }
+}
+
+pub(crate) fn trace_message(
+    state: &mut TickState,
+    connection: ConnectionId,
+    change: &crate::boundary::PlayerChange,
+) {
+    if !state.debug_tracing {
+        return;
+    }
+    // A deferred trace may span ticks. Unrelated chat (including private
+    // messages to this source) during that wait is not command trace output.
+    if state.command_context.current.is_none_or(|context| context.connection != connection) {
+        return;
+    }
+    if let Some(trace) = state.debug_traces.last_mut()
+        && trace.connection == Some(connection)
+    {
+        match change {
+            crate::boundary::PlayerChange::Chat { message } => {
+                trace.record(format_args!("[M] {message}"));
+            }
+            crate::boundary::PlayerChange::StyledChat { .. } => {
+                trace.record(format_args!("[M] {change:?}"));
+            }
+            _ => {}
+        }
+    }
+}
+
+pub(crate) fn trace_waiting_for(
+    state: &TickState,
+    id: crate::command_context::CompletionId,
+) -> bool {
+    state.debug_tracing
+        && state.debug_traces.last().is_some_and(|trace| trace.completion == Some(id))
+}
+
+pub(crate) fn finish_trace(state: &mut TickState) -> Result<(), String> {
+    let trace = state.debug_traces.pop().ok_or("No active function trace")?;
+    state.debug_tracing = false;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let name = format!("debug-trace-{timestamp}.txt");
+    let report = Report {
+        feedback: if trace.truncated {
+            "Function trace budget exceeded; see the debug trace report"
+        } else if trace.functions == 1 {
+            "commands.debug.function.success.single"
+        } else {
+            "commands.debug.function.success.multiple"
+        },
+        arguments: if trace.truncated { Vec::new() } else { vec![
+            mc_nbt::Tag::String(trace.commands.to_string()),
+            mc_nbt::Tag::String(if trace.functions == 1 {
+                trace.name
+            } else {
+                trace.functions.to_string()
+            }),
+            mc_nbt::Tag::String(name.clone()),
+        ] },
+        result: if trace.truncated { 0 } else { trace.commands as i32 },
+        success: !trace.truncated,
+        name,
+        content: trace.content,
+    };
+    state.datapacks.request_debug_report(
+        trace.connection.expect("trace source"),
+        trace.completion.expect("trace completion"),
+        report,
+    )
+}
+
 
 pub(crate) fn start(
     state: &mut TickState,
@@ -50,9 +204,7 @@ pub(crate) fn start(
     command: &crate::commands::Command,
 ) -> CommandResult {
     let _ = command;
-    if let Some(start) = state.debug_profiler.start_tick
-        && state.tick.saturating_sub(start) < STALE_TICKS
-    {
+    if state.debug_profiler.session.is_some() {
         crate::command_execution::feedback(
             state,
             connection,
@@ -61,8 +213,7 @@ pub(crate) fn start(
         );
         return CommandResult::Failed;
     }
-    state.debug_profiler.start_tick = Some(state.tick);
-    state.debug_profiler.start_nanos = Some(wall_nanos());
+    state.debug_profiler.session = Some((state.tick, std::time::Instant::now()));
     crate::command_execution::success_feedback(
         state,
         connection,
@@ -79,7 +230,7 @@ pub(crate) fn stop(
     command: &crate::commands::Command,
 ) -> CommandResult {
     let _ = command;
-    let Some(start_tick) = state.debug_profiler.start_tick.take() else {
+    let Some((start_tick, started)) = state.debug_profiler.session.as_ref() else {
         crate::command_execution::feedback(
             state,
             connection,
@@ -88,25 +239,42 @@ pub(crate) fn stop(
         );
         return CommandResult::Failed;
     };
-    let start_nanos = state.debug_profiler.start_nanos.take().unwrap_or(0);
-    let ticks = state.tick.saturating_sub(start_tick).max(1);
-    let elapsed_nanos = wall_nanos().saturating_sub(start_nanos);
-    let elapsed_ms = elapsed_nanos.div_ceil(1_000_000).max(1);
-    // Average TPS over the profiling window, floored; 20 TPS nominal.
-    let average_tps = ((ticks as u128 * 1_000_000_000).checked_div(elapsed_nanos.max(1)))
-        .map(|tps| tps.min(20) as i32)
-        .unwrap_or(20);
-    crate::command_execution::success_feedback(
-        state,
-        connection,
-        "commands.debug.stopped",
-        vec![
+    let ticks = state.tick.saturating_sub(*start_tick);
+    let elapsed = started.elapsed();
+    let seconds = elapsed.as_secs_f64();
+    let average_tps = ticks as f64 / seconds;
+    let completion = match state.command_context.completion_id() {
+        Ok(id) => id,
+        Err(error) => {
+            crate::command_execution::feedback(state, connection, &error, Vec::new());
+            return CommandResult::Failed;
+        }
+    };
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let report = Report {
+        feedback: "commands.debug.stopped",
+        arguments: vec![
+            mc_nbt::Tag::String(format!("{seconds:.2}")),
             mc_nbt::Tag::String(ticks.to_string()),
-            mc_nbt::Tag::String(elapsed_ms.to_string()),
-            mc_nbt::Tag::String(average_tps.to_string()),
+            mc_nbt::Tag::String(format!("{average_tps:.2}")),
         ],
-    );
-    CommandResult::Success(average_tps)
+        result: average_tps as i32,
+        success: true,
+        name: format!("profile-results-{timestamp}.txt"),
+        content: format!(
+            "---- Solaris tick profile ----\nStart tick: {start_tick}\nEnd tick: {}\nTime span: {} ms\nTick span: {ticks} ticks\nAverage TPS: {average_tps:.2}\n",
+            state.tick, elapsed.as_millis(),
+        ),
+    };
+    if let Err(error) = state.datapacks.request_debug_report(connection, completion, report) {
+        crate::command_execution::feedback(state, connection, &error, Vec::new());
+        return CommandResult::Failed;
+    }
+    state.debug_profiler.session = None;
+    CommandResult::Deferred(completion)
 }
 
 pub(crate) fn trace_function(
@@ -114,108 +282,45 @@ pub(crate) fn trace_function(
     connection: ConnectionId,
     executor: EntityId,
     name: &str,
-    command: &crate::commands::Command,
+    changes: &mut ChangeSet,
 ) -> CommandResult {
-    let _ = command;
     if state.debug_tracing {
         crate::command_execution::feedback(
-            state,
-            connection,
-            "commands.debug.function.recursive",
-            Vec::new(),
+            state, connection, "commands.debug.function.noRecursion", Vec::new(),
         );
         return CommandResult::Failed;
     }
-    // Admission: resolve before mutating. `return run` inside a traced
-    // function refuses like vanilla's return-run nesting rule.
-    let tag = name.strip_prefix('#');
-    let raw = tag.unwrap_or(name);
-    let resolved = (|| -> Result<Vec<String>, String> {
-        if tag.is_some() {
-            let canonical = if raw.contains(':') {
-                raw.to_owned()
-            } else {
-                format!("minecraft:{raw}")
-            };
-            state
-                .datapacks
-                .packs()
-                .tags
-                .get(&canonical)
-                .cloned()
-                .map(|names| names.to_vec())
-                .ok_or_else(|| format!("Unknown function tag {name}"))
-        } else {
-            let canonical = if raw.contains(':') {
-                raw.to_owned()
-            } else {
-                format!("minecraft:{raw}")
-            };
-            if !state.datapacks.packs().functions.contains_key(&canonical) {
-                return Err(format!("Unknown function {name}"));
-            }
-            Ok(vec![canonical])
-        }
-    })();
-    let targets = match resolved {
-        Ok(targets) => targets,
-        Err(message) => {
-            crate::command_execution::feedback(state, connection, &message, Vec::new());
+    let completion = match state.command_context.completion_id() {
+        Ok(id) => id,
+        Err(error) => {
+            crate::command_execution::feedback(state, connection, &error, Vec::new());
             return CommandResult::Failed;
         }
     };
-    let mut artifact = TraceArtifact {
-        name: name.to_owned(),
-        commands: 0,
-        lines: Vec::new(),
-    };
+    let stop_depth = crate::datapacks::pending_depth(state);
     state.debug_tracing = true;
-    for target in targets {
-        let lines = match state.datapacks.packs().functions.get(&target) {
-            Some(lines) => lines.clone(),
-            None => {
-                artifact
-                    .lines
-                    .push(format!("error {target}: Unknown function {target}"));
-                continue;
-            }
-        };
-        for line in lines.iter() {
-            if line.trim_start_matches('/').starts_with("return run") {
-                artifact.lines.push(format!(
-                    "error {target}: return run is not supported in traces"
-                ));
-                continue;
-            }
-            if line.trim_start_matches('/').starts_with("debug function") {
-                crate::command_execution::feedback(
-                    state,
-                    connection,
-                    "commands.debug.function.recursive",
-                    Vec::new(),
-                );
-                state.debug_tracing = false;
-                return CommandResult::Failed;
-            }
-            artifact.commands += 1;
-            artifact.lines.push(format!("command {target}: {line}"));
-            let context = crate::command_context::Context::source(state, connection, executor, 3);
-            let mut changes = ChangeSet::default();
-            crate::command_context::submit(state, line, context, &mut changes);
-            artifact.lines.push(format!("result {target}: ok"));
-        }
+    if let Err(error) = crate::datapacks::enqueue(state, name, connection, executor) {
+        state.debug_tracing = false;
+        crate::command_execution::feedback(state, connection, &error, Vec::new());
+        return CommandResult::Failed;
     }
-    state.debug_tracing = false;
-    let (name, commands) = (artifact.name.clone(), artifact.commands);
-    state.debug_traces.push(artifact);
-    crate::command_execution::success_feedback(
-        state,
-        connection,
-        "commands.debug.function.traced",
-        vec![
-            mc_nbt::Tag::String(name),
-            mc_nbt::Tag::String(commands.to_string()),
-        ],
-    );
-    CommandResult::Success(commands as i32)
+    state.debug_traces.push(TraceArtifact {
+        name: name.to_owned(),
+        connection: Some(connection),
+        completion: Some(completion),
+        functions: crate::datapacks::pending_depth(state) - stop_depth,
+        ..Default::default()
+    });
+    crate::datapacks::drain_until(state, changes, stop_depth);
+    if !state.command_context.waiting()
+        && let Err(error) = finish_trace(state)
+    {
+        crate::command_execution::feedback(state, connection, &error, Vec::new());
+        return CommandResult::Failed;
+    }
+    CommandResult::Deferred(completion)
 }
+
+#[cfg(test)]
+#[path = "command_debug_tests.rs"]
+mod tests;

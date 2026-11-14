@@ -3,6 +3,9 @@ use crate::boundary::PlayerInput;
 use crate::commands::parse;
 use std::sync::Arc;
 
+#[path = "command_selector_predicate_tests.rs"]
+mod selector_predicate_tests;
+
 fn fixture() -> (TickState, EntityId, EntityId) {
     let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
     let generator = Arc::new(mc_worldgen::TerrainGenerator::new(
@@ -836,10 +839,10 @@ fn command_parity_nearest_entity_selects_closest_alive() {
         state.entities.set_pos(slot, position);
     }
     let target = crate::commands::target_of("@n").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![alice]);
     // `@n` with grammar routes through the same nearest parser path.
     let target = crate::commands::target_of("@n[distance=..5]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![alice]);
     let target = crate::commands::target_of("@n[distance=6..20]").unwrap();
     let cow = state.spawn_mob(state.registry.cow_type_id, [2.0, 80.0, 0.0], 10.0);
     command(&mut state, alice, "kill @n[type=minecraft:cow]");
@@ -847,7 +850,7 @@ fn command_parity_nearest_entity_selects_closest_alive() {
         state.entities.body(*slot).id == cow
             && damage.kind == crate::survival::DamageKind::GenericKill
     }));
-    assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![bob]);
 }
 
 #[test]
@@ -858,20 +861,17 @@ fn command_parity_dead_players_stay_selectable_by_name_and_all() {
     let slot = state.entities.slot_of(bob).unwrap();
     state.entities.body_mut(slot).alive = false;
     let target = crate::commands::target_of("@a").unwrap();
-    let mut selected = resolve_target(&state, alice, &target);
+    let mut selected = resolve_target(&state, alice, &target).unwrap();
     selected.sort();
     let mut expected = vec![alice, bob];
     expected.sort();
     assert_eq!(selected, expected);
     let target = crate::commands::target_of("@s").unwrap();
-    assert_eq!(resolve_target(&state, bob, &target), vec![bob]);
+    assert_eq!(resolve_target(&state, bob, &target).unwrap(), vec![bob]);
     for selector in ["@p[name=Bob]", "@r[name=Bob]"] {
         let target = crate::commands::target_of(selector).unwrap();
-        assert_eq!(
-            resolve_target(&state, alice, &target),
-            vec![bob],
-            "{selector}"
-        );
+        assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![bob],
+        "{selector}");
     }
     command(&mut state, alice, "gamemode creative @p[name=Bob]");
     assert_eq!(
@@ -879,9 +879,9 @@ fn command_parity_dead_players_stay_selectable_by_name_and_all() {
         crate::commands::GameMode::Creative
     );
     let target = crate::commands::target_of("@e").unwrap();
-    assert!(!resolve_target(&state, alice, &target).contains(&bob));
+    assert!(!resolve_target(&state, alice, &target).unwrap().contains(&bob));
     let target = crate::commands::target_of("@n").unwrap();
-    assert!(!resolve_target(&state, alice, &target).contains(&bob));
+    assert!(!resolve_target(&state, alice, &target).unwrap().contains(&bob));
 }
 
 #[test]
@@ -892,23 +892,24 @@ fn command_parity_repeated_negative_type_name_clauses() {
     let calf = state.spawn_mob(state.registry.cow_type_id, [3.0, 80.0, 0.0], 10.0);
     let target =
         crate::commands::target_of("@e[type=!minecraft:cow,type=!minecraft:player]").unwrap();
-    let selected = resolve_target(&state, alice, &target);
+    let selected = resolve_target(&state, alice, &target).unwrap();
     assert!(!selected.contains(&cow));
     assert!(!selected.contains(&calf));
     assert!(!selected.contains(&alice));
     let target = crate::commands::target_of("@e[name=!Alice,name=!Bob]").unwrap();
-    let selected = resolve_target(&state, alice, &target);
+    let selected = resolve_target(&state, alice, &target).unwrap();
     assert!(!selected.contains(&alice));
     // The test-only bootstrap registry omits most vanilla entity tags;
     // production loads these from the content pack.
     let registry = Arc::make_mut(&mut state.registry);
+    let cow_type_id = registry.cow_type_id;
     let tags = Arc::make_mut(&mut registry.tags);
     tags.registries
         .entry(mc_data::Identifier::parse("minecraft:entity_type").unwrap())
         .or_default()
         .insert(
             mc_data::Identifier::parse("minecraft:followable_friendly_mobs").unwrap(),
-            vec![registry.cow_type_id as i32],
+            vec![cow_type_id as i32],
         );
     command(
         &mut state,
@@ -931,7 +932,7 @@ fn command_parity_unnamed_mob_plain_name_and_player_type_rejection() {
     let (mut state, alice, _) = fixture();
     let cow = state.spawn_mob(state.registry.cow_type_id, [2.0, 80.0, 0.0], 10.0);
     let target = crate::commands::target_of("@e[name=Cow]").unwrap();
-    assert!(resolve_target(&state, alice, &target).contains(&cow));
+    assert!(resolve_target(&state, alice, &target).unwrap().contains(&cow));
     assert!(crate::commands::target_of("@a[type=minecraft:cow]").is_err());
     assert!(crate::commands::target_of("@p[type=minecraft:cow]").is_err());
 }
@@ -986,20 +987,20 @@ fn command_parity_sort_limit_options_and_typed_filters() {
     // level range: Alice 0 by default; Bob raised to 5.
     state.players.get_mut(&bob).unwrap().vitals.experience.level = 5;
     let target = crate::commands::target_of("@a[level=3..10]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![bob]);
     let target = crate::commands::target_of("@a[level=6..]").unwrap();
-    assert!(resolve_target(&state, alice, &target).is_empty());
+    assert!(resolve_target(&state, alice, &target).unwrap().is_empty());
     let target = crate::commands::target_of("@a[level=..4]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![alice]);
     // gamemode: Bob switched to creative; survival filter keeps Alice only.
     state.players.get_mut(&bob).unwrap().game_mode = crate::commands::GameMode::Creative;
     let target = crate::commands::target_of("@a[gamemode=survival]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![alice]);
     let target = crate::commands::target_of("@a[gamemode=!survival]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![bob]);
     let cow = state.spawn_mob(state.registry.cow_type_id, [2.0, 80.0, 0.0], 10.0);
     let target = crate::commands::target_of("@e[gamemode=!creative]").unwrap();
-    assert!(!resolve_target(&state, alice, &target).contains(&cow));
+    assert!(!resolve_target(&state, alice, &target).unwrap().contains(&cow));
     // team: Bob joins red via scored state; team=red admits Bob only.
     state.scoreboard.teams.insert(
         "red".into(),
@@ -1017,11 +1018,11 @@ fn command_parity_sort_limit_options_and_typed_filters() {
         },
     );
     let target = crate::commands::target_of("@a[team=red]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![bob]);
     let target = crate::commands::target_of("@a[team=!red]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![alice]);
     let target = crate::commands::target_of("@a[team=]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![alice]);
     // scores: Alice 7, Bob 9 on objective test; range 8.. admits Bob only.
     state.scoreboard.objectives.insert(
         "test".into(),
@@ -1045,9 +1046,9 @@ fn command_parity_sort_limit_options_and_typed_filters() {
             );
     }
     let target = crate::commands::target_of("@a[scores={test=8..}]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![bob]);
     let target = crate::commands::target_of("@a[scores={test=..7}]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![alice]);
     let cow_uuid = state
         .entities
         .row(state.entities.slot_of(cow).unwrap())
@@ -1066,7 +1067,7 @@ fn command_parity_sort_limit_options_and_typed_filters() {
             },
         );
     let target = crate::commands::target_of("@e[scores={test=13}]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![cow]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![cow]);
     state
         .scoreboard
         .teams
@@ -1075,33 +1076,33 @@ fn command_parity_sort_limit_options_and_typed_filters() {
         .members
         .insert(cow_uuid);
     let target = crate::commands::target_of("@e[type=minecraft:cow,team=red]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![cow]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![cow]);
     // Tags are retained by the native /tag command and selected thereafter.
     let target = crate::commands::target_of("@e[tag=!untagged]").unwrap();
-    let selected = resolve_target(&state, alice, &target);
+    let selected = resolve_target(&state, alice, &target).unwrap();
     assert!(selected.contains(&alice) && selected.contains(&bob));
     let target = crate::commands::target_of("@e[tag=untagged]").unwrap();
-    assert!(resolve_target(&state, alice, &target).is_empty());
+    assert!(resolve_target(&state, alice, &target).unwrap().is_empty());
     let context = crate::command_context::Context::source(&state, ConnectionId(1), alice, 4);
     crate::command_tag::execute(&mut state, context, "tag Bob add marked");
     let target = crate::commands::target_of("@a[tag=marked]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![bob]);
     let target = crate::commands::target_of("@a[tag=!marked]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![alice]);
     // pitch/yaw: both players spawn at rot 0/0; tight 1..90 pitch rejects.
     let target = crate::commands::target_of("@a[x_rotation=-90..90]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target).len(), 2);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap().len(), 2);
     let target = crate::commands::target_of("@a[x_rotation=1..90]").unwrap();
-    assert!(resolve_target(&state, alice, &target).is_empty());
+    assert!(resolve_target(&state, alice, &target).unwrap().is_empty());
     let target = crate::commands::target_of("@a[y_rotation=0..360]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target).len(), 2);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap().len(), 2);
     let slot = state.entities.slot_of(bob).unwrap();
     state.entities.set_rot(slot, -90.0, 0.0);
     let target = crate::commands::target_of("@a[y_rotation=-100..-80]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![bob]);
     // An NBT predicate with a mismatched field admits nobody.
     let target = crate::commands::target_of("@e[nbt={Health:0.5f}]").unwrap();
-    assert!(resolve_target(&state, alice, &target).is_empty());
+    assert!(resolve_target(&state, alice, &target).unwrap().is_empty());
     let slot = state.entities.slot_of(cow).unwrap();
     mc_nbt::write_named(
         &mut state.entities.row_mut(slot).opaque_entity_fields,
@@ -1116,11 +1117,8 @@ fn command_parity_sort_limit_options_and_typed_filters() {
         ("@e[type=minecraft:cow,nbt=!{Silent:0b}]", true),
     ] {
         let target = crate::commands::target_of(selector).unwrap();
-        assert_eq!(
-            resolve_target(&state, alice, &target).contains(&cow),
-            expected,
-            "{selector}"
-        );
+        assert_eq!(resolve_target(&state, alice, &target).unwrap().contains(&cow), expected,
+        "{selector}");
     }
     // advancements: flagged root=true admits only the granted player.
     state.players.get_mut(&alice).unwrap().advancement_progress =
@@ -1129,16 +1127,17 @@ fn command_parity_sort_limit_options_and_typed_filters() {
         }));
     let target =
         crate::commands::target_of("@a[advancements={minecraft:story/root=true}]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![alice]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![alice]);
     let target =
         crate::commands::target_of("@a[advancements={minecraft:story/root=false}]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target), vec![bob]);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap(), vec![bob]);
     for selector in [
         "@e[predicate=minecraft:test]",
         "@e[predicate=!minecraft:test]",
     ] {
-        let error = crate::commands::target_of(selector).unwrap_err();
-        assert!(error.message().contains("unsupported selector option"));
+        let target = crate::commands::target_of(selector).unwrap();
+        let error = resolve_target(&state, alice, &target).unwrap_err();
+        assert!(error.contains("Unknown predicate minecraft:test"));
     }
 }
 
@@ -1178,21 +1177,21 @@ fn command_parity_unqualified_entity_selector_reaches_loaded_remote_dimensions()
     let target = crate::dimensions::commands::target(&request.command)
         .expect("kill carries a target")
         .clone();
-    let mut selected = crate::dimensions::commands::resolve(&state, &request, &target, origin);
+    let mut selected = crate::dimensions::commands::resolve(&state, &request, &target, origin).unwrap();
     selected.sort();
     let mut expected = vec![local_pig, remote_pig];
     expected.sort();
     assert_eq!(selected, expected, "unqualified @e spans loaded dimensions");
     // A spatial option constrains the query to the request dimension.
     let target = crate::commands::target_of("@e[type=minecraft:pig,x=0,y=80,z=0]").unwrap();
-    let selected = crate::dimensions::commands::resolve(&state, &request, &target, origin);
+    let selected = crate::dimensions::commands::resolve(&state, &request, &target, origin).unwrap();
     assert_eq!(
         selected,
         vec![local_pig],
         "position-qualified @e stays local"
     );
     let target = crate::commands::target_of("@e[type=minecraft:pig,distance=..100]").unwrap();
-    let selected = crate::dimensions::commands::resolve(&state, &request, &target, origin);
+    let selected = crate::dimensions::commands::resolve(&state, &request, &target, origin).unwrap();
     assert_eq!(
         selected,
         vec![local_pig],
@@ -1222,7 +1221,7 @@ fn command_parity_repeated_random_evaluation_redraws_within_one_tick() {
     let mut seen_alice = false;
     let mut seen_bob = false;
     for _ in 0..32 {
-        for id in resolve_target(&state, alice, &target) {
+        for id in resolve_target(&state, alice, &target).unwrap() {
             if id == alice {
                 seen_alice = true;
             }
@@ -1292,16 +1291,13 @@ fn command_parity_selector_box_intersects_body_and_defaults_missing_axes() {
     ] {
         state.entities.set_pos(slot, position);
         let target = crate::commands::target_of(selector).unwrap();
-        assert_eq!(
-            resolve_target(&state, alice, &target).contains(&bob),
-            expected,
-            "{selector} at {position:?}"
-        );
+        assert_eq!(resolve_target(&state, alice, &target).unwrap().contains(&bob), expected,
+        "{selector} at {position:?}");
     }
     command(&mut state, alice, "summon minecraft:pig 5.1 80 0.5");
     let target =
         crate::commands::target_of("@e[type=minecraft:pig,x=0,y=80,z=0,dx=4,dy=1,dz=1]").unwrap();
-    assert_eq!(resolve_target(&state, alice, &target).len(), 1);
+    assert_eq!(resolve_target(&state, alice, &target).unwrap().len(), 1);
     command(
         &mut state,
         alice,
@@ -1467,62 +1463,26 @@ fn advancement_dispatch_validates_before_mutating_and_filters_player_targets() {
 fn selectors_cover_nearest_all_random_self_entities_and_filters() {
     let (mut state, alice, bob) = fixture();
     let cow = state.spawn_mob(state.registry.cow_type_id, [2.0, 80.0, 0.0], 10.0);
-    assert_eq!(
-        resolve_target(&state, bob, &crate::commands::target_of("@p").unwrap()),
-        vec![bob]
-    );
-    assert_eq!(
-        resolve_target(
-            &state,
-            alice,
-            &crate::commands::target_of("@a[sort=furthest,limit=1]").unwrap()
-        ),
-        vec![bob]
-    );
-    assert_eq!(
-        resolve_target(
-            &state,
-            alice,
-            &crate::commands::target_of("@e[type=cow,distance=..3]").unwrap()
-        ),
-        vec![cow]
-    );
-    assert_eq!(
-        resolve_target(
-            &state,
-            alice,
-            &crate::commands::target_of("@e[type=!player,distance=1..3]").unwrap()
-        ),
-        vec![cow]
-    );
-    assert_eq!(
-        resolve_target(
-            &state,
-            alice,
-            &crate::commands::target_of("@a[name=!Alice]").unwrap()
-        ),
-        vec![bob]
-    );
-    assert_eq!(
-        resolve_target(
-            &state,
-            alice,
-            &crate::commands::target_of("@s[distance=0]").unwrap()
-        ),
-        vec![alice]
-    );
-    assert_eq!(
-        resolve_target(&state, alice, &crate::commands::target_of("@r").unwrap()).len(),
-        1
-    );
-    assert_eq!(
-        resolve_target(
-            &state,
-            alice,
-            &crate::commands::target_of("@e[sort=nearest,limit=2]").unwrap()
-        ),
-        vec![alice, cow]
-    );
+    assert_eq!(resolve_target(&state, bob, &crate::commands::target_of("@p").unwrap()).unwrap(), vec![bob]);
+    assert_eq!(resolve_target(&state,
+    alice,
+    &crate::commands::target_of("@a[sort=furthest,limit=1]").unwrap()).unwrap(), vec![bob]);
+    assert_eq!(resolve_target(&state,
+    alice,
+    &crate::commands::target_of("@e[type=cow,distance=..3]").unwrap()).unwrap(), vec![cow]);
+    assert_eq!(resolve_target(&state,
+    alice,
+    &crate::commands::target_of("@e[type=!player,distance=1..3]").unwrap()).unwrap(), vec![cow]);
+    assert_eq!(resolve_target(&state,
+    alice,
+    &crate::commands::target_of("@a[name=!Alice]").unwrap()).unwrap(), vec![bob]);
+    assert_eq!(resolve_target(&state,
+    alice,
+    &crate::commands::target_of("@s[distance=0]").unwrap()).unwrap(), vec![alice]);
+    assert_eq!(resolve_target(&state, alice, &crate::commands::target_of("@r").unwrap()).unwrap().len(), 1);
+    assert_eq!(resolve_target(&state,
+    alice,
+    &crate::commands::target_of("@e[sort=nearest,limit=2]").unwrap()).unwrap(), vec![alice, cow]);
 }
 
 #[test]
@@ -2065,39 +2025,19 @@ fn command_boundary_enforces_operator_level() {
 #[test]
 fn selector_position_overrides_distance_sort_and_body_volumes() {
     let (mut state, alice, bob) = fixture();
-    assert_eq!(
-        resolve_target(
-            &state,
-            alice,
-            &crate::commands::target_of("@p[x=10,y=80,z=0]").unwrap()
-        ),
-        vec![bob]
-    );
-    assert_eq!(
-        resolve_target(
-            &state,
-            alice,
-            &crate::commands::target_of("@a[x=10,distance=..1]").unwrap()
-        ),
-        vec![bob]
-    );
-    assert_eq!(
-        resolve_target(
-            &state,
-            alice,
-            &crate::commands::target_of("@a[x=10,dx=-2]").unwrap()
-        ),
-        vec![bob]
-    );
-    assert_eq!(
-        resolve_target(
-            &state,
-            alice,
-            &crate::commands::target_of("@a[x=0,dx=9]").unwrap()
-        ),
-        vec![alice, bob],
-        "Bob's body crosses the exclusive upper face even though his position is on it"
-    );
+    assert_eq!(resolve_target(&state,
+    alice,
+    &crate::commands::target_of("@p[x=10,y=80,z=0]").unwrap()).unwrap(), vec![bob]);
+    assert_eq!(resolve_target(&state,
+    alice,
+    &crate::commands::target_of("@a[x=10,distance=..1]").unwrap()).unwrap(), vec![bob]);
+    assert_eq!(resolve_target(&state,
+    alice,
+    &crate::commands::target_of("@a[x=10,dx=-2]").unwrap()).unwrap(), vec![bob]);
+    assert_eq!(resolve_target(&state,
+    alice,
+    &crate::commands::target_of("@a[x=0,dx=9]").unwrap()).unwrap(), vec![alice, bob],
+    "Bob's body crosses the exclusive upper face even though his position is on it");
     command(
         &mut state,
         alice,
@@ -2146,10 +2086,10 @@ fn selectors_match_plain_custom_name_component_for_summoned_entities() {
             .find(|id| !before.contains(id))
             .expect("summoned named cow");
         let target = |selector: &str| crate::commands::target_of(selector).unwrap();
-        assert!(resolve_target(&state, alice, &target("@e[name=Foo]")).contains(&cow));
-        assert!(!resolve_target(&state, alice, &target("@e[name=!Foo]")).contains(&cow));
-        assert!(!resolve_target(&state, alice, &target("@e[name=Bar]")).contains(&cow));
-        assert!(resolve_target(&state, alice, &target("@e[name=!Bar]")).contains(&cow));
+        assert!(resolve_target(&state, alice, &target("@e[name=Foo]")).unwrap().contains(&cow));
+        assert!(!resolve_target(&state, alice, &target("@e[name=!Foo]")).unwrap().contains(&cow));
+        assert!(!resolve_target(&state, alice, &target("@e[name=Bar]")).unwrap().contains(&cow));
+        assert!(resolve_target(&state, alice, &target("@e[name=!Bar]")).unwrap().contains(&cow));
     }
 }
 
@@ -2167,15 +2107,12 @@ fn json_shaped_summon_custom_name_stays_literal_in_vanilla_26() {
         r#"summon cow 2 200 2 {CustomName:'{"text":"Foo"}'}"#,
     );
     let target = crate::commands::target_of("@e[type=cow,name=Foo]").unwrap();
-    assert!(resolve_target(&state, alice, &target).is_empty());
+    assert!(resolve_target(&state, alice, &target).unwrap().is_empty());
     let Target::Selector(mut selector) = target else {
         panic!("entity selector");
     };
     selector.names = vec![(r#"{"text":"Foo"}"#.into(), false)];
-    assert_eq!(
-        resolve_target(&state, alice, &Target::Selector(selector)).len(),
-        1
-    );
+    assert_eq!(resolve_target(&state, alice, &Target::Selector(selector)).unwrap().len(), 1);
 }
 
 #[test]
@@ -2184,21 +2121,13 @@ fn named_and_uuid_entity_targets_preserve_player_only_command_filtering() {
     let cow = state.spawn_mob(state.registry.cow_type_id, [2.0, 80.0, 0.0], 10.0);
     let slot = state.entities.slot_of(cow).unwrap();
     let uuid = state.entities.row(slot).uuid.to_string();
-    assert_eq!(
-        resolve_target(
-            &state,
-            alice,
-            &crate::commands::target_of("minecraft:cow").unwrap()
-        ),
-        vec![cow]
-    );
+    assert_eq!(resolve_target(&state,
+    alice,
+    &crate::commands::target_of("minecraft:cow").unwrap()).unwrap(), vec![cow]);
     std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).custom_name =
         Some("Bessie".into());
     for name in ["Bessie", uuid.as_str()] {
-        assert_eq!(
-            resolve_target(&state, alice, &crate::commands::target_of(name).unwrap()),
-            vec![cow]
-        );
+        assert_eq!(resolve_target(&state, alice, &crate::commands::target_of(name).unwrap()).unwrap(), vec![cow]);
     }
     command(&mut state, alice, "give Bessie stone");
     assert!(has_translation(

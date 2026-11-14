@@ -518,7 +518,9 @@ pub(crate) fn resolve_member_uuids(
     }
     let target = crate::commands::target_of(word).map_err(|_| "argument.entity.notfound.player")?;
     let mut uuids = Vec::new();
-    for id in crate::command_execution::resolve_target(state, executor, &target) {
+    for id in crate::command_execution::resolve_target(state, executor, &target)
+        .map_err(|_| "Invalid selector predicate")?
+    {
         let mut found = None;
         for world in
             std::iter::once(state).chain(state.other_dimensions.values().map(|world| &**world))

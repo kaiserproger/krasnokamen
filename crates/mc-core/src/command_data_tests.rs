@@ -751,3 +751,12 @@ fn data_storage_modify_reports_results_and_survives_reads() {
         state.command_storage
     );
 }
+
+#[path = "command_data_mutation_tests.rs"]
+mod mutation;
+
+#[path = "command_data_owner_tests.rs"]
+mod owner_mutation;
+
+#[path = "command_data_loot_tests.rs"]
+mod unopened_loot;

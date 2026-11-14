@@ -68,9 +68,21 @@ pub(crate) const HAZARD_CAMPFIRE: u8 = 0x20;
 pub(crate) const HAZARD_MAGMA: u8 = 0x40;
 pub(crate) const HAZARD_SOUL_CAMPFIRE: u8 = 0x80;
 
-/// Everything the tick reads but never writes.
-#[cfg_attr(test, derive(Clone))]
+/// Immutable registry snapshot. Reloadable recipes and block loot share the
+/// unchanged startup tables instead of copying the entire registry.
 pub struct CoreRegistry {
+    stable: Arc<RegistryTables>,
+    /// Crafting/furnace recipes, index = recipe display id (contract).
+    pub recipes: Vec<mc_data::recipes::Recipe>,
+    /// First native iron-smelting recipe, resolved when registry content changes.
+    pub(crate) iron_smelting: Option<crate::villager::smelting::IronSmelting>,
+    /// Block loot tables used by native block breaks.
+    pub loot: mc_data::loot::LootTables,
+}
+
+/// Startup-only tables shared by successive native content snapshots.
+#[cfg_attr(test, derive(Clone))]
+pub struct RegistryTables {
     /// Dense global block state table.
     pub blocks: Arc<BlockRegistry>,
     /// Item name <-> protocol id table.
@@ -112,18 +124,12 @@ pub struct CoreRegistry {
     pub tags: Arc<mc_data::tags::TagsData>,
     /// View over the already-loaded registry/tag data; no worldgen reload or copy.
     pub(crate) worldgen_tags: Option<Arc<mc_worldgen::vanilla_features::CacheTags>>,
-    /// Crafting/furnace recipes, index = recipe display id (contract).
-    pub recipes: Vec<mc_data::recipes::Recipe>,
-    /// First native iron-smelting recipe, resolved when registry content changes.
-    pub(crate) iron_smelting: Option<crate::villager::smelting::IronSmelting>,
     pub advancements: Arc<mc_data::advancements::AdvancementTree>,
     /// Immutable advancement block properties/tags, populated once per state.
     pub(crate) advancement_blocks: Vec<std::sync::OnceLock<serde_json::Value>>,
     pub(crate) advancement_reward_loot:
         std::collections::BTreeMap<String, mc_data::loot::chest_26_1_2::ChestLootTable>,
     pub enchantments: crate::inventory::enchanting::EnchantmentCatalog,
-    /// Vanilla block loot tables (block breaks).
-    pub loot: mc_data::loot::LootTables,
     /// Immutable catalogs loaded from the same selected vanilla directory.
     pub entity_loot: Arc<mc_data::loot::entity_26_1_2::EntityLootCatalog>,
     pub entity_loot_lookups: Arc<mc_data::loot::entity_26_1_2::VanillaEntityLootLookups>,
@@ -171,6 +177,32 @@ pub struct CoreRegistry {
     pub(crate) carrier_blocks: crate::carrier_blocks::CarrierBlocks,
 }
 
+impl std::ops::Deref for CoreRegistry {
+    type Target = RegistryTables;
+
+    fn deref(&self) -> &Self::Target {
+        &self.stable
+    }
+}
+
+impl std::ops::DerefMut for CoreRegistry {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        Arc::get_mut(&mut self.stable).expect("startup registry tables already published")
+    }
+}
+
+#[cfg(test)]
+impl Clone for CoreRegistry {
+    fn clone(&self) -> Self {
+        Self {
+            stable: Arc::new((*self.stable).clone()),
+            recipes: self.recipes.clone(),
+            iron_smelting: self.iron_smelting,
+            loot: self.loot.clone(),
+        }
+    }
+}
+
 impl std::fmt::Debug for CoreRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("CoreRegistry")
@@ -180,6 +212,17 @@ impl std::fmt::Debug for CoreRegistry {
 }
 
 impl CoreRegistry {
+    /// Prepare an unpublished content snapshot on the datapack worker. Only
+    /// the two replaceable catalogs are copied; startup tables remain shared.
+    pub(crate) fn prepare_content(&self) -> Self {
+        Self {
+            stable: Arc::clone(&self.stable),
+            recipes: self.recipes.clone(),
+            iron_smelting: self.iron_smelting,
+            loot: self.loot.clone(),
+        }
+    }
+
     pub(crate) fn refresh_iron_smelting(&mut self) {
         self.iron_smelting =
             resolve_iron_smelting(&self.items, &self.item_facts, &self.tags, &self.recipes);
@@ -512,10 +555,13 @@ impl CoreRegistry {
             .map(|_| std::sync::OnceLock::new())
             .collect();
         Ok(Self {
+            recipes,
+            iron_smelting,
+            loot,
+            stable: Arc::new(RegistryTables {
             blocks,
             shears_item,
             items: std::sync::Arc::new(items),
-            loot,
             entity_loot,
             entity_loot_lookups,
             chest_loot,
@@ -541,8 +587,6 @@ impl CoreRegistry {
             item_facts,
             tags,
             worldgen_tags,
-            recipes,
-            iron_smelting,
             advancements,
             advancement_blocks,
             advancement_reward_loot,
@@ -560,6 +604,7 @@ impl CoreRegistry {
             block_tools: crate::block_tools::BlockToolTable::default(),
             paintings: crate::painting::load(root)?,
             carrier_blocks: crate::carrier_blocks::CarrierBlocks::default(),
+            }),
         })
     }
 

@@ -1,4 +1,4 @@
-//! Operator-only read queries over native entity and block-entity owners.
+//! Operator data access through native entity, block-entity and storage owners.
 use crate::boundary::{BlockPos, ChunkPos, ConnectionId, EntityId};
 use crate::command_context::Context;
 use crate::command_nbt_path::{argument, get, number, result, snbt};
@@ -135,8 +135,16 @@ pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
         put(&mut fields, key, value);
     }
     let key = (pos.x, pos.y, pos.z);
+    if kind == BlockEntityKind::Hopper
+        && let Some(ticks) = state.redstone_containers.data_cooldown(pos, state.tick) {
+        put(&mut fields, "TransferCooldown", Tag::Int(ticks));
+    }
+    if let Some(clock) = state.gateway_ages.get(&pos) {
+        put(&mut fields, "Age", Tag::Long(clock.age));
+    }
     if let Some(live) = state.block_entities.get(&key) {
-        if kind.inventory_size().is_some() && !fields.iter().any(|(key, _)| key == "LootTable") {
+        if (kind.inventory_size().is_some() || kind == BlockEntityKind::ChiseledBookshelf)
+            && !fields.iter().any(|(key, _)| key == "LootTable") {
             let mut items = Vec::new();
             for (slot, stack) in live
                 .slots
@@ -150,6 +158,14 @@ pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
                 items.push(Tag::Compound(item));
             }
             put(&mut fields, "Items", list(items, tag_type::COMPOUND));
+        }
+        if kind == BlockEntityKind::DecoratedPot {
+            fields.retain(|(name, _)| name != "item");
+            if let Some(stack) = live.slots.first().filter(|stack| !stack.is_empty()) {
+                put(&mut fields, "item", Tag::Compound(
+                    mc_data::item_nbt::stack_to_fields(&state.registry.items, stack)
+                        .map_err(|error| error.to_string())?));
+            }
         }
         if let Some(furnace) = &live.furnace {
             for (key, value) in [
@@ -181,8 +197,148 @@ pub(crate) fn block(state: &TickState, pos: BlockPos) -> Result<Tag, String> {
         fields.retain(|(key, _)| key != "RecordItem" && key != "ticks_since_song_started");
         fields.extend(jukebox.data_fields(&state.registry.items));
     }
+    if let Some(campfire) = state.campfires.get(&key) {
+        for (name, value) in campfire.data_fields(&state.registry.items) {
+            put(&mut fields, &name, value);
+        }
+    }
+    if let Some(crafter) = state.crafters.get(&key) {
+        mc_data::storage_blocks::encode_crafter_fields(&mut fields, crafter.settings);
+    }
+    if let Some(lectern) = state.lecterns.get(&key) {
+        fields.retain(|(name, _)| name != "Book" && name != "Page");
+        if let Some(book) = state.block_entities.get(&key)
+            .and_then(|container| container.slots.first()).filter(|book| !book.is_empty()) {
+            put(&mut fields, "Book", Tag::Compound(
+                mc_data::item_nbt::stack_to_fields(&state.registry.items, book)
+                    .map_err(|error| error.to_string())?));
+            put(&mut fields, "Page", Tag::Int(lectern.page()));
+        }
+    }
+    if let Some(spawner) = state.monster_spawners.data_fields(pos, state.tick) {
+        for (name, value) in spawner { put(&mut fields, &name, value); }
+    }
+    if let Some(spawner) = state.trial_spawners.get(&key) {
+        for (name, value) in spawner.fields(&state.registry.items) {
+            put(&mut fields, &name, value);
+        }
+    }
+    if let Some(vault) = state.vaults.get(&key) {
+        for (name, value) in vault.to_fields(&state.registry.items) {
+            put(&mut fields, &name, value);
+        }
+    }
+    if let Some(sculk) = crate::sculk::data_fields(state, pos) {
+        for (name, value) in sculk { put(&mut fields, &name, value); }
+    }
+    if let Some(shrieker) = crate::shrieker::data_fields(state, pos) {
+        for (name, value) in shrieker { put(&mut fields, &name, value); }
+    }
     public_fields(&mut fields);
     Ok(Tag::Compound(fields))
+}
+
+/// A command resolves its accessor once, before preparing any mutation.
+pub(crate) enum Accessor {
+    Storage(String),
+    Entity(crate::dimensions::Dimension, EntityId),
+    Block(crate::dimensions::Dimension, BlockPos),
+}
+
+impl Accessor {
+    pub(crate) fn parse(
+        state: &TickState,
+        context: Context,
+        input: &mut &str,
+    ) -> Result<Self, String> {
+        match argument(input)? {
+            "storage" => {
+                let name = mc_data::Identifier::parse(argument(input)?)
+                    .map_err(|error| error.to_string())?;
+                Ok(Self::Storage(name.to_string()))
+            }
+            "entity" => {
+                let target = crate::commands::target_of(argument(input)?)
+                    .map_err(|error| error.message())?;
+                let multiple = match &target {
+                    crate::commands::Target::AllPlayers => true,
+                    crate::commands::Target::Selector(selector) => {
+                        selector.limit.unwrap_or(
+                            if matches!(
+                                selector.kind,
+                                crate::commands::SelectorKind::AllPlayers
+                                    | crate::commands::SelectorKind::Entities
+                            ) {
+                                usize::MAX
+                            } else {
+                                1
+                            },
+                        ) > 1
+                    }
+                    _ => false,
+                };
+                if multiple {
+                    return Err("Only one entity is allowed, but the provided selector allows more than one".into());
+                }
+                let selected = crate::dimensions::travel::context_targets(state, context, &target)?;
+                let [id] = selected.as_slice() else {
+                    return Err(if selected.is_empty() {
+                        "No entity was found"
+                    } else {
+                        "Only one entity is allowed, but the provided selector allows more than one"
+                    }.into());
+                };
+                let (dimension, _) = crate::dimensions::travel::locate(state, *id)
+                    .ok_or("No entity was found")?;
+                Ok(Self::Entity(dimension, *id))
+            }
+            "block" => {
+                let coords = [argument(input)?, argument(input)?, argument(input)?];
+                let coords = crate::commands::coords(&coords).ok_or("Invalid block coordinates")?;
+                let position = crate::commands::resolve_coords(
+                    coords,
+                    context.coordinate_origin(coords[0].local),
+                    context.rotation,
+                );
+                if position.iter().any(|value| {
+                    !value.is_finite() || *value < i32::MIN as f64 || *value > i32::MAX as f64
+                }) {
+                    return Err("Invalid block coordinates".into());
+                }
+                let [x, y, z] = position.map(|value| value.floor() as i32);
+                Ok(Self::Block(context.dimension, BlockPos { x, y, z }))
+            }
+            _ => Err("Expected storage, entity or block".into()),
+        }
+    }
+
+    pub(crate) fn read(&self, state: &TickState) -> Result<Tag, String> {
+        match self {
+            Self::Storage(name) => Ok(state.command_storage.get(name).cloned()
+                .unwrap_or_else(|| Tag::Compound(Vec::new()))),
+            Self::Entity(dimension, id) => entity(
+                crate::dimensions::travel::world(state, *dimension)
+                    .ok_or("Entity dimension unavailable")?, *id),
+            Self::Block(dimension, pos) => block(
+                crate::dimensions::travel::world(state, *dimension)
+                    .ok_or("Unknown dimension")?, *pos),
+        }
+    }
+
+    fn feedback(&self, state: &TickState) -> Result<(&'static str, Vec<Tag>), String> {
+        Ok(match self {
+            Self::Storage(name) => ("storage", vec![text(name)]),
+            Self::Entity(dimension, id) => (
+                "entity",
+                vec![crate::command_execution::entity_name(
+                    crate::dimensions::travel::world(state, *dimension)
+                        .ok_or("Entity dimension unavailable")?, *id)],
+            ),
+            Self::Block(_, BlockPos { x, y, z }) => (
+                "block", vec![text(x), text(y), text(z)],
+            ),
+        })
+    }
 }
 
 fn text(value: impl ToString) -> Tag {
@@ -201,82 +357,9 @@ pub(crate) fn query(
     if argument(&mut input)? != "data" || argument(&mut input)? != "get" {
         return Err("Expected data get entity|block".into());
     }
-    let kind = argument(&mut input)?;
-    let (root, args) = match kind {
-        "entity" => {
-            let target =
-                crate::commands::target_of(argument(&mut input)?).map_err(|e| e.message())?;
-            let multiple = match &target {
-                crate::commands::Target::AllPlayers => true,
-                crate::commands::Target::Selector(selector) => {
-                    selector.limit.unwrap_or(
-                        if matches!(
-                            selector.kind,
-                            crate::commands::SelectorKind::AllPlayers
-                                | crate::commands::SelectorKind::Entities
-                        ) {
-                            usize::MAX
-                        } else {
-                            1
-                        },
-                    ) > 1
-                }
-                _ => false,
-            };
-            if multiple {
-                return Err(
-                    "Only one entity is allowed, but the provided selector allows more than one"
-                        .into(),
-                );
-            }
-            let selected = crate::dimensions::travel::context_targets(state, context, &target)?;
-            if selected.len() != 1 {
-                return Err(if selected.is_empty() {
-                    "No entity was found"
-                } else {
-                    "Only one entity is allowed, but the provided selector allows more than one"
-                }
-                .into());
-            }
-            let id = selected[0];
-            let (dimension, _) =
-                crate::dimensions::travel::locate(state, id).ok_or("No entity was found")?;
-            let world = crate::dimensions::travel::world(state, dimension)
-                .ok_or("Entity dimension unavailable")?;
-            (
-                entity(world, id)?,
-                vec![crate::command_execution::entity_name(world, id)],
-            )
-        }
-        "block" => {
-            let coords = [
-                argument(&mut input)?,
-                argument(&mut input)?,
-                argument(&mut input)?,
-            ];
-            let coords = crate::commands::coords(&coords).ok_or("Invalid block coordinates")?;
-            let position = crate::commands::resolve_coords(
-                coords,
-                context.coordinate_origin(coords[0].local),
-                context.rotation,
-            );
-            if position
-                .iter()
-                .any(|v| !v.is_finite() || *v < i32::MIN as f64 || *v > i32::MAX as f64)
-            {
-                return Err("Invalid block coordinates".into());
-            }
-            let [x, y, z] = position.map(|v| v.floor() as i32);
-            let world = crate::dimensions::travel::world(state, context.dimension)
-                .ok_or("Unknown dimension")?;
-            (
-                block(world, BlockPos { x, y, z })?,
-                vec![text(x), text(y), text(z)],
-            )
-        }
-        _ => return Err("Expected data get entity|block".into()),
-    };
-    let mut args = args;
+    let target = Accessor::parse(state, context, &mut input)?;
+    let root = target.read(state)?;
+    let (kind, mut args) = target.feedback(state)?;
     let (key, value) = if input.trim().is_empty() {
         args.push(text(snbt(&root)));
         (format!("commands.data.{kind}.query"), 1)
@@ -307,6 +390,51 @@ pub(crate) fn query(
     Ok(value)
 }
 
+pub(crate) fn mutate(
+    state: &mut TickState,
+    context: Context,
+    mut input: &str,
+) -> Result<i32, String> {
+    if context.permission < 2 {
+        return Err(crate::commands::CommandError::Unknown.message());
+    }
+    if argument(&mut input)? != "data" { return Err("Expected data".into()); }
+    let action = argument(&mut input)?;
+    let target = Accessor::parse(state, context, &mut input)?;
+    let (kind, args) = target.feedback(state)?;
+    let count = match target {
+        Accessor::Storage(name) => {
+            let empty = Tag::Compound(Vec::new());
+            let previous = state.command_storage.get(&name).unwrap_or(&empty);
+            let (count, next) = crate::command_storage::prepare(state, context, previous, action, input)?;
+            state.command_storage.insert(name, next);
+            state.command_storage_dirty = true;
+            count
+        }
+        target => {
+            let previous = target.read(state)?;
+            let (count, next) = crate::command_storage::prepare(state, context, &previous, action, input)?;
+            let dimension = match target {
+                Accessor::Entity(dimension, _) | Accessor::Block(dimension, _) => dimension,
+                Accessor::Storage(_) => unreachable!(),
+            };
+            let world = if state.dimension == dimension { &mut *state } else {
+                state.other_dimensions.get_mut(&dimension).map(|world| &mut **world)
+                    .ok_or("Target dimension unavailable")?
+            };
+            match target {
+                Accessor::Entity(_, id) => crate::command_summon::data::update(world, id, &previous, &next)?,
+                Accessor::Block(_, pos) => crate::command_block_entity::data::update(world, pos, &previous, &next)?,
+                Accessor::Storage(_) => unreachable!(),
+            }
+            count
+        }
+    };
+    crate::command_execution::success_feedback(
+        state, context.connection, &format!("commands.data.{kind}.modified"), args);
+    Ok(count)
+}
+
 pub(crate) fn command(
     state: &mut TickState,
     connection: ConnectionId,
@@ -314,30 +442,16 @@ pub(crate) fn command(
     input: &str,
 ) -> crate::command_execution::CommandResult {
     use crate::command_execution::CommandResult::{Failed, Success};
-    if input.split_whitespace().nth(2) == Some("storage") {
-        let context = state
-            .command_context
-            .current
-            .unwrap_or_else(|| Context::source(state, connection, executor, 2));
-        return crate::command_storage::command(state, context, input);
-    }
-    if input.split_whitespace().nth(1) == Some("modify") {
-        state.push_player(
-            connection,
-            crate::boundary::PlayerChange::Chat {
-                message: "Data modify block and entity is not supported".into(),
-            },
-        );
-        return Failed;
-    }
-    if input.split_whitespace().nth(1) != Some("get") {
-        return crate::command_blocks::data(state, connection, executor, input);
-    }
     let context = state
         .command_context
         .current
         .unwrap_or_else(|| Context::source(state, connection, executor, 2));
-    match query(state, context, input) {
+    let result = if input.split_whitespace().nth(1) == Some("get") {
+        query(state, context, input)
+    } else {
+        mutate(state, context, input)
+    };
+    match result {
         Ok(value) => Success(value),
         Err(message) => {
             state.push_player(connection, crate::boundary::PlayerChange::Chat { message });

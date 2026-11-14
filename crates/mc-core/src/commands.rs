@@ -52,7 +52,7 @@ pub const ROOTS: &[(&str, u8)] = &[
     ("enchant", 2),
     ("effect", 2),
     ("advancement", 2),
-    ("debug", 2),
+    ("debug", 3),
     ("team", 2),
     ("tps", 2),
     ("mspt", 2),
@@ -155,6 +155,8 @@ pub struct Selector {
     pub yaw: Option<(Option<f32>, Option<f32>)>,
     /// Repeated, optionally negated NBT compound predicates.
     pub nbt: Vec<(mc_nbt::Tag, bool)>,
+    /// Installed loot predicates, each independently negatable.
+    pub predicates: Vec<(Identifier, bool)>,
     /// Advancement filters (`advancements={id=true}`).
     pub advancements: Vec<(String, bool)>,
     pub distance: Option<(Option<f64>, Option<f64>)>,
@@ -620,6 +622,7 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
         pitch: None,
         yaw: None,
         nbt: Vec::new(),
+        predicates: Vec::new(),
         advancements: Vec::new(),
         distance: None,
         position: [None; 3],
@@ -823,9 +826,9 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
                 selector.nbt.push((nbt, negated));
             }
             "predicate" => {
-                return Err(CommandError::Message(
-                    "unsupported selector option 'predicate'".into(),
-                ));
+                let negated = value.starts_with('!');
+                let name = value.strip_prefix('!').unwrap_or(value);
+                selector.predicates.push((item_id(name).ok_or_else(invalid)?, negated));
             }
             "advancements" => {
                 let body = value

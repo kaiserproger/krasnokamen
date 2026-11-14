@@ -351,6 +351,11 @@ fn stored_gateway(state: &TickState, pos: BlockPos) -> Result<Gateway, String> {
     if !input.is_empty() {
         return Err(fail("trailing NBT bytes"));
     }
+    gateway_from_fields(pos, &fields).map_err(|error| fail(&error))
+}
+
+pub(crate) fn gateway_from_fields(pos: BlockPos, fields: &[(String, Tag)]) -> Result<Gateway, String> {
+    let fail = |message: &str| message.to_owned();
     let find = |key: &str| -> Result<Option<&Tag>, String> {
         let mut entries = fields.iter().filter(|(name, _)| name == key);
         let found = entries.next().map(|(_, tag)| tag);

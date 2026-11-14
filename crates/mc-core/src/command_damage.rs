@@ -99,7 +99,8 @@ fn resolve(
     executor: EntityId,
     target: &Target,
 ) -> Result<EntityId, CommandError> {
-    let selected = crate::command_execution::resolve_target(state, executor, target);
+    let selected = crate::command_execution::resolve_target(state, executor, target)
+        .map_err(CommandError::Message)?;
     match selected.as_slice() {
         [entity] => Ok(*entity),
         _ => Err(CommandError::Message(

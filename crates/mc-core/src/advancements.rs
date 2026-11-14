@@ -355,6 +355,7 @@ pub fn sync_join(state: &mut TickState, entity: EntityId) {
     state.push_player(
         connection,
         PlayerChange::RecipesUnlocked {
+            registry: crate::boundary::RecipeSource(Arc::clone(&state.registry)),
             recipes,
             replace: true,
         },
@@ -738,6 +739,7 @@ fn reward(state: &mut TickState, entity: EntityId, id: &str, definition: &Advanc
         state.push_player(
             connection,
             PlayerChange::RecipesUnlocked {
+                registry: crate::boundary::RecipeSource(Arc::clone(&state.registry)),
                 recipes: recipes.clone(),
                 replace: false,
             },

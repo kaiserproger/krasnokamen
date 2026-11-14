@@ -84,7 +84,7 @@ fn generate(
                 .map_err(|e| e.to_string())
         }
         Source::Kill(target) => {
-            let entities = crate::command_execution::resolve_target(state, executor, target);
+            let entities = crate::command_execution::resolve_target(state, executor, target)?;
             let [entity] = entities.as_slice() else {
                 return Err("Loot kill requires exactly one entity".into());
             };
@@ -131,23 +131,6 @@ fn generate(
         }
     }
 }
-fn offset(destination: &Destination, offset: usize) -> Option<Destination> {
-    let (slot, block) = match destination {
-        Destination::Block(_, slot) => (slot, true),
-        Destination::Entity(_, slot) => (slot, false),
-    };
-    if offset == 0 {
-        return Some(destination.clone());
-    }
-    let (prefix, index) = slot.rsplit_once('.')?;
-    let index = index.parse::<usize>().ok()?.checked_add(offset)?;
-    let name = format!("{prefix}.{index}");
-    Some(match destination {
-        Destination::Block(coords, _) if block => Destination::Block(*coords, name),
-        Destination::Entity(target, _) => Destination::Entity(target.clone(), name),
-        _ => return None,
-    })
-}
 pub(crate) fn execute(
     state: &mut TickState,
     connection: ConnectionId,
@@ -158,7 +141,7 @@ pub(crate) fn execute(
     let mut count = 0;
     match &command.target {
         Output::Give(target) => {
-            let entities = crate::command_execution::player_targets(state, executor, target);
+            let entities = crate::command_execution::player_targets(state, executor, target)?;
             if entities.is_empty() {
                 return Err("No players found".into());
             }
@@ -229,15 +212,9 @@ pub(crate) fn execute(
             }
         }
         Output::Replace(destination, limit) => {
-            let length = limit.unwrap_or(stacks.len());
-            for i in 0..length {
-                let Some(dest) = offset(destination, i) else {
-                    break;
-                };
-                let empty = ItemStack::EMPTY;
-                let stack = stacks.get(i).unwrap_or(&empty);
-                count += command_item_replace::write_slots(state, executor, &dest, stack)?;
-            }
+            count = command_item_replace::write_slots(
+                state, executor, destination, &stacks, limit.unwrap_or(stacks.len()),
+            )?;
         }
     }
     if crate::command_execution::accepts_success(state, connection) {

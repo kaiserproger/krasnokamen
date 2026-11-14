@@ -603,14 +603,6 @@ impl Core {
         if let Some(runtime) = &mut plugin_runtime {
             runtime.load_catalogs(&registry)?;
         }
-        let datapack_root = config.world_dir.join("datapacks");
-        let datapacks =
-            crate::datapacks::PackSet::load(&datapack_root, crate::datapacks::Selection::default())
-                .map_err(CoreError::Registry)?;
-        datapacks
-            .install_content(&mut registry)
-            .map_err(CoreError::Registry)?;
-        let registry = Arc::new(registry);
         let plugin_commands = plugin_runtime
             .as_ref()
             .map(crate::plugin::PluginRuntime::commands)
@@ -665,15 +657,26 @@ impl Core {
                 .map_err(|e| CoreError::Storage(e.to_string()))?;
         #[cfg(test)]
         crate::native_checkpoint::tests::register_store(&config, &store)?;
+        let base_registry = Arc::new(registry);
         let (mut tick_state, mut root_manifest, salt_minted) = recover_tick_state(
             &config,
-            &registry,
+            &base_registry,
             &store,
             fresh,
             plugin_runtime,
             build_queries,
         )?;
-        tick_state.datapacks.install(datapacks, datapack_root);
+        let datapack_root = config.world_dir.join("datapacks");
+        let datapacks = crate::datapacks::PackSet::load(
+            &datapack_root,
+            tick_state.datapacks.selection().clone(),
+        ).map_err(CoreError::Registry)?;
+        let registry = datapacks.prepare_content(&base_registry).map_err(CoreError::Registry)?;
+        tick_state.registry = Arc::clone(&registry);
+        for world in tick_state.other_dimensions.values_mut() {
+            world.registry = Arc::clone(&registry);
+        }
+        tick_state.datapacks.install(datapacks, datapack_root, base_registry);
         let world_spawn = tick_state.world.world_spawn();
         let terrain_epoch = crate::terrain::epoch_for_open(&tick_state)?;
         // Fresh epoch (minted when the stored record had none): stage it in

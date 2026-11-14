@@ -79,16 +79,20 @@ pub(crate) fn resolve(
     request: &Request,
     target: &Target,
     origin: [f64; 3],
-) -> Vec<EntityId> {
+) -> Result<Vec<EntityId>, String> {
     if matches!(target, Target::Executor) {
-        return locate(state, request.executor)
+        return Ok(locate(state, request.executor)
             .map(|_| vec![request.executor])
-            .unwrap_or_default();
+            .unwrap_or_default());
     }
     if !global_target(target) {
-        return world(state, request.dimension)
-            .map(|world| crate::command_execution::resolve_target(world, request.executor, target))
-            .unwrap_or_default();
+        let world = world(state, request.dimension).ok_or("Unknown dimension")?;
+        return match target {
+            Target::Selector(selector) => crate::command_execution::selector(
+                world, request.executor, selector, state.datapacks.packs(),
+            ),
+            _ => crate::command_execution::resolve_target(world, request.executor, target),
+        };
     }
     // Normalize the bare @p shortcut so global sorting and limiting use the
     // same selector path as @p with options.
@@ -111,15 +115,17 @@ pub(crate) fn resolve(
     };
     for world in std::iter::once(state).chain(state.other_dimensions.values().map(|world| &**world))
     {
-        selected.extend(crate::command_execution::resolve_target(
-            world,
-            request.executor,
-            selector.as_ref().unwrap_or(target),
-        ));
+        let selected_in_world = match selector.as_ref().unwrap_or(target) {
+            Target::Selector(selector) => crate::command_execution::selector(
+                world, request.executor, selector, state.datapacks.packs(),
+            ),
+            target => crate::command_execution::resolve_target(world, request.executor, target),
+        }?;
+        selected.extend(selected_in_world);
     }
     let Target::Selector(selector) = target else {
         selected.sort_unstable();
-        return selected;
+        return Ok(selected);
     };
     let candidates = selected
         .into_iter()
@@ -137,7 +143,7 @@ pub(crate) fn resolve(
             (entity, distance)
         })
         .collect();
-    crate::command_execution::order_and_limit(state, request.executor, selector, candidates)
+    Ok(crate::command_execution::order_and_limit(state, request.executor, selector, candidates))
 }
 
 pub(crate) fn commit(world: &mut TickState, changes: &mut ChangeSet) {
@@ -214,7 +220,7 @@ pub(crate) fn execute(
     mut request: Request,
     changes: &mut BTreeMap<Dimension, ChangeSet>,
 ) -> Result<crate::command_execution::CommandResult, String> {
-    use crate::command_execution::CommandResult::{Completed, Failed, Success, Unavailable};
+    use crate::command_execution::CommandResult::{Completed, Deferred, Failed, Success, Unavailable};
     let source_dimension = locate(state, request.executor)
         .map(|(dimension, _)| dimension)
         .unwrap_or(state.dimension);
@@ -230,7 +236,7 @@ pub(crate) fn execute(
         &request,
         target(&request.command).expect("global command target"),
         origin,
-    );
+    )?;
     if selected.is_empty() {
         let key = match request.command {
             Command::EffectGive { .. }
@@ -334,6 +340,9 @@ pub(crate) fn execute(
             outcome
         };
         result = match (result, outcome) {
+            (Deferred(_), _) | (_, Deferred(_)) => {
+                unreachable!("target-bearing entity commands execute synchronously")
+            }
             (Unavailable, _) | (_, Unavailable) => Unavailable,
             (Completed, _) | (_, Completed) => Completed,
             (Success(total), Success(value)) => Success(total.wrapping_add(value)),

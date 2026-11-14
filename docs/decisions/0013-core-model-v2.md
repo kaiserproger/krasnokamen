@@ -61,6 +61,71 @@ edge queues the burst's frames as one item. World fanout
 may reconcile to a newer snapshot. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
+Datapack filesystem operations use the existing bounded worker slot. Admission
+is not command success: `CommandResult::Deferred` identifies one pending result
+in `command_context::Runtime`. The worker prepares data; only the native tick
+publishes it and completes the matching result. The shared dimension boundary
+applies execute-store callbacks and resumes execute branches and function frames
+in order. A continuation retains its source context, fork accounting and command
+sequence budget; resumption does not begin a new sequence. Other commands wait
+in the existing bounded job queue rather than running a second interpreter.
+Duplicate completion identities have no effect. Deferred continuations and
+queued root commands retain the initiating connection's entity identity and
+permission, independently of an `/execute as` target. Both single-world and
+shared-world drains cancel stale sessions or revoked permissions before executing
+commands, stores, continuations or feedback. Cancellation does not undo filesystem
+work already performed. Plain `/reload` uses this same awaited result: following
+function lines and trace reports wait for publication or explicit failure.
+
+Debug function traces run those same function frames and publish their actual
+`ChangeSet`; they neither dispatch a second interpreter nor invent per-command
+results. A traced child may await I/O before the enclosing trace report is
+written through that same worker slot. Trace recording is limited to the active
+source's command feedback, including its own completion event, never unrelated
+messages received while suspended. Output has a 16 MiB bound; exhausting either
+that bound or the shared command budget produces a failed command result and
+an explicitly incomplete report. A successful profiler/trace result is published
+only after its report has been written.
+
+Recipe and block-loot reloads prepare one immutable native content snapshot on
+the existing datapack worker. Startup tables are shared, not cloned. The native
+shared-world boundary publishes both catalogs and the pack selection together;
+invalid preparation leaves all three unchanged. Open crafting/station menus
+recompute their projections without moving inputs or the carried stack.
+Reliable recipe-book events retain the exact native catalog that produced them.
+The edge memoizes only derived wire packets, weakly keyed by that catalog, and
+sends its station metadata before book displays and refreshed menu contents.
+Neither a lagging pump nor a join racing reload may substitute the latest
+catalog for an older queued event. Advancement definitions remain startup-only.
+
+`/data` resolves one native accessor before preparing its NBT edit. Storage,
+entity and block sources share the same path operations. Entity and block
+destinations preflight the complete candidate through their existing codecs
+and custody guards before the first mutation. They apply typed live changes,
+not summon/placement initialization: entity UUIDs, dense slots, unrelated
+cooldowns and resident block clocks remain owned by their existing runtimes.
+Player destinations are refused. Entity post-images enter the existing
+appearance journal fence; containers and block metadata use their custody
+and opaque-image journals and normal viewer publication. NBT is a command
+projection, not a second entity authority.
+Sculk sensors, catalysts and shriekers use their resident codecs for both
+projection and admission. Unrelated edits preserve phase/bloom/shriek deadlines
+and the exact pending vibration; an authored listener delay replaces its arrival
+relative to the current tick. Internal deadline fields are not command-writable.
+Jukebox data edits publish playback transitions and `has_record` through the
+resident owner; unrelated metadata does not restart a song. Lectern page and
+brewing-property edits update existing viewers without replacing their menus or
+moving their carried stacks.
+
+Unrelated metadata edits on unopened loot chests preserve their typed loot-table
+and seed owner rather than installing an empty live inventory. NPC equipment
+edits prepare the exact prospective custody hashes and script-range revisions
+before health, equipment or journal mutation; unchanged images need no revision
+increment. This is not NPC reservation support: inventory `Reserve` admits only
+player inventory and containers, rejecting NPC equipment/carry with
+`InvalidRequest`. `/loot replace` admits the complete destination range and its
+final aggregate reservation footprint before writing any slot.
+
 Operator changes reserve the whole authoritative input batch before changing
 edge-owned operator state. An async mutex serializes admission and changes;
 the initiator's live permission and lock status are rechecked after reservation.

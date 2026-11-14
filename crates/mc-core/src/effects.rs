@@ -738,7 +738,13 @@ pub(crate) fn execute_command(
         Command::EffectClear { target, effect } => (target, None, Some(*effect)),
         _ => return Unavailable,
     };
-    let targets = crate::command_execution::resolve_target(state, executor, target);
+    let targets = match crate::command_execution::resolve_target(state, executor, target) {
+        Ok(targets) => targets,
+        Err(message) => {
+            crate::command_execution::error(state, connection, message);
+            return Failed;
+        }
+    };
     let mut affected = 0;
     for entity in targets {
         let Some(slot) = state.entities.slot_of(entity) else {

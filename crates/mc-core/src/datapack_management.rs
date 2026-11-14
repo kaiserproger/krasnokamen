@@ -2,16 +2,12 @@
 //! atomic activation.
 //!
 //! Vanilla boundary (Main-approved): `enable`/`disable` swap compiled
-//! functions/tags live via the `/reload` worker. Supported recipe/block-loot
-//! changes refuse atomically with `restart-required`; worldgen/dimensions/
-//! other registries/ZIP refuse atomically as unsupported (never a false
-//! restart promise). Listing serves the cached compiled catalog refreshed by
-//! the worker; immediate filesystem discovery is the open
-//! DATAPACK-LIST-LIVE-DISCOVERY residual. Hot reload of recipes/loot
-//! (DATAPACK-HOT-RELOAD-RECIPES-LOOT), archives and worldgen
-//! (DATAPACK-WORLDGEN-ZIP), and feature-gated admission
-//! (DATAPACK-FEATURE-ADMISSION) stay open. No tick-thread filesystem I/O:
-//! all loads run on the reload worker thread.
+//! functions/tags and supported recipe/block-loot resources live via the
+//! `/reload` worker. Worldgen/dimensions/other registries/ZIP refuse atomically
+//! as unsupported (never a false restart promise). Listing discovers the
+//! current filesystem catalog on
+//! the worker; creation writes pack metadata there before completing its
+//! native command result. No tick-thread filesystem I/O.
 use super::{Selection, feedback};
 use crate::tick::TickState;
 
@@ -72,16 +68,13 @@ pub(crate) fn command(
     connection: crate::boundary::ConnectionId,
     text: &str,
 ) -> crate::command_execution::CommandResult {
-    use crate::command_execution::CommandResult::{Failed, Success, Unavailable};
-    if crate::command_context::exhausted(state) {
-        return Unavailable;
-    }
+    use crate::command_execution::CommandResult::Failed;
     let words: Vec<&str> = crate::commands::command_words(text)
         .map(|words| words.into_iter().collect())
         .unwrap_or_default();
     let result = dispatch(state, connection, words.as_slice());
     match result {
-        Ok(count) => Success(count),
+        Ok(result) => result,
         Err(message) => {
             feedback(state, connection, message);
             Failed
@@ -93,16 +86,20 @@ fn dispatch(
     state: &mut TickState,
     connection: crate::boundary::ConnectionId,
     words: &[&str],
-) -> Result<i32, String> {
+) -> Result<crate::command_execution::CommandResult, String> {
+    use crate::command_execution::CommandResult::Deferred;
     match words {
         ["datapack", "list"] | ["datapack", "list", "available" | "enabled"] => {
-            list(state, connection, words)
+            let filter = words.get(2).map(|word| (*word).to_owned());
+            let completion = state.command_context.completion_id()?;
+            state.datapacks.request_work(connection, false, Some(completion), move |root| {
+                Ok(super::WorkerResult::List { descriptions: discover_descriptions(root)?, filter })
+            })?;
+            Ok(Deferred(completion))
         }
-        ["datapack", "enable", rest @ ..] => enable(state, rest),
-        ["datapack", "disable", rest @ ..] => disable(state, rest),
-        ["datapack", "create", ..] => Err(
-            "Datapack creation is not supported on this server".into(),
-        ),
+        ["datapack", "enable", rest @ ..] => enable(state, connection, rest).map(Deferred),
+        ["datapack", "disable", rest @ ..] => disable(state, connection, rest).map(Deferred),
+        ["datapack", "create", name, description] => create(state, connection, name, description),
         _ => Err(
             "Supported: datapack list [available|enabled]; datapack enable <pack> [first|last|before|after <pack>]; datapack disable <pack>".into(),
         ),
@@ -111,83 +108,160 @@ fn dispatch(
 
 /// One listed pack as a hoverable chat component: the quoted name shows the
 /// `pack.mcmeta` description on hover (DATAPACK-LIST-HOVER).
-fn hover_entry(name: &str, description: &str) -> mc_nbt::Tag {
-    let mut fields = vec![("text".to_owned(), mc_nbt::Tag::String(quoted(name)))];
-    if !description.is_empty() {
-        fields.push((
-            "hoverEvent".to_owned(),
+fn hover_entry(name: &str, description: &mc_nbt::Tag) -> mc_nbt::Tag {
+    let fields = vec![
+        ("text".to_owned(), mc_nbt::Tag::String(quoted(name))),
+        (
+            "hover_event".to_owned(),
             mc_nbt::Tag::Compound(vec![
-                (
-                    "action".to_owned(),
-                    mc_nbt::Tag::String("show_text".to_owned()),
-                ),
-                (
-                    "contents".to_owned(),
-                    mc_nbt::Tag::String(description.to_owned()),
-                ),
+                ("action".to_owned(), mc_nbt::Tag::String("show_text".to_owned())),
+                ("value".to_owned(), description.clone()),
             ]),
-        ));
-    }
+        ),
+    ];
     mc_nbt::Tag::Compound(fields)
 }
 
-fn list(
+pub(super) fn report_list(
     state: &mut TickState,
     connection: crate::boundary::ConnectionId,
-    words: &[&str],
-) -> Result<i32, String> {
-    // Cached compiled catalog: the exact snapshot counts below are the
-    // execute-store results. The reload worker refreshes this snapshot;
-    // listing never touches the filesystem itself.
-    let packs = state.datapacks.packs().clone();
-    let selection = packs.selection.clone();
-    let show_available = !matches!(words, ["datapack", "list", "enabled"]);
-    let show_enabled = !matches!(words, ["datapack", "list", "available"]);
-    let mut entries = Vec::new();
-    if show_available {
-        for name in &selection.disabled {
-            let description = packs
-                .descriptions
-                .get(name)
-                .map(String::as_str)
-                .unwrap_or("");
-            entries.push(hover_entry(name, description));
+    filter: Option<&str>,
+) -> i32 {
+    let descriptions = state.datapacks.catalog();
+    let enabled = &state.datapacks.selection().enabled;
+    let mut count = 0;
+    let messages = ["enabled", "available"].into_iter()
+        .filter(|kind| filter.is_none_or(|filter| filter == *kind))
+        .map(|kind| {
+            let names: Vec<String> = if kind == "enabled" {
+                enabled.iter().filter(|id| descriptions.contains_key(*id)).cloned().collect()
+            } else {
+                descriptions.keys().filter(|id| !enabled.contains(*id)).cloned().collect()
+            };
+            count += names.len() as i32;
+            list_feedback(kind, &names, descriptions)
+        }).collect::<Vec<_>>();
+    for (key, args) in messages {
+        crate::command_execution::feedback(state, connection, &key, args);
+    }
+    count
+}
+
+fn discover_descriptions(root: &std::path::Path) -> Result<std::collections::BTreeMap<String, mc_nbt::Tag>, String> {
+    let mut descriptions = super::PackSet::default().descriptions;
+    let mut remaining = super::MAX_BYTES;
+    for (id, pack) in super::discover(root, &mut remaining)? {
+        if pack.features.iter().all(|feature| super::ENABLED_FEATURES.contains(&feature.as_str())) {
+            descriptions.insert(id, pack.description);
         }
     }
-    if show_enabled {
-        for name in &selection.enabled {
-            let description = packs
-                .descriptions
-                .get(name)
-                .map(String::as_str)
-                .unwrap_or("");
-            entries.push(hover_entry(name, description));
-        }
+    Ok(descriptions)
+}
+
+fn create(state: &mut TickState, connection: crate::boundary::ConnectionId, name: &str, description: &str) -> Result<crate::command_execution::CommandResult, String> {
+    if state.command_context.current.is_none_or(|context| context.permission < 4) {
+        return Err(crate::commands::CommandError::Unknown.message());
     }
-    let count = match words {
-        ["datapack", "list", "available"] => selection.disabled.len(),
-        ["datapack", "list", "enabled"] | ["datapack", "list"] => selection.enabled.len(),
-        _ => selection.enabled.len() + selection.disabled.len(),
-    };
-    let label = match words {
-        ["datapack", "list", "available"] => "Available",
-        ["datapack", "list", "enabled"] => "Enabled",
-        _ => "Enabled",
-    };
-    crate::command_execution::success_feedback(
-        state,
-        connection,
-        "commands.datapack.list",
+    let name = pack_name(name).ok_or("Invalid new pack name")?;
+    let stem = name.split('.').next().unwrap_or("").to_ascii_uppercase();
+    if name.is_empty() || name.len() > 255 || name.ends_with(['.', ' '])
+        || name.chars().any(|ch| ch.is_control() || "<>:\"/\\|?*".contains(ch))
+        || matches!(stem.as_str(), "" | "CON" | "PRN" | "AUX" | "NUL")
+        || (stem.len() == 4 && (stem.starts_with("COM") || stem.starts_with("LPT"))
+            && matches!(stem.as_bytes()[3], b'1'..=b'9'))
+    {
+        return Err(format!("Invalid new pack name '{name}'"));
+    }
+    let description = crate::command_text::parse_component(description).map_err(|error| error.message())?;
+    let context = state.command_context.current.expect("owner permission checked");
+    let description = crate::command_text::resolve_component(state, context.executor, &description)?;
+    let encoded_description = component_json(&description)?;
+    let completion = state.command_context.completion_id()?;
+    state.datapacks.request_work(connection, false, Some(completion), move |root| {
+        let mut descriptions = discover_descriptions(root)?;
+        create_pack(root, &name, encoded_description)?;
+        descriptions.insert(format!("file/{name}"), description);
+        Ok(super::WorkerResult::Created { descriptions, name })
+    })?;
+    Ok(crate::command_execution::CommandResult::Deferred(completion))
+}
+
+fn component_json(tag: &mc_nbt::Tag) -> Result<serde_json::Value, String> {
+    use mc_nbt::Tag;
+    Ok(match tag {
+        Tag::String(value) => value.clone().into(),
+        Tag::Compound(fields) => serde_json::Value::Object(fields.iter().map(|(key, value)| {
+            let encoded = if matches!(key.as_str(), "bold" | "italic" | "underlined" | "strikethrough" | "obfuscated" | "interpret")
+                && let Tag::Byte(value) = value
+            {
+                serde_json::Value::Bool(*value != 0)
+            } else {
+                component_json(value)?
+            };
+            Ok((key.clone(), encoded))
+        }).collect::<Result<_, String>>()?),
+        Tag::List(list) => serde_json::Value::Array(list.elements.iter().map(component_json).collect::<Result<_, _>>()?),
+        Tag::Byte(value) => (*value).into(),
+        Tag::Short(value) => (*value).into(),
+        Tag::Int(value) => (*value).into(),
+        Tag::Long(value) => (*value).into(),
+        Tag::Float(value) => serde_json::Number::from_f64(f64::from(*value)).ok_or("Non-finite component number")?.into(),
+        Tag::Double(value) => serde_json::Number::from_f64(*value).ok_or("Non-finite component number")?.into(),
+        _ => return Err("Unsupported array in text component".into()),
+    })
+}
+
+fn create_pack(root: &std::path::Path, name: &str, description: serde_json::Value) -> Result<(), String> {
+    use std::io::Write;
+    // Canonical 26.3 version.json: data_major=121, data_minor=0.
+    let bytes = serde_json::to_vec_pretty(&serde_json::json!({
+        "pack": { "description": description, "min_format": [121, 0], "max_format": [121, 0] }
+    })).map_err(|error| format!("Encoding datapack '{name}': {error}"))?;
+    std::fs::create_dir_all(root).map_err(|error| format!("Creating datapack directory: {error}"))?;
+    if std::fs::symlink_metadata(root).map_err(|error| error.to_string())?.file_type().is_symlink() {
+        return Err("Datapack root cannot be a symlink".into());
+    }
+    let directory = root.join(name);
+    std::fs::create_dir(&directory).map_err(|error| format!("Creating datapack '{name}': {error}"))?;
+    let metadata = directory.join("pack.mcmeta");
+    let result = (|| {
+        let mut file = std::fs::OpenOptions::new().write(true).create_new(true).open(&metadata)?;
+        file.write_all(&bytes)?;
+        file.sync_all()
+    })();
+    if let Err(error) = result {
+        let cleanup = std::fs::remove_file(&metadata).and_then(|()| std::fs::remove_dir(&directory));
+        return Err(format!("Creating datapack '{name}': {error}; cleanup: {cleanup:?}"));
+    }
+    Ok(())
+}
+
+fn list_feedback(
+    kind: &str,
+    names: &[String],
+    descriptions: &std::collections::BTreeMap<String, mc_nbt::Tag>,
+) -> (String, Vec<mc_nbt::Tag>) {
+    use mc_nbt::{ListTag, Tag, tag_type};
+    if names.is_empty() {
+        return (format!("commands.datapack.list.{kind}.none"), Vec::new());
+    }
+    let mut entries = Vec::with_capacity(names.len() * 2 - 1);
+    for name in names {
+        if !entries.is_empty() {
+            entries.push(Tag::Compound(vec![("text".into(), Tag::String(", ".into()))]));
+        }
+        entries.push(hover_entry(
+            name,
+            descriptions.get(name).unwrap_or(&Tag::String(String::new())),
+        ));
+    }
+    (
+        format!("commands.datapack.list.{kind}.success"),
         vec![
-            mc_nbt::Tag::String(label.to_owned()),
-            mc_nbt::Tag::String(count.to_string()),
-            mc_nbt::Tag::List(mc_nbt::ListTag {
-                element_type: mc_nbt::tag_type::COMPOUND,
-                elements: entries,
-            }),
+            Tag::String(names.len().to_string()),
+            Tag::List(ListTag { element_type: tag_type::COMPOUND, elements: entries }),
         ],
-    );
-    Ok(count as i32)
+    )
 }
 
 fn move_enabled(selection: &mut Selection, id: &str, rest: &[&str]) -> Result<(), String> {
@@ -203,19 +277,7 @@ fn move_enabled(selection: &mut Selection, id: &str, rest: &[&str]) -> Result<()
         }
         ["first"] => {
             let entry = selection.enabled.remove(position);
-            // `vanilla` stays first: enabling past it is unsupported.
-            let at = if selection
-                .enabled
-                .first()
-                .is_some_and(|first| first == "vanilla")
-            {
-                1
-            } else {
-                0
-            };
-            selection
-                .enabled
-                .insert(at.min(selection.enabled.len()), entry);
+            selection.enabled.insert(0, entry);
         }
         ["before", other] | ["after", other] => {
             let other = pack_name(other).ok_or_else(|| format!("Unknown datapack {other}"))?;
@@ -226,16 +288,6 @@ fn move_enabled(selection: &mut Selection, id: &str, rest: &[&str]) -> Result<()
                 .position(|entry| entry == &other)
                 .ok_or_else(|| format!("Unknown datapack {other}"))?;
             let at = if rest[0] == "after" { at + 1 } else { at };
-            // Never order before the builtin vanilla pack.
-            let at = if selection
-                .enabled
-                .first()
-                .is_some_and(|first| first == "vanilla")
-            {
-                at.max(1)
-            } else {
-                at
-            };
             selection
                 .enabled
                 .insert(at.min(selection.enabled.len()), entry);
@@ -249,7 +301,11 @@ fn move_enabled(selection: &mut Selection, id: &str, rest: &[&str]) -> Result<()
     Ok(())
 }
 
-fn enable(state: &mut TickState, rest: &[&str]) -> Result<i32, String> {
+fn enable(
+    state: &mut TickState,
+    connection: crate::boundary::ConnectionId,
+    rest: &[&str],
+) -> Result<crate::command_context::CompletionId, String> {
     let (name, order) = match rest {
         [name, order @ ..] => (
             reference(&[*name]).ok_or_else(|| format!("Unknown datapack {name}"))?,
@@ -266,12 +322,9 @@ fn enable(state: &mut TickState, rest: &[&str]) -> Result<i32, String> {
     }
     let mut selection = state.datapacks.selection().clone();
     if selection.enabled.iter().any(|entry| entry == &name) {
-        if order.is_empty() {
-            return Err(format!("Datapack {name} is already enabled"));
-        }
-        move_enabled(&mut selection, &name, order)?;
+        return Err(format!("Datapack {name} is already enabled"));
     } else {
-        if !selection.disabled.iter().any(|entry| entry == &name) {
+        if !state.datapacks.catalog().contains_key(&name) {
             return Err(format!("Unknown datapack {name}"));
         }
         selection.disabled.retain(|entry| entry != &name);
@@ -280,10 +333,14 @@ fn enable(state: &mut TickState, rest: &[&str]) -> Result<i32, String> {
             move_enabled(&mut selection, &name, order)?;
         }
     }
-    activate(state, selection)
+    activate(state, connection, selection)
 }
 
-fn disable(state: &mut TickState, rest: &[&str]) -> Result<i32, String> {
+fn disable(
+    state: &mut TickState,
+    connection: crate::boundary::ConnectionId,
+    rest: &[&str],
+) -> Result<crate::command_context::CompletionId, String> {
     let name = match rest {
         [name] => reference(&[name]).ok_or_else(|| format!("Unknown datapack {name}"))?,
         _ => return Err("Supported: datapack disable <pack>".into()),
@@ -300,18 +357,25 @@ fn disable(state: &mut TickState, rest: &[&str]) -> Result<i32, String> {
     }
     selection.enabled.retain(|entry| entry != &name);
     selection.disabled.push(name);
-    activate(state, selection)
+    activate(state, connection, selection)
 }
 
 /// Atomically activate `selection` through the reload worker: validate, queue
-/// a worker recompile, and return the loaded-pack count. The worker classifies
-/// the outcome per the approved boundary on completion — functions/tags swap
-/// live, supported recipe/block-loot diffs refuse with restart-required,
-/// worldgen/dimensions/other registries refuse as unsupported — while the old
-/// packs and selection stay authoritative until the worker reports back.
-fn activate(state: &mut TickState, selection: Selection) -> Result<i32, String> {
+/// a worker recompile, and complete with the loaded-pack count. The worker classifies
+/// the outcome on completion: functions/tags and supported recipe/block-loot
+/// resources swap live; worldgen/dimensions/other registries remain unsupported.
+/// Old packs and selection stay authoritative until successful publication.
+fn activate(
+    state: &mut TickState,
+    connection: crate::boundary::ConnectionId,
+    selection: Selection,
+) -> Result<crate::command_context::CompletionId, String> {
     selection.validate()?;
-    let count = selection.enabled.len() as i32;
-    state.datapacks.request_activation(selection)?;
-    Ok(count)
+    let completion = state.command_context.completion_id()?;
+    state.datapacks.request_activation(selection, connection, completion)?;
+    Ok(completion)
 }
+
+#[cfg(test)]
+#[path = "datapack_management_tests.rs"]
+mod tests;

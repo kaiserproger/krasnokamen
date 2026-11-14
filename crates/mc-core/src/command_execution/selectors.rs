@@ -156,11 +156,17 @@ pub(super) fn options_match(
     true
 }
 
-pub(super) fn selector(
+pub(crate) fn selector(
     state: &TickState,
     executor: EntityId,
     selector: &Selector,
-) -> Vec<EntityId> {
+    packs: &crate::datapacks::PackSet,
+) -> Result<Vec<EntityId>, String> {
+    let predicates = selector.predicates.iter().map(|(id, inverted)| {
+        packs.predicates.get(id.as_str())
+            .map(|predicate| (predicate, *inverted))
+            .ok_or_else(|| format!("Unknown predicate {id}"))
+    }).collect::<Result<Vec<_>, _>>()?;
     let origin = crate::command_console::pose(state, executor)
         .map(|(position, _)| position)
         .unwrap_or_else(|| state.world.world_spawn_position());
@@ -170,7 +176,7 @@ pub(super) fn selector(
         selector.kind,
         SelectorKind::Nearest | SelectorKind::AllPlayers | SelectorKind::Random
     );
-    let candidates: Vec<_> = state
+    let mut candidates: Vec<_> = state
         .entities
         .slots()
         .filter_map(|slot| {
@@ -248,7 +254,28 @@ pub(super) fn selector(
             Some((body.id, distance))
         })
         .collect();
-    order_and_limit(state, executor, selector, candidates)
+    if !predicates.is_empty() {
+        for index in (0..candidates.len()).rev() {
+            let mut entity = crate::advancements::entity_snapshot(state, candidates[index].0);
+            // Vanilla selector loot contexts bind ORIGIN to THIS_ENTITY's own
+            // position, not the command source or selector-origin override.
+            entity["distance"] = serde_json::json!({
+                "x":0.0, "y":0.0, "z":0.0, "horizontal":0.0, "absolute":0.0
+            });
+            let mut matched = true;
+            for (predicate, inverted) in &predicates {
+                let evaluation = mc_data::advancements::evaluate_conditions(predicate, &entity);
+                if !evaluation.unsupported.is_empty() {
+                    return Err(format!("Unsupported predicate: {:?}", evaluation.unsupported));
+                }
+                matched &= evaluation.matches != *inverted;
+            }
+            if !matched {
+                candidates.swap_remove(index);
+            }
+        }
+    }
+    Ok(order_and_limit(state, executor, selector, candidates))
 }
 
 /// The single owner of selector `sort=`/`limit=` semantics, shared by
@@ -321,8 +348,8 @@ pub(crate) fn resolve_target(
     state: &TickState,
     executor: EntityId,
     target: &Target,
-) -> Vec<EntityId> {
-    match target {
+) -> Result<Vec<EntityId>, String> {
+    Ok(match target {
         Target::Entity(entity) => state
             .entities
             .slot_of(*entity)
@@ -352,6 +379,7 @@ pub(crate) fn resolve_target(
                 pitch: None,
                 yaw: None,
                 nbt: Vec::new(),
+                predicates: Vec::new(),
                 advancements: Vec::new(),
                 distance: None,
                 position: [None; 3],
@@ -359,8 +387,9 @@ pub(crate) fn resolve_target(
                 limit: None,
                 sort: None,
             },
-        ),
-        Target::Selector(value) => selector(state, executor, value),
+            state.datapacks.packs(),
+        )?,
+        Target::Selector(value) => return selector(state, executor, value, state.datapacks.packs()),
         Target::Player(name) => {
             let uuid = uuid::Uuid::parse_str(name).ok();
             state
@@ -380,7 +409,7 @@ pub(crate) fn resolve_target(
                 })
                 .collect()
         }
-    }
+    })
 }
 
 /// Whether a selector's declared shape admits at most one entity: an
@@ -414,7 +443,7 @@ pub(crate) fn player_targets(
     state: &TickState,
     executor: EntityId,
     target: &Target,
-) -> Vec<EntityId> {
+) -> Result<Vec<EntityId>, String> {
     if let Target::Selector(selector) = target
         && !matches!(
             selector.kind,
@@ -424,9 +453,9 @@ pub(crate) fn player_targets(
                 | SelectorKind::Executor
         )
     {
-        return Vec::new();
+        return Ok(Vec::new());
     }
-    let mut targets = resolve_target(state, executor, target);
+    let mut targets = resolve_target(state, executor, target)?;
     targets.retain(|id| state.players.contains_key(id));
-    targets
+    Ok(targets)
 }

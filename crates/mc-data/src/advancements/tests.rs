@@ -709,3 +709,55 @@ fn event_candidate_dispatch_is_bounded_by_matching_discriminators_and_rebuilds()
         "removed definitions must not retain dispatch entries"
     );
 }
+
+#[test]
+fn loot_conditions_bind_selected_entity_and_its_origin_not_advancement_player() {
+    let predicate = json!([{"condition":"minecraft:all_of","terms":[
+        {"condition":"minecraft:entity_properties","entity":"this","predicate":{"type":"minecraft:cow"}},
+        {"condition":"minecraft:location_check","predicate":{"position":{"x":{"min":40}}}},
+        {"condition":"minecraft:any_of","terms":[
+            {"condition":"minecraft:entity_properties","entity":"this","predicate":{"flags":{"is_baby":true}}},
+            {"condition":"minecraft:inverted","term":{
+                "condition":"minecraft:entity_properties","entity":"this","predicate":{"flags":{"is_on_fire":true}}
+            }}
+        ]}
+    ]}]);
+    let mut selected = json!({
+        "type":"minecraft:cow", "flags":{"is_baby":false,"is_on_fire":false},
+        "location":{"position":{"x":41,"y":70,"z":0}},
+        "player":{"type":"minecraft:player","location":{"position":{"x":0,"y":70,"z":0}}}
+    });
+    let result = evaluate_conditions(&predicate, &selected);
+    assert!(result.unsupported.is_empty());
+    assert!(result.matches);
+    selected["location"]["position"]["x"] = json!(39);
+    assert!(!evaluate_conditions(&predicate, &selected).matches);
+    selected["location"]["position"]["x"] = json!(41);
+    selected["flags"]["is_on_fire"] = json!(true);
+    assert!(!evaluate_conditions(&predicate, &selected).matches);
+    selected["flags"]["is_baby"] = json!(true);
+    assert!(evaluate_conditions(&predicate, &selected).matches);
+    selected["type"] = json!("minecraft:pig");
+    assert!(!evaluate_conditions(&predicate, &selected).matches);
+}
+
+#[test]
+fn loot_conditions_keep_unknown_fields_and_conditions_as_errors_under_boolean_operators() {
+    let entity = json!({"type":"minecraft:cow"});
+    for unknown in [
+        json!({"condition":"test:unknown"}),
+        json!({"condition":"minecraft:entity_properties","entity":"this","predicate":{"not_a_field":true}}),
+    ] {
+        for predicate in [
+            json!([{"condition":"minecraft:inverted","term":unknown.clone()}]),
+            json!([{"condition":"minecraft:any_of","terms":[
+                {"condition":"minecraft:entity_properties","entity":"this","predicate":{"type":"minecraft:cow"}},
+                unknown.clone()
+            ]}]),
+        ] {
+            let result = evaluate_conditions(&predicate, &entity);
+            assert!(!result.matches);
+            assert!(!result.unsupported.is_empty(), "{predicate}");
+        }
+    }
+}

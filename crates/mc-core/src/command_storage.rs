@@ -1,6 +1,5 @@
 //! World-global command storage, retained as vanilla NBT compounds.
 use crate::command_context::Context;
-use crate::command_execution::CommandResult;
 use crate::tick::TickState;
 use mc_nbt::Tag;
 use std::collections::BTreeMap;
@@ -43,91 +42,27 @@ pub(crate) fn decode(bytes: &[u8]) -> Result<Storage, String> {
     }
     from_tag(tag)
 }
-fn id(input: &mut &str) -> Result<String, String> {
-    let name = crate::command_nbt_path::argument(input)?;
-    Ok(mc_data::Identifier::parse(name)
-        .map_err(|e| e.to_string())?
-        .as_str()
-        .to_owned())
-}
-fn source(state: &TickState, input: &mut &str) -> Result<Tag, String> {
-    if crate::command_nbt_path::argument(input)? != "storage" {
-        return Err("Only storage sources are supported".into());
-    }
-    let name = id(input)?;
-    let empty = Tag::Compound(Vec::new());
-    let root = state.command_storage.get(&name).unwrap_or(&empty);
+fn source(state: &TickState, context: Context, input: &mut &str) -> Result<Tag, String> {
+    let root = crate::command_data::Accessor::parse(state, context, input)?.read(state)?;
     if input.trim().is_empty() {
-        Ok(root.clone())
+        Ok(root)
     } else {
         let path = crate::command_nbt_path::argument(input)?;
-        Ok(crate::command_nbt_path::get(root, path)?.into_owned())
+        Ok(crate::command_nbt_path::get(&root, path)?.into_owned())
     }
 }
-pub(crate) fn command(state: &mut TickState, context: Context, input: &str) -> CommandResult {
-    match run(state, input) {
-        Ok((count, message)) => {
-            if crate::command_execution::accepts_success(state, context.connection) {
-                state.push_player(
-                    context.connection,
-                    crate::boundary::PlayerChange::Chat { message },
-                );
-            }
-            CommandResult::Success(count)
-        }
-        Err(message) => {
-            state.push_player(
-                context.connection,
-                crate::boundary::PlayerChange::Chat { message },
-            );
-            CommandResult::Failed
-        }
-    }
-}
-fn run(state: &mut TickState, mut input: &str) -> Result<(i32, String), String> {
+
+/// Prepare one NBT edit without touching the accessor's authoritative owner.
+/// Native entity/block accessors hydrate and validate this candidate before commit.
+pub(crate) fn prepare(
+    state: &TickState,
+    context: Context,
+    previous: &Tag,
+    action: &str,
+    mut input: &str,
+) -> Result<(i32, Tag), String> {
     let word = crate::command_nbt_path::argument;
-    if word(&mut input)? != "data" {
-        return Err("Expected data".into());
-    }
-    let action = word(&mut input)?;
-    if word(&mut input)? != "storage" {
-        return Err("Only storage data editing is supported".into());
-    }
-    let name = id(&mut input)?;
-    let mut root = state
-        .command_storage
-        .get(&name)
-        .cloned()
-        .unwrap_or_else(|| Tag::Compound(Vec::new()));
-    if action == "get" {
-        let (result, message) = if input.trim().is_empty() {
-            (1, crate::command_nbt_path::snbt(&root))
-        } else {
-            let path = word(&mut input)?;
-            let value = crate::command_nbt_path::get(&root, path)?;
-            if input.trim().is_empty() {
-                (
-                    crate::command_nbt_path::result(&value),
-                    crate::command_nbt_path::snbt(&value),
-                )
-            } else {
-                let scale: f64 = word(&mut input)?.parse().map_err(|_| "Invalid scale")?;
-                if !scale.is_finite() {
-                    return Err("Invalid scale".into());
-                }
-                let result = (crate::command_nbt_path::number(&value)
-                    .ok_or("Expected numeric NBT")?
-                    * scale)
-                    .floor() as i32;
-                (result, result.to_string())
-            }
-        };
-        if !input.trim().is_empty() {
-            return Err("Trailing arguments".into());
-        }
-        return Ok((result, message));
-    }
-    let previous = root.clone();
+    let mut root = previous.clone();
     let count = match action {
         "merge" => {
             let patch = crate::command_snbt::parse(input.trim()).map_err(str::to_owned)?;
@@ -148,7 +83,7 @@ fn run(state: &mut TickState, mut input: &str) -> Result<(i32, String), String> 
                 }
             }
             merge(fields, patch);
-            i32::from(root != previous)
+            i32::from(root != *previous)
         }
         "remove" => {
             let path = word(&mut input)?;
@@ -177,7 +112,7 @@ fn run(state: &mut TickState, mut input: &str) -> Result<(i32, String), String> 
                     input = &input.trim_start()[consumed..];
                     value
                 }
-                "from" => source(state, &mut input)?,
+                "from" => source(state, context, &mut input)?,
                 _ => return Err("Expected value or from".into()),
             };
             if !input.trim().is_empty() {
@@ -187,10 +122,8 @@ fn run(state: &mut TickState, mut input: &str) -> Result<(i32, String), String> 
         }
         _ => return Err("Expected data get, merge, modify or remove".into()),
     };
-    if count == 0 || root == previous {
+    if count == 0 || root == *previous {
         return Err("Data did not change".into());
     }
-    state.command_storage.insert(name, root);
-    state.command_storage_dirty = true;
-    Ok((count, "Storage data updated".into()))
+    Ok((count, root))
 }

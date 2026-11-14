@@ -50,18 +50,23 @@ pub(crate) struct PackSet {
     pub selection: Selection,
     /// Pack descriptions from `pack.mcmeta` (`file/<name>` and `vanilla`),
     /// preserved so listing can present them through chat hover components.
-    pub descriptions: BTreeMap<String, String>,
+    pub descriptions: BTreeMap<String, mc_nbt::Tag>,
     pub(crate) functions: BTreeMap<String, Arc<[String]>>,
     pub(crate) tags: BTreeMap<String, Arc<[String]>>,
+    pub(crate) predicates: BTreeMap<String, serde_json::Value>,
     resources: BTreeMap<String, String>,
 }
 impl Default for PackSet {
     fn default() -> Self {
         Self {
             selection: Selection::default(),
-            descriptions: BTreeMap::from([("vanilla".into(), "Vanilla built-in content".into())]),
+            descriptions: BTreeMap::from([(
+                "vanilla".into(),
+                mc_nbt::Tag::String("Vanilla built-in content".into()),
+            )]),
             functions: BTreeMap::new(),
             tags: BTreeMap::new(),
+            predicates: BTreeMap::new(),
             resources: BTreeMap::new(),
         }
     }
@@ -150,80 +155,69 @@ fn read_text(path: &Path, remaining: &mut usize) -> Result<String, String> {
     Ok(text)
 }
 
+struct DiscoveredPack {
+    path: PathBuf,
+    description: mc_nbt::Tag,
+    features: Vec<String>,
+}
+
+fn discover(root: &Path, remaining: &mut usize) -> Result<BTreeMap<String, DiscoveredPack>, String> {
+    let mut packs = BTreeMap::new();
+    if !root.exists() {
+        return Ok(packs);
+    }
+    if std::fs::symlink_metadata(root).map_err(|e| e.to_string())?.file_type().is_symlink() {
+        return Err("Datapack root cannot be a symlink".into());
+    }
+    for entry in std::fs::read_dir(root).map_err(|e| e.to_string())? {
+        if packs.len() >= MAX_RESOURCES - 1 {
+            return Err("Datapack resource limit exceeded".into());
+        }
+        let pack = entry.map_err(|e| e.to_string())?;
+        if !pack.file_type().map_err(|e| e.to_string())?.is_dir() {
+            return Err(format!("Only directory datapacks are supported: {}", pack.path().display()));
+        }
+        let id = format!("file/{}", pack.file_name().into_string().map_err(|_| "Non-UTF8 datapack name")?);
+        let raw = read_text(&pack.path().join("pack.mcmeta"), remaining)?;
+        let metadata: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("{id}: {e}"))?;
+        let pack_meta = metadata.get("pack").filter(|value| value.is_object())
+            .ok_or_else(|| format!("{id}: pack.mcmeta requires a pack object"))?;
+        let description = pack_meta.get("description")
+            .map(|value| crate::command_text::parse_component(&value.to_string())
+                .map_err(|error| format!("{id}: {}", error.message())))
+            .transpose()?.unwrap_or_else(|| mc_nbt::Tag::String(String::new()));
+        let features = metadata.get("features").map(|features| {
+            features.get("enabled").and_then(serde_json::Value::as_array)
+                .ok_or_else(|| format!("{id}: invalid features.enabled"))?
+                .iter().map(|feature| feature.as_str().map(str::to_owned)
+                    .ok_or_else(|| format!("{id}: feature identifier must be a string")))
+                .collect::<Result<Vec<_>, String>>()
+        }).transpose()?.unwrap_or_default();
+        packs.insert(id, DiscoveredPack { path: pack.path(), description, features });
+    }
+    Ok(packs)
+}
+
 impl PackSet {
     pub(crate) fn load(root: &Path, mut selection: Selection) -> Result<Self, String> {
         selection.validate()?;
-        let mut packs = BTreeMap::new();
-        let mut descriptions =
-            BTreeMap::from([("vanilla".to_owned(), "Vanilla built-in content".to_owned())]);
         let mut remaining = MAX_BYTES;
-        if root.exists() {
-            if std::fs::symlink_metadata(root)
-                .map_err(|e| e.to_string())?
-                .file_type()
-                .is_symlink()
-            {
-                return Err("Datapack root cannot be a symlink".into());
-            }
-            for entry in std::fs::read_dir(root).map_err(|e| e.to_string())? {
-                if packs.len() >= MAX_RESOURCES - 1 {
-                    return Err("Datapack resource limit exceeded".into());
-                }
-                let pack = entry.map_err(|e| e.to_string())?;
-                if !pack.file_type().map_err(|e| e.to_string())?.is_dir() {
-                    return Err(format!(
-                        "Only directory datapacks are supported: {}",
-                        pack.path().display()
-                    ));
-                }
-                let raw_meta = read_text(&pack.path().join("pack.mcmeta"), &mut remaining)?;
-                let metadata: serde_json::Value =
-                    serde_json::from_str(&raw_meta).map_err(|e| e.to_string())?;
-                if !metadata
-                    .get("pack")
-                    .is_some_and(serde_json::Value::is_object)
-                {
-                    return Err("Datapack pack.mcmeta requires a pack object".into());
-                }
-                let name = pack
-                    .file_name()
-                    .into_string()
-                    .map_err(|_| "Non-UTF8 datapack name")?;
-                let id = format!("file/{name}");
-                if !selection.disabled.contains(&id)
-                    && let Some(features) = metadata.get("features")
-                {
-                    let required = features
-                        .get("enabled")
-                        .and_then(serde_json::Value::as_array)
-                        .ok_or_else(|| format!("{id}: invalid features.enabled"))?;
-                    for feature in required {
-                        let feature = feature
-                            .as_str()
-                            .ok_or_else(|| format!("{id}: feature identifier must be a string"))?;
-                        if !ENABLED_FEATURES.contains(&feature) {
-                            return Err(format!("{id}: world-disabled feature {feature}"));
-                        }
+        let packs = discover(root, &mut remaining)?;
+        let mut descriptions = Self::default().descriptions;
+        for (id, pack) in &packs {
+            if !selection.disabled.contains(id) {
+                for feature in &pack.features {
+                    if !ENABLED_FEATURES.contains(&feature.as_str()) {
+                        return Err(format!("{id}: world-disabled feature {feature}"));
                     }
                 }
-                let description = metadata
-                    .get("pack")
-                    .and_then(|pack| pack.get("description"))
-                    .map(|description| {
-                        if let Some(text) = description.as_str() {
-                            text.to_owned()
-                        } else {
-                            description.to_string()
-                        }
-                    })
-                    .unwrap_or_default();
-                descriptions.insert(id.clone(), description);
-                packs.insert(id, pack.path());
             }
+            descriptions.insert(id.clone(), pack.description.clone());
         }
         selection
             .enabled
             .retain(|id| id == "vanilla" || packs.contains_key(id));
+        selection.disabled.retain(|id| packs.contains_key(id));
         for id in packs.keys() {
             if !selection.enabled.contains(id) && !selection.disabled.contains(id) {
                 selection.enabled.push(id.clone());
@@ -241,7 +235,7 @@ impl PackSet {
             if id == "vanilla" {
                 continue;
             }
-            let data = packs[id].join("data");
+            let data = packs[id].path.join("data");
             let mut paths = Vec::new();
             files(&data, &mut paths, 0, &mut visited)?;
             for path in paths {
@@ -309,6 +303,24 @@ impl PackSet {
                             .unwrap_or(true);
                         values.push((name.to_owned(), required));
                     }
+                } else if kind == "predicate" && resource.ends_with(".json") {
+                    let id = identifier(&format!(
+                        "{namespace}:{}", resource.strip_suffix(".json").expect("predicate extension")
+                    ))?;
+                    let value: serde_json::Value =
+                        serde_json::from_str(&text).map_err(|error| format!("{id}: {error}"))?;
+                    let conditions = if value.is_array() {
+                        value
+                    } else {
+                        serde_json::Value::Array(vec![value])
+                    };
+                    let evaluation = mc_data::advancements::evaluate_conditions(
+                        &conditions, &serde_json::Value::Null,
+                    );
+                    if !evaluation.unsupported.is_empty() {
+                        return Err(format!("Unsupported predicate {id}: {:?}", evaluation.unsupported));
+                    }
+                    result.predicates.insert(id, conditions);
                 } else if matches!(kind, "recipe" | "loot_table") && resource.ends_with(".json") {
                     result.resources.insert(relative, text);
                 } else {
@@ -369,6 +381,18 @@ impl PackSet {
         Ok(result)
     }
 
+    pub(crate) fn prepare_content(
+        &self,
+        base: &Arc<crate::registry::CoreRegistry>,
+    ) -> Result<Arc<crate::registry::CoreRegistry>, String> {
+        if self.resources.is_empty() {
+            return Ok(Arc::clone(base));
+        }
+        let mut registry = base.prepare_content();
+        self.install_content(&mut registry)?;
+        Ok(Arc::new(registry))
+    }
+
     pub(crate) fn install_content(
         &self,
         registry: &mut crate::registry::CoreRegistry,
@@ -412,7 +436,11 @@ impl PackSet {
 #[derive(Default)]
 pub(crate) struct Runtime {
     packs: Arc<PackSet>,
+    discovered: Option<Arc<BTreeMap<String, mc_nbt::Tag>>>,
     root: Option<PathBuf>,
+    /// Unmodified startup content (including plugin contributions), used only
+    /// to prepare replacement catalogs. TickState.registry remains authoritative.
+    base_registry: Option<Arc<crate::registry::CoreRegistry>>,
     reload: Option<Reload>,
     load_pending: bool,
     pending: Vec<Frame>,
@@ -423,34 +451,68 @@ pub(crate) struct Runtime {
     pub(crate) origin: Option<[f64; 3]>,
 }
 struct Reload {
-    receiver: std::sync::mpsc::Receiver<Result<PackSet, String>>,
+    receiver: std::sync::mpsc::Receiver<Result<WorkerResult, String>>,
     connection: ConnectionId,
     /// Whether this worker run backs an enable/disable activation (report
     /// loaded-pack counts) or a plain `/reload` (report reloaded functions).
     activation: bool,
+    completion: Option<crate::command_context::CompletionId>,
 }
+enum WorkerResult {
+    Reload {
+        packs: PackSet,
+        registry: Option<Arc<crate::registry::CoreRegistry>>,
+    },
+    DebugReport(crate::command_debug::Report),
+    List {
+        descriptions: BTreeMap<String, mc_nbt::Tag>,
+        filter: Option<String>,
+    },
+    Created {
+        descriptions: BTreeMap<String, mc_nbt::Tag>,
+        name: String,
+    },
+}
+
 struct Frame {
     lines: Arc<[String]>,
     next: usize,
     started: bool,
+    trace_name: Option<String>,
     context: crate::command_context::Context,
 }
 
 impl Runtime {
     #[cfg(test)]
-    pub(crate) fn new(packs: PackSet, root: PathBuf) -> Self {
+    pub(crate) fn new(
+        packs: PackSet,
+        root: PathBuf,
+        base: Arc<crate::registry::CoreRegistry>,
+    ) -> Self {
         Self {
             packs: Arc::new(packs),
             root: Some(root),
+            base_registry: Some(base),
             load_pending: true,
             ..Self::default()
         }
     }
-    pub(crate) fn install(&mut self, packs: PackSet, root: PathBuf) {
+    pub(crate) fn install(
+        &mut self,
+        packs: PackSet,
+        root: PathBuf,
+        base: Arc<crate::registry::CoreRegistry>,
+    ) {
         self.selection_dirty |= self.packs.selection != packs.selection;
+        self.discovered = None;
         self.packs = Arc::new(packs);
         self.root = Some(root);
+        self.base_registry = Some(base);
         self.load_pending = true;
+    }
+
+    pub(crate) fn pending_work(&self) -> bool {
+        self.reload.is_some()
     }
     pub(crate) fn selection(&self) -> &Selection {
         &self.packs.selection
@@ -458,19 +520,60 @@ impl Runtime {
     pub(crate) fn packs(&self) -> &PackSet {
         &self.packs
     }
+    fn catalog(&self) -> &BTreeMap<String, mc_nbt::Tag> {
+        self.discovered.as_deref().unwrap_or(&self.packs.descriptions)
+    }
     /// Queue a worker-thread activation for an enable/disable selection:
     /// the worker recompiles and classifies the outcome on completion while
     /// the old packs and selection stay authoritative. Tick-thread callers
     /// never touch the filesystem.
-    pub(crate) fn request_activation(&mut self, selection: Selection) -> Result<(), String> {
+    pub(crate) fn request_activation(
+        &mut self,
+        selection: Selection,
+        connection: ConnectionId,
+        completion: crate::command_context::CompletionId,
+    ) -> Result<(), String> {
         selection.validate()?;
-        self.request_reload(selection, crate::command_console::CONNECTION, true)
+        self.request_reload(selection, connection, true, Some(completion))
     }
     fn request_reload(
         &mut self,
         selection: Selection,
         connection: ConnectionId,
         activation: bool,
+        completion: Option<crate::command_context::CompletionId>,
+    ) -> Result<(), String> {
+        let base = Arc::clone(self.base_registry.as_ref().ok_or("Datapack runtime is not installed")?);
+        let current = Arc::clone(&self.packs);
+        self.request_work(connection, activation, completion, move |root| {
+            let packs = PackSet::load(root, selection)?;
+            let registry = if packs.resources == current.resources {
+                None
+            } else {
+                Some(packs.prepare_content(&base)?)
+            };
+            Ok(WorkerResult::Reload { packs, registry })
+        })
+    }
+
+    pub(crate) fn request_debug_report(
+        &mut self,
+        connection: ConnectionId,
+        completion: crate::command_context::CompletionId,
+        report: crate::command_debug::Report,
+    ) -> Result<(), String> {
+        self.request_work(connection, false, Some(completion), move |root| {
+            report.write(root)?;
+            Ok(WorkerResult::DebugReport(report))
+        })
+    }
+
+    fn request_work(
+        &mut self,
+        connection: ConnectionId,
+        activation: bool,
+        completion: Option<crate::command_context::CompletionId>,
+        work: impl FnOnce(&Path) -> Result<WorkerResult, String> + Send + 'static,
     ) -> Result<(), String> {
         if self.reload.is_some() {
             return Err("Datapack reload already in progress".into());
@@ -483,13 +586,14 @@ impl Runtime {
         std::thread::Builder::new()
             .name("datapack-reload".into())
             .spawn(move || {
-                let _ = tx.send(PackSet::load(&root, selection));
+                let _ = tx.send(work(&root));
             })
             .map_err(|error| format!("Starting datapack reload: {error}"))?;
         self.reload = Some(Reload {
             receiver,
             connection,
             activation,
+            completion,
         });
         Ok(())
     }
@@ -555,7 +659,7 @@ fn feedback(state: &mut TickState, connection: ConnectionId, message: impl Into<
     );
 }
 
-fn enqueue(
+pub(crate) fn enqueue(
     state: &mut TickState,
     name: &str,
     connection: ConnectionId,
@@ -582,6 +686,7 @@ fn enqueue(
                 lines: runtime.packs.functions[name].clone(),
                 next: 0,
                 started: false,
+                trace_name: state.debug_tracing.then(|| name.clone()),
                 context,
             });
         }
@@ -596,6 +701,7 @@ fn enqueue(
             lines,
             next: 0,
             started: false,
+            trace_name: state.debug_tracing.then_some(id),
             context,
         });
     }
@@ -609,13 +715,24 @@ pub(crate) fn execute_block(state: &mut TickState, text: &str, changes: &mut Cha
     crate::command_context::submit(state, text, context, changes);
 }
 
-fn drain(state: &mut TickState, changes: &mut ChangeSet) {
+pub(crate) fn drain(state: &mut TickState, changes: &mut ChangeSet) {
     if state.datapacks.running {
         return;
     }
+    drain_until(state, changes, 0);
+}
+
+pub(crate) fn pending_depth(state: &TickState) -> usize {
+    state.datapacks.pending.len()
+}
+
+/// A traced invocation shares the ordinary interpreter and budget, but must
+/// finish its own frames before returning to the caller's pending function.
+pub(crate) fn drain_until(state: &mut TickState, changes: &mut ChangeSet, stop_depth: usize) {
     crate::command_context::begin_sequence(state);
-    state.datapacks.running = true;
-    while let Some(mut frame) = state.datapacks.pending.pop() {
+    let running = std::mem::replace(&mut state.datapacks.running, true);
+    while state.datapacks.pending.len() > stop_depth {
+        let mut frame = state.datapacks.pending.pop().expect("pending function frame");
         if !frame.started {
             if let Err(error) = crate::command_context::charge(state) {
                 state.datapacks.pending.clear();
@@ -623,11 +740,15 @@ fn drain(state: &mut TickState, changes: &mut ChangeSet) {
                 break;
             }
             frame.started = true;
+            if let Some(name) = &frame.trace_name {
+                crate::command_debug::trace_enter(state, name, frame.lines.len());
+            }
         }
         if frame.next == frame.lines.len() {
             continue;
         }
         if crate::command_context::exhausted(state) {
+            crate::command_debug::trace_budget_exhausted(state);
             state.datapacks.pending.clear();
             feedback(
                 state,
@@ -640,10 +761,21 @@ fn drain(state: &mut TickState, changes: &mut ChangeSet) {
         let index = frame.next;
         let context = frame.context;
         frame.next += 1;
+        crate::command_debug::trace_command(state, &lines[index]);
         state.datapacks.pending.push(frame);
         crate::command_context::submit(state, &lines[index], context, changes);
+        if state.command_context.waiting() {
+            state.command_context.suspend_functions(stop_depth);
+            break;
+        }
     }
-    state.datapacks.running = false;
+    state.datapacks.running = running;
+}
+
+pub(crate) fn cancel_pending(state: &mut TickState) {
+    state.datapacks.pending.clear();
+    state.debug_tracing = false;
+    state.debug_traces.clear();
 }
 
 pub(crate) fn command(
@@ -695,7 +827,22 @@ pub(crate) fn command(
                 Ok(())
             })()
         }
-        ["reload"] => state.datapacks.request_reload(state.datapacks.selection().clone(), connection, false),
+        ["reload"] => {
+            let queued = (|| {
+                let completion = state.command_context.completion_id()?;
+                state.datapacks.request_reload(
+                    state.datapacks.selection().clone(), connection, false, Some(completion),
+                )?;
+                Ok::<_, String>(completion)
+            })();
+            return match queued {
+                Ok(completion) => crate::command_execution::CommandResult::Deferred(completion),
+                Err(error) => {
+                    feedback(state, connection, error);
+                    Failed
+                }
+            };
+        }
         _ => Err("Supported: function <id|#tag>; schedule function <id> <time> [append|replace]; schedule clear <id>; reload; datapack list".into()),
     };
     let outcome = if let Err(error) = result {
@@ -708,54 +855,144 @@ pub(crate) fn command(
     outcome
 }
 
-pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
+fn publish_content(
+    state: &mut TickState,
+    registry: Arc<crate::registry::CoreRegistry>,
+    _changes: &mut ChangeSet,
+) {
+    fn install(world: &mut TickState, registry: &Arc<crate::registry::CoreRegistry>) {
+        world.registry = Arc::clone(registry);
+        let mut updates = Vec::with_capacity(world.players.len());
+        for player in world.players.values_mut() {
+            let changes = player.reload_recipes(&registry.item_rules());
+            let book = crate::boundary::PlayerChange::RecipesUnlocked {
+                registry: crate::boundary::RecipeSource(Arc::clone(registry)),
+                recipes: player.unlocked_recipes.iter().cloned().collect(),
+                replace: true,
+            };
+            updates.push((player.connection, book, changes));
+        }
+        for (connection, book, changes) in updates {
+            world.push_player(connection, book);
+            for change in changes {
+                world.push_player(connection, change);
+            }
+        }
+    }
+    install(state, &registry);
+    for world in state.other_dimensions.values_mut() {
+        install(world, &registry);
+    }
+}
+
+pub(crate) fn poll_worker(state: &mut TickState, changes: &mut ChangeSet) {
+    if state.dimension_globals.active && !state.command_context.shared {
+        return;
+    }
     if let Some(reload) = &state.datapacks.reload {
         let connection = reload.connection;
         let activation = reload.activation;
-        match reload.receiver.try_recv() {
+        let completion = reload.completion;
+        let event_context = completion.and_then(|id| crate::command_context::completion_context(state, id));
+        let deliver = completion.is_none() || event_context.is_some();
+        let result = reload.receiver.try_recv();
+        let previous = state.command_context.current;
+        state.command_context.current = event_context.or(previous);
+        match result {
             Ok(result) => {
                 state.datapacks.reload = None;
+                let mut outcome = (false, 0);
                 match result {
-                    Ok(packs) if packs.resources == state.datapacks.packs.resources => {
+                    Ok(WorkerResult::Reload { packs, registry }) => {
+                        if let Some(registry) = registry {
+                            publish_content(state, registry, changes);
+                        }
                         state.datapacks.selection_dirty |=
                             state.datapacks.packs.selection != packs.selection;
                         let count = packs.selection.enabled.len();
+                        outcome = (true, count as i32);
+                        state.datapacks.discovered = None;
                         state.datapacks.packs = Arc::new(packs);
                         state.datapacks.load_pending = true;
-                        if crate::command_execution::accepts_success(state, connection) {
+                        if deliver && crate::command_execution::accepts_success(state, connection) {
                             feedback(
                                 state,
                                 connection,
                                 if activation {
                                     format!("Datapack selection applied ({count} enabled)")
                                 } else {
-                                    "Datapack functions reloaded".into()
+                                    "Datapack content reloaded".into()
                                 },
                             );
                         }
                     }
-                    Ok(_) => feedback(
-                        state,
-                        connection,
-                        "Recipe/loot changes require restart; reload refused, old packs and selection retained",
-                    ),
-                    Err(error) => feedback(
-                        state,
-                        connection,
-                        format!("Datapack reload refused: {error}"),
-                    ),
+                    Ok(WorkerResult::List { descriptions, filter }) => {
+                        state.datapacks.discovered = Some(Arc::new(descriptions));
+                        let count = if deliver {
+                            management::report_list(state, connection, filter.as_deref())
+                        } else {
+                            0
+                        };
+                        outcome = (true, count);
+                    }
+                    Ok(WorkerResult::Created { descriptions, name }) => {
+                        state.datapacks.discovered = Some(Arc::new(descriptions));
+                        if deliver {
+                            crate::command_execution::success_feedback(
+                                state, connection, "commands.datapack.create.success",
+                                vec![mc_nbt::Tag::String(name)],
+                            );
+                        }
+                        outcome = (true, 1);
+                    }
+                    Ok(WorkerResult::DebugReport(report)) => {
+                        if deliver {
+                            if report.success {
+                                crate::command_execution::success_feedback(
+                                    state, connection, report.feedback, report.arguments,
+                                );
+                            } else {
+                                crate::command_execution::feedback(
+                                    state, connection, report.feedback, report.arguments,
+                                );
+                            }
+                        }
+                        outcome = (report.success, report.result);
+                    }
+                    Err(error) => {
+                        if deliver {
+                            feedback(state, connection, format!("Datapack operation failed: {error}"));
+                        }
+                    }
+                }
+                if let Some(id) = completion {
+                    crate::command_context::complete(state, id, outcome.0, outcome.1);
                 }
             }
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                 state.datapacks.reload = None;
-                feedback(
-                    state,
-                    connection,
-                    "Datapack reload worker disconnected; old packs and selection retained",
-                );
+                if let Some(id) = completion {
+                    crate::command_context::complete(state, id, false, 0);
+                }
+                if deliver {
+                    feedback(
+                        state,
+                        connection,
+                        "Datapack worker disconnected; operation completion unavailable",
+                    );
+                }
             }
             Err(std::sync::mpsc::TryRecvError::Empty) => {}
         }
+        state.command_context.current = previous;
+    }
+}
+
+pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
+    poll_worker(state, changes);
+    crate::command_context::resume(state, changes);
+    if state.command_context.waiting() {
+        return;
     }
     if std::mem::take(&mut state.datapacks.load_pending)
         && state.datapacks.packs.tags.contains_key("minecraft:load")

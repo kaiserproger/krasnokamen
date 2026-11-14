@@ -790,6 +790,17 @@ pub enum BossBarChange {
     Properties(u8),
 }
 
+/// Immutable source revision retained by reliable recipe events. Equality means
+/// the same revision, not a potentially expensive comparison of registry tables.
+#[derive(Debug, Clone)]
+pub struct RecipeSource(pub Arc<crate::registry::CoreRegistry>);
+
+impl PartialEq for RecipeSource {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 /// Reliable results for the connection identified by the enclosing outbox queue key.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PlayerChange {
@@ -805,6 +816,8 @@ pub enum PlayerChange {
         tab: Option<String>,
     },
     RecipesUnlocked {
+        /// Exact native catalog at this reliable event, including across pump lag.
+        registry: RecipeSource,
         recipes: Vec<String>,
         replace: bool,
     },

@@ -72,6 +72,7 @@ fn install_pack(state: &mut TickState, resources: &[(&str, &str)]) -> tempfile::
     state.datapacks = crate::datapacks::Runtime::new(
         crate::datapacks::PackSet::load(directory.path(), Default::default()).unwrap(),
         directory.path().to_path_buf(),
+        state.registry.clone(),
     );
     directory
 }

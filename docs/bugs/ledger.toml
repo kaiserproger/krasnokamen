@@ -1421,7 +1421,7 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-OPTION-COVERAGE"
-regression = []
+regression = ["cargo:mc-core:command_execution::tests::selector_predicate_tests::loaded_predicates_bind_selected_entity_and_origin_before_limit", "cargo:mc-core:command_execution::tests::selector_predicate_tests::loaded_predicates_compose_boolean_conditions_without_losing_identity", "cargo:mc-core:command_execution::tests::selector_predicate_tests::missing_and_unsupported_predicates_fail_without_mutating_targets", "cargo:mc-core:command_execution::tests::selector_predicate_tests::global_selector_uses_root_catalog_with_each_targets_native_dimension"]
 
 [[bug]]
 id = "SELECTOR-DEAD-PLAYERS"
@@ -1530,7 +1530,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-ENABLE"
-regression = []
+regression = ["cargo:mc-core:datapacks::management::tests::enable_first_and_before_vanilla_preserve_requested_precedence", "cargo:mc-core:datapacks::management::tests::activation_completion_keeps_issuing_connection", "cargo:mc-core:datapacks::management::tests::enabling_an_enabled_pack_with_an_order_is_an_error"]
 
 [[bug]]
 id = "DEBUG-PROFILER"
@@ -1540,7 +1540,7 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-PROFILER"
-regression = []
+regression = ["cargo:mc-core:command_debug::tests::profiler_stop_publishes_actual_tick_rate_and_independent_report_before_success", "cargo:mc-core:command_debug::tests::profiler_does_not_expire_after_thirty_minutes_or_invent_one_tick", "cargo:mc-core:command_debug::tests::profiler_report_io_failure_is_not_success"]
 
 [[bug]]
 id = "DEBUG-FUNCTION-TRACE"
@@ -1550,7 +1550,7 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-FUNCTION-TRACE"
-regression = []
+regression = ["cargo:mc-core:command_debug::tests::function_trace_uses_real_interpreter_messages_results_and_change_set", "cargo:mc-core:command_debug::tests::deferred_trace_finishes_children_before_report_and_outer_function_continuation", "cargo:mc-core:command_debug::tests::trace_permissions_and_recursive_error_preserve_outer_execution"]
 
 [[bug]]
 id = "DATAPACK-LIST-LIVE-DISCOVERY"
@@ -1560,7 +1560,7 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-LIVE-DISCOVERY"
-regression = []
+regression = ["cargo:mc-core:datapacks::management::tests::list_discovers_added_removed_and_changed_metadata_without_reloading_functions"]
 
 [[bug]]
 id = "DAMAGE-COMMAND"
@@ -1670,7 +1670,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-HOT-RELOAD-RECIPES-LOOT"
-regression = []
+regression = ["cargo:mc-core:datapacks::tests::content_reload_publishes_recipes_loot_and_open_grid_without_moving_inputs", "cargo:mc-core:datapacks::tests::invalid_reload_retains_both_content_catalogs_and_pack_selection"]
 
 [[bug]]
 id = "DATAPACK-WORLDGEN-ZIP"
@@ -1690,7 +1690,7 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-CREATE"
-regression = []
+regression = ["cargo:mc-core:datapacks::management::tests::create_writes_description_and_does_not_enable_or_overwrite_pack", "cargo:mc-core:datapacks::management::tests::create_stores_final_success_and_failure_without_running_following_lines_early"]
 
 [[bug]]
 id = "DATAPACK-FEATURE-ADMISSION"
@@ -1711,7 +1711,7 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-HOVER"
-regression = []
+regression = ["cargo:mc-core:datapacks::management::tests::list_hover_keeps_structured_description_and_current_codec_keys"]
 
 [[bug]]
 id = "BEE-FLOWER-TABLE"
@@ -2116,13 +2116,13 @@ regression = []
 
 [[bug]]
 id = "DATA-MUTATION-STORAGE"
-title = "Generic entity/storage data operations absent; existing command-block-only merge/get is not general data. Prior DataCommands get+store-score scope did not include merge/modify/storage expansion."
+title = "Generic entity/block data mutation and storage persistence require native-owner and original real-client acceptance."
 area = "gameplay"
 repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-MUTATION-STORAGE"
-regression = []
+regression = ["cargo:mc-core:command_data::tests::mutation::data_mutation_entity_native_delta_preserves_identity_and_unrelated_runtime", "cargo:mc-core:command_data::tests::mutation::data_mutation_block_commits_live_inventory_without_resetting_furnace", "cargo:mc-core:command_data::tests::mutation::data_mutation_entity_preflight_is_atomic_and_players_are_rejected", "cargo:mc-core:command_data::tests::mutation::data_mutation_existing_entity_and_item_survive_checkpoint_then_real_wal_restart", "cargo:mc-core:command_data::tests::mutation::data_mutation_vibration_owners_preserve_live_deadlines_and_reject_partial_updates", "cargo:mc-core:command_data::tests::mutation::data_mutation_catalyst_updates_live_cursors_without_resetting_bloom"]
 
 [[bug]]
 id = "HAPPY-GHAST-HARNESS"

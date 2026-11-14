@@ -257,7 +257,7 @@ pub async fn send_join_burst(burst: JoinBurst<'_>) -> anyhow::Result<()> {
     .await?;
     // Announce displays/stonecutter inputs, but start with an empty book.
     // Core RecipesUnlocked replaces it with this player's persisted rewards.
-    conn.send_packet(&recipes.update).await?;
+    conn.send_packet(&recipes.catalog.update).await?;
     conn.send_packet(&ClientboundRecipeBookSettings::default())
         .await?;
     conn.send_packet(&recipes.book).await?;
