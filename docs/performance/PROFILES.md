@@ -1,6 +1,6 @@
 # Reproducible performance profiles
 
-Solaris is a **draft prerelease**. These profiles measure specific workloads on
+Krasnokamen is a **draft prerelease**. These profiles measure specific workloads on
 stated hardware; they are not performance guarantees, vanilla-parity proofs or
 player-capacity promises. Protocol bots are real TCP clients, not graphical
 Minecraft clients or human players. No survival/gameplay acceptance claim follows
@@ -41,7 +41,7 @@ generator benchmark below cannot fill those cells.
   operator chat-spam parity fix in `crates/mc-core/src/tick/input/social.rs`:
   operators still accumulate the saturating counter but are not kicked. The
   original baseline rejected fixture preparation with `disconnect.spam`.
-- **Build:** `cargo build --release --bin solaris-v2 --bin player-scale-bots
+- **Build:** `cargo build --release --bin krasnokamen --bin player-scale-bots
   -j 2`; rustc 1.99.1 (`58cf8f9c3`, LLVM 23.1.1). Cargo release defaults:
   optimization level 3, debug information off, LTO off, 16 codegen units,
   incremental off. Repository target flags are
@@ -138,7 +138,7 @@ indefinitely through terrain. Login includes operator-assisted safe landing.
 Run from a checkout with the pinned Rust toolchain, Clang/mold, Python 3, Linux
 `taskset`, `lscpu`, `lsblk` and `findmnt`. Import the 26.3 content cache as
 described in the [operating guide](../OPERATING.md#vanilla-content-cache)
-(`solaris-v2 content import --version 26.3 --download`; the cache joins the 26.3
+(`krasnokamen content import --version 26.3 --download`; the cache joins the 26.3
 protocol identity with the 26.1.2 gameplay pack, so no separate legacy cache is
 needed for these profiles). `tools.coreperf.profiles` reads `./data/vanilla` by
 default; point it elsewhere with `--vanilla-data-dir`.
@@ -155,7 +155,7 @@ identify it in the receipt instead of presenting HEAD as the whole source.
 ```sh
 ROOT="$(pwd -P)"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
-cargo build --release --bin solaris-v2 --bin player-scale-bots -j 2
+cargo build --release --bin krasnokamen --bin player-scale-bots -j 2
 python3 - <<'PY'
 import hashlib, json, os, pathlib, subprocess
 root = pathlib.Path.cwd()
@@ -166,12 +166,12 @@ def sha(path):
 receipt = {
     'profile': 'release',
     'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
-    'command': ['cargo', 'build', '--release', '--bin', 'solaris-v2', '--bin', 'player-scale-bots', '-j', '2'],
+    'command': ['cargo', 'build', '--release', '--bin', 'krasnokamen', '--bin', 'player-scale-bots', '-j', '2'],
     'rustc': subprocess.check_output(['rustc', '-Vv'], text=True),
     'build_environment': {k: v for k, v in os.environ.items()
         if k in ('RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_TARGET_DIR') or k.startswith('CARGO_PROFILE_RELEASE')},
     'cargo_config': (root / '.cargo/config.toml').read_text(),
-    'server_sha256': sha(target / 'release/solaris-v2'),
+    'server_sha256': sha(target / 'release/krasnokamen'),
     'bots_sha256': sha(target / 'release/player-scale-bots'),
 }
 (root / '.analysis').mkdir(exist_ok=True)
@@ -191,7 +191,7 @@ each invocation owns preparation/cache reuse, startup, warmup, measurement,
 shutdown, native snapshot checks and its receipt directory.
 
 ```sh
-COMMON=(--server-bin "$CARGO_TARGET_DIR/release/solaris-v2"
+COMMON=(--server-bin "$CARGO_TARGET_DIR/release/krasnokamen"
         --bots-bin "$CARGO_TARGET_DIR/release/player-scale-bots"
         --build-receipt "$ROOT/.analysis/profile-build.json")
 python3 -m tools.coreperf.profiles idle "${COMMON[@]}"
@@ -255,7 +255,7 @@ They are **not** publication evidence and cannot fill the pending table above.
 |---|---|---|---|---|
 | v0.0.8 (tag `57b95ae9`, 2026-10-18) | 100 clients, about 100,000 mixed mobs (`native-100` shape) | about 16 TPS; earlier runs below 10 TPS | frame-pointer build | reference host; exact CPU for this run unverified |
 
-Source: [v0.0.8 release notes at the tag](https://github.com/kaiserproger/solaris/blob/57b95ae9/docs/releases/v0.0.8.md#performance). They also
+Source: [v0.0.8 release notes at the tag](https://github.com/kaiserproger/krasnokamen/blob/57b95ae9/docs/releases/v0.0.8.md#performance). They also
 report a more compact entity layout and hot passes that no longer scan every
 entity row; they do not establish whether either caused the measured gain.
 The current reference host uses a Ryzen 5 7535HS; the release notes do not
@@ -267,7 +267,7 @@ are not known to come from the same run. The next comparable number is a
 `native-100` quiet-window run on a 1.0 release candidate.
 
 The working notes committed with the release
-([`docs/MEMORY.md` at `1ada2ceb`](https://github.com/kaiserproger/solaris/blob/1ada2ceb/docs/MEMORY.md),
+([`docs/MEMORY.md` at `1ada2ceb`](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb/docs/MEMORY.md),
 lines 38–42) record the `native-100` rounds before the tag. Their reports and
 receipts were referenced under the ignored `.analysis/` directory and were not
 found in the paths searched; the host is not named per run.
@@ -287,7 +287,7 @@ unverified.
 ## In-process chunk generation
 
 An existing **Gen32** quiet-window measurement on the same Ryzen 5 7535HS reports
-the following Solaris vanilla-style Overworld generator costs. These are
+the following Krasnokamen vanilla-style Overworld generator costs. These are
 **single-threaded in-process generation**, not full-server requested chunks/s,
 not exploration throughput and not Mojang's Java server.
 
