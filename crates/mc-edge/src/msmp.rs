@@ -1,7 +1,7 @@
 //! Minimal Minecraft Server Management Protocol (MSMP) endpoint.
 //!
 //! This is deliberately a small JSON-RPC 2.0 WebSocket server rather than a
-//! second HTTP framework. It implements the management services Solaris owns:
+//! second HTTP framework. It implements the management services Krasnokamen owns:
 //! players, access lists, operators, server state, save/stop, and system
 //! messages. The method names and DTO field names follow the local 26.1.2
 //! vanilla `net.minecraft.server.jsonrpc` schema.

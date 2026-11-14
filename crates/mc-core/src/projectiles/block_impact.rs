@@ -26,7 +26,7 @@ pub(super) fn may_interact(state: &TickState, record: &ProjectileState, pos: Blo
 /// `projectiles_can_break_blocks` rule, and `canBreakBlockInAdventureMode`.
 /// The last passes for an ownerless shot (the default game type is survival)
 /// and a non-adventure player owner; mob owners and adventure players need a
-/// `can_break` predicate, which Solaris does not evaluate anywhere.
+/// `can_break` predicate, which Krasnokamen does not evaluate anywhere.
 fn may_break(state: &TickState, slot: EntitySlot, record: &ProjectileState) -> bool {
     let EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
         return false;

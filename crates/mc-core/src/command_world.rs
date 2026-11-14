@@ -1301,7 +1301,9 @@ mod tests {
                 .entities
                 .slots()
                 .filter(|slot| state.entities.row(*slot).falling.is_some());
-            let slot = rows.next().expect("setblock sand over air spawns a falling entity");
+            let slot = rows
+                .next()
+                .expect("setblock sand over air spawns a falling entity");
             assert!(rows.next().is_none(), "one sand block, one entity");
             state.entities.pos(slot)[1]
         };
@@ -1322,16 +1324,28 @@ mod tests {
         for _ in 0..5 {
             run_tick(&mut frozen, &[]);
         }
-        assert_eq!(height(&frozen), start, "frozen ticks must not move the block");
+        assert_eq!(
+            height(&frozen),
+            start,
+            "frozen ticks must not move the block"
+        );
         run_tick(&mut frozen, &[command("tick step 3")]);
         for _ in 0..3 {
             run_tick(&mut frozen, &[]);
         }
-        assert_eq!(height(&frozen), after_three_ticks, "three steps are three ticks");
+        assert_eq!(
+            height(&frozen),
+            after_three_ticks,
+            "three steps are three ticks"
+        );
         for _ in 0..5 {
             run_tick(&mut frozen, &[]);
         }
-        assert_eq!(height(&frozen), after_three_ticks, "the world is frozen again after the step");
+        assert_eq!(
+            height(&frozen),
+            after_three_ticks,
+            "the world is frozen again after the step"
+        );
     }
 
     #[test]
@@ -1645,8 +1659,10 @@ mod tests {
             [90.0, -30.0]
         );
         let record = crate::core::player_record_for(&state, actor, state.tick).unwrap();
-        let dir =
-            std::env::temp_dir().join(format!("solaris-command-spawn-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!(
+            "krasnokamen-command-spawn-{}",
+            uuid::Uuid::new_v4()
+        ));
         let uuid = uuid::Uuid::new_v4();
         let config = crate::CoreConfig::new(dir.clone(), 42);
         crate::native_checkpoint::tests::write_player(
@@ -1698,7 +1714,7 @@ mod tests {
         assert_eq!(state.world.world_spawn_rotation(), [-90.0, 25.0]);
         assert_eq!(crate::sleep::respawn_rotation(&state, actor), [-90.0, 25.0]);
         let dir = std::env::temp_dir().join(format!(
-            "solaris-command-worldspawn-{}",
+            "krasnokamen-command-worldspawn-{}",
             uuid::Uuid::new_v4()
         ));
         let mut config = crate::config::CoreConfig::new(dir.clone(), 42);

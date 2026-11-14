@@ -108,9 +108,9 @@
     "Licensed graphical Minecraft Java 26.1.2 client for the Fabric lane",
     "Pinned Fabric loader/dependency artifact hashes for the :loader-fabric:runClientMcp lane",
     "Java 25 and fresh Xvfb display, client bridge/MCP credentials",
-    "SVC scenario driver in sibling solaris-loader (matrix adapter owns the oracle)",
+    "SVC scenario driver in sibling krasnokamen-loader (matrix adapter owns the oracle)",
     "Clean, independently isolated per-run mods dir under the caller's game dir",
-    "Worktree-built solaris-v2 candidate, exact config/world/epoch and binary SHA-256"
+    "Worktree-built krasnokamen candidate, exact config/world/epoch and binary SHA-256"
   ],
   "protocol": 1,
   "source": "Simple Voice Chat publisher API (Modrinth project 9eGKb6K1, query pinned 2026-10-24): game_versions 26.1.2, loaders fabric+neoforge+forge, latest version per loader"

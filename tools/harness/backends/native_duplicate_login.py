@@ -56,7 +56,7 @@ def _chat_wait(client: Any, steps: ProbeSteps, text: str) -> bool:
 
 def _auth_attack(steps: ProbeSteps, first: Any, start: Any, address: str,
                  record: dict[str, Any], diamond: str) -> None:
-    """Duplicate login behind solaris-auth (require_plugin_login): verified incumbent, then two unverified claimants."""
+    """Duplicate login behind krasnokamen-auth (require_plugin_login): verified incumbent, then two unverified claimants."""
     second = start()
     try:
         second.call_tool("minecraft_wait_for_play", {"timeout_seconds": 30})
