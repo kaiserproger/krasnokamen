@@ -137,6 +137,9 @@ Pickup, expiry and physical-profile custody changes still use native owners.
 native `krasnokamen:LifetimeAge`; vanilla `life` projects the effective ground age.
 Hydration refuses an anchored projectile without a native lifetime-age long;
 retained lifetimes accept only 1,201, or 100 for Arrow/SpectralArrow.
+Block impact establishes the native-age anchor. Loss of support exits the idle
+path and clears both the anchor and ground age before falling; a later landing
+starts a fresh ground lifetime, including across checkpoint/WAL recovery.
 Active-clock WAL replay, frozen chunks and wrapping entity age retain elapsed
 time without one arrow image per tick. Loyalty tridents keep their dynamic
 return path and are not treated as idle arrows.
