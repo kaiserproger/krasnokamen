@@ -609,11 +609,9 @@ pub(super) fn work(
     {
         return None;
     }
-    // Miners already handle ore, so a town whose adults all hold jobs still
-    // smelts its construction iron; forestry and workshop staff only empty output.
     let tender = matches!(
         v.data.profession,
-        VillagerProfession::None | VillagerProfession::Shepherd | VillagerProfession::Miner
+        VillagerProfession::None | VillagerProfession::Shepherd
     );
     if v.smelting.is_none()
         && matches!(
