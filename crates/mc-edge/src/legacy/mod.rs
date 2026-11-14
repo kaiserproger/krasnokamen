@@ -33,7 +33,7 @@ pub const PROTOCOL: i32 = 775;
 /// Its release name (known pack version, status name).
 pub const RELEASE: &str = "26.1.2";
 /// Overrides where the 26.1.2 content cache is found.
-pub const CACHE_ENV: &str = "SOLARIS_LEGACY_CONTENT_CACHE";
+pub const CACHE_ENV: &str = "KRASNOKAMEN_LEGACY_CONTENT_CACHE";
 
 /// Where the 26.1.2 cache is expected next to the canonical one: the sibling
 /// release directory of a per-release cache (`.../content/26.3` ->

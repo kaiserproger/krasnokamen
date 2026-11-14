@@ -20,7 +20,7 @@ fn list(elements: Vec<Tag>, element_type: u8) -> Tag {
 }
 fn public_fields(fields: &mut Vec<(String, Tag)>) {
     fields.retain(|(key, _)| {
-        !key.starts_with("solaris") && !key.starts_with("Solaris") && key != "DataVersion"
+        !key.starts_with("krasnokamen") && !key.starts_with("Krasnokamen") && key != "DataVersion"
     });
 }
 

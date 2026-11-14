@@ -96,8 +96,8 @@ fn legacy_creative_echo_and_replacement_reach_player_inventory() {
     use mc_data::{Identifier, ItemStack};
     use mc_protocol::codec::WriteMc;
 
-    let items = mc_data::items::solaris_required_items();
-    let facts = mc_data::item_components::solaris_required_item_facts();
+    let items = mc_data::items::krasnokamen_required_items();
+    let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = mc_data::tags::TagsData::default();
     let rules = ItemRules {
         items: &items,

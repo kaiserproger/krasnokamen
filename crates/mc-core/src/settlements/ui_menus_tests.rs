@@ -101,7 +101,7 @@ fn dialog(
         state,
         &[PlayerInput::DialogClick {
             connection: CONN,
-            id: format!("solaris:settlement/{action}"),
+            id: format!("krasnokamen:settlement/{action}"),
             payload: Some(Tag::Compound(entries)),
         }],
     )

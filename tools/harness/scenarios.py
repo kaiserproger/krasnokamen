@@ -654,11 +654,11 @@ def repo_revisions() -> dict[str, str]:
     turning a run into a failure.
     """
     repos = {
-        "solaris": REPO_ROOT,
-        "solaris-default-plugins": Path(
-            os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", REPO_ROOT.parent / "solaris-default-plugins")
+        "krasnokamen": REPO_ROOT,
+        "krasnokamen-default-plugins": Path(
+            os.environ.get("KRASNOKAMEN_DEFAULT_PLUGINS_ROOT", REPO_ROOT.parent / "solaris-default-plugins")
         ),
-        "solaris-loader": Path(os.environ.get("SOLARIS_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")),
+        "krasnokamen-loader": Path(os.environ.get("KRASNOKAMEN_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")),
     }
     revisions: dict[str, str] = {}
     for name, path in repos.items():

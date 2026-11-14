@@ -1,6 +1,6 @@
 [package]
 name = "mc-script"
-description = "Runtime-independent plugin/script contract (Solaris)."
+description = "Runtime-independent plugin/script contract (Krasnokamen)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

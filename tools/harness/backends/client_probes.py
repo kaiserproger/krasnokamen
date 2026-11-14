@@ -25,7 +25,7 @@ CORE_TOOLS = frozenset({"minecraft_observe", "minecraft_wait_for_state_change", 
 def run_core_subset(client: Any, artifact_dir: Path, timeout: float) -> dict[str, Any]:
     with ProbeSteps(client, artifact_dir / "core-probe", timeout, "core-client-chat-subset") as steps:
         before = steps.observe()
-        marker = f"Solaris core-client MCP {uuid.uuid4().hex[:12]}"
+        marker = f"Krasnokamen core-client MCP {uuid.uuid4().hex[:12]}"
         steps.call("minecraft_send_chat", {"message": marker, "command": False})
         after = steps.wait(lambda state: any(marker in line for line in state["recent_chat"]),
                            "own_chat_echo_observed")
@@ -123,7 +123,7 @@ online_mode = false
 directory = {json.dumps(str(plugin_dir))}
 [data]
 world_dir = "{(artifact / "world").relative_to(runtime.REPO_ROOT).as_posix()}"
-vanilla_data_dir = {json.dumps(os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR", "data/vanilla"))}
+vanilla_data_dir = {json.dumps(os.environ.get("KRASNOKAMEN_SERVER_VANILLA_DATA_DIR", "data/vanilla"))}
 seed = 81
 ''')
     prepare_operator_fixture(ctx, operators)
@@ -156,7 +156,7 @@ seed = 81
         if ctx.client == "native":
             display = None
             client_address = address
-            if (ctx.scenario_id == "native-v2-p1-signs" and os.environ.get("SOLARIS_P1_SIGN_WIRE_TRACE") == "1"
+            if (ctx.scenario_id == "native-v2-p1-signs" and os.environ.get("KRASNOKAMEN_P1_SIGN_WIRE_TRACE") == "1"
                     or ctx.scenario_id == "native-v2-p2-fishing"
                     or ctx.scenario_id in ("native-v2-p1-armor-stand", "native-v2-p1-helmet-equip",
                                           "native-v2-p1-player-observer")):
@@ -173,7 +173,7 @@ seed = 81
                 from .native_promotion_custody import PackWireReceipt
 
                 pack_receipt = PackWireReceipt(
-                    Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json", artifact)
+                    Path(os.environ["KRASNOKAMEN_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json", artifact)
                 wire_trace = light_wire.LightWireProxy(
                     port, artifact, pack_receipt.server_packet, pack_receipt.client_packet)
                 client_address = wire_trace.address
@@ -181,7 +181,7 @@ seed = 81
             elif promotion_maps or ctx.scenario_id == "native-v2-banner-placement":
                 from .native_promotion_wire import PromotionWireReceipt
 
-                report_path = Path(os.environ["SOLARIS_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
+                report_path = Path(os.environ["KRASNOKAMEN_SERVER_VANILLA_DATA_DIR"]) / "reports" / "packets.json"
                 promotion_receipt = PromotionWireReceipt(report_path, artifact)
                 wire_trace = light_wire.LightWireProxy(port, artifact, promotion_receipt.server_packet)
                 client_address = wire_trace.address

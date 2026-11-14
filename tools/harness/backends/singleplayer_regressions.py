@@ -38,7 +38,7 @@ def _server_child(client):
     servers = []
     for child in children:
         try:
-            if Path(os.readlink(f"/proc/{child}/exe")).name == "solaris-v2":
+            if Path(os.readlink(f"/proc/{child}/exe")).name == "krasnokamen":
                 servers.append(int(child))
         except FileNotFoundError:
             continue
@@ -81,9 +81,9 @@ def validate_args(ctx: ProfileContext) -> float:
 
 def run(ctx: ProfileContext) -> dict:
     timeout = validate_args(ctx)
-    server = Path(os.environ.get("SOLARIS_SERVER_BINARY", "")).resolve()
+    server = Path(os.environ.get("KRASNOKAMEN_SERVER_BINARY", "")).resolve()
     if not server.is_file():
-        raise RuntimeError("SOLARIS_SERVER_BINARY must name the release server")
+        raise RuntimeError("KRASNOKAMEN_SERVER_BINARY must name the release server")
     with server.open("rb") as executable:
         server_hash = hashlib.file_digest(executable, "sha256").hexdigest()
     source_root = native_client._client_root()
@@ -91,11 +91,11 @@ def run(ctx: ProfileContext) -> dict:
     artifact = ctx.artifact_dir
     stage = artifact / "bin"
     stage.mkdir()
-    client_copy = stage / "solaris-client"
+    client_copy = stage / "krasnokamen-client"
     shutil.copy2(client_binary, client_copy)
-    server_link = stage / "solaris-v2"
+    server_link = stage / "krasnokamen"
     server_link.symlink_to(server)
-    root = artifact / "data" / "solaris-client"
+    root = artifact / "data" / "krasnokamen-client"
     content = root / "servers" / "content"
     content.mkdir(parents=True)
     shutil.copytree((runtime.REPO_ROOT / "data" / "vanilla").resolve(), content / "26.3")
@@ -105,7 +105,7 @@ def run(ctx: ProfileContext) -> dict:
         source = source_root / name
         if source.exists():
             (root / name).symlink_to(source, target_is_directory=source.is_dir())
-    env = {"SOLARIS_CLIENT_ROOT": str(root), "XDG_DATA_HOME": str(root.parent),
+    env = {"KRASNOKAMEN_CLIENT_ROOT": str(root), "XDG_DATA_HOME": str(root.parent),
            "HOME": str(artifact / "home"), "XDG_CACHE_HOME": str(artifact / "cache"),
            "XDG_CONFIG_HOME": str(artifact / "config"), "ALSOFT_DRIVERS": "null"}
     previous = {name: os.environ.get(name) for name in env}
@@ -129,13 +129,13 @@ def run(ctx: ProfileContext) -> dict:
             _click(probe, state, "Create New World")
             state = probe.wait(lambda s: s["screen"].get("class") == SELECT, "world_created")
             native_client.capture(mcp, artifact, "singleplayer-created")
-            worlds = list((root / "worlds").glob("*/solaris-world.json"))
+            worlds = list((root / "worlds").glob("*/krasnokamen-world.json"))
             if len(worlds) != 1:
                 raise RuntimeError(f"expected one fresh world, found {len(worlds)}")
             world = worlds[0].parent
             if ctx.scenario_id == FIRST:
                 database = world / "world" / "native" / "state.redb"
-                marker = world / "world" / ".solaris-first-start"
+                marker = world / "world" / ".krasnokamen-first-start"
                 def interrupt():
                     _wait_path(database, min(timeout, 180))
                     pid = _server_child(client)
@@ -147,7 +147,7 @@ def run(ctx: ProfileContext) -> dict:
                     future = executor.submit(interrupt)
                     _click(probe, state, "Play Selected World")
                     probe.report["interruption"] = future.result(timeout=min(timeout, 180) + 5)
-                recovery = os.environ.get("SOLARIS_FIRST_START_RECOVERY_BINARY")
+                recovery = os.environ.get("KRASNOKAMEN_FIRST_START_RECOVERY_BINARY")
                 if recovery:
                     replacement = Path(recovery).resolve()
                     if not replacement.is_file():
