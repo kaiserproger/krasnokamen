@@ -5352,3 +5352,15 @@ repro = "manual"
 repro_check = "Render G2 backup take shot g2-14-push-in, t=253.45..257.45, radius 20, 1920x1080 at peak melee (~18k entities) on the laptop RTX 4050."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "IMPORT-ANVIL-PRE-RENAME-KEYS-IGNORED"
+title = "Anvil import keeps pre-rename solaris:* entity keys as unread data and reports no gap"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "RC5WorldConversion 2026-11-14 (receipts/RC5WorldConversion-rc5/REPORT.md, export-rc5.json, import-main2.json, export-main2.json): an RC5-line world exported with `world export-anvil` carries solaris:* keys on every entity (solaris:WireId, entity_loot, solaris:PortalTime, ...) and on player data; main 57324da4 `krasnokamen world import-anvil` keeps them as unread extra fields and re-exports them verbatim, reads only krasnokamen:* keys, and reports known_gaps=[] with no warning. The rider case was shown only with an injected solaris:Rider naming a mob, which RC5 itself refuses (RC5 mounts/persistence.rs:270-282), so a lost rider from a valid RC5 world is not demonstrated."
+repro = "source"
+repro_check = "RC5 world -> RC5 `world export-anvil` -> main `world import-anvil` -> PASS with known_gaps=[]; main re-export still carries the solaris:* keys and no krasnokamen:* equivalents."
+regression = []
+failing_first = "reported"

@@ -477,9 +477,14 @@ pub fn revision_only_difference(config: &CoreConfig, identity: [u8; 32]) -> Opti
     (native_identity_at(config, revision) == identity).then_some(revision)
 }
 
+/// Format tag of native stores written before the Krasnokamen rename (1.0.0-rc.5
+/// and older). Their persisted ids changed with the rename and are not read.
+const PRE_RENAME_TAG: [u8; 16] = *b"SolarisV2Native\0";
+
 /// Refusal for a store that failed identity admission. A world that differs only
-/// in an older worldgen revision gets the explicit operator path; everything else
-/// keeps the plain storage refusal.
+/// in an older worldgen revision gets the explicit operator path, a world from
+/// before the rename gets its conversion path; everything else keeps the plain
+/// storage refusal.
 pub fn open_refusal(
     config: &CoreConfig,
     path: &std::path::Path,
@@ -502,6 +507,23 @@ pub fn open_refusal(
              revision {current}; to keep it, stop the server and run `krasnokamen world \
              upgrade-worldgen --config <server.toml>` (existing chunks stay as generated, only \
              not-yet-generated chunks use revision {current}), or use a fresh world_dir"
+        ));
+    }
+    if matches!(
+        error,
+        mc_world::native::NativeError::Invalid("identity mismatch")
+    ) && mc_world::native::NativeStore::read_identity(path)
+        .is_ok_and(|identity| identity[..16] == PRE_RENAME_TAG)
+    {
+        return CoreError::Storage(format!(
+            "{error}: this world was written by a Solaris build from before the Krasnokamen \
+             rename (1.0.0-rc.5 or older), whose storage ids this build does not read; keep \
+             serving it with that build, or stop it, export it with that build's `world \
+             export-anvil` (binary `solaris` in the release archive, `solaris-v2` from \
+             source) and import the export with `krasnokamen world import-anvil` into a \
+             directory that does not exist yet; blocks, containers, entities and players \
+             carry over, but plugin state, settlements and the block log are lost and \
+             pre-rename solaris:* entity data is kept but not read"
         ));
     }
     CoreError::Storage(error.to_string())
