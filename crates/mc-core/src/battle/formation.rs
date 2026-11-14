@@ -1027,8 +1027,7 @@ impl FormationRuntime {
         // A pressing file surges as one: the men behind follow their front
         // man's pulse at the pressed depth instead of waiting in place.
         let file_surging = presses(r)
-            && r
-                .sections
+            && r.sections
                 .get(m.file / SECTION_SIZE)
                 .is_some_and(|s| s.pulse_until > self.tick);
         if !context.wavering && ((context.front_rank && context.pulsing) || file_surging) {

@@ -52,7 +52,7 @@ fn sampler_takes_the_first_tick_of_each_window_and_skips_gaps() {
 #[test]
 fn missing_cgroup_reads_none() {
     let sampler = HostSampler {
-        cgroup: Some(PathBuf::from("/nonexistent/solaris-test-cgroup")),
+        cgroup: Some(PathBuf::from("/nonexistent/krasnokamen-test-cgroup")),
         last_window: None,
     };
     let sample = sampler.sample();

@@ -399,7 +399,7 @@ fn checkpoint_nbt_and_replayed_tail_preserve_fuse_block_state_and_motion() {
     let (birth, _, _) = run_tick(&mut state, &[]);
     let first = crate::core::journal_entries_for_tick(&mut state, &birth);
     let (_, regions, _) = crate::core::checkpoint_data_for(&state, birth.tick);
-    let dir = std::env::temp_dir().join(format!("solaris-tnt-state-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("krasnokamen-tnt-state-{}", uuid::Uuid::new_v4()));
     mc_world::anvil::entity_regions::write_entity_regions(
         &dir,
         &state.registry.items,
