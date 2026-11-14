@@ -47,6 +47,48 @@ mod stop_tests;
 type OutboxBatch = Vec<(ConnectionId, Vec<PlayerChange>)>;
 pub(crate) type TimedOutboxBatch = (u64, OutboxBatch);
 
+/// Publish impulse epochs after travel, resolving stable entity ids in their
+/// current world rather than only the world where the explosion happened.
+pub(crate) fn observe_explosion_knockback(
+    state: &TickState,
+    output: &mut TickOutput,
+    knockback_ticks: &mut Arc<std::collections::BTreeMap<ConnectionId, (u64, u64)>>,
+) {
+    let worlds =
+        || std::iter::once(state).chain(state.other_dimensions.values().map(|world| &**world));
+    let mut affected = BTreeSet::new();
+    for world in worlds() {
+        let Some(dimension) = output.in_dimension(world.dimension) else {
+            continue;
+        };
+        for explosion in &dimension.changes.explosions {
+            for &(entity, push) in &explosion.knockback {
+                if push != [0.0; 3]
+                    && let Some(connection) =
+                        worlds().find_map(|world| world.connections.entity_connection(entity))
+                {
+                    affected.insert(connection);
+                }
+            }
+        }
+    }
+    let live = |connection: &ConnectionId| {
+        worlds().any(|world| world.connections.entity_of(*connection).is_some())
+    };
+    if !affected.is_empty() || knockback_ticks.keys().any(|id| !live(id)) {
+        let epochs = Arc::make_mut(knockback_ticks);
+        epochs.retain(|id, _| live(id));
+        for connection in affected {
+            let epoch = epochs.entry(connection).or_default();
+            epoch.0 += 1;
+            epoch.1 = output.tick;
+        }
+    }
+    Arc::get_mut(&mut output.snapshot)
+        .expect("tick output is not shared before publication")
+        .player_knockback_ticks = Arc::clone(knockback_ticks);
+}
+
 #[path = "core_session.rs"]
 mod session;
 pub use session::PlayerSession;

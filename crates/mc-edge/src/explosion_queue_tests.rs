@@ -248,17 +248,40 @@ async fn broadcast_lag_closes_only_recipients_of_skipped_knockback() {
         closers.push(closed);
     }
     let (mut connections, _) = server.connections.routing_snapshot();
-    let mut viewers = HashMap::new();
+    let mut viewers = [lost, current, delivered]
+        .into_iter()
+        .map(|id| {
+            (
+                id,
+                crate::plan::ViewerState::new(id, EntityId(id.0 as i32), [8.0, 64.0, 8.0]),
+            )
+        })
+        .collect();
     let mut seen = std::collections::BTreeMap::new();
-    let output = |tick, epochs| TickOutput {
-        tick,
-        snapshot: Arc::new(WorldSnapshot {
+    let output = |tick, epochs: std::collections::BTreeMap<ConnectionId, (u64, u64)>| {
+        let knockback = epochs
+            .iter()
+            .filter(|(_, (_, last_tick))| *last_tick == tick)
+            .map(|(id, _)| (EntityId(id.0 as i32), [0.1, 0.2, 0.3]))
+            .collect();
+        TickOutput {
             tick,
-            player_knockback_ticks: Arc::new(epochs),
-            ..Default::default()
-        }),
-        changes: Arc::new(ChangeSet::default()),
-        times: Default::default(),
+            snapshot: Arc::new(WorldSnapshot {
+                tick,
+                player_knockback_ticks: Arc::new(epochs),
+                ..Default::default()
+            }),
+            changes: Arc::new(ChangeSet {
+                explosions: vec![ExplosionEvent {
+                    center: [8.0, 64.0, 8.0],
+                    radius: 4.0,
+                    blocks: 1,
+                    knockback,
+                }],
+                ..Default::default()
+            }),
+            times: Default::default(),
+        }
     };
     let (tx, mut rx) = broadcast::channel(1);
     tx.send(output(1, [(delivered, (1, 1))].into())).unwrap();
@@ -301,6 +324,91 @@ async fn broadcast_lag_closes_only_recipients_of_skipped_knockback() {
         ));
         server.connections.remove(id);
     }
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn same_tick_dimension_switch_explicitly_closes_unprojected_knockback() {
+    use mc_core::boundary::PlayerChange;
+    use mc_core::dimensions::Dimension;
+    let (server, dir) = fixture();
+    let server = Arc::new(server);
+    let (id, mut reliable_rx) = register(&server, "Traveler", false);
+    let (close, mut closed) = tokio::sync::oneshot::channel();
+    server.connections.inner.lock().closers.insert(id, close);
+    let (mut connections, _) = server.connections.routing_snapshot();
+    let mut viewers = HashMap::from([(
+        id,
+        crate::plan::ViewerState::new(id, EntityId(81), [8.0, 64.0, 8.0]),
+    )]);
+    let output = TickOutput {
+        tick: 2,
+        snapshot: Arc::new(WorldSnapshot {
+            tick: 2,
+            player_knockback_ticks: Arc::new([(id, (1, 2))].into()),
+            dimensions: [(
+                Dimension::Nether,
+                TickOutput {
+                    tick: 2,
+                    snapshot: Arc::new(WorldSnapshot {
+                        tick: 2,
+                        dimension: Dimension::Nether,
+                        ..Default::default()
+                    }),
+                    changes: Arc::new(ChangeSet::default()),
+                    times: Default::default(),
+                },
+            )]
+            .into(),
+            ..Default::default()
+        }),
+        changes: Arc::new(ChangeSet {
+            explosions: vec![ExplosionEvent {
+                center: [8.0, 64.0, 8.0],
+                radius: 4.0,
+                blocks: 1,
+                knockback: vec![(EntityId(81), [0.1, 0.2, 0.3])],
+            }],
+            ..Default::default()
+        }),
+        times: Default::default(),
+    };
+    route_outbox_batches(
+        &server,
+        &mut viewers,
+        &mut connections,
+        vec![(
+            id,
+            vec![PlayerChange::DimensionChanged {
+                teleport_id: 2,
+                dimension: Dimension::Nether,
+                position: [8.0, 64.0, 8.0],
+                yaw: 0.0,
+                pitch: 0.0,
+                game_mode: 0,
+                portal_cooldown: 10,
+            }],
+        )],
+        &mut Arc::from([]),
+    );
+    assert_eq!(viewers[&id].dimension, Dimension::Nether);
+    assert!(!reliable_rx.is_empty(), "dimension reset was not routed");
+    close_skipped_knockback(
+        &server,
+        &output,
+        &mut Default::default(),
+        &mut viewers,
+        &mut connections,
+    );
+    assert_eq!(
+        closed.try_recv().unwrap(),
+        "dimension-switch-explosion-knockback"
+    );
+    assert!(!viewers.contains_key(&id));
+    assert!(!connections.contains_key(&id));
+    assert!(server.connections.get(id).is_none());
+    reliable_rx.close();
     server.hub.shutdown();
     std::fs::remove_dir_all(dir).unwrap();
 }

@@ -429,8 +429,27 @@ pub(super) fn close_skipped_knockback(
         }
         let previous = seen.insert(id, count).unwrap_or(0);
         let current = u64::from(last_tick == out.tick);
-        if count.saturating_sub(previous) > current {
-            server.connections.close(id, "skipped-explosion-knockback");
+        let reason = if count.saturating_sub(previous) > current {
+            Some("skipped-explosion-knockback")
+        } else if current != 0
+            && count > previous
+            && !viewers.get(&id).is_some_and(|viewer| {
+                out.in_dimension(viewer.dimension).is_some_and(|world| {
+                    world.changes.explosions.iter().any(|blast| {
+                        blast
+                            .knockback
+                            .iter()
+                            .any(|&(entity, push)| entity == viewer.entity_id && push != [0.0; 3])
+                    })
+                })
+            })
+        {
+            Some("dimension-switch-explosion-knockback")
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            server.connections.close(id, reason);
             connections.remove(&id);
             viewers.remove(&id);
         }

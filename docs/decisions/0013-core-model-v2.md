@@ -85,6 +85,11 @@ Comparing retained outputs detects lost impulses across broadcast `Lagged`,
 including a skipped impulse followed by another in the retained tick. Only
 affected connections close (`skipped-explosion-knockback`); this observation
 does not alter gameplay authority or persistence.
+Entity ids remain stable through dimension travel: the observer resolves the
+recipient across current worlds after travel commits. If the ordered dimension
+reset moves a viewer away from that tick's explosion projection, the edge closes
+only that recipient (`dimension-switch-explosion-knockback`) instead of silently
+losing the impulse. It does not send an old-world explosion into the new world.
 World snapshot deltas may reconcile to a newer snapshot; fanout plans within
 each world queue's free frame slots and bytes, so a slow viewer's backlog is
 bounded in bytes and its nearest, longest-waiting entity updates go first. See
