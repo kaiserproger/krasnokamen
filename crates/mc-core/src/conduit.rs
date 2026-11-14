@@ -227,6 +227,30 @@ fn distance(pos: BlockPos, other: [f64; 3]) -> f64 {
         .sum()
 }
 
+fn attack_target(state: &TickState, pos: BlockPos) -> Option<EntitySlot> {
+    let mut target = None;
+    // Distance uses floored block positions, not entity-center distance.
+    for x in pos.x.saturating_sub(8).div_euclid(16)..=pos.x.saturating_add(8).div_euclid(16) {
+        for z in pos.z.saturating_sub(8).div_euclid(16)..=pos.z.saturating_add(8).div_euclid(16) {
+            state.entities.for_each_slot_in_chunk(ChunkPos { x, z }, |slot| {
+                #[cfg(test)]
+                spatial_tests::VISITS.with(|visits| visits.set(visits.get() + 1));
+                let body = state.entities.body(slot);
+                if body.alive
+                    && distance(pos, state.entities.pos(slot)) < 64.0
+                    && wet(state, state.entities.pos(slot))
+                    && matches!(body.kind, EntityKind::Mob { type_id } if state.registry
+                        .blueprint(type_id).is_some_and(|b| b.category == crate::blueprint::MobCategory::Monster))
+                    && target.is_none_or(|previous| body.id < state.entities.body(previous).id)
+                {
+                    target = Some(slot);
+                }
+            });
+        }
+    }
+    target
+}
+
 pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
     if !state.tick.is_multiple_of(40) {
         return;
@@ -238,7 +262,12 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
         .flat_map(|chunk| chunk.block_entities.keys().copied())
         .filter(|pos| named(state, *pos, "conduit"))
         .collect();
+    if positions.is_empty() {
+        return;
+    }
     positions.sort_unstable_by_key(|pos| (pos.x, pos.y, pos.z));
+    // Keep the previous slot-order effect delivery without visiting non-players.
+    let players: Vec<_> = state.entities.player_slots().collect();
     for pos in positions {
         if !state
             .world
@@ -256,8 +285,9 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
         let size = frame_size(state, pos);
         if size >= 16 {
             let radius = (size / 7 * 16) as f64;
-            for index in 0..state.entities.len() {
-                let slot = EntitySlot(index as u32);
+            for &slot in &players {
+                #[cfg(test)]
+                spatial_tests::PLAYER_VISITS.with(|visits| visits.set(visits.get() + 1));
                 let body = state.entities.body(slot);
                 let entity = body.id;
                 if !body.alive
@@ -291,18 +321,7 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
                 .slot_of_uuid(uuid)
                 .filter(|slot| valid(*slot))
         } else {
-            state
-                .entities
-                .slots()
-                .filter(|slot| valid(*slot) && wet(state, state.entities.pos(*slot)))
-                .filter(|slot| match state.entities.body(*slot).kind {
-                    EntityKind::Mob { type_id } => state
-                        .registry
-                        .blueprint(type_id)
-                        .is_some_and(|b| b.category == crate::blueprint::MobCategory::Monster),
-                    _ => false,
-                })
-                .min_by_key(|slot| state.entities.body(*slot).id)
+            attack_target(state, pos)
         };
         let uuid = target.map(|slot| state.entities.row(slot).uuid);
         if uuid != old {
@@ -348,3 +367,7 @@ pub(crate) fn deserialize_nbt<'de, D: serde::Deserializer<'de>>(
 #[cfg(test)]
 #[path = "conduit_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "conduit_spatial_tests.rs"]
+mod spatial_tests;
