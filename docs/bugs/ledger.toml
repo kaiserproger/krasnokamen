@@ -4751,7 +4751,10 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "BlockLogTickO java-matrix run 1, 2026-11-11 (receipts/BlockLogTickO/real-client-runs.txt): new item entity ids 274-278 in one column at x=9.5 z=3.5 about 120 blocks below the arena."
-regression = []
+regression = [
+  "cargo:mc-core:fluids_tests::flowing_water_keeps_kelp_and_seagrass_without_loot",
+  "cargo:mc-core:fluids_tests::kelp_growing_in_still_water_drops_no_items",
+]
 failing_first = "reported"
 
 [[bug]]
