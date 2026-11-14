@@ -1121,7 +1121,7 @@ def schedule(args: argparse.Namespace, recipe: dict[str, Any] | None = None) -> 
     active = args.profile != "idle"
     plan = {"windows": [{"name": name, "duration_ms": round(seconds * 1000),
                          "movement_hz": 20 if active else 0,
-                         "edit_hz": 2 if args.mobs else 0,
+                         "edit_hz": int(os.environ.get("PERFAB_EDIT_HZ", 2 if args.mobs else 0)),  # PerfABBisect: edits-off control
                          "chat_hz": 1 if args.mobs else 0}
                         for name, seconds in (("warmup", args.warmup_seconds),
                                               ("measurement", args.measure_seconds))]}
