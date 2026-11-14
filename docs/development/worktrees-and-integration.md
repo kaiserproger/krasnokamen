@@ -7,8 +7,18 @@ authorization, preserve the owner's dirty files. This page is the procedure.
 ## Creating a worktree
 
 ```sh
-git -C <work>/solaris worktree add --detach <work>/wt/<Name> <base-commit>
+<work>/solaris/tools/dev/wt-new <Name> <base-commit> [--repo core|client|loader|plugins]
+<work>/solaris/tools/dev/wt-done <Name>   # verified final.patch, then removal
 ```
+
+`wt-new` creates the branch `wt/<Name>`, the hard-link `data/vanilla`,
+`<work>/receipts/<Name>/` and a private Gradle/XDG home; `wt-done` archives
+everything not in the base as one verified patch, copies `.analysis` evidence
+(`result.json`, logs, reports, screenshots) into the receipts and refuses while
+other ignored files remain, all before it removes anything; `wt-gc` lists stale
+worktrees. Details: [tools/dev](../../tools/dev/README.md).
+Release binaries for gates come from `tools/dev/pin-release`, never from a
+pooled target dir.
 
 - **Absolute paths in every edit/write tool call.** Agent file tools resolve
   relative paths against the session root (the main checkout), not the
@@ -17,10 +27,8 @@ git -C <work>/solaris worktree add --detach <work>/wt/<Name> <base-commit>
   parents forward it to children. Audit a suspect agent by searching its
   transcript for successful edits/writes with relative `crates/...` paths.
 - **`data/vanilla` must be a real directory**, not a symlink: the registry
-  refuses symlinked sidecar dirs. Copy or hard-link it from another tree:
-  `mkdir -p <wt>/data && cp -al <other>/data/vanilla <wt>/data/vanilla`
-  (create `data/` first, otherwise the contents land in the wrong place). It
-  must contain `data/minecraft/advancement/`; extract a full set with
+  refuses symlinked sidecar dirs (`wt-new` hard-links it). It must contain
+  `data/minecraft/advancement/`; extract a full set with
   `tools/extract-vanilla-data.sh` from the local server jar.
 - **`SOLARIS_LOADER_ROOT`** must point at a Loader checkout in worktree gates;
   without it the `real_client_manifest` tests in `mc-test-harness` fail on the

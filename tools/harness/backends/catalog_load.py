@@ -1374,7 +1374,7 @@ async def run(args: argparse.Namespace) -> int:
     return int(any(r["outcome"] in {"SETUP_FAILED", "CORRECTNESS_FAIL", "PERF_FAIL"} for r in summary["results"]))
 
 
-def main() -> int:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario", action="append")
     parser.add_argument("--out", type=Path, required=True)
@@ -1403,11 +1403,16 @@ def main() -> int:
     parser.add_argument("--max-rss-mb", type=float, default=3072)
     parser.add_argument("--worldgen-gpu", action="store_true",
                         help="generate the server's chunk density on the GPU ([server].worldgen_gpu)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.out.exists():
         parser.error("--out must be a new directory; existing receipts are never overwritten")
     if args.scenario and len(args.scenario) != len(set(args.scenario)):
         parser.error("--scenario IDs must not be repeated")
+    if args.scenario and args.scenario != ["spain-industrial"]:
+        available = {item["id"] for item in json.loads(MAPPING.read_text())["scenarios"]}
+        unknown = set(args.scenario) - available
+        if unknown:
+            parser.error(f"unknown scenario IDs: {sorted(unknown)}")
     if args.spain_fixture and args.scenario != ["spain-industrial"]:
         parser.error("--spain-fixture requires only --scenario spain-industrial")
     if not 1 <= args.clients <= 4096 or not 1 <= args.view_distance <= 32:
@@ -1426,7 +1431,11 @@ def main() -> int:
         value = getattr(args, name)
         if value:
             setattr(args, name, value.resolve())
-    return asyncio.run(run(args))
+    return args
+
+
+def main() -> int:
+    return asyncio.run(run(parse_args()))
 
 
 if __name__ == "__main__":

@@ -7,13 +7,38 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import sys
 import tomllib
 
+from .ledger_base_fixed import BASE_FIXED
 from .runtime import REPO_ROOT
 
 REQUIRED = {'id', 'title', 'area', 'repro', 'severity', 'status', 'source', 'regression'}
-OPTIONAL = {'repro_check', 'failing_first'}
+OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion'}
+PROMOTION_DIR = 'docs/bugs/promotions'
+
+
+def _promotion_errors(ident, bug):
+    """Why this row's `fixed` status or `promotion` field is not acceptable, if it is not."""
+    promotion, fix_commit = bug.get('promotion'), bug.get('fix_commit')
+    if 'fix_commit' in bug and (not isinstance(fix_commit, str) or not re.fullmatch(r'[0-9a-f]{7,40}|patch:[0-9a-f]{64}', fix_commit)):
+        return [f'{ident}: fix_commit must be a lowercase hex commit id or patch:<sha256> of an uncommitted fix']
+    if promotion is None:
+        if bug.get('status') == 'fixed' and ident not in BASE_FIXED:
+            return [f'{ident}: fixed without a promotion receipt; only `python3 -m tools.harness ledger promote` may set fixed']
+        return []
+    if promotion != f'{PROMOTION_DIR}/{ident}.json':
+        return [f'{ident}: promotion must be {PROMOTION_DIR}/{ident}.json']
+    if bug.get('status') != 'fixed':
+        return [f'{ident}: promotion receipt on a row that is not fixed']
+    try:
+        receipt = json.loads((REPO_ROOT / promotion).read_text())
+    except (OSError, ValueError):
+        return [f'{ident}: promotion receipt {promotion} is missing or not JSON']
+    if not isinstance(receipt, dict) or receipt.get('id') != ident or receipt.get('verdict') != 'promoted' or not fix_commit or receipt.get('fix_commit') != fix_commit:
+        return [f'{ident}: promotion receipt does not match the row id and fix_commit']
+    return []
 
 
 def _nextest_listing(text):
@@ -41,6 +66,132 @@ def _client_command(profile, scenario):
         argv.extend(['--client', 'java'])
     return argv
 
+# Only profiles explicitly supported by the CLI's windowed native client path.
+_WINDOWED_PROFILES = frozenset({
+    'survival', 'inventory', 'entities', 'core-client', 'native-lifecycle',
+    'logical-native', 'native-scale', 'title-connect', 'singleplayer-regressions',
+    'dialogs', 'admin-commands', 'chisel', 'anti-xray', 'block-log',
+    'composter-chance', 'village-qa', 'village-autonomy-qa',
+    'civilization-seed-qa', 'village-owner-order-qa', 'scene-shot',
+    'settlement-map-qa', 'claim-only-qa', 'buildings-qa', 'army-qa', 'autocraft-qa',
+})
+_AUTONOMY_VERDICTS = frozenset({
+    'walk_to_village', 'ownerless_settlement', 'founding_chest_empty',
+    'generated_buildings_certified', 'natural_zones', 'workers_produce_unfunded',
+    'mutations_refused_unowned', 'builder_completes_storage_l1',
+    'builder_completes_further_building', 'builder_completes_autonomous_upgrade',
+    'claim_via_dialog_button', 'second_claim_refused', 'owner_orders_building',
+    'restart_resume',
+})
+_BOOLEAN_PROFILE_VERDICTS = {
+    'civilization-seed-qa': frozenset({
+        'new_house', 'births', 'second_building', 'iron_smelted', 'all',
+    }),
+}
+_PROFILE_VERDICTS = {
+    'village-qa': ('settlement_acceptance', frozenset({
+        'door_walk', 'sleep_return', 'farmer_harvest', 'miner_deposit', 'lumberjack',
+    })),
+    'village-autonomy-qa': ('autonomy_acceptance', _AUTONOMY_VERDICTS),
+    'claim-only-qa': ('claim_acceptance', frozenset({
+        'ownerless_settlement', 'claim_via_dialog_button', 'second_claim_refused',
+        'owner_orders_building', 'restart_resume',
+    })),
+    'army-qa': ('settlement_acceptance', frozenset({
+        'follow_30_blocks', 'guard_holds_post', 'patrol_moves_inside',
+        'return_to_barracks', 'soldiers_kill_zombies', 'villagers_survive',
+        'guard_returns_after_combat', 'slot_refills_no_dupe',
+    })),
+    # Building verdicts use "<blueprint>.<behaviour>" below.
+    'buildings-qa': ('buildings_acceptance', frozenset()),
+}
+_PROFILE_OVERRIDES = {
+    'buildings-qa': ('BUILDINGS_QA_SELECT', 'BUILDINGS_QA_KEEP_WORLD',
+                     'BUILDINGS_QA_STOP_AFTER_ORDER'),
+    'army-qa': ('SOLARIS_ARMY_QA_PHASE', 'SOLARIS_ARMY_QA_PLUGINS'),
+    'village-autonomy-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE'),
+    'civilization-seed-qa': ('VILLAGE_AUTONOMY_RESUME_WORLD', 'VILLAGE_AUTONOMY_RESUME_PHASE'),
+}
+
+
+
+def _profile_command(profile, verdict):
+    from . import profiles
+
+    spec = profiles.PROFILES.get(profile)
+    if profile not in _WINDOWED_PROFILES or not spec or spec.get('scope') != 'real-client':
+        raise ValueError(f'unknown runnable profile {profile}')
+    overrides = [name for name in _PROFILE_OVERRIDES.get(profile, ()) if os.environ.get(name)]
+    if overrides:
+        raise ValueError(f'{profile}: partial or resumed profile overrides forbidden: {", ".join(overrides)}')
+    if verdict == 'all':
+        valid = True
+    elif profile in _BOOLEAN_PROFILE_VERDICTS:
+        valid = verdict in _BOOLEAN_PROFILE_VERDICTS[profile]
+    elif profile == 'buildings-qa':
+        from .backends.buildings_qa import LEVELS
+        blueprint, separator, behaviour = verdict.partition('.')
+        valid = bool(separator) and blueprint in LEVELS and (
+            behaviour in {'settlement_founded', 'L1_built'}
+            or behaviour == 'L2_upgrade' and LEVELS[blueprint] >= 2
+            or behaviour == 'L3_upgrade' and LEVELS[blueprint] >= 3
+        )
+    else:
+        valid = verdict in _PROFILE_VERDICTS.get(profile, (None, {'all'}))[1]
+    if not valid:
+        raise ValueError(f'unknown verdict {profile}:{verdict}')
+    return [sys.executable, '-m', 'tools.harness', 'run', profile,
+            '--client', 'native', '--windowed']
+
+
+def _check_command(profile, check):
+    from . import scenarios
+
+    if check in scenarios.SCENARIOS:
+        return _client_command(profile, check), False
+    return _profile_command(profile, check), True
+
+
+def _graphical_check(profile, check):
+    from . import scenarios
+
+    if check in scenarios.SCENARIOS:
+        entry = scenarios.SCENARIOS[check]
+        return entry.profile == profile and entry.evidence == 'graphical'
+    try:
+        _profile_command(profile, check)
+        return True
+    except ValueError:
+        return False
+
+
+class VerdictNotMet(RuntimeError):
+    """A profile verdict is not met; `value` is None when the receipt never reported it."""
+
+    def __init__(self, message, value):
+        super().__init__(message)
+        self.value = value
+
+
+def _profile_verdict(receipt, profile, verdict):
+    details = receipt.get('details', {})
+    verdicts = details.get('verdicts')
+    if profile in _BOOLEAN_PROFILE_VERDICTS or verdicts is not None:
+        value = verdicts.get(verdict) if isinstance(verdicts, dict) else None
+        if value is not True:
+            raise VerdictNotMet(f'{profile}:{verdict} verdict is {value!r}, not true', value)
+        return
+    if verdict == 'all':
+        return
+    section = _PROFILE_VERDICTS[profile][0]
+    detail = receipt.get('details', {}).get('scenario', {}).get(section, {})
+    if profile == 'buildings-qa':
+        blueprint, _, verdict = verdict.partition('.')
+        detail = detail.get('blueprints', {}).get(blueprint, {})
+    behaviour = detail.get('behaviour', {})
+    if behaviour.get(verdict) != 'PASS':
+        raise VerdictNotMet(f'{profile}:{verdict} verdict is {behaviour.get(verdict)!r}, not PASS', behaviour.get(verdict))
+
 def _failed_ids(text, cargo):
     failed = set()
     for binary, name in re.findall(r'^\s*FAIL\s+\[[^\]]+\]\s+\(\s*\d+/\d+\)\s+(\S+)\s+(\S+)', text, re.MULTILINE):
@@ -49,22 +200,155 @@ def _failed_ids(text, cargo):
 
 
 
-def _release_server(ctx, profiles):
-    profiles._run_command(['cargo', 'build', '--release', '-p', 'mc-edge', '--bin', 'solaris-v2'], ctx, 'regressions-client-server-build.log')
-    target = Path(os.environ.get('CARGO_TARGET_DIR', str(REPO_ROOT / 'target')))
-    if not target.is_absolute():
-        target = REPO_ROOT / target
-    binary = target / 'release' / 'solaris-v2'
-    digest = hashlib.sha256()
+MEM_RUN = Path(os.environ.get('SOLARIS_MEM_RUN', '/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh'))
+
+
+def is_other_tree(tree):
+    return tree is not None and Path(tree).resolve() != REPO_ROOT.resolve()
+
+
+def tree_build_command(tree, argv):
+    """(argv, env) for a build in `tree`. For a tree other than REPO_ROOT on the owner host it goes
+    through mem-run with cwd=tree and without the caller's CARGO_TARGET_DIR, so the runner gives that
+    tree its own pooled slot (marks it and touches the files on a tree switch): a build must never
+    land in a slot marked for another tree."""
+    env = os.environ.copy()
+    if not is_other_tree(tree) or not MEM_RUN.exists():
+        return list(argv), env
+    env.pop('CARGO_TARGET_DIR', None)
+    return [str(MEM_RUN), '-m', '6G', 'env', 'RUSTC_WRAPPER=', *argv], env
+
+
+def _built_executable(log):
+    """The solaris-v2 executable path named by cargo's JSON messages in a build log."""
+    found = None
+    for line in log.splitlines():
+        if line.startswith('{'):
+            try:
+                message = json.loads(line)
+            except ValueError:
+                continue
+            if message.get('reason') == 'compiler-artifact' and message.get('executable') and Path(message['executable']).name == 'solaris-v2':
+                found = Path(message['executable'])
+    if found is None:
+        raise RuntimeError('cargo reported no solaris-v2 executable')
+    return found
+
+
+def _release_server(ctx, profiles, tree=None):
+    other = is_other_tree(tree)
+    built = Path(tree).resolve() if other else REPO_ROOT.resolve()
+    argv = ['cargo', 'build', '--release', '--locked', '-p', 'mc-edge', '--bin', 'solaris-v2']
+    if other:
+        argv, env = tree_build_command(tree, argv + ['--message-format', 'json-render-diagnostics'])
+        profiles._run_command(argv, ctx, 'regressions-client-server-build.log', cwd=tree, env=env)
+        # The slot is whichever mem-run picked for this tree: read it from cargo's own report.
+        binary = _built_executable((ctx.artifact_dir / 'regressions-client-server-build.log').read_text())
+        target = binary.parent.parent.resolve()
+    else:
+        profiles._run_command(argv, ctx, 'regressions-client-server-build.log', cwd=tree)
+        target = Path(os.environ.get('CARGO_TARGET_DIR', str(REPO_ROOT / 'target')))
+        if not target.is_absolute():
+            target = REPO_ROOT / target
+        target = target.resolve()
+        binary = target / 'release' / 'solaris-v2'
+    marker = target / '.solaris-tree'
+    pooled = target.parent.name == 'targets' and target.name.startswith('slot-')
+    def check_tree():
+        if pooled or marker.exists():
+            if marker.read_text().strip() != str(built):
+                raise RuntimeError(f'target slot {target} does not belong to {built}')
+    check_tree()
     with binary.open('rb') as file:
-        for chunk in iter(lambda: file.read(1024 * 1024), b''):
-            digest.update(chunk)
-    ctx.client_evidence['regressions_server'] = {'path': str(binary), 'sha256': digest.hexdigest()}
-    return binary
+        digest = hashlib.file_digest(file, 'sha256').hexdigest()
+    pin_dir = Path(os.environ.get('SOLARIS_REGRESSIONS_BIN_DIR', str(ctx.artifact_dir / 'bin'))).resolve()
+    if pin_dir.is_relative_to(target) or any(
+        parent.name.startswith('slot-') and parent.parent.name == 'targets'
+        for parent in (pin_dir, *pin_dir.parents)
+    ):
+        raise RuntimeError(f'pin directory {pin_dir} is inside a pooled target')
+    pin_dir.mkdir(parents=True, exist_ok=True)
+    pinned = pin_dir / f'solaris-v2-{digest}'
+    if not pinned.exists():
+        # Cargo replaces outputs with new files, so a hard link pins this build at no disk cost.
+        try:
+            os.link(binary, pinned)
+        except OSError:
+            shutil.copy2(binary, pinned)
+    check_tree()
+    with pinned.open('rb') as file:
+        if hashlib.file_digest(file, 'sha256').hexdigest() != digest:
+            raise RuntimeError('release server changed while pinning')
+    ctx.client_evidence['regressions_server'] = {'path': str(pinned), 'sha256': digest}
+    return pinned
+
+
+def _client_env(binary):
+    env = os.environ.copy()
+    # A mutation control must never replace the binary in a ledger gate.
+    env.pop('SOLARIS_FIRST_START_RECOVERY_BINARY', None)
+    env['SOLARIS_SERVER_BINARY'] = str(binary)
+    return env
+
+
+class ReceiptNotPassed(RuntimeError):
+    def __init__(self, status, detail='', receipt=None):
+        super().__init__(f"client receipt is {status!r}, not passed{detail}")
+        self.status = status
+        self.receipt = receipt
+
+
+def _client_receipt(ctx, profiles, command, env, profile, check, is_profile, cwd=None):
+    """Run one real-client command; return its passed receipt and path, or raise."""
+    from . import scenarios
+
+    log_name = f'regressions-client-{len(ctx.logs)}.log'
+    failure = None
+    try:
+        profiles._run_command(list(command), ctx, log_name, env=env, cwd=cwd)
+    except RuntimeError as error:
+        failure = error
+    log = ctx.artifact_dir / log_name
+    paths = re.findall(r'artifact=(\S+)', log.read_text()) if log.exists() else []
+    if not paths:
+        raise failure or RuntimeError('client run produced no receipt')
+    path = Path(paths[-1]) / 'result.json'
+    receipt = json.loads(path.read_text())
+    if receipt.get('status') != 'passed':
+        raise ReceiptNotPassed(receipt.get('status'), f'; {failure}' if failure else '', receipt)
+    if failure:
+        raise failure
+    server_hash = ctx.client_evidence['regressions_server']['sha256']
+    if is_profile and receipt.get('details', {}).get('server_binary_sha256') != server_hash:
+        raise RuntimeError('client receipt does not identify the built release server')
+    if not is_profile and scenarios.SCENARIOS[check].evidence != 'native' and server_hash not in json.dumps(receipt.get('details', {})):
+        raise RuntimeError('client receipt does not identify the built release server')
+    return receipt, path
+
+
+def _parse_ref(ref):
+    """Split a registered check ref into (kind, a, b); ValueError when it cannot run."""
+    parts = ref.split(':', 2)
+    if len(parts) == 3 and parts[0] == 'cargo' and re.fullmatch(r'[A-Za-z0-9_-]+', parts[1]) and re.fullmatch(r'[A-Za-z0-9_:]+', parts[2]):
+        return tuple(parts)
+    if len(parts) == 3 and parts[0] == 'harness':
+        _check_command(parts[1], parts[2])
+        return tuple(parts)
+    raise ValueError(f'invalid check {ref!r}')
+
+
+def needs_real_client(bug):
+    """Client-surface rows and owner/real-client repros are closed only by a real-client check."""
+    return bug.get('area') == 'client' or bug.get('repro') in ('manual', 'client')
+
+
+def is_graphical_ref(ref):
+    parts = ref.split(':', 2)
+    return len(parts) == 3 and parts[0] == 'harness' and _graphical_check(parts[1], parts[2])
 
 
 def run(ctx):
-    from . import profiles, scenarios
+    from . import profiles
 
     with (REPO_ROOT / 'docs/bugs/ledger.toml').open('rb') as file:
         ledger = tomllib.load(file)
@@ -84,6 +368,7 @@ def run(ctx):
             errors.append(f'invalid or duplicate bug id: {ident!r}')
             continue
         ids.add(ident)
+        errors.extend(_promotion_errors(ident, bug))
         if REQUIRED - bug.keys() or bug.keys() - REQUIRED - OPTIONAL:
             errors.append(f'{ident}: missing or unknown fields')
         if any(not isinstance(bug.get(k), str) or not bug[k] for k in ('title', 'source')):
@@ -107,22 +392,19 @@ def run(ctx):
         if bug.get('status') == 'fixed' and not refs:
             errors.append(f'{ident}: fixed without regression')
         for ref in refs:
-            parts = ref.split(':', 2)
-            if len(parts) == 3 and parts[0] == 'cargo' and re.fullmatch(r'[A-Za-z0-9_-]+', parts[1]) and re.fullmatch(r'[A-Za-z0-9_:]+', parts[2]):
-                cargo[parts[1]][parts[2]].add(ident)
-            elif len(parts) == 3 and parts[0] == 'harness':
-                try:
-                    _client_command(parts[1], parts[2])
-                except ValueError as error:
-                    errors.append(f'{ident}: {error}')
-                else:
-                    clients[ref].add(ident)
+            try:
+                kind, first, second = _parse_ref(ref)
+            except ValueError as error:
+                errors.append(f'{ident}: {error}')
+                continue
+            if kind == 'cargo':
+                cargo[first][second].add(ident)
             else:
-                errors.append(f'{ident}: invalid check {ref!r}')
-        if bug.get('status') == 'fixed' and (bug.get('area') == 'client' or bug.get('repro') in ('manual', 'client')):
-            required_evidence = ('graphical',)
-            if not any(len(parts := ref.split(':', 2)) == 3 and parts[0] == 'harness' and parts[2] in scenarios.SCENARIOS and scenarios.SCENARIOS[parts[2]].profile == parts[1] and scenarios.SCENARIOS[parts[2]].evidence in required_evidence for ref in refs):
-                errors.append(f'{ident}: original or client-surface repro needs a real-client check')
+                clients[ref].add(ident)
+        if bug.get('status') == 'fixed' and needs_real_client(bug) and not any(is_graphical_ref(ref) for ref in refs):
+            errors.append(f'{ident}: original or client-surface repro needs a real-client check')
+    statuses = {b['id']: b.get('status') for b in bugs if isinstance(b, dict) and isinstance(b.get('id'), str)}
+    errors.extend(f'{ident}: reopened row is still in BASE_FIXED; remove it from ledger_base_fixed.py' for ident in sorted(BASE_FIXED) if statuses.get(ident) == 'open')
     fixed = sum(isinstance(b, dict) and b.get('status') == 'fixed' for b in bugs)
     print(f'[regressions] open={len(bugs)-fixed} fixed={fixed}', flush=True)
     if errors:
@@ -153,26 +435,26 @@ def run(ctx):
         except Exception as error:
             failures.append(f"{', '.join(sorted(set().union(*clients.values())))}: release server: {error}")
         else:
-            env = os.environ.copy()
-            # A mutation control must never replace the binary in a ledger gate.
-            env.pop('SOLARIS_FIRST_START_RECOVERY_BINARY', None)
-            env['SOLARIS_SERVER_BINARY'] = str(binary)
+            env = _client_env(binary)
+            grouped = defaultdict(list)
             for ref, bug_ids in sorted(clients.items()):
-                _, profile, scenario = ref.split(':', 2)
+                _, profile, check = ref.split(':', 2)
+                command, is_profile = _check_command(profile, check)
+                grouped[tuple(command)].append((profile, check, bug_ids, is_profile))
+            for command, checks in grouped.items():
                 try:
-                    log_name = f'regressions-client-{len(ctx.logs)}.log'
-                    profiles._run_command(_client_command(profile, scenario), ctx, log_name, env=env)
-                    paths = re.findall(r'artifact=(\S+)', (ctx.artifact_dir / log_name).read_text())
-                    if not paths:
-                        raise RuntimeError('client run produced no receipt')
-                    receipt = json.loads((Path(paths[-1]) / 'result.json').read_text())
-                    if receipt.get('status') != 'passed':
-                        raise RuntimeError(f"client receipt is {receipt.get('status')!r}, not passed")
-                    server_hash = ctx.client_evidence['regressions_server']['sha256']
-                    if scenarios.SCENARIOS[scenario].evidence != 'native' and server_hash not in json.dumps(receipt.get('details', {})):
-                        raise RuntimeError('client receipt does not identify the built release server')
+                    profile, check, _, is_profile = checks[0]
+                    receipt, _ = _client_receipt(ctx, profiles, command, env, profile, check, is_profile)
                 except Exception as error:
+                    bug_ids = set().union(*(ids for _, _, ids, _ in checks))
                     failures.append(f"{', '.join(sorted(bug_ids))}: {error}")
+                    continue
+                for profile, check, bug_ids, is_profile in checks:
+                    if is_profile:
+                        try:
+                            _profile_verdict(receipt, profile, check)
+                        except Exception as error:
+                            failures.append(f"{', '.join(sorted(bug_ids))}: {error}")
     if failures:
         raise RuntimeError('; '.join(failures))
     return {'open': len(bugs)-fixed, 'fixed': fixed, 'cargo_checks': sum(map(len, cargo.values())), 'client_checks': len(clients), 'client_executed': ctx.include_regression_client}

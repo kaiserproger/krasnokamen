@@ -9,8 +9,10 @@ merely because a timeout elapsed or time passed.
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import errno
+import functools
 import os
 import re
 import select
@@ -166,16 +168,96 @@ def _require_event_fds(
     return selector, notify_fd, pid_fd
 
 
+PHASES = ("preflight", "server_start", "client_start", "join",
+          "scenario", "assertion", "teardown")
+
+
+def tag_failure(error: BaseException, name: str) -> None:
+    if name not in PHASES:
+        raise ValueError(f"unknown lifecycle phase: {name}")
+    if not hasattr(error, "failure_phase"):
+        error.failure_phase = name
+
+
+@contextlib.contextmanager
+def phase(name: str):
+    """Tag a failure escaping this block with the lifecycle phase it was observed in.
+
+    The first (innermost) tag wins, so a helper's own phase is never
+    overwritten by an enclosing scenario section.
+    """
+    if name not in PHASES:
+        raise ValueError(f"unknown lifecycle phase: {name}")
+    try:
+        yield
+    except BaseException as error:
+        tag_failure(error, name)
+        raise
+
+
+def in_phase(name: str):
+    """Decorator form of `phase` for the shared launch/join/teardown helpers."""
+    def wrap(function):
+        @functools.wraps(function)
+        def tagged(*args, **kwargs):
+            with phase(name):
+                return function(*args, **kwargs)
+        return tagged
+    return wrap
+
+
+def _causes(error: BaseException):
+    """The error and everything it was raised from or during, outermost first."""
+    seen: set[int] = set()
+    pending: list[BaseException] = [error]
+    while pending:
+        current = pending.pop(0)
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        yield current
+        pending += [link for link in (current.__cause__, current.__context__) if link is not None]
+
+
+def observed_phase(error: BaseException) -> str:
+    """The phase tagged on `error` or on a failure that caused it; `unknown` if none."""
+    return next((current.failure_phase for current in _causes(error)
+                 if getattr(current, "failure_phase", None) in PHASES), "unknown")
+
+
+def child_exit(error: BaseException) -> ChildExited | None:
+    """The first ChildExited in the failure's cause chain."""
+    return next((current for current in _causes(error) if isinstance(current, ChildExited)), None)
+
+
+class ChildExited(RuntimeError):
+    """A child process exited (returncode < 0: killed by that signal) while it was awaited."""
+
+    def __init__(self, message: str, returncode: int, log_path: Path) -> None:
+        super().__init__(message)
+        self.returncode = returncode
+        self.log_path = log_path
+
+
 def wait_port(
     port: int,
     timeout_seconds: float,
     process: subprocess.Popen[Any],
     *,
     log_path: Path,
+    phase_name: str = "server_start",
 ) -> None:
     """Return once port accepts; raise if the process exits or time runs out.
 
-    Re-probes happen only after real events: socket writability, log growth
+    `phase_name` is the lifecycle phase a failure belongs to: the server's
+    readiness by default, `client_start` when the port is a client's MCP.
+    """
+    with phase(phase_name):
+        _wait_port(port, timeout_seconds, process, log_path)
+
+
+def _wait_port(port: int, timeout_seconds: float, process: subprocess.Popen[Any], log_path: Path) -> None:
+    """Re-probes happen only after real events: socket writability, log growth
     (inotify), or process exit (pidfd). There is no polling quantum.
     """
     if timeout_seconds <= 0:
@@ -188,9 +270,10 @@ def wait_port(
         while True:
             if process.poll() is not None:
                 tail = _tail_log(log_path)
-                raise RuntimeError(
+                raise ChildExited(
                     f"process exited with {process.returncode} before port "
-                    f"{port} became ready; log {log_path}: {tail[-2000:]}"
+                    f"{port} became ready; log {log_path}: {tail[-2000:]}",
+                    process.returncode, log_path,
                 )
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -230,6 +313,13 @@ def wait_for_path_condition(path: Path, timeout_seconds: float, condition: Any) 
         os.close(notify_fd)
 
 
+@in_phase("server_start")
+def start_server(*args: Any, **kwargs: Any) -> subprocess.Popen[Any]:
+    """Launch a server process; readiness is observed separately by wait_port."""
+    return subprocess.Popen(*args, **kwargs)
+
+
+@in_phase("teardown")
 def stop_process(
     process: subprocess.Popen[Any] | None,
     *,
@@ -277,6 +367,7 @@ def _wait_for_file(path: Path, timeout_seconds: float, process: subprocess.Popen
             os.close(pid_fd)
 
 
+@in_phase("client_start")
 def start_xvfb(artifact_dir: Path) -> tuple[subprocess.Popen[Any], str, Any]:
     """Start Xvfb and return (process, display, log_handle).
 
@@ -419,6 +510,7 @@ def retry_tool(
     raise RuntimeError(f"{name} did not succeed within {timeout_seconds:.1f}s: {last_error}")
 
 
+@in_phase("client_start")
 def wait_client_ready_for_connect(client: Any, timeout_seconds: float) -> dict[str, Any]:
     import json as _json
 
@@ -446,6 +538,7 @@ def wait_client_ready_for_connect(client: Any, timeout_seconds: float) -> dict[s
     )
 
 
+@in_phase("client_start")
 def start_client(
     *,
     game_dir: Path,
@@ -536,7 +629,8 @@ def start_client(
         log_handle.close()
         raise
     try:
-        wait_port(mcp_port, _CLIENT_READY_TIMEOUT_SECONDS, process, log_path=log_path)
+        wait_port(mcp_port, _CLIENT_READY_TIMEOUT_SECONDS, process, log_path=log_path,
+                  phase_name="client_start")
     except Exception:
         stop_process(process)
         log_handle.close()

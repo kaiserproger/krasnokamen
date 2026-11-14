@@ -96,14 +96,30 @@ export SOLARIS_LOADER_ROOT=<solaris-loader checkout>            # Java/Loader cl
 export SOLARIS_DEFAULT_PLUGINS_ROOT=<solaris-default-plugins>   # standard-pack and plugin gates
 ```
 
-- A headless native run (`--client native`) needs only `SOLARIS_CLIENT_DATA_DIR`
-  (checked: the directory exists); `--windowed` additionally needs
+*Owner host:* builds land in a pooled target dir (`targets/slot-<l>`) that
+other trees reuse, so the harness refuses `SOLARIS_SERVER_BINARY` or
+`SOLARIS_CLIENT_BINARY` inside a slot. Pin instead:
+`<work>/solaris/tools/dev/pin-release <worktree> [--client]` builds once per
+tree (HEAD plus the hash of uncommitted changes), copies the binary to
+`<work>/pins/<sha12>[-<diff8>]/` with a manifest, prints the
+`SOLARIS_SERVER_BINARY=` (or `SOLARIS_CLIENT_BINARY=`) line and reuses an
+existing pin without building. Pins are immutable. A harness profile that
+builds the release server itself (`regressions-client`) hard-links its build
+into the run's artifact dir.
+
+- A headless native run (`--client native`) needs `SOLARIS_CLIENT_DATA_DIR`
+  with its block and registry reports. `--windowed` additionally needs
   `SOLARIS_CLIENT_RESOURCE_ROOT`, `SOLARIS_CLIENT_ASSET_ROOT` and
-  `SOLARIS_CLIENT_ASSET_INDEX` (checked: directories, and the index is a file).
-  A missing variable fails the run before launch. Unlisted profiles are rejected
-  for native, see [AGENT_TOOLING](../AGENT_TOOLING.md#harness-entrypoint).
-  `SOLARIS_CLIENT_BINARY` must exist if set; unset means
-  `<client>/target/debug/solaris-client`, built once with debuginfo off.
+  `SOLARIS_CLIENT_ASSET_INDEX`, including the assets directory, objects and a
+  nonempty asset index. Missing or incomplete paths fail before launch.
+  Real-client runs require executable `SOLARIS_SERVER_BINARY` and native runs
+  also require `SOLARIS_CLIENT_BINARY`; paths under owner-host pooled
+  `targets/slot-*` are refused. Pin copies outside the pool and use those paths.
+  Unlisted profiles are rejected for native; see
+  [AGENT_TOOLING](../AGENT_TOOLING.md#harness-entrypoint).
+  Headless native profiles create a temporary writable XDG root with links to
+  the template containing `data/vanilla`, `facts` and `resources/assets`;
+  it is removed after the profile exits.
 - A single wrong path (for example an item properties file under the wrong repo)
   leaves the client on a white "loading content" screen forever without naming
   the file; diff the env against the last green gate line by line.

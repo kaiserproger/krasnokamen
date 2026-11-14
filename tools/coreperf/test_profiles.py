@@ -27,7 +27,8 @@ class ProfilesTests(unittest.TestCase):
         recipe = profiles.fixture(0, 0)
         self.assertTrue(recipe["regions"])
         self.assertFalse(any(c.startswith("summon ") for r in recipe["regions"] for c in r["commands"]))
-        for name, movement, edits in (("idle", 0, 0), ("explore-20", 20, 0), ("native-100", 20, 2)):
+        for name, movement, edits in (("idle", 0, 0), ("explore-3", 20, 0),
+                                      ("explore-20", 20, 0), ("native-100", 20, 2)):
             args = argparse.Namespace(profile=name, mobs=profiles.PROFILES[name][1], warmup_seconds=30, measure_seconds=120)
             plan = profiles.schedule(args)["windows"]
             self.assertEqual([w["duration_ms"] for w in plan], [30000, 120000])

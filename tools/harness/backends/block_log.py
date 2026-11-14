@@ -89,7 +89,7 @@ def rolled_back_lines(state: dict[str, Any]) -> int:
     return sum("(rolled back)" in str(line) for line in state.get("recent_chat", []))
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
+def validate_args(ctx: ProfileContext) -> float:
     if ctx.client != "native":
         raise ValueError("block-log requires --client native")
     if ctx.extra_args or ctx.platform is not None:
@@ -97,6 +97,11 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else TIMEOUT
     if not 0 < timeout <= 3600:
         raise ValueError("block-log --timeout-seconds must be in (0, 3600]")
+    return timeout
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
     override = os.environ.get("SOLARIS_SERVER_BINARY")
     if not override:
@@ -130,7 +135,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
 
     def start_server() -> subprocess.Popen[bytes]:
-        process = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
+        process = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                                    cwd=runtime.REPO_ROOT, stdout=server_log,
                                    stderr=subprocess.STDOUT, start_new_session=True, env=env)
         runtime.wait_port(server_port, timeout, process, log_path=server_log_path)

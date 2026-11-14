@@ -21,6 +21,7 @@ from typing import Any
 from .. import runtime, wire
 from ..profiles import ProfileContext
 
+@runtime.in_phase("assertion")
 def _check(checks: dict[str, Any], name: str, condition: bool, detail: Any) -> None:
     checks[name] = {"passed": bool(condition), "detail": detail}
     if not condition:
@@ -107,11 +108,14 @@ def _initial_position(sock: Any, timeout: float) -> tuple[float, float, float]:
 
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
+def validate_args(ctx: ProfileContext) -> tuple[argparse.Namespace, float]:
     parser = argparse.ArgumentParser(prog="item-merge")
     parser.add_argument("--items", type=int, default=2)
     parser.add_argument("--command-timeout-seconds", type=float, default=30.0)
-    args = parser.parse_args(ctx.extra_args)
+    try:
+        args = parser.parse_args(ctx.extra_args)
+    except SystemExit as error:
+        raise ValueError("invalid item-merge arguments") from error
     if not 2 <= args.items <= 64:
         raise ValueError("--items must be in 2..=64")
     if ctx.platform is not None or ctx.plugins_dir is not None:
@@ -119,6 +123,11 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 180.0
     if timeout <= 0:
         raise ValueError("timeout must be positive")
+    return args, timeout
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    args, timeout = validate_args(ctx)
 
     artifact = ctx.artifact_dir
     artifact.mkdir(parents=True, exist_ok=True)
@@ -156,14 +165,12 @@ seed = 81
     ctx.cwds.append(str(runtime.REPO_ROOT))
     ctx.exits.append(None)
     ctx.logs.append(str(log_path.relative_to(runtime.REPO_ROOT)))
-    server = subprocess.Popen(
-        argv,
-        cwd=runtime.REPO_ROOT,
-        stdin=subprocess.PIPE,
-        stdout=log_handle,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,
-    )
+    server = runtime.start_server(argv,
+    cwd=runtime.REPO_ROOT,
+    stdin=subprocess.PIPE,
+    stdout=log_handle,
+    stderr=subprocess.STDOUT,
+    start_new_session=True,)
     checks: dict[str, Any] = {}
     report: dict[str, Any] = {
         "scope": "live item merge followed by hopper-to-chest transfer",
@@ -276,14 +283,12 @@ seed = 81
         ctx.cwds.append(str(runtime.REPO_ROOT))
         ctx.exits.append(None)
         ctx.logs.append(str(log_path.relative_to(runtime.REPO_ROOT)))
-        server = subprocess.Popen(
-            argv,
-            cwd=runtime.REPO_ROOT,
-            stdin=subprocess.PIPE,
-            stdout=log_handle,
-            stderr=subprocess.STDOUT,
-            start_new_session=True,
-        )
+        server = runtime.start_server(argv,
+        cwd=runtime.REPO_ROOT,
+        stdin=subprocess.PIPE,
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,)
         server_stopped = False
         runtime.wait_port(port, min(timeout, 120.0), server, log_path=log_path)
         sock, rejoined = wire.join_offline_socket(

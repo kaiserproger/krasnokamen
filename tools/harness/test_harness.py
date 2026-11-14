@@ -256,7 +256,7 @@ class ReceiptContractTests(unittest.TestCase):
                 profiles._run_command(command, ctx, f"step-{index}.log")
             return {}
 
-        spec = {"scope": "harness", "run": run_commands}
+        spec = {"scope": "harness", "run": run_commands, "prerequisites": profiles._NONE}
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):
                 with mock.patch.dict(profiles.PROFILES, {"failing-commands": spec}):
@@ -294,9 +294,16 @@ class ReceiptContractTests(unittest.TestCase):
             self.fail("gameplay must not execute after missing tool discovery")
 
         with tempfile.TemporaryDirectory() as tmp:
-            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):
+            reports = Path(tmp) / "data" / "vanilla" / "reports"
+            reports.mkdir(parents=True)
+            (Path(tmp) / "facts").mkdir()
+            (Path(tmp) / "resources" / "assets").mkdir(parents=True)
+            for name in ("blocks.json", "block_mining.json", "block_light.json", "registries.json"):
+                (reports / name).touch()
+            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), mock.patch("tools.harness.mcp_schema.native_schema", return_value={}), mock.patch.dict(os.environ, {"SOLARIS_CLIENT_DATA_DIR": str(reports.parent), "SOLARIS_SERVER_BINARY": "/bin/true", "SOLARIS_CLIENT_BINARY": "/bin/true"}):
                 with mock.patch.dict(profiles.PROFILES, {
-                    "survival": {"scope": "real-client", "run": missing_tools},
+                    "survival": {"scope": "real-client", "run": missing_tools,
+                                 "prerequisites": profiles.PROFILE_PREREQUISITES["survival"]},
                 }):
                     code = cli.cmd_run(["survival", "--client", "native"])
             payload = json.loads(next(Path(tmp).glob("*/result.json")).read_text())
@@ -408,8 +415,15 @@ class SharedClientProbeTests(unittest.TestCase):
             return compatibility.run_inventory_probe(MissingClicks(), ctx.artifact_dir)
 
         with tempfile.TemporaryDirectory() as tmp:
-            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), mock.patch.dict(profiles.PROFILES, {
-                "inventory": {"scope": "real-client", "run": probe},
+            reports = Path(tmp) / "data" / "vanilla" / "reports"
+            reports.mkdir(parents=True)
+            (Path(tmp) / "facts").mkdir()
+            (Path(tmp) / "resources" / "assets").mkdir(parents=True)
+            for name in ("blocks.json", "block_mining.json", "block_light.json", "registries.json"):
+                (reports / name).touch()
+            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), mock.patch("tools.harness.mcp_schema.native_schema", return_value={}), mock.patch.dict(os.environ, {"SOLARIS_CLIENT_DATA_DIR": str(reports.parent), "SOLARIS_SERVER_BINARY": "/bin/true", "SOLARIS_CLIENT_BINARY": "/bin/true"}), mock.patch.dict(profiles.PROFILES, {
+                "inventory": {"scope": "real-client", "run": probe,
+                              "prerequisites": profiles.PROFILE_PREREQUISITES["inventory"]},
             }):
                 code = cli.cmd_run(["inventory", "--client", "native"])
             payload = json.loads(next(Path(tmp).glob("*/result.json")).read_text())
@@ -512,7 +526,7 @@ class ScenarioCatalogTests(unittest.TestCase):
             proves="nothing",
             limits="test fixture",
         )
-        return scenario, {"fake-profile": {"scope": "harness", "run": run}}
+        return scenario, {"fake-profile": {"scope": "harness", "run": run, "prerequisites": profiles._NONE}}
 
     def test_unknown_scenario_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -73,12 +73,17 @@ def prepare_operator_fixture(ctx: ProfileContext, names: list[str]) -> None:
     ctx.client_evidence.update(operator_fixture_path=str(path), operator_fixture=entries)
 
 
-def run(ctx: ProfileContext) -> dict[str, Any]:
+def validate_args(ctx: ProfileContext) -> float:
     if ctx.extra_args or ctx.platform is not None:
         raise ValueError("survival accepts only --client and --timeout-seconds (debug, no Loader)")
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 120.0
     if not 0 < timeout <= 120:
         raise ValueError("survival --timeout-seconds must be in (0, 120]")
+    return timeout
+
+
+def run(ctx: ProfileContext) -> dict[str, Any]:
+    timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
     plugin_dir = plugin_directory(ctx)
     from .client_probes import _server_binary
@@ -115,7 +120,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     server_log = client_log = display_log = None
     try:
         server_log = (artifact / "server.log").open("wb")
-        server = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],
+        server = runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                                   cwd=runtime.REPO_ROOT, stdout=server_log,
                                   stderr=subprocess.STDOUT, start_new_session=True)
         ctx.logs.append(str(artifact / "server.log"))
@@ -146,16 +151,19 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
         evidence["available_tools"] = sorted(tool["name"] for tool in tools)
         require_tools(tools, survival.REQUIRED_TOOLS | {"minecraft_wait_for_play", "minecraft_disconnect"},
                       "survival")
-        if ctx.client == "java":
-            require_tools(tools, {"minecraft_connect", "minecraft_wait_for_state_change"}, "survival")
-            runtime.wait_client_ready_for_connect(mcp, timeout)
-            mcp.call_tool("minecraft_connect", {"server_addr": address})
-        play = mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": timeout})
-        if not play.get("in_play"):
-            raise RuntimeError(f"survival client did not enter Play: {play}")
-        result = survival.run(mcp, artifact, timeout)
-        if result.get("passed") is not True:
-            raise RuntimeError(f"survival scenario failed: {result}")
+        with runtime.phase("join"):
+            if ctx.client == "java":
+                require_tools(tools, {"minecraft_connect", "minecraft_wait_for_state_change"}, "survival")
+                runtime.wait_client_ready_for_connect(mcp, timeout)
+                mcp.call_tool("minecraft_connect", {"server_addr": address})
+            play = mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": timeout})
+            if not play.get("in_play"):
+                raise RuntimeError(f"survival client did not enter Play: {play}")
+        with runtime.phase("scenario"):
+            result = survival.run(mcp, artifact, timeout)
+            with runtime.phase("assertion"):
+                if result.get("passed") is not True:
+                    raise RuntimeError(f"survival scenario failed: {result}")
         if ctx.windowed:
             evidence["capture"] = native_client.capture(mcp, artifact)
             # Human-playthrough step screenshots on the same live session

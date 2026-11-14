@@ -4,6 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 import signal
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -13,7 +14,7 @@ from typing import Any
 from tools.bench import common
 
 MIB = 2**20
-PROFILE_CLIENTS = {"idle": 0, "explore-20": 20, "native-100": 100, "villager-heavy": 100}
+PROFILE_CLIENTS = {"idle": 0, "explore-3": 3, "explore-20": 20, "native-100": 100, "villager-heavy": 100}
 
 
 @dataclass
@@ -182,3 +183,20 @@ def normalise(profile: str, split: dict[str, Any], memory: str | None, out: Path
         # unloads, reloads included). Real generation rate is measured by the worldgen run.
         resident_chunks_per_s_proxy=(chunks["last"] - chunks["first"]) / seconds)
     return row
+
+
+def run_first_view(ctx: Context, split: dict[str, Any], memory: str) -> dict[str, Any]:
+    """Measure a real window through the canonical harness, not a protocol proxy."""
+    log = ctx.out / "first-view.log"
+    command = ["env", f"SOLARIS_SERVER_BINARY={ctx.server_bin}", sys.executable,
+               "-m", "tools.harness", "run", "weak-first-view", "--client", "native", "--windowed",
+               "--timeout-seconds", str(ctx.readiness_seconds), "--server-cpus", split["server"],
+               "--client-cpus", split["bots"], "--memory", memory]
+    code, _ = _bounded_run(command, log)
+    artifacts = re.findall(r"\bartifact=(\S+)", log.read_text())
+    receipt_path = Path(artifacts[-1]) / "result.json" if artifacts else None
+    receipt = json.loads(receipt_path.read_text()) if receipt_path and receipt_path.is_file() else {}
+    if code or receipt.get("status") != "passed":
+        return {"status": "failed", "error": receipt.get("error") or f"exit {code}; see {log}",
+                "receipt": str(receipt_path) if receipt_path else None}
+    return {**receipt["details"], "status": "ok", "receipt": str(receipt_path)}

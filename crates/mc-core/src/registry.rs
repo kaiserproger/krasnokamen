@@ -268,6 +268,7 @@ impl CoreRegistry {
         let root = vanilla_data_dir.ok_or_else(|| {
             CoreError::Registry("vanilla content directory must be selected before startup".into())
         })?;
+        tracing::info!(stage = "registries", "Loading game registries and loot");
         let report = solaris_required_blocks_report();
         let blocks = Arc::new(
             BlockRegistry::from_report(&report)
@@ -573,6 +574,7 @@ impl CoreRegistry {
         let fail = |what: &str| {
             CoreError::Registry(format!("vanilla {what} missing at {}", dir.display()))
         };
+        tracing::info!(stage = "item_components", "Loading item components");
         let item_facts = mc_data::item_components::load_item_facts(
             dir.join("reports")
                 .join("minecraft")
@@ -583,6 +585,7 @@ impl CoreRegistry {
         if item_facts.is_empty() {
             return Err(fail("item facts"));
         }
+        tracing::info!(stage = "tags", "Loading registries and tags");
         let data =
             Arc::new(mc_data::load(dir).map_err(|err| CoreError::Registry(err.to_string()))?);
         // Resolved wire tags alone do not contain the furnace burn-time table.
@@ -598,6 +601,7 @@ impl CoreRegistry {
             data,
             Arc::clone(&tags),
         ));
+        tracing::info!(stage = "loot", "Loading block loot");
         let mut loot = mc_data::loot::load_vanilla_subset(
             dir.join("data").join("minecraft").join("loot_table"),
         )
@@ -608,6 +612,7 @@ impl CoreRegistry {
         let builtin_loot = mc_data::loot::load_builtin(dir)
             .map_err(|error| CoreError::Registry(error.to_string()))?;
         loot.fill_missing_from(&builtin_loot);
+        tracing::info!(stage = "recipes", "Loading crafting recipes");
         let mut recipes =
             mc_data::recipes::load_recipes(dir.join("data").join("minecraft").join("recipe"))
                 .map_err(|err| CoreError::Registry(err.to_string()))?;
@@ -627,6 +632,7 @@ impl CoreRegistry {
         recipes.extend(by_id.into_values());
         let mining = mc_data::block_mining::load(dir.join("reports").join("block_mining.json"))
             .map_err(|err| CoreError::Registry(err.to_string()))?;
+        tracing::info!(stage = "game_data_ready", "Game data ready");
         Ok((item_facts, tags, recipes, loot, mining, worldgen_tags))
     }
 
