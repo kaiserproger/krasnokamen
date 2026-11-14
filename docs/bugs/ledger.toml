@@ -2252,7 +2252,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+regression = ["harness:village-qa:sleep_return"]
 
 [[bug]]
 id = "ISSUE-1-12"
@@ -2272,7 +2272,7 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+regression = ["harness:village-autonomy-qa:all"]
 
 [[bug]]
 id = "ISSUE-1-14"
