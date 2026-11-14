@@ -63,13 +63,13 @@ def _check_port(port: int, name: str, port_range=(PORT_MIN, PORT_MAX)) -> int:
 def _default_lock_dir() -> Path:
     """One machine-wide lock namespace for every harness process.
 
-    The default is a fixed path (not derived from TMPDIR/SOLARIS_WORK_ROOT),
+    The default is a fixed path (not derived from TMPDIR/KRASNOKAMEN_WORK_ROOT),
     so processes with different environments on the same host still
-    coordinate through the same lock files. SOLARIS_PORT_LOCK_DIR overrides
+    coordinate through the same lock files. KRASNOKAMEN_PORT_LOCK_DIR overrides
     it for isolated tests only. The harness already requires Linux
     (inotify/pidfd), so /tmp is always present.
     """
-    return Path(os.environ.get("SOLARIS_PORT_LOCK_DIR", "/tmp/solaris-port-locks"))
+    return Path(os.environ.get("KRASNOKAMEN_PORT_LOCK_DIR", "/tmp/solaris-port-locks"))
 
 
 PORT_LOCK_DIR = _default_lock_dir()
@@ -228,7 +228,7 @@ port = {self.port}
 
 [auth]
 online_mode = false
-require_plugin_login = {str(self.plugins_dir is not None and (self.plugins_dir / "solaris-auth").is_dir()).lower()}
+require_plugin_login = {str(self.plugins_dir is not None and (self.plugins_dir / "krasnokamen-auth").is_dir()).lower()}
 
 [dashboard]
 enabled = true

@@ -1,4 +1,4 @@
-schema: solaris-domain-spec-1
+schema: krasnokamen-domain-spec-1
 domain: villagers
 minecraft_version: 26.1.2
 executable_interface: tools/harness/matrix_api.py; plain Python adapters; this YAML is specification only, not an
@@ -26,7 +26,7 @@ context_contract:
 subjects:
 - subject: villagers.profession_Armorer
   scenario_ids:
-  - pw:villagers.profession_Armorer/fabric_solaris_loader/adventure/overworld/easy/2/disconnect_during_menu/hot_backup_during_action/op_1
+  - pw:villagers.profession_Armorer/fabric_krasnokamen_loader/adventure/overworld/easy/2/disconnect_during_menu/hot_backup_during_action/op_1
   preconditions:
   - &id001
     console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
@@ -82,7 +82,7 @@ subjects:
     full oracle.
 - subject: villagers.profession_Butcher
   scenario_ids:
-  - pw:villagers.profession_Butcher/forge_solaris_loader/creative/overworld/easy/N8/disconnect_during_menu/hot_backup_during_action/non_op_0
+  - pw:villagers.profession_Butcher/forge_krasnokamen_loader/creative/overworld/easy/N8/disconnect_during_menu/hot_backup_during_action/non_op_0
   preconditions:
   - *id001
   - *id002
@@ -794,7 +794,7 @@ subjects:
   - *id002
   - *id003
   - console: settlement create MatrixTown 48
-  - console: summon villager 3 200 0 {VillagerData:{profession:"solaris:miner"}}
+  - console: summon villager 3 200 0 {VillagerData:{profession:"krasnokamen:miner"}}
   - console: settlement bind MatrixTown
   - console: give ${actor} iron_pickaxe 1
   actions:
@@ -828,7 +828,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: Solaris extension; these professions do not exist in vanilla. Expected behaviour sourced from cited
+    reason: Krasnokamen extension; these professions do not exist in vanilla. Expected behaviour sourced from cited
       native module, never labelled vanilla.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
@@ -841,7 +841,7 @@ subjects:
   - *id002
   - *id003
   - console: settlement create MatrixTown 48
-  - console: summon villager 3 200 0 {VillagerData:{profession:"solaris:lumberjack"}}
+  - console: summon villager 3 200 0 {VillagerData:{profession:"krasnokamen:lumberjack"}}
   - console: settlement bind MatrixTown
   - console: give ${actor} iron_axe 1
   actions:
@@ -875,7 +875,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: Solaris extension; these professions do not exist in vanilla. Expected behaviour sourced from cited
+    reason: Krasnokamen extension; these professions do not exist in vanilla. Expected behaviour sourced from cited
       native module, never labelled vanilla.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
@@ -888,7 +888,7 @@ subjects:
   - *id002
   - *id003
   - console: settlement create MatrixTown 48
-  - console: summon villager 3 200 0 {VillagerData:{profession:"solaris:builder"}}
+  - console: summon villager 3 200 0 {VillagerData:{profession:"krasnokamen:builder"}}
   - console: settlement bind MatrixTown
   - console: give ${actor} oak_planks 1
   actions:
@@ -922,7 +922,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: Solaris extension; these professions do not exist in vanilla. Expected behaviour sourced from cited
+    reason: Krasnokamen extension; these professions do not exist in vanilla. Expected behaviour sourced from cited
       native module, never labelled vanilla.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
@@ -935,7 +935,7 @@ subjects:
   - *id002
   - *id003
   - console: settlement create MatrixTown 48
-  - console: summon villager 3 200 0 {VillagerData:{profession:"solaris:soldier"}}
+  - console: summon villager 3 200 0 {VillagerData:{profession:"krasnokamen:soldier"}}
   - console: settlement bind MatrixTown
   - console: give ${actor} iron_sword 1
   actions:
@@ -969,7 +969,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: Solaris extension; these professions do not exist in vanilla. Expected behaviour sourced from cited
+    reason: Krasnokamen extension; these professions do not exist in vanilla. Expected behaviour sourced from cited
       native module, never labelled vanilla.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
@@ -1099,7 +1099,7 @@ subjects:
   adapter_completeness: complete_subject_oracle
 - subject: villagers.farmer_harvest
   scenario_ids:
-  - pw:villagers.farmer_harvest/neoforge_solaris_loader/creative/the_end/hard/1/duplicate_login/crash_kill9_wal_replay/non_op_0
+  - pw:villagers.farmer_harvest/neoforge_krasnokamen_loader/creative/the_end/hard/1/duplicate_login/crash_kill9_wal_replay/non_op_0
   preconditions:
   - *id001
   - *id002
@@ -1550,9 +1550,9 @@ subjects:
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
-- subject: villagers.solaris_professions
+- subject: villagers.krasnokamen_professions
   scenario_ids:
-  - bl:villagers.solaris_professions/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
+  - bl:villagers.krasnokamen_professions/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
   preconditions:
   - *id001
   - *id002

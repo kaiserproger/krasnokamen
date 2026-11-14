@@ -25,7 +25,7 @@ from .backends.protocol_lifecycle import Blocked, PortReservation, ProtocolServe
 def _harness(tmp: str, **overrides: object) -> ProtocolServer:
     root = Path(tmp)
     kwargs: dict[str, object] = {
-        "binary": root / "solaris-v2",
+        "binary": root / "krasnokamen",
         "run_dir": root / "run",
         "port": 26111,
         "vanilla_data": root / "vanilla",
@@ -115,7 +115,7 @@ class LifecycleGuardTests(unittest.TestCase):
 
     def test_start_blocked_without_vanilla_data(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "solaris-v2").touch()
+            (Path(tmp) / "krasnokamen").touch()
             server = _harness(tmp)
             with self.assertRaises(Blocked):
                 server.start()
@@ -123,7 +123,7 @@ class LifecycleGuardTests(unittest.TestCase):
     def test_start_blocked_without_plugins_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "solaris-v2").touch()
+            (root / "krasnokamen").touch()
             (root / "vanilla").mkdir()
             server = _harness(tmp, plugins_dir=root / "missing-plugins")
             with self.assertRaises(Blocked):
@@ -194,7 +194,7 @@ class LifecycleGuardTests(unittest.TestCase):
             )
             new = SimpleNamespace(pid=13, poll=lambda: None)
             server._process = old
-            server._argv = ["solaris-v2", "--config", "cfg"]
+            server._argv = ["krasnokamen", "--config", "cfg"]
             server._log_handle = SimpleNamespace(close=lambda: None)
             with mock.patch.object(
                 lifecycle.runtime, "wait_port"
@@ -433,19 +433,19 @@ class PortLeaseTests(unittest.TestCase):
                     release()
 
     def test_lock_dir_default_is_one_machine_wide_namespace(self) -> None:
-        # The default must NOT depend on SOLARIS_WORK_ROOT/TMPDIR: two harness
+        # The default must NOT depend on KRASNOKAMEN_WORK_ROOT/TMPDIR: two harness
         # processes with different environments on one host must coordinate
         # through the same lock files.
         with mock.patch.dict(os.environ, {}, clear=True):
             self.assertEqual(lifecycle._default_lock_dir(), Path("/tmp/solaris-port-locks"))
-        with mock.patch.dict(os.environ, {"SOLARIS_WORK_ROOT": "/w", "TMPDIR": "/t"}, clear=True):
+        with mock.patch.dict(os.environ, {"KRASNOKAMEN_WORK_ROOT": "/w", "TMPDIR": "/t"}, clear=True):
             self.assertEqual(lifecycle._default_lock_dir(), Path("/tmp/solaris-port-locks"))
-        with mock.patch.dict(os.environ, {"SOLARIS_PORT_LOCK_DIR": "/locks"}, clear=True):
+        with mock.patch.dict(os.environ, {"KRASNOKAMEN_PORT_LOCK_DIR": "/locks"}, clear=True):
             self.assertEqual(lifecycle._default_lock_dir(), Path("/locks"))
 
     def test_reservations_coordinate_across_processes_with_different_env(self) -> None:
         # Regression: with an env-derived lock dir, two processes with
-        # different SOLARIS_WORK_ROOT/TMPDIR both got the same port before
+        # different KRASNOKAMEN_WORK_ROOT/TMPDIR both got the same port before
         # bind. Separate processes with different env must still get
         # distinct ports from one machine-wide lock namespace.
         import subprocess
@@ -460,12 +460,12 @@ class PortLeaseTests(unittest.TestCase):
             "print(int(r), flush=True); time.sleep(30)"
         ).format(root=root, base=base)
         envs = [
-            {"SOLARIS_WORK_ROOT": "/tmp/fake-root-a", "TMPDIR": "/tmp/fake-tmp-a"},
-            {"SOLARIS_WORK_ROOT": "/tmp/fake-root-b", "TMPDIR": "/tmp/fake-tmp-b"},
+            {"KRASNOKAMEN_WORK_ROOT": "/tmp/fake-root-a", "TMPDIR": "/tmp/fake-tmp-a"},
+            {"KRASNOKAMEN_WORK_ROOT": "/tmp/fake-root-b", "TMPDIR": "/tmp/fake-tmp-b"},
         ]
         procs = []
         for extra in envs:
-            env = {k: v for k, v in os.environ.items() if k != "SOLARIS_PORT_LOCK_DIR"}
+            env = {k: v for k, v in os.environ.items() if k != "KRASNOKAMEN_PORT_LOCK_DIR"}
             env.update(extra)
             procs.append(subprocess.Popen(
                 [sys.executable, "-c", child], env=env,
