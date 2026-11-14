@@ -6,11 +6,13 @@ fn load_queues_aggregate_real_slots_and_expose_unavailable_metrics() {
     assert!(registry.admit(ConnectionId(1), 2, |_| None).is_none());
     assert!(registry.admit(ConnectionId(2), 2, |_| None).is_none());
     let (reliable_tx, mut reliable_rx) = mpsc::channel(4);
-    let (world_tx, _world_rx) = mpsc::channel(4);
+    let (world_tx, mut world_rx) = world_queue(4, WORLD_QUEUE_BYTES);
     reliable_tx
         .try_send(bytes::Bytes::from_static(b"abc"))
         .unwrap();
-    let reserved = world_tx.try_reserve().unwrap();
+    world_tx
+        .try_send(bytes::Bytes::from_static(b"queued"))
+        .unwrap();
     registry
         .register(
             ConnectionId(1),
@@ -21,7 +23,7 @@ fn load_queues_aggregate_real_slots_and_expose_unavailable_metrics() {
         )
         .unwrap();
     let (reliable_tx2, _reliable_rx2) = mpsc::channel(2);
-    let (world_tx2, _world_rx2) = mpsc::channel(2);
+    let (world_tx2, _world_rx2) = world_queue(2, WORLD_QUEUE_BYTES);
     world_tx2
         .try_send(bytes::Bytes::from_static(b"longer payload"))
         .unwrap();
@@ -50,7 +52,7 @@ fn load_queues_aggregate_real_slots_and_expose_unavailable_metrics() {
     assert!(snapshot.world.reserved_bytes.is_none());
     assert!(snapshot.world.queued_slots.is_none());
     assert!(snapshot.world.reserved_slots.is_none());
-    drop(reserved);
+    world_rx.try_recv().unwrap();
     reliable_rx.try_recv().unwrap();
     let snapshot = registry.load_queues().unwrap();
     assert_eq!(snapshot.reliable.queued_or_reserved_slots, 0);
@@ -62,7 +64,7 @@ fn registry_insert_remove_roster() {
     let registry = ConnectionRegistry::new();
     let id = registry.joining_id();
     let (reliable_tx, _) = mpsc::channel(2);
-    let (world_tx, _) = mpsc::channel(2);
+    let (world_tx, _) = world_queue(2, WORLD_QUEUE_BYTES);
     registry
         .register(
             id,
@@ -215,7 +217,7 @@ fn pending_reliable_keeps_burst_order() {
         message: "late".to_owned(),
     });
     let (reliable_tx, _reliable_rx) = mpsc::channel(1);
-    let (world_tx, _world_rx) = mpsc::channel(1);
+    let (world_tx, _world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
     let handles = ConnectionHandles {
         reliable_tx,
         world_tx,

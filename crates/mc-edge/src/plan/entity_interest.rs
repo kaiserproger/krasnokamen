@@ -19,30 +19,11 @@ pub(super) struct EntityInterest {
     scheduled: HashMap<EntityId, u64>,
     due: BinaryHeap<Reverse<(u64, i32)>>,
     order: Vec<Order>,
-    resume: Option<Order>,
     seeded: bool,
     seed: Vec<EntityId>,
 }
 
 impl EntityInterest {
-    pub(super) fn start(&self, work: &[EntityId], snapshot: &WorldSnapshot) -> usize {
-        self.resume
-            .and_then(|resume| {
-                work.iter().position(|id| {
-                    self.visible
-                        .get(id)
-                        .copied()
-                        .or_else(|| snapshot.entities.get(*id).map(order))
-                        .is_some_and(|key| key >= resume)
-                })
-            })
-            .unwrap_or(0)
-    }
-
-    pub(super) fn blocked(&mut self, entity: &EntityView) {
-        self.resume = Some(order(entity));
-    }
-
     pub(super) fn previous(&self) -> Option<&mc_core::boundary::EntityViews> {
         self.previous.as_ref()
     }
@@ -178,6 +159,7 @@ impl EntityInterest {
                 .visible
                 .extend(self.order.iter().map(|key| EntityId(key.2)));
             scratch.spawns.clear();
+            scratch.pending_spawns = self.spawns.len();
             if credit > 0 {
                 self.order.clear();
                 self.order
@@ -219,7 +201,7 @@ impl EntityInterest {
             return;
         }
         let was_visible = self.visible.contains_key(&id);
-        let range = f64::from(delta.range.min(distance.max(0))) * 16.0;
+        let range = f64::from(effective_range(delta.range, distance, viewer.recorder)) * 16.0;
         let interior = delta.membership_same
             && was_visible
             && !self.spawns.contains(&id)
@@ -233,9 +215,9 @@ impl EntityInterest {
         if !interior {
             self.changed(snapshot, viewer, distance, id);
         } else if delta.appearance_changed || delta.motion_changed {
-            // Keep changed movement in canonical credit order even before
-            // its due tick. Only completed rows may arm a deadline: arming
-            // rows behind a blocked cursor would invent delivery debt.
+            // Keep changed movement in delivery order even before its due
+            // tick. Only completed rows may arm a deadline: arming rows the
+            // credit did not reach would invent delivery debt.
             self.dirty.insert(id);
         }
     }
@@ -299,7 +281,7 @@ impl EntityInterest {
         let entity = snapshot.entities.get(id).filter(|entity| {
             let chunk = entity_chunk(entity.position);
             if viewer.loaded_chunks.contains_key(&chunk)
-                && let Some(range) = tracking_range(entity.type_id, distance)
+                && let Some(range) = tracking_range(entity.type_id, distance, viewer.recorder)
             {
                 self.ranges.insert(range);
             }
@@ -407,9 +389,22 @@ fn order(entity: &EntityView) -> Order {
     (chunk.0, chunk.1, entity.id.0)
 }
 
-pub(super) fn tracking_range(type_id: u32, distance: i32) -> Option<i32> {
+/// Tracking radius in chunks of an entity type for one viewer, `None` for a
+/// type without a tracking contract.
+pub(super) fn tracking_range(type_id: u32, distance: i32, recorder: bool) -> Option<i32> {
     mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
-        .map(|contract| (contract.tracking_range as i32).min(distance.max(0)))
+        .map(|contract| effective_range(i32::from(contract.tracking_range), distance, recorder))
+}
+
+/// The vanilla type range capped by the view distance; a recorder tracks
+/// every type vanilla sends (range above zero) to its whole view distance
+/// ([`crate::recorder`]).
+pub(super) fn effective_range(type_range: i32, distance: i32, recorder: bool) -> i32 {
+    if recorder && type_range > 0 {
+        distance.max(0)
+    } else {
+        type_range.min(distance.max(0))
+    }
 }
 
 fn strip_chunks(min: [f64; 2], max: [f64; 2], chunks: &mut HashSet<(i32, i32)>) {

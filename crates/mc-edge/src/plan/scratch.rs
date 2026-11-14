@@ -5,6 +5,9 @@ use super::*;
 pub(super) struct PlanScratch {
     pub visible: Vec<EntityId>,
     pub spawns: Vec<(EntityId, f64)>,
+    /// Visible entities the client does not hold yet, counted even when no
+    /// spawn credit is left and `spawns` stays empty.
+    pub pending_spawns: usize,
     pub bosses: Vec<EntityId>,
     pub removed: Vec<i32>,
     pub tracking_ranges: HashSet<i32>,
@@ -15,6 +18,8 @@ pub(super) struct PlanScratch {
     pub events: Vec<usize>,
     /// Held, in-window chunks named by this publish's delta.
     pub delta_chunks: Vec<(i32, i32)>,
+    /// Pending entity updates of one publish, in send priority order.
+    pub updates: Vec<EntityUpdate>,
 }
 
 #[derive(Debug, Default)]

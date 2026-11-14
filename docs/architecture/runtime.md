@@ -40,9 +40,15 @@ are disconnected with the vanilla illegal-characters reason.
 | Run/process/receipt lifecycle | `tools/harness` | v2-only server launch; one owned artifact directory and fail-closed receipt |
 
 World fanout may skip to the newest immutable snapshot and reconcile the
-viewer's held world state. Reliable per-player results remain ordered; capacity
-exhaustion disconnects rather than dropping them. Socket completion and client
-rendering are separate from native commit.
+viewer's held world state. Each viewer's world credit is its world queue's
+free frame slots (hard) and free bytes (soft: the last admitted group may
+overshoot); entity updates that do not fit wait, ranked by wait time and
+distance, and are planned again from a newer snapshot. Recorder connections
+(`[recorder]`, `crates/mc-edge/src/recorder.rs`) track every entity type to
+their view distance and get a per-tick `solaris:tick` marker. Reliable
+per-player results remain ordered; capacity exhaustion disconnects rather
+than dropping them. Socket completion and client rendering are separate from
+native commit.
 
 ### Tick cost accounting
 

@@ -2,7 +2,8 @@
 //!
 //! A tiny tokio TCP HTTP/1.1 endpoint with a request-head cap,
 //! one-request-per-connection, `GET /stats`, `GET /profile`, streaming
-//! `GET /load-metrics`, and Prometheus `GET /metrics` routes (404 elsewhere).
+//! `GET /load-metrics`, `GET /telemetry.jsonl`, and Prometheus `GET /metrics`
+//! routes (404 elsewhere).
 //! Payloads stay edge-local.
 //!
 //! The existing `/stats` rolling 1200 samples remain independent of the
@@ -15,6 +16,14 @@
 //! immediately even below the requested sample threshold. `overrun`
 //! reports overwritten requested samples; noncontiguous tick IDs or increases
 //! in `source_skipped_ticks_total` also invalidate affected windows.
+//!
+//! `/telemetry.jsonl` takes the same query and returns one JSON object per
+//! retained tick the edge has fanned out (`application/x-ndjson`): the
+//! `/load-metrics` sample plus `host`, the [`HostSample`] taken on that tick
+//! (one per 20-tick window, otherwise `null`). Samples of ticks with battle
+//! units (staged, paused or running) also carry `battle`, counted after
+//! merge; ticks with a recorder connection carry `recorders`
+//! ([`RecorderTick`]). Missing ticks are gaps, never filled in.
 //!
 //! Raw samples retain the core's original UNIX-nanosecond wall start (before
 //! input drains), not edge receipt time or a reconstructed 50 ms cadence.
@@ -37,10 +46,14 @@ use tokio::sync::Notify;
 
 use mc_core::boundary::TickTimes;
 
+use crate::host_telemetry::{HostSample, SAMPLE_TICKS};
+use crate::recorder::RecorderTick;
 use crate::server::ConnectionRegistry;
 
 /// Bounded storage, about 13.6 minutes at 20 TPS; stream longer windows.
 const LOAD_SAMPLE_CAPACITY: usize = 16384;
+/// Host samples covering the same ticks as the load ring.
+const HOST_SAMPLE_CAPACITY: usize = LOAD_SAMPLE_CAPACITY / SAMPLE_TICKS as usize + 1;
 /// A long poll waits on pushes, with this deadline as its only timer.
 const LOAD_WAIT_TIMEOUT: Duration = Duration::from_secs(10);
 /// How long a dashboard peer may take to deliver a complete request head.
@@ -227,6 +240,39 @@ pub struct LoadTickSample {
     pub total_us: u64,
     pub phase_us: LoadPhaseTimes,
     pub coreperf: Option<std::sync::Arc<mc_core::boundary::CorePerfTick>>,
+    /// `{"units": n, "alive": {"<faction>": n}}`; the key is absent without
+    /// battle units.
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        serialize_with = "serialize_battle"
+    )]
+    pub battle: Option<std::sync::Arc<mc_core::boundary::BattleCounts>>,
+}
+
+/// [`LoadTickSample::battle`] as an object whose `alive` maps each faction
+/// (as a string key, the JSON form of integer keys) to its alive units.
+fn serialize_battle<S: serde::Serializer>(
+    battle: &Option<std::sync::Arc<mc_core::boundary::BattleCounts>>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    use serde::ser::{SerializeMap, SerializeStruct};
+    struct Alive<'a>(&'a [(u16, u32)]);
+    impl Serialize for Alive<'_> {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            let mut map = serializer.serialize_map(Some(self.0.len()))?;
+            for (faction, alive) in self.0 {
+                map.serialize_entry(faction, alive)?;
+            }
+            map.end()
+        }
+    }
+    let Some(battle) = battle else {
+        return serializer.serialize_none();
+    };
+    let mut out = serializer.serialize_struct("BattleCounts", 2)?;
+    out.serialize_field("units", &battle.units)?;
+    out.serialize_field("alive", &Alive(&battle.alive))?;
+    out.end()
 }
 
 /// Real send-channel gauges. `capacity()`, unlike a receiver length, includes
@@ -284,9 +330,26 @@ pub struct LoadMetricsSnapshot {
 
 struct LoadMetricsInner {
     samples: VecDeque<LoadTickSample>,
+    /// `(tick, sample)`, ascending tick.
+    host_samples: VecDeque<(u64, HostSample)>,
+    /// `(tick, stats)` of fanned-out ticks that had a recorder, ascending.
+    recorder_ticks: VecDeque<(u64, RecorderTick)>,
+    /// Newest tick whose fanout finished; `/telemetry.jsonl` serves no
+    /// later tick, so a served line never misses its `recorders`.
+    fanout_through: Option<u64>,
     last_evicted_tick: Option<u64>,
     overwritten_samples_total: u64,
     source_skipped_ticks_total: u64,
+}
+
+/// One `/telemetry.jsonl` line.
+#[derive(Serialize)]
+struct TelemetryLine<'a> {
+    #[serde(flatten)]
+    sample: &'a LoadTickSample,
+    host: Option<&'a HostSample>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    recorders: Option<&'a RecorderTick>,
 }
 
 /// Mutable dashboard state. Metrics have an independent lock and never
@@ -348,6 +411,9 @@ impl DashboardState {
             instance_started_unix_ns: unix_ns(),
             load_metrics: Mutex::new(LoadMetricsInner {
                 samples: VecDeque::with_capacity(LOAD_SAMPLE_CAPACITY),
+                host_samples: VecDeque::with_capacity(HOST_SAMPLE_CAPACITY),
+                recorder_ticks: VecDeque::with_capacity(LOAD_SAMPLE_CAPACITY),
+                fanout_through: None,
                 last_evicted_tick: None,
                 overwritten_samples_total: 0,
                 source_skipped_ticks_total: 0,
@@ -428,6 +494,7 @@ impl DashboardState {
             wall_us: times.wall_us,
             total_us: times.total_us,
             coreperf: times.coreperf,
+            battle: times.battle,
             phase_us: LoadPhaseTimes {
                 input_us: times.input_us,
                 chunks_us: times.chunks_us,
@@ -458,6 +525,90 @@ impl DashboardState {
                 inner.source_skipped_ticks_total.saturating_add(skipped);
         }
         self.load_changed.notify_waiters();
+    }
+
+    /// One core tick from the timing lane: the host sample (when `host`
+    /// takes one) is stored before the tick becomes visible, so a reader
+    /// woken by the tick never serves it without its sample.
+    pub(crate) fn record_core_tick(
+        &self,
+        host: &mut crate::host_telemetry::HostSampler,
+        tick: u64,
+        times: TickTimes,
+    ) {
+        if let Some(sample) = host.on_tick(tick) {
+            self.record_host_sample(tick, sample);
+        }
+        self.record_load_tick(tick, times);
+    }
+
+    /// Record the host sample taken on `tick` (ascending ticks).
+    fn record_host_sample(&self, tick: u64, sample: HostSample) {
+        let Ok(mut inner) = self.load_metrics.lock() else {
+            return;
+        };
+        if inner.host_samples.len() == HOST_SAMPLE_CAPACITY {
+            inner.host_samples.pop_front();
+        }
+        inner.host_samples.push_back((tick, sample));
+    }
+
+    /// The pump finished fanning out `tick`; `recorders` when the tick had
+    /// a recorder connection (ascending ticks).
+    pub(crate) fn record_fanout_tick(&self, tick: u64, recorders: Option<RecorderTick>) {
+        let Ok(mut inner) = self.load_metrics.lock() else {
+            return;
+        };
+        if let Some(recorders) = recorders {
+            if inner.recorder_ticks.len() == LOAD_SAMPLE_CAPACITY {
+                inner.recorder_ticks.pop_front();
+            }
+            inner.recorder_ticks.push_back((tick, recorders));
+        }
+        inner.fanout_through = Some(tick);
+        drop(inner);
+        self.load_changed.notify_waiters();
+    }
+
+    /// Retained ticks after `after_tick` whose fanout finished, as JSON
+    /// lines, each joined with the host sample and recorder stats of that
+    /// tick. Copies while locked and serializes after, like
+    /// [`Self::load_snapshot`]. `None` when the ring is poisoned.
+    pub fn telemetry_jsonl(&self, after_tick: Option<u64>) -> Option<Vec<u8>> {
+        type Line = (LoadTickSample, Option<HostSample>, Option<RecorderTick>);
+        let lines: Vec<Line> = {
+            let inner = self.load_metrics.lock().ok()?;
+            let through = inner.fanout_through;
+            let mut hosts = inner.host_samples.iter().peekable();
+            let mut recorders = inner.recorder_ticks.iter().peekable();
+            inner
+                .samples
+                .iter()
+                .filter(|sample| after_tick.is_none_or(|after| sample.tick > after))
+                .take_while(|sample| through.is_some_and(|through| sample.tick <= through))
+                .map(|sample| {
+                    (
+                        sample.clone(),
+                        joined(&mut hosts, sample.tick),
+                        joined(&mut recorders, sample.tick),
+                    )
+                })
+                .collect()
+        };
+        let mut body = Vec::new();
+        for (sample, host, recorders) in &lines {
+            serde_json::to_writer(
+                &mut body,
+                &TelemetryLine {
+                    sample,
+                    host: host.as_ref(),
+                    recorders: recorders.as_ref(),
+                },
+            )
+            .ok()?;
+            body.push(b'\n');
+        }
+        Some(body)
     }
 
     /// Copy only requested raw samples while locked, then read live queues.
@@ -501,10 +652,13 @@ impl DashboardState {
 
     /// Register before checking the ring to avoid lost wakeups. Neither this
     /// wait nor the producer allocates per tick; only readers create futures.
+    /// `fanned_out` counts only ticks whose fanout finished
+    /// (`/telemetry.jsonl`).
     async fn wait_for_load_samples(
         &self,
         after_tick: Option<u64>,
         min_samples: usize,
+        fanned_out: bool,
     ) -> Option<()> {
         let notified = self.load_changed.notified();
         tokio::pin!(notified);
@@ -517,10 +671,16 @@ impl DashboardState {
                         .last_evicted_tick
                         .is_some_and(|evicted| after < evicted)
                 });
+                let through = if fanned_out {
+                    inner.fanout_through
+                } else {
+                    Some(u64::MAX)
+                };
                 let available = inner
                     .samples
                     .iter()
                     .rev()
+                    .skip_while(|sample| through.is_none_or(|through| sample.tick > through))
                     .take_while(|sample| after_tick.is_none_or(|after| sample.tick > after))
                     .take(min_samples)
                     .count();
@@ -847,25 +1007,10 @@ where
             .await;
         }
         "/load-metrics" => {
-            let Ok(query) = parse_load_query(request.query.as_deref()) else {
-                let _ = write_response(
-                    stream,
-                    "400 Bad Request",
-                    "text/plain",
-                    b"invalid metrics query",
-                )
-                .await;
+            let Some((query, wait_timed_out)) =
+                waited_load_query(stream, state, request.query.as_deref(), false).await
+            else {
                 return;
-            };
-            let wait_timed_out = if query.wait {
-                tokio::time::timeout(
-                    LOAD_WAIT_TIMEOUT,
-                    state.wait_for_load_samples(query.after_tick, query.min_samples),
-                )
-                .await
-                .is_err()
-            } else {
-                false
             };
             let Some(mut snapshot) = state.load_snapshot(query.after_tick) else {
                 let _ = write_response(
@@ -889,6 +1034,24 @@ where
                 return;
             };
             let _ = write_response(stream, "200 OK", "application/json", &body).await;
+        }
+        "/telemetry.jsonl" => {
+            let Some((query, _)) =
+                waited_load_query(stream, state, request.query.as_deref(), true).await
+            else {
+                return;
+            };
+            let Some(body) = state.telemetry_jsonl(query.after_tick) else {
+                let _ = write_response(
+                    stream,
+                    "503 Service Unavailable",
+                    "text/plain",
+                    b"metrics unavailable",
+                )
+                .await;
+                return;
+            };
+            let _ = write_response(stream, "200 OK", "application/x-ndjson", &body).await;
         }
         "/profile" => {
             let snapshot = state.snapshot();
@@ -1042,7 +1205,7 @@ fn prometheus(state: &DashboardState) -> String {
         "solaris_pump_skipped_ticks_total",
         snapshot.pump_skipped_ticks,
     );
-    if let Some(bytes) = resident_memory_bytes() {
+    if let Some(bytes) = crate::host_telemetry::resident_memory_bytes() {
         prometheus_gauge(&mut out, "solaris_process_resident_memory_bytes", bytes);
     }
     let load_metrics = state.load_snapshot(None);
@@ -1075,16 +1238,48 @@ fn prometheus(state: &DashboardState) -> String {
     out
 }
 
-fn resident_memory_bytes() -> Option<u64> {
-    let status = std::fs::read_to_string("/proc/self/status").ok()?;
-    let kib = status
-        .lines()
-        .find_map(|line| line.strip_prefix("VmRSS:"))?
-        .split_whitespace()
-        .next()?
-        .parse::<u64>()
-        .ok()?;
-    kib.checked_mul(1024)
+/// Parse a `/load-metrics` query (answering 400 when invalid) and run its
+/// push-driven wait (on fanned-out ticks only when `fanned_out`); returns
+/// the query and whether the wait timed out.
+async fn waited_load_query<S>(
+    stream: &mut S,
+    state: &DashboardState,
+    query: Option<&str>,
+    fanned_out: bool,
+) -> Option<(LoadMetricsQuery, bool)>
+where
+    S: AsyncWrite + Unpin,
+{
+    let Ok(query) = parse_load_query(query) else {
+        let _ = write_response(
+            stream,
+            "400 Bad Request",
+            "text/plain",
+            b"invalid metrics query",
+        )
+        .await;
+        return None;
+    };
+    let timed_out = query.wait
+        && tokio::time::timeout(
+            LOAD_WAIT_TIMEOUT,
+            state.wait_for_load_samples(query.after_tick, query.min_samples, fanned_out),
+        )
+        .await
+        .is_err();
+    Some((query, timed_out))
+}
+
+/// The value an ascending `(tick, value)` series holds for `tick`, after
+/// skipping its older entries.
+fn joined<'a, T: Copy + 'a>(
+    series: &mut std::iter::Peekable<impl Iterator<Item = &'a (u64, T)>>,
+    tick: u64,
+) -> Option<T> {
+    while series.next_if(|(at, _)| *at < tick).is_some() {}
+    series
+        .next_if(|(at, _)| *at == tick)
+        .map(|&(_, value)| value)
 }
 
 /// Read bytes until the CRLFCRLF head terminator, bounded by
@@ -1256,6 +1451,7 @@ mod tests {
             owner_pre_us: 25,
             owner_post_us: 26,
             coreperf: None,
+            battle: None,
         };
         state.record_load_tick(41, times.clone());
         state.record_load_skipped(2);
@@ -1406,8 +1602,8 @@ mod tests {
         use std::task::{Context, Poll, Waker};
 
         let state = test_state();
-        let mut first = std::pin::pin!(state.wait_for_load_samples(Some(40), 2));
-        let mut second = std::pin::pin!(state.wait_for_load_samples(Some(40), 2));
+        let mut first = std::pin::pin!(state.wait_for_load_samples(Some(40), 2, false));
+        let mut second = std::pin::pin!(state.wait_for_load_samples(Some(40), 2, false));
         let mut context = Context::from_waker(Waker::noop());
         assert_eq!(first.as_mut().poll(&mut context), Poll::Pending);
         assert_eq!(second.as_mut().poll(&mut context), Poll::Pending);
@@ -1417,7 +1613,7 @@ mod tests {
         state.record_load_tick(42, TickTimes::default());
         assert_eq!(first.as_mut().poll(&mut context), Poll::Ready(Some(())));
         assert_eq!(second.as_mut().poll(&mut context), Poll::Ready(Some(())));
-        let mut already_ready = std::pin::pin!(state.wait_for_load_samples(Some(40), 2));
+        let mut already_ready = std::pin::pin!(state.wait_for_load_samples(Some(40), 2, false));
         assert_eq!(
             already_ready.as_mut().poll(&mut context),
             Poll::Ready(Some(()))
@@ -1473,6 +1669,157 @@ mod tests {
                 assert!(value["queues"]["world"]["reserved_slots"].is_null());
             }
         }
+    }
+
+    /// One line per retained, fanned-out tick after the cursor, joined by
+    /// tick number with the host sample and recorder stats of that tick;
+    /// gaps stay gaps. Battle counts appear only on ticks that carry them,
+    /// keyed by faction. A tick whose fanout has not finished waits.
+    #[tokio::test]
+    async fn telemetry_jsonl_joins_host_samples_by_tick() {
+        let state = test_state();
+        let host = HostSample {
+            sampled_unix_ns: 1_800_000_000_500_000_000,
+            cgroup_memory_current_bytes: Some(3 << 30),
+            cgroup_cpu_usage_usec: Some(42_000_000),
+            cpu_total_ticks: Some(9_000),
+            cpu_steal_ticks: Some(12),
+            process_rss_bytes: None,
+        };
+        let battle = std::sync::Arc::new(mc_core::boundary::BattleCounts {
+            units: 20_000,
+            alive: vec![(1, 9_870), (2, 0)],
+        });
+        for tick in [19, 20, 21, 23] {
+            state.record_load_tick(
+                tick,
+                TickTimes {
+                    wall_start_unix_ns: 1_800_000_000_000_000_000 + tick * 50_000_000,
+                    wall_us: tick * 10,
+                    battle: (tick == 21).then(|| std::sync::Arc::clone(&battle)),
+                    ..Default::default()
+                },
+            );
+            if tick == 20 {
+                state.record_host_sample(tick, host);
+            }
+        }
+        state.record_host_sample(40, host);
+        state.record_fanout_tick(20, None);
+        let deferred = RecorderTick {
+            connections: 1,
+            deferred_updates_sum: 7,
+            deferred_updates_max: 7,
+        };
+        state.record_fanout_tick(21, Some(deferred));
+        let (mut client, mut server) = duplex(8192);
+        client
+            .write_all(b"GET /telemetry.jsonl?after_tick=19 HTTP/1.1\r\nHost: x\r\n\r\n")
+            .await
+            .unwrap();
+        serve_connection(&mut server, &state).await;
+        drop(server);
+        let mut out = Vec::new();
+        client.read_to_end(&mut out).await.unwrap();
+        let text = String::from_utf8(out).unwrap();
+        assert!(text.starts_with("HTTP/1.1 200 OK"));
+        assert!(text.contains("application/x-ndjson"));
+        let lines: Vec<serde_json::Value> = text
+            .split_once("\r\n\r\n")
+            .unwrap()
+            .1
+            .lines()
+            .map(|line| serde_json::from_str(line).unwrap())
+            .collect();
+        let ticks: Vec<_> = lines.iter().map(|line| line["tick"].as_u64()).collect();
+        assert_eq!(ticks, [Some(20), Some(21)], "tick 23 is not fanned out yet");
+        assert_eq!(lines[0]["wall_us"], 200);
+        assert_eq!(lines[0]["phase_us"]["entity_us"], 0);
+        assert_eq!(lines[0]["host"]["cgroup_memory_current_bytes"], 3u64 << 30);
+        assert_eq!(lines[0]["host"]["cpu_steal_ticks"], 12);
+        assert!(lines[0]["host"]["process_rss_bytes"].is_null());
+        assert!(lines[1]["host"].is_null());
+        assert_eq!(
+            lines[1]["battle"],
+            serde_json::json!({"units": 20_000, "alive": {"1": 9_870, "2": 0}})
+        );
+        assert!(lines[0].get("battle").is_none());
+        assert_eq!(
+            lines[1]["recorders"],
+            serde_json::json!({
+                "connections": 1,
+                "deferred_updates_sum": 7,
+                "deferred_updates_max": 7
+            })
+        );
+        assert!(lines[0].get("recorders").is_none());
+
+        let mut context = std::task::Context::from_waker(std::task::Waker::noop());
+        let mut waiting = std::pin::pin!(state.wait_for_load_samples(Some(21), 1, true));
+        assert!(waiting.as_mut().poll(&mut context).is_pending());
+        state.record_fanout_tick(
+            23,
+            Some(RecorderTick {
+                connections: 2,
+                ..RecorderTick::default()
+            }),
+        );
+        assert!(waiting.as_mut().poll(&mut context).is_ready());
+        let line: serde_json::Value =
+            serde_json::from_slice(&state.telemetry_jsonl(Some(21)).unwrap()).unwrap();
+        assert_eq!(line["tick"], 23);
+        assert!(line.get("battle").is_none());
+        assert_eq!(line["recorders"]["connections"], 2);
+        assert_eq!(line["recorders"]["deferred_updates_max"], 0);
+        assert_eq!(
+            state.telemetry_jsonl(Some(23)).unwrap(),
+            Vec::<u8>::new(),
+            "nothing after the newest tick"
+        );
+    }
+
+    /// A `/telemetry.jsonl` reader woken by a core tick already sees that
+    /// tick's host sample: it is stored before the tick wakes anyone.
+    #[test]
+    fn woken_telemetry_reader_sees_the_host_sample_of_its_tick() {
+        struct ReadOnWake {
+            state: Arc<DashboardState>,
+            seen: std::sync::Mutex<Option<Vec<u8>>>,
+        }
+        impl std::task::Wake for ReadOnWake {
+            fn wake(self: Arc<Self>) {
+                self.wake_by_ref();
+            }
+            fn wake_by_ref(self: &Arc<Self>) {
+                *self.seen.lock().unwrap() = self.state.telemetry_jsonl(Some(39));
+            }
+        }
+        let state = test_state();
+        state.record_fanout_tick(40, None);
+        let reader = Arc::new(ReadOnWake {
+            state: Arc::clone(&state),
+            seen: std::sync::Mutex::default(),
+        });
+        let waker = std::task::Waker::from(Arc::clone(&reader));
+        let mut context = std::task::Context::from_waker(&waker);
+        let mut waiting = std::pin::pin!(state.wait_for_load_samples(Some(39), 1, true));
+        assert!(waiting.as_mut().poll(&mut context).is_pending());
+        let mut host = crate::host_telemetry::HostSampler::new();
+        state.record_core_tick(&mut host, 40, TickTimes::default());
+        let seen = reader
+            .seen
+            .lock()
+            .unwrap()
+            .take()
+            .expect("the tick woke the reader");
+        let line: serde_json::Value = serde_json::from_slice(&seen).unwrap();
+        assert_eq!(line["tick"], 40);
+        assert!(
+            line["host"]["sampled_unix_ns"]
+                .as_u64()
+                .is_some_and(|ns| ns > 0),
+            "{line}"
+        );
     }
 
     #[test]

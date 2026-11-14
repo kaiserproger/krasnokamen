@@ -31,7 +31,7 @@ use mc_protocol::packets::play::{
     RemoveEntities,
 };
 
-use crate::plan::{PlannedPacket, ViewerState, push_reliable};
+use crate::plan::{PlannedPacket, ViewerState, WorldCredit, push_reliable};
 
 /// Cached canonical type, never a version-specific duplicate of the registry.
 static TEXT_DISPLAY_TYPE_ID: std::sync::LazyLock<i32> = std::sync::LazyLock::new(|| {
@@ -178,7 +178,7 @@ pub(crate) fn plan_labels(
     viewer: &mut ViewerState,
     view_distance: i32,
     out: &mut Vec<PlannedPacket>,
-    credit: &mut usize,
+    credit: &mut WorldCredit,
 ) {
     if snapshot.dimension != viewer.dimension {
         remove_all_labels(viewer, out);
@@ -247,7 +247,7 @@ pub(crate) fn plan_labels(
             }
             continue;
         }
-        if *credit == 0 {
+        if credit.spent() {
             continue;
         }
         let Some(id) = viewer.labels.alloc() else {
@@ -278,7 +278,7 @@ pub(crate) fn plan_labels(
                 values: label_spawn_metadata(&label.text),
             },
         );
-        *credit -= 1;
+        credit.frames -= 1;
         viewer
             .labels
             .by_anchor
