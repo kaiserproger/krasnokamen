@@ -777,7 +777,7 @@ pub fn bonemeal_growth_edits(
 }
 
 /// Vanilla 26.1 lets bone meal on `grass_block` roll a 45% attempt gate and then
-/// scatter vegetation in a random walk around the clicked block. Solaris keeps
+/// scatter vegetation in a random walk around the clicked block. Krasnokamen keeps
 /// the gate and the ±3 neighbourhood reach but replaces the walk with
 /// deterministic picks derived from the tree seed: candidate supports are only
 /// grass_block/dirt-family soil with an air plant cell, the clicked grass_block
@@ -1238,7 +1238,7 @@ fn spruce_or_jungle_two_by_two_edits(
     let air = named_block_default(blocks, "minecraft:air")?;
 
     // Vanilla 26.1.2 uses trunk placer parameters (13, 2, 14) for mega spruce
-    // and (10, 2, 19) for mega jungle. Solaris keeps those height ranges but
+    // and (10, 2, 19) for mega jungle. Krasnokamen keeps those height ranges but
     // uses its deterministic tree seed instead of vanilla's RandomSource.
     let (base_height, first_random, second_random) = match sapling_name {
         "minecraft:spruce_sapling" => (13, 2u64, 14u64),

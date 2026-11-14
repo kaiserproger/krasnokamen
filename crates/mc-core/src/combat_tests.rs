@@ -248,7 +248,7 @@ fn spear_minimum_charge_refuses_until_fourteen_ticks() {
             protocol_id: 2,
         },
     ]);
-    let facts = mc_data::item_components::solaris_required_item_facts();
+    let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = TagsData::from_registries(BTreeMap::new());
     let rules = ItemRules {
         items: &items,

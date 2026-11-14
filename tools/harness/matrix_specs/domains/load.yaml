@@ -16,8 +16,8 @@ execution_contract:
     Received packets, exact console predicates, and pushed dashboard tick events only. No sleeps.
     Feedback fence proves only ordering.
   references:
-    Vanilla mechanics reference minecraft.wiki; Solaris extensions/SLOs explicitly separate. No claim
-    that Solaris WAL/hot backup/anti-xray are vanilla features.
+    Vanilla mechanics reference minecraft.wiki; Krasnokamen extensions/SLOs explicitly separate. No claim
+    that Krasnokamen WAL/hot backup/anti-xray are vanilla features.
   temporal_snapshots:
     Freeze or record exact simulation tick; compare timers relative to ticks, not literal after
     arbitrary elapsed time.
@@ -256,7 +256,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state
+            Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state
             oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.
           required:
             - No duplicate entity identity; survival health/death/respawn causality; no stale entity after removal.
@@ -282,7 +282,7 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/dense-hostile
         - tools/harness/catalog_controls.py
@@ -415,7 +415,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state
+            Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state
             oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.
           required:
             - Entity ownership unique; positions legal; no disappearance hidden by cleanup or lowered view distance.
@@ -441,7 +441,7 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/spread-passive
         - tools/harness/catalog_controls.py
@@ -604,7 +604,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state
+            Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state
             oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.
           required:
             - No unready client removed from denominator; no generation/storage completion inferred from packet reception;
@@ -633,14 +633,14 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/explore
         - tools/harness/catalog_controls.py
         - tools/harness/load_matrix_scenarios/explore.json
         - crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:870-874
         - crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:953-954
-        - crates/mc-edge/src/bin/solaris-v2.rs:100-126
+        - crates/mc-edge/src/bin/krasnokamen.rs:100-126
         - crates/mc-test-harness/src/bin/player_scale_bots.rs:749-925
         - tools/harness/backends/catalog_load.py:257-295,419-442
     missing_capabilities:
@@ -770,7 +770,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state
+            Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state
             oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.
           required:
             - Recipe/fuel/remainder transformations conserved; circulation creates no items; block ack is not observed
@@ -797,7 +797,7 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/built-base
         - tools/harness/catalog_controls.py
@@ -925,7 +925,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state
+            Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state
             oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.
           required:
             - Finite pending ticks drain or declared residual explained; source/topology agreement with pinned oracle;
@@ -952,7 +952,7 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/fluids
         - tools/harness/catalog_controls.py
@@ -1082,7 +1082,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state
+            Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state
             oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.
           required:
             - No duplicate POI claims; actual farmer identity/profession and legal retained brain state; decorative
@@ -1109,7 +1109,7 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/village
         - tools/harness/catalog_controls.py
@@ -1255,7 +1255,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state
+            Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state
             oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.
           required:
             - Finite initial TNT stock not recycled; bounded explicit summon stock; no duplicate blast/drop/entity owner;
@@ -1282,7 +1282,7 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/combat
         - tools/harness/catalog_controls.py
@@ -1422,7 +1422,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state
+            Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state
             oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.
           required:
             - Each projectile has one lifecycle/owner; no duplicate hits/damage; legal death/respawn and final removal.
@@ -1448,7 +1448,7 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/projectiles
         - tools/harness/catalog_controls.py
@@ -1578,7 +1578,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state
+            Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state
             oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.
           required:
             - Legal crop age/type and substrate; no unexplained harvest/output; natural RNG variation respected; no
@@ -1605,7 +1605,7 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/farms
         - tools/harness/catalog_controls.py
@@ -1651,7 +1651,7 @@ subjects:
       - canonical_fixture:
           kind: public-native-control
           description:
-            64-villager arena, two empty chests, copied/hashed solaris-towns and solaris-economy packages
+            64-villager arena, two empty chests, copied/hashed krasnokamen-towns and krasnokamen-economy packages
             only; setup identity creates/claims load_matrix and seeds two scale actors at 100 coins each.
           required_native_bridge:
             Validated native fixture authored/readback recipe preserving entities, inventory,
@@ -1748,7 +1748,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state
+            Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state
             oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.
           required:
             - Durable one-claim load_matrix; load_actor0/load_actor1 each one member/claim; exact per-actor/window 93/107
@@ -1776,7 +1776,7 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/plugin-heavy
         - crates/mc-core/src/plugin.rs:498-548,1541-1648,1936-1956
@@ -1920,7 +1920,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state
+            Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state
             oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.
           required:
             - No duplicated/lost item/entity owners; restart source world bytes/hash/identity recorded; permitted durability
@@ -1947,7 +1947,7 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/checkpoint-restart
         - tools/harness/catalog_controls.py
@@ -1956,7 +1956,7 @@ subjects:
         - tools/harness/load_matrix_scenarios/checkpoint-restart.json
         - crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:916-923
         - crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:603-800
-        - crates/mc-edge/src/bin/solaris-v2.rs:140-151
+        - crates/mc-edge/src/bin/krasnokamen.rs:140-151
     missing_capabilities:
       - catalog_load_matrix_context_bridge:checkpoint-restart
     server_gap: []
@@ -2083,7 +2083,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state
+            Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state
             oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.
           required:
             - RSS endpoint slope is diagnostic not leak proof; natural idle/exhaustion cannot masquerade as sustained
@@ -2110,7 +2110,7 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/long-session
         - tools/harness/catalog_controls.py
@@ -2267,11 +2267,11 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/MIX-01
         - tools/harness/catalog_mixes.py
-        - .analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-01
+        - .analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-01
         - crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:384-433
         - crates/mc-test-harness/src/bin/player_scale_bots.rs:749-925,1810-1844
         - crates/mc-core/src/tick.rs:2557-2559
@@ -2299,7 +2299,7 @@ subjects:
           - "vanilla 26.1.2 newcomer wins (owner requirement, BugTriage DUPLICATE-LOGIN): the existing session is disconnected
             ('You logged in from another location'), the new connection reaches Play with the same persisted player
             state; exactly one live player entity for the UUID, no inventory copy or loss, no join-wait timeout. Current
-            Solaris (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
+            Krasnokamen (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
             — expected to fail until ServerFixes lands"
           - "after SIGKILL + restart (no wait for a published WAL fence) the world equals a consistent prefix of the
             committed transactions: every transaction is all-or-nothing (no torn/split/half-moved stacks), no item duplication,
@@ -2429,11 +2429,11 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/MIX-02
         - tools/harness/catalog_mixes.py
-        - .analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-02
+        - .analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-02
         - crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:245-334
         - crates/mc-core/src/tick.rs:2491-2495,4176-4220,4843-4850
         - crates/mc-test-harness/src/bin/player_scale_bots.rs:164-198
@@ -2585,12 +2585,12 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/MIX-04
         - tools/harness/catalog_mixes.py
         - crates/mc-core/src/redstone/piston.rs:62-169
-        - .analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-04
+        - .analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-04
         - crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:245-355
         - crates/mc-core/src/redstone/piston.rs:35-114,194-285
         - crates/mc-core/src/tick.rs:2487-2518
@@ -2746,14 +2746,14 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/MIX-08
         - tools/harness/catalog_mixes.py
-        - .analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-08
+        - .analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-08
         - crates/mc-test-harness/src/bin/player_scale_bots.rs:1131-1155
         - crates/mc-edge/src/config.rs:13-34
-        - crates/mc-edge/src/bin/solaris-v2.rs:100-151
+        - crates/mc-edge/src/bin/krasnokamen.rs:100-151
     missing_capabilities:
       - catalog_load_matrix_context_bridge:MIX-08
     server_gap: []
@@ -2901,14 +2901,14 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/MIX-18
         - tools/harness/catalog_mixes.py
-        - .analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-18
+        - .analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-18
         - crates/mc-test-harness/src/bin/player_scale_bots.rs:63-70
         - crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:953-954
-        - crates/mc-edge/src/bin/solaris-v2.rs:140-151
+        - crates/mc-edge/src/bin/krasnokamen.rs:140-151
     missing_capabilities:
       - catalog_load_matrix_context_bridge:MIX-18
     server_gap: []
@@ -3052,14 +3052,14 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/MIX-21
         - tools/harness/catalog_mixes.py
-        - .analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-21
+        - .analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-21
         - crates/mc-test-harness/src/bin/player_scale_bots.rs:130-163
         - crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:434-454,603-800
-        - crates/mc-edge/src/bin/solaris-v2.rs:140-151
+        - crates/mc-edge/src/bin/krasnokamen.rs:140-151
     missing_capabilities:
       - catalog_load_matrix_context_bridge:MIX-21
     server_gap: []
@@ -3211,10 +3211,10 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/mixed-survival-long
-        - .analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:groups/SAVE/SAVE-12
+        - .analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:groups/SAVE/SAVE-12
         - tools/harness/load_matrix_scenarios/long-session.json
         - crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:916-927,969-972
         - crates/mc-test-harness/src/bin/player_scale_bots.rs:749-925
@@ -3400,7 +3400,7 @@ subjects:
         operator: satisfies
         expected:
           contract:
-            Explicit public Solaris26.1.2 protocol login/survival/chat echo contract at pre-created safe platform;
+            Explicit public Krasnokamen26.1.2 protocol login/survival/chat echo contract at pre-created safe platform;
             pinned block identities and observed server echo
           required:
             - Every requested unique offline survival identity reaches Play,decoded initial window,teleport confirmation
@@ -3432,10 +3432,10 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/JOIN-01
-        - .analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:groups/JOIN/JOIN-01
+        - .analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:groups/JOIN/JOIN-01
         - tools/harness/backends/catalog_load.py:26-32,220-254,257-295,419-442
         - crates/mc-test-harness/src/bin/player_scale_bots.rs (--unassisted-login,--verify-platform,chat echo contract)
     missing_capabilities:
@@ -3547,7 +3547,7 @@ subjects:
       - observation: subject final invariants
         operator: satisfies
         expected:
-          contract: Pinned26.1.2 terrain seed/version and explicitly accepted Solaris generation/durability contract
+          contract: Pinned26.1.2 terrain seed/version and explicitly accepted Krasnokamen generation/durability contract
           required:
             - Unique fresh chunks requested/generated/published in declared route; legitimate movement reaches intended
               new terrain
@@ -3575,10 +3575,10 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/CHUNK-01
-        - .analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:groups/CHUNK/CHUNK-01
+        - .analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:groups/CHUNK/CHUNK-01
         - crates/mc-test-harness/src/bin/player_scale_bots.rs:749-925
         - tools/harness/backends/catalog_load.py:419-442
     missing_capabilities:
@@ -3771,7 +3771,7 @@ subjects:
             Legacy activity minima below are nonzero-work control checks, not capacity or performance SLOs;
             saved_world deltas include setup/warmup unless same-window snapshots are available.
     reference:
-      scope: solaris_operator_SLO_not_vanilla_numeric_guarantee
+      scope: krasnokamen_operator_SLO_not_vanilla_numeric_guarantee
       source:
         - tools/harness/catalog_load_scenarios.json#scenarios/join-ready-assisted
         - tools/harness/backends/catalog_load.py:257-295,419-442

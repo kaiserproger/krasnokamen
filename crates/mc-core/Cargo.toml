@@ -1,6 +1,6 @@
 [package]
 name = "mc-core"
-description = "Core model v2 (ADR 0013): data-parallel tick, columnar world state, tick journal (Solaris)."
+description = "Core model v2 (ADR 0013): data-parallel tick, columnar world state, tick journal (Krasnokamen)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

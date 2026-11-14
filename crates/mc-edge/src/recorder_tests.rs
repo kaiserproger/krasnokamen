@@ -33,7 +33,7 @@ fn viewer(connection: u64, recorder: bool) -> ViewerState {
     viewer
 }
 
-/// `(tick, wall_ns)` of a `solaris:tick` frame, `None` for any other frame.
+/// `(tick, wall_ns)` of a `krasnokamen:tick` frame, `None` for any other frame.
 fn marker(frame: &bytes::Bytes) -> Option<(u64, u64)> {
     let mut bytes = bytes::BytesMut::from(&frame[..]);
     let mut frame = try_decode_frame(&mut bytes, Compression::Threshold(256))

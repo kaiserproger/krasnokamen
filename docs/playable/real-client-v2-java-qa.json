@@ -60,7 +60,7 @@
         "Connect a real vanilla client to playable.toml through the playable runner.",
         "Run the no-debug natural wood -> crafting table -> wooden pickaxe -> stone pickaxe -> furnace path.",
         "Mine and smelt two natural iron ore drops into two earned iron ingots, craft sticks from earned planks when needed, and craft an earned iron sword.",
-        "Stop Solaris with the runner-managed graceful restart path, restart the same world, reconnect the same real client, and capture screenshots for both phases.",
+        "Stop Krasnokamen with the runner-managed graceful restart path, restart the same world, reconnect the same real client, and capture screenshots for both phases.",
         "Verify the crafted table marker persists and the earned iron sword remains in the player inventory after restart."
       ],
       "expected_observations": [
@@ -117,7 +117,7 @@
         "Connect a real vanilla client to playable.toml through the playable runner.",
         "Run the no-debug natural wood -> crafting table -> wooden pickaxe -> stone pickaxe -> furnace path.",
         "Mine and smelt eight natural iron ore drops into eight earned iron ingots, craft and quick-equip an earned iron chestplate, then write the crafted table restart marker.",
-        "Stop Solaris with the runner-managed graceful restart path, restart the same world, reconnect the same real client, and capture screenshots for both phases.",
+        "Stop Krasnokamen with the runner-managed graceful restart path, restart the same world, reconnect the same real client, and capture screenshots for both phases.",
         "Verify the crafted table marker persists, verify the earned iron chestplate remains in the chest armor slot, wait for natural night, and measure a natural zombie melee hit after restart."
       ],
       "expected_observations": [

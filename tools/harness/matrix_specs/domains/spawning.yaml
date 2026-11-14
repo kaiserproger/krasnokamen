@@ -1,4 +1,4 @@
-schema: solaris-domain-spec-1
+schema: krasnokamen-domain-spec-1
 domain: spawning
 minecraft_version: 26.1.2
 executable_interface: tools/harness/matrix_api.py; plain Python adapters; this YAML is specification only, not an
@@ -65,7 +65,7 @@ subjects:
   adapter_completeness: complete_subject_oracle
 - subject: spawning.mob_cap
   scenario_ids:
-  - pw:spawning.mob_cap/neoforge_solaris_loader/spectator/overworld/normal/1/malformed_or_stale_packet/crash_kill9_wal_replay/op_3
+  - pw:spawning.mob_cap/neoforge_krasnokamen_loader/spectator/overworld/normal/1/malformed_or_stale_packet/crash_kill9_wal_replay/op_3
   preconditions:
   - *id001
   - *id002
@@ -103,7 +103,7 @@ subjects:
   adapter_completeness: spec_only
 - subject: spawning.light_rules
   scenario_ids:
-  - pw:spawning.light_rules/fabric_solaris_loader/survival/the_nether/peaceful/1/duplicate_login/save_all_checkpoint/non_op_0
+  - pw:spawning.light_rules/fabric_krasnokamen_loader/survival/the_nether/peaceful/1/duplicate_login/save_all_checkpoint/non_op_0
   preconditions:
   - *id001
   - *id002
@@ -373,7 +373,7 @@ subjects:
   adapter_completeness: spec_only
 - subject: spawning.breeding_and_babies
   scenario_ids:
-  - pw:spawning.breeding_and_babies/forge_solaris_loader/adventure/overworld/easy/N8/normal/pause_when_empty_resume/op_4
+  - pw:spawning.breeding_and_babies/forge_krasnokamen_loader/adventure/overworld/easy/N8/normal/pause_when_empty_resume/op_4
   preconditions:
   - *id001
   - *id002
