@@ -38,6 +38,7 @@ pub(crate) fn prepare(
     if ledger.structures.values().any(|record| {
         record.snapshot.dimension == state.dimension.name()
             && record.snapshot.state != ScriptStructureState::Cancelled
+            && !spent_free_work(record)
             && reserved_bounds(record).is_ok_and(|existing| {
                 overlaps(
                     existing,
@@ -150,6 +151,36 @@ pub(crate) fn area_reserved(state: &TickState, bounds: ScriptWorldBounds) -> boo
         ledger.structures.values().any(|record| {
             record.snapshot.dimension == state.dimension.name()
                 && record.snapshot.state != ScriptStructureState::Cancelled
+                && reserved_bounds(record).is_ok_and(|existing| overlaps(existing, bounds))
+        })
+    })
+}
+
+/// Finished road paving and meadow clearing: free surface work that leaves
+/// nothing to protect. Lots and clearings keep honouring it through
+/// [`area_reserved`]; the perimeter wall, whose line crosses paved roads and
+/// cleared meadow, and the well do not.
+fn spent_free_work(record: &Structure) -> bool {
+    record.snapshot.state == ScriptStructureState::Committed
+        && record
+            .snapshot
+            .blueprint_id
+            .strip_prefix("krasnokamen-settlements:")
+            .is_some_and(|name| {
+                matches!(
+                    name,
+                    crate::settlements::layout::ROAD | crate::settlements::layout::MEADOW
+                )
+            })
+}
+
+/// [`area_reserved`] without the spent free work of [`spent_free_work`].
+pub(crate) fn area_held(state: &TickState, bounds: ScriptWorldBounds) -> bool {
+    ledger(state).map_or(true, |ledger| {
+        ledger.structures.values().any(|record| {
+            record.snapshot.dimension == state.dimension.name()
+                && record.snapshot.state != ScriptStructureState::Cancelled
+                && !spent_free_work(record)
                 && reserved_bounds(record).is_ok_and(|existing| overlaps(existing, bounds))
         })
     })

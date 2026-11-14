@@ -471,17 +471,12 @@ fn autonomous_needs_cover_every_authored_kind_and_ignore_natural_zones() {
         BuildingKind::Workshop(Profession::Builder),
         BuildingKind::Barracks,
         BuildingKind::Tower,
-        BuildingKind::Wall,
     ] {
         assert_eq!(needed_kinds(record, 10).next(), Some(kind));
         certificate(record, kind, 1, false);
     }
     assert_eq!(needed_kinds(record, 10).next(), None);
-    for (kind, threshold) in [
-        (BuildingKind::Barracks, 6),
-        (BuildingKind::Tower, 8),
-        (BuildingKind::Wall, 10),
-    ] {
+    for (kind, threshold) in [(BuildingKind::Barracks, 6), (BuildingKind::Tower, 8)] {
         let building = record
             .buildings
             .values()
@@ -498,10 +493,11 @@ fn autonomous_needs_cover_every_authored_kind_and_ignore_natural_zones() {
         .map(|blueprint| blueprint.kind)
         .collect();
     assert_eq!(authored.len(), 21);
-    // The shepherd's hut, the gate and the ten profession workshops are owner
-    // orders only: the planner never starts them on its own.
+    // The shepherd's hut, the wall, the gate and the ten profession workshops
+    // are owner orders only: the planner never starts them as buildings on its
+    // own (it walls the town in as perimeter work instead).
     let owner_ordered = |kind: &BuildingKind| {
-        matches!(kind, BuildingKind::Gate)
+        matches!(kind, BuildingKind::Gate | BuildingKind::Wall)
             || matches!(
                 kind,
                 BuildingKind::Workshop(profession)
@@ -510,7 +506,7 @@ fn autonomous_needs_cover_every_authored_kind_and_ignore_natural_zones() {
     };
     assert_eq!(
         authored.iter().filter(|kind| owner_ordered(kind)).count(),
-        12
+        13
     );
     assert!(
         authored

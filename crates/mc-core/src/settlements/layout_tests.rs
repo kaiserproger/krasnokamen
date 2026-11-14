@@ -22,11 +22,13 @@ fn street_grid_reserves_roads_verges_lots_and_an_open_plaza() {
     assert_eq!(cell(ANCHOR, 10, 12), Cell::Plaza);
     assert_eq!(cell(ANCHOR, 10, 13), Cell::Verge);
     // East of the avenue: verge, two lot rows of the deepest blueprint with
-    // the one-column gap between them, the next verge and road.
+    // the one-column gap between them, the wall line in place of the last lot
+    // column, the next verge and road.
     assert_eq!(cell(ANCHOR, 10, 20), Cell::Verge);
-    for x in 11..=33 {
+    for x in 11..=32 {
         assert_eq!(cell(ANCHOR, x, 20), Cell::Lot, "{x}");
     }
+    assert_eq!(cell(ANCHOR, 8 + RING, 20), Cell::Wall);
     assert_eq!(cell(ANCHOR, 34, 20), Cell::Verge);
     assert_eq!(cell(ANCHOR, 35, 20), Cell::Road);
 }
@@ -344,4 +346,71 @@ fn part_paved_part_planned_stretch_shows_each_on_its_own_columns() {
         [(PAVED, [7, 200, 13], [9, 200, 16])]
     );
     assert_eq!(runs(&state, id, ROAD), [(ROAD, [7, 200, 17], [9, 200, 23])]);
+}
+
+/// The perimeter tiles the square wall line exactly once, holds a gatehouse
+/// on every column of the four roads through the bell, and leaves every lot
+/// inside it.
+#[test]
+fn perimeter_closes_the_square_wall_line_with_a_gatehouse_on_each_road() {
+    let spans = perimeter_spans(ANCHOR);
+    let mut owner = HashMap::new();
+    for span in &spans {
+        for x in span.min[0]..=span.max[0] {
+            for z in span.min[1]..=span.max[1] {
+                assert_eq!(owner.insert((x, z), span.kind), None, "{x} {z} owned twice");
+            }
+        }
+        let length = (span.max[0] - span.min[0]).max(span.max[1] - span.min[1]) + 1;
+        assert!(length <= 11, "{span:?}");
+    }
+    let mut line = HashSet::new();
+    for x in ANCHOR[0] - 40..=ANCHOR[0] + 40 {
+        for z in ANCHOR[2] - 40..=ANCHOR[2] + 40 {
+            let on_line = (x - ANCHOR[0]).abs().max((z - ANCHOR[2]).abs()) == RING;
+            if on_line {
+                line.insert((x, z));
+            }
+            // No lot is on the line, and every road crossing it is a gatehouse.
+            if cell(ANCHOR, x, z) == Cell::Lot {
+                assert!(!on_line, "{x} {z}");
+            }
+            if cell(ANCHOR, x, z) == Cell::Road && on_line {
+                assert_eq!(
+                    owner[&(x, z)],
+                    GATE,
+                    "road crossing {x} {z} has no gatehouse"
+                );
+            }
+        }
+    }
+    assert_eq!(line.len(), 8 * RING as usize);
+    assert_eq!(owner.keys().copied().collect::<HashSet<_>>(), line);
+    assert_eq!(spans.iter().filter(|span| span.kind == GATE).count(), 4);
+    for gate in spans.iter().filter(|span| span.kind == GATE) {
+        // Seven columns, centred on the road through the bell.
+        let (along, across) = if gate.min[0] == gate.max[0] {
+            (1, 0)
+        } else {
+            (0, 1)
+        };
+        assert_eq!(gate.max[along] - gate.min[along], 6, "{gate:?}");
+        assert_eq!(gate.min[along] + 3, ANCHOR[2 * along]);
+        assert_eq!(gate.min[across].abs_diff(ANCHOR[2 * across]), RING as u32);
+    }
+}
+
+/// The three plaza corners a well may use are open plaza columns, never the
+/// crossing's lamp or a road.
+#[test]
+fn well_corners_are_open_plaza_squares_without_a_lamp() {
+    for span in well_spans(ANCHOR) {
+        assert_eq!(span.kind, WELL);
+        for x in span.min[0]..=span.max[0] {
+            for z in span.min[1]..=span.max[1] {
+                assert_eq!(cell(ANCHOR, x, z), Cell::Plaza, "{x} {z}");
+                assert!(!lamp_at(ANCHOR, x, z), "{x} {z}");
+            }
+        }
+    }
 }
