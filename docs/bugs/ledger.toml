@@ -4062,6 +4062,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T170731-matrix-random-4x_c80x4/result.json; regression: tools/harness/test_protocol_input_verbs.py EncodingTests.test_break_block_sends_start_then_stop_with_sequence"
 regression = []
 failing_first = "reported"
+fix_commit = "5cbed1e33e4184fe8858bbdd93383a8e35d515cf"
 
 [[bug]]
 id = "SCENARIO-MOB-ATTACK-NO-PROGRESS"
@@ -4084,6 +4085,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json"
 regression = []
 failing_first = "reported"
+fix_commit = "09c0d0d7d0c81a2a5ec25387cc22cea2124ad50e"
 
 [[bug]]
 id = "CHISELED-BOOKSHELF-RESTART-DATA-LOSS"
@@ -4440,8 +4442,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Independent graphical damage QA observed rejection of gamerule natural_regeneration, so later health assertions did not have the intended regeneration-off fixture. The owning native P4 fixture now sends natural_health_regeneration false and requires actual command feedback. The corrected full run observes that feedback, but the full graphical gate still fails physical fall readiness and has no acceptance or ledger promotion."
-regression = []
+regression = ["harness:entities:native-v2-p4-damage"]
 failing_first = "reported"
+fix_commit = "4a74eacae1ad73e97f267800a4471d8e6af4450b"
 
 [[bug]]
 id = "NATIVE-REPLACEMENT-INPUT-CLEARED"
@@ -4534,6 +4537,7 @@ status = "open"
 source = "java-matrix row tr.dupe.destroy_during_interaction:death_respawn.keep_inventory_false/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0@live; deterministic repro: a foreign solaris-v2 on 26200, then the row on the base code. Unit checks: tools.harness.test_harness ReadinessCleanupTests.test_wait_port_does_not_accept_a_foreign_listener (red with the fix reverted), test_wait_port_child_exit_wins_over_foreign_listener, tools.harness.test_java_matrix MatrixTest.test_server_instance_reserves_its_own_ports_instead_of_hardcoding."
 regression = []
 failing_first = "reported"
+fix_commit = "ef508fc7858eb80dffaa4be9ba48f24fff335080"
 
 [[bug]]
 id = "HARNESS-JAVA-MATRIX-26-1-2-EVENTS-NONE-ADAPTER-TYPEERROR"
@@ -4545,6 +4549,7 @@ status = "open"
 source = "JavaAuthAck acceptance: 8/8 runs authenticated, then the adapter TypeError (receipts/JavaAuthAck/report.md)."
 regression = []
 failing_first = "reported"
+fix_commit = "e99902e718e0fd710f325169025d67e168ebd901"
 
 [[bug]]
 id = "CLIENT-ZOMBIE-BABY-HELMET-HEIGHT"
@@ -4701,6 +4706,7 @@ status = "open"
 source = "VisualRigsA runs 20261111T115908-scene-shot-wxnrjw82 and 20261111T120609-scene-shot-uo3_ay_m passed despite missing intended visual subjects; the scenario had no assertion for their presence."
 regression = []
 failing_first = "reported"
+fix_commit = "259649f7c66bc6ec346fbc84d74927a7e2a93b81"
 
 [[bug]]
 id = "DEATH-MESSAGE-SELF-OWNED-MOB-ATTACKER"
@@ -4735,8 +4741,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Gate receipts under wt/HarnessRows/.analysis/validation: 20261111T120956-native-v2-p4-damage-6mwbxea3 (wait_for_inventory timeout; the player was slain by the zombie), 20261111T132303-native-v2-p4-damage-wdwexu3s (stalactite from y+5 deals 24 damage to a 20 HP player), 20261111T142141-native-v2-p4-damage-n54aaggu (night spawns a zombie that kills the player), 20261111T142757-native-v2-p4-damage-6pky77eh (warden kills the player before the 7 HP state is observed), 20261111T151144-native-v2-p4-damage-xiqtnmrl (thorns row starts out of reach), 20261111T185402-native-v2-p4-damage-1x27s3mu (void row: below the world the client reports in_play false with no player row, so the row is judged from the out_of_world wire event and the death screen), 20261111T190210-native-v2-p4-damage-6qo8d1ux (hurt tilt observed only after the kill command had cost the ten-tick animation), 20261111T191626-native-v2-p4-damage-hy75cx01 and 20261111T192723-native-v2-p4-damage-aw9r90m6 (on_fire row: no burn after the fire block is removed; the wire holds only in_fire), 20261111T192315-native-v2-p4-damage-wespznqp and 20261111T193311-native-v2-p4-damage-3bv6qiv1 (sweet_berry_bush row: no berry damage after a walk through the bush), 20261111T193906-native-v2-p4-damage-dhuzqzip and 20261111T194354-native-v2-p4-damage-o3gp55l2 (fall row: no fall damage). Cause of the on_fire, berry and fall failures: the water fill that douses the player leaves flowing water (amount 5-7, region scan in 20261111T194354-native-v2-p4-damage-o3gp55l2 scenario.json region_cells) that decays for dozens of ticks; in it a fall is cushioned (core test physics_flowing_water_cancels_landing_damage), fire cannot ignite and a berry bush is washed away. The gate now waits until the client sees no fluid around the cell (douse_water_drained). The server is vanilla-consistent here. Cause of the thorns failures (about half of the runs from 20261111T195113-native-v2-p4-damage-ml9kngg7 on): the row sent `gamemode survival @s` and the attack back to back; a creative player takes no reflected damage and the command and the attack packet are not ordered, so the row now waits ten ticks between them (not yet proven by three consecutive greens). A frozen night (advance_time false) was tried and reverted: it brings a hostile mob into the starve row. The causes above are fixed on branch wt/HarnessRows with a python unit test (tools.harness.test_native_v2.NativeV2ProbeTests.test_damage_*); the ledger has no python-test ref kind, so the row stays open."
-regression = []
+regression = ["harness:entities:native-v2-p4-damage"]
 failing_first = "reported"
+fix_commit = "b6e946c132354808ac376bc2edfb901cd772a821"
 
 [[bug]]
 id = "CREATIVE-PLAYER-FIRE-NEVER-DOUSED"
