@@ -145,7 +145,7 @@ creates an entity tombstone. Checkpoint marks are independent of WAL and wire
 marks.
 
 **Battle allegiance extension (2026-11-09).** Native `Body.faction: u16`
-is captured in the existing entity NBT payload as `solaris:Faction`
+is captured in the existing entity NBT payload as `krasnokamen:Faction`
 (`TAG_Int`, u16 range checked) and in `EntityStateImage.faction` for WAL.
 `set_faction` marks touched + changed custody through the normal body mutation
 path and maintains a sparse native-slot membership index (no battle scan for
@@ -164,7 +164,7 @@ deletes the stored row. Other dead non-player rows, such as a retired deployed
 stand (`plugin_npcs/orders/deployment.rs` `retire`), are not corpses and keep
 their record, so a checkpoint rewrites them. WAL images of a corpse carry
 `alive = false`, which replay already folds as a removal. Vanilla saves
-`DeathTime`; Solaris does not resume a corpse after restart. Regressions:
+`DeathTime`; Krasnokamen does not resume a corpse after restart. Regressions:
 `corpse_is_a_durable_removal_across_checkpoint_crash_and_reopen`,
 `retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart`.
 

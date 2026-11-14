@@ -25,13 +25,13 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
-    let report = mc_data::blocks::solaris_required_blocks_report();
+    let report = mc_data::blocks::krasnokamen_required_blocks_report();
     Fixture {
         biomes: crate::chunks::test_biome_registry(&["minecraft:plains"]),
         blocks: BlockRegistry::from_report(&report).expect("blocks build"),
         light: BlockLightTable::conservative_from_blocks_report(&report),
-        items: mc_data::items::solaris_required_items(),
-        block_entity_types: mc_data::block_entity_types::solaris_required_block_entity_types(),
+        items: mc_data::items::krasnokamen_required_items(),
+        block_entity_types: mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
     }
 }
 

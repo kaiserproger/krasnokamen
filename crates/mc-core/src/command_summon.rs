@@ -234,7 +234,7 @@ pub(crate) fn prepare(
             | "Pose" => name == "minecraft:armor_stand",
             "Size" => matches!(name, "minecraft:slime" | "minecraft:magma_cube"),
             "facing" | "variant" => name == "minecraft:painting",
-            "solaris:Faction" => true,
+            "krasnokamen:Faction" => true,
             "CustomName" | "CustomNameVisible" | "Invulnerable" | "NoGravity" | "Motion"
             | "Rotation" | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
             _ => {

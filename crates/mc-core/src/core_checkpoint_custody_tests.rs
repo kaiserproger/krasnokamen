@@ -632,7 +632,7 @@ fn retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart() {
 fn battle_restart_reset_removes_checkpoint_roster_and_ticket_durably() {
     use crate::battle::staging::{BattleCommand, execute};
     use crate::boundary::ChangeSet;
-    const OWNER: &str = "solaris:battle";
+    const OWNER: &str = "krasnokamen:battle";
     let directory = tempfile::tempdir().unwrap();
     let mut world = World::new(directory.path());
     world.tick(|_| {});
@@ -1983,7 +1983,7 @@ fn opaque_item_owner_refuses_unloadable_replay(kind: &str) {
         .to_fields(&registry.items)
     } else {
         vec![(
-            "solaris:ominous_item".into(),
+            "krasnokamen:ominous_item".into(),
             Tag::Compound(vec![
                 (
                     "uuid".into(),
