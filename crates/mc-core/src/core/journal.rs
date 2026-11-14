@@ -346,6 +346,7 @@ pub(crate) fn journal_entries_for_tick(
     state: &mut TickState,
     output: &TickOutput,
 ) -> Vec<JournalEntry> {
+    let start = std::time::Instant::now();
     // Classify item births/crossings before entity_images advances the
     // existing WAL baselines (restored items already have a baseline).
     crate::abstract_sim::cancel_external_writes(state);
@@ -570,7 +571,9 @@ pub(crate) fn journal_entries_for_tick(
             ));
         }
     }
+    let entities_start = std::time::Instant::now();
     crate::journal_touched::entity_images(state, output, &mut entries);
+    let entities_end = std::time::Instant::now();
     for id in &output.changes.entities_removed {
         // Wire removals include intermediate dimension departures. A same-tick
         // return has live custody here again and must keep its final image.
@@ -595,6 +598,8 @@ pub(crate) fn journal_entries_for_tick(
         });
     }
     state.world.journal_debt(&mut entries);
+    state.journal_scan.times.before_entities = entities_start - start;
+    state.journal_scan.times.after_entities = entities_end.elapsed();
     entries
 }
 

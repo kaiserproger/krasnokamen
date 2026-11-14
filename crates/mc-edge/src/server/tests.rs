@@ -121,6 +121,18 @@ fn core_config_carries_pause_and_mob_griefing_switches() {
     assert!(core.mob_griefing.sheep_grazing);
 }
 
+#[test]
+fn core_config_carries_checkpoint_cadence() {
+    let mut cfg = EdgeConfig::default();
+    let core_default = mc_core::config::CoreConfig::new(cfg.data.world_dir.clone(), 0);
+    assert_eq!(
+        core_config(&cfg).checkpoint_every_ticks,
+        core_default.checkpoint_every_ticks
+    );
+    cfg.data.checkpoint_every_ticks = 1_000_000;
+    assert_eq!(core_config(&cfg).checkpoint_every_ticks, 1_000_000);
+}
+
 /// Two simultaneous joins both resolve; a late waiter sees the stash.
 #[tokio::test]
 async fn simultaneous_joins_both_resolve() {

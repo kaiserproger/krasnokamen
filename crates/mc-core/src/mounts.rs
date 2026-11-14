@@ -565,16 +565,23 @@ pub(crate) fn dismount(state: &mut TickState, actor: EntityId) {
     }
 }
 pub(crate) fn sync_rider(state: &mut TickState, slot: EntitySlot) {
-    let Some(rider) = rider(state, slot) else {
-        return;
-    };
+    if let Some(rider) = rider(state, slot) {
+        seat_rider(state, slot, rider);
+    }
+}
+/// [`sync_rider`] for a rider slot the caller already resolved this pass.
+fn seat_rider(state: &mut TickState, slot: EntitySlot, rider: EntitySlot) {
     let id = state.entities.body(rider).id;
     if state.entity_session_locked(id) {
         return;
     }
     let old = state.entities.pos(rider);
     let already_mounted = state.entities.row(slot).appearance.passengers.as_slice() == [id];
-    state.entities.row_mut(rider).entity_life.mount.vehicle = Some(state.entities.body(slot).id);
+    // Custody only for an actual change (see `tick`): a steady pair is a no-op.
+    let vehicle = Some(state.entities.body(slot).id);
+    if state.entities.row(rider).entity_life.mount.vehicle != vehicle {
+        state.entities.row_mut(rider).entity_life.mount.vehicle = vehicle;
+    }
     let pos = state.entities.pos(slot);
     let (height, forward) =
         if crate::vehicles::kind(state, slot) == Some(crate::vehicles::VehicleKind::Boat) {
@@ -610,8 +617,8 @@ pub(crate) fn sync_rider(state: &mut TickState, slot: EntitySlot) {
         let new = state.entities.pos(rider);
         crate::statistics::riding(state, id, slot, old, new);
     }
-    let (body, row) = state.entities.parts_mut(slot);
-    if row.appearance.passengers.as_slice() != [id] {
+    if state.entities.row(slot).appearance.passengers.as_slice() != [id] {
+        let (body, row) = state.entities.parts_mut(slot);
         Arc::make_mut(&mut row.appearance).passengers = vec![id];
         state.appearance_changed.push(body.id);
     }
@@ -836,7 +843,8 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         ) {
             continue;
         }
-        let live = rider(state, slot).is_some_and(|r| {
+        let rider_slot = rider(state, slot);
+        let live = rider_slot.is_some_and(|r| {
             let body = state.entities.body(r);
             body.alive
                 && match body.kind {
@@ -853,11 +861,19 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             continue;
         }
         let equine = capabilities(state, slot).taming.equine()
-            && rider(state, slot)
+            && rider_slot
                 .is_some_and(|r| matches!(state.entities.body(r).kind, EntityKind::Player { .. }));
-        let row = state.entities.row_mut(slot);
-        row.entity_life.mounted = true;
-        if equine && !row.entity_life.tamed && crate::taming::roll(row, 50) == 0 {
+        // `row_mut` lists the row for the journal, wire views and the next
+        // checkpoint: take it only to change the row, never once per ridden
+        // mount per tick (a steady 2,000-horse cavalry re-listed 4,000 rows).
+        if !state.entities.row(slot).entity_life.mounted {
+            state.entities.row_mut(slot).entity_life.mounted = true;
+        }
+        if equine
+            && !state.entities.row(slot).entity_life.tamed
+            && crate::taming::roll(state.entities.row_mut(slot), 50) == 0
+        {
+            let row = state.entities.row_mut(slot);
             let success = crate::taming::roll(row, 100) < u32::from(row.entity_life.taming.temper);
             if success {
                 row.entity_life.tamed = true;
@@ -892,8 +908,14 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
                     serde_json::json!({ "entity": entity }),
                 );
             }
+            // A failed roll dismounts: resolve the rider again.
+            sync_rider(state, slot);
+            continue;
         }
-        sync_rider(state, slot);
+        // `live` resolved this rider; nothing above moved or removed a row.
+        if let Some(rider) = rider_slot {
+            seat_rider(state, slot, rider);
+        }
     }
     crate::leash::tick(state, changes);
 }

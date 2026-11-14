@@ -200,19 +200,25 @@ fn h07_contact_exhaustive_oracle_edit_ignition_water_rain_negative_coordinates()
 fn h07_quiet_cost_fence_counts_cauldron_tail_separately() {
     let mut state = local(Dimension::Overworld, None);
     load(&mut state, mc_world::ChunkPos { x: -1, z: -1 }, 0);
-    for _ in 0..128 {
-        cow(&mut state, [-0.5, 200.0, -0.5]);
-    }
+    let cows: Vec<_> = (0..128)
+        .map(|_| cow(&mut state, [-0.5, 200.0, -0.5]))
+        .collect();
     contact(&mut state, false);
     portals(&mut state, false);
     contact_hazards::take_work_counts();
     take_work_counts();
     assert!(contact(&mut state, false).is_empty());
     assert!(portals(&mut state, false).is_empty());
-    let contact = contact_hazards::take_work_counts();
+    let contact_counts = contact_hazards::take_work_counts();
     let portal = take_work_counts();
-    assert_eq!((contact, portal), ([128, 0, 128, 0, 128], [128, 0, 0]));
-    println!("H07 quiet contact={contact:?} portals={portal:?}; cauldron tail is NOT zero-read");
+    // Idle quiet rows and the cauldron tail (no cauldron cell) are resolved
+    // by the classifier: the serial owner reads none of their cold rows.
+    assert_eq!((contact_counts, portal), ([128, 0, 0, 0, 0], [128, 0, 0]));
+    println!("H07 quiet contact={contact_counts:?} portals={portal:?}");
+    // A live burn clock still reaches the serial quiet body, and only that row.
+    contact_hazards::ignite(&mut state, cows[7], 40);
+    contact(&mut state, false);
+    assert_eq!(contact_hazards::take_work_counts(), [128, 0, 1, 0, 0]);
 }
 
 #[test]
@@ -410,7 +416,7 @@ fn h07_focused_work_counts() {
             changes.len()
         );
         if scene == "quiet" {
-            assert_eq!(contact_counts, [4096, 0, 4096, 0, 4096]);
+            assert_eq!(contact_counts, [4096, 0, 0, 0, 0]);
             assert_eq!(portal_counts, [4096, 0, 0]);
         }
         if scene == "hazard" {

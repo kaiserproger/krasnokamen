@@ -48,6 +48,24 @@ pub(crate) struct JournalScan {
     clock_recheck: Vec<EntityId>,
     /// The first batch seeds all baselines; later boundaries use chunk indexes.
     initialized: bool,
+    /// Stage wall times of the latest batch build (phase-log attribution).
+    pub(crate) times: BuildTimes,
+}
+
+/// Wall time of one `journal_entries_for_tick` call, in order; the five
+/// stages partition it.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct BuildTimes {
+    /// Owner domains, blocks, block entities and players before entities.
+    pub(crate) before_entities: std::time::Duration,
+    /// Touched-set intake: removals, chunk-clock rows, villagers, motion set.
+    pub(crate) touched: std::time::Duration,
+    /// Motion-pose diffs, vitals and full `Entity` images.
+    pub(crate) images: std::time::Duration,
+    /// Touched rows compared with their baselines (`EntityState` images).
+    pub(crate) compare: std::time::Duration,
+    /// Entity removals, tickets, debt and every child dimension's batch.
+    pub(crate) after_entities: std::time::Duration,
 }
 
 /// Touched rows of the latest batch (bench receipts).
@@ -60,6 +78,7 @@ pub(crate) fn entity_images(
     output: &TickOutput,
     entries: &mut Vec<JournalEntry>,
 ) {
+    let start = std::time::Instant::now();
     let mut touched = state.entities.take_touched();
     #[cfg(test)]
     LAST_TOUCHED.store(touched.len(), std::sync::atomic::Ordering::Relaxed);
@@ -162,6 +181,7 @@ pub(crate) fn entity_images(
             state.journal_scan.motion.remove(id);
         }
     }
+    let images_start = std::time::Instant::now();
     full.extend(
         state
             .journal_scan
@@ -275,6 +295,7 @@ pub(crate) fn entity_images(
             });
         }
     }
+    let compare_start = std::time::Instant::now();
     let mut candidates = touched;
     candidates.append(&mut state.journal_scan.clock_recheck);
     #[cfg(test)]
@@ -329,6 +350,9 @@ pub(crate) fn entity_images(
     }
     state.journal_scan.clock_recheck = recheck;
     state.entities.recycle_touched(candidates);
+    state.journal_scan.times.touched = images_start - start;
+    state.journal_scan.times.images = compare_start - images_start;
+    state.journal_scan.times.compare = compare_start.elapsed();
 }
 
 fn clock_sensitive(
@@ -434,8 +458,9 @@ pub(crate) fn assert_baselines_complete(state: &TickState, tick: u64) {
         }
         assert!(
             old.matches(body, row),
-            "untouched entity {:?} differs from its projected state image",
-            body.id
+            "untouched entity {:?} differs from its projected state image\n  baseline {old:?}\n  live     {:?}",
+            body.id,
+            crate::journal::EntityStateImage::from_row(body, row),
         );
     }
 }

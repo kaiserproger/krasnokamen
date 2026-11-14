@@ -1312,12 +1312,17 @@ fn run_dimension_tick_inner<'a>(
     if sim {
         crate::datapacks::tick(state, &mut changes);
     }
+    let stage_spawn = std::time::Instant::now();
     if sim {
         crate::natural_spawn::advance_ages_and_run(state, &mut changes);
+    }
+    let stage_sim_owners = std::time::Instant::now();
+    if sim {
         crate::mob_lanes::traders(state, &mut changes);
         crate::vibration::tick(state);
         crate::plugin_npcs::advance(state);
     }
+    let stage_inputs = std::time::Instant::now();
     changes.entities_spawned.append(&mut state.plugin_spawned);
     state
         .merge_block_writes
@@ -1344,12 +1349,16 @@ fn run_dimension_tick_inner<'a>(
     if sim {
         crate::shrieker::run(state);
     }
+    let stage_players = std::time::Instant::now();
     tick_players(state, &mut changes, &mut intents);
     if sim {
         crate::raids::raid_omens(state);
     }
+    let stage_effects = std::time::Instant::now();
     crate::effects::run(state, &mut intents);
-    crate::contact_hazards::run(state, &mut intents);
+    let stage_contact = std::time::Instant::now();
+    let contact = crate::contact_hazards::run(state, &mut intents);
+    let stage_tail = std::time::Instant::now();
     crate::dimensions::rules::void_intents(state, &mut intents);
     crate::enchantment_locations::run(state, &mut intents);
     if sim {
@@ -1815,6 +1824,23 @@ fn run_dimension_tick_inner<'a>(
             log.before_return.saturating_sub(measured).as_secs_f64() * 1000.0,
             log.before_return.as_secs_f64() * 1000.0,
             log.allocator_us as f64 / 1000.0,
+        );
+        // Stages of `input`, in order; they partition `input_time`.
+        let ms = |span: std::time::Duration| span.as_secs_f64() * 1000.0;
+        eprintln!(
+            "input ms: tick={} dimension={:?} prelude={:.2} natural_spawn={:.2} sim_owners={:.2} inputs={:.2} players={:.2} effects={:.2} contact_classify={:.2} contact_serial={:.2} contact_cauldron={:.2} tail={:.2}",
+            state.tick,
+            state.dimension,
+            ms(stage_spawn - input_start),
+            ms(stage_sim_owners - stage_spawn),
+            ms(stage_inputs - stage_sim_owners),
+            ms(stage_players - stage_inputs),
+            ms(stage_effects - stage_players),
+            ms(stage_contact - stage_effects),
+            ms(contact.classify),
+            ms(contact.serial),
+            ms(contact.cauldron),
+            ms(input_time.saturating_sub(stage_tail - input_start)),
         );
         log.logging = log_start.elapsed();
     }

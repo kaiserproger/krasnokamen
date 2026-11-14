@@ -83,7 +83,12 @@ comparable only with other `-p` numbers from the same session.
 - **Phase timers:** `MC_CORE_PHASE_LOG=1` prints per-phase and per-section
   milliseconds in `server.log`. If the dashboard phases add up to much less than
   the tick total, the time is in untimed sections (spawning, inputs, chunk
-  ensure/evict, commit, checkpoint capture).
+  ensure/evict, commit, checkpoint capture). Two lines split the owner-heavy
+  phases into consecutive stages that sum to the phase: `input ms` (per
+  dimension: natural spawn, input application, players, effects and the three
+  contact-hazard stages) and `journal build ms` (the `journal` column of `tick
+  outer ms`: domains before entities, the touched-set intake, full images,
+  baseline comparison, and everything after, child dimensions included).
 - **Worldgen:** prefer the test-only stage clocks in
   `crates/mc-worldgen/src/terrain/profile_tests.rs` over call graphs; to split a
   stage add an `end(new_index)` call and widen the totals. Use `--exact`
