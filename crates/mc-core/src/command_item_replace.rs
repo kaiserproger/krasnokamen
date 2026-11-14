@@ -276,15 +276,17 @@ pub(crate) fn write_slots(
             }
             enum Write {
                 Player(EntityId, std::ops::Range<usize>),
-                Equipment(
-                    EntityId,
-                    crate::entities::EntitySlot,
-                    [Option<ItemStack>; 6],
-                    crate::plugin_inventories::PreparedEntityCustody,
-                ),
+                Equipment,
+            }
+            struct EquipmentWrite {
+                entity: EntityId,
+                slot: crate::entities::EntitySlot,
+                equipment: [Option<ItemStack>; 6],
+                custody: crate::plugin_inventories::PreparedEntityCustody,
             }
             let entities = crate::command_execution::resolve_target(state, executor, target)?;
             let mut prepared = Vec::with_capacity(entities.len());
+            let mut equipment_writes = Vec::new();
             let mut count = 0;
             for entity in entities {
                 if let Some(player) = state.players.get(&entity) {
@@ -336,13 +338,20 @@ pub(crate) fn write_slots(
                     )
                     .map_err(|_| "Entity inventory custody is unavailable")?;
                     count += range.len() as i32;
-                    prepared.push(Write::Equipment(entity, entity_slot, equipment, custody));
+                    prepared.push(Write::Equipment);
+                    equipment_writes.push(EquipmentWrite {
+                        entity,
+                        slot: entity_slot,
+                        equipment,
+                        custody,
+                    });
                 }
             }
             if prepared.is_empty() {
                 return Err("No entity has the specified slot".into());
             }
             // Every target and its final reservation footprint is admitted.
+            let mut equipment_writes = equipment_writes.into_iter();
             for write in prepared {
                 match write {
                     Write::Player(entity, range) => {
@@ -352,7 +361,9 @@ pub(crate) fn write_slots(
                         }
                         crate::projectiles::weapons::sync(state, entity);
                     }
-                    Write::Equipment(entity, slot, equipment, custody) => {
+                    Write::Equipment => {
+                        let EquipmentWrite { entity, slot, equipment, custody } =
+                            equipment_writes.next().expect("admitted equipment");
                         std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance)
                             .equipment = equipment;
                         crate::entity_loot::restore(state, slot);
