@@ -151,7 +151,7 @@ class FirstViewTests(unittest.TestCase):
                 "status": "passed", "details": {"first_view_seconds": 12.5}}))
 
             def measured(command, log):
-                self.assertEqual(command[1], f"SOLARIS_SERVER_BINARY={ctx.server_bin}")
+                self.assertEqual(command[1], f"KRASNOKAMEN_SERVER_BINARY={ctx.server_bin}")
                 self.assertEqual(command[-6:], ["--server-cpus", "0", "--client-cpus", "1", "--memory", "2G"])
                 log.write_text(f"[harness] PASS artifact={artifact} in 13s\n")
                 return 0, None
@@ -218,7 +218,7 @@ class SetupPinTests(unittest.TestCase):
         from tools.bench import __main__ as bench
         from tools.coreperf import profiles
         binaries = {}
-        for kind, name in (("server", "solaris-v2"), ("bots", "player-scale-bots")):
+        for kind, name in (("server", "krasnokamen"), ("bots", "player-scale-bots")):
             folder = root / kind
             folder.mkdir()
             binary = folder / name

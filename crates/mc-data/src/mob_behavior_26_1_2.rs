@@ -1,7 +1,7 @@
 //! Data-driven common mob behavior profiles for Java Edition 26.1.2.
 //!
 //! This table deliberately separates common movement/attack families from
-//! species-specific behavior that Solaris has not implemented yet. Consumers
+//! species-specific behavior that Krasnokamen has not implemented yet. Consumers
 //! must not silently run `UnsupportedSpecial` mobs through generic melee logic.
 
 use std::collections::BTreeMap;
@@ -119,7 +119,7 @@ impl MobBehaviorTable {
                 let (combat, special_attack) = combat_policy(contract.name, hostile);
                 // 26.1.2 melee pursuit and idle stroll both run at the base
                 // attribute (e.g. `ZombieAttackGoal(this, 1.0, ...)` over 0.23):
-                // Solaris speed units are attribute x10 (blocks/sec).
+                // Krasnokamen speed units are attribute x10 (blocks/sec).
                 let hostile_speed = if hostile
                     && matches!(movement, MobMovementPolicy::HostilePursuit)
                 {
@@ -219,7 +219,7 @@ fn combat_policy(name: &'static str, hostile: bool) -> (MobCombatPolicy, Option<
     // Golems are constructed mobs, not `Monster`-category spawnees, but both
     // carry attack goals in vanilla: SnowGolem registers RangedAttackGoal
     // (snowball ~1.25 s, 10-block range) and IronGolem runs MeleeAttackGoal
-    // against hostiles (the Solaris village-defense lane owns that trigger).
+    // against hostiles (the Krasnokamen village-defense lane owns that trigger).
     if name == "minecraft:snow_golem" {
         return (MobCombatPolicy::Snowball, None);
     }
@@ -376,7 +376,7 @@ mod tests {
     #[test]
     fn constructed_golems_carry_vanilla_combat_policies() {
         let table = MobBehaviorTable::vanilla_26_1_2();
-        // SnowGolem registers RangedAttackGoal in vanilla; the Solaris snowball
+        // SnowGolem registers RangedAttackGoal in vanilla; the Krasnokamen snowball
         // throw wiring consumes this slot separately from the table.
         let snow_golem = table.get_by_name("minecraft:snow_golem").unwrap();
         assert_eq!(snow_golem.combat, MobCombatPolicy::Snowball);

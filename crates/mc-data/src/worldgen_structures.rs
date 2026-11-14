@@ -1,7 +1,7 @@
 //! Narrow worldgen structure fact reader.
 //!
 //! This loader extracts structure-set references and spacing scalars that
-//! Solaris can feed into its own placement policy. It does not execute vanilla
+//! Krasnokamen can feed into its own placement policy. It does not execute vanilla
 //! structure placement, jigsaw, or processor logic.
 
 use std::path::{Path, PathBuf};
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn loads_synthetic_structure_set_facts() {
         let root = std::env::temp_dir().join(format!(
-            "solaris-structure-facts-{}",
+            "krasnokamen-structure-facts-{}",
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()

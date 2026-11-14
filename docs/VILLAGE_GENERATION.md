@@ -82,7 +82,7 @@ The shared vanilla-like generator loads the 26.1.2 overworld noise settings,
 density functions, noise parameters and expanded multi-noise biome preset from
 the local content cache. `tools/extract-vanilla-data.sh` exports these bootstrap
 registries with `tools/extract-vanilla-worldgen.sh`; extracted Mojang data stays
-outside Git. The current packaged `solaris-v2 content import` path embeds the Java
+outside Git. The current packaged `krasnokamen content import` path embeds the Java
 exporter; cache discovery requires its native routing outputs. Export-only
 invocations do not require biome tags or structure templates.
 
@@ -107,7 +107,7 @@ queries outside the bounded cache.
 
 The headless Java oracle (`tools/VanillaWorldgenOracle.java`) constructs real
 26.1.2 `RandomState`, `NoiseBasedChunkGenerator` and structure starts. The
-`vanilla_worldgen_compare` binary compares Solaris with its output and also
+`vanilla_worldgen_compare` binary compares Krasnokamen with its output and also
 records the old analogue baseline. Observed results for 1,089 biome/climate and
 height columns per seed (XZ −2,048 through 2,048, step 128, climate Y 64):
 
@@ -128,7 +128,7 @@ executor are not implemented in the native density lane; the maximum sampled
 height errors were 12, 30 and 27 blocks respectively. Surface decoration and
 ores still use the existing analogues, and village terrain adaptation remains
 the column-height analogue described below. The oracle records other surface
-structure sets and separately audits stronghold rings, but Solaris does not
+structure sets and separately audits stronghold rings, but Krasnokamen does not
 yet generate those common structures or concentric-ring starts. The start
 agreement above is specifically for villages, not all structures.
 
@@ -223,14 +223,14 @@ These generation changes apply only to newly generated chunks/worlds:
 existing chunks in `~/play-v008` keep their saved terrain and structures.
 
 These are vanilla's own numbers and are read from the derived content cache, not
-from Solaris constants: `data/minecraft/worldgen/structure_set/villages.json`,
+from Krasnokamen constants: `data/minecraft/worldgen/structure_set/villages.json`,
 `data/minecraft/worldgen/structure/village_*.json`, the
 `data/minecraft/tags/worldgen/biome/has_structure/village_*.json` tags, and the
 `worldgen/template_pool/`, `worldgen/processor_list/` and `structure/` data
 underneath them. There is no separate village dataset to install — villages use
 the same derived content cache as the rest of vanilla worldgen (see
 [content cache guide](OPERATING.md#vanilla-content-cache) and
-`solaris-v2 content import`).
+`krasnokamen content import`).
 
 Code paths:
 
@@ -323,9 +323,9 @@ offsets `+12`, `e^(−d²/16)`) by `−dyWithOffset × fastInvSqrt(distance²/2)
 Because the result is a density value, it flows through the normal surface and
 solidity pipeline and can add or remove material at any height in the box.
 
-### What Solaris does instead
+### What Krasnokamen does instead
 
-Solaris terrain is a 2D per-column surface
+Krasnokamen terrain is a 2D per-column surface
 (`TerrainGenerator::surface_height`, `crates/mc-worldgen/src/terrain.rs`) plus
 cave carving, so there is no 3D density array for the term to enter. The
 analogue keeps the same numbers — the same 24³ kernel support, the same
@@ -445,7 +445,7 @@ implement; no structure in the villages set uses them.
 
 Vanilla places a structure into a `WorldGenRegion` that holds the chunk being
 generated *and its already-generated neighbours*, so a piece or a decor tree at a
-chunk edge writes the part that falls in the neighbour. Solaris fills one chunk
+chunk edge writes the part that falls in the neighbour. Krasnokamen fills one chunk
 at a time and has no neighbour access, so a decor feature's writes outside the
 chunk being filled are dropped, and the neighbour does not place them later: the
 leaf piece that carries the feature belongs to one chunk.
@@ -513,7 +513,7 @@ without spawning when mob spawning is disabled. See the
 
 The current server persists native state plus one tick WAL and validates its
 generation identity before recovery/generation. It does not serve an unversioned
-Anvil world or use `solaris/world.json` as an operator migration API. Use explicit
+Anvil world or use `krasnokamen/world.json` as an operator migration API. Use explicit
 offline Anvil conversion, retain source worlds, back up before upgrades and never
 bypass an identity refusal by hand-editing metadata. See [OPERATING.md](OPERATING.md).
 
@@ -522,7 +522,7 @@ bypass an identity refusal by hand-editing metadata. See [OPERATING.md](OPERATIN
 A revision bump is refused by default (`identity mismatch`); when the stored world
 differs only in an older revision the refusal names the operator command. On a
 stopped world, back it up, then run
-`solaris-v2 --config server.toml world upgrade-worldgen`. It refuses unless the
+`krasnokamen --config server.toml world upgrade-worldgen`. It refuses unless the
 seed, format and dimension records equal the configured ones apart from the revision
 (a different seed, a newer revision or a running server is refused), rewrites the
 native header identity and the `generation`/`dimensions` records to the current

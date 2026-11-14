@@ -44,7 +44,7 @@ class WeakFirstViewTests(unittest.TestCase):
             server = Mock(returncode=0)
 
             def fail_client(context, *_args, **_kwargs):
-                root = artifact / "client-data" / "solaris-client"
+                root = artifact / "client-data" / "krasnokamen-client"
                 self.assertEqual(os.environ["XDG_DATA_HOME"], str(root.parent))
                 self.assertEqual((root / "facts").resolve(), source / "facts")
                 context.commands.append(["client"])
@@ -52,7 +52,7 @@ class WeakFirstViewTests(unittest.TestCase):
                 context.exits[len(context.commands) - 1] = 7
                 raise RuntimeError("client startup failed")
 
-            with patch.dict(os.environ, {"SOLARIS_SERVER_BINARY": "/bin/true", "SOLARIS_CLIENT_ROOT": str(source)}), \
+            with patch.dict(os.environ, {"KRASNOKAMEN_SERVER_BINARY": "/bin/true", "KRASNOKAMEN_CLIENT_ROOT": str(source)}), \
                     patch.object(weak_first_view, "validate_args", return_value=args), \
                     patch.object(weak_first_view.native_client, "resolve_binary", return_value=Path("/bin/true")), \
                     patch.object(weak_first_view.native_client, "start", side_effect=fail_client), \

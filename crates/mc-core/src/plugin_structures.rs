@@ -1516,7 +1516,7 @@ pub(crate) fn validate(state: &TickState) -> Result<(), crate::config::CoreError
                                 && record
                                     .snapshot
                                     .blueprint_id
-                                    .strip_prefix("solaris-settlements:")
+                                    .strip_prefix("krasnokamen-settlements:")
                                     .is_some_and(|blueprint| {
                                         crate::settlements::layout::free_paving(
                                             state, blueprint, cell.state,

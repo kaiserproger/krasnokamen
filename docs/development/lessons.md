@@ -1,6 +1,6 @@
 # Lessons
 
-Non-obvious failures and fixes from Solaris development, newest first. Each
+Non-obvious failures and fixes from Krasnokamen development, newest first. Each
 entry says what happened and what to do now; details live on the linked page.
 Dates are when the lesson was learned (owner time zone, UTC+7).
 
@@ -14,7 +14,7 @@ Dates are when the lesson was learned (owner time zone, UTC+7).
   checkpoint/WAL boundary (what the last checkpoint held, what only the WAL
   held); and proof of the selected root. A hot copy, or a recovered row that
   matches, is not causal proof that the WAL recovered it.
-  (`solaris-v2 world probe` and `world census` read a stopped native world:
+  (`krasnokamen world probe` and `world census` read a stopped native world:
   [Constantinople fixture](constantinople-fixture.md#offline-subcommands))
 - **2026-11-07 — the advisor no longer approves publications.** A bare
   `[approved]` arrived 41 turns after it was issued, with no way to tell which
@@ -32,7 +32,7 @@ Dates are when the lesson was learned (owner time zone, UTC+7).
   dep-info paths are relative to the package root, so a worktree whose files
   were older than another tree's build in the same target dir reused that
   tree's binaries: new tests were silently absent and runs passed. The runner
-  now marks each slot with its source tree (`.solaris-tree`), prefers the
+  now marks each slot with its source tree (`.krasnokamen-tree`), prefers the
   tree's own slot and touches every tracked file on a tree switch. When a test
   you added does not run, suspect the target dir first.
   ([heavy commands](heavy-commands-and-memory.md))

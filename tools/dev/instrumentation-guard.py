@@ -63,7 +63,7 @@ def child(directory, command):
     if limit == "max" or int(limit) > MAX_MEMORY:
         raise RuntimeError(f"missing <=6 GiB cgroup memory limit: {limit}")
     root = Path(directory).resolve(strict=True)
-    if root.parent != Path("/dev/shm").resolve() or not root.name.startswith("solaris-instrument-"):
+    if root.parent != Path("/dev/shm").resolve() or not root.name.startswith("krasnokamen-instrument-"):
         raise RuntimeError("invalid private tmpfs directory")
     env = os.environ.copy()
     env.update(CARGO_HOME=str(root / "cargo"), CARGO_TARGET_DIR=str(root / "target"),
@@ -85,7 +85,7 @@ def main():
         child(sys.argv[2], sys.argv[3:])
     if len(sys.argv) < 3 or sys.argv[1] != "--":
         raise SystemExit(__doc__)
-    root = Path(tempfile.mkdtemp(prefix="solaris-instrument-", dir="/dev/shm"))
+    root = Path(tempfile.mkdtemp(prefix="krasnokamen-instrument-", dir="/dev/shm"))
     for part in ("cargo", "target", "tmp", "profiles"):
         (root / part).mkdir()
     cargo_home = Path(os.environ.get("CARGO_HOME", str(Path.home() / ".cargo"))).resolve()
