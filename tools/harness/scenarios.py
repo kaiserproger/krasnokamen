@@ -708,9 +708,9 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="graphical", profile="scene-shot",
         scenario_id="issue1-19-hostile-motion", requires=("xvfb",),
         sources=("tools/harness/issue1_19_hostile_motion_scene.json",),
-        fixture="private native client on a grass pad, frozen day, one spider and one zombie spawned with NoAI toggled for the capture, third-person camera",
-        proves="the received spider and zombie poses and the measured motion between two observed frames match the Java gaits instead of the wrong standstill/hover poses",
-        limits="one spider and one zombie on a flat pad; does not cover other hostiles or terrain",
+        fixture="private native client on a grass pad, frozen day, one NoAI zombie and one NoAI spider stepped by fixture teleports, side camera on the zombie",
+        proves="each declared kind moves more than 0.1 blocks and every segment's client-visible rate sits inside its declared blocks-per-client-tick range, and a pixel window over the zombie's raised-arm anchor counts the rendered sleeve, so a frozen animation or a wrong pace fails",
+        limits="tp-driven NoAI mobs on a flat pad, one speed range per kind measured against that trajectory rather than an AI walk; the spider's moving leg swing has no pose anchor and is covered by its motion rate only",
     ),
     "native-village-idle-stroll": _entry(
         id="native-village-idle-stroll", summary="Idle residents stay bound to the village and swim up out of deep water",
