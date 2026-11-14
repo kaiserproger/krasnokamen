@@ -206,8 +206,10 @@ pub(crate) fn retaliate(state: &mut TickState, victim: EntitySlot, attacker: Ent
     let EntityKind::Mob { type_id } = body.kind else {
         return;
     };
-    // Battle allegiance owns targeting, including after friendly projectile hits.
+    // Battle allegiance owns targeting, including after friendly projectile
+    // hits: a battle unit answers through the battle (retaliation.rs).
     if body.faction != 0 {
+        crate::battle::retaliation::hurt(state, victim, attacker);
         return;
     }
     let Some(blueprint) = state.registry.blueprint(type_id) else {

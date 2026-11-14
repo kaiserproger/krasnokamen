@@ -218,6 +218,35 @@ impl TargetGrid {
         }
         None
     }
+
+    /// Every unit of the actor's own faction within `reach` (3D, inclusive),
+    /// the actor excluded, with its squared distance. Only the cells of the
+    /// reach's square are visited, so the walk is bounded by the reach.
+    pub fn friends_within(&self, actor: Unit, reach: f64, mut visit: impl FnMut(&Unit, f64)) {
+        if actor.faction == 0 || !reach.is_finite() || reach < 0.0 {
+            return;
+        }
+        let limit = reach * reach;
+        let (cx, cz) = (cell(actor.pos[0]), cell(actor.pos[2]));
+        let radius = (reach / CELL_BLOCKS).ceil() as i32;
+        for dx in -radius..=radius {
+            for dz in -radius..=radius {
+                let (x, z) = (cx.saturating_add(dx), cz.saturating_add(dz));
+                if cell_distance_squared(actor.pos, x, z) > limit {
+                    continue;
+                }
+                let Some(bucket) = self.cells.get(&(actor.faction, x, z)) else {
+                    continue;
+                };
+                for unit in &self.members[bucket.start..bucket.start + bucket.len] {
+                    let d2 = distance_squared(actor.pos, unit.pos);
+                    if unit.id != actor.id && d2 <= limit {
+                        visit(unit, d2);
+                    }
+                }
+            }
+        }
+    }
 }
 
 pub const MELEE_ENGAGEMENT_REACH: f64 = 6.0;

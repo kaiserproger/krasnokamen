@@ -341,8 +341,8 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         {
             continue;
         }
-        let soldier = battle.columns.targets[bi].as_ref().map(|target| target.id);
-        if soldier.is_some() {
+        let targeted = battle.columns.targets[bi].as_ref().map(|target| target.id);
+        if targeted.is_some() {
             combat.work.target_checks += 1;
         }
         // Three cautious soldiers in four; decisions once/20t, not per frame.
@@ -374,6 +374,17 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             },
             duration_ticks: fighter.weapon.cycle(),
         });
+        if answered.is_some() || holder.is_some_and(|holder| holder.id == target.id) {
+            // Rare (a live player in reach): the server's record of whom a
+            // soldier swung at, for take analysis.
+            tracing::info!(
+                "Battle holder swing: soldier={} holder={} tick={} answered={}",
+                id.0,
+                target.id.0,
+                frame.tick,
+                answered.is_some()
+            );
+        }
         combat.work.swings += 1;
     }
     count_fighting(frame, battle, &mut combat);

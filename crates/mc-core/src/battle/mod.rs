@@ -9,6 +9,7 @@ pub(crate) mod combat;
 mod faction;
 pub(crate) mod formation;
 pub(crate) mod morale;
+pub(crate) mod retaliation;
 pub mod staging;
 pub(crate) mod steering;
 mod targeting;
@@ -58,6 +59,7 @@ pub(crate) struct Timings {
     pub formation_us: u64,
     pub columns_us: u64,
     pub targeting_us: u64,
+    pub retaliation_us: u64,
     pub steering_us: u64,
     pub combat_us: u64,
     pub morale_us: u64,
@@ -225,6 +227,8 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     timings.columns_us = phase_us(&mut mark);
     targeting::update(&frame, &mut battle);
     timings.targeting_us = phase_us(&mut mark);
+    retaliation::step(&frame, &mut battle);
+    timings.retaliation_us = phase_us(&mut mark);
     steering::step(&frame, &mut battle, &mut output);
     timings.steering_us = phase_us(&mut mark);
     combat::step(&frame, &mut battle, &mut output);
