@@ -292,6 +292,11 @@ are **not covered**. Native storage positives do not substitute for the core
 pipeline receipts. Subprocess stops exit without database destructors; ordinary
 model restarts drop the live state without a final checkpoint.
 
+The randomized drill prepares a survival chest break with actual Start and idle
+ticks appended through the same WAL writer before faulting the Finish tick.
+The mining test helper's direct clock jump is unsuitable here: it leaves a
+journal coverage gap, so append refuses before reaching the injected ENOSPC.
+
 ## Backup and restore
 
 Offline `backup` and `restore` require a stopped, exclusively leased world;

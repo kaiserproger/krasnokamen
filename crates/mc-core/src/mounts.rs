@@ -1093,7 +1093,9 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         let mut index = 0;
         while index < state.entities.row(slot).entity_life.mount.riders.len() {
             let uuid = state.entities.row(slot).entity_life.mount.riders[index];
-            let live = state.entities.slot_of_uuid(uuid).is_some_and(|r| {
+            // Recovered player passengers have no live body until they join.
+            // Absence is not a dismount; leave/death explicitly clears custody.
+            let live = state.entities.slot_of_uuid_any(uuid).is_none_or(|r| {
                 let body = state.entities.body(r);
                 body.alive
                     && match body.kind {

@@ -103,9 +103,25 @@ pub(crate) fn loot_entity(state: &TickState, entity: EntityId) -> Option<EntityL
     result.slime_size = row.loot.slime_size.map(i32::from);
     result.raider_is_captain = Some(row.loot.patrol_leader);
     if crate::mounts::type_id(body).is_some_and(crate::frog::is_frog) {
+        let opaque = (!row.opaque_entity_fields.is_empty()).then(|| {
+            mc_nbt::read_named(&mut row.opaque_entity_fields.as_slice())
+                .expect("validated retained entity fields")
+                .1
+        });
+        let variant = opaque
+            .as_ref()
+            .and_then(|tag| match tag {
+                mc_nbt::Tag::Compound(fields) => mc_data::item_nbt::field(fields, "variant"),
+                _ => None,
+            })
+            .and_then(|tag| match tag {
+                mc_nbt::Tag::String(variant) => Some(variant.as_str()),
+                _ => None,
+            })
+            .unwrap_or("minecraft:temperate");
         result
             .components
-            .insert(id("minecraft:frog/variant"), "minecraft:temperate".into());
+            .insert(id("minecraft:frog/variant"), variant.into());
     }
     let held = state
         .players
