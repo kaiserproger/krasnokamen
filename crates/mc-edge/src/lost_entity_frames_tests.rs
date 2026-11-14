@@ -155,7 +155,9 @@ fn entity_frames(world_rx: &mut WorldReceiver) -> Vec<String> {
 
 struct Pump {
     server: Arc<EdgeServer>,
-    dir: std::path::PathBuf,
+    /// The fixture's world: `TempDir` removes it when this harness drops, on a
+    /// passing test and on a panic before `finish()`.
+    dir: tempfile::TempDir,
     id: ConnectionId,
     viewers: HashMap<ConnectionId, crate::plan::ViewerState>,
     connections: HashMap<ConnectionId, ConnectionHandles>,
@@ -167,7 +169,7 @@ struct Pump {
 
 impl Pump {
     fn new() -> Self {
-        let (server, dir) = fixture();
+        let (server, dir) = fixture_in_temp_dir();
         let server = Arc::new(server);
         let id = server.connections.joining_id();
         let (reliable_tx, reliable_rx) = mpsc::channel(512);
@@ -237,7 +239,7 @@ impl Pump {
     fn finish(self) {
         self.server.connections.remove(self.id);
         self.server.hub.shutdown();
-        std::fs::remove_dir_all(self.dir).unwrap();
+        // `self.dir` drops here and removes the world, exactly as a panic does.
     }
 }
 

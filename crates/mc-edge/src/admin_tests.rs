@@ -22,16 +22,39 @@ pub(crate) fn fixture_in_temp_dir() -> (EdgeServer, tempfile::TempDir) {
     (server, dir)
 }
 
-/// The plain-path fixture for callers that keep their own cleanup guard
-/// (`lost_entity_frames_tests`, `shelf_update_queue_tests` remove it in `Drop`).
-pub(crate) fn fixture() -> (EdgeServer, std::path::PathBuf) {
-    let dir = admin_temp_dir();
-    let path = dir.keep();
-    let server = server_at(&path);
-    (server, path)
+/// The same fixture, shaped as a path for call sites that keep using `dir`.
+///
+/// It still owns the `TempDir`: a panic before the caller's own cleanup finds
+/// the directory already removed, never leaked.
+pub(crate) struct AdminWorld(tempfile::TempDir);
+
+impl AdminWorld {
+    pub(crate) fn path(&self) -> &std::path::Path {
+        self.0.path()
+    }
 }
 
-/// Directory names matching this fixture's prefix; used to prove no leak.
+impl std::ops::Deref for AdminWorld {
+    type Target = std::path::Path;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.path()
+    }
+}
+
+impl AsRef<std::path::Path> for AdminWorld {
+    fn as_ref(&self) -> &std::path::Path {
+        self.0.path()
+    }
+}
+
+pub(crate) fn fixture() -> (EdgeServer, AdminWorld) {
+    let dir = admin_temp_dir();
+    let server = server_at(dir.path());
+    (server, AdminWorld(dir))
+}
+
+/// Directory names matching this fixture's prefix; used by the leak oracles.
 pub(crate) fn admin_temp_dirs() -> std::collections::BTreeSet<std::path::PathBuf> {
     let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) else {
         return Default::default();

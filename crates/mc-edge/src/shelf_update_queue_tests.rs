@@ -167,7 +167,9 @@ impl ClientShelf {
 
 struct Wire {
     server: Arc<EdgeServer>,
-    dir: std::path::PathBuf,
+    /// The fixture's world: `TempDir` removes it when this harness drops, on a
+    /// passing test and on a panic before `finish()`.
+    dir: tempfile::TempDir,
     id: ConnectionId,
     reliable_rx: mpsc::Receiver<bytes::Bytes>,
     world_rx: WorldReceiver,
@@ -180,7 +182,7 @@ struct Wire {
 
 impl Wire {
     fn new() -> Self {
-        let (mut server, dir) = fixture();
+        let (mut server, dir) = fixture_in_temp_dir();
         // A window small enough that unseen chunks cannot starve a repair of
         // the held one within a tick's chunk budget.
         server.cfg.server.view_distance = 1;
@@ -253,7 +255,7 @@ impl Wire {
     fn finish(self) {
         self.server.connections.remove(self.id);
         self.server.hub.shutdown();
-        std::fs::remove_dir_all(self.dir).unwrap();
+        // `self.dir` drops here and removes the world, exactly as a panic does.
     }
 }
 
