@@ -71,7 +71,7 @@ impl DamageTypeTable {
     }
 
     #[must_use]
-    pub fn with_solaris_fallbacks() -> Self {
+    pub fn with_krasnokamen_fallbacks() -> Self {
         let raw: BTreeMap<String, RawDamageType> = serde_json::from_str(REQUIRED_DAMAGE_TYPES)
             .expect("embedded required damage type JSON is valid");
         Self::from_entries(raw.into_iter().map(|(id, raw)| {
@@ -243,7 +243,7 @@ mod tests {
 
     #[test]
     fn fallback_table_covers_m33_damage_sources() {
-        let table = DamageTypeTable::with_solaris_fallbacks();
+        let table = DamageTypeTable::with_krasnokamen_fallbacks();
 
         for id in [
             "minecraft:generic",

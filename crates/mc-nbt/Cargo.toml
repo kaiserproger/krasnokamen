@@ -1,6 +1,6 @@
 [package]
 name = "mc-nbt"
-description = "NBT codec (Solaris)."
+description = "NBT codec (Krasnokamen)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

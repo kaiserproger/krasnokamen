@@ -37,7 +37,7 @@ to keep that from happening again without idling the machine.
 - **Scope properties.** `MemoryMax=<cap>`, `MemorySwapMax=1G`,
   `CPUQuota=<physical cores x 100>%`, `CPUWeight=50`, `nice 19`. These are the
   harness's own scope properties, so harness runs keep their canonical CPU
-  budget. The runner exports `SOLARIS_HARNESS_CPU_SCOPE=1`; without it the
+  budget. The runner exports `KRASNOKAMEN_HARNESS_CPU_SCOPE=1`; without it the
   harness re-runs itself in its own scope outside the slice and escapes the cap.
 - **`tools/dev/heavy-watchdog.py`** (user unit `solaris-heavy-watchdog`,
   started by the runner) is the only thing that pauses work. On real memory
@@ -64,9 +64,9 @@ to keep that from happening again without idling the machine.
   compilers instead of `nproc` each.
 - **Pooled target dirs.** A command that sets `CARGO_TARGET_DIR` keeps it.
   Otherwise it gets a free shared dir `<work>/targets/slot-a..slot-z`
-  (`SOLARIS_SLOT_TARGETS` overrides the root): the slot its source tree used
+  (`KRASNOKAMEN_SLOT_TARGETS` overrides the root): the slot its source tree used
   last, else any existing free slot, else a new one if `df` reports at least
-  `SOLARIS_SLOT_MIN_FREE_GB` (default 80 GiB, the free-space floor below; rounded up) free. This check does
+  `KRASNOKAMEN_SLOT_MIN_FREE_GB` (default 80 GiB, the free-space floor below; rounded up) free. This check does
   not reserve space or limit growth of existing slots. Each running command
   holds its own slot (15-40 GB once built): on 2026-11-07 agents running
   several commands in parallel created 12 slots and filled the disk, so run one
@@ -178,7 +178,7 @@ code, start the unit (agents' runner calls may restart it in between).
 
 Owner-approved response (2026-10-24), adjusted for the current runner: renice
 running rustc/cargo/java/qemu to 19, start new heavy commands with a lower
-`SOLARIS_MEM_RUN_CPU_QUOTA` (e.g. `400`), and tell agents to use
+`KRASNOKAMEN_MEM_RUN_CPU_QUOTA` (e.g. `400`), and tell agents to use
 `-m 6G nice -n 19 env RUSTC_WRAPPER= cargo ... -j 2`, `--test-threads 2`,
 focused `-p` crates only. For a machine-wide cap, write the owner's quota to
 `/tmp/solaris-mem-slots/cpu-quota` (e.g. `600%`, replaced atomically); the runner
@@ -201,7 +201,7 @@ cwd to the agent.
   of 11 GB on 2026-10-28), 650 MB of client content copied into every
   scene-shot receipt (now symlinked), nested `sdk/rust/target` in rsync'd
   worktrees, 66 GB of stale debug targets.
-- **Slot cleanup and rotation.** Below `SOLARIS_SLOT_MIN_FREE_GB` + 10 GiB free
+- **Slot cleanup and rotation.** Below `KRASNOKAMEN_SLOT_MIN_FREE_GB` + 10 GiB free
   (90 GiB by default), the runner (except `-x`/`-p`) invokes `slot-gc --delete`;
   failures are logged and do not stop the command. Each pass removes attributable
   dead artifacts and superseded finalized incremental sessions. If space remains
@@ -223,7 +223,7 @@ Cleanup while agents run:
   By hand, only if its agent finished, it has no tracked changes (a stray `.pyc`
   aside) and its HEAD is in a branch (`git branch --contains`). Check
   handoffs/configs for absolute paths into it first (e.g. an ALSA pkg-config
-  shim, a `SOLARIS_LOADER_ROOT`). Move its `.analysis/` to
+  shim, a `KRASNOKAMEN_LOADER_ROOT`). Move its `.analysis/` to
   `<work>/receipts/<wt>-analysis` and publish outputs to
   `<work>/release-artifacts/` (call them "built", never "published"), then
   `git worktree remove --force` and `git worktree prune`.
