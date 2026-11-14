@@ -1,5 +1,7 @@
 //! Summon preflight uses the same native entity codecs as checkpoint recovery.
 //! No entity is allocated until every authored field has been validated.
+//! Experience orbs retain native `Value`/positive `Count` and spawn directly into
+//! the orb index, rather than being allocated as mobs.
 use crate::boundary::{EntityDataValue, EntityId};
 use crate::commands::CommandError;
 use crate::journal::EntityStateImage;
@@ -182,7 +184,8 @@ pub(crate) fn prepare(
     let Tag::Compound(authored) = nbt else {
         return Err(error("Summon NBT must be a compound"));
     };
-    let living = mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id)
+    let contract = mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(type_id);
+    let living = contract
         .is_some_and(|c| c.behavior.archetype == mc_data::entity_types::EntityArchetype::Living);
     let horse = crate::taming::horse(name);
     let ageable = state
@@ -234,6 +237,10 @@ pub(crate) fn prepare(
             | "Pose" => name == "minecraft:armor_stand",
             "Size" => matches!(name, "minecraft:slime" | "minecraft:magma_cube"),
             "facing" | "variant" => name == "minecraft:painting",
+            "Value" | "Count" => contract.is_some_and(|c| {
+                c.behavior.physical_simulation
+                    == mc_data::entity_types::PhysicalSimulationClass::ExperienceOrb
+            }),
             "CustomName" | "CustomNameVisible" | "Invulnerable" | "NoGravity" | "Motion"
             | "Rotation" | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
             _ => {
@@ -282,6 +289,14 @@ pub(crate) fn prepare(
                 Tag::Float(v as f32)
             }
             "Age" => Tag::Int(number(value, key)?.clamp(i32::MIN as f64, i32::MAX as f64) as i32),
+            "Value" => Tag::Short(number(value, key)? as i16),
+            "Count" => {
+                let count = number(value, key)?;
+                if count.fract() != 0.0 || !(1.0..=f64::from(i32::MAX)).contains(&count) {
+                    return Err(error("Invalid Count: expected positive integer"));
+                }
+                Tag::Int(count as i32)
+            }
             // Vanilla Slime.setSize clamps the stored zero-based Size to 0..=126.
             "Size" => Tag::Int(number(value, key)?.clamp(0.0, 126.0) as i32),
             "facing" => {
@@ -568,6 +583,23 @@ pub(crate) fn prepare(
         painting,
     })
 }
+/// Allocate the canonical kind before indexing or publishing a summoned entity.
+pub(crate) fn spawn(
+    state: &mut TickState,
+    type_id: u32,
+    pos: [f64; 3],
+    health: f32,
+    image: Image,
+) -> EntityId {
+    let id = if let Some(orb) = image.native.experience_orb {
+        crate::experience_orbs::spawn(state, type_id, pos, orb, [0.0; 3], 0.0)
+    } else {
+        state.spawn_mob(type_id, pos, health)
+    };
+    apply(state, id, image);
+    id
+}
+
 pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     let slot = state.entities.slot_of(id).expect("new summon");
     let native = image.native;

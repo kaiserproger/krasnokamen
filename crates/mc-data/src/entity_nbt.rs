@@ -182,7 +182,7 @@ pub fn entity_from_fields(
     if out.id == "minecraft:experience_orb" {
         out.health = int_field(fields, "Health").unwrap_or(5).max(0) as f32;
         out.experience_orb = Some((
-            int_field(fields, "Value").unwrap_or(0).max(0),
+            i32::from(int_field(fields, "Value").unwrap_or(0) as i16),
             int_field(fields, "Count").unwrap_or(1).max(1),
         ));
     }
@@ -434,6 +434,24 @@ mod tests {
         let back =
             entity_from_fields(&items, VanillaEntity::default(), &fields).expect("decode orb");
         assert_eq!(back, entity);
+    }
+
+    #[test]
+    fn experience_orb_signed_value_survives_decode_encode_decode() {
+        let items = items();
+        for value in [-1, 0, i16::MAX, i16::MIN] {
+            let fields = vec![
+                ("id".into(), Tag::String("minecraft:experience_orb".into())),
+                ("Value".into(), Tag::Short(value)),
+                ("Count".into(), Tag::Int(4)),
+            ];
+            let first = entity_from_fields(&items, VanillaEntity::default(), &fields).unwrap();
+            assert_eq!(first.experience_orb, Some((i32::from(value), 4)));
+            let encoded = entity_to_fields(&items, &first).unwrap();
+            assert!(encoded.contains(&("Value".into(), Tag::Short(value))));
+            let second = entity_from_fields(&items, VanillaEntity::default(), &encoded).unwrap();
+            assert_eq!(second, first);
+        }
     }
 }
 

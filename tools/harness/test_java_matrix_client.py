@@ -23,12 +23,15 @@ class JavaMatrixClientTest(unittest.TestCase):
 
     def test_snapshot_normalizes_actual_menu_and_player(self):
         mcp = Mock()
-        mcp.call_tool.return_value = {
+        observed = {
             "in_play": True, "state_version": 3, "recent_chat": ["message"],
             "player": {"x": 1, "y": 2, "z": 3, "health": 18, "food": 19},
             "inventory": [{"slot": 0, "item_id": "minecraft:stone", "count": 2}],
             "container": {"container_id": 7, "slots": [], "carried": {"item_id": "minecraft:air", "count": 0}},
         }
+        native = {"source": "player", "slot": 0, "item_id": "minecraft:stone",
+                  "count": 2, "components": {"minecraft:custom_name": "Actual native component"}}
+        mcp.call_tool.side_effect = lambda tool, args: native if tool == "minecraft_read_item_components" else observed
         result = self.client(mcp).snapshot()
         self.assertEqual(result["position"], [1, 2, 3])
         self.assertEqual(result["health"], 18)
@@ -37,6 +40,49 @@ class JavaMatrixClientTest(unittest.TestCase):
         self.assertEqual(result["raw"]["recent_chat"], ["message"])
         self.assertEqual(result["menu"]["id"], 7)
         self.assertIsNone(result["menu"]["state_id"])
+        self.assertEqual(result["inventory"][0]["slot"], 36)
+        self.assertEqual(result["inventory"][0]["components"], native["components"])
+        mcp.call_tool.assert_any_call("minecraft_read_item_components", {"source": "player", "slot": 0})
+
+    def test_native_stack_components_require_the_same_received_stack(self):
+        observed = {"in_play": True, "inventory": [
+            {"slot": 0, "item_id": "minecraft:diamond_pickaxe", "count": 1}]}
+        for native in [
+            {"source": "player", "slot": 0, "item_id": "minecraft:stone", "count": 1, "components": {}},
+            {"source": "player", "slot": 1, "item_id": "minecraft:diamond_pickaxe", "count": 1, "components": {}},
+            {"source": "player", "slot": 0, "item_id": "minecraft:diamond_pickaxe", "count": 2, "components": {}},
+            {"source": "player", "slot": 0, "item_id": "minecraft:diamond_pickaxe", "count": 1},
+        ]:
+            with self.subTest(native=native):
+                mcp = Mock()
+                mcp.call_tool.side_effect = lambda tool, args: native if tool == "minecraft_read_item_components" else observed
+                with self.assertRaisesRegex(MissingCapability, "stack:components"):
+                    self.client(mcp).snapshot()
+
+    def test_xp_uses_exact_received_player_fields_without_defaults(self):
+        result = JavaMatrixClient.normalize({"player": {
+            "total_experience": 37, "experience_level": 3, "experience_progress": 0.25,
+        }})
+        self.assertEqual(result["xp"], {"total": 37, "level": 3, "progress": 0.25})
+        self.assertEqual(JavaMatrixClient.normalize({"player": {"total_experience": 0}})["xp"], {"total": 0})
+        self.assertEqual(JavaMatrixClient.normalize({})["xp"], {})
+
+    def test_events_use_applied_system_chat_not_bounded_gui_history(self):
+        messages = ["DomItemsInputFence00000001", "same", "same"]
+        result = JavaMatrixClient.normalize({
+            "received_system_chat": messages, "dropped_system_chat": 0,
+            "recent_chat": ["a different GUI-only message"],
+        })
+        self.assertEqual(result["events"], messages)
+        self.assertNotIn("a different GUI-only message", result["events"])
+
+    def test_incomplete_system_chat_journal_fails_closed(self):
+        for messages, dropped in [(["old"], 1), ([], -1), (None, 0), ([], None)]:
+            with self.subTest(messages=messages, dropped=dropped):
+                with self.assertRaisesRegex(MissingCapability, "system_chat"):
+                    JavaMatrixClient.normalize({
+                        "received_system_chat": messages, "dropped_system_chat": dropped,
+                    })
 
     def test_connection_health_uses_reported_transport_not_play_state(self):
         self.assertIs(JavaMatrixClient.normalize({"in_play": True, "connected": False})["connected"], False)

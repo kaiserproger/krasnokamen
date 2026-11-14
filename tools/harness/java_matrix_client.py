@@ -81,11 +81,26 @@ class JavaMatrixClient:
                     "slot_count": container.get("slot_count"),
                     "state_id": container.get("container_state_id")}
             cursor = container.get("carried")
+        events = None
+        if "received_system_chat" in observed:
+            messages = observed["received_system_chat"]
+            dropped = observed.get("dropped_system_chat")
+            if not isinstance(messages, list) or not all(isinstance(message, str) for message in messages):
+                raise MissingCapability("snapshot:system_chat:invalid_receipts")
+            if type(dropped) is not int or dropped < 0:
+                raise MissingCapability("snapshot:system_chat:missing_loss_counter")
+            if dropped:
+                raise MissingCapability(f"snapshot:system_chat:lost_receipts:{dropped}")
+            events = messages
+        xp = {key: player[native] for key, native in (
+            ("total", "total_experience"), ("level", "experience_level"),
+            ("progress", "experience_progress"),
+        ) if player.get(native) is not None}
         return {"position": position, "inventory": JavaMatrixClient.inventory_slots(observed.get("inventory")),
                 "cursor": cursor, "menu": menu, "health": player.get("health"),
-                # recent_chat is a bounded newest-first GUI diagnostic, not
-                # the cumulative actual-receipt journal required by events.
-                "food": player.get("food"), "events": None,
+                # Only the native applied-packet journal can fence inputs;
+                # recent_chat remains a bounded, editable GUI diagnostic.
+                "food": player.get("food"), "xp": xp, "events": events,
                 "in_play": observed.get("in_play"), "raw": observed,
                 "connected": observed.get("connected"),
                 "uuid": player.get("entity_uuid"), "dimension": observed.get("dimension"),
@@ -109,6 +124,22 @@ class JavaMatrixClient:
                                                 "uuid": entity["entity_uuid"],
                                                 "position": [entity["x"], entity["y"], entity["z"]]}
                                       for entity in entities]
+            if result["inventory"] is not None:
+                # Component serialization is an explicit matrix read, not work
+                # imposed on Minecraft's tick observer. Keep native slot IDs
+                # for this query; normalized hotbar/menu IDs differ.
+                for original, stack in zip(self._last_observed["inventory"], result["inventory"], strict=True):
+                    if stack.get("count", 0) <= 0:
+                        continue
+                    native = self.call("minecraft_read_item_components",
+                                       {"source": "player", "slot": original["slot"]})
+                    if (native.get("source"), native.get("slot"), native.get("item_id"), native.get("count")) != (
+                            "player", original["slot"], stack["item_id"], stack["count"]):
+                        raise MissingCapability("snapshot:stack:components:identity_changed")
+                    components = native.get("components")
+                    if not isinstance(components, dict):
+                        raise MissingCapability("snapshot:stack:components:missing_native_data")
+                    stack["components"] = components
         return result
 
     def command(self, text: str) -> None:
