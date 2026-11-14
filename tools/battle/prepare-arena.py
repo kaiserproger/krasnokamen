@@ -364,7 +364,7 @@ def build(run_dir, server_binary, vanilla_cache, seed=42, world_seed=42, decor=T
     root.mkdir(parents=True, exist_ok=False)
     binary = Path(server_binary)
     if binary.is_dir():
-        binary = binary / "solaris-v2"
+        binary = binary / "krasnokamen"
     network, dashboard, rcon_port = free_ports(3)
     password = "arena-fixture-only"
     (root / "server.toml").write_text(
@@ -432,7 +432,7 @@ def build(run_dir, server_binary, vanilla_cache, seed=42, world_seed=42, decor=T
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--pin", type=Path, required=True, help="server pin directory or solaris-v2 binary")
+    parser.add_argument("--pin", type=Path, required=True, help="server pin directory or krasnokamen binary")
     parser.add_argument("--cache", type=Path, required=True, help="vanilla data cache directory")
     parser.add_argument("--run-dir", type=Path, required=True, help="new directory; the world is written to <run-dir>/world")
     parser.add_argument("--seed", type=int, default=42, help="arena layout seed (default 42)")

@@ -40,7 +40,7 @@ STATUS_PATTERN = re.compile(r"Battle (?:paused|running) tick=(\d+) side1=(\d+) s
 def arguments():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--pin', required=True, type=Path, help='server pin directory containing manifest.json')
-    p.add_argument('--client', required=True, type=Path, help='recorder-enabled solaris-client binary')
+    p.add_argument('--client', required=True, type=Path, help='recorder-enabled krasnokamen-client binary')
     p.add_argument('--client-data', required=True, type=Path)
     p.add_argument('--cache', required=True, type=Path, help='server content cache')
     p.add_argument('--run-dir', required=True, type=Path, help='new directory; never overwritten')
@@ -122,7 +122,7 @@ def read_varint(data, offset):
 def recording_chunk_stats(path, battle_start):
     """Terrain in the recording: distinct LevelChunkWithLight packets (id 0x2E, protocol 777) with their
     Chebyshev ring around chunk (0,0), and how many were first sent at or after tick `battle_start`
-    (tick from the `solaris:tick` markers), i.e. terrain that pops in during the shot."""
+    (tick from the `krasnokamen:tick` markers), i.e. terrain that pops in during the shot."""
     seen = {}
     tick = None
     with path.open('rb') as source:
@@ -137,7 +137,7 @@ def recording_chunk_stats(path, battle_start):
                 seen.setdefault((int.from_bytes(packet[1:5], 'big', signed=True), int.from_bytes(packet[5:9], 'big', signed=True)), tick)
             elif packet[:1] == b'\x18':
                 size, offset = read_varint(packet, 1)
-                if packet[offset:offset + size] == b'solaris:tick':
+                if packet[offset:offset + size] == b'krasnokamen:tick':
                     tick = int.from_bytes(packet[offset + size:offset + size + 8], 'big')
     if not seen:
         return {'distinct_chunks': 0}
@@ -422,7 +422,7 @@ def telemetry_worker(port, output, stop, failures, on_batch, ticks, gaps=None):
         ticks.put(None)
 
 
-LOG_MARKERS = ('Solaris is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Saved the game', 'Failed to save the game', 'Command failed:', 'Battle error:')
+LOG_MARKERS = ('Krasnokamen is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Saved the game', 'Failed to save the game', 'Command failed:', 'Battle error:')
 
 
 def stream_logs(pipes, path, messages):
@@ -610,7 +610,7 @@ def run(a):
                 server.stdin.flush()
         log_thread = threading.Thread(target=stream_logs, args=((server.stdout, server.stderr), root / 'server.log', messages), daemon=True)
         log_thread.start()
-        expect(messages, 'Solaris is listening (edge v2)')
+        expect(messages, 'Krasnokamen is listening (edge v2)')
         ignored = ignored_config_keys((root / 'server.log').read_text(errors='replace'))
         if a.take and any(key.endswith('checkpoint_every_ticks') for key in ignored):
             raise RuntimeError('server pin ignores data.checkpoint_every_ticks (it predates the key, 95c4bc59): a take cannot control its checkpoint cadence; pin a newer server')

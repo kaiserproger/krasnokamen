@@ -86,7 +86,7 @@ threading.Thread(target=server.serve_forever, daemon=True).start()
 threading.Thread(target=ticker, daemon=True).start()
 if os.environ.get('FAKE_IGNORE_KEY'):
     print('2026-11-11T00:00:00Z  WARN mc_edge::config: ignoring unknown config key origin=/r/server.toml key=data.checkpoint_every_ticks', flush=True)
-print('Solaris is listening (edge v2)', flush=True)
+print('Krasnokamen is listening (edge v2)', flush=True)
 for line in sys.stdin:
     words = line.split()
     with cond:
@@ -152,7 +152,7 @@ output = Path(arg('--output'))
 def frame(payload):
     return (0).to_bytes(4, 'big') + len(payload).to_bytes(4, 'big') + payload
 def marker(tick):
-    return frame(b'\x18\x0csolaris:tick' + tick.to_bytes(8, 'big') + bytes(8))
+    return frame(b'\x18\x0ckrasnokamen:tick' + tick.to_bytes(8, 'big') + bytes(8))
 def chunk(x, z):
     return frame(b'\x2e' + x.to_bytes(4, 'big', signed=True) + z.to_bytes(4, 'big', signed=True) + b'data')
 output.write_bytes(b'{"protocol_version":777}\n' + marker(start - 1) + chunk(3, -5) + marker(start + 1) + chunk(-9, 2) + chunk(3, -5))
