@@ -10,7 +10,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use crate::bindings::solaris::plugin::commands::Command;
+use crate::bindings::krasnokamen::plugin::commands::Command;
 
 /// Timers one plugin may hold at once.
 ///

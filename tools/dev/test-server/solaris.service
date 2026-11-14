@@ -1,14 +1,14 @@
 [Unit]
-Description=Solaris Minecraft server (test)
+Description=Krasnokamen Minecraft server (test)
 After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=solaris
-Group=solaris
-Environment=SOLARIS_SERVER_DIR=/opt/solaris
+User=krasnokamen
+Group=krasnokamen
+Environment=KRASNOKAMEN_SERVER_DIR=/opt/solaris
 EnvironmentFile=-/etc/default/solaris
-ExecStart=/bin/sh -c 'cd "$$SOLARIS_SERVER_DIR" && export HOME="$$SOLARIS_SERVER_DIR" && exec ./solaris-v2 --config "$$SOLARIS_SERVER_DIR/server.toml" --no-console'
+ExecStart=/bin/sh -c 'cd "$$KRASNOKAMEN_SERVER_DIR" && export HOME="$$KRASNOKAMEN_SERVER_DIR" && exec ./krasnokamen --config "$$KRASNOKAMEN_SERVER_DIR/server.toml" --no-console'
 Restart=on-failure
 RestartSec=5
 MemoryMax=3G

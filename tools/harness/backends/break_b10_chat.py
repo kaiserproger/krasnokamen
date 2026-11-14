@@ -97,13 +97,13 @@ class InjectingProxy(RewritingProxy):
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
-    binary = Path(os.environ["SOLARIS_SERVER_BINARY"]).expanduser().resolve()
+    binary = Path(os.environ["KRASNOKAMEN_SERVER_BINARY"]).expanduser().resolve()
     artifact = ctx.artifact_dir
     port = runtime.reserve_port()
     plugins = artifact / "plugins"
     plugins.mkdir()
     config = artifact / "chat-visibility.toml"
-    vanilla = os.environ.get("SOLARIS_SERVER_VANILLA_DATA_DIR", "data/vanilla")
+    vanilla = os.environ.get("KRASNOKAMEN_SERVER_VANILLA_DATA_DIR", "data/vanilla")
     source = (runtime.REPO_ROOT / "playable.toml").read_text()
     source = source.replace('vanilla_data_dir = "data/vanilla"', f"vanilla_data_dir = {json.dumps(vanilla)}")
     world = artifact / "world"

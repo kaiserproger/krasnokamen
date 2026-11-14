@@ -287,12 +287,12 @@ CUSTODY_FILTERS = ("conservation", "custody")
 SCENARIO_COLLAPSE = 3  # more matching scenarios than this: run their profile instead
 HARNESS_SUITE = "python3 -m unittest discover -t . -s tools/harness -p 'test_*.py'"
 SIBLING_NAMES = {"client": "solaris-client", "loader": "solaris-loader", "plugins": "solaris-default-plugins"}
-SIBLING_ENV = {"client": "SOLARIS_CLIENT_ROOT", "loader": "SOLARIS_LOADER_ROOT",
-               "plugins": "SOLARIS_DEFAULT_PLUGINS_ROOT"}
+SIBLING_ENV = {"client": "KRASNOKAMEN_CLIENT_ROOT", "loader": "KRASNOKAMEN_LOADER_ROOT",
+               "plugins": "KRASNOKAMEN_DEFAULT_PLUGINS_ROOT"}
 SIBLING_MARKERS = {
     "client": ("launcher", "SPECIFICATION.md"),
     "loader": ("loader-core", "settings.gradle.kts"),
-    "plugins": ("standard-pack", "solaris-towns"),
+    "plugins": ("standard-pack", "krasnokamen-towns"),
 }
 
 REVIEWER_KINDS = {

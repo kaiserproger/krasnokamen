@@ -25,7 +25,7 @@ from .backends.protocol_lifecycle import Blocked, PortReservation, ProtocolServe
 def _harness(tmp: str, **overrides: object) -> ProtocolServer:
     root = Path(tmp)
     kwargs: dict[str, object] = {
-        "binary": root / "solaris-v2",
+        "binary": root / "krasnokamen",
         "run_dir": root / "run",
         "port": 26111,
         "vanilla_data": root / "vanilla",
@@ -115,7 +115,7 @@ class LifecycleGuardTests(unittest.TestCase):
 
     def test_start_blocked_without_vanilla_data(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "solaris-v2").touch()
+            (Path(tmp) / "krasnokamen").touch()
             server = _harness(tmp)
             with self.assertRaises(Blocked):
                 server.start()
@@ -123,7 +123,7 @@ class LifecycleGuardTests(unittest.TestCase):
     def test_start_blocked_without_plugins_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "solaris-v2").touch()
+            (root / "krasnokamen").touch()
             (root / "vanilla").mkdir()
             server = _harness(tmp, plugins_dir=root / "missing-plugins")
             with self.assertRaises(Blocked):
@@ -194,7 +194,7 @@ class LifecycleGuardTests(unittest.TestCase):
             )
             new = SimpleNamespace(pid=13, poll=lambda: None)
             server._process = old
-            server._argv = ["solaris-v2", "--config", "cfg"]
+            server._argv = ["krasnokamen", "--config", "cfg"]
             server._log_handle = SimpleNamespace(close=lambda: None)
             with mock.patch.object(
                 lifecycle.runtime, "wait_port"
@@ -435,13 +435,13 @@ class PortLeaseTests(unittest.TestCase):
     def test_lock_dir_default_is_portable_without_work_root(self) -> None:
         import tempfile
         env = {k: v for k, v in os.environ.items()
-               if k not in ("SOLARIS_PORT_LOCK_DIR", "SOLARIS_WORK_ROOT")}
+               if k not in ("KRASNOKAMEN_PORT_LOCK_DIR", "KRASNOKAMEN_WORK_ROOT")}
         with mock.patch.dict(os.environ, env, clear=True):
             self.assertEqual(lifecycle._default_lock_dir(),
                              Path(tempfile.gettempdir()) / "solaris-port-locks")
-        with mock.patch.dict(os.environ, {"SOLARIS_WORK_ROOT": "/w"}, clear=True):
+        with mock.patch.dict(os.environ, {"KRASNOKAMEN_WORK_ROOT": "/w"}, clear=True):
             self.assertEqual(lifecycle._default_lock_dir(), Path("/w/port-locks"))
-        with mock.patch.dict(os.environ, {"SOLARIS_PORT_LOCK_DIR": "/locks"}, clear=True):
+        with mock.patch.dict(os.environ, {"KRASNOKAMEN_PORT_LOCK_DIR": "/locks"}, clear=True):
             self.assertEqual(lifecycle._default_lock_dir(), Path("/locks"))
 
 

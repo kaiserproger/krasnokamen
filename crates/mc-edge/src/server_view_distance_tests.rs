@@ -20,7 +20,7 @@ fn server(root: &std::path::Path) -> Arc<EdgeServer> {
     Arc::new(
         EdgeServer::new(
             hub,
-            Arc::new(mc_data::solaris_required_data()),
+            Arc::new(mc_data::krasnokamen_required_data()),
             Arc::default(),
             cfg,
         )

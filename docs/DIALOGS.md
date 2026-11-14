@@ -1,6 +1,6 @@
 # Server-driven dialogs
 
-Vanilla 26.1.2 clients (and the Solaris native client) render server-sent dialogs with no mod. The
+Vanilla 26.1.2 clients (and the Krasnokamen native client) render server-sent dialogs with no mod. The
 tick decides what to show and acts on the answer; the edge only converts between packets and
 core values.
 
@@ -19,7 +19,7 @@ are rejected on decode.
 
 ```rust
 let dialog = Dialog::multi_action("Found settlement", vec![
-        Button::custom("Found", "solaris:settlement/found").with("site", Tag::Int(7)),
+        Button::custom("Found", "krasnokamen:settlement/found").with("site", Tag::Int(7)),
     ])
     .text("Pick a name and radius")
     .input(Input::text("name", "Name").max_length(16))
@@ -47,14 +47,14 @@ button's `.with(..)` additions plus one entry per input, typed exactly as vanill
 arrives as the same `custom_click_action` as a button, with the payload compound as written.
 The settlement map (`settlements/ui_map.rs`) uses this: a grid of coloured `█` runs (8×8 glyph,
 9-pixel advance and line height, so square cells) with a hover per run and a click on buildings.
-The native Solaris client follows the same handler: centered lines, `hover_event` tooltips, and a
+The native Krasnokamen client follows the same handler: centered lines, `hover_event` tooltips, and a
 run's `custom` (typed payload) or `run_command` click followed by the dialog's `after_action`.
 
 ## Where a click arrives
 
 `PlayerInput::DialogClick` is applied in the native tick (`tick::apply_inputs`, behind the
 session-lock fence) and routed by `dialog::route_click` on the owner segment of the action id
-`solaris:<owner>/<action>`. Add one arm there per owner (for example `settlement`). Unknown ids
+`krasnokamen:<owner>/<action>`. Add one arm there per owner (for example `settlement`). Unknown ids
 are ignored. Clients can send any id/payload at any time: re-validate permission, range and state
 in the tick before acting.
 
@@ -68,12 +68,12 @@ Registered owners: `dialog_probe` (test hook) and `settlement` (`settlements::ui
 re-checks owner/operator before mutating). Keep forms compact: a vanilla dialog scrolls, but a small
 window at GUI scale 3 shows only ~240 GUI pixels, so put the buttons inside that height.
 
-Wasm plugins do not receive dialog clicks yet (that needs a `solaris:plugin` interface change).
+Wasm plugins do not receive dialog clicks yet (that needs a `krasnokamen:plugin` interface change).
 
 ## Test hook and proof
 
-`SOLARIS_DIALOG_PROBE=1` shows every joining player a multi_action dialog (text, slider,
-checkbox) and logs/echoes the click payload (`solaris:dialog_probe/*`); inert otherwise.
+`KRASNOKAMEN_DIALOG_PROBE=1` shows every joining player a multi_action dialog (text, slider,
+checkbox) and logs/echoes the click payload (`krasnokamen:dialog_probe/*`); inert otherwise.
 `python3 -m tools.harness run dialogs --client native --windowed` drives it through the native
-client (`SOLARIS_SERVER_BINARY` required). Unit/integration coverage with a fake connection lives in
+client (`KRASNOKAMEN_SERVER_BINARY` required). Unit/integration coverage with a fake connection lives in
 `mc-protocol` (`dialog_tests.rs`), `mc-core` (`dialog_tests.rs`) and `mc-edge` (`dialog_tests.rs`).
