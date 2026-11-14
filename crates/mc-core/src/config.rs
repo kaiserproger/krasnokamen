@@ -55,7 +55,7 @@ pub struct CoreConfig {
     /// Per-mob switches layered under the `mobGriefing` gamerule.
     pub mob_griefing: MobGriefingRules,
     /// `[block_log]`: attributed block/container history for `/co`.
-    pub block_log: crate::block_log::Settings,
+    pub block_log: BlockLogSettings,
     /// Opt-in per-tick input log under `<world>/input-log/` (replay support;
     /// see `input_log.rs`). Off by default.
     pub input_log: bool,
@@ -64,6 +64,27 @@ pub struct CoreConfig {
     /// any GPU failure, the CPU does it. GPU rounding can flip single blocks
     /// where density is near zero.
     pub worldgen_gpu: bool,
+}
+
+/// `[block_log]` operator policy. `enabled` gates capture only; retained
+/// records stay queryable and are pruned by age and count either way.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlockLogSettings {
+    pub enabled: bool,
+    /// Records older than this are pruned; zero keeps them until `max_records`.
+    pub retention_secs: u64,
+    /// Per-dimension record cap; the oldest records are pruned first.
+    pub max_records: usize,
+}
+
+impl Default for BlockLogSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            retention_secs: 30 * 24 * 60 * 60,
+            max_records: 200_000,
+        }
+    }
 }
 
 /// Finer block-damage switches under vanilla `mobGriefing` (which stays the
@@ -117,7 +138,7 @@ impl CoreConfig {
             enable_command_block: false,
             spawn_protection: 16,
             mob_griefing: MobGriefingRules::default(),
-            block_log: crate::block_log::Settings::default(),
+            block_log: BlockLogSettings::default(),
             input_log: false,
             worldgen_gpu: false,
         }

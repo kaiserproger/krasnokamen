@@ -28,7 +28,7 @@ fn test_state() -> TickState {
         mc_world::OVERWORLD_GEOMETRY,
     );
     let mut state = TickState::new(registry, world, 2, 512);
-    state.block_log = BlockLog::new(Settings::default());
+    state.block_log = BlockLog::new(BlockLogSettings::default());
     state
 }
 
@@ -458,7 +458,7 @@ fn record(seq: u64, time: u64) -> Record {
 
 #[test]
 fn retention_prunes_by_count_then_age() {
-    let mut log = BlockLog::new(Settings {
+    let mut log = BlockLog::new(BlockLogSettings {
         enabled: true,
         retention_secs: 100,
         max_records: 3,
@@ -561,7 +561,7 @@ fn table_rows_then_wal_tail_rebuild_the_log() {
         records: vec![stone(2)],
         marks: vec![(1, false), (7, true)],
     };
-    let log = BlockLog::restore(Settings::default(), vec![overworld, tail]);
+    let log = BlockLog::restore(BlockLogSettings::default(), vec![overworld, tail]);
     assert_eq!(
         log.records.iter().map(|r| r.seq).collect::<Vec<_>>(),
         [1, 2]

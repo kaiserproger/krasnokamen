@@ -27,7 +27,11 @@ pub(super) struct Ceilings {
 
 pub(super) const CEILINGS: Ceilings = Ceilings {
     // Original ceilings measured on ffd52010, 2026-11-07.
-    cycle_modules: 189,
+    // Config owns block-log policy, 2026-11-09: config, debt and carrier
+    // blocks leave the cycle without moving runtime state.
+    // Settled-block orchestration is a tick child: 185 modules, 2026-11-09.
+    // Books is a pure encoding leaf: 184 modules, 2026-11-09.
+    cycle_modules: 184,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
     vanilla_id_literals: 2_617,

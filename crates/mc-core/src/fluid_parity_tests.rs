@@ -603,7 +603,7 @@ fn supported_sign_popping_tombstones_old_text_in_same_block_tick() {
         },
         air,
     )];
-    crate::blocks::run(&mut state, &mut writes, &mut Vec::new(), &mut Vec::new());
+    crate::tick::blocks::run(&mut state, &mut writes, &mut Vec::new(), &mut Vec::new());
     assert_eq!(state.world.block_at(pos.x, pos.y, pos.z), Some(air));
     assert!(state.world.take_block_entity_removals().contains(&pos));
 }
@@ -1126,13 +1126,13 @@ fn wall_hanging_sign_survives_either_bar_end_then_pops_after_both_end_updates() 
     let air = state.registry.states.air;
     state.world.set_block(west.x, west.y, west.z, air);
     let mut writes = vec![(west, air)];
-    crate::blocks::run(&mut state, &mut writes, &mut Vec::new(), &mut Vec::new());
+    crate::tick::blocks::run(&mut state, &mut writes, &mut Vec::new(), &mut Vec::new());
     assert_eq!(state.world.block_at(pos.x, pos.y, pos.z), Some(sign));
     state.world.fold_overlay();
     state.world.set_block(east.x, east.y, east.z, air);
     let mut writes = vec![(east, air)];
     let mut spawned = Vec::new();
-    crate::blocks::run(&mut state, &mut writes, &mut spawned, &mut Vec::new());
+    crate::tick::blocks::run(&mut state, &mut writes, &mut spawned, &mut Vec::new());
     assert_eq!(state.world.block_at(pos.x, pos.y, pos.z), Some(air));
     let drops: Vec<_> = spawned
         .iter()

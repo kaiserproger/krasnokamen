@@ -78,7 +78,7 @@ pub(crate) fn initialize(state: &mut TickState, slot: EntitySlot, type_id: u32) 
 /// Vanilla `NearestAttackableTargetGoal` default `randomInterval`
 /// (`reducedTickDelay(10)`): an unengaged raider searches with probability
 /// 1/10 per tick (javap `NearestAttackableTargetGoal.canUse`).
-const SEARCH_INTERVAL: u64 = 10;
+pub(crate) const SEARCH_INTERVAL: u64 = 10;
 /// Vanilla `TargetGoal.unseenMemoryTicks`: a held target out of sight for more
 /// than this many ticks is dropped (javap `TargetGoal.canContinueToUse`).
 const UNSEEN_MEMORY_TICKS: u32 = 60;

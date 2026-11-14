@@ -624,7 +624,7 @@ pub(in crate::tick) fn use_item(
         return;
     }
     if crate::maps::use_empty(state, entity, *hand, changes)
-        || crate::books::use_item(state, entity, *hand)
+        || crate::tick::book_actions::use_item(state, entity, *hand)
         || crate::brushing::use_on(state, entity, *hand)
     {
         return;

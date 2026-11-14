@@ -1,6 +1,8 @@
 use super::*;
 use crate::boundary::PlayerInput;
 use crate::tick::run_tick;
+use mc_data::Identifier;
+use mc_nbt::Tag;
 use std::sync::Arc;
 struct Empty(u32);
 impl mc_world::ChunkGenerator for Empty {
@@ -212,4 +214,214 @@ fn lectern_insert_read_turn_take_preserves_exact_book() {
         1
     );
     assert_eq!(crate::lectern::comparator(&state, position), Some(0));
+}
+
+#[test]
+fn book_input_enforces_utf16_bounds_and_accepts_exact_offhand_limits() {
+    let (mut state, actor) = fixture();
+    let before = state.players[&actor].inventory.slots[0].clone();
+    for (pages, title) in [
+        (vec!["\u{1f600}".repeat(513)], None),
+        (vec!["text".into()], Some("\u{1f600}".repeat(17))),
+    ] {
+        run_tick(
+            &mut state,
+            &[PlayerInput::EditBook {
+                connection: ConnectionId(1),
+                slot: 0,
+                pages,
+                title,
+            }],
+        );
+        assert_eq!(state.players[&actor].inventory.slots[0], before);
+    }
+    state.players.get_mut(&actor).unwrap().inventory.slots[40] = before.clone();
+    let pages = vec!["\u{1f600}".repeat(512); 100];
+    let title = "\u{1f600}".repeat(16);
+    let (_, batches, _) = run_tick(
+        &mut state,
+        &[PlayerInput::EditBook {
+            connection: ConnectionId(1),
+            slot: 40,
+            pages: pages.clone(),
+            title: Some(title.clone()),
+        }],
+    );
+    let book = &state.players[&actor].inventory.slots[40];
+    assert_eq!(state.players[&actor].inventory.slots[0], before);
+    assert_eq!(
+        state.registry.items.name_of(book.item_id).unwrap().as_str(),
+        "minecraft:written_book"
+    );
+    let component = &book.extended().preserved_components[0];
+    let Tag::Compound(fields) =
+        mc_nbt::read_network_value(&mut component.value.as_slice()).unwrap()
+    else {
+        panic!("book compound")
+    };
+    assert_eq!(
+        mc_data::item_nbt::field(&fields, "title"),
+        Some(&Tag::String(title))
+    );
+    assert_eq!(
+        mc_data::item_nbt::field(&fields, "author"),
+        Some(&Tag::String("Author".into()))
+    );
+    assert_eq!(
+        mc_data::item_nbt::field(&fields, "pages"),
+        Some(&Tag::List(mc_nbt::ListTag {
+            element_type: mc_nbt::tag_type::STRING,
+            elements: pages.into_iter().map(Tag::String).collect(),
+        }))
+    );
+    assert!(batches.iter().filter(|(connection, _)| *connection == ConnectionId(1))
+        .flat_map(|(_, changes)| changes).any(|change| matches!(change,
+            PlayerChange::MenuContents { window: 0, slots, .. } if slots.get(45) == Some(&Some(book.clone()))
+        )));
+}
+
+#[test]
+fn book_replacement_preserves_unrelated_components_and_removes_old_book_components() {
+    use mc_data::item_stack::PreservedItemComponent;
+    let (state, actor) = fixture();
+    let mut held = state.players[&actor].inventory.slots[0].clone();
+    let mut value = Vec::new();
+    mc_nbt::write_network_value(
+        &mut value,
+        &Tag::Compound(vec![("kept".into(), Tag::Int(37))]),
+    )
+    .unwrap();
+    let unrelated = PreservedItemComponent {
+        name: "minecraft:custom_data".into(),
+        value,
+        baseline: None,
+    };
+    held.extended_mut()
+        .preserved_components
+        .push(unrelated.clone());
+    for name in [
+        "minecraft:writable_book_content",
+        "!minecraft:writable_book_content",
+        "minecraft:written_book_content",
+        "!minecraft:written_book_content",
+    ] {
+        held.extended_mut()
+            .preserved_components
+            .push(PreservedItemComponent {
+                name: name.into(),
+                value: Vec::new(),
+                baseline: None,
+            });
+    }
+    for title in [None, Some("Title")] {
+        let replacement = crate::books::replacement(
+            &held,
+            &state.registry.items,
+            &["page".into()],
+            title,
+            "Author",
+        )
+        .unwrap();
+        assert_eq!(replacement.custom_name, held.custom_name);
+        let components = &replacement.extended().preserved_components;
+        assert_eq!(components.len(), 2);
+        assert_eq!(components[0], unrelated);
+        assert_eq!(
+            components[1].name,
+            if title.is_some() {
+                "minecraft:written_book_content"
+            } else {
+                "minecraft:writable_book_content"
+            }
+        );
+    }
+}
+
+#[test]
+fn book_input_refuses_signing_a_custody_reserved_writable_book() {
+    use mc_script::{
+        ScriptInventoryEndpoint, ScriptInventoryMaterial, ScriptInventoryResourcePlan,
+        ScriptInventoryWorkPortion, ScriptOperation, ScriptOperationPayload,
+        ScriptOperationRequest, ScriptOwnedInventoryOperation, ScriptOwnedInventoryResult,
+    };
+    let (mut state, actor) = fixture();
+    let before = state.players[&actor].inventory.slots[0].clone();
+    let endpoint = ScriptInventoryEndpoint::PlayerInventory { player_id: 1 };
+    let inventory = crate::plugin_inventories::load(&state, "book-test", &endpoint).unwrap();
+    let request = ScriptOperationRequest::try_new(
+        "book-reserve",
+        ScriptOperation::Inventory {
+            operation: ScriptOwnedInventoryOperation::Reserve {
+                operation_id: "book-reserve".into(),
+                endpoint,
+                resource_plan: ScriptInventoryResourcePlan::new(vec![
+                    ScriptInventoryWorkPortion::new(
+                        1,
+                        vec![ScriptInventoryMaterial::new(
+                            "minecraft:writable_book".into(),
+                            1,
+                        )],
+                    ),
+                ]),
+                expected_revision: inventory.fence,
+            },
+        },
+    )
+    .unwrap();
+    let reservation = crate::plugin_inventories::execute(&mut state, "book-test", &request);
+    assert_eq!(reservation.failure(), None);
+    let ScriptOperationPayload::OwnedInventory { result } = reservation.payload() else {
+        panic!("native inventory result")
+    };
+    assert!(matches!(
+        result.as_ref(),
+        ScriptOwnedInventoryResult::Reservation { .. }
+    ));
+    let (_, batches, _) = run_tick(
+        &mut state,
+        &[PlayerInput::EditBook {
+            connection: ConnectionId(1),
+            slot: 0,
+            pages: vec!["reserved".into()],
+            title: Some("Title".into()),
+        }],
+    );
+    assert_eq!(state.players[&actor].inventory.slots[0], before);
+    assert!(batches.iter().filter(|(connection, _)| *connection == ConnectionId(1)).flat_map(|(_, changes)| changes).any(|change| matches!(change,
+        PlayerChange::MenuContents { window: 0, slots, .. } if slots.get(36) == Some(&Some(before.clone()))
+    )), "custody refusal republishes authoritative inventory");
+}
+
+#[test]
+fn book_use_input_opens_only_written_books_in_the_requested_hand() {
+    let (mut state, actor) = fixture();
+    let use_book = |hand| PlayerInput::UseItem {
+        connection: ConnectionId(1),
+        hand,
+        yaw: 0.0,
+        pitch: 0.0,
+        sequence: 1,
+    };
+    let (_, batches, _) = run_tick(&mut state, &[use_book(Hand::Main)]);
+    assert!(
+        !batches
+            .iter()
+            .flat_map(|(_, changes)| changes)
+            .any(|change| matches!(change, PlayerChange::BookOpened { .. }))
+    );
+    run_tick(
+        &mut state,
+        &[PlayerInput::EditBook {
+            connection: ConnectionId(1),
+            slot: 0,
+            pages: vec!["page".into()],
+            title: Some("Title".into()),
+        }],
+    );
+    let signed = state.players[&actor].inventory.slots[0].clone();
+    state.players.get_mut(&actor).unwrap().inventory.slots[40] = signed;
+    for hand in [Hand::Main, Hand::Off] {
+        let (_, batches, _) = run_tick(&mut state, &[use_book(hand)]);
+        assert!(batches.iter().filter(|(connection, _)| *connection == ConnectionId(1)).flat_map(|(_, changes)| changes).any(|change| matches!(change, PlayerChange::BookOpened { hand: opened } if *opened == hand)));
+    }
 }

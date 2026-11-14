@@ -119,6 +119,33 @@ fn core_config_carries_pause_and_mob_griefing_switches() {
     assert!(core.mob_griefing.sheep_grazing);
 }
 
+#[test]
+fn core_config_carries_block_log_policy_and_preserves_defaults() {
+    use mc_core::config::BlockLogSettings;
+    let mut cfg = EdgeConfig::default();
+    let defaults = BlockLogSettings::default();
+    assert_eq!(
+        defaults,
+        BlockLogSettings {
+            enabled: true,
+            retention_secs: 30 * 24 * 60 * 60,
+            max_records: 200_000,
+        }
+    );
+    assert_eq!(core_config(&cfg).block_log, defaults);
+    cfg.block_log.enabled = false;
+    cfg.block_log.retention_days = 7;
+    cfg.block_log.max_records = 41;
+    assert_eq!(
+        core_config(&cfg).block_log,
+        BlockLogSettings {
+            enabled: false,
+            retention_secs: 7 * 24 * 60 * 60,
+            max_records: 41,
+        }
+    );
+}
+
 /// Two simultaneous joins both resolve; a late waiter sees the stash.
 #[tokio::test]
 async fn simultaneous_joins_both_resolve() {

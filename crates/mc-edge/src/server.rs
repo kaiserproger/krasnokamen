@@ -1602,7 +1602,7 @@ pub fn core_config(cfg: &EdgeConfig) -> mc_core::config::CoreConfig {
         villager_farming: cfg.mob_griefing.villager_farming,
         sheep_grazing: cfg.mob_griefing.sheep_grazing,
     };
-    core.block_log = mc_core::block_log::Settings {
+    core.block_log = mc_core::config::BlockLogSettings {
         enabled: cfg.block_log.enabled,
         retention_secs: u64::from(cfg.block_log.retention_days) * 24 * 60 * 60,
         max_records: cfg.block_log.max_records,

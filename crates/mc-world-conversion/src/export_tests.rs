@@ -9,7 +9,7 @@ use mc_nbt::Tag;
 use mc_world::{BlockStateId, Chunk, ChunkPos};
 use std::path::Path;
 
-fn read_exported_chunk(
+pub(super) fn read_exported_chunk(
     root: &Path,
     dimension: Dimension,
     pos: ChunkPos,

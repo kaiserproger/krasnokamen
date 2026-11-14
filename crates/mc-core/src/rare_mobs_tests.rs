@@ -139,9 +139,22 @@ fn illusioner_casts_invisibility_and_blindness_and_shoots_durable_bow_arrows() {
     let id = spawn(&mut state, "illusioner", pos);
     let slot = state.entities.slot_of(id).unwrap();
     let root = tempfile::tempdir().unwrap();
-    // Start with a real native checkpoint, then replay only the casting tail.
+    // Replay every post-checkpoint tick through target acquisition and casting.
     let base = checkpoint_restart(&state, &root.path().join("base"));
-    let (output, _, _) = run_tick(&mut state, &[]);
+    let mut writer = JournalWriter::open(&root.path().join("wal"), 1).unwrap();
+    let output = (0..crate::special_mobs::raiders::SEARCH_INTERVAL)
+        .find_map(|_| {
+            let (output, _, _) = run_tick(&mut state, &[]);
+            let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+            writer.append(output.tick, output.tick, &entries).unwrap();
+            state
+                .hostile
+                .native
+                .raider_targets
+                .contains_key(&id)
+                .then_some(output)
+        })
+        .expect("illusioner acquires its target within SEARCH_INTERVAL simulation ticks");
     assert!(
         state
             .entities
@@ -169,9 +182,6 @@ fn illusioner_casts_invisibility_and_blindness_and_shoots_durable_bow_arrows() {
                 && p.owner == Some(state.entities.row(slot).uuid)
         })
     }));
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
-    let mut writer = JournalWriter::open(&root.path().join("wal"), 1).unwrap();
-    writer.append(output.tick, output.tick, &entries).unwrap();
     // A refresh with identical flags/particles must still journal its duration.
     state.appearance_changed.clear();
     crate::special_mobs::effect(
