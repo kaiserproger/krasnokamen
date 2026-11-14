@@ -12,6 +12,7 @@ use std::sync::Arc;
 
 use crate::battle::staging::{BattleCommand, execute};
 use crate::boundary::{ChangeSet, ConnectionId, PlayerInput, TickTimes};
+use crate::projectiles::PostTimes;
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 
@@ -70,6 +71,57 @@ fn summarize(label: &str, rows: &[[u64; 13]], touched: &[usize], entries: &[usiz
         mean(entries)
     ));
     eprintln!("{line}");
+}
+
+/// Mean/p50/p95/max milliseconds of `values` (microseconds).
+fn spread(mut values: Vec<u64>) -> String {
+    if values.is_empty() {
+        return "-".into();
+    }
+    values.sort_unstable();
+    let ms = |value: u64| value as f64 / 1000.0;
+    let mean = values.iter().sum::<u64>() as f64 / values.len() as f64 / 1000.0;
+    format!(
+        "{mean:.3}/{:.3}/{:.3}/{:.3}",
+        ms(values[(values.len() - 1) / 2]),
+        ms(values[((values.len() - 1) * 95) / 100]),
+        ms(values[values.len() - 1]),
+    )
+}
+
+/// The serial `post` stage over the window and over its flight ticks (at
+/// least one projectile not settled in the ground), each as
+/// mean/p50/p95/max ms, with the whole tick on the same flight ticks.
+fn summarize_post(label: &str, rows: &[[u64; 13]], posts: &[PostTimes]) {
+    let flight: Vec<usize> = (0..posts.len())
+        .filter(|&index| posts[index].shots > posts[index].grounded)
+        .collect();
+    let pick = |field: fn(&PostTimes) -> u64| -> Vec<u64> {
+        flight.iter().map(|&index| field(&posts[index])).collect()
+    };
+    let mean_ms =
+        |values: Vec<u64>| values.iter().sum::<u64>() as f64 / values.len().max(1) as f64 / 1000.0;
+    let flying: Vec<u64> = flight
+        .iter()
+        .map(|&index| u64::from(posts[index].shots - posts[index].grounded))
+        .collect();
+    eprintln!(
+        "BATTLE_TICK post window={label} ticks={} post_ms={} flight_ticks={} flight_post_ms={} flight_total_ms={} flight_entity_ms={} flight_stage_mean_ms=pickup:{:.3},hostile:{:.3},weapons:{:.3},hittables:{:.3},candidates:{:.3},shots:{:.3} flying_mean={:.0} flying_max={}",
+        posts.len(),
+        spread(posts.iter().map(|post| post.total_us).collect()),
+        flight.len(),
+        spread(pick(|post| post.total_us)),
+        spread(flight.iter().map(|&index| rows[index][12]).collect()),
+        spread(flight.iter().map(|&index| rows[index][2]).collect()),
+        mean_ms(pick(|post| post.pickup_us)),
+        mean_ms(pick(|post| post.hostile_us)),
+        mean_ms(pick(|post| post.weapons_us)),
+        mean_ms(pick(|post| post.hittables_us)),
+        mean_ms(pick(|post| post.candidates_us)),
+        mean_ms(pick(|post| post.shots_us)),
+        flying.iter().sum::<u64>() as f64 / flying.len().max(1) as f64,
+        flying.iter().max().copied().unwrap_or(0),
+    );
 }
 
 /// `BATTLE_UNITS_PER_SIDE` (default 10,000, the `field-10k` preset),
@@ -152,6 +204,8 @@ fn battle_tick_phase_micro() {
         let mut touched = Vec::with_capacity(ticks);
         let mut entries = Vec::with_capacity(ticks);
         let mut wal = (crc32fast::Hasher::new(), 0_usize);
+        let mut posts = Vec::with_capacity(ticks);
+        let mut alive = None;
         for _ in 0..ticks {
             let start = std::time::Instant::now();
             let (output, _drains, times) = run_tick(&mut state, &[]);
@@ -178,8 +232,38 @@ fn battle_tick_phase_micro() {
                 (total - run_time).as_micros() as u64,
                 total.as_micros() as u64,
             ));
+            posts.push(state.projectiles.post);
+            alive = times.battle.map(|counts| counts.alive.clone());
         }
         summarize(label, &samples, &touched, &entries);
+        summarize_post(label, &samples, &posts);
+        eprintln!("BATTLE_TICK end window={label} alive={alive:?}");
+        if let Some(path) = std::env::var_os("BATTLE_TICK_CSV") {
+            use std::io::Write;
+            let mut csv = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .expect("BATTLE_TICK_CSV opens");
+            for (index, (row, post)) in samples.iter().zip(&posts).enumerate() {
+                writeln!(
+                    csv,
+                    "{label},{index},{},{},{},{},{},{},{},{},{},{},{}",
+                    row[12],
+                    row[2],
+                    post.total_us,
+                    post.pickup_us,
+                    post.hostile_us,
+                    post.weapons_us,
+                    post.hittables_us,
+                    post.candidates_us,
+                    post.shots_us,
+                    post.shots,
+                    post.grounded,
+                )
+                .expect("BATTLE_TICK_CSV writes");
+            }
+        }
         if wal_crc {
             eprintln!(
                 "BATTLE_TICK wal window={label} crc32={:08x} bytes={}",

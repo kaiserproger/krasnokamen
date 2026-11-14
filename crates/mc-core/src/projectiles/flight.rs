@@ -1,8 +1,10 @@
 //! Shared swept collision, ballistic motion, pickup and loyalty return.
-//! One post-move body snapshot owns exact hit geometry. Large volleys use a
-//! two-block XZ counting grid with Y rejection; small/sparse scenes use native
-//! chunks. Membership freezes before payload mutations. Pickup/riptide keep
-//! live native chunk queries and dense-slot priority.
+//! One post-move body snapshot owns exact hit geometry. It holds only bodies
+//! that meet some shot's frozen query box (plus deployed stands and dragon
+//! parts). Large volleys use a two-block XZ counting grid with Y rejection;
+//! small/sparse scenes use native chunks. Membership freezes before payload
+//! mutations. Pickup/riptide keep live native chunk queries and dense-slot
+//! priority.
 
 use std::sync::Arc;
 
@@ -47,7 +49,6 @@ fn hittables_from_slots(
     let include_items = crate::projectiles::active_hook_present(state);
     bodies.extend(slots.filter_map(|slot| {
         let body = state.entities.body(slot);
-        let row = state.entities.row(slot);
         if crate::end_fight::is_dragon(state, slot) {
             return None;
         }
@@ -63,21 +64,40 @@ fn hittables_from_slots(
                 EntityKind::Item { .. } => include_items,
                 EntityKind::ExperienceOrb { .. } => false,
             };
-        hittable.then(|| {
-            let pos = state.entities.pos(slot);
-            Hittable {
-                slot: Some(slot),
-                id: body.id,
-                uuid: row.uuid,
-                item: matches!(body.kind, EntityKind::Item { .. }),
-                deployed_candidate: crate::armor_stand::is_stand(state, slot),
-                min: [pos[0] - body.half_width, pos[1], pos[2] - body.half_width],
-                max: [
-                    pos[0] + body.half_width,
-                    pos[1] + body.height,
-                    pos[2] + body.half_width,
-                ],
+        if !hittable {
+            return None;
+        }
+        let pos = state.entities.pos(slot);
+        let min = [pos[0] - body.half_width, pos[1], pos[2] - body.half_width];
+        let max = [
+            pos[0] + body.half_width,
+            pos[1] + body.height,
+            pos[2] + body.half_width,
+        ];
+        let deployed_candidate = match body.kind {
+            EntityKind::Mob { type_id } => {
+                match stand_types.iter().find(|(seen, _)| *seen == type_id) {
+                    Some(&(_, stand)) => stand,
+                    None => {
+                        let stand = crate::armor_stand::is_stand(state, slot);
+                        stand_types.push((type_id, stand));
+                        stand
+                    }
+                }
             }
+            _ => false,
+        };
+        if !deployed_candidate && cover.is_some_and(|cover| !cover.reaches(min, max)) {
+            return None;
+        }
+        Some(Hittable {
+            slot: Some(slot),
+            id: body.id,
+            uuid: state.entities.row(slot).uuid,
+            item: matches!(body.kind, EntityKind::Item { .. }),
+            deployed_candidate,
+            min,
+            max,
         })
     }));
     if let Some(uuid) = state.end_fight.dragon_uuid
@@ -136,7 +156,9 @@ impl FineGrid {
         z * self.size[0] + x
     }
 
-    fn build(&mut self, bodies: &[Hittable]) -> bool {
+    /// `reach`: cells the caller already proved worth spanning (the shots'
+    /// cover); a covered snapshot may be sparser than `bodies.len()` implies.
+    fn build(&mut self, bodies: &[Hittable], reach: usize) -> bool {
         self.size = [0; 2];
         if bodies.is_empty() {
             return false;
@@ -169,7 +191,7 @@ impl FineGrid {
         };
         // Widely separated worlds must not allocate/enumerate empty continents.
         // The ordinary chunk path is still conservative for these sparse scenes.
-        if cells > Self::MAX_CELLS || cells > bodies.len().saturating_mul(16).max(4096) {
+        if cells > Self::MAX_CELLS || cells > bodies.len().saturating_mul(16).max(4096).max(reach) {
             return false;
         }
         self.origin = min;
@@ -205,8 +227,7 @@ impl FineGrid {
         radius: f64,
         out: &mut Vec<usize>,
     ) -> usize {
-        let low = std::array::from_fn::<_, 3, _>(|axis| start[axis].min(end[axis]) - radius);
-        let high = std::array::from_fn::<_, 3, _>(|axis| start[axis].max(end[axis]) + radius);
+        let (low, high) = query_box(start, end, radius);
         let mut cells = [[0_i64; 2]; 2];
         for (axis, world_axis) in [0, 2].into_iter().enumerate() {
             cells[axis][0] = (i64::from(Self::cell(low[world_axis] - self.half_extent))
@@ -243,6 +264,106 @@ impl FineGrid {
         {
             0
         }
+    }
+}
+
+/// The broad-phase box of one swept query: every body a shot can be tested
+/// against overlaps it (inclusive bounds, as `FineGrid::query` compares).
+fn query_box(start: [f64; 3], end: [f64; 3], radius: f64) -> ([f64; 3], [f64; 3]) {
+    (
+        std::array::from_fn(|axis| start[axis].min(end[axis]) - radius),
+        std::array::from_fn(|axis| start[axis].max(end[axis]) + radius),
+    )
+}
+
+/// Derived per-pass scratch: XZ cells over this pass's frozen shot query
+/// boxes, each holding the vertical span of the boxes that reach it. A body
+/// whose box meets no reached cell within that cell's span overlaps no query
+/// box, so it can be no shot's candidate on either broad phase. Bounded like
+/// `FineGrid`: a sparse or non-finite set of boxes builds no cover and every
+/// hittable body is kept.
+#[derive(Debug, Default)]
+pub(super) struct Cover {
+    origin: [i64; 2],
+    size: [usize; 2],
+    /// `[low, high]` Y per cell; an unreached cell holds an empty span.
+    spans: Vec<[f64; 2]>,
+}
+
+impl Cover {
+    /// Four-block cells: scaling by a power of two is exact, so this is
+    /// `floor(value).div_euclid(4)` without the integer division.
+    fn cell(value: f64) -> i64 {
+        (value * 0.25).floor() as i64
+    }
+
+    /// Two-block `FineGrid` cells spanning this built cover plus one cell of
+    /// margin on every side for body half widths.
+    fn fine_cells(&self) -> usize {
+        (self.size[0] + 2).saturating_mul(2) * (self.size[1] + 2).saturating_mul(2)
+    }
+
+    fn build(&mut self, boxes: &[([f64; 3], [f64; 3])]) -> bool {
+        self.size = [0; 2];
+        let mut min = [i64::MAX; 2];
+        let mut max = [i64::MIN; 2];
+        for (low, high) in boxes {
+            if low.iter().chain(high).any(|value| !value.is_finite()) {
+                return false;
+            }
+            for (axis, world_axis) in [0, 2].into_iter().enumerate() {
+                min[axis] = min[axis].min(Self::cell(low[world_axis]));
+                max[axis] = max[axis].max(Self::cell(high[world_axis]));
+            }
+        }
+        if boxes.is_empty() {
+            return false;
+        }
+        let width = (max[0] - min[0] + 1) as usize;
+        let height = (max[1] - min[1] + 1) as usize;
+        let Some(cells) = width.checked_mul(height) else {
+            return false;
+        };
+        if cells > FineGrid::MAX_CELLS || cells > boxes.len().saturating_mul(64).max(4096) {
+            return false;
+        }
+        self.origin = min;
+        self.size = [width, height];
+        self.spans.clear();
+        self.spans.resize(cells, [f64::INFINITY, f64::NEG_INFINITY]);
+        for (low, high) in boxes {
+            for z in Self::cell(low[2])..=Self::cell(high[2]) {
+                for x in Self::cell(low[0])..=Self::cell(high[0]) {
+                    let index = (z - min[1]) as usize * width + (x - min[0]) as usize;
+                    let span = &mut self.spans[index];
+                    span[0] = span[0].min(low[1]);
+                    span[1] = span[1].max(high[1]);
+                }
+            }
+        }
+        true
+    }
+
+    /// Whether a body box may overlap some query box. Non-finite bodies are
+    /// kept: the broad phases already treat them conservatively.
+    fn reaches(&self, min: [f64; 3], max: [f64; 3]) -> bool {
+        if min.iter().chain(&max).any(|value| !value.is_finite()) {
+            return true;
+        }
+        let range = |axis: usize, world_axis: usize| {
+            (
+                (Self::cell(min[world_axis]) - self.origin[axis]).max(0),
+                (Self::cell(max[world_axis]) - self.origin[axis]).min(self.size[axis] as i64 - 1),
+            )
+        };
+        let (x0, x1) = range(0, 0);
+        let (z0, z1) = range(1, 2);
+        (z0..=z1).any(|z| {
+            (x0..=x1).any(|x| {
+                let span = self.spans[z as usize * self.size[0] + x as usize];
+                max[1] >= span[0] && min[1] <= span[1]
+            })
+        })
     }
 }
 
@@ -469,6 +590,45 @@ fn first_solid(
     step: [f64; 3],
     radius: f64,
 ) -> Result<Option<(f64, crate::boundary::BlockPos)>, ()> {
+    sweep(state, from, step, radius).map(|sweep| sweep.hit)
+}
+
+/// One accepted block sweep: the first hit and, when the blocks were read
+/// from resident columns, the state of the start cell (`from` floored),
+/// which every sweep box contains.
+#[derive(Debug)]
+struct Sweep {
+    hit: Option<(f64, crate::boundary::BlockPos)>,
+    start: Option<u32>,
+}
+
+// Test-only count of cells whose state a sweep read one by one.
+#[cfg(test)]
+std::thread_local! {
+    static SWEPT_CELLS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn take_swept_cells() -> usize {
+    SWEPT_CELLS.with(|cells| cells.replace(0))
+}
+
+/// The result is a function of the box's cells alone: `Err` when any cell is
+/// unloaded, outside the world height or unregistered, otherwise the
+/// earliest hit, ties to the first cell in y, z, x order.
+///
+/// Measured narrow hack (BvArrowPerf receipts). Bottleneck: per-cell reads
+/// plus a second chunk-map probe for the water check, once per flying arrow
+/// (thousands a tick in battle volleys, mostly over all-air sections).
+/// Boundary: overlay-free sweeps; a run of cells inside a single-state
+/// section whose state has no collision shape holds nothing to hit and is
+/// skipped after one registry check. Fence: the world-read oracle tests
+/// `sweep_reads_cells_only_in_sections_that_can_hold_collision_shapes` and
+/// `first_solid_column_reads_match_world_reads_before_and_after_folding`
+/// (hits, ties, refusals, start cell). Effect, S2 battle micro: sweep and
+/// water probe 434 -> 228 profile samples. Removal: drop the `uniform`
+/// branch and let `step` read the start cell through `block_at`.
+fn sweep(state: &TickState, from: [f64; 3], step: [f64; 3], radius: f64) -> Result<Sweep, ()> {
     if from
         .iter()
         .chain(step.iter())
@@ -491,29 +651,111 @@ fn first_solid(
             .div_ceil(16)
             .saturating_sub(1),
     );
+    let low = min[1].saturating_sub(below);
     let mut first: Option<(f64, crate::boundary::BlockPos)> = None;
-    for y in min[1].saturating_sub(below)..=max[1] {
-        for z in min[2]..=max[2] {
-            for x in min[0]..=max[0] {
-                let block = state.world.block_at(x, y, z).ok_or(())?;
-                let Some(boxes) = state.registry.collision_boxes.get(block as usize) else {
-                    return Err(());
-                };
-                for collision_box in boxes {
-                    let local = collision_box.as_blocks();
-                    let offset = [f64::from(x), f64::from(y), f64::from(z)];
-                    let lower = std::array::from_fn(|axis| offset[axis] + local[axis]);
-                    let upper = std::array::from_fn(|axis| offset[axis] + local[axis + 3]);
-                    if let Some(t) = swept_sphere_enters(from, step, lower, upper, radius)
-                        && first.is_none_or(|(old, _)| t < old)
+    let mut test = |x: i32, y: i32, z: i32, block: u32| -> Result<(), ()> {
+        let boxes = state
+            .registry
+            .collision_boxes
+            .get(block as usize)
+            .ok_or(())?;
+        for collision_box in boxes {
+            let local = collision_box.as_blocks();
+            let offset = [f64::from(x), f64::from(y), f64::from(z)];
+            let lower = std::array::from_fn(|axis| offset[axis] + local[axis]);
+            let upper = std::array::from_fn(|axis| offset[axis] + local[axis + 3]);
+            if let Some(t) = swept_sphere_enters(from, step, lower, upper, radius)
+                && first.is_none_or(|(old, _)| t < old)
+            {
+                first = Some((t, crate::boundary::BlockPos { x, y, z }));
+            }
+        }
+        Ok(())
+    };
+    #[cfg(test)]
+    let mut read = 0;
+    // Unfolded writes keep the overlay-first world read.
+    if !state.world.overlay_is_empty() {
+        for y in low..=max[1] {
+            for z in min[2]..=max[2] {
+                for x in min[0]..=max[0] {
+                    test(x, y, z, state.world.block_at(x, y, z).ok_or(())?)?;
+                    #[cfg(test)]
                     {
-                        first = Some((t, crate::boundary::BlockPos { x, y, z }));
+                        read += 1;
                     }
                 }
             }
         }
+        #[cfg(test)]
+        SWEPT_CELLS.with(|cells| cells.set(cells.get() + read));
+        return Ok(Sweep {
+            hit: first,
+            start: None,
+        });
     }
-    Ok(first)
+    // An overlay-free world is read through its resident columns, one map
+    // probe per column crossing, one row run per column and section level.
+    let start_cell: [i32; 3] = from.map(|value| value.floor() as i32);
+    let mut start = None;
+    let mut column: Option<(crate::boundary::ChunkPos, &crate::boundary::Chunk)> = None;
+    for y in low..=max[1] {
+        for z in min[2]..=max[2] {
+            let mut x = min[0];
+            loop {
+                let at = crate::boundary::ChunkPos {
+                    x: x.div_euclid(16),
+                    z: z.div_euclid(16),
+                };
+                let chunk = match column {
+                    Some((cached, chunk)) if cached == at => chunk,
+                    _ => {
+                        let chunk = state.world.chunk(at).ok_or(())?;
+                        column = Some((at, chunk));
+                        chunk
+                    }
+                };
+                let (index, local_y) = chunk.geometry().world_y_to_section(y).ok_or(())?;
+                let section = &chunk.sections[index];
+                let last = max[0].min(at.x * 16 + 15);
+                let start_row =
+                    y == start_cell[1] && z == start_cell[2] && (x..=last).contains(&start_cell[0]);
+                let uniform = section.palette().is_none().then(|| section.get(0, 0, 0).0);
+                if let Some(block) = uniform
+                    && state
+                        .registry
+                        .collision_boxes
+                        .get(block as usize)
+                        .ok_or(())?
+                        .is_empty()
+                {
+                    if start_row {
+                        start = Some(block);
+                    }
+                } else {
+                    let local_z = z.rem_euclid(16) as u8;
+                    for x in x..=last {
+                        let block = section.get(x.rem_euclid(16) as u8, local_y, local_z).0;
+                        if start_row && x == start_cell[0] {
+                            start = Some(block);
+                        }
+                        test(x, y, z, block)?;
+                    }
+                    #[cfg(test)]
+                    {
+                        read += (last - x + 1) as usize;
+                    }
+                }
+                if last == max[0] {
+                    break;
+                }
+                x = last + 1;
+            }
+        }
+    }
+    #[cfg(test)]
+    SWEPT_CELLS.with(|cells| cells.set(cells.get() + read));
+    Ok(Sweep { hit: first, start })
 }
 /// `AbstractArrow.shouldFall`: `noCollision(AABB(pos, pos).inflate(0.06))`,
 /// a strict-overlap test against every block collision box. An unloaded or
@@ -629,6 +871,19 @@ pub(super) fn run(
     if ids.is_empty() {
         return;
     }
+    let mut clock = std::time::Instant::now();
+    let mut lap = || {
+        let now = std::time::Instant::now();
+        let elapsed = now.duration_since(clock).as_micros() as u64;
+        clock = now;
+        elapsed
+    };
+    let queries: Vec<_> = ids.iter().map(|&id| shot_query(state, id)).collect();
+    let boxes: Vec<_> = queries
+        .iter()
+        .flatten()
+        .map(|query| query_box(query.start, query.end, query.radius))
+        .collect();
     let mut bodies = std::mem::take(&mut state.projectiles.bodies);
     bodies.clear();
     let mut slots = Vec::new();
@@ -653,8 +908,9 @@ pub(super) fn run(
         selected.dedup();
         hittables_from_slots(state, &mut bodies, selected.into_iter());
     }
+    let hittables_us = lap();
     let mut grid = std::mem::take(&mut state.projectiles.grid);
-    let use_grid = ids.len() >= FineGrid::MIN_SHOTS && grid.build(&bodies);
+    let use_grid = ids.len() >= FineGrid::MIN_SHOTS && grid.build(&bodies, reach);
     let exceptional: Vec<_> = bodies
         .iter()
         .enumerate()
@@ -686,6 +942,8 @@ pub(super) fn run(
         candidates.truncate(end);
         ranges.push(start..end);
     }
+    let candidates_us = lap();
+    let shots = ids.len() as u32;
     run_shots(
         state,
         intents,
@@ -695,6 +953,11 @@ pub(super) fn run(
         &bodies,
         &mut slots,
     );
+    let post = &mut state.projectiles.post;
+    post.hittables_us = hittables_us;
+    post.candidates_us = candidates_us;
+    post.shots_us = lap();
+    post.shots = shots;
     state.projectiles.bodies = bodies;
     state.projectiles.grid = grid;
 }
@@ -788,6 +1051,7 @@ fn run_shots<'a>(
             continue;
         }
         if grounded_arrow(state, id, slot, slots) {
+            state.projectiles.post.grounded += 1;
             continue;
         }
         let Some(mut boxed) = state.entities.row_mut(slot).projectile.take() else {
@@ -988,7 +1252,11 @@ fn step(
     }
     let velocity = state.entities.vel(slot).map(|value| value / 20.0);
     let collision_radius = authored.map_or(0.0, |profile| profile.collision_radius);
-    let Ok(block_hit) = first_solid(state, pos, velocity, collision_radius) else {
+    let Ok(Sweep {
+        hit: block_hit,
+        start: start_block,
+    }) = sweep(state, pos, velocity, collision_radius)
+    else {
         return false;
     };
     let reach = block_hit.map_or(1.0, |(t, _)| t);
@@ -1283,11 +1551,16 @@ fn step(
         super::set_flight(state, slot, next);
         return false;
     }
-    let block = state.world.block_at(
-        pos[0].floor() as i32,
-        pos[1].floor() as i32,
-        pos[2].floor() as i32,
-    );
+    // Every write lands in the overlay: still empty, no write has replaced
+    // the start cell since the sweep read it.
+    let block = match start_block {
+        Some(block) if state.world.overlay_is_empty() => Some(block),
+        _ => state.world.block_at(
+            pos[0].floor() as i32,
+            pos[1].floor() as i32,
+            pos[2].floor() as i32,
+        ),
+    };
     let water =
         block.is_some_and(|block| state.registry.materials.classify(block) == BlockMaterial::Water);
     let (drag, gravity) = match record.kind {

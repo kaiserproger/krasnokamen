@@ -1956,6 +1956,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     laps.lap("item_merge");
     let commit_time = commit_start.elapsed();
     let post_start = std::time::Instant::now();
+    state.projectiles.post = crate::projectiles::PostTimes::default();
     // Pickup intents: players collect mature item entities in reach.
     // Exact kind lanes, authoritative maturity and post-move positions.
     if sim {
@@ -1970,6 +1971,9 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         crate::projectiles::run(state, &mut intents, &specials);
         laps.lap("projectiles");
     }
+    state.projectiles.post.pickup_us = pickup_us;
+    let post_time = post_start.elapsed();
+    state.projectiles.post.total_us = post_time.as_micros() as u64;
     if std::env::var("MC_CORE_PHASE_LOG").is_ok() {
         laps.print("entity phase");
         eprintln!(
@@ -1978,11 +1982,23 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             rows.len(),
             prep_time.as_secs_f64() * 1000.0,
             commit_time.as_secs_f64() * 1000.0,
-            post_start.elapsed().as_secs_f64() * 1000.0,
+            post_time.as_secs_f64() * 1000.0,
             resting_count,
             pre_time.as_secs_f64() * 1000.0,
             item_merge_time.as_secs_f64() * 1000.0,
             merge_items,
+        );
+        let post = state.projectiles.post;
+        eprintln!(
+            "  post detail us: pickup={} hostile={} weapons={} hittables={} candidates={} shots={} projectiles={} grounded={}",
+            post.pickup_us,
+            post.hostile_us,
+            post.weapons_us,
+            post.hittables_us,
+            post.candidates_us,
+            post.shots_us,
+            post.shots,
+            post.grounded,
         );
         let battle = state.hostile.battle.timings;
         eprintln!(
