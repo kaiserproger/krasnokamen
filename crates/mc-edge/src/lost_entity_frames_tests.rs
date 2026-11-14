@@ -167,6 +167,14 @@ struct Pump {
     _reliable_rx: mpsc::Receiver<bytes::Bytes>,
 }
 
+impl Drop for Pump {
+    fn drop(&mut self) {
+        // The native owners can still write after EdgeServer drops. Join them
+        // before TempDir removes the world, including during panic unwinding.
+        self.server.hub.shutdown();
+    }
+}
+
 impl Pump {
     fn new() -> Self {
         let (server, dir) = fixture_in_temp_dir();
@@ -246,12 +254,15 @@ impl Pump {
 /// A panic before `finish()` must not leave the world behind.
 #[test]
 fn a_panicking_pump_leaves_no_temp_dir() {
+    let sentinel = admin_temp_dir();
+    let mut hub = None;
     let mut created = None;
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let pump = Pump::new();
         created = Some(pump.dir.path().to_path_buf());
+        hub = Some(Arc::clone(&pump.server.hub));
         assert!(
             pump.dir.path().is_dir(),
             "the pump's world exists during the test"
@@ -260,11 +271,19 @@ fn a_panicking_pump_leaves_no_temp_dir() {
     }));
     std::panic::set_hook(previous);
     assert!(outcome.is_err(), "the simulated test must fail");
+    assert!(
+        hub.expect("the pump ran").shutdown_requested(),
+        "panic cleanup must join native writers before removing their directory"
+    );
     let created = created.expect("the pump ran");
     assert!(
         !created.exists(),
         "a panicking pump test left {} behind",
         created.display()
+    );
+    assert!(
+        sentinel.path().is_dir(),
+        "cleanup must not touch another world"
     );
 }
 
