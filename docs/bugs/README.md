@@ -185,12 +185,14 @@ worker, runs the negative control.
    `all` of a profile without a verdict map (`autocraft-qa`,
    `village-autonomy-qa`) is red when the failed receipt's `error` reads
    `<id> assertion failed: <name>`, and a `buildings-qa` `<blueprint>.L<n>_<behaviour>`
-   that was never recorded is red when that assertion's name starts with
-   `buildings_<blueprint>_L<n>_` (a probe check raises before the verdict is
-   written); an abort at another level of the same blueprint leaves it unrunnable.
+   that was never recorded is red only for a same-blueprint, same-level
+   server/client-observed product outcome in `NEGATIVE_CONTROL_STEPS`
+   (`order_available`, `upgrade_available`, `project`, `built`, `blocks`).
+   Stocking, planner fencing, observation races, unknown steps and failures at
+   another level remain unrunnable.
    A buildings-qa `<blueprint>.<behaviour>` ref runs that one blueprint
    (`BUILDINGS_QA_SELECT=<blueprint>` in the command's argv, 1800 s deadline): the
-   nine-blueprint default run has one 600 s deadline and cannot pass.
+   20-blueprint default run has one 600 s deadline and cannot pass.
    Control worktrees
    are temporary `git worktree`s beside the other worktrees (`<work>/wt/`),
    one promotion at a time (a lock), at fixed paths (`ledger-control-candidate`,

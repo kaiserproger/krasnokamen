@@ -118,21 +118,27 @@ def _failing_verdict(receipt, profile, verdict):
     verdict the profile cannot report on failure, when its own assertion failed:
 
     - `all` of a profile without a verdict map (autocraft-qa, village-autonomy-qa);
-    - a buildings-qa `<blueprint>.L<n>_<behaviour>` that never got recorded because an assertion
-      of that blueprint and level, `buildings_<blueprint>_L<n>_*`, aborted the run (a probe check
-      raises before the verdict is written). An abort at another level is not evidence about this
-      one: a level-1 funding failure says nothing about the level-3 upgrade."""
+    - a buildings-qa `<blueprint>.L<n>_<behaviour>` never recorded because a
+      same-kind, same-level assertion in the behavioural allowlist failed.
+      Setup failures, observation races, unknown steps and other levels are unrunnable."""
     try:
         regressions._profile_verdict(receipt, profile, verdict)
     except regressions.VerdictNotMet as error:
         if error.value is not None:
             return True
+        if profile != 'buildings-qa':
+            return False
+        from .backends.buildings_qa import NEGATIVE_CONTROL_STEPS
+
         blueprint, _, behaviour = verdict.partition('.')
         if profile == 'buildings-qa' and verdict == 'house.L1_broken_cell_repaired':
             return _assertion_failure(receipt) == 'buildings_house_L1_broken_cell_repaired'
         level = re.match(r'L\d+_', behaviour)
-        prefix = f'buildings_{blueprint}_' + (level.group(0) if level else '')
-        return profile == 'buildings-qa' and (_assertion_failure(receipt) or '').startswith(prefix)
+        if level is None:
+            return False
+        prefix = f'buildings_{blueprint}_{level.group(0)}'
+        assertion = _assertion_failure(receipt) or ''
+        return assertion.startswith(prefix) and assertion[len(prefix):] in NEGATIVE_CONTROL_STEPS
     return verdict == 'all' and _assertion_failure(receipt) is not None
 
 

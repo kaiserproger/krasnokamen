@@ -356,11 +356,18 @@ regression = []
         self.assertFalse(ledger._failing_verdict(failed('in_play'), 'autocraft-qa', 'all'))
         self.assertFalse(ledger._failing_verdict(failed('x', details={'failure': {'phase': 'client_start'}}), 'autocraft-qa', 'all'))
         self.assertFalse(ledger._failing_verdict({'status': 'failed', 'error': 'timed out'}, 'autocraft-qa', 'all'))
-        # A buildings-qa behaviour never recorded is red only when that blueprint's assertion at the
-        # same level aborted the run: a level-1 funding abort says nothing about levels 2 and 3.
-        self.assertTrue(ledger._failing_verdict(failed('buildings_wall_L1_project'), 'buildings-qa', 'wall.L1_built'))
-        self.assertTrue(ledger._failing_verdict(failed('buildings_wall_L3_level_exists'), 'buildings-qa', 'wall.L3_upgrade'))
-        self.assertFalse(ledger._failing_verdict(failed('buildings_gate_L1_funded'), 'buildings-qa', 'gate.L3_upgrade'))
+        # Only explicit behavioural steps for this blueprint and level are red.
+        for step in ('project', 'built', 'blocks', 'order_available', 'upgrade_available'):
+            with self.subTest(step=step):
+                self.assertTrue(ledger._failing_verdict(
+                    failed(f'buildings_wall_L3_{step}'), 'buildings-qa', 'wall.L3_upgrade'))
+        for step in ('funded', 'planner_fenced', 'fence_waiting', 'not_overtaken',
+                     'level_exists', 'camera_space', 'unknown_future_step'):
+            with self.subTest(step=step):
+                self.assertFalse(ledger._failing_verdict(
+                    failed(f'buildings_wall_L3_{step}'), 'buildings-qa', 'wall.L3_upgrade'))
+        self.assertFalse(ledger._failing_verdict(failed('buildings_gate_L3_blocks'), 'buildings-qa', 'wall.L3_upgrade'))
+        self.assertFalse(ledger._failing_verdict(failed('buildings_wall_L1_project'), 'buildings-qa', 'wall.L3_upgrade'))
         self.assertFalse(ledger._failing_verdict(failed('buildings_house_L1_built'), 'buildings-qa', 'wall.L1_built'))
         self.assertFalse(ledger._failing_verdict(failed('in_play'), 'buildings-qa', 'wall.L1_built'))
         self.assertTrue(ledger._failing_verdict(failed('buildings_house_L1_broken_cell_repaired'),

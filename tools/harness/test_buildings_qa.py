@@ -146,6 +146,117 @@ class BarracksFunctionTest(unittest.TestCase):
             self.assertIsNone(buildings_qa._building_lore(probe, buildings_qa.re.compile(r"#\d+ Barracks L2")))
 
 
+class ProjectMenuTest(unittest.TestCase):
+    def test_order_uses_container_icon_then_real_confirmation(self):
+        probe, sub = mock.Mock(), {}
+        probe.wait.return_value = {"screen": {"title": "Projects"}}
+        with mock.patch.object(buildings_qa, "_send") as send, \
+                mock.patch.object(buildings_qa, "_menu_click_named") as click, \
+                mock.patch.object(buildings_qa, "_confirm_project") as confirm:
+            buildings_qa._order_via_dialog(probe, sub, "buildings_house", "house", 1, "town")
+        send.assert_called_once_with(probe, "settlement menu projects")
+        click.assert_called_once_with(probe, "Projects", "House L1")
+        confirm.assert_called_once_with(probe, "Order: House")
+
+    def test_upgrade_selects_exact_building_and_confirms_its_level(self):
+        probe, sub = mock.Mock(), {}
+        probe.wait.return_value = {"screen": {"title": "Projects"}, "container": {"slots": [
+            {"slot": 52, "name": "Order construction L2"}]}}
+        with mock.patch.object(buildings_qa, "_send"), \
+                mock.patch.object(buildings_qa, "_menu_click_named") as click, \
+                mock.patch.object(buildings_qa, "_confirm_project") as confirm:
+            buildings_qa._upgrade_via_dialog(probe, sub, "buildings_house", "house", (1 << 32) | 7, 2, "town")
+        click.assert_called_once_with(probe, "Buildings", "#7 House L1")
+        confirm.assert_called_once_with(probe, "Order construction L2 #7")
+
+    def test_queued_icon_is_not_reported_as_an_active_project(self):
+        class MenuProbe:
+            def call(self, *args):
+                return {}
+
+            def remaining(self):
+                return 60
+
+            def wait(self, predicate, label, **kwargs):
+                if label == "projects_menu_open":
+                    state = {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": "Projects"},
+                             "container": {"slots": [{"slot": 52, "name": "Status"}]}}
+                else:
+                    state = {"screen": {"class": buildings_qa.CONTAINER_CLASS, "title": "Construction"},
+                             "container": {"slots": [
+                                 {"slot": 4, "name": "Cleric's workshop L1"},
+                                 {"slot": 10, "name": "Queued — site not assigned\nPending: Cleric L1"}]}}
+                assert predicate(state)
+                return state
+
+        with mock.patch.object(buildings_qa, "_close_any_screen"):
+            self.assertEqual(buildings_qa._project_view(MenuProbe()), ("Cleric's workshop", 1, False))
+            self.assertIsNone(buildings_qa._project_status(MenuProbe()))
+
+
+class ResidentsMenuTest(unittest.TestCase):
+    def test_resident_lore_carries_profession_and_specific_workplace(self):
+        class Probe:
+            def __init__(self):
+                self.calls = []
+
+            def call(self, name, args=None):
+                self.calls.append((name, args))
+                if name == "minecraft_read_item_components":
+                    return {"components": {"minecraft:lore": [
+                        {"text": "Farmer"}, {"text": "Works at #7 Farmer workshop L1"}]}}
+                return {}
+
+            def observe(self):
+                return {}
+
+            def wait(self, predicate, label, **kwargs):
+                state = {"screen": {"class": buildings_qa.CONTAINER_CLASS,
+                                    "title": "Residents / households"},
+                         "container": {"slots": [{"slot": 9, "item_id": "minecraft:player_head"}]}}
+                assert predicate(state)
+                return state
+
+        probe = Probe()
+        lines = buildings_qa._residents_text(probe)
+        self.assertEqual(lines, ["Farmer works at #7 Farmer workshop L1"])
+        self.assertEqual(probe.calls[-1][0], "minecraft_close_screen")
+
+    def test_census_continues_to_the_next_page(self):
+        class Probe:
+            page = 0
+
+            def remaining(self):
+                return 60
+
+            def observe(self):
+                return {}
+
+            def call(self, name, args=None):
+                if name == "minecraft_click_container_slot":
+                    self.page += 1
+                if name == "minecraft_read_item_components":
+                    return {"components": {"minecraft:lore": [{"text": f"resident {self.page}"}]}}
+                return {}
+
+            def wait(self, predicate, label, **kwargs):
+                slots = [{"slot": 9, "item_id": "minecraft:player_head", "name": str(self.page)}]
+                if self.page == 0:
+                    slots.append({"slot": 50, "name": "Next page"})
+                state = {"screen": {"class": buildings_qa.CONTAINER_CLASS,
+                                    "title": "Residents / households"},
+                         "container": {"slots": slots}}
+                assert predicate(state)
+                return state
+
+        self.assertEqual(buildings_qa._residents_text(Probe()), ["resident 0", "resident 1"])
+
+    def test_assignment_does_not_hide_a_menu_failure(self):
+        with mock.patch.object(buildings_qa, "_residents_text", side_effect=RuntimeError("menu failed")):
+            with self.assertRaisesRegex(RuntimeError, "menu failed"):
+                buildings_qa._await_assignment(mock.Mock(), 7, "Farmer workshop", "Farmer")
+
+
 class FakeProbe:
     """Enough of ProbeSteps for the order and admission helpers; check raises like the real one."""
 
@@ -155,6 +266,7 @@ class FakeProbe:
         self.waits = 0
         self.sent = 0
         self.deadline = 1e12
+        self.client = mock.sentinel.client
 
     def check(self, name, condition):
         self.report["assertions"][name] = bool(condition)
@@ -176,15 +288,54 @@ class FakeProbe:
 HEADLESS = SimpleNamespace(windowed=False)
 
 
+class WorkerSettlementTest(unittest.TestCase):
+    def test_miner_uses_tracked_building_and_own_settlement_menu(self):
+        probe = FakeProbe()
+        sub = {"site": [128, 70, 0], "building_id": (2 << 32) | 2}
+        with mock.patch.object(buildings_qa, "_at_settlement_anchor") as anchor, \
+                mock.patch.object(buildings_qa, "_building_seq", side_effect=AssertionError("stale lookup")), \
+                mock.patch.object(buildings_qa, "_await_assignment", side_effect=LookupError) as census:
+            with self.assertRaises(LookupError):
+                buildings_qa._function_mine(probe, sub, "buildings_mine", 2, (113, 69, -13), {})
+        anchor.assert_called_once_with(probe, sub)
+        census.assert_called_once_with(probe, 2, "Mine", "Miner")
+
+
+class CameraCaptureTest(unittest.TestCase):
+    def test_elevated_support_is_removed_even_if_capture_fails(self):
+        for capture_error in (None, RuntimeError("capture failed")):
+            with self.subTest(capture_error=capture_error):
+                probe, sub = mock.Mock(), {}
+                with mock.patch.object(buildings_qa, "_fit_orientation", return_value=0), \
+                        mock.patch.object(buildings_qa, "oriented_cells",
+                                          return_value={(10, 70, 20): "stone", (12, 72, 24): "stone"}), \
+                        mock.patch.object(buildings_qa, "_read", return_value={"block_id": "minecraft:air"}), \
+                        mock.patch.object(buildings_qa, "_close_any_screen"), \
+                        mock.patch.object(buildings_qa, "_at_settlement_anchor") as anchor, \
+                        mock.patch.object(buildings_qa.native_client, "capture",
+                                          side_effect=capture_error, return_value={"retained_path": "image.png"}):
+                    if capture_error:
+                        with self.assertRaisesRegex(RuntimeError, "capture failed"):
+                            buildings_qa._capture_level(probe, sub, None, "buildings_gate", "gate", 2, (10, 70, 20))
+                    else:
+                        buildings_qa._capture_level(probe, sub, None, "buildings_gate", "gate", 2, (10, 70, 20))
+                        self.assertEqual(sub["L2_visual_capture"]["retained_path"], "image.png")
+                commands = [call.args[0] for call in probe.fixture.call_args_list]
+                self.assertIn("setblock 2 79 12 minecraft:barrier", commands)
+                self.assertEqual(commands[-1], "setblock 2 79 12 minecraft:air")
+                probe.call.assert_any_call("minecraft_wait_ticks", {"ticks": 240})
+                anchor.assert_called_once_with(probe, sub)
+
+
 class OrderEchoRetryTest(unittest.TestCase):
     def run_retry(self, lines, project_active=False, ctx=HEADLESS):
         probe, sub = FakeProbe(), {}
 
-        def send(_probe, command, settle_ticks=40):
+        def send(_probe, command, prefixes=()):
             probe.sent += 1
             return {"recent_chat": list(lines)}
 
-        with mock.patch.object(buildings_qa, "_send", send), \
+        with mock.patch.object(buildings_qa, "_send_fresh", send), \
                 mock.patch.object(buildings_qa, "_project_active_quiet",
                                   return_value=project_active) as active:
             result = buildings_qa._order_echo_retry(
@@ -206,31 +357,31 @@ class OrderEchoRetryTest(unittest.TestCase):
         active.assert_called_once()
         self.assertIn("No blueprint upgrade available", sub["L3_order_attempt1"])
 
-    def test_no_blueprint_upgrade_without_a_project_is_retried_then_refused(self):
+    def test_refusal_without_target_project_is_not_admitted(self):
         result, probe, _, active = self.run_retry(
             ["No blueprint upgrade available for this building."], project_active=False)
         self.assertFalse(result)
-        self.assertEqual(probe.sent, 3)
-        self.assertEqual(active.call_count, 3)
+        self.assertEqual(probe.sent, 1)
+        active.assert_called_once()
 
-    def test_a_busy_refusal_still_reads_the_headless_echo(self):
-        result, probe, _, active = self.run_retry(["Busy."])
-        self.assertTrue(result)
-        active.assert_not_called()
+    def test_busy_does_not_prove_an_unrelated_project_is_ours(self):
+        result, _, _, active = self.run_retry(["Busy."])
+        self.assertFalse(result)
+        active.assert_called_once()
 
 
 class AdmissionTest(unittest.TestCase):
     def test_an_admitted_order_needs_no_cert(self):
         probe = FakeProbe()
-        with mock.patch.object(buildings_qa, "_building_bounds") as bounds:
+        with mock.patch.object(buildings_qa, "_current_certificate") as certificate:
             self.assertIsNone(buildings_qa._admitted_or_caught(
                 probe, {}, "buildings_gate", "gate", 3, True))
-        bounds.assert_not_called()
+        certificate.assert_not_called()
         self.assertTrue(probe.report["assertions"]["buildings_gate_L3_project"])
 
     def test_a_refused_order_is_fine_when_the_planner_already_certified_the_level(self):
         probe = FakeProbe()
-        with mock.patch.object(buildings_qa, "_building_bounds", return_value=(1, 2, 3)):
+        with mock.patch.object(buildings_qa, "_current_certificate", return_value=(7, (1, 2, 3))):
             caught = buildings_qa._admitted_or_caught(
                 probe, {}, "buildings_gate", "gate", 3, False)
         self.assertEqual(caught, (1, 2, 3))
@@ -238,7 +389,7 @@ class AdmissionTest(unittest.TestCase):
 
     def test_a_refused_order_without_a_cert_fails_the_project_check(self):
         probe = FakeProbe()
-        with mock.patch.object(buildings_qa, "_building_bounds", return_value=None):
+        with mock.patch.object(buildings_qa, "_current_certificate", return_value=None):
             with self.assertRaisesRegex(RuntimeError, "buildings_gate_L3_project"):
                 buildings_qa._admitted_or_caught(probe, {}, "buildings_gate", "gate", 3, False)
 
@@ -285,19 +436,25 @@ class ForeignBlockTest(unittest.TestCase):
 class SequentialFlowTest(unittest.TestCase):
     """`_scenario_sequential` for one blueprint with every game-facing helper replaced."""
 
-    def run_flow(self, bp, top, order_admitted, cert_after_order):
+    def run_flow(self, bp, top, order_admitted, cert_after_order, windowed=False, menu_evidence=(1, 2, 3)):
         probe = FakeProbe()
         detail: dict = {}
         certs = {}
         events = []
         self.calls = []
 
-        def building_bounds(_probe, _bp, level, exclude=None):
-            return certs.get(level)
+        def current(_probe, sub, tag, _bp, level):
+            if level not in certs:
+                return None
+            sub["building_id"] = 7
+            return 7, certs[level]
 
         def order(_probe, sub, tag, _bp, level, cmd, use_dialog, ctx, dialog_fn=None,
                   upgrade_bid=None):
             events.append(("order", level, use_dialog))
+            stages.append(("order", level))
+            if use_dialog and level in menu_evidence:
+                sub[f"L{level}_dialog_{'order' if level == 1 else 'upgrade'}"] = "confirmed"
             if cert_after_order:
                 certs[level] = (level, 70, level)
             return order_admitted
@@ -313,13 +470,15 @@ class SequentialFlowTest(unittest.TestCase):
             if level == 1:
                 self.calls.append("cert")
             certs[level] = (level, 70, level)
+            sub["building_id"] = 7
             sub[f"L{level}_origin"] = list(certs[level])
             return certs[level]
 
         def fund(_probe, sub, _bp, level, chest):
+            stages.append(("fund", level))
             sub.setdefault("behaviour", {})[f"L{level}_funded"] = "PASS"
 
-        ctx = SimpleNamespace(windowed=False)
+        ctx = SimpleNamespace(windowed=windowed)
         patches = dict(
             _send=lambda _p, command, settle_ticks=40: {
                 "recent_chat": ["anchor=[0, 70, 0]"] if "info" in command else []},
@@ -328,8 +487,10 @@ class SequentialFlowTest(unittest.TestCase):
             _summon_bind=lambda *a, **k: True,
             _fund_level=fund,
             _order_echo_retry=order,
-            _building_bounds=building_bounds,
-            _building_seq=lambda *a, **k: 7,
+            _building_records=lambda *a, **k: {},
+            _current_certificate=current,
+            _at_settlement_anchor=lambda *a, **k: None,
+            _queue_planner_fence=lambda _p, _s, _t, _b, level: stages.append(("fence", level)),
             _adversarial_break=lambda *a, **k: False,
             _break_placed_house_cell=lambda *a, **k: None,
             _check_house_repair=lambda *a, **k: None,
@@ -338,8 +499,21 @@ class SequentialFlowTest(unittest.TestCase):
             _broken_replaced=broken_replaced,
             _verify_level=lambda *a, **k: None,
         )
-        with mock.patch.multiple(buildings_qa, **patches):
+        with mock.patch.multiple(buildings_qa, **patches), \
+                mock.patch.object(buildings_qa, "_capture_level",
+                                  side_effect=lambda _p, _s, _a, _t, _b, level, _o:
+                                  stages.append(("capture", level))) as capture:
             buildings_qa._scenario_sequential(probe, detail, ctx, None, (bp,), "", None, None)
+            if windowed:
+                self.assertEqual([call.args[5] for call in capture.call_args_list],
+                                 list(range(1, top + 1)))
+            expected = [("fence", 1)]
+            for level in range(1, top + 1):
+                expected.extend([("fund", level), ("order", level), ("fence", level)])
+                if windowed:
+                    expected.append(("capture", level))
+                expected.append(("verify", level))
+            self.assertEqual(stages, expected)
         return probe, detail["blueprints"][bp], events
 
     def test_a_passing_run_records_every_level_verdict(self):
@@ -349,9 +523,7 @@ class SequentialFlowTest(unittest.TestCase):
         self.assertEqual([level for _, level, _ in events], [1, 2, 3])
         self.assertTrue(probe.report["assertions"]["buildings_gate_L3_project"])
 
-    def test_barracks_and_house_orders_never_wait_for_the_retired_projects_dialog(self):
-        # buildings-qa 2026-11-13, barracks: the dialog path waited for a screen class that the
-        # container Projects menu never opens, and ran into the 1800 s deadline.
+    def test_headless_orders_do_not_use_graphical_menus(self):
         for bp, top in (("barracks", 3), ("house", 3)):
             _, _, events = self.run_flow(bp, top, order_admitted=True, cert_after_order=False)
             self.assertEqual({dialog for _, _, dialog in events}, {False})
@@ -374,12 +546,53 @@ class SequentialFlowTest(unittest.TestCase):
         # because the planner had already built L3; the failed project check ended the run.
         probe, sub, _ = self.run_flow("gate", 3, order_admitted=False, cert_after_order=True)
         self.assertEqual(sub["behaviour"].get("L3_upgrade"), "PASS")
-        self.assertEqual(sub.get("L3_admission"), "planner-admitted")
+        self.assertEqual(sub.get("L3_admission"), "same-run certificate")
         self.assertTrue(probe.report["assertions"]["buildings_gate_L3_project"])
 
     def test_an_order_nobody_admitted_still_fails(self):
         with self.assertRaisesRegex(RuntimeError, "buildings_gate_L1_project"):
             self.run_flow("gate", 3, order_admitted=False, cert_after_order=False)
+
+    def test_missing_level_is_red_only_after_the_server_refuses_the_upgrade(self):
+        data = buildings_qa._load_blueprints()
+        truncated = dict(data)
+        truncated["gate"] = dict(data["gate"], levels=data["gate"]["levels"][:2])
+        probe = FakeProbe()
+        with mock.patch.object(buildings_qa, "_load_blueprints", return_value=truncated), \
+                mock.patch(f"{__name__}.FakeProbe", return_value=probe), \
+                mock.patch.object(buildings_qa, "_send_fresh", return_value={
+                    "recent_chat": ["No blueprint upgrade available for this building."]}) as send:
+            with self.assertRaisesRegex(RuntimeError, "buildings_gate_L3_upgrade_available"):
+                self.run_flow("gate", 3, order_admitted=True, cert_after_order=False)
+        self.assertEqual(send.call_args.args[1], "settlement build upgrade 7")
+        self.assertIs(probe.report["assertions"]["buildings_gate_L3_upgrade_available"], False)
+
+    def test_verifying_previous_level_does_not_index_a_missing_next_level(self):
+        data = {"gate": {"levels": [{}, {}]}}
+        with mock.patch.object(buildings_qa, "_load_blueprints", return_value=data), \
+                mock.patch.object(buildings_qa, "_fit_orientation", return_value=0), \
+                mock.patch.object(buildings_qa, "oriented_cells",
+                                  return_value={(0, 0, 0): "minecraft:stone"}), \
+                mock.patch.object(buildings_qa, "true_origin", return_value=(0, 0, 0)), \
+                mock.patch.object(buildings_qa, "cells_true") as next_cells, \
+                mock.patch.object(buildings_qa, "_read", side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt):
+                buildings_qa._verify_level(FakeProbe(), {}, HEADLESS, None, "gate", 2,
+                                           (0, 0, 0), "buildings_gate", "town", (0, 0, 0))
+        next_cells.assert_not_called()
+
+    def test_missing_blueprint_is_red_only_after_the_server_refuses_the_order(self):
+        data = dict(buildings_qa._load_blueprints())
+        del data["gate"]
+        probe = FakeProbe()
+        with mock.patch.object(buildings_qa, "_load_blueprints", return_value=data), \
+                mock.patch(f"{__name__}.FakeProbe", return_value=probe), \
+                mock.patch.object(buildings_qa, "_send_fresh",
+                                  return_value={"recent_chat": ["Unknown blueprint."]}) as send:
+            with self.assertRaisesRegex(RuntimeError, "buildings_gate_L1_order_available"):
+                self.run_flow("gate", 3, order_admitted=True, cert_after_order=False)
+        self.assertEqual(send.call_args.args[1], "settlement build gate")
+        self.assertIs(probe.report["assertions"]["buildings_gate_L1_order_available"], False)
 
 
 if __name__ == "__main__":

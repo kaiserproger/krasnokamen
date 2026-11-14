@@ -1,33 +1,21 @@
-"""Strict in-game QA of every authored Millenaire blueprint level (buildings slice).
+"""In-game QA of authored blueprint construction and upgrades.
 
-Flow (the ONLY unblocked in-game owner-build path, verified against
-construction.rs/autonomy.rs + the QaAutonomy backend):
-  seed-100 generated village -> walk to it -> ownerless settlement adopts ->
-  founding chest starts empty -> workers produce unfunded -> autonomous Builder
-  completes at least Storage L1 -> CLAIM via dialog Claim button -> owner orders
-  each blueprint via the Projects dialog page (Order buttons; house+barracks L1
-  MUST go through the dialog button per the assignment) or `/settlement build`
-  chat for the rest -> fund the built storage chest via /give + ordinary
-  container shift-click (the legit 'player funds settlement' path) -> a REAL
-  Builder villager builds it -> verify per level -> upgrade L(n)->L(n+1) via
-  the upgrade order -> bounded adversarial pass (break a block mid-build,
-  restart mid-project + verify resume).
+The sequential flow founds a settlement, stocks a real storage container,
+orders a build and observes its completion. The windowed house path uses the
+Projects and Buildings menus and their confirmation dialogs. A pending,
+unfundable owner order fences the planner while each level is examined.
 
-Per level verified with direct client-observed evidence only:
-  - block-by-block match vs the authored blueprint (MCP block reads),
-  - building certified (building list shows kind + level),
-  - entrance reachable (player walks to the entrance cell),
-  - lighting (block light >= 1 inside; no hostile spawns overnight inside),
-  - function: house villagers sleep in its beds; farm farmer harvests+replants;
-    lumber camp lumberjack cuts + deposits; mine miner digs + deposits;
-    mason/Builder works there; storage accepts deposits; barracks soldier slots;
-    wall/tower certified + walkable.
-Screenshots of each finished level. Product code untouched.
+Each level requires a new same-run building ID, that exact level's completed
+certificate and client-observed block IDs, an allowed entrance block after
+teleport, a sampled light value and an instantaneous hostile census. Block
+properties, traversal, door operation and hostile exclusion are not tested;
+natural mob spawning is disabled. House bed capacity is checked, while sleep
+is a non-gating observation. Farm, lumber, mine, mason, storage and barracks
+have separate function checks; other workshop kinds do not prove job use.
+Windowed runs retain an exterior frame per level for review, not an automatic
+visual-quality verdict.
 
-SELECT env: one blueprint per harness invocation (600s cap):
-  house|storage|farm|mason|lumber_camp|mine|barracks|wall|watch_tower
-(BASE omits storage: storage is the boot step, verified as the claim village's
-autonomous Storage L1 + funding target.)
+BUILDINGS_QA_SELECT chooses one member of BLUEPRINTS, or ALL (the default).
 """
 from __future__ import annotations
 
@@ -71,6 +59,12 @@ LEVELS = {"house": 3, "storage": 2, "farm": 2, "mason": 2, "lumber_camp": 2,
           "fisherman": 2, "fletcher": 2, "leatherworker": 2, "librarian": 2,
           "toolsmith": 2, "weaponsmith": 2}
 
+# Only server/client-observed product outcomes can classify an unrecorded
+# building-level verdict as a negative control. Setup and races fail closed.
+NEGATIVE_CONTROL_STEPS = frozenset({
+    "order_available", "upgrade_available", "project", "built", "blocks",
+})
+
 FILL_LIMIT = 32768
 
 
@@ -97,9 +91,13 @@ KIND_LABEL = {"house": "House", "storage": "Storage", "farm": "Farmer workshop",
               "mine": "Mine", "barracks": "Barracks", "wall": "Wall section",
               "watch_tower": "Tower"}
 # ui.rs blueprint_label (English): the `<label> L<level>` project icon.
-PROJECT_LABEL = {"house": "House", "storage": "Storage", "farm": "Farm", "mason": "Mason",
-                 "lumber_camp": "Lumber camp", "mine": "Mine", "barracks": "Barracks",
-                 "wall": "Wall", "watch_tower": "Watchtower"}
+PROJECT_LABEL = {"house": "House", "storage": "Storage", "farm": "Farm",
+                 "mason": "Mason's workshop", "lumber_camp": "Lumber camp", "mine": "Mine",
+                 "barracks": "Barracks", "wall": "Wall", "watch_tower": "Watchtower",
+                 "gate": "Gate",
+                 **{kind: f"{kind.capitalize()}'s workshop" for kind in
+                    ("armorer", "butcher", "cartographer", "cleric", "fisherman", "fletcher",
+                     "leatherworker", "librarian", "toolsmith", "weaponsmith")}}
 KIND_PROFESSION = {"farm": "Farmer", "mason": "Builder",
                     "lumber_camp": "Lumberjack", "mine": "Miner"}
 # Parallel layout: one founded settlement per blueprint, centers 400 apart on
@@ -266,6 +264,27 @@ def _send(probe: ProbeSteps, command: str, settle_ticks: int = 40) -> dict[str, 
     probe.call("minecraft_send_chat", {"message": command, "command": True})
     probe.call("minecraft_wait_ticks", {"ticks": settle_ticks})
     return probe.observe()
+
+
+def _send_fresh(probe: ProbeSteps, command: str, prefixes: tuple[str, ...] = ()) -> dict[str, Any]:
+    """Send a command and return only chat received after its unique pre-command marker."""
+    import uuid
+    marker = f"bqa_fresh_{uuid.uuid4().hex}"
+    probe.call("minecraft_send_chat", {"message": marker, "command": False})
+    probe.wait(lambda s: any(marker in line for line in _chat_lines(s)),
+               "fresh_chat_marker", timeout_seconds=60)
+    probe.call("minecraft_send_chat", {"message": command, "command": True})
+
+    def response(state: dict[str, Any]) -> bool:
+        lines = _chat_lines(state)
+        boundary = next((i for i, line in enumerate(lines) if marker in line), None)
+        return boundary is not None and any(
+            not prefixes or line.startswith(prefixes) for line in lines[:boundary])
+
+    state = probe.wait(response, "fresh_command_response", timeout_seconds=60)
+    lines = _chat_lines(state)
+    boundary = next(i for i, line in enumerate(lines) if marker in line)
+    return {**state, "recent_chat": lines[:boundary]}
 
 
 def _echo(probe: ProbeSteps, label: str) -> dict[str, Any]:
@@ -550,6 +569,81 @@ def _building_bounds(probe: ProbeSteps, kind_label: str, level: int,
     return None
 
 
+def _building_records(probe: ProbeSteps, kind: str) -> dict[int, tuple[int, tuple[int, int, int]]]:
+    """Read current kind, IDs, levels and origins from a fresh listing."""
+    import re
+    state = _send_fresh(probe, "settlement building list", ("Buildings:", "No buildings."))
+    records = {}
+    for line in _chat_lines(state, 25):
+        if not line.startswith("Buildings:"):
+            continue
+        for match in re.finditer(r"#(\d+)([^#]*)", line):
+            segment = match.group(2)
+            if not _match_kind(kind, segment):
+                continue
+            values = re.search(r"\blevel\s+(\d+)\s+\[(-?\d+),\s*(-?\d+),\s*(-?\d+)\]", segment)
+            if values:
+                records[int(match.group(1))] = (
+                    int(values.group(1)),
+                    (int(values.group(2)), int(values.group(3)), int(values.group(4))),
+                )
+    return records
+
+
+def _current_certificate(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
+                         level: int) -> tuple[int, tuple[int, int, int]] | None:
+    records = _building_records(probe, bp)
+    baseline = {int(building_id) for building_id in sub["baseline_building_ids"]}
+    target = sub.get("building_id")
+    candidates = [(building_id, current, origin) for building_id, (current, origin) in records.items()
+                  if building_id not in baseline and (target is None or building_id == target)]
+    if len(candidates) > 1:
+        probe.check(f"{tag}_L{level}_unambiguous_id", False)
+        raise RuntimeError(f"{bp} L{level}: multiple new building IDs: {candidates}")
+    if not candidates:
+        return None
+    building_id, current, origin = candidates[0]
+    if current > level:
+        sub[f"L{level}_not_verified"] = f"building #{building_id} reached L{current} before L{level} verification"
+        probe.check(f"{tag}_L{level}_not_overtaken", False)
+        raise RuntimeError(sub[f"L{level}_not_verified"])
+    if current != level:
+        return None
+    sub["building_id"] = building_id
+    return building_id, origin
+
+
+def _queue_planner_fence(probe: ProbeSteps, sub: dict[str, Any], tag: str,
+                         bp: str, level: int) -> None:
+    # Both fence blueprints also exist in the pre-fix catalog. Withhold wool
+    # for House, or wheat seeds for Farm when the target itself needs wool.
+    fence = "farm" if bp in ("house", "barracks") else "house"
+    state = _send_fresh(probe, f"settlement build {fence}",
+                        (f"Queued {fence}:", f"Started {fence} ", "Unknown blueprint."))
+    lines = _chat_lines(state)
+    acknowledgement = next((line for line in lines if line.startswith(f"Queued {fence}:")), None)
+    sub[f"L{level}_planner_fence"] = acknowledgement or " | ".join(lines)
+    probe.check(f"{tag}_L{level}_planner_fenced", acknowledgement is not None)
+
+
+def _missing_level_order(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
+                         level: int, bid: int | None) -> None:
+    """Ask the server before classifying a local catalog gap as a behavioural failure."""
+    command = f"settlement build {bp}" if level == 1 else f"settlement build upgrade {bid}"
+    state = _send_fresh(probe, command, (
+        "Unknown blueprint.", "Blueprint has no first level.", "No blueprint upgrade available",
+        "Started ", "Queued ", "not enough:", "Construction bed material is unavailable.",
+        "waiting for forest evidence", "Building not found.", "Only the owner"))
+    lines = _chat_lines(state)
+    sub[f"L{level}_missing_level_reply"] = lines
+    refused = any(line.startswith(("Unknown blueprint.", "Blueprint has no first level."))
+                  for line in lines) if level == 1 else any(
+                      line.startswith("No blueprint upgrade available") for line in lines)
+    if refused:
+        probe.check(f"{tag}_L{level}_{'order' if level == 1 else 'upgrade'}_available", False)
+    raise RuntimeError(f"{bp} L{level}: local blueprint unavailable; server reply {lines!r}; cannot verify")
+
+
 def _find_nearby_chest(probe: ProbeSteps, detail: dict[str, Any]) -> tuple[int, int, int] | None:
     state = probe.observe()
     player = state.get("player") or {}
@@ -597,6 +691,47 @@ def _site_center(bp: str) -> tuple[int, int, int]:
     gx, gz = PARALLEL_SITES[bp]
     return (PARALLEL_ORIGIN[0] + gx * PARALLEL_STEP, PARALLEL_ORIGIN[1],
             PARALLEL_ORIGIN[2] + gz * PARALLEL_STEP)
+
+
+def _at_settlement_anchor(probe: ProbeSteps, sub: dict[str, Any]) -> None:
+    """Select this settlement for proximity-scoped commands and menus."""
+    x, y, z = sub["site"]
+    probe.fixture(f"tp @s {x + 0.5} {y + 1.0} {z + 0.5}")
+    probe.wait(lambda s: abs(float((s.get("player") or {}).get("x", -1e9)) - (x + 0.5)) < 2
+               and abs(float((s.get("player") or {}).get("z", -1e9)) - (z + 0.5)) < 2,
+               "settlement_anchor", timeout_seconds=60)
+
+
+def _capture_level(probe: ProbeSteps, sub: dict[str, Any], artifact: Path, tag: str,
+                   bp: str, level: int, origin: tuple[int, int, int]) -> None:
+    """Capture an elevated exterior view; the exact block oracle remains authoritative."""
+    turns = _fit_orientation(probe, bp, level, origin)
+    cells = oriented_cells(bp, level, origin, turns)
+    xs, ys, zs = zip(*cells)
+    cx, cy, cz = (min(xs) + max(xs) + 1) / 2, (min(ys) + max(ys) + 1) / 2, \
+                 (min(zs) + max(zs) + 1) / 2
+    x, y, z = min(xs) - 8, max(ys) + 8, min(zs) - 8
+    support = (x, y - 1, z)
+    probe.check(f"{tag}_L{level}_camera_space", _block_id(_read(probe, support)) == "minecraft:air")
+    _close_any_screen(probe)
+    probe.fixture("time set 3000")
+    probe.fixture(f"setblock {support[0]} {support[1]} {support[2]} minecraft:barrier")
+    try:
+        probe.fixture(f"tp @s {x + 0.5} {y} {z + 0.5}")
+        probe.wait(lambda s: abs(float((s.get("player") or {}).get("x", -1e9)) - (x + 0.5)) < 1
+                   and abs(float((s.get("player") or {}).get("z", -1e9)) - (z + 0.5)) < 1
+                   and float((s.get("player") or {}).get("y", -1e9)) >= y - 0.25,
+                   f"{tag}_L{level}_camera", timeout_seconds=60)
+        dx, dz = cx - (x + 0.5), cz - (z + 0.5)
+        yaw = round(math.degrees(math.atan2(-dx, dz)))
+        pitch = round(math.degrees(math.atan2(y + 1.62 - cy, math.hypot(dx, dz))))
+        probe.call("minecraft_look", {"yaw_deg": yaw, "pitch_deg": pitch})
+        # Let the HUD chat from the setup and listing commands fade before capture.
+        probe.call("minecraft_wait_ticks", {"ticks": 240})
+        sub[f"L{level}_visual_capture"] = native_client.capture(probe.client, artifact, f"{tag}-L{level}")
+    finally:
+        probe.fixture(f"setblock {support[0]} {support[1]} {support[2]} minecraft:air")
+        _at_settlement_anchor(probe, sub)
 
 def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext,
                          artifact: Path, targets: tuple[str, ...],
@@ -662,11 +797,6 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             _verdict(sub, "anchor", "FAIL", "no anchor in settlement info and no prior site")
             continue
         site = tuple(sub["site"])
-        # Project active check: skip ordering when the cert already exists.
-        have_L1 = f"L1_origin" in sub
-        if have_L1:
-            _verify_level(probe, sub, ctx, artifact, bp, 1, tuple(sub["L1_origin"]), tag,
-                          sname, tuple(sub.get("storage_chest", (0, 0, 0))))
         probe.fixture(f"tp @s {site[0] + 0.5} {site[1] + 1.0} {site[2] + 0.5}")
         shell = _hand_storage_at(probe, sub, tag, sname, site)
         if shell is None:
@@ -677,28 +807,25 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             shell = found
             sub["shell_reused"] = list(shell)
         sub["storage_chest"] = list(shell)
+        # Capture a per-run baseline after the hand-built storage exists. A
+        # pre-existing certificate, including that storage, is never our build.
+        _at_settlement_anchor(probe, sub)
+        if not _load_blueprints().get(bp, {}).get("levels"):
+            _missing_level_order(probe, sub, tag, bp, 1, None)
+        sub["baseline_building_ids"] = sorted(_building_records(probe, bp))
+        _queue_planner_fence(probe, sub, tag, bp, 1)
         have = _bound_count(probe, sname) if sub.get("resumed_settlement") else 0
         sub["bound_members"] = have
         if have >= 2:
             pass  # Chain resume: keep existing residents; no population pollution.
         elif not _summon_bind(probe, sub, tag, sname, shell, 6):
             continue
-        # Projects is a container menu now (`_project_status` reads it as one); the dialog helpers
-        # wait for a dialog screen that never opens (barracks hung to its deadline, 2026-11-13).
-        use_dialog = False
-        if f"L1_origin" not in sub:
-            # Chain resume: probe first — Busy/Ordered means a project is
-            # already admitted (ours from an earlier link); skip re-funding
-            # and go straight to monitoring.
-            _resumed_active = False
-            if sub.get("resumed_settlement"):
-                _probe = _send(probe, f"settlement build {bp}")
-                _echo_lines = _chat_lines(_probe, 8)
-                _resumed_active = any("Ordered " in l and "started" in l for l in _echo_lines) or \
-                    any(l.strip() == "Busy." for l in _echo_lines)
-                sub["L1_resume_probe"] = " | ".join(_echo_lines[:4])[:200]
-            if _resumed_active:
-                probe.check(f"{tag}_L1_project", True)
+        use_dialog = bp == "house" and ctx.windowed
+        for level in range(1, LEVELS[bp] + 1):
+            if level > 1:
+                previous = _current_certificate(probe, sub, tag, bp, level - 1)
+                probe.check(f"{tag}_L{level}_found", previous is not None)
+                bid = previous[0]
             else:
                 # FUNDED-FIRST: stock the chest, assert the delta, THEN order.
                 _fund_level(probe, sub, bp, 1, tuple(shell))
@@ -778,35 +905,45 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             _fund_level(probe, sub, bp, level, tuple(sub["storage_chest"]))
             if sub.get("behaviour", {}).get(f"L{level}_funded") != "PASS":
                 probe.check(f"{tag}_L{level}_built", False)
-                _verdict(sub, f"L{level}_upgrade", "FAIL", "funding delta absent; upgrade refused by rule")
                 continue
-            still_up = _order_echo_retry(
-                probe, sub, tag, bp, level, f"settlement build upgrade {bid}",
-                use_dialog, ctx,
-                dialog_fn=lambda: _upgrade_via_dialog(probe, sub, tag, bp, bid, level, sname),
-                upgrade_bid=bid)
-            _caught_up = _admitted_or_caught(probe, sub, tag, bp, level, still_up)
-            if _caught_up is not None:
-                # The planner started or finished this level before our order landed;
-                # follow its build instead of ordering a second one.
-                sub[f"L{level}_admission"] = "planner-admitted"
-            adv = False
-            if _caught_up is None and level == 2:
-                adv = _adversarial_break(probe, sub, tag, bp, level, bid)
-                _fund_level(probe, sub, bp, level, tuple(sub["storage_chest"]))
-            origin_up = _wait_certified_origin_here(probe, sub, tag, bp, level, ctx, artifact)
-            if origin_up is None:
-                probe.check(f"{tag}_L{level}_built", False)
-                _verdict(sub, f"L{level}_upgrade", "FAIL", "upgraded cert never appeared")
-                continue
-            probe.check(f"{tag}_L{level}_built", True)
-            sub[f"L{level}_origin"] = list(origin_up)
-            if adv:
+            # All project commands and menus select the nearest settlement.
+            _at_settlement_anchor(probe, sub)
+            command = f"settlement build {bp}" if level == 1 else f"settlement build upgrade {bid}"
+            dialog = (lambda: _order_via_dialog(probe, sub, tag, bp, level, sname)) if level == 1 else \
+                (lambda: _upgrade_via_dialog(probe, sub, tag, bp, bid, level, sname))
+            admitted = _order_echo_retry(probe, sub, tag, bp, level, command, use_dialog, ctx,
+                                         dialog_fn=dialog, upgrade_bid=bid)
+            # Re-establish the deliberately unfundable pending order immediately
+            # after admission, before even the shortest upgrade can complete.
+            _queue_planner_fence(probe, sub, tag, bp, level)
+            caught = _admitted_or_caught(probe, sub, tag, bp, level, admitted)
+            if caught is not None:
+                sub[f"L{level}_admission"] = "same-run certificate"
+            if level == 1 and use_dialog:
+                probe.check(f"{tag}_L1_order_menu", "L1_dialog_order" in sub)
+            if os.environ.get("BUILDINGS_QA_STOP_AFTER_ORDER"):
+                sub[f"L{level}_order_phase1"] = True
+                break
+            if level == 2 and caught is None and _adversarial_break(probe, sub, tag, bp, level, bid):
                 sub[f"L{level}_adversarial"] = "mid-build block break issued; build waited on site"
-            _verify_level(probe, sub, ctx, artifact, bp, level, origin_up, tag,
-                          sname, tuple(sub["storage_chest"]))
-            _verdict(sub, f"L{level}_upgrade", "PASS",
-                     f"L{level} cert at {list(origin_up)}; block-matched, entrance and light checked")
+                _fund_level(probe, sub, bp, level, tuple(shell))
+                _at_settlement_anchor(probe, sub)
+            origin = _wait_certified_origin_here(probe, sub, tag, bp, level, ctx, artifact)
+            if origin is None:
+                probe.check(f"{tag}_L{level}_built", False)
+                continue
+            if ctx.windowed:
+                _capture_level(probe, sub, artifact, tag, bp, level, origin)
+            _verify_level(probe, sub, ctx, artifact, bp, level, origin, tag, sname, tuple(shell))
+            probe.check(f"{tag}_L{level}_built", True)
+            verdict = "L1_built" if level == 1 else f"L{level}_upgrade"
+            _verdict(sub, verdict, "PASS",
+                     f"same-run #{sub['building_id']} L{level} at {list(origin)}; "
+                     "exact-level blocks, entrance and light checked")
+            _at_settlement_anchor(probe, sub)
+        if use_dialog:
+            probe.check(f"{tag}_upgrade_menu",
+                        any(f"L{level}_dialog_upgrade" in sub for level in range(2, LEVELS[bp] + 1)))
 
 def _check_house_repair(probe: ProbeSteps, sub: dict[str, Any], tag: str) -> None:
     from . import village_autonomy_qa as village
@@ -867,58 +1004,37 @@ def _break_placed_house_cell(probe: ProbeSteps, sub: dict[str, Any], tag: str) -
 def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str, level: int,
                       order_cmd: str, use_dialog: bool, ctx: ProfileContext,
                       dialog_fn=None, upgrade_bid: int | None = None) -> bool:
-    """Issue an order (dialog or echo) with echo capture + retry.
-
-    Refusals are often transient planner contention (autonomous queue holds
-    the slot); retry up to 3 times, 60s apart, re-checking admission each
-    time. Returns True when an active project for OUR target exists."""
-    import re as _re
-    for attempt in range(1, 4):
-        if use_dialog and ctx.windowed and dialog_fn is not None:
-            try:
-                dialog_fn()
-            except Exception as exc:
-                sub[f"L{level}_order_attempt{attempt}"] = f"dialog failed: {exc}"[:200]
-        else:
-            try:
-                state = _send(probe, order_cmd)
-                lines = _chat_lines(state, 12)
-                sub[f"L{level}_order_attempt{attempt}"] = " | ".join(lines[:6])[:300]
-            except Exception as exc:
-                sub[f"L{level}_order_attempt{attempt}"] = f"echo failed: {exc}"[:200]
-        probe.call("minecraft_wait_ticks", {"ticks": 20})
-        if "Started " in str(sub.get(f"L{level}_order_attempt{attempt}", "")):
-            return True
-        # "No blueprint upgrade available" is the planner's own project at this level (the
-        # order would target a level past the blueprint's last): follow that project.
-        refused_as_planned = "No blueprint upgrade available" in str(
-            sub.get(f"L{level}_order_attempt{attempt}", ""))
-        if ctx.windowed or refused_as_planned:
+    """Issue one order; never infer admission from stale chat or an unrelated project."""
+    if use_dialog and ctx.windowed and dialog_fn is not None:
+        message = dialog_fn()
+    else:
+        state = _send_fresh(
+            probe, order_cmd,
+            (f"Started {bp} ", f"Queued {bp}", "No blueprint upgrade available",
+             "Unknown blueprint.", "Busy.", "not enough:"))
+        message = " | ".join(_chat_lines(state, 12))
+    sub[f"L{level}_order_attempt1"] = message[:300]
+    if f"started {PROJECT_LABEL.get(bp, bp)} construction.".lower() in message.lower() or \
+            f"started {bp} construction.".lower() in message.lower():
+        return True
+    # Do not replace a queued owner order with a second attempt while it waits.
+    if "queued " in message.lower():
+        for _ in range(20):
             if _project_active_quiet(probe, sub, tag, bp, level, upgrade_bid=upgrade_bid):
                 return True
-        else:
-            state = _send(probe, order_cmd)
-            lines = _chat_lines(state, 12)
-            echo = " | ".join(lines[:6])
-            sub[f"L{level}_project_body"] = echo[:400]
-            active = any("Ordered " in line and "started" in line for line in lines) or \
-                any(line.strip() == "Busy." for line in lines)
-            if active:
-                return True
-        # The MCP tool accepts at most 255 ticks per request.
-        for ticks in (255, 255, 255, 255, 180):
-            probe.call("minecraft_wait_ticks", {"ticks": ticks})
+            if _current_certificate(probe, sub, tag, bp, level) is not None:
+                return False
+            probe.call("minecraft_wait_ticks", {"ticks": 200})
+    elif _project_active_quiet(probe, sub, tag, bp, level, upgrade_bid=upgrade_bid):
+        return True
     return False
 
 
 def _admitted_or_caught(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str, level: int,
                         admitted: bool) -> tuple[int, int, int] | None:
-    """Admission verdict for a level's order. An order the server refused is still fine when
-    the planner already built the level in the fund window: that cert's origin is returned
-    (the build is then followed, not re-ordered). Neither an admitted project nor a cert
-    fails `<tag>_L<level>_project`; the check must come after the cert lookup, because a failed
-    check raises."""
-    caught = None if admitted else _building_bounds(probe, bp, level)
+    """Accept a refused order only if this run's tracked building reached this exact level."""
+    certificate = None if admitted else _current_certificate(probe, sub, tag, bp, level)
+    caught = certificate[1] if certificate is not None else None
     probe.check(f"{tag}_L{level}_project", admitted or caught is not None)
     return caught
 
@@ -948,7 +1064,15 @@ def _project_status(probe: ProbeSteps) -> tuple[str, int] | None:
     icon = next((row for row in page["container"]["slots"] if row.get("slot") == PROJECT_ICON_SLOT), None)
     probe.call("minecraft_close_screen", {})
     match = re.fullmatch(r"(.+) L(\d+)", str((icon or {}).get("name") or ""))
-    return (match.group(1), int(match.group(2))) if match else None
+    if not match:
+        return None
+    queued = str((status or {}).get("name") or "").startswith("Queued — site not assigned")
+    return match.group(1), int(match.group(2)), not queued
+
+
+def _project_status(probe: ProbeSteps) -> tuple[str, int] | None:
+    view = _project_view(probe)
+    return (view[0], view[1]) if view is not None and view[2] else None
 
 
 def _project_origin(probe: ProbeSteps) -> tuple[int, int, int] | None:
@@ -1085,17 +1209,6 @@ def _project_active_echo(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: s
     return active
 
 
-def _project_idle_state(probe: ProbeSteps, level: int) -> str:
-    """Project state without emitting checks: 'idle' (no active project),
-    'superseded' (active project targets a HIGHER level than ours — ours
-    certified and the planner moved on), else 'building'."""
-    try:
-        status = _project_status(probe)
-    except Exception:
-        return "building"
-    if status is None:
-        return "idle"
-    return "superseded" if status[1] > level else "building"
 
 
 def _wait_certified_origin_here(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str,
@@ -1103,22 +1216,25 @@ def _wait_certified_origin_here(probe: ProbeSteps, sub: dict[str, Any], tag: str
                                 artifact: Path) -> tuple[int, int, int] | None:
     """Poll the listing while the player STAYS on site (active chunks)."""
     budget = probe.deadline - _time.monotonic() - 60.0
-    exclude = [sub["shell_bounds"][0]] if bp == "storage" and "shell_bounds" in sub else None
+    fence = "farm" if bp in ("house", "barracks") else "house"
     deadline = _time.monotonic() + max(budget, 60.0)
     while _time.monotonic() < deadline:
         probe.call("minecraft_wait_ticks", {"ticks": 200})
-        origin = _building_bounds(probe, bp, level, exclude=exclude)
-        if origin is None:
+        certificate = _current_certificate(probe, sub, tag, bp, level)
+        if certificate is None:
             continue
-        if level >= 2 and _project_idle_state(probe, level) == "building":
-            # Upgrade admission flips the listing to the new level while the
-            # builder is still placing: a mid-build verify false-fails.
+        view = _project_view(probe)
+        if view is not None and view[2]:
             continue
-        if ctx.windowed:
-            try:
-                native_client.capture(probe.client, artifact, f"{tag}-L{level}")
-            except Exception:
-                pass
+        expected = PROJECT_LABEL.get(fence, fence.capitalize()).lower()
+        fenced = view is not None and not view[2] and view[1] == 1 and view[0].lower() == expected
+        probe.check(f"{tag}_L{level}_fence_waiting", fenced)
+        # The listing flips on upgrade admission, not completion; check it
+        # again after observing the queued fence.
+        certificate = _current_certificate(probe, sub, tag, bp, level)
+        if certificate is None:
+            continue
+        origin = certificate[1]
         sub[f"L{level}_origin"] = list(origin)
         return origin
     return None
@@ -1681,97 +1797,69 @@ def _summon_bind(probe: ProbeSteps, sub: dict[str, Any], tag: str,
 
 
 
+def _menu_click_named(probe: ProbeSteps, title: str, name: str) -> None:
+    """Find an icon across container pages and click its exact name."""
+    page = probe.wait(lambda s: _container_titled(s, title), f"{title}_menu_open",
+                      timeout_seconds=60)
+    while True:
+        slots = page["container"]["slots"]
+        match = next((row for row in slots if row.get("name") == name), None)
+        if match is not None:
+            probe.call("minecraft_click_container_slot", {"slot": int(match["slot"]), "button": "primary",
+                                                          "timeout_seconds": probe.remaining()})
+            return
+        if not any(row.get("slot") == 50 and row.get("name") == "Next page" for row in slots):
+            raise RuntimeError(f"buildings-qa: {name!r} missing from {title} menu")
+        probe.call("minecraft_click_container_slot", {"slot": 50, "button": "primary",
+                                                      "timeout_seconds": probe.remaining()})
+        page = probe.wait(lambda s: _container_titled(s, title)
+                          and s["container"]["slots"] != slots,
+                          f"{title}_next_page", timeout_seconds=60)
+
+
+def _confirm_project(probe: ProbeSteps, label: str) -> str:
+    # The container icon opens a real server confirmation, not the retired
+    # Projects dialog. Do not bypass that confirmation with a chat command.
+    opened = probe.wait(lambda s: (s.get("screen") or {}).get("class") == DIALOG_CLASS
+                        and (s.get("screen") or {}).get("title") == label,
+                        "project_confirmation_open", timeout_seconds=60)
+    probe.call("minecraft_click_screen_button", {"expected_screen_class": DIALOG_CLASS,
+                                                "expected_title": opened["screen"]["title"],
+                                                "button_label": label})
+    result = probe.wait(
+        lambda s: (s.get("screen") or {}).get("class", "").endswith("SimpleDialogScreen")
+        and any(str(node.get("id", "")).startswith("dialog/body/") for node in s.get("ui_nodes", [])),
+        "project_confirmation_result", timeout_seconds=60)
+    return " | ".join(str(node.get("label", "")) for node in result.get("ui_nodes", [])
+                      if str(node.get("id", "")).startswith("dialog/body/"))
+
+
 def _order_via_dialog(probe: ProbeSteps, sub: dict[str, Any], tag: str,
-                      bp: str, level: int, settlement: str) -> None:
-    state = _send(probe, "settlement menu projects")
-    opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
-                        and "Projects" in str(s["screen"].get("title", "")),
-                        f"{tag}_L{level}_projects_open")
-    title = opened["screen"].get("title")
-    probe.call("minecraft_click_screen_button", {
-        "expected_screen_class": DIALOG_CLASS, "expected_title": title,
-        "button_label": f"Order: {bp}"})
-    probe.call("minecraft_wait_ticks", {"ticks": 40})
-    after = probe.observe()
-    body = "\n".join(str(n.get("label", "")) for n in after.get("ui_nodes", [])
-                     if isinstance(n, dict) and str(n.get("id", "")).startswith("dialog/body"))
-    note = "\n".join(str(n.get("label", "")) for n in after.get("ui_nodes", [])
-                     if isinstance(n, dict) and str(n.get("id", "")) in ("dialog/title", "dialog/note", "dialog/body/0"))
-    sub[f"L{level}_dialog_order"] = f"clicked Order: {bp} in {title}"
-    sub[f"L{level}_order_note"] = (note + "\n" + body)[:500]
+                      bp: str, level: int, settlement: str) -> str:
+    _send(probe, "settlement menu projects")
+    label = PROJECT_LABEL.get(bp, bp.capitalize())
+    _menu_click_named(probe, "Projects", f"{label} L1")
+    result = _confirm_project(probe, f"Order: {label}")
+    sub[f"L{level}_dialog_order"] = result
+    return result
 
 
 def _upgrade_via_dialog(probe: ProbeSteps, sub: dict[str, Any], tag: str,
-                        bp: str, bid: int, level: int, settlement: str) -> None:
-    state = _send(probe, "settlement menu projects")
-    opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
-                        and "Projects" in str(s["screen"].get("title", "")),
-                        f"{tag}_L{level}_projects_open")
-    title = opened["screen"].get("title")
-    # Deterministic label (ui_text Key::UpgradeRow); the scrollable dialog
-    # only exposes on-screen buttons in ui_nodes, so never scan for it —
-    # click by label directly (same as Order buttons).
+                        bp: str, bid: int, level: int, settlement: str) -> str:
+    _send(probe, "settlement menu buildings")
     kind = KIND_LABEL.get(bp, bp.capitalize())
-    label = f"Upgrade #{bid & 0xFFFFFFFF} ({kind} L{level - 1}) to L{level}"
-    _click_upgrade_label(probe, sub, tag, level, title, label, bid)
-
-
-def _click_upgrade_label(probe: ProbeSteps, sub: dict[str, Any], tag: str,
-                         level: int, title: str, label: str, bid: int) -> None:
-    try:
-        probe.call("minecraft_click_screen_button", {
-            "expected_screen_class": DIALOG_CLASS, "expected_title": title,
-            "button_label": label})
-    except Exception:
-        # Fallback: sweep visible buttons for any Upgrade-to-L{level} row
-        # (label drift across locales/templates).
-        found = _find_upgrade_button(probe.observe(), level)
-        if found is None:
-            for _ in range(6):
-                try:
-                    _wheel(probe, 3)
-                except Exception:
-                    break
-                probe.call("minecraft_wait_ticks", {"ticks": 10})
-                found = _find_upgrade_button(probe.observe(), level)
-                if found is not None:
-                    break
-        if found is None:
-            raise RuntimeError(f"buildings-qa {tag}: no Upgrade-to-L{level} button in Projects dialog")
-        label = found
-        probe.call("minecraft_click_screen_button", {
-            "expected_screen_class": DIALOG_CLASS, "expected_title": title,
-            "button_label": label})
-    probe.call("minecraft_wait_ticks", {"ticks": 40})
-    sub[f"L{level}_dialog_upgrade"] = f"clicked {label} (bid {bid})"
-
-def _wheel(probe: ProbeSteps, count: int) -> None:
-    """Real wheel events over our owned Xvfb window (scrollable dialogs)."""
-    import ctypes as _c
-    import ctypes.util as _cu
-    owned = probe.client.p4_window
-    x = _c.CDLL(_cu.find_library("X11"))
-    xt = _c.CDLL(_cu.find_library("Xtst"))
-    x.XOpenDisplay.restype = _c.c_void_p
-    x.XOpenDisplay.argtypes = [_c.c_char_p]
-    x.XWarpPointer.argtypes = [_c.c_void_p, _c.c_ulong, _c.c_ulong, _c.c_int, _c.c_int,
-                              _c.c_uint, _c.c_uint, _c.c_int, _c.c_int]
-    x.XSync.argtypes = [_c.c_void_p, _c.c_int]
-    x.XCloseDisplay.argtypes = [_c.c_void_p]
-    xt.XTestFakeButtonEvent.argtypes = [_c.c_void_p, _c.c_uint, _c.c_int, _c.c_ulong]
-    display = x.XOpenDisplay(owned["display"].encode())
-    if not display:
-        raise RuntimeError("cannot open owned Xvfb display for wheel scroll")
-    try:
-        x.XWarpPointer(display, 0, owned["window_id"], 0, 0, 0, 0, 80, 100)
-        for _ in range(abs(count)):
-            button = 5 if count > 0 else 4
-            if not xt.XTestFakeButtonEvent(display, button, 1, 0) or \
-                    not xt.XTestFakeButtonEvent(display, button, 0, 0):
-                raise RuntimeError("owned Xvfb display refused wheel input")
-        x.XSync(display, 0)
-    finally:
-        x.XCloseDisplay(display)
+    _menu_click_named(probe, "Buildings", f"#{bid & 0xFFFFFFFF} {kind} L{level - 1}")
+    screen = probe.wait(lambda s: _container_titled(s, f"#{bid & 0xFFFFFFFF} {kind}"),
+                        f"{tag}_building_open", timeout_seconds=60)
+    action = next((row for row in screen["container"]["slots"] if row.get("slot") == 52), None)
+    label = f"Order construction L{level}"
+    if not action or action.get("name") != label:
+        raise RuntimeError(f"buildings-qa: expected {label!r}, got {action}")
+    probe.call("minecraft_click_container_slot", {"slot": 52, "button": "primary",
+                                                  "timeout_seconds": probe.remaining()})
+    result = _confirm_project(probe, f"{label} #{bid & 0xFFFFFFFF}")
+    sub[f"L{level}_dialog_upgrade"] = result
+    return result
 
 
 
@@ -1821,13 +1909,16 @@ def _adversarial_break(probe: ProbeSteps, sub: dict[str, Any], tag: str,
                        bp: str, level: int, bid: int) -> bool:
     """Break one placed block mid-upgrade-build (bounded: torch/fence class only)."""
     import re as _re
-    state = _send(probe, "settlement building list")
+    if not _project_active_quiet(probe, sub, tag, bp, level, upgrade_bid=bid):
+        return False
+    state = _send_fresh(probe, "settlement building list", ("Buildings:", "No buildings."))
     bounds = None
     for line in _chat_lines(state, 25):
-        if _match_kind(bp, line) and f"level {level - 1}" in line:
-            m = _re.findall(r"\[(-?\d+),\s*(-?\d+),\s*(-?\d+)\]", line)
-            if len(m) >= 2:
-                bounds = [(int(a), int(b), int(c)) for a, b, c in m[:2]]
+        match = _re.search(rf"#{bid}(?!\d)([^#]*)", line)
+        if match and _match_kind(bp, match.group(1)):
+            points = _re.findall(r"\[(-?\d+),\s*(-?\d+),\s*(-?\d+)\]", match.group(1))
+            if len(points) >= 2:
+                bounds = [(int(a), int(b), int(c)) for a, b, c in points[:2]]
                 break
     if not bounds:
         return False
@@ -1837,6 +1928,8 @@ def _adversarial_break(probe: ProbeSteps, sub: dict[str, Any], tag: str,
             for z in range(z0, z1 + 1):
                 got = _block_id(_read(probe, (x, y, z)))
                 if got in ("minecraft:torch", "minecraft:wall_torch", "minecraft:oak_fence"):
+                    if not _project_active_quiet(probe, sub, tag, bp, level, upgrade_bid=bid):
+                        return False
                     probe.fixture(f"setblock {x} {y} {z} minecraft:air")
                     sub["adversarial_break"] = [x, y, z, got]
                     return True
@@ -1872,12 +1965,10 @@ def _base_materials(listing: str, level: int) -> dict[str, int]:
 
 def _fund_level(probe: ProbeSteps, sub: dict[str, Any], bp: str, level: int,
                 chest: tuple[int, int, int]) -> None:
-    """Give exact base materials + deposit into built storage (ordinary path).
-    Funds 1.5x base (admission-robust for deep craft chains like mason's);
-    planner auto-L+1 races are handled by verify tolerance + pre/post-order
-    cert checks, not by starving the bill. Closes any open dialog,
-    teleports within chest reach, opens a REAL ChestMenu (assert),
-    shift-click deposits, then asserts the stock delta."""
+    """Deposit 1.5x base materials into real storage and assert the stock delta.
+
+    A deliberately unfundable pending order fences autonomous upgrades until
+    each completed level has been verified."""
     import subprocess as _sp
     out = _sp.run(["python3", "tools/blueprints.py", "materials", bp],
                   capture_output=True, text=True, cwd=str(runtime.REPO_ROOT)).stdout
@@ -1933,12 +2024,6 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
     turns = _fit_orientation(probe, bp, level, origin)
     sub[f"L{level}_rotation"] = turns
     cells = oriented_cells(bp, level, origin, turns)
-    # L+1 upgrade clear stage: the planner auto-starts L+1 the moment L1
-    # certifies (1.5x fund covers it) and clears removed cells before this
-    # verify reads. Accept air-where-removed and already-upgraded cells;
-    # L+1 verification itself stays strict.
-    cells_next = (cells_true(bp, level + 1, true_origin(bp, level, origin, turns), turns)
-                  if level < LEVELS[bp] else {})
     mismatches: list[str] = []
     checked = 0
     for pos, want in cells.items():
@@ -1950,19 +2035,7 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
         got = _block_id(block)
         want_id = _state_base(want)
         if got != want_id:
-            if pos in cells_next:
-                if got == _state_base(cells_next[pos]):
-                    checked += 1
-                    continue
-            elif got == "minecraft:air":
-                checked += 1
-                continue
-            fam = want_id.split(":")[-1]
-            fam_key = ("fence" if fam.endswith("_fence") else
-                       "wall" if fam.endswith("_wall") else
-                       "pane" if fam.endswith("_pane") else None)
-            if fam_key is None or fam_key not in got:
-                mismatches.append(f"{list(pos)}: got {got} want {want_id}")
+            mismatches.append(f"{list(pos)}: got {got} want {want_id}")
         checked += 1
         if len(mismatches) > 12:
             break
@@ -1982,25 +2055,23 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
                 still.append(f"{list(pos)}: unreadable {exc}")
                 continue
             if _block_id(block) != _state_base(want):
-                if pos in cells_next and _block_id(block) == _state_base(cells_next[pos]):
-                    continue
-                if pos not in cells_next and _block_id(block) == "minecraft:air":
-                    continue
-                fam = _state_base(want).split(":")[-1]
-                fam_key = ("fence" if fam.endswith("_fence") else
-                           "wall" if fam.endswith("_wall") else
-                           "pane" if fam.endswith("_pane") else None)
-                if fam_key is None or fam_key not in _block_id(block):
-                    still.append(f"{list(pos)}: got {_block_id(block)} want {_state_base(want)}")
+                still.append(f"{list(pos)}: got {_block_id(block)} want {_state_base(want)}")
         mismatches = still
         match_ok = not mismatches
         oracle = []
         for entry in still[:6]:
+            if "want " not in entry:
+                oracle.append(entry)
+                continue
             nums = [int(v) for v in entry.split("]")[0].strip("[").split(",")]
             want_name = entry.rsplit("want ", 1)[1]
             lines = _chat_lines(_send(probe, f"execute if block {nums[0]} {nums[1]} {nums[2]} {want_name}"), 4)
             oracle.append(f"{nums}: {' | '.join(lines)[:120]}")
         sub[f"L{level}_server_oracle"] = oracle
+    if "baseline_building_ids" in sub:
+        certificate = _current_certificate(probe, sub, tag, bp, level)
+        probe.check(f"{tag}_L{level}_exact_snapshot",
+                    certificate is not None and certificate[1] == origin)
     sub[f"L{level}_blockmatch"] = {"checked": checked, "mismatches": mismatches[:12]}
     _verdict(sub, f"L{level}_blockmatch", "PASS" if match_ok else "FAIL",
              f"{checked} cells, {len(mismatches)} mismatches", f"origin {list(origin)} rot {turns}")
@@ -2077,7 +2148,7 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
               and lo[2] <= float(e.get("z", -1e9)) <= hi[2]]
     probe.check(f"{tag}_L{level}_no_hostiles", not inside)
     _verdict(sub, f"L{level}_no_hostiles", "PASS" if not inside else "FAIL",
-             f"{len(inside)} hostiles inside")
+             f"{len(inside)} hostiles observed inside; mob spawning disabled, not an exclusion test")
     probe.fixture("time set 3000")
 
     kind = data["kind"]
@@ -2098,7 +2169,7 @@ def _verify_level(probe: ProbeSteps, sub: dict[str, Any], ctx: ProfileContext,
     elif kind in ("wall", "tower", "gate"):
         probe.check(f"{tag}_L{level}_fort", True)
         _verdict(sub, f"L{level}_function_fort", "PASS",
-                 "certified + entrance walkable (physical fortification)")
+                 "certificate and entrance block checked after teleport; no traversal or door interaction tested")
 
 
 def _function_house(probe: ProbeSteps, sub: dict[str, Any], tag: str, level: int,
@@ -2157,13 +2228,30 @@ def _station_of(cells: dict[tuple[int, int, int], str],
 
 
 def _residents_text(probe: ProbeSteps) -> list[str]:
-    """Residents & jobs page BODY lines (job assignments per building)."""
-    state = _send(probe, "settlement menu residents")
-    opened = probe.wait(lambda s: s["screen"].get("class") == DIALOG_CLASS
-                        and "Residents" in str(s["screen"].get("title", "")),
-                        "residents_page_open")
-    return [str(n.get("label", "")) for n in opened.get("ui_nodes", [])
-            if isinstance(n, dict) and str(n.get("id", "")).startswith("dialog/body")]
+    """Read each resident's profession and workplace from the census icon lore."""
+    _send(probe, "settlement menu residents")
+    opened = probe.wait(lambda s: _container_titled(s, "Residents"), "residents_page_open",
+                        timeout_seconds=60)
+    residents = []
+    while True:
+        for row in opened["container"]["slots"]:
+            slot = int(row.get("slot", -1))
+            if 9 <= slot < 45 and row.get("item_id"):
+                components = probe.call("minecraft_read_item_components",
+                                        {"source": "container", "slot": slot})["components"]
+                lore = [_text_plain(line) for line in components.get("minecraft:lore", [])]
+                residents.append(" ".join(lore).replace("Works at", "works at"))
+        if not any(row.get("slot") == 50 and row.get("name") == "Next page"
+                   for row in opened["container"]["slots"]):
+            break
+        previous = opened["container"]["slots"]
+        probe.call("minecraft_click_container_slot", {"slot": 50, "button": "primary",
+                                                      "timeout_seconds": probe.remaining()})
+        opened = probe.wait(lambda s: _container_titled(s, "Residents")
+                            and s["container"]["slots"] != previous,
+                            "residents_next_page", timeout_seconds=60)
+    probe.call("minecraft_close_screen", {})
+    return residents
 
 
 def _await_assignment(probe: ProbeSteps, short: int | None, label: str,
@@ -2174,10 +2262,7 @@ def _await_assignment(probe: ProbeSteps, short: int | None, label: str,
     deadline = _time.monotonic() + timeout_s
     residents: list[str] = []
     while True:
-        try:
-            residents = _residents_text(probe)
-        except Exception:
-            residents = []
+        residents = _residents_text(probe)
         if short and any(f"works at #{short} {label}" in line and profession in line
                          for line in residents):
             break
@@ -2207,7 +2292,9 @@ def _function_farm(probe: ProbeSteps, sub: dict[str, Any], tag: str, level: int,
                                       "minecraft:potatoes", "minecraft:beetroots")]
     # "works at #<short> <Kind label>" where short = global id low 32 bits.
     import re as _re
-    full = _building_seq(probe, "farm", level)
+    if "site" in sub:
+        _at_settlement_anchor(probe, sub)
+    full = sub.get("building_id") or _building_seq(probe, "farm", level)
     short = full & 0xFFFFFFFF if full else None
     label = KIND_LABEL["farm"]
     residents = _await_assignment(probe, short, label, "Farmer")
@@ -2346,7 +2433,9 @@ def _function_lumber(probe: ProbeSteps, sub: dict[str, Any], tag: str, level: in
     (3) the storage chest gains oak_log (deposit).
     No villager-inventory reads: entities never expose carry."""
     probe.fixture("time set 3000")
-    bid = _building_seq(probe, "lumber_camp", level)
+    if "site" in sub:
+        _at_settlement_anchor(probe, sub)
+    bid = sub.get("building_id") or _building_seq(probe, "lumber_camp", level)
     short = bid & 0xFFFFFFFF if bid else None
     label = KIND_LABEL["lumber_camp"]
     residents = _await_assignment(probe, short, label, "Lumberjack")
@@ -2435,7 +2524,9 @@ def _function_mine(probe: ProbeSteps, sub: dict[str, Any], tag: str, level: int,
     (3) the storage chest gains a mining product (deposit).
     No villager-inventory reads: entities never expose carry."""
     probe.fixture("time set 3000")
-    bid = _building_seq(probe, "mine", level)
+    if "site" in sub:
+        _at_settlement_anchor(probe, sub)
+    bid = sub.get("building_id") or _building_seq(probe, "mine", level)
     short = bid & 0xFFFFFFFF if bid else None
     label = KIND_LABEL["mine"]
     residents = _await_assignment(probe, short, label, "Miner")
@@ -2545,7 +2636,9 @@ def _function_work(probe: ProbeSteps, sub: dict[str, Any], tag: str, level: int,
         probe.check(f"{tag}_L{level}_work", False)
         _verdict(sub, f"L{level}_function_work", "FAIL", "no workstation in blueprint")
         return
-    bid = _building_seq(probe, "mason", level)
+    if "site" in sub:
+        _at_settlement_anchor(probe, sub)
+    bid = sub.get("building_id") or _building_seq(probe, "mason", level)
     short = bid & 0xFFFFFFFF if bid else None
     label = KIND_LABEL["mason"]
     residents = _await_assignment(probe, short, label, "Builder")
