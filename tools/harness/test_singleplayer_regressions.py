@@ -27,7 +27,7 @@ class SingleplayerRegressionTests(unittest.TestCase):
             binary = root / "real server"
             binary.touch()
             pidfile, unit = sp.singleplayer_slow.stage_server(binary, root, root)
-            wrapper = (root / "solaris-v2").read_text()
+            wrapper = (root / "krasnokamen").read_text()
             self.assertTrue(unit.startswith("solaris-sp-slow-"))
             self.assertEqual(pidfile, root / "slow-server.pid")
             self.assertIn("CPUQuota=1%", wrapper)
@@ -42,7 +42,7 @@ class SingleplayerRegressionTests(unittest.TestCase):
             root = Path(temp)
             binary = root / "real server"
             pidfile, unit = sp.singleplayer_slow.stage_server(binary, root, root, slow=False)
-            wrapper = (root / "solaris-v2").read_text()
+            wrapper = (root / "krasnokamen").read_text()
             self.assertIsNone(unit)
             self.assertEqual(pidfile, root / "slow-server.pid")
             self.assertNotIn("CPUQuota", wrapper)
@@ -91,7 +91,7 @@ class SingleplayerRegressionTests(unittest.TestCase):
                                   extra_args=[], platform=None, timeout_seconds=30,
                                   artifact_dir=artifact, client_evidence={})
             with (
-                patch.dict(sp.os.environ, {"SOLARIS_SERVER_BINARY": str(binary)}),
+                patch.dict(sp.os.environ, {"KRASNOKAMEN_SERVER_BINARY": str(binary)}),
                 patch.object(sp.runtime, "REPO_ROOT", root / "repo"),
                 patch.object(sp.native_client, "_client_root", return_value=template),
                 patch.object(sp.native_client, "resolve_binary", return_value=binary),
@@ -99,7 +99,7 @@ class SingleplayerRegressionTests(unittest.TestCase):
             ):
                 with self.assertRaisesRegex(RuntimeError, "fixture staged"):
                     sp.run(ctx)
-            staged = artifact / "data/solaris-client/servers/content/26.3"
+            staged = artifact / "data/krasnokamen-client/servers/content/26.3"
             self.assertFalse(staged.is_symlink())
             self.assertFalse((staged / "tags").is_symlink())
             self.assertEqual((staged / "tags/blocks.json").read_text(), "{}")

@@ -10,7 +10,7 @@ cp docs/agents/PRO_CORE_AUDIT_RUNBOOK.md .ai-bridge/PRO_CORE_AUDIT_RUNBOOK.md
 
 codexpro pro-bundle \
   --root "$ROOT" \
-  --title "Solaris whole-core audit for v0.0.3-alpha.1" \
+  --title "Krasnokamen whole-core audit for v0.0.3-alpha.1" \
   --max-files 80 \
   --max-file-bytes 100000 \
   --max-total-bytes 900000

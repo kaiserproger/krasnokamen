@@ -239,7 +239,7 @@ fn nonzero_debt_eviction_before_ack_restart_consumes_exactly_once() {
             .extras
             .iter()
             .filter_map(|(key, tag)| match (key.as_str(), tag) {
-                ("SolarisSimDebt", mc_nbt::Tag::Long(value)) => Some(*value),
+                ("KrasnokamenSimDebt", mc_nbt::Tag::Long(value)) => Some(*value),
                 _ => None,
             })
             .next();
@@ -327,7 +327,7 @@ fn nonzero_debt_eviction_before_ack_restart_consumes_exactly_once() {
             .extras
             .iter()
             .filter_map(|(key, tag)| match (key.as_str(), tag) {
-                ("SolarisSimDebt", mc_nbt::Tag::Long(value)) => Some(*value),
+                ("KrasnokamenSimDebt", mc_nbt::Tag::Long(value)) => Some(*value),
                 _ => None,
             })
             .next();
