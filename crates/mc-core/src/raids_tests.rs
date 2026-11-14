@@ -367,7 +367,7 @@ fn raids_native_codec_path_wal_roundtrip_and_corrupt_records_fail_closed() {
     assert_eq!(
         raid.iter()
             .map(|(k, _)| k.as_str())
-            .filter(|k| !k.starts_with("solaris:"))
+            .filter(|k| !k.starts_with("krasnokamen:"))
             .collect::<BTreeSet<_>>(),
         [
             "id",
@@ -790,7 +790,10 @@ fn raider_does_not_hit_a_held_target_behind_a_wall_in_reach() {
     let apart =
         crate::special_mobs::distance_sq(state.entities.pos(slot), state.entities.pos(villager))
             .sqrt();
-    assert!(apart < 1.8, "the villager stays within melee reach ({apart})");
+    assert!(
+        apart < 1.8,
+        "the villager stays within melee reach ({apart})"
+    );
     assert!(
         state.hostile.native.raider_targets.contains_key(&raider),
         "the target is still held from memory"

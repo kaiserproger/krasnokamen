@@ -25,7 +25,7 @@ on, mold, no sccache, and one run each. Receipts are in
 
 | Scenario | Wall time |
 |---|---|
-| Cold server binary (`-p mc-edge --bin solaris-v2`) | 6m32s |
+| Cold server binary (`-p mc-edge --bin krasnokamen`) | 6m32s |
 | Cold `mc-core` unit-test binary, after the above | 4m22s |
 | One-line `mc-core` edit → server binary | 59–71 s |
 | One-line `mc-core` edit → `mc-core` unit-test binary | 76–99 s |
@@ -143,7 +143,7 @@ Until then, none of these steps claims a build-time gain. The order:
 `mc-edge` depends on `workspace-features` normally; `mc-core` uses it only as a
 dev dependency. Standalone lower crates keep their own small dependency graphs.
 The feature owner's library has no runtime API; its manifest activates the union
-of third-party features used by the server and core tests. It depends on no Solaris
+of third-party features used by the server and core tests. It depends on no Krasnokamen
 crate, so it cannot introduce a reverse domain dependency. Cargo's
 [`resolver.feature-unification`](https://doc.rust-lang.org/cargo/reference/unstable.html#feature-unification)
 still requires an unstable flag; setting the configuration alone is ignored.
