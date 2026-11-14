@@ -1,7 +1,7 @@
 # Plugins
 
-Solaris production plugins are Wasmtime components implementing the versioned
-WIT contract `solaris:plugin@0.8.0`. The host crate is
+Krasnokamen production plugins are Wasmtime components implementing the versioned
+WIT contract `krasnokamen:plugin@0.9.0`. The host crate is
 `crates/mc-plugin-host`; the WIT source is `crates/mc-script/wit`; Rust guest
 source and the SDK live in the separate `sdk/rust/` workspace. The server
 loads a compiled component artifact. It neither compiles guest source nor
@@ -27,7 +27,7 @@ plugins/
 `plugin.toml` declares the package identity, API version, subscriptions,
 command roots, requested capabilities, and optional client, world-generation,
 or precommit declarations. `plugin.wasm` is a WebAssembly **component** for
-`solaris:plugin@0.8.0`, not an unencoded core Wasm module. `config.toml` is
+`krasnokamen:plugin@0.9.0`, not an unencoded core Wasm module. `config.toml` is
 optional opaque package configuration: the host passes its text to the guest,
 which defines and validates its own settings.
 The host opens configuration relative to the package directory, refuses symlinks
@@ -41,7 +41,7 @@ plugins.
 
 ### Native server
 
-`solaris-v2` uses the production component host with a directory-only deployment:
+`krasnokamen` uses the production component host with a directory-only deployment:
 
 ```toml
 [plugins]
@@ -49,7 +49,7 @@ directory = "plugins"
 ```
 
 ```sh
-solaris-v2 --config server.toml
+krasnokamen --config server.toml
 ```
 
 Every entry must be a valid package directory; malformed manifests or WASM,
@@ -95,7 +95,7 @@ an authentication plugin unlocks that session. Until then only `/register`,
 refused with a short Russian/English hint and nothing is broadcast. `UnlockSession`
 requires the explicit manifest capability `auth`; observing `player.joined`
 alone grants no unlock authority. Of the first-party packages only the optional
-`solaris-auth` (not part of the standard pack) declares `auth`. It does not
+`krasnokamen-auth` (not part of the standard pack) declares `auth`. It does not
 register a `before-build` hook: the native login gate is the single login-lock
 enforcement path.
 
@@ -180,7 +180,7 @@ existing hopper directly beneath it already pulls. A death in mid-air or over a
 fluid therefore moves the grave to the nearest grounded ring cell, and when no
 free grounded cell exists the drops stay ordinary items. Vanishing-curse stacks are destroyed by the
 death before custody, exactly as in vanilla, and experience stays with the
-player, because Solaris spawns no death XP orbs. The `keepInventory` gamerule wins
+player, because Krasnokamen spawns no death XP orbs. The `keepInventory` gamerule wins
 over the declaration: a retained inventory never reaches a grave.
 
 The server then publishes `player.grave_created` to the declaring package only
@@ -227,18 +227,18 @@ directory is the operator authorization decision.
 
 Packages without `[client]` bundles are `server_only` and support ordinary
 vanilla clients. Any package that declares client bundles makes the relevant
-deployment `server_and_client`: connecting players need a compatible Solaris
+deployment `server_and_client`: connecting players need a compatible Krasnokamen
 Loader and must approve the bundle's requested client permissions. Bundle paths,
 hashes, sizes, content kinds, supported loaders, and permissions are validated
 before a player is served content. There is no server-only substitute for a
-package that requires client content. See [`SOLARIS_LOADER.md`](SOLARIS_LOADER.md)
+package that requires client content. See [`KRASNOKAMEN_LOADER.md`](KRASNOKAMEN_LOADER.md)
 for player installation.
 
 A bundle may set `required = false` (default `true`) in its `[[client.bundles]]`
 table for content that enriches rather than enables the package, such as a custom
 item texture. When every bundle of a deployment is optional, Configuration sends
-a `solaris:loader/probe` payload (empty) before known-pack negotiation. A Loader
-client answers `solaris:loader/hello` (empty) while handling it, so the hello
+a `krasnokamen:loader/probe` payload (empty) before known-pack negotiation. A Loader
+client answers `krasnokamen:loader/hello` (empty) while handling it, so the hello
 precedes its known-pack reply; the server then runs the normal manifest/artifact/
 ACK negotiation. A client that does not answer (a vanilla client, or a Loader
 build that predates the probe) joins without any Loader content, and its item
@@ -268,15 +268,15 @@ types cannot become a deployable artifact. The plugin repository owns
 `plugin.toml` and optional `config.toml`; the core repository neither ships nor
 compiles first-party product plugins.
 
-Authors implement `solaris_plugin_sdk::Plugin` (or bindings for the same WIT
+Authors implement `krasnokamen_plugin_sdk::Plugin` (or bindings for the same WIT
 world) and use the WIT and SDK definitions as the API reference. Do not copy
 internal host types into a guest or rely on a host implementation detail.
 
-The contract is `solaris:plugin@0.8.0`: WIT record layout changes require
+The contract is `krasnokamen:plugin@0.9.0`: WIT record layout changes require
 regenerating host and guest bindings, and every guest must be rebuilt and
 re-encoded against it (the Rust SDK workspace is 0.8.0; add `mob_blueprints:
 None` to existing full `StartupContribution` literals and update the manifest
-`api`). This applies to the first-party `solaris-default-plugins` packages too;
+`api`). This applies to the first-party `krasnokamen-default-plugins` packages too;
 no 0.7.0 component or old record-layout shim is accepted, and an older
 component's record layout is not a compatible fallback.
 
@@ -337,7 +337,7 @@ The use is one native intent (`IntentKind::BlockTool`) planned beside hoe tillin
 together against the world and inventory they were planned on. Protection zones
 and reach are checked by the same early use gate as block placement; plugin
 before-build hooks do not cover it, like hoes. The `chisel` package in
-`solaris-default-plugins` is the reference user.
+`krasnokamen-default-plugins` is the reference user.
 
 ## Custom native mobs
 
@@ -366,7 +366,7 @@ allow-list authorizes type names, not bypasses of session or capacity checks.
 Each defining plugin has a 1024-live-custom-mob limit across dimensions; splitters
 reserve descendant capacity as described in ADR 0016. Custom types have no natural
 spawn weight. Native checkpoints retain their custom identity; Anvil export uses
-the vanilla presentation id and a `solaris:MobBlueprint` marker, not custom
+the vanilla presentation id and a `krasnokamen:MobBlueprint` marker, not custom
 gameplay on a vanilla server.
 
 ## Events, commands, and capability boundaries
@@ -398,7 +398,7 @@ A manifest may require one node per command root it already declares:
 
 ```toml
 player_commands = ["home", "sethome"]
-command_permissions = { home = "solaris.essentials.use", sethome = "solaris.essentials.use" }
+command_permissions = { home = "krasnokamen.essentials.use", sethome = "krasnokamen.essentials.use" }
 ```
 
 Nodes become enforced when the deployment installs one permission provider
@@ -630,11 +630,11 @@ not imply the mod remains useful without them.
 
 Required local tools: JDK **17**, Python 3 with PyYAML, Maven 3.9, Binaryen **123**
 (`wasm-opt`, `wasm-merge`), Rust with `wasm32-unknown-unknown`, and the normal
-Solaris dependencies. Maven resolves the pinned TeaVM dependencies in
+Krasnokamen dependencies. Maven resolves the pinned TeaVM dependencies in
 `tools/bukkit/pom.xml`. The offline compiler toolchain is **not a sandbox**;
 convert trusted input only (compiler extensions may execute build-time code).
 The converter does not intentionally invoke the plugin lifecycle. Build the
-adapter and existing component encoder from the **same Solaris checkout**:
+adapter and existing component encoder from the **same Krasnokamen checkout**:
 
 ```sh
 cargo build --manifest-path tools/bukkit/adapter/Cargo.toml --target wasm32-unknown-unknown
@@ -643,7 +643,7 @@ python3 tools/bukkit/convert.py \
   --java-home /path/to/jdk17 --maven /path/to/mvn \
   --binaryen-bin /path/to/binaryen-version_123/bin \
   --jar /path/to/plugin.jar --blocks-report data/vanilla/reports/blocks.json \
-  --adapter tools/bukkit/adapter/target/wasm32-unknown-unknown/debug/solaris_bukkit_adapter.wasm \
+  --adapter tools/bukkit/adapter/target/wasm32-unknown-unknown/debug/krasnokamen_bukkit_adapter.wasm \
   --component-encoder target/debug/examples/plugin_component --output /tmp/converted-plugin
 ```
 
@@ -662,8 +662,8 @@ the **upstream API**, never the shim, then uses the same generic converter.
 Run the opt-in in-process host test against its output:
 
 ```sh
-SOLARIS_BUKKIT_PACKAGE=/tmp/bukkit-receipt/package \
-SOLARIS_BUKKIT_BLOCKS=data/vanilla/reports/blocks.json \
+KRASNOKAMEN_BUKKIT_PACKAGE=/tmp/bukkit-receipt/package \
+KRASNOKAMEN_BUKKIT_BLOCKS=data/vanilla/reports/blocks.json \
   cargo test -p mc-plugin-host --test bukkit_component -- --ignored
 python3 -m unittest discover -s tools/bukkit -p 'test_*.py'
 ```

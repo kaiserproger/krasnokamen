@@ -1,6 +1,6 @@
 # Reproducible performance profiles
 
-Solaris is a **draft prerelease**. These profiles measure specific workloads on
+Krasnokamen is a **draft prerelease**. These profiles measure specific workloads on
 stated hardware; they are not performance guarantees, vanilla-parity proofs or
 player-capacity promises. Protocol bots are real TCP clients, not graphical
 Minecraft clients or human players. No survival/gameplay acceptance claim follows
@@ -41,7 +41,7 @@ generator benchmark below cannot fill those cells.
   operator chat-spam parity fix in `crates/mc-core/src/tick/input/social.rs`:
   operators still accumulate the saturating counter but are not kicked. The
   original baseline rejected fixture preparation with `disconnect.spam`.
-- **Build:** `cargo build --release --bin solaris-v2 --bin player-scale-bots
+- **Build:** `cargo build --release --bin krasnokamen --bin player-scale-bots
   -j 2`; rustc 1.99.1 (`58cf8f9c3`, LLVM 23.1.1). Cargo release defaults:
   optimization level 3, debug information off, LTO off, 16 codegen units,
   incremental off. Repository target flags are
@@ -136,7 +136,7 @@ indefinitely through terrain. Login includes operator-assisted safe landing.
 Run from a checkout with the pinned Rust toolchain, Clang/mold, Python 3, Linux
 `taskset`, `lscpu`, `lsblk` and `findmnt`. Import the 26.3 content cache as
 described in the [operating guide](../OPERATING.md#vanilla-content-cache)
-(`solaris-v2 content import --version 26.3 --download`; the cache joins the 26.3
+(`krasnokamen content import --version 26.3 --download`; the cache joins the 26.3
 protocol identity with the 26.1.2 gameplay pack, so no separate legacy cache is
 needed for these profiles). `tools.coreperf.profiles` reads `./data/vanilla` by
 default; point it elsewhere with `--vanilla-data-dir`.
@@ -153,7 +153,7 @@ identify it in the receipt instead of presenting HEAD as the whole source.
 ```sh
 ROOT="$(pwd -P)"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target}"
-cargo build --release --bin solaris-v2 --bin player-scale-bots -j 2
+cargo build --release --bin krasnokamen --bin player-scale-bots -j 2
 python3 - <<'PY'
 import hashlib, json, os, pathlib, subprocess
 root = pathlib.Path.cwd()
@@ -164,12 +164,12 @@ def sha(path):
 receipt = {
     'profile': 'release',
     'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
-    'command': ['cargo', 'build', '--release', '--bin', 'solaris-v2', '--bin', 'player-scale-bots', '-j', '2'],
+    'command': ['cargo', 'build', '--release', '--bin', 'krasnokamen', '--bin', 'player-scale-bots', '-j', '2'],
     'rustc': subprocess.check_output(['rustc', '-Vv'], text=True),
     'build_environment': {k: v for k, v in os.environ.items()
         if k in ('RUSTFLAGS', 'CARGO_ENCODED_RUSTFLAGS', 'CARGO_TARGET_DIR') or k.startswith('CARGO_PROFILE_RELEASE')},
     'cargo_config': (root / '.cargo/config.toml').read_text(),
-    'server_sha256': sha(target / 'release/solaris-v2'),
+    'server_sha256': sha(target / 'release/krasnokamen'),
     'bots_sha256': sha(target / 'release/player-scale-bots'),
 }
 (root / '.analysis').mkdir(exist_ok=True)
@@ -189,7 +189,7 @@ each invocation owns preparation/cache reuse, startup, warmup, measurement,
 shutdown, native snapshot checks and its receipt directory.
 
 ```sh
-COMMON=(--server-bin "$CARGO_TARGET_DIR/release/solaris-v2"
+COMMON=(--server-bin "$CARGO_TARGET_DIR/release/krasnokamen"
         --bots-bin "$CARGO_TARGET_DIR/release/player-scale-bots"
         --build-receipt "$ROOT/.analysis/profile-build.json")
 python3 -m tools.coreperf.profiles idle "${COMMON[@]}"
@@ -247,7 +247,7 @@ an approved performance measurement. Use the ordinary memory-capped lane, not
 ## In-process chunk generation
 
 An existing **Gen32** quiet-window measurement on the same Ryzen 5 7535HS reports
-the following Solaris vanilla-style Overworld generator costs. These are
+the following Krasnokamen vanilla-style Overworld generator costs. These are
 **single-threaded in-process generation**, not full-server requested chunks/s,
 not exploration throughput and not Mojang's Java server.
 

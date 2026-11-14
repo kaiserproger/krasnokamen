@@ -59,7 +59,7 @@ for the entity checkpoint design.
    serving recovery source.
 
 On genuine first start, `Core::open` writes and fsyncs
-`<world>/.solaris-first-start`, creates `native/state.redb.new` and renames the
+`<world>/.krasnokamen-first-start`, creates `native/state.redb.new` and renames the
 committed store into place. The marker is removed after the initial checkpoint
 is durable. A remaining marker permits retrying interrupted first start; a store
 without a checkpoint or marker fails closed. Required checkpoint player records

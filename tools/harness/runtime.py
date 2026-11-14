@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-AGENT_ROOT = Path(os.environ.get("SOLARIS_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")).expanduser().resolve()
+AGENT_ROOT = Path(os.environ.get("KRASNOKAMEN_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")).expanduser().resolve()
 
 USERNAME_RE = re.compile(r"[A-Za-z0-9_]{1,16}\Z")
 CLIENT_PROFILES = ("vanilla", "loader", "svc", "dh")
@@ -599,10 +599,10 @@ def start_client(
             "SDL_VIDEO_DRIVER": "x11",
             "GDK_BACKEND": "x11",
             "XDG_SESSION_TYPE": "x11",
-            "SOLARIS_CLIENT_MCP_TOKEN": token,
-            "SOLARIS_CLIENT_MCP_PORT": str(mcp_port),
-            "SOLARIS_CLIENT_MCP_GAME_DIR": str(game_dir),
-            "SOLARIS_CLIENT_MCP_USERNAME": username,
+            "KRASNOKAMEN_CLIENT_MCP_TOKEN": token,
+            "KRASNOKAMEN_CLIENT_MCP_PORT": str(mcp_port),
+            "KRASNOKAMEN_CLIENT_MCP_GAME_DIR": str(game_dir),
+            "KRASNOKAMEN_CLIENT_MCP_USERNAME": username,
         }
     )
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -615,8 +615,8 @@ def start_client(
                 "--no-configuration-cache",
                 "-p",
                 str(AGENT_ROOT),
-                f"-Psolaris.clientMcp.gameDir={game_dir}",
-                f"-Psolaris.clientMcp.username={username}",
+                f"-Pkrasnokamen.clientMcp.gameDir={game_dir}",
+                f"-Pkrasnokamen.clientMcp.username={username}",
                 task,
             ],
             cwd=REPO_ROOT,

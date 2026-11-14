@@ -139,7 +139,7 @@ fi
 # crates rebuild. The lock files a-e are the old slot locks, so commands of the
 # previous runner version never share a dir with new ones. Existing dirs are
 # reused before a new one is created; a new dir is created only if `df` (whole
-# GiB, rounded up) shows at least SOLARIS_SLOT_MIN_FREE_GB (default 80, the owner's free-space floor) free at
+# GiB, rounded up) shows at least KRASNOKAMEN_SLOT_MIN_FREE_GB (default 80, the owner's free-space floor) free at
 # selection time. This only stops slot proliferation (12 parallel slots filled
 # the disk on 2026-11-07); it reserves nothing, and existing dirs keep growing
 # unchecked, so it is no protection against ENOSPC. Never waits: with no usable
@@ -147,16 +147,16 @@ fi
 target=${CARGO_TARGET_DIR:-}
 for w in "$@"; do [[ $w == CARGO_TARGET_DIR=* ]] && target=${w#CARGO_TARGET_DIR=}; done
 if [ -z "$target" ]; then
-  slots=${SOLARIS_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
+  slots=${KRASNOKAMEN_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
   tree=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-  min_free=${SOLARIS_SLOT_MIN_FREE_GB:-80}
+  min_free=${KRASNOKAMEN_SLOT_MIN_FREE_GB:-80}
   free_gb=$(df --output=avail -BG "$slots" 2>/dev/null | tail -1 | tr -dc 0-9)
   slot=
   for pass in own existing new; do
     [ "$pass" = new ] && [ "${free_gb:-0}" -lt "$min_free" ] && break
     for l in {a..z}; do
       case $pass in
-        own) [ "$(cat "$slots/slot-$l/.solaris-tree" 2>/dev/null)" = "$tree" ] || continue ;;
+        own) [ "$(cat "$slots/slot-$l/.krasnokamen-tree" 2>/dev/null)" = "$tree" ] || continue ;;
         existing) [ -d "$slots/slot-$l" ] || continue ;;
         new) [ -d "$slots/slot-$l" ] && continue ;;
       esac
@@ -168,12 +168,12 @@ if [ -z "$target" ]; then
   [ -n "$slot" ] || { echo "mem-run: no free target dir (disk ${free_gb}G free, new dirs need ${min_free}G); finish or cancel another command (exit 75)" >&2; exit 75; }
   export CARGO_TARGET_DIR="$slots/slot-$slot"
   target=$CARGO_TARGET_DIR
-  if [ "$(cat "$target/.solaris-tree" 2>/dev/null)" != "$tree" ]; then
+  if [ "$(cat "$target/.krasnokamen-tree" 2>/dev/null)" != "$tree" ]; then
     if git -C "$tree" rev-parse --git-dir >/dev/null 2>&1; then
       (cd "$tree" && git ls-files -z | xargs -0 -r touch -c --)
     fi
     mkdir -p "$target"
-    printf '%s\n' "$tree" >"$target/.solaris-tree"
+    printf '%s\n' "$tree" >"$target/.krasnokamen-tree"
   fi
 fi
 # The harness would otherwise re-run itself in its own scope outside this slice;
@@ -186,9 +186,9 @@ case " $* " in
   *" --release "*|*" --profile"*) incremental=0 ;;
   *) incremental=1 ;;
 esac
-export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-$jobs_default}" CARGO_INCREMENTAL="$incremental" SOLARIS_HARNESS_CPU_SCOPE=1
+export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-$jobs_default}" CARGO_INCREMENTAL="$incremental" KRASNOKAMEN_HARNESS_CPU_SCOPE=1
 cores=$(lscpu -p=core,socket | grep -v '^#' | sort -u | wc -l)
-props=(-p MemoryMax="$mem" -p MemorySwapMax=1G -p CPUQuota="${SOLARIS_MEM_RUN_CPU_QUOTA:-$((cores * 100))}%" -p CPUWeight=50)
+props=(-p MemoryMax="$mem" -p MemorySwapMax=1G -p CPUQuota="${KRASNOKAMEN_MEM_RUN_CPU_QUOTA:-$((cores * 100))}%" -p CPUWeight=50)
 niceness=19
 cpu_pin=()
 # Preemptible (the watchdog may freeze it under memory pressure) only for plain

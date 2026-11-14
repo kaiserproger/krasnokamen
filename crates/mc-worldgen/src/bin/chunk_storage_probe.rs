@@ -26,9 +26,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let count: usize = args[4].parse()?;
     assert!(count > 0);
     let blocks = Arc::new(BlockRegistry::from_report(
-        &mc_data::blocks::solaris_required_blocks_report(),
+        &mc_data::blocks::krasnokamen_required_blocks_report(),
     )?);
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let loot = mc_data::loot::chest_26_1_2::ChestLootCatalog::new();
     let fixture = Path::new(&args[2]);
     std::fs::create_dir_all(fixture)?;

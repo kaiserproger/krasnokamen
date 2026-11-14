@@ -62,7 +62,7 @@ and verdicts fail validation.
 `pin-release` rule, listed in [open transitions](../STATUS.md#open-transitions))
 in the enclosing runner's pooled target, then hard-links it (copies if it
 cannot) outside the pooled target before executing clients.
-`SOLARIS_REGRESSIONS_BIN_DIR` selects that directory; the receipt records the
+`KRASNOKAMEN_REGRESSIONS_BIN_DIR` selects that directory; the receipt records the
 pinned path and SHA-256. Pin any supplied client binary separately.
 Every green Cargo check in `regression`, even for an open row, runs on every
 integration; client checks run in the client tier. Keep a known-red reproducer
@@ -124,7 +124,7 @@ worker, runs the negative control.
    the tooling built from exactly that candidate (`ledger probe --client` and
    `promote` register every server they build in
    `.analysis/ledger-builds/<sha256>.json`): a pinned or foreign
-   `SOLARIS_SERVER_BINARY`, or a binary built from an older source, proves
+   `KRASNOKAMEN_SERVER_BINARY`, or a binary built from an older source, proves
    nothing about this source and is refused. A unit test cannot close a client
    failure.
 4. Automatic negative control: the fix commit's non-test hunks (test files,
@@ -192,9 +192,9 @@ changes the ledger; it is not promotion.
 `--client` (and `promote` of a client row) needs the real-client environment of
 [real-client gates](../development/real-client-gates.md#3-environment-block):
 a pinned client/server pair of the same protocol, the data, resource and asset
-roots, and a fresh `XDG_DATA_HOME` whose `solaris-client/` symlinks `facts
+roots, and a fresh `XDG_DATA_HOME` whose `krasnokamen-client/` symlinks `facts
 assets data resources mojang`; run it through `scene-slot.sh` and `mem-run.sh`.
-The tool builds the release server itself and ignores `SOLARIS_SERVER_BINARY`;
+The tool builds the release server itself and ignores `KRASNOKAMEN_SERVER_BINARY`;
 that is a second pinning mechanism next to `tools/dev/pin-release`, kept until
 its [open transition](../STATUS.md#open-transitions) closes. Do not extend it.
 A stale `target/debug` client fails with `target protocol mismatch`, a missing
@@ -256,10 +256,10 @@ The shared native wire observer uses the pinned 26.3 packet IDs and vanilla
 `ByteBufCodecs.BIT_SET` byte-array masks. Heightmap long arrays are a different
 field. KeepAlive is not chunk data.
 
-Client-tier scenarios run the native client at `SOLARIS_CLIENT_ROOT` (default:
-the sibling `solaris-client` checkout). The P2, mount-kind and map-marker
+Client-tier scenarios run the native client at `KRASNOKAMEN_CLIENT_ROOT` (default:
+the sibling `krasnokamen-client` checkout). The P2, mount-kind and map-marker
 promotions were gated with client branch `pauline/client-post-rc4` (`e1b22a5`);
-the released client `5d34e88` lacks those fixes, so point `SOLARIS_CLIENT_ROOT`
+the released client `5d34e88` lacks those fixes, so point `KRASNOKAMEN_CLIENT_ROOT`
 at a checkout of that branch or later.
 
 A probe's registration or screenshot alone is not acceptance evidence; repeat

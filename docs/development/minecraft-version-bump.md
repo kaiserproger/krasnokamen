@@ -33,14 +33,14 @@ bump. Old-version support is described in
    guards: duplicate components get through vanilla (last wins) but break the
    native client. Test the exact payload and decode strictly in the legacy TCP
    gate (`cargo test -p mc-edge --lib legacy` plus the ignored TCP join test with
-   `SOLARIS_LEGACY_CONTENT_CACHE`).
+   `KRASNOKAMEN_LEGACY_CONTENT_CACHE`).
 5. Refresh fixtures and wire ordinals from the local reports of the right
    version.
 6. Re-import the content cache (old caches fail the new verify), rebuild the
    singleplayer content bundle and re-pin it in the launcher
    ([releases](release-and-tags.md#client-release-and-the-singleplayer-content-bundle)).
 
-## Native client (`solaris-client`)
+## Native client (`krasnokamen-client`)
 
 1. One test asserting that every packet id the client dispatches or sends
    (Login, Configuration, Play, both directions) equals `packets.json` by name.
@@ -76,16 +76,16 @@ bump. Old-version support is described in
    holder-typed serializers encode id + 1 with 0 meaning an inline value.
 5. Strict clippy: compare diagnostics by (lint, path) against the baseline
    commit, not totals.
-6. Bump `SOLARIS_REVISION` in the client's `release.yml` to the pushed
+6. Bump `KRASNOKAMEN_REVISION` in the client's `release.yml` to the pushed
    new-protocol core commit and smoke the packaged singleplayer.
 
-## Gates (release server binary as `SOLARIS_SERVER_BINARY`)
+## Gates (release server binary as `KRASNOKAMEN_SERVER_BINARY`)
 
 - Java, new version: `run core-client|inventory|survival|entities --client java`
-  with `SOLARIS_LOADER_ROOT` pointing at a Loader checkout for the new version.
+  with `KRASNOKAMEN_LOADER_ROOT` pointing at a Loader checkout for the new version.
   Prewarm Gradle once (`:fabric-agent:classes`) or the first runs time out.
 - Java, previous version: the same `core-client` with the old Loader and
-  `SOLARIS_LEGACY_CONTENT_CACHE`.
+  `KRASNOKAMEN_LEGACY_CONTENT_CACHE`.
 - Native: `native-lifecycle --client native` to Play with chunks rendered, one
   interaction, clean exit, on the release client with the real published
   content and facts.

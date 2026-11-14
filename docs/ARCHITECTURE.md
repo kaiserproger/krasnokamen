@@ -1,8 +1,8 @@
-# Solaris core architecture
+# Krasnokamen core architecture
 
-Solaris serves Minecraft Java **26.3** (protocol 777); 26.1.2 clients
+Krasnokamen serves Minecraft Java **26.3** (protocol 777); 26.1.2 clients
 (protocol 775) connect through the retained legacy cache and edge translation.
-`solaris-v2` is the `mc-edge` binary over native `mc-core`; the v1 server is
+`krasnokamen` is the `mc-edge` binary over native `mc-core`; the v1 server is
 retired. [ADR 0013](decisions/0013-core-model-v2.md) governs the core model.
 
 ## Composition
@@ -30,7 +30,7 @@ authoritative.
 - [Settlement authority and code locations](architecture/settlements.md)
 - [Chunk residency, activation and tickets](architecture/residency.md)
 - [Adding a vanilla gameplay feature](development/adding-a-feature.md)
-- [Plugins](PLUGINS.md), [Loader](SOLARIS_LOADER.md),
+- [Plugins](PLUGINS.md), [Loader](KRASNOKAMEN_LOADER.md),
   [operations](OPERATING.md), [decisions](decisions/README.md)
 
 Generated indexes navigate code; they are not a second source of semantics.

@@ -44,7 +44,7 @@ def run(ctx: ProfileContext) -> dict:
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 1200.0
     if not 0 < timeout < float("inf"):
         raise ValueError("timeout must be positive and finite")
-    server = Path(os.environ["SOLARIS_SERVER_BINARY"]).resolve()
+    server = Path(os.environ["KRASNOKAMEN_SERVER_BINARY"]).resolve()
     binary = native_client.resolve_binary(ctx)
     artifact = ctx.artifact_dir
     world = artifact / "world"
@@ -67,7 +67,7 @@ def run(ctx: ProfileContext) -> dict:
             (root / name).symlink_to(path, target_is_directory=path.is_dir())
     for name in ("home", "cache", "config"):
         (artifact / name).mkdir()
-    env = {"SOLARIS_CLIENT_ROOT": str(root), "ALSOFT_DRIVERS": "null",
+    env = {"KRASNOKAMEN_CLIENT_ROOT": str(root), "ALSOFT_DRIVERS": "null",
            "HOME": str(artifact / "home"), "XDG_CACHE_HOME": str(artifact / "cache"),
            "XDG_CONFIG_HOME": str(artifact / "config"),
            "LIBGL_ALWAYS_SOFTWARE": "1", "VK_DRIVER_FILES": "/usr/share/vulkan/icd.d/lvp_icd.json",
