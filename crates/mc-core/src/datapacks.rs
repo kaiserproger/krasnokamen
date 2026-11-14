@@ -1138,7 +1138,6 @@ impl PackSet {
 #[derive(Default)]
 pub(crate) struct Runtime {
     packs: Arc<PackSet>,
-    discovered: Option<BTreeMap<String, Tag>>,
     root: Option<PathBuf>,
     /// Unmodified startup content (including plugin contributions), used only
     /// to prepare replacement catalogs. TickState.registry remains authoritative.
@@ -1314,7 +1313,6 @@ impl Runtime {
         base: Arc<crate::registry::CoreRegistry>,
     ) {
         self.selection_dirty |= self.packs.selection != packs.selection;
-        self.discovered = None;
         self.packs = Arc::new(packs);
         self.root = Some(root);
         self.base_registry = Some(base);
@@ -1329,9 +1327,6 @@ impl Runtime {
     }
     pub(crate) fn packs(&self) -> &PackSet {
         &self.packs
-    }
-    fn catalog(&self) -> &BTreeMap<String, Tag> {
-        self.discovered.as_ref().unwrap_or(&self.packs.descriptions)
     }
     /// Queue a worker-thread job for the current selection; the old packs and
     /// selection stay authoritative until it reports back. Tick-thread
@@ -1848,7 +1843,6 @@ fn finish(
             let count = packs.selection.enabled.len() as i32;
             state.datapacks.selection_dirty |= state.datapacks.packs.selection != packs.selection;
             let warnings = packs.warnings(Some(&state.datapacks.packs));
-            state.datapacks.discovered = None;
             state.datapacks.packs = Arc::new(*packs);
             state.datapacks.load_pending = true;
             if deliver {
@@ -1883,27 +1877,12 @@ fn finish(
             (true, count)
         }
         (Job::List(scope), Completed::Listing(listing)) => {
-            state.datapacks.discovered = Some(
-                listing
-                    .enabled
-                    .iter()
-                    .chain(&listing.available)
-                    .cloned()
-                    .collect(),
-            );
             if deliver {
                 management::listed(state, connection, *scope, &listing);
             }
             (true, management::counted(&listing, *scope))
         }
-        (Job::Create { id, description }, Completed::Created) => {
-            let description = crate::command_text::parse_component(description)
-                .expect("worker accepted validated description");
-            let catalog = state
-                .datapacks
-                .discovered
-                .get_or_insert_with(|| state.datapacks.packs.descriptions.clone());
-            catalog.insert(format!("file/{id}"), description);
+        (Job::Create { id, .. }, Completed::Created) => {
             if deliver {
                 management::created(state, connection, id);
             }

@@ -176,14 +176,15 @@ fn list_discovers_added_removed_and_changed_metadata_without_reloading_functions
     .unwrap();
     run(&mut state, "datapack list available");
     finish_worker(&mut state);
-    assert!(state.datapacks.catalog().contains_key("file/added"));
+    assert!(format!("{:?}", state.outbox).contains("file/added"));
     assert_eq!(state.datapacks.selection().enabled, ["vanilla"]);
     assert!(state.datapacks.packs().functions.is_empty());
     std::fs::remove_file(added.join("pack.mcmeta")).unwrap();
     std::fs::remove_dir(added).unwrap();
+    state.outbox.clear();
     run(&mut state, "datapack list available");
     finish_worker(&mut state);
-    assert!(!state.datapacks.catalog().contains_key("file/added"));
+    assert!(!format!("{:?}", state.outbox).contains("file/added"));
 }
 
 #[test]
@@ -214,7 +215,10 @@ fn create_writes_description_and_does_not_enable_or_overwrite_pack() {
     assert_eq!(metadata["pack"]["description"]["color"], "gold");
     assert_eq!(metadata["pack"]["min_format"], serde_json::json!([121, 0]));
     assert_eq!(state.datapacks.selection().enabled, ["vanilla"]);
-    assert!(state.datapacks.catalog().contains_key("file/New pack"));
+    state.outbox.clear();
+    run(&mut state, "datapack list available");
+    finish_worker(&mut state);
+    assert!(format!("{:?}", state.outbox).contains("file/New pack"));
     run(&mut state, r#"datapack create "New pack" "overwrite""#);
     finish_worker(&mut state);
     assert_eq!(std::fs::read(path).unwrap(), bytes);

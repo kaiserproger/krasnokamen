@@ -82,7 +82,7 @@ nearest, longest-waiting entity updates go first. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
 Datapack reloads and `/debug function` trace-file writes run as jobs on a
-short-lived `datapack-worker` thread (`crates/mc-core/src/datapacks.rs:1391-1395`),
+short-lived `datapack-worker` thread (`crates/mc-core/src/datapacks.rs:1386-1390`),
 handing the result back over a bounded `sync_channel(1)`, so they execute
 outside the tick and never hold it.
 

@@ -267,25 +267,6 @@ fn present(state: &mut TickState, connection: ConnectionId, scope: ListScope, li
     }
 }
 
-fn cached_listing(state: &TickState) -> Listing {
-    let packs = state.datapacks.packs();
-    let describe = |id: &String| {
-        (
-            id.clone(),
-            state
-                .datapacks
-                .catalog()
-                .get(id)
-                .cloned()
-                .unwrap_or_else(|| Tag::String(String::new())),
-        )
-    };
-    Listing {
-        enabled: packs.selection.enabled.iter().map(describe).collect(),
-        available: packs.selection.disabled.iter().map(describe).collect(),
-    }
-}
-
 pub(super) fn counted(listing: &Listing, scope: ListScope) -> i32 {
     let count = match scope {
         ListScope::Enabled => listing.enabled.len(),
