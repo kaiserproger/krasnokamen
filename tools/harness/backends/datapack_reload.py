@@ -66,6 +66,9 @@ def write_pack(world: Path) -> Path:
 
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
+    if os.environ.get("BREAK_B10_ATTACK"):
+        from .break_b10_reload import run as attack
+        return attack(ctx)
     timeout = validate_args(ctx)
     override = os.environ.get("SOLARIS_SERVER_BINARY")
     if not override or not os.environ.get("SOLARIS_CLIENT_BINARY"):
