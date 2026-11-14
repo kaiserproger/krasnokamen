@@ -56,6 +56,12 @@ geometry recover to the nearest supported, clear position within two blocks;
 sleeping residents are excluded and no position is chosen in unloaded space.
 
 
+Breeding-ration provisioning retains its own transient storage destination once
+a resident finds a reachable spare bed. Arrival completes that food transfer
+even when the bed is outside storage's local POI scan; ordinary worker hauling
+does not become a ration trip. This intent is not persisted and grants neither
+a bed claim nor a birth: those still require the allocator and birth checks.
+
 ## Durability and plugin boundary
 
 Touched settlement post-images and deletions share the dimension-wrapped tick
