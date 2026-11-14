@@ -65,7 +65,7 @@ def line(p, x0, y0, x1, y1, color):
 def graph_y(value, maximum):
     return 172-round(min(max(value, 0), maximum)*100/maximum)
 
-def render(sample, history, cpu, steal, memory, label='REPLAY TELEMETRY', units_label=None):
+def render(sample, history, cpu, steal, memory, label='REPLAY TELEMETRY', units_label=None, alive_total=False):
     # units_label: names what UNITS counts (e.g. 'SOLDIERS + HORSES'); it needs a second line, so the panel is 20 px taller.
     h = H if units_label is None else H + 20
     p = bytearray(W*h*4)
@@ -99,7 +99,10 @@ def render(sample, history, cpu, steal, memory, label='REPLAY TELEMETRY', units_
     if units_label is None:
         text(p, 12, 239, f"UNITS {battle.get('units', 'N/A')}  {sides}", scale=2)
     else:
-        text(p, 12, 239, f"UNITS ({units_label}) {battle.get('units', 'N/A')}", scale=2)
+        if alive_total:  # sum of the SIDE numbers of this sample; `units` also counts fallen bodies not yet removed
+            text(p, 12, 239, f"ALIVE ({units_label}) {sum(alive.values()) if alive else 'N/A'}", scale=2)
+        else:
+            text(p, 12, 239, f"UNITS ({units_label}) {battle.get('units', 'N/A')}", scale=2)
         text(p, 12, 258, sides, scale=2)
     return png(p)
 
@@ -142,7 +145,7 @@ def render_unanchored():
     return png(p)
 
 
-def write_overlay(telemetry_path, frames_path, out, label='REPLAY TELEMETRY', units_label=None):
+def write_overlay(telemetry_path, frames_path, out, label='REPLAY TELEMETRY', units_label=None, alive_total=False):
     """One overlay-%06d.png per row of the frames file; `out` must not exist."""
     telemetry = load(telemetry_path)
     out = pathlib.Path(out)
@@ -155,7 +158,7 @@ def write_overlay(telemetry_path, frames_path, out, label='REPLAY TELEMETRY', un
             if not frame.get('unanchored'): raise ValueError(f'frame {expected}: no tick and not marked unanchored')
         elif tick not in telemetry: raise ValueError(f'frame {expected}: tick {tick} missing from telemetry')
         if tick != cached_key:  # consecutive frames of one tick share one image
-            cached_key, cached = tick, render_unanchored() if tick is None else render(*telemetry[tick], label=label, units_label=units_label)
+            cached_key, cached = tick, render_unanchored() if tick is None else render(*telemetry[tick], label=label, units_label=units_label, alive_total=alive_total)
         (out / f'overlay-{expected:06d}.png').write_bytes(cached)
 
 def main():
@@ -165,8 +168,9 @@ def main():
     a.add_argument('--out', required=True, help='new output directory of overlay-%%06d.png')
     a.add_argument('--label', default='REPLAY TELEMETRY', help='panel header after the tick')
     a.add_argument('--units-label', help='what UNITS counts, e.g. "SOLDIERS + HORSES" (adds a second line to the panel)')
+    a.add_argument('--alive-total', action='store_true', help='with --units-label: show ALIVE = sum of the SIDE numbers instead of UNITS')
     args = a.parse_args()
-    write_overlay(args.telemetry, args.frames, args.out, label=args.label, units_label=args.units_label)
+    write_overlay(args.telemetry, args.frames, args.out, label=args.label, units_label=args.units_label, alive_total=args.alive_total)
 
 if __name__ == '__main__':
     main()

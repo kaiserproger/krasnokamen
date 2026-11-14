@@ -111,6 +111,15 @@ class LiveMap(unittest.TestCase):
         self.assertEqual(height(labelled), overlay.H + 20)
         self.assertNotEqual(plain[33:], labelled[33:])
 
+    def test_alive_total_is_the_side_sum(self):
+        sample = {'tick': 5, 'wall_us': 1000, 'host': None, 'battle': {'units': 3252, 'alive': {'1': 1631, '2': 1621}}}
+        args = (sample, ((1.0, 20.0, 5),), None, None, None)
+        units = overlay.render(*args, units_label='SOLDIERS + HORSES')
+        alive = overlay.render(*args, units_label='SOLDIERS + HORSES', alive_total=True)
+        self.assertNotEqual(units, alive)
+        other = dict(sample, battle={'units': 9999, 'alive': {'1': 1631, '2': 1621}})
+        self.assertEqual(alive, overlay.render(other, *args[1:], units_label='SOLDIERS + HORSES', alive_total=True))
+
     def test_uncovered_clip_is_unanchored_not_estimated(self):
         # Offset puts the clip 20 s before the first telemetry tick.
         ticks, report = self.write(anchors(offset=-LAPTOP_AHEAD_NS - 21 * 10**9,

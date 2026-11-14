@@ -373,6 +373,7 @@ def main():
     b.add_argument('--output', required=True)
     b.add_argument('--caption-file', help='UTF-8 text file drawn bottom-left for the whole video (what the footage is)')
     b.add_argument('--units-label', help='panel UNITS line names what it counts, e.g. "SOLDIERS + HORSES" (two-line units block, taller panel)')
+    b.add_argument('--alive-total', action='store_true', help='with --units-label: the line reads ALIVE N, N = sum of the SIDE numbers (telemetry units also counts fallen bodies)')
     b.add_argument('--panel-label', default='REPLAY TELEMETRY', help='panel header after the tick, e.g. "LIVE SERVER TELEMETRY" (max ~22 characters)')
     a = p.parse_args()
     shots, ticks, sources, reports = load_shots(a)
@@ -411,7 +412,7 @@ def main():
     write_map(rows, work / 'edit.frames.jsonl')
     (work / 'live-anchors.json').write_text(json.dumps(reports, indent=1) + '\n')
     import overlay
-    overlay.write_overlay(a.telemetry, work / 'edit.frames.jsonl', work / 'overlay', label=a.panel_label, units_label=a.units_label)
+    overlay.write_overlay(a.telemetry, work / 'edit.frames.jsonl', work / 'overlay', label=a.panel_label, units_label=a.units_label, alive_total=a.alive_total)
     caption_lines = []
     if a.caption_file:  # one text file per line (see build_filter)
         lines = [x.strip() for x in pathlib.Path(a.caption_file).read_text(encoding='utf-8').splitlines() if x.strip()]
