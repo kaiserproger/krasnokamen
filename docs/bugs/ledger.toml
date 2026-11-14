@@ -5363,3 +5363,14 @@ repro = "manual"
 repro_check = "Render G2 backup take shot g2-14-push-in, t=253.45..257.45, radius 20, 1920x1080 at peak melee (~18k entities) on the laptop RTX 4050."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "RETIRED-DEPLOYED-STAND-RETURNS-ON-RESTART"
+title = "Retired deployed banner stand is marked dead but never removed, so it can return after restart"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Architect review of the battle port plan (receipts/BattlePortPlan/fable-review-v2.md, P3; PLAN-v2.md section 4 row 3). On main crates/mc-core/src/plugin_npcs/orders/deployment.rs retire() sets alive=false, health 0 and death_handled but leaves the row and journals no UUID removal; the battle line fixed it with a deferred pending_removals drain at the commit tail (bv-g2l2 335afd19). Not yet reproduced on main: slice B0 first writes the checkpoint/restart test on main."
+repro = "source"
+regression = []
+failing_first = "not recorded"
