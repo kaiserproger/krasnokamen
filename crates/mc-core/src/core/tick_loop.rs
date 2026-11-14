@@ -3,6 +3,7 @@
 
 use super::*;
 use crate::singleplayer_pause::{SingleplayerPause, online_players};
+use crate::tick::phase_laps::Laps;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Tick loop: 20 TPS, event-driven wake (no sleeps beyond the tick timer).
@@ -494,31 +495,33 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
         state.tick_control.record_tick(tick_times.wall_us);
         if std::env::var("MC_CORE_PHASE_LOG").is_ok() {
             let pre_time = tick_start.duration_since(wall_start);
-            eprintln!(
-                "tick outer ms: tick={} pre={:.2} run={:.2} journal={:.2} seal_send_generated={:.2} post={:.2}",
-                tick,
-                pre_time.as_secs_f64() * 1000.0,
-                run_time.as_secs_f64() * 1000.0,
-                (journal_time - run_time).as_secs_f64() * 1000.0,
-                (tick_times.total_us as f64 / 1000.0) - journal_time.as_secs_f64() * 1000.0,
-                tick_times
-                    .wall_us
-                    .saturating_sub(tick_times.total_us)
-                    .saturating_sub(pre_time.as_micros() as u64) as f64
-                    / 1000.0,
+            let mut outer = Laps::new(true, wall_start);
+            outer.record("pre", pre_time);
+            outer.record("run", run_time);
+            outer.record("journal", journal_time.saturating_sub(run_time));
+            outer.record(
+                "seal_send_generated",
+                std::time::Duration::from_micros(tick_times.total_us).saturating_sub(journal_time),
             );
+            outer.record(
+                "post",
+                std::time::Duration::from_micros(
+                    tick_times
+                        .wall_us
+                        .saturating_sub(tick_times.total_us)
+                        .saturating_sub(pre_time.as_micros() as u64),
+                ),
+            );
+            outer.print_summary("tick outer", format_args!("tick={tick}"));
             // Stages of `journal` above, in order; they partition it.
             let build = state.journal_scan.times;
-            let ms = |span: std::time::Duration| span.as_secs_f64() * 1000.0;
-            eprintln!(
-                "journal build ms: tick={} before_entities={:.2} entity_touched={:.2} entity_images={:.2} entity_compare={:.2} after_entities={:.2}",
-                tick,
-                ms(build.before_entities),
-                ms(build.touched),
-                ms(build.images),
-                ms(build.compare),
-                ms(build.after_entities),
-            );
+            let mut journal = Laps::new(true, wall_start);
+            journal.record("before_entities", build.before_entities);
+            journal.record("entity_touched", build.touched);
+            journal.record("entity_images", build.images);
+            journal.record("entity_compare", build.compare);
+            journal.record("after_entities", build.after_entities);
+            journal.print_summary("journal build", format_args!("tick={tick}"));
         }
         let _ = channels.timing_broadcast.send((tick, tick_times));
         // Keep the hook-free shutdown/deadline wait unchanged. A hook-enabled

@@ -321,6 +321,13 @@ vanilla `Zombie.registerGoals`/`addBehaviourGoals` has no `PanicGoal`. Daylight
 burning must leave normal survival-player acquisition and pursuit eligible;
 animal panic and explicitly authored fire-fleeing goals remain independent.
 
+`MC_CORE_PHASE_LOG` diagnostics use the tick's `Laps` collector for both
+per-callee laps and already measured phase/journal/contact spans. Recording a
+known span does not advance a lap boundary. Disabled collectors allocate
+nothing; the `phase ms:`, `tick outer ms:` and `journal build ms:` summary
+prefixes and field units remain compatible with the coreperf log reader.
+These opt-in log records do not replace authoritative `TickTimes` telemetry.
+
 ## Recurring allocator and farming projections
 
 Villager threat and pickup projection visits entity bodies only in neighboring
