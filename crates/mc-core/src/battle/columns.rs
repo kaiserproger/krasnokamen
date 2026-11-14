@@ -7,7 +7,19 @@ use super::{
     formation::{FormationRuntime, SoldierSample},
 };
 use crate::boundary::EntityId;
-use crate::entities::{EntityKind, EntitySlot};
+use crate::entities::{EntityKind, EntitySlot, EntityStore};
+
+/// Cold-row facts, valid only until the next native wire mutation. The slot is
+/// merely an identity-checked lookup hint, including for dead retained bodies.
+#[derive(Debug, Default)]
+struct StaticFacts {
+    slot: Option<EntitySlot>,
+    valid: bool,
+    health: f32,
+    no_ai: bool,
+    carried: bool,
+    targetable: bool,
+}
 
 /// Cold-row facts, valid only until the next native wire mutation. The slot is
 /// merely an identity-checked lookup hint, including for dead retained bodies.

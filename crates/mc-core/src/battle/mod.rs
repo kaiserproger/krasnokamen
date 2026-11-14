@@ -234,6 +234,16 @@ fn invalidate_facts(
         columns.invalidate(id, slot);
         population.invalidate(id, slot);
     }
+
+    fn sample(&mut self, entities: &EntityStore, tick: u64) {
+        self.tick = tick;
+        self.clear();
+        for slot in entities.battle_slots() {
+            let body = entities.body(slot);
+            self.record(body.faction, body.alive && entities.row(slot).health > 0.0);
+        }
+        self.finish();
+    }
 }
 
 /// Latest sample keyed by global server tick: pre-motion after `step`, and
