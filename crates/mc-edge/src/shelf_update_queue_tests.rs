@@ -180,6 +180,14 @@ struct Wire {
     base: Chunk,
 }
 
+impl Drop for Wire {
+    fn drop(&mut self) {
+        // The native owners can still write after EdgeServer drops. Join them
+        // before TempDir removes the world, including during panic unwinding.
+        self.server.hub.shutdown();
+    }
+}
+
 impl Wire {
     fn new() -> Self {
         let (mut server, dir) = fixture_in_temp_dir();
@@ -262,12 +270,15 @@ impl Wire {
 /// A panic before `finish()` must not leave the world behind.
 #[test]
 fn a_panicking_shelf_test_leaves_no_temp_dir() {
+    let sentinel = admin_temp_dir();
+    let mut hub = None;
     let mut created = None;
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wire = Wire::new();
         created = Some(wire.dir.path().to_path_buf());
+        hub = Some(Arc::clone(&wire.server.hub));
         assert!(
             wire.dir.path().is_dir(),
             "the wire's world exists during the test"
@@ -276,11 +287,19 @@ fn a_panicking_shelf_test_leaves_no_temp_dir() {
     }));
     std::panic::set_hook(previous);
     assert!(outcome.is_err(), "the simulated test must fail");
+    assert!(
+        hub.expect("the wire ran").shutdown_requested(),
+        "panic cleanup must join native writers before removing their directory"
+    );
     let created = created.expect("the wire ran");
     assert!(
         !created.exists(),
         "a panicking shelf test left {} behind",
         created.display()
+    );
+    assert!(
+        sentinel.path().is_dir(),
+        "cleanup must not touch another world"
     );
 }
 
