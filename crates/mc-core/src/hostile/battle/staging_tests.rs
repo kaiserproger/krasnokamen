@@ -521,7 +521,7 @@ fn status_counts_a_corpse_as_dead_until_its_body_leaves() {
     let victim = state.hostile.battle.formation.members[0].id;
     let slot = state.entities.slot_of(victim).unwrap();
     let side = state.entities.body(slot).faction;
-    let before = crate::battle::publication_counts(&mut state).unwrap();
+    let before = crate::hostile::battle::publication_counts(&mut state).unwrap();
     let alive_on = |counts: &crate::boundary::BattleCounts| {
         counts
             .alive
@@ -554,7 +554,7 @@ fn status_counts_a_corpse_as_dead_until_its_body_leaves() {
         status.contains(sides) && status.contains(" dead=1 grounding="),
         "{status}"
     );
-    let counts = crate::battle::publication_counts(&mut state).unwrap();
+    let counts = crate::hostile::battle::publication_counts(&mut state).unwrap();
     assert_eq!(counts.units, before.units, "the corpse is a retained unit");
     assert_eq!(
         alive_on(&counts),
@@ -563,7 +563,7 @@ fn status_counts_a_corpse_as_dead_until_its_body_leaves() {
         counts.alive
     );
     state.hostile.battle.running = true;
-    crate::battle::step(&mut state);
+    crate::hostile::battle::step(&mut state);
     let member = state
         .hostile
         .battle

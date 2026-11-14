@@ -369,7 +369,7 @@ pub(crate) fn execute(
             }
             let origin = crate::command_console::pose(state, executor)
                 .map_or_else(|| state.world.world_spawn_position(), |(pos, _)| pos);
-            return match crate::battle::staging::execute(state, changes, origin, command) {
+            return match crate::hostile::battle::staging::execute(state, changes, origin, command) {
                 Ok(message) => {
                     if accepts_success(state, connection) {
                         state.push_player(connection, PlayerChange::Chat { message });

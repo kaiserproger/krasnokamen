@@ -98,5 +98,5 @@ pub(crate) fn execute(
 }
 
 #[cfg(test)]
-#[path = "command_swing_tests.rs"]
+#[path = "swing_tests.rs"]
 mod tests;

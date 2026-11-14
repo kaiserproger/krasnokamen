@@ -2079,7 +2079,7 @@ fn run_dimension_tick_inner<'a>(
         log.logging = log_start.elapsed();
     }
     let battle_counts_start = std::time::Instant::now();
-    let battle = crate::battle::publication_counts(state);
+    let battle = crate::hostile::battle::publication_counts(state);
     let battle_counts_time = battle_counts_start.elapsed();
     let times = TickTimes {
         input_us: input_time.as_micros() as u64,

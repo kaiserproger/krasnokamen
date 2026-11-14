@@ -18,6 +18,10 @@ pub use crate::entity_contract_26_1_2::{
     entity_type_contract_26_1_2_by_protocol_id,
 };
 
+/// Canonical entity identities that core gameplay spawns by name.
+pub const HORSE: &str = "minecraft:horse";
+pub const HUSK: &str = "minecraft:husk";
+
 const REQUIRED_REGISTRIES: &str = include_str!("../data/required_registries.json");
 
 #[derive(Debug, Error)]

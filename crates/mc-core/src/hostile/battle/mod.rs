@@ -12,6 +12,8 @@ mod ground;
 pub(crate) mod morale;
 pub mod staging;
 pub(crate) mod steering;
+/// Operator `/swing` attack presentation over [`crate::boundary::EntityEvent::Swing`].
+pub mod swing;
 mod targeting;
 
 pub(crate) use faction::special;

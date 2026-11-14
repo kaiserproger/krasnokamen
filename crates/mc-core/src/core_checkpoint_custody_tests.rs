@@ -948,7 +948,6 @@ fn unblocked_arrow_wear_break_removes_the_stand_without_stale_arrow_slot() {
 
 #[test]
 fn battle_restart_reset_removes_checkpoint_roster_and_ticket_durably() {
-    use crate::battle::staging::{BattleCommand, execute};
     use crate::boundary::ChangeSet;
     const OWNER: &str = "krasnokamen:battle";
     let directory = tempfile::tempdir().unwrap();

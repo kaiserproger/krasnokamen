@@ -12,7 +12,6 @@ pub mod allay;
 pub mod armadillo;
 mod armor_stand;
 mod axolotl;
-pub mod battle;
 mod beacon;
 #[cfg(test)]
 mod beacon_tests;
@@ -79,7 +78,6 @@ pub mod command_rules;
 pub(crate) mod command_snbt;
 mod command_store;
 mod command_summon;
-pub mod command_swing;
 pub(crate) mod command_text;
 pub mod command_tick;
 pub mod command_world;

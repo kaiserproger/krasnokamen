@@ -735,7 +735,7 @@ fn lower_cauldron(
             state
                 .registry
                 .blocks
-                .block(&Identifier::parse("minecraft:cauldron").expect("vanilla block"))
+                .block(&Identifier::parse(mc_data::blocks::CAULDRON).expect("vanilla block"))
                 .expect("cauldron")
                 .default
                 .0
@@ -744,7 +744,7 @@ fn lower_cauldron(
                 .registry
                 .blocks
                 .by_name_and_props(
-                    &Identifier::parse("minecraft:water_cauldron").expect("vanilla block"),
+                    &Identifier::parse(mc_data::blocks::WATER_CAULDRON).expect("vanilla block"),
                     &[("level".into(), (level - 1).to_string())],
                 )
                 .expect("water cauldron level")
@@ -754,7 +754,7 @@ fn lower_cauldron(
         state
             .registry
             .blocks
-            .block(&Identifier::parse("minecraft:cauldron").expect("vanilla block"))
+            .block(&Identifier::parse(mc_data::blocks::CAULDRON).expect("vanilla block"))
             .expect("cauldron")
             .default
             .0
@@ -763,7 +763,7 @@ fn lower_cauldron(
             .registry
             .blocks
             .by_name_and_props(
-                &Identifier::parse("minecraft:water_cauldron").expect("vanilla block"),
+                &Identifier::parse(mc_data::blocks::WATER_CAULDRON).expect("vanilla block"),
                 &[("level".into(), (level - 1).to_string())],
             )
             .expect("water cauldron level")
