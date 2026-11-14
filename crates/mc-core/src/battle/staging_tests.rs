@@ -35,6 +35,55 @@ fn layout(seed: u64) -> Vec<([u64; 3], u16, String)> {
 }
 
 #[test]
+fn first_battle_tick_after_setup_reuses_staged_shield_appearances() {
+    let mut state = fixture();
+    let mut changes = ChangeSet::default();
+    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 42, 100).unwrap();
+    let want = changes
+        .entities_spawned
+        .iter()
+        .map(|id| {
+            let pos = state.entities.pos(state.entities.slot_of(*id).unwrap());
+            (
+                ChunkPos {
+                    x: (pos[0].floor() as i32).div_euclid(16),
+                    z: (pos[2].floor() as i32).div_euclid(16),
+                },
+                0,
+            )
+        })
+        .collect();
+    state.world.ensure_blocking(&want);
+    state.refresh_active_chunks(state.tick);
+    let appearances: Vec<_> = changes
+        .entities_spawned
+        .iter()
+        .map(|id| {
+            let slot = state.entities.slot_of(*id).unwrap();
+            (
+                *id,
+                std::sync::Arc::clone(&state.entities.row(slot).appearance),
+            )
+        })
+        .collect();
+    state.appearance_changed.clear();
+    state.hostile.battle.running = true;
+    crate::battle::step(&mut state);
+    assert!(
+        state.appearance_changed.is_empty(),
+        "starting staged guard must not publish a mass shield transition: {:?}",
+        state.appearance_changed
+    );
+    for (id, appearance) in appearances {
+        let slot = state.entities.slot_of(id).unwrap();
+        assert!(
+            std::sync::Arc::ptr_eq(&appearance, &state.entities.row(slot).appearance),
+            "first tick copied appearance for {id:?}"
+        );
+    }
+}
+
+#[test]
 fn seed_reproduces_layout_and_army_mix() {
     let first = layout(123);
     assert_eq!(first.len(), 200);

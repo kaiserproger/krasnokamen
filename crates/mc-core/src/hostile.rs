@@ -460,15 +460,15 @@ fn rng_for(state: &TickState, id: EntityId) -> Rng {
         ^ (id.0 as u64).wrapping_mul(0xBF58_476D_1CE4_E5B9))
 }
 
-/// Writes changed runtime metadata only. No-op reads take no mutable custody;
-/// the edge diffs real appearance changes, and none is journaled here.
-fn set_extra(
+/// Writes changed metadata only and returns whether it changed. No-op reads take
+/// no mutable custody; the edge and native journal diff real appearance changes.
+pub(crate) fn set_extra(
     state: &mut TickState,
     slot: EntitySlot,
     index: u8,
     default: EntityDataValue,
     value: EntityDataValue,
-) {
+) -> bool {
     let row = state.entities.row(slot);
     let current = row
         .appearance
@@ -477,7 +477,7 @@ fn set_extra(
         .find(|(at, _)| *at == index)
         .map_or(&default, |(_, value)| value);
     if *current == value {
-        return;
+        return false;
     }
     let row = state.entities.row_mut(slot);
     let appearance = Arc::make_mut(&mut row.appearance);
@@ -485,6 +485,7 @@ fn set_extra(
         Some(entry) => entry.1 = value,
         None => appearance.extra.push((index, value)),
     }
+    true
 }
 
 /// The mob-flags byte [`set_zombie_aggressive`] would write for this slot and

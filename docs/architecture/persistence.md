@@ -160,6 +160,13 @@ The native checkpoint/WAL/restart regression is
 `battle_faction_survives_native_checkpoint_wal_and_restart`; see ADR 0020's
 allegiance extension. Persistence changes require Main's independent review.
 
+Shield presentation is durable entity appearance, not a runtime action clock:
+the living-flags byte in `appearance.extra` follows full WAL entity post-images
+and native checkpoints. Guard/swing/stagger/rout decisions remain runtime-only;
+on restart the retained pose lasts until the next admitted AI decision. Staging
+raises shields before the initial spawn, so starting a staged battle does not
+republish every shield bearer's appearance.
+
 ## Quarantined chunks
 
 A chunk whose stored record cannot be loaded (decode error, invalid block

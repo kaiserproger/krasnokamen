@@ -72,6 +72,11 @@ identity remap preserves actions and ammunition when roster layout changes.
 These are runtime battle state: pause holds their clock; restart restores
 bodies and mount custody, not an in-progress battle. The native projectile
 owner alone moves arrows and resolves hits.
+The shield's raised/lowered pose is different: it is native `appearance.extra`
+metadata, persisted in WAL post-images and checkpoints. The combat runtime
+owns decisions, while the shared changed-only metadata setter owns presentation
+mutation; unchanged guard never copies or republishes appearance. Staging
+pre-raises equipped shields so the first running tick makes no mass pose write.
 The sole kernel tree is `mc-core/src/battle`, restored from the F battle
 line; `hostile` retains its runtime state, not another implementation.
 

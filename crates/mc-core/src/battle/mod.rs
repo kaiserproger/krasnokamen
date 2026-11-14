@@ -439,27 +439,15 @@ fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {
         return;
     };
     let flags = if raised { USING_OFF_HAND } else { 0 };
-    let shown = state
-        .entities
-        .row(slot)
-        .appearance
-        .extra
-        .iter()
-        .find_map(|(index, value)| match (*index, value) {
-            (LIVING_FLAGS, crate::boundary::EntityDataValue::Byte(flags)) => Some(*flags),
-            _ => None,
-        })
-        .unwrap_or(0);
-    if shown == flags {
-        return;
+    if crate::hostile::set_extra(
+        state,
+        slot,
+        LIVING_FLAGS,
+        crate::boundary::EntityDataValue::Byte(0),
+        crate::boundary::EntityDataValue::Byte(flags),
+    ) {
+        state.appearance_changed.push(id);
     }
-    let extra = &mut std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).extra;
-    let value = crate::boundary::EntityDataValue::Byte(flags);
-    match extra.iter_mut().find(|(index, _)| *index == LIVING_FLAGS) {
-        Some((_, current)) => *current = value,
-        None => extra.push((LIVING_FLAGS, value)),
-    }
-    state.appearance_changed.push(id);
 }
 
 #[cfg(test)]
