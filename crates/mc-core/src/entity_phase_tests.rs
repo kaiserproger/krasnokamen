@@ -1837,6 +1837,11 @@ fn battle_zero_thrust_rests_but_thrust_impulse_and_world_edits_wake_it() {
     assert!(run_entity_phase(&mut state, true).is_empty());
     assert_eq!(state.entities.pos(slot), pos);
     assert!(state.entity_phase_scratch.rows.is_empty());
+    state
+        .hostile
+        .battle
+        .columns
+        .clear_projection(state.entities.len());
     state.hostile.battle.columns.drive_by_slot[slot.0 as usize] = [1.0, 0.0, 0.0];
     assert!(!can_early_rest(&mut state, slot));
     state.hostile.battle.columns.drive_by_slot[slot.0 as usize] = [0.0; 3];

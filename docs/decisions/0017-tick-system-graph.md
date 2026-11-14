@@ -127,6 +127,14 @@ faction bodies and horses occupy a derived tail. Targets, classification and
 drive share this index. Slot caches are refreshed before consumers; native
 compaction/removal never gives a cached row authority over another identity.
 
+Production kernels consume indexed contexts and columns directly. Stable-ID
+query adapters, explicit withdrawal/order/interval controls and diagnostic rank
+fields used only by the regression fixtures are compiled only under `cfg(test)`;
+the production battle API does not retain unused compatibility entry points.
+An inactive battle clears the lengths of its native-slot projections without
+resizing or filling them against the world's population; missing entries mean
+zero drive/no look, preserving the ordinary world's sparse fast path.
+
 Workers read slot-indexed drive/look arrays, not ID hash maps. A battle row
 with zero thrust may use the existing rest proof only while grounded, motionless
 and unaffected by impulse/hurt/effects or changed geometry. Moving rows still use

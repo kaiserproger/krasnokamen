@@ -21,6 +21,7 @@ pub(crate) enum Order {
     Advance,
     Hold,
     Charge,
+    #[cfg(test)]
     Withdraw,
     Pursue,
 }
@@ -60,6 +61,7 @@ fn position(spec: &RegimentSpec, file: usize, rank: u16, interval: f64) -> [f64;
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CombatContext {
     pub regiment: u32,
+    #[cfg(test)]
     pub rank: u16,
     pub front_rank: bool,
     pub pulsing: bool,
@@ -153,6 +155,7 @@ pub(crate) struct FormationRuntime {
 }
 
 impl FormationRuntime {
+    #[cfg(test)]
     pub fn clear(&mut self) {
         *self = Self::default();
     }
@@ -300,6 +303,7 @@ impl FormationRuntime {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn set_order(&mut self, regiment: u32, order: Order) -> bool {
         let Some(r) = self.regiments.iter_mut().find(|r| r.spec.id == regiment) else {
             return false;
@@ -316,6 +320,7 @@ impl FormationRuntime {
         true
     }
 
+    #[cfg(test)]
     /// Polybius fighting interval: 1..2 blocks per man. Staging must leave the
     /// corresponding regiment intervals; this never changes rank spacing.
     pub fn set_fighting_interval(
@@ -338,6 +343,7 @@ impl FormationRuntime {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn context(&self, id: EntityId) -> Option<CombatContext> {
         Some(self.context_at(*self.index.get(&id)?))
     }
@@ -353,6 +359,7 @@ impl FormationRuntime {
             .is_some_and(|s| s.pulse_until > self.tick);
         CombatContext {
             regiment: r.spec.id,
+            #[cfg(test)]
             rank: m.rank,
             front_rank: m.rank == 0 && m.alive && !m.wounded,
             pulsing,
@@ -376,10 +383,12 @@ impl FormationRuntime {
         Some(self.members[roster[(roll % roster.len() as u64) as usize]].id)
     }
 
+    #[cfg(test)]
     pub fn can_engage(&self, id: EntityId) -> bool {
         self.context(id).is_none_or(|c| c.front_rank && !c.routing)
     }
 
+    #[cfg(test)]
     pub fn can_attack(&self, id: EntityId) -> bool {
         let Some(&index) = self.index.get(&id) else {
             return true;
@@ -536,7 +545,12 @@ impl FormationRuntime {
                 || r.stamina < 20.0
                 || r.morale.broken
                 || s * SECTION_SIZE >= usize::from(r.spec.files)
-                || matches!(r.spec.order, Order::Withdraw | Order::Pursue)
+                || match r.spec.order {
+                    #[cfg(test)]
+                    Order::Withdraw => true,
+                    Order::Pursue => true,
+                    _ => false,
+                }
             {
                 continue;
             }
@@ -601,6 +615,7 @@ impl FormationRuntime {
                         0.0
                     }
                 }
+                #[cfg(test)]
                 Order::Withdraw => -0.05,
                 Order::Pursue => {
                     if r.enemy.is_some() {

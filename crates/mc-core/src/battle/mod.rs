@@ -182,7 +182,8 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
         ..Default::default()
     };
     if !battle.running {
-        battle.columns.clear_projection(state.entities.len());
+        battle.columns.drive_by_slot.clear();
+        battle.columns.look_by_slot.clear();
         battle.output = output;
         timings.total_us = start.map_or(0, |start| start.elapsed().as_micros() as u64);
         battle.timings = timings;
