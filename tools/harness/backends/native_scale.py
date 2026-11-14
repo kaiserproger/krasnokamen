@@ -221,10 +221,12 @@ def run(ctx: Any) -> dict[str, Any]:
     try:
         server_bin = _server_binary(ctx)
         native_bin = native_client.resolve_binary(ctx)
+        scale.refuse_incremental_pin(server_bin, "server")
         report["server_binary"] = {"path": str(server_bin), "sha256": scale.binary_sha256(server_bin)}
         if args.bots:
             if not args.bots_binary.is_file():
                 raise RuntimeError(f"missing prebuilt real Rust protocol bots: {args.bots_binary}")
+            scale.refuse_incremental_pin(args.bots_binary, "bots")
             report["bots_binary"] = {"path": str(args.bots_binary), "sha256": scale.binary_sha256(args.bots_binary)}
         port, dashboard_port = scale.reserve_ports()
         address, url = f"127.0.0.1:{port}", f"http://127.0.0.1:{dashboard_port}"
