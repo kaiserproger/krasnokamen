@@ -46,7 +46,7 @@ fn add_item(layout: &mut Layout, stack: &mc_data::ItemStack, owner: Owner) {
                 name.clone(),
                 OwnedItem {
                     item_id: stack.item_id,
-                    count: i32::from(stack.count),
+                    count: stack.count,
                     owner
                 }
             )

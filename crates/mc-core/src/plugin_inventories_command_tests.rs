@@ -64,7 +64,7 @@ fn command_custody_npc_reserve_is_rejected_by_real_ingress_without_state_changes
         },
         Endpoint::NpcCarry { handle },
     ] {
-        let image = load(&mut state, "owner", &endpoint).unwrap();
+        let image = load(&state, "owner", &endpoint).unwrap();
         let request = reserve_request(endpoint, image.fence, 1);
         let before = state.plugins.clone();
         let row = state.entities.row(slot).clone();
@@ -195,7 +195,7 @@ fn command_custody_loot_replacement_admits_whole_reserved_range_before_writing()
         dimension: "minecraft:overworld".into(),
         position: ScriptBlockPosition::new(4, 201, 4),
     };
-    let image = load(&mut state, "owner", &endpoint).unwrap();
+    let image = load(&state, "owner", &endpoint).unwrap();
     let reserved = execute(
         &mut state,
         "owner",
