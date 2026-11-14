@@ -11,7 +11,6 @@ pub(crate) fn prepare_edit(
 ) -> Result<crate::plugin_inventories::PreparedEntityCustody, String> {
     let current = &state.entities.row(slot).entity_life;
     let next = &mut image.state.entity_life;
-    next.mounted = current.mounted;
     next.frog_spawn_target = current.frog_spawn_target;
     next.cat_relax = current.cat_relax.clone();
     next.mount.input = current.mount.input;

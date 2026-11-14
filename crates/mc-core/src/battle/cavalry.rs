@@ -370,9 +370,9 @@ pub fn mount(state: &mut TickState, rider: EntityId, horse: EntityId) -> Result<
         || rider_row.health <= 0.0
         || horse_row.health <= 0.0
         || rider_row.entity_life.mount.vehicle.is_some()
-        || !rider_row.entity_life.mount.riders.is_empty()
+        || crate::mounts::occupied(&state.entities, &rider_row.entity_life.mount)
         || horse_row.entity_life.mount.vehicle.is_some()
-        || !horse_row.entity_life.mount.riders.is_empty()
+        || crate::mounts::occupied(&state.entities, &horse_row.entity_life.mount)
     {
         return Err(invalid());
     }
@@ -381,10 +381,10 @@ pub fn mount(state: &mut TickState, rider: EntityId, horse: EntityId) -> Result<
     crate::scoreboard::require_no_team(&state.scoreboard, &horse_row.uuid.to_string())
         .map_err(CoreError::Storage)?;
     state.entities.set_faction(horse_slot, faction);
+    state.entities.set_riders(rider_slot, Vec::new());
     state.entities.set_riders(horse_slot, vec![uuid]);
     let horse_row = state.entities.row_mut(horse_slot);
     horse_row.persistent = true;
-    horse_row.entity_life.mounted = true;
     horse_row.entity_life.tamed = true;
     state.entities.row_mut(rider_slot).persistent = true;
     crate::mounts::sync_rider(state, horse_slot);
@@ -395,12 +395,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
     sweep_drives(battle, combat);
     for horse in frame.entities.rider_slots() {
         let row = frame.entities.row(horse);
-        let Some(rider) = row
-            .entity_life
-            .mount
-            .riders
-            .first()
-            .and_then(|&uuid| frame.entities.slot_of_uuid(uuid))
+        let Some(rider) = crate::mounts::live_riders(frame.entities, &row.entity_life.mount).next()
         else {
             continue;
         };

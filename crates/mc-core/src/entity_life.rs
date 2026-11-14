@@ -30,8 +30,6 @@ pub struct EntityLifeState {
     pub immune_to_zombification: bool,
     pub tamed: bool,
     pub sitting: bool,
-    #[serde(skip)]
-    pub mounted: bool,
     pub taming: crate::taming::TamingState,
     pub mount: crate::mounts::MountState,
     pub leash: Option<crate::leash::Holder>,
@@ -148,7 +146,7 @@ pub fn breed_ready(body: &crate::entities::Body, row: &ColdRow) -> bool {
 
 /// Species prerequisites from OLD passive_mobs authority; no session state.
 pub fn can_breed(state: &TickState, body: &crate::entities::Body, row: &ColdRow) -> bool {
-    if !can_breed_in(&state.registry, body, row) {
+    if !can_breed_in(&state.registry, &state.entities, body, row) {
         return false;
     }
     // Panda courtship requires at least eight bamboo blocks nearby.
@@ -196,9 +194,10 @@ fn panda_bamboo_nearby(state: &TickState, pos: [f64; 3]) -> bool {
     false
 }
 
-/// [`can_breed`] over the registry alone, for workers without a `TickState`.
+/// [`can_breed`] over immutable registry/entity reads for workers without a `TickState`.
 pub(crate) fn can_breed_in(
     registry: &crate::registry::CoreRegistry,
+    entities: &crate::entities::EntityStore,
     body: &crate::entities::Body,
     row: &ColdRow,
 ) -> bool {
@@ -219,7 +218,7 @@ pub(crate) fn can_breed_in(
         }
         crate::blueprint::BreedingRule::TamedHealthyUnmounted => {
             row.entity_life.tamed
-                && !row.entity_life.mounted
+                && !crate::mounts::occupied(entities, &row.entity_life.mount)
                 && row.health >= blueprint.params.max_health
         }
         crate::blueprint::BreedingRule::Sterile => false,
@@ -264,7 +263,6 @@ pub fn make_child(state: &mut TickState, id: EntityId) {
 
 /// Rebuild retained species appearance when a checkpoint/replay row is restored.
 pub fn restore_appearance(body: &crate::entities::Body, row: &mut ColdRow) {
-    row.entity_life.mounted = !row.entity_life.mount.riders.is_empty();
     let EntityKind::Mob { type_id } = body.kind else {
         return;
     };

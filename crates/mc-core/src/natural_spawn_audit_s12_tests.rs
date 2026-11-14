@@ -132,9 +132,10 @@ fn old_observe_slot(state: &mut TickState, slot: EntitySlot) {
     // Native rows outlive residency, unlike vanilla's loaded-entity census.
     // Keep their bodies indexed for overlap checks, but not in loaded mob caps.
     let cell = chunk_of(position);
-    let category = (!persistent(state.entities.row(slot)) && state.world.has_chunk(cell.0, cell.1))
-        .then(|| category_of(state, slot))
-        .and_then(category_index);
+    let category = (!persistent(&state.entities, state.entities.row(slot))
+        && state.world.has_chunk(cell.0, cell.1))
+    .then(|| category_of(state, slot))
+    .and_then(category_index);
     state
         .spawn_census
         .observe(entity, position, width, category);
@@ -412,8 +413,16 @@ fn mixed(state: &mut TickState) {
             3 | 4 => {
                 let mut life = state.entities.row(slot).entity_life.clone();
                 life.tamed = index == 3;
-                life.mounted = index == 4;
                 state.entities.set_entity_life(slot, life);
+                if index == 4 {
+                    let passenger = state
+                        .entities
+                        .mob_slots(state.registry.zombie_type_id)
+                        .next()
+                        .unwrap();
+                    let uuid = state.entities.row(passenger).uuid;
+                    state.entities.set_riders(slot, vec![uuid]);
+                }
             }
             5 => state.entities.set_pos(slot, [64.5, 250.0, 0.5]),
             6 => state.entities.set_pos(slot, [656.5, 250.0, 0.5]),

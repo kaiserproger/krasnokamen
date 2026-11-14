@@ -214,6 +214,7 @@ pub(crate) fn unlock_session(state: &mut TickState, connection: ConnectionId) {
             );
         }
     }
+    crate::mounts::join(state, entity);
     crate::effects::sync_join(state, entity);
     crate::advancements::sync_join(state, entity);
     if let Some(name) = state.connections.name_of(entity).map(str::to_owned) {

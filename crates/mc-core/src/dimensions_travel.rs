@@ -266,7 +266,7 @@ fn move_between(
     }
     crate::sleep::wake(source, id);
     crate::mounts::dismount(source, id);
-    crate::mounts::death(source, slot);
+    crate::mounts::eject(source, slot);
     crate::leash::detach(source, slot);
     if let Some(connection) = connection {
         let rules = source.registry.item_rules();

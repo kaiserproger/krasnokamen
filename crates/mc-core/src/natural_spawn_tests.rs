@@ -1341,7 +1341,7 @@ fn despawn_prefilter_never_skips_a_row_the_full_decision_acts_on() {
                 let category = crate::natural_spawn::category_of(&state, slot);
                 let acts_on = (category == MobCategory::Monster && peaceful)
                     || !(no_players
-                        || (crate::natural_spawn::persistent(row)
+                        || (crate::natural_spawn::persistent(&state.entities, row)
                             || category.is_persistent()
                             || matches!(
                                 row.special_mob.as_deref(),

@@ -653,6 +653,28 @@ fn native_cached_facts_invalidate_mounts_between_ticks() {
 }
 
 #[test]
+fn native_cached_facts_release_carried_when_the_rider_row_disappears() {
+    let (mut state, rider, horse) = native_cache_fixture();
+    // Keep horse's dense slot unchanged when remove swap-removes the rider.
+    spawn(&mut state, 0, "minecraft:cow", [6.5, 64.0, 6.5]);
+    cavalry::mount(&mut state, rider, horse).unwrap();
+    step(&mut state);
+    let horse_slot = state.entities.slot_of(horse).unwrap();
+    let bi = state.hostile.battle.columns.index(horse_slot).unwrap();
+    assert!(state.hostile.battle.columns.carried[bi]);
+    drain_entity_views(&mut state);
+    let rider_slot = state.entities.slot_of(rider).unwrap();
+    state.entities.remove(rider_slot);
+    assert_eq!(state.entities.slot_of(horse), Some(horse_slot));
+    step(&mut state);
+    let bi = state.hostile.battle.columns.index(horse_slot).unwrap();
+    assert!(
+        !state.hostile.battle.columns.carried[bi],
+        "a valid cold-row cache must not retain vanished occupancy"
+    );
+}
+
+#[test]
 fn late_wire_fact_invalidation_precedes_the_views_drain() {
     let (mut state, rider, _) = native_cache_fixture();
     step(&mut state);
