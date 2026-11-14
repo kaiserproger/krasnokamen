@@ -1,0 +1,13 @@
+diff --git a/crates/mc-core/src/command_summon.rs b/crates/mc-core/src/command_summon.rs
+index aa9680cea..39200c647 100644
+--- a/crates/mc-core/src/command_summon.rs
++++ b/crates/mc-core/src/command_summon.rs
+@@ -244,7 +244,7 @@ pub(crate) fn supports(state: &TickState, type_id: u32, name: &str, key: &str) -
+                     "minecraft:villager" | "minecraft:wandering_trader" | "minecraft:tadpole"
+                 )
+         }
+-        "IsBaby" => name == "minecraft:zombie_villager",
++        "IsBaby" => crate::entity_life::uses_is_baby(name),
+         "VillagerData" => matches!(name, "minecraft:villager" | "minecraft:zombie_villager"),
+         "InLove" | "LoveCause" => ageable,
+         "Color" | "Sheared" => name == "minecraft:sheep",

@@ -1,0 +1,13 @@
+diff --git a/crates/mc-core/src/command_execution.rs b/crates/mc-core/src/command_execution.rs
+index e4cf02535..97b237512 100644
+--- a/crates/mc-core/src/command_execution.rs
++++ b/crates/mc-core/src/command_execution.rs
+@@ -37,6 +37,8 @@ pub(crate) fn supports_store_result(command: &Command) -> bool {
+         | Command::Attribute(_)
+         | Command::Item(_)
+         | Command::Loot(_)
++        | Command::Give { .. }
++        | Command::Clear { .. }
+         | Command::EffectGive { .. }
+         | Command::EffectClear { .. }
+         | Command::Teleport { .. }

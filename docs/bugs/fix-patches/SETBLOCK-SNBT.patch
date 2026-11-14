@@ -1,0 +1,34 @@
+diff --git a/crates/mc-core/src/command_world.rs b/crates/mc-core/src/command_world.rs
+index 48dedffd1..3a7e16f96 100644
+--- a/crates/mc-core/src/command_world.rs
++++ b/crates/mc-core/src/command_world.rs
+@@ -82,9 +82,17 @@ fn message(text: impl Into<String>) -> CommandError {
+ }
+ 
+ pub(crate) fn block_spec(word: &str) -> Result<BlockSpec, CommandError> {
+-    if word.contains(['{', '}']) {
+-        return Err(message("Block entity SNBT is not supported"));
+-    }
++    let (word, nbt) = if let Some(start) = word.find('{') {
++        let tag = crate::command_snbt::parse(&word[start..]).map_err(message)?;
++        if !matches!(tag, mc_nbt::Tag::Compound(_)) {
++            return Err(message("Expected block entity compound"));
++        }
++        let mut bytes = Vec::new();
++        mc_nbt::write_network(&mut bytes, &tag).map_err(|error| message(error.to_string()))?;
++        (&word[..start], Some(bytes))
++    } else {
++        (word, None)
++    };
+     let (name, properties) = match word.split_once('[') {
+         Some((name, rest)) => {
+             let rest = rest
+@@ -121,7 +129,7 @@ pub(crate) fn block_spec(word: &str) -> Result<BlockSpec, CommandError> {
+     Ok(BlockSpec {
+         name: Identifier::parse(name).map_err(|_| message("Invalid block identifier"))?,
+         properties,
+-        nbt: None,
++        nbt,
+     })
+ }
+ 
