@@ -1284,3 +1284,37 @@ fn body_retained_fields_preserve_image_bytes_and_transient_fields_stay_out() {
     state.entities.body_mut(slot).burn_ticks += 1;
     assert!(!image.matches(state.entities.body(slot), state.entities.row(slot)));
 }
+
+#[test]
+fn landing_reset_of_a_journaled_fall_distance_reaches_the_journal() {
+    let (mut state, _, pos) = crate::mounts::tests::fixture();
+    let at = [pos[0] + 3.0, pos[1] + 2.0, pos[2] + 3.0];
+    let cow = crate::mounts::tests::spawn(&mut state, "cow", at);
+    let slot = state.entities.slot_of(cow).unwrap();
+    state.entities.set_ground(slot, false);
+    state.refresh_active_chunks(state.tick);
+    step(&mut state);
+    while state.entities.row(slot).controls.fall_distance == 0.0 {
+        assert!(!state.entities.ground(slot), "landed before falling");
+        step(&mut state);
+    }
+    let persistent = state.entities.row(slot).persistent;
+    state.entities.row_mut(slot).persistent = !persistent;
+    step(&mut state);
+    assert_ne!(
+        state.journaled_entity_state[&cow].2.controls.fall_distance,
+        0.0
+    );
+    for _ in 0..40 {
+        if state.entities.ground(slot) {
+            break;
+        }
+        step(&mut state);
+    }
+    assert!(state.entities.ground(slot), "the cow landed");
+    assert_eq!(state.entities.row(slot).controls.fall_distance, 0.0);
+    assert_eq!(
+        state.journaled_entity_state[&cow].2.controls.fall_distance,
+        0.0
+    );
+}

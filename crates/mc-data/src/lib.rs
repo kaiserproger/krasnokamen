@@ -55,6 +55,7 @@ pub mod conduit_nbt;
 pub mod damage_types;
 pub mod data_component_types_26_1_2;
 pub mod enchanting_26_1_2;
+pub mod entity_attachments_26_3;
 mod entity_contract_26_1_2;
 pub mod entity_nbt;
 pub mod entity_types;

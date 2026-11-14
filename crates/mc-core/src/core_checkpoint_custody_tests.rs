@@ -2446,3 +2446,46 @@ container_replay_cases!(
     (chiseled_bookshelf, "chiseled_bookshelf", 6, true),
     (lectern, "lectern", 1, true),
 );
+
+#[test]
+fn mob_rider_survives_checkpoint_wal_and_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let horse = world.spawn("minecraft:horse", [8.5, 80.0, 8.5]);
+    let husk = world.spawn("minecraft:husk", [8.5, 80.0, 8.5]);
+    let horse_slot = slot(&world.state, horse);
+    let husk_slot = slot(&world.state, husk);
+    let horse_uuid = world.state.entities.row(horse_slot).uuid;
+    let rider_uuid = world.state.entities.row(husk_slot).uuid;
+    world.state.entities.row_mut(horse_slot).persistent = true;
+    world.state.entities.row_mut(husk_slot).persistent = true;
+    world.tick(|state| state.entities.set_riders(horse_slot, vec![rider_uuid]));
+    world.checkpoint();
+    world = world.crash();
+    let horse_slot = world.state.entities.slot_of_uuid(horse_uuid).unwrap();
+    assert_eq!(
+        world
+            .state
+            .entities
+            .row(horse_slot)
+            .entity_life
+            .mount
+            .riders,
+        vec![rider_uuid]
+    );
+    world.tick(|state| state.entities.row_mut(horse_slot).persistent = false);
+    world = world.crash();
+    let horse_slot = world.state.entities.slot_of_uuid(horse_uuid).unwrap();
+    assert_eq!(
+        world
+            .state
+            .entities
+            .row(horse_slot)
+            .entity_life
+            .mount
+            .riders,
+        vec![rider_uuid]
+    );
+    assert!(world.state.entities.slot_of_uuid(rider_uuid).is_some());
+}

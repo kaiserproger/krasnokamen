@@ -92,6 +92,94 @@ pub(crate) fn use_entity(target: EntityId) -> PlayerInput {
 pub(crate) fn slot(state: &TickState, id: EntityId) -> EntitySlot {
     state.entities.slot_of(id).unwrap()
 }
+#[test]
+fn steady_mob_rider_takes_no_row_custody_per_tick() {
+    let (mut state, _, pos) = fixture();
+    let horse = spawn(&mut state, "horse", pos);
+    let husk = spawn(&mut state, "husk", pos);
+    let (horse_slot, husk_slot) = (slot(&state, horse), slot(&state, husk));
+    let uuid = state.entities.row(husk_slot).uuid;
+    state.entities.set_riders(horse_slot, vec![uuid]);
+    state.refresh_active_chunks(state.tick);
+    tick(&mut state, &mut ChangeSet::default());
+    assert_eq!(
+        state.entities.row(husk_slot).entity_life.mount.vehicle,
+        Some(horse)
+    );
+    let seat_y = pos[1] + (f64::from(1.443_75_f32) - f64::from(0.7_f32));
+    assert_eq!(state.entities.pos(husk_slot), [pos[0], seat_y, pos[2]]);
+    state.entities.take_touched();
+    state.entities.prepare_motion_hints(&state.registry);
+    tick(&mut state, &mut ChangeSet::default());
+    let touched = state.entities.touched_ids();
+    assert!(
+        !touched.contains(&horse) && !touched.contains(&husk),
+        "{touched:?}"
+    );
+}
+
+#[test]
+fn seated_mob_rider_accrues_no_fall_distance_and_lands_unhurt() {
+    let (mut state, _, pos) = fixture();
+    let at = [pos[0] + 4.0, pos[1], pos[2] + 4.0];
+    let horse = spawn(&mut state, "horse", at);
+    let husk = spawn(&mut state, "husk", at);
+    let (horse_slot, husk_slot) = (slot(&state, horse), slot(&state, husk));
+    let uuid = state.entities.row(husk_slot).uuid;
+    state.entities.set_riders(horse_slot, vec![uuid]);
+    state.entities.row_mut(husk_slot).controls.fall_distance = 12.0;
+    sync_rider(&mut state, horse_slot);
+    assert_eq!(state.entities.row(husk_slot).controls.fall_distance, 0.0);
+    state.refresh_active_chunks(state.tick);
+    for _ in 0..100 {
+        run_tick(&mut state, &[]);
+    }
+    assert_eq!(
+        state.entities.row(husk_slot).entity_life.mount.vehicle,
+        Some(horse)
+    );
+    assert_eq!(state.entities.row(husk_slot).controls.fall_distance, 0.0);
+    let health = state.entities.row(husk_slot).health;
+    dismount(&mut state, husk);
+    for _ in 0..40 {
+        run_tick(&mut state, &[]);
+    }
+    assert!(state.entities.ground(husk_slot));
+    assert_eq!(state.entities.row(husk_slot).health, health);
+}
+#[test]
+fn camel_and_happy_ghast_keep_their_existing_seats() {
+    let (mut state, _, pos) = fixture();
+    for (kind, offsets) in [
+        ("camel", vec![(0.5, 0.0), (-0.7, 0.0)]),
+        (
+            "happy_ghast",
+            vec![(1.7, 0.0), (0.0, -1.7), (-1.7, 0.0), (0.0, 1.7)],
+        ),
+    ] {
+        let vehicle = spawn(&mut state, kind, pos);
+        let vehicle_slot = slot(&state, vehicle);
+        let riders: Vec<_> = offsets
+            .iter()
+            .map(|_| spawn(&mut state, "husk", pos))
+            .collect();
+        let uuids = riders
+            .iter()
+            .map(|id| state.entities.row(slot(&state, *id)).uuid)
+            .collect();
+        state.entities.set_riders(vehicle_slot, uuids);
+        sync_rider(&mut state, vehicle_slot);
+        let height =
+            state.entities.body(vehicle_slot).height * if kind == "camel" { 0.75 } else { 1.0 };
+        for (rider, (forward, side)) in riders.iter().zip(offsets) {
+            assert_eq!(
+                state.entities.pos(slot(&state, *rider)),
+                [pos[0] + side, pos[1] + height, pos[2] + forward]
+            );
+        }
+    }
+}
+
 fn equip(state: &mut TickState, actor: EntityId, target: EntityId, item: &str) {
     hold(state, actor, item, 1);
     run_tick(state, &[use_entity(target)]);
