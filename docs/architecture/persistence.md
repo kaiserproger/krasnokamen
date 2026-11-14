@@ -150,14 +150,13 @@ A killed living mob keeps its body for 20 ticks (vanilla `deathTime`) so
 clients play the death tilt, but its death is the durable removal. A corpse is
 a row on the dying clock (`EntityStore::is_dying`), not every `alive = false`
 row. WAL images of the corpse carry `alive = false`, which replay folds as a
-removal; a checkpoint writes no record for it and tombstones its UUID. Other
-dead non-player rows, such as a retired deployed stand, keep their checkpoint
-record, so a later checkpoint rewrites the stored image instead of leaving a
-stale one. Vanilla saves `DeathTime`; after a restart Krasnokamen shows no
+removal; a checkpoint writes no record for it and tombstones its UUID. A retired
+deployed stand is removed at the commit tail and its UUID is likewise
+tombstoned in the next checkpoint. Vanilla saves `DeathTime`; after a restart Krasnokamen shows no
 remaining corpse, and the loot journaled at death exists once. Regressions:
 `corpse_is_a_durable_removal_across_checkpoint_crash_and_reopen`,
 `retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart`;
-ADR 0020 "Corpse extension".
+[ADR 0020](../decisions/0020-entity-checkpoints-at-one-million.md).
 
 ### Battle allegiance
 
@@ -168,8 +167,8 @@ post-images; `krasnokamen:Faction` (`TAG_Int`, checked as 0–65535) is the
 checkpoint projection. Both omit zero, leaving unaffiliated entity bytes unchanged.
 Missing allegiance is zero; a wrong NBT type, out-of-range value or malformed WAL
 value refuses decoding. Recovery and `/summon` use the same setter.
-The internal key remains hidden from `/data` and NBT selectors; no wire metadata
-or protocol change is needed. Allegiance travels with the body on transfer and
+The key is visible to `/data` and NBT selectors while allegiance is nonzero;
+no wire metadata or protocol change is needed. Allegiance travels with the body on transfer and
 dense compaction. Restart restores allegiance, not runtime battle targets or timers.
 The native checkpoint/WAL/restart regression is
 `battle_faction_survives_native_checkpoint_wal_and_restart`; see ADR 0020's

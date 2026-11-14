@@ -72,7 +72,10 @@ pub(super) fn census(battle: &BattleState) -> Census {
                 if let Some(list) = cells.get(&[key[0] + dx, key[1] + dz]) {
                     for &other in list {
                         let o = &f.members[other];
-                        if other != bi && (o.pos[0] - m.pos[0]).hypot(o.pos[2] - m.pos[2]) < HEAP {
+                        if other != bi
+                            && (o.pos[0] - m.pos[0]).powi(2) + (o.pos[2] - m.pos[2]).powi(2)
+                                < HEAP * HEAP
+                        {
                             heaped = true;
                             break 'near;
                         }
@@ -102,7 +105,7 @@ pub(super) fn census(battle: &BattleState) -> Census {
             }
             c.marching += 1;
             let slot = f.heading_target(bi);
-            let error = (slot[0] - m.pos[0]).hypot(slot[2] - m.pos[2]);
+            let error = ((slot[0] - m.pos[0]).powi(2) + (slot[2] - m.pos[2]).powi(2)).sqrt();
             c.slot_error_sum += error;
             c.off_slot += usize::from(error > OFF_SLOT);
             if r.spec.frontage > 1.0 {
@@ -233,7 +236,7 @@ fn rank_and_heap_table() {
                     .map(|bi| {
                         let m = &battle.formation.members[bi];
                         let slot = battle.formation.heading_target(bi);
-                        (slot[0] - m.pos[0]).hypot(slot[2] - m.pos[2])
+                        ((slot[0] - m.pos[0]).powi(2) + (slot[2] - m.pos[2]).powi(2)).sqrt()
                     })
                     .collect();
                 eprintln!(

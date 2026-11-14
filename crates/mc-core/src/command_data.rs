@@ -81,22 +81,31 @@ pub(crate) fn entity_image(state: &TickState, id: EntityId) -> Result<Vec<(Strin
     } else {
         let record =
             crate::core::entity_data_record(state, slot).ok_or("Entity has no vanilla data")?;
-        mc_data::entity_nbt::entity_to_fields(&state.registry.items, &record)
-            .map_err(|e| e.to_string())?
+        let mut fields = mc_data::entity_nbt::entity_to_fields(&state.registry.items, &record)
+            .map_err(|e| e.to_string())?;
+        let body = state.entities.body(slot);
+        if matches!(body.kind, crate::entities::EntityKind::Mob { .. }) && body.faction != 0 {
+            put(
+                &mut fields,
+                "krasnokamen:Faction",
+                Tag::Int(i32::from(body.faction)),
+            );
+        }
+        fields
     })
 }
 
 /// An entity's public NBT, as `data get entity` shows it.
 pub(crate) fn entity(state: &TickState, id: EntityId) -> Result<Tag, String> {
     let mut fields = entity_image(state, id)?;
-    public_fields(&mut fields);
+    fields.retain(|(key, _)| key == "krasnokamen:Faction" || !private_field(key));
     // EntityDataAccessor uses NbtPredicate -> saveWithoutId, not a disk entity root.
     fields.retain(|(key, _)| key != "id");
     Ok(Tag::Compound(fields))
 }
 
 /// A block entity's full native image: public NBT plus the private native
-/// fields, with live owner state (inventory, furnace, brewing, jukebox) folded in.
+/// fields, with live inventory, furnace, brewing, campfire, jukebox and spawner state.
 pub(crate) fn block_image(
     state: &TickState,
     pos: BlockPos,
@@ -216,9 +225,33 @@ pub(crate) fn block_image(
         put(&mut fields, "BrewTime", Tag::Short(stand.brew_time));
         put(&mut fields, "Fuel", Tag::Byte(stand.fuel as i8));
     }
+    if let Some(campfire) = state.campfires.get(&key) {
+        for (name, value) in campfire.data_fields(&state.registry.items) {
+            put(&mut fields, &name, value);
+        }
+    }
     if let Some(jukebox) = state.jukeboxes.get(&key) {
         fields.retain(|(key, _)| key != "RecordItem" && key != "ticks_since_song_started");
         fields.extend(jukebox.data_fields(&state.registry.items));
+    }
+    if kind == BlockEntityKind::MobSpawner
+        && let Some(spawner) = state.monster_spawners.data_fields(pos, state.tick)
+    {
+        for (name, value) in spawner {
+            put(&mut fields, &name, value);
+        }
+    }
+    let vibration = match kind {
+        BlockEntityKind::SculkSensor
+        | BlockEntityKind::CalibratedSculkSensor
+        | BlockEntityKind::SculkCatalyst => crate::sculk::data_fields(state, pos),
+        BlockEntityKind::SculkShrieker => crate::shrieker::data_fields(state, pos),
+        _ => None,
+    };
+    if let Some(vibration) = vibration {
+        for (name, value) in vibration {
+            put(&mut fields, &name, value);
+        }
     }
     Ok((kind, fields))
 }
@@ -297,59 +330,6 @@ pub(crate) fn block_target(context: Context, input: &mut &str) -> Result<BlockPo
     }
     let [x, y, z] = position.map(|v| v.floor() as i32);
     Ok(BlockPos { x, y, z })
-}
-
-/// Resolve an accessor once so command stores and reads use the same owner.
-pub(crate) enum Accessor {
-    Storage(String),
-    Entity(crate::dimensions::Dimension, EntityId),
-    Block(crate::dimensions::Dimension, BlockPos),
-}
-
-impl Accessor {
-    pub(crate) fn parse(
-        state: &TickState,
-        context: Context,
-        input: &mut &str,
-    ) -> Result<Self, String> {
-        match argument(input)? {
-            "storage" => {
-                let name = mc_data::Identifier::parse(argument(input)?)
-                    .map_err(|error| error.to_string())?;
-                Ok(Self::Storage(name.to_string()))
-            }
-            "entity" => {
-                let id = single_entity(state, context, argument(input)?)?;
-                let (dimension, _) =
-                    crate::dimensions::travel::locate(state, id).ok_or("No entity was found")?;
-                Ok(Self::Entity(dimension, id))
-            }
-            "block" => Ok(Self::Block(
-                context.dimension,
-                block_target(context, input)?,
-            )),
-            _ => Err("Expected storage, entity or block".into()),
-        }
-    }
-
-    pub(crate) fn read(&self, state: &TickState) -> Result<Tag, String> {
-        match self {
-            Self::Storage(name) => Ok(state
-                .command_storage
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| Tag::Compound(Vec::new()))),
-            Self::Entity(dimension, id) => entity(
-                crate::dimensions::travel::world(state, *dimension)
-                    .ok_or("Entity dimension unavailable")?,
-                *id,
-            ),
-            Self::Block(dimension, pos) => block(
-                crate::dimensions::travel::world(state, *dimension).ok_or("Unknown dimension")?,
-                *pos,
-            ),
-        }
-    }
 }
 
 /// The NBT of an `entity <selector>` or `block <x> <y> <z>` data target, with

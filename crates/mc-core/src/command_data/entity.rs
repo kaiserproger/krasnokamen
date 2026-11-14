@@ -30,7 +30,7 @@ pub(crate) fn command(state: &mut TickState, context: Context, input: &str) -> C
 
 /// The loaded form of an edit, ready to install without further failure.
 enum Prepared {
-    Mob(Box<Image>),
+    Mob(Box<Image>, crate::plugin_inventories::PreparedEntityCustody),
     Item(ItemSummon),
 }
 
@@ -86,7 +86,19 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
         if matches!(key.as_str(), "Pos" | "id") {
             return Err(format!("Editing {key} is not supported; use /tp"));
         }
-        if key != "UUID" {
+        if key == "Tags" {
+            let Tag::List(list) = value else {
+                return Err("Tags must be a string list".into());
+            };
+            if list.elements.len() > 1024
+                || list.elements.iter().any(|tag| !matches!(tag, Tag::String(_)))
+            {
+                return Err("Tags must contain at most 1024 strings".into());
+            }
+            image.retain(|(existing, _)| existing != key);
+            image.push((key.clone(), value.clone()));
+            touched.push(key.clone());
+        } else if key != "UUID" {
             changed.push((key.clone(), value.clone()));
             touched.push(key.clone());
         }
@@ -104,7 +116,9 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
         if crate::command_data::private_field(key) {
             return Err(format!("Editing {key} of {name} is not supported"));
         }
-        let authored = if item {
+        let authored = if key == "Tags" {
+            true
+        } else if item {
             ITEM_FIELDS.contains(&key.as_str())
         } else {
             crate::command_summon::supports(world, type_id, name, key) == Some(true)
@@ -117,8 +131,9 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
     let prepared = if item {
         // A removed field loads as its default, like a compound without it does.
         let fields = new
-            .into_iter()
+            .iter()
             .filter(|(key, _)| ITEM_FIELDS.contains(&key.as_str()))
+            .cloned()
             .collect();
         let mut payload = crate::command_summon::prepare_item(world, &Tag::Compound(fields))
             .map_err(|error| error.message())?;
@@ -131,7 +146,7 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
         let keep_villager = !touched
             .iter()
             .any(|key| crate::villager::persistence::owns_field(key));
-        Prepared::Mob(Box::new(
+        let mut image = Box::new(
             crate::command_summon::prepare_edit(
                 world,
                 type_id,
@@ -142,7 +157,28 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
                 keep_villager,
             )
             .map_err(|error| error.message())?,
-        ))
+        );
+        let custody = crate::command_summon::data::prepare_edit(
+            world,
+            slot,
+            &mut image,
+            touched.iter().any(|key| key == "equipment"),
+        )?;
+        Prepared::Mob(image, custody)
+    };
+    let retained_tags = if touched.iter().any(|key| key == "Tags") {
+        let image = match &prepared {
+            Prepared::Mob(image, _) => Some(image.as_ref()),
+            Prepared::Item(_) => None,
+        };
+        Some(crate::command_summon::data::prepare_tags(
+            world,
+            slot,
+            image,
+            new.iter().find(|(key, _)| key == "Tags").map(|(_, value)| value),
+        )?)
+    } else {
+        None
     };
     let world = if dimension == state.dimension {
         state
@@ -154,8 +190,14 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
             .ok_or("Entity dimension unavailable")?
     };
     match prepared {
-        Prepared::Mob(image) => crate::command_summon::apply(world, id, *image),
+        Prepared::Mob(image, custody) => {
+            crate::command_summon::apply(world, id, *image);
+            crate::plugin_inventories::apply_entity_custody(world, custody);
+        }
         Prepared::Item(payload) => crate::command_summon::apply_item(world, id, payload),
+    }
+    if let Some(tags) = retained_tags {
+        world.entities.row_mut(slot).opaque_entity_fields = tags;
     }
     Ok(crate::command_execution::entity_name(world, id))
 }

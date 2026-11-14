@@ -481,6 +481,23 @@ fn enter(state: &TickState, pos: BlockPos, fluid: Fluid, spreading: bool) -> Opt
     if let Some((other, level)) = fluid_at(states, block) {
         return (other == fluid && level != 0).then_some(Flow::Open);
     }
+    // A lava bucket replaces these non-solid blocks even though their liquid
+    // container refuses spreading fluid (26.3 BucketItem.emptyContents).
+    if !spreading
+        && fluid == Fluid::Lava
+        && state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(block))
+            .is_some_and(|entry| {
+                matches!(
+                    entry.block.id.path(),
+                    "kelp" | "kelp_plant" | "seagrass" | "tall_seagrass"
+                )
+            })
+    {
+        return Some(Flow::Wash(block));
+    }
     // Vanilla 26.3 `FlowingFluid.canHoldFluid`: only tagged blocks give way, and
     // `LiquidBlockContainer`s (kelp, seagrass, waterloggable blocks) hold a
     // flow back; the table already excludes them. Everything else blocks.

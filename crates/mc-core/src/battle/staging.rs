@@ -445,11 +445,10 @@ fn item_model(model: &str) -> (String, Tag) {
     ("minecraft:item_model".into(), Tag::String(model.into()))
 }
 
+type StagedEquipment = (&'static str, KitItem, Vec<(String, Tag)>);
+
 /// `None` is a horse's caparison; otherwise one fighter's loadout.
-fn equipment_slots(
-    unit: Option<&Loadout>,
-    side: u16,
-) -> Vec<(&'static str, KitItem, Vec<(String, Tag)>)> {
+fn equipment_slots(unit: Option<&Loadout>, side: u16) -> Vec<StagedEquipment> {
     let red = side == 1;
     let coloured = |r: &'static str, b: &'static str| if red { r } else { b };
     let mut slots = Vec::new();

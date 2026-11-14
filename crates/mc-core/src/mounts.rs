@@ -72,10 +72,6 @@ fn capabilities(state: &TickState, slot: EntitySlot) -> crate::blueprint::Capabi
         .map(|blueprint| blueprint.capabilities)
         .unwrap_or_default()
 }
-fn contains_passenger(mount: &MountState, uuid: Uuid) -> bool {
-    mount.riders.contains(&uuid)
-}
-
 pub(crate) fn vehicle(state: &TickState, actor: EntityId) -> Option<EntitySlot> {
     let actor = state.entities.row(state.entities.slot_of(actor)?);
     let slot = state
@@ -810,26 +806,6 @@ pub(crate) fn sync_rider(state: &mut TickState, slot: EntitySlot) {
         state.appearance_changed.push(body.id);
     }
 }
-/// Liquid inside the camel's body: water or lava from the feet up to mid-height.
-fn in_liquid(state: &TickState, slot: EntitySlot) -> bool {
-    let pos = state.entities.pos(slot);
-    let height = state.entities.body(slot).height;
-    [pos[1], pos[1] + height * 0.5].into_iter().any(|y| {
-        state
-            .world
-            .block_at(
-                pos[0].floor() as i32,
-                y.floor() as i32,
-                pos[2].floor() as i32,
-            )
-            .is_some_and(|id| {
-                matches!(
-                    state.registry.materials.classify(id),
-                    mc_physics::BlockMaterial::Water | mc_physics::BlockMaterial::Lava
-                )
-            })
-    })
-}
 fn controllable(state: &TickState, slot: EntitySlot, actor: EntityId) -> bool {
     let Some(player) = state.players.get(&actor) else {
         return false;
@@ -1056,22 +1032,41 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             continue;
         }
         // The cooldown is persisted: write only while it is running.
-        let cooldown = match state.entities.row(slot).entity_life.mount.dash_cooldown {
-            0 => 0,
-            running => {
-                let cooldown = running - 1;
-                state.entities.row_mut(slot).entity_life.mount.dash_cooldown = cooldown;
-                cooldown
-            }
-        };
+        let cooldown = state.entities.row(slot).entity_life.mount.dash_cooldown;
+        if cooldown > 0 {
+            state.entities.row_mut(slot).entity_life.mount.dash_cooldown = cooldown - 1;
+        }
         let dashing = state.entities.row(slot).appearance.extra.contains(&(
             CAMEL_DASH_INDEX,
             crate::boundary::EntityDataValue::Boolean(true),
         ));
-        // Landing ends the dash once the launch cooldown allows it again, and
-        // liquid ends it at any time: a camel that steps into water or lava
-        // stops dashing.
-        if dashing && ((cooldown < 50 && state.entities.ground(slot)) || in_liquid(state, slot)) {
+        let liquid = if dashing && cooldown < 50 && !state.entities.ground(slot) {
+            let body = state.entities.body(slot);
+            let x = (pos[0] - body.half_width).floor() as i32
+                ..=(pos[0] + body.half_width).floor() as i32;
+            let y = pos[1].floor() as i32..=(pos[1] + body.height).floor() as i32;
+            let z = (pos[2] - body.half_width).floor() as i32
+                ..=(pos[2] + body.half_width).floor() as i32;
+            x.into_iter().any(|x| {
+                z.clone().any(|z| {
+                    y.clone().any(|y| {
+                        state.world.block_at(x, y, z)
+                            .and_then(|block| crate::fluids::contained(state, block))
+                            .is_some()
+                    })
+                })
+            })
+        } else {
+            false
+        };
+        // Vanilla Camel.tick (26.3 javap): isDashing && dashCooldown < 50 &&
+        // (onGround || isInLiquid || isPassenger), checked before the decrement.
+        if cooldown < 50
+            && (state.entities.ground(slot)
+                || liquid
+                || vehicle(state, state.entities.body(slot).id).is_some())
+            && dashing
+        {
             crate::special_mobs::metadata(
                 state,
                 slot,

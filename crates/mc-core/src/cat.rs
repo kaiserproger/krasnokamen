@@ -32,6 +32,13 @@ pub(crate) fn drive(row: &ColdRow) -> Option<([f64; 3], f64)> {
 }
 
 fn metadata(state: &mut TickState, slot: EntitySlot, lying: bool, relaxing: bool) {
+    let extra = &state.entities.row(slot).appearance.extra;
+    if [(21, lying), (22, relaxing)].iter().all(|(index, value)| {
+        extra.iter().find(|(i, _)| i == index).map(|(_, v)| v)
+            .unwrap_or(&EntityDataValue::Boolean(false)) == &EntityDataValue::Boolean(*value)
+    }) {
+        return;
+    }
     let row = state.entities.row_mut(slot);
     let appearance = Arc::make_mut(&mut row.appearance);
     let mut changed = false;
@@ -62,7 +69,7 @@ pub(crate) fn run(state: &mut TickState) {
             body.alive && !row.controls.no_ai && row.entity_life.tamed && !row.entity_life.sitting;
         let Some(owner_slot) = owner.and_then(|owner| state.entities.slot_of_uuid(owner)) else {
             if row.entity_life.cat_relax.is_some() {
-                state.entities.row_mut(slot).entity_life.cat_relax = None;
+                state.entities.row_mut_unmarked(slot).entity_life.cat_relax = None;
                 metadata(state, slot, false, false);
             }
             continue;
@@ -70,7 +77,7 @@ pub(crate) fn run(state: &mut TickState) {
         let owner_id = state.entities.body(owner_slot).id;
         let Some(sleeper) = state.sleepers.get(&owner_id).copied().filter(|_| eligible) else {
             if state.entities.row(slot).entity_life.cat_relax.is_some() {
-                state.entities.row_mut(slot).entity_life.cat_relax = None;
+                state.entities.row_mut_unmarked(slot).entity_life.cat_relax = None;
                 metadata(state, slot, false, false);
             }
             continue;
@@ -114,7 +121,7 @@ pub(crate) fn run(state: &mut TickState) {
                 && (0..3).all(|i| (state.entities.pos(other)[i] - target[i]).abs() <= 2.0)
         });
         if occupied {
-            state.entities.row_mut(slot).entity_life.cat_relax = None;
+            state.entities.row_mut_unmarked(slot).entity_life.cat_relax = None;
             metadata(state, slot, false, false);
             continue;
         }
@@ -135,7 +142,7 @@ pub(crate) fn run(state: &mut TickState) {
             relax.on_bed_ticks > 16,
             (1..=16).contains(&relax.on_bed_ticks),
         );
-        state.entities.row_mut(slot).entity_life.cat_relax = Some(relax);
+        state.entities.row_mut_unmarked(slot).entity_life.cat_relax = Some(relax);
     }
 }
 
@@ -209,11 +216,11 @@ pub(crate) fn wake(state: &mut TickState, owner: EntityId, slept: u32) {
         })
         .collect();
     for slot in cats {
-        state.entities.row_mut(slot).entity_life.cat_relax = None;
+        state.entities.row_mut_unmarked(slot).entity_life.cat_relax = None;
         metadata(state, slot, false, false);
         let time = state.day_time.rem_euclid(24_000);
         if slept < 100
-            || !(time >= 23_667 || time < 362)
+            || (362..23_667).contains(&time)
             || crate::taming::roll(state.entities.row_mut(slot), 10) >= 7
         {
             continue;

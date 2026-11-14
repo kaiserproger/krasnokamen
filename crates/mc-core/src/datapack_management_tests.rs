@@ -1,6 +1,5 @@
 use super::*;
 use crate::boundary::ConnectionId;
-use crate::command_execution::CommandResult;
 
 fn fixture() -> (TickState, tempfile::TempDir) {
     let root = tempfile::tempdir().unwrap();
@@ -99,14 +98,10 @@ fn enabling_an_enabled_pack_with_an_order_is_an_error() {
     state
         .datapacks
         .install(packs, _root.path().to_owned(), state.registry.clone());
-    assert!(matches!(
-        command(
-            &mut state,
-            ConnectionId(1),
-            "datapack enable file/custom first"
-        ),
-        CommandResult::Failed
-    ));
+    run(&mut state, "datapack enable file/custom first");
+    assert!(
+        format!("{:?}", state.outbox).contains("commands.datapack.enable.failed")
+    );
     assert!(state.datapacks.reload.is_none());
     assert_eq!(
         state.datapacks.selection().enabled,
@@ -176,14 +171,15 @@ fn list_discovers_added_removed_and_changed_metadata_without_reloading_functions
     .unwrap();
     run(&mut state, "datapack list available");
     finish_worker(&mut state);
-    assert!(state.datapacks.catalog().contains_key("file/added"));
+    assert!(format!("{:?}", state.outbox).contains("file/added"));
     assert_eq!(state.datapacks.selection().enabled, ["vanilla"]);
     assert!(state.datapacks.packs().functions.is_empty());
     std::fs::remove_file(added.join("pack.mcmeta")).unwrap();
     std::fs::remove_dir(added).unwrap();
+    state.outbox.clear();
     run(&mut state, "datapack list available");
     finish_worker(&mut state);
-    assert!(!state.datapacks.catalog().contains_key("file/added"));
+    assert!(!format!("{:?}", state.outbox).contains("file/added"));
 }
 
 #[test]
@@ -201,10 +197,10 @@ fn create_writes_description_and_does_not_enable_or_overwrite_pack() {
     };
     run(
         &mut state,
-        r#"datapack create "New pack" {text:"Created description",color:"gold"}"#,
+        r#"datapack create "new_pack" {text:"Created description",color:"gold"}"#,
     );
     finish_worker(&mut state);
-    let path = root.path().join("New pack/pack.mcmeta");
+    let path = root.path().join("new_pack/pack.mcmeta");
     let bytes = std::fs::read(&path).unwrap();
     let metadata: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert_eq!(
@@ -212,13 +208,16 @@ fn create_writes_description_and_does_not_enable_or_overwrite_pack() {
         "Created description"
     );
     assert_eq!(metadata["pack"]["description"]["color"], "gold");
-    assert_eq!(metadata["pack"]["min_format"], serde_json::json!([121, 0]));
+    assert_eq!(metadata["pack"]["min_format"], serde_json::json!(121));
     assert_eq!(state.datapacks.selection().enabled, ["vanilla"]);
-    assert!(state.datapacks.catalog().contains_key("file/New pack"));
-    run(&mut state, r#"datapack create "New pack" "overwrite""#);
+    state.outbox.clear();
+    run(&mut state, "datapack list available");
+    finish_worker(&mut state);
+    assert!(format!("{:?}", state.outbox).contains("file/new_pack"));
+    run(&mut state, r#"datapack create "new_pack" "overwrite""#);
     finish_worker(&mut state);
     assert_eq!(std::fs::read(path).unwrap(), bytes);
-    for invalid in ["../escape", "CON", "trailing.", "a/b", "LPT1"] {
+    for invalid in ["New pack", "../escape", "CON", "con", "trailing.", "a/b", "LPT1"] {
         run(
             &mut state,
             &format!("datapack create \"{invalid}\" \"bad\""),
@@ -512,14 +511,14 @@ fn completion_waits_for_shared_command_authority_before_store_and_resume() {
     assert!(state.command_context.waiting());
     assert!(!state.scoreboard.scores.contains_key("shared"));
     state.command_context.shared = true;
-    crate::datapacks::poll_worker(&mut state, &mut crate::boundary::ChangeSet::default());
+    crate::datapacks::poll_worker(&mut state);
     crate::command_context::resume(&mut state, &mut crate::boundary::ChangeSet::default());
     assert_eq!(score(&state, "shared"), 2);
     assert!(!state.command_context.waiting());
 }
 
 #[test]
-fn create_preserves_boolean_component_style_and_catalog_failure_creates_nothing() {
+fn create_preserves_boolean_component_style_and_ignores_an_unrelated_bad_pack() {
     let (mut state, root) = fixture();
     run(
         &mut state,
@@ -537,8 +536,9 @@ fn create_preserves_boolean_component_style_and_catalog_failure_creates_nothing(
         r#"execute store success score failed oracle run datapack create refused "Refused""#,
     );
     finish_worker(&mut state);
-    assert_eq!(score(&state, "failed"), 0);
-    assert!(!root.path().join("refused").exists());
+    assert_eq!(score(&state, "failed"), 1);
+    assert!(root.path().join("refused/pack.mcmeta").exists());
+    assert_eq!(std::fs::read_to_string(root.path().join("custom/pack.mcmeta")).unwrap(), "not JSON");
 }
 
 #[test]

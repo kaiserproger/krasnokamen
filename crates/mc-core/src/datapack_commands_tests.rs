@@ -875,6 +875,24 @@ fn enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clien
     assert_ne!(vanilla_bone_meal.as_deref(), Some("minecraft:diamond"));
     assert_ne!(vanilla_drops, ["minecraft:diamond"]);
     state.outbox.clear();
+    let entity = state
+        .connections
+        .entity_of(crate::boundary::ConnectionId(1))
+        .unwrap();
+    let bone = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:bone").unwrap())
+        .unwrap();
+    let diamond = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+        .unwrap();
+    let player = state.players.get_mut(&entity).unwrap();
+    player.inventory_menu.grid[0] = mc_data::ItemStack::new(bone, 1);
+    player.inventory_menu.reload_recipes(&state.registry.item_rules());
+    assert_ne!(player.inventory_menu.result.item_id, diamond);
     // The cell a joining player's recipes are read from (a core with nobody
     // online still follows the reload).
     let published = Arc::new(std::sync::RwLock::new(Arc::clone(&state.registry)));
@@ -898,6 +916,8 @@ fn enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clien
     );
     assert_eq!(stone_drops(&state.registry), ["minecraft:diamond"]);
     assert_eq!(state.registry.recipes.len(), recipes_before + 1);
+    assert_eq!(state.players[&entity].inventory_menu.result.item_id, diamond);
+    assert_eq!(state.players[&entity].inventory_menu.grid[0].item_id, bone);
     let player = crate::boundary::ConnectionId(1);
     let sent = state.outbox.get(&player).cloned().unwrap_or_default();
     let announced = sent
@@ -925,20 +945,20 @@ fn enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clien
     assert_eq!(state.registry.recipes.len(), recipes_before);
 }
 
-/// What a reload costs the tick thread: the registry clone and the packs'
-/// recipes and loot, with the default registry.
+/// Measure worker-side registry preparation with the default registry.
 #[test]
 #[ignore = "microbenchmark; prints the median reload install time"]
 fn datapack_reload_install_microbench() {
     let world = tempfile::tempdir().unwrap();
     let root = world.path().join("datapacks");
     pack(&root, "gems", "\"Gems\"", &GEM_RECIPES);
-    let mut state = fixture(&root);
+    let state = fixture(&root);
     let packs = PackSet::load(&root, Selection::default()).unwrap();
     let mut samples = Vec::new();
     for _ in 0..7 {
         let start = std::time::Instant::now();
-        install_registry(&mut state, &packs).unwrap();
+        let mut registry = state.registry.prepare_content();
+        packs.install_content(&mut registry).unwrap();
         samples.push(start.elapsed().as_micros());
     }
     samples.sort_unstable();
@@ -975,7 +995,28 @@ fn a_reload_with_an_unusable_recipe_keeps_the_old_registry_and_selection() {
         std::sync::Arc::clone(&state.registry),
     );
     let recipes = state.registry.recipes.len();
-    run(&mut state, "datapack enable file/broken");
+    let context = crate::command_context::Context::source(
+        &state,
+        crate::command_console::CONNECTION,
+        crate::command_console::EXECUTOR,
+        4,
+    );
+    crate::command_context::run(
+        &mut state,
+        "datapack enable file/broken",
+        context,
+        &mut ChangeSet::default(),
+    );
+    let mut job = state.datapacks.reload.take().expect("worker queued");
+    let result = job.receiver.recv().expect("worker finished");
+    assert!(
+        result.is_err(),
+        "worker must reject unusable content before tick publication"
+    );
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    assert!(sender.send(result).is_ok());
+    job.receiver = receiver;
+    state.datapacks.reload = Some(job);
     settle(&mut state);
     let shown = messages(&mut state);
     assert!(

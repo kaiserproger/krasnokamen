@@ -558,7 +558,7 @@ fn finish_reload(state: &mut TickState) {
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     sender.send(prepared).unwrap();
     reload.receiver = receiver;
-    poll_worker(state, &mut ChangeSet::default());
+    poll_worker(state);
 }
 
 #[test]

@@ -1,6 +1,5 @@
 //! `data merge|modify|remove block`: edit one block entity's native NBT image in
-//! the command's dimension and install it back through the same prepared-image
-//! path `setblock` NBT uses, so every kind keeps its own validation and owners.
+//! the command's dimension and preflight it with its resident owners.
 use crate::boundary::PlayerChange;
 use crate::command_context::Context;
 use crate::command_execution::CommandResult;
@@ -39,13 +38,10 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Vec<T
     let world =
         crate::dimensions::travel::world(state, context.dimension).ok_or("Unknown dimension")?;
     let (kind, image) = crate::command_data::block_image(world, pos)?;
-    let block = world
-        .world
-        .block_at(pos.x, pos.y, pos.z)
-        .ok_or("That position is not loaded")?;
-    let (private, public): (Vec<_>, Vec<_>) = image
+    let public: Vec<_> = image
         .into_iter()
-        .partition(|(key, _)| crate::command_data::private_field(key));
+        .filter(|(key, _)| !crate::command_data::private_field(key))
+        .collect();
     let mut edited = Tag::Compound(public.clone());
     crate::command_storage::mutate(state, context, action, &mut edited, &mut input)?;
     let Tag::Compound(edited) = edited else {
@@ -66,17 +62,12 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Vec<T
     if kind == BlockEntityKind::CommandBlock {
         crate::command_blocks::edit(world, pos, &public, &edited)?;
     } else {
-        // Identity and position stay the block's own whatever the edit says.
-        let mut fields: Vec<(String, Tag)> = edited
-            .into_iter()
-            .filter(|(key, _)| !matches!(key.as_str(), "id" | "x" | "y" | "z"))
-            .collect();
-        fields.extend(private);
-        let mut bytes = Vec::new();
-        mc_nbt::write_network(&mut bytes, &Tag::Compound(fields)).map_err(|e| e.to_string())?;
-        let image = crate::command_block_entity::prepare(world, block, Some(&bytes))?
-            .ok_or("The target block is not a block entity")?;
-        crate::command_block_entity::install(world, pos, image);
+        crate::command_block_entity::data::update(
+            world,
+            pos,
+            &Tag::Compound(public),
+            &Tag::Compound(edited),
+        )?;
     }
     Ok([pos.x, pos.y, pos.z]
         .map(crate::command_data::text)

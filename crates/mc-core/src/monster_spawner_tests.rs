@@ -52,6 +52,29 @@ fn step(state: &mut TickState) -> ChangeSet {
     changes
 }
 #[test]
+fn data_view_reports_the_live_spawner_deadline() {
+    let (mut state, _, key) = fixture("silverfish");
+    for _ in 0..30 {
+        step(&mut state);
+    }
+    let spawner = entry(&state, key);
+    let remaining = spawner
+        .deadline
+        .unwrap()
+        .saturating_sub(state.tick)
+        .min(spawner.delay);
+    let pos = BlockPos {
+        x: key.0,
+        y: key.1,
+        z: key.2,
+    };
+    let Tag::Compound(fields) = crate::command_data::block(&state, pos).unwrap() else {
+        panic!("expected spawner compound");
+    };
+    assert_eq!(field(&fields, "Delay"), Some(&Tag::Short(remaining as i16)));
+}
+
+#[test]
 fn regular_spawner_activates_spawns_and_respects_local_cap() {
     let (mut state, _, key) = fixture("silverfish");
     let mut spawned = Vec::new();

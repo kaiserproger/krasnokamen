@@ -64,7 +64,7 @@ fn command_custody_npc_reserve_is_rejected_by_real_ingress_without_state_changes
         },
         Endpoint::NpcCarry { handle },
     ] {
-        let image = load(&mut state, "owner", &endpoint).unwrap();
+        let image = load(&state, "owner", &endpoint).unwrap();
         let request = reserve_request(endpoint, image.fence, 1);
         let before = state.plugins.clone();
         let row = state.entities.row(slot).clone();
@@ -143,6 +143,28 @@ fn command_custody_data_preflights_exact_revision_capacity_before_health_or_equi
     }
 }
 
+#[test]
+fn command_custody_removing_equipment_clears_the_live_image_and_advances_fence() {
+    let (mut state, slot, handle) = npc();
+    let stack = item(&state, "minecraft:iron_helmet", 1);
+    std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).equipment[5] =
+        Some(stack);
+    synchronize_entity_custody(&mut state, slot).unwrap();
+    let before = native_npc_inventory_revision(&state, "owner", &handle).unwrap();
+    let id = state.entities.body(slot).id;
+    assert!(matches!(
+        crate::command_data::command(
+            &mut state,
+            crate::command_console::CONNECTION,
+            id,
+            "data remove entity @s equipment",
+        ),
+        crate::command_execution::CommandResult::Success(_)
+    ));
+    assert!(state.entities.row(slot).appearance.equipment.iter().all(Option::is_none));
+    assert!(native_npc_inventory_revision(&state, "owner", &handle).unwrap() > before);
+}
+
 fn item(state: &TickState, name: &str, count: i32) -> ItemStack {
     ItemStack::new(
         state
@@ -195,7 +217,7 @@ fn command_custody_loot_replacement_admits_whole_reserved_range_before_writing()
         dimension: "minecraft:overworld".into(),
         position: ScriptBlockPosition::new(4, 201, 4),
     };
-    let image = load(&mut state, "owner", &endpoint).unwrap();
+    let image = load(&state, "owner", &endpoint).unwrap();
     let reserved = execute(
         &mut state,
         "owner",

@@ -594,7 +594,9 @@ or `t`/`s`/`d`; zero or negative delays are rejected. Schedules survive restart.
 functions and tags at a tick boundary and also **install the changed recipes,
 block loot and predicates**: the registry is rebuilt from the world's start
 content plus the enabled packs, every world adopts it, and each client receives
-the new recipe list and its recipe book again. A candidate with load errors, or
+the new recipe list and its recipe book again. Open crafting outputs are
+recomputed from the new catalog without changing their inputs or cursor.
+A candidate with load errors, or
 with a recipe the server cannot encode, is refused whole and the old packs, selection
 and registry are kept. The enabled/disabled selection is saved with the world,
 so a restart loads the same packs, recipes and loot. A pack that appears on disk is
@@ -824,6 +826,12 @@ state fails closed. Keep the same seed, content cache and deployment
 configuration, back up before changing binaries or world identity, and never
 bypass identity validation by hand-editing saved metadata. Anvil is a
 compatibility format, not a live fallback or dual-write store.
+
+When upgrading from a build with the old scalar rider format, stop it cleanly
+before deploying: an old unclean WAL tail containing `rider` is refused at
+startup. A checkpoint containing the old `krasnokamen:Rider` key is also
+refused, even after a clean stop. Back up the world and test opening a copy with
+the new binary before deployment. See [ADR 0013](decisions/0013-core-model-v2.md).
 
 Convert only stopped worlds; the destination must not exist, the source is left
 unchanged and a receipt is written:
