@@ -770,6 +770,13 @@ pub struct ChangeSet {
     pub explosions: Vec<ExplosionEvent>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SwingKind {
+    None,
+    Whack,
+    Stab,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EntityEvent {
     /// Verified vanilla entity status event (guardian beam, sonic, fangs).
@@ -780,6 +787,8 @@ pub enum EntityEvent {
     Swing {
         entity: EntityId,
         hand: Hand,
+        animation: SwingKind,
+        duration_ticks: i32,
     },
     Hurt {
         entity: EntityId,

@@ -71,6 +71,33 @@ fn command_parser_ids_follow_names_not_ordinals() {
     let body = [1, 2, 0, 1, b'x', 61, 0];
     assert_eq!(translate("commands", &body), [1, 2, 0, 1, b'x', 58, 0]);
 }
+
+#[test]
+fn swing_argument_downgrades_for_776_and_775() {
+    let body = [1, 2, 0, 1, b'x', 60, 0];
+    let mut first = tables();
+    first.argument_types = IdMap::by_name(
+        [("brigadier:string", 5), ("minecraft:swing_animation", 60)],
+        [("brigadier:string", 5)],
+        |_| None,
+    );
+    first.argument_names[5] = "brigadier:string".into();
+    first.argument_names[60] = "minecraft:swing_animation".into();
+    let mut bytes = Vec::new();
+    let mut input = &body[..];
+    clientbound(&first, "commands", &mut input, &mut bytes).unwrap();
+    assert_eq!(bytes, [1, 2, 0, 1, b'x', 5, 0, 0]);
+    let mut second = tables();
+    second.argument_types =
+        IdMap::by_name([("brigadier:string", 5)], [("brigadier:string", 5)], |_| {
+            None
+        });
+    second.argument_names[5] = "brigadier:string".into();
+    let mut translated = Vec::new();
+    let mut input = bytes.as_slice();
+    clientbound(&second, "commands", &mut input, &mut translated).unwrap();
+    assert_eq!(translated, bytes);
+}
 #[test]
 fn recipes_remap_templates_and_ingredients() {
     let body = [1, 1, b'x', 1, 10, 1, 2, 10, 5, 10, 2, 0, 0];

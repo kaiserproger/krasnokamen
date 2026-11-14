@@ -1272,6 +1272,7 @@ fn command_argument_parser_ids_and_properties_match_vanilla_26_3() {
             &[31, flags],
         );
     }
+    assert_command_parser_wire(P::SwingAnimation, &[60]);
     assert_command_parser_wire(P::Time { min: 20 }, &[43, 0, 0, 0, 20]);
     assert_command_parser_wire(P::Time { min: -1 }, &[43, 255, 255, 255, 255]);
     for (parser, id) in [

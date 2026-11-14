@@ -885,6 +885,14 @@ pub(crate) fn tree(op_level: u8, plugins: &[(String, u8)]) -> ClientboundCommand
     if let Some(root) = t.root("kill", true) {
         t.argument(root, "targets", entities(false), true);
     }
+    if let Some(root) = t.root("swing", true) {
+        let targets = t.argument(root, "targets", entities(false), true);
+        for hand in ["mainhand", "offhand"] {
+            let hand = t.literal(targets, hand, true);
+            let animation = t.argument(hand, "animation", Parser::SwingAnimation, true);
+            t.argument(animation, "duration", Parser::Time { min: 1 }, true);
+        }
+    }
     if let Some(root) = t.root("damage", false) {
         let target = t.argument(root, "target", entities(true), false);
         let amount = t.argument(

@@ -117,16 +117,23 @@ fn commands(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
             2 => {
                 string(r, w)?;
                 let parser = r.read_varint()?;
-                w.write_varint(
-                    t.argument_types
-                        .get(parser)
-                        .context("unmapped command parser")?,
-                );
                 let name = t
                     .argument_names
                     .get(parser as usize)
                     .context("unknown command parser")?
                     .as_str();
+                if name == "minecraft:swing_animation" {
+                    // Older clients have no swing-animation argument. A word
+                    // still permits the server to validate the vanilla values.
+                    w.write_varint(t.argument_types.get(5).context("unmapped string parser")?);
+                    w.write_varint(0);
+                } else {
+                    w.write_varint(
+                        t.argument_types
+                            .get(parser)
+                            .context("unmapped command parser")?,
+                    );
+                }
                 match name {
                     "brigadier:float" | "brigadier:integer" | "brigadier:double"
                     | "brigadier:long" => {

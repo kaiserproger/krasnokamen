@@ -498,6 +498,7 @@ pub enum CommandArgumentParser {
     ResourceKey {
         registry: Identifier,
     },
+    SwingAnimation,
     Uuid,
 }
 
@@ -772,6 +773,7 @@ impl CommandArgumentParser {
             Self::ResourceOrTagKey { .. } => 45,
             Self::Resource { .. } => 46,
             Self::ResourceKey { .. } => 47,
+            Self::SwingAnimation => 60,
             Self::Uuid => 61,
         }
     }
@@ -953,6 +955,7 @@ impl CommandArgumentParser {
             47 => Self::ResourceKey {
                 registry: buf.read_identifier()?,
             },
+            60 => Self::SwingAnimation,
             61 => Self::Uuid,
             _ => {
                 return Err(CodecError::NotSupported(

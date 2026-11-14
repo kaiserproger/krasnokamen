@@ -1519,6 +1519,8 @@ fn entity_events_map() {
         changes.entity_events.push(BoundaryEvent::Swing {
             entity: EntityId(5),
             hand: Hand::Main,
+            animation: mc_core::boundary::SwingKind::Stab,
+            duration_ticks: 23,
         });
         changes.entity_events.push(BoundaryEvent::Hurt {
             entity: EntityId(5),
@@ -1537,11 +1539,19 @@ fn entity_events_map() {
             changes,
         );
         let packets = plan_viewer(&out, &mut v, 1, c);
-        assert!(
-            packets
-                .iter()
-                .any(|p| p.id == mc_protocol::packets::play::ClientboundSwingAnimation::ID)
+        let packet = packets
+            .iter()
+            .find(|p| p.id == mc_protocol::packets::play::ClientboundSwingAnimation::ID)
+            .unwrap();
+        let swing = mc_protocol::packets::play::ClientboundSwingAnimation::decode(
+            &mut &body_of(packet)[..],
+        )
+        .unwrap();
+        assert_eq!(
+            swing.animation,
+            mc_protocol::packets::play::SwingAnimationType::Stab
         );
+        assert_eq!(swing.duration, 23);
         assert!(
             packets
                 .iter()
