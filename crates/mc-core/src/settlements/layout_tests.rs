@@ -22,15 +22,19 @@ fn street_grid_reserves_roads_verges_lots_and_an_open_plaza() {
     assert_eq!(cell(ANCHOR, 10, 12), Cell::Plaza);
     assert_eq!(cell(ANCHOR, 10, 13), Cell::Verge);
     // East of the avenue: verge, two lot rows of the deepest blueprint with
-    // the one-column gap between them, the wall line in place of the last lot
-    // column, the next verge and road.
+    // the one-column gap between them (the outer row's door column included),
+    // the ring road with its verges, and the wall line on the outer verge.
     assert_eq!(cell(ANCHOR, 10, 20), Cell::Verge);
-    for x in 11..=32 {
+    for x in 11..=33 {
         assert_eq!(cell(ANCHOR, x, 20), Cell::Lot, "{x}");
     }
-    assert_eq!(cell(ANCHOR, 8 + RING, 20), Cell::Wall);
     assert_eq!(cell(ANCHOR, 34, 20), Cell::Verge);
-    assert_eq!(cell(ANCHOR, 35, 20), Cell::Road);
+    for x in 35..=37 {
+        assert_eq!(cell(ANCHOR, x, 20), Cell::Road, "{x}");
+    }
+    assert_eq!(8 + RING, 38);
+    assert_eq!(cell(ANCHOR, 8 + RING, 20), Cell::Wall);
+    assert_eq!(cell(ANCHOR, 39, 20), Cell::Lot);
 }
 
 #[test]
@@ -63,12 +67,17 @@ fn stretches_partition_every_road_column_and_own_one_verge_lamp() {
             }
         }
         let [x, z] = stretch.lamp;
+        assert!(lamps.insert(stretch.lamp), "shared lamp {stretch:?}");
+        if cell(ANCHOR, x, z) == Cell::Wall {
+            // A ring road's outer verge is the wall line: no lamp post there.
+            assert!(!lamp_at(ANCHOR, x, z), "{stretch:?}");
+            continue;
+        }
         assert!(lamp_at(ANCHOR, x, z), "{stretch:?}");
         assert!(
             matches!(cell(ANCHOR, x, z), Cell::Verge | Cell::Plaza),
             "{stretch:?}"
         );
-        assert!(lamps.insert(stretch.lamp), "shared lamp {stretch:?}");
     }
     // The crossing at the bell owns the plaza corner lamp; stretches run eight
     // to fourteen blocks.
@@ -371,17 +380,27 @@ fn perimeter_closes_the_square_wall_line_with_a_gatehouse_on_each_road() {
             if on_line {
                 line.insert((x, z));
             }
-            // No lot is on the line, and every road crossing it is a gatehouse.
+            // No lot or verge is on the line: every non-road column of it is
+            // wall. The two roads through the bell cross it in a gatehouse;
+            // the other crossing roads get plain wall.
             if cell(ANCHOR, x, z) == Cell::Lot {
                 assert!(!on_line, "{x} {z}");
             }
+            if on_line && cell(ANCHOR, x, z) != Cell::Road {
+                assert_eq!(cell(ANCHOR, x, z), Cell::Wall, "{x} {z}");
+            }
             if cell(ANCHOR, x, z) == Cell::Road && on_line {
+                let through_bell = (x - ANCHOR[0]).abs() <= 1 || (z - ANCHOR[2]).abs() <= 1;
                 assert_eq!(
                     owner[&(x, z)],
-                    GATE,
-                    "road crossing {x} {z} has no gatehouse"
+                    if through_bell { GATE } else { PERIMETER },
+                    "road crossing {x} {z}"
                 );
             }
+            assert!(
+                !(on_line && lamp_at(ANCHOR, x, z)),
+                "lamp on the wall line {x} {z}"
+            );
         }
     }
     assert_eq!(line.len(), 8 * RING as usize);

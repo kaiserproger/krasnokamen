@@ -34,18 +34,19 @@ fn block_name(state: &TickState, x: i32, y: i32, z: i32) -> String {
 }
 
 /// A flat plain at `y = 200` wide enough for the whole wall line around the
-/// fixture's bell, ten residents, and a chest stocking the whole fortification:
-/// cobblestone for every column and one oak door per gatehouse.
+/// fixture's bell and the road stretches that cross it, ten residents, and a
+/// chest stocking the whole fortification: cobblestone for every column and
+/// one oak door per gatehouse.
 fn town(residents: usize, stocked: bool) -> (TickState, SettlementId, crate::entities::EntitySlot) {
     let (mut state, id, builder) = fixture();
     state
         .world
-        .ensure_blocking(&rustc_hash::FxHashMap::from_iter((-2..=2).flat_map(|x| {
-            (-2..=2).map(move |z| (crate::boundary::ChunkPos { x, z }, 0))
+        .ensure_blocking(&rustc_hash::FxHashMap::from_iter((-3..=3).flat_map(|x| {
+            (-3..=3).map(move |z| (crate::boundary::ChunkPos { x, z }, 0))
         })));
     let grass = crate::settlements::allocator::tests::block(&state, "minecraft:grass_block", &[]);
-    for x in -24..=40 {
-        for z in -24..=40 {
+    for x in -40..=56 {
+        for z in -40..=56 {
             state.world.set_block(x, GROUND, z, grass);
             for y in 201..224 {
                 if (x, y, z) != (1, 201, 1) {
@@ -121,7 +122,7 @@ fn ten_residents_wall_the_town_in_with_four_gates_and_one_well() {
     assert_eq!(order[0], WELL, "the well comes first: {order:?}");
     assert_eq!(order.iter().filter(|kind| *kind == WELL).count(), 1);
     assert_eq!(order.iter().filter(|kind| *kind == GATE).count(), 4);
-    assert_eq!(order.iter().filter(|kind| *kind == PERIMETER).count(), 16);
+    assert_eq!(order.iter().filter(|kind| *kind == PERIMETER).count(), 24);
     assert!(
         state.settlements.get(id).unwrap().project.is_none(),
         "nothing owed once the wall and well stand"
@@ -214,7 +215,7 @@ fn fewer_than_ten_residents_or_no_stock_start_no_fortification() {
 #[test]
 fn a_gatehouse_stands_on_a_road_that_was_paved_first() {
     let (mut state, id, builder) = town(10, true);
-    for (x, z) in [(31, 8), (-15, 8), (8, 31), (8, -15)] {
+    for (x, z) in [(38, 8), (-22, 8), (8, 38), (8, -22)] {
         let tile = layout::tile(ANCHOR, x, z).unwrap();
         let record = state.settlements.get(id).unwrap();
         let work = layout::Network::walk(&state, record)
@@ -240,7 +241,7 @@ fn a_gatehouse_stands_on_a_road_that_was_paved_first() {
         4,
         "{order:?}"
     );
-    for (x, z) in [(33, 8), (-17, 8), (8, 33), (8, -17)] {
+    for (x, z) in [(38, 8), (-22, 8), (8, 38), (8, -22)] {
         assert_eq!(block_name(&state, x, GROUND + 1, z), "oak_door", "{x} {z}");
     }
 }
@@ -249,11 +250,11 @@ fn a_gatehouse_stands_on_a_road_that_was_paved_first() {
 fn a_column_over_water_stays_a_gap_and_the_rest_of_the_wall_stands() {
     let (mut state, id, builder) = town(10, true);
     let water = crate::settlements::allocator::tests::block(&state, "minecraft:water", &[]);
-    state.world.set_block(33, GROUND, 20, water);
+    state.world.set_block(38, GROUND, 20, water);
     state.world.fold_overlay();
     let order = build_everything(&mut state, id, builder);
-    assert_eq!(order.iter().filter(|kind| *kind == PERIMETER).count(), 16);
-    assert_eq!(block_name(&state, 33, GROUND + 1, 20), "air");
-    assert_eq!(block_name(&state, 33, GROUND + 1, 19), "cobblestone");
-    assert_eq!(block_name(&state, 33, GROUND + 1, 21), "cobblestone");
+    assert_eq!(order.iter().filter(|kind| *kind == PERIMETER).count(), 24);
+    assert_eq!(block_name(&state, 38, GROUND + 1, 20), "air");
+    assert_eq!(block_name(&state, 38, GROUND + 1, 19), "cobblestone");
+    assert_eq!(block_name(&state, 38, GROUND + 1, 21), "cobblestone");
 }
