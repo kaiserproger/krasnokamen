@@ -120,6 +120,26 @@ class LifecyclePhases(unittest.TestCase):
                     probe.call('minecraft_wait_for_play', {})
             self.assertEqual(runtime.observed_phase(caught.exception), 'join')
 
+    def test_hung_mcp_call_retains_bounded_phase_before_return(self):
+        import json
+        class Client:
+            def __init__(self, root):
+                self.root = root
+            def call_tool(self, name, args):
+                progress = json.loads((self.root / 'mcp-progress.json').read_text())
+                assert progress['tool'] == name
+                assert progress['state'] == 'started'
+                assert 0 < progress['remaining_seconds'] <= 5
+                raise RuntimeError('simulated stall')
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(RuntimeError, 'simulated stall'):
+                with ProbeSteps(Client(root), root, 5, 'test') as probe:
+                    probe.call('minecraft_wait_for_state_change', {})
+            progress = json.loads((root / 'mcp-progress.json').read_text())
+            self.assertEqual(progress['state'], 'failed')
+            self.assertEqual(progress['error_type'], 'RuntimeError')
+
     def test_building_retry_splits_long_wait_into_valid_requests(self):
         class Probe:
             def __init__(self):

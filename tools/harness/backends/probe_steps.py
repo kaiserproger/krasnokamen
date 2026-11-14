@@ -33,15 +33,25 @@ class ProbeSteps:
 
     def call(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         self.remaining()
+        self.artifact_dir.mkdir(parents=True, exist_ok=True)
+        progress = self.artifact_dir / "mcp-progress.json"
+        progress.write_text(json.dumps({"tool": name, "state": "started",
+                                        "started_unix": time.time(),
+                                        "remaining_seconds": self.remaining()}) + "\n")
         entry: dict[str, Any] = {"tool": name, "arguments": arguments or {}}
         self.transcript.append(entry)
         try:
             result = self.client.call_tool(name, arguments or {})
             entry["result"] = result
+            progress.write_text(json.dumps({"tool": name, "state": "completed",
+                                            "finished_unix": time.time()}) + "\n")
             return result
         except Exception as error:
             if name in {"minecraft_connect", "minecraft_wait_for_play"}:
                 runtime.tag_failure(error, "join")
+            progress.write_text(json.dumps({"tool": name, "state": "failed",
+                                            "finished_unix": time.time(),
+                                            "error_type": type(error).__name__}) + "\n")
             entry["error"] = str(error)
             raise
 

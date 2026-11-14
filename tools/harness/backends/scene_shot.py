@@ -13,6 +13,7 @@ import secrets
 import shutil
 import subprocess
 import threading
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -108,7 +109,8 @@ class LatencyProxy:
 
     def start(self):
         self.thread.start()
-        self.ready.wait()
+        if not self.ready.wait(timeout=8):
+            raise TimeoutError("latency proxy start exceeded 8 seconds")
         if self.error is not None:
             raise RuntimeError("starting latency proxy failed") from self.error
         return self.port
@@ -126,7 +128,9 @@ class LatencyProxy:
     def close(self):
         if self.loop.is_running():
             self.loop.call_soon_threadsafe(self.loop.stop)
-        self.thread.join()
+        self.thread.join(timeout=8)
+        if self.thread.is_alive():
+            raise TimeoutError("latency proxy teardown exceeded 8 seconds")
 
 
 def _validate_java_display(gui_scale: int, language: str, screen_size: tuple[int, int] = WINDOW) -> None:
@@ -149,6 +153,7 @@ def java_options(render_distance: int, fov: int, *, gui_scale: int = NATIVE_GUI_
         f"overrideWidth:{screen_size[0]}\noverrideHeight:{screen_size[1]}\n"
         f"fov:{(fov - 70) / 40}\nguiScale:{gui_scale}\nlang:{language}\nrenderDistance:{render_distance}\n"
         f"simulationDistance:{min(render_distance, 12)}\nmaxFps:60\nenableVsync:false\n"
+        f"chatVisibility:{2 if hide_chat else 0}\n"
         "pauseOnLostFocus:false\ntutorialStep:none\nsoundCategory_master:0.0\n"
     )
 
@@ -489,7 +494,12 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
     validate_steps(steps, client)
     capture = capture_java if client == "java" else capture_native
     shots = []
-    for step in steps:
+    for index, step in enumerate(steps):
+        if isinstance(probe, ProbeSteps):
+            (artifact / "scene-progress.json").write_text(json.dumps({
+                "step_index": index, "step": next(iter(step)), "started_unix": time.time(),
+                "remaining_seconds": probe.remaining(),
+            }) + "\n")
         if isinstance(step, dict) and set(step) == {"shot", "hold_keys"}:
             name, keys = step["shot"], step["hold_keys"]
             args = {"keys": keys, "ticks": 1, "hold": True}
@@ -599,6 +609,9 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             (artifact / f"{value['name']}.json").write_text(json.dumps(state, indent=2) + "\n")
         elif kind == "walk_capture":
             args = {"radius": 32, "limit": 128}
+            attempts = []
+            before = after = frame = None
+            image = frame_path = first = None
             for _ in range(value["max_ticks"]):
                 before = probe.call("minecraft_list_entities", args)
                 candidate = matching_walk(before, value)
@@ -608,20 +621,13 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                     break
                 probe.call("minecraft_wait_ticks", {"ticks": 1})
             else:
+                (artifact / f"{value['name']}-walk.json").write_text(
+                    json.dumps({"attempts": attempts, "spec": value}, indent=2) + "\n")
                 raise RuntimeError(f"walk phase not reached: {value['name']}")
-            image = capture(probe, artifact, value["name"])
-            after = probe.call("minecraft_list_entities", args)
-            frame_path = Path(image + ".gait.json") if client == "java" else Path(image).with_suffix(".json")
-            frame_data = json.loads(frame_path.read_text())
-            frame_entities = frame_data if client == "java" else frame_data["gait_frame"]
-            frame = {"entities": frame_entities}
-            first = matching_walk(before, value)
-            same_entity = [entity for entity in after.get("entities", [])
-                           if first is not None and first.get("entity_uuid")
-                           and entity.get("entity_uuid") == first["entity_uuid"]]
             (artifact / f"{value['name']}-walk.json").write_text(
                 json.dumps({"before": before, "after": after, "frame": frame,
-                            "frame_path": str(frame_path), "spec": value}, indent=2) + "\n")
+                            "frame_path": str(frame_path), "spec": value,
+                            "attempts": attempts}, indent=2) + "\n")
             probe.check(f"{value['name']}_same_entity", first is not None and len(same_entity) == 1)
             # The captured frame is the last presented render: it is sampled
             # with partial-tick interpolation and can lag the triggering
@@ -844,6 +850,27 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
     return shots
 
 
+def wait_java_bootstrap(mcp: McpClient, process: Any, timeout: float) -> dict[str, Any]:
+    """The agent listens in premain, before the client thread can answer MCP."""
+    import time
+
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("Java client bootstrap did not become responsive")
+        if process.poll() is not None:
+            raise RuntimeError(f"Java client exited during bootstrap: {process.returncode}")
+        try:
+            return runtime.wait_client_ready_for_connect(mcp, remaining)
+        except RuntimeError as error:
+            # Only the agent's client-thread startup timeout is transient here;
+            # all other MCP, loading-screen and protocol failures stay fatal.
+            if not (str(error).startswith("minecraft_observe failed:")
+                    and '"message": "TimeoutException"' in str(error)):
+                raise
+
+
 def start_java(ctx: ProfileContext, artifact: Path, address: str | None, username: str, timeout: float,
                display: str, render_distance: int, fov: int, *, plain: bool = False,
                gui_scale: int = NATIVE_GUI_SCALE, language: str = "en_us",
@@ -868,7 +895,7 @@ def start_java(ctx: ProfileContext, artifact: Path, address: str | None, usernam
     try:
         mcp = McpClient(f"http://127.0.0.1:{mcp_port}/mcp", token, timeout + 10)
         mcp.initialize()
-        runtime.wait_client_ready_for_connect(mcp, timeout)
+        wait_java_bootstrap(mcp, process, timeout)
         if "video driver: wayland" in log_path.read_text(errors="replace").lower():
             raise RuntimeError("Java client opened its window on Wayland (the owner's desktop), not the harness Xvfb")
         if address is not None:
@@ -920,6 +947,8 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         raise ValueError("scenario must contain a steps array")
     if type(scenario.get("java_plain", False)) is not bool or (scenario.get("java_plain") and ctx.client != "java"):
         raise ValueError("java_plain requires --client java and a boolean value")
+    if type(scenario.get("java_hide_chat", False)) is not bool or (scenario.get("java_hide_chat") and ctx.client != "java"):
+        raise ValueError("java_hide_chat requires --client java and a boolean value")
     if scenario.get("vanilla_singleplayer") is True:
         if ctx.client != "java":
             raise ValueError("vanilla singleplayer scenes require --client java")
@@ -1047,6 +1076,7 @@ def run(
     ctx.cwds.append(str(runtime.REPO_ROOT))
     ctx.exits.append(None)
     try:
+        (artifact / "lifecycle-progress.json").write_text(json.dumps({"phase": "server_start", "timeout_seconds": timeout, "started_unix": time.time()}) + "\n")
         log = (artifact / "server.log").open("wb")
         ctx.logs.append(str(artifact / "server.log"))
         with binary.open("rb") as server_executable:
@@ -1055,6 +1085,7 @@ def run(
         server = runtime.start_server(server_command, cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         runtime.wait_port(port, timeout, server, log_path=artifact / "server.log")
         client_port = port
+        (artifact / "lifecycle-progress.json").write_text(json.dumps({"phase": "proxy_start", "timeout_seconds": 8, "started_unix": time.time()}) + "\n")
         if client_latency_ms or any(step.get("server_eof") is True for step in scenario["steps"]):
             proxy = LatencyProxy(port, client_latency_ms)
             client_port = proxy.start()
@@ -1083,6 +1114,7 @@ def run(
         mcp.scene_address = f"127.0.0.1:{client_port}"
         mcp.scene_window_size = tuple(settings.get("screen_size", WINDOW))
         mcp.scene_proxy = proxy
+        (artifact / "lifecycle-progress.json").write_text(json.dumps({"phase": "scenario", "timeout_seconds": timeout, "started_unix": time.time()}) + "\n")
         with ProbeSteps(mcp, artifact / "scene-shot", timeout, "scene-shot") as probe:
             wait_play(probe)
             if ctx.client == "java":
@@ -1102,18 +1134,24 @@ def run(
             shots = script(probe, artifact, scenario["steps"], ctx.client)
         result = {"screenshots": shots, "scenario": probe.report, "seed": seed, "settings": settings, "client_latency_ms": client_latency_ms}
     finally:
+        (artifact / "lifecycle-progress.json").write_text(json.dumps({"phase": "teardown", "started_unix": time.time()}) + "\n")
+        (artifact / "teardown-progress.json").write_text(json.dumps({"component": "mcp", "timeout_seconds": getattr(mcp, "request_timeout_seconds", 0), "started_unix": time.time()}) + "\n")
         if mcp is not None:
             mcp.close()
+        (artifact / "teardown-progress.json").write_text(json.dumps({"component": "client", "timeout_seconds": 13, "started_unix": time.time()}) + "\n")
         runtime.stop_process(client)
         if client is not None:
             ctx.exits[ctx.client_evidence["command_index"]] = client.returncode
         if client_log is not None:
             client_log.close()
+        (artifact / "teardown-progress.json").write_text(json.dumps({"component": "proxy", "timeout_seconds": 8, "started_unix": time.time()}) + "\n")
         if proxy is not None:
             proxy.close()
+        (artifact / "teardown-progress.json").write_text(json.dumps({"component": "server", "timeout_seconds": 13, "started_unix": time.time()}) + "\n")
         runtime.stop_process(server, interrupt=True)
         if server is not None:
             ctx.exits[server_index] = server.returncode
+        (artifact / "teardown-progress.json").write_text(json.dumps({"component": "display", "timeout_seconds": 13, "started_unix": time.time()}) + "\n")
         runtime.stop_process(xvfb)
         if log is not None:
             log.close()
