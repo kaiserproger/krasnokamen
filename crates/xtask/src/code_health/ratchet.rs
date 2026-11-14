@@ -30,7 +30,8 @@ pub(super) const CEILINGS: Ceilings = Ceilings {
     cycle_modules: 189,
     // Offline conversion/tools moved above core, 2026-11-08:
     // canonical code-health measured 2617 literals and 114 path comparisons.
-    vanilla_id_literals: 2_617,
+    // Battle equipment and cauldron ids named in mc-data, 2026-11-11: 2613.
+    vanilla_id_literals: 2_613,
     path_equality: 114,
     panics: 5,
     merge_block_write_pushes: 17,

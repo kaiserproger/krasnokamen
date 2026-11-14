@@ -10,8 +10,8 @@
 
 use std::sync::Arc;
 
-use crate::battle::staging::{BattleCommand, execute};
 use crate::boundary::{ChangeSet, ConnectionId, PlayerInput, TickTimes};
+use crate::hostile::battle::staging::{BattleCommand, execute};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 

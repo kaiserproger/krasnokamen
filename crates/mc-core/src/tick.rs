@@ -1753,7 +1753,7 @@ fn run_dimension_tick_inner<'a>(
     let chunks = state.world.snapshot();
     let snapshot_time = publish_start.elapsed();
     let views_start = std::time::Instant::now();
-    crate::battle::invalidate_wire_facts(state);
+    crate::hostile::battle::invalidate_wire_facts(state);
     let views = state.entities.views();
     let views_time = views_start.elapsed();
     let snapshot = Arc::new(WorldSnapshot {
@@ -1852,7 +1852,7 @@ fn run_dimension_tick_inner<'a>(
         log.logging = log_start.elapsed();
     }
     let battle_counts_start = std::time::Instant::now();
-    let battle = crate::battle::publication_counts(state);
+    let battle = crate::hostile::battle::publication_counts(state);
     let battle_counts_time = battle_counts_start.elapsed();
     let times = TickTimes {
         input_us: input_time.as_micros() as u64,

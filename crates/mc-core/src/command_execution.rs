@@ -297,8 +297,10 @@ pub(crate) fn execute(
 ) -> CommandResult {
     match command {
         Command::Battle(command) => {
-            if matches!(command, crate::battle::staging::BattleCommand::Roster)
-                && connection != crate::command_console::CONNECTION
+            if matches!(
+                command,
+                crate::hostile::battle::staging::BattleCommand::Roster
+            ) && connection != crate::command_console::CONNECTION
             {
                 error(
                     state,
@@ -309,7 +311,7 @@ pub(crate) fn execute(
             }
             let origin = crate::command_console::pose(state, executor)
                 .map_or_else(|| state.world.world_spawn_position(), |(pos, _)| pos);
-            return match crate::battle::staging::execute(state, changes, origin, command) {
+            return match crate::hostile::battle::staging::execute(state, changes, origin, command) {
                 Ok(message) => {
                     if accepts_success(state, connection) {
                         state.push_player(connection, PlayerChange::Chat { message });
@@ -1041,7 +1043,7 @@ pub(crate) fn execute(
             return Success(1);
         }
         Command::Swing(command) => {
-            return match crate::command_swing::execute(state, executor, command, changes) {
+            return match crate::hostile::battle::swing::execute(state, executor, command, changes) {
                 Ok(count) => Success(count),
                 Err(failure) => {
                     error(state, connection, failure.message());

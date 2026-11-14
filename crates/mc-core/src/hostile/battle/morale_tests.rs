@@ -1,8 +1,8 @@
 use super::*;
-use crate::battle::formation::{
+use crate::boundary::EntityId;
+use crate::hostile::battle::formation::{
     FormationRuntime, Order, PULSE_MORALE_FLOOR, RegimentSpec, SoldierSample,
 };
-use crate::boundary::EntityId;
 
 #[test]
 fn film_nerve_keeps_a_rear_trickle_above_the_regiment_break_threshold() {

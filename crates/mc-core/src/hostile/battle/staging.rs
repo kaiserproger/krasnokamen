@@ -1,8 +1,14 @@
 //! Operator-owned deterministic battle staging. No scenario file is read on the tick.
-use crate::battle::formation::{Order, RegimentSpec, slot_position};
 use crate::boundary::{ChangeSet, ChunkPos, EntityId};
 use crate::commands::CommandError;
+use crate::hostile::battle::formation::{Order, RegimentSpec, slot_position};
 use crate::tick::TickState;
+use mc_data::entity_types::{HORSE, HUSK};
+use mc_data::item_nbt::{EQUIPPABLE_COMPONENT, ITEM_MODEL_COMPONENT};
+use mc_data::items::{
+    BOW, CHAINMAIL_CHESTPLATE, IRON_CHESTPLATE, IRON_HELMET, IRON_HORSE_ARMOR, IRON_SWORD,
+    LEATHER_CHESTPLATE, SHIELD, TRIDENT,
+};
 use mc_nbt::{ListTag, Tag, tag_type};
 
 pub(super) const OWNER: &str = "solaris:battle";
@@ -64,27 +70,27 @@ enum Kind {
 fn equipment(kind: Kind) -> &'static [(&'static str, &'static str)] {
     match kind {
         Kind::Infantry => &[
-            ("mainhand", "minecraft:iron_sword"),
-            ("offhand", "minecraft:shield"),
-            ("head", "minecraft:iron_helmet"),
-            ("chest", "minecraft:iron_chestplate"),
+            ("mainhand", IRON_SWORD),
+            ("offhand", SHIELD),
+            ("head", IRON_HELMET),
+            ("chest", IRON_CHESTPLATE),
         ],
         Kind::Spear => &[
-            ("mainhand", "minecraft:trident"),
-            ("offhand", "minecraft:shield"),
-            ("head", "minecraft:iron_helmet"),
-            ("chest", "minecraft:chainmail_chestplate"),
+            ("mainhand", TRIDENT),
+            ("offhand", SHIELD),
+            ("head", IRON_HELMET),
+            ("chest", CHAINMAIL_CHESTPLATE),
         ],
         Kind::Archer => &[
-            ("mainhand", "minecraft:bow"),
-            ("head", "minecraft:iron_helmet"),
-            ("chest", "minecraft:leather_chestplate"),
+            ("mainhand", BOW),
+            ("head", IRON_HELMET),
+            ("chest", LEATHER_CHESTPLATE),
         ],
         Kind::Cavalry => &[
-            ("mainhand", "minecraft:iron_sword"),
-            ("offhand", "minecraft:shield"),
-            ("head", "minecraft:iron_helmet"),
-            ("chest", "minecraft:iron_chestplate"),
+            ("mainhand", IRON_SWORD),
+            ("offhand", SHIELD),
+            ("head", IRON_HELMET),
+            ("chest", IRON_CHESTPLATE),
         ],
     }
 }
@@ -149,7 +155,7 @@ fn plan(seed: u64, count: usize, origin: [f64; 3], side: u16) -> Vec<(RegimentSp
 }
 
 /// Pursue routed opponents without disabling the pulse-based fight beforehand.
-pub(super) fn update_orders(formation: &mut crate::battle::formation::FormationRuntime) {
+pub(super) fn update_orders(formation: &mut crate::hostile::battle::formation::FormationRuntime) {
     for index in 0..formation.regiments.len() {
         let regiment = &formation.regiments[index];
         let order = match (
@@ -217,37 +223,36 @@ fn reset(state: &mut TickState, changes: &mut ChangeSet) -> usize {
 
 fn summon_tag(kind: Option<Kind>, side: u16) -> Tag {
     let mut fields = vec![("PersistenceRequired".into(), Tag::Byte(1))];
-    let items = kind.map_or(&[("body", "minecraft:iron_horse_armor")][..], equipment);
+    let items = kind.map_or(&[("body", IRON_HORSE_ARMOR)][..], equipment);
     let slots = items
         .iter()
         .map(|&(slot, item)| {
             let component = match (kind, slot, side) {
                 (Some(Kind::Infantry), "mainhand", _) => {
-                    ("minecraft:item_model", "solaris_battle:iron_longsword")
+                    (ITEM_MODEL_COMPONENT, "solaris_battle:iron_longsword")
                 }
                 (Some(Kind::Spear), "mainhand", _) => {
-                    ("minecraft:item_model", "solaris_battle:iron_spear")
+                    (ITEM_MODEL_COMPONENT, "solaris_battle:iron_spear")
                 }
-                (Some(Kind::Archer), "mainhand", _) => (
-                    "minecraft:item_model",
-                    "solaris_battle:iron_longbow_standby",
-                ),
+                (Some(Kind::Archer), "mainhand", _) => {
+                    (ITEM_MODEL_COMPONENT, "solaris_battle:iron_longbow_standby")
+                }
                 (Some(Kind::Cavalry), "mainhand", _) => {
-                    ("minecraft:item_model", "solaris_battle:iron_lance")
+                    (ITEM_MODEL_COMPONENT, "solaris_battle:iron_lance")
                 }
-                (_, "offhand", 1) => ("minecraft:item_model", "solaris_battle:red_heater_shield"),
-                (_, "offhand", _) => ("minecraft:item_model", "solaris_battle:blue_heater_shield"),
+                (_, "offhand", 1) => (ITEM_MODEL_COMPONENT, "solaris_battle:red_heater_shield"),
+                (_, "offhand", _) => (ITEM_MODEL_COMPONENT, "solaris_battle:blue_heater_shield"),
                 (Some(Kind::Cavalry), "head", _) => {
-                    ("minecraft:equippable", "solaris_battle:crested_helm")
+                    (EQUIPPABLE_COMPONENT, "solaris_battle:crested_helm")
                 }
-                (_, "head", _) => ("minecraft:equippable", "solaris_battle:iron_plate"),
-                (_, "chest", 1) => ("minecraft:equippable", "solaris_battle:red_surcoat"),
-                (_, "chest", _) => ("minecraft:equippable", "solaris_battle:blue_surcoat"),
-                (_, "body", 1) => ("minecraft:equippable", "solaris_battle:red_caparison"),
-                (_, "body", _) => ("minecraft:equippable", "solaris_battle:blue_caparison"),
+                (_, "head", _) => (EQUIPPABLE_COMPONENT, "solaris_battle:iron_plate"),
+                (_, "chest", 1) => (EQUIPPABLE_COMPONENT, "solaris_battle:red_surcoat"),
+                (_, "chest", _) => (EQUIPPABLE_COMPONENT, "solaris_battle:blue_surcoat"),
+                (_, "body", 1) => (EQUIPPABLE_COMPONENT, "solaris_battle:red_caparison"),
+                (_, "body", _) => (EQUIPPABLE_COMPONENT, "solaris_battle:blue_caparison"),
                 _ => unreachable!("battle equipment table contains an unknown slot"),
             };
-            let value = if component.0 == "minecraft:equippable" {
+            let value = if component.0 == EQUIPPABLE_COMPONENT {
                 Tag::Compound(vec![
                     ("slot".into(), Tag::String(slot.into())),
                     ("asset_id".into(), Tag::String(component.1.into())),
@@ -340,28 +345,12 @@ fn setup(
                 let mut members = Vec::with_capacity(size);
                 for index in 0..size {
                     let pos = slot_position(&spec, index);
-                    let id = spawn(
-                        state,
-                        changes,
-                        "minecraft:husk",
-                        pos,
-                        Some(kind),
-                        &loadout,
-                        &tag,
-                    )?;
+                    let id = spawn(state, changes, HUSK, pos, Some(kind), &loadout, &tag)?;
                     let slot = state.entities.slot_of(id).expect("battle unit");
                     state.entities.set_faction(slot, side);
                     if kind == Kind::Cavalry {
-                        let horse = spawn(
-                            state,
-                            changes,
-                            "minecraft:horse",
-                            pos,
-                            None,
-                            &horse_loadout,
-                            &tag,
-                        )?;
-                        crate::battle::cavalry::mount(state, id, horse)
+                        let horse = spawn(state, changes, HORSE, pos, None, &horse_loadout, &tag)?;
+                        crate::hostile::battle::cavalry::mount(state, id, horse)
                             .map_err(|e| format!("battle mount: {e}"))?;
                     }
                     members.push(id);

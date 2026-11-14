@@ -15,6 +15,11 @@ use crate::Identifier;
 
 /// Canonical identity used to resolve the pointed-dripstone state family.
 pub const POINTED_DRIPSTONE: &str = "minecraft:pointed_dripstone";
+/// Canonical identities of the empty cauldron and its three filled forms.
+pub const CAULDRON: &str = "minecraft:cauldron";
+pub const WATER_CAULDRON: &str = "minecraft:water_cauldron";
+pub const POWDER_SNOW_CAULDRON: &str = "minecraft:powder_snow_cauldron";
+pub const LAVA_CAULDRON: &str = "minecraft:lava_cauldron";
 
 const REQUIRED_BLOCKS: &str = include_str!("../data/required_blocks.json");
 

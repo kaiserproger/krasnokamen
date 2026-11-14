@@ -2,7 +2,7 @@ use super::*;
 use crate::mounts::tests::{slot, spawn};
 use crate::tick::TickState;
 
-pub(in crate::battle) fn fixture() -> (TickState, EntityId, [f64; 3]) {
+pub(in crate::hostile::battle) fn fixture() -> (TickState, EntityId, [f64; 3]) {
     let (mut state, player, pos) = crate::mounts::tests::fixture();
     // Loading terrain does not activate its clocks. Kernel-only tests must
     // explicitly admit the same player-demand chunks as the native tick.
@@ -11,7 +11,7 @@ pub(in crate::battle) fn fixture() -> (TickState, EntityId, [f64; 3]) {
     (state, player, pos)
 }
 
-pub(in crate::battle) fn prepare(state: &TickState, battle: &mut BattleState, tick: u64) {
+pub(in crate::hostile::battle) fn prepare(state: &TickState, battle: &mut BattleState, tick: u64) {
     let frame = Frame {
         entities: &state.entities,
         registry: &state.registry,
@@ -28,7 +28,11 @@ pub(in crate::battle) fn prepare(state: &TickState, battle: &mut BattleState, ti
     battle.combat.prepare(&battle.columns.ids);
 }
 
-pub(in crate::battle) fn index(state: &TickState, battle: &BattleState, id: EntityId) -> usize {
+pub(in crate::hostile::battle) fn index(
+    state: &TickState,
+    battle: &BattleState,
+    id: EntityId,
+) -> usize {
     battle.columns.index(slot(state, id)).unwrap()
 }
 

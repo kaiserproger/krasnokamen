@@ -284,7 +284,7 @@ pub enum AdvancementScope {
 #[derive(Debug, Clone, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum Command {
-    Battle(crate::battle::staging::BattleCommand),
+    Battle(crate::hostile::battle::staging::BattleCommand),
     Attribute(crate::command_attribute::AttributeCommand),
     Item(crate::command_item_replace::ItemCommand),
     Loot(crate::command_loot::LootCommand),
@@ -330,8 +330,8 @@ pub enum Command {
         target: Target,
     },
     Damage(crate::command_damage::DamageCommand),
-    /// Solaris attack presentation (`command_swing`).
-    Swing(crate::command_swing::SwingCommand),
+    /// Solaris attack presentation (`hostile::battle::swing`).
+    Swing(crate::hostile::battle::swing::SwingCommand),
     /// `time set` (`add == false`) or `time add`.
     Time {
         ticks: i64,
@@ -457,7 +457,7 @@ pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
         "attribute" => crate::command_attribute::parse(args).map(Command::Attribute),
         "item" => crate::command_item_replace::parse(args).map(Command::Item),
         "loot" => crate::command_loot::parse(args).map(Command::Loot),
-        "battle" => crate::battle::staging::parse(args).map(Command::Battle),
+        "battle" => crate::hostile::battle::staging::parse(args).map(Command::Battle),
         "settlement" => crate::settlements::commands::parse(args).map(Command::Settlement),
         "gamemode" => parse_gamemode(args),
         "tp" | "teleport" => parse_teleport(args),
@@ -466,7 +466,7 @@ pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
         "effect" => crate::effects::parse_command(args),
         "advancement" => parse_advancement(args),
         "damage" => crate::command_damage::parse(args).map(Command::Damage),
-        "swing" => crate::command_swing::parse(args).map(Command::Swing),
+        "swing" => crate::hostile::battle::swing::parse(args).map(Command::Swing),
         "kill" => match args {
             [] => Ok(Command::Kill {
                 target: Target::Executor,

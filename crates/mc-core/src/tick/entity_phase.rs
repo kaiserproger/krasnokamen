@@ -854,7 +854,9 @@ pub(super) fn admit_slot(
     let mut special_idle = true;
     if flags & MOTION_SPECIAL != 0 {
         let hint = view.entities.motion_hint(slot);
-        if let Some(special) = crate::battle::special(view.bodies[index].faction, hint.special) {
+        if let Some(special) =
+            crate::hostile::battle::special(view.bodies[index].faction, hint.special)
+        {
             let id = view.bodies[slot.0 as usize].id;
             special_idle = targets_empty
                 && !view.hostile.targets.contains_key(&id)
@@ -978,7 +980,8 @@ pub(super) fn read_row(
             || crate::entity_life::adult(row))
         && (battle || !is_enderman || rare.enderman_target.is_some());
     let breeder = !battle && breeder && !row.controls.no_ai;
-    let special = crate::battle::special(body.faction, special).filter(|_| !row.controls.no_ai);
+    let special =
+        crate::hostile::battle::special(body.faction, special).filter(|_| !row.controls.no_ai);
     let panic_multiplier = if !battle
         && (body.burn_ticks > 0
             || body
@@ -1100,7 +1103,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         crate::enderman::tick(state);
     }
     let battle_intents = if sim {
-        crate::battle::step(state)
+        crate::hostile::battle::step(state)
     } else {
         Vec::new()
     };
@@ -1684,7 +1687,7 @@ pub(super) struct StepCtx<'a> {
     pub(super) rows: &'a [ReadRow],
     /// Immutable through the indexed worker join; writes/compaction follow it.
     pub(super) entities: &'a crate::entities::EntityStore,
-    pub(super) battle: &'a crate::battle::BattleState,
+    pub(super) battle: &'a crate::hostile::battle::BattleState,
     pub(super) retained_targets:
         &'a rustc_hash::FxHashMap<EntityId, (crate::target_grid::Target, f64)>,
     pub(super) players: crate::target_grid::TargetGrid<'a>,

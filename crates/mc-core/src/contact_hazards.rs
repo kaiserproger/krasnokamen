@@ -441,9 +441,9 @@ pub(crate) fn run_with(
 fn cauldron_states(registry: &crate::registry::CoreRegistry) -> [&[mc_world::BlockStateId]; 3] {
     static NAMES: LazyLock<[mc_data::Identifier; 3]> = LazyLock::new(|| {
         [
-            "minecraft:water_cauldron",
-            "minecraft:powder_snow_cauldron",
-            "minecraft:lava_cauldron",
+            mc_data::blocks::WATER_CAULDRON,
+            mc_data::blocks::POWDER_SNOW_CAULDRON,
+            mc_data::blocks::LAVA_CAULDRON,
         ]
         .map(|name| mc_data::Identifier::parse(name).expect("vanilla block id"))
     });
@@ -575,7 +575,7 @@ fn lower_cauldron(
             state
                 .registry
                 .blocks
-                .block(&Identifier::parse("minecraft:cauldron").expect("vanilla block"))
+                .block(&Identifier::parse(mc_data::blocks::CAULDRON).expect("vanilla block"))
                 .expect("cauldron")
                 .default
                 .0
@@ -584,7 +584,7 @@ fn lower_cauldron(
                 .registry
                 .blocks
                 .by_name_and_props(
-                    &Identifier::parse("minecraft:water_cauldron").expect("vanilla block"),
+                    &Identifier::parse(mc_data::blocks::WATER_CAULDRON).expect("vanilla block"),
                     &[("level".into(), (level - 1).to_string())],
                 )
                 .expect("water cauldron level")
@@ -594,7 +594,7 @@ fn lower_cauldron(
         state
             .registry
             .blocks
-            .block(&Identifier::parse("minecraft:cauldron").expect("vanilla block"))
+            .block(&Identifier::parse(mc_data::blocks::CAULDRON).expect("vanilla block"))
             .expect("cauldron")
             .default
             .0
@@ -603,7 +603,7 @@ fn lower_cauldron(
             .registry
             .blocks
             .by_name_and_props(
-                &Identifier::parse("minecraft:water_cauldron").expect("vanilla block"),
+                &Identifier::parse(mc_data::blocks::WATER_CAULDRON).expect("vanilla block"),
                 &[("level".into(), (level - 1).to_string())],
             )
             .expect("water cauldron level")

@@ -18,6 +18,17 @@ use thiserror::Error;
 use crate::Identifier;
 use crate::sidecar::RawRegistries;
 
+/// Canonical item identities that core gameplay resolves by name.
+pub const BOW: &str = "minecraft:bow";
+pub const CHAINMAIL_CHESTPLATE: &str = "minecraft:chainmail_chestplate";
+pub const IRON_CHESTPLATE: &str = "minecraft:iron_chestplate";
+pub const IRON_HELMET: &str = "minecraft:iron_helmet";
+pub const IRON_HORSE_ARMOR: &str = "minecraft:iron_horse_armor";
+pub const IRON_SWORD: &str = "minecraft:iron_sword";
+pub const LEATHER_CHESTPLATE: &str = "minecraft:leather_chestplate";
+pub const SHIELD: &str = "minecraft:shield";
+pub const TRIDENT: &str = "minecraft:trident";
+
 const REQUIRED_REGISTRIES: &str = include_str!("../data/required_registries.json");
 
 #[derive(Debug, Error)]

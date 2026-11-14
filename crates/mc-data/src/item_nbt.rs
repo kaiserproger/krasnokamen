@@ -45,6 +45,7 @@ pub const DAMAGE_COMPONENT: &str = "minecraft:damage";
 pub const CUSTOM_NAME_COMPONENT: &str = "minecraft:custom_name";
 pub const ITEM_MODEL_COMPONENT: &str = "minecraft:item_model";
 pub const ENCHANTMENTS_COMPONENT: &str = "minecraft:enchantments";
+pub const EQUIPPABLE_COMPONENT: &str = "minecraft:equippable";
 
 /// Find a field in an NBT compound field list.
 #[must_use]

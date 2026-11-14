@@ -61,7 +61,7 @@ Persistence: [corpses](persistence.md#corpses).
 
 ### Staged battle actions
 
-`battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
+`hostile/battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
 regiment volley clocks, and `cavalry.rs` owns charge/refusal timers. Fighters
 and charge state share the formation-aligned dense execution index; a cold
 identity remap preserves actions and ammunition when roster layout changes.
@@ -107,7 +107,7 @@ time without one arrow image per tick. Loyalty tridents keep their dynamic
 return path and are not treated as idle arrows.
 
 Mob riders use the same horse-owned UUID relation as player riders. Staging
-uses `battle::cavalry::mount`, requires a nonzero rider faction and copies it to
+uses `hostile::battle::cavalry::mount`, requires a nonzero rider faction and copies it to
 the horse so native battle motion is not suppressed as ordinary tamed AI.
 Recovery allows a live mob passenger rather than requiring a player UUID,
 rejects item/boat/dead/nested passengers, and rebuilds reverse links/appearance.

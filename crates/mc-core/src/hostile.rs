@@ -18,6 +18,10 @@ use crate::survival::Difficulty;
 use crate::target_grid::TargetGrid;
 use crate::tick::TickState;
 
+/// Native faction battles: hostile-mob regiments whose state lives in
+/// [`HostileState::battle`].
+pub mod battle;
+
 /// A skeleton backs off from a target closer than this (vanilla
 /// `RangedBowAttackGoal` strafes back inside a quarter of its squared radius).
 pub(crate) const BOW_BACKOFF: f64 = 7.5;
@@ -82,7 +86,7 @@ pub struct HostileState {
     /// persisted or used as a wake subscription.
     pub(crate) targets: rustc_hash::FxHashMap<EntityId, (crate::target_grid::Target, f64)>,
     pub(crate) native: crate::special_mobs::Runtime,
-    pub(crate) battle: crate::battle::BattleState,
+    pub(crate) battle: battle::BattleState,
     pub(crate) events: Vec<crate::boundary::EntityEvent>,
     /// Blasts committed this tick (drained into the change set).
     pub(crate) explosions: Vec<ExplosionEvent>,

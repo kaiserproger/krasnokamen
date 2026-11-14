@@ -251,7 +251,7 @@ mod ripple_tests {
         let bow = state
             .registry
             .items
-            .id_of(&mc_data::Identifier::parse("minecraft:bow").unwrap())
+            .id_of(&mc_data::Identifier::parse(mc_data::items::BOW).unwrap())
             .unwrap();
         let mut battle = BattleState::default();
         let mut archers = Vec::new();
@@ -335,7 +335,7 @@ mod ripple_tests {
     #[test]
     #[ignore = "20k in-process volley diagnostic; frozen release executable in mem-run -p"]
     fn twenty_thousand_volley_journal_views_micro() {
-        use crate::battle::staging::{BattleCommand, execute};
+        use crate::hostile::battle::staging::{BattleCommand, execute};
         fn cpu_ticks() -> u64 {
             let stat = std::fs::read_to_string("/proc/self/stat").unwrap();
             let mut fields = stat.rsplit_once(')').unwrap().1.split_whitespace().skip(11);
