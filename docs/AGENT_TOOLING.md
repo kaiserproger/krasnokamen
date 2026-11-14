@@ -452,7 +452,7 @@ a total, not per-process.
 |---|---|---|
 | `CPUQuota` (+`CPUWeight=50`) | every physical core | `KRASNOKAMEN_HARNESS_CPU_QUOTA` |
 | `MemoryHigh` | `off` (no throttle) | `KRASNOKAMEN_HARNESS_MEMORY_HIGH` |
-| `MemoryMax` | `12G` for `test`/`correctness`; `4G` for other profiles and clients | `KRASNOKAMEN_HARNESS_MEMORY_MAX` |
+| `MemoryMax` | `12G` for `test`/`correctness` and the real-Java-client profiles (`java-battle-functional`, `java`, `loader-live`, `scene-shot`); `4G` for other profiles and clients | `KRASNOKAMEN_HARNESS_MEMORY_MAX` |
 | `MemorySwapMax` | `1G` | `KRASNOKAMEN_HARNESS_MEMORY_SWAP_MAX` |
 
 ```sh
@@ -460,6 +460,12 @@ python3 -m tools.harness run correctness              # the defaults above
 KRASNOKAMEN_HARNESS_CPU_QUOTA=150% python3 -m tools.harness run test
 python3 -m tools.harness run test -p mc-core --lib inventory  # focused Rust loop
 KRASNOKAMEN_HARNESS_MEMORY_MAX=12G python3 -m tools.harness client   # heavier client runs
+
+A real Java client plus its Xvfb plus the release server does not fit 4G: the
+`java-battle-functional` scope was OOM-killed on 2/2 canonical runs
+(`receipts/JavaGateBreaker`), so those four profiles now take the test-wide 12G
+cap instead of needing the variable set by hand. `MEMORY_HEAVY_PROFILES` in
+`tools/harness/__main__.py` is the list; a light profile still gets 4G.
 KRASNOKAMEN_HARNESS_CPU_QUOTA=off  python3 -m tools.harness run test  # unbounded, opt-out
 ```
 
