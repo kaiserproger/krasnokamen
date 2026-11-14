@@ -694,6 +694,13 @@ enum BatchDecodeError {
         kind: Option<String>,
         source: serde_json::Error,
     },
+    /// A record an older build wrote with the pre-list scalar mount `rider`
+    /// field; refused like any unknown field, but the error names the remedy.
+    ObsoleteScalarRider {
+        index: usize,
+        offset: usize,
+        kind: Option<String>,
+    },
 }
 
 impl BatchDecodeError {
@@ -711,8 +718,25 @@ impl BatchDecodeError {
                 "record {index} offset {offset} kind {}: {source}",
                 kind.as_deref().unwrap_or("unknown")
             ),
+            Self::ObsoleteScalarRider { index, offset, kind } => format!(
+                "record {index} offset {offset} kind {}: {}",
+                kind.as_deref().unwrap_or("unknown"),
+                crate::mounts::persistence::OBSOLETE_SCALAR_RIDER_REFUSAL,
+            ),
         };
         CoreError::Storage(format!("journal {}: {detail}", path.display()))
+    }
+}
+
+/// The only historical writer of a `rider` key in a journal record is the
+/// pre-list scalar mount field, which `MountState` denies as unknown.
+fn has_obsolete_scalar_rider(value: &serde_json::Value) -> bool {
+    match value {
+        serde_json::Value::Object(map) => map
+            .iter()
+            .any(|(key, value)| key == "rider" || has_obsolete_scalar_rider(value)),
+        serde_json::Value::Array(items) => items.iter().any(has_obsolete_scalar_rider),
+        _ => false,
     }
 }
 
@@ -758,13 +782,14 @@ fn decode_batch(
     for (index, line) in payload.split(|byte| *byte == b'\n').enumerate() {
         if !line.is_empty() {
             let entry = serde_json::from_slice(line).map_err(|source| {
-                let kind = serde_json::from_slice::<serde_json::Value>(line)
-                    .ok()
+                let value = serde_json::from_slice::<serde_json::Value>(line).ok();
+                let kind = value
+                    .as_ref()
                     .and_then(|value| match value {
                         serde_json::Value::Object(object) if object.len() == 1 => {
-                            object.into_iter().next().map(|(kind, _)| kind)
+                            object.iter().next().map(|(kind, _)| kind.clone())
                         }
-                        serde_json::Value::String(kind) => Some(kind),
+                        serde_json::Value::String(kind) => Some(kind.clone()),
                         _ => None,
                     })
                     .or_else(|| {
@@ -773,6 +798,10 @@ fn decode_batch(
                         let key = std::str::from_utf8(&line[..colon]).ok()?.trim();
                         serde_json::from_str::<String>(key.strip_prefix('{')?.trim()).ok()
                     });
+                if value.as_ref().is_some_and(has_obsolete_scalar_rider) {
+                    // An older build's unclean WAL tail: say how to open the world.
+                    return BatchDecodeError::ObsoleteScalarRider { index, offset, kind };
+                }
                 BatchDecodeError::Record {
                     index,
                     offset,

@@ -1329,6 +1329,40 @@ fn journal_decode_corrupt_final_batch_fails_open_without_writes() {
 }
 
 #[test]
+fn wal_tail_with_obsolete_scalar_rider_is_refused_and_names_the_remedy() {
+    let dir = decode_failure_fixture();
+    let path = batch_path(dir.path(), 3);
+    let mut frame = std::fs::read(&path).unwrap();
+    // Replace the last batch's record with one an older build wrote: the
+    // pre-list scalar mount `rider` field inside the entity state image.
+    let mut image = serde_json::to_value(
+        serde_json::from_str::<crate::journal::EntityStateImage>("{}").unwrap(),
+    )
+    .unwrap();
+    image["entity_life"]["mount"]["rider"] =
+        serde_json::json!("00000000-0000-0000-0000-000000000001");
+    let record = serde_json::json!({ "EntityState": { "id": 7, "state": image, "tick": 3 } });
+    let payload = format!("{record}\n").into_bytes();
+    frame.truncate(24);
+    frame.extend_from_slice(&(payload.len() as u32).to_le_bytes());
+    frame.extend_from_slice(&crc32fast::hash(&payload).to_le_bytes());
+    frame.extend_from_slice(&payload);
+    std::fs::write(&path, &frame).unwrap();
+
+    let before = journal_recovery_files(dir.path());
+    let error = read_complete_batches_after(&dir.path().join("journal"), 0)
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains(path.to_str().unwrap()), "{error}");
+    assert!(error.contains("record 0 offset 32 kind EntityState"), "{error}");
+    assert!(error.contains("`rider`"), "{error}");
+    assert!(error.contains("previous build"), "{error}");
+    assert!(error.contains("krasnokamen restore"), "{error}");
+    // The refusal changes nothing on disk: fail closed, no rewrites.
+    assert_eq!(journal_recovery_files(dir.path()), before);
+}
+
+#[test]
 fn journal_missing_middle_batch_refuses_runtime_recovery_without_rewrites() {
     let dir = decode_failure_fixture();
     let config = crate::CoreConfig::new(dir.path().to_path_buf(), 42);

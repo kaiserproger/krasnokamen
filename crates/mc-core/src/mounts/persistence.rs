@@ -2,6 +2,18 @@
 use crate::{CoreError, entity_life::EntityLifeState};
 use mc_nbt::{ListTag, Tag, tag_type};
 use uuid::Uuid;
+/// Operator-facing refusal for a WAL record that still carries the pre-list
+/// scalar mount `rider` field: an older build wrote the tail before an
+/// unclean stop, this build refuses the batch, and the world only opens after
+/// the previous build checkpoints the tail away or the operator restores a
+/// backup.
+pub(crate) const OBSOLETE_SCALAR_RIDER_REFUSAL: &str = "obsolete scalar mount field \
+    `rider` from a WAL tail written by an older build before an unclean stop; this \
+    build refuses the batch and the world does not open — start the previous build \
+    on this world and stop it cleanly so it writes a checkpoint and prunes the WAL, \
+    then start this build; if the previous build is unavailable, restore the last \
+    backup with `krasnokamen restore --from <backup> --world-dir <dir>` (play since \
+    that backup is lost)";
 fn invalid(field: &str) -> CoreError {
     CoreError::Storage(format!("invalid animal NBT: {field}"))
 }
