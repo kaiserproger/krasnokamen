@@ -175,7 +175,7 @@ def escape_filter_path(path):
     return path.replace('\\', '\\\\').replace(':', '\\:').replace("'", "'\\\\\\''").replace(',', '\\,').replace('[', '\\[').replace(']', '\\]')
 
 
-def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5, fade_out=1.0, trims=None, ends=None, caption_file=None):
+def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5, fade_out=1.0, trims=None, ends=None, caption_lines=None):
     """Filter graph for inputs: shots 0..N-1, overlay PNG sequence N, music N+1 (optional).
 
     `lengths` are the visible frames per shot; `trims[i]` frames are cut off the head of input i and,
@@ -218,9 +218,13 @@ def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5,
     parts.append(f'{video.rstrip(",")}[faded]')
     parts.append(f'[{n}:v]format=rgba,scale=iw*{panel}:ih*{panel}:flags=neighbor[panel]')
     caption = ''
-    if caption_file:  # persistent honest label, e.g. what the footage is and how many soldiers it shows
-        caption = (f"drawtext=fontfile={FONT}:textfile='{escape_filter_path(caption_file)}':expansion=none:"
-                   f"fontcolor=white:fontsize={26*panel}:box=1:boxcolor=black@0.55:boxborderw={8*panel}:x={32*panel}:y=h-th-{32*panel},")
+    # Persistent honest label (what the footage is, how many soldiers), one drawtext per line: a newline inside
+    # a drawtext text file renders as a missing-glyph box on some ffmpeg builds. Lines are stacked bottom-left.
+    step = round(26 * panel * 1.5)
+    for i, line_file in enumerate(caption_lines or []):
+        caption += (f"drawtext=fontfile={FONT}:textfile='{escape_filter_path(line_file)}':expansion=none:"
+                    f"fontcolor=white:fontsize={26*panel}:box=1:boxcolor=black@0.55:boxborderw={5*panel}:"
+                    f"x={32*panel}:y=h-{(len(caption_lines) - i) * step + 24 * panel},")
     parts.append('[faded][panel]overlay=x=W-w-32:y=32:alpha=straight:eof_action=endall,' + caption +
                  f"drawtext=fontfile={FONT}:textfile='{title}':expansion=none:"
                  f"fontcolor=white:fontsize={48*panel}:x=(w-text_w)/2:y=h*0.78:enable='between(t,0,3)',"
@@ -231,7 +235,7 @@ def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5,
     return ';'.join(parts)
 
 
-def encode_command(shot_files, overlay_pattern, music, lengths, crossfade, resolution, title_file, output, trims=None, ends=None, caption_file=None):
+def encode_command(shot_files, overlay_pattern, music, lengths, crossfade, resolution, title_file, output, trims=None, ends=None, caption_lines=None):
     total = sum(lengths) - (len(lengths) - 1) * crossfade
     cmd = ['ffmpeg', '-hide_banner', '-nostdin', '-n', '-filter_complex_threads', '1']
     for path in shot_files:
@@ -239,7 +243,7 @@ def encode_command(shot_files, overlay_pattern, music, lengths, crossfade, resol
     cmd += ['-framerate', str(FPS), '-i', overlay_pattern]
     if music:
         cmd += ['-stream_loop', '-1', '-i', music]
-    cmd += ['-filter_complex', build_filter(lengths, crossfade, resolution, title_file, music, trims=trims, ends=ends, caption_file=caption_file), '-map', '[v]']
+    cmd += ['-filter_complex', build_filter(lengths, crossfade, resolution, title_file, music, trims=trims, ends=ends, caption_lines=caption_lines), '-map', '[v]']
     if music:
         cmd += ['-map', '[audio]']
     # Half a frame of slack: -t drops packets at pts >= t, so exactly `total` frames survive.
@@ -407,10 +411,17 @@ def main():
     (work / 'live-anchors.json').write_text(json.dumps(reports, indent=1) + '\n')
     import overlay
     overlay.write_overlay(a.telemetry, work / 'edit.frames.jsonl', work / 'overlay', label=a.panel_label)
+    caption_lines = []
+    if a.caption_file:  # one text file per line (see build_filter)
+        lines = [x.strip() for x in pathlib.Path(a.caption_file).read_text(encoding='utf-8').splitlines() if x.strip()]
+        for i, text in enumerate(lines):
+            line_file = work / f'caption-{i}.txt'
+            line_file.write_text(text, encoding='utf-8')
+            caption_lines.append(str(line_file))
     subprocess.run(encode_command(shot_files, str(work / 'overlay' / 'overlay-%06d.png'), a.music,
                                   [len(t) for t in ticks], a.crossfade_frames, a.resolution, a.title_file, a.output,
                                   trims=[s['head'] for s in sources],
-                                  ends=[s['end'] for s in sources], caption_file=a.caption_file),
+                                  ends=[s['end'] for s in sources], caption_lines=caption_lines),
                    check=True)
 
 

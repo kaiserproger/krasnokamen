@@ -141,13 +141,15 @@ class LiveInEdit(unittest.TestCase):
         self.assertIn('[0:v]fps=60,trim=start_frame=30:end_frame=150,setpts=PTS-STARTPTS,scale', g)
         self.assertIn('[1:v]fps=60,scale', g)
 
-    def test_caption_is_drawn_for_the_whole_video_when_given(self):
+    def test_caption_lines_are_drawn_for_the_whole_video_one_drawtext_each(self):
         plain = compose.build_filter([120, 60], 0, '1080p', '/tmp/t.txt', None)
-        captioned = compose.build_filter([120, 60], 0, '1080p', '/tmp/t.txt', None, caption_file='/tmp/c.txt')
+        captioned = compose.build_filter([120, 60], 0, '1080p', '/tmp/t.txt', None, caption_lines=['/tmp/c0.txt', '/tmp/c1.txt'])
         self.assertEqual(plain.count('drawtext'), 1)
-        self.assertEqual(captioned.count('drawtext'), 2)
-        self.assertIn("textfile='/tmp/c.txt'", captioned)
-        self.assertNotIn("between(t,0,3)", captioned.split('/tmp/c.txt')[1].split('drawtext')[0])
+        self.assertEqual(captioned.count('drawtext'), 3)
+        self.assertIn("textfile='/tmp/c0.txt'", captioned)
+        self.assertIn("textfile='/tmp/c1.txt'", captioned)
+        self.assertLess(captioned.index('/tmp/c0.txt'), captioned.index('/tmp/c1.txt'))
+        self.assertNotIn("between(t,0,3)", captioned.split('/tmp/t.txt')[0])
 
 
 if __name__ == '__main__':
