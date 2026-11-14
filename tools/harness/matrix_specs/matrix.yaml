@@ -2,10 +2,10 @@ schema: krasnokamen-scenario-matrix/2
 generated: '2026-10-24'
 generator: tools/harness/matrix_specs/gen_matrix.py (+ subjects*.py, codegen_subjects.py, existing.py); deterministic seed 20261024
 repo_heads:
-  solaris: 7cff6cb35
+  solaris: 04af6cc1f
   solaris-default-plugins: 9b407a4
   solaris-loader: 6b79ace
-  solaris-client: 55d8b2c6
+  solaris-client: 54b79f73
 id_scheme:
   cell: subject/client_kind/game_mode/dimension/difficulty/player_count/network_condition/server_lifecycle/permission
   wave1_id: <tag>:<cell>; tag = pw (pairwise) | bl (baseline) | tr.<triple origin with ':'->'.'>
@@ -14182,7 +14182,8 @@ dimensions:
         name: chisel_loader_bundle
         do: join the live set (chisel bundle required = false) with a Krasnokamen client (native, Fabric/NeoForge/Forge Loader) and with vanilla
         expect: 'Krasnokamen client that consents gets the chisel item definition/model/texture; vanilla completes configuration without the bundle (edge configuration.rs: optional bundles are negotiated
-          only after a Loader hello) and sees chisel:chisel as its minecraft:stick carrier; the chisel README sentence ''vanilla is refused'' is stale vs plugin.toml required = false'
+          only after a Loader hello) and sees chisel:chisel as its minecraft:stick carrier; the shipped manifest (plugin.toml required = false) is authoritative and its README now says the same (it read
+          ''a vanilla client is refused'' until the plugins repository corrected it in 2ed597a1)'
         caps:
         - command_send
         - plugin_deploy
@@ -19550,6 +19551,7 @@ dimensions:
         - crates/mc-core/src/pause_when_empty_tests.rs
         - crates/mc-core/src/plugin_backlog_tests.rs
         - crates/mc-core/src/plugin_player_tests.rs
+        - crates/mc-core/src/projectiles/persistence_tests.rs
         - crates/mc-core/src/quirk_parity_tests.rs
         - crates/mc-core/src/shrieker_tests.rs
         - crates/mc-core/src/terrain_tests.rs
@@ -26382,6 +26384,7 @@ dimensions:
         - crates/mc-core/src/mounts_tests.rs
         - crates/mc-core/src/taming_tests.rs
         - crates/mc-core/src/battle/tests.rs
+        - crates/mc-core/src/core_checkpoint_custody_tests.rs
         - crates/mc-core/src/entity_loot_tests.rs
         - crates/mc-core/src/natural_spawn_tests.rs
         - crates/mc-core/src/tick/statistics_tests.rs
@@ -26390,6 +26393,7 @@ dimensions:
         - crates/mc-edge/src/mounts_wire_tests.rs
         - crates/mc-edge/src/plan_tests.rs
         - crates/mc-edge/src/plan_tracking_tests.rs
+        - crates/mc-world-conversion/src/pre_rename_tests.rs
         dims:
         - overworld
         - the_nether
@@ -26431,6 +26435,7 @@ dimensions:
         unit_tests:
         - crates/mc-core/src/battle/staging_tests.rs
         - crates/mc-core/src/battle/tests.rs
+        - crates/mc-core/src/core_checkpoint_custody_tests.rs
         - crates/mc-core/src/golems_tests.rs
         - crates/mc-core/src/hostile_tests.rs
         - crates/mc-core/src/mob_equipment_pickup_tests.rs
@@ -47240,7 +47245,8 @@ scenarios:
   - 'Lifecycle (crash_kill9_wal_replay): SIGKILL the server between action steps; restart replays tick WAL from last checkpoint'
   oracle:
   - 'reference: Krasnokamen client that consents gets the chisel item definition/model/texture; vanilla completes configuration without the bundle (edge configuration.rs: optional bundles are negotiated
-    only after a Loader hello) and sees chisel:chisel as its minecraft:stick carrier; the chisel README sentence ''vanilla is refused'' is stale vs plugin.toml required = false'
+    only after a Loader hello) and sees chisel:chisel as its minecraft:stick carrier; the shipped manifest (plugin.toml required = false) is authoritative and its README now says the same (it read ''a vanilla
+    client is refused'' until the plugins repository corrected it in 2ed597a1)'
   - out-of-reach/illegal/malformed input is rejected (BlockChangedAck + block update / correction teleport / protocol disconnect) without state change; a stale container state_id is applied once and followed
     by a full-state resync (vanilla handleContainerClick); never duplicated; server keeps running
   - 'after SIGKILL + restart (no wait for a published WAL fence) the world equals a consistent prefix of the committed transactions: every transaction is all-or-nothing (no torn/split/half-moved stacks),
@@ -65835,7 +65841,7 @@ scenarios:
     - crates/mc-core/src/mounts_tests.rs
     - crates/mc-core/src/taming_tests.rs
     - crates/mc-core/src/battle/tests.rs
-    - crates/mc-core/src/entity_loot_tests.rs
+    - crates/mc-core/src/core_checkpoint_custody_tests.rs
 - id: bl:mobs.husk/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: mobs.husk/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -65868,8 +65874,8 @@ scenarios:
     unit:
     - crates/mc-core/src/battle/staging_tests.rs
     - crates/mc-core/src/battle/tests.rs
+    - crates/mc-core/src/core_checkpoint_custody_tests.rs
     - crates/mc-core/src/golems_tests.rs
-    - crates/mc-core/src/hostile_tests.rs
 - id: bl:mobs.illusioner/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: mobs.illusioner/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
