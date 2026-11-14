@@ -261,7 +261,7 @@ class PublicControlRecipeTests(unittest.TestCase):
 
     def test_plugin_uses_two_town_economy_actors_and_real_chest_custody(self):
         prepared = self.recipes["plugin-heavy"]
-        self.assertEqual(prepared["required_plugins"], ["solaris-towns", "solaris-economy"])
+        self.assertEqual(prepared["required_plugins"], ["krasnokamen-towns", "krasnokamen-economy"])
         self.assertEqual(prepared["constraints"]["minimum_clients"], 2)
         setup = prepared["preparation_spec"]["actions"]
         self.assertEqual([action["command"] for action in setup[:2]],
@@ -571,7 +571,7 @@ class ReceivedControlOracleTests(unittest.TestCase):
 
     def test_plugin_is_real_prerequisite_not_missing_villager_fallback(self):
         prepared = controls.recipe("plugin-heavy", 16, True)
-        self.assertEqual(prepared["required_plugins"], ["solaris-towns", "solaris-economy"])
+        self.assertEqual(prepared["required_plugins"], ["krasnokamen-towns", "krasnokamen-economy"])
         report = exploration_report(prepared)
         report["bots"]["commands_sent"] = 100000
         report["bots"]["command_feedback_received"] = 100000

@@ -147,20 +147,20 @@ else
     flock 6
   fi
 fi
-# Disk floor: below SOLARIS_SLOT_MIN_FREE_GB + 10 GiB free on the targets disk, run
+# Disk floor: below KRASNOKAMEN_SLOT_MIN_FREE_GB + 10 GiB free on the targets disk, run
 # slot-gc --delete first. It takes each slot's pool lock itself (busy slots are
 # skipped), removes artifacts of removed trees and superseded incremental sessions,
 # then rotates idle slots in LRU order while still short. It never delays the command
-# by more than SOLARIS_SLOT_GC_TIMEOUT seconds (default 120) and never fails it: an
+# by more than KRASNOKAMEN_SLOT_GC_TIMEOUT seconds (default 120) and never fails it: an
 # error is printed and the command starts anyway. Not run for -x and -p, whose
 # windows are quiet measurements.
 if [ "$exclusive" = 0 ] && [ "$perf" = 0 ]; then
-  gc_root=${SOLARIS_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
-  gc_floor=$(( ${SOLARIS_SLOT_MIN_FREE_GB:-80} + 10 ))
+  gc_root=${KRASNOKAMEN_SLOT_TARGETS:-/run/media/kaiserroman/games/solaris-work/targets}
+  gc_floor=$(( ${KRASNOKAMEN_SLOT_MIN_FREE_GB:-80} + 10 ))
   gc_free=$(df --output=avail -BG "$gc_root" 2>/dev/null | tail -1 | tr -dc 0-9 || true)
   if [ -n "$gc_free" ] && [ "$gc_free" -lt "$gc_floor" ]; then
     echo "mem-run: ${gc_free}G free, below ${gc_floor}G (floor + 10G): running slot-gc --delete on idle slots" >&2
-    if gc_out=$(timeout "${SOLARIS_SLOT_GC_TIMEOUT:-120}" "$here/slot-gc" --delete --lock-dir "$dir" 3>&- 6>&- 2>&1); then
+    if gc_out=$(timeout "${KRASNOKAMEN_SLOT_GC_TIMEOUT:-120}" "$here/slot-gc" --delete --lock-dir "$dir" 3>&- 6>&- 2>&1); then
       printf '%s\n' "$gc_out" | sed 's/^/mem-run: slot-gc: /' >&2
     else
       gc_st=$?
@@ -203,9 +203,9 @@ else
 fi
 # The harness would otherwise re-run itself in its own scope outside this slice;
 # tell it it is already scoped so cargo/server/client stay under this cap.
-export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-$jobs_default}" CARGO_INCREMENTAL="$incremental" SOLARIS_HARNESS_CPU_SCOPE=1
+export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-$jobs_default}" CARGO_INCREMENTAL="$incremental" KRASNOKAMEN_HARNESS_CPU_SCOPE=1
 cores=$(lscpu -p=core,socket | grep -v '^#' | sort -u | wc -l)
-props=(-p MemoryMax="$mem" -p MemorySwapMax=1G -p CPUQuota="${SOLARIS_MEM_RUN_CPU_QUOTA:-$((cores * 100))}%" -p CPUWeight=50)
+props=(-p MemoryMax="$mem" -p MemorySwapMax=1G -p CPUQuota="${KRASNOKAMEN_MEM_RUN_CPU_QUOTA:-$((cores * 100))}%" -p CPUWeight=50)
 niceness=19
 cpu_pin=()
 # Preemptible (the watchdog may freeze it under memory pressure) only for plain
@@ -237,7 +237,7 @@ echo "mem-run: scope ${props[*]} nice=$niceness exclusive=$exclusive perf=$perf 
 # The guardian is a separate user service, outside both the scope and the job's
 # process tree, so a job kill cannot kill it before it tears the scope down.
 guard_dir=$(mktemp -d "${TMPDIR:-/tmp}/solaris-mem-guard.XXXXXXXX")
-unit="solaris-mem-run-${guard_dir##*.}.scope"
+unit="krasnokamen-mem-run-${guard_dir##*.}.scope"
 mkfifo "$guard_dir/events" "$guard_dir/ready"
 if ! systemd-run --user --quiet --collect --unit="${unit%.scope}-guard" \
   python3 "$here/mem-run-guard.py" "$guard_dir" "/sys/fs/cgroup$cgroup/$unit" "$$" "$PPID" \

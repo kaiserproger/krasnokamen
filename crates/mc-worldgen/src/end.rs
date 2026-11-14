@@ -25,35 +25,35 @@ mod outer;
 
 pub const END_MIN_Y: i32 = 0;
 pub const END_HEIGHT: i32 = 256;
-/// Main-island radius in blocks (Solaris-owned tuning, not a vanilla claim:
+/// Main-island radius in blocks (Krasnokamen-owned tuning, not a vanilla claim:
 /// controls where the height field falls to void. Vanilla side-by-side
 /// terrain comparison is queued).
 pub const END_ISLAND_RADIUS: f64 = 64.0;
 /// Island surface baseline in blocks before noise and edge falloff
-/// (Solaris-owned tuning, not a vanilla claim).
+/// (Krasnokamen-owned tuning, not a vanilla claim).
 pub const END_ISLAND_BASE_Y: f64 = 64.0;
-/// Height-field amplitude in blocks (Solaris-owned tuning, not a vanilla claim).
+/// Height-field amplitude in blocks (Krasnokamen-owned tuning, not a vanilla claim).
 pub const END_ISLAND_AMPLITUDE: f64 = 12.0;
 /// Quadratic edge falloff in blocks at the island rim, i.e. what drops the
-/// rim to void (Solaris-owned tuning, not a vanilla claim).
+/// rim to void (Krasnokamen-owned tuning, not a vanilla claim).
 pub const END_ISLAND_FALLOFF: f64 = 96.0;
-/// Noise input scale divisor (Solaris-owned tuning, not a vanilla claim).
+/// Noise input scale divisor (Krasnokamen-owned tuning, not a vanilla claim).
 pub const END_NOISE_SCALE: f64 = 96.0;
 /// Pillar ring size. The shaft/cap materials (obsidian with bedrock caps)
 /// match the vanilla End island pillars; the count, positions, heights, and
-/// square footprint below are Solaris-owned simplifications (not vanilla
+/// square footprint below are Krasnokamen-owned simplifications (not vanilla
 /// claims): no crystals, iron bars, or cages. Vanilla side-by-side
 /// comparison is queued.
 pub const END_PILLAR_COUNT: usize = 10;
-/// Pillar ring radius in blocks (Solaris-owned tuning, not a vanilla claim).
+/// Pillar ring radius in blocks (Krasnokamen-owned tuning, not a vanilla claim).
 pub const END_PILLAR_RADIUS: f64 = 42.0;
-/// Shortest pillar shaft in blocks (Solaris-owned tuning, not a vanilla claim).
+/// Shortest pillar shaft in blocks (Krasnokamen-owned tuning, not a vanilla claim).
 pub const END_PILLAR_MIN_HEIGHT: i32 = 6;
 /// Shaft height span above the minimum, i.e. heights `MIN..MIN + SPAN`
-/// (Solaris-owned tuning, not a vanilla claim).
+/// (Krasnokamen-owned tuning, not a vanilla claim).
 pub const END_PILLAR_HEIGHT_SPAN: i32 = 12;
 /// Pillar half-width: shafts and caps are `(2 * HALF + 1)` blocks square
-/// (Solaris-owned tuning, not a vanilla claim).
+/// (Krasnokamen-owned tuning, not a vanilla claim).
 pub const END_PILLAR_HALF_WIDTH: i32 = 1;
 
 #[must_use]
@@ -146,7 +146,7 @@ impl EndGenerator {
             3,
             0.5,
         );
-        // Solaris-owned shaping (not a vanilla claim): gentle noise dome minus
+        // Krasnokamen-owned shaping (not a vanilla claim): gentle noise dome minus
         // a quadratic rim falloff. Vanilla side-by-side terrain comparison is
         // queued.
         (END_ISLAND_BASE_Y + END_ISLAND_AMPLITUDE * field - END_ISLAND_FALLOFF * edge * edge)

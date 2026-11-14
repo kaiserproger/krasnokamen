@@ -26,7 +26,7 @@ def run_loader_ui(client, artifact, timeout):
         steps.check('declared_view', 'ruby-live:showcase' in admitted['loader']['declared_views'])
         steps.check('verified_asset', 'ruby-live:fixture_icon' in admitted['loader']['activated_assets'])
         steps.call('minecraft_send_chat', {'message': 'loader_ruby', 'command': True})
-        opened = steps.wait(lambda s: s['screen']['class'] == 'dev.solaris.loader.minecraft.LoaderViewScreen', 'received_loader_view')
+        opened = steps.wait(lambda s: s['screen']['class'] == 'dev.krasnokamen.loader.minecraft.LoaderViewScreen', 'received_loader_view')
         opened_frame = native_client.capture(client, artifact, 'loader-open')
         steps.call('minecraft_set_screen_input', {'expected_screen_class': opened['screen']['class'],
             'expected_title': opened['screen']['title'], 'input_label': 'Name', 'value': ''})
@@ -107,10 +107,10 @@ def run_full_bundle(client, artifact, timeout, index, setup_commands, view_key=N
         overview = next(screen for screen in index['screens'] if screen['id'] == view_key) if view_key else next(screen for screen in index['screens'] if screen['id'].endswith(':overview'))
         steps.call('minecraft_request_loader_view', {'view_key': overview['id']})
         opened = steps.wait(lambda s: (s['loader'].get('view') or {}).get('view_id') == overview['id']
-            and s['screen']['class'] == 'dev.solaris.loader.minecraft.LoaderViewScreen', 'received_full_overview')
+            and s['screen']['class'] == 'dev.krasnokamen.loader.minecraft.LoaderViewScreen', 'received_full_overview')
         overview_frame = native_client.capture(client, artifact, 'full-overview')
         steps.call('minecraft_close_screen')
-        steps.wait(lambda s: s['screen']['class'] != 'dev.solaris.loader.minecraft.LoaderViewScreen', 'full_overview_closed')
+        steps.wait(lambda s: s['screen']['class'] != 'dev.krasnokamen.loader.minecraft.LoaderViewScreen', 'full_overview_closed')
         item = index['items'][0]
         steps.fixture('debug give ' + item['base_item'] + ' 1 0')
         steps.call('minecraft_wait_for_inventory', {'item_id': item['base_item'], 'count': 1, 'timeout_seconds': steps.remaining()})

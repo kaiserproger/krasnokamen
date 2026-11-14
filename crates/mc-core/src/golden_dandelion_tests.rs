@@ -150,7 +150,7 @@ fn golden_lock_native_entity_checkpoint_and_wal_image_restore_exactly() {
         extra_fields: crate::entity_life::to_fields(&row.entity_life, 0),
         ..Default::default()
     };
-    let dir = std::env::temp_dir().join(format!("solaris-golden-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("krasnokamen-golden-{}", uuid::Uuid::new_v4()));
     mc_world::anvil::entity_regions::write_entity_regions(
         &dir,
         &state.registry.items,
@@ -206,9 +206,9 @@ fn corrupt_age_lock_records_have_exact_diagnostics() {
         .contains("AgeLocked: duplicate field")
     );
     assert!(
-        from_fields(&[("solaris:AgeLockCooldownUntil".into(), Tag::Long(-1))])
+        from_fields(&[("krasnokamen:AgeLockCooldownUntil".into(), Tag::Long(-1))])
             .unwrap_err()
             .to_string()
-            .contains("solaris:AgeLockCooldownUntil: expected nonnegative long")
+            .contains("krasnokamen:AgeLockCooldownUntil: expected nonnegative long")
     );
 }

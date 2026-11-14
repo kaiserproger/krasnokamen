@@ -39,8 +39,8 @@ class PinReleaseTests(unittest.TestCase):
 
     def test_slot_is_the_pool_child_for_host_and_cross_artifacts(self):
         with patch.object(pin.w, "TARGETS", self.targets):
-            for artifact in (self.slot / "release/solaris-v2",
-                             self.slot / WINDOWS / "release/solaris-client.exe"):
+            for artifact in (self.slot / "release/krasnokamen",
+                             self.slot / WINDOWS / "release/krasnokamen-client.exe"):
                 with self.subTest(artifact=artifact):
                     self.assertEqual(pin.artifact_slot(artifact), self.slot)
             for artifact in (self.root / "elsewhere/release/client", self.targets / "not-a-slot/release/client"):
@@ -50,7 +50,7 @@ class PinReleaseTests(unittest.TestCase):
     def test_kind_and_target_are_required_for_reuse(self):
         directory = self.root / "pin"
         directory.mkdir()
-        binary = directory / "solaris-client.exe"
+        binary = directory / "krasnokamen-client.exe"
         binary.write_bytes(b"test pin")
         manifest = {"repo": "client", "kind": "client", "target": WINDOWS,
                     "binary": str(binary), "binary_sha256": pin.w.sha256_file(binary)}
@@ -71,10 +71,10 @@ class PinReleaseTests(unittest.TestCase):
             pin.existing_pin(directory, "client", WINDOWS, False)
 
     def test_target_is_explicit_and_inherited_target_is_removed(self):
-        artifact = self.slot / WINDOWS / "release/solaris-client.exe"
+        artifact = self.slot / WINDOWS / "release/krasnokamen-client.exe"
         artifact.parent.mkdir(parents=True)
         artifact.touch()
-        message = {"reason": "compiler-artifact", "target": {"name": "solaris-client", "kind": ["bin"]},
+        message = {"reason": "compiler-artifact", "target": {"name": "krasnokamen-client", "kind": ["bin"]},
                    "executable": str(artifact)}
 
         class Process:
@@ -116,7 +116,7 @@ class PinReleaseTests(unittest.TestCase):
         locks.mkdir()
         tree = self.root / "Tree"
         tree.mkdir()
-        (self.slot / ".solaris-tree").write_text(str(tree))
+        (self.slot / ".krasnokamen-tree").write_text(str(tree))
         provenance = {"id": "123456789abc-dirty123", "head": "1" * 40, "tree": "2" * 40,
                       "diff_sha256": "3" * 64, "dirty": True, "untracked_files": 0}
         paths = []
@@ -159,10 +159,10 @@ class PinReleaseTests(unittest.TestCase):
         self.assertEqual(len(set(paths)), 5)
 
     def test_foreign_config_target_is_not_labeled_native(self):
-        artifact = self.slot / WINDOWS / "release/solaris-client.exe"
+        artifact = self.slot / WINDOWS / "release/krasnokamen-client.exe"
         artifact.parent.mkdir(parents=True)
         artifact.touch()
-        message = {"reason": "compiler-artifact", "target": {"name": "solaris-client", "kind": ["bin"]},
+        message = {"reason": "compiler-artifact", "target": {"name": "krasnokamen-client", "kind": ["bin"]},
                    "executable": str(artifact)}
 
         class Process:
@@ -287,7 +287,7 @@ class ReuseTests(unittest.TestCase):
     def test_reuse_links_the_binary_and_writes_this_trees_manifest(self):
         directory, binary = self.source_pin()
         reused = self.reuse()
-        self.assertEqual(reused, self.pins / "new-server" / "solaris-v2")
+        self.assertEqual(reused, self.pins / "new-server" / "krasnokamen")
         self.assertEqual(reused.stat().st_ino, binary.stat().st_ino, "hard link, not a copy")
         manifest = json.loads((self.pins / "new-server" / "manifest.json").read_text())
         self.assertEqual((manifest["head"], manifest["diff_sha256"], manifest["source"]),
@@ -395,7 +395,7 @@ class ReuseTests(unittest.TestCase):
         build.assert_not_called()
         new = self.pins / f"{provenance['id']}-server-{LINUX}-incr"
         mark.assert_called_with(new, self.top.name, "pin")
-        self.assertEqual(output.getvalue().strip(), f"SOLARIS_SERVER_BINARY={new / 'solaris-v2'}")
+        self.assertEqual(output.getvalue().strip(), f"KRASNOKAMEN_SERVER_BINARY={new / 'krasnokamen'}")
         self.assertEqual(json.loads((new / "manifest.json").read_text())["reused_from"], directory.name)
 
 
