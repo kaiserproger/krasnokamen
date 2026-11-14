@@ -27,10 +27,10 @@
 
 use std::convert::Infallible;
 
-use mc_plugin_host::bindings::exports::solaris::plugin::events::{
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::events::{
     Event, EventContext, PlayerJoined,
 };
-use mc_plugin_host::bindings::exports::solaris::plugin::lifecycle::{
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::lifecycle::{
     InitContext, StartupContribution,
 };
 use mc_plugin_host::{
@@ -191,7 +191,7 @@ fn assert_refused_by_the_transfer_budget(answer: Result<(), HostError>) {
     }
 }
 
-const ON_EVENTS: &str = "solaris:plugin/events@0.8.0#on-events";
+const ON_EVENTS: &str = "krasnokamen:plugin/events@0.9.0#on-events";
 
 /// `(stride, text offset, text length offset)` of one `send-message` command in
 /// the guest's lowered answer, read from the WIT the host implements so that a
@@ -400,7 +400,7 @@ fn component_with_aliased_wide_output() -> Vec<u8> {
     let _ = fixture::component_bytes();
     let bytes = std::fs::read(
         fixture::target_directory(&fixture::repo_root().join("sdk/rust"))
-            .join("wasm32-unknown-unknown/release/solaris_hello_plugin.wasm"),
+            .join("wasm32-unknown-unknown/release/krasnokamen_hello_plugin.wasm"),
     )
     .expect("the SDK-built core module exists");
     let mut imports = 0;
@@ -537,7 +537,7 @@ fn the_transfer_budget_covers_the_whole_answer_not_one_string() {
         assert!(
             matches!(
                 command,
-                mc_plugin_host::bindings::solaris::plugin::commands::Command::SendMessage(message)
+                mc_plugin_host::bindings::krasnokamen::plugin::commands::Command::SendMessage(message)
                     if message.text.len() == EACH
             ),
             "every returned message retains its full payload"
@@ -669,7 +669,7 @@ fn repeated_output_pointers_cannot_reduce_the_transfer_charge() {
         "all aliased commands reached the host"
     );
     for (index, command) in admitted.into_commands().into_iter().enumerate() {
-        let mc_plugin_host::bindings::solaris::plugin::commands::Command::SendMessage(message) =
+        let mc_plugin_host::bindings::krasnokamen::plugin::commands::Command::SendMessage(message) =
             command
         else {
             panic!("the aliased command must remain a send-message");

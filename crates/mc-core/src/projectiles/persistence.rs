@@ -12,7 +12,7 @@ use mc_data::{
 use mc_nbt::Tag;
 use serde::Deserialize;
 
-const RETAINED: &str = "solaris:ProjectileRuntime";
+const RETAINED: &str = "krasnokamen:ProjectileRuntime";
 
 pub(crate) fn validate_state(state: &ProjectileState) -> Result<(), &'static str> {
     if state.ground_lifetime != super::ARROW_GROUND_LIFETIME
@@ -253,7 +253,7 @@ fn default_stack(kind: ProjectileKind, items: &ItemRegistry) -> ItemStack {
 /// Full retained state plus the exact vanilla projection. `Item` is a shared
 /// entity field; checkpoint callers move that one field into VanillaEntity.item.
 /// Grounded arrows project effective age to vanilla `life`; their retained anchor
-/// stays paired with EntityStateImage's `solaris:LifetimeAge` for native replay.
+/// stays paired with EntityStateImage's `krasnokamen:LifetimeAge` for native replay.
 pub(crate) fn to_fields(
     state: &ProjectileState,
     items: &ItemRegistry,

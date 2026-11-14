@@ -53,13 +53,13 @@ fn modern_jigsaw_variable_heights_are_bounded_and_deterministic() {
 #[test]
 #[ignore = "requires the local licensed vanilla content cache"]
 fn modern_jigsaw_seeded_structures_generate_with_bounded_work() {
-    let cache = std::env::var_os("SOLARIS_CONTENT_CACHE")
+    let cache = std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
         });
     let blocks = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     let vanilla = Arc::new(mc_data::load(cache.clone()).unwrap());
     let tags = Arc::new(mc_data::tags::load(&cache, &vanilla).unwrap());

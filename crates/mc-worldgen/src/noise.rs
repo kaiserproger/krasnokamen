@@ -1,6 +1,6 @@
 //! Small hash-based value noise used by deterministic world generation.
 //!
-//! Not a translation of vanilla's algorithm — Solaris uses its own
+//! Not a translation of vanilla's algorithm — Krasnokamen uses its own
 //! deterministic noise per ADR 0001 / PROJECT_SPEC §8.1. The shape is
 //! a Perlin-style fade curve over lattice values produced by a
 //! `xxhash`-flavoured scrambler. Outputs are continuous,

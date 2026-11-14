@@ -18,6 +18,6 @@
   ],
   "tolerance": {
     "kind": "correction_parity",
-    "rule": "Solaris sends no corrections on any trajectory vanilla accepts without corrections; Solaris correction count on the +10% control must be >= vanilla's (not materially stricter: Solaris must not correct straight/diagonal when vanilla corrects neither)"
+    "rule": "Krasnokamen sends no corrections on any trajectory vanilla accepts without corrections; Krasnokamen correction count on the +10% control must be >= vanilla's (not materially stricter: Krasnokamen must not correct straight/diagonal when vanilla corrects neither)"
   }
 }

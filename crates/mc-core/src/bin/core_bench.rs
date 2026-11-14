@@ -146,10 +146,10 @@ fn acknowledge_teleports(core: &Core) {
     }
 }
 
-/// Vanilla content for bench registries: `SOLARIS_CONTENT_CACHE`, else the
+/// Vanilla content for bench registries: `KRASNOKAMEN_CONTENT_CACHE`, else the
 /// repository's local `data/vanilla` extraction.
 fn content_dir() -> std::path::PathBuf {
-    std::env::var_os("SOLARIS_CONTENT_CACHE")
+    std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
