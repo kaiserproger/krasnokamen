@@ -874,6 +874,7 @@ impl EntityStore {
         }
         self.orbs.remove(&removed_id);
         self.tnt.remove(&removed_id);
+        self.battle_members.remove(&removed_id);
         self.unregister_warden(removed_id);
         self.dying.remove(&removed_id);
         self.pos.swap_remove(idx);
@@ -957,6 +958,9 @@ impl EntityStore {
         self.uuid_index.remove(&uuid);
         let orb = self.orbs.remove(&id);
         let tnt = self.tnt.remove(&id);
+        if self.battle_members.remove(&id) {
+            destination.battle_members.insert(id);
+        }
         let warden = self.unregister_warden(id);
         let dying = self.dying.remove(&id);
         if index != self.bodies.len() {

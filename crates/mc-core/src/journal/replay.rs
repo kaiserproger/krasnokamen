@@ -553,6 +553,7 @@ impl EntityStateImage {
             ));
         }
         fields.extend([
+            ("krasnokamen:Faction".into(), mc_nbt::Tag::Int(i32::from(self.faction))),
             (
                 "krasnokamen:LifetimeAge".into(),
                 mc_nbt::Tag::Long(i64::from(self.age)),
