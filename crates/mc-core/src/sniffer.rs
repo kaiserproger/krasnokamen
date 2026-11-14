@@ -129,6 +129,18 @@ fn animation(sniffer: Option<&Sniffer>) -> u8 {
     }
 }
 
+pub(crate) fn restore_appearance(row: &mut ColdRow) {
+    let value = crate::boundary::EntityDataValue::SnifferState(animation(
+        row.entity_life.sniffer.as_deref(),
+    ));
+    let extra = &mut std::sync::Arc::make_mut(&mut row.appearance).extra;
+    if let Some((_, old)) = extra.iter_mut().find(|(index, _)| *index == STATE_INDEX) {
+        *old = value;
+    } else {
+        extra.push((STATE_INDEX, value));
+    }
+}
+
 /// Publishes the state accessor only when it changed; the unchanged case reads
 /// the row without marking it dirty.
 fn publish(state: &mut TickState, slot: crate::entities::EntitySlot, value: u8) {

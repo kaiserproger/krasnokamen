@@ -264,7 +264,7 @@ pub(super) fn step(
             entity: id,
             hand: Hand::Main,
             animation: SwingKind::Whack,
-            duration_ticks: pause as u16,
+            duration_ticks: pause as i32,
         });
         out.weapons.push((id, drawn));
         swaps += 1;

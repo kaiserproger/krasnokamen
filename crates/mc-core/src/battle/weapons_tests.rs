@@ -256,7 +256,7 @@ fn no_windup_until_the_drawn_sword_is_up() {
     let first_windup = first_windup.expect("the sword strikes once it is up");
     assert_eq!(battle.combat.fighters[bi].weapon, Weapon::Sword);
     assert!(
-        first_windup >= swap + u64::from(pause),
+        first_windup >= swap + pause as u64,
         "windup at {first_windup}, swap at {swap}"
     );
 }

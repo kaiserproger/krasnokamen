@@ -1,5 +1,6 @@
 //! World-global command storage, retained as vanilla NBT compounds.
 use crate::command_context::Context;
+use crate::command_execution::CommandResult;
 use crate::tick::TickState;
 use mc_nbt::Tag;
 use std::collections::BTreeMap;

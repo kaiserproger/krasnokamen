@@ -159,8 +159,6 @@ pub struct Selector {
     pub yaw: Option<(Option<f32>, Option<f32>)>,
     /// Repeated, optionally negated NBT compound predicates.
     pub nbt: Vec<(mc_nbt::Tag, bool)>,
-    /// Installed loot predicates, each independently negatable.
-    pub predicates: Vec<(Identifier, bool)>,
     /// Advancement filters (`advancements={id=true}`).
     pub advancements: Vec<(String, bool)>,
     /// Loot-predicate filters (`predicate=<id>` / `predicate=!<id>`) by
@@ -293,7 +291,7 @@ pub enum AdvancementScope {
 #[derive(Debug, Clone, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum Command {
-    Battle(crate::hostile::battle::staging::BattleCommand),
+    Battle(crate::battle::staging::BattleCommand),
     Attribute(crate::command_attribute::AttributeCommand),
     Item(crate::command_item_replace::ItemCommand),
     Loot(crate::command_loot::LootCommand),
@@ -467,7 +465,7 @@ pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
         "attribute" => crate::command_attribute::parse(args).map(Command::Attribute),
         "item" => crate::command_item_replace::parse(args).map(Command::Item),
         "loot" => crate::command_loot::parse(args).map(Command::Loot),
-        "battle" => crate::hostile::battle::staging::parse(args).map(Command::Battle),
+        "battle" => crate::battle::staging::parse(args).map(Command::Battle),
         "settlement" => crate::settlements::commands::parse(args).map(Command::Settlement),
         "gamemode" => parse_gamemode(args),
         "defaultgamemode" => parse_defaultgamemode(args),
@@ -477,7 +475,7 @@ pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
         "effect" => crate::effects::parse_command(args),
         "advancement" => parse_advancement(args),
         "damage" => crate::command_damage::parse(args).map(Command::Damage),
-        "swing" => crate::hostile::battle::swing::parse(args).map(Command::Swing),
+        "swing" => crate::command_swing::parse(args).map(Command::Swing),
         "kill" => match args {
             [] => Ok(Command::Kill {
                 target: Target::Executor,
@@ -638,7 +636,6 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
         pitch: None,
         yaw: None,
         nbt: Vec::new(),
-        predicates: Vec::new(),
         advancements: Vec::new(),
         predicates: Vec::new(),
         distance: None,

@@ -535,7 +535,9 @@ fn opaque_entity_tags_survive_native_runtime_checkpoint_and_restart() {
             crate::commands::target_of("@e[type=minecraft:cow,nbt={Silent:1b,NoGravity:1b}]")
                 .unwrap();
         assert!(
-            crate::command_execution::resolve_target(&view, view_id, &target).contains(&view_id)
+            crate::command_execution::resolve_target(&view, view_id, &target)
+                .unwrap()
+                .contains(&view_id)
         );
         let (_, opaque) =
             mc_nbt::read_named(&mut entity.state.opaque_entity_fields.as_slice()).unwrap();

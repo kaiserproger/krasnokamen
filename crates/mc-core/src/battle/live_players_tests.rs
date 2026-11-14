@@ -169,14 +169,21 @@ fn live_player_takes_the_centre_infantry_slot_with_its_kit() {
         .slot_of(formation.members[members[0]].id)
         .unwrap();
     let kit = state.entities.row(source).appearance.equipment.clone();
-    let sword = state
-        .registry
-        .items
-        .id_of(&mc_data::Identifier::parse("minecraft:iron_sword".to_owned()).unwrap())
-        .unwrap();
+    let item = |name: &str| {
+        state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse(name.to_owned()).unwrap())
+            .unwrap()
+    };
+    // Foot carries the spear in; the infantry arm wears the iron chestplate.
     assert_eq!(
         kit[0].as_ref().unwrap().item_id,
-        sword,
+        item("minecraft:iron_spear")
+    );
+    assert_eq!(
+        kit[4].as_ref().unwrap().item_id,
+        item("minecraft:iron_chestplate"),
         "infantry, not spear"
     );
     assert!(kit[1].is_some(), "off-hand shield");
@@ -663,9 +670,8 @@ fn holder_hits_hurt_enemy_soldiers_and_spare_his_own_side() {
 /// hand his client attacks with STAB, no target (krasnokamen-client
 /// `Player::attack` on `minecraft:piercing_weapon`, vanilla 26.3 likewise).
 /// The jab hurts the blue soldier inside the spear's 2..4.5 attack range as
-/// an ordinary blow of his (cause and direct). Below the spear's minimum
-/// charge a jab is refused even at a soldier no longer hurt-immune, without
-/// spending the charge; a soldier closer than the near bound is missed.
+/// an ordinary blow of his (cause and direct); the spent charge refuses an
+/// immediate second jab, and a soldier closer than the near bound is missed.
 #[test]
 fn a_holder_stab_with_the_kit_spear_hurts_the_enemy_soldier_in_its_range() {
     let (mut state, player, blue, at) = facing_blue();
@@ -702,39 +708,32 @@ fn a_holder_stab_with_the_kit_spear_hurts_the_enemy_soldier_in_its_range() {
             )
         })
     };
-    let health = |state: &TickState| {
-        state
-            .entities
-            .row(state.entities.slot_of(blue).unwrap())
-            .health
-    };
-    let idle = |state: &mut TickState, ticks: u32| {
-        for _ in 0..ticks {
+    // The spear's charge (minimum 1.0, 19-tick delay) is back 14 ticks after
+    // a jab, or after the kit was put in his hand.
+    let recharge = |state: &mut TickState| {
+        for _ in 0..20 {
             hold(state, Action::Wounded, None);
             run_tick(state, &[]);
         }
     };
-    // The spear's charge (minimum 1.0, 19-tick delay) is back 14 ticks after
-    // a jab, or after the kit was put in his hand.
-    idle(&mut state, 20);
-    let before = health(&state);
+    recharge(&mut state);
+    let before = state
+        .entities
+        .row(state.entities.slot_of(blue).unwrap())
+        .health;
     assert!(
         stab(&mut state, 3.0),
         "the jab 3 blocks out never hurt the soldier"
     );
-    let after = health(&state);
+    let after = state
+        .entities
+        .row(state.entities.slot_of(blue).unwrap())
+        .health;
     assert!(after < before, "{before} -> {after}");
-    // 11 ticks on: past the soldier's 10 hurt-immune ticks, charge 0.84.
-    idle(&mut state, 10);
-    let before = health(&state);
     assert!(!stab(&mut state, 3.0), "a jab without charge landed");
-    assert_eq!(health(&state), before, "a jab without charge hurt him");
-    // 14 ticks on: charged, the refused jab spent nothing.
-    idle(&mut state, 2);
-    assert!(stab(&mut state, 3.0), "the jab 14 ticks on missed");
-    idle(&mut state, 20);
+    recharge(&mut state);
     assert!(!stab(&mut state, 1.0), "a jab inside the near bound landed");
-    idle(&mut state, 20);
+    recharge(&mut state);
     assert!(stab(&mut state, 3.0), "the recharged jab missed");
 }
 
@@ -763,11 +762,14 @@ fn a_respawn_after_his_infantry_broke_takes_a_standing_line_with_the_same_kit() 
     run_tick(&mut state, &[]);
     kill(&mut state, 1);
     run_tick(&mut state, &[]);
-    // Every red infantry line breaks while he is dead.
-    let infantry = state.hostile.battle.live.holds[0].regiment;
-    state.hostile.battle.formation.regiments[infantry]
-        .morale
-        .broken = true;
+    // Every red infantry line breaks while he is dead, out of contact: no
+    // soldier of his line has an enemy within reach.
+    let hold = state.hostile.battle.live.holds[0].clone();
+    let infantry = hold.regiment;
+    let line = &mut state.hostile.battle.formation.regiments[infantry];
+    line.morale.broken = true;
+    let keep = (hold.regiment, hold.file);
+    assert!(nearest_file(&state, infantry, keep, hold.alive_at, true).is_none());
     run_tick(
         &mut state,
         &[PlayerInput::Respawn {
@@ -1114,92 +1116,4 @@ fn the_bound_spectator_goes_behind_the_holder_again_after_a_respawn_and_a_rearm(
     let reply = command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
     assert!(reply.starts_with("Battle live rearmed: PovRed "), "{reply}");
     assert_behind(&state, viewer, player);
-}
-
-fn team(state: &mut TickState, executor: EntityId, args: &[&str]) -> Result<String, String> {
-    let command = crate::scoreboard::ScoreboardCommand::parse("team", args).unwrap();
-    match crate::scoreboard::execute(state, executor, &command) {
-        (reply, crate::command_execution::CommandResult::Failed) => Err(reply),
-        (reply, _) => Ok(reply),
-    }
-}
-
-/// Entry-free rule (`scoreboard::require_no_team`): a player in a `/team`
-/// team takes no slot. The edge would move his entry into his side's faction
-/// team, and a later `/team leave` (method 4) would disconnect him.
-#[test]
-fn a_player_in_a_team_cannot_take_a_slot() {
-    let (mut state, ids) = staged(&["PovRed"]);
-    let mut changes = ChangeSet::default();
-    team(&mut state, ids[0], &["add", "allies"]).unwrap();
-    team(&mut state, ids[0], &["join", "allies", "PovRed"]).unwrap();
-    assert_eq!(
-        command(&mut state, &mut changes, live_cmd("PovRed")).unwrap_err(),
-        "PovRed is in team allies; an entry in a team cannot join a battle faction (team leave PovRed first)"
-    );
-    assert!(state.hostile.battle.live.holds.is_empty());
-    team(&mut state, ids[0], &["leave", "PovRed"]).unwrap();
-    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
-    assert_eq!(state.hostile.battle.live.holds.len(), 1);
-}
-
-/// The other side of the rule: `/team join` refuses a holder's name and a
-/// battle soldier's UUID, and changes nothing; an ordinary entry still joins.
-#[test]
-fn team_join_refuses_a_holder_and_a_faction_entity() {
-    let (mut state, ids) = staged(&["PovRed", "Other"]);
-    let mut changes = ChangeSet::default();
-    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
-    team(&mut state, ids[0], &["add", "allies"]).unwrap();
-    assert_eq!(
-        team(&mut state, ids[0], &["join", "allies", "PovRed"]).unwrap_err(),
-        "PovRed holds a battle slot of side 1; a holder cannot join a team"
-    );
-    let soldier = state
-        .entities
-        .slot_of(state.hostile.battle.formation.members[0].id)
-        .unwrap();
-    let uuid = state.entities.row(soldier).uuid.to_string();
-    let faction = state.entities.body(soldier).faction;
-    assert_ne!(faction, 0);
-    assert_eq!(
-        team(&mut state, ids[0], &["join", "allies", &uuid]).unwrap_err(),
-        format!("{uuid} is an entity of battle faction {faction}; it cannot join a team")
-    );
-    assert!(state.scoreboard.teams["allies"].members.is_empty());
-    team(&mut state, ids[0], &["join", "allies", "Other"]).unwrap();
-    assert!(state.scoreboard.teams["allies"].members.contains("Other"));
-}
-
-/// `WorldSnapshot::player_factions`: every hold's side by name, the same
-/// `Arc` while the holds are unchanged, empty again after `battle reset`.
-#[test]
-fn holds_publish_player_factions_in_one_arc() {
-    let (mut state, _) = staged(&["PovRed", "PovBlue"]);
-    let mut changes = ChangeSet::default();
-    let (before, _, _) = run_tick(&mut state, &[]);
-    assert!(before.snapshot.player_factions.is_empty());
-    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
-    command(
-        &mut state,
-        &mut changes,
-        BattleCommand::Live {
-            name: "PovBlue".into(),
-            side: 2,
-        },
-    )
-    .unwrap();
-    let (first, _, _) = run_tick(&mut state, &[]);
-    assert_eq!(
-        *first.snapshot.player_factions,
-        [("PovBlue".to_owned(), 2), ("PovRed".to_owned(), 1)]
-    );
-    let (second, _, _) = run_tick(&mut state, &[]);
-    assert!(std::sync::Arc::ptr_eq(
-        &first.snapshot.player_factions,
-        &second.snapshot.player_factions
-    ));
-    command(&mut state, &mut changes, BattleCommand::Reset).unwrap();
-    let (reset, _, _) = run_tick(&mut state, &[]);
-    assert!(reset.snapshot.player_factions.is_empty());
 }

@@ -785,9 +785,6 @@ pub(super) fn restore_data_value(
         crate::journal::EntityDataValueImage::Boolean(v) => {
             crate::boundary::EntityDataValue::Boolean(*v)
         }
-        crate::journal::EntityDataValueImage::SnifferState(v) => {
-            crate::boundary::EntityDataValue::SnifferState(*v)
-        }
         crate::journal::EntityDataValueImage::String(v) => {
             crate::boundary::EntityDataValue::String(v.clone())
         }

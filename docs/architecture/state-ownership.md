@@ -65,13 +65,15 @@ Persistence: [corpses](persistence.md#corpses).
 
 ### Staged battle actions
 
-`hostile/battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
+`battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
 regiment volley clocks, and `cavalry.rs` owns charge/refusal timers. Fighters
 and charge state share the formation-aligned dense execution index; a cold
 identity remap preserves actions and ammunition when roster layout changes.
 These are runtime battle state: pause holds their clock; restart restores
 bodies and mount custody, not an in-progress battle. The native projectile
 owner alone moves arrows and resolves hits.
+The sole kernel tree is `mc-core/src/battle`, restored from the F battle
+line; `hostile` retains its runtime state, not another implementation.
 
 Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
 An unparried blow removes about two times in five on the authored
@@ -131,7 +133,7 @@ time without one arrow image per tick. Loyalty tridents keep their dynamic
 return path and are not treated as idle arrows.
 
 Mob riders use the same horse-owned UUID relation as player riders. Staging
-uses `hostile::battle::cavalry::mount`, requires a nonzero rider faction and copies it to
+uses `battle::cavalry::mount`, requires a nonzero rider faction and copies it to
 the horse so native battle motion is not suppressed as ordinary tamed AI.
 Recovery allows a live mob passenger rather than requiring a player UUID,
 rejects item/boat/dead/nested passengers, and rebuilds reverse links/appearance.

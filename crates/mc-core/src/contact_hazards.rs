@@ -555,7 +555,12 @@ fn classify_contact(
 /// scan, in row order, only for rows that need it, so intent, fire and
 /// appearance sequences match the all-serial pass. Cauldron contact follows
 /// all scans, as before, over the rows the classifier flagged.
-pub(crate) fn run_with(state: &mut TickState, intents: &mut Vec<Intent>, min_parallel: usize) {
+pub(crate) fn run_with(
+    state: &mut TickState,
+    intents: &mut Vec<Intent>,
+    min_parallel: usize,
+) -> StageTimes {
+    let start = std::time::Instant::now();
     // Take the reused predicate caches out of tick state (restored at the end
     // so capacity survives across ticks); reset once for this read-only pass.
     // `negative` retains capacity; stale slots beyond the live length are ignored.
@@ -566,9 +571,6 @@ pub(crate) fn run_with(state: &mut TickState, intents: &mut Vec<Intent>, min_par
         scratch.cauldron = cauldron_table(state);
     }
     let rows = state.entities.len();
-    let phase_start = std::env::var_os("MC_CORE_PHASE_LOG")
-        .is_some()
-        .then(std::time::Instant::now);
     #[cfg(test)]
     count_work(0, rows);
     if scratch.negative.len() < rows {
@@ -610,6 +612,7 @@ pub(crate) fn run_with(state: &mut TickState, intents: &mut Vec<Intent>, min_par
             );
         }
     }
+    let cauldron_start = std::time::Instant::now();
     for &(index, ref work) in pending.iter().flatten() {
         #[cfg(test)]
         if work.sampled {
@@ -625,22 +628,10 @@ pub(crate) fn run_with(state: &mut TickState, intents: &mut Vec<Intent>, min_par
         }
     }
     state.contact_hazards_scratch = scratch;
-    if let Some(started) = phase_start
-        && rows > 1000
-    {
-        let (scans, burns, cauldrons) = pending.iter().flatten().fold((0, 0, 0), |sum, (_, w)| {
-            (
-                sum.0 + usize::from(w.scan),
-                sum.1 + usize::from(!w.scan && w.burn),
-                sum.2 + usize::from(w.cauldron),
-            )
-        });
-        eprintln!(
-            "  contact detail ms: rows={rows} classify={:.2} serial={:.2} total={:.2} scans={scans} burns={burns} cauldrons={cauldrons}",
-            (classified - started).as_secs_f64() * 1000.0,
-            classified.elapsed().as_secs_f64() * 1000.0,
-            started.elapsed().as_secs_f64() * 1000.0,
-        );
+    StageTimes {
+        classify: classified - start,
+        serial: cauldron_start - classified,
+        cauldron: cauldron_start.elapsed(),
     }
 }
 
@@ -705,18 +696,39 @@ pub(crate) fn cauldron_contact(state: &mut TickState, intents: &mut Vec<Intent>)
         if fx < 0.125 || fx > 0.875 || fz < 0.125 || fz > 0.875 {
             continue;
         }
-        "powder_snow_cauldron" if level > 0 && body.burn_ticks > 0 => {
-            let (body, row) = state.entities.parts_mut(slot);
-            body.burn_ticks = 0;
-            Arc::make_mut(&mut row.appearance).shared_flags &= !1;
-            state.appearance_changed.push(id);
-            lower_cauldron(state, (cell.0, cell.1, cell.2), current, level, true);
+        let cell = (
+            pos[0].floor() as i32,
+            pos[1].floor() as i32,
+            pos[2].floor() as i32,
+        );
+        let Some(current) = state.world.block_at(cell.0, cell.1, cell.2) else {
+            continue;
+        };
+        let Some(block) = state.registry.blocks.by_id(mc_world::BlockStateId(current)) else {
+            continue;
+        };
+        let name = block.block.id.path().to_owned();
+        let level = block
+            .properties
+            .iter()
+            .find(|(key, _)| key == "level")
+            .and_then(|(_, value)| value.parse::<u8>().ok())
+            .unwrap_or(0);
+        let id = body.id;
+        match name.as_str() {
+            "water_cauldron" | "powder_snow_cauldron" if level > 0 && body.burn_ticks > 0 => {
+                let (body, row) = state.entities.parts_mut(slot);
+                body.burn_ticks = 0;
+                Arc::make_mut(&mut row.appearance).shared_flags &= !1;
+                state.appearance_changed.push(id);
+                lower_cauldron(state, cell, current, level, name == "powder_snow_cauldron");
+            }
+            "lava_cauldron" => {
+                damage(state, id, DamageKind::Lava, 4.0, intents);
+                ignite(state, id, 300);
+            }
+            _ => {}
         }
-        "lava_cauldron" => {
-            damage(state, id, DamageKind::Lava, 4.0, intents);
-            ignite(state, id, 300);
-        }
-        _ => {}
     }
 }
 

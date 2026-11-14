@@ -22,7 +22,11 @@ fn pack(root: &Path, name: &str, description: &str, resources: &[(&str, &str)]) 
 fn fixture(root: &Path) -> TickState {
     let (mut state, _, _) = crate::hostile_tests::setup(8.0);
     let packs = PackSet::open(root, Selection::default(), &state.registry).unwrap();
-    state.datapacks = Runtime::new(packs, root.to_path_buf());
+    state.datapacks = Runtime::new(
+        packs,
+        root.to_path_buf(),
+        std::sync::Arc::clone(&state.registry),
+    );
     state
 }
 
@@ -791,6 +795,7 @@ fn enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clien
         )
         .unwrap(),
         root.clone(),
+        std::sync::Arc::clone(&state.registry),
     );
     let recipes_before = state.registry.recipes.len();
     let vanilla_bone_meal = recipe_result(&state.registry, "minecraft:bone_meal");
@@ -895,6 +900,7 @@ fn a_reload_with_an_unusable_recipe_keeps_the_old_registry_and_selection() {
         )
         .unwrap(),
         root.clone(),
+        std::sync::Arc::clone(&state.registry),
     );
     let recipes = state.registry.recipes.len();
     run(&mut state, "datapack enable file/broken");
@@ -1032,6 +1038,7 @@ fn a_pack_with_worldgen_resources_loads_its_other_content_and_warns_once() {
         )
         .unwrap(),
         root.clone(),
+        std::sync::Arc::clone(&state.registry),
     );
     messages(&mut state);
     run(&mut state, "datapack enable file/wg");
@@ -1129,7 +1136,11 @@ fn a_corrupt_saved_selection_fails_closed() {
         bad(&["vanilla", "datapack/a"], &[]),
         bad(&["vanilla"], &["bogus"]),
     ] {
-        let mut runtime = Runtime::new(PackSet::default(), root.clone());
+        let mut runtime = Runtime::new(
+            PackSet::default(),
+            root.clone(),
+            std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap()),
+        );
         assert!(
             runtime.restore_selection(selection.clone()).is_err(),
             "{selection:?}"
@@ -1145,7 +1156,11 @@ fn a_corrupt_saved_selection_fails_closed() {
         );
     }
     // An absent saved selection is the default one; a good one restores.
-    let mut runtime = Runtime::new(PackSet::default(), root.clone());
+    let mut runtime = Runtime::new(
+        PackSet::default(),
+        root.clone(),
+        std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap()),
+    );
     runtime
         .restore_selection(bad(&["vanilla", "file/a"], &["file/b"]))
         .unwrap();
@@ -1282,6 +1297,7 @@ fn the_live_refusal_of_a_pack_names_the_pack_and_the_file() {
         )
         .unwrap(),
         root.clone(),
+        std::sync::Arc::clone(&state.registry),
     );
     run(&mut state, "datapack enable file/broken");
     settle(&mut state);
@@ -1385,6 +1401,7 @@ fn a_pack_command_while_another_is_still_compiling_says_so_instead_of_misreporti
         )
         .unwrap(),
         root.clone(),
+        std::sync::Arc::clone(&state.registry),
     );
     run(&mut state, "datapack enable file/gems");
     run(&mut state, "datapack disable file/gems");

@@ -299,6 +299,59 @@ pub(crate) fn block_target(context: Context, input: &mut &str) -> Result<BlockPo
     Ok(BlockPos { x, y, z })
 }
 
+/// Resolve an accessor once so command stores and reads use the same owner.
+pub(crate) enum Accessor {
+    Storage(String),
+    Entity(crate::dimensions::Dimension, EntityId),
+    Block(crate::dimensions::Dimension, BlockPos),
+}
+
+impl Accessor {
+    pub(crate) fn parse(
+        state: &TickState,
+        context: Context,
+        input: &mut &str,
+    ) -> Result<Self, String> {
+        match argument(input)? {
+            "storage" => {
+                let name = mc_data::Identifier::parse(argument(input)?)
+                    .map_err(|error| error.to_string())?;
+                Ok(Self::Storage(name.to_string()))
+            }
+            "entity" => {
+                let id = single_entity(state, context, argument(input)?)?;
+                let (dimension, _) =
+                    crate::dimensions::travel::locate(state, id).ok_or("No entity was found")?;
+                Ok(Self::Entity(dimension, id))
+            }
+            "block" => Ok(Self::Block(
+                context.dimension,
+                block_target(context, input)?,
+            )),
+            _ => Err("Expected storage, entity or block".into()),
+        }
+    }
+
+    pub(crate) fn read(&self, state: &TickState) -> Result<Tag, String> {
+        match self {
+            Self::Storage(name) => Ok(state
+                .command_storage
+                .get(name)
+                .cloned()
+                .unwrap_or_else(|| Tag::Compound(Vec::new()))),
+            Self::Entity(dimension, id) => entity(
+                crate::dimensions::travel::world(state, *dimension)
+                    .ok_or("Entity dimension unavailable")?,
+                *id,
+            ),
+            Self::Block(dimension, pos) => block(
+                crate::dimensions::travel::world(state, *dimension).ok_or("Unknown dimension")?,
+                *pos,
+            ),
+        }
+    }
+}
+
 /// The NBT of an `entity <selector>` or `block <x> <y> <z>` data target, with
 /// the feedback arguments naming it.
 pub(crate) fn target_root(
@@ -374,68 +427,6 @@ pub(crate) fn query(
     };
     crate::command_execution::success_feedback(state, context.connection, &key, args);
     Ok(value)
-}
-
-pub(crate) fn mutate(
-    state: &mut TickState,
-    context: Context,
-    mut input: &str,
-) -> Result<i32, String> {
-    if context.permission < 2 {
-        return Err(crate::commands::CommandError::Unknown.message());
-    }
-    if argument(&mut input)? != "data" {
-        return Err("Expected data".into());
-    }
-    let action = argument(&mut input)?;
-    let target = Accessor::parse(state, context, &mut input)?;
-    let (kind, args) = target.feedback(state)?;
-    let count = match target {
-        Accessor::Storage(name) => {
-            let empty = Tag::Compound(Vec::new());
-            let previous = state.command_storage.get(&name).unwrap_or(&empty);
-            let (count, next) =
-                crate::command_storage::prepare(state, context, previous, action, input)?;
-            state.command_storage.insert(name, next);
-            state.command_storage_dirty = true;
-            count
-        }
-        target => {
-            let previous = target.read(state)?;
-            let (count, next) =
-                crate::command_storage::prepare(state, context, &previous, action, input)?;
-            let dimension = match target {
-                Accessor::Entity(dimension, _) | Accessor::Block(dimension, _) => dimension,
-                Accessor::Storage(_) => unreachable!(),
-            };
-            let world = if state.dimension == dimension {
-                &mut *state
-            } else {
-                state
-                    .other_dimensions
-                    .get_mut(&dimension)
-                    .map(|world| &mut **world)
-                    .ok_or("Target dimension unavailable")?
-            };
-            match target {
-                Accessor::Entity(_, id) => {
-                    crate::command_summon::data::update(world, id, &previous, &next)?
-                }
-                Accessor::Block(_, pos) => {
-                    crate::command_block_entity::data::update(world, pos, &previous, &next)?
-                }
-                Accessor::Storage(_) => unreachable!(),
-            }
-            count
-        }
-    };
-    crate::command_execution::success_feedback(
-        state,
-        context.connection,
-        &format!("commands.data.{kind}.modified"),
-        args,
-    );
-    Ok(count)
 }
 
 pub(crate) fn command(

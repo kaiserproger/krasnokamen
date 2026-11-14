@@ -336,7 +336,7 @@ pub(crate) fn selector(
             });
             let mut matched = true;
             for (predicate, inverted) in &predicates {
-                let evaluation = mc_data::advancements::evaluate_conditions(predicate, &entity);
+                let evaluation = mc_data::advancements::evaluate_predicate(predicate, &entity);
                 if !evaluation.unsupported.is_empty() {
                     return Err(format!(
                         "Unsupported predicate: {:?}",
@@ -456,7 +456,6 @@ pub(crate) fn resolve_target(
                 nbt: Vec::new(),
                 predicates: Vec::new(),
                 advancements: Vec::new(),
-                predicates: Vec::new(),
                 distance: None,
                 position: [None; 3],
                 extent: [None; 3],

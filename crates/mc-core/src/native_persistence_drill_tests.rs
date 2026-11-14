@@ -233,6 +233,7 @@ impl Drill {
         drop(tx);
         journal_loop(
             &self.config.world_dir,
+            fixture_store(&self.config).unwrap(),
             rx,
             self.writer.take().unwrap(),
             &std::sync::atomic::AtomicBool::new(false),
@@ -767,6 +768,7 @@ fn enospc_transfer_wal_halts_admission_without_ack_or_checkpoint() {
     crate::journal::WAL_WRITE_FAILURE.set(Some(35));
     journal_loop(
         &config.world_dir,
+        fixture_store(&config).unwrap(),
         rx,
         drill.writer.take().unwrap(),
         &std::sync::atomic::AtomicBool::new(false),

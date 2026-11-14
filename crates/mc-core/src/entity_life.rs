@@ -47,7 +47,8 @@ pub struct EntityLifeState {
     pub frog_pregnant: bool,
     #[serde(skip)]
     pub frog_spawn_target: Option<[i32; 3]>,
-    pub sniffer: Option<Box<crate::sniffer::Sniffer>>,
+    #[serde(skip)]
+    pub(crate) cat_relax: Option<crate::cat::Relax>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -1081,9 +1082,6 @@ pub fn to_fields(life: &EntityLifeState, love: u32) -> Vec<(String, mc_nbt::Tag)
         fields.push(("home_pos".into(), Tag::IntArray(turtle.home.to_vec())));
         fields.push(("has_egg".into(), Tag::Byte(i8::from(turtle.has_egg))));
     }
-    if let Some(sniffer) = &life.sniffer {
-        fields.extend(crate::sniffer::fields(sniffer));
-    }
     if life.frog_pregnant {
         fields.push(("krasnokamen:FrogPregnant".into(), Tag::Byte(1)));
     }
@@ -1201,9 +1199,6 @@ pub fn from_record(
     }
     if record.id == "minecraft:turtle" {
         life.turtle = Some(crate::turtle::TurtleState::new(record.pos));
-    }
-    if record.id == "minecraft:sniffer" {
-        life.sniffer = crate::sniffer::from_fields(&record.extra_fields);
     }
     let mut love = 0;
     for (key, tag) in &record.extra_fields {

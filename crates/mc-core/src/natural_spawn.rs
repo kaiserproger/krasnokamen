@@ -1463,8 +1463,6 @@ fn burn(state: &mut TickState, night: bool, changes: &mut ChangeSet) {
         }
         crate::contact_hazards::ignite(state, id, 160);
     }
-    slots.clear();
-    state.serial_entity_slots = slots;
 }
 
 /// Sheared sheep graze (vanilla `EatBlockGoal`, about once per 1000 ticks):
@@ -1520,8 +1518,6 @@ fn graze(state: &mut TickState, rng: &mut Rng, changes: &mut ChangeSet) {
         crate::tick::set_wool(std::sync::Arc::make_mut(&mut row.appearance), wool & 0x0F);
         state.appearance_changed.push(id);
     }
-    slots.clear();
-    state.serial_entity_slots = slots;
 }
 
 /// Sunlight at the head, with no water at the feet.

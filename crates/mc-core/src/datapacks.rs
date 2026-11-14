@@ -1138,9 +1138,7 @@ impl PackSet {
 #[derive(Default)]
 pub(crate) struct Runtime {
     packs: Arc<PackSet>,
-    /// The registry before any datapack, which every reload rebuilds on;
-    /// `None` until the first reload (the registry then still is that).
-    base: Option<Arc<crate::registry::CoreRegistry>>,
+    discovered: Option<BTreeMap<String, Tag>>,
     root: Option<PathBuf>,
     /// Unmodified startup content (including plugin contributions), used only
     /// to prepare replacement catalogs. TickState.registry remains authoritative.
@@ -1152,8 +1150,6 @@ pub(crate) struct Runtime {
     scheduled: BTreeMap<(u64, String), ()>,
     dirty: bool,
     selection_dirty: bool,
-    /// `/debug function` trace files being written by their worker threads.
-    trace_writes: Vec<(ConnectionId, std::sync::mpsc::Receiver<std::io::Result<()>>)>,
     /// Traced lines awaiting the end of the functions they called:
     /// `(depth, command, result)`, innermost last.
     trace_returns: Vec<(usize, String, i32)>,
@@ -1166,12 +1162,19 @@ pub(crate) enum Job {
     /// `/reload`: recompile the selected packs.
     Reload,
     /// `/datapack enable|disable`: recompile with a changed selection.
-    Activation { action: Action, id: String },
+    Activation {
+        action: Action,
+        id: String,
+    },
     /// `/datapack list`: scan the pack folder for a fresh listing.
     List(ListScope),
     /// `/datapack create`: write an empty directory pack; `description` is
     /// the JSON text of its description component.
-    Create { id: String, description: String },
+    Create {
+        id: String,
+        description: String,
+    },
+    DebugReport(Arc<crate::command_debug::Report>),
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Action {
@@ -1196,11 +1199,13 @@ enum Completed {
     Packs(Box<PackSet>),
     Listing(Listing),
     Created,
+    DebugReport(Arc<crate::command_debug::Report>),
 }
 struct Reload {
     receiver: std::sync::mpsc::Receiver<Result<Completed, Failure>>,
     connection: ConnectionId,
     job: Job,
+    completion: Option<crate::command_context::CompletionId>,
 }
 
 struct Frame {
@@ -1280,6 +1285,10 @@ fn work(
         Job::Create { id, description } => {
             create_pack(root, id, description).map(|()| Completed::Created)
         }
+        Job::DebugReport(report) => {
+            report.write(root).map_err(Failure::Text)?;
+            Ok(Completed::DebugReport(Arc::clone(report)))
+        }
     }
 }
 
@@ -1308,7 +1317,7 @@ impl Runtime {
         self.discovered = None;
         self.packs = Arc::new(packs);
         self.root = Some(root);
-        self.base = Some(base);
+        self.base_registry = Some(base);
         self.load_pending = true;
     }
 
@@ -1321,6 +1330,9 @@ impl Runtime {
     pub(crate) fn packs(&self) -> &PackSet {
         &self.packs
     }
+    fn catalog(&self) -> &BTreeMap<String, Tag> {
+        self.discovered.as_ref().unwrap_or(&self.packs.descriptions)
+    }
     /// Queue a worker-thread job for the current selection; the old packs and
     /// selection stay authoritative until it reports back. Tick-thread
     /// callers never touch the filesystem.
@@ -1328,9 +1340,10 @@ impl Runtime {
         &mut self,
         job: Job,
         connection: ConnectionId,
+        completion: crate::command_context::CompletionId,
     ) -> Result<(), Failure> {
         let selection = self.selection().clone();
-        self.spawn(job, selection, connection, None)
+        self.spawn(job, selection, connection, Some(completion))
     }
     /// Queue an enable/disable activation of `selection`.
     pub(crate) fn request_activation(
@@ -1339,17 +1352,23 @@ impl Runtime {
         selection: Selection,
         action: Action,
         id: String,
+        completion: crate::command_context::CompletionId,
     ) -> Result<(), Failure> {
         selection.validate()?;
-        self.spawn(Job::Activation { action, id }, selection, connection, None)
+        self.spawn(
+            Job::Activation { action, id },
+            selection,
+            connection,
+            Some(completion),
+        )
     }
     fn request_reload(
         &mut self,
         connection: ConnectionId,
-        base: Arc<crate::registry::CoreRegistry>,
+        completion: crate::command_context::CompletionId,
     ) -> Result<(), String> {
         let selection = self.selection().clone();
-        self.spawn(Job::Reload, selection, connection, Some(base))
+        self.spawn(Job::Reload, selection, connection, Some(completion))
             .map_err(Failure::into_text)
     }
     fn spawn(
@@ -1357,7 +1376,7 @@ impl Runtime {
         job: Job,
         selection: Selection,
         connection: ConnectionId,
-        base: Option<Arc<crate::registry::CoreRegistry>>,
+        completion: Option<crate::command_context::CompletionId>,
     ) -> Result<(), Failure> {
         if self.reload.is_some() {
             return Err("Datapack reload already in progress".into());
@@ -1366,6 +1385,7 @@ impl Runtime {
             .root
             .clone()
             .ok_or("No datapack directory configured")?;
+        let base = self.base_registry.clone();
         let (tx, receiver) = std::sync::mpsc::sync_channel(1);
         let running = job.clone();
         std::thread::Builder::new()
@@ -1378,40 +1398,23 @@ impl Runtime {
             receiver,
             connection,
             job,
+            completion,
         });
         Ok(())
     }
-    /// Write a finished `/debug function` trace to `debug/<file>` in the
-    /// server directory (the folder holding the world) on a worker thread;
-    /// [`tick`] reports a failure to `connection`.
-    pub(crate) fn write_trace(&mut self, connection: ConnectionId, file: &str, trace: String) {
-        let (tx, receiver) = std::sync::mpsc::sync_channel(1);
-        let directory = self
-            .root
-            .as_deref()
-            .and_then(Path::parent)
-            .and_then(Path::parent)
-            .map(|server| server.join("debug"));
-        match directory {
-            Some(directory) => {
-                let file = directory.join(file);
-                let failed = tx.clone();
-                let spawned = std::thread::Builder::new()
-                    .name("datapack-trace".into())
-                    .spawn(move || {
-                        let written = std::fs::create_dir_all(&directory)
-                            .and_then(|()| std::fs::write(&file, trace));
-                        let _ = tx.send(written);
-                    });
-                if let Err(error) = spawned {
-                    let _ = failed.send(Err(error));
-                }
-            }
-            None => {
-                let _ = tx.send(Err(std::io::Error::other("no world folder")));
-            }
-        }
-        self.trace_writes.push((connection, receiver));
+    pub(crate) fn request_debug_report(
+        &mut self,
+        connection: ConnectionId,
+        completion: crate::command_context::CompletionId,
+        report: crate::command_debug::Report,
+    ) -> Result<(), String> {
+        self.spawn(
+            Job::DebugReport(Arc::new(report)),
+            self.selection().clone(),
+            connection,
+            Some(completion),
+        )
+        .map_err(Failure::into_text)
     }
     pub(crate) fn image(&self) -> Vec<(u64, String)> {
         self.scheduled.keys().cloned().collect()
@@ -1503,7 +1506,7 @@ pub(crate) fn enqueue(
                 lines: runtime.packs.functions[name].clone(),
                 next: 0,
                 started: false,
-                trace_name: state.debug_tracing.then(|| name.clone()),
+                trace_name: state.debug_trace.as_ref().map(|_| name.clone()),
                 context,
             });
         }
@@ -1515,11 +1518,11 @@ pub(crate) fn enqueue(
             .ok_or_else(|| format!("Unknown function {id}"))?
             .clone();
         runtime.pending.push(Frame {
-            id,
+            id: id.clone(),
             lines,
             next: 0,
             started: false,
-            trace_name: state.debug_tracing.then_some(id),
+            trace_name: state.debug_trace.as_ref().map(|_| id),
             context,
         });
     }
@@ -1587,16 +1590,25 @@ pub(crate) fn drain_until(state: &mut TickState, changes: &mut ChangeSet, stop_d
         let index = frame.next;
         let context = frame.context;
         frame.next += 1;
-        crate::command_debug::trace_command(state, &lines[index]);
         state.datapacks.pending.push(frame);
         if state.debug_trace.is_some() {
             trace_line(state, &lines[index], context, changes);
         } else {
             crate::command_context::submit(state, &lines[index], context, changes);
         }
+        if state.command_context.waiting() {
+            state.command_context.suspend_functions(stop_depth);
+            break;
+        }
     }
     release_returns(state);
-    state.datapacks.running = false;
+    state.datapacks.running = running;
+}
+
+pub(crate) fn cancel_pending(state: &mut TickState) {
+    state.datapacks.pending.clear();
+    state.datapacks.trace_returns.clear();
+    state.debug_trace = None;
 }
 
 /// Print the results of traced lines whose called functions have finished: a
@@ -1637,7 +1649,11 @@ fn trace_line(
             .trace_returns
             .push((depth, line.to_owned(), result));
     } else if let Some(trace) = &mut state.debug_trace {
-        trace.on_return(depth, line, result);
+        if state.command_context.waiting() {
+            trace.awaiting = Some((depth, line.to_owned()));
+        } else {
+            trace.on_return(depth, line, result);
+        }
     }
 }
 
@@ -1707,13 +1723,21 @@ pub(crate) fn command(
             })()
         }
         ["reload"] => {
-            // Every reload rebuilds on the registry before any datapack.
-            let base = state
-                .datapacks
-                .base
-                .clone()
-                .unwrap_or_else(|| Arc::clone(&state.registry));
-            state.datapacks.request_reload(connection, base)
+            let queued = (|| {
+                let completion = state.command_context.completion_id()?;
+                if state.datapacks.base_registry.is_none() {
+                    state.datapacks.base_registry = Some(Arc::clone(&state.registry));
+                }
+                state.datapacks.request_reload(connection, completion)?;
+                Ok::<_, String>(completion)
+            })();
+            return match queued {
+                Ok(id) => crate::command_execution::CommandResult::Deferred(id),
+                Err(error) => {
+                    feedback(state, connection, error);
+                    Failed
+                }
+            };
         }
         _ => Err("Supported: function <id|#tag>; schedule function <id> <time> [append|replace]; schedule clear <id>; reload; datapack list".into()),
     };
@@ -1734,7 +1758,7 @@ fn install_registry(state: &mut TickState, packs: &PackSet) -> Result<(), String
     let base = Arc::clone(
         state
             .datapacks
-            .base
+            .base_registry
             .get_or_insert_with(|| Arc::clone(&state.registry)),
     );
     let mut registry = (*base).clone();
@@ -1779,13 +1803,32 @@ pub(crate) fn adopt_registry(state: &mut TickState, registry: Arc<crate::registr
 }
 
 /// Show a finished worker job's outcome and, for recompiled packs, install them.
-fn finish(state: &mut TickState, reload: Reload, result: Result<Completed, Failure>) {
+fn finish(
+    state: &mut TickState,
+    reload: Reload,
+    result: Result<Completed, Failure>,
+) -> (bool, i32) {
     let connection = reload.connection;
+    let deliver = reload
+        .completion
+        .is_none_or(|id| crate::command_context::completion_context(state, id).is_some());
     let completed = match result {
         Ok(completed) => completed,
         Err(failure) => {
-            failure.send(state, connection);
-            return;
+            if deliver {
+                if matches!(reload.job, Job::DebugReport(_)) {
+                    tracing::warn!(error = %failure.into_text(), "debug trace write failed");
+                    crate::command_execution::feedback(
+                        state,
+                        connection,
+                        "commands.debug.function.traceFailed",
+                        Vec::new(),
+                    );
+                } else {
+                    failure.send(state, connection);
+                }
+            }
+            return (false, 0);
         }
     };
     match (&reload.job, completed) {
@@ -1793,85 +1836,107 @@ fn finish(state: &mut TickState, reload: Reload, result: Result<Completed, Failu
             if packs.changes_registry(&state.datapacks.packs)
                 && let Err(error) = install_registry(state, &packs)
             {
-                feedback(
-                    state,
-                    connection,
-                    format!("{error}; old packs and selection retained"),
-                );
-                return;
+                if deliver {
+                    feedback(
+                        state,
+                        connection,
+                        format!("{error}; old packs and selection retained"),
+                    );
+                }
+                return (false, 0);
             }
+            let count = packs.selection.enabled.len() as i32;
             state.datapacks.selection_dirty |= state.datapacks.packs.selection != packs.selection;
             let warnings = packs.warnings(Some(&state.datapacks.packs));
+            state.datapacks.discovered = None;
             state.datapacks.packs = Arc::new(*packs);
             state.datapacks.load_pending = true;
-            match &reload.job {
-                Job::Activation { action, id } => {
-                    management::activated(state, connection, *action, id);
+            if deliver {
+                match &reload.job {
+                    Job::Activation { action, id } => {
+                        management::activated(state, connection, *action, id)
+                    }
+                    _ => crate::command_execution::success_feedback(
+                        state,
+                        connection,
+                        "commands.reload.success",
+                        Vec::new(),
+                    ),
                 }
-                _ => crate::command_execution::success_feedback(
-                    state,
-                    connection,
-                    "commands.reload.success",
-                    Vec::new(),
-                ),
             }
-            // Every warning goes to the server log, as vanilla logs them to the console;
-            // the operator's chat gets the first few and a count, never one line per entry.
             for warning in &warnings {
                 tracing::warn!("{warning}");
             }
-            let hidden = warnings.len().saturating_sub(CHAT_WARNINGS);
-            for warning in warnings.into_iter().take(CHAT_WARNINGS) {
-                feedback(state, connection, warning);
+            if deliver {
+                let hidden = warnings.len().saturating_sub(CHAT_WARNINGS);
+                for warning in warnings.into_iter().take(CHAT_WARNINGS) {
+                    feedback(state, connection, warning);
+                }
+                if hidden > 0 {
+                    feedback(
+                        state,
+                        connection,
+                        format!("{hidden} more datapack warning(s), see the server log"),
+                    );
+                }
             }
-            if hidden > 0 {
-                feedback(
-                    state,
-                    connection,
-                    format!("{hidden} more datapack warning(s), see the server log"),
-                );
-            }
+            (true, count)
         }
         (Job::List(scope), Completed::Listing(listing)) => {
-            management::listed(state, connection, *scope, &listing);
+            state.datapacks.discovered = Some(
+                listing
+                    .enabled
+                    .iter()
+                    .chain(&listing.available)
+                    .cloned()
+                    .collect(),
+            );
+            if deliver {
+                management::listed(state, connection, *scope, &listing);
+            }
+            (true, management::counted(&listing, *scope))
         }
-        (Job::Create { id, .. }, Completed::Created) => {
-            management::created(state, connection, id);
+        (Job::Create { id, description }, Completed::Created) => {
+            let description = crate::command_text::parse_component(description)
+                .expect("worker accepted validated description");
+            let catalog = state
+                .datapacks
+                .discovered
+                .get_or_insert_with(|| state.datapacks.packs.descriptions.clone());
+            catalog.insert(format!("file/{id}"), description);
+            if deliver {
+                management::created(state, connection, id);
+            }
+            (true, 1)
+        }
+        (Job::DebugReport(_), Completed::DebugReport(report)) => {
+            if deliver {
+                if report.success {
+                    crate::command_execution::success_feedback(
+                        state,
+                        connection,
+                        report.feedback,
+                        report.arguments.clone(),
+                    );
+                } else {
+                    crate::command_execution::feedback(
+                        state,
+                        connection,
+                        report.feedback,
+                        report.arguments.clone(),
+                    );
+                }
+            }
+            (report.success, report.result)
         }
         _ => unreachable!("a worker answers its own job"),
     }
 }
 
-/// Report finished `/debug function` trace writes; a failed write is the
-/// command's `traceFailed` error, shown when the worker reports it.
-fn poll_trace_writes(state: &mut TickState) {
-    let mut index = 0;
-    while index < state.datapacks.trace_writes.len() {
-        let written = state.datapacks.trace_writes[index].1.try_recv();
-        let failed = match written {
-            Ok(Ok(())) => None,
-            Ok(Err(error)) => Some(error.to_string()),
-            Err(std::sync::mpsc::TryRecvError::Empty) => {
-                index += 1;
-                continue;
-            }
-            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                Some("trace writer disconnected".to_owned())
-            }
-        };
-        let (connection, _) = state.datapacks.trace_writes.remove(index);
-        if let Some(error) = failed {
-            tracing::warn!(%error, "debug trace write failed");
-            crate::command_execution::feedback(
-                state,
-                connection,
-                "commands.debug.function.traceFailed",
-                Vec::new(),
-            );
-        }
+pub(crate) fn poll_worker(state: &mut TickState, changes: &mut ChangeSet) {
+    if state.dimension_globals.active && !state.command_context.shared {
+        return;
     }
-}
-pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
     if let Some(polled) = state
         .datapacks
         .reload
@@ -1881,10 +1946,22 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         match polled {
             Ok(result) => {
                 let reload = state.datapacks.reload.take().expect("polled worker job");
-                finish(state, reload, result);
+                let completion = reload.completion;
+                let previous = state.command_context.current;
+                state.command_context.current = completion
+                    .and_then(|id| crate::command_context::completion_context(state, id))
+                    .or(previous);
+                let (success, value) = finish(state, reload, result);
+                if let Some(id) = completion {
+                    crate::command_context::complete(state, id, success, value);
+                }
+                state.command_context.current = previous;
             }
             Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                 let reload = state.datapacks.reload.take().expect("polled worker job");
+                if let Some(id) = reload.completion {
+                    crate::command_context::complete(state, id, false, 0);
+                }
                 feedback(
                     state,
                     reload.connection,
@@ -1893,7 +1970,6 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             }
             Err(std::sync::mpsc::TryRecvError::Empty) => {}
         }
-        state.command_context.current = previous;
     }
 }
 
@@ -1903,7 +1979,6 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
     if state.command_context.waiting() {
         return;
     }
-    poll_trace_writes(state);
     if std::mem::take(&mut state.datapacks.load_pending)
         && state.datapacks.packs.tags.contains_key("minecraft:load")
     {
@@ -1943,10 +2018,6 @@ pub(crate) fn settle(state: &mut TickState) {
             receiver: answered(result),
             ..reload
         });
-    }
-    for (_, receiver) in &mut state.datapacks.trace_writes {
-        let written = receiver.recv().expect("trace writer answers");
-        *receiver = answered(written);
     }
     tick(state, &mut ChangeSet::default());
 }

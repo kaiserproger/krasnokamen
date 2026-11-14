@@ -12,14 +12,24 @@
 //! reach [`STEP_IN_TICKS`] after the first blow, or two enemies within
 //! [`HELP_RADIUS`] hurt him inside the window, each such attacker goes to the
 //! idle friends nearest the attacker (no target, neither hurt nor helping),
-//! at most [`HELPERS`] per attacker, who answer him the same way for a window.
+//! at most [`HELPERS`] per attacker, who answer him the same way for a window
+//! while they can; a helper who can no longer answer leaves the attacker's
+//! crew at once.
 //!
 //! Between soldiers a landed blow wounds (the man withdraws) or kills, so a
 //! soldier-versus-soldier fight keeps its nearest-enemy choice (`targeting`);
 //! only a blow that leaves a man able to fight (a live player's, an arrow's)
-//! makes him answer.
+//! makes him answer. A victim who cannot answer at all (wounded, an archer, a
+//! fugitive) hands on only when two enemies hurt him: one soldier's wounding
+//! blow must not pull idle friends after its striker, which would change every
+//! soldier fight.
 //!
-//! Cost per tick: one pass over the soldiers hurt or helping within the
+//! Only a blow that can lead somewhere is remembered: on a roster soldier (no
+//! horse), by an enemy within [`HELP_RADIUS`] of him. A far archer's arrow can
+//! neither be answered (beyond [`MELEE_ENGAGEMENT_REACH`]) nor handed on
+//! (beyond [`HELP_RADIUS`]), and at 20k such arrows filled the window.
+//!
+//! Cost per tick: one pass over the soldiers so hurt or helping within the
 //! window, and per hand-off one lookup of the attacker's helpers plus the
 //! target grid's cells within [`HELP_RADIUS`] of the attacker; never a scan
 //! of the whole roster or of all grudges per hand-off.
@@ -39,9 +49,10 @@ pub(crate) const HELP_RADIUS: f64 = 8.0;
 /// by a whole rank.
 pub(crate) const HELPERS: usize = 2;
 /// Time from the first blow a victim has to step in on his attacker before
-/// an attacker still out of his reach is handed on: 2 s, enough to close from
-/// the edge of [`MELEE_ENGAGEMENT_REACH`] to a sword's reach at the
-/// formation's closing step.
+/// an attacker still out of his reach is handed on: 2 s. At the closing step
+/// (0.10 blocks a tick) that covers the ~3 blocks from a player's 4.5-block
+/// jab to a soldier spear's reach after his next re-pick; an attacker farther
+/// off is handed on before the victim gets there.
 pub(crate) const STEP_IN_TICKS: u64 = 40;
 
 #[derive(Debug, Clone, Copy)]
@@ -71,6 +82,8 @@ type Crew = [Option<EntityId>; HELPERS];
 /// Scale counters of the last pass.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Work {
+    /// Blows the last merge reported (before the intake filter).
+    pub blows: u64,
     /// Soldiers hurt or helping within the window (grudges kept).
     pub remembered: u64,
     /// Of those, soldiers holding their attacker as target.
@@ -97,8 +110,9 @@ pub(crate) struct Retaliation {
     pub(crate) work: Work,
 }
 
-/// The damage merge committed a blow of `attacker` that took health from
-/// battle unit `victim` (`hostile::retaliate`); the next battle tick weighs it.
+/// The damage merge accepted a blow of `attacker` on battle unit `victim`
+/// (`hostile::retaliate`: a hit that took health, or a projectile payload's
+/// hit on him); the next battle tick weighs it.
 pub(crate) fn hurt(state: &mut TickState, victim: EntitySlot, attacker: EntityId) {
     let battle = &mut state.hostile.battle;
     if battle.running {
@@ -183,20 +197,23 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState) {
             member.close_on = None;
         }
     }
+    state.work.blows = state.pending.len() as u64;
     for (victim, attacker) in state.pending.drain(..) {
-        let Some(slot) = entities.slot_of(victim) else {
+        let Some(bi) = entities
+            .slot_of(victim)
+            .and_then(|slot| columns.index(slot))
+        else {
             continue;
         };
-        if victim == attacker
-            || opponent(
-                entities,
-                live,
-                entities.body(slot).faction,
-                [0.0; 3],
-                attacker,
-            )
-            .is_none()
-        {
+        let near = opponent(
+            entities,
+            live,
+            columns.factions[bi],
+            columns.positions[bi],
+            attacker,
+        )
+        .is_some_and(|(_, enemy)| enemy.distance <= HELP_RADIUS);
+        if victim == attacker || bi >= formation.members.len() || !near {
             continue;
         }
         match state.grudges.get_mut(&victim) {
@@ -267,6 +284,9 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState) {
         } else if grudge.answering || due {
             grudge.answering = enemy.is_some_and(|(_, enemy)| enemy.distance <= reach);
         }
+        if grudge.helping && !grudge.answering {
+            return false;
+        }
         let range = combat.fighters[bi].range;
         if grudge.answering
             && let Some((enemy_slot, enemy)) = enemy
@@ -298,17 +318,17 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState) {
             *free = Some(victim);
         }
         if due && !grudge.helping {
-            let near = |attacker| {
-                opponent(entities, live, faction, pos, attacker)
-                    .filter(|(_, enemy)| enemy.distance <= HELP_RADIUS)
-            };
             let unanswered = grudge.answering
                 && tick.saturating_sub(grudge.since) >= STEP_IN_TICKS
                 && enemy.is_some_and(|(enemy_slot, _)| {
                     !in_melee_range(entities, slot, enemy_slot, range)
                 });
-            let second = grudge.other.and_then(|(other, _)| near(other));
-            if (unanswered || second.is_some()) && near(grudge.attacker).is_some() {
+            let second = grudge.other.and_then(|(other, _)| {
+                opponent(entities, live, faction, pos, other)
+                    .filter(|(_, enemy)| enemy.distance <= HELP_RADIUS)
+            });
+            let attacker_near = enemy.is_some_and(|(_, enemy)| enemy.distance <= HELP_RADIUS);
+            if (unanswered || second.is_some()) && attacker_near {
                 handoffs.push((victim, grudge.attacker));
             }
             if let Some((_, other)) = second {
@@ -319,6 +339,9 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState) {
     });
     work.remembered = grudges.len() as u64;
     work.handoffs = handoffs.len() as u64;
+    // Canonical order: which attacker a shared idle friend goes to does not
+    // depend on hash iteration.
+    state.handoffs.sort_unstable();
     for index in 0..state.handoffs.len() {
         let (victim, attacker) = state.handoffs[index];
         hand_off(
@@ -404,6 +427,8 @@ fn hand_off(
     });
     state.work.friends_examined += examined;
     let mut added = 0;
+    // Distance of each new helper to the attacker (blocks), for the log.
+    let mut distances = [0.0_f64; HELPERS];
     for (_, helper, bi) in nearest.into_iter().flatten().take(HELPERS - helping) {
         let slot = columns.slots[bi].expect("indexed column");
         let Some((enemy_slot, enemy)) =
@@ -430,17 +455,19 @@ fn hand_off(
             formation.members[bi].close_on = Some(at);
             state.closing.push(bi);
         }
+        distances[added] = enemy.distance;
         added += 1;
     }
-    if added > 0 {
+    if added > 0 && super::live_players::holder_side(live, attacker).is_some() {
         tracing::info!(
-            "Battle help: attacker={} victim={} tick={} helpers={}/{} crew={:?}",
+            "Battle help: attacker={} victim={} tick={} helpers={}/{} crew={:?} new_distances={:.2?}",
             attacker.0,
             victim.0,
             tick,
             helping + added,
             HELPERS,
-            crew.map(|helper| helper.map(|id| id.0))
+            crew.map(|helper| helper.map(|id| id.0)),
+            &distances[..added]
         );
     }
 }
