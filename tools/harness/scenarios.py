@@ -1262,6 +1262,25 @@ SCENARIOS: dict[str, Scenario] = {
         proves="same UUID remains still during first gaze, moves on look-away and freezes on second gaze",
         limits="no heart linkage, pumpkin, occlusion or multiple observers coverage",
     ),
+    "protocol-random-break-seed-4": _entry(
+        id="protocol-random-break-seed-4", summary="Seeded protocol-bot survival break of a declared dirt block (random:4)",
+        owner="core:harness", evidence="tcp", profile="matrix-random",
+        selector=("--script", "tools/harness/matrix_scripts/random-break-seed-4.json", "--vanilla-data", "data/vanilla"),
+        sources=("tools/harness/matrix_scripts/random-break-seed-4.json", "tools/harness/matrix_domains/random.py",
+                 "tools/harness/protocol_input_verbs.py"),
+        fixture="release server named by --server-bin (default KRASNOKAMEN_SERVER_BINARY); two protocol bots, one declared dirt block at Y80, survival",
+        proves="the bot's StartDestroy+Finish PlayerAction pair (26.3 ordinals) makes the server remove the block, received as a block update",
+        limits="TCP protocol bots, not a native or Java client; one block, no tool-speed or drop-parity coverage",
+    ),
+    "protocol-mob-attack-cow": _entry(
+        id="protocol-mob-attack-cow", summary="Protocol-bot survival attack on a summoned cow (adapter-probe:mobs.cow)",
+        owner="core:harness", evidence="tcp", profile="protocol-matrix",
+        selector=("--subject", "mobs.cow", "--vanilla-data", "data/vanilla"),
+        sources=("tools/harness/matrix_domains/mobs.py", "tools/harness/protocol_matrix_client.py"),
+        fixture="release server named by --server-bin (default KRASNOKAMEN_SERVER_BINARY); one protocol bot, normal difficulty, survival, exact 26.1.2 loot data",
+        proves="an attack packet at standard reach changes the cow's received health or removes it, then its loot is received once",
+        limits="TCP protocol bot, not a native or Java client; one species, no knockback, damage-number or animation coverage",
+    ),
 }
 
 
@@ -1381,7 +1400,7 @@ def describe(scenario: Scenario) -> str:
         f"profile: {scenario.profile}",
     ]
     if scenario.selector:
-        lines.append("selector: cargo test " + " ".join(scenario.selector))
+        lines.append("selector: " + ("cargo test " if scenario.tests else "") + " ".join(scenario.selector))
     if scenario.scenario_id:
         lines.append(f"scenario id: {scenario.scenario_id} (bound for this run)")
     if scenario.manifest:

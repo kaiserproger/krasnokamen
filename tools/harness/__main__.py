@@ -333,6 +333,10 @@ def cmd_run(argv: list[str]) -> int:
             )
         else:
             extra = list(scenario.selector)
+            if args.server_bin is None and profile in {"protocol-matrix", "matrix-random"}:
+                # Ledger and promotion runs name the candidate server only through this variable.
+                env_server = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
+                args.server_bin = Path(env_server) if env_server else None
     spec = catalog.PROFILES.get(profile)
     if scenario_error is None and args.server_bin is not None and profile not in {"loader-live", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}:
         scenario_error = "--server-bin is only supported by loader-live or matrix profiles"

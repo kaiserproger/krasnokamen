@@ -654,6 +654,27 @@ class ScenarioCatalogTests(unittest.TestCase):
             self.assertEqual(payload["status"], "failed")
             self.assertEqual(payload["commands"], [])
 
+    def test_matrix_scenario_takes_its_server_from_the_environment(self) -> None:
+        seen = {}
+
+        def run(ctx):
+            seen["server_bin"] = ctx.server_bin
+            seen["extra_args"] = list(ctx.extra_args)
+            return {}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            server = Path(tmp) / "krasnokamen"
+            server.write_text("#!/bin/sh\n")
+            server.chmod(0o755)
+            patched = dict(profiles.PROFILES["protocol-matrix"], run=run)
+            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp) / "artifacts"), \
+                    mock.patch.dict(profiles.PROFILES, {"protocol-matrix": patched}), \
+                    mock.patch.dict(os.environ, {"KRASNOKAMEN_SERVER_BINARY": str(server)}):
+                code = cli.cmd_run(["scenario", "protocol-mob-attack-cow"])
+        self.assertEqual(code, 0)
+        self.assertEqual(seen["server_bin"], server)
+        self.assertEqual(seen["extra_args"][:2], ["--subject", "mobs.cow"])
+
     def test_explain_writes_no_artifact_and_rejects_unknown_ids(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)):
