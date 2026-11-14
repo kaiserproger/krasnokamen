@@ -42,6 +42,14 @@ a resident finds a reachable spare bed. Arrival completes that food transfer
 even when the bed is outside storage's local POI scan; ordinary worker hauling
 does not become a ration trip. This intent is not persisted and grants neither
 a bed claim nor a birth: those still require the allocator and birth checks.
+Awake residents check nearby door approaches during admitted brain decisions.
+Nonpersistent leaves at foot or head height can be cleared with their vanilla
+loot credited to physical settlement storage; retained player edits and
+persistent leaves are protected. Clearing waits if loot cannot be stored.
+Logs are not cleared by this maintenance. Villagers embedded in collision
+geometry recover to the nearest supported, clear position within two blocks;
+sleeping residents are excluded and no position is chosen in unloaded space.
+
 
 ## Durability and plugin boundary
 
