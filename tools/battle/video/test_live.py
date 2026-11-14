@@ -8,6 +8,7 @@ import unittest
 
 import compose
 import live
+import struct
 import overlay
 
 TICK0, WALL0 = 1000, 1_700_000_000_000_000_000  # telemetry: tick 1000 + k at WALL0 + k * 50 ms
@@ -100,6 +101,15 @@ class LiveMap(unittest.TestCase):
         live_label = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, label='LIVE SERVER TELEMETRY')
         self.assertNotEqual(default, live_label)
         self.assertEqual(default, overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, label='REPLAY TELEMETRY'))
+
+    def test_units_label_names_what_units_counts(self):
+        sample = {'tick': 5, 'wall_us': 1000, 'host': None, 'battle': {'units': 3252, 'alive': {'1': 1631, '2': 1621}}}
+        plain = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None)
+        labelled = overlay.render(sample, ((1.0, 20.0, 5),), None, None, None, units_label='SOLDIERS + HORSES')
+        height = lambda data: struct.unpack('>I', data[20:24])[0]
+        self.assertEqual(height(plain), overlay.H)
+        self.assertEqual(height(labelled), overlay.H + 20)
+        self.assertNotEqual(plain[33:], labelled[33:])
 
     def test_uncovered_clip_is_unanchored_not_estimated(self):
         # Offset puts the clip 20 s before the first telemetry tick.

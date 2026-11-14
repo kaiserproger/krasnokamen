@@ -184,7 +184,7 @@ def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5,
     """
     n = len(lengths)
     width, height = (1920, 1080) if resolution == '1080p' else (3840, 2160)
-    panel = 1 if resolution == '1080p' else 2  # overlay is rendered at native 480x260
+    panel = 1 if resolution == '1080p' else 2  # overlay is rendered at native 480x260 (280 high with --units-label)
     trims = trims or [0] * n
     ends = ends or [None] * n
 
@@ -372,6 +372,7 @@ def main():
     b.add_argument('--resolution', choices=('1080p', '4k'), required=True)
     b.add_argument('--output', required=True)
     b.add_argument('--caption-file', help='UTF-8 text file drawn bottom-left for the whole video (what the footage is)')
+    b.add_argument('--units-label', help='panel UNITS line names what it counts, e.g. "SOLDIERS + HORSES" (two-line units block, taller panel)')
     b.add_argument('--panel-label', default='REPLAY TELEMETRY', help='panel header after the tick, e.g. "LIVE SERVER TELEMETRY" (max ~22 characters)')
     a = p.parse_args()
     shots, ticks, sources, reports = load_shots(a)
@@ -410,7 +411,7 @@ def main():
     write_map(rows, work / 'edit.frames.jsonl')
     (work / 'live-anchors.json').write_text(json.dumps(reports, indent=1) + '\n')
     import overlay
-    overlay.write_overlay(a.telemetry, work / 'edit.frames.jsonl', work / 'overlay', label=a.panel_label)
+    overlay.write_overlay(a.telemetry, work / 'edit.frames.jsonl', work / 'overlay', label=a.panel_label, units_label=a.units_label)
     caption_lines = []
     if a.caption_file:  # one text file per line (see build_filter)
         lines = [x.strip() for x in pathlib.Path(a.caption_file).read_text(encoding='utf-8').splitlines() if x.strip()]

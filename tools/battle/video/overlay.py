@@ -13,6 +13,7 @@ W, H = 480, 260
 FONT = {
  '0':['01110','10001','10011','10101','11001','10001','01110'], '1':['00100','01100','00100','00100','00100','00100','01110'], '2':['01110','10001','00001','00010','00100','01000','11111'], '3':['11110','00001','00001','01110','00001','00001','11110'], '4':['00010','00110','01010','10010','11111','00010','00010'], '5':['11111','10000','10000','11110','00001','00001','11110'], '6':['01110','10000','10000','11110','10001','10001','01110'], '7':['11111','00001','00010','00100','01000','01000','01000'], '8':['01110','10001','10001','01110','10001','10001','01110'], '9':['01110','10001','10001','01111','00001','00001','01110'],
  'A':['01110','10001','10001','11111','10001','10001','10001'], 'B':['11110','10001','10001','11110','10001','10001','11110'], 'C':['01111','10000','10000','10000','10000','10000','01111'], 'D':['11110','10001','10001','10001','10001','10001','11110'], 'E':['11111','10000','10000','11110','10000','10000','11111'], 'F':['11111','10000','10000','11110','10000','10000','10000'], 'G':['01111','10000','10000','10111','10001','10001','01111'], 'H':['10001','10001','10001','11111','10001','10001','10001'], 'I':['111','010','010','010','010','010','111'], 'J':['00111','00010','00010','00010','10010','10010','01100'], 'K':['10001','10010','10100','11000','10100','10010','10001'], 'L':['10000','10000','10000','10000','10000','10000','11111'], 'M':['10001','11011','10101','10101','10001','10001','10001'], 'N':['10001','11001','10101','10011','10001','10001','10001'], 'O':['01110','10001','10001','10001','10001','10001','01110'], 'P':['11110','10001','10001','11110','10000','10000','10000'], 'Q':['01110','10001','10001','10001','10101','10010','01101'], 'R':['11110','10001','10001','11110','10100','10010','10001'], 'S':['01111','10000','10000','01110','00001','00001','11110'], 'T':['11111','00100','00100','00100','00100','00100','00100'], 'U':['10001','10001','10001','10001','10001','10001','01110'], 'V':['10001','10001','10001','10001','10001','01010','00100'], 'W':['10001','10001','10001','10101','10101','10101','01010'], 'X':['10001','10001','01010','00100','01010','10001','10001'], 'Y':['10001','10001','01010','00100','00100','00100','00100'], 'Z':['11111','00001','00010','00100','01000','10000','11111'],
+ '(':['001','010','100','100','100','010','001'], ')':['100','010','001','001','001','010','100'], '+':['000','010','010','111','010','010','000'],
  '.':['0','0','0','0','0','0','1'], ':':['0','1','0','0','1','0','0'], '-':['0','0','0','1','0','0','0'], '/':['00001','00001','00010','00100','01000','10000','10000'], '%':['10001','00010','00100','01000','10001','00000','00000'], '#':['01010','11111','01010','01010','11111','01010','00000'], ' ':['0']*7,
 }
 
@@ -28,11 +29,12 @@ def chunk(kind, data):
     return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data))
 
 def png(pixels):
-    scan = b''.join(b'\0' + pixels[y*W*4:(y+1)*W*4] for y in range(H))
-    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', W, H, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(scan, 6)) + chunk(b'IEND', b'')
+    h = len(pixels)//(W*4)
+    scan = b''.join(b'\0' + pixels[y*W*4:(y+1)*W*4] for y in range(h))
+    return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', W, h, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(scan, 6)) + chunk(b'IEND', b'')
 
 def rect(p, x, y, w, h, color):
-    x0, y0, x1, y1 = max(0, x), max(0, y), min(W, x+w), min(H, y+h)
+    x0, y0, x1, y1 = max(0, x), max(0, y), min(W, x+w), min(len(p)//(W*4), y+h)
     if x1 <= x0 or y1 <= y0:
         return
     row = bytes(color) * (x1-x0)
@@ -63,9 +65,11 @@ def line(p, x0, y0, x1, y1, color):
 def graph_y(value, maximum):
     return 172-round(min(max(value, 0), maximum)*100/maximum)
 
-def render(sample, history, cpu, steal, memory, label='REPLAY TELEMETRY'):
-    p = bytearray(W*H*4)
-    rect(p, 0, 0, W, H, (7, 16, 28, 205))
+def render(sample, history, cpu, steal, memory, label='REPLAY TELEMETRY', units_label=None):
+    # units_label: names what UNITS counts (e.g. 'SOLDIERS + HORSES'); it needs a second line, so the panel is 20 px taller.
+    h = H if units_label is None else H + 20
+    p = bytearray(W*h*4)
+    rect(p, 0, 0, W, h, (7, 16, 28, 205))
     text(p, 12, 10, f"TICK #{sample['tick']}  {label}", scale=2)
     ms = sample['wall_us']/1000
     tps = history[-1][1]
@@ -92,7 +96,11 @@ def render(sample, history, cpu, steal, memory, label='REPLAY TELEMETRY'):
     if len(factions) > 2:
         raise ValueError('overlay supports two factions; telemetry contains more')
     sides = '  '.join(f'SIDE {key} {alive[key]}' for key in factions) or 'SIDES N/A'
-    text(p, 12, 239, f"UNITS {battle.get('units', 'N/A')}  {sides}", scale=2)
+    if units_label is None:
+        text(p, 12, 239, f"UNITS {battle.get('units', 'N/A')}  {sides}", scale=2)
+    else:
+        text(p, 12, 239, f"UNITS ({units_label}) {battle.get('units', 'N/A')}", scale=2)
+        text(p, 12, 258, sides, scale=2)
     return png(p)
 
 def load(telemetry):
@@ -134,7 +142,7 @@ def render_unanchored():
     return png(p)
 
 
-def write_overlay(telemetry_path, frames_path, out, label='REPLAY TELEMETRY'):
+def write_overlay(telemetry_path, frames_path, out, label='REPLAY TELEMETRY', units_label=None):
     """One overlay-%06d.png per row of the frames file; `out` must not exist."""
     telemetry = load(telemetry_path)
     out = pathlib.Path(out)
@@ -147,7 +155,7 @@ def write_overlay(telemetry_path, frames_path, out, label='REPLAY TELEMETRY'):
             if not frame.get('unanchored'): raise ValueError(f'frame {expected}: no tick and not marked unanchored')
         elif tick not in telemetry: raise ValueError(f'frame {expected}: tick {tick} missing from telemetry')
         if tick != cached_key:  # consecutive frames of one tick share one image
-            cached_key, cached = tick, render_unanchored() if tick is None else render(*telemetry[tick], label=label)
+            cached_key, cached = tick, render_unanchored() if tick is None else render(*telemetry[tick], label=label, units_label=units_label)
         (out / f'overlay-{expected:06d}.png').write_bytes(cached)
 
 def main():
@@ -156,8 +164,9 @@ def main():
     a.add_argument('--frames', required=True)
     a.add_argument('--out', required=True, help='new output directory of overlay-%%06d.png')
     a.add_argument('--label', default='REPLAY TELEMETRY', help='panel header after the tick')
+    a.add_argument('--units-label', help='what UNITS counts, e.g. "SOLDIERS + HORSES" (adds a second line to the panel)')
     args = a.parse_args()
-    write_overlay(args.telemetry, args.frames, args.out, label=args.label)
+    write_overlay(args.telemetry, args.frames, args.out, label=args.label, units_label=args.units_label)
 
 if __name__ == '__main__':
     main()
