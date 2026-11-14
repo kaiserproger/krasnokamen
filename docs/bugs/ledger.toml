@@ -10,7 +10,8 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-CUSTOM-PAYLOAD"
 regression = ["cargo:mc-core:projectiles::payloads::tests::lingering_custom_payload_and_impact_color_are_preserved"]
 failing_first = "not recorded"
-
+fix_commit = "bafcdb6f0"
+repro_check = "candidate: bafcdb6f0's payloads.rs reverse conflicts in 10 blocks after b46ace161 rewrote the cloud code, and reversing b46ace161 leaves the ref green, so no real-hunk control exists; only a synthetic mutation was red and is not counted; client repro, real-client gate pending (stage 3)"
 [[bug]]
 id = "LINGERING-FRIENDLY-PVP"
 title = "Disabling PvP also disables beneficial lingering potion effects on other players: player A cannot heal or buff player B with a cloud, although self-use and ordinary splash healing remain allowed. A generic pre-effect PvP gate rejects the entire target, not merely harmful damage."
@@ -329,7 +330,8 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-FRAME-AUTO-EXPLORE"
 regression = ["cargo:mc-core:tick_tests::maps_tests::framed_and_pocket_maps_do_not_explore_until_held"]
 failing_first = "reported"
-
+fix_commit = "33812b466"
+repro_check = "candidate: 33812b466's maps/runtime.rs reverse conflicts inside the explorers/frame_types block and the exploration loop, so no real-hunk control; only a synthetic mutation was red and is not counted; client repro, real-client gate pending (stage 3)"
 [[bug]]
 id = "ITEM-FRAME-PROJECTILE-CONTENTS"
 title = "Shooting an occupied item frame with an ordinary arrow destroys both the frame and its display, whereas vanilla ejects only the displayed item on the first non-explosive hit and leaves the frame attached."
@@ -537,7 +539,7 @@ severity = "major"
 status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#RESPAWN-PARTIAL-COLLISION"
 regression = ["cargo:mc-core:sleep::tests::respawn_on_carpet_uses_its_collision_height", "cargo:mc-core:dimensions::tests::anchor_respawn_uses_carpet_collision_height"]
-
+repro_check = "round 2: green with the child-sender routing fix and no test edit; with the routing reversed the ref reports [8.0,150.0,8.0] and 150.0 instead of [8.5,151.0,8.5] and 150.0625. The row's own fix is untouched and its status stays fixed"
 [[bug]]
 id = "ANCHOR-TOP-RESPAWN"
 title = "A charged anchor is falsely rejected when the only valid spawn position is directly on top of it; the candidate only searches eight neighboring columns, omitting the center-top fallback."
@@ -548,7 +550,7 @@ status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#ANCHOR-TOP-RESPAWN"
 regression = ["cargo:mc-core:dimensions::tests::anchor_respawn_can_stand_on_top_when_surrounded"]
 failing_first = "not recorded"
-
+repro_check = "round 2: green with the child-sender routing fix and no test edit - the command ran on the root world and the /kill never landed, so the respawn height was read from a stale world. The row's own sleep.rs fix is untouched and its status stays fixed"
 [[bug]]
 id = "ANCHOR-OFFHAND-CHARGE"
 title = "Using a partially charged anchor with a non-glowstone main hand and glowstone offhand produces a main-hand SetRespawn or explosion intent instead of deferring to the offhand charge. In the Overworld/End this can explode an anchor the player is trying to recharge."
@@ -834,7 +836,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-SCREEN-AUDIO-CONSENT"
 regression = ["harness:screens-voice-qa:owner_consent_names_app_audio", "harness:screens-voice-qa:owner_deny_sends_no_audio"]
-
+fix_commit = "client:a35187ca"
+repro_check = "candidate: the dialog title/body/choice strings live in src/computer/native/sharing.rs and the only registered check is the real-client screens-voice-qa gate (owner_consent_names_app_audio, owner_deny_sends_no_audio), which cannot run here - the profile had no real run in stage 2; stage 3"
 [[bug]]
 id = "HS-1"
 title = "Destroy an open single chest, then click before ordinary commit: extraction duplicates the staged drop; insertion is discarded."
@@ -905,7 +908,8 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-2"
 regression = ["cargo:mc-core:vehicles::tests::hopper_pulling_from_a_container_vehicle_refreshes_its_open_menu"]
-
+fix_commit = "6948e64e1"
+repro_check = "real-hunk control: reverse-applying 6948e64e1's redstone/containers.rs additions turns the ref red at vehicles_tests.rs:1647 (the hopper viewer never sees the pulled apple), receipts/XCoreItems/real-hunk-control.txt; the row is repro=manual, so candidate: real-client check required (repro=manual)"
 [[bug]]
 id = "HS-3"
 title = "Imported unsupported sand/gravel with a saved due gravity tick stays suspended without new edits; distinct from native rendering and setblock observation."
@@ -1073,7 +1077,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-PEACEFUL-REMOVAL"
 regression = ["cargo:mc-core:natural_spawn_tests::fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled", "harness:entities:native-v2-peaceful-removal"]
-
+repro_check = "candidate: e2e05b33e's monster_spawner.rs hunks conflict in three large blocks, the despawn path predates it and was restructured by 2dfebd7ab, so no real-hunk control; module 43/43 green, only a synthetic mutation was red and is not counted; real-client gate pending (stage 3)"
 [[bug]]
 id = "SPAWN-SPAWNER-EGG"
 title = "Using spawn egg on spawner spawns adjacent mob rather than configuring SpawnData."
@@ -1107,8 +1111,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TOTEM"
 regression = ["cargo:mc-core:tick_tests::combat_parity_tests::fix_mobs_totem_intercepts_lethal_damage_in_either_hand_but_not_void", "harness:entities:native-v2-command-score-store"]
-fix_commit = "de780c8823e3359fe426621a331c13ab58ccc127"
-
+fix_commit = "de780c882"
+repro_check = "candidate: same de780c882 reversal failure as DEATH-PROTECTION-COMPONENT; only a synthetic mutation was red and is not counted; real-client gate pending (stage 3)"
 [[bug]]
 id = "KILL-TYPE"
 title = "Player /kill used out_of_world instead of generic_kill."
@@ -1157,7 +1161,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-NOTIFY"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_death_notification_ignores_broadcast_rule", "harness:entities:native-v2-death-messages"]
-fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
+fix_commit = "patch:616679e6694db5ccffffe249b463d53949cc4b2857aee832b51deca82550db57"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> the dying player's outbox has no PlayerChange::Died with show_death_messages=false"
 
 [[bug]]
 id = "SCORE-FOOD"
@@ -1168,7 +1173,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-FOOD"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_auto_criteria_accept_authoritative_values", "harness:entities:native-v2-score-food"]
-fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
+fix_commit = "patch:73a2d42c2f1c0e6287e457bb9fa61fd7b3058ef35dc810c889c6e0d7e8cda669"
+repro_check = "round 2: patch digest verified. Control control-C.log: reversed -> red at `objectives add hunger food` (command usage)"
 
 [[bug]]
 id = "SCORE-CRITERIA-WRITABLE"
@@ -1179,8 +1185,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-CRITERIA-WRITABLE"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_counter_criteria_allow_writes_and_swap_sources", "harness:entities:native-v2-command-score-store"]
-fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
-
+fix_commit = "patch:49684fbf13f63f651932adb59ed33616b0f7178faac54b7af4ccc8182c5f7bf5"
+repro_check = "round 2: patch digest verified. Control control-B.log: reversed -> red `no entry found for key`, the `deaths` write was refused as read-only"
 [[bug]]
 id = "SCORE-TOTAL-KILLS"
 title = "totalKillCount was unsupported; native mob kill credit updated statistics but not this scoreboard objective."
@@ -1190,8 +1196,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SCORE-TOTAL-KILLS"
 regression = ["cargo:mc-core:tick_tests::damage_scoreboard_tests::damage_scoreboard_actual_mob_and_player_deaths_credit_distinct_kill_counters_once", "harness:entities:native-v2-command-score-store"]
-fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
-
+fix_commit = "patch:f8dd23107df8d86196bd9f2eb2526329eb997ef64e6e3a82573f2dc6d3c1ac0b"
+repro_check = "round 2: patch digest verified. Control control-B.log: reversed -> red `objectives add kills totalKillCount` refused (usage)"
 [[bug]]
 id = "TEAM-DEATH-VISIBILITY"
 title = "team modify deathMessageVisibility never was rejected before broadcast filtering."
@@ -1214,7 +1220,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-001"
 regression = ["cargo:mc-core:mounts::tests::mount_inventory_opens_for_each_tamed_mount", "cargo:mc-core:mounts::tests::mount_inventory_equipment_cargo_and_ridden_open_share_native_custody"]
-
+repro_check = "candidate: the cargo-menu code arrives with 2ccf8cc1a, which creates mounts/menus.rs, so reversing its hunks deletes the module and does not build; the green refs and the module run (21 passed / 2 failed, both failures are mount control outside this row) are in receipts/XCoreItems; only a synthetic mutation was red and is not counted"
 [[bug]]
 id = "CONTAINERS-002"
 title = "Lectern hold/open/page/take-book menu is absent."
@@ -1224,7 +1230,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-002"
 regression = ["cargo:mc-core:tick::book_actions::tests::lectern_insert_read_turn_take_preserves_exact_book"]
-
+repro_check = "candidate: lectern.rs is created by 2ccf8cc1a and `git log -S'button == 3' -- lectern.rs` shows the take branch was never touched since, so reversing means deleting the module; module 7/7 green, only a synthetic mutation was red and is not counted (receipts/XCoreItems)"
 [[bug]]
 id = "CONTAINERS-003"
 title = "Crafting table closes on first inventory pickup before disconnect; backing10 versus container_size0 guard."
@@ -1234,7 +1240,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-003"
 regression = ["cargo:mc-core:tick_tests::predicted_table_use_waits_for_accepted_placement"]
-
+repro_check = "candidate: guard and ref both come from base commit 1ada2ceb9, there is no discrete fix commit; only a synthetic mutation was red and is not counted (receipts/XCoreItems)"
 [[bug]]
 id = "CUSTODY-ENTITY-MENU-FLOOR"
 title = "A player stack reserved by a plugin can be moved into entity cargo below its reservation floor: mount and vehicle handlers directly mutate player/container, bypassing generic planned-transition floor refusal. Same contract gap, not two bugs."
@@ -1268,7 +1274,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SETBLOCK-SNBT"
 regression = ["cargo:mc-core:command_world::tests::setblock_snbt_installs_native_chest_contents_and_replaces_same_block", "harness:entities:native-v2-ledger-setblock-snbt"]
-fix_commit = "2ccf8cc1a397481928c7ac575cf6df177de66fb2"
+fix_commit = "patch:43dcf616a9d89ec5444b0e93311f364ea0d3b0efa9f89339236702c1de6dd054"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> red at command_world.rs:994 (`Block entity SNBT is not supported`)"
 
 [[bug]]
 id = "FORCELOAD-RING"
@@ -1279,6 +1286,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#FORCELOAD-RING"
 regression = ["cargo:mc-core:forceload::tests::forced_neighbour_ticks_blocks_but_freezes_entity_motion_and_age"]
+fix_commit = "5d86de8479676b431c79dcf09251a07f3721ef8b"
+repro_check = "round 2: the original fix 5d86de847 stays the fix_commit and docs/bugs/fix-patches/FORCELOAD-RING.patch (patch:6e94d3ac57d00f97) is the forward-ported reversal vehicle. Control control-A.log: reversed -> red with the neighbour at [184.53,199.23,168.46] instead of [184.5,200.0,168.5] (the ring ticks entities). Needs a graphical harness ref before promote"
 
 [[bug]]
 id = "DATA-QUERY"
@@ -1289,7 +1298,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-QUERY"
 regression = ["cargo:mc-core:command_data::tests::data_player_queries_read_live_inventory_vitals_and_absent_paths", "cargo:mc-core:command_data::tests::data_block_accepts_every_registered_block_entity_kind", "harness:entities:native-v2-data-query"]
-fix_commit = "0c6f68d84c1d2500bdd5ab7f016ae12887006730"
+fix_commit = "patch:3ac02a62ea68203b76871560682ec62146c9828bbde7cfed8b4763d0c1c69c4c"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> both refs red (path/scale queries refused)"
 
 [[bug]]
 id = "EXECUTE-STORE"
@@ -1300,7 +1310,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#EXECUTE-STORE"
 regression = ["cargo:mc-core:command_data::tests::execute_store_give_and_clear_execute_once_and_return_real_counts", "harness:entities:native-v2-command-score-store"]
-fix_commit = "0c6f68d84c1d2500bdd5ab7f016ae12887006730"
+fix_commit = "patch:ddb8f835cbaeb31923bef075d0c9fa05d057fb858c6628eaee1828d278ef94bd"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> red, `give @s stone 7` reports 0 (mutator refused)"
 
 [[bug]]
 id = "P1"
@@ -1323,7 +1334,96 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-1"
-regression = ["harness:screens-voice-qa:native_voice_resets_on_non_voice_server"]
+regression = ["harness:screens-voice-qa:native_voice_resets_on_non_voice_server", "client:krasnokamen-client:session::disconnect_forgets_the_previous_server_voice_negotiation"]
+fix_commit = "client:a35187ca"
+repro_check = "real-hunk control red (a35187ca's reset_voice() in disconnect reversed); real gate harness:screens-voice-qa:native_voice_resets_on_non_voice_server, whose profile had no stage-2 run; area=client, candidate"
+[[bug]]
+id = "HARNESS-ADMIN-TEST-TEMP-DIR-LEAK"
+title = "A failing mc-edge admin test leaked its /tmp/mc-edge-admin-* fixture directory"
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "crates/mc-edge/src/admin_tests.rs created /tmp/mc-edge-admin-* directories by hand instead of through a TempDir, so a failing (or panicking) test left them behind and a later test could remove a directory it did not own; the shared host accumulated them across runs."
+regression = ["cargo:mc-edge:admin_tests::a_failing_admin_test_leaves_no_temp_dir_and_removes_no_other", "cargo:mc-edge:admin_tests::a_passing_admin_test_leaves_no_temp_dir"]
+fix_commit = "abc5fd559"
+repro_check = "real-hunk control receipts/XHarnessJava/NC-ADMIN-TEMPDIR-reverse-abc5fd559.log: reversing abc5fd559's non-test hunks makes both refs red with the leaked directory listed; the refs live on wt/XHarnessJava 730d9a79c and become runnable after Main merges that branch. Both refs land with wt/XHarnessJava (abc5fd559): on a tree without that branch the tests do not exist and the refs are unrunnable, which is a merge gap, not a wrong name"
+
+[[bug]]
+id = "CLIENT-LAUNCHER-STALE-RESOURCE-PACK"
+title = "Launcher resource extraction was additive and skipped on a manifest claim, so a stale 26.1.2 pack was never rebuilt and 26.3 assets (sign templates, cushion, sulfur_cube textures) were missing"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "The launcher wrote the resource pack into the game directory incrementally and treated an existing manifest as proof the pack was current, so upgrading the client left a 26.1.2 pack in place: 26.3 content the client needs (template_sign_* block models, entity/cushion and entity/sulfur_cube textures) never appeared, and the client's model-texture walk fails on the missing files."
+regression = ["client:krasnokamen-launcher:bootstrap::tests::a_manifest_claim_does_not_make_a_stale_pack_current", "client:krasnokamen-launcher:bootstrap::tests::a_stale_resource_pack_is_replaced_instead_of_merged", "client:krasnokamen-launcher:bootstrap::tests::an_installation_whose_pack_lost_its_marker_is_not_ready", "client:krasnokamen-launcher:bootstrap::tests::a_failed_pack_swap_keeps_the_previous_pack", "client:krasnokamen-launcher:bootstrap::tests::a_jar_with_the_same_paths_and_other_bytes_invalidates_the_pack", "client:krasnokamen-launcher:bootstrap::tests::pack_entry_digest_is_the_shared_known_answer", "client:krasnokamen-launcher:ui::tests::ordinary_play_runs_the_install_stage_for_a_stale_pack"]
+fix_commit = "client:8f8e07e9"
+repro_check = "candidate: area=client. fix client:3fa63044 (which contains 1ea6d127) makes readiness require the pack marker to match the local jar, so ordinary Play on an existing install repairs a stale pack, and a failed swap restores the old pack. Control receipts/XClientBlocks/27-ready-negative-control.log: an_installation_whose_pack_lost_its_marker_is_not_ready and ordinary_play_repairs_an_installation_whose_pack_lost_its_marker are red with the fix reverted (94 passed, 2 failed); a_failed_pack_swap_keeps_the_previous_pack stayed green in that same run, so for the swap claim the control is not yet shown and it must not be cited as proof. Real-client check required: the gate is a client install upgraded across a pack change Later round: client:8f8e07e9 makes the marker the jar's measured SHA-1 plus a per-entry crc32/size digest, and stage 5 refuses a jar whose SHA-1 differs from the release; the two new refs are red in receipts/XClientBlocks/31-jar-identity-negative-control.log (96 passed, 2 failed). Later round: test commit client:9629a519 replaces the earlier ui ref (that test no longer exists) with one that drives the real start_play, which enters Phase::Installing for a stale pack and takes the direct branch when the marker is fresh; the ref is red in receipts/XClientBlocks/36-play-negative-control.log with the readiness hunk reverted (95 passed, 3 failed: the marker readiness, the jar identity and the play refs). a_failed_pack_swap_keeps_the_previous_pack is 'ok' in both 27 and 36, so it still has no control of its own."
+
+[[bug]]
+id = "STORAGE-L3-SEALED-CORNER-CHEST"
+title = "The level-three storage barrel is placed over the corner chest, sealing it: the chest is unreachable from the entrance and an adopted village stops producing stock and building"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Owner report (issue 1, storage): a settlement with a level-three storage never used its container - the L3 barrel blueprint (crates/mc-core/assets/blueprints/storage.json) sits on the cell of the level-one corner chest, so the chest is walled in with no route from the door. Found by Stage2Edge while tracing the autonomy run that stopped producing stock (wt/Stage2Edge, fixes 50f1e9a0e + 90e282cec)."
+regression = ["cargo:mc-core:settlements::blueprints::tests::every_storage_container_is_reachable_from_the_entrance", "cargo:mc-core:villager::building_autonomy_tests::adopted_village_with_resident_shears_produces_stock_and_builds"]
+failing_first = "reported"
+fix_commit = "patch:cc57c08cd8ee096658ff998a85cb5dadfd3ee6e9d53e72c2fcfe38f430fed1d3"
+repro_check = "candidate: receipt patch docs/bugs/fix-patches/STORAGE-L3-SEALED-CORNER-CHEST.patch (patch:cc57c08cd8ee0966) for fix 50f1e9a0e, digest verified. Controls: the reachability ref is red with it reversed (control3-STORAGE-*.log) and adopted_village_with_resident_shears_produces_stock_and_builds is red, funding budget exceeded at tick 54321 (control2-STORAGE-*.log). The reachability ref and the one-line storage.json change land only with 50f1e9a0e/90e282cec, so on a tree without them the ref has no match and the patch does not reverse yet. gameplay row, repro source: no real-client receipt needed"
+
+[[bug]]
+id = "AUTOCRAFT-DEAD-WORKER"
+title = "An autocraft order whose worker dies is never handed on: the order holds the dead resident and the settlement stops crafting it"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Owner report (issue 1, autocraft): a resident died mid-order and the order stayed bound to it forever. Found by Stage2Edge on the autonomy run; fix b620e3333 (crates/mc-core/src/settlements/production.rs)."
+regression = ["cargo:mc-core:settlements::autocraft::tests::an_order_whose_worker_dies_passes_to_a_free_resident_and_finishes", "cargo:mc-core:settlements::autocraft::tests::resuming_a_held_order_of_a_dead_worker_hands_it_to_a_free_resident"]
+failing_first = "reported"
+fix_commit = "patch:715b0c246d7e17902281663b3b260fd58fb237ef9b9f5501e8f72a0577611fd4"
+repro_check = "candidate: receipt patch docs/bugs/fix-patches/AUTOCRAFT-DEAD-WORKER.patch (patch:715b0c246d7e1790) for fix b620e3333, digest verified and reverse-ok on this tree; control: both refs red with the committed hunk reversed (control4-AUTOCRAFT-*.log). gameplay row, repro source: no real-client receipt needed"
+
+[[bug]]
+id = "EDGE-RECIPE-RELOAD-CATALOG-SENT-TWICE"
+title = "A recipe reload announces the catalog twice, so the client applies the same recipe book update in two consecutive frames"
+area = "gameplay"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "Found by Stage2Edge while auditing the mc-edge datapack reload path: the reload handler sent the recipe catalog once for the datapack event and once more after re-projecting it; the fix is in crates/mc-edge/src/plan/player_changes.rs and the ref lives in crates/mc-edge/src/advancements_tests.rs, declared as advancements::tests."
+regression = ["cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book"]
+failing_first = "reported"
+fix_commit = "patch:8b8ac42337fbd5b2de83f105991a134dc367b2a1bc00aa46908815ce676f2973"
+repro_check = "candidate: receipt patch docs/bugs/fix-patches/EDGE-RECIPE-RELOAD-CATALOG-SENT-TWICE.patch (patch:8b8ac42337fbd5b2) for commit 3c2124c08, digest verified and reverse-ok on this tree; control: the ref is red with it reversed (control4-EDGE-RECIPE-RELOAD-*.log). reliable_recipe_reload_uses_each_event_catalog_and_reuses_wire_projection stays green when reversed, so it does not catch this bug and is not a ref for the row. gameplay row, repro cargo: no real-client receipt needed"
+
+[[bug]]
+id = "COMMAND-CHILD-SENDER-DROPPED"
+title = "A command sent by a player standing in the Nether or the End ran on the root world: /kill did nothing, /summon put the entity in the wrong world and gamerule feedback never reached the edge"
+area = "gameplay"
+repro = "cargo"
+severity = "major"
+status = "open"
+source = "Found while auditing the command path for the XCoreCommands slice (wt/XCoreCommands 349208af8): command_execution_deferred.rs ran the queued job against the job's root context, not job.context.dimension, so every queued command from a child dimension executed on the overworld. XCoreItems' bisect left b2b442ded6 among the candidates for the same symptom (candidate, not proven causal)."
+regression = ["cargo:mc-core:dimensions::tests::data_edits_an_entity_for_senders_in_the_nether_and_the_end", "cargo:mc-core:dimensions::tests::send_command_feedback_set_from_the_nether_is_published_for_the_edge", "cargo:mc-core:dimensions::tests::anchor_respawn_can_stand_on_top_when_surrounded", "cargo:mc-core:dimensions::tests::anchor_respawn_uses_carpet_collision_height"]
+failing_first = "reported"
+fix_commit = "patch:d761f6961cdf70c1ed7c475b70c76ccb48144f2715f6b851163f0dfc79ea4cc9"
+repro_check = "round 2: docs/bugs/fix-patches/COMMAND-CHILD-SENDER-DROPPED.patch (digest verified here). Control control-D.log: reversed -> all four refs red - the gamerule feedback is not shown, the cow is not in the sender's world, and the respawn position reads [8.0,150.0,8.0] and 150.0 instead of [8.5,151.0,8.5] and 150.0625 because the dropped /kill never killed the player. One cause, four refs; the anchor rows' own sleep.rs fix is untouched"
+
+[[bug]]
+id = "CLIENT-HELD-DROP-KEY-DOUBLE-DROP"
+title = "Holding the drop (Q) key across a tick sent two drop packets (press-edge dispatch + held-key tick edge)"
+area = "client"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "A Q press was dispatched twice: the press edge (src/session/actions.rs) inserted 'drop'/'pick' into the session key set and src/player/interaction.rs also dispatched the same action from the held-key tick edge, so a key held across a tick boundary sent two drop packets for one press."
+regression = ["client:krasnokamen-client:session::actions::item_key_tests::one_drop_press_sends_one_drop_and_a_held_key_does_not_repeat", "client:krasnokamen-client:session::actions::item_key_tests::one_pick_press_sends_one_pick_item", "client:krasnokamen-client:session::actions::item_key_tests::repeated_key_down_events_are_extra_clicks"]
+fix_commit = "client:405ff485"
+repro_check = "repeat parity resolved: vanilla KeyboardHandler.keyPress clicks on GLFW_REPEAT (javap offsets 971/1168-1176; F11 is press-only at 275), so a held Q drops one item per OS repeat. client:405ff485 stops the double dispatch and the extension client:648ab844 routes src/session/actions.rs repeats (plus one src/lib.rs hunk) only inside the game screen. Control receipts/XClientControl/negctl/negctl-real-F-repeat.log: with it reverted, three key-downs produce one drop. Candidate: real-client check required - physical repeat delivery is not unit-testable"
 
 [[bug]]
 id = "HC-2"
@@ -1333,8 +1433,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-2"
-regression = ["harness:entities:native-v2-input-menus"]
-
+regression = ["harness:entities:native-v2-input-menus", "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_number_keys_and_offhand_swap_hovered_stack", "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_q_and_control_q_throw_hovered_items", "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_shortcuts_preserve_gameplay_and_ignore_releases", "client:krasnokamen-client:ui::inventory_input_tests::hovered_hotbar_swap_reconciles_server_rejection", "client:krasnokamen-client:ui::inventory_input_tests::inventory_swapping_while_carrying_does_not_change_slots"]
+fix_commit = "client:5ef71d56"
+repro_check = "candidate: the real fix hunks no longer apply to client HEAD (5ef71d56 src/lib.rs + src/ui/state.rs, carriers d5303246/83994480 src/lib.rs all fail `git apply -R --check --recount`, receipts/XClientControl/negctl/hc23-reverse-apply-failures.log), so no real-hunk control; a hand mutation would be synthetic. Refs green; harness:entities:native-v2-input-menus still has to run at stage 3; refs become runnable in the client checkout after the merge"
 [[bug]]
 id = "HC-3"
 title = "Physical gameplay F/middle-click unbound. Client dispatch fixed; server pick handler tracked PICK-SERVER separately."
@@ -1343,8 +1444,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-3"
-regression = ["harness:entities:native-v2-input-pick"]
-
+regression = ["harness:entities:native-v2-input-pick", "client:krasnokamen-client:controls_tests::controls_pick_defaults_and_old_settings_keep_rebindings", "client:krasnokamen-client:controls_tests::controls_native_dispatch_uses_rebound_mouse_button", "client:krasnokamen-client:controls_tests::controls_item_mapping_uses_rebound_key", "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_shortcuts_preserve_gameplay_and_ignore_releases"]
+fix_commit = "client:5ef71d56"
+repro_check = "candidate: same drift as HC-2 (receipts/XClientControl/negctl/hc23-reverse-apply-failures.log); the gameplay early return and pick binding were introduced by d5303246/83994480, no real hunk reverse-applies; the server pick half is PICK-SERVER"
 [[bug]]
 id = "P2"
 title = "Optional server resource-pack offer unconditionally disconnects native join; repaired to decline optional offers."
@@ -1363,8 +1465,9 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P3"
-regression = ["harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn"]
-
+regression = ["harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn", "client:krasnokamen-client:session::packets::same_dimension_respawn_keeps_active_screen_catalog"]
+fix_commit = "client:a35187ca"
+repro_check = "real-hunk control (a35187ca's dimension guard reversed -> catalog cleared); real gate harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn; area=client, candidate"
 [[bug]]
 id = "PICK-SERVER"
 title = "Native middle-click sends play36/37 but original server lacked the authoritative pick handler."
@@ -1386,8 +1489,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-CREATIVE; fixed in client branch wt/LedgerInputB03Client (13f1f28b), gate run with that client"
-regression = ["harness:entities:native-v2-input-menus"]
-
+regression = ["harness:entities:native-v2-input-menus", "client:krasnokamen-client:inventory::tests::creative_player_menu_moves_and_drops_use_set_slot_without_ui_side_state", "client:krasnokamen-client:ui::inventory_input_tests::inventory_native_q_and_control_q_throw_hovered_items", "client:krasnokamen-client:ui::state::drag_tests::shift_with_carried_stack_dispatches_on_release"]
+fix_commit = "client:13f1f28b"
+repro_check = "candidate: only the creative-routing component has a real-hunk control (receipts/XClientControl/negctl/negctl-real-C-creative.log: reverting 13f1f28b sends packet 18 CONTAINER_CLICK instead of 57 SET_CREATIVE_MODE_SLOT); e16a3701 and 5ef71d56 src/ui/state.rs hunks do not apply (negctl/drifted-real-hunks.log) and the carried-stack drawing lives outside that slice's write set"
 [[bug]]
 id = "QA5-SETBLOCK-SAND"
 title = "QAWin5 setblock sand over air remained visually floating on winfix3; authoritative server/client cause not isolated."
@@ -1409,9 +1513,10 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "solaris-client src/session.rs:1165 sets presentation_partial to 0 while server_frozen and src/entities/physical.rs:818-828 (fall_step) leaves the stepped tick as previous->transform at lerp_progress 0. Vanilla 26.3 LevelExtractor.extractVisibleEntities passes !TickRateManager.isEntityFrozen(entity) to DeltaTracker.getGameTimeDeltaPartialTick, which returns 1.0f while frozen (DeltaTracker$Timer). Evidence: native-v2-input-sand receipts on client 13f1f28b, e.g. .analysis/validation/20261111T163719-native-v2-input-sand-2gazssgv falling_after_step presented 106.76314 = previous predicted, predicted 106.60788; receipts/LedgerInputSand/REPORT.md. Received-interpolated mobs are unaffected (their lerp starts on packet receipt)."
-regression = []
+regression = ["client:krasnokamen-client:session::frozen_world_presents_entities_at_their_current_tick"]
 failing_first = "reported"
-
+fix_commit = "client:c6a56f1d"
+repro_check = "real-hunk control red; real gate harness:entities:native-v2-input-sand (whose hold check is HARNESS-SAND-GATE-NO-HOLD-CHECK); area=client, candidate"
 [[bug]]
 id = "HARNESS-SAND-GATE-NO-HOLD-CHECK"
 title = "native-v2-input-sand stays green when the server keeps dropping a falling block in a frozen world: since 760ca0b5 it slows the server to 1 tick/s after the spawn and never compares the server position with the stepped tick count."
@@ -1420,8 +1525,9 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "Negative controls of P1 and QA5-SETBLOCK-SAND (docs/bugs/promotions/P1.json, QA5-SETBLOCK-SAND.json): with the crates/mc-core/src/falling.rs frozen hold reversed, the cargo ref went red and harness:entities:native-v2-input-sand stayed green. tools/harness/backends/native_player_input.py sand() checks client prediction only."
-regression = ["harness:entities:native-v2-input-sand"]
+regression = ["harness:entities:native-v2-input-sand", "python:tools.harness.test_native_player_input:SandGateTests.test_a_server_that_keeps_dropping_a_frozen_block_turns_the_gate_red"]
 failing_first = "reported"
+fix_commit = "e1d92ae4e8ebb7ae1a186b2774bd564fff9dc958"
 
 [[bug]]
 id = "QA5-FAST-CLICK"
@@ -1431,8 +1537,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-FAST-CLICK"
-regression = ["harness:entities:native-v2-input-menus"]
-
+regression = ["harness:entities:native-v2-input-menus", "client:krasnokamen-client:session::actions::fast_click_tests::press_released_before_the_next_tick_still_starts_the_attack"]
+fix_commit = "client:a2d0c81d"
+repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-D-fastclick.log: reversing a2d0c81d's 11 non-test hunks (player.rs, player/interaction.rs, session/actions.rs) turns the ref red (a released press still attacks at the next tick), asserting the symptom; area=client, so candidate: real-client check required. Ref runs in the client checkout after the merge"
 [[bug]]
 id = "QA5-STARTUP-GREY"
 title = "Cold startup still shows a blank grey client window before the title: original winfix3 approximately60s report, latest Windows8796727 approximately25s report. Sane window dimensions do not resolve first-frame latency."
@@ -1442,7 +1549,8 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-STARTUP-GREY"
 regression = []
-
+fix_commit = "client:9102bbd4"
+repro_check = "candidate: the fix keeps the window hidden (wayland ignores set_visible and maps on the first buffer) and presents one frame in `resumed` before set_visible, but window-mapping timing has no unit seam; the 25-60 s grey period must be measured on a real window (stage 3), including the Windows/macOS launchers"
 [[bug]]
 id = "INPUTLOG-AUTHORIZED"
 title = "Consumed AuthorizedBuild records contain only kind/connection, so a fresh placement/dig/use cannot be distinguished from stale queued authorization by sequence/payload/tick. Strict concurrency evidence must block rather than match this ambiguous marker."
@@ -1512,7 +1620,7 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SELECTOR-OPTION-COVE
 regression = ["cargo:mc-core:datapacks::command_tests::selector_predicate_selects_and_negates_datapack_predicates", "cargo:mc-core:datapacks::command_tests::predicates_with_conditions_the_selector_cannot_evaluate_are_refused_at_load", "cargo:mc-data:advancements::tests::selector_predicates_evaluate_scores_time_weather_and_chance_from_facts", "cargo:mc-data:advancements::tests::predicate_support_reports_conditions_that_cannot_be_evaluated", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:57f423038d585e7d4ef178f508013b198add0ee60a4eb6976878f604e53811f0"
 promotion = "docs/bugs/promotions/SELECTOR-PREDICATE-UNSUPPORTED.json"
-
+repro_check = "round 2: the cause was the selector evaluating `predicate=` twice, so the second pass handed the bare entity snapshot to evaluate_predicate and `entity_properties entity:'this'` read event['player'] as null; fixed in command_execution/selectors.rs (predicate_event), duplicate pass removed. Unknown predicates stay a command error, which is vanilla (lang key predicate.unknown). Status untouched"
 [[bug]]
 id = "SELECTOR-DEAD-PLAYERS"
 title = "@a and @s omit retained dead players, so commands directed at players on the death screen incorrectly get no matching target. Shared selector admission also imposes alive-only behavior on other player selectors."
@@ -1635,7 +1743,7 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-PROFILER Fix p
 regression = ["cargo:mc-core:command_debug::tests::profiler_reports_seconds_ticks_and_rate_and_refuses_double_start_and_stop", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:099e67237851fc2045b6895f76198518921e163ac5e0d90525e76149f73d6b3b"
 promotion = "docs/bugs/promotions/DEBUG-PROFILER.json"
-
+repro_check = "round 2 restore: the refs went red again before the test-helper commit 1e0dccd4b, same cause as DEBUG-FUNCTION-TRACE (helper claimed Deferred and sent no refusals). Status untouched: promotion reverses this row's own original fix (patch:099e67237851fc20), not 1e0dccd4b"
 [[bug]]
 id = "DEBUG-FUNCTION-TRACE"
 title = "`/debug function <id>` and function-tag tracing are rejected because debug parsing only accepts Solaris debug give; operators cannot obtain vanilla command/message/result/function traces."
@@ -1647,7 +1755,7 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEBUG-FUNCTION-TRACE
 regression = ["cargo:mc-core:command_debug::tests::function_trace_records_commands_results_messages_errors_and_nested_calls", "cargo:mc-core:command_debug::tests::function_tag_trace_counts_every_function_and_reports_the_multiple_key", "cargo:mc-core:command_debug::tests::function_trace_refuses_unknown_functions_low_permission_and_recursion", "cargo:mc-core:command_debug::tests::function_trace_write_failure_is_reported_not_hidden", "cargo:mc-core:command_debug::tests::function_trace_records_only_what_the_source_is_sent", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:40a6af5157a6fdb37ce21e147f3178511d2897ace09ec46fafd2a03fe92a37b3"
 promotion = "docs/bugs/promotions/DEBUG-FUNCTION-TRACE.json"
-
+repro_check = "round 2 restore: this row's 6 command_debug::tests::* refs went red again before the test-helper commit 1e0dccd4b (they claimed Deferred wrong and sent no refusals). Status is untouched: promotion must reverse this row's own original fix (patch:40a6af5157a6fdb3), never the test commit"
 [[bug]]
 id = "DATAPACK-LIST-LIVE-DISCOVERY"
 title = "After packs are added/removed on disk, a cached-only `/datapack list` cannot immediately discover the repository change without a separate reload. This remains the explicit residual of Main-approved snapshot listing, not an assumed full vanilla list implementation."
@@ -1669,8 +1777,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DAMAGE-COMMAND"
 regression = ["cargo:mc-core:command_damage::tests::damage_command_commits_default_damage_and_reports_actual_rejection", "harness:entities:native-v2-command-score-store"]
-fix_commit = "7fe4905282fca09d7e0a6d133b9db08e7dad5835"
-
+fix_commit = "patch:ff8339d548af2b08289112d15575ac1aeff71dd04da4dfd85585245b9a18c6f5"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> `/damage` is an unknown command again"
 [[bug]]
 id = "HC-4"
 title = "Native app does not enable/consume IME; CJK composition cannot commit in chat/editors. Main sets minor priority."
@@ -1679,8 +1787,9 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-4"
-regression = []
-
+regression = ["client:krasnokamen-client:ui::dialog::tests::ime_preedit_and_cjk_commit_edit_the_focused_field"]
+fix_commit = "client:7cd21ceb"
+repro_check = "candidate: no control - 7cd21ceb bundles the IME plumbing with 17 files of unrelated rc1 work and its non-test hunks no longer apply, and removing only the UiIntent::Composition arm makes the match non-exhaustive (compile error); the ref (added by c53b0d40) asserts the state-layer symptom (preedit in place, CJK commit as text, no composition without field focus); window-level set_ime_allowed is untested by design; area=client, real-client check required"
 [[bug]]
 id = "HC-5"
 title = "Launcher Cancel cannot interrupt headers-stalled HTTP send and may retry20-minute requests."
@@ -1689,8 +1798,9 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-5"
-regression = []
-
+regression = ["client:krasnokamen-launcher:net::tests::stalled_headers_fail_within_the_bounded_request_timeout", "client:krasnokamen-launcher:net::tests::cancel_ends_a_stalled_download"]
+fix_commit = "client:b47fc25a"
+repro_check = "real-hunk control (cancel/retry hunks reversed -> the timeout surfaces instead of the cancel); the launcher crate is krasnokamen-launcher; the 60 s bound itself is pinned only through the client_with_timeout seam, not by a symptom-level ref; area=client, candidate"
 [[bug]]
 id = "SVC-BRIDGE"
 title = "Frozen release lacks requested Fabric SVC bridge; implementation now exists on voice-server. Real Fabric+SVC proximity/group verification remains absent; not vanilla parity."
@@ -1699,9 +1809,9 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SVC-BRIDGE"
-regression = ["cargo:mc-edge:svc_service::tests::svc_group_audio_stays_inside_the_password_protected_group", "harness:screens-voice-qa:svc_proximity_fabric_to_fabric", "harness:screens-voice-qa:svc_group_fabric_to_fabric", "harness:screens-voice-qa:native_outsider_hears_no_group_audio"]
+regression = ["cargo:mc-edge:svc_service::tests::svc_group_audio_stays_inside_the_password_protected_group", "harness:screens-voice-qa:svc_proximity_fabric_to_fabric", "harness:screens-voice-qa:svc_group_fabric_to_fabric", "harness:screens-voice-qa:native_outsider_hears_no_group_audio", "cargo:mc-edge:svc_service::tests::svc_players_and_native_players_hear_each_other_through_the_bridge"]
 fix_commit = "20bfb62a"
-
+repro_check = "candidate: the implementation is in tree (crates/mc-edge/src/svc.rs + svc_service.rs, fix 20bfb62a is an ancestor) and both refs are green, but the real Fabric+SVC gate needs graphical Fabric clients plus the SVC jar and .analysis/SVCCompat/artifacts is absent on this host (receipts/XHarnessInfra/edge-rows-verify.log); stage 3; the screens-voice-qa verdicts svc_proximity_fabric_to_fabric, svc_group_fabric_to_fabric and native_outsider_hears_no_group_audio exist and are unrunnable for the same reason"
 [[bug]]
 id = "NATIVE-FREEZE-CAMERA"
 title = "Under server tick freeze, tp updates observed position while native camera frames remain stale; minecraft_wait_ticks times out30s. Original source returned before player.tick when server_frozen and no step budget."
@@ -1711,7 +1821,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-FREEZE-CAMERA"
 regression = ["harness:entities:native-v2-input-camera", "harness:admin-commands:all"]
-
+fix_commit = "client:c6a56f1d"
+repro_check = "candidate: the tree already ticks the local player while the world is frozen (in-tree test frozen_world_keeps_local_player_and_teleport_camera_live green) and c6a56f1d removes the frozen presentation lag, but no scoped revert exists (stage-0 wip merge); real gate harness:entities:native-v2-input-camera"
 [[bug]]
 id = "SUMMON-AGE"
 title = "Gallery summon with Age:-24000 rejects squid, glow_squid, skeleton_horse and zombie_horse with explicit unsupported-field error; baby fixtures cannot be authored."
@@ -1721,7 +1832,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-AGE"
 regression = ["cargo:mc-core:command_summon::age_tests::summon_age_water_families", "cargo:mc-core:command_summon::age_tests::summon_age_horse_families", "harness:entities:native-v2-summon-age"]
-fix_commit = "69650602b181121c5d47b1cf082d91654505612d"
+fix_commit = "patch:c9e6a2f3467c0e78076dea00299c9d6e1693d5eed3a065324d36e1bb3d60636f"
+repro_check = "round 2: patch digest verified. Control control-A.log: reversed -> red `squid {Age:-1234}` / `skeleton_horse {Age:-1234}`: `Entity does not support summon NBT field Age`"
 
 [[bug]]
 id = "SUMMON-ISBABY"
@@ -1732,7 +1844,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SUMMON-ISBABY"
 regression = ["cargo:mc-core:command_summon::age_tests::summon_is_baby_zombie_family", "cargo:mc-core:command_summon::age_tests::summon_is_baby_piglin_and_zoglin", "harness:entities:native-v2-summon-age"]
-fix_commit = "69650602b181121c5d47b1cf082d91654505612d"
+fix_commit = "patch:1d24d42295a3d1140a14a4109683c73aea94df4fe083c22efe1669c4f4cf88ac"
+repro_check = "round 2: patch digest verified. Control control-C.log: reversed -> red `piglin/zombie {IsBaby:0b}`: `Entity does not support summon NBT field IsBaby`"
 
 [[bug]]
 id = "DEATH-PROTECTION-COMPONENT"
@@ -1743,7 +1856,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-PROTECTION-COMPONENT"
 regression = ["cargo:mc-core:tick_tests::combat_parity_tests::death_protection_component_rescues_any_held_item_without_default_totem_effects", "harness:entities:native-v2-command-score-store"]
-
+fix_commit = "de780c882"
+repro_check = "candidate: de780c882's tick/totem.rs and tick/damage.rs hunks no longer apply (files rewritten later), so no real-hunk control; module 25/25 green, only a synthetic mutation was red and is not counted; real-client gate pending (stage 3)"
 [[bug]]
 id = "SHUTDOWN-ERROR-LOG"
 title = "Ordinary console stop emits ERROR for tick owner, journal owner, checkpoint writer, broadcast closure and server loop, forcing intentional-stop health-oracle exceptions. Checkpoint commit is present; no crash/data-loss inferred."
@@ -1752,15 +1866,9 @@ repro = "manual"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SHUTDOWN-ERROR-LOG"
-regression = [
-  "cargo:mc-core:core::stop_tests::native_writer_explicit_shutdown_logs_info_without_waiting_for_channel_close",
-  "cargo:mc-core:core::stop_tests::native_writer_channel_close_logs_stop_cause",
-  "cargo:mc-core:core::stop_tests::journal_io_failure_still_logs_error_and_never_acknowledges",
-  "cargo:mc-edge:console::tests::console_stop_has_no_error_logs_and_keeps_checkpoint",
-  "harness:entities:native-v2-console-shutdown",
-]
-fix_commit = "3acf6374f2e67c0e413dff79b2c1049edee14904"
-
+regression = ["cargo:mc-core:core::stop_tests::native_writer_explicit_shutdown_logs_info_without_waiting_for_channel_close", "cargo:mc-core:core::stop_tests::native_writer_channel_close_logs_stop_cause", "cargo:mc-core:core::stop_tests::journal_io_failure_still_logs_error_and_never_acknowledges", "cargo:mc-edge:console::tests::console_stop_has_no_error_logs_and_keeps_checkpoint", "harness:entities:native-v2-console-shutdown"]
+fix_commit = "3acf6374"
+repro_check = "candidate: fix 3acf6374's non-test hunks no longer reverse (core.rs moved to core/journal.rs + core/tick_loop.rs by the stage-0 merges; crates/mc-edge/src/bin/solaris-v2.rs no longer exists; `git apply -3 -R --check` conflicts), so no real control; a hand-made level flip would be synthetic. Refs green incl. the 47 s real-core console stop (receipts/XHarnessInfra/edge-rows-verify.log); harness:entities:native-v2-console-shutdown is stage 3; repro=manual, real-client check required"
 [[bug]]
 id = "DEATH-PROTECTION-ACTIONS"
 title = "Valid nonempty custom death_protection consume actions are rejected at admission, so custom protection cannot apply its specified effects when saving the holder. This is the explicit residual of the approved B07 empty/omitted-action subset, not a second count for item-independent protection."
@@ -1783,7 +1891,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-HOT-RELOAD-RECIPES-LOOT"
 regression = ["cargo:mc-core:datapacks::command_tests::enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clients", "cargo:mc-core:datapacks::command_tests::a_reload_with_an_unusable_recipe_keeps_the_old_registry_and_selection", "cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book", "harness:datapack-reload:native-datapack-reload", "cargo:mc-core:datapacks::command_tests::a_new_pack_that_cannot_load_is_skipped_at_start_and_the_error_names_pack_and_file", "cargo:mc-core:datapacks::command_tests::a_pack_the_live_reload_refused_does_not_stop_the_next_start", "cargo:mc-core:datapacks::command_tests::the_live_refusal_of_a_pack_names_the_pack_and_the_file", "cargo:mc-core:datapacks::command_tests::a_pack_filter_hides_the_files_of_the_packs_below_it", "cargo:mc-core:datapacks::command_tests::a_malformed_pack_filter_is_refused_naming_the_pack", "cargo:mc-core:datapacks::command_tests::a_pack_command_while_another_is_still_compiling_says_so_instead_of_misreporting_the_selection"]
-
+fix_commit = "7875d3193"
+repro_check = "candidate: 7875d3193's datapacks.rs reverse conflicts in four blocks after b24f0ce35 and the per-entry scan follow-ups (83d0928e9, 554ba43f1, fd757e004), so no real-hunk control; the refs need test helper df2766ffb from wt/XCoreCommands to be green (12 such failures on base, 3 remaining with the peer fix, none a row ref); receipts/XCoreItems; real-client gate pending (stage 3)"
 [[bug]]
 id = "DATAPACK-WORLDGEN-ZIP"
 title = "ZIP datapacks and worldgen/dimension resources are rejected, preventing valid archive/world-generation packs from loading. They remain explicit gaps rather than hidden under functions/tags-only enable/disable support."
@@ -1817,7 +1926,7 @@ source = "/run/media/kaiserroman/games/solaris-work/receipts/BreakJoinRows/FINDI
 regression = ["cargo:mc-edge:server::view_distance_tests::list_obeys_the_send_command_feedback_rule", "harness:chat-visibility:native-chat-visibility", "cargo:mc-core:dimensions::tests::send_command_feedback_set_from_the_nether_is_published_for_the_edge"]
 fix_commit = "patch:0eb05a69067379a145703ad813222c14d28930a0dde1529bb37252b395d7116d"
 promotion = "docs/bugs/promotions/COMMAND-FEEDBACK-LIST-IGNORES-GAMERULE.json"
-
+repro_check = "round 2: green with the child-sender routing fix and no test edit; this row's own fix (patch:0eb05a69) is untouched and its status stays fixed"
 [[bug]]
 id = "DATAPACK-CREATE"
 title = "`/datapack create <id> <description>` always falls through to unsupported syntax, preventing creation of the vanilla empty directory pack from the command interface."
@@ -1851,6 +1960,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-LIST-HOVER Fix patch: reversing it makes the list print plain pack names instead of hover chat links."
 regression = ["cargo:mc-core:datapacks::command_tests::list_entries_are_chat_links_with_title_and_description_hover"]
 fix_commit = "patch:61916b68f2759fa892f3eedc6158c06aa19d47274e877ab607e220a850d0593a"
+repro_check = "round 2: patch docs/bugs/fix-patches/DATAPACK-LIST-HOVER.patch (digest verified here). Control negative-control.log: reversed -> red `left: [] right: [vanilla, file/alpha]` (plain names, no link or hover). Needs a graphical harness ref before it can be promoted"
 
 [[bug]]
 id = "BEE-FLOWER-TABLE"
@@ -1961,7 +2071,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CLIENT-TEST-SIGSEGV"
 regression = []
-
+repro_check = "not reproducible in stage 2: three full-parallel `cargo test --lib` runs (1330 tests, default thread count) on wt/XClientSession showed no SIGSEGV and the named tests pass in the suite; if it returns, it needs the failing thread's backtrace"
 [[bug]]
 id = "REDSTONE-DAYLIGHT"
 title = "gap_daylight_detector failed bare (thunder step power 15 vs 10)."
@@ -2303,7 +2413,7 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATA-MUTATION-STORAG
 regression = ["cargo:mc-core:command_data::tests::data_storage_modify_reports_results_and_survives_reads", "cargo:mc-core:command_data::tests::data_merge_modify_and_remove_edit_a_mobs_data_and_keep_its_identity", "cargo:mc-core:command_data::tests::data_entity_edits_refuse_players_unsupported_fields_and_position_without_changing_anything", "cargo:mc-core:command_data::tests::data_entity_edit_of_a_villager_keeps_its_profession_level_and_age", "cargo:mc-core:command_data::tests::data_edits_an_item_entitys_stack_delay_age_and_gravity", "cargo:mc-core:command_data::tests::data_modify_and_merge_edit_any_block_entity_through_its_native_owner", "cargo:mc-core:command_data::tests::data_block_edits_are_refused_without_changing_anything", "cargo:mc-core:command_data::tests::data_edits_a_command_block_through_the_same_command_path", "cargo:mc-core:command_data::tests::data_edit_of_a_baby_keeps_its_hitbox_and_growing_up_restores_it", "cargo:mc-core:command_data::tests::data_edit_of_an_experience_orb_changes_its_value_and_count", "cargo:mc-core:command_data::tests::data_edit_keeps_a_zombie_villagers_cure_and_a_name_removal_clears_it", "cargo:mc-core:dimensions::tests::data_merge_entity_edits_an_entity_in_another_loaded_dimension", "cargo:mc-core:dimensions::tests::data_edits_a_block_entity_in_another_loaded_dimension", "cargo:mc-core:dimensions::tests::data_edits_an_entity_for_senders_in_the_nether_and_the_end", "cargo:mc-core:dimensions::tests::data_edit_of_a_villager_keeps_trades_gossip_inventory_and_replays_from_the_wal", "cargo:mc-core:command_data::tests::data_edit_of_one_field_keeps_love_and_persistence_the_entity_already_had", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:f3ee0db6f2ab384acbb5302aa2202e5a64216714f8e89b77ac32c859b97f65cb"
 promotion = "docs/bugs/promotions/DATA-MUTATION-STORAGE.json"
-
+repro_check = "round 2: the ref went green with the child-sender routing fix and no test edit, which confirms XCoreItems' reattribution - the dropped sender was one cause. This row's own fix (patch:f3ee0db6) is untouched and its status stays fixed"
 [[bug]]
 id = "HAPPY-GHAST-HARNESS"
 title = "No harness equipment or four-rider admission; current mount owner has single rider. Species itself exists."
@@ -2327,7 +2437,7 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P5"
 regression = []
-
+repro_check = "candidate: no scoped fix commit to reverse - the stage-0 merge already handles hello/program/tiles in both the dispatch and the far updater, and fe07445f only pins hello->lod/request; area=client, real-client check required"
 [[bug]]
 id = "ISSUE-1-01"
 title = "Villager leg model translucent and malformed"
@@ -2336,8 +2446,9 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
-
+regression = ["harness:scene-shot:issue1-01-villager-leg"]
+fix_commit = "client:97e988d2"
+repro_check = "red/green pair on the fixed scene: client pin 97e988d2^ with the era server be41f092 FAILs at villager-leg-opaque_pixels (receipts/Stage2Client/run-redfix-01.log), client 34a85940c8f7 PASSes (run-green2-01_villager_leg.log); the pixel window over the leg columns comes from the matched green frames. Candidate for stage 3 - ledger promote reruns the registered scenario on its own pinned binaries"
 [[bug]]
 id = "ISSUE-1-02"
 title = "Held tool floats rather than sitting in hand"
@@ -2347,7 +2458,7 @@ severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = []
-
+repro_check = "note only: green PASS on the current client with no discriminating red yet - Mistral round 2 is building fix-hunk-reversal pins"
 [[bug]]
 id = "ISSUE-1-03"
 title = "F3 drawn-index count rises sharply with camera direction; verify it stays bounded rather than accumulating"
@@ -2357,7 +2468,7 @@ severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = []
-
+repro_check = "note only: green PASS on the current client with no discriminating red yet - the scene must move from key.keyboard.f3 to toggle_debug_overlay + assert_render_bounded before it can discriminate; Mistral round 2 owns the scene"
 [[bug]]
 id = "ISSUE-1-04"
 title = "Settlement UI absent or inconvenient"
@@ -2555,8 +2666,8 @@ regression = [
   "harness:civilization-seed-qa:births",
 ]
 failing_first = "reported"
-fix_commit = "patch:80e8f4617387098f399868a65a28cb7f66b59f839009cec78604dedcc443b407"
-
+fix_commit = "patch:5f50f42f18f1a2f1a25b548f65759cf1d06484459099cd71e40c0eceb09db8a1"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME.patch (patch:5f50f42f18f1a2f1), reverse-ok; replaces the earlier patch:80e8f461; control: four refs red (control-autolayout.log)"
 [[bug]]
 id = "DROWNED-IGNORE-VILLAGERS"
 title = "A drowned never targets villagers or other residents, though vanilla Drowned (a Zombie) adds a NearestAttackableTargetGoal on AbstractVillager"
@@ -2589,7 +2700,8 @@ regression = [
     "harness:buildings-qa:perimeter.enclosed",
 ]
 failing_first = "not recorded"
-
+fix_commit = "patch:fba7b70bec58aef790363834237d768a0e4d1e248979a3ba807b0d002e4a230b"
+repro_check = "round-final (Stage2Edge 90e282cec): receipt patch docs/bugs/fix-patches/ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL.patch (patch:fba7b70bec58aef7), reverse-ok on this tree. Control: with it reversed the four fortification refs are red (control2-ISSUE-1-17-NO-PERIMETER-*.log). The layout refs (street_grid_reserves_roads_verges_lots_and_an_open_plaza, perimeter_closes_the_square_wall_line_with_a_gatehouse_on_each_road) go red with the follow-up patch docs/bugs/fix-patches/ISSUE-1-17-PERIMETER-WALL-ON-LOT-COLUMN.patch (patch:e3309c0aa2c4d7dd, three fortification refs and building_autonomy adopted_village too); that patch does not reverse on a tree that already has b61e3ac31 (wall on the outer verge, L=30 per CivSimDesignE S1/P2), which supersedes it - so the layout refs' red must be shown by reverting b61e3ac31 there. gameplay row, repro source: candidate promotion needs no real-client receipt"
 [[bug]]
 id = "ISSUE-1-09-BUILDERS-CANNOT-BUILD-GATES-OR-MOST-WORKSHOPS"
 title = "Builders can build only ten blueprint kinds: no gate, no armorer, butcher, cartographer, cleric, fisherman, fletcher, leatherworker, librarian, toolsmith or weaponsmith, and walls, towers and barracks stop at level 2"
@@ -2598,10 +2710,10 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "Owner expectation (issue 1, ISSUE-1-09): build separate buildings (walls, production, military, fortification) and upgrade them. docs/settlements/construction.md#blueprint-files: the embedded catalog is house 1-3; storage, farm, mason, lumber_camp, mine, barracks, wall and watch_tower 1-2; shepherd 1 (crates/mc-core/assets/blueprints/*.json, read 2026-11-12: kinds barracks, farmer, house, lumber_camp, builder, mine, shepherd, storage, wall, tower). Player-built gates and every workshop kind can be certified and upgraded to level 3 (`settlement building certify|upgrade`, docs/settlements/construction.md#certification-commands), so the gap is Builder-built coverage only. Remaining wish: blueprints for gate and the other workshop kinds, and level 3 where the certificate allows it"
-regression = ["harness:buildings-qa:gate.L1_built", "harness:buildings-qa:gate.L2_upgrade", "harness:buildings-qa:gate.L3_upgrade", "harness:buildings-qa:wall.L3_upgrade", "harness:buildings-qa:watch_tower.L3_upgrade", "harness:buildings-qa:barracks.L3_upgrade", "harness:buildings-qa:fisherman.L1_built", "harness:buildings-qa:fisherman.L2_upgrade", "harness:buildings-qa:armorer.L1_built", "harness:buildings-qa:armorer.L2_upgrade", "harness:buildings-qa:butcher.L1_built", "harness:buildings-qa:butcher.L2_upgrade", "harness:buildings-qa:cartographer.L1_built", "harness:buildings-qa:cartographer.L2_upgrade", "harness:buildings-qa:cleric.L1_built", "harness:buildings-qa:cleric.L2_upgrade", "harness:buildings-qa:fletcher.L1_built", "harness:buildings-qa:fletcher.L2_upgrade", "harness:buildings-qa:leatherworker.L1_built", "harness:buildings-qa:leatherworker.L2_upgrade", "harness:buildings-qa:librarian.L1_built", "harness:buildings-qa:librarian.L2_upgrade", "harness:buildings-qa:toolsmith.L1_built", "harness:buildings-qa:toolsmith.L2_upgrade", "harness:buildings-qa:weaponsmith.L1_built", "harness:buildings-qa:weaponsmith.L2_upgrade"]
+regression = ["harness:buildings-qa:gate.L1_built", "harness:buildings-qa:gate.L2_upgrade", "harness:buildings-qa:gate.L3_upgrade", "harness:buildings-qa:wall.L3_upgrade", "harness:buildings-qa:watch_tower.L3_upgrade", "harness:buildings-qa:barracks.L3_upgrade", "harness:buildings-qa:fisherman.L1_built", "harness:buildings-qa:fisherman.L2_upgrade", "harness:buildings-qa:armorer.L1_built", "harness:buildings-qa:armorer.L2_upgrade", "harness:buildings-qa:butcher.L1_built", "harness:buildings-qa:butcher.L2_upgrade", "harness:buildings-qa:cartographer.L1_built", "harness:buildings-qa:cartographer.L2_upgrade", "harness:buildings-qa:cleric.L1_built", "harness:buildings-qa:cleric.L2_upgrade", "harness:buildings-qa:fletcher.L1_built", "harness:buildings-qa:fletcher.L2_upgrade", "harness:buildings-qa:leatherworker.L1_built", "harness:buildings-qa:leatherworker.L2_upgrade", "harness:buildings-qa:librarian.L1_built", "harness:buildings-qa:librarian.L2_upgrade", "harness:buildings-qa:toolsmith.L1_built", "harness:buildings-qa:toolsmith.L2_upgrade", "harness:buildings-qa:weaponsmith.L1_built", "harness:buildings-qa:weaponsmith.L2_upgrade", "cargo:mc-core:settlements::blueprints::tests::gate_and_fortifications_reach_level_three", "cargo:mc-core:settlements::blueprints::tests::workshops_place_their_job_site_and_gain_a_slot_per_level", "cargo:mc-core:settlements::construction::tests::gate_level_one_is_built_cell_for_cell_in_every_rotation", "cargo:mc-core:villager::building_worksite_tests::wall_tower_and_gate_certify_with_intentionally_zero_worker_slots", "cargo:mc-core:villager::building_worksite_tests::armorer", "cargo:mc-core:villager::building_worksite_tests::butcher", "cargo:mc-core:villager::building_worksite_tests::cartographer", "cargo:mc-core:villager::building_worksite_tests::cleric", "cargo:mc-core:villager::building_worksite_tests::fisherman", "cargo:mc-core:villager::building_worksite_tests::fletcher", "cargo:mc-core:villager::building_worksite_tests::leatherworker", "cargo:mc-core:villager::building_worksite_tests::librarian", "cargo:mc-core:villager::building_worksite_tests::toolsmith", "cargo:mc-core:villager::building_worksite_tests::weaponsmith"]
 failing_first = "not recorded"
-fix_commit = "patch:c08470d55c904b23b2efd8f2e9a3a4bfb28b3e93a19feef1dd46de63e8b972a7"
-
+fix_commit = "patch:77894540b1f7388764af612585aaf7bfa95f8e971c028d76cd68d34b48f80a65"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/ISSUE-1-09-BUILDERS-CANNOT-BUILD-GATES-OR-MOST-WORKSHOPS.patch (patch:77894540b1f73887), reverse-ok on this tree; the test-only layout::front visibility hunk was removed because reversing it broke the build with E0603. Control: the 14 cargo refs and the buildings-qa harness refs are red with it reversed (control3-ISSUE-1-09-*.log)"
 [[bug]]
 id = "SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN"
 title = "A player breaking an already-placed cell of an active Builder project leaves a hole that is never re-placed: House L1 stays active at 250/250 and holds the settlement's project slot"
@@ -2612,8 +2724,8 @@ status = "open"
 source = "Issue1Breaker (qa-breaker) on main fa637b84, receipts/Issue1Breaker/REPORT.md 'Actual player site interference' (1/1): on a copy of an active House L1 world at [122,69,-5], a survival-mode real native client broke the already-placed corner [122,70,-5] (oak_log[axis=y]) at 88/250; the block read air, work continued to 160/250 with the corner still air, and after a copied-world restart the project stayed active at 250/250 with the cell air across eight 200-tick observations (wt/Issue1Breaker/.analysis/validation/20261113T075452-scene-shot-o4m1dbb1, 20261113T075614-scene-shot-ca1o3e5m; retained under receipts/Issue1Breaker retained/player-site-break and retained/player-break-followup). docs/settlements/construction.md#builders-and-supplies says already placed cells are not re-planned after a foreign edit, so the project can never pass its geometric certificate and blocks further construction. A foreign SOLID block in a placed cell (operator diamond at the same corner) still certifies, which that rule documents and is not this defect. Expected: Builders re-place an authored cell that a foreign edit emptied, and the project finishes."
 regression = ["cargo:mc-core:settlements::construction::fencing_tests::a_placed_cell_broken_to_air_is_replaced_before_the_house_certifies", "cargo:mc-core:settlements::construction::fencing_tests::a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_project", "cargo:mc-core:settlements::construction::fencing_tests::a_second_break_during_the_repair_requeues_the_repair_stage", "harness:buildings-qa:house.broken_cell_replaced"]
 failing_first = "reported"
-fix_commit = "patch:f6806e454c75f19c259f2d090541005a0cfc33aeb62ab0f7e5e4a96fab00c1c8"
-
+fix_commit = "patch:813e2a17b3a70583a4622f7ab73916c143053dd5f56812edd65c14c2bea6cdb3"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN.patch (patch:813e2a17b3a70583), reverse-ok; replaces the earlier patch:f6806e45; control: the four fencing refs are red (control-batch1.log)"
 [[bug]]
 id = "ISSUE-1-18"
 title = "Sheep and goat models wrong"
@@ -2622,8 +2734,9 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
-
+regression = ["harness:scene-shot:issue1-18-sheep-goat"]
+fix_commit = "client:b7c48e1c"
+repro_check = "red/green pair: client pin b7c48e1c^ FAILs goat_horns_upright (receipts/Stage2Client/run-redfix-18_sheep_goat.log), the fixed client PASSes (run-green2-18_sheep_goat.log). Candidate for stage 3"
 [[bug]]
 id = "ISSUE-1-19"
 title = "Spider and zombie movement animation and speed wrong"
@@ -2632,7 +2745,9 @@ repro = "manual"
 severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = ["cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval", "cargo:mc-core:hostile_tests::zombie_chase_publishes_and_clears_aggressive_pose_metadata", "cargo:mc-core:journal_touched::tests::zombie_chase_pose_is_journaled_and_repaired_after_recovery"]
+regression = ["cargo:mc-core:hostile_tests::zombie_chase_speed_matches_java_263_moving_interval", "cargo:mc-core:hostile_tests::zombie_chase_publishes_and_clears_aggressive_pose_metadata", "cargo:mc-core:journal_touched::tests::zombie_chase_pose_is_journaled_and_repaired_after_recovery", "harness:scene-shot:issue1-19-hostile-motion"]
+fix_commit = "client:9a645aa9"
+repro_check = "scene authored by Stage2Client (receipts/Stage2Client/scenes/issue1_19_spider_zombie_motion_scene.json); red on client pin 55d8b2c6 (receipts/Stage2Client/run-red-19_spider_zombie_motion.log), green on 9a645aa9 + server b620e3333; fix_commit provisional per Main, Stage2Client is identifying the real client fix commit; the gate run itself happens in stage 3; note only: the scene-shot pair is flaky on AI wander (the specimen can walk out of the measured window between frames), so red/green is not yet discriminating; Stage2Client round 3 owns the stabilisation"
 failing_first = "reported"
 
 [[bug]]
@@ -2657,7 +2772,7 @@ severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = []
-
+repro_check = "note only: green PASS on the current client with no discriminating red yet - Mistral round 2 is building fix-hunk-reversal pins"
 [[bug]]
 id = "ISSUE-1-22"
 title = "Recursive automatic crafting missing"
@@ -2680,7 +2795,7 @@ severity = "major"
 status = "open"
 source = "https://github.com/kaiserproger/solaris/issues/1"
 regression = []
-
+repro_check = "note only: green PASS on the current client with no discriminating red yet - the two pixel windows (emerald green, redstone red) land with Mistral round 2"
 [[bug]]
 id = "ISSUE-1-24"
 title = "Settlement UI fails to open by bell"
@@ -2828,8 +2943,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/rnd-20261102/todo-active/TodoIssueSonnet/REPORT.md"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::animation_tests::animation_chicken_wings_rest_on_received_ground_and_beat_in_midair"]
+repro_check = "candidate: in-tree code and a passing unit ref, no control (the code lives in the shared animation state, Area C); real-client check required"
 [[bug]]
 id = "MODEL-USE-POSE"
 title = "Third-person item-use poses collapse to one"
@@ -2945,8 +3060,8 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-MATRIX-CONSOLE-FENCE-CHAT"
-regression = []
-repro_check = "matrix-random random:4 with two protocol clients; observe exact console command completion and received chat for MatrixConsoleFence"
+regression = ["python:tools.harness.matrix_domains.test_commands:DomainContractTests.test_console_acknowledgment_is_never_received_player_chat"]
+repro_check = "matrix-random random:4 with two protocol clients; observe exact console command completion and received chat for MatrixConsoleFence; candidate: the row's fix_commit is a patch hash with no patch file in docs/bugs/fix-patches/ and no committed non-test hunks, so no control from the real fix exists; a hand-made removal of the MatrixConsoleFence filter is synthetic and kept as evidence only; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "reported"
 fix_commit = "patch:df70fb9dc2c94a992826305d4854355aca7352c0289e941e535ba1c69830711c"
 
@@ -2957,9 +3072,9 @@ area = "harness"
 repro = "cargo"
 severity = "minor"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-WINQA-OBSERVATION-TRIGGERS"
+source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-WINQA-OBSERVATION-TRIGGERS Blocked (stage 2): the only artifact is the untracked <work>/winqa-8796727.yaml outside the repo, and the two acceptance actions need the Windows VM under dockur/noVNC (owner hardware): a ground-level observer pose for the falling-sand column (mouse-look over noVNC never framed it and the server has no console block query) and the exact share-dialog trigger (no share/consent UI match in the client sources, so the trigger is a client-repo decision)."
 regression = []
-
+repro_check = "blocked: needs the Windows VM under dockur/noVNC (owner hardware) and the untracked <work>/winqa-8796727.yaml"
 [[bug]]
 id = "TEST-NATIVE-FACTS"
 title = "All 113 stale `scenarios/runs/RunNative/bugs.md` sections belong to `20261024T041330-native-matrix-87e0kytf`. Representative `ac0095c8f169e8bb/client-0/native-client.log:1` says missing block_collision_shapes fact under private XDG home. No action/dupe oracle reached. Latest `fail` misleadingly counts these as executed in matrix status."
@@ -2968,10 +3083,10 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-FACTS"
-regression = []
-repro_check = "native-matrix --only-id tr.dupe.kill9_between_click_and_checkpoint:containers.chest/native_linux/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0 with missing client facts"
+regression = ["python:tools.harness.test_native_matrix:NativeMatrixTests.test_run_classifies_startup_and_oracle_exceptions", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_native_missing_content_is_blocked_not_product_failure", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_receipt_records_exact_status_without_promoting_blocked"]
+repro_check = "negative control receipts/XHarnessGates/neg-native-facts.log (failure_status always fail -> blocked counted as executed); candidate: no exact revert (only 1 of 4 hunks applies); control is fix-lines-only (`failure_status` forced to 'fail'), receipts/XHarnessGates/neg-native-facts.log"
 failing_first = "reported"
-fix_commit = "patch:0c92630f7936cc7558a9ab73a1621ea62e041b333caca738e5ad498ab9afc4b5"
+fix_commit = "11ed1c38a"
 
 [[bug]]
 id = "TEST-NATIVE-IMPORT"
@@ -2981,8 +3096,8 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-IMPORT"
-regression = []
-
+regression = ["python:tools.harness.test_matrix_blocks:BlocksContractTests.test_all_matrix_domains_import_and_health_requires_received_value"]
+repro_check = "candidate: no non-test fix commit exists (`git log -S'def entity_health'` finds only the adding commit b592f8bd9) - the ImportError came from an in-flight merge, never mainline; the control is synthetic (symbol renamed) and reproduces the row's ImportError, receipts/XHarnessGates/neg-native-import.log"
 [[bug]]
 id = "TEST-INVENTORY-FRESHNESS"
 title = "Arrow-consumption probe043124-bc41wx1w preferred old menu1 arrow4 over newer window0 arrow3+bowdamage1."
@@ -2991,10 +3106,10 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-INVENTORY-FRESHNESS"
-regression = []
-repro_check = "python3 -m unittest tools.harness.test_protocol_wire.ProtocolWireTests.test_original_bow_packet_replays_through_wire_and_snapshot"
+regression = ["python:tools.harness.test_protocol_wire:ProtocolWireTests.test_original_bow_packet_replays_through_wire_and_snapshot", "python:tools.harness.test_protocol_wire:ProtocolWireTests.test_newer_window_zero_updates_override_stale_open_menu"]
+repro_check = "python3 -m unittest tools.harness.test_protocol_wire.ProtocolWireTests.test_original_bow_packet_replays_through_wire_and_snapshot; candidate: no control from the real fix - that SHA's wire.py hunks do not reverse on HEAD (apply -R/-C1/-C0/--3way all fail; wire.py rewritten by 0a54b273d/0b5923451), and a hand revert of _cache_player_suffix is synthetic; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "not recorded"
-fix_commit = "patch:ed194baecd9d3c829c5e2c9c725bc0c47aa6a72a2011bac62ddf416120b58fad"
+fix_commit = "ef67d139e"
 
 [[bug]]
 id = "AUDIT-CHAT-VISIBILITY"
@@ -3027,7 +3142,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DOC-CHISEL"
 regression = []
-
+repro_check = "doc-only fix in the plugins repository, branch wt/XInfraPlugins 2ed597a1 (not merged until M3): chisel/README.md now says the bundle is optional (required = false) and documents the probe/hello rule, the vanilla carrier fallback and the required-bundle refusal. Checked against the deployed manifest and the core behaviour in configuration_tests::vanilla_client_completes_configuration_with_only_optional_bundles, loader_hello_before_known_packs_starts_negotiation_of_optional_bundles, mc-protocol with_vanilla_item_models, mc-edge server/connection.rs:353-359 and mc-core carrier_blocks custom_stack. No revertable hunk (a doc), repro=manual so a real-client check would still be required for promotion; the evidence wait for the plugins merge"
 [[bug]]
 id = "CODE-CLIENT-CLIPPY"
 title = "Existing strict lint gate fails: `refactor/SplitClientLoader-client-final-1.log:6580,6701` reports436 library/459 lib-test errors. Combined native strict `artifact://64976:6915,7005` now reports435 library/458 lib-test errors; concrete:ui_hotfix_tests.rs:967 uses an always-true fov assertion. No runtime conclusion inferred."
@@ -3037,7 +3152,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CODE-CLIENT-CLIPPY"
 regression = []
-
+repro_check = "candidate: the gate was re-measured green on client 9a645aa9 (workspace and the root crate explicitly, `cargo clippy --workspace --all-targets -- -D warnings` rc=0 plus `-p krasnokamen-client`, receipts/XHarnessInfra/client-clippy-9a645aa9*.log); the cited always-true assertion is gone (src/ui_hotfix_tests.rs has real assert_eq!/assert_ne! FOV assertions). No fix hunks exist to revert, and the --workspace run never printed 'Checking krasnokamen-client', which is why the root crate was checked explicitly"
 [[bug]]
 id = "TEST-JAVA-CAPABILITIES"
 title = "Exact submitted prediction tokens/ACK sequence and cumulative chat unavailable; raw GUI recent_chat is bounded/newest-first. Final transformer pickup/shield/tick/QA receipt corrections9bdf33d unbuilt/unretested; old47unit passes do not prove a client. Fabric SVC/DH profiles include SolarisLoader, not pure target-mod lanes."
@@ -3046,8 +3161,9 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-JAVA-CAPABILITIES"
-regression = []
-repro_check = "python3 -m unittest tools.harness.test_java_matrix_client.JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts; gradlew :java-agent:test --tests '*VanillaEventTransformerTest' --tests '*ClientStateEventsTest' in the loader worktree. Remaining: exact prediction ACK sequence and pure-target-mod lanes are not exposed; the frozen 604b plugin set cannot run the Java lane (the Java lane postdates the 2026-10-24 freeze and the 604b packages no longer instantiate on any retained server pin), so the real Java run 20261111T122429-java-matrix-m7hk88z8 used plugin set 5efb and blocked on client:respawn."
+regression = ["python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_events_use_applied_system_chat_not_gui_history", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_incomplete_system_chat_journal_fails_closed", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts"]
+repro_check = "python3 -m unittest tools.harness.test_java_matrix_client.JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts; gradlew :java-agent:test --tests '*VanillaEventTransformerTest' --tests '*ClientStateEventsTest' in the loader worktree. Remaining: exact prediction ACK sequence and pure-target-mod lanes are not exposed; the frozen 604b plugin set cannot run the Java lane (the Java lane postdates the 2026-10-24 freeze and the 604b packages no longer instantiate on any retained server pin), so the real Java run 20261111T122429-java-matrix-m7hk88z8 used plugin set 5efb and blocked on client:respawn.; candidate: only the cumulative-chat half (same control, receipts/XHarnessJava/NC-R2-reverse-e99902e71.log); the prediction-token/ACK sequence and the pure-target-mod SVC/DH lanes need tools/harness/java_matrix_client.py plus a transformer-enabled agent jar from solaris-loader; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
+fix_commit = "e99902e71"
 failing_first = "reported"
 
 [[bug]]
@@ -3058,8 +3174,9 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-HEALTH"
-regression = []
-repro_check = "python3 -m unittest tools.harness.test_native_matrix.NativeMatrixTests.test_health_interval_requires_live_complete_below_budget_samples_and_clean_log tools.harness.test_native_matrix.NativeMatrixTests.test_health_checks_before_and_after_restart_and_discloses_gap. Remaining blocker: every restart cell (kill9_wal_replay and clean restart) is blocked, never pass, because the interval from the final /load-metrics read to server stop is unobservable without out-of-process telemetry; non-restart cells run the full always_oracle."
+regression = ["python:tools.harness.test_native_matrix:NativeMatrixTests.test_health_interval_requires_live_complete_below_budget_samples_and_clean_log", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_health_checks_before_and_after_restart_and_discloses_gap", "python:tools.harness.test_native_matrix:NativeMatrixTests.test_health_rejects_frozen_server_despite_client_ticks"]
+repro_check = "fix is ef67d139e (HealthInterval) + fb2674fb7 (restored hunks); negative controls receipts/XHarnessGates/neg-native-health-restart.log and neg-native-health-gap.log; candidate: exact revert of fb2674fb7's native_matrix.py hunks reds the ref but with `AttributeError: no attribute HealthInterval`, not the row symptom (receipts/XHarnessGates/neg-health-restore-revert.log); restart cells stay blocked by design (final metrics read -> server stop unobservable)"
+fix_commit = "ef67d139e"
 failing_first = "reported"
 
 [[bug]]
@@ -3070,8 +3187,9 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-NATIVE-F1"
-regression = ["harness:entities:native-v2-input-camera"]
-
+regression = ["harness:entities:native-v2-input-camera", "client:krasnokamen-client:session::mining_start_tests::f1_key_toggles_hide_hud_through_the_ordinary_key_path"]
+fix_commit = "client:e0f9d563"
+repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-C-f1.log: reversing e0f9d563's two actions.rs hunks (hide_hud arm, normalize_key f1) reproduces the reported symptom 'unsupported ordinary key key.keyboard.f1'; area=harness, repro=cargo, so the evidence is complete. The ref runs in the client checkout (client:<crate>:<test>) and becomes runnable after Main merges wt/XClientControl"
 [[bug]]
 id = "TEST-DIMENSION-BIOME"
 title = "`dimensions_tests.rs:1679` hardcodes nether_wastes although fixture `:260-275` uses the real seed42 NetherGenerator; actual crimson_forest alone does not violate dimension-local spawn tables. Failure retained in `wt/server-fixes/.analysis/codex-logs/server-fixes/after/core-fixer.log:174-179`."
@@ -3102,8 +3220,9 @@ repro = "cargo"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TEST-END-RESTART-OBSERVER"
-regression = []
-repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/scene-slot.sh /run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/krasnokamen --plugins-dir /run/media/kaiserroman/games/solaris-work/wt/LedgerMatrixB15/.analysis/end-plugins --timeout-seconds 240 --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --capability peaceful_end_restart --port 26741 --dashboard-port 26742. Passed live with eight protocol clients (receipt wt/LedgerMatrixB15/.analysis/validation/20261111T123432-protocol-matrix-ty2uwwtr/result.json) on plugin set 060d (current krasnokamen-essentials+krasnokamen-permissions), not the original b52 packages: the preserved b52 packages (scenarios/live-plugins.stale-20261024) no longer instantiate on any retained server pin ('failed to convert function to given type', receipt .analysis/validation/20261111T132836-protocol-matrix-0x8arzc7), and the original server binary 7e7ba958 is not retained."
+regression = ["python:tools.harness.test_end_restart:EndRestartObserverTests.test_restart_moves_observers_beside_the_dragon_and_never_the_dragon", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_dragon_beyond_tracking_range_after_restart_is_a_failure", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_different_dragon_identity_after_recovery_is_a_failure", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_restart_capability_requires_eight_real_joined_clients", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_a_new_error_record_fails_the_capability", "python:tools.harness.test_end_restart:EndRestartObserverTests.test_missing_info_level_writer_shutdown_receipt_fails_the_capability"]
+repro_check = "/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/scene-slot.sh /run/media/kaiserroman/games/solaris-work/solaris/tools/dev/mem-run.sh -m 6G python3 -m tools.harness run protocol-matrix --server-bin /run/media/kaiserroman/games/solaris-work/pins/e4304662b8f4-server-x86_64-unknown-linux-gnu-incr/krasnokamen --plugins-dir /run/media/kaiserroman/games/solaris-work/wt/LedgerMatrixB15/.analysis/end-plugins --timeout-seconds 240 --vanilla-data /run/media/kaiserroman/games/solaris-work/receipts/H08Orbs/protocol-content/26.3 --capability peaceful_end_restart --port 26741 --dashboard-port 26742. Passed live with eight protocol clients (receipt wt/LedgerMatrixB15/.analysis/validation/20261111T123432-protocol-matrix-ty2uwwtr/result.json) on plugin set 060d (current krasnokamen-essentials+krasnokamen-permissions), not the original b52 packages: the preserved b52 packages (scenarios/live-plugins.stale-20261024) no longer instantiate on any retained server pin ('failed to convert function to given type', receipt .analysis/validation/20261111T132836-protocol-matrix-0x8arzc7), and the original server binary 7e7ba958 is not retained.; candidate: receipts/XHarnessJava/NC-R8-reverse-ef67d139e.log reverses the protocol_end_restart.py hunk and the module disappears (a proxy, not the symptom); a symptom-level control would be synthetic and is not counted; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
+fix_commit = "ef67d139e"
 failing_first = "reported"
 
 [[bug]]
@@ -3124,8 +3243,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:73"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::pig_is_the_vanilla_horizontal_torso_with_a_grounded_head_and_short_legs"]
+fix_commit = "client:4092ac53"
+repro_check = "candidate: real revert control (18 rigs reverted -> all six asset regressions red, receipts/XHarnessGates/client-rigs-revert-red.log; green in client-entities-postfmt.log); rig quad-exact vs the vanilla 26.1.2 layer dump (31/31); area=client, real-client check required. Ref runs in the client checkout after Main merges wt/XClientMobs"
 [[bug]]
 id = "MODEL-OPUS-3"
 title = "Animal equipment is never drawn."
@@ -3143,9 +3263,10 @@ area = "client"
 repro = "source"
 severity = "major"
 status = "open"
-source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:87"
-regression = []
-
+source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:87 Stage-2 note: the lid override landed in client:832d7145 (2026-10-30), before this audit, so the audit measured a stale binary; the row text above describes that older state."
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::chest_lid_top_samples_the_outer_plank_net_and_the_underside_the_inner_one", "client:krasnokamen-client:entities::krasnokamen_models::tests::chest_rims_are_single_and_the_latch_straddles_the_lid_seam"]
+fix_commit = "client:832d7145"
+repro_check = "candidate: real revert (three chest rigs restored from 832d7145^) reds the ref at the lid-top UV island (`[0.21875, 0.0, 0.4375, 0.21875] != 0.4375`), receipts/XClientBlocks/09-chest-negative-control.log and 10-negative-control.log; area=client, real-client check required. The row text is stale: the lid override landed in 832d7145 (2026-10-30), before the audit, so the audit measured a stale binary"
 [[bug]]
 id = "MODEL-OPUS-5"
 title = "Slime has no face."
@@ -3154,8 +3275,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:96"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::slime_face_parts_sit_on_the_inner_cube_under_a_separate_shell"]
+fix_commit = "client:4092ac53"
+repro_check = "candidate: same real revert run (red); the shell stays a separate EntityTranslucent rig; area=client, real-client check required"
 [[bug]]
 id = "MODEL-OPUS-6"
 title = "Renderer and layer scale is lost."
@@ -3165,7 +3287,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:100"
 regression = []
-
+repro_check = "parked by Main after stage 2: the shared renderer scale affects about ten model families and needs a design decision from the owner, so no row work here"
 [[bug]]
 id = "MODEL-OPUS-7"
 title = "Creeper has no pre-explosion swell or white flash, and no charged aura."
@@ -3175,7 +3297,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:117"
 regression = []
-
+repro_check = "candidate: in-tree code (entities/creeper.rs swell/swollen/flash + creeper_charge rig) with no control - reverting the swell/flash hunks needs a commit-level revert not attempted; real-client check required"
 [[bug]]
 id = "MODEL-OPUS-8"
 title = "Vanilla keyframe animations are not applied."
@@ -3194,8 +3316,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:129"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::axolotl_gill_fans_and_tail_are_flat_vanilla_planes", "client:krasnokamen-client:entities::krasnokamen_models::tests::post_rc4_reauthored_rigs_keep_their_reference_silhouettes", "client:krasnokamen-client:entities::asset_model_regression_tests::pufferfish_inflation_changes_body_volume_and_exposes_spines"]
+fix_commit = "client:35df28a0"
+repro_check = "candidate: cod and pufferfish_small/medium are exact against 26.3 with a real revert control (receipts/XHarnessGates/client-r5-revert-red.log fails the pufferfish ref at asset_model_regression_tests.rs:352; receipts/XHarnessGates/models263/audit-pufferfish.json). Decision (Main, round 5): salmon, tropical_fish and pufferfish_big keep the authored rigs because the vanilla samples fall outside the 32x32 texture and the shared checker stays unchanged - the earlier 'needs the 26.3 dump and a decision' clause is settled. area=client, candidate: real-client check required"
 [[bug]]
 id = "MODEL-OPUS-10"
 title = "Hoglin ears and tusks, baby bee limbs, guardian spikes and strider bristles or proportions are missing or malformed"
@@ -3204,8 +3327,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:135"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::hoglin_strider_and_bee_keep_their_signature_parts", "client:krasnokamen-client:entities::animation_tests::animation_roleless_named_parts_move_without_erasing_authored_orientation"]
+fix_commit = "client:92dcb25d"
+repro_check = "candidate: same real revert run (red); guardian/elder_guardian blocked on named-part animation; area=client, real-client check required; round 3 adds guardian/elder_guardian (client:92dcb25d) with its real revert control; area=client, candidate: real-client check required"
 [[bug]]
 id = "MODEL-OPUS-11"
 title = "Allay, rabbit, fox, panda, vex and horse family rigs have incorrect silhouettes or sizes"
@@ -3214,8 +3338,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:142"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::rabbit_fox_panda_and_vex_shapes_match_the_vanilla_proportions", "client:krasnokamen-client:entities::asset_model_regression_tests::adult_horse_rig_has_vanilla_equine_proportions", "client:krasnokamen-client:entities::equipment::tests::horse_overlay_joints_follow_authored_horse_pose"]
+fix_commit = "client:92dcb25d"
+repro_check = "candidate: same real revert run (red); allay/horse family blocked on the bone inventory; area=client, real-client check required; round 3 adds the horse family (client:92dcb25d, vanilla bones) with a real revert control (receipts/XHarnessGates/client-r3-*.log, models/audit-r3-after.json); area=client, candidate: real-client check required"
 [[bug]]
 id = "MODEL-OPUS-12"
 title = "Vindicator samples the wrong texture regions."
@@ -3224,8 +3349,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:156"
-regression = ["harness:scene-shot:native-entity-visuals"]
-
+regression = ["harness:scene-shot:native-entity-visuals", "client:krasnokamen-client:entities::krasnokamen_models::tests::post_rc4_reauthored_rigs_keep_their_reference_silhouettes"]
+fix_commit = "client:ee258651"
+repro_check = "round 6 (client:ee258651): the rig is exact against 26.3 (receipts/XHarnessGates/models263/audit-r6-before.json) and the ref is red with the fix reverted - receipts/XHarnessGates/client-r6-revert-red.log (320 passed, 3 failed, this ref among them). candidate: area=client, real-client check required"
 [[bug]]
 id = "MODEL-OPUS-13"
 title = "Banner flags are too short."
@@ -3234,8 +3360,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:159"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::banner_flags_keep_the_full_vanilla_height", "client:krasnokamen-client:entities::render_blocks::village_tests::static_banner_renders_standing_and_wall_with_patterns_and_world_time"]
+fix_commit = "client:43362918"
+repro_check = "candidate: real revert (flag cube restored to 20x39 uv(0,1)) reds the ref on the flag height (`39 is shorter than 40 px`), receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required"
 [[bug]]
 id = "MODEL-OPUS-14"
 title = "Hanging signs have incorrect bar, chains, board UV and wall brackets"
@@ -3245,7 +3372,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:163"
 regression = []
-
+repro_check = "obsolete per evidence: hanging_sign_ceiling/hanging_sign_wall rigs were deleted by 7df8dd6e; 26.3 bars, chains and brackets live in template_hanging_sign_rot_0/template_attached_hanging_sign_rot_0/template_wall_hanging_sign; nothing to revert, no promotion claimed"
 [[bug]]
 id = "MODEL-OPUS-15"
 title = "Elytra and capes are never drawn."
@@ -3254,8 +3381,8 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:170"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::equipment::tests::player_back_uses_wings_asset_profile_priority_gliding_and_cape_exclusion"]
+repro_check = "candidate: in-tree code and a passing unit ref, no control; area=client, real-client check required"
 [[bug]]
 id = "MODEL-OPUS-16"
 title = "Happy ghast baby renders mostly pink"
@@ -3264,8 +3391,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:174"
-regression = ["harness:scene-shot:native-entity-visuals"]
-
+regression = ["harness:scene-shot:native-entity-visuals", "client:krasnokamen-client:entities::krasnokamen_models::tests::post_rc4_reauthored_rigs_keep_their_reference_silhouettes"]
+fix_commit = "client:ee258651"
+repro_check = "round 6 (client:ee258651): the rig is exact against 26.3 (receipts/XHarnessGates/models263/audit-r6-before.json) and the ref is red with the fix reverted - receipts/XHarnessGates/client-r6-revert-red.log (320 passed, 3 failed, this ref among them). candidate: area=client, real-client check required"
 [[bug]]
 id = "MODEL-OPUS-N1"
 title = "Baby chestplates have see-through shoulders. This affects every family and every material, and is confirmed at runtime."
@@ -3284,8 +3412,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:99"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::magma_cube_eyes_stay_on_the_vanilla_one_pixel_layers"]
+fix_commit = "client:4092ac53"
+repro_check = "candidate: same real revert run (red); no split eye bones, 8x8x1x8 layers plus the 4^3 inside cube; area=client, real-client check required"
 [[bug]]
 id = "MODEL-OPUS-N3"
 title = "Player heads have no outer (hat) layer."
@@ -3294,8 +3423,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:107"
-regression = ["harness:scene-shot:native-player-head"]
-
+regression = ["harness:scene-shot:native-player-head", "client:krasnokamen-client:entities::render_blocks::village_tests::listed_player_head_profile_renders_skin_with_hat_layer"]
+fix_commit = "client:e8fe40c2"
+repro_check = "candidate: real revert (player_head.json restored from e8fe40c2^, one cube) reds the 12-face head+hat assertion, receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required; the graphical twin is harness:scene-shot:native-player-head at stage 3"
 [[bug]]
 id = "MODEL-OPUS-N4"
 title = "`camel_husk` is the camel rig and inherits every camel finding."
@@ -3304,8 +3434,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:115"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::animation_tests::camel_back_and_saddle_carry_the_received_standing_and_sitting_seat"]
+fix_commit = "client:ee258651"
+repro_check = "round 6 (client:ee258651): the camel and camel_husk rigs are exact against 26.3 (receipts/XHarnessGates/models263/audit-r6-before.json) and the ref is red with the fix reverted - receipts/XHarnessGates/client-r6-revert-red.log (this ref among the three failures). candidate: area=client, real-client check required"
 [[bug]]
 id = "MODEL-OPUS-N5"
 title = "With boots on, baby leggings are hidden or nearly hidden."
@@ -3344,8 +3475,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:143"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::left_side_mirror_flags_follow_the_26_3_layers", "client:krasnokamen-client:entities::asset_model_regression_tests::species_layer_scales_preserve_the_feet_and_distinguish_related_mobs", "client:krasnokamen-client:entities::presentation::tests::received_pet_sitting_flag_poses_and_restores_adult_and_baby_rigs"]
+repro_check = "round 8 (client:b40b8d63): 19 rigs now carry the exact 26.3 mirror flags and the ref is red with the fix reverted - receipts/XHarnessGates/client-r8-revert-red.log (25 passed, 1 failed). candidate: area=client, real-client check required"
+fix_commit = "client:b40b8d63"
 [[bug]]
 id = "MODEL-OPUS-N9"
 title = "The shulker box base reuses the lid's UV origin."
@@ -3354,8 +3486,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:150"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::shulker_base_uses_lower_shell_and_spiral_floor_not_lid_texels", "client:krasnokamen-client:entities::render_blocks::village_tests::static_shulker_box_renders_and_opening_moves_lid"]
+fix_commit = "client:83994480"
+repro_check = "candidate: real revert (base cube uv restored to its pre-83994480 value [0,0], so base sides sample lid rows) reds both refs, receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required"
 [[bug]]
 id = "MODEL-OPUS-N10"
 title = "Glow squid tentacle texture yaw, cow and mooshroom front-leg alignment, and bed right-leg mirroring differ from vanilla"
@@ -3364,8 +3497,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:156"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::cow_horn_cube_and_humanoid_hat_follow_the_26_3_layers"]
+repro_check = "round 7 (client:6d4540e3, test 23a158e9): the ref is red with the fix reverted - receipts/XHarnessGates/client-r7-revert-red.log (24 passed, 1 failed) - and the row text overstated the deltas: only the cow/mooshroom horn mirror and the skeleton/stray hat cube differed from 26.3. candidate: area=client, real-client check required"
+fix_commit = "client:6d4540e3"
 [[bug]]
 id = "MODEL-PLAYER-HEAD-PROFILE"
 title = "`player_head` items ignore the `profile` component (GUI, hand, ground, frame, worn): always Steve"
@@ -3374,8 +3508,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-20261102.md:24"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::render_blocks::village_tests::player_head_item_uses_listed_profile_skin"]
+fix_commit = "client:4380b088"
+repro_check = "candidate: real revert (the head_skin branch removed from special_item) reds the ref on the baked texture layer (listed 9, unlisted/none Steve 5), receipts/XClientBlocks/10-negative-control.log; the test that commit added had been lost in the stage-0 merges and is restored here; area=client, real-client check required"
 [[bug]]
 id = "MODEL-ELEMENT-EMISSION"
 title = "Element-level `light_emission` is ignored by the model baker: `open_eyeblossom`, `potted_open_eyeblossom`, `firefly_bush` emissive overlays are not full-bright"
@@ -3384,8 +3519,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-20261102.md:25"
-regression = []
-
+regression = ["client:krasnokamen-client:terrain::border_tests::element_emission_stays_on_its_quad_across_chunk_boundaries", "client:krasnokamen-client:protocol::models::tests::element_emission_is_baked_per_element_and_bounded"]
+fix_commit = "client:83994480"
+repro_check = "candidate: real revert (quad.light_with_emission back to raw sampled light) reds the refs on the emitted vertex light, receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required"
 [[bug]]
 id = "MODEL-ITEM-POSE"
 title = "Copper-golem statue item ignores its `pose` (always standing rig); `swap_animation_scale` (7 spear items) unimplemented"
@@ -3405,7 +3541,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:28"
 regression = []
-
+repro_check = "obsolete per evidence: the cited sign_standing/sign_wall rigs were deleted by client:7df8dd6e and 26.3 ships sign bodies as block models (template_sign_rot_0/template_wall_sign carry elements; dump key minecraft:block/oak_sign_rot_0), so there is nothing to revert; no promotion is claimed"
 [[bug]]
 id = "MODEL-BANNER-PLACEMENT"
 title = "A banner placed from an item with `banner_patterns` is unpatterned in the world, and named banners lose their custom names: server writes only `{id,x,y,z}` block-entity defaults without transferring the banner item components."
@@ -3425,9 +3561,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29"
-regression = ["cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components"]
+regression = ["cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components", "client:krasnokamen-client:entities::render_blocks::village_tests::listed_player_head_profile_renders_skin_with_hat_layer", "client:krasnokamen-client:entities::render_blocks::village_tests::static_skulls_render_and_unresolved_player_heads_keep_the_default_skin"]
 failing_first = "not recorded"
-
+fix_commit = "client:8347908e"
+repro_check = "candidate-unit: this branch's own hunk reverted (.ok() -> Some(..?)) makes the unresolved-owner head unrendered again, i.e. the ref asserts the symptom (a visible default-skin head instead of nothing), receipts/XClientBlocks/10-negative-control.log; repro=client, placement frames are stage 3"
 [[bug]]
 id = "MODEL-PLACED-POT-DECORATIONS"
 title = "Decorated pots placed from an item remain visually plain: the native pot renderer (src/entities/render_blocks/surfaces.rs:143-146) reads only the sherds[side] {id: ...} form, but vanilla 26.3 PotDecorations accepts both that form and a bare item-id string, and the server sends the string form. Needs both forms read and a graphical decoration assertion with a one-fix negative control."
@@ -3436,9 +3573,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:29. Client fix 6e541f96 (wt/ClientEntityParity): 26.3 PotDecorations sides are ItemStackTemplates whose CODEC takes a bare item id or an {id} record (javap receipts/ClientEntityParity/javap/potdecorations.txt, itemstacktemplate.txt); block and item renderers share pot_side_texture(). entities::render_blocks::village_tests::static_decorated_pot_uses_received_sherd_textures and entities::presentation::tests::decorated_pot_item_bakes_all_sides_and_received_sherds are red with only the two call-site hunks reverted (receipts/ClientEntityParity/negative-control/pot-reverted.txt). Graphical native-vs-Java pot frames not yet captured."
-regression = ["cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components"]
+regression = ["cargo:mc-core:block_entity_defaults::tests::placed_head_and_pot_preserve_their_item_components", "client:krasnokamen-client:entities::render_blocks::village_tests::static_decorated_pot_uses_received_sherd_textures"]
 failing_first = "reported"
-
+fix_commit = "client:6e541f96"
+repro_check = "candidate-unit: control is the commit's `+` line reversed to the {id}-only read plus a new bare-item-id case in the same ref (a whole-commit reverse no longer applies, the file moved); asserts the sherd texture layer per side, receipts/XClientBlocks/10-negative-control.log; repro=client, the graphical decoration frame is stage 3"
 [[bug]]
 id = "MODEL-DYNAMIC-CONTEXT"
 title = "Clock/compass: item frames, dropped items, shelves, mob/other-player hands never receive the new world context → still frozen"
@@ -3457,8 +3595,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-block-item-completion-20261103.md:56"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::render_blocks::village_tests::every_factory_block_entity_reaches_the_static_scene", "client:krasnokamen-client:entities::render_blocks::village_tests::static_shelf_renders_and_clears_received_item_slots", "client:krasnokamen-client:entities::render_blocks::village_tests::static_brushable_renders_received_item_with_adjacent_light_and_clears", "client:krasnokamen-client:entities::render_blocks::village_tests::structure_box_tracks_viewer_and_received_mode_and_size", "client:krasnokamen-client:entities::render_blocks::village_tests::test_instance_scene_tracks_received_status_box_and_errors"]
+fix_commit = "client:83994480"
+repro_check = "candidate: real revert (scene filter restored to the narrow pre-fix literal list plus the same names excluded from draws_static) reds all eight shelf/brushable/structure/test_instance refs, receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required"
 [[bug]]
 id = "MODEL-ENTITY-FIRE"
 title = "Burning entities have no fire overlay. The server sends the on-fire flag; the client never reads it"
@@ -3468,7 +3607,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:86"
 regression = ["harness:scene-shot:native-entity-visuals"]
-
+repro_check = "parked after stage 2. Round 8 corrects the earlier 'no producer' line: presentation.rs already has a burning-entity block, so this is not a missing producer - the re-check is queued for round 9 and no ref is recorded yet. Renderer owner after stage 2"
 [[bug]]
 id = "MODEL-ENTITY-TNT-FALLING-LIGHTNING"
 title = "TNT, falling blocks and lightning bolts have simulation state but no draw call"
@@ -3488,7 +3627,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:88"
 regression = ["harness:scene-shot:native-entity-visuals"]
-
+repro_check = "parked after stage 2 with vanilla evidence: 26.3 LeashFeatureRenderer needs the holder transform in the emit path (renderer owner)"
 [[bug]]
 id = "MODEL-PANE-ALPHA"
 title = "15 stained-glass-pane GUI icons ≈1.5× too opaque (0.70 vs 0.46); cause unproven"
@@ -3497,8 +3636,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-model-remainder-20261103.md:125"
-regression = []
-
+regression = ["client:krasnokamen-client:ui::state::item_projection_tests::gui_blended_item_draws_only_the_facing_side_after_rotation"]
+fix_commit = "client:83994480"
+repro_check = "control receipts/XClientUi/controls-2.log: 83994480's cull hunk no longer applies as a patch (reflowed by 9a645aa9), so its added lines were removed verbatim (quoted byte-identical in controls/pane-alpha-reverted-lines.txt) -> 12 vs 6 indices, both slab faces blended. The ref asserts the mechanism (one viewer-facing blended quad), a proxy for the audit's 0.70-vs-0.46 pixel value; the pixel check is the stage-3 GUI gate. area=client, candidate"
 [[bug]]
 id = "MODEL-SHADE-OVERRIDE"
 title = "26.3 `shade_direction_override` is not implemented. 190/1,288 blockstates (all cross plants incl. short/tall grass, ferns, flowers, saplings, crops, sugar cane, vines, kelp, seagrass, corals; torches, lanterns, chains, fire, campfire, redstone wire, repeater/comparator, tripwire, cobweb, snow layer 2, flowerbeds, poplar sapling) get directional face shading that vanilla 26.3 does not apply"
@@ -3507,8 +3647,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:84"
-regression = ["harness:scene-shot:native-shade-override"]
-
+regression = ["harness:scene-shot:native-shade-override", "client:krasnokamen-client:terrain::border_tests::shade_direction_override_replaces_the_faces_cardinal_weight", "client:krasnokamen-client:terrain::border_tests::shade_direction_override_wins_over_the_legacy_flat_shade_flag", "client:krasnokamen-client:terrain::border_tests::shade_direction_override_reads_the_dimensions_weights"]
+fix_commit = "client:43362918"
+repro_check = "candidate: real revert (shade expression back to the pre-commit if/else) reds the three refs on the emitted per-face shade, receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required; the graphical twin is harness:scene-shot:native-shade-override at stage 3"
 [[bug]]
 id = "MODEL-ENTITY-263-RIGS"
 title = "4 entity types new in 26.3 have no rig family: `cushion`, `sulfur_cube`, `poplar_boat`, `poplar_chest_boat` → `material()` errs `no activated rig family` → entity is unrendered (invisible)"
@@ -3517,8 +3658,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:85"
-regression = ["harness:scene-shot:native-263-entity-rigs"]
-
+regression = ["harness:scene-shot:native-263-entity-rigs", "client:krasnokamen-client:entities::resources::tests::entity_render_263_poplar_boats_use_boat_hulls_and_poplar_textures", "client:krasnokamen-client:entities::resources::tests::regression_263_cushion_and_painting_metadata", "client:krasnokamen-client:entities::asset_model_regression_tests::boat_and_raft_hulls_match_the_vanilla_26_3_layers"]
+repro_check = "candidate: boats/rafts/chest boats and the water patch are 5/5 exact against 26.3 and pufferfish_small/medium are exact (receipts/XHarnessGates/models263/audit-boats-after.json, audit-pufferfish.json). Round 5 (client:35df28a0) carries a real revert control - receipts/XHarnessGates/client-r5-revert-red.log fails both the boat-layers ref and the pufferfish inflation ref (asset_model_regression_tests.rs:932 and :352). area=client, candidate: real-client check required"
+fix_commit = "client:35df28a0"
 [[bug]]
 id = "MODEL-ITEM-BARS"
 title = "No item bar (durability or bundle fullness) anywhere in the GUI"
@@ -3527,18 +3669,20 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:86"
-regression = ["harness:scene-shot:native-item-bars"]
-
+regression = ["harness:scene-shot:native-item-bars", "client:krasnokamen-client:ui::state::item_bar_tests::every_retained_stack_paint_uses_shared_decoration_in_real_renderer", "client:krasnokamen-client:ui::state::item_bar_tests::damaged_stack_emits_shrinking_green_yellow_red_bar_quads", "client:krasnokamen-client:ui::state::item_bar_tests::bundle_fullness_scales_and_changes_blue_to_red_only_when_full"]
+fix_commit = "client:e8fe40c2"
+repro_check = "real-hunk control receipts/XClientUi/controls-2.log: reversing ebed661d's only non-test hunk gives 16 vs 8 vertices (two bars per stack) in the real append_stack_item path. Bars are e8fe40c2, one-bar-per-stack is ebed661d; area=client, candidate: real-client check required"
 [[bug]]
 id = "MODEL-SHIELD-GUI"
-title = "Shield GUI cell narrow: runtime corroboration of Opus S3 (10×16) on rig bytes = W `273a83141a8f`"
+title = "Shield GUI cell narrow: the in-tree shield plate was 10x16 at uv(0,6), not the vanilla 26.3 ShieldModel (12x22 plate plus a handle), so the item drew a squashed shield"
 area = "client"
 repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:92"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::shield_plate_and_handle_match_the_vanilla_263_model"]
+repro_check = "round 2 (XClientUi f2c3a0f8): the shield rig is now the vanilla 26.3 ShieldModel - the plate addBox(-6,-11,-2,12,22,1) at texOffs(0,0) plus the handle addBox(-1,-3,-1,2,6,6) at texOffs(26,0) - and the ref asserts the authored 12 layer quads against it. The earlier 'blocked on rig content' line is closed: the rig exists. Control receipts/XClientUi/shield-control.log: with f2c3a0f8 reverted the ref is red (17 passed, 1 failed). candidate: area=client, real-client check required - the narrow 16x16 GUI cell is the stage-3 visual gate"
+fix_commit = "client:f2c3a0f8"
 [[bug]]
 id = "COPPER-WEATHERING"
 title = "Weathering did not cover the vanilla copper families"
@@ -3675,8 +3819,8 @@ status = "open"
 source = "Mixed birch/oak lumber-camp construction: 176/183 cells complete, seven birch planks missing while 34 oak logs remain."
 failing_first = "reported"
 regression = ["cargo:mc-core:settlements::construction::tests::admitted_birch_camp_can_finish_from_the_same_mixed_stock"]
-fix_commit = "e2a61744749a879ef3c5a02866ea120310d9e11d"
-
+fix_commit = "patch:1d0f3fb02785d3fa6dae0487338ad0fbbe1da62d66cbdc9cf4c9548f9275487f"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/CIVILIZATION-MIXED-WOOD-FUNDING-STALL.patch (patch:1d0f3fb02785d3fa), non-test hunks only so the helpers the refs call stay; supersedes commit e2a61744 as the reversal target; control red at construction_tests.rs:103 (control2-CIVILIZATION-MIXED-WOOD-*.log)"
 [[bug]]
 id = "VILLAGER-RATION-PATH-STARVATION"
 title = "Repeated spare-bed searches can exhaust the shared path budget and prevent a worker from delivering carried resources."
@@ -3687,8 +3831,8 @@ status = "open"
 source = "Seed-24 civilization worker repeatedly selects a delivery target without an admitted path search."
 failing_first = "reported"
 regression = ["cargo:mc-core:villager::brain::tests::exhausted_spare_bed_search_does_not_starve_a_lumber_delivery"]
-fix_commit = "01767ab8714af7c27792790897f885f40e2e2971"
-
+fix_commit = "patch:37387f76c070961b39fbfa14b80bbfe20f396a158ab8b2f1bc352db000558975"
+repro_check = "round-final: the fix is receipt patch docs/bugs/fix-patches/VILLAGER-RATION-PATH-STARVATION.patch (patch:37387f76c070961b), which supersedes commit 01767ab8 as the reversal target; control red at brain_tests.rs:199 (control2-VILLAGER-RATION-*.log)"
 [[bug]]
 id = "CIVILIZATION-PREMATURE-LOG-DELIVERY"
 title = "An already-funded construction candidate sends the lumberjack home after each harvested log while it still has no legal site."
@@ -3790,8 +3934,8 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/kind-starvation-baseline.log"
 failing_first = "reported"
 regression = ["cargo:mc-core:settlements::construction::site_tests::funded_mine_without_a_site_does_not_starve_a_legal_mason"]
-fix_commit = "898af4725f6491600b88125f0b452fcc3ad39719"
-
+fix_commit = "patch:52f3b7a5c34f1c9772475a9240a6c42e69a0f14a59a0a268e95a3daa9155a793"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/CIVILIZATION-FUNDED-KIND-SITE-STARVATION.patch (patch:52f3b7a5c34f1c97), reverse-ok; supersedes commit 898af472; control red at site_tests.rs:1170 (control2-CIVILIZATION-FUNDED-KIND-*.log)"
 [[bug]]
 id = "CIVILIZATION-INACTIVE-SHEEP-TARGET"
 title = "Shearing targets loaded sheep beyond simulation distance and strands the worker at the inactive boundary."
@@ -3833,8 +3977,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Promote gate 20261104T213104-native-v2-map-frame-waypoint-lhku9sjo (promotion-wire-receipts.json, screenshots/map-distant-held-clone.png)"
-regression = []
-
+regression = ["client:krasnokamen-client:ui::packets::held_map_tests::received_map_decorations_face_the_map_and_use_their_atlas_regions", "client:krasnokamen-client:ui::packets::map_lifecycle_tests::received_map_marker_replacements_remove_old_icons_and_omitted_updates_preserve_them"]
+fix_commit = "client:e1b22a5a"
+repro_check = "real-hunk control receipts/XClientUi/controls-2.log: reversing e1b22a5a's non-test hunk reds held_map_tests at src/ui/packets.rs:1196 ('decoration must face the map viewer'), i.e. the cause (marker winding/UV flip), not the held-map pixels; repro=client, candidate: real-client check required"
 [[bug]]
 id = "NATIVE-FRAMED-MAP"
 title = "The native client never draws a map inside an item frame: src/entities/render_special/item_frame.rs:84-91 draws only the baked item model, and the frame render path has no map state."
@@ -3843,8 +3988,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/MapMarkers (agent finding, client 815c708)"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::render_special::item_frame::map_tests::framed_map_uses_received_identity_replacement_and_removal", "client:krasnokamen-client:entities::render_special::item_frame::map_tests::framed_map_quarter_turns_face_outward_on_all_surfaces"]
+fix_commit = "client:83994480"
+repro_check = "candidate: no control - reversing 83994480's item_frame.rs hunks removes ItemFrameResources.maps, which the regression fixture constructs, so the ref stops compiling instead of going red; area=client, real-client check required"
 [[bug]]
 id = "NATIVE-DEATH-TILT-PIVOT"
 title = "The native client tilts a dying living entity about the model origin on a sqrt(t/20) curve, so the body turns about chest height and the upright legs lift off the ground; vanilla LivingEntityRenderer.setupRotations turns about the feet with min(sqrt((deathTime-1)/20*1.6),1) * flipDegrees (180 for spider, cave spider, silverfish, endermite). The local avatar never tilted because local.rs reset its death tick every tick."
@@ -3853,9 +3999,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/BvDeathTilt (native scene-shot base vs candidate, death-tilt-base-vs-candidate.png; fix death-tilt.patch 642165ec on client wt/ClientBattleIntegration 45ceeaf with entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve and entities::crowd::tests::dying_crowd_instances_tilt_about_the_feet_like_the_cpu_pose)"
-regression = ["harness:scene-shot:native-death-tilt"]
+regression = ["harness:scene-shot:native-death-tilt", "client:krasnokamen-client:entities::animation_tests::death_tilt_turns_about_the_feet_on_the_vanilla_curve"]
 failing_first = "reported"
-
+repro_check = "implemented in the tree (commit 45ceeafb, carried by wt/XClientMobs); the ref is green and the death tilt turns about the feet on the vanilla curve, but no negative control has been run yet, so this row is not promotable before one exists (the tilt landed as 45ceeafb, which is the fix_commit to record once the control is run). candidate: area=client, real-client check required"
 [[bug]]
 id = "NATIVE-POTION-IMPACT-EFFECT"
 title = "The native client ignores splash/lingering potion impact level events (2002/2007): src/session/packets.rs:518 routes LevelEvent to present_block_break and block_effects.rs:10 accepts only 2001, so impact particles and custom colors never appear."
@@ -3864,8 +4010,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "Promote agent finding on client e1b22a5"
-regression = []
-
+regression = ["client:krasnokamen-client:session::packets::map_effect_packet_tests::received_potion_impact_uses_event_rgb_and_effect_family_until_expiry"]
+fix_commit = "client:83994480"
+repro_check = "candidate: no faithful reverse - 83994480's block_effects.rs hunks no longer apply (3-way conflicts after 54b79f73 rewrote the file); area=client, real-client check required"
 [[bug]]
 id = "WORLD-FIRST-START-INTERRUPTED"
 title = "A new world whose first start is stopped before the initial checkpoint can never be opened: Core::open creates native/state.redb before the first global/checkpoint, so the next start is not fresh and fails with 'native global/checkpoint: missing'. The native client's 180 s singleplayer start limit triggers it on slow or busy machines."
@@ -3887,19 +4034,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "WinFixReview (history://WinFixReview) on RC5 hotfix a76e1e80: mc-edge backup.rs ExclusiveLease, mc-core hot_backup.rs:123-127, world_conversion.rs:673-679, import.rs session.lock skip"
-regression = [
-  "cargo:mc-core:hot_backup_tests::copy_reads_the_owned_database_snapshot_not_a_second_path_handle",
-  "cargo:mc-core:hot_backup_tests::backup_of_a_running_core_restores_the_state_at_its_tick",
-  "cargo:mc-core:core::stop_tests::shutdown_releases_database_while_backup_admission_is_paused",
-  "cargo:mc-edge:backup::tests::offline_backup_restore_copies_database_under_real_file_leases",
-  "cargo:mc-edge:backup::tests::hot_backup_of_a_running_core_is_a_verified_restorable_backup",
-  "cargo:mc-world-conversion:path_tests::walked_paths_are_portable_metadata_keys_and_exclude_world_lease",
-  "cargo:mc-world-conversion:path_tests::syncing_staged_nested_files_preserves_every_byte",
-  "cargo:mc-world-conversion:roundtrip_tests::nested_paths_import_export_and_census_under_world_leases",
-  "cargo:mc-world:native::backup_tests::snapshot_reads_lease_holding_handle_without_releasing_database_custody",
-]
+regression = ["cargo:mc-core:hot_backup_tests::copy_reads_the_owned_database_snapshot_not_a_second_path_handle", "cargo:mc-core:hot_backup_tests::backup_of_a_running_core_restores_the_state_at_its_tick", "cargo:mc-core:core::stop_tests::shutdown_releases_database_while_backup_admission_is_paused", "cargo:mc-edge:backup::tests::offline_backup_restore_copies_database_under_real_file_leases", "cargo:mc-edge:backup::tests::hot_backup_of_a_running_core_is_a_verified_restorable_backup", "cargo:mc-world-conversion:path_tests::walked_paths_are_portable_metadata_keys_and_exclude_world_lease", "cargo:mc-world-conversion:path_tests::syncing_staged_nested_files_preserves_every_byte", "cargo:mc-world-conversion:roundtrip_tests::nested_paths_import_export_and_census_under_world_leases", "cargo:mc-world:native::backup_tests::snapshot_reads_lease_holding_handle_without_releasing_database_custody"]
 fix_commit = "c1f387bbcb3c1f09d61c9e04c6d114b1b1e3cf0c"
-
+repro_check = "candidate: all nine refs green (receipts/XHarnessInfra/rows-verify.log; the mc-world one needs the stage2/integration 7c7a5dc16 mc-world E0063 fix), but no real-hunk control exists - c1f387bb's native.rs/lib.rs/core.rs hunks conflict on reverse and the two that reverse (backup.rs, import.rs) change nothing on Linux - and the Windows-only symptom (LockFileEx second-handle sharing violation, error 33) needs a Windows host"
 [[bug]]
 id = "SP-RELAUNCH-LEASE-RACE"
 title = "After Save & Quit, the native client's process can end while its singleplayer server is still checkpointing (old server alive 1.6 s after RC4 client exit, 3.8 s after RC5); relaunching the client and pressing Play on the same world at once was refused once with 'world ... is already leased' (Server exited during startup). Not reproduced on RC4; Play after the refusal was not exercised."
@@ -3921,7 +4058,7 @@ status = "open"
 source = "Main's smoke of the published RC5 Windows zip, 2026-11-07: 4-core Windows 11 VM with software rendering (WARP; the client used about 3000 s CPU and starved the server). Play #1 and #2 timed out; Play #3, with the client minimized, had the server listening after 36 s. Not tried on hardware with a GPU."
 regression = ["harness:singleplayer-regressions:native-sp-slow-machine"]
 failing_first = "reported"
-
+repro_check = "candidate: START_TIMEOUT (180 s) was removed by 6a8d255a but that hunk no longer reverse-applies (file drifted) and no cargo ref observes the absence of a deadline - only harness:singleplayer-regressions:native-sp-slow-machine does; area=client, real-client check required"
 [[bug]]
 id = "SP-PREPARING-TERRAIN-STUCK-SLOW-MACHINE"
 title = "After entering a new singleplayer world on a slow machine, the 'Preparing terrain and light' overlay stayed over the already rendered world for minutes while the server kept running and checkpointing."
@@ -3932,7 +4069,8 @@ status = "open"
 source = "Same RC5 Windows VM smoke as SP-START-TIMEOUT-SLOW-MACHINE (Play #3); the session was stopped without seeing the overlay clear. Software rendering may be the whole cause."
 regression = []
 failing_first = "reported"
-
+fix_commit = "client:803f0e00"
+repro_check = "real-hunk control red (same loading-screen gate as NATIVE-INPLAY-BLOCKED-BY-MISSING-CHUNK); the only check is the real gate harness:singleplayer-regressions:native-sp-slow-machine; area=client, candidate"
 [[bug]]
 id = "CORE-PICKUP-FULL-INVENTORY"
 title = "Every successful pickup republishes the full player inventory instead of the changed active-menu slots"
@@ -4059,9 +4197,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "CoreBlockers: native-v2-corrupt-block-entities fixtures had to stay two chunks from the player; with the fixture in the player's own chunk the client stays at 'session startup: play' while the server keeps ticking (scenario native-v2-corrupt-chunk-near-camera, restart_client_entered_play fails); a refused chunk two chunks away does not block it (play_world_presentation_ready, spawn_meshes_presented)."
-regression = ["cargo:mc-core:chunk_loader::tests::refused_chunk_never_blocks_other_chunks_and_stays_refused"]
-repro_check = "harness:entities:native-v2-corrupt-chunk-near-camera"
-
+regression = ["cargo:mc-core:chunk_loader::tests::refused_chunk_never_blocks_other_chunks_and_stays_refused", "client:krasnokamen-client:session::observation::a_hole_under_the_camera_does_not_hold_the_play_loading_screen"]
+repro_check = "harness:entities:native-v2-corrupt-chunk-near-camera; real-hunk control red (the loading screen stays); real gate harness:entities:native-v2-corrupt-chunk-near-camera (known-red client repro); area=client, candidate"
+fix_commit = "client:803f0e00"
 [[bug]]
 id = "OPAQUE-CUSTODY-LOST-ON-REFUSED-REPLAY"
 title = "WAL recovery replays an OpaqueBlockEntity record into a chunk that is refused at load: set_opaque_block_entity returns before mark_block_entity_dirty (crates/mc-core/src/world.rs:850-852), so the refused chunk shows unsaved=0, the next checkpoint skips it and truncates the WAL, and opaque-only custody of that chunk (campfire items, hive bees, brushable items) is lost."
@@ -4140,8 +4278,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T170731-matrix-random-4x_c80x4/result.json; regression: tools/harness/test_protocol_input_verbs.py EncodingTests.test_break_block_sends_start_then_stop_with_sequence"
-regression = ["harness:matrix-random:protocol-random-break-seed-4"]
-fix_commit = "5cbed1e33e4184fe8858bbdd93383a8e35d515cf"
+regression = ["harness:matrix-random:protocol-random-break-seed-4", "python:tools.harness.test_protocol_input_verbs:EncodingTests.test_break_block_sends_start_then_stop_with_sequence", "python:tools.harness.test_protocol_input_verbs:EncodingTests.test_break_block_phases_send_exact_actions", "python:tools.harness.test_matrix_random:RandomMatrixTests.test_mining_waits_for_exact_ack_including_sequence_zero"]
+fix_commit = "5cbed1e33"
+repro_check = "control receipts/XHarnessJava/NC-R6-reverse-5cbed1e33.log (both non-test files reversed -> 3 red: stop/abort codes and the drop code); live twin in receipts/CheckInvalid3; the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "reported"
 
 [[bug]]
@@ -4152,7 +4291,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validation/20261107T163619-protocol-matrix-3xalnot6/result.json"
-regression = ["harness:protocol-matrix:protocol-mob-attack-cow"]
+regression = ["harness:protocol-matrix:protocol-mob-attack-cow", "python:tools.harness.matrix_domains.test_combat:MobTargetsBaselineTests.test_baseline_is_taken_before_the_mob_can_hit", "python:tools.harness.matrix_domains.test_combat:MobTargetsBaselineTests.test_a_probe_without_any_hit_still_times_out"]
+fix_commit = "1721ec147"
+repro_check = "blocked on a core targeting bug: a summoned zombie ignores a protocol-bot player 8 blocks away on b620e3333 (no health change over 800+ ticks, the zombie walks away) while the core unit test asserts acquisition; routed to Area A. Two harness defects in this row are closed and controlled: 6410b213 (fixture block resolution, receipts/XHarnessJava/NC-R7-reverse-6410b213.log) and the owner fix 1721ec147 (receipts/XHarnessJava/NC-OWN-1721ec147-reverse.log; the live probe then passed with hostile_damage_received 17.0); core cause fixed by Sol stage2/core 63b66bf29 (bogus FleeFire removed from the zombie melee preset; its fix-reverted control reds both targeting regressions, evidence wt/Stage2Core/.analysis/codex-logs/stage2core/zombie-result.json) - no longer blocked on the core bug; repro=client, so the original protocol scenario must pass on the final pin at stage 3"
 failing_first = "reported"
 
 [[bug]]
@@ -4163,9 +4304,10 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/FuzzE2E/analysis/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json"
-regression = []
+regression = ["python:tools.harness.test_matrix_random:RandomMatrixTests.test_seed19_adapter_consumes_received_packet_transitions"]
+repro_check = "control receipts/XHarnessJava/NC-R5-reverse-09c0d0d7.log (matrix_domains/random.py + quirk_parity/player.py reversed -> TimeoutError: received crafting input, the row symptom); that commit's wire.py hunk does not reverse on HEAD (rewritten by ef67d139e); the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "reported"
-fix_commit = "09c0d0d7d0c81a2a5ec25387cc22cea2124ad50e"
+fix_commit = "09c0d0d7d"
 
 [[bug]]
 id = "CHISELED-BOOKSHELF-RESTART-DATA-LOSS"
@@ -4277,9 +4419,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T230450-civilization-seed-qa-o31rlnkb on server pin 107ddb91 (stand fix): after sprint 300 the read-only console read of furnace [134,78,-217] showed one iron ingot in its output slot (server.log line 33); the observer's furnace menu then opened (container 6, 111 transcript observations) with all three furnace slots empty for the whole 15 s wait, so the ingot had left the furnace in between (furnace output is collected by residents, docs/settlements/construction.md); the gate failed after 174 s on 'timed out waiting for furnace_iron_output_visible'. Iron was smelted; the failure is the harness observation race. tools/harness/backends/civilization_seed_qa.py capture_iron_menu now holds the simulation with tick freeze, re-reads the output, captures the menu, then unfreezes; output collected before the hold leaves the milestone to a later snapshot. Negative control: python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/iron-hold-fix-hunks.patch, sha256 db052414) test_furnace_output_collected_before_the_menu_does_not_abort_the_run fails with the gate's TimeoutError on furnace_iron_output_visible (receipts/CivSimSeed24/iron-hold-negative-control.log); fixed tree 79/79 with test_village_autonomy_qa (receipts/CivSimSeed24/iron-hold-tests.log)."
+repro_check = "negative control receipts/XHarnessGates/neg-civ-iron.log (backend hunks reversed -> furnace_iron_output_visible TimeoutError); candidate: exact revert (git apply -R of d7f98cd4, clean) reds the ref with the gate's own symptom string `TimeoutError ... furnace_iron_output_visible`; repro=client, real-client gate pending"
 failing_first = "reported"
-regression = ["harness:civilization-seed-qa:iron_smelted"]
-fix_commit = "d7f98cd44dc46f9fe23845240f776cf7e080b91d"
+regression = ["harness:civilization-seed-qa:iron_smelted", "python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_furnace_output_collected_before_the_menu_does_not_abort_the_run", "python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_iron_capture_opens_furnace_and_requires_visible_output", "python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_iron_collected_by_a_resident_before_the_hold_is_retried_not_fatal"]
+fix_commit = "d7f98cd4"
 
 [[bug]]
 id = "VILLAGER-BABY-WADES-INTO-HEAD-DEEP-WATER"
@@ -4301,9 +4444,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civilization-seed-qa-ufgbv77d (server pin 107ddb91, harness d7f98cd4): the active Road level 1 at [158,71,-257] showed 'Road · level 1 · 0/33' from sprint 45000 to the 96000 limit (51,000 ticks) and held the only project slot, but the oracle signature included the whole status dialog, whose waiting Farm line went 'Dirt 3/30' -> 'Dirt 16/30', so the run ended on the bounded limit instead of the stall. tools/harness/backends/civilization_seed_qa.py stall_signature now keeps only the active project's own dialog line (dialog/body/0) while a project holds the slot; without one the waiting lists still count as progress. Negative control: python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/stall-oracle-fix-hunks.patch, sha256 959a3fb2) test_waiting_project_materials_do_not_hide_a_stalled_active_project fails with 'bounded observation limit reached', the gate's symptom (receipts/CivSimSeed24/stall-oracle-negative-control.log); fixed tree 81/81 with test_village_autonomy_qa (receipts/CivSimSeed24/stall-oracle-tests.log)."
+repro_check = "negative control receipts/XHarnessGates/neg-civ-stall.log (backend hunks reversed -> bounded observation limit reached); candidate: exact revert (git apply -R of 7ed4d504, clean) reds the ref with `bounded observation limit reached`, the row symptom; repro=client, real-client gate pending"
 failing_first = "reported"
-regression = ["harness:civilization-seed-qa:all"]
-fix_commit = "7ed4d504759de26d3c9126d8b40d62a5b25dd389"
+regression = ["harness:civilization-seed-qa:all", "python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_waiting_project_materials_do_not_hide_a_stalled_active_project", "python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_waiting_projects_count_as_progress_without_an_active_project"]
+fix_commit = "7ed4d504"
 
 [[bug]]
 id = "CIV-SEED24-ROAD-CLEAR-STALL"
@@ -4378,12 +4522,12 @@ area = "gameplay"
 repro = "source"
 severity = "blocker"
 status = "fixed"
-source = "Contributing factors: maps/runtime.rs appends distinct retained frame markers without a writer-side limit; maps::checkpoint serializes them without validation; maps::recover rejects more than 256. The read boundary fails closed, but the live admission and save boundaries do not prevent that state. Source finding, not a destructive restart test. M00 batches genuine maps to avoid creating this invalid benchmark fixture; that does not fix the gameplay owner."
+source = "Contributing factors: maps/runtime.rs appends distinct retained frame markers without a writer-side limit; maps::checkpoint serializes them without validation; maps::recover rejected more than 256 (fixed in 78fe5e3a: the read boundary is now uncapped, as vanilla MapItemSavedData.frameMarkers is, and only the writer stays bounded by MAX_FRAME_MARKERS). The pre-fix read boundary failed closed, but the live admission and save boundaries did not prevent that state. Source finding, not a destructive restart test. M00 batches genuine maps to avoid creating this invalid benchmark fixture; that does not fix the gameplay owner."
 regression = ["cargo:mc-core:tick_tests::maps_tests::more_than_256_retained_frame_markers_checkpoint_and_recover"]
 failing_first = "reported"
 fix_commit = "78fe5e3a"
 promotion = "docs/bugs/promotions/MAP-FRAME-MARKER-RECOVERY-LIMIT.json"
-
+repro_check = "real-hunk control: reversing 78fe5e3a's SavedMap::validate hunk re-adds `frame_markers.len() > 256` and the ref fails at recovery with Storage('invalid saved map') on a 300-marker save, i.e. the row's symptom (vanilla-valid save refused); receipts/XCoreItems/frame-markers-negative-control.txt. Repro is source and the ref is a cargo check through the real recovery path, so the row's evidence is complete; the ref was updated by 4c0b0b98c"
 [[bug]]
 id = "NATIVE-BLACK-SKY-GEOMETRY"
 title = "Black stair-stepped geometry covers the hill and sky in a native frame"
@@ -4403,7 +4547,7 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "tools/harness/plan.py _expand_innovation added a required innovation reviewer although AGENTS.md names the review checkpoints and adding-a-feature.md requires only a decision record for an innovation token. Corrected by preserving the decision record without the extra reviewer; two focused assertions failed before the fix, all 42 planner tests and actual dependency/persistence CLI smokes passed after it. Formal ledger promotion remains pending."
-regression = []
+regression = ["python:tools.harness.test_plan:InnovationTests.test_added_dependency_needs_a_decision_record_without_an_extra_reviewer", "python:tools.harness.test_plan:InnovationTests.test_toolchain_and_cargo_config_change_is_innovation"]
 failing_first = "reported"
 fix_commit = "6333b8d8a29d2e02a8f75720cc431275937a781a"
 
@@ -4415,9 +4559,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Seed-24 civilization return to (131,76,-216) refused without movement from (143.865930,75,-203.841109). Received terrain shows air below the center and grass support in the overlapping neighboring footprint. Original planner considers only its center column. Reproduced on original client 75755212b117; the four-cardinal regression failed before the fix. Corrected native pin 75755212b117-345e4b64 passed 20 navigation tests and three original saved-world windowed returns with actual grounded arrival. The correction and grounded_edge_pose_can_enter_a_supported_neighbor_column are in solaris-client commit 895c63f3444e81087913d363c4dfc3feed09a4da, included in client base 5d3868fa. Fresh civilization acceptance remains 0/3; independent acceptance and formal ledger promotion remain pending."
-regression = ["harness:entities:native-v2-lease-navigation"]
+regression = ["harness:entities:native-v2-lease-navigation", "client:krasnokamen-client:minecraft::navigation::planner::tests::grounded_edge_pose_can_enter_a_supported_neighbor_column"]
 failing_first = "reported"
-
+fix_commit = "client:895c63f3"
+repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-B-grounded-edge.log (reversing the planner anchor hunk reds the ref on the grounded edge origin); repro=client, so candidate: real-client check required"
 [[bug]]
 id = "COREPERF-PINS-OWNER-HOST-ONLY"
 title = "Coreperf profiles reject valid release pins on other Linux hosts"
@@ -4426,7 +4571,7 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "tools/coreperf/profiles.py pinned_binary unconditionally required the owner's absolute pin store. The relocated-pin regression failed before correction. Owner-host store and exact manifest path checks remain strict; other hosts verify the original manifest, binary name and SHA-256. Both host-boundary tests and a real release idle CLI lifecycle passed with the owner-host marker absent in a controlled local simulation, not on a second machine. Formal ledger promotion remains pending."
-regression = []
+regression = ["python:tools.coreperf.test_profiles:ProfilesTests.test_remote_host_accepts_relocated_pin_and_checks_manifest_and_hash", "python:tools.coreperf.test_profiles:ProfilesTests.test_incremental_pin_is_refused_but_pre_field_and_full_pins_pass", "python:tools.coreperf.test_profiles:ProfilesTests.test_capacity_ladder_refuses_incremental_or_mismatched_pins_before_any_rung"]
 failing_first = "reported"
 fix_commit = "80191f115bc889838a5620b554b2a84cb7d84cb0"
 
@@ -4438,9 +4583,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Seed-24 bed route (166,75,-282) stayed outside an ordinarily opened door while every one of 24 replans found a path. The 0.22 waypoint tolerance skipped required centering, then the 0.12 movement deadzone suppressed the remaining alignment in the 13/16-block opening. The real-session regression failed before correction; the corrected client passed all 21 navigation tests and three windowed saved-world arrivals with the exact bed head visible. Native pin 75755212b117-3902797f and owned patch receipts/CivSimStallFix/native-nav-waypoint-centering.patch retain the evidence. The correction and open_door_requires_centering_before_the_next_path_segment are in solaris-client commit 895c63f3444e81087913d363c4dfc3feed09a4da, included in client base 5d3868fa. Independent acceptance and formal ledger promotion remain pending; saved routes are not fresh civilization acceptance."
-regression = ["harness:entities:native-v2-lease-navigation"]
+regression = ["harness:entities:native-v2-lease-navigation", "client:krasnokamen-client:minecraft::navigation::tests::open_door_requires_centering_before_the_next_path_segment"]
 failing_first = "reported"
-
+fix_commit = "client:895c63f3"
+repro_check = "candidate: 895c63f3's centering hunk reverse-applies but its companion `self.movement(...)` call was re-wrapped by rustfmt and no longer matches, and reverting the centering hunk alone does not compile (`cannot find value center_before_turn`) - receipts/XClientControl/negctl/drifted-real-hunks.log; repro=client, stage-3 real client anyway"
 [[bug]]
 id = "CIV-HOUSE-CAPTURE-CLOSED-ENTRANCE"
 title = "Civilization house milestone tries to reach an interior bed without opening its received entrance"
@@ -4449,8 +4595,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "The seed-24 fresh scenario built and received the new house and bed but its milestone capture navigated directly through a closed door, aborting the run. The wt/CivSim5 correction uses ordinary entrance approach/use, awaits both open halves, preserves the exact bed raycast and rendered capture, and returns to the observer. Three canonical saved-world closed/open flows passed, with the unprepared closed route and missing/stale entrance controls refusing capture; 72 affected contracts and doclinks passed. Source and commands are retained in receipts/CivSimStallFix/house-harness-capture.json. Full original fresh acceptance remains 0/3; integration and formal ledger promotion remain pending."
-regression = ["harness:civilization-seed-qa:new_house"]
-fix_commit = "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
+regression = ["harness:civilization-seed-qa:new_house", "python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_house_capture_opens_both_halves_before_exact_bed_and_returns_outside", "python:tools.harness.test_civilization_seed_qa:CivilizationEvidenceTests.test_house_capture_refuses_missing_or_changed_entrance_before_capture"]
+fix_commit = "4e6874de"
+repro_check = "negative control receipts/XHarnessGates/neg-civ-house.log (door open/both-half wait removed -> 3 failures); candidate: no exact revert - only 2 of 8 hunks apply, the capture_house hunks conflict; control is fix-lines-only (door lookup/open/both-half wait removed), receipts/XHarnessGates/neg-civ-house.log"
 failing_first = "reported"
 
 [[bug]]
@@ -4461,8 +4608,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Seed-24 original-identity continuation: simulation distance 4 leaves Mine (60,66,-154) inactive, so 118 native staffing attempts make no route call. Changing only the isolated fixture to the core-default distance 6 activates the mine; original resident 12939df5 receives a fully active 269-node native route and the real assignment. View distance remains 4. No allocator policy change is justified; the original fresh civilization gate remains 0/3."
-regression = ["harness:civilization-seed-qa:all"]
-fix_commit = "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
+regression = ["harness:civilization-seed-qa:all", "python:tools.harness.test_village_autonomy_qa:VillageAutonomyQaTests.test_civilization_fixture_raises_only_the_simulation_distance"]
+fix_commit = "4e6874de"
+repro_check = "negative control receipts/XHarnessGates/neg-civ-mine.log (simulation_distance replacement removed -> config stays 4); unit negative control checks only the `simulation_distance = 6` fixture line, not mine activity; the fresh real gate was 0/3, so the row is candidate evidence only - real-client gate pending (stage 3); candidate: no exact revert (the simulation_distance hunk conflicts); the control is fix-lines-only and a proxy - it checks the `simulation_distance = 6` config line, not mine activity, receipts/XHarnessGates/neg-civ-mine.log"
 failing_first = "reported"
 
 [[bug]]
@@ -4495,9 +4643,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "An isolated actual native approach to an unreachable entity ended at 120.018 seconds with controller_lease_revoked and release reason lease_expired, in the same focused instance. The writer action was still active. A SourceNext candidate retains the existing lease fence during admitted activity and starts the unchanged idle TTL after its final response; three native runs return the bounded out-of-reach result with the controller active and held inputs empty. The correction and active_writer_action_survives_idle_expiry_then_returns_to_idle are in solaris-client commit 895c63f3444e81087913d363c4dfc3feed09a4da, included in client base 5d3868fa. Independent coverage is incomplete, and the original fresh civilization run still fails at a later occluded milestone. No global acceptance or ledger promotion."
-regression = ["harness:entities:native-v2-lease-navigation"]
+regression = ["harness:entities:native-v2-lease-navigation", "client:krasnokamen-client:automation::tests::active_writer_action_survives_idle_expiry_then_returns_to_idle"]
 failing_first = "reported"
-
+fix_commit = "client:895c63f3"
+repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-A-idle-expiry.log (reversing 895c63f3's lease_verdict hunk reds the ref: an admitted owner action is not an idle writer); repro=client and area=client, so candidate: real-client check required (native-v2-lease-navigation at stage 3)"
 [[bug]]
 id = "NATIVE-CANCELLED-OWNER-REVOKES-NEW-WRITER"
 title = "A cancelled native action revokes a replacement controller"
@@ -4506,9 +4655,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Independent native WriterLifetimeQA reproduced 2/2 on original client f1 and server befd: cancel session A's active input, then admit session B; B receives controller_lease_revoked while A returns cancelled. The late owner-error path revokes the current lease without checking its admitted identity. The SourceNext correction uses the existing identity-fenced revoke operation; 24 lifecycle tests and three native 4f/befd cases pass. These are not the assigned Core5e pair. Later exact 4f/Core5e attempts keep B's controller active but reveal the separate NATIVE-REPLACEMENT-INPUT-CLEARED symptom in one of three attempts. The correction and late_cancelled_owner_result_cannot_revoke_replacement_writer are in solaris-client commit 895c63f3444e81087913d363c4dfc3feed09a4da, included in client base 5d3868fa. Both rows remain open; no general handoff acceptance or promotion."
-regression = ["harness:entities:native-v2-lease-navigation"]
+regression = ["harness:entities:native-v2-lease-navigation", "client:krasnokamen-client:automation::tests::late_cancelled_owner_result_cannot_revoke_replacement_writer"]
 failing_first = "reported"
-
+fix_commit = "client:895c63f3"
+repro_check = "candidate: 895c63f3's src/automation/tools.rs hunk does not reverse-apply (its pre-image `&& !readonly` was replaced later; --3way also conflicts) - receipts/XClientControl/negctl/drifted-real-hunks.log; a hand mutation reds it but is synthetic and not claimed; repro=client, stage-3 real client"
 [[bug]]
 id = "NATIVE-RIDER-IGNORES-RECEIVED-SEAT"
 title = "The native renderer places a seated resident at its collision-safe body instead of its received seat"
@@ -4528,9 +4678,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Independent graphical damage QA observed rejection of gamerule natural_regeneration, so later health assertions did not have the intended regeneration-off fixture. The owning native P4 fixture now sends natural_health_regeneration false and requires actual command feedback. The corrected full run observes that feedback, but the full graphical gate still fails physical fall readiness and has no acceptance or ledger promotion."
-regression = ["harness:entities:native-v2-p4-damage"]
+regression = ["harness:entities:native-v2-p4-damage", "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_gamerule_fixture_requires_supported_rule_and_ack"]
+repro_check = "negative control receipts/XHarnessGates/neg-damage-regeneration.log (ack wait removed -> both rule subtests red); candidate: no exact revert - 4a74eaca's hunks conflict on HEAD and the current form comes from b0fa3d298 whose hunks also conflict (native_p4.py:233); the control is fix-lines-only (ack wait removed), receipts/XHarnessGates/neg-damage-regeneration.log"
 failing_first = "reported"
-fix_commit = "4a74eacae1ad73e97f267800a4471d8e6af4450b"
+fix_commit = "4a74eaca"
 
 [[bug]]
 id = "NATIVE-REPLACEMENT-INPUT-CLEARED"
@@ -4540,9 +4691,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "WriterLifetimeQA exact client 4f96c55b and Core5e: cancel A's held sneak, then B successfully holds forward; B's controller remains active but the next observation has no held inputs. One failure in three fresh attempts; a confirmation did not reproduce. Both observations are healthy and playable without a screen transition. Session::input(ReleaseAll) clears gameplay input synchronously but UiState::release_all leaves a pending release that the next UI synchronization can replay over B's input. The SourceNext correction consumes that already-applied release: 30 focused regressions pass, the same consumer regression fails with the original release owner in an isolated tree, and native candidate 99f28571/Core5e passes three fresh cancellation cases plus manual preemption. Main read all four receipts; evidence is retained in receipts/NativeControlLease/replacement-input-cleanup.json. The correction and synchronous_release_does_not_clear_replacement_input_on_ui_sync are in solaris-client commit 895c63f3444e81087913d363c4dfc3feed09a4da, included in client base 5d3868fa. Broader acceptance and formal promotion remain pending."
-regression = ["harness:entities:native-v2-lease-navigation"]
+regression = ["harness:entities:native-v2-lease-navigation", "client:krasnokamen-client:session::observation::debug_tests::synchronous_release_does_not_clear_replacement_input_on_ui_sync"]
 failing_first = "reported"
-
+fix_commit = "client:895c63f3"
+repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-A-replacement-input.log (reversing the `ui.release_pending = false;` hunk leaves held inputs [] after the UI sync, the symptom); repro=client, so candidate: real-client check required"
 [[bug]]
 id = "NATIVE-CAMEL-RIDER-OFF-SADDLE"
 title = "The native camel rider appears over the neck instead of the visible saddle"
@@ -4613,7 +4765,7 @@ regression = ["cargo:mc-core:command_summon::tests::experience_orb_summon_preser
 fix_commit = "1bf193720f99740448be7fc290f33b1b97e312b5"
 failing_first = "reported"
 promotion = "docs/bugs/promotions/SUMMON-EXPERIENCE-ORB-NOT-ORB.json"
-
+repro_check = "round 2: the admission regression came back from c9401c3e5 and is fixed again by patch:a0e50c6d63e64f16 (docs/bugs/fix-patches/SUMMON-EXPERIENCE-ORB-NOT-ORB.patch, digest verified); control-D.log - reversed -> red `Unsupported or duplicate orb summon NBT field Count` for {Value:5s,Count:4,Motion:[...]}. Status untouched: the recorded fix_commit stays the one the promotion receipt carries"
 [[bug]]
 id = "HARNESS-JAVA-MATRIX-FOREIGN-PORT-AUTH-ACK"
 title = "java-matrix hardcoded game port 26200 and wait_port accepted any listener, so on the shared host a colliding run's server died with 'Address already in use' while its clients joined the foreign server: the solaris-auth acknowledgement never arrived and the foreign server later kicked the client with 'logged in from another location'."
@@ -4622,9 +4774,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "java-matrix row tr.dupe.destroy_during_interaction:death_respawn.keep_inventory_false/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0@live; deterministic repro: a foreign solaris-v2 on 26200, then the row on the base code. Unit checks: tools.harness.test_harness ReadinessCleanupTests.test_wait_port_does_not_accept_a_foreign_listener (red with the fix reverted), test_wait_port_child_exit_wins_over_foreign_listener, tools.harness.test_java_matrix MatrixTest.test_server_instance_reserves_its_own_ports_instead_of_hardcoding."
-regression = []
+regression = ["python:tools.harness.test_harness:ReadinessCleanupTests.test_wait_port_does_not_accept_a_foreign_listener", "python:tools.harness.test_harness:ReadinessCleanupTests.test_wait_port_child_exit_wins_over_foreign_listener", "python:tools.harness.test_java_matrix:MatrixTest.test_server_instance_leases_both_ports_under_flock"]
+repro_check = "candidate: receipts/XHarnessJava/NC-R1-reverse-ef508fc78.log reverses the runtime.py hunks (readiness must not be a bare accept, the ref fails); the java_matrix.py lease hunks do not reverse on HEAD so the lease ref is candidate-only; client row, real-client gate pending (stage 3); the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "reported"
-fix_commit = "ef508fc7858eb80dffaa4be9ba48f24fff335080"
+fix_commit = "ef508fc78"
 
 [[bug]]
 id = "HARNESS-JAVA-MATRIX-26-1-2-EVENTS-NONE-ADAPTER-TYPEERROR"
@@ -4634,9 +4787,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "JavaAuthAck acceptance: 8/8 runs authenticated, then the adapter TypeError (receipts/JavaAuthAck/report.md)."
-regression = []
+regression = ["python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_events_use_applied_system_chat_not_gui_history", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_incomplete_system_chat_journal_fails_closed", "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts"]
+repro_check = "candidate; receipts/XHarnessJava/NC-R2-reverse-e99902e71.log (both non-test files reversed -> 14 red incl. all three refs: a lossy journal raises MissingCapability instead of handing events=None to the TypeError); client row, real-client gate pending (stage 3); the refs live on wt/XHarnessJava (new test files test_end_restart.py, matrix_domains/test_combat.py, test_screen_audio_graph.py) and become runnable after Main merges that branch"
 failing_first = "reported"
-fix_commit = "e99902e718e0fd710f325169025d67e168ebd901"
+fix_commit = "e99902e71"
 
 [[bug]]
 id = "CLIENT-ZOMBIE-BABY-HELMET-HEIGHT"
@@ -4657,9 +4811,10 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "solaris-client 2edbb590 src/ui/packets.rs read_advancements reads the show-toast flag as `let _show` and discards it; no toast renderer exists anywhere in solaris-client/src. Paired frames: Java receipts/VisualItemsClient/20261111T140325-scene-shot-znvexbrh statue-sitting.png and framed-map.png show 'New Recipe(s) Unlocked!'; the native frames of the same scene (20261111T135619-scene-shot-gmao8eqn) show none (Main, 2026-11-11). Client fix 8deb8fd7 (wt/ClientEntityParity): src/ui/toasts.rs follows 26.3 ToastManager/AdvancementToast/RecipeToast/SystemToast (javap receipts/ClientEntityParity/javap/toast-*.txt; Java HashMap progress order java-oracle/hashmap-order.txt). ui::advancements::tests::completed_show_toast_advancements_raise_stacked_toasts is red with only the wiring hunks reverted (receipts/ClientEntityParity/negative-control/toasts-reverted.txt); ui::toasts::tests cover slots, slide timing, recipe merge and the unsecure-server toast. Graphical native-vs-Java toast frames not yet captured."
-regression = []
+regression = ["client:krasnokamen-client:ui::toasts::tests"]
 failing_first = "reported"
-
+fix_commit = "client:8deb8fd7"
+repro_check = "candidate: no control - the fix adds src/ui/toasts.rs and its paint calls, so reversing the non-test hunks deletes the module the refs live in (compile error, not red); six toasts tests plus the advancements stacking test are green (receipts/XClientUi/tests-green-5.log); area=client, real-client check required"
 [[bug]]
 id = "CLIENT-HELD-TRIDENT-ORIENTATION"
 title = "Shared trident geometry uses the wrong shaft and held-grip frame"
@@ -4679,9 +4834,10 @@ severity = "minor"
 status = "open"
 source = "ClientQ04 matched 26.3 block-special controls on 2026-11-11 first showed the native lip below Java. A raised v1 lip aligns, but clean HUD-free pairs still expose an oversized shoulder, protruding bottom stripe and narrow stepped neck against Java's broad neck. The retained supplied PNG and paired frames under ClientQ04Variants/final-native-r1-clean and final-java-r1 support an independent connected body/cap/neck fit, not copied Java model geometry. Client tests: entities::solaris_models::tests::decorated_pot_body_supports_its_neck_at_the_matched_control_height."
 repro = "client"
-regression = []
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::decorated_pot_body_supports_its_neck_at_the_matched_control_height"]
 failing_first = "reported"
-
+fix_commit = "client:f4bd26d4"
+repro_check = "candidate-unit: real asset revert (decorated_pot_base.json from f4bd26d4^) reds the ref on the body/cap/neck dimensions, receipts/XClientBlocks/10-negative-control.log; repro=client, the native-vs-Java body/neck frames are stage 3"
 [[bug]]
 id = "CLIENT-BELL-AUTHORED-SILHOUETTE"
 title = "Native bell body and rim side textures are vertically inverted"
@@ -4690,9 +4846,10 @@ severity = "minor"
 status = "open"
 source = "ClientQ04 clean HUD-free 26.3 block-special controls on 2026-11-11, native pin 90c4850a282a-844cc39b versus canonical Java: body/rim outlines agree, so the initial silhouette interpretation is withdrawn. The native body dark edge and rim stripe are vertically reversed against Java on the same block/camera. Supplied PNG inspection and emitted wall-UV regression isolate inverted side-net V, not geometry or chat brightness. Raw pairs remain in ClientQ04Variants/final-native-r1-clean and final-java-r1. Client tests: entities::solaris_models::tests::bell_wall_texels_follow_the_clean_control_orientation."
 repro = "client"
-regression = []
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::bell_wall_texels_follow_the_clean_control_orientation"]
 failing_first = "reported"
-
+fix_commit = "client:832d7145"
+repro_check = "not reproducible from the packed assets: bell.json and the baker are unchanged since 832d7145 and the packed bell_body.png is a binary mask with no orientation signal, so the inverted-stripe claim needs the runtime 26.3 texture plus paired native/Java frames (stage 3)"
 [[bug]]
 id = "CLIENT-BED-DEFAULT-TEXTURE-PATH"
 title = "The shipped bed model default texture is absent from the 26.3 resource layout"
@@ -4701,9 +4858,11 @@ severity = "minor"
 status = "open"
 source = "ClientQ04 catalog suite observed every_shipped_model_is_well_formed fail because bed_foot.json declares entity/bed/red.png, absent from the supplied 26.3 resources. The broader suite result was 22 passed and 1 failed; focused coverage passes did not replace it. Client tests: entities::solaris_models::tests::every_shipped_model_is_well_formed, entities::solaris_models::tests::obsolete_bed_entity_texture_rigs_are_not_shipped_in_26_3, entities::asset_model_regression_tests::bed_item_uses_resource_model_halves_without_a_legacy_entity_texture."
 repro = "cargo"
-regression = []
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::every_shipped_model_is_well_formed", "client:krasnokamen-client:entities::krasnokamen_models::tests::obsolete_bed_entity_texture_rigs_are_not_shipped_in_26_3", "client:krasnokamen-client:entities::asset_model_regression_tests::bed_item_uses_resource_model_halves_without_a_legacy_entity_texture"]
 failing_first = "reported"
 
+fix_commit = "client:109ec84a"
+repro_check = "supersedes the earlier 'obsolete' note: round 2 (client:109ec84a) deleted the bed entity rigs - 26.3 has no bed block entity - and the refs now assert the rigs are not shipped and the bed item uses the resource-model halves. Negative control receipts/XClientBlocks/19-bed-negative-control.log. area=client, candidate: real-client check required"
 [[bug]]
 id = "CLIENT-WITHER-SKULL-MATERIAL-SELECTION"
 title = "The native wither skull default material selection remains unresolved"
@@ -4712,9 +4871,10 @@ severity = "major"
 status = "open"
 source = "ClientQ04 production material-selection coverage observed selection/minecraft:wither_skull/adult/default return variant material not yet received/resolved despite an authored wither_skull rig. The actual production selector takes the empty family default texture and has no wither-skull material branch. This is source-fixture evidence, not a claimed runtime crash. Client tests: entities::solaris_models::tests::entity_selection_coverage_wither_skull_material_tracks_received_dangerous_flag."
 repro = "source"
-regression = []
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::entity_selection_coverage_wither_skull_material_tracks_received_dangerous_flag"]
 failing_first = "reported"
-
+fix_commit = "client:f4bd26d4"
+repro_check = "candidate: real revert (the DATA_DANGEROUS material branch removed) reds the ref on the selected texture (wither vs wither_invulnerable), receipts/XClientBlocks/10-negative-control.log; area=client, real-client check required"
 [[bug]]
 id = "CLIENT-BABY-CHICKEN-LAYOUT"
 title = "Baby chickens use an inflated adult-style stack and lose their proper feet"
@@ -4723,9 +4883,9 @@ severity = "minor"
 status = "open"
 source = "ClientQ04 clean 26.3 native/Java cold-baby pair on 2026-11-11, UUID ending 0fa400000011: the native chick is an oversized floating gray stack with no proper visible toes. The shared chicken_baby layout also serves temperate/warm babies. Main explicitly assigned that shared caller; local BabyChickenModel anatomy and the three supplied 16-pixel skin nets ground a body/beak assembly with planar shanks, toes and wings. Raw original pairs remain under ClientQ04Variants/final-native-r1-clean and final-java-r1. Client tests: entities::solaris_models::tests::baby_chicken_body_and_planar_feet_follow_the_26_3_texture_net."
 repro = "client"
-regression = []
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::baby_chicken_body_and_planar_feet_follow_the_26_3_texture_net"]
 failing_first = "reported"
-
+repro_check = "candidate: in-tree code and a passing unit ref, no control; area=client, real-client check required"
 [[bug]]
 id = "CLIENT-CLIMATE-COW-HORNS"
 title = "Native climate cow horns and the cold adult muzzle use the wrong shapes or net"
@@ -4734,9 +4894,9 @@ severity = "minor"
 status = "open"
 source = "ClientQ04 clean same-camera 26.3 climate pairs on 2026-11-11 show long curved cold horns against Java short stubs, thin diagonal warm horns against squared bends, absent native calf stubs and a gray cold muzzle against Java pink nostrils. Exact four UUIDs and front/side frames are retained in expected-subjects.json, native-r1-variant-proof.json and the clean native/Java artifact roots. Supplied cow skin nets independently locate the gray horn, child stub and pink muzzle islands. Client tests: entities::solaris_models::tests::climate_cow_horns_and_cold_muzzle_follow_the_clean_controls."
 repro = "client"
-regression = []
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::climate_cow_horns_and_cold_muzzle_follow_the_clean_controls"]
 failing_first = "reported"
-
+repro_check = "candidate: in-tree code and a passing unit ref, no control; area=client, real-client check required"
 [[bug]]
 id = "CLIENT-WARM-NAUTILUS-ROOT"
 title = "The authored warm zombie nautilus faces backward and its shell floats above its feet"
@@ -4745,9 +4905,9 @@ severity = "minor"
 status = "open"
 source = "ClientQ04 clean 26.3 warm zombie nautilus pair on 2026-11-11, UUID ending 0fa400000014, has actual native received warm selection. Native front shows the green head where Java shows the shell; native side places the head on the opposite end. The short floating shell, roof-only fans and short tentacles also disagree with the paired side outline. Source-facing root, connected ground-reaching shell and fan/tentacle fits are independently authored from both retained views and the supplied PNG, not copied Java model arrays. Client tests: entities::solaris_models::tests::warm_nautilus_shell_and_face_follow_both_matched_views."
 repro = "client"
-regression = []
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::warm_nautilus_shell_and_face_follow_both_matched_views"]
 failing_first = "reported"
-
+repro_check = "candidate: in-tree code and a passing unit ref, no control; area=client, real-client check required"
 [[bug]]
 id = "SUMMON-NBT-FUSE-BLOCKSTATE"
 title = "/summon rejects valid vanilla entity NBT such as tnt {fuse:...} and falling_block {BlockState:{...}} with 'unknown field', so primed TNT and falling blocks cannot be summoned with their vanilla data"
@@ -4757,8 +4917,9 @@ severity = "major"
 status = "open"
 source = "VisualWorldM scene runs 2026-11-11 (receipts/VisualWorldClient/rows.yaml, batch-fx2 scene uojfjhnq/wh9f5dcu): the server refused the fields identically for native and Java clients."
 regression = ["cargo:mc-core:command_summon::tests::summon_tnt_accepts_fuse_and_explosion_power_and_applies_them", "cargo:mc-core:command_summon::tests::summon_falling_block_accepts_block_state_and_time_and_defaults_to_sand", "cargo:mc-core:command_summon::tests::summon_rejects_tnt_and_falling_block_fields_on_wrong_entities_and_bad_values", "harness:entities:native-v2-summon-nbt"]
+repro_check = "round 2: patch digest verified. Control control-C.log: reversed -> red `Unknown or unsupported summon NBT field fuse` / `field BlockState`; the third ref asserts the refusals and stays green, as it should"
 failing_first = "reported"
-fix_commit = "patch:39fc05d0cdfc4522b94663dfc4d755f126328424e1594e136a8e90c002ce147c"
+fix_commit = "patch:5e828ea5732c81cc0c14cabb4347c919e27c2a9391d65cfd358d7ac61ee1fba4"
 
 [[bug]]
 id = "KELP-ITEMS-SPAWN-ON-OCEAN-FLOOR"
@@ -4795,7 +4956,7 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "VisualRigsA runs 20261111T115908-scene-shot-wxnrjw82 and 20261111T120609-scene-shot-uo3_ay_m passed despite missing intended visual subjects; the scenario had no assertion for their presence."
-regression = []
+regression = ["python:tools.harness.test_scene_shot:SceneShotTests.test_require_entities_fails_before_shot_when_summon_did_not_create_subject", "python:tools.harness.test_scene_shot:SceneShotTests.test_require_entities_rejects_empty_or_invalid_type_lists"]
 failing_first = "reported"
 fix_commit = "259649f7c66bc6ec346fbc84d74927a7e2a93b81"
 
@@ -4821,6 +4982,7 @@ severity = "minor"
 status = "open"
 source = "Probe of every DamageKind through the real death path (HarnessRows): death_message.rs maps message ids to camelCase keys but omits outside_border; en_us.json has no death.attack.outside_border."
 regression = ["cargo:mc-core:tick_tests::combat_parity_tests::parity_death_message_keys_match_the_damage_type_registry_and_language_file"]
+repro_check = "round 2, complete: fix da9bca085, control negative-control.log - all non-test hunks of da9bca08 (contact_hazards.rs, tick/death_message.rs) reversed -> red at the key parity assertion (`want death.attack.outsideBorder, got death.attack.outside_border`)"
 failing_first = "reported"
 fix_commit = "da9bca085da0c0c542cac42f95f38b373849bd99"
 
@@ -4832,9 +4994,10 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Gate receipts under wt/HarnessRows/.analysis/validation: 20261111T120956-native-v2-p4-damage-6mwbxea3 (wait_for_inventory timeout; the player was slain by the zombie), 20261111T132303-native-v2-p4-damage-wdwexu3s (stalactite from y+5 deals 24 damage to a 20 HP player), 20261111T142141-native-v2-p4-damage-n54aaggu (night spawns a zombie that kills the player), 20261111T142757-native-v2-p4-damage-6pky77eh (warden kills the player before the 7 HP state is observed), 20261111T151144-native-v2-p4-damage-xiqtnmrl (thorns row starts out of reach), 20261111T185402-native-v2-p4-damage-1x27s3mu (void row: below the world the client reports in_play false with no player row, so the row is judged from the out_of_world wire event and the death screen), 20261111T190210-native-v2-p4-damage-6qo8d1ux (hurt tilt observed only after the kill command had cost the ten-tick animation), 20261111T191626-native-v2-p4-damage-hy75cx01 and 20261111T192723-native-v2-p4-damage-aw9r90m6 (on_fire row: no burn after the fire block is removed; the wire holds only in_fire), 20261111T192315-native-v2-p4-damage-wespznqp and 20261111T193311-native-v2-p4-damage-3bv6qiv1 (sweet_berry_bush row: no berry damage after a walk through the bush), 20261111T193906-native-v2-p4-damage-dhuzqzip and 20261111T194354-native-v2-p4-damage-o3gp55l2 (fall row: no fall damage). Cause of the on_fire, berry and fall failures: the water fill that douses the player leaves flowing water (amount 5-7, region scan in 20261111T194354-native-v2-p4-damage-o3gp55l2 scenario.json region_cells) that decays for dozens of ticks; in it a fall is cushioned (core test physics_flowing_water_cancels_landing_damage), fire cannot ignite and a berry bush is washed away. The gate now waits until the client sees no fluid around the cell (douse_water_drained). The server is vanilla-consistent here. Cause of the thorns failures (about half of the runs from 20261111T195113-native-v2-p4-damage-ml9kngg7 on): the row sent `gamemode survival @s` and the attack back to back; a creative player takes no reflected damage and the command and the attack packet are not ordered, so the row now waits ten ticks between them (not yet proven by three consecutive greens). A frozen night (advance_time false) was tried and reverted: it brings a hostile mob into the starve row. The causes above are fixed on branch wt/HarnessRows with a python unit test (tools.harness.test_native_v2.NativeV2ProbeTests.test_damage_*); the ledger has no python-test ref kind, so the row stays open."
-regression = ["harness:entities:native-v2-p4-damage"]
+regression = ["harness:entities:native-v2-p4-damage", "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_disables_mob_spawning_before_the_night", "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_pins_clear_weather_before_its_rows", "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_rows_wait_for_the_douse_water_to_drain_before_their_fixture", "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_void_row_observes_outside_play_while_the_player_hangs_below_the_world", "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_lets_the_survival_mode_land_before_the_hit", "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_thorns_row_returns_the_player_to_the_origin_before_the_reach_bound_attack", "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_warden_lethal_prep_accepts_a_player_the_sonic_boom_already_killed", "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_scenario_stops_the_zombie_before_slow_capture", "python:tools.harness.test_native_v2:NativeV2ProbeTests.test_damage_identity_timeout_reports_the_wire_events_it_saw"]
+repro_check = "negative control receipts/XHarnessGates/neg-damage-selfkill.log (kill @e removed -> fixture-order ref red); candidate: exact revert (git apply -R of b6e946c1, clean) reds the ref, which asserts fixture ordering (no pre-existing mob before the night) - a proxy for the in-game self-kill; repro=client, real-client gate pending (stage 3)"
 failing_first = "reported"
-fix_commit = "b6e946c132354808ac376bc2edfb901cd772a821"
+fix_commit = "b6e946c1"
 
 [[bug]]
 id = "CREATIVE-PLAYER-FIRE-NEVER-DOUSED"
@@ -4870,9 +5033,10 @@ repro = "client"
 severity = "blocker"
 status = "open"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F2, 2/2): server encodes the 26.3 layout (receipts/BreakJoinRows/javap/SetPlayerTeamParameters.txt: display name, prefix, suffix, visibility, collision, Optional<color>, options); solaris-client src/ui/hud.rs:304-318 decodes the old order. Fixed in solaris-client ef4dc465 (client gate line wt/ClientGateLine d5f25569 = f4bd26d4 + ef4dc465 + census fix 04f3e0f9, pin pins/d5f25569b785-client-x86_64-unknown-linux-gnu-incr, receipts/ClientGateLine/pin.log; 3/3 team scene receipts/ClientTeamPacket/run-team{1,2,3}.log, negative control with the old client receipts/ClientTeamPacket/run-oldctl.log). Status stays open: client-repo rows wait for the owner's promotion-rule decision."
-regression = []
+regression = ["client:krasnokamen-client:session::hud_packet_tests::rc1_team_packet_decodes_the_26_3_parameter_order"]
 failing_first = "reported"
-
+fix_commit = "client:ef4dc465"
+repro_check = "real-hunk control: reversing ef4dc465's src/ui/hud.rs hunk reds the ref ('unknown NBT type 116'); real-client gate for stage 3 is harness:entities:native-v2-team-deaths; area=client, candidate"
 [[bug]]
 id = "TELLRAW-PLAIN-STRING-COMPONENT-DROPPED"
 title = "tellraw with a plain JSON string component (tellraw @s \"text\") shows nothing and reports no error; {\"text\":...} works."
@@ -4918,9 +5082,10 @@ repro = "client"
 severity = "minor"
 status = "open"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F5, 1/2, BREAK_DL_ATTACK=nether); the server log shows 'You logged in from another location' was sent."
-regression = []
+regression = ["client:krasnokamen-client:protocol::network::kick_reason_survives_a_failed_client_write"]
 failing_first = "reported"
-
+fix_commit = "client:bf55a58f"
+repro_check = "real-hunk control red ('play disconnect packet must be delivered'); real gate harness:entities:native-v2-duplicate-login (BREAK_DL_ATTACK=nether); area=client, candidate"
 [[bug]]
 id = "COMMAND-DEFAULTGAMEMODE-UNKNOWN"
 title = "defaultgamemode is an unknown command (vanilla DefaultGameModeCommands: level 2, one gamemode argument, commands.defaultgamemode.success)."
@@ -5252,6 +5417,7 @@ status = "open"
 source = "BreakB10Commands round 3 H3 (REBREAK3.md). The listing now keeps a selected pack that failed to scan, with the load error as its hover."
 regression = ["cargo:mc-core:datapacks::command_tests::the_list_keeps_a_selected_pack_whose_pack_mcmeta_broke", "harness:datapack-reload:native-datapack-reload"]
 fix_commit = "patch:4b74ef2fefca7443e10acdf6e42eb5d4a52250cb4d7b4674b0c54b97dc5246fb"
+repro_check = "round 2: patch docs/bugs/fix-patches/DATAPACK-LIST-HIDES-BROKEN-SELECTED-PACK.patch (digest verified). Control negative-control.log: reversed -> red `commands.datapack.list.enabled.success[1, vanilla]` (file/gems dropped)"
 
 [[bug]]
 id = "DATAPACK-DISABLE-SKIPPED-PACK-UNKNOWN"
@@ -5274,7 +5440,8 @@ severity = "minor"
 status = "open"
 source = "BreakB10Commands round 3 H5 (REBREAK3.md). The log gets every warning; the operator's chat gets three and a count."
 regression = ["cargo:mc-core:datapacks::command_tests::many_pack_warnings_are_a_few_chat_lines_and_a_count", "harness:datapack-reload:native-datapack-reload"]
-fix_commit = "patch:0b5f5cb44123d114ea150df190a015bc68d8f63abe579c9c789338cb2c8e19e4"
+fix_commit = "patch:7b0fdad349e409f18ff3f8c5bfd69f20a84bb80e79befdebf55e98e59ca7c485"
+repro_check = "round 2: docs/bugs/fix-patches/DATAPACK-WARNINGS-CHAT-FLOOD.patch was replaced - the previous text is recoverable at b620e3333 - and the new digest is verified. Control control-A.log: reversed -> red with 8 `Found non-pack entry` lines and no `5 more` line (8 vs 3)"
 
 [[bug]]
 id = "VILLAGER-IDLE-STROLL-UNBOUNDED-DRIFT"
@@ -5414,8 +5581,10 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "solaris-client src/session/packets.rs:96 (configuration RESOURCE_PACK_PUSH) and :657 (play RESOURCE_PACK_PUSH) both call decline_resource_pack; battle-video client line 6eac8021 lines 96 and 105 likewise; the client loads packs only from SOLARIS_CLIENT_RESOURCE_PACKS. Found while preparing live laptop clients for the G2 battle video (owner 2026-11-13: fix right after the video). Follow-up to P2, which only stopped optional offers from disconnecting the join. Gate: a live native client joins a server that pushes the battle pack, with no local pack folder, and shows the battle armour and weapons."
-regression = []
+regression = ["client:krasnokamen-client:session::packets::tests::resource_pack_push_accepted_downloaded_applied_in_both_phases", "client:krasnokamen-client:session::packets::tests::resource_pack_push_hash_mismatch_reports_failed_download"]
 failing_first = "reported"
+fix_commit = "client:54b79f73d2c48928ddc60fb82b60c33d7581d11b"
+repro_check = "round 2 (XClientSession): control receipts/XClientSession/control-w8.log (red with client:54b79f73 reversed). candidate: area=client, real-client check required - the gate is a live native client joining a server that pushes the pack with no local pack folder and showing the battle armour and weapons"
 
 [[bug]]
 id = "PLAYER-SPEAR-JAB-DROPPED-AT-DECODE"
@@ -5478,8 +5647,9 @@ severity = "major"
 status = "open"
 source = "Owner host 2026-11-14 18:53-19:48: receipts/BvItemCache/g2x/chain-V2.sh under mem-run -x held /tmp/solaris-mem-slots/exclusive.lock while its replay-van.sh waited for a slot through scene-slot.sh; all six scene slots were held by tasks waiting for the shared exclusive.lock or a build token. The token-holding builds were themselves waiting for the lock or frozen under -x (load 0.2, 18 queued, about 50 minutes). Broken by killing the window. Fix: tools/dev/mem-run.sh exports KRASNOKAMEN_EXCLUSIVE_WINDOW inside a window; tools/dev/scene-slot.sh reuses an inherited slot and otherwise refuses inside a window (lock order: scene slot, then -x). Checks: python3 tools/dev/test_scene_slot.py (refusal and reuse tests; both red on the previous scene-slot.sh). The ledger grammar has no python ref yet (owner question 13)."
 repro = "manual"
-regression = []
+regression = ["python:tools.dev.test_scene_slot:ExclusiveWindowSceneSlot.test_exclusive_window_refuses_new_slot", "python:tools.dev.test_scene_slot:ExclusiveWindowSceneSlot.test_nested_runner_preserves_window_marker", "python:tools.dev.test_scene_slot:ExclusiveWindowSceneSlot.test_exclusive_window_reuses_outer_slot", "python:tools.dev.test_scene_slot:SceneSlot.test_refuses_to_take_a_slot_inside_an_exclusive_window", "python:tools.dev.test_scene_slot:SceneSlot.test_window_inside_a_held_slot_reuses_it"]
 failing_first = "reported"
+fix_commit = "c7fc3ab52"
 
 [[bug]]
 id = "IMPORT-ANVIL-PRE-RENAME-KEYS-IGNORED"

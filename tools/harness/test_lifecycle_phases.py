@@ -147,6 +147,10 @@ class LifecyclePhases(unittest.TestCase):
             def call(self, name, args):
                 self.ticks.append(args['ticks'])
         probe = Probe()
-        with patch.object(buildings_qa, '_send', return_value={}), patch.object(buildings_qa, '_chat_lines', return_value=[]):
+        with patch.object(buildings_qa, '_send_fresh', return_value={}), \
+                patch.object(buildings_qa, '_chat_lines', return_value=[]), \
+                patch.object(buildings_qa, '_project_active_quiet', return_value=False), \
+                patch.object(buildings_qa, '_current_certificate', return_value=None):
             self.assertFalse(buildings_qa._order_echo_retry(probe, {}, 'tag', 'bp', 1, 'order', False, SimpleNamespace(windowed=False)))
+        # An empty echo (lost chat) is retried; one MCP request accepts at most 255 ticks.
         self.assertEqual(probe.ticks, [20, 255, 255, 255, 255, 180] * 3)

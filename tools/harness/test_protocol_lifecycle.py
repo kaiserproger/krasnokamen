@@ -172,16 +172,21 @@ class LifecycleGuardTests(unittest.TestCase):
             server._process = SimpleNamespace(poll=lambda: None, stdin=stdin)
 
             def fake_wait(path: Path, timeout: float, condition: object) -> str:
-                path.write_text("fixture complete\nScores for MatrixConsoleFence00000001: {}\n")
+                # The fence marker is unique per call: read it back from the console write.
+                marker = stdin.writes[0].decode().splitlines()[1].split("list ", 1)[1]
+                path.write_text(f"fixture complete\nScores for {marker}: {{}}\n")
                 matched, text = condition()
                 self.assertTrue(matched)
                 return text
 
             with mock.patch.object(lifecycle.runtime, "wait_for_path_condition", side_effect=fake_wait):
                 result = server.command("time query daytime")
-            self.assertEqual(stdin.writes, [
-                b"time query daytime\nscoreboard players list MatrixConsoleFence00000001\n"
-            ])
+            sent = stdin.writes[0].decode()
+            marker = sent.splitlines()[1].split("list ", 1)[1]
+            self.assertTrue(marker.startswith("MatrixConsoleFence"))
+            self.assertEqual(len(marker) - len("MatrixConsoleFence"), 32)
+            self.assertEqual(sent, f"time query daytime\nscoreboard players list {marker}\n")
+            # Only the output before the fence is the command's answer.
             self.assertEqual(result, "fixture complete\n")
 
     def test_stop_fails_closed_on_nonzero_exit(self) -> None:

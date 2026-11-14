@@ -108,11 +108,12 @@ def run_campaign(args):
         print(root / 'result.json', flush=True)
         return 1
     deadline = time.monotonic() + args.budget_seconds
-    common = [str(MEM_RUN), '-m', '6G', 'nice', '-n', '19',
-              'ionice', '-c', '3', sys.executable, '-m', 'tools.harness', 'run', 'matrix-random',
+    # The plain runner is also the shrink command: the replay backend prepends
+    # KRASNOKAMEN_RANDOM_REPLAY_MEM_RUN itself so the timeout stays observable.
+    runner = [sys.executable, '-m', 'tools.harness', 'run', 'matrix-random',
               '--server-bin', str(args.server_bin), '--vanilla-data', str(args.vanilla_data),
               '--port', str(args.port), '--dashboard-port', str(args.port + 1)]
-    common = [str(MEM_RUN), '-m', '6G', *runner]
+    common = [str(MEM_RUN), '-m', '6G', 'nice', '-n', '19', 'ionice', '-c', '3', *runner]
     from tools.harness.quirk_parity.seeded import failure_identity
     from tools.harness.ledger import tree_fingerprint
     for seed in range(args.start_seed, args.start_seed + args.seeds):
@@ -164,7 +165,8 @@ def run_campaign(args):
                 elif script is not None and remaining > 0:
                     reduction = directory / 'reduction'
                     reduction.mkdir()
-                    reduce_env = dict(os.environ, KRASNOKAMEN_VALIDATION_ROOT=str(reduction / 'receipts'))
+                    reduce_env = dict(os.environ, KRASNOKAMEN_VALIDATION_ROOT=str(reduction / 'receipts'),
+                                      KRASNOKAMEN_RANDOM_REPLAY_MEM_RUN=str(MEM_RUN))
                     with (reduction / 'campaign.log').open('w') as log:
                         try:
                             subprocess.run(runner + ['--script', str(script), '--shrink'], cwd=args.repo,

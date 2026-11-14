@@ -1,0 +1,21 @@
+diff --git a/crates/mc-core/src/scoreboard.rs b/crates/mc-core/src/scoreboard.rs
+index d576e2c00..c011b1418 100644
+--- a/crates/mc-core/src/scoreboard.rs
++++ b/crates/mc-core/src/scoreboard.rs
+@@ -235,7 +235,7 @@ impl ScoreboardCommand {
+                     "add",
+                     _,
+                     "dummy" | "trigger" | "deathCount" | "playerKillCount" | "totalKillCount"
+-                    | "health" | "air" | "armor" | "xp" | "level",
++                    | "health" | "food" | "air" | "armor" | "xp" | "level",
+                     ..,
+                 ],
+             ) => true,
+@@ -1113,6 +1113,7 @@ pub fn automatic(state: &mut TickState, deaths: &[EntityId], kills: &[(EntityId,
+                 .map(|score| score.value);
+             let value = match criteria.as_str() {
+                 "health" => (player.vitals.health + player.active_effects.absorption).ceil() as i32,
++                "food" => player.vitals.food,
+                 "air" => player.vitals.air,
+                 "xp" => player.vitals.experience.total,
+                 "level" => player.vitals.experience.level,

@@ -2,10 +2,10 @@ schema: krasnokamen-scenario-matrix/2
 generated: '2026-10-24'
 generator: tools/harness/matrix_specs/gen_matrix.py (+ subjects*.py, codegen_subjects.py, existing.py); deterministic seed 20261024
 repo_heads:
-  solaris: 910638f1
-  solaris-default-plugins: 0162e03
-  solaris-loader: f2ca429
-  solaris-client: ded59ce5
+  solaris: 7cff6cb35
+  solaris-default-plugins: 9b407a4
+  solaris-loader: 6b79ace
+  solaris-client: 55d8b2c6
 id_scheme:
   cell: subject/client_kind/game_mode/dimension/difficulty/player_count/network_condition/server_lifecycle/permission
   wave1_id: <tag>:<cell>; tag = pw (pairwise) | bl (baseline) | tr.<triple origin with ':'->'.'>
@@ -13,28 +13,28 @@ id_scheme:
   stability: content-derived (subject + context values), independent of generation order
 full_set:
   definition: every subject x every value of the 8 context factors, minus invalid constraints C01-C05; negative-oracle (C06-C10), server-gap (C11) and procedure (C12) cells stay in the set
-  unconstrained: 251102592
+  unconstrained: 251662464
   contexts_per_subject: 279936
   removed_by_first_violated:
     C01: 3732480
     C02: 4572288
-    C03: 36500544
+    C03: 36593856
     C04: 8370432
     C05: 27026208
   plugin_sensitive_subjects: 9
   plugin_profiles:
   - vanilla
   - live
-  valid: 170900640
-  wave1_unique_cells: 1409
-  wave1_scenarios: 1430
+  valid: 171367200
+  wave1_unique_cells: 1411
+  wave1_scenarios: 1432
   waves:
-    1: 1409
+    1: 1411
     2: 29347073
-    3: 117717286
-    4: 18836192
-    5: 3188362
-    6: 1810318
+    3: 118106086
+    4: 18898400
+    5: 3198730
+    6: 1815500
   wave_definitions:
     1: 'wave 1: the matrix.yaml scenarios (pairwise + baseline + explicit high-risk triples)'
     2: 'dupes: custody subject (items change owner) with 2/8 players, a non-normal network condition or a non-steady server lifecycle'
@@ -403,13 +403,13 @@ full_set:
       wave5: 21600
       wave6: 10800
     commands:
-      valid: 16666560
-      wave1: 76
+      valid: 17133120
+      wave1: 78
       wave2: 0
-      wave3: 13888792
-      wave4: 2222207
-      wave5: 390517
-      wave6: 164968
+      wave3: 14277592
+      wave4: 2284415
+      wave5: 400885
+      wave6: 170150
     selectors:
       valid: 4043520
       wave1: 19
@@ -560,23 +560,23 @@ method:
   driver_rule: client_kind selects the driver; required capabilities = domain + subject + context; A=proven by an existing scenario, P=tool/packet exists but no scenario exercises it (listed as unproven),
     M=missing (listed as missing)
 counts:
-  scenarios: 1430
+  scenarios: 1432
   pairwise: 413
-  baseline: 534
+  baseline: 536
   triples: 483
-  subjects: 888
+  subjects: 890
   domains: 46
   valid_pairs_covered: 2517
   coverage:
-    unit_only: 869
+    unit_only: 871
     partial: 387
     none: 123
     covered: 51
   driver_status:
     missing_capability: 560
     plausible: 100
-    ready: 770
-  full_set_valid_cells: 170900640
+    ready: 772
+  full_set_valid_cells: 171367200
 dimensions:
   client_kind:
   - id: vanilla_java_26_1_2
@@ -13283,6 +13283,7 @@ dimensions:
         - crates/mc-core/src/scoreboard_persistence.rs
         unit_tests:
         - crates/mc-core/src/command_damage_tests.rs
+        - crates/mc-core/src/command_summon_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
         - crates/mc-core/src/tick_tests.rs
         dims:
@@ -13313,6 +13314,7 @@ dimensions:
         - crates/mc-core/src/scoreboard_persistence.rs
         unit_tests:
         - crates/mc-core/src/command_damage_tests.rs
+        - crates/mc-core/src/command_summon_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
         - crates/mc-core/src/tick_tests.rs
         dims:
@@ -13343,6 +13345,7 @@ dimensions:
         - crates/mc-core/src/scoreboard_persistence.rs
         unit_tests:
         - crates/mc-core/src/command_damage_tests.rs
+        - crates/mc-core/src/command_summon_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
         - crates/mc-core/src/tick_tests.rs
         dims:
@@ -13373,6 +13376,7 @@ dimensions:
         - crates/mc-core/src/scoreboard_persistence.rs
         unit_tests:
         - crates/mc-core/src/command_damage_tests.rs
+        - crates/mc-core/src/command_summon_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
         - crates/mc-core/src/tick_tests.rs
         dims:
@@ -13403,6 +13407,7 @@ dimensions:
         - crates/mc-core/src/scoreboard_persistence.rs
         unit_tests:
         - crates/mc-core/src/command_damage_tests.rs
+        - crates/mc-core/src/command_summon_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
         - crates/mc-core/src/tick_tests.rs
         mp: true
@@ -13434,6 +13439,7 @@ dimensions:
         - crates/mc-core/src/scoreboard_persistence.rs
         unit_tests:
         - crates/mc-core/src/command_damage_tests.rs
+        - crates/mc-core/src/command_summon_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
         - crates/mc-core/src/tick_tests.rs
         dims:
@@ -13465,6 +13471,7 @@ dimensions:
         - crates/mc-core/src/scoreboard_persistence.rs
         unit_tests:
         - crates/mc-core/src/command_damage_tests.rs
+        - crates/mc-core/src/command_summon_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
         - crates/mc-core/src/tick_tests.rs
         dims:
@@ -17745,6 +17752,7 @@ dimensions:
         - crates/mc-core/src/command_blocks_tests.rs
         - crates/mc-core/src/command_characterization_tests.rs
         - crates/mc-core/src/command_context_tests.rs
+        - crates/mc-core/src/command_data_mutation_tests.rs
         - crates/mc-core/src/command_data_tests.rs
         - crates/mc-core/src/command_difficulty_tests.rs
         - crates/mc-core/src/command_enchant_execution_tests.rs
@@ -17752,6 +17760,7 @@ dimensions:
         - crates/mc-core/src/command_permission_tests.rs
         - crates/mc-core/src/core/default_game_mode_persistence_tests.rs
         - crates/mc-core/src/core_checkpoint_custody_tests.rs
+        - crates/mc-core/src/datapack_management_tests.rs
         - crates/mc-core/src/datapacks_tests.rs
         - crates/mc-core/src/dimensions_tests.rs
         - crates/mc-edge/src/command_tree_parity_tests.rs
@@ -17833,6 +17842,8 @@ dimensions:
         - crates/mc-core/src/advancement_block_use_tests.rs
         - crates/mc-core/src/advancements_tests.rs
         - crates/mc-core/src/allay_tests.rs
+        - crates/mc-core/src/battle/cavalry_tests.rs
+        - crates/mc-core/src/battle/tests.rs
         - crates/mc-core/src/block_drop_context_tests.rs
         - crates/mc-core/src/block_log_tests.rs
         - crates/mc-core/src/block_tools_tests.rs
@@ -17909,6 +17920,7 @@ dimensions:
         - crates/mc-core/src/fluids_tests.rs
         - crates/mc-core/src/piglin_tests.rs
         - crates/mc-core/src/projectiles/fishing_tests.rs
+        - crates/mc-core/src/tick/dying_tests.rs
         - crates/mc-core/src/vehicles_tests.rs
         - crates/mc-edge/src/command_tree/tests.rs
         - crates/mc-edge/src/command_tree_parity_tests.rs
@@ -18014,9 +18026,12 @@ dimensions:
         - crates/mc-edge/src/command_tree.rs
         - crates/mc-edge/src/admin.rs
         unit_tests:
+        - crates/mc-core/src/battle/live_players_tests.rs
+        - crates/mc-core/src/battle/retaliation_tests.rs
         - crates/mc-core/src/command_context_tests.rs
         - crates/mc-core/src/command_data_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
+        - crates/mc-core/src/command_selector_predicate_tests.rs
         - crates/mc-core/src/commands_tests.rs
         - crates/mc-core/src/datapack_commands_tests.rs
         - crates/mc-core/src/dimensions_tests.rs
@@ -18085,6 +18100,38 @@ dimensions:
         op: 2
         status: implemented
         console: true
+      - id: commands.swing
+        name: swing
+        do: /swing (requires op 2; probe also at op 1)
+        expect: 'per vanilla; below op 2: root not advertised and ''Unknown or incomplete command'''
+        caps:
+        - command_send
+        - read_chat
+        sources:
+        - crates/mc-core/src/commands.rs
+        - crates/mc-edge/src/command_tree.rs
+        - crates/mc-edge/src/admin.rs
+        unit_tests:
+        - crates/mc-core/src/battle/live_players_tests.rs
+        - crates/mc-core/src/command_swing_tests.rs
+        - crates/mc-edge/src/command_tree/tests.rs
+        dims:
+        - overworld
+        - the_nether
+        - the_end
+        clients:
+        - vanilla_java_26_1_2
+        - native_linux
+        - native_windows
+        - fabric_krasnokamen_loader
+        - neoforge_krasnokamen_loader
+        - forge_krasnokamen_loader
+        - fabric_svc
+        - fabric_distant_horizons
+        - protocol_bot
+        op: 2
+        status: implemented
+        console: true
       - id: commands.time
         name: time
         do: /time set day|noon|night|midnight|<n>[d|s|t]; add; query (requires op 2; probe also at op 1)
@@ -18107,6 +18154,7 @@ dimensions:
         - crates/mc-core/src/command_execution_tests.rs
         - crates/mc-core/src/commands_tests.rs
         - crates/mc-core/src/datapack_commands_tests.rs
+        - crates/mc-core/src/datapack_management_tests.rs
         - crates/mc-core/src/datapacks_tests.rs
         - crates/mc-core/src/input_log_tests.rs
         - crates/mc-core/src/replay_determinism_tests.rs
@@ -18225,6 +18273,7 @@ dimensions:
         - crates/mc-core/src/command_execution_tests.rs
         - crates/mc-core/src/commands_tests.rs
         - crates/mc-core/src/composter_tests.rs
+        - crates/mc-core/src/datapack_management_tests.rs
         - crates/mc-core/src/datapacks_tests.rs
         - crates/mc-core/src/dimensions_tests.rs
         - crates/mc-core/src/inventory/conservation_tests.rs
@@ -18263,6 +18312,9 @@ dimensions:
         - crates/mc-edge/src/command_tree.rs
         - crates/mc-edge/src/admin.rs
         unit_tests:
+        - crates/mc-core/src/battle/staging_tests.rs
+        - crates/mc-core/src/battle/tests.rs
+        - crates/mc-core/src/command_data_mutation_tests.rs
         - crates/mc-core/src/command_data_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
         - crates/mc-core/src/command_summon_age_tests.rs
@@ -18281,6 +18333,39 @@ dimensions:
         - crates/mc-edge/src/command_tree_parity_tests.rs
         - crates/mc-world-conversion/src/recovery_roundtrip_tests.rs
         - crates/mc-world-conversion/src/roundtrip_tests.rs
+        dims:
+        - overworld
+        - the_nether
+        - the_end
+        clients:
+        - vanilla_java_26_1_2
+        - native_linux
+        - native_windows
+        - fabric_krasnokamen_loader
+        - neoforge_krasnokamen_loader
+        - forge_krasnokamen_loader
+        - fabric_svc
+        - fabric_distant_horizons
+        - protocol_bot
+        op: 2
+        status: implemented
+        console: true
+      - id: commands.battle
+        name: battle
+        do: /battle (requires op 2; probe also at op 1)
+        expect: 'per vanilla; below op 2: root not advertised and ''Unknown or incomplete command'''
+        caps:
+        - command_send
+        - read_chat
+        sources:
+        - crates/mc-core/src/commands.rs
+        - crates/mc-edge/src/command_tree.rs
+        - crates/mc-edge/src/admin.rs
+        unit_tests:
+        - crates/mc-core/src/battle/live_players_tests.rs
+        - crates/mc-core/src/battle/staging_tests.rs
+        - crates/mc-core/src/villager/soldier_tests.rs
+        - crates/mc-edge/src/command_tree/tests.rs
         dims:
         - overworld
         - the_nether
@@ -18346,6 +18431,8 @@ dimensions:
         - crates/mc-core/src/block_entity_defaults_tests.rs
         - crates/mc-core/src/command_blocks_tests.rs
         - crates/mc-core/src/command_context_tests.rs
+        - crates/mc-core/src/command_data_mutation_tests.rs
+        - crates/mc-core/src/command_data_owner_tests.rs
         - crates/mc-core/src/command_data_tests.rs
         - crates/mc-core/src/commands_tests.rs
         - crates/mc-core/src/core_checkpoint_custody_tests.rs
@@ -18357,6 +18444,7 @@ dimensions:
         - crates/mc-core/src/hot_backup_tests.rs
         - crates/mc-core/src/input_log_tests.rs
         - crates/mc-core/src/interact_parity_tests.rs
+        - crates/mc-core/src/plugin_inventories_command_tests.rs
         - crates/mc-core/src/redstone/dirty_signals_tests.rs
         - crates/mc-core/src/replay_determinism_tests.rs
         - crates/mc-core/src/sculk_tests.rs
@@ -18470,6 +18558,7 @@ dimensions:
         - crates/mc-core/src/command_data_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
         - crates/mc-core/src/commands_tests.rs
+        - crates/mc-core/src/tick/dying_tests.rs
         - crates/mc-edge/src/command_tree/tests.rs
         dims:
         - overworld
@@ -18678,12 +18767,14 @@ dimensions:
         - crates/mc-core/src/item_merge_tests.rs
         - crates/mc-core/src/mob_loot_tests.rs
         - crates/mc-core/src/native_checkpoint_noop_tests.rs
+        - crates/mc-core/src/native_persistence_drill_tests.rs
         - crates/mc-core/src/native_population_tests.rs
         - crates/mc-core/src/quirk_parity_tests.rs
         - crates/mc-core/src/settlements/autonomy_tests.rs
         - crates/mc-core/src/spawn_clearance_tests.rs
         - crates/mc-core/src/villager/building_autonomy_tests.rs
         - crates/mc-core/src/world_tests.rs
+        - crates/mc-edge/src/command_tree/tests.rs
         - crates/mc-world-conversion/src/old_world_import_tests.rs
         dims:
         - overworld
@@ -18807,8 +18898,8 @@ dimensions:
         console: true
       - id: commands.debug
         name: debug
-        do: '/debug (Krasnokamen fixture: hotbar give) (requires op 2; probe also at op 1)'
-        expect: 'DIVERGENCE: Krasnokamen test fixture (hotbar give) occupies the root; vanilla 26.1.2 /debug is the start|stop|function profiler; op only; below op 2: root not advertised and ''Unknown or
+        do: '/debug (Krasnokamen fixture: hotbar give) (requires op 3; probe also at op 2)'
+        expect: 'DIVERGENCE: Krasnokamen test fixture (hotbar give) occupies the root; vanilla 26.1.2 /debug is the start|stop|function profiler; op only; below op 3: root not advertised and ''Unknown or
           incomplete command'''
         caps:
         - command_send
@@ -18843,7 +18934,7 @@ dimensions:
         - fabric_svc
         - fabric_distant_horizons
         - protocol_bot
-        op: 2
+        op: 3
         status: implemented
         console: true
       - id: commands.team
@@ -18860,6 +18951,7 @@ dimensions:
         unit_tests:
         - crates/mc-core/src/chat_visibility_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
+        - crates/mc-core/src/command_summon_tests.rs
         - crates/mc-core/src/core_tests.rs
         - crates/mc-core/src/dimensions_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
@@ -18955,11 +19047,13 @@ dimensions:
         - crates/mc-core/src/command_characterization_tests.rs
         - crates/mc-core/src/command_context_tests.rs
         - crates/mc-core/src/command_damage_tests.rs
+        - crates/mc-core/src/command_data_mutation_tests.rs
         - crates/mc-core/src/command_data_tests.rs
         - crates/mc-core/src/command_difficulty_tests.rs
         - crates/mc-core/src/command_enchant_execution_tests.rs
         - crates/mc-core/src/core_tests.rs
         - crates/mc-core/src/datapack_commands_tests.rs
+        - crates/mc-core/src/datapack_management_tests.rs
         - crates/mc-core/src/dimensions_tests.rs
         - crates/mc-core/src/native_checkpoint_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
@@ -19137,10 +19231,13 @@ dimensions:
         - crates/mc-edge/src/command_tree.rs
         - crates/mc-edge/src/admin.rs
         unit_tests:
+        - crates/mc-core/src/command_data_loot_tests.rs
         - crates/mc-core/src/command_permission_tests.rs
         - crates/mc-core/src/datapack_commands_tests.rs
+        - crates/mc-core/src/datapack_management_tests.rs
         - crates/mc-core/src/datapacks_tests.rs
         - crates/mc-core/src/maps/tests.rs
+        - crates/mc-core/src/plugin_inventories_command_tests.rs
         - crates/mc-edge/src/command_tree_parity_tests.rs
         dims:
         - overworld
@@ -19204,6 +19301,8 @@ dimensions:
         - crates/mc-edge/src/admin.rs
         unit_tests:
         - crates/mc-core/src/datapack_commands_tests.rs
+        - crates/mc-core/src/datapack_management_tests.rs
+        - crates/mc-core/src/datapacks_tests.rs
         dims:
         - overworld
         - the_nether
@@ -19234,6 +19333,7 @@ dimensions:
         - crates/mc-edge/src/admin.rs
         unit_tests:
         - crates/mc-core/src/datapack_commands_tests.rs
+        - crates/mc-core/src/datapacks_tests.rs
         - crates/mc-core/src/farming_cache_tests.rs
         - crates/mc-core/src/world_tests.rs
         - crates/mc-script/src/host_control_tests.rs
@@ -19271,16 +19371,22 @@ dimensions:
         unit_tests:
         - crates/mc-core/src/bossbar_tests.rs
         - crates/mc-core/src/command_blocks_tests.rs
+        - crates/mc-core/src/command_data_loot_tests.rs
+        - crates/mc-core/src/command_data_mutation_tests.rs
+        - crates/mc-core/src/command_data_owner_tests.rs
         - crates/mc-core/src/command_data_tests.rs
         - crates/mc-core/src/command_debug_tests.rs
         - crates/mc-core/src/command_permission_tests.rs
+        - crates/mc-core/src/command_summon_tests.rs
         - crates/mc-core/src/core_tests.rs
         - crates/mc-core/src/datapack_commands_tests.rs
+        - crates/mc-core/src/datapack_management_tests.rs
         - crates/mc-core/src/datapacks_tests.rs
         - crates/mc-core/src/dimensions_tests.rs
         - crates/mc-core/src/end_fight/tests.rs
         - crates/mc-core/src/journal_tests.rs
         - crates/mc-core/src/monster_spawner_tests.rs
+        - crates/mc-core/src/plugin_inventories_command_tests.rs
         - crates/mc-core/src/raids_tests.rs
         - crates/mc-edge/src/command_tree/tests.rs
         - crates/mc-edge/src/command_tree_parity_tests.rs
@@ -19423,6 +19529,8 @@ dimensions:
         - crates/mc-edge/src/admin.rs
         unit_tests:
         - crates/mc-core/src/allay_tests.rs
+        - crates/mc-core/src/battle/retaliation_tests.rs
+        - crates/mc-core/src/battle/tests.rs
         - crates/mc-core/src/bees_tests.rs
         - crates/mc-core/src/block_log_tests.rs
         - crates/mc-core/src/block_ticks_tests.rs
@@ -19456,6 +19564,7 @@ dimensions:
         - crates/mc-edge/src/auth_edge_fence_tests.rs
         - crates/mc-edge/src/command_tree_parity_tests.rs
         - crates/mc-edge/src/plan/chunk_delta_tests.rs
+        - crates/mc-edge/src/plan/entity_interest_tests.rs
         - crates/mc-edge/src/plan_tracking_tests.rs
         - crates/mc-edge/src/plugin_tests.rs
         - crates/mc-edge/src/settlement_labels_tests.rs
@@ -19615,6 +19724,7 @@ dimensions:
         - crates/mc-edge/src/admin.rs
         unit_tests:
         - crates/mc-core/src/core_checkpoint_custody_tests.rs
+        - crates/mc-core/src/native_persistence_drill_tests.rs
         - crates/mc-core/src/plugin_inventories_tests.rs
         - crates/mc-edge/src/transfer_tests.rs
         mp: true
@@ -19810,6 +19920,7 @@ dimensions:
         - crates/mc-edge/src/command_tree.rs
         - crates/mc-edge/src/admin.rs
         unit_tests:
+        - crates/mc-core/src/datapack_management_tests.rs
         - crates/mc-edge/src/admin_tests.rs
         - crates/mc-edge/src/plugin_wire_tests.rs
         mp: true
@@ -20069,6 +20180,7 @@ dimensions:
         unit_tests:
         - crates/mc-core/src/command_bossbar_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
+        - crates/mc-core/src/command_selector_predicate_tests.rs
         - crates/mc-core/src/command_text_tests.rs
         - crates/mc-core/src/commands_tests.rs
         - crates/mc-edge/src/admin_tests.rs
@@ -20134,6 +20246,7 @@ dimensions:
         unit_tests:
         - crates/mc-core/src/command_data_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
+        - crates/mc-core/src/command_selector_predicate_tests.rs
         - crates/mc-core/src/command_summon_tests.rs
         - crates/mc-core/src/commands_tests.rs
         - crates/mc-core/src/datapack_commands_tests.rs
@@ -20192,6 +20305,7 @@ dimensions:
         - crates/mc-core/src/commands.rs
         unit_tests:
         - crates/mc-core/src/command_execution_tests.rs
+        - crates/mc-core/src/command_selector_predicate_tests.rs
         - crates/mc-core/src/settlements/building_commands_tests.rs
         dims:
         - overworld
@@ -20250,10 +20364,13 @@ dimensions:
         unit_tests:
         - crates/mc-core/src/command_context_tests.rs
         - crates/mc-core/src/command_damage_tests.rs
+        - crates/mc-core/src/command_data_mutation_tests.rs
         - crates/mc-core/src/command_data_tests.rs
         - crates/mc-core/src/command_enchant_execution_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
+        - crates/mc-core/src/command_selector_predicate_tests.rs
         - crates/mc-core/src/command_summon_tests.rs
+        - crates/mc-core/src/command_swing_tests.rs
         - crates/mc-core/src/commands_tests.rs
         - crates/mc-core/src/datapack_commands_tests.rs
         - crates/mc-core/src/effects_tests.rs
@@ -20288,6 +20405,7 @@ dimensions:
         - crates/mc-core/src/command_execution_tests.rs
         - crates/mc-core/src/command_items_tests.rs
         - crates/mc-core/src/command_locate_tests.rs
+        - crates/mc-core/src/command_selector_predicate_tests.rs
         - crates/mc-core/src/command_summon_tests.rs
         - crates/mc-core/src/commands_tests.rs
         - crates/mc-edge/src/admin_tests.rs
@@ -20350,8 +20468,10 @@ dimensions:
         - crates/mc-core/src/commands.rs
         unit_tests:
         - crates/mc-core/src/command_damage_tests.rs
+        - crates/mc-core/src/command_data_mutation_tests.rs
         - crates/mc-core/src/command_data_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
+        - crates/mc-core/src/command_selector_predicate_tests.rs
         - crates/mc-core/src/commands_tests.rs
         - crates/mc-edge/src/admin_tests.rs
         dims:
@@ -20382,6 +20502,7 @@ dimensions:
         - crates/mc-core/src/commands.rs
         unit_tests:
         - crates/mc-core/src/command_execution_tests.rs
+        - crates/mc-core/src/command_selector_predicate_tests.rs
         - crates/mc-core/src/commands_tests.rs
         dims:
         - overworld
@@ -20551,13 +20672,17 @@ dimensions:
         - crates/mc-core/src/tick/damage.rs
         unit_tests:
         - crates/mc-core/src/advancements_tests.rs
+        - crates/mc-core/src/battle/combat_tests.rs
+        - crates/mc-core/src/battle/staging_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
+        - crates/mc-core/src/core_checkpoint_custody_tests.rs
         - crates/mc-core/src/effects_trigger_tests.rs
         - crates/mc-core/src/projectiles/payloads_tests.rs
         - crates/mc-core/src/special_mobs_tests.rs
         - crates/mc-core/src/survival_tests.rs
         - crates/mc-core/src/tick/combat_parity_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
+        - crates/mc-core/src/tick/dying_tests.rs
         - crates/mc-core/src/tick/statistics_tests.rs
         - crates/mc-core/src/tick_tests.rs
         dims:
@@ -20590,6 +20715,7 @@ dimensions:
         - crates/mc-core/src/auth_gate_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
         - crates/mc-core/src/command_summon_tests.rs
+        - crates/mc-core/src/core_checkpoint_custody_tests.rs
         - crates/mc-core/src/effects_tests.rs
         - crates/mc-core/src/enchantment_tick_tests.rs
         - crates/mc-core/src/end_fight/tests.rs
@@ -20606,6 +20732,7 @@ dimensions:
         - crates/mc-core/src/survival_tests.rs
         - crates/mc-core/src/tick/combat_parity_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
+        - crates/mc-core/src/tick/dying_tests.rs
         - crates/mc-core/src/tick/statistics_tests.rs
         - crates/mc-core/src/tick_tests.rs
         - crates/mc-core/src/villager/conversion_tests.rs
@@ -21287,9 +21414,13 @@ dimensions:
         - crates/mc-core/src/survival.rs
         - crates/mc-core/src/tick/damage.rs
         unit_tests:
+        - crates/mc-core/src/battle/combat_tests.rs
+        - crates/mc-core/src/battle/staging_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
+        - crates/mc-core/src/core_checkpoint_custody_tests.rs
         - crates/mc-core/src/tick/combat_parity_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
+        - crates/mc-core/src/tick/dying_tests.rs
         dims:
         - overworld
         - the_nether
@@ -23418,6 +23549,7 @@ dimensions:
         - crates/mc-core/src/command_rules.rs
         - crates/mc-core/src/dimensions_rules.rs
         unit_tests:
+        - crates/mc-core/src/battle/live_players_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
         - crates/mc-core/src/commands_tests.rs
         - crates/mc-core/src/inventory/conservation_tests.rs
@@ -23619,6 +23751,7 @@ dimensions:
         - crates/mc-core/src/dimensions_rules.rs
         unit_tests:
         - crates/mc-core/src/command_context_tests.rs
+        - crates/mc-core/src/datapack_management_tests.rs
         - crates/mc-core/src/datapacks_tests.rs
         dims:
         - overworld
@@ -23706,6 +23839,7 @@ dimensions:
         unit_tests:
         - crates/mc-core/src/allay_tests.rs
         - crates/mc-core/src/armor_stand_tests.rs
+        - crates/mc-core/src/battle/staging_tests.rs
         - crates/mc-core/src/end_fight/tests.rs
         - crates/mc-core/src/entity_loot_tests.rs
         - crates/mc-core/src/falling_tests.rs
@@ -23766,6 +23900,7 @@ dimensions:
         - crates/mc-core/src/command_rules.rs
         - crates/mc-core/src/dimensions_rules.rs
         unit_tests:
+        - crates/mc-core/src/battle/staging_tests.rs
         - crates/mc-core/src/effects_trigger_tests.rs
         - crates/mc-core/src/hostile_tests.rs
         - crates/mc-core/src/mob_equipment_pickup_tests.rs
@@ -24261,7 +24396,13 @@ dimensions:
         - crates/mc-core/src/dimensions_rules.rs
         unit_tests:
         - crates/mc-core/src/armor_stand_tests.rs
+        - crates/mc-core/src/battle/staging_tests.rs
+        - crates/mc-core/src/command_data_loot_tests.rs
+        - crates/mc-core/src/command_data_mutation_tests.rs
+        - crates/mc-core/src/command_data_owner_tests.rs
         - crates/mc-core/src/command_summon_tests.rs
+        - crates/mc-core/src/contact_hazards_tests.rs
+        - crates/mc-core/src/core_checkpoint_custody_tests.rs
         - crates/mc-core/src/creaking_tests.rs
         - crates/mc-core/src/dimensions_tests.rs
         - crates/mc-core/src/end_fight/tests.rs
@@ -24285,6 +24426,7 @@ dimensions:
         - crates/mc-core/src/natural_spawn_tests.rs
         - crates/mc-core/src/physical_attacks_tests.rs
         - crates/mc-core/src/piglin_tests.rs
+        - crates/mc-core/src/plugin_inventories_command_tests.rs
         - crates/mc-core/src/portals_tests.rs
         - crates/mc-core/src/portals_travel_top100_h07_tests.rs
         - crates/mc-core/src/projectiles/flight_tests.rs
@@ -24752,6 +24894,7 @@ dimensions:
         - crates/mc-core/src/projectiles/flight_tests.rs
         - crates/mc-core/src/projectiles/flight_top100_h02_tests.rs
         - crates/mc-core/src/projectiles/payloads_tests.rs
+        - crates/mc-core/src/tick/dying_tests.rs
         - crates/mc-edge/src/plan_tests.rs
         dims:
         - overworld
@@ -25204,6 +25347,7 @@ dimensions:
         - crates/mc-core/src/blueprint_tests.rs
         - crates/mc-core/src/campfire_tests.rs
         - crates/mc-core/src/command_summon_variant_refusal_tests.rs
+        - crates/mc-core/src/contact_hazards_tests.rs
         - crates/mc-core/src/core_checkpoint_custody_tests.rs
         - crates/mc-core/src/entity_phase_tests.rs
         - crates/mc-core/src/entity_prephase_tests.rs
@@ -25341,8 +25485,11 @@ dimensions:
         - crates/mc-core/src/armadillo_spatial_tests.rs
         - crates/mc-core/src/armor_stand_tests.rs
         - crates/mc-core/src/auth_gate_tests.rs
+        - crates/mc-core/src/battle/staging_tests.rs
+        - crates/mc-core/src/battle/tests.rs
         - crates/mc-core/src/command_data_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
+        - crates/mc-core/src/command_selector_predicate_tests.rs
         - crates/mc-core/src/contact_hazards_tests.rs
         - crates/mc-core/src/core/motion_tests.rs
         - crates/mc-core/src/core_checkpoint_custody_tests.rs
@@ -25381,6 +25528,7 @@ dimensions:
         - crates/mc-core/src/sculk_tests.rs
         - crates/mc-core/src/settlements/allocator_event_tests.rs
         - crates/mc-core/src/special_mobs_tests.rs
+        - crates/mc-core/src/tick/dying_tests.rs
         - crates/mc-core/src/tick/input/pick_item_tests.rs
         - crates/mc-core/src/tick/system_graph_tests.rs
         - crates/mc-core/src/tick_tests.rs
@@ -25486,6 +25634,7 @@ dimensions:
         - crates/mc-core/src/hostile_tests.rs
         - crates/mc-core/src/blueprint_family_tests.rs
         - crates/mc-core/src/blueprint_tests.rs
+        - crates/mc-core/src/contact_hazards_tests.rs
         - crates/mc-core/src/entity_loot_tests.rs
         - crates/mc-core/src/entity_motion_hint_tests.rs
         - crates/mc-core/src/entity_phase_tests.rs
@@ -25622,6 +25771,7 @@ dimensions:
         - crates/mc-data/src/mob_behavior_26_1_2.rs
         unit_tests:
         - crates/mc-core/src/conduit_tests.rs
+        - crates/mc-core/src/entity_phase_tests.rs
         - crates/mc-core/src/hostile_tests.rs
         - crates/mc-core/src/mob_equipment_pickup_tests.rs
         dims:
@@ -26231,6 +26381,7 @@ dimensions:
         unit_tests:
         - crates/mc-core/src/mounts_tests.rs
         - crates/mc-core/src/taming_tests.rs
+        - crates/mc-core/src/battle/tests.rs
         - crates/mc-core/src/entity_loot_tests.rs
         - crates/mc-core/src/natural_spawn_tests.rs
         - crates/mc-core/src/tick/statistics_tests.rs
@@ -26278,12 +26429,17 @@ dimensions:
         - crates/mc-core/src/hostile.rs
         - crates/mc-data/src/mob_behavior_26_1_2.rs
         unit_tests:
+        - crates/mc-core/src/battle/staging_tests.rs
+        - crates/mc-core/src/battle/tests.rs
         - crates/mc-core/src/golems_tests.rs
         - crates/mc-core/src/hostile_tests.rs
         - crates/mc-core/src/mob_equipment_pickup_tests.rs
+        - crates/mc-core/src/projectiles/flight_tests.rs
+        - crates/mc-core/src/projectiles/persistence_tests.rs
         - crates/mc-core/src/tnt_tests.rs
         - crates/mc-core/src/trial_spawner_tests.rs
         - crates/mc-core/src/villager/conversion_tests.rs
+        - crates/mc-edge/src/faction_teams_tests.rs
         dims:
         - overworld
         - the_nether
@@ -26856,6 +27012,8 @@ dimensions:
         - crates/mc-core/src/mounts_tests.rs
         - crates/mc-core/src/command_damage_tests.rs
         - crates/mc-core/src/command_execution_tests.rs
+        - crates/mc-core/src/command_selector_predicate_tests.rs
+        - crates/mc-core/src/contact_hazards_tests.rs
         - crates/mc-core/src/core_checkpoint_custody_tests.rs
         - crates/mc-core/src/entity_motion_tests.rs
         - crates/mc-core/src/entity_phase_tests.rs
@@ -27246,6 +27404,7 @@ dimensions:
         - crates/mc-core/src/hostile.rs
         - crates/mc-data/src/mob_behavior_26_1_2.rs
         unit_tests:
+        - crates/mc-core/src/contact_hazards_tests.rs
         - crates/mc-core/src/core/motion_tests.rs
         - crates/mc-core/src/core_checkpoint_custody_tests.rs
         - crates/mc-core/src/entity_motion_tests.rs
@@ -27386,7 +27545,9 @@ dimensions:
         - crates/mc-data/src/mob_behavior_26_1_2.rs
         unit_tests:
         - crates/mc-core/src/hostile_tests.rs
+        - crates/mc-core/src/battle/tests.rs
         - crates/mc-core/src/command_summon_tests.rs
+        - crates/mc-core/src/contact_hazards_tests.rs
         - crates/mc-core/src/dimensions_tests.rs
         - crates/mc-core/src/entity_loot_tests.rs
         - crates/mc-core/src/entity_motion_hint_tests.rs
@@ -27398,6 +27559,7 @@ dimensions:
         - crates/mc-core/src/natural_spawn_tests.rs
         - crates/mc-core/src/projectiles/flight_tests.rs
         - crates/mc-core/src/spawn_egg_tests.rs
+        - crates/mc-core/src/tick/dying_tests.rs
         - crates/mc-core/src/villager/conversion_tests.rs
         - crates/mc-edge/src/decode_embedded_projectiles_tests.rs
         - crates/mc-edge/src/plan_native_density_tests.rs
@@ -27607,6 +27769,7 @@ dimensions:
         - crates/mc-data/src/mob_behavior_26_1_2.rs
         unit_tests:
         - crates/mc-core/src/blueprint_tests.rs
+        - crates/mc-core/src/contact_hazards_tests.rs
         - crates/mc-core/src/enchantment_tick_tests.rs
         - crates/mc-core/src/entity_motion_tests.rs
         - crates/mc-core/src/entity_phase_tests.rs
@@ -28060,6 +28223,7 @@ dimensions:
         - crates/mc-core/src/maps/tests.rs
         - crates/mc-core/src/native_checkpoint_crash_tests.rs
         - crates/mc-core/src/native_population_tests.rs
+        - crates/mc-core/src/plugin_inventories_command_tests.rs
         - crates/mc-core/src/plugin_npcs_tests.rs
         - crates/mc-core/src/plugin_settlements_tests.rs
         - crates/mc-core/src/plugin_structures_tests.rs
@@ -28474,7 +28638,11 @@ dimensions:
         - crates/mc-core/src/hostile_tests.rs
         - crates/mc-core/src/advancements_tests.rs
         - crates/mc-core/src/armadillo_spatial_tests.rs
+        - crates/mc-core/src/battle/tests.rs
+        - crates/mc-core/src/command_summon_tests.rs
+        - crates/mc-core/src/command_swing_tests.rs
         - crates/mc-core/src/conduit_spatial_tests.rs
+        - crates/mc-core/src/contact_hazards_tests.rs
         - crates/mc-core/src/core_checkpoint_custody_tests.rs
         - crates/mc-core/src/datapack_commands_tests.rs
         - crates/mc-core/src/effects_tests.rs
@@ -28497,6 +28665,7 @@ dimensions:
         - crates/mc-core/src/sensor_bench_tests.rs
         - crates/mc-core/src/tick/combat_parity_tests.rs
         - crates/mc-core/src/tick/damage_scoreboard_tests.rs
+        - crates/mc-core/src/tick/dying_tests.rs
         - crates/mc-core/src/tick_tests.rs
         - crates/mc-core/src/villager/brain_tests.rs
         - crates/mc-core/src/villager/conversion_tests.rs
@@ -30242,9 +30411,11 @@ dimensions:
       EditBook: items.books
       SignUpdate: block_interact.sign_edit_decorate
       Attack: combat.melee_cooldown_crit_sweep
+      Stab: combat.melee_cooldown_crit_sweep
       InteractEntity: villagers.trade_level_restock
       InteractEntitySecondary: entities_misc.leash
       VehicleInput: entities_misc.horses_mounts
+      RidingJump: entities_misc.horses_mounts
       MoveVehicle: entities_misc.boats
       SelectSlot: inventory.hotbar_select
       SelectBundleItem: items.bundle
@@ -30319,11 +30490,13 @@ dimensions:
       clear: commands.clear
       kill: commands.kill
       damage: commands.damage
+      swing: commands.swing
       time: commands.time
       weather: commands.weather
       difficulty: commands.difficulty
       gamerule: commands.gamerule
       summon: commands.summon
+      battle: commands.battle
       worldborder: commands.worldborder
       setblock: commands.setblock
       fill: commands.fill
@@ -33764,8 +33937,8 @@ scenarios:
     unit:
     - crates/mc-core/src/command_bossbar_tests.rs
     - crates/mc-core/src/command_execution_tests.rs
+    - crates/mc-core/src/command_selector_predicate_tests.rs
     - crates/mc-core/src/command_text_tests.rs
-    - crates/mc-core/src/commands_tests.rs
 - id: pw:block_break.abort_dig/fabric_distant_horizons/survival/overworld/easy/N8/duplicate_login/pause_when_empty_resume/non_op_0
   cell: block_break.abort_dig/fabric_distant_horizons/survival/overworld/easy/N8/duplicate_login/pause_when_empty_resume/non_op_0
   origin: pairwise
@@ -36603,8 +36776,8 @@ scenarios:
     unit:
     - crates/mc-core/src/command_data_tests.rs
     - crates/mc-core/src/command_execution_tests.rs
+    - crates/mc-core/src/command_selector_predicate_tests.rs
     - crates/mc-core/src/command_summon_tests.rs
-    - crates/mc-core/src/commands_tests.rs
 - id: pw:death_respawn.anchor_spawn/forge_krasnokamen_loader/adventure/the_nether/normal/N8/slow_reader_backpressure/clean_restart_mid_action/op_1
   cell: death_respawn.anchor_spawn/forge_krasnokamen_loader/adventure/the_nether/normal/N8/slow_reader_backpressure/clean_restart_mid_action/op_1
   origin: pairwise
@@ -36822,6 +36995,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_damage_tests.rs
+    - crates/mc-core/src/command_summon_tests.rs
     - crates/mc-core/src/tick/damage_scoreboard_tests.rs
     - crates/mc-core/src/tick_tests.rs
 - id: pw:gamerules.advance_weather/vanilla_java_26_1_2/spectator/the_end/hard/N8/normal/steady/op_4
@@ -37721,6 +37895,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_damage_tests.rs
+    - crates/mc-core/src/command_summon_tests.rs
     - crates/mc-core/src/tick/damage_scoreboard_tests.rs
     - crates/mc-core/src/tick_tests.rs
 - id: pw:damage.Campfire/neoforge_krasnokamen_loader/adventure/the_nether/normal/1/duplicate_login/clean_restart_mid_action/op_1
@@ -38805,6 +38980,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_damage_tests.rs
+    - crates/mc-core/src/command_summon_tests.rs
     - crates/mc-core/src/tick/damage_scoreboard_tests.rs
     - crates/mc-core/src/tick_tests.rs
 - id: pw:falling_blocks.falling_into_void_or_unloaded/fabric_distant_horizons/adventure/the_nether/hard/N8/malformed_or_stale_packet/pause_when_empty_resume/op_4
@@ -39646,6 +39822,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_damage_tests.rs
+    - crates/mc-core/src/command_summon_tests.rs
     - crates/mc-core/src/tick/damage_scoreboard_tests.rs
     - crates/mc-core/src/tick_tests.rs
 - id: pw:combat.damage_enchants/fabric_distant_horizons/creative/the_nether/easy/2/reconnect_mid_action/pause_when_empty_resume/op_4
@@ -43169,6 +43346,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_damage_tests.rs
+    - crates/mc-core/src/command_summon_tests.rs
     - crates/mc-core/src/tick/damage_scoreboard_tests.rs
     - crates/mc-core/src/tick_tests.rs
 - id: pw:block_place.build_height_limits/fabric_distant_horizons/adventure/the_nether/easy/2/normal/steady/op_4
@@ -44039,10 +44217,10 @@ scenarios:
     unit:
     - crates/mc-edge/src/computer_tests.rs
     - crates/mc-edge/src/screen_tests.rs
-- id: pw:commands.bossbar/native_linux/survival/the_nether/normal/1/slow_reader_backpressure/steady/op_3
-  cell: commands.bossbar/native_linux/survival/the_nether/normal/1/slow_reader_backpressure/steady/op_3
+- id: pw:commands.battle/native_linux/survival/the_nether/normal/1/slow_reader_backpressure/steady/op_3
+  cell: commands.battle/native_linux/survival/the_nether/normal/1/slow_reader_backpressure/steady/op_3
   origin: pairwise
-  title: commands.bossbar [native_linux, survival, the_nether, p1, op_3, slow_reader_backpressure]
+  title: commands.battle [native_linux, survival, the_nether, p1, op_3, slow_reader_backpressure]
   context:
     client_kind: native_linux
     game_mode: survival
@@ -44053,12 +44231,12 @@ scenarios:
     server_lifecycle: steady
     permission: op_3
   domain: commands
-  subject: commands.bossbar
+  subject: commands.battle
   steps:
-  - 'Action: /bossbar add|set|remove|list|get (requires op 2; probe also at op 1)'
+  - 'Action: /battle (requires op 2; probe also at op 1)'
   - 'Network (slow_reader_backpressure): actor reads its socket at a throttled rate (MIX-08 reader_rate_limit) during the action'
   oracle:
-  - 'reference: bossbar managed; below op 2: root not advertised and ''Unknown or incomplete command'''
+  - 'reference: per vanilla; below op 2: root not advertised and ''Unknown or incomplete command'''
   - server tick (MSPT) and other players unaffected; slow client either catches up with consistent state or is disconnected by bounded queue/timeout; no unbounded memory growth
   - holds in the_nether (dimension-isolated world)
   driver:
@@ -44072,14 +44250,12 @@ scenarios:
     - slow_reader_backpressure
     fallback: protocol_bot can drive the server-side oracle (no client-presentation evidence)
   existing_coverage:
-    status: partial
-    e2e_other_context:
-    - admin-commands
+    status: unit_only
     unit:
-    - crates/mc-core/src/command_bossbar_tests.rs
-    - crates/mc-core/src/command_execution_tests.rs
-    - crates/mc-core/src/core_tests.rs
-    - crates/mc-edge/src/command_tree_parity_tests.rs
+    - crates/mc-core/src/battle/live_players_tests.rs
+    - crates/mc-core/src/battle/staging_tests.rs
+    - crates/mc-core/src/villager/soldier_tests.rs
+    - crates/mc-edge/src/command_tree/tests.rs
 - id: pw:load.MIX-04/protocol_bot/spectator/overworld/normal/N8/reconnect_mid_action/pause_when_empty_resume/op_4
   cell: load.MIX-04/protocol_bot/spectator/overworld/normal/N8/reconnect_mid_action/pause_when_empty_resume/op_4
   origin: pairwise
@@ -44747,6 +44923,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_damage_tests.rs
+    - crates/mc-core/src/command_summon_tests.rs
     - crates/mc-core/src/tick/damage_scoreboard_tests.rs
     - crates/mc-core/src/tick_tests.rs
 - id: pw:settlements.caravan/fabric_distant_horizons/survival/overworld/normal/N8/reconnect_mid_action/save_all_checkpoint/op_2
@@ -44841,10 +45018,10 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/tnt_tests.rs
-- id: pw:commands.clear/fabric_krasnokamen_loader/creative/the_end/easy/1/normal/save_all_checkpoint/op_4
-  cell: commands.clear/fabric_krasnokamen_loader/creative/the_end/easy/1/normal/save_all_checkpoint/op_4
+- id: pw:commands.bossbar/fabric_krasnokamen_loader/creative/the_end/easy/1/normal/save_all_checkpoint/op_4
+  cell: commands.bossbar/fabric_krasnokamen_loader/creative/the_end/easy/1/normal/save_all_checkpoint/op_4
   origin: pairwise
-  title: commands.clear [fabric_krasnokamen_loader, creative, the_end, p1, op_4, save_all_checkpoint]
+  title: commands.bossbar [fabric_krasnokamen_loader, creative, the_end, p1, op_4, save_all_checkpoint]
   context:
     client_kind: fabric_krasnokamen_loader
     game_mode: creative
@@ -44855,12 +45032,12 @@ scenarios:
     server_lifecycle: save_all_checkpoint
     permission: op_4
   domain: commands
-  subject: commands.clear
+  subject: commands.bossbar
   steps:
-  - 'Action: /clear <targets> [item] [max] (requires op 2; probe also at op 1)'
+  - 'Action: /bossbar add|set|remove|list|get (requires op 2; probe also at op 1)'
   - 'Lifecycle (save_all_checkpoint): /save-all (checkpoint) issued during the action'
   oracle:
-  - 'reference: matching items removed; count reported; below op 2: root not advertised and ''Unknown or incomplete command'''
+  - 'reference: bossbar managed; below op 2: root not advertised and ''Unknown or incomplete command'''
   - save-all completes without stalling the tick; post-save state equals pre-save state
   - holds in the_end (dimension-isolated world)
   driver:
@@ -44873,12 +45050,14 @@ scenarios:
     unproven:
     - server_save_all
   existing_coverage:
-    status: unit_only
+    status: partial
+    e2e_other_context:
+    - admin-commands
     unit:
-    - crates/mc-core/src/command_data_tests.rs
+    - crates/mc-core/src/command_bossbar_tests.rs
     - crates/mc-core/src/command_execution_tests.rs
-    - crates/mc-core/src/command_items_tests.rs
-    - crates/mc-core/src/command_text_tests.rs
+    - crates/mc-core/src/core_tests.rs
+    - crates/mc-edge/src/command_tree_parity_tests.rs
 - id: pw:persistence.save_all_flush/fabric_svc/spectator/overworld/hard/2/slow_reader_backpressure/pause_when_empty_resume/op_3
   cell: persistence.save_all_flush/fabric_svc/spectator/overworld/hard/2/slow_reader_backpressure/pause_when_empty_resume/op_3
   origin: pairwise
@@ -45295,10 +45474,10 @@ scenarios:
     - crates/mc-core/src/combat_tests.rs
     - crates/mc-core/src/physical_attacks_tests.rs
     - crates/mc-core/src/physical_defense_tests.rs
-- id: pw:commands.clone/fabric_distant_horizons/creative/the_end/hard/N8/duplicate_login/clean_restart_mid_action/op_2
-  cell: commands.clone/fabric_distant_horizons/creative/the_end/hard/N8/duplicate_login/clean_restart_mid_action/op_2
+- id: pw:commands.clear/fabric_distant_horizons/creative/the_end/hard/N8/duplicate_login/clean_restart_mid_action/op_2
+  cell: commands.clear/fabric_distant_horizons/creative/the_end/hard/N8/duplicate_login/clean_restart_mid_action/op_2
   origin: pairwise
-  title: commands.clone [fabric_distant_horizons, creative, the_end, pN8, op_2, duplicate_login, clean_restart_mid_action]
+  title: commands.clear [fabric_distant_horizons, creative, the_end, pN8, op_2, duplicate_login, clean_restart_mid_action]
   context:
     client_kind: fabric_distant_horizons
     game_mode: creative
@@ -45309,14 +45488,14 @@ scenarios:
     server_lifecycle: clean_restart_mid_action
     permission: op_2
   domain: commands
-  subject: commands.clone
+  subject: commands.clear
   steps:
-  - 'Action: /clone (requires op 2; probe also at op 1)'
+  - 'Action: /clear <targets> [item] [max] (requires op 2; probe also at op 1)'
   - 'Network (duplicate_login): a second connection with the same account/UUID logs in during the action'
   - 'Lifecycle (clean_restart_mid_action): /stop between action steps, restart same world, rejoin and continue'
   - All 8 clients repeat the action concurrently on own targets and on one shared target
   oracle:
-  - 'reference: per vanilla; below op 2: root not advertised and ''Unknown or incomplete command'''
+  - 'reference: matching items removed; count reported; below op 2: root not advertised and ''Unknown or incomplete command'''
   - 'vanilla 26.1.2 newcomer wins (owner requirement, BugTriage DUPLICATE-LOGIN): the existing session is disconnected (''You logged in from another location''), the new connection reaches Play with the
     same persisted player state; exactly one live player entity for the UUID, no inventory copy or loss, no join-wait timeout. Current Krasnokamen (core tick/input/session.rs:93-107) refuses the newcomer
     instead and live runs time out in join-wait — expected to fail until ServerFixes lands'
@@ -45341,8 +45520,10 @@ scenarios:
   existing_coverage:
     status: unit_only
     unit:
-    - crates/mc-core/src/command_context_tests.rs
-    - crates/mc-edge/src/command_tree_parity_tests.rs
+    - crates/mc-core/src/command_data_tests.rs
+    - crates/mc-core/src/command_execution_tests.rs
+    - crates/mc-core/src/command_items_tests.rs
+    - crates/mc-core/src/command_text_tests.rs
 - id: pw:spawning.natural_Ambient/fabric_distant_horizons/adventure/the_nether/normal/1/duplicate_login/hot_backup_during_action/op_3
   cell: spawning.natural_Ambient/fabric_distant_horizons/adventure/the_nether/normal/1/duplicate_login/hot_backup_during_action/op_3
   origin: pairwise
@@ -45878,10 +46059,10 @@ scenarios:
     - playable-35-two-client-player-disconnect-removal
     unit:
     - crates/mc-edge/src/decode_tests.rs
-- id: pw:commands.co/native_windows/survival/the_nether/easy/2/normal/pause_when_empty_resume/non_op_0
-  cell: commands.co/native_windows/survival/the_nether/easy/2/normal/pause_when_empty_resume/non_op_0
+- id: pw:commands.clone/native_windows/survival/the_nether/easy/2/normal/pause_when_empty_resume/non_op_0
+  cell: commands.clone/native_windows/survival/the_nether/easy/2/normal/pause_when_empty_resume/non_op_0
   origin: pairwise
-  title: commands.co [native_windows, survival, the_nether, p2, non_op_0, pause_when_empty_resume]
+  title: commands.clone [native_windows, survival, the_nether, p2, non_op_0, pause_when_empty_resume]
   context:
     client_kind: native_windows
     game_mode: survival
@@ -45892,14 +46073,14 @@ scenarios:
     server_lifecycle: pause_when_empty_resume
     permission: non_op_0
   domain: commands
-  subject: commands.co
+  subject: commands.clone
   steps:
-  - 'Action: /co inspect|lookup|rollback|restore (requires op 3; probe also at op 2)'
+  - 'Action: /clone (requires op 2; probe also at op 1)'
   - 'Lifecycle (pause_when_empty_resume): all players leave (pause-when-empty-seconds>0), world pauses, players rejoin'
   - Second client observes the actor's target
   oracle:
-  - 'reference: Krasnokamen block log (see block_log); below op 3: root not advertised and ''Unknown or incomplete command'''
-  - 'NEGATIVE (permission non_op_0 < op 3): command not advertised in the command tree, execution answers ''Unknown or incomplete command'', no state change'
+  - 'reference: per vanilla; below op 2: root not advertised and ''Unknown or incomplete command'''
+  - 'NEGATIVE (permission non_op_0 < op 2): command not advertised in the command tree, execution answers ''Unknown or incomplete command'', no state change'
   - while empty the world does not advance (no growth/smelting/mob movement); after rejoin it resumes from the same tick and the action completes normally
   - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no desync between observers
   - holds in the_nether (dimension-isolated world)
@@ -45917,12 +46098,10 @@ scenarios:
     - windows_mcp_lane
     fallback: protocol_bot can drive the server-side oracle (no client-presentation evidence)
   existing_coverage:
-    status: partial
-    e2e_other_context:
-    - block-log
+    status: unit_only
     unit:
-    - crates/mc-core/src/block_log_tests.rs
-    - crates/mc-core/src/command_permission_tests.rs
+    - crates/mc-core/src/command_context_tests.rs
+    - crates/mc-edge/src/command_tree_parity_tests.rs
 - id: pw:redstone.piston_push_pull/fabric_krasnokamen_loader/survival/the_end/hard/2/slow_reader_backpressure/hot_backup_during_action/non_op_0
   cell: redstone.piston_push_pull/fabric_krasnokamen_loader/survival/the_end/hard/2/slow_reader_backpressure/hot_backup_during_action/non_op_0
   origin: pairwise
@@ -46426,6 +46605,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_damage_tests.rs
+    - crates/mc-core/src/command_summon_tests.rs
     - crates/mc-core/src/tick/damage_scoreboard_tests.rs
     - crates/mc-core/src/tick_tests.rs
 - id: pw:fire.entity_burning/native_linux/creative/overworld/easy/N8/reconnect_mid_action/steady/op_4
@@ -47391,6 +47571,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_damage_tests.rs
+    - crates/mc-core/src/command_summon_tests.rs
     - crates/mc-core/src/tick/damage_scoreboard_tests.rs
     - crates/mc-core/src/tick_tests.rs
 - id: pw:containers.chest_boat/neoforge_krasnokamen_loader/survival/the_nether/normal/N8/normal/clean_restart_mid_action/op_1
@@ -49046,6 +49227,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_damage_tests.rs
+    - crates/mc-core/src/command_summon_tests.rs
     - crates/mc-core/src/tick/damage_scoreboard_tests.rs
     - crates/mc-core/src/tick_tests.rs
 - id: pw:entities_misc.item_frame_entity/fabric_distant_horizons/spectator/the_nether/peaceful/2/duplicate_login/clean_restart_mid_action/op_1
@@ -59579,7 +59761,7 @@ scenarios:
     - crates/mc-core/src/advancement_block_use_tests.rs
     - crates/mc-core/src/advancements_tests.rs
     - crates/mc-core/src/allay_tests.rs
-    - crates/mc-core/src/block_drop_context_tests.rs
+    - crates/mc-core/src/battle/cavalry_tests.rs
 - id: bl:commands.loot/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: commands.loot/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -59643,10 +59825,10 @@ scenarios:
     e2e_other_context:
     - native-v2-dimensions
     unit:
+    - crates/mc-core/src/battle/live_players_tests.rs
+    - crates/mc-core/src/battle/retaliation_tests.rs
     - crates/mc-core/src/command_context_tests.rs
     - crates/mc-core/src/command_data_tests.rs
-    - crates/mc-core/src/command_execution_tests.rs
-    - crates/mc-core/src/commands_tests.rs
 - id: bl:commands.damage/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: commands.damage/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -59679,6 +59861,37 @@ scenarios:
     - crates/mc-core/src/command_border_tests.rs
     - crates/mc-core/src/command_damage_tests.rs
     - crates/mc-core/src/command_data_tests.rs
+- id: bl:commands.swing/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+  cell: commands.swing/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+  origin: baseline
+  title: commands.swing [vanilla_java_26_1_2, survival, overworld, p1, op_2]
+  context:
+    client_kind: vanilla_java_26_1_2
+    game_mode: survival
+    dimension: overworld
+    difficulty: normal
+    player_count: '1'
+    network_condition: normal
+    server_lifecycle: steady
+    permission: op_2
+  domain: commands
+  subject: commands.swing
+  steps:
+  - 'Action: /swing (requires op 2; probe also at op 1)'
+  oracle:
+  - 'reference: per vanilla; below op 2: root not advertised and ''Unknown or incomplete command'''
+  driver:
+    kind: java_mcp
+    status: ready
+    required_capabilities:
+    - command_send
+    - read_chat
+  existing_coverage:
+    status: unit_only
+    unit:
+    - crates/mc-core/src/battle/live_players_tests.rs
+    - crates/mc-core/src/command_swing_tests.rs
+    - crates/mc-edge/src/command_tree/tests.rs
 - id: bl:commands.time/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: commands.time/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -59837,10 +60050,10 @@ scenarios:
     e2e_other_context:
     - native-v2-p5-humanoid-armor
     unit:
+    - crates/mc-core/src/battle/staging_tests.rs
+    - crates/mc-core/src/battle/tests.rs
+    - crates/mc-core/src/command_data_mutation_tests.rs
     - crates/mc-core/src/command_data_tests.rs
-    - crates/mc-core/src/command_execution_tests.rs
-    - crates/mc-core/src/command_summon_age_tests.rs
-    - crates/mc-core/src/command_summon_hanging_tests.rs
 - id: bl:commands.worldborder/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: commands.worldborder/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -59904,7 +60117,7 @@ scenarios:
     - crates/mc-core/src/block_entity_defaults_tests.rs
     - crates/mc-core/src/command_blocks_tests.rs
     - crates/mc-core/src/command_context_tests.rs
-    - crates/mc-core/src/command_data_tests.rs
+    - crates/mc-core/src/command_data_mutation_tests.rs
 - id: bl:commands.fill/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: commands.fill/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -59968,7 +60181,7 @@ scenarios:
     - crates/mc-core/src/command_data_tests.rs
     - crates/mc-core/src/command_execution_tests.rs
     - crates/mc-core/src/commands_tests.rs
-    - crates/mc-edge/src/command_tree/tests.rs
+    - crates/mc-core/src/tick/dying_tests.rs
 - id: bl:commands.xp/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: commands.xp/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -60224,10 +60437,10 @@ scenarios:
     - crates/mc-core/src/command_execution_tests.rs
     - crates/mc-core/src/dimensions_tests.rs
     - crates/mc-core/src/effects_tests.rs
-- id: bl:commands.debug/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
-  cell: commands.debug/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
+- id: bl:commands.debug/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+  cell: commands.debug/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
   origin: baseline
-  title: commands.debug [vanilla_java_26_1_2, survival, overworld, p1, op_2]
+  title: commands.debug [vanilla_java_26_1_2, survival, overworld, p1, op_3]
   context:
     client_kind: vanilla_java_26_1_2
     game_mode: survival
@@ -60236,13 +60449,13 @@ scenarios:
     player_count: '1'
     network_condition: normal
     server_lifecycle: steady
-    permission: op_2
+    permission: op_3
   domain: commands
   subject: commands.debug
   steps:
-  - 'Action: /debug (Krasnokamen fixture: hotbar give) (requires op 2; probe also at op 1)'
+  - 'Action: /debug (Krasnokamen fixture: hotbar give) (requires op 3; probe also at op 2)'
   oracle:
-  - 'reference: DIVERGENCE: Krasnokamen test fixture (hotbar give) occupies the root; vanilla 26.1.2 /debug is the start|stop|function profiler; op only; below op 2: root not advertised and ''Unknown or
+  - 'reference: DIVERGENCE: Krasnokamen test fixture (hotbar give) occupies the root; vanilla 26.1.2 /debug is the start|stop|function profiler; op only; below op 3: root not advertised and ''Unknown or
     incomplete command'''
   driver:
     kind: java_mcp
@@ -60287,8 +60500,8 @@ scenarios:
     unit:
     - crates/mc-core/src/chat_visibility_tests.rs
     - crates/mc-core/src/command_execution_tests.rs
+    - crates/mc-core/src/command_summon_tests.rs
     - crates/mc-core/src/core_tests.rs
-    - crates/mc-core/src/dimensions_tests.rs
 - id: bl:commands.tps/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: commands.tps/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -60503,10 +60716,10 @@ scenarios:
   existing_coverage:
     status: unit_only
     unit:
+    - crates/mc-core/src/command_data_loot_tests.rs
     - crates/mc-core/src/command_permission_tests.rs
     - crates/mc-core/src/datapack_commands_tests.rs
-    - crates/mc-core/src/datapacks_tests.rs
-    - crates/mc-core/src/maps/tests.rs
+    - crates/mc-core/src/datapack_management_tests.rs
 - id: bl:commands.schedule/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: commands.schedule/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -60567,6 +60780,8 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/datapack_commands_tests.rs
+    - crates/mc-core/src/datapack_management_tests.rs
+    - crates/mc-core/src/datapacks_tests.rs
 - id: bl:commands.reload/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: commands.reload/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -60596,9 +60811,9 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/datapack_commands_tests.rs
+    - crates/mc-core/src/datapacks_tests.rs
     - crates/mc-core/src/farming_cache_tests.rs
     - crates/mc-core/src/world_tests.rs
-    - crates/mc-script/src/host_control_tests.rs
 - id: bl:commands.data/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: commands.data/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -60634,8 +60849,8 @@ scenarios:
     unit:
     - crates/mc-core/src/bossbar_tests.rs
     - crates/mc-core/src/command_blocks_tests.rs
-    - crates/mc-core/src/command_data_tests.rs
-    - crates/mc-core/src/command_debug_tests.rs
+    - crates/mc-core/src/command_data_loot_tests.rs
+    - crates/mc-core/src/command_data_mutation_tests.rs
 - id: bl:commands.tag/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: commands.tag/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -60762,9 +60977,9 @@ scenarios:
     - admin-commands
     unit:
     - crates/mc-core/src/allay_tests.rs
+    - crates/mc-core/src/battle/retaliation_tests.rs
+    - crates/mc-core/src/battle/tests.rs
     - crates/mc-core/src/bees_tests.rs
-    - crates/mc-core/src/block_log_tests.rs
-    - crates/mc-core/src/block_ticks_tests.rs
 - id: bl:commands.kick/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/op_3
   cell: commands.kick/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/op_3
   origin: baseline
@@ -60918,6 +61133,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/core_checkpoint_custody_tests.rs
+    - crates/mc-core/src/native_persistence_drill_tests.rs
     - crates/mc-core/src/plugin_inventories_tests.rs
     - crates/mc-edge/src/transfer_tests.rs
 - id: bl:commands.pardon/vanilla_java_26_1_2/survival/overworld/normal/2/normal/steady/op_3
@@ -61047,6 +61263,7 @@ scenarios:
   existing_coverage:
     status: unit_only
     unit:
+    - crates/mc-core/src/datapack_management_tests.rs
     - crates/mc-edge/src/admin_tests.rs
     - crates/mc-edge/src/plugin_wire_tests.rs
 - id: bl:commands.whitelist/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
@@ -61079,6 +61296,38 @@ scenarios:
     unit:
     - crates/mc-edge/src/admin_tests.rs
     - crates/mc-edge/src/plugin_wire_tests.rs
+- id: bl:commands.co/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+  cell: commands.co/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_3
+  origin: baseline
+  title: commands.co [vanilla_java_26_1_2, survival, overworld, p1, op_3]
+  context:
+    client_kind: vanilla_java_26_1_2
+    game_mode: survival
+    dimension: overworld
+    difficulty: normal
+    player_count: '1'
+    network_condition: normal
+    server_lifecycle: steady
+    permission: op_3
+  domain: commands
+  subject: commands.co
+  steps:
+  - 'Action: /co inspect|lookup|rollback|restore (requires op 3; probe also at op 2)'
+  oracle:
+  - 'reference: Krasnokamen block log (see block_log); below op 3: root not advertised and ''Unknown or incomplete command'''
+  driver:
+    kind: java_mcp
+    status: ready
+    required_capabilities:
+    - command_send
+    - read_chat
+  existing_coverage:
+    status: partial
+    e2e_other_context:
+    - block-log
+    unit:
+    - crates/mc-core/src/block_log_tests.rs
+    - crates/mc-core/src/command_permission_tests.rs
 - id: bl:commands.stop/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/console
   cell: commands.stop/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/console
   origin: baseline
@@ -61206,6 +61455,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_execution_tests.rs
+    - crates/mc-core/src/command_selector_predicate_tests.rs
     - crates/mc-core/src/settlements/building_commands_tests.rs
 - id: bl:selectors.opt_type/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: selectors.opt_type/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
@@ -61237,8 +61487,8 @@ scenarios:
     unit:
     - crates/mc-core/src/command_context_tests.rs
     - crates/mc-core/src/command_damage_tests.rs
+    - crates/mc-core/src/command_data_mutation_tests.rs
     - crates/mc-core/src/command_data_tests.rs
-    - crates/mc-core/src/command_enchant_execution_tests.rs
 - id: bl:selectors.opt_name/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: selectors.opt_name/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -61300,9 +61550,9 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_damage_tests.rs
+    - crates/mc-core/src/command_data_mutation_tests.rs
     - crates/mc-core/src/command_data_tests.rs
     - crates/mc-core/src/command_execution_tests.rs
-    - crates/mc-core/src/commands_tests.rs
 - id: bl:selectors.sort_nearest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: selectors.sort_nearest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -61332,6 +61582,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_execution_tests.rs
+    - crates/mc-core/src/command_selector_predicate_tests.rs
     - crates/mc-core/src/commands_tests.rs
 - id: bl:selectors.sort_furthest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: selectors.sort_furthest/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
@@ -61447,9 +61698,9 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/advancements_tests.rs
+    - crates/mc-core/src/battle/combat_tests.rs
+    - crates/mc-core/src/battle/staging_tests.rs
     - crates/mc-core/src/command_execution_tests.rs
-    - crates/mc-core/src/effects_trigger_tests.rs
-    - crates/mc-core/src/projectiles/payloads_tests.rs
 - id: bl:damage.Melee/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
   cell: damage.Melee/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
   origin: baseline
@@ -61954,9 +62205,10 @@ scenarios:
   existing_coverage:
     status: unit_only
     unit:
+    - crates/mc-core/src/battle/combat_tests.rs
+    - crates/mc-core/src/battle/staging_tests.rs
     - crates/mc-core/src/command_execution_tests.rs
-    - crates/mc-core/src/tick/combat_parity_tests.rs
-    - crates/mc-core/src/tick/damage_scoreboard_tests.rs
+    - crates/mc-core/src/core_checkpoint_custody_tests.rs
 - id: bl:damage.Freeze/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
   cell: damage.Freeze/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
   origin: baseline
@@ -63527,10 +63779,10 @@ scenarios:
   existing_coverage:
     status: unit_only
     unit:
+    - crates/mc-core/src/battle/live_players_tests.rs
     - crates/mc-core/src/command_execution_tests.rs
     - crates/mc-core/src/commands_tests.rs
     - crates/mc-core/src/inventory/conservation_tests.rs
-    - crates/mc-core/src/tick/combat_parity_tests.rs
 - id: bl:gamerules.lava_source_conversion/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: gamerules.lava_source_conversion/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -63727,6 +63979,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/command_context_tests.rs
+    - crates/mc-core/src/datapack_management_tests.rs
     - crates/mc-core/src/datapacks_tests.rs
 - id: bl:gamerules.max_entity_cramming/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: gamerules.max_entity_cramming/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
@@ -63814,8 +64067,8 @@ scenarios:
     unit:
     - crates/mc-core/src/allay_tests.rs
     - crates/mc-core/src/armor_stand_tests.rs
+    - crates/mc-core/src/battle/staging_tests.rs
     - crates/mc-core/src/end_fight/tests.rs
-    - crates/mc-core/src/entity_loot_tests.rs
 - id: bl:gamerules.mob_explosion_drop_decay/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: gamerules.mob_explosion_drop_decay/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -63871,10 +64124,10 @@ scenarios:
   existing_coverage:
     status: unit_only
     unit:
+    - crates/mc-core/src/battle/staging_tests.rs
     - crates/mc-core/src/effects_trigger_tests.rs
     - crates/mc-core/src/hostile_tests.rs
     - crates/mc-core/src/mob_equipment_pickup_tests.rs
-    - crates/mc-core/src/mob_lanes_tests.rs
 - id: bl:gamerules.natural_health_regeneration/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: gamerules.natural_health_regeneration/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -64353,9 +64606,9 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/armor_stand_tests.rs
-    - crates/mc-core/src/command_summon_tests.rs
-    - crates/mc-core/src/creaking_tests.rs
-    - crates/mc-core/src/dimensions_tests.rs
+    - crates/mc-core/src/battle/staging_tests.rs
+    - crates/mc-core/src/command_data_loot_tests.rs
+    - crates/mc-core/src/command_data_mutation_tests.rs
 - id: bl:gamerules.spawn_monsters/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: gamerules.spawn_monsters/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -64837,7 +65090,7 @@ scenarios:
     - crates/mc-core/src/blueprint_tests.rs
     - crates/mc-core/src/campfire_tests.rs
     - crates/mc-core/src/command_summon_variant_refusal_tests.rs
-    - crates/mc-core/src/core_checkpoint_custody_tests.rs
+    - crates/mc-core/src/contact_hazards_tests.rs
 - id: bl:mobs.cod/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: mobs.cod/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -65006,7 +65259,7 @@ scenarios:
     - crates/mc-core/src/hostile_tests.rs
     - crates/mc-core/src/blueprint_family_tests.rs
     - crates/mc-core/src/blueprint_tests.rs
-    - crates/mc-core/src/entity_loot_tests.rs
+    - crates/mc-core/src/contact_hazards_tests.rs
 - id: bl:mobs.dolphin/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: mobs.dolphin/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -65103,6 +65356,7 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/conduit_tests.rs
+    - crates/mc-core/src/entity_phase_tests.rs
     - crates/mc-core/src/hostile_tests.rs
     - crates/mc-core/src/mob_equipment_pickup_tests.rs
 - id: bl:mobs.elder_guardian/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
@@ -65580,8 +65834,8 @@ scenarios:
     unit:
     - crates/mc-core/src/mounts_tests.rs
     - crates/mc-core/src/taming_tests.rs
+    - crates/mc-core/src/battle/tests.rs
     - crates/mc-core/src/entity_loot_tests.rs
-    - crates/mc-core/src/natural_spawn_tests.rs
 - id: bl:mobs.husk/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: mobs.husk/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -65612,10 +65866,10 @@ scenarios:
   existing_coverage:
     status: unit_only
     unit:
+    - crates/mc-core/src/battle/staging_tests.rs
+    - crates/mc-core/src/battle/tests.rs
     - crates/mc-core/src/golems_tests.rs
     - crates/mc-core/src/hostile_tests.rs
-    - crates/mc-core/src/mob_equipment_pickup_tests.rs
-    - crates/mc-core/src/tnt_tests.rs
 - id: bl:mobs.illusioner/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: mobs.illusioner/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -66055,7 +66309,7 @@ scenarios:
     - crates/mc-core/src/mounts_tests.rs
     - crates/mc-core/src/command_damage_tests.rs
     - crates/mc-core/src/command_execution_tests.rs
-    - crates/mc-core/src/core_checkpoint_custody_tests.rs
+    - crates/mc-core/src/command_selector_predicate_tests.rs
 - id: bl:mobs.piglin/vanilla_java_26_1_2/survival/the_nether/normal/1/normal/steady/op_2
   cell: mobs.piglin/vanilla_java_26_1_2/survival/the_nether/normal/1/normal/steady/op_2
   origin: baseline
@@ -66340,10 +66594,10 @@ scenarios:
     e2e_other_context:
     - playable-44-passive-livestock-motion
     unit:
+    - crates/mc-core/src/contact_hazards_tests.rs
     - crates/mc-core/src/core/motion_tests.rs
     - crates/mc-core/src/core_checkpoint_custody_tests.rs
     - crates/mc-core/src/entity_motion_tests.rs
-    - crates/mc-core/src/entity_phase_tests.rs
 - id: bl:mobs.shulker/vanilla_java_26_1_2/survival/the_end/normal/1/normal/steady/op_2
   cell: mobs.shulker/vanilla_java_26_1_2/survival/the_end/normal/1/normal/steady/op_2
   origin: baseline
@@ -66441,9 +66695,9 @@ scenarios:
     - native-v2-p5-humanoid-armor
     unit:
     - crates/mc-core/src/hostile_tests.rs
+    - crates/mc-core/src/battle/tests.rs
     - crates/mc-core/src/command_summon_tests.rs
-    - crates/mc-core/src/dimensions_tests.rs
-    - crates/mc-core/src/entity_loot_tests.rs
+    - crates/mc-core/src/contact_hazards_tests.rs
 - id: bl:mobs.skeleton_horse/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: mobs.skeleton_horse/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -66605,9 +66859,9 @@ scenarios:
     status: unit_only
     unit:
     - crates/mc-core/src/blueprint_tests.rs
+    - crates/mc-core/src/contact_hazards_tests.rs
     - crates/mc-core/src/enchantment_tick_tests.rs
     - crates/mc-core/src/entity_motion_tests.rs
-    - crates/mc-core/src/entity_phase_tests.rs
 - id: bl:mobs.squid/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: mobs.squid/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline
@@ -67224,7 +67478,7 @@ scenarios:
     - crates/mc-core/src/hostile_tests.rs
     - crates/mc-core/src/advancements_tests.rs
     - crates/mc-core/src/armadillo_spatial_tests.rs
-    - crates/mc-core/src/conduit_spatial_tests.rs
+    - crates/mc-core/src/battle/tests.rs
 - id: bl:mobs.zombie_horse/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   cell: mobs.zombie_horse/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/op_2
   origin: baseline

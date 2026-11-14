@@ -285,7 +285,7 @@ class SettlementMapQaTests(unittest.TestCase):
                 archive.writestr("assets/minecraft/textures/font/test.png", data.getvalue())
             mask = gate._label_bitmap("A B", jar)
             frame = Image.new("RGB", (120, 80))
-            frame.paste((255, 255, 255), (14, 21), mask.resize((mask.width * 2, mask.height * 2), Image.Resampling.NEAREST))
+            frame.paste((255, 255, 255), (14, 21), gate.nearest_scale(mask, mask.width * 2, mask.height * 2))
             path = root / "frame.png"
             frame.save(path)
             self.assertTrue(gate._label_points(str(path), mask, 2))

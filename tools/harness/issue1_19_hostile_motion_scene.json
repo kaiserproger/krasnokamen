@@ -1,0 +1,183 @@
+{
+  "seed": 100,
+  "server_view_distance": 4,
+  "client_settings": {
+    "render_distance": 8,
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule advance_weather false"
+    },
+    {
+      "cmd": "time set 18000"
+    },
+    {
+      "cmd": "weather clear"
+    },
+    {
+      "tp": [
+        1000.5,
+        175,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 200
+    },
+    {
+      "cmd": "fill 990 159 990 1010 159 1010 minecraft:grass_block"
+    },
+    {
+      "cmd": "fill 990 160 990 1010 164 1010 minecraft:air"
+    },
+    {
+      "cmd": "summon minecraft:zombie 998.5 160 1004.5 {PersistenceRequired:1b,Rotation:[180f,0f]}"
+    },
+    {
+      "cmd": "summon minecraft:spider 1002.5 160 1004.5 {PersistenceRequired:1b,Rotation:[180f,0f]}"
+    },
+    {
+      "wait_ticks": 60
+    },
+    {
+      "tp": [
+        1000.5,
+        162,
+        999.5,
+        0,
+        15
+      ]
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "shot": "zombie-walk-shot-1"
+    },
+    {
+      "timed_entities": {
+        "name": "zombie-moving-1",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        }
+      }
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "shot": "zombie-walk-shot-2"
+    },
+    {
+      "timed_entities": {
+        "name": "zombie-moving-2",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        }
+      }
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "shot": "zombie-walk-shot-3"
+    },
+    {
+      "timed_entities": {
+        "name": "zombie-moving-3",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        }
+      }
+    },
+    {
+      "mob_motion": {
+        "name": "zombie-walk",
+        "samples": [
+          "zombie-moving-1",
+          "zombie-moving-2",
+          "zombie-moving-3"
+        ]
+      }
+    },
+    {
+      "shot": "spider-walk-shot-1"
+    },
+    {
+      "timed_entities": {
+        "name": "spider-moving-1",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        }
+      }
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "shot": "spider-walk-shot-2"
+    },
+    {
+      "timed_entities": {
+        "name": "spider-moving-2",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        }
+      }
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "shot": "spider-walk-shot-3"
+    },
+    {
+      "timed_entities": {
+        "name": "spider-moving-3",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        }
+      }
+    },
+    {
+      "mob_motion": {
+        "name": "spider-walk",
+        "samples": [
+          "spider-moving-1",
+          "spider-moving-2",
+          "spider-moving-3"
+        ]
+      }
+    },
+    {
+      "require_entities": {
+        "name": "zombie-present",
+        "args": {
+          "radius": 16,
+          "limit": 32
+        },
+        "types": [
+          "minecraft:zombie"
+        ]
+      }
+    }
+  ]
+}

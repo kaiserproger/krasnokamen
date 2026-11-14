@@ -1,0 +1,77 @@
+diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
+--- a/crates/mc-core/src/settlements/construction.rs
++++ b/crates/mc-core/src/settlements/construction.rs
+@@ -806,6 +806,9 @@
+ // The priority table's array type keeps the stack funding cache in sync.
+ const AUTONOMOUS_KINDS: usize = 8;
+ 
++/// Residents from which the settlement walls itself in and digs its well.
++const FORTIFY_RESIDENTS: usize = 10;
++
+ /// Needed authored kinds in priority order. A natural work zone is not an
+ /// authored level-one building, and housing remains needed until beds suffice.
+ pub(super) fn needed_kinds(
+@@ -1584,12 +1587,61 @@
+     if gathering {
+         return;
+     }
+-    // Free street work fills every pass that starts no building or upgrade.
+-    if let Some(site) = street_site(state, record, &images) {
++    // The wall, its gates and the well come before street work: the streets
++    // reach every standing building in the radius and owe work without end,
++    // the fortification is a bounded list that the world itself shortens.
++    if let Some(site) = fortification_site(state, record, residents, &images)
++        .or_else(|| street_site(state, record, &images))
++    {
+         begin_cells(state, site.project, site.bounds, site.cells);
+     }
+ }
+ 
++/// The next funded piece of the perimeter wall, its gates or the well, from
++/// [`FORTIFY_RESIDENTS`] residents. Each wall stretch, gatehouse or well is a
++/// project of its own, bought from real stock like a lamp post; the world, not
++/// a saved plan, says what is already standing.
++fn fortification_site(
++    state: &TickState,
++    record: &SettlementRecord,
++    residents: usize,
++    images: &[super::inventory::Image],
++) -> Option<FundedSite> {
++    if residents < FORTIFY_RESIDENTS {
++        return None;
++    }
++    for (kind, mut work) in layout::fortification(state, record) {
++        if executor::area_held(state, work.bounds) {
++            continue;
++        }
++        let Some(bill) = cell_bill(state, &work.cells) else {
++            continue;
++        };
++        let Some(species) = select_species(state, &bill, images, false) else {
++            continue;
++        };
++        if apply_species(state, &mut work.cells, species).is_none() {
++            continue;
++        }
++        return Some(FundedSite {
++            project: Project {
++                settlement: record.id,
++                blueprint: kind.to_owned(),
++                level: 1,
++                origin: work.bounds.min,
++                rotation: 0,
++                building: None,
++                structure: String::new(),
++                ordered: false,
++                borrowed_builder: None,
++            },
++            bounds: work.bounds,
++            cells: work.cells,
++        });
++    }
++    None
++}
++
+ /// The first Farm's wheat cells cost seeds that only a farm produces. While
+ /// the stock is short of them, Builders clear seed-bearing grass near the bell
+ /// (vanilla: short grass drops a wheat seed one time in eight), the same way

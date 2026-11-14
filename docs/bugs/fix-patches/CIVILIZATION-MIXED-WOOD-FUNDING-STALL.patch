@@ -1,0 +1,23 @@
+diff --git a/crates/mc-core/src/plugin_structures/settlement_builds.rs b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+--- a/crates/mc-core/src/plugin_structures/settlement_builds.rs
++++ b/crates/mc-core/src/plugin_structures/settlement_builds.rs
+@@ -1003,7 +1003,18 @@
+                 *count = count.saturating_sub(amount);
+             }
+             let specific = crate::settlements::construction_crafting::wood_specific(state, planned);
+-            let reserved = Default::default();
++            let reserved = if specific {
++                Default::default()
++            } else if let Ok(reserved) = crate::settlements::construction_crafting::reserve_wood(
++                state,
++                &future,
++                &stock_after,
++            ) {
++                reserved
++            } else {
++                amount /= 2;
++                continue;
++            };
+             let mut trial = stock_after.clone();
+             if crate::settlements::construction_crafting::ensure_units(
+                 state,

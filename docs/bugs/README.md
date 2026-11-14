@@ -52,6 +52,15 @@ failing_first = "not recorded"
 - `failing_first` is optional and, when present, is `reported` or `not recorded`;
   report the actual pre-fix evidence, never infer it from a passing test.
 
+A ref is `cargo:<crate>:<test>` and `harness:<profile>:<scenario|verdict>` for this repository,
+`python:<dotted module>:<TestClass.test_method>` for a fix in the harness/tooling code itself
+(`ledger promote` runs it with `unittest` in the candidate tree), and
+`client:<crate>:<test>` for a fix in the client repository (`ledger promote` runs
+`cargo test -p <crate> --lib -- <test>` in `KRASNOKAMEN_CLIENT_ROOT` or the sibling
+`krasnokamen-client` checkout, so the ref may name one test or a whole module; it is green only when
+it selected at least one test and none failed). A ref the tooling cannot find is unrunnable, never green: a client
+test that does not exist yet at that checkout reports "ran no matching test" rather than passing.
+
 `fix_commit` (optional until promotion) is the lowercase hex id of the commit
 that fixes the row; `promotion` is set only by `ledger promote`, see
 [the `fixed` rule](#the-fixed-rule-single-home).
@@ -128,7 +137,9 @@ reopened row leaves the list in the same edit).
 evidence) and record `fix_commit`: the one commit with the fix (the test may
 be in it or earlier, never only in later commits), or the `patch:<sha256>` of
 step 1 for a forward-ported fix, a fix in several commits or a guard older
-than the finding. They do not edit `status` or
+than the finding - and keep that patch committed at
+`docs/bugs/fix-patches/<ID>.patch`, so the promote that later runs needs no
+receipt outside the tree. They do not edit `status` or
 `promotion`, and they do not decide that a row is fixed: a green test that also
 passes without the fix proves nothing, which is why the script, not the
 worker, runs the negative control.
@@ -139,7 +150,27 @@ worker, runs the negative control.
    not yet committed, is `patch:<sha256>` of the non-test hunks of the git diff
    passed as `--fix-patch` (a mismatch prints the value to record; the patch
    must still apply in reverse on the candidate, so a later edit or re-break of
-   it refuses). The candidate is the
+   it refuses). A **client** fix is `client:<sha>` instead: the commit of the
+   client repository (`KRASNOKAMEN_CLIENT_ROOT`, else `solaris-client` beside
+   the core checkout), resolved there and refused when unknown. It is a client
+   behaviour change, so it is proved by receipts, not by reversing server
+   hunks: `--client-control-receipt` is a real-client `result.json` of the
+   **pre-fix** client (one that does not contain `<sha>`, e.g. `<sha>^`) whose
+   client ref is **red**, and `--client-receipt` is a `passed` one of the client
+   that contains `<sha>` with the same ref **green**. Both ran on the tree being
+   promoted (the same `tree` identity and server-binary registry checks as rule
+   3). The client is bound to its source through the pin-release manifest, not
+   the checkout beside it: each receipt records `client_binary` at run start
+   (the binary's sha256, hashed then, its `manifest.json`, and the manifest's
+   `head`/`dirty`), and promotion refuses a receipt without it, a manifest that
+   pins another binary than the one that ran, a `dirty` pin, or a pin without a
+   head. The ancestry checks use the pinned head: the control's head must not
+   contain `<sha>`, the restore's must. **Red is an observed assertion failure**:
+   the control receipt has to be `status = "failed"` with the scenario's own
+   assertion recorded false. A `timeout`, a launch error, a preflight failure or
+   a crashed client never observed the bug and is refused as a control. No
+   worktree, patch reversal or ref run is involved, and a row whose only refs are
+   unit tests cannot use this form. The candidate is the
    exact tree: `HEAD` plus its uncommitted diff and untracked files
    (`docs/bugs/` aside), identified by a fingerprint; no commit is needed. The
    control and the restore worktrees reproduce it, verified by that fingerprint.

@@ -600,6 +600,31 @@ negative control; bundled multi-fix reversals do not count either. A unit or
 synthetic test is a regression guard, never the closing evidence for a
 client-visible bug.
 
+## Client fixes and `ledger promote` (stage 2, 2026-11-15)
+
+A fix that lives in the client repository is recorded as `fix_commit = "client:<sha>"`
+instead of a core commit or a `patch:`. `ledger promote` proves it with receipts, because
+there are no server hunks to reverse: `--client-control-receipt` is a real-client
+`result.json` of the **pre-fix** client whose row ref is red, and `--client-receipt` is a
+`passed` one of the client that contains `<sha>` with the same ref green. Both ran on the
+tree being promoted, so the server-side identity checks are unchanged.
+
+Two rules make that evidence real, and both cost a rerun when skipped:
+
+- **The client that ran, not a checkout beside it.** Receipts record `client_binary` at run
+  start: the sha256 of `KRASNOKAMEN_CLIENT_BINARY` hashed then, its pin-release
+  `manifest.json`, and that manifest's `head`/`dirty`. Promotion refuses a receipt without
+  it, a manifest that pins another binary, a `dirty` pin and a pin without a head, and the
+  ancestry checks read the pinned head. A receipt that only names a checkout HEAD proves
+  nothing: preflight launches the binary, not the checkout.
+- **Red means an observed assertion failure.** The control must be `status = "failed"` with
+  the scenario's own assertion recorded false. A `timeout`, a launch error, a preflight
+  failure or a crashed client never observed the bug; they are refused as a control.
+
+`python3 -m tools.harness ledger promote <ID> --client-control-receipt <pre-fix.json>
+--client-receipt <fixed.json>` writes `control_tree: client` in `promote.json` and flips the
+row; `--dry-run` runs both checks and writes nothing.
+
 ## village-autonomy-qa
 
 1. Build the release server under the runner into its own target.

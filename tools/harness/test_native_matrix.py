@@ -3,7 +3,10 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
+
+from tools.harness.matrix_api import MissingCapability
 
 from tools.harness.backends import native_matrix
 
@@ -110,6 +113,89 @@ class NativeMatrixTests(unittest.TestCase):
                 with self.assertRaisesRegex(TimeoutError,'frozen'):
                     native_matrix.check_health(lane,steps)
 
+    def test_health_interval_requires_live_complete_below_budget_samples_and_clean_log(self):
+        baseline = {'latest_tick': 10, 'source_skipped_ticks_total': 0,
+                    'instance_started_unix_ns': 42}
+        good = {'latest_tick': 12, 'source_skipped_ticks_total': 0, 'after_tick': 10,
+                'instance_started_unix_ns': 42, 'overrun': False,
+                'samples': [{'tick': 11, 'wall_us': 1000}, {'tick': 12, 'wall_us': 49999}]}
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / 'server.log'
+            log.write_text('INFO server started\n')
+            host = SimpleNamespace(running=True, _process=object(), log_path=log)
+            with patch.object(native_matrix.HealthInterval, '_snapshot', return_value=baseline | {'latest_tick': None}):
+                with self.assertRaisesRegex(MissingCapability, 'missing_load_metrics_baseline'):
+                    native_matrix.HealthInterval(host)
+            with patch.object(native_matrix.HealthInterval, '_snapshot', side_effect=[baseline, good]):
+                health = native_matrix.HealthInterval(host)
+                health.finish()
+                health.verify_log()
+            self.assertEqual(health.segments[0]['samples'], good['samples'])
+            for bad in (
+                good | {'samples': []},
+                good | {'overrun': True},
+                good | {'source_skipped_ticks_total': 1},
+                good | {'samples': [{'tick': 12, 'wall_us': 1}]},
+                good | {'samples': [{'tick': 11, 'wall_us': 1}, {'tick': 13, 'wall_us': 1}]},
+                good | {'samples': [{'tick': 11}]},
+                good | {'instance_started_unix_ns': 43},
+            ):
+                with self.subTest(bad=bad), patch.object(native_matrix.HealthInterval, '_snapshot',
+                                                         side_effect=[baseline, bad]):
+                    health = native_matrix.HealthInterval(host)
+                    with self.assertRaises(MissingCapability):
+                        health.finish()
+            slow = good | {'samples': [{'tick': 11, 'wall_us': 50000}]}
+            with patch.object(native_matrix.HealthInterval, '_snapshot', side_effect=[baseline, slow]):
+                health = native_matrix.HealthInterval(host)
+                with self.assertRaisesRegex(RuntimeError, 'tick_mspt_at_least_50'):
+                    health.finish()
+            with patch.object(native_matrix.HealthInterval, '_snapshot', return_value=baseline):
+                health = native_matrix.HealthInterval(host)
+            host.running = False
+            with self.assertRaisesRegex(RuntimeError, 'server_not_alive'):
+                health.finish()
+            host.running = True
+            host._process = object()
+            with self.assertRaisesRegex(RuntimeError, 'server_not_alive'):
+                health.finish()
+            for message in ('ERROR plugin failure', 'thread panicked at source'):
+                log.write_text(message)
+                with self.assertRaisesRegex(RuntimeError, 'server_log_error'):
+                    health.verify_log()
+
+    def test_health_checks_before_and_after_restart_and_discloses_gap(self):
+        from unittest.mock import Mock, call
+        lane = object.__new__(native_matrix.Lane)
+        events = Mock()
+        lane.health = Mock(restart_boundaries=[])
+        lane.host = Mock()
+        lane.host.kill9_restart.return_value = {}
+        lane._record_server = Mock()
+        events.attach_mock(lane.health, 'health')
+        events.attach_mock(lane.host, 'host')
+        lane.steps = SimpleNamespace(report={}, deadline=0)
+        lane.clients, lane.names = [], []
+        lane.wal_checkpoint_baseline = None
+        lane.timeout = 30
+        lane.restart(crash=True)
+        self.assertEqual(events.mock_calls, [call.health.finish(), call.health.verify_log(),
+                                            call.host.kill9_restart(), call.health.begin()])
+        self.assertEqual(lane.health.restart_boundaries, [{
+            'kind': 'kill9', 'unobserved_shutdown_gap': 'between final metrics read and server stop'}])
+        health = object.__new__(native_matrix.HealthInterval)
+        health.restart_boundaries = lane.health.restart_boundaries
+        with self.assertRaisesRegex(MissingCapability, 'final_tick_to_server_stop_unobservable'):
+            health.require_complete()
+        health.restart_boundaries = []
+        health.require_complete()
+        lane.health.finish.side_effect = RuntimeError('bad health')
+        lane.host.kill9_restart.reset_mock()
+        with self.assertRaisesRegex(RuntimeError, 'bad health'):
+            lane.restart(crash=True)
+        lane.host.kill9_restart.assert_not_called()
+
+
     def test_restart_has_one_deadline_despite_unrelated_events(self):
         from types import SimpleNamespace
         lane=object.__new__(native_matrix.Lane)
@@ -117,6 +203,7 @@ class NativeMatrixTests(unittest.TestCase):
         lane._record_server=lambda:None
         lane.steps=SimpleNamespace(report={})
         lane.wal_checkpoint_baseline=None
+        lane.health=None
         lane.timeout=1
         client=SimpleNamespace(call_tool=lambda *args:{'in_play':True,'state_version':1})
         lane.clients=[client]; lane.names=['test']
@@ -290,6 +377,45 @@ class NativeMatrixTests(unittest.TestCase):
              patch.object(native_matrix.native_client,'start',side_effect=fake_start):
             lane.launch('test')
         self.assertIsNone(seen['scenario_id'])
+
+    def test_native_missing_content_is_blocked_not_product_failure(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from tools.harness import runtime
+        from tools.harness.matrix_api import MissingCapability
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / 'client.log'
+            log.write_text('krasnokamen-client: missing content file: /private/facts/block_collision_shapes_26_3.bin\n')
+            lane = object.__new__(native_matrix.Lane)
+            lane.directory, lane.processes = root, []
+            lane.ctx = SimpleNamespace(client_evidence={}, commands=[], cwds=[], exits=[], logs=[])
+            lane.scenario = {'id': 'matrix:chest'}
+            lane.native, lane.address, lane.timeout, lane.display = Path('/client'), 'localhost:1', 30, ':1'
+            with patch('tools.harness.audio.private_audio_preflight'), \
+                 patch.object(native_matrix.native_client, 'start',
+                              side_effect=runtime.ChildExited('startup failed', 1, log)):
+                with self.assertRaisesRegex(MissingCapability, 'client:missing_content'):
+                    lane.launch('test')
+
+    def test_native_other_startup_crash_remains_failure(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from tools.harness import runtime
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / 'client.log'
+            log.write_text('client panic\n')
+            lane = object.__new__(native_matrix.Lane)
+            lane.directory, lane.processes = root, []
+            lane.ctx = SimpleNamespace(client_evidence={}, commands=[], cwds=[], exits=[], logs=[])
+            lane.scenario = {'id': 'matrix:chest'}
+            lane.native, lane.address, lane.timeout, lane.display = Path('/client'), 'localhost:1', 30, ':1'
+            with patch('tools.harness.audio.private_audio_preflight'), \
+                 patch.object(native_matrix.native_client, 'start',
+                              side_effect=runtime.ChildExited('startup failed', 1, log)):
+                with self.assertRaises(runtime.ChildExited):
+                    lane.launch('test')
 
     def _loaded_lane(self, home):
         from unittest.mock import MagicMock

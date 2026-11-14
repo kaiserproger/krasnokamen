@@ -222,7 +222,9 @@ class RunTestPolicyTests(unittest.TestCase):
     def test_profile_memory_defaults_match_admission_and_scope(self) -> None:
         env = {key: value for key, value in os.environ.items()
                if key not in {cli.CPU_SCOPE_ENV, cli.MEMORY_MAX_ENV}}
-        for profile, expected in [("test", "12G"), ("correctness", "12G"), ("check", "4G"), (None, "4G")]:
+        for profile, expected in [("test", "12G"), ("correctness", "12G"), ("check", "4G"),
+                                  ("java-battle-functional", "12G"), ("scene-shot", "12G"),
+                                  ("regressions", "4G"), (None, "4G")]:
             with self.subTest(profile=profile), mock.patch.dict(os.environ, env, clear=True):
                 with mock.patch.object(cli, "_default_cpu_quota", return_value="600%"):
                     with mock.patch.object(cli, "_available_bytes", return_value=16 * 1024**3):
@@ -971,7 +973,6 @@ class ReadinessCleanupTests(unittest.TestCase):
 def load_tests(loader, tests, pattern):
     tests.addTests(loader.loadTestsFromNames([
         "tools.harness.test_protocol_lifecycle.LifecycleGuardTests.test_command_fence_uses_private_read_only_query",
-        "tools.harness.test_native_matrix.NativeMatrixTests.test_native_launch_provides_matrix_scenario_id",
         "tools.harness.test_native_matrix.NativeMatrixTests.test_health_interval_requires_live_complete_below_budget_samples_and_clean_log",
         "tools.harness.test_native_matrix.NativeMatrixTests.test_health_checks_before_and_after_restart_and_discloses_gap",
         "tools.harness.test_native_matrix.NativeMatrixTests.test_row_verdicts_distinguish_declared_blockers_and_failures",

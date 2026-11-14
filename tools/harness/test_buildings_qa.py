@@ -436,11 +436,13 @@ class ForeignBlockTest(unittest.TestCase):
 class SequentialFlowTest(unittest.TestCase):
     """`_scenario_sequential` for one blueprint with every game-facing helper replaced."""
 
-    def run_flow(self, bp, top, order_admitted, cert_after_order, windowed=False, menu_evidence=(1, 2, 3)):
+    def run_flow(self, bp, top, order_admitted, cert_after_order, windowed=False, menu_evidence=(1, 2, 3),
+                 order_echo=None):
         probe = FakeProbe()
         detail: dict = {}
         certs = {}
         events = []
+        stages = []
         self.calls = []
 
         def current(_probe, sub, tag, _bp, level):
@@ -453,6 +455,8 @@ class SequentialFlowTest(unittest.TestCase):
                   upgrade_bid=None):
             events.append(("order", level, use_dialog))
             stages.append(("order", level))
+            if order_echo is not None:
+                sub[f"L{level}_order_attempt1"] = order_echo
             if use_dialog and level in menu_evidence:
                 sub[f"L{level}_dialog_{'order' if level == 1 else 'upgrade'}"] = "confirmed"
             if cert_after_order:
@@ -497,13 +501,16 @@ class SequentialFlowTest(unittest.TestCase):
             _wait_certified_origin_here=wait_cert,
             _break_corner=break_corner,
             _broken_replaced=broken_replaced,
-            _verify_level=lambda *a, **k: None,
+            _verify_level=lambda _p, _s, _c, _a, _b, level, *_args: stages.append(("verify", level)),
         )
-        with mock.patch.multiple(buildings_qa, **patches), \
-                mock.patch.object(buildings_qa, "_capture_level",
-                                  side_effect=lambda _p, _s, _a, _t, _b, level, _o:
-                                  stages.append(("capture", level))) as capture:
-            buildings_qa._scenario_sequential(probe, detail, ctx, None, (bp,), "", None, None)
+        self.last_probe = probe
+        try:
+            with mock.patch.multiple(buildings_qa, **patches), \
+                    mock.patch.object(buildings_qa, "_capture_level",
+                                      side_effect=lambda _p, _s, _a, _t, _b, level, _o:
+                                      stages.append(("capture", level))) as capture:
+                buildings_qa._scenario_sequential(probe, detail, ctx, None, (bp,), "", None, None)
+            self.last_sub = detail["blueprints"][bp]
             if windowed:
                 self.assertEqual([call.args[5] for call in capture.call_args_list],
                                  list(range(1, top + 1)))
@@ -514,6 +521,9 @@ class SequentialFlowTest(unittest.TestCase):
                     expected.append(("capture", level))
                 expected.append(("verify", level))
             self.assertEqual(stages, expected)
+        except RuntimeError:
+            self.last_sub = detail["blueprints"][bp]
+            raise
         return probe, detail["blueprints"][bp], events
 
     def test_a_passing_run_records_every_level_verdict(self):
@@ -552,6 +562,18 @@ class SequentialFlowTest(unittest.TestCase):
     def test_an_order_nobody_admitted_still_fails(self):
         with self.assertRaisesRegex(RuntimeError, "buildings_gate_L1_project"):
             self.run_flow("gate", 3, order_admitted=False, cert_after_order=False)
+
+    def test_an_unknown_blueprint_refusal_fails_l1_built_as_an_ordinary_check(self):
+        # ISSUE-1-16 negative control: with the wall blueprint unregistered the server
+        # answers "Unknown blueprint."; the gate must record L1_built=FAIL and trip the
+        # buildings_wall_L1_built check, never die with an unexpected exception.
+        # Red without the fix: the run then aborts at buildings_wall_L1_project instead.
+        with self.assertRaisesRegex(RuntimeError, "buildings_wall_L1_built"):
+            self.run_flow("wall", 3, order_admitted=False, cert_after_order=False,
+                          order_echo="Unknown blueprint.")
+        self.assertEqual(self.last_sub["behaviour"].get("L1_built"), "FAIL")
+        self.assertIn("Unknown blueprint.", self.last_sub["evidence"].get("L1_built", ""))
+        self.assertFalse(self.last_probe.report["assertions"]["buildings_wall_L1_built"])
 
     def test_missing_level_is_red_only_after_the_server_refuses_the_upgrade(self):
         data = buildings_qa._load_blueprints()

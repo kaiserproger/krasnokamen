@@ -1,0 +1,35 @@
+diff --git a/crates/mc-core/src/tick/damage.rs b/crates/mc-core/src/tick/damage.rs
+index eab1a3502..a2962f141 100644
+--- a/crates/mc-core/src/tick/damage.rs
++++ b/crates/mc-core/src/tick/damage.rs
+@@ -792,19 +792,18 @@ impl TickState {
+                     self,
+                     crate::command_rules::BoolRule::SHOW_DEATH_MESSAGES,
+                 );
++                let message = if show {
++                    super::death_message::component(self, id, piece.kind, last_damage_source)
++                } else {
++                    mc_nbt::Tag::String(String::new())
++                };
++                self.push_player(
++                    connection,
++                    PlayerChange::Died {
++                        message: message.clone(),
++                    },
++                );
+                 if show {
+-                    let message = super::death_message::component(
+-                        self,
+-                        id,
+-                        piece.kind,
+-                        last_damage_source,
+-                    );
+-                    self.push_player(
+-                        connection,
+-                        PlayerChange::Died {
+-                            message: message.clone(),
+-                        },
+-                    );
+                     super::death_message::broadcast(self, id, message);
+                 }
+             } else {

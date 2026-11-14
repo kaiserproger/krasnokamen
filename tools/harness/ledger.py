@@ -113,6 +113,58 @@ def _run_cargo(ctx, tests, tree):
     return results
 
 
+def _run_client(ctx, tests, root):
+    """Run exact client-crate tests {(crate, name)} in the client checkout -> {(crate, name): (state, detail)}.
+
+    A `client:<crate>:<test>` ref is a fix in the client repository: it never builds here, so the
+    checkout is `runtime.sibling_root('client')` (KRASNOKAMEN_CLIENT_ROOT or the sibling repo)."""
+    from . import runtime
+
+    repo = client_repo(root)
+    if not repo.is_dir():
+        return {test: (UNRUNNABLE, f'no client checkout at {repo} (set KRASNOKAMEN_CLIENT_ROOT)') for test in tests}
+    results = {}
+    for crate, name in sorted(tests):
+        # A ref may name one test or a whole module (`ui::toasts::tests`): cargo's filter selects it
+        # either way, and `--exact` would find nothing for the module form. Green needs at least one
+        # selected test and no failure, so a ref can never pass by selecting nothing.
+        argv, env = regressions.tree_build_command(
+            repo, ['cargo', 'test', '-p', crate, '--lib', '--', name])
+        ok, text = _exec(ctx, argv, f'client-{name.rsplit("::", 1)[-1][:24]}', repo, env)
+        summary = re.search(r'test result: (\w+)\. (\d+) passed; (\d+) failed', text)
+        if summary is None:
+            results[(crate, name)] = (UNRUNNABLE, 'no test summary (build error?)')
+            continue
+        passed, failed = int(summary.group(2)), int(summary.group(3))
+        if passed == 0:
+            results[(crate, name)] = (UNRUNNABLE, 'ran no matching test')
+        elif failed or not ok:
+            results[(crate, name)] = (RED, f'{failed} failed of {passed + failed}')
+        else:
+            results[(crate, name)] = (GREEN, '')
+    return results
+
+
+def _run_python(ctx, tests, tree):
+    """Run exact unittest targets {(module, dotted test)} in `tree` -> {(module, test): (state, detail)}.
+
+    A tools/** fix has no cargo check and no windowed profile; its own unittest is the guard. The
+    module is imported from `tree` so the run is about that candidate, not the invoking checkout."""
+    results = {}
+    for module, test in sorted(tests):
+        argv = [sys.executable, '-m', 'unittest', f'{module}.{test}']
+        ok, text = _exec(ctx, argv, f'python-{test.rsplit(".", 1)[-1][:24]}', tree, None)
+        if ok:
+            results[(module, test)] = (GREEN, '')
+            continue
+        detail = 'test failed' if re.search(r'(?m)^(FAIL|ERROR):', text) else 'test did not run (import error, unknown test?)'
+        if 'ModuleNotFoundError' in text or 'AttributeError' in text and 'has no attribute' in text:
+            results[(module, test)] = (UNRUNNABLE, 'module or test not found in this tree')
+        else:
+            results[(module, test)] = (RED, detail)
+    return results
+
+
 def _failing_verdict(receipt, profile, verdict):
     """A failed profile run is red for `verdict` when the receipt reports it unmet, or, for a
     verdict the profile cannot report on failure, when its own assertion failed:
@@ -286,7 +338,7 @@ def run_refs(ctx, refs, tree, client):
     A failed client run is red only when its receipt carries an explicitly failing verdict for the
     referenced profile check. A timeout, a client that never reached play or any other failure
     without a negative verdict is unrunnable: it is not evidence about the check."""
-    out, cargo, harness = {}, set(), []
+    out, cargo, harness, python, client_tests = {}, set(), [], set(), set()
     for ref in refs:
         try:
             kind, first, second = regressions._parse_ref(ref)
@@ -295,6 +347,10 @@ def run_refs(ctx, refs, tree, client):
             continue
         if kind == 'cargo':
             cargo.add((first, second))
+        elif kind == 'python':
+            python.add((first, second))
+        elif kind == 'client':
+            client_tests.add((first, second))
         elif client:
             harness.append(ref)
         else:
@@ -306,6 +362,12 @@ def run_refs(ctx, refs, tree, client):
         if harness:
             for ref, (state, detail, receipt) in _run_harness(ctx, harness, tree).items():
                 out[ref] = {'state': state, 'detail': detail, **({'receipt': receipt} if receipt else {})}
+        if python:
+            for (module, test), (state, detail) in _run_python(ctx, python, tree).items():
+                out[f'python:{module}:{test}'] = {'state': state, 'detail': detail}
+        if client_tests:
+            for (crate, name), (state, detail) in _run_client(ctx, client_tests, tree).items():
+                out[f'client:{crate}:{name}'] = {'state': state, 'detail': detail}
     return out
 
 
@@ -587,6 +649,203 @@ def _server_built_from(root, receipt_text, tree):
                   f"({named[0]['tree']['head'][:12]}), not the candidate")
 
 
+def client_repo(root=REPO_ROOT):
+    """The client checkout a `client:<sha>` fix_commit is resolved in (the sibling repo, or its env override)."""
+    from . import runtime
+
+    return runtime.sibling_root('client', root)
+
+
+def client_fix_commit(fix, root=REPO_ROOT):
+    """Full sha of a `client:<sha>` fix_commit in the client repository; Refused when it is unknown."""
+    sha = fix[len('client:'):]
+    if not re.fullmatch(r'[0-9a-f]{7,40}', sha):
+        raise Refused(f'fix_commit {fix}: expected client:<sha>')
+    repo = client_repo(root)
+    if not repo.is_dir():
+        raise Refused(f'fix_commit {fix}: no client checkout at {repo} (set KRASNOKAMEN_CLIENT_ROOT)')
+    code, full = _git(repo, 'rev-parse', '--verify', '--quiet', f'{sha}^{{commit}}', check=False)
+    if code:
+        raise Refused(f'fix_commit {fix}: {sha} is not a commit of the client repository {repo}')
+    return full.strip()
+
+
+def client_pin(binary_path):
+    """`{path, sha256, manifest_path, head, dirty}` of the client binary a run launches.
+
+    The binary is hashed here, now, and bound to its source only through the pin-release manifest
+    beside it: a checkout HEAD beside the binary says nothing about what that binary was built from.
+    Missing pieces stay missing (`head`/`dirty` None, `error` says why) so promotion can refuse."""
+    from . import runtime
+
+    info = {'path': str(binary_path) if binary_path else None, 'sha256': None,
+            'manifest_path': None, 'head': None, 'dirty': None}
+    if not binary_path:
+        info['error'] = 'KRASNOKAMEN_CLIENT_BINARY is not set: no client ran under this receipt'
+        return info
+    path = Path(binary_path).expanduser()
+    if not path.is_absolute():
+        path = runtime.sibling_root('client') / path
+    info['path'] = str(path)
+    try:
+        with path.open('rb') as binary:
+            info['sha256'] = hashlib.file_digest(binary, 'sha256').hexdigest()
+    except OSError as error:
+        info['error'] = f'client binary {path} unreadable: {error}'
+        return info
+    manifest = path.parent / 'manifest.json'
+    info['manifest_path'] = str(manifest)
+    try:
+        pin = json.loads(manifest.read_text())
+    except (OSError, ValueError) as error:
+        info['error'] = f'no client pin manifest beside {path}: {error}'
+        return info
+    if pin.get('kind') != 'client' or pin.get('repo') != 'client':
+        info['error'] = f'{manifest} is not a client pin (kind {pin.get("kind")!r}, repo {pin.get("repo")!r})'
+        return info
+    info['head'] = pin.get('head')
+    info['dirty'] = pin.get('dirty')
+    if pin.get('binary_sha256') != info['sha256']:
+        info['error'] = (f'{manifest} pins a different binary ({str(pin.get("binary_sha256"))[:12]}) than the '
+                         f'one that ran ({str(info["sha256"])[:12]})')
+    return info
+
+
+def _client_pin_of_receipt(root, receipt, path):
+    """The pin head a receipt's client ran, Refused unless the receipt's pin is complete and clean."""
+    recorded = receipt.get('client_binary')
+    if not isinstance(recorded, dict):
+        raise Refused(f'client receipt {path} records no client binary (the harness writes client_binary at '
+                      'run start): rerun the gate on a pinned client')
+    if recorded.get('error'):
+        raise Refused(f'client receipt {path}: {recorded["error"]}')
+    if not re.fullmatch(r'[0-9a-f]{64}', str(recorded.get('sha256', ''))):
+        raise Refused(f'client receipt {path} records no sha256 of the client binary that ran')
+    manifest_path = recorded.get('manifest_path')
+    if not manifest_path:
+        raise Refused(f'client receipt {path} records no client pin manifest: a binary without its source '
+                      'pin proves nothing about the fix')
+    try:
+        pin = json.loads(Path(manifest_path).read_text())
+    except (OSError, ValueError) as error:
+        raise Refused(f'client receipt {path}: client pin manifest {manifest_path} unreadable: {error}')
+    if pin.get('kind') != 'client' or pin.get('repo') != 'client':
+        raise Refused(f'client receipt {path}: {manifest_path} is not a client pin')
+    if pin.get('binary_sha256') != recorded['sha256']:
+        raise Refused(f"client receipt {path}: the manifest pins binary {str(pin.get('binary_sha256'))[:12]}, "
+                      f"the receipt ran {recorded['sha256'][:12]}: the pin does not describe the client that ran")
+    if pin.get('dirty') is not False:
+        raise Refused(f"client receipt {path}: client pin {manifest_path} is dirty ({pin.get('dirty')!r}); a "
+                      'dirty client tree has no reliable source revision')
+    head = pin.get('head')
+    if not re.fullmatch(r'[0-9a-f]{40}', str(head or '')):
+        raise Refused(f'client receipt {path}: client pin {manifest_path} records no head')
+    if recorded.get('head') is not None and recorded['head'] != head:
+        raise Refused(f'client receipt {path}: records client head {str(recorded["head"])[:12]} but its pin '
+                      f'says {head[:12]}')
+    code, _ = _git(client_repo(root), 'cat-file', '-e', f'{head}^{{commit}}', check=False)
+    if code:
+        raise Refused(f'client receipt {path} ran a client revision {head[:12]} that the client repository '
+                      f'{client_repo(root)} does not have')
+    return head
+
+
+def client_contains(root, client_head, fix_full):
+    """True when the client revision contains the fix commit."""
+    code, _ = _git(client_repo(root), 'merge-base', '--is-ancestor', fix_full, client_head, check=False)
+    return code == 0
+
+
+def _failed_assertion(details):
+    """Name of the first assertion a scenario report records as false, or None when it recorded none."""
+    def assertion_maps(node, depth=0):
+        if depth > 3 or not isinstance(node, dict):
+            return
+        assertions = node.get('assertions')
+        if isinstance(assertions, dict):
+            yield assertions
+        for key in ('scenario', 'named_scenario'):
+            if key in node:
+                yield from assertion_maps(node[key], depth + 1)
+
+    for assertions in assertion_maps(details):
+        for name, passed in assertions.items():
+            if passed is False:
+                return name
+    return None
+
+
+def _client_ref_states(receipt, graphical_refs):
+    """{ref: GREEN|RED|None} for the row's real-client refs in one receipt; None means it never reported it."""
+    from . import regressions, scenarios
+
+    details = receipt.get('details', {})
+    states = {}
+    for ref in graphical_refs:
+        _, profile, check = ref.split(':', 2)
+        if check in scenarios.SCENARIOS:
+            named = details.get('named_scenario', {})
+            if named.get('id') != check:
+                states[ref] = None
+            elif receipt.get('status') == 'passed':
+                states[ref] = GREEN
+            else:
+                # RED is "the scenario ran and an assertion of it failed". A timeout, a launch error or
+                # a crashed client never observed the bug, so it cannot stand as the negative control.
+                states[ref] = RED if (receipt.get('status') == 'failed'
+                                      and _failed_assertion(details) is not None) else None
+            continue
+        try:
+            regressions._profile_verdict(receipt, profile, check)
+            states[ref] = GREEN
+        except regressions.VerdictNotMet as missing:
+            # A verdict that was never reported is not a red observation of the bug.
+            states[ref] = RED if missing.value is False else None
+    return states
+
+
+def _receipt_identity(root, receipt_path, tree):
+    """(receipt, path, server binary sha256) of a real-client result.json run on exactly `tree`."""
+    path = Path(receipt_path).resolve()
+    try:
+        receipt = json.loads(path.read_text())
+    except (OSError, ValueError) as error:
+        raise Refused(f'client receipt {receipt_path} unreadable: {error}')
+    if path.name != 'result.json':
+        raise Refused(f'client receipt {receipt_path} is not a result.json')
+    recorded = receipt.get('tree')
+    if not isinstance(recorded, dict) or not re.fullmatch(r'[0-9a-f]{40}', str(recorded.get('head', ''))) or not re.fullmatch(r'[0-9a-f]{64}', str(recorded.get('sha256', ''))):
+        raise Refused(f'client receipt {receipt_path} records no tree fingerprint (the harness writes it at run start): rerun the gate on the candidate')
+    if recorded['head'] != tree['head']:
+        raise Refused(f"client receipt ran at {recorded['head'][:12]}, not at the tree being promoted {tree['head'][:12]}: rerun the gate there")
+    if recorded['sha256'] != tree['sha256']:
+        raise Refused('client receipt ran with different uncommitted changes than the tree being promoted: rerun the gate on the candidate')
+    server = _server_built_from(root, json.dumps(receipt), tree)
+    return receipt, path, server, recorded
+
+
+def check_client_control_receipt(root, receipt_path, graphical_refs, fix_full, tree):
+    """Validate the negative control of a `client:<sha>` row -> info dict.
+
+    The control is a real-client receipt of the *pre-fix* client (one that does not contain the fix)
+    on the same server tree, in which the row's ref is red: it shows the fix is what the check sees."""
+    receipt, path, server, recorded = _receipt_identity(root, receipt_path, tree)
+    if not graphical_refs:
+        raise Refused('a client:<sha> fix_commit needs a real-client ref to carry the control')
+    states = _client_ref_states(receipt, graphical_refs)
+    red = [ref for ref, state in states.items() if state == RED]
+    if not red:
+        raise Refused(f"client receipt {path} is not red on any of the row's real-client refs ("
+                      + ', '.join(f'{ref}={states[ref] or "unreported"}' for ref in graphical_refs)
+                      + '): a control that stays green does not test the fix')
+    client_head = _client_pin_of_receipt(root, receipt, path)
+    if client_contains(root, client_head, fix_full):
+        raise Refused(f'client receipt {path} ran the client at {client_head[:12]}, which already contains the '
+                      f'fix {fix_full[:12]}: the control has to be the pre-fix client (e.g. {fix_full[:12]}^)')
+    return {'path': str(path), 'client_head': client_head, 'server_binary_sha256': server,
+            'red': red, 'states': states}
+
+
 def check_client_receipt(root, receipt_path, graphical_refs, tree):
     """Validate the supplied real-client receipt -> info dict.
 
@@ -616,16 +875,31 @@ def check_client_receipt(root, receipt_path, graphical_refs, tree):
                 pass
     if not covered:
         raise Refused(f"client receipt {receipt_path} does not pass any of the row's real-client refs: {', '.join(graphical_refs)}")
-    recorded = receipt.get('tree')
-    if not isinstance(recorded, dict) or not re.fullmatch(r'[0-9a-f]{40}', str(recorded.get('head', ''))) or not re.fullmatch(r'[0-9a-f]{64}', str(recorded.get('sha256', ''))):
-        raise Refused(f'client receipt {receipt_path} records no tree fingerprint (the harness writes it at run start): rerun the gate on the candidate')
-    if recorded['head'] != tree['head']:
-        raise Refused(f"client receipt ran at {recorded['head'][:12]}, not at the tree being promoted {tree['head'][:12]}: rerun the gate there")
-    if recorded['sha256'] != tree['sha256']:
-        raise Refused('client receipt ran with different uncommitted changes than the tree being promoted: rerun the gate on the candidate')
-    server = _server_built_from(root, json.dumps(receipt), tree)
+    _, _, server, recorded = _receipt_identity(root, path, tree)
     return {'path': str(path), 'tree_head': recorded['head'], 'tree_dirty': bool(recorded.get('dirty')), 'tree_sha256': recorded['sha256'],
             'server_binary_sha256': server, 'covers': covered, 'profile': receipt.get('profile')}
+
+
+def check_client_restore_receipt(root, receipt_path, graphical_refs, fix_full, tree):
+    """Validate the restore of a `client:<sha>` row -> info dict.
+
+    A passed receipt of the candidate whose client contains the fix and whose ref is green: the pair
+    with its control proves the ref follows the client fix, on this server tree."""
+    receipt, path, server, recorded = _receipt_identity(root, receipt_path, tree)
+    if receipt.get('status') != 'passed':
+        raise Refused(f"client receipt {path} is not a passed result.json (status {receipt.get('status')!r})")
+    states = _client_ref_states(receipt, graphical_refs)
+    green = [ref for ref, state in states.items() if state == GREEN]
+    if not green:
+        raise Refused(f"client receipt {path} does not pass any of the row's real-client refs ("
+                      + ', '.join(f'{ref}={states[ref] or "unreported"}' for ref in graphical_refs) + ')')
+    client_head = _client_pin_of_receipt(root, receipt, path)
+    if not client_contains(root, client_head, fix_full):
+        raise Refused(f'client receipt {path} ran the client at {client_head[:12]}, which does not contain the fix '
+                      f'{fix_full[:12]}: the restore has to run the fixed client')
+    return {'path': str(path), 'client_head': client_head, 'server_binary_sha256': server,
+            'green': green, 'states': states, 'tree_head': recorded['head'],
+            'tree_dirty': bool(recorded.get('dirty')), 'tree_sha256': recorded['sha256']}
 
 
 def _mark_fixed(text, ident, promotion):
@@ -641,10 +915,68 @@ def _mark_fixed(text, ident, promotion):
     raise Refused(f'{ident}: row not found in ledger.toml')
 
 
-def promote(ident, *, root=REPO_ROOT, client_receipt=None, fix_patch=None, dry_run=False, ctx, runner=run_refs):
+def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client_receipt, client_control_receipt):
+    """A `client:<sha>` row: control red on the pre-fix client, restore green on the client containing it.
+
+    The server side is the tree being promoted in both receipts (the fix is not a server change), and
+    no worktree, patch reversal or ref run is involved: the receipts are the evidence."""
+    fix_full = client_fix_commit(fix, root)
+    refs = row['regression']
+    if not refs:
+        raise Refused(f'{ident}: no registered check (regression is empty)')
+    for ref in refs:
+        try:
+            regressions._parse_ref(ref)
+        except ValueError as error:
+            raise Refused(f'{ident}: {error}')
+    graphical = [ref for ref in refs if regressions.is_graphical_ref(ref)]
+    if not graphical:
+        raise Refused(f'{ident}: a client:<sha> fix_commit needs a real-client harness ref (a graphical check) '
+                      'to carry the red control')
+    if not client_control_receipt:
+        raise Refused(f'{ident}: fix_commit {fix} needs the negative control (--client-control-receipt '
+                      '<result.json>): a real-client receipt of the pre-fix client with the ref red')
+    if not client_receipt:
+        raise Refused(f'{ident}: fix_commit {fix} needs the restore (--client-receipt <result.json>): a passed '
+                      'receipt of the client that contains the fix with the same ref green')
+    control = check_client_control_receipt(root, client_control_receipt, graphical, fix_full, tree_now)
+    restored_info = check_client_restore_receipt(root, client_receipt, graphical, fix_full, tree_now)
+    if not set(control['red']) & set(restored_info['green']):
+        raise Refused(f"{ident}: the control's red refs {control['red']} and the restore's green refs "
+                      f"{restored_info['green']} do not overlap: the same check has to flip")
+    receipt = {
+        'id': ident, 'verdict': 'promoted', 'fix_commit': fix, 'fix_commit_full': fix_full,
+        'promoted_at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
+        'tree_head': tree_now['head'], 'tree_dirty': tree_now['dirty'], 'tree_sha256': tree_now['sha256'],
+        'client_fix': True, 'control_tree': 'client',
+        'negative_control': control, 'restored': restored_info, 'client_receipt': restored_info,
+        'artifact_dir': str(ctx.artifact_dir),
+    }
+    (ctx.artifact_dir / 'promote.json').write_text(json.dumps(receipt, indent=2) + '\n')
+    if dry_run:
+        return receipt
+    promotion = f'{regressions.PROMOTION_DIR}/{ident}.json'
+    ledger = root / 'docs/bugs/ledger.toml'
+    original = ledger.read_text()
+    (root / promotion).parent.mkdir(parents=True, exist_ok=True)
+    (root / promotion).write_text(json.dumps(receipt, indent=2) + '\n')
+    ledger.write_text(_mark_fixed(original, ident, promotion))
+    try:
+        written = next(bug for bug in _load_bugs(root) if bug['id'] == ident)
+        assert written['status'] == 'fixed' and written['promotion'] == promotion
+    except Exception:
+        ledger.write_text(original)
+        raise
+    return receipt
+
+
+def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receipt=None, fix_patch=None,
+            dry_run=False, ctx, runner=run_refs):
     """Run every promotion check for `ident`; on success (and not dry_run) flip it to fixed. Refused on any failure.
 
-    The candidate is the exact tree: HEAD plus uncommitted diff and untracked files (docs/bugs aside)."""
+    The candidate is the exact tree: HEAD plus uncommitted diff and untracked files (docs/bugs aside).
+    A `client:<sha>` fix_commit is a client-repository fix: its control is a red real-client receipt of
+    the pre-fix client and its restore a green one of the client that contains the fix (docs/bugs/README.md)."""
     bugs = _load_bugs(root)
     row = next((bug for bug in bugs if bug['id'] == ident), None)
     if row is None:
@@ -656,6 +988,12 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, fix_patch=None, dry_r
     fix = row.get('fix_commit')
     if not fix:
         raise Refused(f'{ident}: no fix_commit recorded')
+    if fix.startswith('client:'):
+        return _promote_client_fix(ident, row=row, fix=fix, root=root, tree_now=tree_now, dry_run=dry_run,
+                                   ctx=ctx, client_receipt=client_receipt,
+                                   client_control_receipt=client_control_receipt)
+    if client_control_receipt:
+        raise Refused(f'{ident}: --client-control-receipt is only for a fix_commit of the form client:<sha>')
     patch_mode = fix.startswith('patch:')
     if patch_mode:
         full = fix
@@ -776,6 +1114,8 @@ def main(argv):
     promote_parser = sub.add_parser('promote', help='the only way a row becomes fixed')
     promote_parser.add_argument('id')
     promote_parser.add_argument('--client-receipt', type=Path, default=None, help='passed real-client result.json from a tree containing fix_commit')
+    promote_parser.add_argument('--client-control-receipt', type=Path, default=None,
+                                help='negative control for fix_commit client:<sha>: a real-client result.json of the pre-fix client with the row\'s ref red')
     promote_parser.add_argument('--fix-patch', type=Path, default=None,
                                 help="git diff of an uncommitted fix, for a fix_commit of the form patch:<sha256> of its non-test hunks")
     promote_parser.add_argument('--dry-run', action='store_true', help='run every check, write nothing to the ledger')
@@ -808,7 +1148,9 @@ def main(argv):
         return 0
     ctx = _artifact_ctx('promote')
     try:
-        receipt = promote(args.id, client_receipt=args.client_receipt, fix_patch=args.fix_patch, dry_run=args.dry_run, ctx=ctx)
+        receipt = promote(args.id, client_receipt=args.client_receipt,
+                          client_control_receipt=args.client_control_receipt,
+                          fix_patch=args.fix_patch, dry_run=args.dry_run, ctx=ctx)
     except Refused as error:
         print(f'[ledger] refused: {error}')
         print(f'[ledger] artifact={ctx.artifact_dir}')

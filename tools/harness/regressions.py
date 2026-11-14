@@ -92,6 +92,7 @@ _WINDOWED_PROFILES = frozenset({
     'composter-chance', 'chat-visibility', 'datapack-reload', 'village-qa', 'village-autonomy-qa',
     'civilization-seed-qa', 'village-owner-order-qa', 'scene-shot',
     'settlement-map-qa', 'claim-only-qa', 'buildings-qa', 'army-qa', 'autocraft-qa', 'screen-share',
+    'screens-voice-qa',
 })
 _AUTONOMY_VERDICTS = frozenset({
     'walk_to_village', 'ownerless_settlement', 'founding_chest_empty',
@@ -117,6 +118,9 @@ _BOOLEAN_PROFILE_VERDICTS = {
 # (it sends ClientInformation `en_us` fixed), so the Russian text check runs on vanilla Java.
 _PROFILE_VERDICT_RUN = {
     ('settlement-map-qa', 'localized_text'): ('java', ['--', '--language', 'ru_ru']),
+    # The chisel resource-pack admission is a vanilla-Java client behaviour; the native client
+    # never asks for the optional pack.
+    ('chisel', 'vanilla_optional_admission'): ('java', []),
 }
 _PROFILE_RUN_OPTIONS = {
     'civilization-seed-qa': ['--timeout-seconds', '7200'],
@@ -128,6 +132,14 @@ _PROFILE_VERDICTS = {
         'door_walk', 'sleep_return', 'night_door', 'farmer_harvest', 'miner_deposit', 'lumberjack',
     })),
     'village-autonomy-qa': ('autonomy_acceptance', _AUTONOMY_VERDICTS),
+    # backends/screens_voice_qa.py verdicts: consent, audio, respawn and SVC proximity/group voice.
+    'screens-voice-qa': ('screens_voice', frozenset({
+        'native_loads_computer_monitor', 'owner_consent_names_app_audio', 'owner_deny_sends_no_audio',
+        'owner_allow_streams_picture_and_audio', 'fabric_loader_plays_screen_audio',
+        'viewer_keeps_screen_after_same_dimension_respawn', 'native_voice_resets_on_non_voice_server',
+        'svc_proximity_fabric_to_fabric', 'svc_proximity_fabric_and_native', 'svc_group_fabric_to_fabric',
+        'native_outsider_hears_no_group_audio', 'all',
+    })),
     'claim-only-qa': ('claim_acceptance', frozenset({
         'ownerless_settlement', 'claim_via_dialog_button', 'second_claim_refused',
         'owner_orders_building', 'restart_resume',
@@ -174,12 +186,15 @@ def _profile_command(profile, verdict):
         from .backends.buildings_qa import LEVELS, PERIMETER
         from .backends.perimeter_qa import VERDICTS as PERIMETER_VERDICTS
         blueprint, separator, behaviour = verdict.partition('.')
-        valid = bool(separator) and blueprint in LEVELS and (
-            behaviour in {'settlement_founded', 'L1_built'}
-            or (blueprint, behaviour) == ('house', 'broken_cell_replaced')
-            or behaviour == 'L2_upgrade' and LEVELS[blueprint] >= 2
-            or behaviour == 'L3_upgrade' and LEVELS[blueprint] >= 3
-        )
+        if blueprint == PERIMETER:
+            valid = bool(separator) and behaviour in PERIMETER_VERDICTS
+        else:
+            valid = bool(separator) and blueprint in LEVELS and (
+                behaviour in {'settlement_founded', 'L1_built'}
+                or (blueprint, behaviour) == ('house', 'broken_cell_replaced')
+                or behaviour == 'L2_upgrade' and LEVELS[blueprint] >= 2
+                or behaviour == 'L3_upgrade' and LEVELS[blueprint] >= 3
+            )
     else:
         valid = verdict in _PROFILE_VERDICTS.get(profile, (None, {'all'}))[1]
     if not valid:
@@ -461,6 +476,17 @@ def _parse_ref(ref):
         return tuple(parts)
     if len(parts) == 3 and parts[0] == 'harness':
         _check_command(parts[1], parts[2])
+        return tuple(parts)
+    # A fix in the client repository: the test runs in the client checkout, not in this one.
+    # `client:<crate>:<test>` (both resolved by cargo in runtime.sibling_root('client')).
+    if (len(parts) == 3 and parts[0] == 'client'
+            and re.fullmatch(r'[A-Za-z0-9_-]+', parts[1]) and re.fullmatch(r'[A-Za-z0-9_:]+', parts[2])):
+        return tuple(parts)
+    # A python fix in tools/** has no cargo check and no windowed profile: its own unittest is the
+    # regression guard. `python:<dotted module>:<dotted TestClass.test_method>`.
+    if (len(parts) == 3 and parts[0] == 'python'
+            and re.fullmatch(r'[A-Za-z0-9_.]+', parts[1])
+            and re.fullmatch(r'[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*', parts[2])):
         return tuple(parts)
     raise ValueError(f'invalid check {ref!r}')
 

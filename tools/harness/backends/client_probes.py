@@ -15,8 +15,8 @@ from typing import Any
 from .. import compatibility, runtime
 from ..mcp import McpClient
 from ..profiles import ProfileContext, _server_binary
-from . import (entities_probe, java_p5, light_wire, native_auth_budget, native_client, native_lifecycle,
-               native_light, native_v2)
+from . import (entities_probe, java_p5, java_parrot, light_wire, native_auth_budget, native_client,
+               native_lifecycle, native_light, native_v2)
 from .gameplay import cpu_usage, peak_rss_kib, plugin_directory, prepare_operator_fixture, require_tools
 from .probe_steps import ProbeSteps
 

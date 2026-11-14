@@ -75,6 +75,14 @@ def arguments():
     p.add_argument('--view-distance', type=int, default=12, metavar='CHUNKS', help='server and recorder view distance, 2..32')
     p.add_argument('--allow-marker-gaps', action='store_true', help='record recorder marker and telemetry tick gaps instead of failing the run; implied by --take')
     p.add_argument('--server-scope', nargs='?', const='', default=None, metavar='SLICE', help='run the server in its own transient systemd user scope (optionally under SLICE) so the cgroup memory/CPU telemetry is the server alone')
+    p.add_argument('--live-player', action='append', default=[], metavar='NAME:SIDE', help='network player (offline-mode name) who takes a front-rank infantry slot of SIDE (red|blue) near the centre with its kit before start; repeatable. The runner waits until every live name is online before it launches the recorder')
+    p.add_argument('--live-spectator', action='append', default=[], metavar='NAME[:TARGET]', help='network player put in spectator mode behind TARGET (default: the first --live-player) before start; repeatable')
+    p.add_argument('--live-timeout', type=int, default=DEFAULT_LIVE_TIMEOUT, metavar='SECONDS', help=f'how long the online barrier waits for every live player and spectator (default {DEFAULT_LIVE_TIMEOUT})')
+    p.add_argument('--pre-stage-ticks', type=int, default=0, metavar='TICKS', help='after the recorder has joined and before `battle setup`, wait this many server ticks (from the telemetry stream) so the terrain ring streams without the entity burst; about 1200 for view distance 18')
+    p.add_argument('--server-wrapper', default='', help='profiling command prefix before the pinned server; must forward console input and termination')
+    p.add_argument('--resource-pack-url', default='', help='vanilla server-pushed resource pack URL (empty disables the offer)')
+    p.add_argument('--resource-pack-sha1', default='', help='SHA-1 of the server-pushed pack')
+    p.add_argument('--console-fifo', action='store_true', help='create RUN_DIR/console.fifo: each line written to it is sent to the server console (recorded in commands.txt), e.g. `echo "kill PovRed" > RUN_DIR/console.fifo`')
     p.add_argument('--trace', type=trace_point, metavar='X,Z,R', help='from the end of the population barrier until the recorder stops, send `battle trace X Z R` about every --trace-every recorded ticks and write the replies to trace.jsonl; needs a server pin with the command (b31c2540 or later); default off')
     p.add_argument('--trace-every', type=int, metavar='TICKS', help=f'trace cadence in recorded ticks, with --trace (default {DEFAULT_TRACE_EVERY_TICKS})')
     p.add_argument('--dry-run', action='store_true')
@@ -117,6 +125,8 @@ def arguments():
         a.checkpoint_every_ticks = take_checkpoint_ticks(a.duration) if a.take else DEFAULT_CHECKPOINT_EVERY_TICKS
     elif a.take and a.checkpoint_every_ticks <= a.duration * TICKS_PER_SECOND:
         p.error(f'take mode needs a checkpoint cadence above the {a.duration * TICKS_PER_SECOND} ticks of the take, or a checkpoint lands in the shot window')
+    if a.pre_stage_ticks < 0:
+        p.error('pre-stage ticks must not be negative')
     if a.live_timeout < 1:
         p.error('live timeout must be at least one second')
     try:
@@ -485,7 +495,15 @@ def sha256_file(path):
 
 
 def quote(value):
-    return json.dumps(str(value))
+    """A TOML basic string for `value`; every value placed here is ASCII-only.
+
+    `json.dumps` escapes a non-BMP character as a UTF-16 surrogate pair, and TOML rejects a lone
+    a lone UTF-16 surrogate escape, so a pack URL carrying one would break the whole
+    server config."""
+    text = str(value)
+    if not text.isascii():
+        raise ValueError('config value must be ASCII: {!r}'.format(text))
+    return json.dumps(text)
 
 
 def read_pin(pin):
@@ -568,14 +586,33 @@ def telemetry_worker(port, output, stop, failures, on_batch, ticks, gaps=None, b
         ticks.put(None)
 
 
-def stream_log(pipe, file, messages, trace=None):
-    with file.open('x') as output:
-        for line in pipe:
-            output.write(line)
-            output.flush()
-            if any(marker in line for marker in ('Krasnokamen is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Command failed:', 'Battle error:')):
-                messages.put(line)
-    messages.put(None)
+def console_fifo_worker(path, send):
+    """Forward each line written to the FIFO to the server console. Opening blocks until a writer
+    appears and reading blocks until it writes: no timer. Each writer's EOF reopens the FIFO."""
+    while True:
+        with open(path, encoding='utf-8', errors='replace') as fifo:
+            for line in fifo:
+                command = line.strip()
+                if command:
+                    send(command)
+
+
+def stream_log(pipe, file, messages, trace=None, presence=None):
+    try:
+        with file.open('x') as output:
+            for line in pipe:
+                output.write(line)
+                output.flush()
+                if presence is not None:
+                    presence.feed(line)
+                if trace is not None and 'Battle trace:' in line:
+                    trace.record(line)
+                if any(marker in line for marker in ('Krasnokamen is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Saved the game', 'Failed to save the game', 'Command failed:', 'Battle error:', 'Battle watching:', 'Battle live placed:', 'Battle spectator placed:')):
+                    messages.put(line)
+    finally:
+        if presence is not None:
+            presence.close()
+        messages.put(None)
 
 
 def expect(messages, phrase, timeout=600):
@@ -724,6 +761,7 @@ def run(a):
             subprocess.run(cmd, stdout=host, stderr=subprocess.STDOUT, check=True, text=True)
     messages, failures, ticks, stop = queue.Queue(), queue.Queue(), queue.Queue(), threading.Event()
     status_policy = StatusPolicy(a.status_every)
+    presence = LivePresence(live_names(a)) if live_watch else None
     trace_policy = TracePolicy(a.trace_every) if a.trace is not None else None
     trace_log = TraceLog(root / 'trace.jsonl') if a.trace is not None else None
     telemetry_gaps = []
@@ -741,9 +779,27 @@ def run(a):
                     record.write(command + '\n')
                 server.stdin.write(command + '\n')
                 server.stdin.flush()
-        log_thread = threading.Thread(target=stream_log, args=(server.stdout, root / 'server.log', messages, trace_log), daemon=True)
+        log_thread = threading.Thread(target=stream_log, args=(server.stdout, root / 'server.log', messages, trace_log, presence), daemon=True)
         log_thread.start()
+        if a.console_fifo:
+            os.mkfifo(root / 'console.fifo', 0o600)
+            threading.Thread(target=console_fifo_worker, args=(root / 'console.fifo', send), daemon=True).start()
         expect(messages, 'Krasnokamen is listening (edge v2)')
+        ignored = ignored_config_keys((root / 'server.log').read_text(errors='replace'))
+        if a.take and any(key.endswith('checkpoint_every_ticks') for key in ignored):
+            raise RuntimeError('server pin ignores data.checkpoint_every_ticks (it predates the key, 95c4bc59): a take cannot control its checkpoint cadence; pin a newer server')
+        if a.server_scope is not None:
+            (root / 'server-scope.json').write_text(json.dumps({'unit': f'{server_name}.scope', 'pid': server.pid, 'cgroup': Path(f'/proc/{server.pid}/cgroup').read_text().strip()}, indent=2) + '\n')
+        if presence is not None:
+            # Before the recorder: its take duration and roster timeout start when it launches.
+            send(live_watch)
+            expect(messages, 'Battle watching:')
+            print(f'{utc_now()} live barrier: waiting up to {a.live_timeout} s for {", ".join(live_names(a))}', flush=True)
+            presence.wait_online(live_names(a), a.live_timeout)
+            for name, at in presence.first_online().items():
+                print(f'live barrier: {name} online at {at}', flush=True)
+            presence.barrier_passed = utc_now()
+            (root / 'live-players.json').write_text(json.dumps({'players': a.live_players, 'spectators': a.live_spectators, **presence.receipt()}, indent=2) + '\n')
         header = root / 'header.json'
         header.write_text(json.dumps({'protocol_version': 777, 'server_build': manifest['head'], 'seed': a.seed, 'start_tick': 0, 'wall_time': 0}) + '\n')
         with (root / 'recorder.log').open('x') as recorder_log:

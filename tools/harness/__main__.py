@@ -349,6 +349,16 @@ def cmd_run(argv: list[str]) -> int:
         run_tree = ledger.tree_fingerprint(REPO_ROOT)
     except Exception as error:
         run_tree = {"head": "unavailable", "dirty": True, "error": str(error)}
+    # The client binary this run launches, bound to its source through the pin-release manifest beside
+    # it: a client-surface row is promoted on a `client:<sha>` fix_commit, and its negative control is
+    # a receipt of the pre-fix client, so the receipt has to say which client ran, not which checkout
+    # happened to be beside this one. Never fatal: the receipt records the reason instead.
+    try:
+        from . import ledger
+
+        client_binary = ledger.client_pin(os.environ.get("KRASNOKAMEN_CLIENT_BINARY"))
+    except Exception as error:
+        client_binary = {"path": os.environ.get("KRASNOKAMEN_CLIENT_BINARY"), "error": str(error)}
     start_epoch = time.time()
     named_scenario: dict[str, Any] | None = None
     if scenario is not None:
@@ -436,6 +446,7 @@ def cmd_run(argv: list[str]) -> int:
             "duration_seconds": round(time.time() - start_epoch, 3),
             "details": details,
             "tree": run_tree,
+            "client_binary": client_binary,
             "error": error,
         }
         (artifact_dir / "result.json").write_text(
@@ -533,7 +544,12 @@ def cmd_run(argv: list[str]) -> int:
         observed = observed_phase(error)
         if observed != "unknown":
             failure_phase = observed
-        return finish("failed", spec["scope"], {}, str(error), artifact_dir, 1, ctx)
+        failed = {}
+        if getattr(ctx, "failure_scenario", None) is not None:
+            # A failed scenario still records its own assertions: a promotion control has to tell a
+            # failed assertion from a timeout or a crashed client (ledger._client_ref_states).
+            failed["scenario"] = ctx.failure_scenario
+        return finish("failed", spec["scope"], failed, str(error), artifact_dir, 1, ctx)
     finally:
         for sig, handler in previous_handlers.items():
             signal.signal(sig, handler)
@@ -630,6 +646,9 @@ DEFAULT_MEMORY_HIGH = "off"
 DEFAULT_MEMORY_MAX = "4G"
 DEFAULT_TEST_MEMORY_MAX = "12G"
 DEFAULT_MEMORY_SWAP_MAX = "1G"
+# A real Java client, its Xvfb and the release server do not fit 4G: java-battle-functional was
+# killed by the scope on 2/2 runs of receipts/JavaGateBreaker, so these get the test-wide cap.
+MEMORY_HEAVY_PROFILES = {"java-battle-functional", "java", "loader-live", "scene-shot"}
 _OFF = {"", "off", "none", "0", "max"}
 
 _MEMORY_UNITS = {"K": 1024, "M": 1024**2, "G": 1024**3, "T": 1024**4}
@@ -723,7 +742,11 @@ def _exec_in_scope(profile: str | None) -> int | None:
     quota = os.environ.get(CPU_QUOTA_ENV, _default_cpu_quota()).strip()
     if quota.lower() in _OFF:
         return None
-    default_memory = DEFAULT_TEST_MEMORY_MAX if profile in {"test", "correctness"} else DEFAULT_MEMORY_MAX
+    default_memory = (
+        DEFAULT_TEST_MEMORY_MAX
+        if profile in {"test", "correctness"} or profile in MEMORY_HEAVY_PROFILES
+        else DEFAULT_MEMORY_MAX
+    )
     memory_max = os.environ.get(MEMORY_MAX_ENV, default_memory)
     # A run that cannot fit in the machine's free memory is not bounded by its
     # own cap: the kernel reclaims the rest of the session instead, and
