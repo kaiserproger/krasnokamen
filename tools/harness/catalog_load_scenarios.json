@@ -2,8 +2,8 @@
   "schema_version": 1,
   "source_notes": {
     "owner_catalog": {
-      "markdown": ".analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.md",
-      "json": ".analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json",
+      "markdown": ".analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.md",
+      "json": ".analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json",
       "status": "DESIGN_ONLY_NOT_EXECUTED",
       "source_ambiguity": "Markdown has unnumbered headings and procedure step7 (Recovery), not a section7 containing12 controls. The12 names are discovered exclusively in tools/harness/load_matrix_scenarios and MATRIX_SCENARIOS, not asserted to be catalog-owned numbered scenarios. mixed-survival-long is an owner-requested harness composition, not an invented catalog ID.",
       "numeric_slo": "Catalog proposed scale rungs are exploratory, not numeric acceptance SLO. Defaults19.5TPS,p99<=50ms,max<=250ms,RSS<=3072MiB are explicit operator/Main instructions2026-10-13, separately sourced and configurable."
@@ -45,7 +45,7 @@
       "PASS"
     ],
     "classification": "Unsupported requires evidence that a required game/extension mechanic is absent. Missing native fixture transport,bot stimulus,expected-state oracle or telemetry is INFRA_BLOCKED. Present recipe failing preparation/readiness is SETUP_FAILED; observed mismatch is CORRECTNESS_FAIL; measured explicit budget failure is PERF_FAIL. PASS requires actual named-scope work+oracle and never fills an absent proof.",
-    "capability_null": "Recipe eligible for runtime preflight, not a recorded successful run. catalog_closure:false marks separately named diagnostics. A runnable P0 protocol gate does not establish full Solaris vanilla parity.",
+    "capability_null": "Recipe eligible for runtime preflight, not a recorded successful run. catalog_closure:false marks separately named diagnostics. A runnable P0 protocol gate does not establish full Krasnokamen vanilla parity.",
     "execution": "Independent ordinary release v2 server and separate player_scale_bots process; isolated native world, explicit binary/data/fixture/recipe/command/schedule hashes and requested-client barrier. Public control fixture plus actual wire mirror and read-only native checkpoint/server-export images; eligibility is not executed evidence.",
     "runtime_defaults": {
       "clients": 10,
@@ -174,7 +174,7 @@
         "scope": "Per-wall-window bot evidence; fixture final readback spans setup/warmup/run and is not measurement-only throughput."
       },
       "oracle": {
-        "contract": "Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
+        "contract": "Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
         "required": [
           "No duplicate entity identity; survival health/death/respawn causality; no stale entity after removal."
         ],
@@ -296,7 +296,7 @@
         "scope": "Per-wall-window bot evidence; fixture final readback spans setup/warmup/run and is not measurement-only throughput."
       },
       "oracle": {
-        "contract": "Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
+        "contract": "Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
         "required": [
           "Entity ownership unique; positions legal; no disappearance hidden by cleanup or lowered view distance."
         ],
@@ -345,7 +345,7 @@
           "tools/harness/load_matrix_scenarios/explore.json",
           "crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:870-874",
           "crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:953-954",
-          "crates/mc-edge/src/bin/solaris-v2.rs:100-126",
+          "crates/mc-edge/src/bin/krasnokamen.rs:100-126",
           "crates/mc-test-harness/src/bin/player_scale_bots.rs:749-925",
           "tools/harness/backends/catalog_load.py:257-295,419-442"
         ]
@@ -446,7 +446,7 @@
         ]
       },
       "oracle": {
-        "contract": "Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
+        "contract": "Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
         "required": [
           "No unready client removed from denominator; no generation/storage completion inferred from packet reception; no vanilla survival expedition claim."
         ],
@@ -572,7 +572,7 @@
         "scope": "Per-wall-window bot evidence; fixture final readback spans setup/warmup/run and is not measurement-only throughput."
       },
       "oracle": {
-        "contract": "Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
+        "contract": "Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
         "required": [
           "Recipe/fuel/remainder transformations conserved; circulation creates no items; block ack is not observed mutation; scheduled release only affects its matching block."
         ],
@@ -682,7 +682,7 @@
         "scope": "Per-wall-window bot evidence; fixture final readback spans setup/warmup/run and is not measurement-only throughput."
       },
       "oracle": {
-        "contract": "Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
+        "contract": "Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
         "required": [
           "Finite pending ticks drain or declared residual explained; source/topology agreement with pinned oracle; no missing final block updates."
         ],
@@ -801,7 +801,7 @@
         "scope": "Per-wall-window bot evidence; fixture final readback spans setup/warmup/run and is not measurement-only throughput."
       },
       "oracle": {
-        "contract": "Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
+        "contract": "Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
         "required": [
           "No duplicate POI claims; actual farmer identity/profession and legal retained brain state; decorative movement is not full village correctness."
         ],
@@ -937,7 +937,7 @@
         "scope": "Per-wall-window bot evidence; fixture final readback spans setup/warmup/run and is not measurement-only throughput."
       },
       "oracle": {
-        "contract": "Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
+        "contract": "Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
         "required": [
           "Finite initial TNT stock not recycled; bounded explicit summon stock; no duplicate blast/drop/entity owner; no ghost after death/respawn."
         ],
@@ -1065,7 +1065,7 @@
         "scope": "Per-wall-window bot evidence; fixture final readback spans setup/warmup/run and is not measurement-only throughput."
       },
       "oracle": {
-        "contract": "Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
+        "contract": "Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
         "required": [
           "Each projectile has one lifecycle/owner; no duplicate hits/damage; legal death/respawn and final removal."
         ],
@@ -1177,7 +1177,7 @@
         "scope": "Per-wall-window bot evidence; fixture final readback spans setup/warmup/run and is not measurement-only throughput."
       },
       "oracle": {
-        "contract": "Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
+        "contract": "Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
         "required": [
           "Legal crop age/type and substrate; no unexplained harvest/output; natural RNG variation respected; no claim of sparse/dense pairwise catalog closure."
         ],
@@ -1230,7 +1230,7 @@
       },
       "fixture_recipe": {
         "kind": "public-native-control",
-        "description": "64-villager arena, two empty chests, copied/hashed solaris-towns and solaris-economy packages only; setup identity creates/claims load_matrix and seeds two scale actors at 100 coins each.",
+        "description": "64-villager arena, two empty chests, copied/hashed krasnokamen-towns and krasnokamen-economy packages only; setup identity creates/claims load_matrix and seeds two scale actors at 100 coins each.",
         "required_native_bridge": "Validated native fixture authored/readback recipe preserving entities, inventory, POIs, simulation clock and pending ticks before run; never inject legacy checkpoint as native."
       },
       "behaviors": {
@@ -1296,7 +1296,7 @@
         "scope": "Per-wall-window bot evidence; fixture final readback spans setup/warmup/run and is not measurement-only throughput."
       },
       "oracle": {
-        "contract": "Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
+        "contract": "Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
         "required": [
           "Durable one-claim load_matrix; load_actor0/load_actor1 each one member/claim; exact per-actor/window 93/107 balances; idempotent payment replay; one diamond conserved per player and empty chest/cursor after ordinary quick-moves. Missing state readback fails closed; generic command feedback is not evidence."
         ],
@@ -1349,7 +1349,7 @@
           "tools/harness/load_matrix_scenarios/checkpoint-restart.json",
           "crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:916-923",
           "crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:603-800",
-          "crates/mc-edge/src/bin/solaris-v2.rs:140-151"
+          "crates/mc-edge/src/bin/krasnokamen.rs:140-151"
         ]
       },
       "fixture_recipe": {
@@ -1434,7 +1434,7 @@
         "scope": "Per-wall-window bot evidence; fixture final readback spans setup/warmup/run and is not measurement-only throughput."
       },
       "oracle": {
-        "contract": "Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
+        "contract": "Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
         "required": [
           "No duplicated/lost item/entity owners; restart source world bytes/hash/identity recorded; permitted durability tail only; save command sent is not fsync/checkpoint completion."
         ],
@@ -1554,7 +1554,7 @@
         "scope": "Per-wall-window bot evidence; fixture final readback spans setup/warmup/run and is not measurement-only throughput."
       },
       "oracle": {
-        "contract": "Explicit Solaris control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
+        "contract": "Explicit Krasnokamen control contract, pinned26.1.2 mechanics only where a dedicated expected-state oracle exists. catalog_ids show related risks, not equivalence to all catalog cases.",
         "required": [
           "RSS endpoint slope is diagnostic not leak proof; natural idle/exhaustion cannot masquerade as sustained production; final queues/resource trend and clean restart invariants."
         ],
@@ -1604,7 +1604,7 @@
         "reason": "Runnable native final-state oracle: valid unique villager POI ownership after workstation changes and readiness of the requested login cohort. No acquire/release attempt trace or trade causality proof is claimed.",
         "evidence": [
           "tools/harness/catalog_mixes.py",
-          ".analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-01",
+          ".analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-01",
           "crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:384-433",
           "crates/mc-test-harness/src/bin/player_scale_bots.rs:749-925,1810-1844",
           "crates/mc-core/src/tick.rs:2557-2559"
@@ -1709,7 +1709,7 @@
         "reason": "Runnable native final item conservation and free-branch throughput oracle. No rejected-transfer immutability or per-contender debit/credit trace is required or claimed.",
         "evidence": [
           "tools/harness/catalog_mixes.py",
-          ".analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-02",
+          ".analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-02",
           "crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:245-334",
           "crates/mc-core/src/tick.rs:2491-2495,4176-4220,4843-4850",
           "crates/mc-test-harness/src/bin/player_scale_bots.rs:164-198"
@@ -1812,7 +1812,7 @@
         "evidence": [
           "tools/harness/catalog_mixes.py",
           "crates/mc-core/src/redstone/piston.rs:62-169",
-          ".analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-04",
+          ".analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-04",
           "crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:245-355",
           "crates/mc-core/src/redstone/piston.rs:35-114,194-285",
           "crates/mc-core/src/tick.rs:2487-2518"
@@ -1912,10 +1912,10 @@
         "reason": "Runnable designated limited reader with death/respawn and independent normal-reader progress. Final identity/state checks do not prove internal viewer queue age or complete epoch history.",
         "evidence": [
           "tools/harness/catalog_mixes.py",
-          ".analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-08",
+          ".analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-08",
           "crates/mc-test-harness/src/bin/player_scale_bots.rs:1131-1155",
           "crates/mc-edge/src/config.rs:13-34",
-          "crates/mc-edge/src/bin/solaris-v2.rs:100-151"
+          "crates/mc-edge/src/bin/krasnokamen.rs:100-151"
         ]
       },
       "fixture_recipe": {
@@ -2015,10 +2015,10 @@
         "reason": "Runnable outbound/return route, accepted edit and same-identity native restart oracle. No generation/save admission trace or queue-age proof is claimed.",
         "evidence": [
           "tools/harness/catalog_mixes.py",
-          ".analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-18",
+          ".analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-18",
           "crates/mc-test-harness/src/bin/player_scale_bots.rs:63-70",
           "crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:953-954",
-          "crates/mc-edge/src/bin/solaris-v2.rs:140-151"
+          "crates/mc-edge/src/bin/krasnokamen.rs:140-151"
         ]
       },
       "fixture_recipe": {
@@ -2118,10 +2118,10 @@
         "reason": "Runnable finite blast/final block/entity changes with zero-input recovery and native restart comparison. No all-family queue drain or oldest-age trace is claimed.",
         "evidence": [
           "tools/harness/catalog_mixes.py",
-          ".analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-21",
+          ".analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:compound_scenarios/MIX-21",
           "crates/mc-test-harness/src/bin/player_scale_bots.rs:130-163",
           "crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:434-454,603-800",
-          "crates/mc-edge/src/bin/solaris-v2.rs:140-151"
+          "crates/mc-edge/src/bin/krasnokamen.rs:140-151"
         ]
       },
       "fixture_recipe": {
@@ -2226,7 +2226,7 @@
         "outcome": null,
         "reason": "Runnable long-duration composition of reachable native controls and their existing final-state oracles. Assisted finite stock is explicit; no earned crafting/food/trade survival or full queue trace is claimed.",
         "evidence": [
-          ".analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:groups/SAVE/SAVE-12",
+          ".analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:groups/SAVE/SAVE-12",
           "tools/harness/load_matrix_scenarios/long-session.json",
           "crates/mc-test-harness/src/bin/load_matrix_fixtures.rs:916-927,969-972",
           "crates/mc-test-harness/src/bin/player_scale_bots.rs:749-925"
@@ -2327,7 +2327,7 @@
         "outcome": null,
         "reason": "Implemented protocol-only survival login/control: simultaneous unassisted clients into a publicly prepared,persisted safe platform; each first ordinary chat interaction has a causal server echo. Runtime requires complete fixture/readiness/echo oracle; no executed evidence claimed by this mapping. This is not render/FPS evidence or full gameplay/entity-visibility parity.",
         "evidence": [
-          ".analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:groups/JOIN/JOIN-01",
+          ".analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:groups/JOIN/JOIN-01",
           "tools/harness/backends/catalog_load.py:26-32,220-254,257-295,419-442",
           "crates/mc-test-harness/src/bin/player_scale_bots.rs (--unassisted-login,--verify-platform,chat echo contract)"
         ]
@@ -2445,7 +2445,7 @@
         ]
       },
       "oracle": {
-        "contract": "Explicit public Solaris26.1.2 protocol login/survival/chat echo contract at pre-created safe platform; pinned block identities and observed server echo",
+        "contract": "Explicit public Krasnokamen26.1.2 protocol login/survival/chat echo contract at pre-created safe platform; pinned block identities and observed server echo",
         "required": [
           "Every requested unique offline survival identity reaches Play,decoded initial window,teleport confirmation and verified persisted safe platform; no silent smaller client set",
           "Each requested client receives its own exact uniquely tagged chat echo from server after ready; sent chat/movement counts are not completed actions",
@@ -2486,7 +2486,7 @@
         "outcome": "INFRA_BLOCKED",
         "reason": "Exact survival fresh-world expedition has no native generation/persisted-chunk revision oracle. Existing explore is an assisted decoded-terrain protocol diagnostic; do not silently substitute it for catalog closure.",
         "evidence": [
-          ".analysis/SOLARIS_MINECRAFT_LOAD_CATALOG.json:groups/CHUNK/CHUNK-01",
+          ".analysis/KRASNOKAMEN_MINECRAFT_LOAD_CATALOG.json:groups/CHUNK/CHUNK-01",
           "crates/mc-test-harness/src/bin/player_scale_bots.rs:749-925",
           "tools/harness/backends/catalog_load.py:419-442"
         ]
@@ -2536,7 +2536,7 @@
         "transport_is_not_completion": true
       },
       "oracle": {
-        "contract": "Pinned26.1.2 terrain seed/version and explicitly accepted Solaris generation/durability contract",
+        "contract": "Pinned26.1.2 terrain seed/version and explicitly accepted Krasnokamen generation/durability contract",
         "required": [
           "Unique fresh chunks requested/generated/published in declared route; legitimate movement reaches intended new terrain",
           "Native saved chunk/revision matches generated/edited state after clean shutdown/restart; packet reception is not persistence completion",

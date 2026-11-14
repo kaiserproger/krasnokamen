@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
-    "solaris-plugin-sdk",
+    "krasnokamen-plugin-sdk",
     "examples/hello",
     "examples/sky-creeper",
 ]
@@ -12,7 +12,7 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
-solaris-plugin-sdk = { path = "solaris-plugin-sdk" }
+krasnokamen-plugin-sdk = { path = "krasnokamen-plugin-sdk" }
 wit-bindgen = "0.62"
 toml = "0.8"
 serde = { version = "1", features = ["derive"] }
