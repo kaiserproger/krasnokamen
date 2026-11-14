@@ -452,6 +452,20 @@ fn published_population_recounts_post_merge_state_and_keeps_zero_alive_factions(
 }
 
 #[test]
+fn published_strikes_are_tick_impacts_and_zero_while_paused() {
+    let mut state = fixture();
+    spawn(&mut state, 1, "minecraft:husk", [1.0, 100.0, 1.0]);
+    state.hostile.battle.running = true;
+    state.hostile.battle.combat.work.strikes = 7;
+    state.hostile.battle.combat.work.acting = 19;
+    let counts = publication_counts(&mut state).unwrap();
+    assert_eq!(counts.strikes, 7);
+    assert_eq!(counts.acting, 19);
+    state.hostile.battle.running = false;
+    assert_eq!(publication_counts(&mut state).unwrap().strikes, 0);
+}
+
+#[test]
 fn population_cache_reads_changed_health_and_keeps_corpses_until_removal() {
     let mut state = fixture();
     spawn(&mut state, 0, "minecraft:husk", [1.5, 64.0, 1.5]);

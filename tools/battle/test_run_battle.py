@@ -383,12 +383,14 @@ class BattleRunnerTests(unittest.TestCase):
 
     def test_server_scope_wraps_only_the_server(self):
         runner = load_runner()
-        plain = argparse.Namespace(server_scope=None)
+        plain = argparse.Namespace(server_scope=None, server_wrapper='')
         self.assertEqual(runner.server_argv(plain, '/bin/server', '/c.toml', 'u'), ['/bin/server', '--config', '/c.toml'])
-        scoped = runner.server_argv(argparse.Namespace(server_scope=''), '/bin/server', '/c.toml', 'battle-1')
+        scoped = runner.server_argv(argparse.Namespace(server_scope='', server_wrapper=''), '/bin/server', '/c.toml', 'battle-1')
         self.assertEqual(scoped[:7], ['systemd-run', '--user', '--scope', '--quiet', '--collect', '--unit', 'battle-1'])
         self.assertEqual(scoped[7:], ['--', '/bin/server', '--config', '/c.toml'])
-        self.assertIn('solaris-heavy.slice', runner.server_argv(argparse.Namespace(server_scope='solaris-heavy.slice'), '/s', '/c', 'u'))
+        self.assertIn('solaris-heavy.slice', runner.server_argv(argparse.Namespace(server_scope='solaris-heavy.slice', server_wrapper=''), '/s', '/c', 'u'))
+        wrapped = runner.server_argv(argparse.Namespace(server_scope=None, server_wrapper='python3 "/profile wrapper.py"'), '/s', '/c', 'u')
+        self.assertEqual(wrapped, ['python3', '/profile wrapper.py', '/s', '--config', '/c'])
 
     def test_telemetry_gaps_are_recorded_in_a_take_and_fatal_otherwise(self):
         runner = load_runner()

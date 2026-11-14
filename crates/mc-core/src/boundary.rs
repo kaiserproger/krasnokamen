@@ -585,6 +585,9 @@ pub struct BattleCounts {
     /// Of those, the fighters in action rather than standing guard: winding
     /// up, recovering from a blow, staggered by a parry or blocking one.
     pub acting: u32,
+    /// Resolved melee impacts on this running tick, including parried blows.
+    /// Zero while staged or paused; this is not the number of acting fighters.
+    pub strikes: u32,
     /// Shield bearers holding the shield up after the last running tick.
     pub shields_raised: u32,
     /// Shield blocks (`ShieldBlock` events) on the last running tick.

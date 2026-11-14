@@ -765,6 +765,22 @@ def run_catalog_load(ctx: ProfileContext) -> dict[str, Any]:
     return details
 
 
+def run_server_load_profile(ctx: ProfileContext) -> dict[str, Any]:
+    """Always capture stacks, exact tick budgets and neighbour receipts."""
+    extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
+    out = ctx.artifact_dir / "server-load-profile"
+    wrapper = [sys.executable, str(REPO_ROOT / "tools/harness/server_load_profile.py"),
+               "--capture", "--out", str(out), "--"]
+    import shlex
+    extra = [part.replace("{out}", str(out)).replace("{wrapper}", shlex.join(wrapper)) for part in extra]
+    details = _run_command(
+        [sys.executable, "-m", "tools.harness.server_load_profile", "--out", str(out), *extra],
+        ctx, "server-load-profile.log", env=_backend_env(ctx),
+    )
+    details["profile"] = json.loads((out / "profile-result.json").read_text())
+    return details
+
+
 def run_quirk_parity(ctx: ProfileContext) -> dict[str, Any]:
     """Vanilla-26.1.2-oracle parity of player-relied quirks and farm rates."""
     extra = ctx.extra_args[1:] if ctx.extra_args[:1] == ["--"] else ctx.extra_args
@@ -1132,6 +1148,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Owner catalog v2 open-loop controls, exact wall windows and classified receipts (explicit release binaries)",
         "run": run_catalog_load,
     },
+    "server-load-profile": {
+        "scope": "scale",
+        "description": "Always-profile a real server window: call stacks, CPU ms/tick, budget and first/mid/last neighbours",
+        "run": run_server_load_profile,
+    },
     "constantinople": {
         "scope": "fixture",
         "description": "Imported vanilla city: deterministic population, street walking, native save/reopen (not performance)",
@@ -1223,6 +1244,7 @@ PROFILE_PREREQUISITES = {
     "oracle-check": _NONE,
     "quirk-parity": _NONE,
     "catalog-load": _NONE,
+    "server-load-profile": _NONE,
     "constantinople": _NONE,
     "seed-review": (("optional_server_binary", "seed_review_client"), (), (), ()),
     "seed-contact-sheet": _NONE,

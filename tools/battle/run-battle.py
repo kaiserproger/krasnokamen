@@ -63,6 +63,7 @@ def arguments():
     p.add_argument('--view-distance', type=int, default=12, metavar='CHUNKS', help='server and recorder view distance, 2..32')
     p.add_argument('--allow-marker-gaps', action='store_true', help='record recorder marker and telemetry tick gaps instead of failing the run; implied by --take')
     p.add_argument('--server-scope', nargs='?', const='', default=None, metavar='SLICE', help='run the server in its own transient systemd user scope (optionally under SLICE) so the cgroup memory/CPU telemetry is the server alone')
+    p.add_argument('--server-wrapper', default='', help='profiling command prefix before the pinned server; must forward console input and termination')
     p.add_argument('--live-player', action='append', default=[], metavar='NAME:SIDE', help='network player (offline-mode name) who takes a front-rank infantry slot of SIDE (red|blue) near the centre with its kit before start; repeatable. The runner waits until every live name is online before it launches the recorder')
     p.add_argument('--live-spectator', action='append', default=[], metavar='NAME[:TARGET]', help='network player put in spectator mode behind TARGET (default: the first --live-player) before start; repeatable')
     p.add_argument('--live-timeout', type=int, default=DEFAULT_LIVE_TIMEOUT, metavar='SECONDS', help=f'how long the online barrier waits for every live player and spectator (default {DEFAULT_LIVE_TIMEOUT})')
@@ -232,7 +233,8 @@ def server_environment(a, base):
 
 
 def server_argv(a, binary, config, unit):
-    argv = [str(binary), '--config', str(config)]
+    import shlex
+    argv = [*shlex.split(a.server_wrapper), str(binary), '--config', str(config)]
     if a.server_scope is None:
         return argv
     scope = ['systemd-run', '--user', '--scope', '--quiet', '--collect', '--unit', unit]

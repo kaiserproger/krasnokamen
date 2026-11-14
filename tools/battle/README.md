@@ -92,6 +92,10 @@ attack-strength recovery, 20 / attack speed ticks (sword 13, spear 19, bow 5).
 That swing is the only main-hand swing sent in the same tick as the entity's
 `SetEquipment`. Telemetry `battle` carries `weapon_swaps` and
 `holding_spear` / `holding_sword` / `holding_bow` per tick.
+`battle.strikes` counts resolved melee impacts on that tick, including parried
+blows, and is zero while staged or paused. `battle.acting` counts fighters in
+the active combat-cycle phase, not strikes. Sum `strikes` over exact source
+ticks for an impact rate; do not treat a sampled tick as a sustained rate.
 
 Side rule: every fighter shows the side colour on the torso (red or blue
 surcoat, red- or blue-dyed leather) or carries the red or blue heater shield;
