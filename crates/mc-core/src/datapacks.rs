@@ -1735,6 +1735,15 @@ fn finish(
                         "commands.debug.function.traceFailed",
                         Vec::new(),
                     );
+                } else if let (Job::Reload | Job::Activation { .. }, Failure::Text(text)) =
+                    (&reload.job, &failure)
+                {
+                    // The worker refused before anything was installed.
+                    feedback(
+                        state,
+                        connection,
+                        format!("{text}; old packs and selection retained"),
+                    );
                 } else {
                     failure.send(state, connection);
                 }

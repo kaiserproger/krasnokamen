@@ -352,7 +352,8 @@ fn enable_and_disable_follow_vanilla_ordering_errors_and_results() {
         ["vanilla", "file/a", "file/c"]
     );
 
-    // Enabling places the pack: `first` stays behind the built-in pack.
+    // Enabling places the pack: vanilla `first` is `list.add(0, pack)` (26.3
+    // DataPackCommand), ahead of the built-in pack too.
     pipeline(
         &mut state,
         "execute store result score packs packs run datapack enable file/b first",
@@ -364,7 +365,7 @@ fn enable_and_disable_follow_vanilla_ordering_errors_and_results() {
     );
     assert_eq!(
         state.datapacks.selection().enabled,
-        ["vanilla", "file/b", "file/a", "file/c"]
+        ["file/b", "vanilla", "file/a", "file/c"]
     );
     assert!(state.datapacks.packs().functions.contains_key("test:b"));
     let shown = messages(&mut state);
@@ -376,7 +377,7 @@ fn enable_and_disable_follow_vanilla_ordering_errors_and_results() {
     settle(&mut state);
     assert_eq!(
         state.datapacks.selection().enabled,
-        ["vanilla", "file/b", "file/c", "file/a"]
+        ["file/b", "file/c", "vanilla", "file/a"]
     );
     run(&mut state, "datapack disable file/b");
     settle(&mut state);
@@ -384,7 +385,7 @@ fn enable_and_disable_follow_vanilla_ordering_errors_and_results() {
     settle(&mut state);
     assert_eq!(
         state.datapacks.selection().enabled,
-        ["vanilla", "file/c", "file/b", "file/a"]
+        ["file/c", "vanilla", "file/b", "file/a"]
     );
     run(&mut state, "datapack disable file/c");
     settle(&mut state);

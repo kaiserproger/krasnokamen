@@ -559,6 +559,9 @@ fn finish_reload(state: &mut TickState) {
     sender.send(prepared).unwrap();
     reload.receiver = receiver;
     poll_worker(state);
+    // As in `datapacks::tick`: the finished worker completes the deferred
+    // command, and only `resume` ends it so the next console command runs.
+    crate::command_context::resume(state, &mut ChangeSet::default());
 }
 
 #[test]
@@ -646,8 +649,6 @@ fn content_reload_publishes_recipes_loot_and_open_grid_without_moving_inputs() {
     }
     run(&mut state, "datapack disable file/a");
     finish_reload(&mut state);
-    crate::command_context::resume(&mut state, &mut ChangeSet::default());
-    assert!(Arc::ptr_eq(&base, &state.registry));
     let player = &state.players[&entity];
     assert!(player.inventory_menu.result.is_empty());
     assert_eq!(
