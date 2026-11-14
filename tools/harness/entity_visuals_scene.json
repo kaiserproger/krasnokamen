@@ -1,0 +1,166 @@
+{
+  "seed": 100,
+  "client_settings": {
+    "render_distance": 8,
+    "graphics_preset": "low",
+    "fov": 70
+  },
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamerule send_command_feedback false"
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "cmd": "effect give @s minecraft:slow_falling 600 0 true"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "time set 6000"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "fill 995 159 995 1005 159 1010 minecraft:stone"
+    },
+    {
+      "cmd": "fill 995 160 995 1005 165 1010 minecraft:air"
+    },
+    {
+      "tp": [
+        1000.5,
+        160,
+        1000.5,
+        0,
+        0
+      ]
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "empty"
+    },
+    {
+      "cmd": "summon minecraft:vindicator 1000.5 160 1004.5 {NoAI:1b,Rotation:[180f,0f]}"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "vindicator"
+    },
+    {
+      "list_entities": {
+        "name": "vindicator-entities",
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:vindicator,distance=..16]"
+    },
+    {
+      "cmd": "summon minecraft:happy_ghast 1000.5 160 1004.5 {NoAI:1b,NoGravity:1b,Age:-24000}"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "ghastling"
+    },
+    {
+      "list_entities": {
+        "name": "ghastling-entities",
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:happy_ghast,distance=..16]"
+    },
+    {
+      "cmd": "summon minecraft:pig 1000.5 160 1004.5 {NoAI:1b,Invulnerable:1b,Fire:300s}"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "burning"
+    },
+    {
+      "list_entities": {
+        "name": "fire-entities",
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:pig,distance=..16]"
+    },
+    {
+      "cmd": "summon minecraft:pig 1000.5 160 1004.5 {NoAI:1b,Invulnerable:1b}"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "plain"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:pig,distance=..16]"
+    },
+    {
+      "cmd": "summon minecraft:sheep 998.5 160 1004.5 {NoAI:1b,UUID:[I;5,6,7,8]}"
+    },
+    {
+      "cmd": "summon minecraft:cow 1002.5 160 1004.5 {NoAI:1b,leash:{UUID:[I;5,6,7,8]}}"
+    },
+    {
+      "wait_ticks": 30
+    },
+    {
+      "shot": "leashed"
+    },
+    {
+      "list_entities": {
+        "name": "leash-entities",
+        "args": {
+          "radius": 16,
+          "limit": 64
+        }
+      }
+    },
+    {
+      "cmd": "kill @e[type=minecraft:cow,distance=..16]"
+    },
+    {
+      "cmd": "kill @e[type=minecraft:sheep,distance=..16]"
+    }
+  ]
+}

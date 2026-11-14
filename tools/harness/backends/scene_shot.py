@@ -1151,6 +1151,20 @@ def run(
                 "observed_version": before["state_version"], "timeout_seconds": probe.remaining(),
             })
             shots = script(probe, artifact, scenario["steps"], ctx.client)
+            if ctx.scenario_id == "native-263-entity-rigs":
+                check_263_entity_rigs(probe, artifact)
+            elif ctx.scenario_id == "native-shelf-clock":
+                check_shelf_clock(probe, artifact)
+            elif ctx.scenario_id == "native-entity-visuals":
+                check_entity_visuals(probe, artifact)
+            elif ctx.scenario_id == "native-item-bars":
+                check_item_bars(probe, artifact)
+            elif ctx.scenario_id == "native-shade-override":
+                check_shade_override(probe, artifact)
+            elif ctx.scenario_id == "native-player-head":
+                check_player_head(probe, artifact)
+            elif ctx.scenario_id == "native-dynamic-context":
+                check_dynamic_context(probe, artifact)
         result = {"screenshots": shots, "scenario": probe.report, "seed": seed, "settings": settings, "client_latency_ms": client_latency_ms}
     finally:
         (artifact / "lifecycle-progress.json").write_text(json.dumps({"phase": "teardown", "started_unix": time.time()}) + "\n")
