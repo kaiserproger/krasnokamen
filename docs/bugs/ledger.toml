@@ -1324,8 +1324,7 @@ severity = "major"
 status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P1; fixed in client branch wt/LedgerInputB03Client (13f1f28b), gate run with that client; the frozen-world falling hold is a core fix on wt/LedgerInputB03 (fe28852b, crates/mc-core/src/falling.rs; fix patch docs/bugs/fix-patches/P1.patch is that hunk)"
 regression = ["cargo:mc-core:command_world::tests::frozen_world_holds_a_setblock_falling_block_until_stepped", "harness:entities:native-v2-input-sand", "harness:scene-shot:native-falling-block-prediction"]
-proving_assertions = { "harness:entities:native-v2-input-sand" = "sand_presents_predicted_descent" }
-repro_check = "No symptom-specific assertion identified in native-falling-block-prediction: promotion needs the gate to assert the falling entity's rendered prediction."
+proving_assertions = { "harness:entities:native-v2-input-sand" = "sand_presents_predicted_descent", "harness:scene-shot:native-falling-block-prediction" = "falling_pixels_move_down" }
 fix_commit = "patch:e293275c93a859e503ade5346229103777f1f670a68f366a4a1ea06135b30682"
 failing_first = "reported"
 promotion = "docs/bugs/promotions/P1.json"
@@ -3368,7 +3367,8 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:156"
 regression = ["harness:scene-shot:native-entity-visuals", "client:krasnokamen-client:entities::krasnokamen_models::tests::post_rc4_reauthored_rigs_keep_their_reference_silhouettes"]
 fix_commit = "client:ee258651"
-repro_check = "Round 6 client:ee258651 rig control red (receipts/XHarnessGates/client-r6-revert-red.log). No symptom-specific assertion in native-entity-visuals: promotion needs the gate to assert vindicator texture regions."
+proving_assertions = { "harness:scene-shot:native-entity-visuals" = "vindicator_legs_teal" }
+repro_check = "Round 6 client:ee258651 rig control red (receipts/XHarnessGates/client-r6-revert-red.log); native-entity-visuals checks texture colors and requires visual review."
 [[bug]]
 id = "MODEL-OPUS-13"
 title = "Banner flags are too short."
@@ -3410,7 +3410,8 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:174"
 regression = ["harness:scene-shot:native-entity-visuals", "client:krasnokamen-client:entities::krasnokamen_models::tests::post_rc4_reauthored_rigs_keep_their_reference_silhouettes"]
 fix_commit = "client:ee258651"
-repro_check = "Round 6 client:ee258651 rig control red (receipts/XHarnessGates/client-r6-revert-red.log). No symptom-specific assertion in native-entity-visuals: promotion needs the gate to assert ghastling coloration."
+proving_assertions = { "harness:scene-shot:native-entity-visuals" = "ghastling_not_pink" }
+repro_check = "Round 6 client:ee258651 rig control red (receipts/XHarnessGates/client-r6-revert-red.log); native-entity-visuals checks ghastling coloration."
 [[bug]]
 id = "MODEL-OPUS-N1"
 title = "Baby chestplates have see-through shoulders. This affects every family and every material, and is confirmed at runtime."
@@ -3604,7 +3605,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-sonnet-continuation-20261102.md:32"
 regression = ["harness:scene-shot:native-shelf-clock", "harness:scene-shot:native-dynamic-context"]
-repro_check = "No symptom-specific assertion in native-shelf-clock or native-dynamic-context: promotion needs the gates to assert world-context-driven clock and compass changes."
+proving_assertions = { "harness:scene-shot:native-shelf-clock" = "clock_face_changed", "harness:scene-shot:native-dynamic-context" = "dropped_clock_face_changed" }
+repro_check = "Scenario checks cover shelf and dropped clock changes; full item-frame, mob and other-player hand coverage remains unproven."
 
 [[bug]]
 id = "MODEL-BLOCK-ENTITY-DRAW"
@@ -3627,7 +3629,8 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:86"
 regression = ["harness:scene-shot:native-entity-visuals", "client:krasnokamen-client:entities::presentation::tests::fire_bands_follow_the_vanilla_flame_feature_numbers"]
 fix_commit = "client:a3f2a486"
-repro_check = "Stage2X SLICES.md:120: 26.3 FlameFeatureRenderer band geometry corrected; producer-only reversal fails the band-height assertion (receipts/XHarnessGates/client-r10-fire-red.log). No symptom-specific assertion in native-entity-visuals: promotion needs the gate to assert the rendered fire overlay."
+proving_assertions = { "harness:scene-shot:native-entity-visuals" = "fire_overlay_only_when_burning" }
+repro_check = "Stage2X SLICES.md:120: 26.3 FlameFeatureRenderer band geometry corrected; producer-only reversal fails the band-height assertion (receipts/XHarnessGates/client-r10-fire-red.log). Graphical control remains required."
 [[bug]]
 id = "MODEL-ENTITY-TNT-FALLING-LIGHTNING"
 title = "TNT, falling blocks and lightning bolts have simulation state but no draw call"
@@ -3647,7 +3650,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:88"
 regression = ["harness:scene-shot:native-entity-visuals"]
-repro_check = "26.3 LeashFeatureRenderer needs the holder transform in the emit path. No symptom-specific assertion in native-entity-visuals: promotion needs the gate to assert the rendered leash rope."
+proving_assertions = { "harness:scene-shot:native-entity-visuals" = "leash_rope_drawn" }
+repro_check = "26.3 LeashFeatureRenderer needs the holder transform in the emit path; the scene checks rope pixels."
 [[bug]]
 id = "MODEL-PANE-ALPHA"
 title = "15 stained-glass-pane GUI icons ≈1.5× too opaque (0.70 vs 0.46); cause unproven"
@@ -3669,7 +3673,8 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:84"
 regression = ["harness:scene-shot:native-shade-override", "client:krasnokamen-client:terrain::border_tests::shade_direction_override_replaces_the_faces_cardinal_weight", "client:krasnokamen-client:terrain::border_tests::shade_direction_override_wins_over_the_legacy_flat_shade_flag", "client:krasnokamen-client:terrain::border_tests::shade_direction_override_reads_the_dimensions_weights"]
 fix_commit = "client:43362918"
-repro_check = "Real shade-expression revert reds the emitted per-face shade refs (receipts/XClientBlocks/10-negative-control.log). No symptom-specific assertion in native-shade-override: promotion needs the gate to assert the visible shade override."
+proving_assertions = { "harness:scene-shot:native-shade-override" = "poppy_no_directional_shading" }
+repro_check = "Real shade-expression revert reds the emitted per-face shade refs (receipts/XClientBlocks/10-negative-control.log); the scene compares poppy luminance."
 [[bug]]
 id = "MODEL-ENTITY-263-RIGS"
 title = "4 entity types new in 26.3 have no rig family: `cushion`, `sulfur_cube`, `poplar_boat`, `poplar_chest_boat` → `material()` errs `no activated rig family` → entity is unrendered (invisible)"
@@ -3679,7 +3684,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:85"
 regression = ["harness:scene-shot:native-263-entity-rigs", "client:krasnokamen-client:entities::resources::tests::entity_render_263_poplar_boats_use_boat_hulls_and_poplar_textures", "client:krasnokamen-client:entities::resources::tests::regression_263_cushion_and_painting_metadata", "client:krasnokamen-client:entities::asset_model_regression_tests::boat_and_raft_hulls_match_the_vanilla_26_3_layers"]
-repro_check = "Round 5 client:35df28a0 real revert reds boat-layer and pufferfish refs (receipts/XHarnessGates/client-r5-revert-red.log). No symptom-specific assertion in native-263-entity-rigs: promotion needs the gate to assert the missing 26.3 rigs render."
+proving_assertions = { "harness:scene-shot:native-263-entity-rigs" = "rendered_minecraft:cushion" }
+repro_check = "Round 5 client:35df28a0 real revert reds boat-layer and pufferfish refs (receipts/XHarnessGates/client-r5-revert-red.log); the scene checks all four received rigs and their visibility."
 fix_commit = "client:35df28a0"
 [[bug]]
 id = "MODEL-ITEM-BARS"
@@ -3691,7 +3697,8 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:86"
 regression = ["harness:scene-shot:native-item-bars", "client:krasnokamen-client:ui::state::item_bar_tests::every_retained_stack_paint_uses_shared_decoration_in_real_renderer", "client:krasnokamen-client:ui::state::item_bar_tests::damaged_stack_emits_shrinking_green_yellow_red_bar_quads", "client:krasnokamen-client:ui::state::item_bar_tests::bundle_fullness_scales_and_changes_blue_to_red_only_when_full"]
 fix_commit = "client:e8fe40c2"
-repro_check = "Real-hunk control receipts/XClientUi/controls-2.log gives 16 vs 8 vertices on duplicate bars. No symptom-specific assertion in native-item-bars: promotion needs the gate to assert visible durability and bundle bars."
+proving_assertions = { "harness:scene-shot:native-item-bars" = "durability_bar_drawn" }
+repro_check = "Real-hunk control receipts/XClientUi/controls-2.log gives 16 vs 8 vertices on duplicate bars; the scene checks durability and fullness pixels."
 [[bug]]
 id = "MODEL-SHIELD-GUI"
 title = "Shield GUI cell narrow: the in-tree shield plate was 10x16 at uv(0,6), not the vanilla 26.3 ShieldModel (12x22 plate plus a handle), so the item drew a squashed shield"
