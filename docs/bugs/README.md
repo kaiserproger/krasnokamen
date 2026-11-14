@@ -243,6 +243,7 @@ worker, runs the negative control.
    so tests do not need its new API, or promote nothing). A hunk straddling
    the test-module boundary is refused. Graphical refs run in the control on
    the real client.
+   A deletion at an inline module boundary is ambiguous and is refused.
 5. The restore, always on a worktree of the exact candidate (never at
    `fix_commit`): every ref is **green**, so a regression after the fix
    refuses promotion. A ref already passed by the supplied client receipt (same

@@ -1122,6 +1122,17 @@ class LedgerToolTests(unittest.TestCase):
         self.assertIn('-    1\n+    2\n', patch_text)
         self.assertNotIn('assert!(false)', patch_text)
 
+    def test_deletion_before_test_module_refuses_ambiguous_boundary(self):
+        root = self.scratch()
+        source = 'fn removed_production() {}\n#[cfg(test)]\nmod tests {\n    fn it() {}\n}\n'
+        (root / 'src/lib.rs').write_text(source)
+        self.git(root, 'add', '-A')
+        self.git(root, 'commit', '-qm', 'production before test')
+        (root / 'src/lib.rs').write_text(source.replace('fn removed_production() {}\n', ''))
+        self.git(root, 'commit', '-qam', 'delete production')
+        with self.assertRaisesRegex(ledger.Refused, 'deletion.*module boundary'):
+            ledger.non_test_patch(root, self.git(root, 'rev-parse', 'HEAD'))
+
     def test_hunk_straddling_the_test_module_is_refused(self):
         root = self.scratch()
         source = 'fn value() -> u8 {\n    1\n}\n#[cfg(test)]\nmod tests {\n    fn it() {}\n}\n'

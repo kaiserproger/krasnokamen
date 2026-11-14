@@ -494,15 +494,15 @@ def _rust_test_ranges(source):
 
 
 def _hunk_changed_lines(hunk):
-    """New-side line numbers of the changed lines of a hunk (a deletion counts at its position)."""
+    """New-side positions and whether each changed line is a deletion."""
     line = int(_HUNK.match(hunk[0]).group(3))
     changed = []
     for text in hunk[1:]:
         if text.startswith('+'):
-            changed.append(line)
+            changed.append((line, False))
             line += 1
         elif text.startswith('-'):
-            changed.append(line)
+            changed.append((line, True))
         elif text.startswith(' '):
             line += 1
     return changed
@@ -546,7 +546,10 @@ def _split_non_test(diff, source_of):
         kept = []
         for hunk in hunks:
             changed = _hunk_changed_lines(hunk)
-            in_test = [any(start <= line <= end for start, end in ranges) for line in changed]
+            if any(deleted and any(line in (start, end + 1) for start, end in ranges)
+                   for line, deleted in changed):
+                raise Refused(f'a deletion in {path} touches a #[cfg(test)] module boundary; split the fix commit')
+            in_test = [any(start <= line <= end for start, end in ranges) for line, _ in changed]
             if in_test and all(in_test):
                 continue
             if any(in_test):
