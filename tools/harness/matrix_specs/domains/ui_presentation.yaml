@@ -18,7 +18,7 @@ subjects:
 - subject: ui_presentation.bossbar_custom
   matrix_ids:
   - pw:ui_presentation.bossbar_custom/fabric_distant_horizons/survival/the_end/peaceful/N8/duplicate_login/clean_restart_mid_action/op_2
-  - pw:ui_presentation.bossbar_custom/neoforge_solaris_loader/survival/overworld/normal/N8/malformed_or_stale_packet/save_all_checkpoint/op_1
+  - pw:ui_presentation.bossbar_custom/neoforge_krasnokamen_loader/survival/overworld/normal/N8/malformed_or_stale_packet/save_all_checkpoint/op_1
   preconditions:
     setup_callable: ui_presentation.ADAPTERS['ui_presentation.bossbar_custom'].setup
     fixture_calls: []
@@ -51,7 +51,7 @@ subjects:
   subject_oracle_text: 'reference: bossbar shown/updated/removed'
 - subject: ui_presentation.bossbar_entities
   matrix_ids:
-  - pw:ui_presentation.bossbar_entities/fabric_solaris_loader/adventure/overworld/hard/2/reconnect_mid_action/hot_backup_during_action/non_op_0
+  - pw:ui_presentation.bossbar_entities/fabric_krasnokamen_loader/adventure/overworld/hard/2/reconnect_mid_action/hot_backup_during_action/non_op_0
   preconditions:
     setup_callable: ui_presentation.ADAPTERS['ui_presentation.bossbar_entities'].setup
     fixture_calls:
@@ -181,7 +181,7 @@ subjects:
   subject_oracle_text: 'reference: custom_click_action payload exact at server'
 - subject: ui_presentation.tab_list
   matrix_ids:
-  - pw:ui_presentation.tab_list/forge_solaris_loader/adventure/the_end/easy/N8/malformed_or_stale_packet/pause_when_empty_resume/op_4
+  - pw:ui_presentation.tab_list/forge_krasnokamen_loader/adventure/the_end/easy/N8/malformed_or_stale_packet/pause_when_empty_resume/op_4
   preconditions:
     setup_callable: ui_presentation.ADAPTERS['ui_presentation.tab_list'].setup
     fixture_calls:

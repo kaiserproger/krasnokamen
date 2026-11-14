@@ -62,7 +62,7 @@ domain("villagers", ["core:villager/mod.rs", "core:villager/brain.rs", "core:vil
     ("raid_start", "enter village with Bad Omen / ominous bottle", "raid omen -> raid starts; bossbar", {"src": ["core:raids.rs", "core:omens.rs"]}),
     ("raid_waves_victory", "defeat all waves", "Hero of the Village effect; discounts", {"src": ["core:raids.rs"], "inflight": True}),
     ("raid_loss", "let raiders kill all villagers", "raid lost; bossbar removed", {"src": ["core:raids.rs"], "inflight": True}),
-    ("solaris_professions", "observe Solaris-only Miner/Lumberjack/Builder/Soldier villagers", "settlement work loops (mining/lumber/building/soldier) run on native tick", {"src": ["core:villager/mining.rs", "core:villager/lumber.rs", "core:villager/soldier.rs"]}),
+    ("krasnokamen_professions", "observe Krasnokamen-only Miner/Lumberjack/Builder/Soldier villagers", "settlement work loops (mining/lumber/building/soldier) run on native tick", {"src": ["core:villager/mining.rs", "core:villager/lumber.rs", "core:villager/soldier.rs"]}),
 ])
 
 domain("farming", ["core:farming.rs", "core:plants.rs", "core:plants_growth.rs"], ["use_item_on_block", "read_world_state"], [

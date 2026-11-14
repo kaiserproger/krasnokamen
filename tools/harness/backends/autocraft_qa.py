@@ -1,6 +1,6 @@
 """Real-client gate for Factorio-style settlement autocraft (issue #1, item 10).
 
-Native client, isolated world, server from SOLARIS_SERVER_BINARY (release build).
+Native client, isolated world, server from KRASNOKAMEN_SERVER_BINARY (release build).
 The operator player levels a pad and certifies a storage hut (one chest) and a
 cartographer workshop (cartography table + crafting table; a cartographer never
 bakes or deposits). It binds one summoned villager and puts 3 hay blocks into
@@ -145,9 +145,9 @@ def validate_args(ctx: ProfileContext) -> float:
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
-        raise RuntimeError("autocraft-qa requires SOLARIS_SERVER_BINARY (a solaris-v2 built from this tree)")
+        raise RuntimeError("autocraft-qa requires KRASNOKAMEN_SERVER_BINARY (a krasnokamen built from this tree)")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing executable server binary: {binary}")
@@ -182,7 +182,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     try:
         server_log = server_log_path.open("wb")
         env = os.environ.copy()
-        env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+        env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
         servers.append(runtime.start_server([str(binary), "--config", str(config), "--no-console"],
                                         cwd=runtime.REPO_ROOT, stdout=server_log,
                                         stderr=subprocess.STDOUT, start_new_session=True, env=env))
@@ -371,7 +371,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     probe.check("storage_hay_consumed_once", "minecraft:hay_block" not in after)
 
     again = _readback(probe, f"settlement production {SETTLEMENT} order ui-1 {worker} "
-                             f"solaris-settlements:bread {COUNT} {workshop} "
+                             f"krasnokamen-settlements:bread {COUNT} {workshop} "
                              f"{table[0]},{table[1]},{table[2]} {table[0] - 1},{table[1]},{table[2]}",
                       "Autocraft")
     detail["reorder"] = again
@@ -384,7 +384,7 @@ def _scenario(probe: ProbeSteps, detail: dict[str, Any], ctx: ProfileContext, ar
     detail["cancel_deposit"] = _deposit_all(probe, chest, ["minecraft:hay_block"])
     planned_cancel = _readback(
         probe, f"settlement production {SETTLEMENT} order {CANCEL} {worker} "
-               f"solaris-settlements:bread {CANCEL_COUNT} {workshop} "
+               f"krasnokamen-settlements:bread {CANCEL_COUNT} {workshop} "
                f"{table[0]},{table[1]},{table[2]} {table[0] - 1},{table[1]},{table[2]}",
         "Autocraft")
     detail["cancel_planned"] = planned_cancel

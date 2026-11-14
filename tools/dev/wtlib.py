@@ -80,7 +80,7 @@ def repo_of_worktree(path: Path) -> str:
     for key, repo in REPOS.items():
         if (repo / ".git").resolve() == common:
             return key
-    raise ToolError(f"{path} belongs to {common}, which is none of the four Solaris repositories")
+    raise ToolError(f"{path} belongs to {common}, which is none of the four Krasnokamen repositories")
 
 
 def worktree_entries(key: str) -> list[dict]:
