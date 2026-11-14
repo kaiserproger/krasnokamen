@@ -8,6 +8,7 @@ use mc_world::anvil::upgrade::{self, PreservationReceipt, RecordKind, UpgradeRep
 use mc_world::native::{NativeCheckpoint, NativePlayerSnapshot, NativeStore};
 use mc_world::{Chunk, ChunkPos};
 
+use super::pre_rename::Owner;
 use super::{
     ConversionStats, RecordUpgradeReceipt, check_version, fail, files, player_source_version,
     read_nbt, saved_data_source_version, source_version,
@@ -851,7 +852,7 @@ pub(super) fn convert(
     let mut level = read_nbt(&level_path)?;
     stats
         .pre_rename
-        .rename(&mut level, &|| "level.dat".into())?;
+        .rename(&mut level, Owner::Level, &|| "level.dat".into())?;
     let level_version = source_version(&level, &level_path)?;
     stats.data_version = level_version.max(mc_world::anvil::TARGET_DATA_VERSION);
     let data = field(&level, "Data")?.ok_or_else(|| fail("level.dat: missing Data"))?;
@@ -958,7 +959,9 @@ pub(super) fn convert(
         let relative = PathBuf::from(path);
         if paths.contains(&relative) {
             let mut tag = read_nbt(&source.join(path))?;
-            stats.pre_rename.rename(&mut tag, &|| path.into())?;
+            stats
+                .pre_rename
+                .rename(&mut tag, Owner::metadata(Path::new(path)), &|| path.into())?;
             check_version(&tag, &source.join(path))?;
             metadata.insert(path.into(), tag);
             consumed.insert(relative);
@@ -984,7 +987,9 @@ pub(super) fn convert(
         let mut tag = read_nbt(&path)?;
         stats
             .pre_rename
-            .rename(&mut tag, &|| relative.display().to_string())?;
+            .rename(&mut tag, Owner::metadata(destination), &|| {
+                relative.display().to_string()
+            })?;
         let version = saved_data_source_version(&tag, &path)?;
         // No saved-data payload fixer is registered between 4790 and 5023.
         // File-only hardcore spectator settings do not change these codecs.
@@ -1341,7 +1346,7 @@ pub(super) fn convert(
                 .binary_search(&entities.join(relative.file_name().expect("region filename")))
                 .is_ok();
             visit(&path, |pos, mut tag, _| {
-                stats.pre_rename.rename(&mut tag, &|| {
+                stats.pre_rename.rename(&mut tag, Owner::Chunk, &|| {
                     format!("{}#chunk({}, {})", relative.display(), pos.x, pos.z)
                 })?;
                 let from = source_version(&tag, &path)?;
@@ -1715,9 +1720,11 @@ pub(super) fn convert(
         {
             let path = source.join(relative);
             visit(&path, |pos, mut tag, _| {
-                stats.pre_rename.rename(&mut tag, &|| {
-                    format!("{}#chunk({}, {})", relative.display(), pos.x, pos.z)
-                })?;
+                stats
+                    .pre_rename
+                    .rename(&mut tag, Owner::EntityRegion, &|| {
+                        format!("{}#chunk({}, {})", relative.display(), pos.x, pos.z)
+                    })?;
                 let from = source_version(&tag, &path)?;
                 let report = upgrade::upgrade_entity_region(&mut tag, from).map_err(|error| {
                     fail(format!(
@@ -2052,7 +2059,7 @@ pub(super) fn convert(
         let mut tag = read_nbt(&path)?;
         stats
             .pre_rename
-            .rename(&mut tag, &|| relative.display().to_string())?;
+            .rename(&mut tag, Owner::Player, &|| relative.display().to_string())?;
         let source_location = player_missing_dimension_source(&tag)?;
         // Versionless players report -1 (vanilla PlayerDataStorage/NbtUtils
         // default), NOT 1343: -1 runs the full legacy fixer chain, while

@@ -240,11 +240,14 @@ This build refuses to open a world written before the Krasnokamen rename and
 names the way out: stop it, export it with that release's own binary
 (`solaris world export-anvil`, `solaris-v2` from source) and import the export
 here. The old release writes its own NBT fields as `solaris:*` and `Solaris*`;
-import renames them to the `krasnokamen:*` and `Krasnokamen*` names this build
-reads (counted as `pre_rename_keys` and listed under `normalizations`), and a
-player rider stored on a vehicle as `solaris:Rider` becomes `krasnokamen:Riders`.
-A field present under both names refuses the import. String values in the old
-`solaris:` namespace stay as they are and are listed under `known_gaps`. Plugin
+import renames only the exact known legacy keys in their owning player, entity,
+chunk, block-entity or metadata compounds to this build's `krasnokamen:*` and
+`Krasnokamen*` names (counted as `pre_rename_keys` and listed under
+`normalizations`). Foreign keys and opaque nested compounds are not renamed,
+even if their names contain `solaris` or match a legacy key owned elsewhere.
+A player rider stored on a vehicle as `solaris:Rider` becomes
+`krasnokamen:Riders`. A field present under both names refuses the import.
+String values in the old `solaris:` namespace stay as they are and are listed under `known_gaps`. Plugin
 state, settlements and the block log live only in the old native store and do
 not carry over.
 

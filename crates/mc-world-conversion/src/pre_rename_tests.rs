@@ -1,4 +1,4 @@
-use super::PreRename;
+use super::{Owner, PreRename};
 use mc_nbt::{ListTag, Tag, tag_type};
 
 fn compound(fields: Vec<(&str, Tag)>) -> Tag {
@@ -15,6 +15,167 @@ fn keys(tag: &Tag) -> Vec<&str> {
         panic!("compound expected: {tag:?}")
     };
     fields.iter().map(|(name, _)| name.as_str()).collect()
+}
+
+fn foreign_payload() -> Tag {
+    compound(vec![
+        ("my_mod:solaris_flag", Tag::Byte(1)),
+        ("my_mod:SolarisFlag", Tag::String("kept".into())),
+        ("MY_MOD:SOLARIS_FLAG", Tag::Int(2)),
+        ("solaris:unknown_extension", Tag::Int(3)),
+        // Even an exact owned key is foreign inside an opaque compound.
+        ("solaris:WireId", Tag::Int(9)),
+        ("solaris:Rider", Tag::Int(4)),
+        ("SolarisUnlockedRecipes", Tag::String("opaque".into())),
+        (
+            "Entities",
+            Tag::List(ListTag {
+                element_type: tag_type::COMPOUND,
+                elements: vec![compound(vec![("solaris:WireId", Tag::Int(10))])],
+            }),
+        ),
+    ])
+}
+
+#[test]
+fn foreign_nested_keys_survive_pre_rename_in_every_record_owner() {
+    for owner in [
+        Owner::Player,
+        Owner::Entity,
+        Owner::Chunk,
+        Owner::EntityRegion,
+        Owner::Level,
+        Owner::Raids,
+        Owner::DragonFight,
+    ] {
+        let original = compound(vec![
+            ("my_mod:solaris_flag", Tag::Byte(1)),
+            ("my_mod:SolarisFlag", Tag::Int(2)),
+            ("my_mod:SOLARIS_FLAG", Tag::Int(3)),
+            ("solaris:unknown_extension", Tag::Int(4)),
+            ("my_mod:payload", foreign_payload()),
+            (
+                "foreign",
+                Tag::List(ListTag {
+                    element_type: tag_type::COMPOUND,
+                    elements: vec![foreign_payload()],
+                }),
+            ),
+        ]);
+        let mut tag = original.clone();
+        let mut report = PreRename::default();
+        report
+            .rename(&mut tag, owner, &|| "foreign record".into())
+            .unwrap();
+        assert_eq!(tag, original);
+        assert_eq!(report.keys, 0);
+    }
+}
+
+#[test]
+fn nested_owned_entity_block_and_metadata_keys_are_renamed_only_at_their_owner() {
+    let mut chunk = compound(vec![
+        ("SolarisSimDebt", Tag::Long(1)),
+        (
+            "Entities",
+            Tag::List(ListTag {
+                element_type: tag_type::COMPOUND,
+                elements: vec![compound(vec![
+                    ("solaris:WireId", Tag::Int(7)),
+                    ("my_mod:payload", foreign_payload()),
+                    (
+                        "solaris:VillagerRuntime",
+                        compound(vec![("SolarisSoldier", Tag::String("kept state".into()))]),
+                    ),
+                ])],
+            }),
+        ),
+        (
+            "block_entities",
+            Tag::List(ListTag {
+                element_type: tag_type::COMPOUND,
+                elements: vec![compound(vec![
+                    ("solaris:TransferCooldownUntil", Tag::Long(10)),
+                    ("my_mod:payload", foreign_payload()),
+                ])],
+            }),
+        ),
+    ]);
+    let mut report = PreRename::default();
+    report
+        .rename(&mut chunk, Owner::Chunk, &|| "chunk".into())
+        .unwrap();
+    assert_eq!(report.keys, 5);
+    let Tag::Compound(fields) = &chunk else {
+        unreachable!()
+    };
+    assert_eq!(fields[0].0, "KrasnokamenSimDebt");
+    let Tag::List(entities) = &fields[1].1 else {
+        unreachable!()
+    };
+    assert_eq!(
+        keys(&entities.elements[0]),
+        [
+            "krasnokamen:WireId",
+            "my_mod:payload",
+            "krasnokamen:VillagerRuntime"
+        ]
+    );
+    let Tag::Compound(entity) = &entities.elements[0] else {
+        unreachable!()
+    };
+    assert_eq!(entity[1].1, foreign_payload());
+    assert_eq!(keys(&entity[2].1), ["KrasnokamenSoldier"]);
+    let Tag::List(blocks) = &fields[2].1 else {
+        unreachable!()
+    };
+    assert_eq!(
+        keys(&blocks.elements[0]),
+        ["krasnokamen:TransferCooldownUntil", "my_mod:payload"]
+    );
+    let Tag::Compound(block) = &blocks.elements[0] else {
+        unreachable!()
+    };
+    assert_eq!(block[1].1, foreign_payload());
+
+    for (owner, container, old, current) in [
+        (
+            Owner::Level,
+            "Data",
+            "SolarisTerrainEpoch",
+            "KrasnokamenTerrainEpoch",
+        ),
+        (
+            Owner::Raids,
+            "data",
+            "solaris:clock_tick",
+            "krasnokamen:clock_tick",
+        ),
+        (
+            Owner::DragonFight,
+            "data",
+            "SolarisFightState",
+            "KrasnokamenFightState",
+        ),
+    ] {
+        let mut tag = compound(vec![(
+            container,
+            compound(vec![(old, Tag::Long(1)), ("foreign", foreign_payload())]),
+        )]);
+        let mut report = PreRename::default();
+        report
+            .rename(&mut tag, owner, &|| "metadata".into())
+            .unwrap();
+        assert_eq!(report.keys, 1);
+        let Tag::Compound(fields) = &tag else {
+            unreachable!()
+        };
+        assert_eq!(keys(&fields[0].1), [current, "foreign"]);
+        let Tag::Compound(data) = &fields[0].1 else {
+            unreachable!()
+        };
+        assert_eq!(data[1].1, foreign_payload());
+    }
 }
 
 /// An RC5 export of `tag`: every Krasnokamen field name back in its pre-rename
@@ -51,7 +212,7 @@ fn mentions_pre_rename(tag: &Tag) -> bool {
 #[test]
 fn nested_pre_rename_fields_take_their_current_names_and_values_stay() {
     let mut tag = compound(vec![
-        ("solaris:WireId", Tag::Int(7)),
+        ("solaris:PortalTime", Tag::Int(7)),
         (
             "SolarisUnlockedRecipes",
             Tag::List(ListTag {
@@ -76,12 +237,12 @@ fn nested_pre_rename_fields_take_their_current_names_and_values_stay() {
     ]);
     let mut report = PreRename::default();
     report
-        .rename(&mut tag, &|| "entities/r.0.0.mca#chunk(0, 0)".into())
+        .rename(&mut tag, Owner::Player, &|| "players/data/x.dat".into())
         .unwrap();
     assert_eq!(
         keys(&tag),
         [
-            "krasnokamen:WireId",
+            "krasnokamen:PortalTime",
             "KrasnokamenUnlockedRecipes",
             "Item",
             "Tags",
@@ -94,7 +255,7 @@ fn nested_pre_rename_fields_take_their_current_names_and_values_stay() {
     let Tag::Compound(item) = &fields[2].1 else {
         unreachable!()
     };
-    assert_eq!(keys(&item[0].1), ["krasnokamen:entity_loot"]);
+    assert_eq!(keys(&item[0].1), ["solaris:entity_loot"]);
     assert_eq!(
         fields[3].1,
         Tag::List(ListTag {
@@ -103,11 +264,11 @@ fn nested_pre_rename_fields_take_their_current_names_and_values_stay() {
         })
     );
     assert_eq!(fields[4].1, Tag::String("Solaris".into()));
-    assert_eq!(report.keys, 3);
+    assert_eq!(report.keys, 2);
     assert_eq!(report.values, 1);
     assert_eq!(
         report.first_value.as_deref(),
-        Some("entities/r.0.0.mca#chunk(0, 0) field Tags")
+        Some("players/data/x.dat field Tags")
     );
 }
 
@@ -115,7 +276,9 @@ fn nested_pre_rename_fields_take_their_current_names_and_values_stay() {
 fn an_rc5_player_rider_becomes_the_rider_list() {
     let mut tag = compound(vec![("solaris:Rider", Tag::IntArray(vec![0, 0, 0, 3]))]);
     let mut report = PreRename::default();
-    report.rename(&mut tag, &|| "horse".into()).unwrap();
+    report
+        .rename(&mut tag, Owner::Entity, &|| "horse".into())
+        .unwrap();
     assert_eq!(
         tag,
         compound(vec![(
@@ -130,7 +293,7 @@ fn an_rc5_player_rider_becomes_the_rider_list() {
 
     let mut broken = compound(vec![("solaris:Rider", Tag::Int(3))]);
     let error = PreRename::default()
-        .rename(&mut broken, &|| "horse".into())
+        .rename(&mut broken, Owner::Entity, &|| "horse".into())
         .unwrap_err()
         .to_string();
     assert!(
@@ -146,7 +309,7 @@ fn a_field_under_both_names_refuses_the_import() {
         ("solaris:PortalTime", Tag::Int(2)),
     ]);
     let error = PreRename::default()
-        .rename(&mut tag, &|| "players/data/x.dat".into())
+        .rename(&mut tag, Owner::Player, &|| "players/data/x.dat".into())
         .unwrap_err()
         .to_string();
     assert!(
@@ -193,6 +356,7 @@ fn rc5_export_with_a_player_rider_keeps_its_fields_and_the_rider() {
                 ("solaris:WireId".into(), Tag::Int(201)),
                 ("solaris:PortalTime".into(), Tag::Int(7)),
                 ("solaris:Rider".into(), Tag::IntArray(vec![0, 0, 0, 3])),
+                ("my_mod:payload".into(), foreign_payload()),
             ],
             ..Default::default()
         });
@@ -251,6 +415,11 @@ fn rc5_export_with_a_player_rider_keeps_its_fields_and_the_rider() {
     assert!(
         exported_horse
             .extra_fields
+            .contains(&("my_mod:payload".into(), foreign_payload()))
+    );
+    assert!(
+        exported_horse
+            .extra_fields
             .iter()
             .any(|(name, value)| name == "krasnokamen:PortalTime" && *value == Tag::Int(7)),
         "{:?}",
@@ -272,12 +441,15 @@ fn rc5_export_with_a_player_rider_keeps_its_fields_and_the_rider() {
     let Tag::Compound(fields) = &exported_player else {
         unreachable!()
     };
-    assert!(
-        fields
-            .iter()
-            .any(|(name, value)| name == "KrasnokamenUnlockedRecipes"
-                && matches!(value, Tag::List(list)
-                if list.elements.contains(&Tag::String("minecraft:crafting_table".into())))),
-        "{exported_player:?}"
+    // Export projects native recipe custody into vanilla's recipe book.
+    let Some(Tag::Compound(book)) = mc_data::item_nbt::field(fields, "recipeBook") else {
+        panic!("recipeBook compound: {exported_player:?}")
+    };
+    assert_eq!(
+        mc_data::item_nbt::field(book, "recipes"),
+        Some(&Tag::List(ListTag {
+            element_type: tag_type::STRING,
+            elements: vec![Tag::String("minecraft:crafting_table".into())],
+        }))
     );
 }
