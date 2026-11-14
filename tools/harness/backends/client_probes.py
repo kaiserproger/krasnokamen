@@ -82,7 +82,7 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         "native-v2-map-inventory-player-markers", "native-v2-map-pumpkin-hiding")
     if ctx.scenario_id == "native-v2-cursor-close":
         required = required | {"minecraft_open_inventory", "client_capture"}
-    if ctx.scenario_id == "native-v2-craft-drag":
+    if ctx.scenario_id in ("native-v2-craft-drag", "native-v2-craft-drag-paced"):
         required = required | {"minecraft_open_inventory", "client_capture"}
     if ctx.scenario_id == "native-v2-settlement-storage":
         required = required | {"client_capture"}
@@ -90,6 +90,8 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         required = required | {"minecraft_approach_entity", "minecraft_interact_entity", "client_capture"}
     if p5_scenario:
         required = java_p5.REQUIRED_TOOLS
+    if ctx.scenario_id in ("java-v2-p5-craft-drag", "java-v2-p5-craft-drag-paced"):
+        required = required | {"minecraft_open_inventory"}
     artifact = ctx.artifact_dir
     plugin_dir = plugin_directory(ctx)
     binary = _server_binary(ctx)
@@ -383,10 +385,14 @@ seed = 81
                     mcp.promotion_mount_export_reimport = export_reimport
             result = native_v2.run(mcp, artifact, timeout, ctx.scenario_id)
         elif p5_scenario:
+            from . import java_craft_drag
+
             runners = {
                 "java-v2-p5-towns": java_p5.run_towns,
                 "java-v2-p5-parity": java_p5.run_parity,
                 "java-v2-p5-cursor": java_p5.run_cursor,
+                "java-v2-p5-craft-drag": java_craft_drag.run,
+                "java-v2-p5-craft-drag-paced": java_craft_drag.run_paced,
             }
             result = runners[ctx.scenario_id](mcp, artifact, timeout)
         elif kind == "entities":

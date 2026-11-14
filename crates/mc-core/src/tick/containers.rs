@@ -50,6 +50,73 @@ pub(super) fn container_slots(
         .collect()
 }
 
+/// Snapshot the actual backing storage of the issuing player's current menu.
+pub(crate) fn debug_menu_snapshot(
+    state: &TickState,
+    entity: EntityId,
+) -> Result<serde_json::Value, &'static str> {
+    let player = state.players.get(&entity).ok_or("player not found")?;
+    let menu = player.open.as_ref().unwrap_or(&player.inventory_menu);
+    use std::borrow::Cow;
+    let container: Cow<'_, [mc_data::ItemStack]> = if let Some(open) = state.settlement_menus.get(&player.connection) {
+        let (window, icons) = open.snapshot();
+        if window != menu.window {
+            return Err("settlement menu is stale");
+        }
+        Cow::Borrowed(icons)
+    } else if crate::vehicles::is_open(state, entity) {
+        Cow::Borrowed(crate::vehicles::container_slots_for_player(state, entity)
+            .ok_or("vehicle menu storage is unavailable")?)
+    } else if let crate::inventory::MenuKind::Mount { entity: mount, .. } = menu.kind {
+        let slot = state.entities.slot_of(mount).ok_or("mount is unavailable")?;
+        if crate::mounts::menus::kind(state, slot) != Some(menu.kind) {
+            return Err("mount menu is stale");
+        }
+        Cow::Owned(crate::mounts::menus::slots(state, slot))
+    } else if crate::ender_chest::is_open(state, entity) {
+        Cow::Owned(crate::ender_chest::contents(&player.opaque_player_fields, &state.registry.items)
+            .map_err(|_| "ender chest storage is invalid")?)
+    } else if let Some(position) = state.open_containers.get(&entity) {
+        let cells = container_cells(state, *position);
+        let mut slots = Vec::with_capacity(menu.kind.container_size());
+        for cell in cells {
+            let record = state.block_entities.get(&cell).ok_or("container storage is unavailable")?;
+            slots.extend(record.slots.iter().cloned());
+        }
+        Cow::Owned(slots)
+    } else if menu.kind.container_size() == 0 {
+        Cow::Borrowed(&[])
+    } else {
+        return Err("menu backing storage is unavailable");
+    };
+    if container.len() < menu.kind.container_size() {
+        return Err("menu backing storage is incomplete");
+    }
+    let stack = |item: &mc_data::ItemStack| -> Result<serde_json::Value, &'static str> {
+        if item.is_empty() {
+            return Ok(serde_json::json!({"item": null, "count": 0}));
+        }
+        let name = state.registry.items.name_of(item.item_id).ok_or("unknown item in menu")?;
+        Ok(serde_json::json!({"item": name.as_str(), "count": item.count}))
+    };
+    let slots = (0..menu.kind.slot_count()).map(|index| {
+        use crate::inventory::SlotRef;
+        let item = match menu.kind.slot(index) {
+            Some(SlotRef::Result) => &menu.result,
+            Some(SlotRef::Grid(i)) => &menu.grid[i],
+            Some(SlotRef::Inventory(i)) => &player.inventory.slots[i],
+            Some(SlotRef::Container(i)) => &container[i],
+            None => &mc_data::ItemStack::EMPTY,
+        };
+        stack(item)
+    }).collect::<Result<Vec<_>, _>>()?;
+    Ok(serde_json::json!({
+        "container_id": menu.window,
+        "carried": stack(&menu.carried)?,
+        "slots": slots,
+    }))
+}
+
 /// Resync the real current menu after refusing a native inventory transition.
 /// A vehicle or block menu must never be imaged with placeholder empty cargo.
 pub(crate) fn inventory_transition_refused(

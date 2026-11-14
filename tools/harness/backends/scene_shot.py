@@ -216,6 +216,18 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 shots.append(capture(probe, artifact, value))
             else:
                 (artifact / f"{value}.json").write_text(json.dumps(probe.observe(), indent=2) + "\n")
+        elif kind == "goat_horns_upright" and isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value):
+            from . import goat_horn_oracle
+
+            edges = goat_horn_oracle.horn_left_edges(artifact / "screenshots" / f"{value}.png")
+            probe.report["goat_horn_left_edges"] = edges
+            probe.check("goat_horns_upright", goat_horn_oracle.upright(edges))
+            body_edges = goat_horn_oracle.body_left_edges(artifact / "screenshots" / f"{value}.png")
+            probe.report["goat_body_left_edges"] = body_edges
+            probe.check("goat_body_aligned", goat_horn_oracle.body_aligned(body_edges))
+            ear_coverage = goat_horn_oracle.ear_lower_coverage(artifact / "screenshots" / f"{value}.png")
+            probe.report["goat_ear_lower_coverage"] = ear_coverage
+            probe.check("goat_ear_full_height", ear_coverage >= 25)
         elif kind == "cmd" and isinstance(value, str) and value and not value.startswith("/"):
             wait_play(probe)
             probe.call("minecraft_send_chat", {"message": value, "command": True})
@@ -286,6 +298,31 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             receipt = artifact / f"{name}.json"
             receipt.write_text(json.dumps(result, indent=2) + "\n")
             probe.report.setdefault("terrain_waits", []).append({"receipt": str(receipt), "result": result})
+        elif kind == "timed_entities" and isinstance(value, dict):
+            name, args = value.get("name"), value.get("args")
+            if (set(value) != {"name", "args"} or not isinstance(name, str)
+                    or not re.fullmatch(r"[A-Za-z0-9_-]+", name) or not isinstance(args, dict)):
+                raise ValueError(f"invalid {kind} step: {value!r}")
+            result = probe.call("minecraft_list_entities", args)
+            if type(result.get("game_time")) is not int:
+                raise RuntimeError("entity snapshot omitted same-thread game_time")
+            receipt = {"game_time": result["game_time"], "snapshot": result}
+            (artifact / f"{name}.json").write_text(json.dumps(receipt, indent=2) + "\n")
+        elif kind == "mob_motion" and isinstance(value, dict):
+            from . import mob_motion_oracle
+
+            names, name = value.get("samples"), value.get("name")
+            if (set(value) != {"samples", "name"} or not isinstance(name, str)
+                    or not re.fullmatch(r"[A-Za-z0-9_-]+", name)
+                    or not isinstance(names, list) or len(names) != 3
+                    or any(not isinstance(item, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", item)
+                           for item in names)):
+                raise ValueError(f"invalid mob_motion step: {value!r}")
+            samples = [json.loads((artifact / f"{item}.json").read_text()) for item in names]
+            measurement = mob_motion_oracle.measure(samples, ["minecraft:zombie", "minecraft:spider"])
+            (artifact / f"{name}.json").write_text(json.dumps(measurement, indent=2) + "\n")
+            for entity, row in measurement.items():
+                probe.check("mob_moved_" + entity.split(":")[1], row["total_displacement_blocks"] > 0.1)
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities") and isinstance(value, dict):
             name, args = value.get("name"), value.get("args")
             if (set(value) != {"name", "args"} or not isinstance(name, str)
@@ -298,9 +335,9 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
     return shots
 
 
-def start_java(ctx: ProfileContext, artifact: Path, address: str, username: str, timeout: float,
+def start_java(ctx: ProfileContext, artifact: Path, address: str | None, username: str, timeout: float,
                display: str, render_distance: int, fov: int) -> tuple[Any, Any, McpClient]:
-    """Launch the vanilla Java client (loader MCP) and connect it to `address`."""
+    """Launch the vanilla Java client, optionally connecting to a server."""
     game_dir = artifact / "game"
     game_dir.mkdir()
     (game_dir / "options.txt").write_text(java_options(render_distance, fov))
@@ -320,7 +357,8 @@ def start_java(ctx: ProfileContext, artifact: Path, address: str, username: str,
         runtime.wait_client_ready_for_connect(mcp, timeout)
         if "video driver: wayland" in log_path.read_text(errors="replace").lower():
             raise RuntimeError("Java client opened its window on Wayland (the owner's desktop), not the harness Xvfb")
-        mcp.call_tool("minecraft_connect", {"server_addr": address})
+        if address is not None:
+            mcp.call_tool("minecraft_connect", {"server_addr": address})
     except BaseException:
         if mcp is not None:
             mcp.close()
@@ -351,6 +389,12 @@ def run(
         scenario = json.loads(Path(scenario_path).read_text())
     if not isinstance(scenario, dict) or not isinstance(scenario.get("steps"), list):
         raise ValueError("scenario must contain a steps array")
+    if scenario.get("vanilla_singleplayer") is True:
+        if ctx.client != "java":
+            raise ValueError("vanilla singleplayer scenes require --client java")
+        from . import integrated_scene
+
+        return integrated_scene.run(ctx, scenario)
     seed = scenario.get("seed", 100)
     if type(seed) is not int:
         raise ValueError("seed must be an integer")

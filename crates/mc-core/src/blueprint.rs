@@ -916,8 +916,8 @@ pub fn vanilla_blueprints(
         },
         MobParams {
             max_health: 20.0,
-            // Modest gameplay tuning from 4.3; this is not a vanilla parity claim.
-            speed: 3.8,
+            // Java 26.3 integrated-scene chase moved ~0.116 blocks per client game tick.
+            speed: 2.4,
             attack_damage: 3.0,
             pickup_delay: 0,
             breed_cooldown: 0,

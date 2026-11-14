@@ -402,6 +402,8 @@ pub enum Command {
         count: i32,
         hotbar_slot: u8,
     },
+    /// Solaris operator probe: report the issuing player's authoritative menu.
+    DebugMenu,
     /// Vanilla `/debug start`: begin tick-time profiling.
     DebugStart,
     /// Vanilla `/debug stop`: end profiling, report elapsed ticks/time/TPS.
@@ -1299,7 +1301,7 @@ fn parse_summon(args: &[&str]) -> Result<Command, CommandError> {
 }
 
 fn parse_debug(args: &[&str]) -> Result<Command, CommandError> {
-    const USAGE: &str = "debug give <item> <count> <hotbar slot 0-8>";
+    const USAGE: &str = "debug give <item> <count> <hotbar slot 0-8> | debug menu";
     match args {
         ["give", item, count, slot] => Ok(Command::DebugGive {
             item: crate::command_items::ItemArgument::parse(item)?,
@@ -1310,6 +1312,7 @@ fn parse_debug(args: &[&str]) -> Result<Command, CommandError> {
                 .filter(|slot| *slot <= 8)
                 .ok_or(CommandError::Usage(USAGE))?,
         }),
+        ["menu"] => Ok(Command::DebugMenu),
         ["start"] => Ok(Command::DebugStart),
         ["stop"] => Ok(Command::DebugStop),
         ["function", name] => Ok(Command::DebugFunction {

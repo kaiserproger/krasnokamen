@@ -6,7 +6,7 @@ use crate::tick::TickState;
 use mc_data::ItemStack;
 use std::sync::Arc;
 
-pub(super) fn kind(state: &TickState, slot: EntitySlot) -> Option<MenuKind> {
+pub(crate) fn kind(state: &TickState, slot: EntitySlot) -> Option<MenuKind> {
     let name = super::name(state, slot);
     let armor = match name {
         "minecraft:horse" => MountArmor::Horse,
@@ -83,7 +83,7 @@ pub(crate) fn select_bundle_item(
     }
 }
 
-fn slots(state: &TickState, slot: EntitySlot) -> Vec<ItemStack> {
+pub(crate) fn slots(state: &TickState, slot: EntitySlot) -> Vec<ItemStack> {
     let row = state.entities.row(slot);
     let size = kind(state, slot).unwrap().container_size();
     let mut result = Vec::with_capacity(size);

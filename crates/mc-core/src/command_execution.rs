@@ -500,6 +500,24 @@ pub(crate) fn execute(
                 changes,
             );
         }
+        Command::DebugMenu => {
+            let Some(issuer) = state.connections.entity_of(connection) else {
+                error(state, connection, "Cannot inspect menu: player not found");
+                return Failed;
+            };
+            match crate::tick::debug_menu_snapshot(state, issuer) {
+                Ok(snapshot) => {
+                    state.push_player(connection, PlayerChange::Chat {
+                        message: format!("SOLARIS_MENU {snapshot}"),
+                    });
+                    return CommandResult::Completed;
+                }
+                Err(reason) => {
+                    error(state, connection, format!("Cannot inspect menu: {reason}"));
+                    return Failed;
+                }
+            }
+        }
         Command::DebugGive {
             item,
             count,

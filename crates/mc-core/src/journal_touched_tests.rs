@@ -196,6 +196,38 @@ fn vehicle_motion_and_rotation_only_changes_survive_wal_replay() {
 }
 
 #[test]
+fn zombie_chase_pose_is_journaled_and_cleared_on_recovery() {
+    let dir = std::env::temp_dir().join(format!("mc-core-zombie-pose-{}", uuid::Uuid::new_v4()));
+    let mut state = fixture();
+    let zombie_type = state.registry.entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap()).unwrap();
+    let zombie = state.spawn_mob(zombie_type, [8.5, 65.0, 8.5], 20.0);
+    let slot = state.entities.slot_of(zombie).unwrap();
+    state.entities.row_mut(slot).controls.no_ai = true;
+    state.entities.row_mut(slot).persistent = true;
+    let mut writer = JournalWriter::open(&dir, 1).unwrap();
+    let entries = step(&mut state);
+    writer.append(state.tick, state.tick, &entries).unwrap();
+    crate::hostile::set_zombie_aggressive(&mut state, slot, true);
+    let entries = step(&mut state);
+    assert_eq!(image_ids(&entries), vec![zombie.0]);
+    writer.append(state.tick, state.tick, &entries).unwrap();
+    writer.flush().unwrap();
+    drop(writer);
+    let batches = read_complete_batches_after(&dir.join("journal"), 0).unwrap();
+    let replay = replay_batches(Replay::default(), &batches);
+    let record = &replay.entities[&zombie.0];
+    assert!(record.appearance.extra.iter().any(|(index, value)| *index == 15
+        && matches!(value, crate::journal::EntityDataValueImage::Byte(flags) if flags & 4 != 0)));
+    let mut restored = fixture();
+    assert!(crate::core::restore_entity(&mut restored, zombie.0, record).unwrap());
+    let slot = restored.entities.slot_of(zombie).unwrap();
+    assert!(!restored.entities.row(slot).appearance.extra.iter().any(|(index, value)| *index == 15
+        && matches!(value, crate::boundary::EntityDataValue::Byte(flags) if flags & 4 != 0)));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
 fn row_mut_spawn_and_removal_are_the_only_journal_marks() {
     let mut state = fixture();
     let cow = spawn_idle_cow(&mut state, 8.5);
