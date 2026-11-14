@@ -10,7 +10,8 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#POTION-CUSTOM-PAYLOAD"
 regression = ["cargo:mc-core:projectiles::payloads::tests::lingering_custom_payload_and_impact_color_are_preserved"]
 failing_first = "not recorded"
-
+fix_commit = "bafcdb6f0"
+repro_check = "candidate: bafcdb6f0's payloads.rs reverse conflicts in 10 blocks after b46ace161 rewrote the cloud code, and reversing b46ace161 leaves the ref green, so no real-hunk control exists; only a synthetic mutation was red and is not counted; client repro, real-client gate pending (stage 3)"
 [[bug]]
 id = "LINGERING-FRIENDLY-PVP"
 title = "Disabling PvP also disables beneficial lingering potion effects on other players: player A cannot heal or buff player B with a cloud, although self-use and ordinary splash healing remain allowed. A generic pre-effect PvP gate rejects the entire target, not merely harmful damage."
@@ -329,7 +330,8 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#MAP-FRAME-AUTO-EXPLORE"
 regression = ["cargo:mc-core:tick_tests::maps_tests::framed_and_pocket_maps_do_not_explore_until_held"]
 failing_first = "reported"
-
+fix_commit = "33812b466"
+repro_check = "candidate: 33812b466's maps/runtime.rs reverse conflicts inside the explorers/frame_types block and the exploration loop, so no real-hunk control; only a synthetic mutation was red and is not counted; client repro, real-client gate pending (stage 3)"
 [[bug]]
 id = "ITEM-FRAME-PROJECTILE-CONTENTS"
 title = "Shooting an occupied item frame with an ordinary arrow destroys both the frame and its display, whereas vanilla ejects only the displayed item on the first non-explosive hit and leaves the frame attached."
@@ -905,7 +907,8 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-2"
 regression = ["cargo:mc-core:vehicles::tests::hopper_pulling_from_a_container_vehicle_refreshes_its_open_menu"]
-
+fix_commit = "6948e64e1"
+repro_check = "real-hunk control: reverse-applying 6948e64e1's redstone/containers.rs additions turns the ref red at vehicles_tests.rs:1647 (the hopper viewer never sees the pulled apple), receipts/XCoreItems/real-hunk-control.txt; the row is repro=manual, so candidate: real-client check required (repro=manual)"
 [[bug]]
 id = "HS-3"
 title = "Imported unsupported sand/gravel with a saved due gravity tick stays suspended without new edits; distinct from native rendering and setblock observation."
@@ -1073,7 +1076,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#SPAWN-PEACEFUL-REMOVAL"
 regression = ["cargo:mc-core:natural_spawn_tests::fix_mobs_peaceful_command_removes_hostiles_with_spawning_disabled", "harness:entities:native-v2-peaceful-removal"]
-
+repro_check = "candidate: e2e05b33e's monster_spawner.rs hunks conflict in three large blocks, the despawn path predates it and was restructured by 2dfebd7ab, so no real-hunk control; module 43/43 green, only a synthetic mutation was red and is not counted; real-client gate pending (stage 3)"
 [[bug]]
 id = "SPAWN-SPAWNER-EGG"
 title = "Using spawn egg on spawner spawns adjacent mob rather than configuring SpawnData."
@@ -1107,8 +1110,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#TOTEM"
 regression = ["cargo:mc-core:tick_tests::combat_parity_tests::fix_mobs_totem_intercepts_lethal_damage_in_either_hand_but_not_void", "harness:entities:native-v2-command-score-store"]
-fix_commit = "de780c8823e3359fe426621a331c13ab58ccc127"
-
+fix_commit = "de780c882"
+repro_check = "candidate: same de780c882 reversal failure as DEATH-PROTECTION-COMPONENT; only a synthetic mutation was red and is not counted; real-client gate pending (stage 3)"
 [[bug]]
 id = "KILL-TYPE"
 title = "Player /kill used out_of_world instead of generic_kill."
@@ -1216,7 +1219,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-001"
 regression = ["cargo:mc-core:mounts::tests::mount_inventory_opens_for_each_tamed_mount", "cargo:mc-core:mounts::tests::mount_inventory_equipment_cargo_and_ridden_open_share_native_custody"]
-
+repro_check = "candidate: the cargo-menu code arrives with 2ccf8cc1a, which creates mounts/menus.rs, so reversing its hunks deletes the module and does not build; the green refs and the module run (21 passed / 2 failed, both failures are mount control outside this row) are in receipts/XCoreItems; only a synthetic mutation was red and is not counted"
 [[bug]]
 id = "CONTAINERS-002"
 title = "Lectern hold/open/page/take-book menu is absent."
@@ -1226,7 +1229,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-002"
 regression = ["cargo:mc-core:tick::book_actions::tests::lectern_insert_read_turn_take_preserves_exact_book"]
-
+repro_check = "candidate: lectern.rs is created by 2ccf8cc1a and `git log -S'button == 3' -- lectern.rs` shows the take branch was never touched since, so reversing means deleting the module; module 7/7 green, only a synthetic mutation was red and is not counted (receipts/XCoreItems)"
 [[bug]]
 id = "CONTAINERS-003"
 title = "Crafting table closes on first inventory pickup before disconnect; backing10 versus container_size0 guard."
@@ -1236,7 +1239,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CONTAINERS-003"
 regression = ["cargo:mc-core:tick_tests::predicted_table_use_waits_for_accepted_placement"]
-
+repro_check = "candidate: guard and ref both come from base commit 1ada2ceb9, there is no discrete fix commit; only a synthetic mutation was red and is not counted (receipts/XCoreItems)"
 [[bug]]
 id = "CUSTODY-ENTITY-MENU-FLOOR"
 title = "A player stack reserved by a plugin can be moved into entity cargo below its reservation floor: mount and vehicle handlers directly mutate player/container, bypassing generic planned-transition floor refusal. Same contract gap, not two bugs."
@@ -1754,7 +1757,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DEATH-PROTECTION-COMPONENT"
 regression = ["cargo:mc-core:tick_tests::combat_parity_tests::death_protection_component_rescues_any_held_item_without_default_totem_effects", "harness:entities:native-v2-command-score-store"]
-
+fix_commit = "de780c882"
+repro_check = "candidate: de780c882's tick/totem.rs and tick/damage.rs hunks no longer apply (files rewritten later), so no real-hunk control; module 25/25 green, only a synthetic mutation was red and is not counted; real-client gate pending (stage 3)"
 [[bug]]
 id = "SHUTDOWN-ERROR-LOG"
 title = "Ordinary console stop emits ERROR for tick owner, journal owner, checkpoint writer, broadcast closure and server loop, forcing intentional-stop health-oracle exceptions. Checkpoint commit is present; no crash/data-loss inferred."
@@ -1794,7 +1798,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#DATAPACK-HOT-RELOAD-RECIPES-LOOT"
 regression = ["cargo:mc-core:datapacks::command_tests::enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clients", "cargo:mc-core:datapacks::command_tests::a_reload_with_an_unusable_recipe_keeps_the_old_registry_and_selection", "cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book", "harness:datapack-reload:native-datapack-reload", "cargo:mc-core:datapacks::command_tests::a_new_pack_that_cannot_load_is_skipped_at_start_and_the_error_names_pack_and_file", "cargo:mc-core:datapacks::command_tests::a_pack_the_live_reload_refused_does_not_stop_the_next_start", "cargo:mc-core:datapacks::command_tests::the_live_refusal_of_a_pack_names_the_pack_and_the_file", "cargo:mc-core:datapacks::command_tests::a_pack_filter_hides_the_files_of_the_packs_below_it", "cargo:mc-core:datapacks::command_tests::a_malformed_pack_filter_is_refused_naming_the_pack", "cargo:mc-core:datapacks::command_tests::a_pack_command_while_another_is_still_compiling_says_so_instead_of_misreporting_the_selection"]
-
+fix_commit = "7875d3193"
+repro_check = "candidate: 7875d3193's datapacks.rs reverse conflicts in four blocks after b24f0ce35 and the per-entry scan follow-ups (83d0928e9, 554ba43f1, fd757e004), so no real-hunk control; the refs need test helper df2766ffb from wt/XCoreCommands to be green (12 such failures on base, 3 remaining with the peer fix, none a row ref); receipts/XCoreItems; real-client gate pending (stage 3)"
 [[bug]]
 id = "DATAPACK-WORLDGEN-ZIP"
 title = "ZIP datapacks and worldgen/dimension resources are rejected, preventing valid archive/world-generation packs from loading. They remain explicit gaps rather than hidden under functions/tags-only enable/disable support."
@@ -4401,12 +4406,12 @@ area = "gameplay"
 repro = "source"
 severity = "blocker"
 status = "fixed"
-source = "Contributing factors: maps/runtime.rs appends distinct retained frame markers without a writer-side limit; maps::checkpoint serializes them without validation; maps::recover rejects more than 256. The read boundary fails closed, but the live admission and save boundaries do not prevent that state. Source finding, not a destructive restart test. M00 batches genuine maps to avoid creating this invalid benchmark fixture; that does not fix the gameplay owner."
+source = "Contributing factors: maps/runtime.rs appends distinct retained frame markers without a writer-side limit; maps::checkpoint serializes them without validation; maps::recover rejected more than 256 (fixed in 78fe5e3a: the read boundary is now uncapped, as vanilla MapItemSavedData.frameMarkers is, and only the writer stays bounded by MAX_FRAME_MARKERS). The pre-fix read boundary failed closed, but the live admission and save boundaries did not prevent that state. Source finding, not a destructive restart test. M00 batches genuine maps to avoid creating this invalid benchmark fixture; that does not fix the gameplay owner."
 regression = ["cargo:mc-core:tick_tests::maps_tests::more_than_256_retained_frame_markers_checkpoint_and_recover"]
 failing_first = "reported"
 fix_commit = "78fe5e3a"
 promotion = "docs/bugs/promotions/MAP-FRAME-MARKER-RECOVERY-LIMIT.json"
-
+repro_check = "real-hunk control: reversing 78fe5e3a's SavedMap::validate hunk re-adds `frame_markers.len() > 256` and the ref fails at recovery with Storage('invalid saved map') on a 300-marker save, i.e. the row's symptom (vanilla-valid save refused); receipts/XCoreItems/frame-markers-negative-control.txt. Repro is source and the ref is a cargo check through the real recovery path, so the row's evidence is complete; the ref was updated by 4c0b0b98c"
 [[bug]]
 id = "NATIVE-BLACK-SKY-GEOMETRY"
 title = "Black stair-stepped geometry covers the hill and sky in a native frame"
