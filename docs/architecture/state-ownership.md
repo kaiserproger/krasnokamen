@@ -141,6 +141,35 @@ matching uninterrupted/restarted expiry through actual checkpoint and WAL produc
 Protocol and persistence changes require Main's independent review.
 
 
+### Mob death and corpses
+
+`tick/damage.rs` commits a mob's death once: `alive = false`, entity event 3,
+loot, equipment and experience (vanilla `die` drops everything then). A living
+mob then stays an inert corpse row: `EntityStore::begin_dying` starts its clock
+and `tick/dying.rs` alone moves it (gravity and lethal knockback, no AI). After
+20 simulated ticks it broadcasts entity event 60 and removes the row. Gameplay
+consumers treat it as dead through `alive` (no damage, interaction, targeting,
+pushing, pickup, mob caps, special-mob AI or battle fighting); battle status
+counts it as dead. Its published health is 0 (vanilla `setHealth` clamps).
+Players keep their own death and respawn flow; vehicles, frames, paintings and
+armor stands leave the store at once. Differences from vanilla:
+
+- Slime splits and the oozing, weaving and wind-charged death effects happen
+  at death, with the durable removal; vanilla runs them when the body is
+  removed (`LivingEntity.remove`).
+- Riders leave at death: a dying mount dismounts its rider
+  (`mounts::death`, called from the death commit) and `mounts::tick` unlinks a
+  dead rider. Vanilla keeps them seated until the body is removed
+  (`Entity.baseTick` stops riding a removed vehicle; `setRemoved`).
+- The corpse clock runs every simulated tick whatever the chunk's activity, so
+  a corpse always leaves after 20 ticks. Vanilla `deathTime` advances only
+  while the entity ticks.
+- A bee that stung dies without a corpse: `bees.rs` marks it dead after 1200
+  ticks and removes the row with no death event or loot. Vanilla `Bee` kills
+  itself through `hurtServer(generic, getHealth())`, an ordinary death.
+
+Persistence: [corpses](persistence.md#corpses).
+
 ### Staged battle actions
 
 `battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
