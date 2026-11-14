@@ -2,6 +2,7 @@
 
 No runner or declarative interpreter: matrix_api owns execution and receipts.
 Inventory slots use the vanilla window-0 wire indices, not core storage indices.
+Fixtures build their floor before moving the actor and await its client update.
 """
 from __future__ import annotations
 

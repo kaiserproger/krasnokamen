@@ -1,4 +1,7 @@
-"""Vanilla 26.1.2 inventory interactions, including intermediate custody checks."""
+"""Vanilla inventory interactions; orb multiplicity uses server-only NBT."""
+from uuid import UUID
+
+from ..matrix_api import MissingCapability
 from ._items import (
     adapter, block_is, check, client, command, condition, count, cursor, entities,
     give, inventory_slot, menu, menu_slot, number, observe, open_menu, player_menu_slot,
@@ -294,7 +297,6 @@ def xp(ctx):
     ticks(ctx, 20)
     tools = [s for s in observe(ctx, 'inventory') if s['item_id'] == 'minecraft:diamond_pickaxe']
     if 'components' not in tools[0]:
-        from ..matrix_api import MissingCapability
         raise MissingCapability('snapshot:stack:components')
     check(ctx, 'mending_two_durability_per_xp', tools[0]['components'].get('minecraft:damage', 0), 10, source=WIKI + 'Mending')
     check(ctx, 'repair_consumes_xp', number(ctx, client(ctx).name, 'XpTotal'), 0, source=WIKI + 'Mending')
@@ -310,11 +312,34 @@ def xp(ctx):
         command(ctx, 'summon experience_orb 7.5 180 0.5 {Value:1s,Motion:[0d,0d,0d]}')
     ticks(ctx, 40)
     orbs = entities(ctx, 'experience_orb')
-    if any('value' not in orb or 'count' not in orb for orb in orbs):
-        from ..matrix_api import MissingCapability
-        raise MissingCapability('snapshot:experience_orb:value_count')
-    check(ctx, 'merged_orb_xp_conserved', sum(orb['value'] * orb['count'] for orb in orbs), 41, source=WIKI + 'Experience')
-    condition(ctx, 'equal_value_orbs_merge', len(orbs) < 41, orbs, source='local:scenarios/runs/DomItems/facts/ExperienceOrb.javap:651-670')
+    observations = []
+    for orb in orbs:
+        try:
+            identity = str(UUID(orb['uuid']))
+        except (KeyError, TypeError, ValueError, AttributeError) as error:
+            raise MissingCapability('snapshot:experience_orb:uuid') from error
+        if 'value' not in orb:
+            raise MissingCapability('snapshot:experience_orb:value')
+        observations.append({
+            'uuid': identity, 'received_value': orb['value'],
+            'value': number(ctx, identity, 'Value'),
+            'count': number(ctx, identity, 'Count'),
+        })
+    source = {'rule': WIKI + 'Experience', 'fields': {
+        'uuid': 'client.entity_uuid',
+        'received_value': 'client.synced_entity_data.DATA_VALUE',
+        'value': 'server.console.data_get_entity.Value',
+        'count': 'server.console.data_get_entity.Count',
+    }, 'orbs': observations}
+    check(ctx, 'received_orb_values_match_server',
+          [orb['received_value'] for orb in observations],
+          [orb['value'] for orb in observations], source=source)
+    check(ctx, 'merged_orb_xp_conserved',
+          sum(orb['value'] * orb['count'] for orb in observations), 41, source=source)
+    condition(ctx, 'equal_value_orbs_merge', 0 < len(orbs) < 41, orbs,
+              source={'rule': 'local:scenarios/runs/DomItems/facts/ExperienceOrb.javap:651-670',
+                      'census': 'client.minecraft_list_entities',
+                      'value': 'client.synced_entity_data.DATA_VALUE'})
 
 
 ADAPTERS = {f'inventory.{name}': adapter(fn) for name, fn in {

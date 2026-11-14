@@ -143,30 +143,96 @@ class ItemAdaptersTest(unittest.TestCase):
             with self.assertRaisesRegex(MissingCapability, 'snapshot:equipment'):
                 inventory.hotbar(ctx)
 
-    def test_xp_orb_merge_counts_value_times_multiplicity(self):
+    def test_xp_orb_merge_queries_server_multiplicity_per_received_uuid(self):
         from tools.harness.matrix_domains import inventory
         ctx = Context({'inventory': [{'item_id': 'minecraft:diamond_pickaxe',
                                       'components': {'minecraft:damage': 10}}]})
-        orbs = [{'value': 1, 'count': 2}] + [{'value': 1, 'count': 1}] * 39
+        orbs = [{'uuid': f'00000000-0000-0000-0000-{i:012d}', 'value': 1,
+                 'count': 999} for i in range(1, 41)]
+        authoritative = {orb['uuid']: 2 if i == 0 else 1 for i, orb in enumerate(orbs)}
+        player_xp = iter((0, 0, 5))
+        queries = []
+        def number(_ctx, target, path):
+            if target == 'UnitActor':
+                return next(player_xp)
+            queries.append((target, path))
+            return 1 if path == 'Value' else authoritative[target]
         with patch.multiple(inventory, give=lambda *a: None, select=lambda *a: None,
                             command=lambda *a: None, ticks=lambda *a: None,
-                            entities=lambda *a: orbs), \
-             patch.object(inventory, 'number', side_effect=[0, 0, 5]):
+                            entities=lambda *a: orbs, number=number):
             inventory.xp(ctx)
         checks = {c.name: c for c in _items.oracle(ctx)}
         self.assertTrue(checks['merged_orb_xp_conserved'].passed)
         self.assertTrue(checks['equal_value_orbs_merge'].passed)
+        self.assertTrue(checks['received_orb_values_match_server'].passed)
+        self.assertEqual(queries, [(orb['uuid'], field) for orb in orbs
+                                   for field in ('Value', 'Count')])
+        fields = checks['merged_orb_xp_conserved'].detail['source']['fields']
+        self.assertEqual(fields['value'], 'server.console.data_get_entity.Value')
+        self.assertEqual(fields['count'], 'server.console.data_get_entity.Count')
+        self.assertEqual(fields['received_value'], 'client.synced_entity_data.DATA_VALUE')
 
-    def test_xp_orb_merge_cannot_pass_unknown_count(self):
+    def test_xp_orb_merge_cannot_pass_unknown_server_count(self):
         from tools.harness.matrix_domains import inventory
         ctx = Context({'inventory': [{'item_id': 'minecraft:diamond_pickaxe',
                                       'components': {'minecraft:damage': 10}}]})
         with patch.multiple(inventory, give=lambda *a: None, select=lambda *a: None,
                             command=lambda *a: None, ticks=lambda *a: None,
-                            entities=lambda *a: [{'value': 1}]), \
-             patch.object(inventory, 'number', side_effect=[0, 0, 5]):
-            with self.assertRaisesRegex(MissingCapability, 'snapshot:experience_orb:value_count'):
+                            entities=lambda *a: [{'uuid': '00000000-0000-0000-0000-000000000001',
+                                                  'value': 1}]), \
+             patch.object(inventory, 'number', side_effect=[
+                 0, 0, 5, 1, MissingCapability('data_get_entity:Count:scalar_feedback')]):
+            with self.assertRaisesRegex(MissingCapability, 'data_get_entity:Count:scalar_feedback'):
                 inventory.xp(ctx)
+
+    def test_xp_orb_merge_requires_received_uuid(self):
+        from tools.harness.matrix_domains import inventory
+        ctx = Context({'inventory': [{'item_id': 'minecraft:diamond_pickaxe',
+                                      'components': {'minecraft:damage': 10}}]})
+        with patch.multiple(inventory, give=lambda *a: None, select=lambda *a: None,
+                            command=lambda *a: None, ticks=lambda *a: None,
+                            entities=lambda *a: [{'value': 1, 'count': 41}]), \
+             patch.object(inventory, 'number', side_effect=[0, 0, 5]):
+            with self.assertRaisesRegex(MissingCapability, 'snapshot:experience_orb:uuid'):
+                inventory.xp(ctx)
+
+    def test_setup_builds_floor_before_teleport_and_waits_for_received_floor(self):
+        ctx = Context()
+        events = []
+        server_ready = False
+        ctx.server.query = lambda text: ('DomItemsFixtureLoaded' if server_ready
+                                         else 'Condition position is not loaded')
+        state = {'block_id': 'minecraft:air', 'properties': {}}
+        ctx.server.ensure_loaded = lambda bounds: events.append('ensure_loaded')
+        actor = ctx.clients[0]
+        actor.close_container = lambda: None
+        actor.wait_for_chunk = lambda pos: events.append(('loaded_chunk', pos))
+        actor.read_block_state = lambda pos: dict(state)
+        def teleport(*position):
+            self.assertIn('fill -8 179 -8 16 179 16 stone', events)
+            events.append(('teleport', position))
+        actor.teleport_to = teleport
+        def wait(predicate, **kwargs):
+            nonlocal server_ready
+            if kwargs.get('description') == 'server fixture floor chunks loaded':
+                self.assertFalse(predicate())
+                server_ready = True
+                self.assertTrue(predicate())
+            elif not predicate():
+                state['block_id'] = 'minecraft:stone'
+                events.append('floor_received')
+                self.assertTrue(predicate())
+        ctx.wait_until = wait
+        def command(_ctx, text):
+            if text.startswith('fill '):
+                self.assertTrue(server_ready)
+            events.append(text)
+        with patch.multiple(_items, command=command,
+                            verb=lambda *a: None, count=lambda *a: 0):
+            _items.setup(ctx)
+        self.assertIn('floor_received', events)
+        self.assertLess(events.index('fill -8 179 -8 16 179 16 stone'),
+                        events.index(('teleport', (0.5, 180, 0.5))))
 
 
     def test_creative_arrow_allowed_adds_item_but_creative_only_does_not(self):
@@ -234,6 +300,11 @@ class ItemAdaptersTest(unittest.TestCase):
         ctx = Context(replies=['UnitActor has the following entity data: 17.5f'])
         self.assertEqual(_items.number(ctx, 'UnitActor', 'Health'), 17.5)
         self.assertIn('data get entity UnitActor Health', ctx.queries[0])
+
+    def test_scalar_nbt_feedback_ignores_console_fence(self):
+        ctx = Context(replies=['Orb has the following entity data: 2\n'
+                               '[Server] MatrixConsoleFence00000042'])
+        self.assertEqual(_items.number(ctx, '00000000-0000-0000-0000-000000000001', 'Count'), 2)
 
     def test_scalar_does_not_parse_numbers_from_errors(self):
         ctx = Context(replies=['No elements matching Inventory[36]'])
