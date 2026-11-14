@@ -2,7 +2,7 @@
 use crate::{Identifier, tags::TagsData};
 
 pub(super) fn add(tags: &mut TagsData) {
-    let entities = crate::entity_types::solaris_required_entity_types();
+    let entities = crate::entity_types::krasnokamen_required_entity_types();
     let registry = tags
         .registries
         .entry(Identifier::parse("minecraft:entity_type").expect("static registry id"))
