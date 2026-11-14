@@ -3,6 +3,20 @@
 
 use super::*;
 
+#[cfg(test)]
+type CheckpointStageObserver = (std::path::PathBuf, Box<dyn Fn(&'static str) + Send + Sync>);
+#[cfg(test)]
+pub(super) static CHECKPOINT_STAGE_OBSERVERS: parking_lot::Mutex<Vec<CheckpointStageObserver>> =
+    parking_lot::const_mutex(Vec::new());
+
+#[cfg(test)]
+fn checkpoint_stage(world_dir: &std::path::Path, stage: &'static str) {
+    let observers = CHECKPOINT_STAGE_OBSERVERS.lock();
+    for (_, observe) in observers.iter().filter(|(path, _)| path == world_dir) {
+        observe(stage);
+    }
+}
+
 /// One checkpoint frozen on the tick thread for the journal thread.
 pub(super) struct CheckpointJob {
     pub(super) tick: u64,
@@ -735,6 +749,15 @@ pub(super) fn journal_loop(
                         committed_tick.load(std::sync::atomic::Ordering::Acquire),
                         job.tick,
                     );
+                    #[cfg(test)]
+                    checkpoint_stage(
+                        world_dir,
+                        if gate.is_ok() {
+                            "wal_gated"
+                        } else {
+                            "gate_refused"
+                        },
+                    );
                     let plugins = gate.map(|()| Box::new(plugins.clone()));
                     if native_tx
                         .send(NativeWork::Checkpoint { job, plugins })
@@ -937,12 +960,32 @@ pub(super) fn run_native_work(
                     .collect();
                 (tick, written, block_ticks, fluid_ticks, dimensions)
             });
+            #[cfg(test)]
+            let positive_ack = ack.is_some();
+            #[cfg(test)]
+            checkpoint_stage(world_dir, "before_ack");
+            #[cfg(test)]
+            let ack_sent = done.send(ack).is_ok();
+            #[cfg(not(test))]
             let _ = done.send(ack);
+            #[cfg(test)]
+            checkpoint_stage(
+                world_dir,
+                if !ack_sent {
+                    "ack_receiver_closed"
+                } else if positive_ack {
+                    "ack_some_sent"
+                } else {
+                    "ack_none_sent"
+                },
+            );
             if let Some(reply) = reply {
                 let _ = reply.send(committed);
             }
             if committed {
                 prune_batches_through(&world_dir.join("journal"), prev_manifest.tick);
+                #[cfg(test)]
+                checkpoint_stage(world_dir, "pruned");
             }
         }
         NativeWork::SaveGenerated(chunks) => {
@@ -1017,6 +1060,8 @@ pub(super) fn commit_checkpoint(
     {
         panic!("injected native writer panic");
     }
+    #[cfg(test)]
+    checkpoint_stage(_world_dir, "before_native_commit");
     #[cfg(test)]
     if FAIL_CHECKPOINT_AFTER_REGIONS.lock().is_ok_and(|mut armed| {
         armed
@@ -1171,6 +1216,8 @@ pub(super) fn commit_checkpoint(
             &job.items,
         )
         .map_err(|e| CoreError::Storage(e.to_string()))?;
+    #[cfg(test)]
+    checkpoint_stage(_world_dir, "native_committed");
     #[cfg(test)]
     if FAIL_CHECKPOINT_AFTER_NATIVE_COMMIT
         .lock()

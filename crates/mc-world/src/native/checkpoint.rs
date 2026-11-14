@@ -894,6 +894,8 @@ impl NativeStore {
                 }
             }
         }
+        #[cfg(test)]
+        drill_tests::checkpoint_stage("globals");
         let mut io = NativeCheckpointIo::default();
         let mut keys = BTreeSet::new();
         let chunks_started = std::time::Instant::now();
@@ -929,9 +931,13 @@ impl NativeStore {
             Ok(())
         })?;
         io.chunk_micros = micros(chunks_started);
+        #[cfg(test)]
+        drill_tests::checkpoint_stage("chunks");
         let entities_started = std::time::Instant::now();
         write_entities(&tx, entities, image.tick, &mut io)?;
         io.entity_micros = micros(entities_started);
+        #[cfg(test)]
+        drill_tests::checkpoint_stage("entities");
         {
             let mut table = db(tx.open_table(PLAYERS))?;
             let mut seen = BTreeSet::new();
@@ -949,8 +955,12 @@ impl NativeStore {
             }
             validate_player_map(&manifest, &table, image.tick)?;
         }
+        #[cfg(test)]
+        drill_tests::checkpoint_stage("players");
         let commit_started = std::time::Instant::now();
         db(tx.commit())?;
+        #[cfg(test)]
+        drill_tests::checkpoint_stage("committed");
         io.commit_micros = micros(commit_started);
         Ok(io)
     }
@@ -1275,3 +1285,7 @@ impl NativeCheckpointReader {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "checkpoint_drill_tests.rs"]
+mod drill_tests;
