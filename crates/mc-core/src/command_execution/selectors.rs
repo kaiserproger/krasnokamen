@@ -216,6 +216,13 @@ pub(crate) fn selector(
     selector: &Selector,
     packs: &crate::datapacks::PackSet,
 ) -> Result<Vec<EntityId>, String> {
+    // Vanilla resolves the id only at evaluation time and treats a missing one
+    // as "this candidate does not match", before the `!` inversion is applied
+    // (`EntitySelectorOptions.lambda$bootStrap$56`: registry lookup, then
+    // `Optional.isEmpty -> false`; `ixor` with the invert flag only after it).
+    // So `predicate=<missing>` and `predicate=!<missing>` both select nothing,
+    // while `/execute if predicate <missing>` stays a parse error
+    // (`ResourceOrIdArgument.ErrorReferenceResult`, `resource_or_id.no_such_element`).
     let predicates = selector
         .predicates
         .iter()
@@ -224,9 +231,8 @@ pub(crate) fn selector(
                 .predicates
                 .get(id.as_str())
                 .map(|predicate| (predicate, *inverted))
-                .ok_or_else(|| format!("Unknown predicate {id}"))
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Vec<_>>();
     let origin = crate::command_console::pose(state, executor)
         .map(|(position, _)| position)
         .unwrap_or_else(|| state.world.world_spawn_position());
@@ -315,6 +321,11 @@ pub(crate) fn selector(
         })
         .collect();
     if !predicates.is_empty() {
+        // A missing predicate fails for every candidate and is not rescued by
+        // `!`, so the whole selection is empty without touching the world.
+        let Some(predicates) = predicates.iter().copied().collect::<Option<Vec<_>>>() else {
+            return Ok(Vec::new());
+        };
         for index in (0..candidates.len()).rev() {
             // `evaluate_predicate` reads the loot-context facts, so the candidate
             // must be bound as `this` inside the event, not passed as the event.

@@ -743,12 +743,22 @@ fn selector_predicate_selects_and_negates_datapack_predicates() {
         0,
         "all must match"
     );
-    // Vanilla reports a predicate no datapack defines as an error
-    // (`predicate.unknown`, "Unknown predicate: %s"), never as a silent
-    // non-match: data/vanilla/assets/minecraft/lang/en_us.json.
+    // Vanilla looks a `predicate=` option up only while evaluating a candidate
+    // (`EntitySelectorOptions.lambda$bootStrap$56`: `lookup().get(key)`, then
+    // `Optional.isEmpty -> false` before the invert `ixor`), so an id no
+    // datapack defines filters silently instead of failing the command. The
+    // parse-time `predicate` error belongs to other arguments (e.g.
+    // `ItemPredicateArgument`, `predicate.unknown`) and to
+    // `/execute if predicate` (`argument.resource_or_id.no_such_element`).
     assert_eq!(
-        try_count(&mut state, "predicate=test:nosuch").unwrap_err(),
-        "Unknown predicate test:nosuch"
+        count(&mut state, "predicate=test:nosuch"),
+        0,
+        "unknown predicate selects nobody"
+    );
+    assert_eq!(
+        count(&mut state, "predicate=!test:nosuch"),
+        0,
+        "inversion does not rescue an unknown predicate"
     );
 
     // entity_scores reads the candidate's own scoreboard value.
