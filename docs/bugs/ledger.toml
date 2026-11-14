@@ -1347,7 +1347,7 @@ status = "open"
 source = "crates/mc-edge/src/admin_tests.rs created /tmp/mc-edge-admin-* directories by hand instead of through a TempDir, so a failing (or panicking) test left them behind and a later test could remove a directory it did not own; the shared host accumulated them across runs."
 regression = ["cargo:mc-edge:admin_tests::a_failing_admin_test_leaves_no_temp_dir_and_removes_no_other", "cargo:mc-edge:admin_tests::a_passing_admin_test_leaves_no_temp_dir"]
 fix_commit = "abc5fd559"
-repro_check = "real-hunk control receipts/XHarnessJava/NC-ADMIN-TEMPDIR-reverse-abc5fd559.log: reversing abc5fd559's non-test hunks makes both refs red with the leaked directory listed; the refs live on wt/XHarnessJava 730d9a79c and become runnable after Main merges that branch."
+repro_check = "real-hunk control receipts/XHarnessJava/NC-ADMIN-TEMPDIR-reverse-abc5fd559.log: reversing abc5fd559's non-test hunks makes both refs red with the leaked directory listed; the refs live on wt/XHarnessJava 730d9a79c and become runnable after Main merges that branch. Both refs land with wt/XHarnessJava (abc5fd559): on a tree without that branch the tests do not exist and the refs are unrunnable, which is a merge gap, not a wrong name"
 
 [[bug]]
 id = "CLIENT-LAUNCHER-STALE-RESOURCE-PACK"
@@ -1357,9 +1357,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "The launcher wrote the resource pack into the game directory incrementally and treated an existing manifest as proof the pack was current, so upgrading the client left a 26.1.2 pack in place: 26.3 content the client needs (template_sign_* block models, entity/cushion and entity/sulfur_cube textures) never appeared, and the client's model-texture walk fails on the missing files."
-regression = ["client:krasnokamen-launcher:bootstrap::tests::a_manifest_claim_does_not_make_a_stale_pack_current", "client:krasnokamen-launcher:bootstrap::tests::a_stale_resource_pack_is_replaced_instead_of_merged", "client:krasnokamen-launcher:bootstrap::tests::an_installation_whose_pack_lost_its_marker_is_not_ready", "client:krasnokamen-launcher:ui::tests::ordinary_play_repairs_an_installation_whose_pack_lost_its_marker", "client:krasnokamen-launcher:bootstrap::tests::a_failed_pack_swap_keeps_the_previous_pack"]
-fix_commit = "client:3fa63044"
-repro_check = "candidate: area=client. fix client:3fa63044 (which contains 1ea6d127) makes readiness require the pack marker to match the local jar, so ordinary Play on an existing install repairs a stale pack, and a failed swap restores the old pack. Control receipts/XClientBlocks/27-ready-negative-control.log: an_installation_whose_pack_lost_its_marker_is_not_ready and ordinary_play_repairs_an_installation_whose_pack_lost_its_marker are red with the fix reverted (94 passed, 2 failed); a_failed_pack_swap_keeps_the_previous_pack stayed green in that same run, so for the swap claim the control is not yet shown and it must not be cited as proof. Real-client check required: the gate is a client install upgraded across a pack change"
+regression = ["client:krasnokamen-launcher:bootstrap::tests::a_manifest_claim_does_not_make_a_stale_pack_current", "client:krasnokamen-launcher:bootstrap::tests::a_stale_resource_pack_is_replaced_instead_of_merged", "client:krasnokamen-launcher:bootstrap::tests::an_installation_whose_pack_lost_its_marker_is_not_ready", "client:krasnokamen-launcher:ui::tests::ordinary_play_repairs_an_installation_whose_pack_lost_its_marker", "client:krasnokamen-launcher:bootstrap::tests::a_failed_pack_swap_keeps_the_previous_pack", "client:krasnokamen-launcher:bootstrap::tests::a_jar_with_the_same_paths_and_other_bytes_invalidates_the_pack", "client:krasnokamen-launcher:bootstrap::tests::pack_entry_digest_is_the_shared_known_answer"]
+fix_commit = "client:8f8e07e9"
+repro_check = "candidate: area=client. fix client:3fa63044 (which contains 1ea6d127) makes readiness require the pack marker to match the local jar, so ordinary Play on an existing install repairs a stale pack, and a failed swap restores the old pack. Control receipts/XClientBlocks/27-ready-negative-control.log: an_installation_whose_pack_lost_its_marker_is_not_ready and ordinary_play_repairs_an_installation_whose_pack_lost_its_marker are red with the fix reverted (94 passed, 2 failed); a_failed_pack_swap_keeps_the_previous_pack stayed green in that same run, so for the swap claim the control is not yet shown and it must not be cited as proof. Real-client check required: the gate is a client install upgraded across a pack change Later round: client:8f8e07e9 makes the marker the jar's measured SHA-1 plus a per-entry crc32/size digest, and stage 5 refuses a jar whose SHA-1 differs from the release; the two new refs are red in receipts/XClientBlocks/31-jar-identity-negative-control.log (96 passed, 2 failed)."
 
 [[bug]]
 id = "STORAGE-L3-SEALED-CORNER-CHEST"
@@ -3464,7 +3464,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:143"
 regression = []
-
+repro_check = "round 7 note only: still a partial fix, so there is no scoped revert to control and no ref; the remaining delta is in the Stage2Edge/XHarnessGates audit, not in this row"
 [[bug]]
 id = "MODEL-OPUS-N9"
 title = "The shulker box base reuses the lid's UV origin."
@@ -3484,8 +3484,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-finish-20261102.md:156"
-regression = []
-repro_check = "round 6 note only: the surface audit is still a minor mismatch, so there is no fix to reverse and no ref; needs the owner's renderer-scale decision (see MODEL-OPUS-6)"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::cow_horn_cube_and_humanoid_hat_follow_the_26_3_layers"]
+repro_check = "round 7 (client:6d4540e3, test 23a158e9): the ref is red with the fix reverted - receipts/XHarnessGates/client-r7-revert-red.log (24 passed, 1 failed) - and the row text overstated the deltas: only the cow/mooshroom horn mirror and the skeleton/stray hat cube differed from 26.3. candidate: area=client, real-client check required"
+fix_commit = "client:6d4540e3"
 [[bug]]
 id = "MODEL-PLAYER-HEAD-PROFILE"
 title = "`player_head` items ignore the `profile` component (GUI, hand, ground, frame, worn): always Steve"
@@ -3593,7 +3594,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:86"
 regression = ["harness:scene-shot:native-entity-visuals"]
-
+repro_check = "parked after stage 2 with vanilla evidence: 26.3 FlameFeatureRenderer needs a block-atlas sprite lookup in the emit path (renderer owner)"
 [[bug]]
 id = "MODEL-ENTITY-TNT-FALLING-LIGHTNING"
 title = "TNT, falling blocks and lightning bolts have simulation state but no draw call"
@@ -3613,7 +3614,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-entities-completion-20261103.md:88"
 regression = ["harness:scene-shot:native-entity-visuals"]
-
+repro_check = "parked after stage 2 with vanilla evidence: 26.3 LeashFeatureRenderer needs the holder transform in the emit path (renderer owner)"
 [[bug]]
 id = "MODEL-PANE-ALPHA"
 title = "15 stained-glass-pane GUI icons ≈1.5× too opaque (0.70 vs 0.46); cause unproven"
