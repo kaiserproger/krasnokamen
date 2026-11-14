@@ -54,7 +54,17 @@ pass". This page is the release procedure for the four repositories:
    upgrade-worldgen --config <cfg>` on the stopped server; existing chunks stay
    as generated). Put both steps in the release notes; singleplayer worlds
    need the same upgrade. A content-cache change also means a new singleplayer
-   content bundle (below).
+   content bundle (below). Persisted ids are a third trap: the Krasnokamen
+   rename (`b24f0ce3`) changed the native store tag and every persisted id, so
+   the first release after RC5 refuses RC5 server and singleplayer worlds
+   ("this world was written by a Solaris build from before the Krasnokamen
+   rename"). The notes must give the conversion: stop the RC5 server, run RC5's
+   `world export-anvil` (binary `solaris` in the release archive), then
+   `krasnokamen world import-anvil` into a directory that does not exist yet;
+   conversion loses plugin state, settlements and the block log (see
+   [Native worlds and Anvil interchange](../OPERATING.md#native-worlds-and-anvil-interchange)),
+   keeps pre-rename `solaris:*` entity data unread (`IMPORT-ANVIL-PRE-RENAME-KEYS-IGNORED`),
+   and RC5's export does not work on Windows (`WINDOWS-BACKUP-CONVERSION`).
 5. **Release notes.** `docs/releases/<tag>.md`: CI copies it into every server
    archive as `CHANGELOG.md` and uses it as the GitHub release body. Include
    upgrade notes, the first-start `content import ... --download` step and the

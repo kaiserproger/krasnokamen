@@ -1432,3 +1432,40 @@ fn pre_plugin_native_checkpoint_opens_with_empty_authority_and_upgrades_on_check
         assert!(upgraded.globals.contains_key(domain));
     }
 }
+
+/// Opening a world whose store carries `identity` fails; return the refusal.
+fn open_refusal_text(identity: impl FnOnce(&CoreConfig) -> [u8; 32]) -> String {
+    let directory = tempfile::tempdir().unwrap();
+    let config = CoreConfig::new(directory.path().to_owned(), 42);
+    let path = config.world_dir.join("native/state.redb");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    drop(NativeStore::create(&path, identity(&config)).unwrap());
+    crate::Core::open(config).err().unwrap().to_string()
+}
+
+#[test]
+fn pre_rename_world_is_refused_with_its_conversion_path() {
+    // A 1.0.0-rc.5 store: same seed and revision, the pre-rename format tag.
+    let error = open_refusal_text(|config| {
+        let mut identity = native_identity(config);
+        identity[..16].copy_from_slice(b"SolarisV2Native\0");
+        identity
+    });
+    assert!(
+        error.contains("identity mismatch: this world was written by a Solaris build"),
+        "{error}"
+    );
+    assert!(
+        error.contains("`world export-anvil` (binary `solaris`"),
+        "{error}"
+    );
+    assert!(
+        error.contains("`krasnokamen world import-anvil`"),
+        "{error}"
+    );
+
+    // Any other foreign identity keeps the plain refusal.
+    let error = open_refusal_text(|_| [7; 32]);
+    assert!(error.contains("identity mismatch"), "{error}");
+    assert!(!error.contains("Krasnokamen rename"), "{error}");
+}
