@@ -188,15 +188,19 @@ impl Bot {
                 }
                 self.setup_fence(client, &format!("frame_empty_map_{index}"), preparing)
                     .await?;
-                ensure!(
-                    shared.lock().players[self.index as usize]
+                loop {
+                    let empty = shared.lock().players[self.index as usize]
                         .final_inventory
                         .as_ref()
                         .is_some_and(|items| items.iter().any(|item| item.slot == 36
                             && item.name.as_deref() == Some("minecraft:map")
-                            && item.count == 1)),
-                    "frame fixture did not receive an empty map"
-                );
+                            && item.count == 1));
+                    if empty {
+                        break;
+                    }
+                    let frame = client.read_frame().await?;
+                    self.frame(client, frame, self.view_distance, preparing).await?;
+                }
                 self.sequence = self
                     .sequence
                     .checked_add(1)

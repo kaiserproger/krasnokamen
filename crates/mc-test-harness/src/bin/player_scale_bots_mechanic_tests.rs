@@ -1331,6 +1331,26 @@ fn sparse_command_intervals_preserve_wall_offers_and_recovery_zero() -> Result<(
     Ok(())
 }
 
+#[test]
+fn command_offers_exclude_the_window_end_boundary() -> Result<()> {
+    let schedule: OpenLoopSchedule = serde_json::from_value(json!({"windows":[
+        {"name":"warmup","duration_ms":2000,"command_interval_ms":500,"commands":["say x"]}
+    ]}))?;
+    let window = &schedule.windows[0];
+    assert_eq!(window.offered_commands(Duration::from_millis(1999)), 3);
+    assert_eq!(window.offered_commands(Duration::from_millis(2000)), 3);
+    assert_eq!(window.offered_commands(Duration::from_millis(3000)), 3);
+    Ok(())
+}
+
+#[test]
+fn anchor_chunk_landing_checks_the_final_stride_position() {
+    assert_eq!(landing_step_in_chunk(2104, 8, 0, -1, 12, Some((131, 0))), None);
+    assert_eq!(landing_step_in_chunk(2104, 12, 0, -1, 4, Some((131, 0))), Some((2104, 8)));
+    assert_eq!(landing_step_in_chunk(2104, 8, 0, -1, 12, None), Some((2104, -4)));
+    assert_eq!(landing_step_in_chunk(-1, -1, -1, 0, 1, Some((-1, -1))), Some((-2, -1)));
+}
+
 #[tokio::test]
 async fn fresh_menu_open_is_not_completed_by_an_old_image() -> Result<()> {
     let mut args = mechanic_test_args()?;

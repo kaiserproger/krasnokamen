@@ -82,6 +82,30 @@ fn chat_contains(state: &TickState, text: &str) -> bool {
 }
 
 #[test]
+fn summon_experience_orb_creates_real_orb_with_authored_or_default_value() {
+    let (mut state, alice, _) = fixture();
+    for (input, value) in [
+        ("summon minecraft:experience_orb ~ ~ ~ {Value:7s}", 7),
+        ("summon minecraft:experience_orb ~ ~ ~", 0),
+        ("summon minecraft:experience_orb ~ ~ ~ {Value:-1s}", -1),
+    ] {
+        let changes = command(&mut state, alice, input);
+        assert_eq!(changes.entities_spawned.len(), 1);
+        let id = changes.entities_spawned[0];
+        let slot = state.entities.slot_of(id).unwrap();
+        assert!(matches!(
+            state.entities.body(slot).kind,
+            crate::entities::EntityKind::ExperienceOrb { .. }
+        ));
+        assert_eq!(
+            state.entities.row(slot).appearance.experience_orb,
+            Some((value, 1))
+        );
+        assert!(state.entities.experience_orbs().any(|orb| orb == id));
+    }
+}
+
+#[test]
 fn gamerule_suppresses_player_scene_success_but_not_failure_or_console() {
     let (mut state, alice, _) = fixture();
     command(&mut state, alice, "gamerule send_command_feedback false");

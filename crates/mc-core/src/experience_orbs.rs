@@ -22,6 +22,40 @@ fn random(seed: u64) -> u64 {
     value ^ (value >> 31)
 }
 
+/// Create one commanded orb without the denomination splitting of XP awards.
+pub(crate) fn summon(state: &mut TickState, type_id: u32, pos: [f64; 3], value: i16) -> EntityId {
+    let id = state.entities.alloc_id();
+    state.entities.spawn(
+        id,
+        state.entity_uuid(id),
+        EntityKind::ExperienceOrb { type_id },
+        ColdFields {
+            pos,
+            vel: [0.0; 3],
+            yaw: 0.0,
+            pitch: 0.0,
+            ground: false,
+            health: 5.0,
+            breed_cooldown: 0,
+            pickup_delay: 0,
+            item: None,
+            appearance: Arc::new(EntityAppearance {
+                experience_orb: Some((i32::from(value), 1)),
+                health: 5.0,
+                ..Default::default()
+            }),
+            movement: crate::blueprint::MovementClass::Item,
+            half_width: 0.25,
+            height: 0.5,
+            speed: 0.0,
+            attack_damage: 0.0,
+            sight_range: 0.0,
+            attack_reach: 0.0,
+        },
+    );
+    id
+}
+
 /// Spawn denominations; the vanilla randomized 40-group merge bounds orb density.
 pub(crate) fn award(
     state: &mut TickState,
@@ -427,6 +461,14 @@ fn run_inner(
                 crate::tick::coreperf_block_region(pos[0].floor() as i32, pos[2].floor() as i32)
             {
                 *sample.xp_orbs_by_region.entry(region).or_default() += 1;
+                let (value, count) = state
+                    .entities
+                    .row(slot)
+                    .appearance
+                    .experience_orb
+                    .expect("orb");
+                *sample.xp_value_by_region.entry(region).or_default() +=
+                    i64::from(value) * i64::from(count);
             }
         }
         let mut velocity = state.entities.vel(slot).map(|component| component / 20.0);
