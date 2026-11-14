@@ -225,7 +225,7 @@ def build_filter(lengths, crossfade, resolution, title_file, music, fade_in=0.5,
         caption += (f"drawtext=fontfile={FONT}:textfile='{escape_filter_path(line_file)}':expansion=none:"
                     f"fontcolor=white:fontsize={26*panel}:box=1:boxcolor=black@0.55:boxborderw={5*panel}:"
                     f"x={48*panel}:y=h-{(len(caption_lines) - i) * step + 48 * panel},")
-    parts.append('[faded][panel]overlay=x=W-w-32:y=32:alpha=straight:eof_action=endall,' + caption +
+    parts.append(f'[faded][panel]overlay=x=W-w-{48*panel}:y={48*panel}:alpha=straight:eof_action=endall,' + caption +
                  f"drawtext=fontfile={FONT}:textfile='{title}':expansion=none:"
                  f"fontcolor=white:fontsize={48*panel}:x=(w-text_w)/2:y=h*0.78:enable='between(t,0,3)',"
                  'scale=out_color_matrix=bt709:out_range=tv,format=yuv420p,'
