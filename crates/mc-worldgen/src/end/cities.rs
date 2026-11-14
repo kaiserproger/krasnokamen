@@ -1,5 +1,5 @@
 //! End-city templates loaded once from the imported vanilla resource cache.
-//! Assembly is Solaris-owned; resource geometry/markers and placement are data-driven.
+//! Assembly is Krasnokamen-owned; resource geometry/markers and placement are data-driven.
 use super::*;
 use crate::structures::{StructureTemplate, TemplateBlock, TemplateChest};
 use crate::village::piece::rotate_state;

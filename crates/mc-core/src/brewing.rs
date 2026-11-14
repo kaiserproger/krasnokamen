@@ -118,7 +118,7 @@ impl BrewingState {
         // identity explicitly, so a post-image cannot restart a changed batch.
         if let Some(name) = self.ingredient.and_then(|id| items.name_of(id)) {
             fields.push((
-                "solaris:brewing_ingredient".into(),
+                "krasnokamen:brewing_ingredient".into(),
                 Tag::String(name.as_str().into()),
             ));
         }
@@ -158,7 +158,7 @@ impl BrewingState {
         let ingredient = if brew_time == 0 {
             None
         } else {
-            match field(&fields, "solaris:brewing_ingredient") {
+            match field(&fields, "krasnokamen:brewing_ingredient") {
                 Some(Tag::String(name)) => Identifier::parse(name)
                     .ok()
                     .and_then(|name| items.id_of(&name)),

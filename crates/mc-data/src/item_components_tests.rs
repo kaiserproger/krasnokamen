@@ -216,7 +216,7 @@ fn missing_component_dir_is_empty() {
 
 #[test]
 fn embedded_required_item_facts_cover_basic_wood_and_stone_tools() {
-    let facts = solaris_required_item_facts();
+    let facts = krasnokamen_required_item_facts();
     for (id, max_damage) in [
         ("minecraft:wooden_pickaxe", 59),
         ("minecraft:wooden_axe", 59),
@@ -238,7 +238,7 @@ fn embedded_required_item_facts_cover_basic_wood_and_stone_tools() {
 
 #[test]
 fn embedded_required_item_facts_cover_shield_disable_contract() {
-    let facts = solaris_required_item_facts();
+    let facts = krasnokamen_required_item_facts();
     for id in [
         "minecraft:wooden_axe",
         "minecraft:stone_axe",
@@ -262,7 +262,7 @@ fn embedded_required_item_facts_cover_shield_disable_contract() {
 
 #[test]
 fn embedded_required_item_facts_cover_shears_durability() {
-    let facts = solaris_required_item_facts();
+    let facts = krasnokamen_required_item_facts();
     let shears = facts
         .get(&Identifier::parse("minecraft:shears").unwrap())
         .expect("embedded shears facts");
@@ -272,7 +272,7 @@ fn embedded_required_item_facts_cover_shears_durability() {
 
 #[test]
 fn embedded_required_item_facts_cover_spear_attack_range() {
-    let facts = solaris_required_item_facts();
+    let facts = krasnokamen_required_item_facts();
     for id in [
         "minecraft:wooden_spear",
         "minecraft:stone_spear",
@@ -426,7 +426,7 @@ fn loads_real_ordered_tool_rules_when_present() {
 
 #[test]
 fn embedded_equipment_and_projectile_facts_keep_vanilla_durability_and_modifiers() {
-    let facts = solaris_required_item_facts();
+    let facts = krasnokamen_required_item_facts();
     for (name, durability) in [
         ("bow", 384),
         ("crossbow", 465),

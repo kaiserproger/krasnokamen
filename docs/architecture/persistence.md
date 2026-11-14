@@ -100,7 +100,7 @@ pose and the hostile tick derives it again from live targeting.
 `EntityStore::set_faction` owns the sparse battle membership index and marks
 both WAL and incremental-checkpoint custody, including a reset to zero.
 `EntityStateImage.faction` carries full/compact WAL post-images;
-`solaris:Faction` (`TAG_Int`, validated as 0–65535) carries the checkpoint
+`krasnokamen:Faction` (`TAG_Int`, validated as 0–65535) carries the checkpoint
 projection. Recovery and `/summon` use the same setter. Missing allegiance is
 zero; malformed or out-of-range authored/persisted values fail decoding.
 The standard NBT selector/data projection exposes the field; no wire metadata
@@ -115,7 +115,7 @@ changes require Main's independent review before commit.
 
 
 On genuine first start, `Core::open` writes and fsyncs
-`<world>/.solaris-first-start`, creates `native/state.redb.new` and renames the
+`<world>/.krasnokamen-first-start`, creates `native/state.redb.new` and renames the
 committed store into place. The marker is removed after the initial checkpoint
 is durable. A remaining marker permits retrying interrupted first start; a store
 without a checkpoint or marker fails closed. Required checkpoint player records
@@ -162,7 +162,7 @@ brushable block) into a chunk refused at load: recovery needs that chunk
 resident to replay it, so it stops with the chunk's load error and the world
 does not open, nothing is checkpointed, and the WAL keeps the write until the
 stored chunk is valid again (test
-`opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal`). Solaris
+`opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal`). Krasnokamen
 has no command that repairs or removes a quarantined chunk: the operator's way
 out is an offline `restore` of the last backup (play since that backup is
 lost); the stored record stays byte-identical for inspection. Importing an

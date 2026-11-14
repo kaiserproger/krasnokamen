@@ -160,7 +160,7 @@ fn click(state: &mut TickState, id: SettlementId, action: &str) -> Tag {
         state,
         PlayerInput::DialogClick {
             connection: CONN,
-            id: format!("solaris:settlement/{action}"),
+            id: format!("krasnokamen:settlement/{action}"),
             payload: Some(Tag::Compound(vec![(
                 "s".to_owned(),
                 Tag::String(id.0.to_string()),
@@ -217,9 +217,9 @@ fn empty_village_shows_the_territory_disk_on_square_cells() {
     assert_eq!(
         actions(&dialog),
         [
-            "solaris:settlement/map",
-            "solaris:settlement/buildings",
-            "solaris:settlement/main"
+            "krasnokamen:settlement/map",
+            "krasnokamen:settlement/buildings",
+            "krasnokamen:settlement/main"
         ]
     );
     // Equal neighbours share one run, and every run carries a hover.
@@ -232,10 +232,10 @@ fn empty_village_shows_the_territory_disk_on_square_cells() {
     // The claimed main page links the map; every settlement's Buildings page
     // does too (the compact unclaimed main page keeps its four buttons).
     let main = command(&mut state, "settlement menu main");
-    assert!(actions(&main).contains(&"solaris:settlement/map".to_owned()));
+    assert!(actions(&main).contains(&"krasnokamen:settlement/map".to_owned()));
     state.settlements.get_mut(id).unwrap().owner = None;
     let buildings = click(&mut state, id, "buildings");
-    assert!(actions(&buildings).contains(&"solaris:settlement/map".to_owned()));
+    assert!(actions(&buildings).contains(&"krasnokamen:settlement/map".to_owned()));
     // Reads stay open on an unclaimed village.
     let map = click(&mut state, id, "map");
     assert_eq!(string(field(&map, "title")), "Map - oak");
@@ -271,7 +271,10 @@ fn buildings_sit_on_their_footprint_cells_with_hover_and_click() {
         .expect("a house run");
     let event = field(run, "click_event").unwrap();
     assert_eq!(string(field(event, "action")), "custom");
-    assert_eq!(string(field(event, "id")), "solaris:settlement/buildings");
+    assert_eq!(
+        string(field(event, "id")),
+        "krasnokamen:settlement/buildings"
+    );
     let payload = field(event, "payload").unwrap();
     assert_eq!(string(field(payload, "s")), id.0.to_string());
     assert_eq!(string(field(payload, "b")), house.0.to_string());
@@ -351,7 +354,7 @@ fn construction_site_covers_its_reserved_rotated_footprint() {
         .expect("a site run");
     assert_eq!(
         string(field(field(site, "click_event").unwrap(), "id")),
-        "solaris:settlement/project_status"
+        "krasnokamen:settlement/project_status"
     );
 }
 

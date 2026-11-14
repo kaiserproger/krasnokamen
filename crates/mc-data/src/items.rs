@@ -112,10 +112,10 @@ impl ItemRegistry {
     }
 }
 
-/// Repo-owned item registry slice required by the embedded Solaris survival
+/// Repo-owned item registry slice required by the embedded Krasnokamen survival
 /// data. Protocol ids are loaded from JSON pinned to the supported protocol.
 #[must_use]
-pub fn solaris_required_items() -> ItemRegistry {
+pub fn krasnokamen_required_items() -> ItemRegistry {
     let raw: RawRegistries = serde_json::from_str(REQUIRED_REGISTRIES)
         .expect("embedded required registries JSON is valid");
     let items = raw
@@ -204,8 +204,8 @@ mod tests {
     }
 
     #[test]
-    fn solaris_required_items_cover_recipe_baseline() {
-        let reg = solaris_required_items();
+    fn krasnokamen_required_items_cover_recipe_baseline() {
+        let reg = krasnokamen_required_items();
 
         assert_eq!(
             reg.id_of(&Identifier::parse("minecraft:air").unwrap()),
@@ -226,8 +226,8 @@ mod tests {
     }
 
     #[test]
-    fn solaris_required_items_cover_crop_harvest_baseline() {
-        let reg = solaris_required_items();
+    fn krasnokamen_required_items_cover_crop_harvest_baseline() {
+        let reg = krasnokamen_required_items();
 
         for item in [
             "minecraft:wheat",
