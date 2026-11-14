@@ -4143,7 +4143,6 @@ source = "/run/media/kaiserroman/games/solaris-work/wt/FuzzE2E/.analysis/validat
 regression = ["harness:matrix-random:protocol-random-break-seed-4"]
 fix_commit = "5cbed1e33e4184fe8858bbdd93383a8e35d515cf"
 failing_first = "reported"
-fix_commit = "5cbed1e33e4184fe8858bbdd93383a8e35d515cf"
 
 [[bug]]
 id = "SCENARIO-MOB-ATTACK-NO-PROGRESS"
