@@ -32,6 +32,7 @@ mod books;
 pub mod bossbar;
 mod bottles;
 pub mod boundary;
+pub mod battle;
 mod brewing;
 pub mod build_precommit;
 mod campfire;

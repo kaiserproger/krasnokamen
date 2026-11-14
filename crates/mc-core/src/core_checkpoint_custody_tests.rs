@@ -278,6 +278,44 @@ impl World {
     }
 }
 
+#[test]
+fn battle_faction_survives_native_checkpoint_wal_and_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let mob = world.spawn("minecraft:cow", [0.5, 80.0, 0.5]);
+    let uuid = uuid_of(&mut world.state, mob);
+    world.tick(|state| state.entities.set_faction(slot(state, mob), 7));
+    world.checkpoint();
+    let config = world.config.clone();
+    drop(world);
+    let mut world = World::open(config);
+    let restored = world.state.entities.slot_of_uuid(uuid).expect("checkpoint mob");
+    assert_eq!(world.state.entities.body(restored).faction, 7);
+    assert!(world.state.entities.battle_slots().any(|candidate| candidate == restored));
+    let mob = world.state.entities.body(restored).id;
+    world.tick(|state| state.entities.set_faction(slot(state, mob), 60_000));
+    let mut world = world.crash();
+    let restored = world.state.entities.slot_of_uuid(uuid).unwrap();
+    assert_eq!(world.state.entities.body(restored).faction, 60_000);
+    // The WAL-only mutation must also enter the next incremental checkpoint.
+    world.checkpoint();
+    let config = world.config.clone();
+    drop(world);
+    let mut world = World::open(config);
+    let restored = world.state.entities.slot_of_uuid(uuid).unwrap();
+    assert_eq!(world.state.entities.body(restored).faction, 60_000);
+    let mob = world.state.entities.body(restored).id;
+    world.tick(|state| state.entities.set_faction(slot(state, mob), 0));
+    world.checkpoint();
+    let config = world.config.clone();
+    drop(world);
+    let world = World::open(config);
+    let restored = world.state.entities.slot_of_uuid(uuid).unwrap();
+    assert_eq!(world.state.entities.body(restored).faction, 0);
+    assert!(world.state.entities.battle_slots().next().is_none());
+}
+
 /// UUIDs of every row a capture presents.
 fn captured(job: &CheckpointJob) -> BTreeSet<uuid::Uuid> {
     std::iter::once(&job.entities)
