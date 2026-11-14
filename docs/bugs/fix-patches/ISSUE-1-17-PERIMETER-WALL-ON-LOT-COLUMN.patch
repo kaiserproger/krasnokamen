@@ -1,0 +1,136 @@
+diff --git a/crates/mc-core/src/settlements/layout.rs b/crates/mc-core/src/settlements/layout.rs
+index 69cbc778b..a11ac9b65 100644
+--- a/crates/mc-core/src/settlements/layout.rs
++++ b/crates/mc-core/src/settlements/layout.rs
+@@ -50,10 +50,10 @@ pub(crate) const LOT_DEPTH: i32 = blueprints::MAX_SIZE[2] as i32;
+ pub(crate) const PERIOD: i32 = 2 * (LOT_FRONT + LOT_DEPTH);
+ /// Chebyshev radius of the open square around the bell.
+ pub(crate) const PLAZA: i32 = 4;
+-/// Chebyshev distance of the perimeter wall from the bell: the last lot column
+-/// of the four blocks around it, so the wall stands on the column beside the
+-/// outer verge and no lot reaches it.
+-pub(crate) const RING: i32 = PERIOD - LOT_FRONT;
++/// Chebyshev distance of the perimeter wall from the bell: the outer verge of
++/// the first ring road. The ring road runs inside the wall, every lot of the
++/// four blocks around the bell keeps its frontage, and no lot reaches the wall.
++pub(crate) const RING: i32 = PERIOD + 2;
+ /// Street stretches along x per period as `(first, last, lamp)` offsets from
+ /// an avenue centre. The first owns the crossing and its corner lamp.
+ const STREET_TILES: [(i32, i32, i32); 3] = [(-1, 6, 2), (7, 16, 11), (17, 26, 20)];
+@@ -220,7 +220,8 @@ pub(crate) enum Cell {
+     Road,
+     Plaza,
+     Verge,
+-    /// The perimeter wall line outside the lots: no building stands on it.
++    /// The perimeter wall line on the first ring road's outer verge: no lot
++    /// reaches it and no frontage forms across it from outside.
+     Wall,
+     Lot,
+ }
+@@ -237,23 +238,24 @@ pub(crate) fn cell(anchor: [i32; 3], x: i32, z: i32) -> Cell {
+         Cell::Road
+     } else if (x - anchor[0]).abs().max((z - anchor[2]).abs()) <= PLAZA {
+         Cell::Plaza
+-    } else if dx.abs() == 2 || dz.abs() == 2 {
+-        Cell::Verge
+     } else if on_ring(anchor, x, z) {
+         Cell::Wall
++    } else if dx.abs() == 2 || dz.abs() == 2 {
++        Cell::Verge
+     } else {
+         Cell::Lot
+     }
+ }
+ 
+ /// Lamp post columns: the crossing corner and every nine blocks along the
+-/// street's south verge and the avenue's east verge.
++/// street's south verge and the avenue's east verge, never on the wall line.
+ #[must_use]
+ pub(crate) fn lamp_at(anchor: [i32; 3], x: i32, z: i32) -> bool {
+     let ox = (x - anchor[0]).rem_euclid(PERIOD);
+     let oz = (z - anchor[2]).rem_euclid(PERIOD);
+-    (oz == 2 && STREET_TILES.iter().any(|tile| tile.2 == ox))
+-        || (ox == 2 && AVENUE_TILES.iter().any(|tile| tile.2 == oz))
++    ((oz == 2 && STREET_TILES.iter().any(|tile| tile.2 == ox))
++        || (ox == 2 && AVENUE_TILES.iter().any(|tile| tile.2 == oz)))
++        && !on_ring(anchor, x, z)
+ }
+ 
+ /// One road stretch with its lamp post: the structure-ledger unit of street
+@@ -888,12 +890,14 @@ impl<'a> Network<'a> {
+ 
+     /// The stretch's lamp post when it is still missing and buildable: two
+     /// oak fences and a torch on walkable verge ground beside a reached road
+-    /// column. Species and funding are the construction planner's choice.
++    /// column. A ring road's lamp column on the wall line has no post. Species
++    /// and funding are the construction planner's choice.
+     pub(crate) fn lamp_work(&mut self, tile: &Tile) -> Option<Work> {
+         let (state, record) = (self.state, self.record);
+         let [x, z] = tile.lamp;
+         let stand = stand_column(record.anchor, x, z);
+-        if !self.index.contains_key(&(stand[0], stand[1]))
++        if !lamp_at(record.anchor, x, z)
++            || !self.index.contains_key(&(stand[0], stand[1]))
+             || !level_inside(record, x, z)
+             || lamp_standing(state, record, x, z)
+         {
+@@ -976,33 +980,42 @@ pub(crate) struct Span {
+ /// The perimeter: the square wall line [`RING`] blocks from the bell, split
+ /// into projects, with a gatehouse where each of the four roads through the bell
+ /// crosses it. Sides run north, east, south, west; each is its gatehouse, then
+-/// the wall outward from it. The north and south sides own the corner columns.
+-/// A pure function of the anchor.
++/// the wall outward from it in stretches of at most [`STRETCH`] columns,
++/// alternating sides of the gatehouse. Other roads crossing the line get plain
++/// wall; the ring road inside connects them. The north and south sides own the
++/// corner columns. A pure function of the anchor.
+ #[must_use]
+ pub(crate) fn perimeter_spans(anchor: [i32; 3]) -> Vec<Span> {
+-    let mut spans = Vec::with_capacity(20);
++    let mut spans = Vec::new();
+     for (fixed, side) in [(1_usize, -1), (0, 1), (1, 1), (0, -1)] {
+         let along = 1 - fixed;
+         let centre = [anchor[0], anchor[2]];
+         let reach = if fixed == 1 { RING } else { RING - 1 };
+-        for (from, to, kind) in [
+-            (-GATE_HALF, GATE_HALF, GATE),
+-            (GATE_HALF + 1, GATE_HALF + STRETCH, PERIMETER),
+-            (-GATE_HALF - STRETCH, -GATE_HALF - 1, PERIMETER),
+-            (GATE_HALF + STRETCH + 1, reach, PERIMETER),
+-            (-reach, -GATE_HALF - STRETCH - 1, PERIMETER),
+-        ] {
+-            let at = |offset: i32| {
+-                let mut column = [0; 2];
+-                column[fixed] = centre[fixed] + side * RING;
+-                column[along] = centre[along] + offset;
+-                column
+-            };
++        let at = |offset: i32| {
++            let mut column = [0; 2];
++            column[fixed] = centre[fixed] + side * RING;
++            column[along] = centre[along] + offset;
++            column
++        };
++        spans.push(Span {
++            kind: GATE,
++            min: at(-GATE_HALF),
++            max: at(GATE_HALF),
++        });
++        let mut from = GATE_HALF + 1;
++        while from <= reach {
++            let to = (from + STRETCH - 1).min(reach);
+             spans.push(Span {
+-                kind,
++                kind: PERIMETER,
+                 min: at(from),
+                 max: at(to),
+             });
++            spans.push(Span {
++                kind: PERIMETER,
++                min: at(-to),
++                max: at(-from),
++            });
++            from = to + 1;
+         }
+     }
+     spans

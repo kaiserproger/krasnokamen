@@ -1,0 +1,13 @@
+diff --git a/crates/mc-core/assets/blueprints/storage.json b/crates/mc-core/assets/blueprints/storage.json
+index b796b578e..f9a837dd1 100644
+--- a/crates/mc-core/assets/blueprints/storage.json
++++ b/crates/mc-core/assets/blueprints/storage.json
+@@ -46,7 +46,7 @@
+       "entrance": [3, 1, 4],
+       "layers": [
+         ["ppppppppp", "ppppppppp", "ppppppppp", "ppppppppp", "ppppppppp"],
+-        ["dpppppppd", "pCCCCbbbp", "p.b..b.bp", "pc.....bp", "dppoppppd"],
++        ["dpppppppd", "pCCCCbbbp", "p....b.bp", "pcb....bp", "dppoppppd"],
+         ["dDPDPDPDd", "D....b.bD", "D.......D", "D......WD", "dPDODPDPd"],
+         ["ZZZZZZZZZ", "DLLLLLLLD", "DLLLLLLLD", "DLLLLLLLD", "XXXXXXXXX"],
+         [".........", "ZZZZZZZZZ", "D.......D", "XXXXXXXXX", "........."],

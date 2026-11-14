@@ -1,0 +1,293 @@
+diff --git a/crates/mc-core/assets/blueprints/farm.json b/crates/mc-core/assets/blueprints/farm.json
+index 4127c041..b46ad573 100644
+--- a/crates/mc-core/assets/blueprints/farm.json
++++ b/crates/mc-core/assets/blueprints/farm.json
+@@ -20,11 +20,11 @@
+           "pZZZZZp",
+           "pZZZZZp",
+           "ppppppp",
+-          "gggpggg",
+-          "gffpffg",
+-          "gffpffg",
+-          "gffpffg",
+-          "gggpggg"
++          "...p...",
++          ".ffpff.",
++          ".ffpff.",
++          ".ffpff.",
++          "...p..."
+         ],
+         [
+           "XpppppX",
+@@ -118,11 +118,11 @@
+           "pZZZZZZZp",
+           "pZZZZZZZp",
+           "ppppppppp",
+-          "gggpggggg",
+-          "gffpffffg",
+-          "gffpffffg",
+-          "gffpffffg",
+-          "gggpggggg"
++          "...p.....",
++          ".ffpffff.",
++          ".ffpffff.",
++          ".ffpffff.",
++          "...p....."
+         ],
+         [
+           "XpppppppX",
+@@ -217,7 +217,6 @@
+     "s": "oak_planks",
+     "t": "torch",
+     "x": "oak_stairs[facing=south,half=bottom]",
+-    "W": "wheat[age=0]",
+-    "g": "dirt"
++    "W": "wheat[age=0]"
+   }
+ }
+\ No newline at end of file
+diff --git a/crates/mc-core/src/settlements/blueprints.rs b/crates/mc-core/src/settlements/blueprints.rs
+index 9e3fad41..2368c835 100644
+--- a/crates/mc-core/src/settlements/blueprints.rs
++++ b/crates/mc-core/src/settlements/blueprints.rs
+@@ -339,12 +339,13 @@ fn attachment(path: &str) -> bool {
+         || path.ends_with("vine")
+ }
+ 
+-/// Item (and count) one placed block costs; `None` = free half or air.
++/// Item (and count) one placed block costs; `None` = free half, air or farmland
++/// (the soil already in place, hoed as in vanilla, as a dirt path is shoveled).
+ fn block_cost(registry: &CoreRegistry, id: BlockStateId) -> Result<Option<(ItemId, u32)>, String> {
+     let def = registry.blocks.by_id(id).ok_or("unknown state")?;
+     let path = def.block.id.path();
+     let prop = |key: &str, value: &str| def.properties.iter().any(|(k, v)| k == key && v == value);
+-    if matches!(path, "air" | "cave_air" | "void_air")
++    if matches!(path, "air" | "cave_air" | "void_air" | "farmland")
+         || (prop("half", "upper")
+             && (path.ends_with("_door")
+                 || path.contains("tall")
+@@ -362,7 +363,6 @@ fn block_cost(registry: &CoreRegistry, id: BlockStateId) -> Result<Option<(ItemI
+         "carrots" => "carrot",
+         "potatoes" => "potato",
+         "beetroots" => "beetroot_seeds",
+-        "farmland" => "dirt",
+         "water" => "water_bucket",
+         "lava" => "lava_bucket",
+         "redstone_wire" => "redstone",
+diff --git a/crates/mc-core/src/settlements/construction.rs b/crates/mc-core/src/settlements/construction.rs
+--- a/crates/mc-core/src/settlements/construction.rs
++++ b/crates/mc-core/src/settlements/construction.rs
+@@ -1574,12 +1574,19 @@
+     {
+         return;
+     }
+-    if gathering {
+-        return;
+-    }
++    // The first Farm's seeds are gathered even while a priority material
++    // worker is out: `assign_builder` keeps that worker out of this project,
++    // and another resident clears the meadow.
+     let Some(record) = state.settlements.get(id) else {
+         return;
+     };
++    if let Some(site) = meadow_site(state, record, residents, &images) {
++        begin_cells(state, site.project, site.bounds, site.cells);
++        return;
++    }
++    if gathering {
++        return;
++    }
+     // The wall, its gates and the well come before street work: the streets
+     // reach every standing building in the radius and owe work without end,
+     // the fortification is a bounded list that the world itself shortens.
+@@ -1635,6 +1642,65 @@
+     None
+ }
+ 
++/// The first Farm's wheat cells cost seeds that only a farm produces. While
++/// the stock is short of them, Builders clear seed-bearing grass near the bell
++/// (vanilla: short grass drops a wheat seed one time in eight), the same way
++/// they clear any plant: free work, loot credited to storage.
++fn meadow_site(
++    state: &TickState,
++    record: &SettlementRecord,
++    residents: usize,
++    images: &[super::inventory::Image],
++) -> Option<FundedSite> {
++    let farmer = BuildingKind::Workshop(Profession::Farmer);
++    if !needed_kinds(record, residents).any(|kind| kind == farmer) {
++        return None;
++    }
++    let is_seed = |item: u32| {
++        state
++            .registry
++            .items
++            .name_of(item)
++            .is_some_and(|name| matches!(name.path(), "wheat_seeds"))
++    };
++    let catalog = blueprints::all(&state.registry);
++    let level = catalog
++        .iter()
++        .find(|blueprint| blueprint.kind == farmer)?
++        .level(1)?;
++    let need: u64 = level
++        .materials
++        .iter()
++        .filter(|(item, _)| is_seed(*item))
++        .map(|(_, count)| u64::from(*count))
++        .sum();
++    let have: u64 = images
++        .iter()
++        .flat_map(|image| &image.slots)
++        .filter(|stack| is_seed(stack.item_id))
++        .map(|stack| stack.count.max(0) as u64)
++        .sum();
++    if have >= need {
++        return None;
++    }
++    let work = layout::meadow_work(state, record)?;
++    Some(FundedSite {
++        project: Project {
++            settlement: record.id,
++            blueprint: layout::MEADOW.to_owned(),
++            level: 1,
++            origin: work.bounds.min,
++            rotation: 0,
++            building: None,
++            structure: String::new(),
++            ordered: false,
++            borrowed_builder: None,
++        },
++        bounds: work.bounds,
++        cells: work.cells,
++    })
++}
++
+ /// Chunk-local resident index, with a hard admission cap. Other mob populations
+ /// never contribute to planner or builder search cost.
+ pub(crate) fn residents(
+@@ -2309,27 +2375,34 @@
+         .find_map(|(item, _)| wood_species(state, item))
+ }
+ 
++/// The extraction worker the settlement's next bill needs: a pending owner
++/// order's, else the first autonomous candidate whose unfunded bill needs one.
++/// A priority bill short only of what no worker produces (a bed's wool with
++/// no sheep) must not leave the later Farm without its dirt and stone.
+ fn gatherer_demand(
+     state: &TickState,
+     record: &SettlementRecord,
+     images: &[super::inventory::Image],
+ ) -> Option<Profession> {
+-    let (name, level) = if let Some(order) = &record.pending_order {
+-        (order.blueprint.as_str(), order.level)
+-    } else {
+-        let kind = candidate_kinds(state, record, images).next()?;
+-        (
+-            blueprints::all(&state.registry)
++    let demand = |name: &str, level: u8| {
++        let level = blueprints::get(&state.registry, name)?.level(level)?;
++        let bill = selected_bill(state, record.id, &level.materials, images)?;
++        super::construction_crafting::needed_gatherer(state, &bill, images)
++    };
++    if let Some(order) = &record.pending_order {
++        return demand(order.blueprint.as_str(), order.level);
++    }
++    let catalog = blueprints::all(&state.registry);
++    candidate_kinds(state, record, images).find_map(|kind| {
++        demand(
++            catalog
+                 .iter()
+                 .find(|blueprint| blueprint.kind == kind)?
+                 .id
+                 .as_str(),
+             1,
+         )
+-    };
+-    let level = blueprints::get(&state.registry, name)?.level(level)?;
+-    let bill = selected_bill(state, record.id, &level.materials, images)?;
+-    super::construction_crafting::needed_gatherer(state, &bill, images)
++    })
+ }
+ 
+ /// Current bounded construction target, before subtracting the iron pipeline.
+diff --git a/crates/mc-core/src/settlements/ui.rs b/crates/mc-core/src/settlements/ui.rs
+index 284902d8..67d8ef2e 100644
+--- a/crates/mc-core/src/settlements/ui.rs
++++ b/crates/mc-core/src/settlements/ui.rs
+@@ -2155,6 +2155,8 @@ fn blueprint_label(ctx: &Ctx, blueprint: &str) -> &'static str {
+         (Lang::Ru, "road") => "Дорога",
+         (Lang::En, "lamp") => "Street lamp",
+         (Lang::Ru, "lamp") => "Фонарь",
++        (Lang::En, "meadow") => "Meadow clearing",
++        (Lang::Ru, "meadow") => "Расчистка луга",
+         (Lang::En, _) => "Building",
+         (Lang::Ru, _) => "Здание",
+     }
+diff --git a/crates/mc-core/src/villager/brain/social.rs b/crates/mc-core/src/villager/brain/social.rs
+index 370e72a1..3ab6f318 100644
+--- a/crates/mc-core/src/villager/brain/social.rs
++++ b/crates/mc-core/src/villager/brain/social.rs
+@@ -805,6 +805,45 @@ pub(super) fn courtship(state: &mut TickState, cache: &mut PoiCache, changes: &m
+             let Some(second) = second else {
+                 continue;
+             };
++            // Vanilla spends a courtship's food even when no bed takes the
++            // baby. A settlement's stored rations are not wasted that way: a
++            // resident courts only while a spare bed is reachable, searched on
++            // the ration cadence.
++            if state
++                .entities
++                .row(first)
++                .villager
++                .as_ref()
++                .is_some_and(|v| v.settlement.is_some())
++            {
++                if state
++                    .entities
++                    .row(first)
++                    .villager
++                    .as_ref()
++                    .unwrap()
++                    .ration_at
++                    > state.tick
++                {
++                    continue;
++                }
++                let mut path = std::mem::take(&mut cache.candidate_path);
++                let found = free_bed(state, cache, first, &mut path).is_some();
++                path.clear();
++                cache.candidate_path = path;
++                if !found {
++                    if !allocator::nodes_exhausted(state) {
++                        state
++                            .entities
++                            .row_mut_unmarked(first)
++                            .villager
++                            .as_mut()
++                            .unwrap()
++                            .ration_at = state.tick.saturating_add(40);
++                    }
++                    continue;
++                }
++            }
+             let second_id = state.entities.body(second).id;
+             let until =
+                 state.tick + 275 + ((first_id.0 as u64 ^ second_id.0 as u64 ^ state.tick) % 50);
+diff --git a/crates/mc-core/src/villager/building.rs b/crates/mc-core/src/villager/building.rs
+index 348fc7ec..3eb82dea 100644
+--- a/crates/mc-core/src/villager/building.rs
++++ b/crates/mc-core/src/villager/building.rs
+@@ -253,9 +253,9 @@ fn in_reach(
+     let pos = state.entities.pos(slot);
+     let width = state.entities.body(slot).half_width;
+     if layout::infra(&project.blueprint) || project.blueprint == construction::furnace::NAME {
+-        // Roads are walked on while paved; a lamp or furnace column must
+-        // stay clear of the builder's whole body.
+-        let clear = project.blueprint == layout::ROAD
++        // Roads and meadows are walked on while worked; a lamp or furnace
++        // column must stay clear of the builder's whole body.
++        let clear = matches!(project.blueprint.as_str(), layout::ROAD | layout::MEADOW)
+             || [0, 2].into_iter().any(|axis| {
+                 let min = f64::from(next[axis]);
+                 pos[axis] + width <= min || pos[axis] - width >= min + 1.0

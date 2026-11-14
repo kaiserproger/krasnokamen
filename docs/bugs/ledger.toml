@@ -1362,6 +1362,45 @@ fix_commit = "client:1ea6d127"
 repro_check = "controls receipts/XClientBlocks/17-* and 18-*: with the fix reverted the manifest claim keeps the stale pack and the extracted set lacks the 26.3 files. The launcher python side (client tools.test_resources) also covers the extracted inventory but has no ref form yet - client refs run cargo only, recorded here instead. area=client, so candidate: real-client check required; the launcher refs become runnable after Main merges wt/XClientBlocks 109ec84a."
 
 [[bug]]
+id = "STORAGE-L3-SEALED-CORNER-CHEST"
+title = "The level-three storage barrel is placed over the corner chest, sealing it: the chest is unreachable from the entrance and an adopted village stops producing stock and building"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Owner report (issue 1, storage): a settlement with a level-three storage never used its container - the L3 barrel blueprint (crates/mc-core/assets/blueprints/storage.json) sits on the cell of the level-one corner chest, so the chest is walled in with no route from the door. Found by Stage2Edge while tracing the autonomy run that stopped producing stock (wt/Stage2Edge, fixes 50f1e9a0e + 90e282cec)."
+regression = ["cargo:mc-core:settlements::blueprints::tests::every_storage_container_is_reachable_from_the_entrance", "cargo:mc-core:villager::building_autonomy_tests::adopted_village_with_resident_shears_produces_stock_and_builds"]
+failing_first = "reported"
+fix_commit = "patch:cc57c08cd8ee096658ff998a85cb5dadfd3ee6e9d53e72c2fcfe38f430fed1d3"
+repro_check = "candidate: receipt patch docs/bugs/fix-patches/STORAGE-L3-SEALED-CORNER-CHEST.patch (patch:cc57c08cd8ee0966) for fix 50f1e9a0e, digest verified. Controls: the reachability ref is red with it reversed (control3-STORAGE-*.log) and adopted_village_with_resident_shears_produces_stock_and_builds is red, funding budget exceeded at tick 54321 (control2-STORAGE-*.log). The reachability ref and the one-line storage.json change land only with 50f1e9a0e/90e282cec, so on a tree without them the ref has no match and the patch does not reverse yet. gameplay row, repro source: no real-client receipt needed"
+
+[[bug]]
+id = "AUTOCRAFT-DEAD-WORKER"
+title = "An autocraft order whose worker dies is never handed on: the order holds the dead resident and the settlement stops crafting it"
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Owner report (issue 1, autocraft): a resident died mid-order and the order stayed bound to it forever. Found by Stage2Edge on the autonomy run; fix b620e3333 (crates/mc-core/src/settlements/production.rs)."
+regression = ["cargo:mc-core:settlements::autocraft::tests::an_order_whose_worker_dies_passes_to_a_free_resident_and_finishes", "cargo:mc-core:settlements::autocraft::tests::resuming_a_held_order_of_a_dead_worker_hands_it_to_a_free_resident"]
+failing_first = "reported"
+fix_commit = "patch:715b0c246d7e17902281663b3b260fd58fb237ef9b9f5501e8f72a0577611fd4"
+repro_check = "candidate: receipt patch docs/bugs/fix-patches/AUTOCRAFT-DEAD-WORKER.patch (patch:715b0c246d7e1790) for fix b620e3333, digest verified and reverse-ok on this tree; control: both refs red with the committed hunk reversed (control4-AUTOCRAFT-*.log). gameplay row, repro source: no real-client receipt needed"
+
+[[bug]]
+id = "EDGE-RECIPE-RELOAD-CATALOG-SENT-TWICE"
+title = "A recipe reload announces the catalog twice, so the client applies the same recipe book update in two consecutive frames"
+area = "gameplay"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "Found by Stage2Edge while auditing the mc-edge datapack reload path: the reload handler sent the recipe catalog once for the datapack event and once more after re-projecting it (crates/mc-edge/src/advancements.rs)."
+regression = ["cargo:mc-edge:advancements::tests::reloaded_recipes_are_announced_once_and_feed_the_next_book"]
+failing_first = "reported"
+fix_commit = "patch:8b8ac42337fbd5b2de83f105991a134dc367b2a1bc00aa46908815ce676f2973"
+repro_check = "candidate: receipt patch docs/bugs/fix-patches/EDGE-RECIPE-RELOAD-CATALOG-SENT-TWICE.patch (patch:8b8ac42337fbd5b2) for commit 3c2124c08, digest verified and reverse-ok on this tree; control: the ref is red with it reversed (control4-EDGE-RECIPE-RELOAD-*.log). reliable_recipe_reload_uses_each_event_catalog_and_reuses_wire_projection stays green when reversed, so it does not catch this bug and is not a ref for the row. gameplay row, repro cargo: no real-client receipt needed"
+
+[[bug]]
 id = "CLIENT-HELD-DROP-KEY-DOUBLE-DROP"
 title = "Holding the drop (Q) key across a tick sent two drop packets (press-edge dispatch + held-key tick edge)"
 area = "client"
@@ -2615,8 +2654,8 @@ regression = [
   "harness:civilization-seed-qa:births",
 ]
 failing_first = "reported"
-fix_commit = "patch:80e8f4617387098f399868a65a28cb7f66b59f839009cec78604dedcc443b407"
-
+fix_commit = "patch:5f50f42f18f1a2f1a25b548f65759cf1d06484459099cd71e40c0eceb09db8a1"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/ISSUE-1-17-AUTOLAYOUT-HOUSING-NOT-SEEN-IN-GAME.patch (patch:5f50f42f18f1a2f1), reverse-ok; replaces the earlier patch:80e8f461; control: four refs red (control-autolayout.log)"
 [[bug]]
 id = "DROWNED-IGNORE-VILLAGERS"
 title = "A drowned never targets villagers or other residents, though vanilla Drowned (a Zombie) adds a NearestAttackableTargetGoal on AbstractVillager"
@@ -2649,7 +2688,8 @@ regression = [
     "harness:buildings-qa:perimeter.enclosed",
 ]
 failing_first = "not recorded"
-
+fix_commit = "patch:fba7b70bec58aef790363834237d768a0e4d1e248979a3ba807b0d002e4a230b"
+repro_check = "round-final (Stage2Edge 90e282cec): receipt patch docs/bugs/fix-patches/ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL.patch (patch:fba7b70bec58aef7), reverse-ok on this tree. Control: with it reversed the four fortification refs are red (control2-ISSUE-1-17-NO-PERIMETER-*.log). The layout refs (street_grid_reserves_roads_verges_lots_and_an_open_plaza, perimeter_closes_the_square_wall_line_with_a_gatehouse_on_each_road) go red with the follow-up patch docs/bugs/fix-patches/ISSUE-1-17-PERIMETER-WALL-ON-LOT-COLUMN.patch (patch:e3309c0aa2c4d7dd, three fortification refs and building_autonomy adopted_village too); that patch does not reverse on a tree that already has b61e3ac31 (wall on the outer verge, L=30 per CivSimDesignE S1/P2), which supersedes it - so the layout refs' red must be shown by reverting b61e3ac31 there. gameplay row, repro source: candidate promotion needs no real-client receipt"
 [[bug]]
 id = "ISSUE-1-09-BUILDERS-CANNOT-BUILD-GATES-OR-MOST-WORKSHOPS"
 title = "Builders can build only ten blueprint kinds: no gate, no armorer, butcher, cartographer, cleric, fisherman, fletcher, leatherworker, librarian, toolsmith or weaponsmith, and walls, towers and barracks stop at level 2"
@@ -2658,10 +2698,10 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "Owner expectation (issue 1, ISSUE-1-09): build separate buildings (walls, production, military, fortification) and upgrade them. docs/settlements/construction.md#blueprint-files: the embedded catalog is house 1-3; storage, farm, mason, lumber_camp, mine, barracks, wall and watch_tower 1-2; shepherd 1 (crates/mc-core/assets/blueprints/*.json, read 2026-11-12: kinds barracks, farmer, house, lumber_camp, builder, mine, shepherd, storage, wall, tower). Player-built gates and every workshop kind can be certified and upgraded to level 3 (`settlement building certify|upgrade`, docs/settlements/construction.md#certification-commands), so the gap is Builder-built coverage only. Remaining wish: blueprints for gate and the other workshop kinds, and level 3 where the certificate allows it"
-regression = ["harness:buildings-qa:gate.L1_built", "harness:buildings-qa:gate.L2_upgrade", "harness:buildings-qa:gate.L3_upgrade", "harness:buildings-qa:wall.L3_upgrade", "harness:buildings-qa:watch_tower.L3_upgrade", "harness:buildings-qa:barracks.L3_upgrade", "harness:buildings-qa:fisherman.L1_built", "harness:buildings-qa:fisherman.L2_upgrade", "harness:buildings-qa:armorer.L1_built", "harness:buildings-qa:armorer.L2_upgrade", "harness:buildings-qa:butcher.L1_built", "harness:buildings-qa:butcher.L2_upgrade", "harness:buildings-qa:cartographer.L1_built", "harness:buildings-qa:cartographer.L2_upgrade", "harness:buildings-qa:cleric.L1_built", "harness:buildings-qa:cleric.L2_upgrade", "harness:buildings-qa:fletcher.L1_built", "harness:buildings-qa:fletcher.L2_upgrade", "harness:buildings-qa:leatherworker.L1_built", "harness:buildings-qa:leatherworker.L2_upgrade", "harness:buildings-qa:librarian.L1_built", "harness:buildings-qa:librarian.L2_upgrade", "harness:buildings-qa:toolsmith.L1_built", "harness:buildings-qa:toolsmith.L2_upgrade", "harness:buildings-qa:weaponsmith.L1_built", "harness:buildings-qa:weaponsmith.L2_upgrade"]
+regression = ["harness:buildings-qa:gate.L1_built", "harness:buildings-qa:gate.L2_upgrade", "harness:buildings-qa:gate.L3_upgrade", "harness:buildings-qa:wall.L3_upgrade", "harness:buildings-qa:watch_tower.L3_upgrade", "harness:buildings-qa:barracks.L3_upgrade", "harness:buildings-qa:fisherman.L1_built", "harness:buildings-qa:fisherman.L2_upgrade", "harness:buildings-qa:armorer.L1_built", "harness:buildings-qa:armorer.L2_upgrade", "harness:buildings-qa:butcher.L1_built", "harness:buildings-qa:butcher.L2_upgrade", "harness:buildings-qa:cartographer.L1_built", "harness:buildings-qa:cartographer.L2_upgrade", "harness:buildings-qa:cleric.L1_built", "harness:buildings-qa:cleric.L2_upgrade", "harness:buildings-qa:fletcher.L1_built", "harness:buildings-qa:fletcher.L2_upgrade", "harness:buildings-qa:leatherworker.L1_built", "harness:buildings-qa:leatherworker.L2_upgrade", "harness:buildings-qa:librarian.L1_built", "harness:buildings-qa:librarian.L2_upgrade", "harness:buildings-qa:toolsmith.L1_built", "harness:buildings-qa:toolsmith.L2_upgrade", "harness:buildings-qa:weaponsmith.L1_built", "harness:buildings-qa:weaponsmith.L2_upgrade", "cargo:mc-core:settlements::blueprints::tests::gate_and_fortifications_reach_level_three", "cargo:mc-core:settlements::blueprints::tests::workshops_place_their_job_site_and_gain_a_slot_per_level", "cargo:mc-core:settlements::construction::tests::gate_level_one_is_built_cell_for_cell_in_every_rotation", "cargo:mc-core:villager::building_worksite_tests::wall_tower_and_gate_certify_with_intentionally_zero_worker_slots", "cargo:mc-core:villager::building_worksite_tests::armorer", "cargo:mc-core:villager::building_worksite_tests::butcher", "cargo:mc-core:villager::building_worksite_tests::cartographer", "cargo:mc-core:villager::building_worksite_tests::cleric", "cargo:mc-core:villager::building_worksite_tests::fisherman", "cargo:mc-core:villager::building_worksite_tests::fletcher", "cargo:mc-core:villager::building_worksite_tests::leatherworker", "cargo:mc-core:villager::building_worksite_tests::librarian", "cargo:mc-core:villager::building_worksite_tests::toolsmith", "cargo:mc-core:villager::building_worksite_tests::weaponsmith"]
 failing_first = "not recorded"
-fix_commit = "patch:c08470d55c904b23b2efd8f2e9a3a4bfb28b3e93a19feef1dd46de63e8b972a7"
-
+fix_commit = "patch:77894540b1f7388764af612585aaf7bfa95f8e971c028d76cd68d34b48f80a65"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/ISSUE-1-09-BUILDERS-CANNOT-BUILD-GATES-OR-MOST-WORKSHOPS.patch (patch:77894540b1f73887), reverse-ok on this tree; the test-only layout::front visibility hunk was removed because reversing it broke the build with E0603. Control: the 14 cargo refs and the buildings-qa harness refs are red with it reversed (control3-ISSUE-1-09-*.log)"
 [[bug]]
 id = "SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN"
 title = "A player breaking an already-placed cell of an active Builder project leaves a hole that is never re-placed: House L1 stays active at 250/250 and holds the settlement's project slot"
@@ -2672,8 +2712,8 @@ status = "open"
 source = "Issue1Breaker (qa-breaker) on main fa637b84, receipts/Issue1Breaker/REPORT.md 'Actual player site interference' (1/1): on a copy of an active House L1 world at [122,69,-5], a survival-mode real native client broke the already-placed corner [122,70,-5] (oak_log[axis=y]) at 88/250; the block read air, work continued to 160/250 with the corner still air, and after a copied-world restart the project stayed active at 250/250 with the cell air across eight 200-tick observations (wt/Issue1Breaker/.analysis/validation/20261113T075452-scene-shot-o4m1dbb1, 20261113T075614-scene-shot-ca1o3e5m; retained under receipts/Issue1Breaker retained/player-site-break and retained/player-break-followup). docs/settlements/construction.md#builders-and-supplies says already placed cells are not re-planned after a foreign edit, so the project can never pass its geometric certificate and blocks further construction. A foreign SOLID block in a placed cell (operator diamond at the same corner) still certifies, which that rule documents and is not this defect. Expected: Builders re-place an authored cell that a foreign edit emptied, and the project finishes."
 regression = ["cargo:mc-core:settlements::construction::fencing_tests::a_placed_cell_broken_to_air_is_replaced_before_the_house_certifies", "cargo:mc-core:settlements::construction::fencing_tests::a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_project", "cargo:mc-core:settlements::construction::fencing_tests::a_second_break_during_the_repair_requeues_the_repair_stage", "harness:buildings-qa:house.broken_cell_replaced"]
 failing_first = "reported"
-fix_commit = "patch:f6806e454c75f19c259f2d090541005a0cfc33aeb62ab0f7e5e4a96fab00c1c8"
-
+fix_commit = "patch:813e2a17b3a70583a4622f7ab73916c143053dd5f56812edd65c14c2bea6cdb3"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN.patch (patch:813e2a17b3a70583), reverse-ok; replaces the earlier patch:f6806e45; control: the four fencing refs are red (control-batch1.log)"
 [[bug]]
 id = "ISSUE-1-18"
 title = "Sheep and goat models wrong"
@@ -3761,8 +3801,8 @@ status = "open"
 source = "Mixed birch/oak lumber-camp construction: 176/183 cells complete, seven birch planks missing while 34 oak logs remain."
 failing_first = "reported"
 regression = ["cargo:mc-core:settlements::construction::tests::admitted_birch_camp_can_finish_from_the_same_mixed_stock"]
-fix_commit = "e2a61744749a879ef3c5a02866ea120310d9e11d"
-
+fix_commit = "patch:1d0f3fb02785d3fa6dae0487338ad0fbbe1da62d66cbdc9cf4c9548f9275487f"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/CIVILIZATION-MIXED-WOOD-FUNDING-STALL.patch (patch:1d0f3fb02785d3fa), non-test hunks only so the helpers the refs call stay; supersedes commit e2a61744 as the reversal target; control red at construction_tests.rs:103 (control2-CIVILIZATION-MIXED-WOOD-*.log)"
 [[bug]]
 id = "VILLAGER-RATION-PATH-STARVATION"
 title = "Repeated spare-bed searches can exhaust the shared path budget and prevent a worker from delivering carried resources."
@@ -3773,8 +3813,8 @@ status = "open"
 source = "Seed-24 civilization worker repeatedly selects a delivery target without an admitted path search."
 failing_first = "reported"
 regression = ["cargo:mc-core:villager::brain::tests::exhausted_spare_bed_search_does_not_starve_a_lumber_delivery"]
-fix_commit = "01767ab8714af7c27792790897f885f40e2e2971"
-
+fix_commit = "patch:37387f76c070961b39fbfa14b80bbfe20f396a158ab8b2f1bc352db000558975"
+repro_check = "round-final: the fix is receipt patch docs/bugs/fix-patches/VILLAGER-RATION-PATH-STARVATION.patch (patch:37387f76c070961b), which supersedes commit 01767ab8 as the reversal target; control red at brain_tests.rs:199 (control2-VILLAGER-RATION-*.log)"
 [[bug]]
 id = "CIVILIZATION-PREMATURE-LOG-DELIVERY"
 title = "An already-funded construction candidate sends the lumberjack home after each harvested log while it still has no legal site."
@@ -3876,8 +3916,8 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/kind-starvation-baseline.log"
 failing_first = "reported"
 regression = ["cargo:mc-core:settlements::construction::site_tests::funded_mine_without_a_site_does_not_starve_a_legal_mason"]
-fix_commit = "898af4725f6491600b88125f0b452fcc3ad39719"
-
+fix_commit = "patch:52f3b7a5c34f1c9772475a9240a6c42e69a0f14a59a0a268e95a3daa9155a793"
+repro_check = "round-final: receipt patch docs/bugs/fix-patches/CIVILIZATION-FUNDED-KIND-SITE-STARVATION.patch (patch:52f3b7a5c34f1c97), reverse-ok; supersedes commit 898af472; control red at site_tests.rs:1170 (control2-CIVILIZATION-FUNDED-KIND-*.log)"
 [[bug]]
 id = "CIVILIZATION-INACTIVE-SHEEP-TARGET"
 title = "Shearing targets loaded sheep beyond simulation distance and strands the worker at the inactive boundary."
@@ -5523,10 +5563,10 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "solaris-client src/session/packets.rs:96 (configuration RESOURCE_PACK_PUSH) and :657 (play RESOURCE_PACK_PUSH) both call decline_resource_pack; battle-video client line 6eac8021 lines 96 and 105 likewise; the client loads packs only from SOLARIS_CLIENT_RESOURCE_PACKS. Found while preparing live laptop clients for the G2 battle video (owner 2026-11-13: fix right after the video). Follow-up to P2, which only stopped optional offers from disconnecting the join. Gate: a live native client joins a server that pushes the battle pack, with no local pack folder, and shows the battle armour and weapons."
-regression = []
+regression = ["client:krasnokamen-client:session::packets::tests::resource_pack_push_accepted_downloaded_applied_in_both_phases", "client:krasnokamen-client:session::packets::tests::resource_pack_push_hash_mismatch_reports_failed_download"]
 failing_first = "reported"
 fix_commit = "client:54b79f73d2c48928ddc60fb82b60c33d7581d11b"
-repro_check = "client cargo tests src/session/packets.rs::tests::resource_pack_push_accepted_downloaded_applied_in_both_phases and ::resource_pack_push_hash_mismatch_reports_failed_download (crate krasnokamen-client in the client repo; no client ref form exists in ledger promote yet, so this row records them here instead of in regression - gap for the ledger owner)"
+repro_check = "round 2 (XClientSession): control receipts/XClientSession/control-w8.log (red with client:54b79f73 reversed). candidate: area=client, real-client check required - the gate is a live native client joining a server that pushes the pack with no local pack folder and showing the battle armour and weapons"
 
 [[bug]]
 id = "PLAYER-SPEAR-JAB-DROPPED-AT-DECODE"
