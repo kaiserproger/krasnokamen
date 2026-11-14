@@ -230,6 +230,54 @@ fn nether_sample(state: &TickState, map: &SavedMap, index: usize) -> u8 {
     base * 4 + ((seed >> 7) % 3) as u8
 }
 
+#[cfg(test)]
+thread_local! {
+    static FRAME_CANDIDATE_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+fn nearby_frames(
+    entities: &crate::entities::EntityStore,
+    position: [f64; 3],
+    radius: f64,
+    types: [Option<u32>; 2],
+) -> Vec<crate::entities::EntitySlot> {
+    use crate::boundary::ChunkPos;
+    use crate::entities::EntityKind;
+    if types
+        .into_iter()
+        .flatten()
+        .all(|id| entities.mob_slots(id).next().is_none())
+    {
+        return Vec::new();
+    }
+
+    let chunk = |v: f64| mc_physics::mth::floor_i32(v).div_euclid(16);
+    let mut frames = Vec::new();
+    for x in chunk(position[0] - radius)..=chunk(position[0] + radius) {
+        for z in chunk(position[2] - radius)..=chunk(position[2] + radius) {
+            entities.for_each_slot_in_chunk(ChunkPos { x, z }, |slot| {
+                #[cfg(test)]
+                FRAME_CANDIDATE_VISITS.with(|count| count.set(count.get() + 1));
+                let EntityKind::Mob { type_id } = entities.body(slot).kind else {
+                    return;
+                };
+                if types.contains(&Some(type_id)) {
+                    frames.push(slot);
+                }
+            });
+        }
+    }
+    // Match the old type-major, dense-slot order and discard stale index duplicates.
+    frames.sort_unstable_by_key(|&slot| {
+        let crate::entities::EntityKind::Mob { type_id } = entities.body(slot).kind else {
+            unreachable!("only frame slots are collected");
+        };
+        (types.iter().position(|id| *id == Some(type_id)), slot)
+    });
+    frames.dedup();
+    frames
+}
+
 pub(crate) fn tick(state: &mut TickState) {
     if !state.tick.is_multiple_of(5) {
         return;
@@ -238,6 +286,12 @@ pub(crate) fn tick(state: &mut TickState) {
     // Marker: x, z, rotation, frame flag, carrier-hidden, owner connection.
     let mut markers: BTreeMap<i32, Vec<MarkerRow>> = BTreeMap::new();
     let mut explorers: BTreeMap<i32, Vec<(f64, f64)>> = BTreeMap::new();
+    let frame_types = ["minecraft:item_frame", "minecraft:glow_item_frame"].map(|name| {
+        state
+            .registry
+            .entity_types
+            .id_of(&mc_data::Identifier::parse(name).unwrap())
+    });
     for (&entity, player) in &state.players {
         if player.spectator() {
             continue;
@@ -282,72 +336,62 @@ pub(crate) fn tick(state: &mut TickState) {
             }
         }
         let radius = f64::from(state.config_view_distance.clamp(0, 16) * 16);
-        for name in ["minecraft:item_frame", "minecraft:glow_item_frame"] {
-            let Some(type_id) = state
-                .registry
-                .entity_types
-                .id_of(&mc_data::Identifier::parse(name).unwrap())
-            else {
+        for frame in nearby_frames(&state.entities, pos, radius, frame_types) {
+            if !state.entities.body(frame).alive {
+                continue;
+            }
+            let frame_pos = state.entities.pos(frame);
+            if (frame_pos[0] - pos[0]).abs() > radius || (frame_pos[2] - pos[2]).abs() > radius {
+                continue;
+            }
+            let row = state.entities.row(frame);
+            let Some(stack) = row.appearance.extra.iter().find_map(|(index, value)| {
+                if *index == 9
+                    && let EntityDataValue::Item(stack) = value
+                {
+                    return stack.as_ref();
+                }
+                None
+            }) else {
                 continue;
             };
-            for frame in state.entities.mob_slots(type_id) {
-                if !state.entities.body(frame).alive {
-                    continue;
-                }
-                let frame_pos = state.entities.pos(frame);
-                if (frame_pos[0] - pos[0]).abs() > radius || (frame_pos[2] - pos[2]).abs() > radius
-                {
-                    continue;
-                }
-                let row = state.entities.row(frame);
-                let Some(stack) = row.appearance.extra.iter().find_map(|(index, value)| {
-                    if *index == 9
-                        && let EntityDataValue::Item(stack) = value
-                    {
-                        return stack.as_ref();
-                    }
-                    None
-                }) else {
-                    continue;
-                };
-                let Some(id) = map_id(stack) else {
-                    continue;
-                };
-                super::adopt_item_decorations(&mut state.maps, id, stack);
-                views.entry(id).or_default().insert(player.connection);
-                let angle = match row.appearance.spawn_data {
-                    2 => 180.0,
-                    3 => 0.0,
-                    4 => 90.0,
-                    5 => 270.0,
-                    _ => 0.0,
-                };
-                let marker = (
-                    frame_pos[0].floor(),
-                    frame_pos[2].floor(),
-                    angle,
-                    true,
-                    false,
-                    player.connection,
+            let Some(id) = map_id(stack) else {
+                continue;
+            };
+            super::adopt_item_decorations(&mut state.maps, id, stack);
+            views.entry(id).or_default().insert(player.connection);
+            let angle = match row.appearance.spawn_data {
+                2 => 180.0,
+                3 => 0.0,
+                4 => 90.0,
+                5 => 270.0,
+                _ => 0.0,
+            };
+            let marker = (
+                frame_pos[0].floor(),
+                frame_pos[2].floor(),
+                angle,
+                true,
+                false,
+                player.connection,
+            );
+            let entries = markers.entry(id).or_default();
+            if !entries.contains(&marker) {
+                entries.push(marker);
+            }
+            // Retain the framed waypoint on the map itself so distant
+            // held clones keep the green pointer after everyone leaves
+            // the frame-view radius (vanilla frameMarkers).
+            if let Some(map) = state.maps.records.get_mut(&id) {
+                let map = std::sync::Arc::make_mut(map);
+                let retained = (
+                    frame_pos[0].floor() as i32,
+                    frame_pos[2].floor() as i32,
+                    angle as i32,
                 );
-                let entries = markers.entry(id).or_default();
-                if !entries.contains(&marker) {
-                    entries.push(marker);
-                }
-                // Retain the framed waypoint on the map itself so distant
-                // held clones keep the green pointer after everyone leaves
-                // the frame-view radius (vanilla frameMarkers).
-                if let Some(map) = state.maps.records.get_mut(&id) {
-                    let map = std::sync::Arc::make_mut(map);
-                    let retained = (
-                        frame_pos[0].floor() as i32,
-                        frame_pos[2].floor() as i32,
-                        angle as i32,
-                    );
-                    if !map.frame_markers.contains(&retained) {
-                        map.frame_markers.push(retained);
-                        state.maps.dirty.insert(id);
-                    }
+                if !map.frame_markers.contains(&retained) {
+                    map.frame_markers.push(retained);
+                    state.maps.dirty.insert(id);
                 }
             }
         }
@@ -498,6 +542,10 @@ pub(crate) fn tick(state: &mut TickState) {
         .viewers
         .retain(|_, (_, seen)| state.tick.saturating_sub(*seen) <= 20);
 }
+
+#[cfg(test)]
+#[path = "runtime_top100_h11_tests.rs"]
+mod top100_h11_tests;
 
 #[cfg(test)]
 mod tests {
