@@ -216,7 +216,7 @@ def tree_build_command(tree, argv):
     if not is_other_tree(tree) or not MEM_RUN.exists():
         return list(argv), env
     env.pop('CARGO_TARGET_DIR', None)
-    return [str(MEM_RUN), '-m', '6G', 'env', 'RUSTC_WRAPPER=', *argv], env
+    return [str(MEM_RUN), '-m', '6G', *argv], env
 
 
 def _built_executable(log):

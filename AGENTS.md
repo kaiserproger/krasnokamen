@@ -129,12 +129,14 @@ python3 -m tools.harness list
   already includes it, so run it alone only after an integration that skips L2.
   Markdown-only changes need `python3 tools/doclinks.py`, not Cargo or harness gates.
 - *Owner host:* wrap heavy Cargo, harness and Gradle commands in Main's runner by
-  absolute path: `<work>/solaris/tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER= <command>`
+  absolute path: `<work>/solaris/tools/dev/mem-run.sh -m 6G <command>`
   (`-m 12G` for full `test`/`correctness`; at most 12G each), never a worktree's
   or sibling repo's copy. There are no slots or queue: every command starts at
   once; the heavy-watchdog pauses plain cargo builds under real memory pressure
-  and resumes them, never tests, servers or harness runs. `RUSTC_WRAPPER=` keeps
-  the global sccache from compiling outside the cap. The runner makes Cargo
+  and resumes them, never tests, servers or harness runs. The runner points
+  `RUSTC_WRAPPER` at `tools/dev/sccache.sh` (shared sccache; empty when its daemon is
+  down), so never pass `env RUSTC_WRAPPER=` or plain `RUSTC_WRAPPER=sccache`; an old
+  `env RUSTC_WRAPPER=` still works but is uncached. The runner makes Cargo
   incremental for debug/test builds and normal-lane `--release` builds, never in
   `-p`/`-x` or `--profile` builds: a binary for a performance window comes from
   `pin-release --no-incremental` (or `env CARGO_INCREMENTAL=0`), and bench,

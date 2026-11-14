@@ -1,7 +1,7 @@
 # Heavy commands, memory and disk on the shared machine
 
 The rules (which commands go through the runner, which `-m` cap to use,
-`env RUSTC_WRAPPER=`, when `-p`/`-x` are allowed) live in
+the sccache wrapper, when `-p`/`-x` are allowed) live in
 [AGENTS.md](../../AGENTS.md) "Build and validation" and the harness's own
 cgroup bounds in [AGENT_TOOLING.md](../AGENT_TOOLING.md) "Resource bounds".
 This page explains how the runner works, how to diagnose it and what went
@@ -143,10 +143,26 @@ code, start the unit (agents' runner calls may restart it in between).
   `/proc/self/cgroup` to a file; a bash smoke test proves nothing.
 - Never set `MemoryHigh` on the slice: reclaim pressure is what systemd-oomd
   kills on, and it picks the largest units (terminal, agent host).
-- The global `~/.cargo` sccache wrapper compiles outside the cap; that is why
-  every Cargo command is `env RUSTC_WRAPPER=`. An sccache daemon first started
-  inside a scope keeps that scope populated forever; start it outside
-  (`systemd-run --user --scope --slice=app.slice sccache --start-server`).
+- sccache: the runner exports `RUSTC_WRAPPER=tools/dev/sccache.sh` and
+  `SCCACHE_CLIENT_SIDE=1` when the user unit `solaris-sccache.service` (app.slice,
+  `client_side_mode`: the daemon only fronts the cache, every compile runs in the
+  caller's scope) is active and `~/.cargo/bin/sccache` exists, else
+  `RUSTC_WRAPPER=` (uncached). Never stop, restart or reconfigure that unit, never
+  start an sccache inside a scope (it would stay populated by that scope), and
+  compare `sccache --show-stats` before and after instead of zeroing it. Measured
+  2026-11-11, one run: a cold debug `solaris-v2` in another tree against a warm
+  cache took 4542 -> 3316 G instructions (`perf stat`, -27%; 213/271 Rust hits plus
+  284 C hits), and populating an empty cache cost +6%. The same for a cold release
+  `solaris-v2`: 5482 -> 4707 G instructions (-14%), populating +1%. Each is one
+  measurement under those conditions, not a general speedup. Expected to help on cold or
+  private target dirs, after slot rotation and after toolchain changes; a warm slot
+  gains nothing. Plain
+  `RUSTC_WRAPPER=sccache` is wrong here: sccache hashes every `CARGO_*` variable
+  into Rust keys and the runner's per-slot `CARGO_TARGET_DIR` made every key
+  differ (0 hits across slots), it refuses `CARGO_INCREMENTAL=1` (which the runner
+  sets for debug builds), and a wrapper not named `sccache` leaves C/C++ build
+  scripts (aws-lc-sys, zstd-sys) uncached. `sccache.sh` unsets those two variables
+  (cargo passes their effect to rustc as arguments) and keeps the stem `sccache`.
 - Incremental (`CARGO_INCREMENTAL`) is set by the runner from the argv: 1 for
   debug/test builds and for `--release` builds in the normal lane, 0 in `-p`/`-x`
   lanes and for any `--profile` build. One re-pin measurement (2026-11-11) used
@@ -154,7 +170,7 @@ code, start the unit (agents' runner calls may restart it in between).
   runs, so only the direction is plausible, not the size. It needs about 2.4 GB
   more per slot and uses more codegen units, so its binary can run slower: take
   performance binaries from `pin-release --no-incremental` or
-  `env RUSTC_WRAPPER= CARGO_INCREMENTAL=0 cargo build --release`.
+  `env CARGO_INCREMENTAL=0 cargo build --release`.
 - rust-analyzer (about 5 GB, agents auto-start it) and the agent host (about
   4 GB) sit outside the slice. Killing rust-analyzer, leaked Minecraft clients
   and idle Gradle daemons is safe.
@@ -180,7 +196,7 @@ code, start the unit (agents' runner calls may restart it in between).
 Owner-approved response (2026-10-24), adjusted for the current runner: renice
 running rustc/cargo/java/qemu to 19, start new heavy commands with a lower
 `SOLARIS_MEM_RUN_CPU_QUOTA` (e.g. `400`), and tell agents to use
-`-m 6G nice -n 19 env RUSTC_WRAPPER= cargo ... -j 2`, `--test-threads 2`,
+`-m 6G nice -n 19 cargo ... -j 2`, `--test-threads 2`,
 focused `-p` crates only. For a machine-wide cap, write the owner's quota to
 `/tmp/solaris-mem-slots/cpu-quota` (e.g. `600%`, replaced atomically); the runner
 clears any slice `CPUQuota` not set through that file (a forgotten one held every

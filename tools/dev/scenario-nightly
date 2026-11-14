@@ -97,7 +97,7 @@ def run_campaign(args):
         print(root / 'result.json', flush=True)
         return 1
     deadline = time.monotonic() + args.budget_seconds
-    common = [str(MEM_RUN), '-m', '6G', 'env', 'RUSTC_WRAPPER=', 'nice', '-n', '19',
+    common = [str(MEM_RUN), '-m', '6G', 'nice', '-n', '19',
               'ionice', '-c', '3', sys.executable, '-m', 'tools.harness', 'run', 'matrix-random',
               '--server-bin', str(args.server_bin), '--vanilla-data', str(args.vanilla_data),
               '--port', str(args.port), '--dashboard-port', str(args.port + 1)]

@@ -41,7 +41,7 @@ checked out beside this repository unless an environment variable says otherwise
   `alsa-sys` panic; missing `LIBRARY_PATH` fails linking `-lasound`. Check the
   binary's mtime afterwards: an early-exiting wrapped build leaves the old binary.
   On the shared host wrap the build:
-  `<work>/solaris/tools/dev/mem-run.sh -m 10G env RUSTC_WRAPPER= cargo build --release --bin solaris-client`.
+  `<work>/solaris/tools/dev/mem-run.sh -m 10G cargo build --release --bin solaris-client`.
 
 ### 2. Build the client data root from public sources
 
@@ -140,7 +140,7 @@ into the run's artifact dir.
   see [OPERATING](../OPERATING.md#vanilla-content-cache)); they copy it into the
   private client data root as `servers/content/26.3`.
 - Run each graphical gate through the scene slot so at most three run on the
-  host: `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER=
+  host: `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G
   python3 -m tools.harness run <profile> --client native --windowed`.
 
 ### 4. Which gates need owner-held access

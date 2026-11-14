@@ -344,7 +344,7 @@ Select a frozen protocol row with `--matrix tools/harness/matrix_specs/matrix.ya
 `--only-id`, `--ledger`, `--run-root`. Both graphical lanes require
 `--plugins-dir` and the private hardware-free `tools/harness/screen_audio_graph.sh`
 wrapper. On the owner host wrap every run in Main's absolute
-`tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER=` invocation.
+`tools/dev/mem-run.sh -m 6G` invocation.
 
 Optional CRAP measurement: `cargo-llvm-cov` and `cargo-crap` measure line
 coverage and cyclomatic complexity per function on one source tree. Retain the

@@ -189,6 +189,18 @@ else
     *) incremental=1 ;;
   esac
 fi
+# sccache through tools/dev/sccache.sh while the shared cache daemon runs (never plain
+# `RUSTC_WRAPPER=sccache`: it hashes the per-slot CARGO_TARGET_DIR into every key and refuses
+# CARGO_INCREMENTAL=1; see docs/development/heavy-commands-and-memory.md). The daemon only
+# fronts the cache (client_side_mode): compiles run here, inside this scope. A caller's own
+# `env RUSTC_WRAPPER=` (old briefs) still wins, uncached.
+sccache_unit=solaris-sccache.service
+sccache_bin="$HOME/.cargo/bin/sccache"
+if [ -x "$sccache_bin" ] && [ -x "$here/sccache.sh" ] && systemctl --user is-active -q "$sccache_unit"; then
+  export RUSTC_WRAPPER="$here/sccache.sh" SCCACHE_CLIENT_SIDE=1
+else
+  export RUSTC_WRAPPER=
+fi
 # The harness would otherwise re-run itself in its own scope outside this slice;
 # tell it it is already scoped so cargo/server/client stay under this cap.
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-$jobs_default}" CARGO_INCREMENTAL="$incremental" SOLARIS_HARNESS_CPU_SCOPE=1

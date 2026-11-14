@@ -92,7 +92,7 @@ class PinReleaseTests(unittest.TestCase):
         self.assertIn("--locked", command)
         self.assertIn("--release", command)
         self.assertIn("CARGO_INCREMENTAL=1", command)
-        self.assertIn("RUSTC_WRAPPER=", command)
+        self.assertNotIn("RUSTC_WRAPPER=", command)  # the runner selects the wrapper
         with patch.object(pin.subprocess, "Popen", return_value=Process()):
             command, _ = pin.build(self.root, "client", WINDOWS, False, target=self.slot)
         self.assertIn("CARGO_INCREMENTAL=0", command)

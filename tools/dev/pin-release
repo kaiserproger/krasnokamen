@@ -85,7 +85,7 @@ def build(top: Path, kind: str, rust_target: str | None, incremental: bool,
     CARGO_INCREMENTAL is set explicitly (the runner's own default would also be on in its normal
     lane) so the manifest records exactly what was built."""
     spec = KINDS[kind]
-    cmd = [str(w.MEM_RUN), "-m", "6G", "env", "RUSTC_WRAPPER=", f"CARGO_INCREMENTAL={int(incremental)}"]
+    cmd = [str(w.MEM_RUN), "-m", "6G", "env", f"CARGO_INCREMENTAL={int(incremental)}"]
     if target is not None:
         cmd.append(f"CARGO_TARGET_DIR={target}")
     cmd += ["cargo", "build", "--release", "--locked"]

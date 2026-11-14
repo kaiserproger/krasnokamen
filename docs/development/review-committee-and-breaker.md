@@ -140,7 +140,7 @@ is the QA protocol plus these rules:
   services.
 - Private ports, data roots, `XDG`/`HOME` and Xvfb display per run; localhost
   only; kill only its own processes; heavy commands through
-  Main's `<work>/solaris/tools/dev/mem-run.sh` with `env RUSTC_WRAPPER=` for Cargo; no wall-clock
+  Main's `<work>/solaris/tools/dev/mem-run.sh` for Cargo; no wall-clock
   sleeps. Viewers (browser, noVNC) need proven headless isolation; it tracks and
   closes whole browser instances.
 - It returns exactly the protocol's YAML and the final `QA_RESULT` line.
@@ -259,7 +259,7 @@ line on spawning, and in the extra lines below:
 > - Commits: the brief sets the commit policy. Default: no commits; leave the
 >   diff and report `git diff <base> --binary | sha256sum`.
 > - Heavy commands (Cargo, harness, Gradle): one at a time, through Main's
->   `<work>/solaris/tools/dev/mem-run.sh` with `env RUSTC_WRAPPER=`. The
+>   `<work>/solaris/tools/dev/mem-run.sh`. The
 >   `-x`/`-p` measurement lanes serialize themselves; no GO is needed.
 > - Change: the smallest correct change. A behaviour change gets a regression
 >   test that goes red when the fix hunks are reverted (negative control); note

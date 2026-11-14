@@ -76,7 +76,7 @@ round-trip and malformed-input tests alongside the affected code, and exercise
 both versions when translation changes. The relevant crate tests can be run with:
 
 ```sh
-tools/dev/mem-run.sh -m 6G env RUSTC_WRAPPER= cargo test -p mc-protocol
+tools/dev/mem-run.sh -m 6G cargo test -p mc-protocol
 ```
 
 Use the shared-machine runner described in [heavy commands](heavy-commands-and-memory.md)
