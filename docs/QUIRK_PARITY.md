@@ -1,6 +1,6 @@
 # Quirk and farm parity gate
 
-Solaris deliberately keeps vanilla behaviours that players rely on (TNT duping,
+Krasnokamen deliberately keeps vanilla behaviours that players rely on (TNT duping,
 quasi-connectivity, update order, attribute swapping, diagonal sprint speed) and
 must not change farm output rates (iron, villager breeder, mob, crop farms).
 This gate proves that against a **real Mojang 26.1.2 server** run on the same
@@ -10,14 +10,14 @@ scenario that vanilla itself does not show is a failing scenario.
 ```sh
 # whole gate (needs .analysis/server.jar = vanilla 26.1.2 bundler, Java 25, a built mc-core test binary)
 python3 -m tools.harness run quirk-parity -- --family quasi-connectivity
-python3 -m tools.harness.quirk_parity --out DIR [--scenario ID] [--family F] [--vanilla-only|--solaris-only]
+python3 -m tools.harness.quirk_parity --out DIR [--scenario ID] [--family F] [--vanilla-only|--krasnokamen-only]
 python3 -m tools.harness.quirk_parity --out DIR --fuzz-seed 1 --fuzz-cells 256 --fuzz-style dense|mixed|bud|slime3d
 ```
 
 Receipts: `DIR/receipt.json` (per scenario `status`: `pass`, `fail`,
 `known-divergence`, `findings` for fuzz; diffs, vanilla self-check failures,
-wall times), `DIR/vanilla-results.json`, `DIR/solaris/receipt.json` and the
-`vanilla.log` / `solaris.log` of every run. The harness profile `quirk-parity`
+wall times), `DIR/vanilla-results.json`, `DIR/krasnokamen/receipt.json` and the
+`vanilla.log` / `krasnokamen.log` of every run. The harness profile `quirk-parity`
 (`tools/harness/profiles.py`) wraps the same module.
 
 ## How a scenario runs
@@ -29,11 +29,11 @@ Both servers execute the **same console command strings** (`setblock`, `fill`,
   `tick sprint N` per phase (completion is the server's own "Sprint completed"
   log line), then `save-all flush` and the saved Anvil files are decoded
   (`tools/harness/quirk_parity/anvil.py`: blocks, entities, container items).
-* Solaris: the real native tick in-process
+* Krasnokamen: the real native tick in-process
   (`crates/mc-core/src/quirk_parity_tests.rs`, `#[ignore]` test run by the
-  harness with `SOLARIS_QUIRK_SCENARIOS` / `SOLARIS_QUIRK_RECEIPT`): the same
+  harness with `KRASNOKAMEN_QUIRK_SCENARIOS` / `KRASNOKAMEN_QUIRK_RECEIPT`): the same
   commands through the console command path, `run_tick` per tick, same
-  snapshot format. A command Solaris rejects but vanilla accepts is a failure.
+  snapshot format. A command Krasnokamen rejects but vanilla accepts is a failure.
 
 Nothing sleeps: every wait is a specific server log line / tick count.
 
@@ -58,8 +58,8 @@ Nothing sleeps: every wait is a specific server log line / tick count.
     {"phase": "p", "check": "count", "key": "minecraft:tnt", "min": 1, "max": 1, "cell": 0}],
   "rate": {"metric": {"kind": "container_items", "item": "minecraft:iron_ingot"},   // farm rate scenarios
            "baseline_phase": "warmup", "phase": "run", "tolerance_pct": 5, "min_vanilla": 1},
-  "known_divergence": "one-line reason + repro; the marker itself fails the gate once Solaris matches",
-  "allow_solaris_command_errors": false
+  "known_divergence": "one-line reason + repro; the marker itself fails the gate once Krasnokamen matches",
+  "allow_krasnokamen_command_errors": false
 }
 ```
 
@@ -69,7 +69,7 @@ baseline minus end value.
 Metric kinds: `container_items` (all hoppers/chests/barrels/...), `item_entities`,
 `entity_count`, `block_count` (by block name), `block_state_count` (`equals`: exact
 `name[sorted props]`, e.g. `minecraft:wheat[age=7]`). Rate comparison: mean production per seed,
-Solaris vs vanilla; passes inside `tolerance_pct` of the vanilla mean or two
+Krasnokamen vs vanilla; passes inside `tolerance_pct` of the vanilla mean or two
 standard errors of the seed noise, whichever is wider.
 
 Blocks are compared as `name[sorted props]` (non-air only); entities by count
@@ -89,8 +89,8 @@ ends in an explosion (80 ticks).
 | player | `player_scenarios/*` | diagonal sprint speed acceptance, attribute swapping (see `tools/harness/quirk_parity/player.py`) |
 | farm-* | `farm-*` | production per hour over several seeds within tolerance |
 
-Rules: never "fix" a divergence by making Solaris stricter than vanilla. A
-Solaris divergence is either fixed with a regression test (small fix) or
+Rules: never "fix" a divergence by making Krasnokamen stricter than vanilla. A
+Krasnokamen divergence is either fixed with a regression test (small fix) or
 recorded as `known_divergence` with an exact repro in the receipt/report.
 Mojang bytes never enter Git: the jar and worlds stay under `.analysis/`.
 
@@ -108,7 +108,7 @@ The tracked scenarios mark these divergences and contain their exact repros:
 - [Villager breeder](../tools/harness/quirk_parity/scenarios/farm-villager-breeder.json):
   farmer harvest cadence differs.
 
-A stale `known_divergence` marker fails once Solaris matches. See also the
+A stale `known_divergence` marker fails once Krasnokamen matches. See also the
 [native test driver](../crates/mc-core/src/quirk_parity_tests.rs).
 
 ## Native block interaction regressions (26.1.2)

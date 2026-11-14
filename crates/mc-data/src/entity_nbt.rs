@@ -29,12 +29,12 @@ pub struct VanillaEntity {
     /// Vanilla experience orb `Value` and `Count`.
     pub experience_orb: Option<(i32, i32)>,
     /// Sheep color (low four bits) and sheared flag (`0x10`), persisted as
-    /// vanilla `Color` and `Sheared` rather than a Solaris-specific key.
+    /// vanilla `Color` and `Sheared` rather than a Krasnokamen-specific key.
     pub sheep_wool: Option<u8>,
     /// Vanilla effect compounds retained without depending on gameplay types.
     pub active_effects: Vec<Tag>,
     pub absorption_amount: f32,
-    /// Solaris wire id (`solaris:WireId`; vanilla ignores unknown keys).
+    /// Krasnokamen wire id (`krasnokamen:WireId`; vanilla ignores unknown keys).
     /// Lets journal tail entries keyed by wire id match after recovery.
     pub wire_id: i32,
     /// Species-owned vanilla fields, retained through neutral region codecs.
@@ -61,8 +61,8 @@ fn shared_field(name: &str) -> bool {
             | "Sheared"
             | "active_effects"
             | "AbsorptionAmount"
-            | "solaris:WireId"
-            | "solaris:BreedCooldown"
+            | "krasnokamen:WireId"
+            | "krasnokamen:BreedCooldown"
     )
 }
 
@@ -186,16 +186,16 @@ pub fn entity_from_fields(
             int_field(fields, "Count").unwrap_or(1).max(1),
         ));
     }
-    match field(fields, "solaris:WireId") {
+    match field(fields, "krasnokamen:WireId") {
         Some(Tag::Int(wire)) if *wire >= 0 => out.wire_id = *wire,
         Some(_) => {
             return Err(ItemNbtError::InvalidComponent(
-                "solaris:WireId: expected nonnegative int".into(),
+                "krasnokamen:WireId: expected nonnegative int".into(),
             ));
         }
         None => {}
     }
-    if let Some(cooldown) = int_field(fields, "solaris:BreedCooldown") {
+    if let Some(cooldown) = int_field(fields, "krasnokamen:BreedCooldown") {
         out.breed_cooldown = cooldown.max(0);
     }
     if let Some(Tag::List(list)) = field(fields, "active_effects") {
@@ -297,17 +297,17 @@ pub fn entity_to_fields(
         fields.push(("Value".into(), Tag::Short(value as i16)));
         fields.push(("Count".into(), Tag::Int(count)));
     }
-    // Solaris-only bookkeeping (vanilla ignores unknown keys).
+    // Krasnokamen-only bookkeeping (vanilla ignores unknown keys).
     if entity.wire_id > 0 {
-        fields.push(("solaris:WireId".into(), Tag::Int(entity.wire_id)));
+        fields.push(("krasnokamen:WireId".into(), Tag::Int(entity.wire_id)));
     } else if entity.wire_id < 0 {
         return Err(ItemNbtError::InvalidComponent(
-            "solaris:WireId: expected nonnegative int".into(),
+            "krasnokamen:WireId: expected nonnegative int".into(),
         ));
     }
     if entity.breed_cooldown != 0 {
         fields.push((
-            "solaris:BreedCooldown".into(),
+            "krasnokamen:BreedCooldown".into(),
             Tag::Int(entity.breed_cooldown),
         ));
     }
@@ -380,7 +380,7 @@ mod tests {
     use super::*;
 
     fn items() -> ItemRegistry {
-        crate::items::solaris_required_items()
+        crate::items::krasnokamen_required_items()
     }
 
     #[test]
