@@ -370,6 +370,22 @@ type WalWriteObserver = (PathBuf, Box<dyn Fn(&mut File, &[u8]) + Send>);
 pub(crate) static WAL_WRITE_OBSERVER: parking_lot::Mutex<Option<WalWriteObserver>> =
     parking_lot::const_mutex(None);
 
+#[cfg(test)]
+thread_local! {
+    /// One-shot partial write followed by ENOSPC on this writer thread only.
+    pub(crate) static WAL_WRITE_FAILURE: std::cell::Cell<Option<usize>> =
+        const { std::cell::Cell::new(None) };
+    pub(crate) static WAL_CRASH_STAGE: std::cell::Cell<Option<&'static str>> =
+        const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+fn wal_stage(stage: &str) {
+    if WAL_CRASH_STAGE.get().is_some_and(|stop| stop == stage) {
+        std::process::exit(39);
+    }
+}
+
 impl JournalWriter {
     pub fn open(world_dir: &Path, fsync_every: u32) -> Result<Self, CoreError> {
         let dir = world_dir.join("journal");
@@ -515,6 +531,8 @@ impl JournalWriter {
         {
             let mut file = File::create(&tmp).map_err(|err| CoreError::Storage(err.to_string()))?;
             #[cfg(test)]
+            wal_stage("created");
+            #[cfg(test)]
             if let Some((_, observe)) = WAL_WRITE_OBSERVER
                 .lock()
                 .as_ref()
@@ -522,16 +540,32 @@ impl JournalWriter {
             {
                 observe(&mut file, &frame);
             }
+            #[cfg(test)]
+            if let Some(offset) = WAL_WRITE_FAILURE.take() {
+                file.write_all(&frame[..offset.min(frame.len())])
+                    .map_err(|err| CoreError::Storage(err.to_string()))?;
+                return Err(CoreError::Storage(
+                    std::io::Error::from_raw_os_error(28).to_string(),
+                ));
+            }
             file.write_all(&frame)
                 .map_err(|err| CoreError::Storage(err.to_string()))?;
+            #[cfg(test)]
+            wal_stage("written");
             file.sync_all()
                 .map_err(|err| CoreError::Storage(err.to_string()))?;
+            #[cfg(test)]
+            wal_stage("synced");
         }
         std::fs::rename(&tmp, &final_path).map_err(|err| CoreError::Storage(err.to_string()))?;
+        #[cfg(test)]
+        wal_stage("published");
         self.appended = Some((self.appended.map_or(tick_lo, |(lo, _)| lo), tick_hi));
         self.pending_fsync += 1;
         if self.pending_fsync >= self.fsync_every {
             self.flush()?;
+            #[cfg(test)]
+            wal_stage("durable");
         }
         Ok(())
     }

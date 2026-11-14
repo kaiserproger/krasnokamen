@@ -170,6 +170,47 @@ an old stored record without a live or WAL substitute through interaction and
 restart. Prior load and custody tests did not cover this combination; the
 slot-6 refusal was a different failure, not proof against this data loss.
 
+## Hazards and defense layers
+
+Focused sources: `native_persistence_drill_tests.rs` and its
+`native_checkpoint_pipeline_drill_tests.rs` sibling (`mc-core`), plus
+`native/checkpoint_drill_tests.rs` (`mc-world`). Harness `test` filters are
+`persistence_drills` and `native::checkpoint::drill_tests`, respectively.
+The table describes assertions in the drills, **not their run status**; use
+candidate-matched receipts for acceptance.
+
+| Hazard | Defense layers | Drill assertions and scope |
+|---|---|---|
+| Take, insert or break splits item custody | Whole-tick post-images; one checkpoint transaction | The randomized model validates the selected operation, freezes complete named-token before/after owner-and-slot maps, then requires the appropriate map after recovery. Counts independently reject loss, changed identity and duplicate custody. |
+| Refused request mutates items | Authoritative window validation | A wrong-window click must leave every named token's owner and slot unchanged, not merely its global count. Attempted operations, real mutations, actual append faults, faulted mutations and ordinary durable restarts have separate counters. |
+| ENOSPC during a transfer-frame append | Failed append cannot supply WAL coverage; unpublished temporary files are ignored | Every byte boundary of a **real transfer frame** fails before publication. The production recovery fold over a pinned native checkpoint must retain the exact old placement. A complete published frame must yield the exact new placement. This is not a fresh Core process per byte. |
+| Failed WAL writer keeps admitting work | Journal owner closes its queue without acknowledging the failed tick | A queued real transfer fails during append; neither its append ACK nor the queued checkpoint ACK/save reply may succeed. Native custody remains old and recovery must select the exact old placement. |
+| Process stops at a WAL boundary | File fsync before rename; directory fsync for durable publication | Transfer subprocesses stop after create, write, file fsync, rename and directory fsync. Recovery requires the whole old or new owner/slot map. The unflushed rename is modeled both retained and lost. |
+| ENOSPC in a native checkpoint backend write | Immediate redb transaction | The `mc-world` backend fails successive **write calls** until the first successful commit; complete old/new globals, player, entity, chunk and index records are checked. Its synthetic Score/Health fixture is not an item transfer or a core ACK/prune test. |
+| Checkpoint gate or commit refusal loses a durable transfer | Journal queue owns WAL gate; native worker sends a negative ACK/save reply and does not prune on failure | A real take followed by an unpublished inverse transfer exercises a genuine coverage hole. A separate pre-commit failure follows a durably appended take. Tests inspect checkpoint-only player/chest slots, retained item-bearing WAL and recovered owners; both failure paths must refuse positive ACKs. The pre-commit hook is a generic injected error, not a physical ENOSPC in the core process. |
+| Successful checkpoint prunes a newer transfer | Frozen capture; ACK and pruning after commit; pruning only through the committed tick | A take is captured, then a newer inverse transfer is append-ACKed before the native commit proceeds. An event-driven pre-commit probe requires no checkpoint ACK/save reply and no premature pruning. The committed checkpoint must contain the captured placement, send its matching positive ACK, remove covered WAL and retain/replay the newer inverse-transfer frame. |
+| Process stops in the core checkpoint pipeline | WAL gate before native commit; ACK and pruning after commit | Item-transfer subprocesses stop at WAL-gated, pre-commit, native-committed, pre-ACK, ACK-sent and post-prune boundaries. Persisted stage receipts count only reached boundaries. Checkpoint-only custody must be entirely old or new; checkpoint plus retained WAL must recover the complete durable transfer. |
+| Process stops inside a native transaction | One transaction across all participating records | Separate `mc-world` children exit after globals, chunks, entities, players and durable commit. These check storage atomicity, not the core queue or item-transfer semantics. |
+
+The core drills run real `PlayerInput`s through `run_tick`; checkpoint jobs
+then traverse the actual `journal_loop` queue, WAL gate and native writer
+thread. They do not claim a live `Core::open` tick-thread/client gate.
+Core recovery cases explicitly write a **new checkpoint**, prune its covered
+WAL, drop the process state and recover again. Repeating `NativeStore::open`
+in the transaction-only tests checks repeated database open, not that stronger
+checkpoint/prune/recovery sequence.
+The successful core case also applies the older capture's ACK to a live newer
+inverse transfer and checkpoints that live state before restarting. Recovery
+cannot hide a stale-ACK dirty-mark error by seeding fresh marks first.
+
+These are bounded software-fault drills, not proof that storage hardware
+honours fsync or survives arbitrary torn sectors. The WAL hook writes a prefix
+and returns ENOSPC before publication. The native backend injects failures in
+`write` only: `set_len` and `sync_data` delegate normally and their ENOSPC paths
+are **not covered**. Native storage positives do not substitute for the core
+pipeline receipts. Subprocess stops exit without database destructors; ordinary
+model restarts drop the live state without a final checkpoint.
+
 ## Backup and restore
 
 Offline `backup` and `restore` require a stopped, exclusively leased world;

@@ -907,3 +907,6 @@ fn start_waits_for_the_previous_server_to_release_the_world() {
         .retain(|(dir, _)| dir != directory.path());
     opening.join().unwrap().unwrap().shutdown();
 }
+
+#[path = "native_persistence_drill_tests.rs"]
+mod persistence_drills;
