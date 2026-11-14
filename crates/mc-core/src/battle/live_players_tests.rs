@@ -124,7 +124,10 @@ fn watch_announces_each_join_and_leave_once() {
     assert_eq!(reply, "Battle watching: PovRed,CamSpec");
     assert_eq!(state.hostile.battle.live.announced, vec![None, None]);
     run_tick(&mut state, &[]);
-    assert_eq!(state.hostile.battle.live.announced, vec![Some(ids[0]), None]);
+    assert_eq!(
+        state.hostile.battle.live.announced,
+        vec![Some(ids[0]), None]
+    );
     run_tick(
         &mut state,
         &[PlayerInput::Join {
@@ -148,7 +151,10 @@ fn live_player_takes_the_centre_infantry_slot_with_its_kit() {
     let player = ids[0];
     let mut changes = ChangeSet::default();
     let reply = command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
-    assert!(reply.starts_with("Battle live placed: PovRed side=1 "), "{reply}");
+    assert!(
+        reply.starts_with("Battle live placed: PovRed side=1 "),
+        "{reply}"
+    );
     let hold = state.hostile.battle.live.holds[0].clone();
     let formation = &state.hostile.battle.formation;
     assert_eq!(formation.held, vec![(hold.regiment, hold.file)]);
@@ -168,7 +174,11 @@ fn live_player_takes_the_centre_infantry_slot_with_its_kit() {
         .items
         .id_of(&mc_data::Identifier::parse("minecraft:iron_sword".to_owned()).unwrap())
         .unwrap();
-    assert_eq!(kit[0].as_ref().unwrap().item_id, sword, "infantry, not spear");
+    assert_eq!(
+        kit[0].as_ref().unwrap().item_id,
+        sword,
+        "infantry, not spear"
+    );
     assert!(kit[1].is_some(), "off-hand shield");
     let inventory = &state.players[&player].inventory;
     let selected = usize::from(inventory.selected);
@@ -200,7 +210,10 @@ fn live_player_takes_the_centre_infantry_slot_with_its_kit() {
     assert!(state.hostile.battle.ground_refused.is_empty());
     // An ordinary player: hits land.
     assert!(!state.entities.row(body).controls.invulnerable);
-    assert_eq!(state.gamerules.get("keep_inventory").map(String::as_str), Some("true"));
+    assert_eq!(
+        state.gamerules.get("keep_inventory").map(String::as_str),
+        Some("true")
+    );
 }
 
 fn kill(state: &mut TickState, connection: u64) {
@@ -295,10 +308,17 @@ fn assert_exactly_the_kit(state: &TickState, player: EntityId) {
             expected[player_index(equipment, selected)] = stack.clone();
         }
     }
-    assert_eq!(inventory.slots, expected, "inventory is not exactly the kit");
+    assert_eq!(
+        inventory.slots, expected,
+        "inventory is not exactly the kit"
+    );
     let menu = &player_state.inventory_menu;
     assert!(menu.carried.is_empty(), "cursor {:?}", menu.carried);
-    assert!(menu.grid.iter().all(ItemStack::is_empty), "grid {:?}", menu.grid);
+    assert!(
+        menu.grid.iter().all(ItemStack::is_empty),
+        "grid {:?}",
+        menu.grid
+    );
     let sword = kit[0].as_ref().unwrap().item_id;
     let swords: i32 = inventory
         .slots
@@ -448,8 +468,7 @@ fn wounded_staggered_or_recovering_soldiers_in_reach_never_hit_the_holder() {
             assert!(!swung(&output, blue), "{action:?} soldier swung");
         }
         assert_eq!(
-            state.players[&player].vitals.health,
-            20.0,
+            state.players[&player].vitals.health, 20.0,
             "{action:?} soldiers hit him"
         );
     }
@@ -473,13 +492,22 @@ fn a_ready_enemy_soldier_hits_the_holder_once_per_swing_cycle() {
             let slot = state.entities.slot_of(blue).unwrap();
             let bi = battle.columns.index(slot).unwrap();
             let Action::Windup { target, weapon, .. } = battle.combat.fighters[bi].action else {
-                panic!("swing without a windup: {:?}", battle.combat.fighters[bi].action);
+                panic!(
+                    "swing without a windup: {:?}",
+                    battle.combat.fighters[bi].action
+                );
             };
             assert_eq!(target, player, "his swing is at the holder");
             assert_ne!(weapon, Weapon::Bow);
-            let raised = state.entities.row(slot).appearance.extra.iter().any(|(index, value)| {
-                *index == 8 && matches!(value, EntityDataValue::Byte(flags) if *flags != 0)
-            });
+            let raised = state
+                .entities
+                .row(slot)
+                .appearance
+                .extra
+                .iter()
+                .any(|(index, value)| {
+                    *index == 8 && matches!(value, EntityDataValue::Byte(flags) if *flags != 0)
+                });
             assert!(!raised, "the shield is lowered for the swing");
             swings.push((tick, u64::from(weapon.windup())));
         }
@@ -492,7 +520,10 @@ fn a_ready_enemy_soldier_hits_the_holder_once_per_swing_cycle() {
             break;
         }
     }
-    assert!(!hits.is_empty(), "the ready soldier never hit him; swings {swings:?}");
+    assert!(
+        !hits.is_empty(),
+        "the ready soldier never hit him; swings {swings:?}"
+    );
     // Every blow is the impact of his own swing, one per cycle.
     for &hit in &hits {
         assert!(
@@ -500,7 +531,10 @@ fn a_ready_enemy_soldier_hits_the_holder_once_per_swing_cycle() {
             "hit at {hit} is no swing's impact: hits {hits:?} swings {swings:?}"
         );
     }
-    assert!(hits.len() <= swings.len(), "hits {hits:?} swings {swings:?}");
+    assert!(
+        hits.len() <= swings.len(),
+        "hits {hits:?} swings {swings:?}"
+    );
     // His own side never swings: a red holder beside red soldiers only.
     let (mut state, ids) = staged(&["PovRed"]);
     let mut changes = ChangeSet::default();
@@ -509,7 +543,10 @@ fn a_ready_enemy_soldier_hits_the_holder_once_per_swing_cycle() {
     for _ in 0..60 {
         run_tick(&mut state, &[]);
     }
-    assert_eq!(state.players[&ids[0]].vitals.health, 20.0, "red soldiers swung at him");
+    assert_eq!(
+        state.players[&ids[0]].vitals.health, 20.0,
+        "red soldiers swung at him"
+    );
 }
 
 #[test]
@@ -539,7 +576,10 @@ fn holder_hits_hurt_enemy_soldiers_and_spare_his_own_side() {
         for _ in 0..20 {
             run_tick(&mut state, &[]);
         }
-        let before = state.entities.row(state.entities.slot_of(victim).unwrap()).health;
+        let before = state
+            .entities
+            .row(state.entities.slot_of(victim).unwrap())
+            .health;
         run_tick(
             &mut state,
             &[PlayerInput::Attack {
@@ -582,7 +622,9 @@ fn a_respawn_after_his_infantry_broke_takes_a_standing_line_with_the_same_kit() 
     run_tick(&mut state, &[]);
     // Every red infantry line breaks while he is dead.
     let infantry = state.hostile.battle.live.holds[0].regiment;
-    state.hostile.battle.formation.regiments[infantry].morale.broken = true;
+    state.hostile.battle.formation.regiments[infantry]
+        .morale
+        .broken = true;
     run_tick(
         &mut state,
         &[PlayerInput::Respawn {
@@ -591,7 +633,10 @@ fn a_respawn_after_his_infantry_broke_takes_a_standing_line_with_the_same_kit() 
     );
     run_tick(&mut state, &[]);
     let hold = state.hostile.battle.live.holds[0].clone();
-    assert_ne!(hold.regiment, infantry, "a standing line, not the broken one");
+    assert_ne!(
+        hold.regiment, infantry,
+        "a standing line, not the broken one"
+    );
     let r = &state.hostile.battle.formation.regiments[hold.regiment];
     assert_eq!((r.spec.faction, r.spec.frontage), (1, 1.0));
     assert!(!r.morale.broken);
@@ -613,7 +658,10 @@ fn spectator_goes_behind_the_holder_in_spectator_mode() {
         },
     )
     .unwrap();
-    assert!(reply.starts_with("Battle spectator placed: CamSpec target=PovRed "), "{reply}");
+    assert!(
+        reply.starts_with("Battle spectator placed: CamSpec target=PovRed "),
+        "{reply}"
+    );
     assert_eq!(state.players[&ids[1]].game_mode, GameMode::Spectator);
     let hold = &state.hostile.battle.live.holds[0];
     let at = state.entities.pos(state.entities.slot_of(ids[1]).unwrap());

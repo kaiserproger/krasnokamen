@@ -289,10 +289,18 @@ fn fighter_without_a_recent_man_searches_only_on_his_slice() {
             world: &state.world,
             tick,
         };
-        battle.columns.prepare(&frame, &mut battle.formation, &mut battle.output.counters, &mut battle.population);
+        battle.columns.prepare(
+            &frame,
+            &mut battle.formation,
+            &mut battle.output.counters,
+            &mut battle.population,
+        );
         battle.formation.finish_preparation();
         targeting::update(&frame, &mut battle);
-        assert!(battle.columns.target(slot).is_none(), "off-slice search at tick {tick}");
+        assert!(
+            battle.columns.target(slot).is_none(),
+            "off-slice search at tick {tick}"
+        );
     }
     let frame = Frame {
         entities: &state.entities,
@@ -300,7 +308,12 @@ fn fighter_without_a_recent_man_searches_only_on_his_slice() {
         world: &state.world,
         tick: due + 20,
     };
-    battle.columns.prepare(&frame, &mut battle.formation, &mut battle.output.counters, &mut battle.population);
+    battle.columns.prepare(
+        &frame,
+        &mut battle.formation,
+        &mut battle.output.counters,
+        &mut battle.population,
+    );
     battle.formation.finish_preparation();
     targeting::update(&frame, &mut battle);
     assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
@@ -369,7 +382,7 @@ fn faction_fields_reject_invalid_native_and_json_values() {
     ] {
         let record = mc_data::entity_nbt::VanillaEntity {
             id: "minecraft:zombie".into(),
-            extra_fields: vec![("solaris:Faction".into(), tag)],
+            extra_fields: vec![("krasnokamen:Faction".into(), tag)],
             ..Default::default()
         };
         assert!(crate::journal::EntityStateImage::from_record(&state.registry, &record).is_err());
@@ -1115,7 +1128,9 @@ fn melee_contact(battle: &BattleState) -> bool {
     })
 }
 
-pub(super) fn native_battle_losses(state: &crate::tick::TickState) -> ([usize; 2], [usize; 2], usize) {
+pub(super) fn native_battle_losses(
+    state: &crate::tick::TickState,
+) -> ([usize; 2], [usize; 2], usize) {
     let mut dead = [0; 2];
     let mut removed = [0; 2];
     let mut native_wounds = 0;

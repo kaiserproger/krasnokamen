@@ -1,4 +1,4 @@
-package org.solaris.bukkit;
+package org.krasnokamen.bukkit;
 
 /** Offline replacement for the supported java.util.logging.Logger operations. */
 public final class PluginLogger {

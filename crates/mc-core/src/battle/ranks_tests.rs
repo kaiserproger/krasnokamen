@@ -47,7 +47,10 @@ pub(super) fn census(battle: &BattleState) -> Census {
             .or_default()
             .push(bi);
         *density
-            .entry([(m.pos[0] / 2.0).floor() as i32, (m.pos[2] / 2.0).floor() as i32])
+            .entry([
+                (m.pos[0] / 2.0).floor() as i32,
+                (m.pos[2] / 2.0).floor() as i32,
+            ])
             .or_default() += 1;
         let horse = f.regiments[m.regiment].spec.frontage > 1.0;
         if horse {
@@ -69,9 +72,7 @@ pub(super) fn census(battle: &BattleState) -> Census {
                 if let Some(list) = cells.get(&[key[0] + dx, key[1] + dz]) {
                     for &other in list {
                         let o = &f.members[other];
-                        if other != bi
-                            && (o.pos[0] - m.pos[0]).hypot(o.pos[2] - m.pos[2]) < HEAP
-                        {
+                        if other != bi && (o.pos[0] - m.pos[0]).hypot(o.pos[2] - m.pos[2]) < HEAP {
                             heaped = true;
                             break 'near;
                         }
@@ -110,7 +111,10 @@ pub(super) fn census(battle: &BattleState) -> Census {
                 c.horse_error_sum += error;
             }
             if m.rank == 0 && r.spec.frontage <= 1.0 {
-                front.push((m.pos[0] - slot[0]) * r.spec.facing[0] + (m.pos[2] - slot[2]) * r.spec.facing[1]);
+                front.push(
+                    (m.pos[0] - slot[0]) * r.spec.facing[0]
+                        + (m.pos[2] - slot[2]) * r.spec.facing[1],
+                );
             }
         }
         if front.len() > 1 {
@@ -171,7 +175,10 @@ fn marching_fighters_keep_the_ordinary_retarget_cadence_before_contact() {
             .count() as u64;
     }
     assert!(eligible > 100_000, "{eligible}");
-    assert!(retargeted * 10 <= eligible * 11, "retargeted {retargeted} of {eligible} eligible fighter-ticks");
+    assert!(
+        retargeted * 10 <= eligible * 11,
+        "retargeted {retargeted} of {eligible} eligible fighter-ticks"
+    );
 }
 
 fn dead(state: &crate::tick::TickState) -> usize {
@@ -197,14 +204,22 @@ fn rank_and_heap_table() {
     for t in 1..=ticks {
         crate::tick::run_tick(&mut state, &[]);
         let battle = &state.hostile.battle;
-        contact_ticks += usize::from(battle.formation.regiments.iter().any(|r| r.gap <= 6.0 && r.enemy.is_some()));
+        contact_ticks += usize::from(
+            battle
+                .formation
+                .regiments
+                .iter()
+                .any(|r| r.gap <= 6.0 && r.enemy.is_some()),
+        );
         if t % 100 == 0 {
             let c = census(battle);
             eprintln!(
                 "RANKS {t} {} {:.1} {:.2} {:.1} {:.2} {:.2} {:.2} {:.2} {} {} {}",
                 c.marching,
-                100.0 * (c.off_slot - c.horse_off_slot) as f64 / (c.marching - c.horse_marching).max(1) as f64,
-                (c.slot_error_sum - c.horse_error_sum) / (c.marching - c.horse_marching).max(1) as f64,
+                100.0 * (c.off_slot - c.horse_off_slot) as f64
+                    / (c.marching - c.horse_marching).max(1) as f64,
+                (c.slot_error_sum - c.horse_error_sum)
+                    / (c.marching - c.horse_marching).max(1) as f64,
                 100.0 * c.horse_off_slot as f64 / c.horse_marching.max(1) as f64,
                 c.horse_error_sum / c.horse_marching.max(1) as f64,
                 c.front_wobble,
@@ -221,8 +236,15 @@ fn rank_and_heap_table() {
             let mut text = String::new();
             for m in battle.formation.members.iter().filter(|m| m.alive) {
                 let r = &battle.formation.regiments[m.regiment];
-                let kind = if r.spec.frontage > 1.0 { "horse" } else { "foot" };
-                text += &format!("{} {kind} {:.2} {:.2}\n", r.spec.faction, m.pos[0], m.pos[2]);
+                let kind = if r.spec.frontage > 1.0 {
+                    "horse"
+                } else {
+                    "foot"
+                };
+                text += &format!(
+                    "{} {kind} {:.2} {:.2}\n",
+                    r.spec.faction, m.pos[0], m.pos[2]
+                );
             }
             std::fs::write(std::path::Path::new(&dir).join(format!("t{t}.csv")), text).unwrap();
         }
@@ -313,7 +335,8 @@ fn reaction_latency_table() {
     // to the first tick he FACES (yaw within 30 degrees of) the man or his new target, and to the
     // first tick he STEPS towards him (more than 0.02 blocks along the bearing).
     // watch = (start tick, old target); results (turn latency, step latency), None = not within 40 ticks.
-    let mut watch: Vec<Option<(u64, crate::boundary::EntityId, Option<u64>, Option<u64>)>> = Vec::new();
+    let mut watch: Vec<Option<(u64, crate::boundary::EntityId, Option<u64>, Option<u64>)>> =
+        Vec::new();
     let mut prev_target: Vec<Option<crate::boundary::EntityId>> = Vec::new();
     let mut prev_pos: Vec<[f64; 2]> = Vec::new();
     let mut direct: Vec<(Option<u64>, Option<u64>)> = Vec::new();
@@ -350,18 +373,32 @@ fn reaction_latency_table() {
                 turns[class][0] += 1;
                 if (v1[0] * v2[0] + v1[1] * v2[1]) / (l1 * l2) < 0.0 {
                     turns[class][1] += 1;
-                    turns[class][2] += u64::from(target.is_some() && before.is_some() && target != before);
+                    turns[class][2] +=
+                        u64::from(target.is_some() && before.is_some() && target != before);
                     turns[class][3] += u64::from(before.is_some() && target.is_none());
                     if class == 1 {
-                        let close = columns.targets.get(bi).copied().flatten().map(|x| x.distance);
+                        let close = columns
+                            .targets
+                            .get(bi)
+                            .copied()
+                            .flatten()
+                            .map(|x| x.distance);
                         let k = match close {
                             Some(d) if d < 3.0 => 0,
                             Some(_) => 1,
-                            None if battle.combat.sweeps.get(m.regiment).is_some_and(Option::is_some) => 2,
+                            None if battle
+                                .combat
+                                .sweeps
+                                .get(m.regiment)
+                                .is_some_and(Option::is_some) =>
+                            {
+                                2
+                            }
                             None => 3,
                         };
                         horse_state[k] += 1;
-                        refused_turns += u64::from(k == 1 && battle.combat.fighters[bi].charge.refused);
+                        refused_turns +=
+                            u64::from(k == 1 && battle.combat.fighters[bi].charge.refused);
                     }
                 }
             }
@@ -374,17 +411,31 @@ fn reaction_latency_table() {
         for bi in 0..f.members.len().min(columns.ids.len()) {
             let m = &f.members[bi];
             let now = [columns.positions[bi][0], columns.positions[bi][2]];
-            let moved = if prev_pos[bi][0].is_nan() { [0.0; 2] } else { [now[0] - prev_pos[bi][0], now[1] - prev_pos[bi][1]] };
+            let moved = if prev_pos[bi][0].is_nan() {
+                [0.0; 2]
+            } else {
+                [now[0] - prev_pos[bi][0], now[1] - prev_pos[bi][1]]
+            };
             prev_pos[bi] = now;
             let current = columns.targets[bi].map(|x| x.id);
             let before = std::mem::replace(&mut prev_target[bi], current);
-            let steady = !battle.combat.fighters[bi].charge.refused && columns.active[bi] && !columns.carried[bi] && !columns.ranged[bi] && m.alive && !m.routing && !m.wounded;
+            let steady = !battle.combat.fighters[bi].charge.refused
+                && columns.active[bi]
+                && !columns.carried[bi]
+                && !columns.ranged[bi]
+                && m.alive
+                && !m.routing
+                && !m.wounded;
             if !steady {
                 watch[bi] = None;
                 continue;
             }
             let position_of = |id: crate::boundary::EntityId| {
-                state.entities.slot_of(id).filter(|s| state.entities.body(*s).alive).map(|s| state.entities.pos(s))
+                state
+                    .entities
+                    .slot_of(id)
+                    .filter(|s| state.entities.body(*s).alive)
+                    .map(|s| state.entities.pos(s))
             };
             if watch[bi].is_none()
                 && let Some(old) = before
@@ -400,7 +451,9 @@ fn reaction_latency_table() {
                 if let Some(p) = want {
                     let (dx, dz) = (p[0] - now[0], p[2] - now[1]);
                     let length = dx.hypot(dz).max(1e-9);
-                    let yaw = state.entities.slot_of(columns.ids[bi]).map_or(0.0, |s| f64::from(state.entities.rotations()[s.0 as usize][0]));
+                    let yaw = state.entities.slot_of(columns.ids[bi]).map_or(0.0, |s| {
+                        f64::from(state.entities.rotations()[s.0 as usize][0])
+                    });
                     let bearing = -mc_physics::mth::atan2(dx, dz) * 180.0 / std::f64::consts::PI;
                     let error = ((yaw - bearing + 540.0).rem_euclid(360.0) - 180.0).abs();
                     if turn.is_none() && error <= 30.0 {
@@ -421,7 +474,11 @@ fn reaction_latency_table() {
         for bi in 0..columns.ids.len() {
             if columns.targetable[bi] {
                 cells
-                    .entry((columns.factions[bi], (columns.positions[bi][0] / 6.0).floor() as i32, (columns.positions[bi][2] / 6.0).floor() as i32))
+                    .entry((
+                        columns.factions[bi],
+                        (columns.positions[bi][0] / 6.0).floor() as i32,
+                        (columns.positions[bi][2] / 6.0).floor() as i32,
+                    ))
                     .or_default()
                     .push(bi);
             }
@@ -451,14 +508,18 @@ fn reaction_latency_table() {
             let (cx, cz) = ((p[0] / 6.0).floor() as i32, (p[2] / 6.0).floor() as i32);
             let enemy_in_reach = (-1..=1).any(|dx| {
                 (-1..=1).any(|dz| {
-                    [1_u16, 2].into_iter().filter(|&fac| fac != columns.factions[bi]).any(|fac| {
-                        cells.get(&(fac, cx + dx, cz + dz)).is_some_and(|list| {
-                            list.iter().any(|&o| {
-                                let q = columns.positions[o];
-                                (q[0] - p[0]).hypot(q[2] - p[2]) <= 6.0 && (q[1] - p[1]).abs() < 2.0
+                    [1_u16, 2]
+                        .into_iter()
+                        .filter(|&fac| fac != columns.factions[bi])
+                        .any(|fac| {
+                            cells.get(&(fac, cx + dx, cz + dz)).is_some_and(|list| {
+                                list.iter().any(|&o| {
+                                    let q = columns.positions[o];
+                                    (q[0] - p[0]).hypot(q[2] - p[2]) <= 6.0
+                                        && (q[1] - p[1]).abs() < 2.0
+                                })
                             })
                         })
-                    })
                 })
             });
             if enemy_in_reach && columns.targets[bi].is_none() {
@@ -490,14 +551,29 @@ fn reaction_latency_table() {
     let stat = |v: &mut Vec<u32>| {
         v.sort_unstable();
         let mean = v.iter().map(|&x| f64::from(x)).sum::<f64>() / v.len().max(1) as f64;
-        let p95 = v.get(((v.len().max(1) - 1) as f64 * 0.95) as usize).copied().unwrap_or(0);
-        (v.len(), mean, p95, v.get((v.len().max(1) - 1) / 2).copied().unwrap_or(0))
+        let p95 = v
+            .get(((v.len().max(1) - 1) as f64 * 0.95) as usize)
+            .copied()
+            .unwrap_or(0);
+        (
+            v.len(),
+            mean,
+            p95,
+            v.get((v.len().max(1) - 1) / 2).copied().unwrap_or(0),
+        )
     };
     {
         let stat = |v: &mut Vec<u64>| {
             v.sort_unstable();
             let mean = v.iter().sum::<u64>() as f64 / v.len().max(1) as f64;
-            (v.len(), mean, v.get(((v.len().max(1) - 1) as f64 * 0.95) as usize).copied().unwrap_or(0), v.get((v.len().max(1) - 1) / 2).copied().unwrap_or(0))
+            (
+                v.len(),
+                mean,
+                v.get(((v.len().max(1) - 1) as f64 * 0.95) as usize)
+                    .copied()
+                    .unwrap_or(0),
+                v.get((v.len().max(1) - 1) / 2).copied().unwrap_or(0),
+            )
         };
         let mut turns_l: Vec<u64> = direct.iter().filter_map(|d| d.0).collect();
         let mut steps_l: Vec<u64> = direct.iter().filter_map(|d| d.1).collect();
@@ -506,21 +582,42 @@ fn reaction_latency_table() {
         let (n, mean, p95, p50) = stat(&mut turns_c);
         eprintln!("REACT censored(40) turn_to_him events={n} mean {mean:.2} p50 {p50} p95 {p95}");
         let (n, mean, p95, p50) = stat(&mut steps_c);
-        eprintln!("REACT censored(40) step_toward_him events={n} mean {mean:.2} p50 {p50} p95 {p95}");
+        eprintln!(
+            "REACT censored(40) step_toward_him events={n} mean {mean:.2} p50 {p50} p95 {p95}"
+        );
         let (n, mean, p95, p50) = stat(&mut turns_l);
-        eprintln!("REACT direct man-left-reach events={} turn_to_him: reacted {n} mean {mean:.2} p50 {p50} p95 {p95} not within 40 ticks {}", direct.len(), direct.len() - n);
+        eprintln!(
+            "REACT direct man-left-reach events={} turn_to_him: reacted {n} mean {mean:.2} p50 {p50} p95 {p95} not within 40 ticks {}",
+            direct.len(),
+            direct.len() - n
+        );
         let (n, mean, p95, p50) = stat(&mut steps_l);
-        eprintln!("REACT direct man-left-reach events={} step_toward_him: reacted {n} mean {mean:.2} p50 {p50} p95 {p95} not within 40 ticks {}", direct.len(), direct.len() - n);
+        eprintln!(
+            "REACT direct man-left-reach events={} step_toward_him: reacted {n} mean {mean:.2} p50 {p50} p95 {p95} not within 40 ticks {}",
+            direct.len(),
+            direct.len() - n
+        );
     }
     let (n, mean, p95, p50) = stat(&mut idle);
-    eprintln!("REACT idle_with_enemy_in_reach runs={n} mean_ticks={mean:.2} p50_ticks={p50} p95_ticks={p95}");
+    eprintln!(
+        "REACT idle_with_enemy_in_reach runs={n} mean_ticks={mean:.2} p50_ticks={p50} p95_ticks={p95}"
+    );
     for (name, c) in ["foot", "horse"].into_iter().zip(turns) {
         eprintln!(
             "REACT turns {name}: moving samples (3-tick vectors >0.25) {} reversals(>90deg) {} ({:.2}%) with target change {} target lost {}",
-            c[0], c[1], 100.0 * c[1] as f64 / c[0].max(1) as f64, c[2], c[3]
+            c[0],
+            c[1],
+            100.0 * c[1] as f64 / c[0].max(1) as f64,
+            c[2],
+            c[3]
         );
     }
-    eprintln!("REACT horse reversals by state: targeted<3 {} targeted>=3 {} sweeping {} slot/other {} (of targeted>=3, charge refused: {})", horse_state[0], horse_state[1], horse_state[2], horse_state[3], refused_turns);
+    eprintln!(
+        "REACT horse reversals by state: targeted<3 {} targeted>=3 {} sweeping {} slot/other {} (of targeted>=3, charge refused: {})",
+        horse_state[0], horse_state[1], horse_state[2], horse_state[3], refused_turns
+    );
     let (n, mean, p95, p50) = stat(&mut swing);
-    eprintln!("REACT new_target_to_windup swings={n} of {fresh_targets} new targets mean_ticks={mean:.2} p50_ticks={p50} p95_ticks={p95}");
+    eprintln!(
+        "REACT new_target_to_windup swings={n} of {fresh_targets} new targets mean_ticks={mean:.2} p50_ticks={p50} p95_ticks={p95}"
+    );
 }

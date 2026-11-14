@@ -998,7 +998,7 @@ fn debug_menu_reads_live_chest_and_carried_stack_through_command_path() {
                 crate::boundary::PlayerChange::Chat { message }
                     if *connection == ConnectionId(7) =>
                 {
-                    message.strip_prefix("SOLARIS_MENU ")
+                    message.strip_prefix("KRASNOKAMEN_MENU ")
                 }
                 _ => None,
             })

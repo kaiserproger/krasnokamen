@@ -193,7 +193,11 @@ fn horse_push(formation: &super::formation::FormationRuntime, bi: usize) -> [f64
         let length = distance.sqrt();
         let way = if length < 1e-8 {
             // Coincident horses part symmetrically by id.
-            if me.id < contact.id { [-1.0, 0.0] } else { [1.0, 0.0] }
+            if me.id < contact.id {
+                [-1.0, 0.0]
+            } else {
+                [1.0, 0.0]
+            }
         } else {
             away.map(|v| v / length)
         };
@@ -406,7 +410,11 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
                     && !wounded
                     && !routing
                 {
-                    if combat.sweeps.get(member.regiment).is_some_and(Option::is_some) {
+                    if combat
+                        .sweeps
+                        .get(member.regiment)
+                        .is_some_and(Option::is_some)
+                    {
                         // `speed` is the distance to the plan point in blocks: a rider
                         // that reaches it slows down instead of riding through it and
                         // turning back every few ticks.
@@ -416,7 +424,8 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
                         let away = mth::length2(slot[0] - position[0], slot[2] - position[2]);
                         let leader = formation.regiments[member.regiment].speed.abs()
                             / mc_physics::TICK_SECONDS;
-                        mounted_speed = mounted_speed.min((leader + away * SLOT_CATCH_UP).max(speed));
+                        mounted_speed =
+                            mounted_speed.min((leader + away * SLOT_CATCH_UP).max(speed));
                     }
                 }
                 velocity[0] *= mounted_speed / speed;
@@ -443,7 +452,9 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             } else {
                 super::steering::Mover::Rider
             };
-            let velocity = super::steering::around_obstacles(frame, formation, horse, velocity, heading, mover);
+            let velocity = super::steering::around_obstacles(
+                frame, formation, horse, velocity, heading, mover,
+            );
             battle.columns.drive[horse_bi] = velocity;
             battle.columns.drive[bi] = [0.0; 3];
             continue;

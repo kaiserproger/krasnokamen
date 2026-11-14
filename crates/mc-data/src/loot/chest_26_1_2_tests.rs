@@ -29,7 +29,7 @@ fn advancement_reward_loot_uses_existing_rolls_without_weakening_chest_type() {
         "entries":[{"type":"minecraft:item","name":"minecraft:bread",
             "functions":[{"function":"minecraft:set_count","count":3}]}]}]}"#;
     let table = ChestLootTable::compile_advancement_reward(id("test:reward"), raw).unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let drops = table.roll(&mut ChestRng::new(7), &items, 0.0).unwrap();
     assert_eq!(drops.len(), 1);
     assert_eq!(
@@ -73,7 +73,7 @@ fn random_book_loot_is_an_enchanted_book_with_canonical_stored_enchantments() {
         }]}]}"##,
     )
     .unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let stack = table
         .roll(&mut ChestRng::new(7), &items, 0.0)
         .unwrap()
@@ -105,7 +105,7 @@ fn opening_luck_adds_floored_bonus_rolls_and_rejects_unbounded_context() {
             "entries":[{"type":"minecraft:item","name":"minecraft:bread"}]}]}"#,
     )
     .unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let drops = table.roll(&mut ChestRng::new(7), &items, 2.5).unwrap();
     assert_eq!(drops.iter().map(|stack| stack.count).sum::<i32>(), 3);
     assert!(table.roll(&mut ChestRng::new(7), &items, f32::NAN).is_err());
@@ -123,7 +123,7 @@ fn all_empty_pool_rolls_nothing() {
         table
             .roll(
                 &mut ChestRng::new(1),
-                &crate::items::solaris_required_items(),
+                &crate::items::krasnokamen_required_items(),
                 0.0
             )
             .unwrap()
@@ -142,7 +142,7 @@ fn missing_table_file_fails_closed() {
 
 #[test]
 fn luck_quality_can_suppress_entries_and_an_entire_pool() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let table = ChestLootTable::compile(
         id("minecraft:chests/quality"),
         r#"{
@@ -186,7 +186,7 @@ fn fractional_bonus_uses_vanilla_float_multiplication_before_floor() {
         ]}]}"#,
     )
     .unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let drops = table.roll(&mut ChestRng::new(7), &items, 100.0).unwrap();
     assert_eq!(drops.iter().map(|stack| stack.count).sum::<i32>(), 30);
 }
@@ -203,7 +203,7 @@ fn functions_keep_order_and_conditions_at_each_scope() {
             {"function":"minecraft:set_count","count":60,"conditions":[{"condition":"minecraft:random_chance","chance":0}]}
         ]}]}]}"#;
     let table = ChestLootTable::compile(id("test:ordered"), raw).unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let drops = table.roll(&mut ChestRng::new(4), &items, 0.0).unwrap();
     assert_eq!(drops[0].count, 6);
 }
@@ -216,7 +216,7 @@ fn explicit_random_options_produce_swift_sneak_not_default_book_pool() {
         }]
     }]}]}"#;
     let table = ChestLootTable::compile(id("test:swift"), raw).unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let mut seen = std::collections::BTreeSet::new();
     for seed in 0..64 {
         let a = table.roll(&mut ChestRng::new(seed), &items, 0.0).unwrap();
@@ -246,7 +246,7 @@ fn component_functions_survive_native_nbt_roundtrip() {
         ]
     }]}]}"#;
     let table = ChestLootTable::compile(id("test:components"), raw).unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let drops = table.roll(&mut ChestRng::new(3), &items, 0.0).unwrap();
     let stack = &drops[0];
     assert_eq!(
@@ -278,7 +278,7 @@ fn maps_require_native_owner_and_never_fabricate_empty_fallback() {
         }]
     }]}]}"#;
     let table = ChestLootTable::compile(id("test:map"), raw).unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     assert!(table.requires_world_context());
     let mut rng = ChestRng::new(3);
     let error = table.roll(&mut rng, &items, 0.0).unwrap_err().to_string();
@@ -384,7 +384,7 @@ fn every_vanilla_chest_compiles_rolls_and_is_seed_deterministic() {
     .unwrap();
     assert_eq!(ids.len(), 56, "26.1.2 chest table inventory changed");
     assert_eq!(catalog.len(), 77, "56 chests, 6 archaeology, 15 hero gifts");
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     for (id, table) in &catalog.tables {
         for seed in 0..16 {
             // Test-only deterministic map owner; real saved-map/locate integration
@@ -439,7 +439,7 @@ fn every_vanilla_chest_compiles_rolls_and_is_seed_deterministic() {
 #[ignore = "requires selected local vanilla data"]
 fn vanilla_signature_rewards_are_preserved() {
     let catalog = load_vanilla(&workspace_path("data/vanilla")).unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let ancient = catalog.get(&id("minecraft:chests/ancient_city")).unwrap();
     let end = catalog
         .get(&id("minecraft:chests/end_city_treasure"))
@@ -511,7 +511,7 @@ fn selected_catalog_load_follows_references_and_propagates_map_preflight() {
         table
             .roll(
                 &mut ChestRng::new(1),
-                &crate::items::solaris_required_items(),
+                &crate::items::krasnokamen_required_items(),
                 0.0
             )
             .is_err()
@@ -520,7 +520,7 @@ fn selected_catalog_load_follows_references_and_propagates_map_preflight() {
 
 #[test]
 fn set_damage_changes_durability_but_leaves_nondurable_trial_loot_intact() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     for (item, expected) in [
         ("minecraft:iron_pickaxe", Some(125)),
         ("minecraft:compass", None),

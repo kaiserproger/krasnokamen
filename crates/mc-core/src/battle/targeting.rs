@@ -225,7 +225,8 @@ pub const CONTACT_RETARGET_TICKS: u64 = 4;
 const CONTACT_HOLD_TICKS: u64 = 20;
 
 fn fast_due(id: EntityId, tick: u64) -> bool {
-    tick % CONTACT_RETARGET_TICKS == i64::from(id.0).rem_euclid(CONTACT_RETARGET_TICKS as i64) as u64
+    tick % CONTACT_RETARGET_TICKS
+        == i64::from(id.0).rem_euclid(CONTACT_RETARGET_TICKS as i64) as u64
 }
 
 /// A fighter looks faster only within this many blocks of the enemy regiment's block.
@@ -303,58 +304,62 @@ pub(crate) fn update(frame: &super::Frame<'_>, battle: &mut super::BattleState) 
     let grid = &battle.grid;
     let entities = frame.entities;
     let tick = frame.tick;
-    let sample = |(chunk_index, (chunk, hold)): (usize, (&mut [Option<EnemyTarget>], &mut [u64]))| {
-        let mut work = Work::default();
-        for (offset, (target, hold)) in chunk.iter_mut().zip(hold.iter_mut()).enumerate() {
-            let bi = chunk_index * TARGET_CHUNK + offset;
-            if !eligible(formation, columns, bi) {
-                *target = None;
-                continue;
-            }
-            let id = columns.ids[bi];
-            let due = retarget_due(id, tick);
-            // In contact (or just out of it, or standing in the enemy block): a fighter who
-            // loses his man looks again at once, and looks for a better one every few ticks.
-            let hot = !columns.ranged[bi] && (*hold > tick || near_contact(formation, bi));
-            if !due {
-                let slack = if bi < formation.members.len() && formation.loose_order_at(bi) {
-                    LOOSE_RETAIN_BLOCKS
+    let sample =
+        |(chunk_index, (chunk, hold)): (usize, (&mut [Option<EnemyTarget>], &mut [u64]))| {
+            let mut work = Work::default();
+            for (offset, (target, hold)) in chunk.iter_mut().zip(hold.iter_mut()).enumerate() {
+                let bi = chunk_index * TARGET_CHUNK + offset;
+                if !eligible(formation, columns, bi) {
+                    *target = None;
+                    continue;
+                }
+                let id = columns.ids[bi];
+                let due = retarget_due(id, tick);
+                // In contact (or just out of it, or standing in the enemy block): a fighter who
+                // loses his man looks again at once, and looks for a better one every few ticks.
+                let hot = !columns.ranged[bi] && (*hold > tick || near_contact(formation, bi));
+                if !due {
+                    let slack = if bi < formation.members.len() && formation.loose_order_at(bi) {
+                        LOOSE_RETAIN_BLOCKS
+                    } else {
+                        0.0
+                    };
+                    *target = (*target)
+                        .and_then(|target| retained(entities, columns, bi, target.id, slack));
+                    if target.is_some() {
+                        *hold = tick + CONTACT_HOLD_TICKS;
+                    }
+                    if (target.is_some() && !(hot && fast_due(id, tick)))
+                        || (target.is_none() && !hot)
+                    {
+                        continue;
+                    }
+                }
+                work.retargeted += 1;
+                *target = if columns.ranged[bi] && bi < formation.members.len() {
+                    let roll = super::combat::roll(id, tick / RETARGET_TICKS, 0x4152_4348) as u64;
+                    formation.archer_target(bi, roll).and_then(|target| {
+                        work.examined += 1;
+                        retained(entities, columns, bi, target, 0.0)
+                    })
                 } else {
-                    0.0
+                    let query = grid.nearest_enemy(
+                        Unit {
+                            id,
+                            faction: columns.factions[bi],
+                            pos: columns.positions[bi],
+                        },
+                        columns.reach[bi],
+                    );
+                    work.examined += query.examined;
+                    query.target
                 };
-                *target = (*target).and_then(|target| retained(entities, columns, bi, target.id, slack));
                 if target.is_some() {
                     *hold = tick + CONTACT_HOLD_TICKS;
                 }
-                if (target.is_some() && !(hot && fast_due(id, tick))) || (target.is_none() && !hot) {
-                    continue;
-                }
             }
-            work.retargeted += 1;
-            *target = if columns.ranged[bi] && bi < formation.members.len() {
-                let roll = super::combat::roll(id, tick / RETARGET_TICKS, 0x4152_4348) as u64;
-                formation.archer_target(bi, roll).and_then(|target| {
-                    work.examined += 1;
-                    retained(entities, columns, bi, target, 0.0)
-                })
-            } else {
-                let query = grid.nearest_enemy(
-                    Unit {
-                        id,
-                        faction: columns.factions[bi],
-                        pos: columns.positions[bi],
-                    },
-                    columns.reach[bi],
-                );
-                work.examined += query.examined;
-                query.target
-            };
-            if target.is_some() {
-                *hold = tick + CONTACT_HOLD_TICKS;
-            }
-        }
-        work
-    };
+            work
+        };
     let merge = |a: Work, b: Work| Work {
         retargeted: a.retargeted + b.retargeted,
         examined: a.examined + b.examined,

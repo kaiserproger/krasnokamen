@@ -37,7 +37,7 @@ fn member(
     if let Some(household) = household {
         runtime.push(("household".into(), Tag::String(household.into())));
     }
-    fields.push(("solaris:VillagerRuntime".into(), Tag::Compound(runtime)));
+    fields.push(("krasnokamen:VillagerRuntime".into(), Tag::Compound(runtime)));
     fields
 }
 
