@@ -12,6 +12,71 @@ from tools.harness import scenarios
 from tools.harness.backends import scene_shot
 
 
+class DebugOverlayAndPixelSteps(unittest.TestCase):
+    """F3 through the dedicated tool, the generic pixel window, and the drawn-index bound."""
+
+    def test_toggle_debug_overlay_is_a_validated_step_and_calls_the_client_tool(self):
+        steps = [{"toggle_debug_overlay": True}, {"toggle_debug_overlay": False}]
+        scene_shot.validate_steps(steps, "native")
+        self.assertEqual([call for call in scene_shot.scene_mcp_calls(steps)],
+                         [("minecraft_toggle_debug_overlay", {"enabled": True}),
+                          ("minecraft_toggle_debug_overlay", {"enabled": False})])
+        for bad in ({"toggle_debug_overlay": "on"}, {"toggle_debug_overlay": 1}, {"toggle_debug_overlay": None}):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                scene_shot.validate_steps([bad], "native")
+
+    def test_pixel_window_counts_only_the_color_box_inside_the_window(self):
+        from PIL import Image
+
+        frame = Image.new("RGB", scene_shot.PIXEL_FRAME, (10, 20, 30))
+        for y in range(100, 110):
+            for x in range(50, 60):
+                frame.putpixel((x, y), (200, 40, 40))
+        count = scene_shot.pixel_window_count(frame, [40, 90, 70, 120], {"min": [180, 30, 30], "max": [255, 60, 60]})
+        self.assertEqual(count, 100)
+        # The same window outside the drawn rectangle sees none of those pixels.
+        self.assertEqual(scene_shot.pixel_window_count(frame, [0, 0, 30, 30], {"min": [180, 30, 30], "max": [255, 60, 60]}), 0)
+
+    def test_pixel_window_refuses_a_frame_that_is_not_the_matched_size(self):
+        from PIL import Image
+
+        with self.assertRaisesRegex(ValueError, "pixel_window requires"):
+            scene_shot.pixel_window_count(Image.new("RGB", (640, 360)), [0, 0, 10, 10],
+                                          {"min": [0, 0, 0], "max": [255, 255, 255]})
+
+    def test_pixel_window_step_validation(self):
+        good = {"pixel_window": {"name": "leg", "shot": "front", "window": [10, 20, 30, 40],
+                                 "color": {"min": [1, 2, 3], "max": [4, 5, 6]}, "min_pixels": 1}}
+        scene_shot.validate_steps([good], "native")
+        broken = [
+            {"pixel_window": {**good["pixel_window"], "name": "bad name"}},
+            {"pixel_window": {**good["pixel_window"], "window": [30, 20, 10, 40]}},
+            {"pixel_window": {**good["pixel_window"], "window": [10, 20, 3000, 40]}},
+            {"pixel_window": {**good["pixel_window"], "color": {"min": [9, 2, 3], "max": [4, 5, 6]}}},
+            {"pixel_window": {**good["pixel_window"], "min_pixels": 0}},
+            {"pixel_window": {**good["pixel_window"], "shot": ""}},
+            {"pixel_window": {k: v for k, v in good["pixel_window"].items() if k != "min_pixels"}},
+        ]
+        for bad in broken:
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                scene_shot.validate_steps([bad], "native")
+
+    def test_render_metrics_and_the_drawn_index_bound(self):
+        metrics = scene_shot.render_metrics({"render": {"draw_calls": 12, "index_count": 4000,
+                                                        "entity_submitted_indices": 900}})
+        self.assertEqual(metrics["index_count"], 4000)
+        with self.assertRaises(RuntimeError):
+            scene_shot.render_metrics({"render": {"draw_calls": 1}})
+        with self.assertRaises(RuntimeError):
+            scene_shot.render_metrics({})
+        first = {"index_count": 4000}
+        # Re-submitted per frame: bounded.
+        self.assertTrue(scene_shot.bounded_draw({"index_count": 4200}, [first], max_index_count=10000, max_growth=1.5))
+        # Accumulating with camera movement: grows past both the absolute and the relative bound.
+        self.assertFalse(scene_shot.bounded_draw({"index_count": 7000}, [first], max_index_count=10000, max_growth=1.5))
+        self.assertFalse(scene_shot.bounded_draw({"index_count": 20000}, [first], max_index_count=10000, max_growth=10))
+
+
 class SceneShotTests(unittest.TestCase):
     def test_java_chat_hidden_is_opt_in(self):
         self.assertIn("chatVisibility:0\n", scene_shot.java_options(8, 70))

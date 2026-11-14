@@ -290,6 +290,8 @@ def scene_mcp_calls(steps: list[dict[str, Any]]):
         elif kind == "falling_block_capture":
             yield "minecraft_wait_for_visible_entity", {"entity_type": "minecraft:falling_block", "radius": 32, "timeout_seconds": 30}
             yield "minecraft_wait_ticks", {"ticks": 1}
+        elif kind == "toggle_debug_overlay":
+            yield "minecraft_toggle_debug_overlay", {"enabled": value}
         elif kind == "cmd":
             yield "minecraft_send_chat", {"message": value, "command": True}
         elif kind == "tp":
@@ -366,6 +368,26 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
             valid = client == "native" and isinstance(value, str) and bool(re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", value))
         elif kind == "wait_screen":
             valid = isinstance(value, str) and bool(value)
+        elif kind == "toggle_debug_overlay":
+            valid = type(value) is bool
+        elif kind == "pixel_window":
+            valid = (isinstance(value, dict)
+                     and set(value) == {"name", "shot", "window", "color", "min_pixels"}
+                     and isinstance(value["name"], str)
+                     and bool(re.fullmatch(r"[A-Za-z0-9_-]+", value["name"]))
+                     and isinstance(value["shot"], str) and bool(value["shot"])
+                     and isinstance(value["window"], list) and len(value["window"]) == 4
+                     and all(type(v) is int for v in value["window"])
+                     and 0 <= value["window"][0] < value["window"][2] < PIXEL_FRAME[0]
+                     and 0 <= value["window"][1] < value["window"][3] < PIXEL_FRAME[1]
+                     and isinstance(value["color"], dict) and set(value["color"]) == {"min", "max"}
+                     and all(isinstance(value["color"][k], list) and len(value["color"][k]) == 3
+                             and all(type(c) is int and 0 <= c <= 255 for c in value["color"][k])
+                             for k in ("min", "max"))
+                     and all(value["color"]["min"][i] <= value["color"]["max"][i] for i in range(3))
+                     and type(value["min_pixels"]) is int and value["min_pixels"] > 0)
+        elif kind == "assert_render_bounded":
+            valid = (round(value, 12) >= 0) if isinstance(value, float) else True
         elif kind == "key":
             valid = isinstance(value, dict) and set(value) == {"keys", "ticks"}
         elif kind in ("look", "hotbar", "use_item_on", "click_screen_button"):
@@ -461,6 +483,53 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
 PROFESSIONS = ("none", "armorer", "butcher", "cartographer", "cleric", "farmer", "fisherman",
                "fletcher", "leatherworker", "librarian", "mason", "nitwit", "shepherd",
                "toolsmith", "weaponsmith")
+
+
+PIXEL_FRAME = (1280, 720)
+
+
+def pixel_window_count(frame, window, color) -> int:
+    """Pixels inside `window` whose RGB lies inside the inclusive `color` box.
+
+    A capture at another size cannot be compared with hand-picked coordinates, so it refuses."""
+    if frame.size != PIXEL_FRAME:
+        raise ValueError(f"pixel_window requires the {PIXEL_FRAME[0]}x{PIXEL_FRAME[1]} frame, got {frame.size}")
+    x0, y0, x1, y1 = window
+    low, high = color["min"], color["max"]
+    count = 0
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            r, g, b = frame.convert("RGB").getpixel((x, y))
+            if low[0] <= r <= high[0] and low[1] <= g <= high[1] and low[2] <= b <= high[2]:
+                count += 1
+    return count
+
+
+def render_metrics(observation) -> dict[str, int]:
+    """The client's own draw counters (data.render): present whenever a renderer exists, F3 or not."""
+    render = observation.get("render") if isinstance(observation, dict) else None
+    if not isinstance(render, dict):
+        raise RuntimeError("client observation omitted render metrics (data.render)")
+    metrics = {}
+    for name in ("draw_calls", "index_count", "entity_submitted_indices"):
+        value = render.get(name)
+        if type(value) is not int or value < 0:
+            raise RuntimeError(f"client observation render metrics lack a non-negative {name}")
+        metrics[name] = value
+    return metrics
+
+
+def bounded_draw(metrics, samples, *, max_index_count, max_growth) -> bool:
+    """True when the drawn index count stays bounded across samples instead of accumulating.
+
+    `samples` are the earlier render_metrics dicts of the same run: a count that exceeds both the
+    absolute bound and `max_growth` times the first sample means indices accumulate with camera
+    movement (the ISSUE-1-03 symptom) rather than being re-submitted per frame."""
+    if not samples:
+        return metrics["index_count"] <= max_index_count
+    first = samples[0]["index_count"]
+    return (metrics["index_count"] <= max_index_count
+            and metrics["index_count"] <= max_growth * max(first, 1))
 
 
 def matching_entities(entities: list[dict[str, Any]], spec: dict[str, Any]) -> list[dict[str, Any]]:
@@ -705,6 +774,28 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             (artifact / f"{value}-evidence.json").write_text(json.dumps({
                 "entity_uuid": identity, "samples": samples, "sand_bounds": boxes,
             }, indent=2) + "\n")
+        elif kind == "toggle_debug_overlay":
+            # F3 is a dedicated client tool: the named-key list has no f3, so press it through it.
+            result = probe.call("minecraft_toggle_debug_overlay", {"enabled": value})
+            probe.report.setdefault("debug_overlay", []).append(
+                {"enabled": value, "lines": result.get("lines"), "status": result.get("status")})
+            probe.check(f"debug_overlay_{'on' if value else 'off'}",
+                        result.get("debug_overlay") is value)
+        elif kind == "assert_render_bounded":
+            samples = probe.report.setdefault("render_samples", [])
+            metrics = render_metrics(probe.observe())
+            samples.append({**metrics, "max_index_count": value["max_index_count"],
+                            "max_growth": value["max_growth"]})
+            probe.check("render_drawn_index_bounded",
+                        bounded_draw(metrics, samples[:-1], **{k: value[k] for k in ("max_index_count", "max_growth")}))
+        elif kind == "pixel_window":
+            from PIL import Image
+
+            shot_path = artifact / "screenshots" / f"{value['shot']}.png"
+            count = pixel_window_count(Image.open(shot_path), value["window"], value["color"])
+            probe.report.setdefault("pixel_windows", []).append(
+                {"name": value["name"], "window": value["window"], "color": value["color"], "count": count})
+            probe.check(f"{value['name']}_pixels", count >= value["min_pixels"])
         elif kind == "goat_horns_upright":
             from . import goat_horn_oracle
 
