@@ -2,7 +2,7 @@
 use crate::boundary::{ChangeSet, ConnectionId, EntityId, PlayerChange};
 use crate::command_feedback::{text, translated};
 use crate::commands::{
-    Command, Destination, Selector, SelectorKind, SelectorSort, Target, Weather,
+    BorderCommand, Command, Destination, Selector, SelectorKind, SelectorSort, Target, Weather,
 };
 use crate::entities::EntityKind;
 use crate::tick::{DamagePiece, TickState};
@@ -29,6 +29,59 @@ pub(crate) use selectors::*;
 mod settlement;
 use settlement::*;
 
+pub(crate) fn execute_border(
+    border: &mut crate::command_border::Border,
+    command: BorderCommand,
+    origin: [f64; 3],
+) -> String {
+    match command {
+        BorderCommand::Get => return format!("The world border is {} blocks wide", border.size),
+        BorderCommand::Center([x, z]) => {
+            border.center_x = (x.value + if x.relative { origin[0] } else { 0.0 })
+                .clamp(-30_000_000.0, 30_000_000.0);
+            border.center_z = (z.value + if z.relative { origin[2] } else { 0.0 })
+                .clamp(-30_000_000.0, 30_000_000.0);
+        }
+        // Vanilla `setSize`: time>0 starts `lerpSizeBetween(current,
+        // target, gameTime, gameTime + time)`; time==0 installs instantly
+        // (`WorldBorderCommand.setSize` bytecode branches on lload time).
+        // `add` targets current size + delta with the in-flight remaining
+        // time added (`lambda$register$1`: getSize + distance, getLerpTime
+        // + time).
+        BorderCommand::Set { size, time } => {
+            if time > 0 && size != border.size {
+                border.lerp_target = size;
+                border.lerp_remaining = time;
+            } else {
+                border.size = size;
+                border.lerp_target = size;
+                border.lerp_remaining = 0;
+            }
+        }
+        BorderCommand::Add { delta, time } => {
+            let target = (border.size + delta).clamp(1.0, crate::command_border::MAX_SIZE);
+            let remaining = if time > 0 {
+                border.lerp_remaining.saturating_add(time)
+            } else {
+                0
+            };
+            if remaining > 0 && target != border.size {
+                border.lerp_target = target;
+                border.lerp_remaining = remaining;
+            } else {
+                border.size = target;
+                border.lerp_target = target;
+                border.lerp_remaining = 0;
+            }
+        }
+        BorderCommand::DamageBuffer(value) => border.safe_zone = value,
+        BorderCommand::DamageAmount(value) => border.damage_per_block = value,
+        BorderCommand::WarningDistance(value) => border.warning_blocks = value,
+        BorderCommand::WarningTime(value) => border.warning_time = value,
+    }
+    format!("Set the world border to {} blocks wide", border.size)
+}
+
 pub(crate) fn supports_store_result(command: &Command) -> bool {
     match command {
         Command::Kill { .. }
@@ -51,7 +104,7 @@ pub(crate) fn supports_store_result(command: &Command) -> bool {
         | Command::DebugStop
         | Command::DebugFunction { .. }
         | Command::GameRule { value: None, .. }
-        | Command::WorldBorder(crate::command_border::BorderCommand::Get)
+        | Command::WorldBorder(BorderCommand::Get)
         | Command::World(
             crate::command_world::WorldCommand::SetBlock { .. }
             | crate::command_world::WorldCommand::Fill { .. }
@@ -976,11 +1029,11 @@ pub(crate) fn execute(
                 || state.world.world_spawn_position(),
                 |(position, _)| position,
             );
-            let message = crate::command_border::execute(&mut state.border, *command, origin);
+            let message = execute_border(&mut state.border, *command, origin);
             if accepts_success(state, connection) {
                 state.push_player(connection, PlayerChange::Chat { message });
             }
-            if matches!(command, crate::command_border::BorderCommand::Get) {
+            if matches!(command, BorderCommand::Get) {
                 return Success((state.border.size + 0.5).floor() as i32);
             }
             return CommandResult::Completed;

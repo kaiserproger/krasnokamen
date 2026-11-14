@@ -367,7 +367,11 @@ pub(crate) fn gateway_from_fields(
         }
         Ok(found)
     };
-    if !matches!(find("id")?,Some(Tag::String(id)) if id == "minecraft:end_gateway") {
+    if !matches!(
+        find("id")?,
+        Some(Tag::String(id))
+            if id == mc_data::block_entity_kinds::BlockEntityKind::EndGateway.vanilla_id()
+    ) {
         return Err(fail("id must be minecraft:end_gateway"));
     }
     for (key, value) in [("x", pos.x), ("y", pos.y), ("z", pos.z)] {
@@ -430,7 +434,14 @@ fn store_gateway(state: &mut TickState, pos: BlockPos, image: Gateway, journal: 
         state.world.fold_overlay();
     }
     let mut fields = vec![
-        ("id".into(), Tag::String("minecraft:end_gateway".into())),
+        (
+            "id".into(),
+            Tag::String(
+                mc_data::block_entity_kinds::BlockEntityKind::EndGateway
+                    .vanilla_id()
+                    .into(),
+            ),
+        ),
         ("x".into(), Tag::Int(pos.x)),
         ("y".into(), Tag::Int(pos.y)),
         ("z".into(), Tag::Int(pos.z)),
@@ -735,7 +746,14 @@ pub(crate) fn after_blocks(state: &mut TickState, writes: &[(BlockPos, u32)]) {
             );
         } else if named(state, pos, "end_portal") {
             let root = Tag::Compound(vec![
-                ("id".into(), Tag::String("minecraft:end_portal".into())),
+                (
+                    "id".into(),
+                    Tag::String(
+                        mc_data::block_entity_kinds::BlockEntityKind::EndPortal
+                            .vanilla_id()
+                            .into(),
+                    ),
+                ),
                 ("x".into(), Tag::Int(pos.x)),
                 ("y".into(), Tag::Int(pos.y)),
                 ("z".into(), Tag::Int(pos.z)),

@@ -497,7 +497,11 @@ pub(super) fn early_entity_rest(
         || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::frog::is_frog(type_id))
             && crate::frog::drive(view.entities.row(slot)).is_some()
         || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::cat::is_cat(type_id))
-            && crate::cat::drive(view.entities.row(slot)).is_some()
+            && crate::cat::drive(
+                view.entities.row(slot).entity_life.cat_relax.as_ref(),
+                view.entities.row(slot).speed,
+            )
+            .is_some()
         || view
             .entities
             .row(slot)
@@ -2220,7 +2224,10 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
         vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
         look_target = Some(target);
     } else if crate::cat::is_cat(row.type_id)
-        && let Some((target, speed)) = crate::cat::drive(ctx.entities.row(row.slot))
+        && let Some((target, speed)) = crate::cat::drive(
+            ctx.entities.row(row.slot).entity_life.cat_relax.as_ref(),
+            ctx.entities.row(row.slot).speed,
+        )
     {
         vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
         look_target = Some(target);

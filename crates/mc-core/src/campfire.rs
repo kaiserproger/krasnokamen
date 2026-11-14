@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use mc_data::block_entity_kinds::BlockEntityKind;
 use mc_data::item_nbt::{field, stack_to_fields};
 use mc_data::recipes::{Recipe, RecipeKind, ingredient_accepts_stack};
 use mc_data::{ItemStack, items::ItemRegistry};
@@ -39,15 +40,16 @@ fn recipe<'a>(rules: &ItemRules<'a>, stack: &ItemStack) -> Option<&'a Recipe> {
     })
 }
 
+fn is_campfire(id: &mc_data::Identifier) -> bool {
+    id.namespace() == "minecraft"
+        && BlockEntityKind::Campfire.block_paths().contains(&id.path())
+}
+
 fn lit(state: &TickState, pos: BlockPos) -> Option<bool> {
     let block = state.registry.blocks.by_id(mc_world::BlockStateId(
         state.world.block_at(pos.x, pos.y, pos.z)?,
     ))?;
-    matches!(
-        block.block.id.as_str(),
-        "minecraft:campfire" | "minecraft:soul_campfire"
-    )
-    .then(|| {
+    is_campfire(&block.block.id).then(|| {
         block
             .properties
             .iter()
@@ -73,12 +75,7 @@ pub(crate) fn decode_chunk(
                 pos.z.rem_euclid(16) as u8,
             )
             .and_then(|id| registry.blocks.by_id(id))
-            .is_some_and(|block| {
-                matches!(
-                    block.block.id.as_str(),
-                    "minecraft:campfire" | "minecraft:soul_campfire"
-                )
-            });
+            .is_some_and(|block| is_campfire(&block.block.id));
         if is_campfire {
             let campfire = CampfireState::decode(bytes, &registry.items)
                 .ok_or_else(|| format!("campfire {pos:?}: undecodable block entity"))?;
@@ -104,10 +101,7 @@ pub(crate) fn relight(state: &mut TickState, pos: BlockPos) -> bool {
     let Some(block) = state.registry.blocks.by_id(mc_world::BlockStateId(current)) else {
         return false;
     };
-    if !matches!(
-        block.block.id.as_str(),
-        "minecraft:campfire" | "minecraft:soul_campfire"
-    ) {
+    if !is_campfire(&block.block.id) {
         return false;
     }
     if block
@@ -383,7 +377,10 @@ impl CampfireState {
         let mut fields = self.items_nbt(items);
         let update = sync.then(|| Tag::Compound(fields.clone()));
         fields.extend([
-            ("id".into(), Tag::String("minecraft:campfire".into())),
+            (
+                "id".into(),
+                Tag::String(BlockEntityKind::Campfire.vanilla_id().into()),
+            ),
             ("x".into(), Tag::Int(pos.x)),
             ("y".into(), Tag::Int(pos.y)),
             ("z".into(), Tag::Int(pos.z)),

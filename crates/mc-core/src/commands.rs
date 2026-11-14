@@ -374,7 +374,7 @@ pub enum Command {
         target: Target,
         levels: bool,
     },
-    WorldBorder(crate::command_border::BorderCommand),
+    WorldBorder(BorderCommand),
     BossBar(crate::command_bossbar::BossBarCommand),
     Settlement(crate::settlements::commands::SettlementCommand),
     World(crate::command_world::WorldCommand),
@@ -493,7 +493,7 @@ pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
         }
         "xp" | "experience" => parse_experience(args),
         "summon" => parse_summon(args),
-        "worldborder" => crate::command_border::parse(args).map(Command::WorldBorder),
+        "worldborder" => parse_border(args).map(Command::WorldBorder),
         "forceload" => crate::forceload::parse(args).map(Command::ForceLoad),
         "co" => crate::block_log::parse(args).map(Command::BlockLog),
         "setblock" | "fill" | "clone" | "spawnpoint" | "setworldspawn" => {
@@ -1432,6 +1432,116 @@ pub fn add_experience(experience: &mut Experience, amount: i32, levels: bool) {
         experience.add_levels(amount);
     } else {
         experience.add_points(amount);
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum BorderCommand {
+    Center([Coord; 2]),
+    Set { size: f64, time: i64 },
+    Add { delta: f64, time: i64 },
+    DamageBuffer(f64),
+    DamageAmount(f64),
+    WarningDistance(i32),
+    WarningTime(i32),
+    Get,
+}
+/// Vanilla `TimeArgument` units (TimeArgument.javap static init:
+/// d=24000, s=20, t=1, bare=1); minimum 0 for the border time argument
+/// (`TimeArgument.time(0)` at WorldBorderCommand.javap registration).
+fn parse_border_time(raw: &str) -> Option<i64> {
+    let (number, unit) = if let Some(prefix) = raw.strip_suffix('d') {
+        (prefix, 24_000_i64)
+    } else if let Some(prefix) = raw.strip_suffix('s') {
+        (prefix, 20_i64)
+    } else if let Some(prefix) = raw.strip_suffix('t') {
+        (prefix, 1_i64)
+    } else {
+        (raw, 1_i64)
+    };
+    let value: f64 = number.parse().ok()?;
+    if !value.is_finite() || value < 0.0 {
+        return None;
+    }
+    let scaled = (value * unit as f64).round();
+    (scaled < i64::MAX as f64).then_some(scaled as i64)
+}
+pub(crate) fn parse_border(args: &[&str]) -> Result<BorderCommand, CommandError> {
+    let invalid = || {
+        CommandError::Usage(
+            "worldborder <center x z|set size [time]|add size [time]|damage buffer|damage amount|warning distance|warning time|get>",
+        )
+    };
+    let number = |raw: &str| {
+        raw.parse::<f64>()
+            .ok()
+            .filter(|n| n.is_finite())
+            .ok_or_else(invalid)
+    };
+    match args {
+        ["get"] => Ok(BorderCommand::Get),
+        ["center", x, z] => {
+            let x = coord(x).filter(|c| !c.local).ok_or_else(invalid)?;
+            let z = coord(z).filter(|c| !c.local).ok_or_else(invalid)?;
+            Ok(BorderCommand::Center([x, z]))
+        }
+        ["damage", "buffer", value] => {
+            let value = number(value)?;
+            if value < 0.0 {
+                return Err(invalid());
+            }
+            Ok(BorderCommand::DamageBuffer(value))
+        }
+        ["damage", "amount", value] => {
+            let value = number(value)?;
+            if !(0.0..=5.0).contains(&value) {
+                return Err(invalid());
+            }
+            Ok(BorderCommand::DamageAmount(value))
+        }
+        ["warning", "distance", value] => {
+            let value = value
+                .parse::<i32>()
+                .ok()
+                .filter(|v| *v >= 0)
+                .ok_or_else(invalid)?;
+            Ok(BorderCommand::WarningDistance(value))
+        }
+        ["warning", "time", value] => {
+            let value = value
+                .parse::<i32>()
+                .ok()
+                .filter(|v| *v >= 0)
+                .ok_or_else(invalid)?;
+            Ok(BorderCommand::WarningTime(value))
+        }
+        [mode @ ("set" | "add"), size] => {
+            let size = number(size)?;
+            if *mode == "set" {
+                if !(1.0..=crate::command_border::MAX_SIZE).contains(&size) {
+                    return Err(invalid());
+                }
+                Ok(BorderCommand::Set { size, time: 0 })
+            } else {
+                Ok(BorderCommand::Add {
+                    delta: size,
+                    time: 0,
+                })
+            }
+        }
+        [mode @ ("set" | "add"), size, time] => {
+            let size = number(size)?;
+            let time = parse_border_time(time).ok_or_else(invalid)?;
+            if *mode == "set" {
+                if !(1.0..=crate::command_border::MAX_SIZE).contains(&size) {
+                    return Err(invalid());
+                }
+                Ok(BorderCommand::Set { size, time })
+            } else {
+                Ok(BorderCommand::Add { delta: size, time })
+            }
+        }
+        _ => Err(invalid()),
     }
 }
 

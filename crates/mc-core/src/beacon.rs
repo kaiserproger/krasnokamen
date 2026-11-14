@@ -126,7 +126,14 @@ fn allowed(primary: EffectId, level: i32) -> bool {
 fn store(state: &mut TickState, pos: BlockPos, mut fields: Vec<(String, Tag)>) {
     fields.retain(|(key, _)| !matches!(key.as_str(), "id" | "x" | "y" | "z"));
     fields.extend([
-        ("id".into(), Tag::String("minecraft:beacon".into())),
+        (
+            "id".into(),
+            Tag::String(
+                mc_data::block_entity_kinds::BlockEntityKind::Beacon
+                    .vanilla_id()
+                    .into(),
+            ),
+        ),
         ("x".into(), Tag::Int(pos.x)),
         ("y".into(), Tag::Int(pos.y)),
         ("z".into(), Tag::Int(pos.z)),

@@ -417,7 +417,14 @@ fn fields(
     pending: Option<&Pending>,
 ) -> Vec<(String, Tag)> {
     let mut fields = vec![
-        ("id".into(), Tag::String("minecraft:sculk_shrieker".into())),
+        (
+            "id".into(),
+            Tag::String(
+                mc_data::block_entity_kinds::BlockEntityKind::SculkShrieker
+                    .vanilla_id()
+                    .into(),
+            ),
+        ),
         ("x".into(), Tag::Int(pos.x)),
         ("y".into(), Tag::Int(pos.y)),
         ("z".into(), Tag::Int(pos.z)),

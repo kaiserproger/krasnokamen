@@ -57,6 +57,20 @@ pub struct ItemRules<'a> {
     pub recipes: &'a [Recipe],
 }
 
+impl crate::block_drops::BlockDropItems for ItemRules<'_> {
+    fn items(&self) -> &ItemRegistry {
+        self.items
+    }
+
+    fn facts(&self) -> &ItemFactsTable {
+        self.facts
+    }
+
+    fn tags(&self) -> &TagsData {
+        self.tags
+    }
+}
+
 impl ItemRules<'_> {
     #[must_use]
     pub fn max_stack(&self, stack: &ItemStack) -> i32 {
