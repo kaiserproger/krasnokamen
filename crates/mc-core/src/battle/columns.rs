@@ -36,6 +36,18 @@ struct StaticFacts {
 /// Mob type id with main- and off-hand item ids: archer classification inputs.
 type ClassificationKey = (u32, Option<u32>, Option<u32>);
 
+/// Cold-row facts, valid only until the next native wire mutation. The slot is
+/// merely an identity-checked lookup hint, including for dead retained bodies.
+#[derive(Debug, Default)]
+struct StaticFacts {
+    slot: Option<EntitySlot>,
+    valid: bool,
+    health: f32,
+    no_ai: bool,
+    carried: bool,
+    targetable: bool,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct Columns {
     pub ids: Vec<EntityId>,

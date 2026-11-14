@@ -455,7 +455,10 @@ pub(super) enum Outcome {
 /// Pursuit shifts the casualties to the broken side; never speeds up animations.
 pub(super) fn outcome(roll: u32, routing: bool, charge: f32, scale: f32) -> Outcome {
     let (removal, fatal) = if routing {
-        (1300.0, 900.0)
+        (
+            PURSUIT_REMOVAL_ROLLS,
+            PURSUIT_REMOVAL_ROLLS * PURSUIT_FATAL_SHARE,
+        )
     } else {
         (
             REMOVALS_PER_TEN_THOUSAND,
