@@ -2578,14 +2578,33 @@ const NEIGHBOUR_POS: crate::boundary::BlockPos = crate::boundary::BlockPos {
 };
 
 struct ContainerCustody {
+    dimension: Dimension,
     case: ContainerCase,
     slots: [Vec<mc_data::ItemStack>; 2],
     player: Vec<mc_data::ItemStack>,
     total: i32,
 }
 
+fn container_dimension(state: &TickState, dimension: Dimension) -> &TickState {
+    if dimension == Dimension::Overworld {
+        state
+    } else {
+        &state.other_dimensions[&dimension]
+    }
+}
+
+fn container_dimension_mut(state: &mut TickState, dimension: Dimension) -> &mut TickState {
+    if dimension == Dimension::Overworld {
+        state
+    } else {
+        state.other_dimensions.get_mut(&dimension).unwrap()
+    }
+}
+
 impl ContainerCustody {
     fn assert(&self, state: &TickState, base: Option<&mc_world::Chunk>, phase: &str) {
+        let root = state;
+        let state = container_dimension(root, self.dimension);
         let mut total = 0;
         for ((pos, kind), expected) in [(TRANSFER_POS, self.case.name), (NEIGHBOUR_POS, "chest")]
             .into_iter()
@@ -2616,20 +2635,23 @@ impl ContainerCustody {
             );
             total += actual.iter().map(|stack| stack.count.max(0)).sum::<i32>();
         }
-        let player = state
-            .offline_players
-            .get(&CONTAINER_PLAYER)
-            .map(|player| player.inventory.as_slice())
-            .unwrap_or_else(|| {
+        let player = worlds(root)
+            .find_map(|state| {
                 state
-                    .players
-                    .values()
-                    .next()
-                    .unwrap()
-                    .inventory
-                    .slots
-                    .as_slice()
-            });
+                    .offline_players
+                    .get(&CONTAINER_PLAYER)
+                    .map(|player| player.inventory.as_slice())
+            })
+            .or_else(|| {
+                worlds(root).find_map(|state| {
+                    state
+                        .players
+                        .values()
+                        .next()
+                        .map(|player| player.inventory.slots.as_slice())
+                })
+            })
+            .expect("the fixture player's live or offline inventory");
         assert_eq!(
             player, self.player,
             "{phase}: {} full player inventory",
@@ -2644,7 +2666,9 @@ impl ContainerCustody {
     }
 
     fn assert_stored(&self, world: &World, phase: &str) {
-        let source = world.state.world.chunk_source();
+        let source = container_dimension(&world.state, self.dimension)
+            .world
+            .chunk_source();
         let state = &world.state;
         let chunk = source.load_native(CONTAINER_CHUNK).unwrap().unwrap();
         let mut total = 0;
@@ -2684,6 +2708,7 @@ impl ContainerCustody {
             "{phase}: {} durable total custody",
             self.case.name
         );
+        assert_container_wal_pruned(world);
     }
 
     fn assert_replay(&self, replay: &Replay, base: &mc_world::Chunk, registry: &CoreRegistry) {
@@ -2778,6 +2803,7 @@ fn native_container_slots(
 fn container_transfer_fixture(
     directory: &std::path::Path,
     case: ContainerCase,
+    dimension: Dimension,
 ) -> (World, ContainerCustody) {
     use crate::boundary::{ClickMode, ConnectionId, Hand, PlayerInput};
     let mut world = World::new(directory);
@@ -2788,12 +2814,15 @@ fn container_transfer_fixture(
         permission_level: 0,
     }]);
     let entity = world.state.connections.entity_of(ConnectionId(1)).unwrap();
-    let slot = world.state.entities.slot_of(entity).unwrap();
-    world.state.entities.set_pos(slot, [34.5, 200.0, 42.5]);
+    if dimension != Dimension::Overworld {
+        world.transfer(entity, dimension);
+    }
+    let state = container_dimension_mut(&mut world.state, dimension);
+    let slot = state.entities.slot_of(entity).unwrap();
+    state.entities.set_pos(slot, [34.5, 200.0, 42.5]);
     let item = |name: &str, count| {
         mc_data::ItemStack::new(
-            world
-                .state
+            state
                 .registry
                 .items
                 .id_of(&mc_data::Identifier::parse(format!("minecraft:{name}")).unwrap())
@@ -2833,16 +2862,9 @@ fn container_transfer_fixture(
             },
             1,
         );
-        world
-            .state
-            .players
-            .get_mut(&entity)
-            .unwrap()
-            .inventory
-            .slots[0] = disc;
+        state.players.get_mut(&entity).unwrap().inventory.slots[0] = disc;
     }
-    world
-        .state
+    state
         .world
         .ensure_blocking(&[(CONTAINER_CHUNK, 0)].into_iter().collect());
     for ((pos, kind), slots) in [(TRANSFER_POS, case.name), (NEIGHBOUR_POS, "chest")]
@@ -2850,7 +2872,7 @@ fn container_transfer_fixture(
         .zip(&slots)
     {
         let id = crate::crafter::tests::block(
-            &world.state,
+            state,
             kind,
             if (shelf || chiseled) && pos == TRANSFER_POS {
                 &[("facing", "south")]
@@ -2858,8 +2880,8 @@ fn container_transfer_fixture(
                 &[]
             },
         );
-        world.state.world.set_block(pos.x, pos.y, pos.z, id);
-        world.state.block_entities.insert(
+        state.world.set_block(pos.x, pos.y, pos.z, id);
+        state.block_entities.insert(
             (pos.x, pos.y, pos.z),
             crate::tick::BlockEntityState {
                 slots: slots.clone(),
@@ -2868,14 +2890,13 @@ fn container_transfer_fixture(
             },
         );
     }
-    world.state.world.fold_overlay();
+    state.world.fold_overlay();
     if pot || chiseled || lectern {
-        let id = world
-            .state
+        let id = state
             .world
             .block_at(TRANSFER_POS.x, TRANSFER_POS.y, TRANSFER_POS.z)
             .unwrap();
-        crate::block_entity_defaults::after_blocks(&mut world.state, &[(TRANSFER_POS, id)]);
+        crate::block_entity_defaults::after_blocks(state, &[(TRANSFER_POS, id)]);
     }
     if chiseled {
         let mut fields = vec![
@@ -2887,28 +2908,28 @@ fn container_transfer_fixture(
             ("y".into(), mc_nbt::Tag::Int(TRANSFER_POS.y)),
             ("z".into(), mc_nbt::Tag::Int(TRANSFER_POS.z)),
         ];
-        mc_data::storage_blocks::encode_items(&mut fields, &slots[0], &world.state.registry.items);
+        mc_data::storage_blocks::encode_items(&mut fields, &slots[0], &state.registry.items);
         let mut bytes = Vec::new();
         mc_nbt::write_network(&mut bytes, &mc_nbt::Tag::Compound(fields)).unwrap();
-        world
-            .state
+        state
             .world
             .set_opaque_block_entity(TRANSFER_POS, Some(bytes));
     }
-    crate::redstone::containers::register(&mut world.state, TRANSFER_POS);
+    crate::redstone::containers::register(state, TRANSFER_POS);
     if case.name == "crafter" {
-        crate::crafter::register(&mut world.state, TRANSFER_POS);
+        crate::crafter::register(state, TRANSFER_POS);
     }
     if case.name == "brewing_stand" {
-        world.state.brewing.insert(
+        state.brewing.insert(
             (TRANSFER_POS.x, TRANSFER_POS.y, TRANSFER_POS.z),
             Default::default(),
         );
     }
     let mut expected = ContainerCustody {
+        dimension,
         case,
         slots,
-        player: world.state.players[&entity].inventory.slots.clone(),
+        player: state.players[&entity].inventory.slots.clone(),
         total: if chiseled {
             13
         } else if jukebox || pot || lectern {
@@ -2952,7 +2973,10 @@ fn container_transfer_fixture(
         expected.assert(&world.state, None, "fixture interaction");
         let first = if case.name == "brewing_stand" { 3 } else { 0 };
         for (index, count) in [(first, 2), (case.size - 1, 9)] {
-            let menu = world.state.players[&entity].open.as_ref().expect(case.name);
+            let menu = container_dimension(&world.state, dimension).players[&entity]
+                .open
+                .as_ref()
+                .expect(case.name);
             world.run(&[PlayerInput::ContainerClick {
                 connection: ConnectionId(1),
                 window: menu.window,
@@ -2962,7 +2986,9 @@ fn container_transfer_fixture(
                 mode: ClickMode::QuickMove,
             }]);
             expected.slots[0][index] = mc_data::ItemStack::EMPTY;
-            let player = &world.state.players[&entity].inventory.slots;
+            let player = &container_dimension(&world.state, dimension).players[&entity]
+                .inventory
+                .slots;
             let nonempty: Vec<_> = player
                 .iter()
                 .filter(|stack| !stack.is_empty())
@@ -2987,12 +3013,12 @@ fn container_transfer_fixture(
     (world, expected)
 }
 
-fn hydrate_container_chunk(world: &mut World) {
-    world
-        .state
+fn hydrate_container_chunk(world: &mut World, dimension: Dimension) {
+    let state = container_dimension_mut(&mut world.state, dimension);
+    state
         .world
         .ensure_blocking(&[(CONTAINER_CHUNK, 0)].into_iter().collect());
-    crate::tick::sync_chunk_block_entities(&mut world.state);
+    crate::tick::sync_chunk_block_entities(state);
 }
 
 #[test]
@@ -3073,7 +3099,7 @@ fn chiseled_bookshelf_old_save_interaction_preserves_all_books() {
         .state
         .entities
         .set_pos(entity_slot, [34.5, 200.0, 42.5]);
-    hydrate_container_chunk(&mut world);
+    hydrate_container_chunk(&mut world, Dimension::Overworld);
     let use_on = |x| PlayerInput::UseItemOn {
         connection: ConnectionId(1),
         position: TRANSFER_POS,
@@ -3118,7 +3144,7 @@ fn chiseled_bookshelf_old_save_interaction_preserves_all_books() {
     drop(world);
 
     let mut world = World::open(config);
-    hydrate_container_chunk(&mut world);
+    hydrate_container_chunk(&mut world, Dimension::Overworld);
     let actual = &world
         .state
         .block_entities
@@ -3142,12 +3168,14 @@ fn chiseled_bookshelf_old_save_interaction_preserves_all_books() {
     );
 }
 
-fn container_replay_checkpoint(case: ContainerCase, refused: bool) {
+fn container_replay_checkpoint(case: ContainerCase, dimension: Dimension, refused: bool) {
     let directory = tempfile::tempdir().unwrap();
-    let (world, expected) = container_transfer_fixture(directory.path(), case);
+    let (world, expected) = container_transfer_fixture(directory.path(), case, dimension);
     let config = world.config.clone();
     let committed = world.manifest.tick;
-    let source = world.state.world.chunk_source();
+    let source = container_dimension(&world.state, dimension)
+        .world
+        .chunk_source();
     let store = Arc::clone(source.native.as_ref().unwrap());
     let registry = Arc::clone(&world.state.registry);
     let valid = source.load_native(CONTAINER_CHUNK).unwrap().unwrap();
@@ -3162,7 +3190,7 @@ fn container_replay_checkpoint(case: ContainerCase, refused: bool) {
         .unwrap()
     };
     let tail = replay();
-    let tail = &tail.dimensions[&Dimension::Overworld];
+    let tail = &tail.dimensions[&dimension];
     if matches!(case.name, "jukebox" | "chiseled_bookshelf" | "lectern") {
         assert_eq!(
             tail.blocks.keys().copied().collect::<Vec<_>>(),
@@ -3224,20 +3252,19 @@ fn container_replay_checkpoint(case: ContainerCase, refused: bool) {
             // These owners already need the chunk resident during replay. They
             // must refuse startup rather than reach a lossy checkpoint.
             for _ in 0..2 {
-                let Err(error) = recover_dimension_state(&config, Dimension::Overworld) else {
+                let Err(error) = recover_dimension_state(&config, dimension) else {
                     panic!("{}: opaque replay opened an unloadable chunk", case.name);
                 };
                 assert!(error.to_string().contains(&refusal), "{error}");
                 assert_eq!(read_manifest(&config).unwrap().tick, committed);
                 let tail = replay();
-                let tail = &tail.dimensions[&Dimension::Overworld];
+                let tail = &tail.dimensions[&dimension];
                 expected.assert_replay(tail, &valid, &registry);
             }
         } else {
             let mut reopened = World::open(config.clone());
             assert!(
-                !reopened
-                    .state
+                !container_dimension(&reopened.state, dimension)
                     .world
                     .has_chunk(CONTAINER_CHUNK.x, CONTAINER_CHUNK.z)
             );
@@ -3265,11 +3292,17 @@ fn container_replay_checkpoint(case: ContainerCase, refused: bool) {
             assert_eq!(declines.len(), 2, "{log}");
             for decline in declines {
                 assert!(decline.contains("container_records=1"), "{log}");
-                assert!(decline.contains("native dimension 0 chunk (2, 2)"), "{log}");
+                assert!(
+                    decline.contains(&format!(
+                        "native dimension {} chunk (2, 2)",
+                        source.dimension
+                    )),
+                    "{log}"
+                );
             }
             drop(reopened);
             let tail = replay();
-            let tail = &tail.dimensions[&Dimension::Overworld];
+            let tail = &tail.dimensions[&dimension];
             expected.assert_replay(tail, &valid, &registry);
         }
         let mut repaired = valid.clone();
@@ -3285,8 +3318,7 @@ fn container_replay_checkpoint(case: ContainerCase, refused: bool) {
     }
     let mut reopened = World::open(config.clone());
     assert_eq!(
-        reopened
-            .state
+        container_dimension(&reopened.state, dimension)
             .world
             .has_chunk(CONTAINER_CHUNK.x, CONTAINER_CHUNK.z),
         case.opaque,
@@ -3302,7 +3334,7 @@ fn container_replay_checkpoint(case: ContainerCase, refused: bool) {
     // slot of both owners and the entire offline player inventory.
     for _ in 0..2 {
         let mut reopened = World::open(config.clone());
-        hydrate_container_chunk(&mut reopened);
+        hydrate_container_chunk(&mut reopened, dimension);
         expected.assert(&reopened.state, None, "restart hydration");
         reopened.checkpoint();
         expected.assert_stored(&reopened, "restart checkpoint");
@@ -3343,11 +3375,15 @@ macro_rules! container_replay_cases {
             };
             #[test]
             fn container_transfer_replay_holds_unloadable_chunk_and_wal() {
-                container_replay_checkpoint(CASE, true);
+                for dimension in Dimension::ALL {
+                    container_replay_checkpoint(CASE, dimension, true);
+                }
             }
             #[test]
             fn container_transfer_replay_materializes_full_healthy_chunk() {
-                container_replay_checkpoint(CASE, false);
+                for dimension in Dimension::ALL {
+                    container_replay_checkpoint(CASE, dimension, false);
+                }
             }
         })+
     };
@@ -3373,3 +3409,167 @@ container_replay_cases!(
     (chiseled_bookshelf, "chiseled_bookshelf", 6, true),
     (lectern, "lectern", 1, true),
 );
+
+fn assert_container_wal_pruned(world: &World) {
+    let journal = world.config.world_dir.join("journal");
+    for entry in std::fs::read_dir(&journal).unwrap() {
+        let name = entry.unwrap().file_name();
+        if let Some((_, hi)) = crate::journal::parse_batch_name(&name.to_string_lossy()) {
+            assert!(
+                hi > world.manifest.tick,
+                "covered container WAL batch {name:?} was not pruned"
+            );
+        }
+    }
+    crate::journal::read_complete_batches_after(&journal, world.manifest.tick).unwrap();
+}
+
+#[test]
+fn container_stale_ack_and_real_eviction_keep_full_custody_in_every_dimension() {
+    use crate::boundary::{ClickMode, ConnectionId, Hand, PlayerInput};
+
+    for dimension in Dimension::ALL {
+        let directory = tempfile::tempdir().unwrap();
+        let case = ContainerCase {
+            name: "chest",
+            size: 27,
+            opaque: false,
+        };
+        let (mut world, mut expected) =
+            container_transfer_fixture(directory.path(), case, dimension);
+        world.checkpoint();
+        expected.assert_stored(&world, "initial transfer fence");
+        world.run(&[PlayerInput::Join {
+            connection: ConnectionId(1),
+            uuid: CONTAINER_PLAYER,
+            name: "custody".into(),
+            permission_level: 0,
+        }]);
+        let entity = container_dimension(&world.state, dimension)
+            .connections
+            .entity_of(ConnectionId(1))
+            .expect("rejoined connection belongs to the persisted dimension");
+        assert_eq!(
+            crate::dimensions::travel::locate(&world.state, entity)
+                .unwrap()
+                .0,
+            dimension
+        );
+        let state = container_dimension_mut(&mut world.state, dimension);
+        let slot = state.entities.slot_of(entity).unwrap();
+        state.entities.set_pos(slot, [34.5, 200.0, 42.5]);
+        hydrate_container_chunk(&mut world, dimension);
+        world.run(&[PlayerInput::UseItemOn {
+            connection: ConnectionId(1),
+            position: NEIGHBOUR_POS,
+            hand: Hand::Main,
+            face: 1,
+            cursor: [0.5; 3],
+            sequence: 1,
+        }]);
+        let quick_move = |world: &mut World, slot| {
+            let menu = container_dimension(&world.state, dimension).players[&entity]
+                .open
+                .as_ref()
+                .unwrap();
+            world.run(&[PlayerInput::ContainerClick {
+                connection: ConnectionId(1),
+                window: menu.window,
+                state_id: menu.state_id,
+                slot,
+                button: 0,
+                mode: ClickMode::QuickMove,
+            }]);
+        };
+        quick_move(&mut world, 0);
+        expected.slots[1][0] = mc_data::ItemStack::EMPTY;
+        expected.player.clone_from(
+            &container_dimension(&world.state, dimension).players[&entity]
+                .inventory
+                .slots,
+        );
+        expected.assert(&world.state, None, "first neighbour transfer");
+        assert_eq!(
+            expected
+                .player
+                .iter()
+                .map(|stack| stack.count.max(0))
+                .sum::<i32>(),
+            12
+        );
+        let (older, older_done) = world.capture();
+        let older_ack = world.commit(older, &older_done);
+        assert!(older_ack.is_some());
+
+        quick_move(&mut world, 26);
+        expected.slots[1][26] = mc_data::ItemStack::EMPTY;
+        expected.player.clone_from(
+            &container_dimension(&world.state, dimension).players[&entity]
+                .inventory
+                .slots,
+        );
+        expected.assert(&world.state, None, "second neighbour transfer");
+        assert_eq!(
+            expected
+                .player
+                .iter()
+                .map(|stack| stack.count.max(0))
+                .sum::<i32>(),
+            20
+        );
+        world.checkpoint();
+        expected.assert_stored(&world, "newer acknowledged fence");
+
+        // A third real mutation follows the newer ACK: return the whole stack
+        // through the same menu, then deliver the older capture's stale ACK.
+        let inventory_slot = expected
+            .player
+            .iter()
+            .position(|stack| !stack.is_empty())
+            .unwrap();
+        assert!(inventory_slot < 36);
+        let menu_slot = 27
+            + if inventory_slot < 9 {
+                27 + inventory_slot
+            } else {
+                inventory_slot - 9
+            };
+        let returned = expected.player[inventory_slot].clone();
+        assert_eq!(returned.count, 20);
+        quick_move(&mut world, menu_slot as i16);
+        expected.slots[1][0] = returned;
+        expected.player.clone_from(
+            &container_dimension(&world.state, dimension).players[&entity]
+                .inventory
+                .slots,
+        );
+        assert!(expected.player.iter().all(mc_data::ItemStack::is_empty));
+        expected.assert(&world.state, None, "late real return before stale ACK");
+        acknowledge_checkpoint(&mut world.state, older_ack);
+        world.run(&[PlayerInput::Leave {
+            connection: ConnectionId(1),
+        }]);
+        world.checkpoint();
+        expected.assert_stored(&world, "late return after stale ACK");
+        expected.assert(&world.state, None, "late return after stale ACK");
+
+        let state = container_dimension_mut(&mut world.state, dimension);
+        state.world.evict_outside(&Default::default());
+        assert!(
+            !state.world.has_chunk(CONTAINER_CHUNK.x, CONTAINER_CHUNK.z),
+            "{dimension:?}: actual residency eviction"
+        );
+        expected.assert_stored(&world, "evicted native custody");
+        hydrate_container_chunk(&mut world, dimension);
+        expected.assert(&world.state, None, "rehydrated custody");
+        let config = world.config.clone();
+        drop(world);
+        for _ in 0..2 {
+            let mut reopened = World::open(config.clone());
+            hydrate_container_chunk(&mut reopened, dimension);
+            expected.assert(&reopened.state, None, "post-eviction restart");
+            reopened.checkpoint();
+            expected.assert_stored(&reopened, "post-eviction restart fence");
+        }
+    }
+}
