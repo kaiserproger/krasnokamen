@@ -3723,6 +3723,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/civ-stall2/kind-starvation-baseline.log"
 failing_first = "reported"
 regression = ["cargo:mc-core:settlements::construction::site_tests::funded_mine_without_a_site_does_not_starve_a_legal_mason"]
+fix_commit = "898af4725f6491600b88125f0b452fcc3ad39719"
 
 [[bug]]
 id = "CIVILIZATION-INACTIVE-SHEEP-TARGET"
@@ -4496,6 +4497,7 @@ severity = "major"
 status = "open"
 source = "village-autonomy-qa run mgep0_gi (CivSimLanding .analysis/validation/20261111T140725-village-autonomy-qa-mgep0_gi, server pin 4e6874de): after Storage L1 the planner admitted the funded Storage L2 upgrade (site 121,69,-2, no missing materials) and its status stayed 'Storage · level 2 · 0/65' to the end. It held the single project slot, so builder_completes_autonomous_upgrade and builder_completes_further_building both failed. The final checkpoint (receipts/CivSimLanding/probe-mgep0-storage.json) has the stock in the level-one barrels: 126,70,-1 (acacia_log 59, birch_log 12) and 126,70,0 (cobblestone 205, coal 4, wheat_seeds 4). storage.json level 2 turned the first barrel into a chest and removed the second. The structure executor refuses any cell whose block entity holds items (plugin_structures.rs AdvanceStructure, Failure::Blocked), and villager/building.rs ignores that error, so the upgrade could never advance. mason level 2 (furnace, chest) and barracks level 2 (two barrels replaced by beds) had the same defect. Fix: the blueprint loader refuses a level that replaces or removes a previous-level container, and the three level-2 layouts keep their level-one containers. Negative control: Both tests fail with only the fix hunks reverted (receipts/CivSimLanding/negative-container-upgrade-fix-hunks.patch, sha256 b95def36): the storage test stops at 'Blocks: 0/65 · Prepared', the gate's symptom, and the loader test accepts a level that replaces the chest (receipts/CivSimLanding/negative-container-upgrade.log)."
 regression = ["cargo:mc-core:settlements::construction::tests::stocked_storage_upgrades_around_its_level_one_containers", "cargo:mc-core:settlements::blueprints::tests::upgrade_levels_keep_previous_containers"]
+fix_commit = "5ae49587a5366fe838793070ac508a87e4e54fff"
 failing_first = "reported"
 
 [[bug]]
