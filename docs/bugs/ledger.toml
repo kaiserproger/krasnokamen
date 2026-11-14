@@ -5310,3 +5310,45 @@ status = "open"
 source = "solaris-client src/session/packets.rs:96 (configuration RESOURCE_PACK_PUSH) and :657 (play RESOURCE_PACK_PUSH) both call decline_resource_pack; battle-video client line 6eac8021 lines 96 and 105 likewise; the client loads packs only from SOLARIS_CLIENT_RESOURCE_PACKS. Found while preparing live laptop clients for the G2 battle video (owner 2026-11-13: fix right after the video). Follow-up to P2, which only stopped optional offers from disconnecting the join. Gate: a live native client joins a server that pushes the battle pack, with no local pack folder, and shows the battle armour and weapons."
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "PLAYER-SPEAR-JAB-DROPPED-AT-DECODE"
+title = "Player spear jab dropped at decode"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "G2L laptop hit-test: the iron spear sent player action STAB but the server discarded it; zero PovRed hits before the pre-rename fix. See receipts/G2/LAPTOP-NEXT.md history and receipts/G2L/hit-test-diag. The pre-rename server fix 0e0155ce was live-tested in receipts/G2L/hit-test-stab; this main port still needs its own real-client check."
+repro = "client"
+regression = [
+  "cargo:mc-edge:decode::decode_tests::player_action_maps_dig_drop_release_swap",
+  "cargo:mc-edge:translation::adjacent::play::tests::old_client_stab_reaches_core_input_through_adjacent_translation",
+  "cargo:mc-core:tick_tests::spear_stab_hits_at_range_only_when_charged",
+  "cargo:mc-core:tick_tests::spear_stab_sequence_preserves_charge_and_rejects_plain_attack",
+  "cargo:mc-core:combat::tests::spear_minimum_charge_refuses_until_fourteen_ticks",
+  "cargo:mc-data:item_components::tests::embedded_required_item_facts_cover_spear_attack_range",
+  "cargo:mc-data:item_components::tests::loads_component_report_fixture",
+]
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-HOLY-CHEST-STATIC-EFFECT-PLANES"
+title = "Holy chest battle rig draws static effect planes through the wearer"
+area = "client"
+severity = "minor"
+status = "open"
+source = "Battle-video client commit 0b8a4350 removed the upstream animated effect bones that appeared as a static cloud of rings and crosses. The post-rename client has the same rig at assets/krasnokamen/models/entity/battle_holy_chest.json; the port needs real-client visual verification."
+repro = "client"
+regression = []
+failing_first = "reported"
+
+[[bug]]
+id = "CLIENT-GPU-DEVICE-LOST-G2-PEAK"
+title = "Client Vulkan device lost while rendering the peak G2 battle replay"
+area = "client"
+severity = "major"
+status = "open"
+source = "Laptop RTX 4050, client dd36acd5: 2026-11-13 21:52:07 laptop time, Vulkan Parent device is lost during G2 g2-14-push-in. Laptop reports NVRM Xid 32 at that time and another at 2026-11-14 05:24:29 during G2R g2r-11; both retries passed. Xid remains unconfirmed: kernel log not yet returned. First application log: receipts/BvCinemaReplay/laptop-returns/2026-11-13-g2/g2-14-push-in.devlost.log; second retry: receipts/BvCinemaReplay/laptop-returns/2026-11-14-g2r/g2r-11-dolly.log. Not yet reproduced on the host."
+repro = "manual"
+repro_check = "Render G2 backup take shot g2-14-push-in, t=253.45..257.45, radius 20, 1920x1080 at peak melee (~18k entities) on the laptop RTX 4050."
+regression = []
+failing_first = "reported"

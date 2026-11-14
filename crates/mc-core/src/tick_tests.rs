@@ -381,6 +381,181 @@ fn inhabited_time_uses_strict_horizontal_128_block_chunk_centre_distance() {
 }
 
 #[test]
+fn spear_stab_hits_at_range_only_when_charged() {
+    for (gap, elapsed, expected) in [(3.0, 20, true), (3.0, 13, false), (1.0, 20, false)] {
+        let (mut state, player, pos) = flat_player_fixture();
+        state.tick = 20;
+        state.last_swing.insert(player, 20 - elapsed);
+        let player_slot = state.entities.slot_of(player).unwrap();
+        state.entities.set_rot(player_slot, 0.0, 0.0);
+        let spear = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:iron_spear").unwrap())
+            .unwrap();
+        state.players.get_mut(&player).unwrap().inventory.slots[0] =
+            mc_data::ItemStack::new(spear, 1);
+        let zombie = state
+            .registry
+            .entity_types
+            .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap())
+            .unwrap();
+        let target = state.spawn_mob(zombie, [pos[0], pos[1], pos[2] + gap], 20.0);
+        state.day_time = 14_000;
+        let (output, _, _) = run_tick(
+            &mut state,
+            &[PlayerInput::Stab {
+                connection: ConnectionId(1),
+            }],
+        );
+        assert_eq!(
+            output
+                .changes
+                .entity_events
+                .iter()
+                .any(|event| matches!(event,
+                    crate::boundary::EntityEvent::Damage { entity, cause, direct, .. }
+                        if *entity == target && *cause == Some(player) && *direct == Some(player)
+                )),
+            expected,
+            "gap={gap} elapsed={elapsed}"
+        );
+    }
+}
+
+#[test]
+fn spear_stab_sequence_preserves_charge_and_rejects_plain_attack() {
+    let (mut state, player, pos) = flat_player_fixture();
+    state.tick = 20;
+    state.last_swing.insert(player, 0);
+    let player_slot = state.entities.slot_of(player).unwrap();
+    state.entities.set_rot(player_slot, 0.0, 0.0);
+    let spear = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:iron_spear").unwrap())
+        .unwrap();
+    state.players.get_mut(&player).unwrap().inventory.slots[0] = mc_data::ItemStack::new(spear, 1);
+    let zombie = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap())
+        .unwrap();
+    let first = state.spawn_mob(zombie, [pos[0], pos[1], pos[2] + 3.0], 100.0);
+    let second = state.spawn_mob(zombie, [pos[0], pos[1], pos[2] + 7.0], 100.0);
+    state.day_time = 14_000;
+    let place = |state: &mut TickState, target, gap: f64| {
+        let slot = state.entities.slot_of(target).unwrap();
+        state.entities.set_pos(slot, [pos[0], pos[1], pos[2] + gap]);
+        state.entities.set_vel(slot, [0.0; 3]);
+        state.entities.body_mut(slot).attack_cooldown = 100;
+    };
+    let hits = |state: &mut TickState, input: PlayerInput| {
+        let (output, _, _) = run_tick(state, &[input]);
+        output
+            .changes
+            .entity_events
+            .iter()
+            .filter_map(|event| match event {
+                crate::boundary::EntityEvent::Damage {
+                    entity,
+                    cause,
+                    direct,
+                    ..
+                } if *cause == Some(player) && *direct == Some(player) => Some(*entity),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let stab = || PlayerInput::Stab {
+        connection: ConnectionId(1),
+    };
+    let idle = |state: &mut TickState, count| {
+        for _ in 0..count {
+            run_tick(state, &[]);
+        }
+    };
+    place(&mut state, first, 3.0);
+    assert!(hits(&mut state, stab()).contains(&first));
+    let swing = state.last_swing[&player];
+    idle(&mut state, 10);
+    place(&mut state, first, 1.5);
+    let before = state
+        .entities
+        .row(state.entities.slot_of(first).unwrap())
+        .health;
+    let wear = state.players[&player].inventory.slots[0].damage;
+    let exhaustion = state.players[&player].vitals.exhaustion;
+    assert!(
+        hits(
+            &mut state,
+            PlayerInput::Attack {
+                connection: ConnectionId(1),
+                target: first
+            }
+        )
+        .is_empty()
+    );
+    assert_eq!(
+        state
+            .entities
+            .row(state.entities.slot_of(first).unwrap())
+            .health,
+        before
+    );
+    assert_eq!(state.last_swing[&player], swing);
+    assert_eq!(state.players[&player].inventory.slots[0].damage, wear);
+    assert_eq!(state.players[&player].vitals.exhaustion, exhaustion);
+    place(&mut state, first, 3.0);
+    assert!(hits(&mut state, stab()).is_empty(), "undercharged jab");
+    assert_eq!(
+        state
+            .entities
+            .row(state.entities.slot_of(first).unwrap())
+            .health,
+        before
+    );
+    assert_eq!(
+        state.last_swing[&player], swing,
+        "refusal must not spend charge"
+    );
+    assert_eq!(state.players[&player].inventory.slots[0].damage, wear);
+    assert_eq!(state.players[&player].vitals.exhaustion, exhaustion);
+    idle(&mut state, 1);
+    place(&mut state, first, 3.0);
+    assert!(
+        hits(&mut state, stab()).contains(&first),
+        "refusal spent charge"
+    );
+
+    idle(&mut state, 20);
+    place(&mut state, first, 3.0);
+    place(&mut state, second, 4.0);
+    let pierced = hits(&mut state, stab());
+    assert!(
+        pierced.contains(&first) && pierced.contains(&second),
+        "{pierced:?}"
+    );
+
+    idle(&mut state, 20);
+    place(&mut state, first, 5.5);
+    place(&mut state, second, 7.0);
+    assert!(hits(&mut state, stab()).is_empty(), "beyond far bound");
+    let miss = state.last_swing[&player];
+    assert!(miss > swing, "a miss must reset charge");
+    place(&mut state, first, 3.0);
+    assert!(
+        hits(&mut state, stab()).is_empty(),
+        "miss did not reset charge"
+    );
+    assert_eq!(state.last_swing[&player], miss);
+    idle(&mut state, 20);
+    place(&mut state, first, 1.0);
+    place(&mut state, second, 7.0);
+    assert!(hits(&mut state, stab()).is_empty(), "inside near bound");
+}
+
+#[test]
 fn sword_sweep_damages_an_adjacent_zombie_only_on_a_charged_grounded_hit() {
     // Vanilla Zombie.createAttributes supplies armor 2. CombatRules mitigates
     // the raw one-point sweep to 1 * (1 - (2 - 1 / 2) / 25) = 0.94.

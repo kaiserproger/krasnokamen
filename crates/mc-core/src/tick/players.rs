@@ -305,6 +305,9 @@ pub(super) fn apply_inputs<'a>(
             PlayerInput::Attack { connection, target } => {
                 input::combat::attack(state, (connection, target), intents, changes)
             }
+            PlayerInput::Stab { connection } => {
+                input::combat::stab(state, connection, intents, changes)
+            }
             PlayerInput::InteractEntity {
                 connection,
                 target,

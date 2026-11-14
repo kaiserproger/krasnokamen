@@ -620,6 +620,56 @@ fn animations_and_team_parameters_follow_the_old_layout() {
 }
 
 #[test]
+fn old_client_stab_reaches_core_input_through_adjacent_translation() {
+    use mc_core::boundary::{ConnectionId, PlayerInput};
+    use mc_protocol::Packet;
+    use mc_protocol::packets::play::ServerboundPlayerAction;
+
+    for version in [775, 776] {
+        let mut wire = Vec::new();
+        wire.write_varint(7); // 26.1.2 / 26.2 STAB.
+        wire.write_i64(0);
+        wire.write_u8(1);
+        wire.write_varint(0);
+        if version == 775 {
+            let mut step = test_session(Tables {
+                formats: super::super::tables::Formats {
+                    upper: 776,
+                    lower: 775,
+                },
+                ..Tables::default()
+            });
+            wire = serverbound(&mut step, "minecraft:player_action", &wire)
+                .unwrap()
+                .unwrap();
+        }
+        let mut step = test_session(Tables {
+            formats: super::super::tables::Formats {
+                upper: 777,
+                lower: 776,
+            },
+            ..Tables::default()
+        });
+        let wire = serverbound(&mut step, "minecraft:player_action", &wire)
+            .unwrap()
+            .unwrap();
+        assert_eq!(wire[0], 8);
+        let connection = ConnectionId(7);
+        assert_eq!(
+            crate::decode::decode_play_frame_for(
+                connection,
+                ServerboundPlayerAction::ID,
+                &wire,
+                &mut crate::decode::DecodeState::default(),
+            )
+            .unwrap(),
+            vec![PlayerInput::Stab { connection }],
+            "protocol {version}",
+        );
+    }
+}
+
+#[test]
 fn serverbound_actions_signs_and_teleports_gain_26_3_fields() {
     let mut s = session();
     let mut body = Vec::new();

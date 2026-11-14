@@ -569,14 +569,14 @@ fn player_action_maps_dig_drop_release_swap() {
     )
     .unwrap();
     assert_eq!(out, vec![PlayerInput::SwapHands { connection: conn() }]);
-    // Stab has no mapping.
+    // A spear's attack: the core jabs along its attack range.
     let out = decode(
         ServerboundPlayerAction::ID,
         mk(PlayerActionKind::Stab),
         &mut s,
     )
     .unwrap();
-    assert!(out.is_empty());
+    assert_eq!(out, vec![PlayerInput::Stab { connection: conn() }]);
 }
 
 #[test]
