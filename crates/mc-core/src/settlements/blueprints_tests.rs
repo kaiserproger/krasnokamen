@@ -574,10 +574,6 @@ fn every_storage_container_is_reachable_from_the_entrance() {
     use std::collections::{HashMap, HashSet, VecDeque};
     let state = test_state();
     let storage = get(&state.registry, "storage").unwrap();
-    let [sx, _, sz] = storage
-        .footprint(Rotation(0))
-        .map(i8::try_from)
-        .map(Result::unwrap);
     let path = |id: BlockStateId| {
         state
             .registry
@@ -589,13 +585,16 @@ fn every_storage_container_is_reachable_from_the_entrance() {
             .path()
             .to_owned()
     };
+    // A level lists only its diff against the previous one; replay the diffs
+    // so each level is checked against its complete picture.
+    let mut blocks: HashMap<[i8; 3], String> = HashMap::new();
     for (n, level) in storage.levels.iter().enumerate() {
         let rotated = level.rotated(Rotation(0));
-        let blocks: HashMap<[i8; 3], String> = rotated
-            .blocks
-            .iter()
-            .map(|&(at, id)| (at, path(id)))
-            .collect();
+        for at in &rotated.removals {
+            blocks.remove(at);
+        }
+        blocks.extend(rotated.blocks.iter().map(|&(at, id)| (at, path(id))));
+        let [sx, _, sz] = rotated.size.map(i8::try_from).map(Result::unwrap);
         let open = |at: [i8; 3]| blocks.get(&at).is_none_or(|name| name.ends_with("_door"));
         let entrance = rotated.entrance;
         let floor = entrance[1];
@@ -614,6 +613,7 @@ fn every_storage_container_is_reachable_from_the_entrance() {
                 }
             }
         }
+        // Reach is the route search's goal: one block away on every axis.
         for (at, name) in &blocks {
             if !(name.ends_with("chest") || name == "barrel") {
                 continue;
