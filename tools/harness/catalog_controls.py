@@ -24,7 +24,7 @@ RECIPE_IDS = CONTROL_IDS
 _NAMESPACE = uuid.UUID("43a20e67-dceb-534d-9e84-b559c8ac013a")
 _PASSIVE = ("cow", "sheep", "pig", "chicken")
 _CROPS = ("wheat", "carrots", "potatoes", "beetroots")
-_VILLAGER_CUSTOM_NAME = '{"text":"solaris-catalog-villager"}'
+_VILLAGER_CUSTOM_NAME = '{"text":"krasnokamen-catalog-villager"}'
 
 
 def _spec() -> dict[str, Any]:
@@ -328,7 +328,7 @@ def recipe(scenario_id: str, clients: int, smoke: bool) -> dict[str, Any] | None
         result["expected"]["families"].append("entities")
         result["commands"] += ["time set 2000", "gamerule doDaylightCycle true"]
         if scenario_id == "plugin-heavy":
-            result["required_plugins"] = ["solaris-towns", "solaris-economy"]
+            result["required_plugins"] = ["krasnokamen-towns", "krasnokamen-economy"]
             result["constraints"].update(minimum_clients=2,
                 minimum_window_ms={"steady": 12_000, "burst": 8_000})
             result["scope_notes"] = [
@@ -406,8 +406,8 @@ def recipe(scenario_id: str, clients: int, smoke: bool) -> dict[str, Any] | None
                          expected_feedback="load_matrix: 1 members, 1 claims."),
             ]
             result["source_evidence"] += [
-                "../solaris-default-plugins/sources/solaris-towns/src/lib.rs",
-                "../solaris-default-plugins/sources/solaris-economy/src/lib.rs"]
+                "../solaris-default-plugins/sources/krasnokamen-towns/src/lib.rs",
+                "../solaris-default-plugins/sources/krasnokamen-economy/src/lib.rs"]
     elif scenario_id == "combat":
         _herd(result, [0, 0], 128, True)
         result["expected"]["families"] += ["entities", "hostile", "combat"]

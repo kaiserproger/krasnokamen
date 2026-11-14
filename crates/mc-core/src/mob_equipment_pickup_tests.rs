@@ -414,7 +414,7 @@ fn can_pick_up_loot_defaults_false_and_native_boolean_is_authoritative() {
         let mut fields = to_fields(&expected);
         assert!(fields.contains(&("CanPickUpLoot".into(), Tag::Byte(i8::from(enabled)))));
         assert_eq!(from_fields(&fields).unwrap(), expected);
-        fields.retain(|(key, _)| key != "solaris:entity_loot");
+        fields.retain(|(key, _)| key != "krasnokamen:entity_loot");
         assert_eq!(from_fields(&fields).unwrap().can_pick_up_loot, enabled);
     }
     let mut fields = to_fields(&EntityLootState::default());

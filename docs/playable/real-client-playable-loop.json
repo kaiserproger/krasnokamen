@@ -2,7 +2,7 @@
   "schema_version": 1,
   "pack_id": "playable-real-client-loop",
   "quality_label": "playable-spike",
-  "server_command": "cargo run -p mc-edge --bin solaris-v2 -- --config playable.toml",
+  "server_command": "cargo run -p mc-edge --bin krasnokamen -- --config playable.toml",
   "client_requirement": "A vanilla 26.1.2 real client must connect to playable.toml through the repo-native Gradle runClient adapter; protocol harnesses do not satisfy this gate, and prepared artifacts are not passing evidence.",
   "forbidden_client_evidence": [
     "wire-probe",
@@ -24,18 +24,18 @@
   "automation_runner": {
     "script": "python3 -m tools.harness run playable",
     "delegates_to": "tools/harness/backends/regression.sh",
-    "client_adapter": "client-mod/solaris-client-agent/gradlew --no-configuration-cache :fabric-agent:runClientAgent",
+    "client_adapter": "client-mod/krasnokamen-client-agent/gradlew --no-configuration-cache :fabric-agent:runClientAgent",
     "client_adapter_source": "auto-gradle-runclient",
-    "server_config_env": "SOLARIS_REAL_CLIENT_SERVER_CONFIG",
+    "server_config_env": "KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG",
     "server_config_value": "playable.toml",
     "agent_driver": "tools/harness/backends/driver.py",
-    "agent_bridge_url_env": "SOLARIS_REAL_CLIENT_AGENT_BRIDGE_URL",
-    "agent_secret_env": "SOLARIS_REAL_CLIENT_AGENT_SECRET",
-    "agent_jar_env": "SOLARIS_REAL_CLIENT_AGENT_JAR",
-    "agent_port_env": "SOLARIS_REAL_CLIENT_AGENT_PORT",
-    "agent_scenario_env": "SOLARIS_REAL_CLIENT_AGENT_SCENARIO",
+    "agent_bridge_url_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_BRIDGE_URL",
+    "agent_secret_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_SECRET",
+    "agent_jar_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_JAR",
+    "agent_port_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_PORT",
+    "agent_scenario_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO",
     "default_agent_scenario": "playable-04-twenty-minute-survival-loop",
-    "timeout_env": "SOLARIS_REAL_CLIENT_TIMEOUT_SECONDS",
+    "timeout_env": "KRASNOKAMEN_REAL_CLIENT_TIMEOUT_SECONDS",
     "default_timeout_seconds": 1500,
     "passing_gate": "agent-run real-client",
     "modes": [
@@ -53,7 +53,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Start Solaris with playable.toml through the runner.",
+        "Start Krasnokamen with playable.toml through the runner.",
         "Connect one vanilla 26.1.2 client to 127.0.0.1:25565.",
         "Wait until the client is in Play state on the generated seed-0 world.",
         "Capture a screenshot after chunks and hotbar are visible."
@@ -127,7 +127,7 @@
       "steps": [
         "Run the playable-03 before phase through the real-client agent.",
         "Collect natural oak logs, craft a wooden pickaxe, place the earned crafting table, and record the table marker.",
-        "Stop Solaris cleanly through the runner and restart with the same playable.toml world.",
+        "Stop Krasnokamen cleanly through the runner and restart with the same playable.toml world.",
         "Run the playable-03 after phase, rejoin, and inspect the recorded table marker and saved wooden pickaxe inventory."
       ],
       "expected_observations": [
@@ -145,7 +145,7 @@
       "steps": [
         "Run the before-restart phase through the real-client agent.",
         "Collect natural logs, craft a wooden pickaxe, place the earned crafting table, and record the table marker.",
-        "Capture a screenshot before the runner stops Solaris."
+        "Capture a screenshot before the runner stops Krasnokamen."
       ],
       "expected_observations": [
         "The before phase uses no debug give, teleport, or chat-command setup.",
@@ -160,7 +160,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Restart Solaris on the same playable.toml world through the runner.",
+        "Restart Krasnokamen on the same playable.toml world through the runner.",
         "Reconnect the real client through the agent bridge.",
         "Verify the recorded crafting-table marker and wooden pickaxe inventory, then capture a screenshot."
       ],
@@ -219,7 +219,7 @@
       "no_debug_commands": true,
       "steps": [
         "Run the no-debug natural wood -> wooden pickaxe -> stone pickaxe path through the real client.",
-        "Record the earned crafting table marker, cleanly stop Solaris, and restart on the same per-run playable world.",
+        "Record the earned crafting table marker, cleanly stop Krasnokamen, and restart on the same per-run playable world.",
         "Reconnect the real client and verify the recorded crafting table marker plus the saved stone pickaxe inventory.",
         "Capture before and after screenshots for the restarted stone-tool state."
       ],
@@ -251,7 +251,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Restart Solaris on the same playable world through the runner.",
+        "Restart Krasnokamen on the same playable world through the runner.",
         "Reconnect the real client and run the after phase.",
         "Verify the persisted crafting-table marker and stone pickaxe inventory."
       ],
@@ -377,8 +377,8 @@
       "no_debug_commands": true,
       "steps": [
         "Connect a real vanilla client to playable.toml through the playable runner.",
-        "Run the earned chest storage path, write the chest marker, and let the runner stop Solaris cleanly.",
-        "Restart Solaris on the same world, rejoin, open the marked chest, verify slot 0 still contains the earned item, and capture before/after screenshots."
+        "Run the earned chest storage path, write the chest marker, and let the runner stop Krasnokamen cleanly.",
+        "Restart Krasnokamen on the same world, rejoin, open the marked chest, verify slot 0 still contains the earned item, and capture before/after screenshots."
       ],
       "expected_observations": [
         "The runner records one clean server restart between before and after phases.",
@@ -410,7 +410,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Rejoin the same playable.toml world after the runner restarts Solaris.",
+        "Rejoin the same playable.toml world after the runner restarts Krasnokamen.",
         "Read the chest marker from the runner artifact directory.",
         "Open the marked chest, verify slot 0 still contains the stored item, close the screen, and capture a screenshot."
       ],
@@ -635,7 +635,7 @@
         "Connect a real vanilla client to playable.toml through the playable runner.",
         "Run the no-debug natural wood -> crafting table -> wooden pickaxe -> stone pickaxe -> furnace path.",
         "Mine and smelt two natural iron ore drops into two earned iron ingots, craft sticks from earned planks when needed, and craft an earned iron sword.",
-        "Stop Solaris with the runner-managed graceful restart path, restart the same world, reconnect the same real client, and capture screenshots for both phases.",
+        "Stop Krasnokamen with the runner-managed graceful restart path, restart the same world, reconnect the same real client, and capture screenshots for both phases.",
         "Verify the crafted table marker persists and the earned iron sword remains in the player inventory after restart."
       ],
       "expected_observations": [
@@ -667,7 +667,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Reconnect the same real vanilla client after the runner restarts Solaris against the same playable world.",
+        "Reconnect the same real vanilla client after the runner restarts Krasnokamen against the same playable world.",
         "Read the before-phase marker, verify the crafted table block is still present, verify the earned iron sword remains in inventory, and capture a screenshot."
       ],
       "expected_observations": [
@@ -742,7 +742,7 @@
         "Connect a real vanilla client to playable.toml through the playable runner.",
         "Run the no-debug natural wood -> crafting table -> wooden pickaxe -> stone pickaxe -> furnace path.",
         "Mine and smelt eight natural iron ore drops into eight earned iron ingots, craft and quick-equip an earned iron chestplate, then write the crafted table restart marker.",
-        "Stop Solaris with the runner-managed graceful restart path, restart the same world, reconnect the same real client, and capture screenshots for both phases.",
+        "Stop Krasnokamen with the runner-managed graceful restart path, restart the same world, reconnect the same real client, and capture screenshots for both phases.",
         "Verify the crafted table marker persists, verify the earned iron chestplate remains in the chest armor slot, wait for natural night, and measure a natural zombie melee hit after restart."
       ],
       "expected_observations": [
@@ -774,7 +774,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Reconnect the same real vanilla client after the runner restarts Solaris against the same playable world.",
+        "Reconnect the same real vanilla client after the runner restarts Krasnokamen against the same playable world.",
         "Read the before-phase marker, verify the crafted table block is still present, verify minecraft:iron_chestplate remains in the chest armor slot, wait for natural night, scan and approach a naturally loaded zombie, wait for a natural melee hit, and capture a screenshot."
       ],
       "expected_observations": [
@@ -789,7 +789,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
         "Primary finds and approaches a natural generated log, breaks it through normal survival block breaking, and leaves the visible log item drop in the world.",
         "Secondary observes the same visible log item drop, primary collects it through normal movement pickup, secondary observes the item entity removal, and both clients capture screenshots."
       ],
@@ -858,7 +858,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
         "Primary earns wood, crafts an earned chest, places the chest, deposits a leftover earned plank item, and writes the shared chest marker.",
         "Secondary opens the same chest, observes the primary deposited item, withdraws it through the normal container quick-move path, and primary reopens the chest to observe the slot empty.",
         "Capture screenshots from both real clients."
@@ -915,7 +915,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
         "Primary earns wood, stone, charcoal, sticks, and torches, places an earned torch block, and writes the shared block edit marker.",
         "Secondary observes the primary placed torch block, primary breaks and collects that torch through the normal block edit path, and secondary observes the block become air.",
         "Capture screenshots from both real clients."
@@ -985,7 +985,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
         "Secondary observes the primary player as a client-visible player entity and writes the shared player visibility marker.",
         "Primary moves through the normal client movement command, and secondary observes the primary player's client-visible position change.",
         "Capture screenshots from both real clients."
@@ -1029,7 +1029,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
         "Primary sends a normal chat message through the vanilla client chat path.",
         "Secondary waits for the primary player's formatted chat line in the real client chat history.",
         "Capture screenshots from both real clients."
@@ -1073,7 +1073,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
         "Secondary observes the primary player as a client-visible player entity before disconnect.",
         "Primary disconnects through the real client bridge.",
         "Secondary waits until the primary player entity is no longer visible.",
@@ -1118,7 +1118,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
         "Secondary records the primary player's client-visible entity before disconnect.",
         "Primary disconnects through the real client bridge.",
         "Secondary waits until the old primary player entity is gone.",
@@ -1179,7 +1179,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
         "Secondary records the primary player's client-visible entity before primary death.",
         "Primary earns and places a campfire, stands on it until death, and performs vanilla respawn.",
         "Primary moves through the normal real-client movement command after respawn.",
@@ -1239,7 +1239,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
         "Primary mines and picks up a natural generated log, selects that earned log, and drops one item through the vanilla selected-item drop action.",
         "Secondary observes the visible dropped item entity, collects it through normal movement pickup, and primary observes the item entity removal.",
         "Capture screenshots from both real clients."
@@ -1309,7 +1309,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
         "Keep both clients in Play state while each client performs six normal movement pulses through the bridge-level move_forward command.",
         "Record each client's state after every movement pulse and capture screenshots from both clients before disconnecting."
       ],
@@ -1326,7 +1326,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
         "Keep both clients in Play state while each client performs twelve normal movement pulses through the bridge-level move_forward command.",
         "Record each client's state after every movement pulse and require both clients to cross at least one chunk boundary before screenshots.",
         "Capture screenshots from both clients before disconnecting."
@@ -1344,8 +1344,8 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
-        "Let the initial visible chunk window complete so Solaris can prewarm the next forward edge outside the visible view.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
+        "Let the initial visible chunk window complete so Krasnokamen can prewarm the next forward edge outside the visible view.",
         "Keep both clients in Play state while each client performs twelve normal movement pulses through the bridge-level move_forward command.",
         "Record each client's state after every movement pulse and require both clients to cross at least one chunk boundary before screenshots.",
         "Inspect server.log for the crossed boundary window and require the forward prewarm path to avoid slow fetch/light work there."
@@ -1364,7 +1364,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect two real vanilla clients to the same playable.toml Solaris server through the playable runner.",
+        "Connect two real vanilla clients to the same playable.toml Krasnokamen server through the playable runner.",
         "Keep both clients in Play state while the primary performs twelve move_forward pulses and the secondary performs twelve move_backward pulses through bridge-level movement commands.",
         "Record each client's state after every movement pulse and require both clients to cross at least one chunk boundary before screenshots.",
         "Capture screenshots from both clients before disconnecting."
@@ -1382,7 +1382,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect one real vanilla client to the playable.toml Solaris server through the playable runner.",
+        "Connect one real vanilla client to the playable.toml Krasnokamen server through the playable runner.",
         "Gather natural logs, craft a crafting table, sticks, and a wooden hoe, then break natural short grass until three wheat seeds are collected.",
         "Till three natural dirt or grass blocks, plant the earned seeds, and await the exact client block-state event showing age 7 for every crop.",
         "Harvest all three mature crops and craft bread from the earned wheat without synthetic hunger-drain movement.",
@@ -1402,7 +1402,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "Connect one real vanilla client to the playable.toml Solaris server through the playable runner.",
+        "Connect one real vanilla client to the playable.toml Krasnokamen server through the playable runner.",
         "Find naturally spawned cows, sheep, and chickens already visible in the loaded client world.",
         "For each species, block on applied entity packets until that exact entity has moved at least one block; require the cow to climb at least 0.8 blocks above an observed low point.",
         "Measure the client entity velocity and yaw while it moves, then capture a screenshot from the real client."
@@ -1424,7 +1424,7 @@
       "steps": [
         "Launch two repo-native Gradle real clients against one fresh playable.toml world.",
         "Primary earns logs, crafts and places a chest, then deposits one earned plank while both clients are in Play.",
-        "Disconnect both clients, stop Solaris gracefully, and restart it on the same world directory.",
+        "Disconnect both clients, stop Krasnokamen gracefully, and restart it on the same world directory.",
         "Reconnect both clients; secondary opens the persisted chest and withdraws the primary item, then primary reopens it and observes slot 0 empty.",
         "Capture both clients before and after the restart."
       ],
@@ -1444,7 +1444,7 @@
       "steps": [
         "Connect primary and secondary real clients to the same fresh playable world.",
         "Primary follows the natural log-to-planks path, crafts and places an earned chest, and deposits one earned plank into slot 0.",
-        "Require both clients to remain in Play, capture both screens, and disconnect both cleanly before the runner stops Solaris."
+        "Require both clients to remain in Play, capture both screens, and disconnect both cleanly before the runner stops Krasnokamen."
       ],
       "expected_observations": [
         "The primary deposit uses normal crafting, placement, and container-click paths.",
@@ -1459,7 +1459,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "After the runner starts Solaris on the same world, reconnect both original real clients.",
+        "After the runner starts Krasnokamen on the same world, reconnect both original real clients.",
         "Secondary walks to the saved chest marker, opens the persisted chest, observes the deposited earned plank, and withdraws it normally.",
         "Primary walks to the same chest, opens it, observes slot 0 empty, and both clients capture screenshots before disconnecting."
       ],
@@ -1478,7 +1478,7 @@
       "steps": [
         "Launch one repo-native Gradle client against a fresh seed-0 playable world.",
         "Walk to the deterministic generated ruin, discover and open its generated chest, and move the generated loot into player inventory.",
-        "Disconnect, stop Solaris gracefully, restart on the same world directory, and reconnect the same client.",
+        "Disconnect, stop Krasnokamen gracefully, restart on the same world directory, and reconnect the same client.",
         "Return to the same chest, verify it is still present and empty, verify the moved loot remains in inventory, and capture screenshots before and after restart."
       ],
       "expected_observations": [
@@ -1497,7 +1497,7 @@
       "steps": [
         "Connect to a fresh seed-0 playable world and approach the generated ruin center.",
         "Discover the chest from loaded client block state, open it normally, and move every expected generated loot stack into inventory.",
-        "Close the chest, capture a screenshot, record the chest target and moved-loot invariant, and disconnect before the runner stops Solaris."
+        "Close the chest, capture a screenshot, record the chest target and moved-loot invariant, and disconnect before the runner stops Krasnokamen."
       ],
       "expected_observations": [
         "The generated ruin center and generated chest are reached without teleport or structure fixtures.",
@@ -1512,7 +1512,7 @@
       "screenshots_required": true,
       "no_debug_commands": true,
       "steps": [
-        "After the runner starts Solaris on the same world directory, reconnect the same client.",
+        "After the runner starts Krasnokamen on the same world directory, reconnect the same client.",
         "Return to the persisted chest target, require the generated chest block to still exist, and reopen it normally.",
         "Verify moved loot still has the recorded inventory counts and every generated chest slot is empty, then close the screen and capture a screenshot."
       ],

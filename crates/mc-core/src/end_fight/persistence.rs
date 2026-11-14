@@ -84,7 +84,7 @@ pub fn to_nbt(fight: &Fight) -> Tag {
         // Vanilla's codec ignores this extension; it preserves the exact tick
         // phase, beam ownership, crystal membership and death award cursor.
         (
-            "SolarisFightState".into(),
+            "KrasnokamenFightState".into(),
             Tag::String(serde_json::to_string(fight).expect("validated retained fight")),
         ),
     ];
@@ -153,7 +153,7 @@ pub fn from_nbt(root: &Tag) -> Result<Fight, String> {
                 .copied()
                 .map(gateway)
                 .collect::<Result<_, _>>(),
-            // Solaris's native writer above emits a wire-typed Int list.
+            // Krasnokamen's native writer above emits a wire-typed Int list.
             Tag::List(list) => list
                 .elements
                 .iter()
@@ -213,12 +213,12 @@ pub fn from_nbt(root: &Tag) -> Result<Fight, String> {
             })
             .collect();
     }
-    if let Some(tag) = field(fields, "SolarisFightState")? {
+    if let Some(tag) = field(fields, "KrasnokamenFightState")? {
         let Tag::String(json) = tag else {
-            return Err("DragonFight.SolarisFightState: expected string".into());
+            return Err("DragonFight.KrasnokamenFightState: expected string".into());
         };
         let saved: Fight = serde_json::from_str(json)
-            .map_err(|e| format!("DragonFight.SolarisFightState: {e}"))?;
+            .map_err(|e| format!("DragonFight.KrasnokamenFightState: {e}"))?;
         if saved.initialized != fight.initialized
             || saved.dragon_uuid != fight.dragon_uuid
             || saved.dragon_killed != fight.dragon_killed
@@ -227,7 +227,7 @@ pub fn from_nbt(root: &Tag) -> Result<Fight, String> {
             || saved.gateways != fight.gateways
             || saved.respawn != fight.respawn
         {
-            return Err("DragonFight: native fields disagree with SolarisFightState".into());
+            return Err("DragonFight: native fields disagree with KrasnokamenFightState".into());
         }
         return Ok(saved);
     }
