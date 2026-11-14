@@ -1863,7 +1863,75 @@ fn turtle_eggs_crack_at_night_into_baby_turtles() {
 }
 
 #[test]
-fn sniffer_scheduled_edges_match_continuous_ticks() {
+fn sniffer_moss_interval_matches_warp_without_other_simulation() {
+    fn isolated() -> TickState {
+        let registry = Arc::new(crate::tick_tests::full_registry());
+        let world = ChunkWorld::new(
+            42,
+            Arc::new(EmptyWorld {
+                air: registry.states.air,
+            }),
+            &registry,
+            BlockStateId(registry.states.air),
+            [0, Y + 1, 0],
+            mc_world::OVERWORLD_GEOMETRY,
+        );
+        let mut state = TickState::new(registry, world, 0, 512);
+        let chunk = mc_world::ChunkPos { x: 0, z: 0 };
+        state.tickets.insert("egg-fixture".into(), (chunk, 0));
+        state
+            .world
+            .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+        state.refresh_active_chunks(state.tick);
+        state.gamerules.insert("spawn_mobs".into(), "false".into());
+        state
+            .gamerules
+            .insert("random_tick_speed".into(), "0".into());
+        let moss = block(&state, "moss_block", &[]);
+        let egg = block(&state, "sniffer_egg", &[("hatch", "0")]);
+        put(&mut state, 3, Y, 2, moss);
+        put(&mut state, 3, Y + 1, 2, egg);
+        crate::eggs::changed(
+            &mut state,
+            BlockPos {
+                x: 3,
+                y: Y + 1,
+                z: 2,
+            },
+        );
+        state
+    }
+
+    let (mut ordinary, mut warped) = (isolated(), isolated());
+    let pos = BlockPos {
+        x: 3,
+        y: Y + 1,
+        z: 2,
+    };
+    let due = crate::tick_tests::warp_to_block_tick(&mut warped, pos);
+    assert_eq!(due - ordinary.tick, 4_000);
+    while ordinary.tick < due {
+        run(&mut ordinary, 1);
+    }
+    assert_eq!(
+        at(&ordinary, pos.x, pos.y, pos.z),
+        block(&ordinary, "sniffer_egg", &[("hatch", "0")])
+    );
+    run(&mut ordinary, 1);
+    run(&mut warped, 1);
+    assert_eq!(
+        at(&ordinary, pos.x, pos.y, pos.z),
+        block(&ordinary, "sniffer_egg", &[("hatch", "1")])
+    );
+    assert_eq!(
+        at(&ordinary, pos.x, pos.y, pos.z),
+        at(&warped, pos.x, pos.y, pos.z)
+    );
+    assert_eq!(ordinary.block_ticks.image(), warped.block_ticks.image());
+}
+
+#[test]
+fn sniffer_scheduled_edge_windows_match_continuous_ticks() {
     let (mut ordinary, _) = setup();
     let (mut warped, _) = setup();
     let pos = BlockPos {
@@ -1886,9 +1954,8 @@ fn sniffer_scheduled_edges_match_continuous_ticks() {
             .find(|tick| tick.pos == [pos.x, pos.y, pos.z])
             .unwrap()
             .trigger_tick;
-        // Compare a small continuous window around each real scheduled edge.
-        // No other behaviour in this isolated fixture is asserted across the
-        // omitted interval.
+        // Only the four ticks immediately before each edge are continuous;
+        // this does not compare the intervening 8,000-tick intervals.
         ordinary.tick = due - 4;
         warped.tick = due - 4;
         while ordinary.tick < due {
