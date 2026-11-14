@@ -1254,7 +1254,7 @@ impl EntityStore {
         if body.faction == faction {
             return;
         }
-        if faction == 0 {
+        if !crate::battle::battle_row(faction) {
             self.battle_members.remove(&slot);
         } else {
             self.battle_members.insert(slot);
@@ -1864,7 +1864,7 @@ impl EntityStore {
 
     fn index_tick_members(&mut self, slot: EntitySlot) {
         let body = &self.bodies[slot.0 as usize];
-        if body.faction != 0 {
+        if crate::battle::battle_row(body.faction) {
             self.battle_members.insert(slot);
         }
         match body.kind {

@@ -76,7 +76,7 @@ impl TargetGrid {
         self.cells.clear();
         self.factions.clear();
         self.input.clear();
-        for unit in units.filter(|unit| unit.faction != 0) {
+        for unit in units.filter(|unit| super::battle_row(unit.faction)) {
             let key = (unit.faction, cell(unit.pos[0]), cell(unit.pos[2]));
             self.cells.entry(key).or_default().len += 1;
             if !self.factions.contains(&unit.faction) {
@@ -131,7 +131,7 @@ impl TargetGrid {
     /// lowest stable entity id, independent of bucket order, slots and workers.
     /// A cell's horizontal lower bound prunes work, never a possible winner.
     pub fn nearest_enemy(&self, actor: Unit, reach: f64) -> Query {
-        if actor.faction == 0 || !reach.is_finite() || reach < 0.0 {
+        if !super::battle_row(actor.faction) || !reach.is_finite() || reach < 0.0 {
             return Query::default();
         }
         let mut search = Search {
@@ -142,7 +142,7 @@ impl TargetGrid {
         let (cx, cz) = (cell(actor.pos[0]), cell(actor.pos[2]));
         let radius = (reach / CELL_BLOCKS).ceil() as i32;
         for &faction in &self.factions {
-            if faction == actor.faction {
+            if !super::enemies(faction, actor.faction) {
                 continue;
             }
             for ring in 0..=radius {
@@ -186,14 +186,14 @@ impl TargetGrid {
         reach: f64,
         mut accept: impl FnMut(&Unit) -> bool,
     ) -> Option<Unit> {
-        if actor.faction == 0 || !reach.is_finite() || reach < 0.0 {
+        if !super::battle_row(actor.faction) || !reach.is_finite() || reach < 0.0 {
             return None;
         }
         let limit = reach * reach;
         let (cx, cz) = (cell(actor.pos[0]), cell(actor.pos[2]));
         let radius = (reach / CELL_BLOCKS).ceil() as i32;
         for &faction in &self.factions {
-            if faction == actor.faction {
+            if !super::enemies(faction, actor.faction) {
                 continue;
             }
             for ring in 0..=radius {
@@ -225,7 +225,7 @@ impl TargetGrid {
     /// the actor excluded, with its squared distance. Only the cells of the
     /// reach's square are visited, so the walk is bounded by the reach.
     pub fn friends_within(&self, actor: Unit, reach: f64, mut visit: impl FnMut(&Unit, f64)) {
-        if actor.faction == 0 || !reach.is_finite() || reach < 0.0 {
+        if !super::battle_row(actor.faction) || !reach.is_finite() || reach < 0.0 {
             return;
         }
         let limit = reach * reach;

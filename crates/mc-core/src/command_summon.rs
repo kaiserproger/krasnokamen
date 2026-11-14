@@ -676,6 +676,10 @@ pub(crate) fn prepare(
         equipment_authored,
         Summoned::Fresh,
     )?;
+    if image.uuid_authored && image.state.faction != 0 {
+        crate::scoreboard::require_no_team(&state.scoreboard, &image.native.uuid.to_string())
+            .map_err(error)?;
+    }
     image.variant = variant;
     Ok(image)
 }

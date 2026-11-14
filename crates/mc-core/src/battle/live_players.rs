@@ -315,10 +315,9 @@ pub(crate) fn same_side(state: &TickState, attacker: EntityId, victim: EntityId)
     let Some(hold) = holds.iter().find(|hold| hold.name == name) else {
         return false;
     };
-    state
-        .entities
-        .slot_of(victim)
-        .is_some_and(|slot| state.entities.body(slot).faction == hold.side)
+    state.entities.slot_of(victim).is_some_and(|slot| {
+        super::relation(state.entities.body(slot).faction, hold.side) == super::Relation::Same
+    })
 }
 
 /// A regiment that can take a holder in `tier`: 0 is `side`'s sword-and-shield
@@ -327,7 +326,10 @@ pub(crate) fn same_side(state: &TickState, attacker: EntityId, victim: EntityId)
 /// line must still have men, and tiers 0 and 1 must not be broken.
 fn eligible(state: &TickState, regiment: &Regiment, side: u16, tier: u8) -> bool {
     let spec = &regiment.spec;
-    if spec.faction != side || spec.order == Order::Hold || spec.frontage != 1.0 {
+    if super::relation(spec.faction, side) != super::Relation::Same
+        || spec.order == Order::Hold
+        || spec.frontage != 1.0
+    {
         return false;
     }
     if state.hostile.battle.running
@@ -366,7 +368,9 @@ fn choose_slot(
     let foot: Vec<usize> = (0..formation.regiments.len())
         .filter(|&i| {
             let spec = &formation.regiments[i].spec;
-            spec.faction == side && spec.order != Order::Hold && spec.frontage == 1.0
+            super::relation(spec.faction, side) == super::Relation::Same
+                && spec.order != Order::Hold
+                && spec.frontage == 1.0
         })
         .collect();
     if foot.is_empty() {
@@ -689,6 +693,7 @@ pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<Strin
         return Err("no staged formation; setup required".into());
     }
     let player = player_named(state, name).ok_or_else(|| format!("{name} is not online"))?;
+    crate::scoreboard::require_no_team(&state.scoreboard, name)?;
     if is_dead(state, player) {
         return Err(format!("{name} is dead; placed again on respawn"));
     }

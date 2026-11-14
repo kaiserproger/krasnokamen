@@ -480,7 +480,7 @@ pub(super) fn early_entity_rest(
     targets_empty: bool,
 ) -> bool {
     let flags = view.entities.motion_flags(slot);
-    let battle = view.bodies[slot.0 as usize].faction != 0;
+    let battle = crate::battle::battle_row(view.bodies[slot.0 as usize].faction);
     let battle_thrust = view
         .hostile
         .battle
@@ -1092,7 +1092,8 @@ pub(super) fn read_row(
     rare: &RarePrep,
 ) -> (ReadRow, bool) {
     let body = &view.bodies[slot.0 as usize];
-    let battle = body.faction != 0 && matches!(body.kind, EntityKind::Mob { .. });
+    let battle =
+        crate::battle::battle_row(body.faction) && matches!(body.kind, EntityKind::Mob { .. });
     let think = battle || motion_thinks(view.tick, flags, period);
     let row = view.entities.row(slot);
     let observed = rare.observed;
@@ -1799,7 +1800,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     retain_resting_writeback(state, &mut resting);
     for slot in resting.drain(..) {
         let body = state.entities.body(slot);
-        if body.faction == 0 {
+        if !crate::battle::battle_row(body.faction) {
             let aggressive = state.hostile.targets.contains_key(&body.id);
             crate::hostile::set_zombie_aggressive(state, slot, aggressive);
         }

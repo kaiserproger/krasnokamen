@@ -1361,7 +1361,10 @@ fn step(
                 // Battle volleys cross their own ranks just as a scoreboard
                 // team with friendlyFire=false does; ordinary arrows and player
                 // targets retain the existing collision and scoreboard rules.
-                .filter(|body| battle_faction == 0 || body.battle_faction != battle_faction)
+                .filter(|body| {
+                    crate::battle::relation(battle_faction, body.battle_faction)
+                        != crate::battle::Relation::Same
+                })
                 .filter(|body| {
                     owner.is_none_or(|owner| {
                         crate::scoreboard::permits_player_damage(state, owner, body.id)

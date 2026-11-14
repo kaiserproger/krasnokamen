@@ -10,11 +10,10 @@
 //! - an add to an unknown team is dropped, so a team is created first;
 //! - an add moves an entry out of its other team;
 //! - removing an entry from a team that does not hold it throws, which
-//!   disconnects. The projection removes an entry (method 4) only when this
-//!   connection's baseline lists it in that team ([`plan_teams`]). The core's
-//!   entry-free rule (`mc_core::scoreboard::require_no_team`) keeps `/team`
-//!   entries out, and [`release_for_core_team`] keeps a `/team` add from
-//!   moving a listed entry first;
+//!   disconnects. The projection never sends method 4: entries stay until
+//!   their team is removed, or an add moves them. The core's entry-free rule
+//!   rejects faction admission for `/team` entries and rejects `/team join`
+//!   for active faction entries; [`forget_for_core_team`] tracks core adds;
 //! - the scoreboard outlives respawns and dimension changes;
 //! - a team member's nameplate follows the team's nametag visibility before
 //!   the hidden-HUD check, so these teams use `never`.
@@ -45,7 +44,6 @@ pub(crate) const MEMBERS_PER_PACKET: usize = 4096;
 pub(crate) const CREATE: u8 = 0;
 pub(crate) const REMOVE: u8 = 1;
 pub(crate) const ADD: u8 = 3;
-pub(crate) const REMOVE_MEMBERS: u8 = 4;
 /// 26.3 `TeamColor` ids (the `ChatFormatting` order): red 12, blue 9; other
 /// factions get no colour (`ChatFormatting.RESET`).
 const RED: i32 = 12;
@@ -72,9 +70,6 @@ pub(crate) struct FactionDelta {
     /// `(faction, uuid)` of the rows that entered a nonzero faction,
     /// ascending faction.
     added: Vec<(u16, Uuid)>,
-    /// Rows that left their faction for none: set to zero or gone from the
-    /// snapshot.
-    left: Vec<Uuid>,
     /// Factions that lost a row (it left the snapshot or changed faction),
     /// ascending.
     lost: Vec<u16>,
@@ -87,7 +82,6 @@ impl FactionDelta {
         Self {
             base,
             added: Vec::new(),
-            left: Vec::new(),
             lost: Vec::new(),
             still_held: OnceLock::new(),
         }
@@ -105,8 +99,6 @@ impl FactionDelta {
         }
         if let Some(row) = new.filter(|_| new_faction != 0) {
             self.added.push((new_faction, row.uuid));
-        } else if let Some(row) = old {
-            self.left.push(row.uuid);
         }
     }
 
@@ -180,13 +172,10 @@ impl TeamBaseline {
 /// are reliable, like the core's scoreboard packets: a membership the client
 /// misses is never repaired.
 ///
-/// An entry the baseline lists leaves its team (method 4) once its faction is
-/// zero: a mob row set to zero or gone from the snapshot, a player whose hold
-/// ended (`battle reset` ends every hold but leaves summoned faction rows
-/// standing), an entry of a faction a core team name now blocks. An entry
-/// moving to another faction is only added there (vanilla moves it). A team
-/// leaves (method 1) when no row and no player of its faction is left, and
-/// takes its entries along.
+/// Entries stay in their last projected team after their faction ends. Only
+/// an add moves them, or removal of the whole team takes them along. Never
+/// send method 4, including before a core `/team` add. A team leaves (method
+/// 1) when no snapshot row and no player of its faction remains.
 pub(crate) fn plan_teams(
     snapshot: &WorldSnapshot,
     delta: Option<&FactionDelta>,
@@ -235,7 +224,6 @@ pub(crate) fn plan_teams(
 
     let entities = &snapshot.entities;
     let mut additions: BTreeMap<u16, Vec<String>> = BTreeMap::new();
-    let mut removals: BTreeMap<u16, Vec<String>> = BTreeMap::new();
     let mut candidates: Vec<u16> = Vec::new();
     let mut shared = None;
     let mut present = None;
@@ -244,21 +232,13 @@ pub(crate) fn plan_teams(
         Some(revision) if delta.is_some_and(|delta| delta.base == revision) => {
             let delta = delta.expect("matched base");
             for (faction, uuid) in &delta.added {
-                if teams.blocked.contains(faction) {
-                    if let Some(held) = teams.mobs.remove(uuid) {
-                        removals.entry(held).or_default().push(uuid.to_string());
-                    }
-                } else if teams.mobs.insert(*uuid, *faction) != Some(*faction) {
-                    // An add moves the entry out of its other team.
+                if !teams.blocked.contains(faction)
+                    && teams.mobs.insert(*uuid, *faction) != Some(*faction)
+                {
                     additions
                         .entry(*faction)
                         .or_default()
                         .push(uuid.to_string());
-                }
-            }
-            for uuid in &delta.left {
-                if let Some(held) = teams.mobs.remove(uuid) {
-                    removals.entry(held).or_default().push(uuid.to_string());
                 }
             }
             candidates.extend_from_slice(&delta.lost);
@@ -270,7 +250,6 @@ pub(crate) fn plan_teams(
                 &teams.blocked,
                 &mut teams.mobs,
                 &mut additions,
-                &mut removals,
             ));
             candidates.extend_from_slice(&teams.created);
         }
@@ -278,24 +257,16 @@ pub(crate) fn plan_teams(
     teams.revision = Some(entities.revision());
     if !Arc::ptr_eq(&teams.player_list, &snapshot.player_factions) {
         let list = &snapshot.player_factions;
-        // A team can lose its last player; a held entry released ahead of a
-        // core `/team` add is in the old list only.
+        // A core add may already have moved a stale projected entry.
         candidates.extend(teams.player_list.iter().map(|(_, faction)| *faction));
         candidates.extend(teams.players.values().copied());
-        teams.players.retain(|name, held| {
-            if side(list, name).is_some() {
-                return true;
-            }
-            // His hold ended.
-            removals.entry(*held).or_default().push(name.clone());
-            false
-        });
         for (name, faction) in list.iter() {
-            let held = teams.players.get(name).copied();
-            if *faction == 0 || held == Some(*faction) || teams.blocked.contains(faction) {
+            if *faction == 0
+                || teams.players.get(name) == Some(faction)
+                || teams.blocked.contains(faction)
+            {
                 continue;
             }
-            // An add moves the entry out of its other team on the client.
             additions.entry(*faction).or_default().push(name.clone());
             teams.players.insert(name.clone(), *faction);
         }
@@ -324,12 +295,6 @@ pub(crate) fn plan_teams(
             gone.push(faction);
         }
     }
-    // Entries leave a team that stays; a removed team takes its own along.
-    for (faction, members) in removals {
-        if !gone.contains(&faction) {
-            push_members(out, connection, faction, REMOVE_MEMBERS, members);
-        }
-    }
     for faction in gone {
         push_reliable(out, connection, &team(faction, REMOVE, Vec::new()));
         teams.forget(faction);
@@ -339,21 +304,15 @@ pub(crate) fn plan_teams(
             push_reliable(out, connection, &team(faction, CREATE, Vec::new()));
             teams.created.insert(at, faction);
         }
-        push_members(out, connection, faction, ADD, members);
+        push_members(out, connection, faction, members);
     }
 }
 
-/// Release the projected entries a `/team` add names, before it: the add
-/// moves each out of its projected team on the client, and a later removal
-/// from that team would throw (vanilla `Scoreboard.removePlayerFromTeam`).
-/// The pump routes the core's scoreboard packets before the world publish,
-/// so an entry whose faction ends in the tick of its `/team join` (a hold
-/// ended, a row gone) is released here, ahead of the add; the core's
-/// entry-free rule refuses the join while the faction lasts.
-pub(crate) fn release_for_core_team(
+/// Forget entries moved by a core team add. Vanilla performs the move;
+/// the projection only updates its baseline, without an entry-removal packet.
+pub(crate) fn forget_for_core_team(
     event: &mc_core::scoreboard::ScoreboardEvent,
     viewer: &mut ViewerState,
-    out: &mut Vec<PlannedPacket>,
 ) {
     let mc_core::scoreboard::ScoreboardEvent::Team {
         method: 0 | 3,
@@ -367,56 +326,42 @@ pub(crate) fn release_for_core_team(
     if teams.mobs.is_empty() && teams.players.is_empty() {
         return;
     }
-    let mut released: BTreeMap<u16, Vec<String>> = BTreeMap::new();
     for member in members {
-        // The entry exactly as it was sent: a mob's hyphenated lowercase UUID.
-        let held = match Uuid::try_parse(member) {
-            Ok(uuid) => teams
-                .mobs
-                .remove(&uuid)
-                .map(|held| (held, uuid.to_string())),
-            Err(_) => teams
-                .players
-                .remove(member)
-                .map(|held| (held, member.clone())),
-        };
-        if let Some((faction, entry)) = held {
-            released.entry(faction).or_default().push(entry);
+        // UUID spelling variants share a baseline key; player names stay exact.
+        match Uuid::try_parse(member) {
+            Ok(uuid) => {
+                teams.mobs.remove(&uuid);
+            }
+            Err(_) => {
+                teams.players.remove(member);
+            }
         }
-    }
-    for (faction, members) in released {
-        push_members(out, viewer.connection, faction, REMOVE_MEMBERS, members);
     }
 }
 
-/// Add or remove `members` in chunks of [`MEMBERS_PER_PACKET`].
+/// Add `members` in chunks of [`MEMBERS_PER_PACKET`].
 fn push_members(
     out: &mut Vec<PlannedPacket>,
     connection: mc_core::boundary::ConnectionId,
     faction: u16,
-    method: u8,
     mut members: Vec<String>,
 ) {
     while !members.is_empty() {
         let rest = members.split_off(members.len().min(MEMBERS_PER_PACKET));
         let chunk = std::mem::replace(&mut members, rest);
-        push_reliable(out, connection, &team(faction, method, chunk));
+        push_reliable(out, connection, &team(faction, ADD, chunk));
     }
 }
 
-/// Reconcile `mobs` with the snapshot in full: an add for every row whose
-/// projected faction the baseline does not list, a removal for every listed
-/// entry whose row has none (zero, gone, or a blocked faction). Returns the
-/// factions that have a row, ascending.
+/// Add current mobs missing from the baseline, retaining stale entries until
+/// their whole team leaves. Returns factions with a current row, ascending.
 fn reconcile_mobs(
     entities: &EntityViews,
     blocked: &[u16],
     mobs: &mut FxHashMap<Uuid, u16>,
     additions: &mut BTreeMap<u16, Vec<String>>,
-    removals: &mut BTreeMap<u16, Vec<String>>,
 ) -> Vec<u16> {
     let mut present = Vec::new();
-    let mut next = FxHashMap::with_capacity_and_hasher(mobs.len(), Default::default());
     for row in entities {
         if row.faction == 0 {
             continue;
@@ -427,27 +372,14 @@ fn reconcile_mobs(
         if blocked.contains(&row.faction) {
             continue;
         }
-        if mobs.remove(&row.uuid) != Some(row.faction) {
+        if mobs.insert(row.uuid, row.faction) != Some(row.faction) {
             additions
                 .entry(row.faction)
                 .or_default()
                 .push(row.uuid.to_string());
         }
-        next.insert(row.uuid, row.faction);
     }
-    for (uuid, held) in mobs.drain() {
-        removals.entry(held).or_default().push(uuid.to_string());
-    }
-    *mobs = next;
     present
-}
-
-/// The side `name` holds in `players` (sorted by name).
-fn side(players: &[(String, u16)], name: &str) -> Option<u16> {
-    players
-        .binary_search_by(|(held, _)| held.as_str().cmp(name))
-        .ok()
-        .map(|index| players[index].1)
 }
 
 /// Factions whose exact team name a core team holds, ascending.

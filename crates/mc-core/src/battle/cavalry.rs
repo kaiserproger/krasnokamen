@@ -100,7 +100,7 @@ fn nearest_enemy_foot<'a>(
         .regiments
         .iter()
         .filter(|e| {
-            e.spec.faction != own.spec.faction
+            super::enemies(e.spec.faction, own.spec.faction)
                 && e.spec.frontage <= 1.0
                 && e.morale.broken == broken
                 && e.live_count > 0
@@ -160,10 +160,10 @@ fn plan_sweeps(battle: &BattleState, plans: &mut Vec<Option<Sweep>>) {
             None
         } else if let Some(fugitives) = nearest_enemy_foot(battle, own, true) {
             Some(Sweep::Chase(fugitives.spec.origin))
-        } else if regiments
-            .iter()
-            .any(|r| r.spec.faction == own.spec.faction && foot_closing(r))
-        {
+        } else if regiments.iter().any(|r| {
+            super::relation(r.spec.faction, own.spec.faction) == super::Relation::Same
+                && foot_closing(r)
+        }) {
             nearest_enemy_foot(battle, own, false).map(|e| Sweep::Flank(flank_round(own, e)))
         } else {
             None
@@ -362,7 +362,7 @@ pub fn mount(state: &mut TickState, rider: EntityId, horse: EntityId) -> Result<
     let rider_row = state.entities.row(rider_slot);
     let horse_row = state.entities.row(horse_slot);
     if rider == horse
-        || rider_body.faction == 0
+        || !super::battle_row(rider_body.faction)
         || !rider_body.alive
         || !horse_body.alive
         || !matches!(rider_body.kind, EntityKind::Mob { .. })
@@ -378,6 +378,8 @@ pub fn mount(state: &mut TickState, rider: EntityId, horse: EntityId) -> Result<
     }
     let uuid = rider_row.uuid;
     let faction = rider_body.faction;
+    crate::scoreboard::require_no_team(&state.scoreboard, &horse_row.uuid.to_string())
+        .map_err(CoreError::Storage)?;
     state.entities.set_faction(horse_slot, faction);
     state.entities.set_riders(horse_slot, vec![uuid]);
     let horse_row = state.entities.row_mut(horse_slot);
