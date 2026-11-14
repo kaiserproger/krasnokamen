@@ -155,6 +155,7 @@ async fn operator_updates_wait_for_capacity_before_mutating() {
     let (_alex, _alex_rx) = register(&server, "Alex", false);
     let uuid = crate::crypto::offline_uuid("Alex");
     let held = server.hub.reserve_inputs(4096).await.unwrap();
+    let dropped = server.hub.dropped_inputs();
     let command = server.handle_admin_command(operator, "op Alex");
     tokio::pin!(command);
     let deop = server.handle_admin_command(operator, "deop Alex");
@@ -165,12 +166,18 @@ async fn operator_updates_wait_for_capacity_before_mutating() {
         std::task::Poll::Ready(())
     })
     .await;
+    assert_eq!(
+        server.hub.dropped_inputs(),
+        dropped,
+        "a full queue must park the update, not poll submit and shed copies"
+    );
     assert_eq!(server.admin.level(uuid), 0);
     drop(held);
     assert!(command.await.unwrap());
     assert_eq!(server.admin.level(uuid), 4);
     assert!(deop.await.unwrap());
     assert_eq!(server.admin.level(uuid), 0);
+    assert_eq!(server.hub.dropped_inputs(), dropped);
     server.hub.shutdown();
     // The fixture's TempDir removes this directory when it is dropped.
 }
