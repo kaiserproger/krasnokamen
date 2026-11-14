@@ -2,9 +2,21 @@
 //! faction rows not in that roster (including carried horses) occupy the tail.
 //! Native rows remain authoritative. Only preparation resolves identity to slot.
 
-use super::{EnemyTarget, Frame, formation::FormationRuntime};
+use super::{EnemyTarget, Frame, UnitCounters, formation::{FormationRuntime, SoldierSample}};
 use crate::boundary::EntityId;
-use crate::entities::{EntityKind, EntitySlot};
+use crate::entities::{EntityKind, EntitySlot, EntityStore};
+
+/// Cold-row facts, valid only until the next native wire mutation. The slot is
+/// merely an identity-checked lookup hint, including for dead retained bodies.
+#[derive(Debug, Default)]
+struct StaticFacts {
+    slot: Option<EntitySlot>,
+    valid: bool,
+    health: f32,
+    no_ai: bool,
+    carried: bool,
+    targetable: bool,
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct Columns {
@@ -22,7 +34,9 @@ pub(crate) struct Columns {
     pub index_by_slot: Vec<Option<usize>>,
     pub drive_by_slot: Vec<[f64; 3]>,
     pub look_by_slot: Vec<Option<[f64; 3]>>,
-    classification: Vec<Option<(u32, Option<u32>)>>,
+    classification: Vec<Option<(u32, Option<u32>, Option<u32>)>>,
+    pub equipment_dirty: Vec<bool>,
+    facts: Vec<StaticFacts>,
 }
 
 impl Columns {
@@ -39,6 +53,27 @@ impl Columns {
         self.carried.push(false);
         self.targetable.push(false);
         self.classification.push(None);
+        self.equipment_dirty.push(false);
+        self.facts.push(StaticFacts::default());
+    }
+
+    /// The feed is borrowed, never consumed. Repacked native slots are checked
+    /// again during preparation; a different slot/identity forces a fresh read.
+    pub fn invalidate(&mut self, entities: &EntityStore) {
+        for (id, slot) in entities.pending_wire_changes() {
+            if let Some(bi) = self.index(slot)
+                && self.ids[bi] == id
+            {
+                self.facts[bi].valid = false;
+            }
+        }
+    }
+
+    fn native_slot(&self, frame: &Frame<'_>, bi: usize, id: EntityId) -> Option<EntitySlot> {
+        self.facts.get(bi).and_then(|facts| facts.slot)
+            .filter(|slot| (slot.0 as usize) < frame.entities.len()
+                && frame.entities.body(*slot).id == id)
+            .or_else(|| frame.entities.slot_of_any(id))
     }
 
     fn prepare_unit(
@@ -47,6 +82,7 @@ impl Columns {
         bi: usize,
         id: EntityId,
         slot: Option<EntitySlot>,
+        expected_faction: Option<u16>,
     ) {
         if bi == self.ids.len() {
             self.append();
@@ -54,55 +90,106 @@ impl Columns {
         if self.ids[bi] != id {
             self.targets[bi] = None;
             self.classification[bi] = None;
+            self.facts[bi].valid = false;
         }
+        if self.facts[bi].slot != slot {
+            self.facts[bi].valid = false;
+        }
+        self.facts[bi].slot = slot;
         self.ids[bi] = id;
-        self.slots[bi] = slot;
+        self.slots[bi] = None;
         self.drive[bi] = [0.0; 3];
         self.active[bi] = false;
         self.targetable[bi] = false;
         self.carried[bi] = false;
         self.factions[bi] = 0;
         let Some(slot) = slot else {
+            self.facts[bi].valid = false;
             self.targets[bi] = None;
             return;
         };
-        self.index_by_slot[slot.0 as usize] = Some(bi);
         let body = frame.entities.body(slot);
-        let row = frame.entities.row(slot);
+        if !body.alive {
+            self.facts[bi].valid = false;
+            self.targets[bi] = None;
+            return;
+        }
+        if !self.facts[bi].valid {
+            let row = frame.entities.row(slot);
+            let facts = &mut self.facts[bi];
+            facts.health = row.health;
+            facts.no_ai = row.controls.no_ai;
+            facts.carried = row.entity_life.mount.rider.is_some();
+            facts.targetable = matches!(body.kind, EntityKind::Mob { .. })
+                && !crate::axolotl::playing_dead(row);
+            let type_id = match body.kind {
+                EntityKind::Mob { type_id } => type_id,
+                _ => u32::MAX,
+            };
+            let held = row.appearance.equipment[0]
+                .as_ref().filter(|stack| !stack.is_empty()).map(|stack| stack.item_id);
+            let offhand = row.appearance.equipment[1]
+                .as_ref().filter(|stack| !stack.is_empty()).map(|stack| stack.item_id);
+            let key = (type_id, held, offhand);
+            if self.classification[bi] != Some(key) {
+                self.ranged[bi] = super::combat::is_archer(frame, slot);
+                self.classification[bi] = Some(key);
+                // Latch until combat consumes it: inactive/carried rows may
+                // change equipment several ticks before becoming fighters.
+                self.equipment_dirty[bi] = true;
+            }
+            self.reach[bi] = super::engagement_reach(self.ranged[bi], row.attack_reach);
+            facts.valid = true;
+        }
+        let facts = &mut self.facts[bi];
+        let member_visible = expected_faction
+            .is_none_or(|expected| facts.health > 0.0 && body.faction == expected);
+        if !member_visible || (expected_faction.is_none() && facts.health <= 0.0) {
+            facts.valid = false;
+            self.targets[bi] = None;
+            return;
+        }
+        self.slots[bi] = Some(slot);
+        self.index_by_slot[slot.0 as usize] = Some(bi);
         self.positions[bi] = frame.entities.pos(slot);
         self.factions[bi] = body.faction;
-        self.carried[bi] = row.entity_life.mount.rider.is_some();
-        self.targetable[bi] = body.faction != 0
-            && body.alive
-            && row.health > 0.0
-            && matches!(body.kind, EntityKind::Mob { .. })
-            && !crate::axolotl::playing_dead(row);
+        self.carried[bi] = facts.carried;
+        self.targetable[bi] = body.faction != 0 && facts.health > 0.0 && facts.targetable;
         let chunk = frame.entities.chunk_of(slot);
-        self.active[bi] = self.targetable[bi]
-            && !row.controls.no_ai
+        self.active[bi] = self.targetable[bi] && !facts.no_ai
             && frame.world.is_active_position(chunk.x, chunk.z);
-        let type_id = match body.kind {
-            EntityKind::Mob { type_id } => type_id,
-            _ => u32::MAX,
-        };
-        let held = row.appearance.equipment[0]
-            .as_ref()
-            .filter(|stack| !stack.is_empty())
-            .map(|stack| stack.item_id);
-        let key = (type_id, held);
-        if self.classification[bi] != Some(key) {
-            self.ranged[bi] = super::combat::is_archer(frame, slot);
-            self.classification[bi] = Some(key);
-        }
-        self.reach[bi] = super::engagement_reach(self.ranged[bi], row.attack_reach);
     }
 
-    pub fn prepare(&mut self, frame: &Frame<'_>, formation: &FormationRuntime) {
+    pub fn prepare(
+        &mut self,
+        frame: &Frame<'_>,
+        formation: &mut FormationRuntime,
+        counters: &mut UnitCounters,
+    ) {
+        // Input/pre-hint changes are visible here, before battle and merge.
+        self.invalidate(frame.entities);
         self.index_by_slot.resize(frame.entities.len(), None);
         self.index_by_slot.fill(None);
+        counters.clear();
+        formation.begin_preparation(frame.tick);
         let mut len = 0;
-        for member in &formation.members {
-            self.prepare_unit(frame, len, member.id, member.slot);
+        for bi in 0..formation.members.len() {
+            let member = &formation.members[bi];
+            let id = member.id;
+            let expected = formation.regiments[member.regiment].spec.faction;
+            let slot = self.native_slot(frame, bi, id);
+            self.prepare_unit(frame, bi, id, slot, Some(expected));
+            let sample = slot.and_then(|slot| {
+                let body = frame.entities.body(slot);
+                counters.record(body.faction, body.alive && self.facts[bi].health > 0.0);
+                body.alive.then(|| SoldierSample {
+                    slot: Some(slot),
+                    pos: frame.entities.pos(slot),
+                    health: self.facts[bi].health,
+                    faction: body.faction,
+                })
+            });
+            formation.sample_member(bi, sample);
             len += 1;
         }
         for slot in frame.entities.battle_slots() {
@@ -110,15 +197,23 @@ impl Columns {
                 continue;
             }
             let body = frame.entities.body(slot);
-            if !body.alive
-                || frame.entities.row(slot).health <= 0.0
-                || !matches!(body.kind, EntityKind::Mob { .. })
-            {
+            let counted = formation.has_member(body.id);
+            if !body.alive || !matches!(body.kind, EntityKind::Mob { .. }) {
+                if !counted {
+                    counters.record(body.faction,
+                        body.alive && frame.entities.row(slot).health > 0.0);
+                }
                 continue;
             }
-            self.prepare_unit(frame, len, frame.entities.body(slot).id, Some(slot));
-            len += 1;
+            self.prepare_unit(frame, len, body.id, Some(slot), None);
+            if !counted {
+                counters.record(body.faction, self.facts[len].health > 0.0);
+            }
+            if self.slots[len].is_some() {
+                len += 1;
+            }
         }
+        counters.finish();
         self.ids.truncate(len);
         self.slots.truncate(len);
         self.factions.truncate(len);
@@ -131,6 +226,8 @@ impl Columns {
         self.carried.truncate(len);
         self.targetable.truncate(len);
         self.classification.truncate(len);
+        self.equipment_dirty.truncate(len);
+        self.facts.truncate(len);
         self.clear_projection(frame.entities.len());
     }
 

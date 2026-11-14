@@ -120,8 +120,8 @@ conflict. Floating-point sums cannot become unordered parallel reductions.
 
 Faction battle preparation is ordered owner work before EntityStep admission,
 not another independently scheduled graph node. Its frozen `Frame` feeds
-formation update, dense-column preparation, target pairing, steering, combat
-(including archery/cavalry), morale, then native-slot drive projection.
+dense-column/member snapshot, formation decisions, target pairing, steering,
+combat (including archery/cavalry), morale, then native-slot drive projection.
 The formation roster supplies the stable battle-index prefix; unregistered
 faction bodies and horses occupy a derived tail. Targets, classification and
 drive share this index. Slot caches are refreshed before consumers; native
@@ -143,9 +143,34 @@ Sub-step timers are exposed only with `MC_CORE_PHASE_LOG`; concurrency is not
 enabled merely by introducing columns. A measured kernel exceeding 5 ms is the
 threshold for evaluating indexed parallel sub-steps on the existing worker pool.
 
-Population counters use the same sparse native faction membership owner.
-The hook samples pre-motion; publication refreshes the sample after merge before
-creating immutable `TickTimes.battle`. The extra observer pass is part of tick
+The member snapshot, derived columns and pre-motion faction counts share one
+ordered roster fold plus the existing unregistered native-faction tail. Member
+position sums keep their original battle-index order. Native ID/slot hints are
+validated against the hot body before use; repacking or identity changes force
+cold-fact refresh. Health, NoAI, mount occupancy, attack reach and equipment
+classification are derived cached facts, never a second authority. Equipment
+changes stay latched until an active fighter consumes classification.
+
+The read-only pending-wire feed conservatively invalidates these facts twice:
+at column preparation after input/pre-hints, before battle/merge, and after merge
+and late native writes immediately before `EntityStore::views()` drains it.
+The latter only invalidates scratch for the next frame and is charged to the
+views timer. The feed includes movement, so a moving row may refresh more often
+than a static-fact change requires. No custody, feed drain, WAL, view ordering
+or publication owner changes; full tick CPU, not just battle timings, measures
+the optimization.
+
+Native battle arrows exclude same-faction mobs from the shared swept collision
+snapshot, equivalent to disabling friendly fire for a battle team. Player
+targets, unaffiliated mobs and existing scoreboard checks are unchanged.
+This prevents rear-rank volleys from killing their own archers and triggering
+casualty/panic routs while ammunition remains.
+
+Population counters use native faction membership. The running hook folds
+pre-motion counts into its snapshot; paused hooks and publication use the native
+sparse scan. Publication still reads fresh post-merge health, never the cached
+pre-motion count, before creating immutable `TickTimes.battle`. The extra observer
+pass is part of tick
 CPU cost, not WAL or checkpoint work. Faction remains native persisted state;
 all battle columns, targets, clocks and counters are restart-local.
 

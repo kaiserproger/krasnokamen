@@ -18,8 +18,8 @@ pub(in crate::battle) fn prepare(state: &TickState, battle: &mut BattleState, ti
         world: &state.world,
         tick,
     };
-    super::super::formation::update(&frame, battle);
-    battle.columns.prepare(&frame, &battle.formation);
+    battle.columns.prepare(&frame, &mut battle.formation, &mut battle.output.counters);
+    battle.formation.finish_preparation();
     battle.combat.prepare(&battle.columns.ids);
 }
 

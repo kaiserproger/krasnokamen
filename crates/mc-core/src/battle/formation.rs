@@ -3,7 +3,6 @@
 //! Decisions are staggered at 10 ticks; motion and membership liveness are not.
 
 use super::morale::{Morale, Pressure, nerve};
-use super::{BattleState, Frame};
 use crate::boundary::EntityId;
 use crate::entities::EntitySlot;
 use rustc_hash::FxHashMap;
@@ -431,13 +430,26 @@ impl FormationRuntime {
         p.panicking = p.panicking.saturating_add(pressure.panicking);
     }
 
-    /// One O(N) liveness/position pass; lookup is the entity store's O(1) id
-    /// index. Tests feed the same kernel explicit frozen oracle snapshots.
+    /// Frozen snapshots and native columns use the same ordered fold.
+    #[cfg(test)]
     pub fn prepare(
         &mut self,
         tick: u64,
         mut lookup: impl FnMut(EntityId) -> Option<SoldierSample>,
     ) {
+        self.begin_preparation(tick);
+        for bi in 0..self.members.len() {
+            let sample = lookup(self.members[bi].id);
+            self.sample_member(bi, sample);
+        }
+        self.finish_preparation();
+    }
+
+    pub fn has_member(&self, id: EntityId) -> bool {
+        self.index.contains_key(&id)
+    }
+
+    pub fn begin_preparation(&mut self, tick: u64) {
         self.tick = tick;
         self.work = Work::default();
         for r in &mut self.regiments {
@@ -445,35 +457,40 @@ impl FormationRuntime {
             r.live_count = 0;
             r.live_members.clear();
         }
-        for (bi, m) in self.members.iter_mut().enumerate() {
-            self.work.soldiers += 1;
-            let expected = self.regiments[m.regiment].spec.faction;
-            m.slot = None;
-            m.alive = lookup(m.id).is_some_and(|sample| {
-                m.pos = sample.pos;
-                m.slot = sample
-                    .slot
-                    .filter(|_| sample.health > 0.0 && sample.faction == expected);
-                sample.health > 0.0 && sample.faction == expected
-            });
-            if m.alive {
-                let r = &mut self.regiments[m.regiment];
-                r.live_count += 1;
-                if !m.wounded {
-                    r.live_members.push(bi);
-                }
-                for axis in 0..3 {
-                    r.live_sum[axis] += m.pos[axis];
-                }
+    }
+
+    pub fn sample_member(&mut self, bi: usize, sample: Option<SoldierSample>) {
+        self.work.soldiers += 1;
+        let m = &mut self.members[bi];
+        let expected = self.regiments[m.regiment].spec.faction;
+        m.slot = None;
+        m.alive = sample.is_some_and(|sample| {
+            m.pos = sample.pos;
+            m.slot = sample
+                .slot
+                .filter(|_| sample.health > 0.0 && sample.faction == expected);
+            sample.health > 0.0 && sample.faction == expected
+        });
+        if m.alive {
+            let r = &mut self.regiments[m.regiment];
+            r.live_count += 1;
+            if !m.wounded {
+                r.live_members.push(bi);
+            }
+            for axis in 0..3 {
+                r.live_sum[axis] += m.pos[axis];
             }
         }
+    }
+
+    pub fn finish_preparation(&mut self) {
         for r in &mut self.regiments {
             if r.morale.broken && r.live_count > 0 {
                 r.spec.origin = r.live_sum.map(|x| x / r.live_count as f64);
             }
         }
         for i in 0..self.regiments.len() {
-            if tick % DECISION_TICKS == u64::from(self.regiments[i].spec.id) % DECISION_TICKS {
+            if self.tick % DECISION_TICKS == u64::from(self.regiments[i].spec.id) % DECISION_TICKS {
                 self.work.regiments += 1;
                 self.rotate_wounded(i);
                 let (enemy_regiment, enemy, routing, examined) =
@@ -771,17 +788,6 @@ pub(crate) fn roll(regiment: u32, section: usize, tick: u64) -> f64 {
     (x ^ (x >> 31)) as f64 / u64::MAX as f64
 }
 
-pub(crate) fn update(frame: &Frame<'_>, battle: &mut BattleState) {
-    battle.formation.prepare(frame.tick, |id| {
-        let slot = frame.entities.slot_of(id)?;
-        Some(SoldierSample {
-            slot: Some(slot),
-            pos: frame.entities.pos(slot),
-            health: frame.entities.row(slot).health,
-            faction: frame.entities.body(slot).faction,
-        })
-    });
-}
 
 #[cfg(test)]
 #[path = "formation_tests.rs"]

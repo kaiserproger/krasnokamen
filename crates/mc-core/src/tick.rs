@@ -1738,6 +1738,7 @@ fn run_dimension_tick_inner<'a>(
     let chunks = state.world.snapshot();
     let snapshot_time = publish_start.elapsed();
     let views_start = std::time::Instant::now();
+    crate::battle::invalidate_wire_facts(state);
     let views = state.entities.views();
     let views_time = views_start.elapsed();
     let snapshot = Arc::new(WorldSnapshot {

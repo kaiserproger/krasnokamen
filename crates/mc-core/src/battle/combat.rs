@@ -204,7 +204,10 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         let id = battle.columns.ids[bi];
         combat.work.visited += 1;
         let fighter = &mut combat.fighters[bi];
-        classify(frame, slot, fighter, battle.columns.ranged[bi]);
+        if battle.columns.equipment_dirty[bi] || fighter.equipment.is_none() {
+            classify(frame, slot, fighter, battle.columns.ranged[bi]);
+            battle.columns.equipment_dirty[bi] = false;
+        }
         if matches!(fighter.action, Action::Wounded) {
             continue;
         }
