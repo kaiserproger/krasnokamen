@@ -23,6 +23,9 @@ pub(super) struct RegistryInner {
     /// Client locale last admitted to the core (`ClientInformation.language`);
     /// deduplicates Play updates and is cleared on disconnect.
     pub(super) locales: HashMap<ConnectionId, String>,
+    /// Measured tab-list latency and profile id per connection, recorded on
+    /// keepalive replies and broadcast batched by the pump; cleared on disconnect.
+    pub(super) latencies: HashMap<ConnectionId, (uuid::Uuid, i32)>,
     pub(super) roster_dirty: bool,
     // Join state and its waiters share the queue registry's atomic removal.
     pub(super) pending_joins: HashMap<ConnectionId, JoinedSpawn>,
@@ -252,6 +255,7 @@ impl ConnectionRegistry {
                 self.setup_fences_pending.store(false, Ordering::Release);
             }
             inner.locales.remove(&id);
+            inner.latencies.remove(&id);
             inner.closers.remove(&id)
         };
         if let Some(closer) = closer {
@@ -309,6 +313,18 @@ impl ConnectionRegistry {
             inner.names.insert(id, name);
             inner.roster_dirty = true;
         }
+    }
+
+    /// Record a keepalive-measured latency for the pump's batched broadcast.
+    pub fn set_latency(&self, id: ConnectionId, profile: uuid::Uuid, latency: i32) {
+        self.inner.lock().latencies.insert(id, (profile, latency));
+    }
+
+    /// Every connection's last measured latency, sorted by profile id.
+    pub(super) fn latencies(&self) -> Vec<(uuid::Uuid, i32)> {
+        let mut latencies: Vec<_> = self.inner.lock().latencies.values().copied().collect();
+        latencies.sort_by_key(|(profile, _)| *profile);
+        latencies
     }
 
     /// Sorted roster names for the dashboard.

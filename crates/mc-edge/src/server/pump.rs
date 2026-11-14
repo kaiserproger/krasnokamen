@@ -6,6 +6,11 @@ use mc_core::boundary::EntityId;
 
 const COREPERF_COLD_PAIR_LIMIT: usize = 1_000_000;
 
+/// Vanilla 26.3 `PlayerList.tick()` (javap) increments `sendAllPlayerInfoIn`
+/// and, once it exceeds 600, broadcasts one `UPDATE_LATENCY` player-info packet
+/// listing every player and resets it to 0: one packet per 601 ticks.
+pub(super) const LATENCY_BROADCAST_INTERVAL_TICKS: u64 = 601;
+
 fn bounded_tracked_union(
     pairs: usize,
     ids: impl Iterator<Item = EntityId>,
@@ -96,6 +101,12 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                 &mut connections,
             )
             .await;
+            broadcast_latencies(
+                &server.connections,
+                &server.net_counters,
+                &mut connections,
+                out.tick,
+            );
             let publish_us = publish_start
                 .elapsed()
                 .as_micros()
@@ -408,6 +419,69 @@ pub(super) async fn publish_and_route(
         }
     }
     flush_setup_world_fences(server, viewers, connections, out, view_distance);
+}
+
+/// Broadcast tab-list latencies at vanilla cadence: every
+/// [`LATENCY_BROADCAST_INTERVAL_TICKS`] ticks one batched
+/// `PlayerInfoUpdate(UPDATE_LATENCY)` frame with every measured player goes
+/// to every connection. That is one reliable-queue slot per interval per
+/// connection, not one slot per other connection per keepalive reply: the
+/// per-reply fan-out filled the 512-slot reliable queue of a slow reader in
+/// seconds and the delivery policy disconnected it.
+pub(super) fn broadcast_latencies(
+    registry: &ConnectionRegistry,
+    net_counters: &NetCounters,
+    connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+    tick: u64,
+) {
+    use mc_protocol::packets::Packet as _;
+    if tick % LATENCY_BROADCAST_INTERVAL_TICKS != 0 {
+        return;
+    }
+    let entries = registry.latencies();
+    if entries.is_empty() {
+        return;
+    }
+    let update = mc_protocol::packets::play::PlayerInfoUpdate {
+        actions: mc_protocol::packets::play::PlayerInfoActions::UPDATE_LATENCY,
+        entries: entries
+            .into_iter()
+            .map(
+                |(profile_id, latency)| mc_protocol::packets::play::PlayerInfoEntry {
+                    profile_id,
+                    name: String::new(),
+                    properties: Vec::new(),
+                    listed: false,
+                    latency,
+                    game_mode: 0,
+                    list_order: 0,
+                    show_hat: false,
+                },
+            )
+            .collect(),
+    };
+    let mut body = Vec::new();
+    if update.encode(&mut body).is_err() {
+        return;
+    }
+    let mut frame = bytes::BytesMut::new();
+    if mc_protocol::frame::append_frame(
+        &mut frame,
+        mc_protocol::packets::play::PlayerInfoUpdate::ID,
+        &body,
+        mc_protocol::frame::Compression::Threshold(256),
+    )
+    .is_err()
+    {
+        return;
+    }
+    let frame = frame.freeze();
+    for (id, handles) in connections.iter() {
+        if handles.reliable_tx.try_send(frame.clone()).is_err() {
+            registry.remove(*id);
+            net_counters.reliable_drops.fetch_add(1, Ordering::Relaxed);
+        }
+    }
 }
 
 pub(super) fn flush_setup_world_fences(
