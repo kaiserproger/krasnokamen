@@ -11,6 +11,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import test_build_tokens
+
+
 SCRIPT = Path(__file__).resolve().parent / "scene-slot.sh"
 # Each slot holds exactly one of these after the command starts (or none).
 PROBE = (
@@ -107,6 +110,58 @@ class SceneSlot(unittest.TestCase):
         out = subprocess.run([str(SCRIPT), "sh", "-c", inner], env=self.env,
                              capture_output=True, text=True, timeout=60, check=True)
         self.assertEqual(len(out.stdout.strip()), 1, f"exactly one slot held, got {out.stdout!r}")
+
+
+class ExclusiveWindowSceneSlot(unittest.TestCase):
+    """Exercise lock order through an isolated real runner and private watchdog."""
+
+    def setUp(self) -> None:
+        test_build_tokens.BuildTokenTests.setUp(self)
+        self.scene = self.root / "scene-slot.sh"
+        source = Path(os.environ.get("SCENESLOT_TEST_SCRIPT", str(SCRIPT)))
+        self.scene.write_text(source.read_text())
+        self.scene.chmod(0o755)
+        self.env.update(KRASNOKAMEN_SCENE_SLOT_DIR=str(self.root))
+        for key in ("KRASNOKAMEN_SCENE_SLOT_PID", "KRASNOKAMEN_EXCLUSIVE_WINDOW"):
+            self.env.pop(key, None)
+        self.probe = self.root / "probe.py"
+        self.probe.write_text(PROBE)
+
+    def run_command(self, *command: str) -> subprocess.CompletedProcess:
+        return subprocess.run(command, cwd=self.tree, env=self.env,
+                              capture_output=True, text=True, timeout=test_build_tokens.BOUND)
+
+    def assert_slots_free(self) -> None:
+        for slot in "abcdef":
+            path = self.root / f"solaris-scene-slot-{slot}.lock"
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o666)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            finally:
+                os.close(fd)
+
+    def assert_refused(self, *command: str) -> None:
+        out = self.run_command(*command)
+        self.assertEqual(out.returncode, 75, out.stderr)
+        self.assertEqual(out.stdout, "", "the probe must not run")
+        self.assertIn("scene-slot: refused inside mem-run -x window", out.stderr)
+        self.assert_slots_free()
+
+    def test_exclusive_window_refuses_new_slot(self) -> None:
+        self.assert_refused(str(self.runner), "-x", str(self.scene),
+                            sys.executable, str(self.probe), str(self.root))
+
+    def test_nested_runner_preserves_window_marker(self) -> None:
+        self.assert_refused(str(self.runner), "-x", str(self.runner), str(self.scene),
+                            sys.executable, str(self.probe), str(self.root))
+
+    def test_exclusive_window_reuses_outer_slot(self) -> None:
+        out = self.run_command(str(self.scene), str(self.runner), "-x", str(self.scene),
+                               sys.executable, str(self.probe), str(self.root))
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertEqual(len(out.stdout.strip()), 1, f"expected exactly one held slot: {out.stdout!r}")
+        self.assertIn(out.stdout.strip(), "abcdef")
+        self.assert_slots_free()
 
 
 if __name__ == "__main__":
