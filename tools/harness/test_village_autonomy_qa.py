@@ -158,6 +158,7 @@ class VillageAutonomyQaTests(unittest.TestCase):
         for label, kind, level, site in (
             ("Road", "road", "level", "Site"), ("Дорога", "road", "уровень", "Место"),
             ("Street lamp", "lamp", "level", "Site"), ("Фонарь", "lamp", "уровень", "Место"),
+            ("Meadow clearing", "meadow", "level", "Site"), ("Расчистка луга", "meadow", "уровень", "Место"),
         ):
             observed = {"ui_nodes": [{
                 "id": "dialog/body/0", "label": f"{label} L1 · Building\n7/42\n7 200 10",

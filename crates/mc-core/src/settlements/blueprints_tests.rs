@@ -156,8 +156,32 @@ fn material_costs_follow_block_halves_and_variants() {
         Some(("spruce_slab".into(), 1))
     );
     assert_eq!(cost("wall_torch[facing=east]"), Some(("torch".into(), 1)));
-    assert_eq!(cost("farmland[moisture=7]"), Some(("dirt".into(), 1)));
+    assert_eq!(cost("farmland[moisture=7]"), None);
     assert_eq!(cost("air"), None);
+}
+
+/// Seed-24 civilization-seed-qa (ISSUE-1-17 births): the first Farm needed 30
+/// dirt while the quarry yielded 9-14, so it was never funded. Hoeing the soil
+/// in place is free, as paving is, and the field's dirt border was cosmetic.
+#[test]
+fn the_first_farm_costs_no_dirt() {
+    let state = test_state();
+    let farm = get(&state.registry, "farm").unwrap();
+    for level in 1..=2 {
+        let dirt = farm
+            .level(level)
+            .unwrap()
+            .materials
+            .iter()
+            .any(|(item, _)| {
+                state
+                    .registry
+                    .items
+                    .name_of(*item)
+                    .is_some_and(|name| matches!(name.path(), "dirt"))
+            });
+        assert!(!dirt, "farm level {level} must not bill dirt");
+    }
 }
 
 #[test]

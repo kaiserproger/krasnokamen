@@ -1,0 +1,32 @@
+{
+  "id": "DROWNED-IGNORE-VILLAGERS",
+  "verdict": "promoted",
+  "fix_commit": "00ad2a8d",
+  "fix_commit_full": "00ad2a8d11daeb8c2e766a7a409521cdc7c0628f",
+  "promoted_at": "2026-11-13T06:46:44+00:00",
+  "tree_head": "96155f9185ef67e05284b690f728bd936406fd94",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "crates/mc-core/src/blueprint.rs"
+  ],
+  "kept_test_files": [
+    "crates/mc-core/src/entity_phase_tests.rs"
+  ],
+  "negative_control": {
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::drowned_rest_acquires_a_resident": {
+      "state": "red",
+      "detail": "FAIL"
+    }
+  },
+  "restored": {
+    "cargo:mc-core:tick::entity_phase::entity_phase_tests::drowned_rest_acquires_a_resident": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/Issue1Births/.analysis/validation/20261113T063438-ledger-promote-p3rjq03h"
+}

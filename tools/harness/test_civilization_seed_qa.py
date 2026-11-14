@@ -306,6 +306,116 @@ class CivilizationEvidenceTests(unittest.TestCase):
         self.assertEqual([c.args for c in teleport.call_args_list],
                          [(160.5, 75.0, -280.5), (131.0, 77.0, -215.0)])
 
+    def test_sparse_building_whose_centre_aim_misses_is_aimed_at_the_nearest_solid_block(self):
+        # Seed-24 Lumber camp (runs 0yj9abeh, p1pmn34d): the centre-nearest solid
+        # block gave {'type': 'none'} from the exterior stand; a solid block
+        # nearer the observer is in reach and inside the certificate.
+        building = {"id": 4294967303, "kind": "lumber_camp",
+                    "min": [150, 75, -262], "max": [156, 79, -256]}
+        floor = [{"x": 150, "y": y, "z": -255, "block_id": block,
+                  "collision_empty": empty, "fluid": {"empty": True}}
+                 for y, block, empty in ((75, "minecraft:cobblestone", False),
+                                         (76, "minecraft:air", True),
+                                         (77, "minecraft:air", True),
+                                         (78, "minecraft:birch_slab", False))]
+        solid = [{"x": 153, "y": 77, "z": -259}, {"x": 150, "y": 76, "z": -256}]
+        looks = []
+        probe = Mock()
+        def observe():
+            seen = {"type": "none"}
+            if len(looks) >= 2:
+                seen = {"type": "block", "x": 150, "y": 76, "z": -256}
+            return {"player": {"x": 150.5, "y": 76.0, "z": -254.5}, "target": seen}
+        probe.observe.side_effect = observe
+        def call(name, arguments):
+            if name == "minecraft_scan_blocks":
+                return {"blocks": floor, "truncated": False}
+            if name == "minecraft_look":
+                looks.append(arguments)
+            return {}
+        probe.call.side_effect = call
+        with patch.object(qa.native_client, "capture", return_value={}):
+            result = qa.capture_target(probe, "artifact", "building", (153.5, 77.5, -258.5),
+                                       building=building, solid=solid)
+        self.assertEqual(len(looks), 2, "the missed centre aim is followed by the nearest solid block")
+        self.assertEqual(result["observed_target"], {"type": "block", "x": 150, "y": 76, "z": -256})
+
+    def test_sparse_building_aim_waits_while_a_resident_stands_in_the_line_of_sight(self):
+        # Seed-24 run chswt0i9: a villager walked through the aim at the Lumber
+        # camp and the capture aborted on the occluder; it passes, so aim again.
+        building = {"min": [150, 75, -262], "max": [156, 79, -256]}
+        floor = [{"x": 150, "y": y, "z": -255, "block_id": block,
+                  "collision_empty": empty, "fluid": {"empty": True}}
+                 for y, block, empty in ((75, "minecraft:cobblestone", False),
+                                         (76, "minecraft:air", True), (77, "minecraft:air", True),
+                                         (78, "minecraft:birch_slab", False))]
+        solid = [{"x": 153, "y": 77, "z": -259}]
+        waits = []
+        probe = Mock()
+        def observe():
+            seen = {"type": "entity", "entity_uuid": "walker"}
+            if len(waits) >= 2:
+                seen = {"type": "block", "x": 153, "y": 77, "z": -259}
+            return {"player": {"x": 150.5, "y": 76.0, "z": -254.5}, "target": seen}
+        probe.observe.side_effect = observe
+        def call(name, arguments):
+            if name == "minecraft_scan_blocks":
+                return {"blocks": floor, "truncated": False}
+            if name == "minecraft_wait_ticks":
+                waits.append(arguments)
+            return {}
+        probe.call.side_effect = call
+        with patch.object(qa.native_client, "capture", return_value={}):
+            result = qa.capture_target(probe, "artifact", "building", (153.5, 77.5, -258.5),
+                                       building=building, solid=solid)
+        self.assertEqual(len(waits), 2)
+        self.assertEqual(result["observed_target"]["type"], "block")
+
+    def test_building_the_walking_observer_cannot_reach_is_observed_from_a_teleport(self):
+        # Seed-24 run m8v6480s: navigate_to_block answered "target is unreachable
+        # from the current loaded client position" for the Lumber camp stand.
+        building = {"min": [150, 75, -262], "max": [156, 79, -256]}
+        floor = [{"x": 150, "y": y, "z": -255, "block_id": block,
+                  "collision_empty": empty, "fluid": {"empty": True}}
+                 for y, block, empty in ((75, "minecraft:cobblestone", False),
+                                         (76, "minecraft:air", True), (77, "minecraft:air", True),
+                                         (78, "minecraft:birch_slab", False))]
+        player = {"x": 131.0, "y": 77.0, "z": -215.0}
+        probe = Mock()
+        probe.observe.side_effect = lambda: {
+            "player": player, "target": {"type": "block", "x": 153, "y": 77, "z": -259}}
+        def call(name, arguments):
+            if name == "minecraft_scan_blocks":
+                return {"blocks": floor, "truncated": False}
+            if name == "minecraft_navigate_to_block":
+                raise RuntimeError("minecraft_navigate_to_block failed: target is unreachable")
+            return {}
+        probe.call.side_effect = call
+        teleport = Mock()
+        with patch.object(qa.native_client, "capture", return_value={}):
+            result = qa.capture_target(probe, "artifact", "building", (153.5, 77.5, -258.5),
+                                       building=building, solid=[{"x": 153, "y": 77, "z": -259}],
+                                       teleport=teleport)
+        self.assertTrue(result["observer_teleported"])
+        self.assertEqual(teleport.call_args_list[-1].args, (131.0, 77.0, -215.0))
+
+    def test_sparse_building_with_no_solid_block_in_reach_still_refuses_a_screenshot(self):
+        building = {"min": [150, 75, -262], "max": [156, 79, -256]}
+        probe = Mock()
+        probe.observe.return_value = {"player": {"x": 150.5, "y": 76.0, "z": -254.5},
+                                      "target": {"type": "none"}}
+        probe.call.return_value = {"blocks": [
+            {"x": 150, "y": y, "z": -255, "block_id": block, "collision_empty": empty,
+             "fluid": {"empty": True}}
+            for y, block, empty in ((75, "minecraft:cobblestone", False),
+                                    (76, "minecraft:air", True), (77, "minecraft:air", True),
+                                    (78, "minecraft:birch_slab", False))], "truncated": False}
+        with patch.object(qa.native_client, "capture") as capture:
+            with self.assertRaisesRegex(RuntimeError, "occluded or out of reach"):
+                qa.capture_target(probe, "artifact", "building", (153.5, 77.5, -258.5),
+                                  building=building, solid=[{"x": 153, "y": 77, "z": -259}])
+        capture.assert_not_called()
+
     def test_sparse_building_is_aimed_at_a_solid_block_not_its_air_centre(self):
         building = {"min": [113, 72, -226], "max": [119, 76, -220]}
         solid = [{"x": 113, "y": 72, "z": -226}, {"x": 116, "y": 73, "z": -223}, {"x": 119, "y": 76, "z": -220}]

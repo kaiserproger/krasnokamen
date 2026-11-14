@@ -2527,8 +2527,29 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Owner expectation (issue 1, ISSUE-1-17): the settlement lays itself out and grows without the player placing every building. Planner source: docs/settlements/construction.md#planning-and-streets (houses are planned when certified house capacity is below population; the first House needs a bed: 3 wool, shears, 2 iron ingots, docs/settlements/construction.md#builders-and-supplies). Evidence: harness profile civilization-seed-qa verdict map, scanned over the 51 result.json receipts under wt/*/.analysis/validation and receipts/ on 2026-11-12: new_house true in 0, second_building true in 3, iron_smelted true in 17, births 0, all 0 (last full runs 2026-11-08/09 on older trees; the three runs of 2026-11-12 failed at start on a missing client root, no evidence). receipts/CivSimSeed24/REPORT.md and REPORT-2.md name the stalls (bed iron never smelted, the first Farm cannot be funded without seeds). Related rows: CIV-SEED24-HOUSE-BED-IRON-NEVER-SMELTED, CIV-SEED24-FARM-SEEDS-NEED-A-FARM, CIV-SEED24-STALLED-PROJECT-HOLDS-SLOT. The remaining wish of ISSUE-1-17: civilization-seed-qa `new_house` and `second_building` true on main in one run"
-regression = []
+regression = [
+  "cargo:mc-core:villager::brain::tests::breeding_tests::fed_residents_with_no_spare_bed_keep_their_bread",
+  "cargo:mc-core:settlements::construction::site_tests::a_town_short_of_wheat_seeds_clears_a_meadow_for_its_first_farm",
+  "cargo:mc-core:settlements::construction::site_tests::a_town_with_the_farms_wheat_seeds_in_stock_clears_no_meadow",
+  "cargo:mc-core:settlements::construction::planner_tests::a_house_short_of_unproducible_wool_does_not_hide_the_farms_extraction",
+  "cargo:mc-core:settlements::blueprints::tests::the_first_farm_costs_no_dirt",
+  "harness:civilization-seed-qa:births",
+]
 failing_first = "reported"
+fix_commit = "patch:80e8f4617387098f399868a65a28cb7f66b59f839009cec78604dedcc443b407"
+
+[[bug]]
+id = "DROWNED-IGNORE-VILLAGERS"
+title = "A drowned never targets villagers or other residents, though vanilla Drowned (a Zombie) adds a NearestAttackableTargetGoal on AbstractVillager"
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "fixed"
+source = "Issue1Births (ISSUE-1-17 births investigation, 2026-11-13): javap of net.minecraft.world.entity.monster.zombie.Drowned.addBehaviourGoals in server-26.1.2.jar shows a NearestAttackableTargetGoal on net/minecraft/world/entity/npc/villager/AbstractVillager; crates/mc-core/src/blueprint.rs hunts_villagers listed zombie, zombie_villager and husk only, so a drowned walked up to residents unharmed."
+regression = ["cargo:mc-core:tick::entity_phase::entity_phase_tests::drowned_rest_acquires_a_resident"]
+failing_first = "reported"
+fix_commit = "00ad2a8d"
+promotion = "docs/bugs/promotions/DROWNED-IGNORE-VILLAGERS.json"
 
 [[bug]]
 id = "ISSUE-1-17-NO-PERIMETER-WALL-GATE-OR-WELL"

@@ -1404,6 +1404,31 @@ fn zombie_rest_acquires_spawned_player_and_resident_on_normal_decision() {
     }
 }
 
+/// Vanilla `Drowned.addBehaviourGoals` (26.1.2) adds a `NearestAttackableTargetGoal`
+/// on `AbstractVillager`, like the `Zombie` it extends; ISSUE-1-17 births: a
+/// resident must not be the one hostile it can walk up to unharmed.
+#[test]
+fn drowned_rest_acquires_a_resident() {
+    let (mut state, slot) = resting_mob("minecraft:drowned");
+    state.day_time = 14_000;
+    let id = state.entities.body(slot).id;
+    let type_id = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:villager").unwrap())
+        .unwrap();
+    let target = state.spawn_mob(type_id, [9.5, 101.0, 8.5], 20.0);
+    let mut acquired = false;
+    for _ in 1..=MOB_FAR_PERIOD {
+        state.tick += 1;
+        acquired |= run_entity_phase(&mut state, true).iter().any(|intent| {
+            intent.actor == id
+                && matches!(intent.kind, IntentKind::DamageEntity { target: victim, .. } if victim == target)
+        });
+    }
+    assert!(acquired);
+}
+
 #[test]
 fn zombie_rest_rechecks_same_chunk_range_entry_and_remote_wall_opening() {
     let (mut state, slot) = idle_zombie();

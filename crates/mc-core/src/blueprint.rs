@@ -1479,7 +1479,10 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
         equine_body_armor: matches!(name, "minecraft:horse" | "minecraft:zombie_horse"),
         hunts_villagers: matches!(
             name,
-            "minecraft:zombie" | "minecraft:zombie_villager" | "minecraft:husk"
+            "minecraft:zombie"
+                | "minecraft:zombie_villager"
+                | "minecraft:husk"
+                | "minecraft:drowned"
         ),
         hunts_monsters: name == "minecraft:iron_golem",
         hunts_living: name == "minecraft:zoglin",

@@ -258,10 +258,23 @@ def _aim_at_baby(probe: ProbeSteps, entity: dict[str, Any],
     raise RuntimeError(f"milestone target is occluded or out of reach: baby {entity['entity_uuid']}: {observed}")
 
 
+BUILDING_AIM_CANDIDATES = 8
+BUILDING_AIM_RETRIES = 5
+
+
+def _solid_targets_by_distance(solid: list[dict[str, Any]],
+                               player: dict[str, Any]) -> list[tuple[float, float, float]]:
+    """Centres of the received solid blocks, nearest the observer's eye first."""
+    eye = (player["x"], player["y"] + 1.62, player["z"])
+    centres = [tuple(block[axis] + 0.5 for axis in ("x", "y", "z")) for block in solid]
+    return sorted(centres, key=lambda c: sum((c[i] - eye[i]) ** 2 for i in range(3)))
+
+
 def capture_target(probe: ProbeSteps, artifact: Path, label: str,
                    target: tuple[float, float, float], *,
                    entity: dict[str, Any] | None = None,
                    building: dict[str, Any] | None = None,
+                   solid: list[dict[str, Any]] | None = None,
                    teleport: Teleport | None = None) -> dict[str, Any]:
     probe.call("minecraft_close_screen", {})
     initial = probe.observe()["player"]
@@ -292,15 +305,46 @@ def capture_target(probe: ProbeSteps, artifact: Path, label: str,
                         raise RuntimeError("observer perimeter scan pagination did not advance")
                     offset = following
             destination = building_observer_stand(blocks, building, target[1], initial)
-        probe.call("minecraft_navigate_to_block", {
-            "x": destination[0], "y": destination[1], "z": destination[2],
-            "timeout_seconds": 120.0,
-        })
+        try:
+            probe.call("minecraft_navigate_to_block", {
+                "x": destination[0], "y": destination[1], "z": destination[2],
+                "timeout_seconds": 120.0,
+            })
+        except RuntimeError as error:
+            # A building the walking observer cannot reach (seed 24, run
+            # m8v6480s: "target is unreachable from the current loaded client
+            # position") is observed from where the creative observer is
+            # moved through the server console, and moved back afterwards.
+            if teleport is None or "unreachable" not in str(error):
+                raise
+            teleport(destination[0] + 0.5, destination[1], destination[2] + 0.5)
+            probe.call("minecraft_wait_ticks", {"ticks": 20})
+            teleported = True
         observed = _aim(probe, target)
         if building:
-            visible = observed.get("type") == "block" and all(
-                building["min"][i] <= observed.get(axis, building["min"][i] - 1) <= building["max"][i]
-                for i, axis in enumerate(("x", "y", "z")))
+            def inside(seen: dict[str, Any]) -> bool:
+                return seen.get("type") == "block" and all(
+                    building["min"][i] <= seen.get(axis, building["min"][i] - 1) <= building["max"][i]
+                    for i, axis in enumerate(("x", "y", "z")))
+            visible = inside(observed)
+            for _ in range(BUILDING_AIM_RETRIES):
+                if visible or not solid:
+                    break
+                # A sparse building (a Lumber camp) can leave its solid block
+                # beyond the observer's reach or behind a fence: try the
+                # received solid blocks nearest the observer's eye in turn.
+                eye = probe.observe()["player"]
+                for candidate in _solid_targets_by_distance(solid, eye)[:BUILDING_AIM_CANDIDATES]:
+                    observed = _aim(probe, candidate)
+                    if inside(observed):
+                        visible = True
+                        break
+                if visible or observed.get("type") != "entity":
+                    break
+                # A resident walking through the line of sight (seed 24, run
+                # chswt0i9: a villager at the Lumber camp) is not a wall: let
+                # it pass and aim again.
+                probe.call("minecraft_wait_ticks", {"ticks": 40})
         else:
             visible = observed.get("type") == "block" and all(
                 observed.get(axis) == math.floor(target[i]) for i, axis in enumerate(("x", "y", "z")))
@@ -773,7 +817,10 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                 target = building_aim_point(building, evidence.get("solid", []))
                 detail["milestones"]["second_building"] = {
                     "sprint_ticks": advanced, "building": building, "project": project,
-                    "screenshot": capture_target(probe, artifact, f"civilization-building-{advanced:06d}", target, building=building),
+                    "screenshot": capture_target(probe, artifact, f"civilization-building-{advanced:06d}", target, building=building,
+                                              solid=evidence.get("solid", []),
+                                              teleport=lambda x, y, z: item_merge._console(
+                                                  server, f"tp {village.USERNAME} {x:.2f} {y:.2f} {z:.2f}")),
                 }
         candidate = acceptance_verdict({name: name in detail["milestones"] for name in STAGES}, stalled=False)
         verdicts.update(candidate)
