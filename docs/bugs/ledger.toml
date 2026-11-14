@@ -1334,8 +1334,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-1"
-regression = ["harness:screens-voice-qa:native_voice_resets_on_non_voice_server"]
-
+regression = ["harness:screens-voice-qa:native_voice_resets_on_non_voice_server", "client:krasnokamen-client:session::disconnect_forgets_the_previous_server_voice_negotiation"]
+fix_commit = "client:a35187ca"
+repro_check = "real-hunk control red (a35187ca's reset_voice() in disconnect reversed); real gate harness:screens-voice-qa:native_voice_resets_on_non_voice_server, whose profile had no stage-2 run; area=client, candidate"
 [[bug]]
 id = "HARNESS-ADMIN-TEST-TEMP-DIR-LEAK"
 title = "A failing mc-edge admin test leaked its /tmp/mc-edge-admin-* fixture directory"
@@ -1349,6 +1350,18 @@ fix_commit = "abc5fd559"
 repro_check = "real-hunk control receipts/XHarnessJava/NC-ADMIN-TEMPDIR-reverse-abc5fd559.log: reversing abc5fd559's non-test hunks makes both refs red with the leaked directory listed; the refs live on wt/XHarnessJava 730d9a79c and become runnable after Main merges that branch."
 
 [[bug]]
+id = "CLIENT-LAUNCHER-STALE-RESOURCE-PACK"
+title = "Launcher resource extraction was additive and skipped on a manifest claim, so a stale 26.1.2 pack was never rebuilt and 26.3 assets (sign templates, cushion, sulfur_cube textures) were missing"
+area = "client"
+repro = "source"
+severity = "major"
+status = "open"
+source = "The launcher wrote the resource pack into the game directory incrementally and treated an existing manifest as proof the pack was current, so upgrading the client left a 26.1.2 pack in place: 26.3 content the client needs (template_sign_* block models, entity/cushion and entity/sulfur_cube textures) never appeared, and the client's model-texture walk fails on the missing files."
+regression = ["client:krasnokamen-launcher:bootstrap::tests::a_manifest_claim_does_not_make_a_stale_pack_current", "client:krasnokamen-launcher:bootstrap::tests::a_stale_resource_pack_is_replaced_instead_of_merged"]
+fix_commit = "client:1ea6d127"
+repro_check = "controls receipts/XClientBlocks/17-* and 18-*: with the fix reverted the manifest claim keeps the stale pack and the extracted set lacks the 26.3 files. The launcher python side (client tools.test_resources) also covers the extracted inventory but has no ref form yet - client refs run cargo only, recorded here instead. area=client, so candidate: real-client check required; the launcher refs become runnable after Main merges wt/XClientBlocks 109ec84a."
+
+[[bug]]
 id = "CLIENT-HELD-DROP-KEY-DOUBLE-DROP"
 title = "Holding the drop (Q) key across a tick sent two drop packets (press-edge dispatch + held-key tick edge)"
 area = "client"
@@ -1356,9 +1369,9 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "A Q press was dispatched twice: the press edge (src/session/actions.rs) inserted 'drop'/'pick' into the session key set and src/player/interaction.rs also dispatched the same action from the held-key tick edge, so a key held across a tick boundary sent two drop packets for one press."
-regression = ["client:krasnokamen-client:session::actions::item_key_tests::one_drop_press_sends_one_drop_and_a_held_key_does_not_repeat", "client:krasnokamen-client:session::actions::item_key_tests::one_pick_press_sends_one_pick_item"]
+regression = ["client:krasnokamen-client:session::actions::item_key_tests::one_drop_press_sends_one_drop_and_a_held_key_does_not_repeat", "client:krasnokamen-client:session::actions::item_key_tests::one_pick_press_sends_one_pick_item", "client:krasnokamen-client:session::actions::item_key_tests::repeated_key_down_events_are_extra_clicks"]
 fix_commit = "client:405ff485"
-repro_check = "real-hunk control receipts/XClientControl/negctl/negctl-real-E-itemkey.log: reverting client:405ff485 (wt/XClientControl) sends two drop packets for one held press, the row's symptom. Key-repeat parity with vanilla is still under review in XClientControl round 3. area=client, so candidate: real-client check required; the client refs become runnable after Main merges the client branch."
+repro_check = "repeat parity resolved: vanilla KeyboardHandler.keyPress clicks on GLFW_REPEAT (javap offsets 971/1168-1176; F11 is press-only at 275), so a held Q drops one item per OS repeat. client:405ff485 stops the double dispatch and the extension client:648ab844 routes src/session/actions.rs repeats (plus one src/lib.rs hunk) only inside the game screen. Control receipts/XClientControl/negctl/negctl-real-F-repeat.log: with it reverted, three key-downs produce one drop. Candidate: real-client check required - physical repeat delivery is not unit-testable"
 
 [[bug]]
 id = "HC-2"
@@ -1400,8 +1413,9 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P3"
-regression = ["harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn"]
-
+regression = ["harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn", "client:krasnokamen-client:session::packets::same_dimension_respawn_keeps_active_screen_catalog"]
+fix_commit = "client:a35187ca"
+repro_check = "real-hunk control (a35187ca's dimension guard reversed -> catalog cleared); real gate harness:screens-voice-qa:viewer_keeps_screen_after_same_dimension_respawn; area=client, candidate"
 [[bug]]
 id = "PICK-SERVER"
 title = "Native middle-click sends play36/37 but original server lacked the authoritative pick handler."
@@ -1447,9 +1461,10 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "solaris-client src/session.rs:1165 sets presentation_partial to 0 while server_frozen and src/entities/physical.rs:818-828 (fall_step) leaves the stepped tick as previous->transform at lerp_progress 0. Vanilla 26.3 LevelExtractor.extractVisibleEntities passes !TickRateManager.isEntityFrozen(entity) to DeltaTracker.getGameTimeDeltaPartialTick, which returns 1.0f while frozen (DeltaTracker$Timer). Evidence: native-v2-input-sand receipts on client 13f1f28b, e.g. .analysis/validation/20261111T163719-native-v2-input-sand-2gazssgv falling_after_step presented 106.76314 = previous predicted, predicted 106.60788; receipts/LedgerInputSand/REPORT.md. Received-interpolated mobs are unaffected (their lerp starts on packet receipt)."
-regression = []
+regression = ["client:krasnokamen-client:session::frozen_world_presents_entities_at_their_current_tick"]
 failing_first = "reported"
-
+fix_commit = "client:c6a56f1d"
+repro_check = "real-hunk control red; real gate harness:entities:native-v2-input-sand (whose hold check is HARNESS-SAND-GATE-NO-HOLD-CHECK); area=client, candidate"
 [[bug]]
 id = "HARNESS-SAND-GATE-NO-HOLD-CHECK"
 title = "native-v2-input-sand stays green when the server keeps dropping a falling block in a frozen world: since 760ca0b5 it slows the server to 1 tick/s after the spawn and never compares the server position with the stepped tick count."
@@ -1732,8 +1747,9 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-5"
-regression = []
-
+regression = ["client:krasnokamen-launcher:net::tests::stalled_headers_fail_within_the_bounded_request_timeout", "client:krasnokamen-launcher:net::tests::cancel_ends_a_stalled_download"]
+fix_commit = "client:b47fc25a"
+repro_check = "real-hunk control (cancel/retry hunks reversed -> the timeout surfaces instead of the cancel); the launcher crate is krasnokamen-launcher; the 60 s bound itself is pinned only through the client_with_timeout seam, not by a symptom-level ref; area=client, candidate"
 [[bug]]
 id = "SVC-BRIDGE"
 title = "Frozen release lacks requested Fabric SVC bridge; implementation now exists on voice-server. Real Fabric+SVC proximity/group verification remains absent; not vanilla parity."
@@ -1754,7 +1770,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-FREEZE-CAMERA"
 regression = ["harness:entities:native-v2-input-camera", "harness:admin-commands:all"]
-
+fix_commit = "client:c6a56f1d"
+repro_check = "candidate: the tree already ticks the local player while the world is frozen (in-tree test frozen_world_keeps_local_player_and_teleport_camera_live green) and c6a56f1d removes the frozen presentation lag, but no scoped revert exists (stage-0 wip merge); real gate harness:entities:native-v2-input-camera"
 [[bug]]
 id = "SUMMON-AGE"
 title = "Gallery summon with Age:-24000 rejects squid, glow_squid, skeleton_horse and zombie_horse with explicit unsupported-field error; baby fixtures cannot be authored."
@@ -2003,7 +2020,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#CLIENT-TEST-SIGSEGV"
 regression = []
-
+repro_check = "not reproducible in stage 2: three full-parallel `cargo test --lib` runs (1330 tests, default thread count) on wt/XClientSession showed no SIGSEGV and the named tests pass in the suite; if it returns, it needs the failing thread's backtrace"
 [[bug]]
 id = "REDSTONE-DAYLIGHT"
 title = "gap_daylight_detector failed bare (thunder step power 15 vs 10)."
@@ -2369,7 +2386,7 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#P5"
 regression = []
-
+repro_check = "candidate: no scoped fix commit to reverse - the stage-0 merge already handles hello/program/tiles in both the dispatch and the far updater, and fe07445f only pins hello->lod/request; area=client, real-client check required"
 [[bug]]
 id = "ISSUE-1-01"
 title = "Villager leg model translucent and malformed"
@@ -3982,7 +3999,7 @@ status = "open"
 source = "Main's smoke of the published RC5 Windows zip, 2026-11-07: 4-core Windows 11 VM with software rendering (WARP; the client used about 3000 s CPU and starved the server). Play #1 and #2 timed out; Play #3, with the client minimized, had the server listening after 36 s. Not tried on hardware with a GPU."
 regression = ["harness:singleplayer-regressions:native-sp-slow-machine"]
 failing_first = "reported"
-
+repro_check = "candidate: START_TIMEOUT (180 s) was removed by 6a8d255a but that hunk no longer reverse-applies (file drifted) and no cargo ref observes the absence of a deadline - only harness:singleplayer-regressions:native-sp-slow-machine does; area=client, real-client check required"
 [[bug]]
 id = "SP-PREPARING-TERRAIN-STUCK-SLOW-MACHINE"
 title = "After entering a new singleplayer world on a slow machine, the 'Preparing terrain and light' overlay stayed over the already rendered world for minutes while the server kept running and checkpointing."
@@ -3993,7 +4010,8 @@ status = "open"
 source = "Same RC5 Windows VM smoke as SP-START-TIMEOUT-SLOW-MACHINE (Play #3); the session was stopped without seeing the overlay clear. Software rendering may be the whole cause."
 regression = []
 failing_first = "reported"
-
+fix_commit = "client:803f0e00"
+repro_check = "real-hunk control red (same loading-screen gate as NATIVE-INPLAY-BLOCKED-BY-MISSING-CHUNK); the only check is the real gate harness:singleplayer-regressions:native-sp-slow-machine; area=client, candidate"
 [[bug]]
 id = "CORE-PICKUP-FULL-INVENTORY"
 title = "Every successful pickup republishes the full player inventory instead of the changed active-menu slots"
@@ -4120,9 +4138,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "CoreBlockers: native-v2-corrupt-block-entities fixtures had to stay two chunks from the player; with the fixture in the player's own chunk the client stays at 'session startup: play' while the server keeps ticking (scenario native-v2-corrupt-chunk-near-camera, restart_client_entered_play fails); a refused chunk two chunks away does not block it (play_world_presentation_ready, spawn_meshes_presented)."
-regression = ["cargo:mc-core:chunk_loader::tests::refused_chunk_never_blocks_other_chunks_and_stays_refused"]
-repro_check = "harness:entities:native-v2-corrupt-chunk-near-camera"
-
+regression = ["cargo:mc-core:chunk_loader::tests::refused_chunk_never_blocks_other_chunks_and_stays_refused", "client:krasnokamen-client:session::observation::a_hole_under_the_camera_does_not_hold_the_play_loading_screen"]
+repro_check = "harness:entities:native-v2-corrupt-chunk-near-camera; real-hunk control red (the loading screen stays); real gate harness:entities:native-v2-corrupt-chunk-near-camera (known-red client repro); area=client, candidate"
+fix_commit = "client:803f0e00"
 [[bug]]
 id = "OPAQUE-CUSTODY-LOST-ON-REFUSED-REPLAY"
 title = "WAL recovery replays an OpaqueBlockEntity record into a chunk that is refused at load: set_opaque_block_entity returns before mark_block_entity_dirty (crates/mc-core/src/world.rs:850-852), so the refused chunk shows unsaved=0, the next checkpoint skips it and truncates the WAL, and opaque-only custody of that chunk (campfire items, hive bees, brushable items) is lost."
@@ -4781,9 +4799,11 @@ severity = "minor"
 status = "open"
 source = "ClientQ04 catalog suite observed every_shipped_model_is_well_formed fail because bed_foot.json declares entity/bed/red.png, absent from the supplied 26.3 resources. The broader suite result was 22 passed and 1 failed; focused coverage passes did not replace it. Client tests: entities::solaris_models::tests::every_shipped_model_is_well_formed, entities::solaris_models::tests::obsolete_bed_entity_texture_rigs_are_not_shipped_in_26_3, entities::asset_model_regression_tests::bed_item_uses_resource_model_halves_without_a_legacy_entity_texture."
 repro = "cargo"
-regression = []
+regression = ["client:krasnokamen-client:entities::krasnokamen_models::tests::every_shipped_model_is_well_formed", "client:krasnokamen-client:entities::krasnokamen_models::tests::obsolete_bed_entity_texture_rigs_are_not_shipped_in_26_3", "client:krasnokamen-client:entities::asset_model_regression_tests::bed_item_uses_resource_model_halves_without_a_legacy_entity_texture"]
 failing_first = "reported"
-repro_check = "obsolete per evidence: 08-bed-texture.log shows bed_head/bed_foot declare entity/bed/red.png and that file exists at 64x64 in dist/resources, so there is nothing to revert; no promotion claimed"
+
+fix_commit = "client:109ec84a"
+repro_check = "supersedes the earlier 'obsolete' note: round 2 (client:109ec84a) deleted the bed entity rigs - 26.3 has no bed block entity - and the refs now assert the rigs are not shipped and the bed item uses the resource-model halves. Negative control receipts/XClientBlocks/19-bed-negative-control.log. area=client, candidate: real-client check required"
 [[bug]]
 id = "CLIENT-WITHER-SKULL-MATERIAL-SELECTION"
 title = "The native wither skull default material selection remains unresolved"
@@ -4954,9 +4974,10 @@ repro = "client"
 severity = "blocker"
 status = "open"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F2, 2/2): server encodes the 26.3 layout (receipts/BreakJoinRows/javap/SetPlayerTeamParameters.txt: display name, prefix, suffix, visibility, collision, Optional<color>, options); solaris-client src/ui/hud.rs:304-318 decodes the old order. Fixed in solaris-client ef4dc465 (client gate line wt/ClientGateLine d5f25569 = f4bd26d4 + ef4dc465 + census fix 04f3e0f9, pin pins/d5f25569b785-client-x86_64-unknown-linux-gnu-incr, receipts/ClientGateLine/pin.log; 3/3 team scene receipts/ClientTeamPacket/run-team{1,2,3}.log, negative control with the old client receipts/ClientTeamPacket/run-oldctl.log). Status stays open: client-repo rows wait for the owner's promotion-rule decision."
-regression = []
+regression = ["client:krasnokamen-client:session::hud_packet_tests::rc1_team_packet_decodes_the_26_3_parameter_order"]
 failing_first = "reported"
-
+fix_commit = "client:ef4dc465"
+repro_check = "real-hunk control: reversing ef4dc465's src/ui/hud.rs hunk reds the ref ('unknown NBT type 116'); real-client gate for stage 3 is harness:entities:native-v2-team-deaths; area=client, candidate"
 [[bug]]
 id = "TELLRAW-PLAIN-STRING-COMPONENT-DROPPED"
 title = "tellraw with a plain JSON string component (tellraw @s \"text\") shows nothing and reports no error; {\"text\":...} works."
@@ -5002,9 +5023,10 @@ repro = "client"
 severity = "minor"
 status = "open"
 source = "BreakJoinRows 2026-11-12 (receipts/BreakJoinRows/FINDINGS.md F5, 1/2, BREAK_DL_ATTACK=nether); the server log shows 'You logged in from another location' was sent."
-regression = []
+regression = ["client:krasnokamen-client:protocol::network::kick_reason_survives_a_failed_client_write"]
 failing_first = "reported"
-
+fix_commit = "client:bf55a58f"
+repro_check = "real-hunk control red ('play disconnect packet must be delivered'); real gate harness:entities:native-v2-duplicate-login (BREAK_DL_ATTACK=nether); area=client, candidate"
 [[bug]]
 id = "COMMAND-DEFAULTGAMEMODE-UNKNOWN"
 title = "defaultgamemode is an unknown command (vanilla DefaultGameModeCommands: level 2, one gamemode argument, commands.defaultgamemode.success)."
