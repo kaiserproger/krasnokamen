@@ -44,6 +44,25 @@ fn block_state(state: &TickState, name: &str, properties: &[(&str, &str)]) -> u3
         .0
 }
 #[test]
+fn faction_soldier_leaves_ordinary_brain_and_attack_pass_untouched() {
+    let (mut state, settlement, slot) = army::tests::fixture();
+    army::recruit(&mut state, settlement).unwrap();
+    let mut villager = state.entities.row(slot).villager.as_ref().unwrap().clone();
+    assert!(goal(&state, slot, &villager).is_some());
+    villager.panic_until = 77;
+    state.entities.set_faction(slot, 1);
+    assert!(work(&mut state, slot, &mut villager).is_none());
+    assert_eq!(
+        villager.panic_until, 77,
+        "battle morale must not be cleared by vanilla work"
+    );
+    let mut intents = Vec::new();
+    let mut changes = ChangeSet::default();
+    attacks(&mut state, &mut intents, &mut changes);
+    assert!(intents.is_empty() && changes.entity_events.is_empty());
+}
+
+#[test]
 fn follow_keeps_near_player_and_guard_returns_to_post() {
     let (mut state, id, slot) = army::tests::fixture();
     let soldier = army::recruit(&mut state, id).unwrap();

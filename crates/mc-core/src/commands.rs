@@ -38,6 +38,7 @@ pub const ROOTS: &[(&str, u8)] = &[
     ("difficulty", 2),
     ("gamerule", 2),
     ("summon", 2),
+    ("battle", 2),
     ("worldborder", 2),
     ("setblock", 2),
     ("fill", 2),
@@ -282,6 +283,7 @@ pub enum AdvancementScope {
 #[derive(Debug, Clone, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum Command {
+    Battle(crate::battle::staging::BattleCommand),
     Attribute(crate::command_attribute::AttributeCommand),
     Item(crate::command_item_replace::ItemCommand),
     Loot(crate::command_loot::LootCommand),
@@ -452,6 +454,7 @@ pub fn parse(command: &str, operator: bool) -> Result<Command, CommandError> {
         "attribute" => crate::command_attribute::parse(args).map(Command::Attribute),
         "item" => crate::command_item_replace::parse(args).map(Command::Item),
         "loot" => crate::command_loot::parse(args).map(Command::Loot),
+        "battle" => crate::battle::staging::parse(args).map(Command::Battle),
         "settlement" => crate::settlements::commands::parse(args).map(Command::Settlement),
         "gamemode" => parse_gamemode(args),
         "tp" | "teleport" => parse_teleport(args),

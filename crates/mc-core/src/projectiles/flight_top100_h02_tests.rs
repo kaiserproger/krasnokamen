@@ -118,7 +118,7 @@ fn digest(state: &TickState, intents: &[Intent], names: &[(String, String)]) -> 
             let stable: ProjectileState = serde_json::from_str(&stable).unwrap();
             result.push_str(&format!(
                 "{:?}",
-                crate::projectiles::persistence::to_fields(&stable, &state.registry.items)
+                crate::projectiles::persistence::to_fields(&stable, &state.registry.items, row.age)
             ));
             result.push_str(&format!("{stable:?}"));
         }
@@ -133,9 +133,14 @@ fn digest(state: &TickState, intents: &[Intent], names: &[(String, String)]) -> 
 
 #[test]
 fn exhaustive_flight_oracle_covers_negative_seams_long_sweeps_ties_and_swap_removals() {
-    for (origin, speed, piercing, shots) in
-        [(-16.7, 2.0, 0, 1), (-48.0, 96.0, 7, 1), (-32.0, 64.0, 1, 3)]
-    {
+    for (origin, speed, piercing, shots) in [
+        (-16.7, 2.0, 0, 1),
+        (-48.0, 96.0, 7, 1),
+        (-32.0, 64.0, 1, 3),
+        (-16.7, 2.0, 0, 16),
+        (-48.0, 96.0, 7, 64),
+        (-32.0, 64.0, 1, 256),
+    ] {
         let simulate = |indexed| {
             let (mut state, player) = scene();
             for (x, z) in [(-15.8, -0.1), (-15.8, 0.1), (0.2, 0.0), (31.9, 0.0)] {
@@ -158,6 +163,12 @@ fn exhaustive_flight_oracle_covers_negative_seams_long_sweeps_ties_and_swap_remo
             let mut intents = Vec::new();
             if indexed {
                 run(&mut state, &mut intents, ids.into_iter());
+                if shots >= FineGrid::MIN_SHOTS {
+                    assert_ne!(
+                        state.projectiles.grid.size, [0; 2],
+                        "oracle must exercise the fine grid"
+                    );
+                }
             } else {
                 exhaustive(&mut state, &mut intents, &ids);
             }
@@ -180,7 +191,15 @@ fn neighbouring_chunk_omission_changes_boundary_hit_oracle() {
     let mut bodies = Vec::new();
     hittables(&state, &mut bodies);
     let mut candidates = Vec::new();
-    shot_candidates(&state, id, &bodies, &[], &mut Vec::new(), &mut candidates);
+    shot_candidates(
+        &state,
+        id,
+        &bodies,
+        &[],
+        None,
+        &mut Vec::new(),
+        &mut candidates,
+    );
     assert!(candidates.iter().any(|&i| bodies[i].id == victim));
     // Negative-control mutant: retain only the projectile's starting chunk.
     let bad: Vec<_> = candidates
@@ -227,7 +246,15 @@ fn wide_moved_body_and_duplicate_memberships_remain_conservative() {
     let mut bodies = Vec::new();
     hittables(&state, &mut bodies);
     let mut candidates = Vec::new();
-    shot_candidates(&state, id, &bodies, &[], &mut Vec::new(), &mut candidates);
+    shot_candidates(
+        &state,
+        id,
+        &bodies,
+        &[],
+        None,
+        &mut Vec::new(),
+        &mut candidates,
+    );
     assert!(candidates.iter().any(|&i| bodies[i].id == victim));
 }
 
@@ -337,7 +364,15 @@ fn rejected_fast_or_nonfinite_flight_does_not_expand_world_query() {
     for speed in [f64::INFINITY, f64::NAN, 1e20] {
         state.entities.set_vel(slot, [speed; 3]);
         let mut candidates = Vec::new();
-        shot_candidates(&state, id, &bodies, &[], &mut Vec::new(), &mut candidates);
+        shot_candidates(
+            &state,
+            id,
+            &bodies,
+            &[],
+            None,
+            &mut Vec::new(),
+            &mut candidates,
+        );
         assert!(candidates.is_empty());
     }
 }
@@ -398,7 +433,7 @@ fn projectile_candidate_cpu_micro() {
             let mut candidates = Vec::new();
             for &id in &ids {
                 candidates.clear();
-                shot_candidates(&state, id, &bodies, &[], &mut slots, &mut candidates);
+                shot_candidates(&state, id, &bodies, &[], None, &mut slots, &mut candidates);
                 h += candidates.len();
             }
             assert!(
@@ -482,19 +517,25 @@ fn dragon_multipart_hit_and_retained_uuid_match_exhaustive_snapshot() {
         state.end_fight.dragon_uuid = Some(state.entities.row(slot).uuid);
         let (min, max) = crate::end_fight::part_bounds(&state, EntityId(dragon.0 + 1)).unwrap();
         let at: [f64; 3] = std::array::from_fn(|axis| (min[axis] + max[axis]) * 0.5);
-        let id = arrow(
-            &mut state,
-            owner,
-            [at[0] - 8.0, at[1], at[2]],
-            [16.0, 0.0, 0.0],
-            4,
-        );
+        let ids: Vec<_> = (0..FineGrid::MIN_SHOTS)
+            .map(|_| {
+                arrow(
+                    &mut state,
+                    owner,
+                    [at[0] - 8.0, at[1], at[2]],
+                    [16.0, 0.0, 0.0],
+                    4,
+                )
+            })
+            .collect();
+        let id = ids[0];
         let names = identities(&state);
         let mut intents = Vec::new();
         if indexed {
-            run(&mut state, &mut intents, [id].into_iter());
+            run(&mut state, &mut intents, ids.iter().copied());
+            assert_ne!(state.projectiles.grid.size, [0; 2]);
         } else {
-            exhaustive(&mut state, &mut intents, &[id]);
+            exhaustive(&mut state, &mut intents, &ids);
         }
         assert!(!intents.is_empty());
         let record = state
@@ -521,16 +562,21 @@ fn deployed_candidate_outside_body_chunks_is_not_pruned() {
         .enumerate()
         .filter_map(|(i, b)| b.deployed_candidate.then_some(i))
         .collect();
-    let mut candidates = Vec::new();
-    shot_candidates(
-        &state,
-        id,
-        &bodies,
-        &exceptional,
-        &mut Vec::new(),
-        &mut candidates,
-    );
-    assert!(candidates.iter().any(|&i| bodies[i].id == stand));
+    let mut grid = FineGrid::default();
+    assert!(grid.build(&bodies));
+    for grid in [None, Some(&grid)] {
+        let mut candidates = Vec::new();
+        shot_candidates(
+            &state,
+            id,
+            &bodies,
+            &exceptional,
+            grid,
+            &mut Vec::new(),
+            &mut candidates,
+        );
+        assert!(candidates.iter().any(|&i| bodies[i].id == stand));
+    }
 }
 
 #[test]
@@ -677,4 +723,191 @@ fn pickup_matches_exhaustive_player_priority_after_swap_remove() {
     for kind in [ProjectileKind::Arrow, ProjectileKind::Trident] {
         assert_eq!(simulate(true, kind), simulate(false, kind));
     }
+}
+
+#[test]
+fn fine_grid_twenty_thousand_bodies_bounds_work_and_rejects_other_heights() {
+    let bodies: Vec<_> = (0..20_000)
+        .map(|i| {
+            let x = (i % 200) as f64 - 100.0;
+            let z = (i / 200) as f64 * 2.0 - 100.0;
+            let y = if i % 3 == 0 { 90.0 } else { 64.0 };
+            Hittable {
+                slot: Some(EntitySlot(i)),
+                id: EntityId(i as i32 + 1),
+                uuid: Uuid::from_u128(i as u128 + 1),
+                deployed_candidate: false,
+                item: false,
+                min: [x - 0.3, y, z - 0.3],
+                max: [x + 0.3, y + 1.8, z + 0.3],
+            }
+        })
+        .collect();
+    let mut grid = FineGrid::default();
+    assert!(grid.build(&bodies));
+    assert_eq!(
+        grid.items.len(),
+        bodies.len(),
+        "one counting-sort entry per body"
+    );
+    assert!(grid.offsets.len() <= 10_101);
+    let storage = grid.items.as_ptr();
+    assert!(grid.build(&bodies));
+    assert_eq!(
+        grid.items.as_ptr(),
+        storage,
+        "rebuild reuses retained scratch"
+    );
+    let mut examined = 0;
+    let mut candidates = Vec::new();
+    for shot in 0..400 {
+        let from = [
+            (shot % 100) as f64 * 1.8 - 99.5,
+            64.7,
+            (shot / 100) as f64 * 20.0 - 60.0,
+        ];
+        let delta = [4.5, -0.1, 0.0];
+        let end = std::array::from_fn(|axis| from[axis] + delta[axis]);
+        candidates.clear();
+        examined += grid.query(&bodies, from, end, 0.3, &mut candidates);
+        candidates.sort_unstable();
+        let hits = |indices: Vec<usize>| {
+            indices
+                .into_iter()
+                .filter(|&i| {
+                    segment_enters(
+                        from,
+                        delta,
+                        bodies[i].min.map(|v| v - 0.3),
+                        bodies[i].max.map(|v| v + 0.3),
+                    )
+                    .is_some()
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(hits(candidates.clone()), hits((0..bodies.len()).collect()));
+    }
+    assert!(
+        examined < 400 * 32,
+        "candidate visits={examined}; no per-shot full/chunk scan"
+    );
+    candidates.clear();
+    assert!(
+        grid.query(
+            &bodies,
+            [0.0, 80.0, 0.0],
+            [4.5, 80.0, 0.0],
+            0.3,
+            &mut candidates
+        ) > 0
+    );
+    assert!(
+        candidates.is_empty(),
+        "XZ neighbours at other heights must be rejected"
+    );
+}
+
+#[test]
+fn fine_grid_includes_wide_bodies_across_negative_cell_edges_and_bounds_sparse_storage() {
+    let mut bodies = vec![Hittable {
+        slot: Some(EntitySlot(0)),
+        id: EntityId(1),
+        uuid: Uuid::from_u128(1),
+        deployed_candidate: false,
+        item: false,
+        min: [-9.0, 64.0, -3.0],
+        max: [3.0, 70.0, 9.0],
+    }];
+    let mut grid = FineGrid::default();
+    assert!(grid.build(&bodies));
+    let mut candidates = Vec::new();
+    grid.query(
+        &bodies,
+        [-9.2, 65.0, -3.2],
+        [-8.9, 65.0, -2.9],
+        0.3,
+        &mut candidates,
+    );
+    assert_eq!(
+        candidates,
+        [0],
+        "center is several fine cells outside the sweep"
+    );
+    bodies.push(Hittable {
+        slot: Some(EntitySlot(1)),
+        id: EntityId(2),
+        uuid: Uuid::from_u128(2),
+        deployed_candidate: false,
+        item: false,
+        min: [29_999_999.0, 64.0, 29_999_999.0],
+        max: [30_000_000.0, 66.0, 30_000_000.0],
+    });
+    assert!(
+        !grid.build(&bodies),
+        "sparse worlds use the conservative native chunk path"
+    );
+    assert_eq!(grid.size, [0; 2]);
+    assert!(
+        grid.offsets.capacity() < 100,
+        "do not allocate empty world space before fallback"
+    );
+}
+
+#[test]
+fn grounded_arrow_idle_ticks_do_not_touch_rows_or_appearance_and_pickup_still_works() {
+    let (mut state, player, centre) = crate::projectiles::flight_tests::setup();
+    let id = arrow(
+        &mut state,
+        player,
+        [centre[0] + 4.0, centre[1] + 0.5, centre[2]],
+        [0.0, -1.0, 0.0],
+        0,
+    );
+    run(&mut state, &mut Vec::new(), [id].into_iter());
+    let slot = state.entities.slot_of(id).unwrap();
+    let saved = state
+        .entities
+        .row(slot)
+        .projectile
+        .as_deref()
+        .unwrap()
+        .clone();
+    assert!(
+        saved.stuck && saved.grounded_at_age.is_some(),
+        "fixture must hit a real block"
+    );
+    state.entities.take_touched();
+    state.appearance_changed.clear();
+    let mut mutations = 0;
+    for _ in 0..100 {
+        state.entities.advance_age(slot);
+        run(&mut state, &mut Vec::new(), [id].into_iter());
+        mutations += state.entities.take_touched().len() + state.appearance_changed.len();
+        state.appearance_changed.clear();
+    }
+    assert_eq!(
+        mutations, 0,
+        "idle clocks must not take row_mut or publish appearance"
+    );
+    let record = state.entities.row(slot).projectile.as_deref().unwrap();
+    assert_eq!(
+        record, &saved,
+        "the persistent anchor stays immutable between transitions"
+    );
+    assert_eq!(record.ground_age(state.entities.row(slot).age), 100);
+    // Ordinary arrows retain their normal lifetime; a nearby player still
+    // receives exactly one real item through the existing inventory owner.
+    let p = state.entities.slot_of(player).unwrap();
+    state.entities.set_pos(p, state.entities.pos(slot));
+    run(&mut state, &mut Vec::new(), [id].into_iter());
+    assert!(state.entities.slot_of(id).is_none());
+    assert_eq!(
+        state.players[&player]
+            .inventory
+            .slots
+            .iter()
+            .map(|s| s.count.max(0))
+            .sum::<i32>(),
+        1
+    );
 }

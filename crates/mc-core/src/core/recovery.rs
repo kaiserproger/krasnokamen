@@ -565,6 +565,7 @@ pub(crate) fn restore_entity(
         state
             .entities
             .set_entity_life(slot, record.state.entity_life.clone());
+        state.entities.set_faction(slot, record.state.faction);
         let (body, row) = state.entities.parts_mut(slot);
         body.alive = record.alive;
         row.age = record.age;

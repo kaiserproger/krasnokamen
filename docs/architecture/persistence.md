@@ -94,6 +94,26 @@ admitted hostile evaluation after restart, and a changed appearance is
 journaled as usual. A checkpoint-only restart instead reconstructs the default
 pose and the hostile tick derives it again from live targeting.
 
+### Battle allegiance
+
+`Body.faction: u16` is native entity state (zero means unaffiliated).
+`EntityStore::set_faction` owns the sparse battle membership index and marks
+both WAL and incremental-checkpoint custody, including a reset to zero.
+`EntityStateImage.faction` carries full/compact WAL post-images;
+`solaris:Faction` (`TAG_Int`, validated as 0–65535) carries the checkpoint
+projection. Recovery and `/summon` use the same setter. Missing allegiance is
+zero; malformed or out-of-range authored/persisted values fail decoding.
+The standard NBT selector/data projection exposes the field; no wire metadata
+slot or protocol change is needed. Transfers carry the body and membership,
+and dense compaction cannot change its allegiance.
+
+Battle targets, pairings, grid, movement, combat timers and the running/paused
+clock are runtime-only. Restart restores allegiance, not an in-progress fight.
+The native checkpoint/WAL/restart regression is
+`battle_faction_survives_native_checkpoint_wal_and_restart`; persistence
+changes require Main's independent review before commit.
+
+
 On genuine first start, `Core::open` writes and fsyncs
 `<world>/.solaris-first-start`, creates `native/state.redb.new` and renames the
 committed store into place. The marker is removed after the initial checkpoint
