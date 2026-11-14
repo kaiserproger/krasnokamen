@@ -5770,3 +5770,143 @@ repro = "source"
 regression = []
 repro_check = "Inspect battle/mod.rs population counting: linear faction lookup per body and PopulationCache::sample over the whole faction population yield N(N-1)/2 comparisons per sample for N distinct factions; targeting.rs nearest_enemy also visits every faction. Faction is u16, not limited to two sides. TPS impact has not been measured."
 failing_first = "not recorded"
+
+[[bug]]
+id = "EDGE-ONESHOT-WORLD-PRESSURE"
+title = "Explosion knockback can disappear under world queue pressure or skipped tick output"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage2Review/terra-edge-events.md finding 1; Stage2X SLICES.md:154-156,161,172"
+repro = "source"
+regression = []
+fix_commit = "40b28f732"
+repro_check = "The fix spans 40b28f732, 60f1d475b and 9a8fd193e on wt/XEdgeEvents, not merged into wt/M3Server at filing. The latter closes a same-tick dimension-transfer gap. Branch checks server::admin_tests::explosion_queue_tests::{explosions_deliver_or_explicitly_close_under_queue_pressure,broadcast_lag_closes_only_recipients_of_skipped_knockback,same_tick_dimension_switch_explicitly_closes_unprojected_knockback,six_hundred_explosions_coalesce_knockback_without_disconnect}; coalescing is a synthetic queue test, not a live TNT burst. Negative controls: receipts/XEdgeEvents/negative-queue.log, round3-lag-red-broadcast_lag_closes_only_recipients_of_skipped_knockback.log and round3-edge-red-same_tick_dimension_switch_explicitly_closes_unprojected_knockback.log. Multi-commit promotion needs a committed fix patch after integration."
+failing_first = "not recorded"
+
+[[bug]]
+id = "MODERATION-SELECTOR-DEOP-RACE"
+title = "Selector-based moderation can act after the operator is deopped during resolution"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage2Review/terra-edge-events.md moderation review; Stage2X SLICES.md:154"
+repro = "source"
+regression = []
+fix_commit = "40b28f732"
+repro_check = "Fix is on wt/XEdgeEvents, not merged into wt/M3Server at filing. Branch check cargo:mc-edge:server::admin_tests::moderation_selectors_reauthorize_after_deop_during_resolution; green receipts/XEdgeEvents/green-moderation.log, fix-reverted red receipts/XEdgeEvents/negative-moderation.log."
+failing_first = "not recorded"
+
+[[bug]]
+id = "EDGE-ONESHOT-VISUALS-BEST-EFFORT"
+title = "World-credit pressure silently drops non-explosion one-shot visual events"
+area = "client"
+severity = "minor"
+status = "open"
+source = "Stage2Review/terra-edge-events.md finding 4"
+repro = "source"
+regression = []
+repro_check = "Under missing world credit, status, sweep, shield, bottle, swing, damage, hurt, death and pickup events can be dropped without a later snapshot repeating them. Define a delivery policy and test it, including pickup and death ordering before entity removal."
+failing_first = "not recorded"
+
+[[bug]]
+id = "EXPLOSION-MOTION-ORDER"
+title = "Explosion impulses lack a proved causal order relative to snapshots and player motion"
+area = "client"
+severity = "major"
+status = "open"
+source = "Stage2Review/terra-edge-events.md finding 5"
+repro = "source"
+regression = []
+repro_check = "Reliable explosions can overtake pending world frames; position corrections and motion are reliable as well. Define the required tick and client impulse order and prove it with a real-client gate, including chunk, block, entity, forget and respawn transitions."
+failing_first = "not recorded"
+
+[[bug]]
+id = "DATA-FACTION-NBT-HIDDEN"
+title = "Entity data queries hide the faction key even when a mob is affiliated"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage2X SLICES.md:149,169; data query test at integration"
+repro = "cargo"
+regression = ["cargo:mc-core:command_data::tests::data_mob_faction_is_public_only_while_affiliated"]
+fix_commit = "60ba27a64"
+repro_check = "The existing query test failed before the projection fix: receipts/XStage2Cleanup/data-green.log. Green after fix: receipts/XStage2Cleanup/data-final-v2.log."
+failing_first = "reported"
+
+[[bug]]
+id = "DATA-BLOCK-MERGE-LOSES-LIVE-OWNER"
+title = "Block entity data edits discard live owner state"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage2X SLICES.md:145,149,169"
+repro = "source"
+regression = ["cargo:mc-core:command_data::tests::data_block_metadata_edit_preserves_live_brewing_owner"]
+fix_commit = "d42665ab0"
+repro_check = "The reconciled command path used placement install instead of the existing owner-aware update, discarding a brewing stand's live brew time and fuel on metadata edit. The previously unwired update and absent regression allowed the loss; routing through the native owner and the brewing regression provide the defense. Green receipts/XStage2Cleanup/data-final-v2.log; reverted wiring red receipts/XStage2Cleanup/data-negative.log."
+failing_first = "not recorded"
+
+[[bug]]
+id = "DATA-MERGE-HEALTH-ZERO-REFUSED"
+title = "Entity data merge refuses zero health accepted by vanilla"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage2X SLICES.md:169; XStage2Cleanup vanilla comparison"
+repro = "source"
+regression = []
+repro_check = "Run /data merge entity on a living mob with {Health:0}; the retained summon-backed admission refuses it, while vanilla 26.3 accepts it. No fix or regression yet."
+failing_first = "not recorded"
+
+[[bug]]
+id = "COMMAND-BLOCK-DATA-SUCCESSCOUNT-REFUSED"
+title = "Command block data merge refuses the supported SuccessCount field"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage2X SLICES.md:176,179; vanilla BaseCommandBlock javap"
+repro = "cargo"
+regression = ["cargo:mc-core:command_blocks::tests::data_merge_admits_only_supported_fields_and_requires_operator"]
+fix_commit = "7af558182"
+repro_check = "Pre-existing since 0416a3d4c. Green receipts/M3FixCommands/green-scoped-final.log; fix-reverted red receipts/M3FixCommands/red-fix-reverted.log."
+failing_first = "reported"
+
+[[bug]]
+id = "MOUNT-RIDER-ERASED-AFTER-RECOVERY"
+title = "Recovered happy ghast loses a rider before the player reconnects"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage2X SLICES.md:176,180"
+repro = "cargo"
+regression = ["cargo:mc-core:core::mounts_persistence_tests::happy_ghast_admission_leave_and_reconnect_survive_wal_recovery"]
+fix_commit = "94f312783"
+repro_check = "Introduced by 7d30f2991: the first tick after WAL recovery pruned the absent player's UUID before reconnect. Recovery preserved the mount image, but tick reconciliation treated a disconnected rider as invalid; the missing recovery-and-reconnect test failed to catch their interaction. The fix retains absent UUIDs, and the WAL recovery test provides a regression defense. Fix-reverted red receipts/M3FixState/product-negative-controls.log. Independent persistence review pending."
+failing_first = "reported"
+
+[[bug]]
+id = "FROG-FROGLIGHT-ALWAYS-TEMPERATE"
+title = "Warm and cold frogs drop temperate froglights when eating magma cubes"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "Stage2X SLICES.md:176,180; vanilla 26.3 jar mappings"
+repro = "cargo"
+regression = ["cargo:mc-core:frog::tests::frog_variants_eat_magma_cube_and_drop_exact_froglight"]
+fix_commit = "a7a0e3951"
+repro_check = "Introduced by 7d30f2991; loot was hard-coded to temperate rather than the retained variant. Fix-reverted red receipts/M3FixState/product-negative-controls.log."
+failing_first = "reported"
+
+[[bug]]
+id = "RC5-HIVE-ITEM-BEE-STATE"
+title = "RC5 hive items in player custody lose legacy native bee state on import"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage2Review/terra-edge-events.md finding 3; Stage2X SLICES.md:172-173"
+repro = "source"
+regression = []
+fix_commit = "602c20cfd"
+repro_check = "The fix spans 259a078ef and 602c20cfd on wt/XEdgeEvents, not merged into wt/M3Server at filing. Legacy minecraft:bees item components and scalar rider images require typed migration, including player equipment, cursor and crafting custody. The initial normalizer skipped these owned components and the first fixture used a current image, masking RC5 rider incompatibility; typed migration and the captured RC5 import/place/release fixture add defenses. Branch check cargo:mc-world-conversion:pre_rename::tests::bee_items::rc5_hive_item_export_import_place_release_preserves_native_bee; green receipts/XEdgeEvents/round3-conversion.log, red receipts/XEdgeEvents/round3-image-red-rc5_hive_item_export_import_place_release_preserves_native_bee.log and round3-player-red-exits.log. Multi-commit promotion needs a committed fix patch after integration."
+failing_first = "not recorded"
