@@ -84,6 +84,12 @@ created pack descriptions preserve component style booleans.
 | Villagers: jobs, beds, POIs, schedules, breeding, gossip, golems | `partial` | [villager persistence tests](../crates/mc-core/src/villager/persistence_tests.rs); [stroll/swim tests](../crates/mc-core/src/villager/stroll_swim_tests.rs) | Gossip-triggered golem eligibility is implemented; farmer harvest about 2.4× vanilla in breeder oracle. Strolls stay within one section of the resident's meeting point, home or job site (vanilla VillageBoundRandomStroll, keyed to the resident's own POIs), and residents swim up out of deep water (Swim 0.8) and float across its surface to the bank (setCanFloat: water two or more blocks deep is a standable surface for a route; the resident leaves the water by jumpOutOfFluid). Villagers open and close every `#mob_interactable_doors` door (wooden and copper, not iron). A jobless adult walks to its claimed workstation in the Idle and Work periods (GoToPotentialJobSite). Settlement residency is an extension, not vanilla proof. |
 | Villager/wandering-trader trade UI, offers, restock and prices | `partial` | [villager/trades_tests.rs](../crates/mc-core/src/villager/trades_tests.rs); [merchant_tests.rs](../crates/mc-core/src/tick/merchant_tests.rs); [trader persistence](../crates/mc-core/src/level_metadata_trader_tests.rs) | Native trading/restock coverage; complete vanilla offer/demand/discount/UI and survival acquisition gate not established. |
 
+Frog magma-cube loot uses the retained frog `variant`, not a hard-coded temperate
+component: warm yields pearlescent, cold verdant, temperate (including an absent
+variant) ochre. The 26.3 jar's `loot_table/entities/magma_cube.json` owns this
+mapping; [the frog regression](../crates/mc-core/src/frog_tests.rs) checks all three
+through native damage/death and item drops, not a real-client gate.
+
 ## Items, stations and containers
 
 | Player-visible feature area | Status | Tracked test | Limitation |
