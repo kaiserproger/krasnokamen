@@ -7,7 +7,7 @@
 //! generator paths that must not change when no plan is configured — is covered
 //! without any content cache. The live layer runs the real `minecraft:villages`
 //! closure from a content cache (`/tmp/jdk-cold2` when present, else
-//! `SOLARIS_CONTENT_CACHE` or `<workspace>/data/vanilla`) and skips loudly,
+//! `KRASNOKAMEN_CONTENT_CACHE` or `<workspace>/data/vanilla`) and skips loudly,
 //! never silently, when none is available.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -63,7 +63,7 @@ impl BiomeTagIndex for AllBiomes {
 
 fn required_registry() -> Arc<BlockRegistry> {
     Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report())
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report())
             .expect("embedded block report"),
     )
 }
@@ -884,11 +884,11 @@ fn plan_lookup_is_deterministic_for_a_key() {
     }
 }
 
-/// `<SOLARIS_CONTENT_CACHE>`, then `/tmp/jdk-cold2`, then
+/// `<KRASNOKAMEN_CONTENT_CACHE>`, then `/tmp/jdk-cold2`, then
 /// `<workspace>/data/vanilla`.
 fn content_cache() -> Option<PathBuf> {
     content_cache_among([
-        std::env::var("SOLARIS_CONTENT_CACHE")
+        std::env::var("KRASNOKAMEN_CONTENT_CACHE")
             .ok()
             .map(PathBuf::from)
             .unwrap_or_default(),
@@ -1098,7 +1098,7 @@ fn live_village_populates_its_pieces_villagers() {
     let Some(cache) = content_cache() else {
         println!(
             "SKIP live_village_populates_its_pieces_villagers: no vanilla content cache found \
-             (set SOLARIS_CONTENT_CACHE, or run with /tmp/jdk-cold2 present)"
+             (set KRASNOKAMEN_CONTENT_CACHE, or run with /tmp/jdk-cold2 present)"
         );
         return;
     };
@@ -1279,7 +1279,7 @@ fn live_village_plan_moves_columns_and_writes_blocks() {
     let Some(cache) = content_cache() else {
         println!(
             "SKIP live_village_plan_moves_columns_and_writes_blocks: no vanilla content cache \
-             found (set SOLARIS_CONTENT_CACHE, or run with /tmp/jdk-cold2 present)"
+             found (set KRASNOKAMEN_CONTENT_CACHE, or run with /tmp/jdk-cold2 present)"
         );
         return;
     };
@@ -1434,7 +1434,7 @@ fn live_village_plan_lookup_agrees_for_chunk_and_column() {
     let Some(cache) = content_cache() else {
         println!(
             "SKIP live_village_plan_lookup_agrees_for_chunk_and_column: no vanilla content cache \
-             found (set SOLARIS_CONTENT_CACHE, or run with /tmp/jdk-cold2 present)"
+             found (set KRASNOKAMEN_CONTENT_CACHE, or run with /tmp/jdk-cold2 present)"
         );
         return;
     };
@@ -1526,7 +1526,7 @@ fn live_decor_places_a_feature_through_the_executor() {
     let Some(cache) = content_cache() else {
         println!(
             "SKIP live_decor_places_a_feature_through_the_executor: no vanilla content cache \
-             found (set SOLARIS_CONTENT_CACHE, or run with /tmp/jdk-cold2 present)"
+             found (set KRASNOKAMEN_CONTENT_CACHE, or run with /tmp/jdk-cold2 present)"
         );
         return;
     };
@@ -1611,7 +1611,7 @@ fn live_decor_seeding_matches_the_structure_registry_order() {
     let Some(cache) = content_cache() else {
         println!(
             "SKIP live_decor_seeding_matches_the_structure_registry_order: no vanilla content \
-             cache found (set SOLARIS_CONTENT_CACHE, or run with /tmp/jdk-cold2 present)"
+             cache found (set KRASNOKAMEN_CONTENT_CACHE, or run with /tmp/jdk-cold2 present)"
         );
         return;
     };

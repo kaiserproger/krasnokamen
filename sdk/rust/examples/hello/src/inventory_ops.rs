@@ -42,17 +42,17 @@
 //! One action is outstanding at a time, and nothing here waits: each step is the
 //! answer to the request the previous one staged.
 
-use solaris_plugin_sdk::commands;
-use solaris_plugin_sdk::events::{
+use krasnokamen_plugin_sdk::commands;
+use krasnokamen_plugin_sdk::events::{
     CommandInvoked, Event, OperationAnswered, OperationOutcome, OperationPayload,
 };
-use solaris_plugin_sdk::inventories::{
+use krasnokamen_plugin_sdk::inventories::{
     InventoryEndpoint, InventoryExpectedRevision, InventoryFence, InventoryMaterial,
     InventoryReservationSnapshot, InventoryResourcePlan, InventoryResult, InventoryWorkPortion,
     OwnedInventorySnapshot, OwnedItemTransfer,
 };
-use solaris_plugin_sdk::operation_types::OperationFailure;
-use solaris_plugin_sdk::{
+use krasnokamen_plugin_sdk::operation_types::OperationFailure;
+use krasnokamen_plugin_sdk::{
     Command, Config, Failure, LogLevel, log, message_session, query_owned_inventory,
     reserve_inventory_items, transfer_owned_items,
 };
@@ -375,9 +375,9 @@ impl Fixture {
             ),
             Action::AbsentContainer => query_owned_inventory(
                 QUERY_REQUEST,
-                InventoryEndpoint::Container(solaris_plugin_sdk::inventories::ContainerEndpoint {
+                InventoryEndpoint::Container(krasnokamen_plugin_sdk::inventories::ContainerEndpoint {
                     dimension: "minecraft:overworld".to_owned(),
-                    position: solaris_plugin_sdk::types::BlockPosition { x: 0, y: 64, z: 0 },
+                    position: krasnokamen_plugin_sdk::types::BlockPosition { x: 0, y: 64, z: 0 },
                 }),
                 None,
             ),

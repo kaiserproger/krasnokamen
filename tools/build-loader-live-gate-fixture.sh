@@ -7,7 +7,7 @@ FIXTURE_ROOT="$REPO_ROOT/examples/loader-live-gate"
 PLUGIN_ROOT="$FIXTURE_ROOT/plugins"
 DEPLOY_ROOT="$REPO_ROOT/.analysis/loader-live-gate/plugins"
 GUEST_MANIFEST="$REPO_ROOT/sdk/rust/Cargo.toml"
-GUEST_MODULE="${CARGO_TARGET_DIR:-"$REPO_ROOT/sdk/rust/target"}/wasm32-unknown-unknown/release/solaris_hello_plugin.wasm"
+GUEST_MODULE="${CARGO_TARGET_DIR:-"$REPO_ROOT/sdk/rust/target"}/wasm32-unknown-unknown/release/krasnokamen_hello_plugin.wasm"
 MODE="build"
 
 usage() {
@@ -165,7 +165,7 @@ build_owner() {
     local archive_output="$FIXTURE_TMP/$owner-rich-content.zip"
     local manifest_output="$FIXTURE_TMP/$owner-plugin.toml"
 
-    require_asset "$source_root/solaris-client.json.in"
+    require_asset "$source_root/krasnokamen-client.json.in"
     require_asset "$source_root/$item_path"
     require_asset "$source_root/$block_item_path"
     require_asset "$source_root/$block_path"
@@ -195,7 +195,7 @@ build_owner() {
         -e "s/@TONE_SHA256@/$(sha256 "$source_root/$tone_path")/g" \
         -e "s/@TONE_SIZE@/$(stat -c %s "$source_root/$tone_path")/g" \
         "${extra_asset_args[@]}" \
-        "$source_root/solaris-client.json.in" > "$stage_root/solaris-client.json"
+        "$source_root/krasnokamen-client.json.in" > "$stage_root/krasnokamen-client.json"
 
     find "$stage_root" -type f -exec chmod 0644 {} +
     find "$stage_root" -type f -exec touch -t 200001010000 {} +
@@ -205,13 +205,13 @@ build_owner() {
     )
     (
         cd "$stage_root"
-        zip -X -q "$archive_output" solaris-client.json "${archive_files[@]}"
+        zip -X -q "$archive_output" krasnokamen-client.json "${archive_files[@]}"
     )
 
     local first_entry
     first_entry="$(zipinfo -1 "$archive_output" | sed -n '1p')"
-    if [[ "$first_entry" != "solaris-client.json" ]]; then
-        printf '%s archive does not begin with solaris-client.json.\n' "$owner" >&2
+    if [[ "$first_entry" != "krasnokamen-client.json" ]]; then
+        printf '%s archive does not begin with krasnokamen-client.json.\n' "$owner" >&2
         exit 1
     fi
 
@@ -247,7 +247,7 @@ prepare_guest() {
         --manifest-path "$GUEST_MANIFEST" \
         --target wasm32-unknown-unknown \
         --release \
-        -p solaris-hello-plugin)
+        -p krasnokamen-hello-plugin)
     if [[ ! -f "$GUEST_MODULE" ]]; then
         printf 'The guest build did not produce %s.\n' "${GUEST_MODULE#"$REPO_ROOT"/}" >&2
         exit 1

@@ -1,4 +1,4 @@
-"""Solaris Loader contracts (not vanilla). mc-edge/src/configuration.rs:95-97,212-216;
+"""Krasnokamen Loader contracts (not vanilla). mc-edge/src/configuration.rs:95-97,212-216;
 live-plugins/chisel/plugin.toml:10-19 is authoritative over the stale README.
 """
 from tools.harness.matrix_api import Adapter
@@ -33,7 +33,7 @@ def required_bundle_vanilla_refused(ctx):
     p.rich_action(ctx, 'reconnect_profile', 'vanilla_26_1_2')
     p.check(ctx, 'required bundle denies vanilla', p.observe(ctx, 'connection.phase'), 'disconnected')
     reason = p.observe(ctx, 'connection.disconnect_reason')
-    p.test(ctx, 'actionable Loader reason', 'Solaris Loader' in reason, reason)
+    p.test(ctx, 'actionable Loader reason', 'Krasnokamen Loader' in reason, reason)
 
 
 def permission_prompt_cache(ctx):
@@ -63,7 +63,7 @@ def permission_prompt_cache(ctx):
 
 
 def loader_view_request(ctx):
-    view = p.fixture(ctx, 'loader_view', package='solaris-towns')
+    view = p.fixture(ctx, 'loader_view', package='krasnokamen-towns')
     p.rich_action(ctx, 'loader_view_request', view['id'])
     p.check(ctx, 'view identity', p.observe(ctx, 'loader.view.id'), view['id'])
     p.check(ctx, 'view authoritative data', p.observe(ctx, 'loader.view.data'), view['expected_data'])

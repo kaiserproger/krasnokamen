@@ -11,7 +11,7 @@
 //! - heightmaps (long-array view preserved)
 //! - opaque block entities (stored in `Chunk::block_entities` and
 //!   byte-identical on round-trip); typed container entities are normalized
-//!   through runtime models, accepting vanilla byte and existing Solaris int `Slot` tags
+//!   through runtime models, accepting vanilla byte and existing Krasnokamen int `Slot` tags
 //! - scheduled block and fluid ticks
 //! - Status string, xPos / zPos
 //! - per-section `BlockLight` / `SkyLight` nibble arrays (decoded
@@ -1840,7 +1840,7 @@ fn get_field<'a>(cmp: &'a [(String, Tag)], name: &'static str) -> Result<&'a Tag
         .ok_or(ChunkNbtError::MissingField(name))
 }
 
-/// Vanilla inventories use a byte slot; Solaris chunk encoding uses an int.
+/// Vanilla inventories use a byte slot; Krasnokamen chunk encoding uses an int.
 /// Accept both locally to inventory slots, not general NBT integers.
 fn get_container_slot(cmp: &[(String, Tag)]) -> Result<i32, ChunkNbtError> {
     match get_field(cmp, "Slot")? {

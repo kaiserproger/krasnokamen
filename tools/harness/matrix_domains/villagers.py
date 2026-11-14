@@ -77,7 +77,7 @@ def lightning_act(ctx):
 
 
 def lightning_oracle(ctx):
-    # The subject requires a type transition, not a fresh UUID. Solaris's
+    # The subject requires a type transition, not a fresh UUID. Krasnokamen's
     # replace_type deliberately preserves entity identity. Peaceful skips the
     # conversion altogether (weather_lightning.rs:149).
     peaceful=ctx.factors['difficulty']=='peaceful'
