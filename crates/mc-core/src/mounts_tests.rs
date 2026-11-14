@@ -398,7 +398,7 @@ fn camel_dash_requires_rider_saddle_ground_and_cooldown() {
     );
     let after = state.entities.pos(camel_slot);
     assert!(
-        (after[0] - before[0]).hypot(after[2] - before[2]) > 0.01,
+        (after[0] - before[0]).powi(2) + (after[2] - before[2]).powi(2) > 0.01_f64.powi(2),
         "dash must move the camel through the full entity phase"
     );
     assert!(state.entities.vel(camel_slot)[1] > 0.0);
@@ -475,7 +475,7 @@ fn camel_dash_requires_rider_saddle_ground_and_cooldown() {
         .row_mut(camel_slot)
         .entity_life
         .mount
-        .dash_cooldown = 49;
+        .dash_cooldown = 50;
     state.entities.set_ground(camel_slot, false);
     let at = state.entities.pos(camel_slot);
     state.world.set_block(
@@ -483,6 +483,16 @@ fn camel_dash_requires_rider_saddle_ground_and_cooldown() {
         at[1].floor() as i32,
         at[2].floor() as i32,
         state.registry.states.water,
+    );
+    tick(&mut state, &mut changes);
+    assert!(
+        state
+            .entities
+            .row(camel_slot)
+            .appearance
+            .extra
+            .contains(&(19, crate::boundary::EntityDataValue::Boolean(true))),
+        "cooldown 50 is checked before decrement"
     );
     tick(&mut state, &mut changes);
     assert!(
@@ -562,6 +572,8 @@ fn control_requires_tame_saddle_and_correct_stick_in_either_hand() {
     let pig = spawn(&mut state, "pig", pos);
     equip(&mut state, actor, pig, "saddle");
     let p = slot(&state, pig);
+    run_tick(&mut state, &[use_entity(pig)]);
+    assert_eq!(vehicle(&state, actor), Some(p));
     hold(&mut state, actor, "wheat", 1);
     assert!(!controllable(&state, p, actor));
     let stick = state
@@ -572,9 +584,15 @@ fn control_requires_tame_saddle_and_correct_stick_in_either_hand() {
     state.players.get_mut(&actor).unwrap().inventory.slots[crate::inventory::OFF_HAND] =
         ItemStack::new(stick, 1);
     assert!(controllable(&state, p, actor));
+    dismount(&mut state, actor);
+    hold(&mut state, actor, "wheat", 0);
     let horse = spawn(&mut state, "horse", pos);
     let h = slot(&state, horse);
     state.entities.row_mut(h).loot.saddle = state.entities.row(p).loot.saddle.clone();
+    state.entities.row_mut(h).entity_life.tamed = true;
+    run_tick(&mut state, &[use_entity(horse)]);
+    assert_eq!(vehicle(&state, actor), Some(h));
+    state.entities.row_mut(h).entity_life.tamed = false;
     assert!(!controllable(&state, h, actor));
     state.entities.row_mut(h).entity_life.tamed = true;
     assert!(controllable(&state, h, actor));

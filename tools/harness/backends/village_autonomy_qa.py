@@ -36,7 +36,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import runtime
-from ..profiles import ProfileContext
+from ..profiles import ProfileContext, SplitPart, run_split, split_part_label
 from . import native_client
 from .gameplay import peak_rss_kib, prepare_operator_fixture
 from .probe_steps import ProbeSteps
@@ -628,6 +628,22 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
         if not os.environ.get("VILLAGE_AUTONOMY_SEED") and not QA_VILLAGE:
             SEED, VILLAGE_CENTER = CIVILIZATION_SEED, CIVILIZATION_CENTER
         from . import civilization_seed_qa
+        if ctx.parts > 1 and split_part_label() is None:
+            # One observation world per part: the stages are time-ordered on a
+            # single village, so seeds (each with a verified center) are the only
+            # independent axis; the operator must name them.
+            seeds = civilization_seed_qa.split_seeds(
+                os.environ.get(civilization_seed_qa.SPLIT_SEEDS_ENV))
+            if len(seeds) != ctx.parts:
+                raise ValueError(
+                    f"--parts {ctx.parts} needs exactly {ctx.parts} entries in "
+                    f"{civilization_seed_qa.SPLIT_SEEDS_ENV}, got {len(seeds)}")
+            blocks = run_split(ctx, "civilization-seed-qa", [
+                SplitPart(civilization_seed_qa.split_label(seed, center),
+                          {"VILLAGE_AUTONOMY_SEED": str(seed),
+                           "VILLAGE_AUTONOMY_CENTER": center})
+                for seed, center in seeds])
+            return {"scenario": civilization_seed_qa.merge_seed_parts(blocks, seeds)}
         ctx.client_evidence["verdicts"] = {**dict.fromkeys(civilization_seed_qa.STAGES, False), "all": False}
         ctx.client_evidence["verdict_limitations"] = {"births": civilization_seed_qa.BIRTHS_LIMITATION}
         ctx.client_evidence["birth_verdict"] = {"status": "unverified", "reason": civilization_seed_qa.BIRTHS_LIMITATION}

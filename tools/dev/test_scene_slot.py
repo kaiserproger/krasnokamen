@@ -11,7 +11,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-import test_build_tokens
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import test_build_tokens  # noqa: E402  (sibling test module in tools/dev)
 
 
 SCRIPT = Path(__file__).resolve().parent / "scene-slot.sh"

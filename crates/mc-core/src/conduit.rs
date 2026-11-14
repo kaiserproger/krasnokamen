@@ -135,7 +135,14 @@ fn image(state: &TickState, pos: BlockPos) -> Result<Option<Uuid>, String> {
         return Err("conduit NBT: trailing bytes".into());
     }
     for (key, value) in [
-        ("id", Tag::String("minecraft:conduit".into())),
+        (
+            "id",
+            Tag::String(
+                mc_data::block_entity_kinds::BlockEntityKind::Conduit
+                    .vanilla_id()
+                    .into(),
+            ),
+        ),
         ("x", Tag::Int(pos.x)),
         ("y", Tag::Int(pos.y)),
         ("z", Tag::Int(pos.z)),
@@ -173,7 +180,14 @@ fn store(state: &mut TickState, pos: BlockPos, target: Option<Uuid>, sync: bool)
         unreachable!()
     };
     fields.extend([
-        ("id".into(), Tag::String("minecraft:conduit".into())),
+        (
+            "id".into(),
+            Tag::String(
+                mc_data::block_entity_kinds::BlockEntityKind::Conduit
+                    .vanilla_id()
+                    .into(),
+            ),
+        ),
         ("x".into(), Tag::Int(pos.x)),
         ("y".into(), Tag::Int(pos.y)),
         ("z".into(), Tag::Int(pos.z)),

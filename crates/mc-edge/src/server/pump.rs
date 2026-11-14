@@ -561,7 +561,7 @@ pub(super) fn broadcast_latencies(
     tick: u64,
 ) {
     use mc_protocol::packets::Packet as _;
-    if tick % LATENCY_BROADCAST_INTERVAL_TICKS != 0 {
+    if !tick.is_multiple_of(LATENCY_BROADCAST_INTERVAL_TICKS) {
         return;
     }
     let entries = registry.latencies();

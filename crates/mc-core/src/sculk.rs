@@ -160,14 +160,14 @@ fn decode_fields(
                 .transpose()?
                 .flatten();
             if let Some(p) = &mut pending
-                && field(&f, "krasnokamen:event_arrival").is_some()
+                && field(f, "krasnokamen:event_arrival").is_some()
             {
-                p.arrival = deadline(&f, "krasnokamen:event_arrival")?;
+                p.arrival = deadline(f, "krasnokamen:event_arrival")?;
             }
             Ok((
                 Entry::Sensor {
                     frequency,
-                    deadline: deadline(&f, "krasnokamen:phase_until")?,
+                    deadline: deadline(f, "krasnokamen:phase_until")?,
                 },
                 pending,
             ))
@@ -227,7 +227,7 @@ fn decode_fields(
             Ok((
                 Entry::Catalyst {
                     cursors,
-                    bloom_until: deadline(&f, "krasnokamen:bloom_until")?,
+                    bloom_until: deadline(f, "krasnokamen:bloom_until")?,
                 },
                 None,
             ))

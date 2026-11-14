@@ -255,8 +255,8 @@ fn decode_fields(
     {
         return Err("sculk_shrieker.id: expected minecraft:sculk_shrieker".into());
     }
-    let warning_level = integer(&fields, "warning_level", 4)?;
-    let shriek_until = match crate::warden::unique(&fields, "krasnokamen:shriek_until")? {
+    let warning_level = integer(fields, "warning_level", 4)?;
+    let shriek_until = match crate::warden::unique(fields, "krasnokamen:shriek_until")? {
         None => 0,
         Some(Tag::Long(n)) if *n >= 0 => *n as u64,
         _ => {
@@ -269,7 +269,7 @@ fn decode_fields(
         .map(|tag| vibration::decode_listener(tag, tick))
         .transpose()?
         .flatten();
-    if let Some(tag) = crate::warden::unique(&fields, "krasnokamen:event_arrival")? {
+    if let Some(tag) = crate::warden::unique(fields, "krasnokamen:event_arrival")? {
         let Tag::Long(n) = tag else {
             return Err(
                 "sculk_shrieker.krasnokamen:event_arrival: expected nonnegative long".into(),
@@ -417,7 +417,14 @@ fn fields(
     pending: Option<&Pending>,
 ) -> Vec<(String, Tag)> {
     let mut fields = vec![
-        ("id".into(), Tag::String("minecraft:sculk_shrieker".into())),
+        (
+            "id".into(),
+            Tag::String(
+                mc_data::block_entity_kinds::BlockEntityKind::SculkShrieker
+                    .vanilla_id()
+                    .into(),
+            ),
+        ),
         ("x".into(), Tag::Int(pos.x)),
         ("y".into(), Tag::Int(pos.y)),
         ("z".into(), Tag::Int(pos.z)),

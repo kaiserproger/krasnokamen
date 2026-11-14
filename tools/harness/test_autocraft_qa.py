@@ -18,6 +18,7 @@ class AutocraftReadbackTests(unittest.TestCase):
         state = autocraft_qa.job_state(line)
         self.assertEqual((state["done"], state["receipts"], state["order"], state["after"]),
                          (1, 1, "ui-1", None))
+        self.assertEqual(state["worker"], "w")
         # The readback needle for the product never matches its dependency.
         self.assertNotIn('"id":"ui-1"', line)
 
@@ -53,6 +54,22 @@ class AutocraftReadbackTests(unittest.TestCase):
     def test_flat_undoes_dialog_wrapping(self) -> None:
         self.assertEqual(autocraft_qa._flat("Refused: missing 24\nminecraft:leather:  not"),
                          "Refused: missing 24 minecraft:leather: not")
+
+    def test_admitted_worker_matches_its_form_not_an_earlier_refused_form(self) -> None:
+        saddle = {"ui_nodes": [{"id": "dialog/input/worker", "label": "Resident: Ольга"}]}
+        bread = {"ui_nodes": [{"id": "dialog/input/worker", "label": "Resident: Павел"}]}
+        # Street work finished between forms; neither refusal reserved a worker.
+        tags = {"former-builder": "Павел · безработный · работа",
+                "cartographer": "Ольга · картограф · работа"}
+        self.assertTrue(autocraft_qa.worker_matches_form(bread, "former-builder", tags))
+        self.assertFalse(autocraft_qa.worker_matches_form(saddle, "former-builder", tags))
+        self.assertFalse(autocraft_qa.worker_matches_form(bread, "cartographer", tags))
+        self.assertFalse(autocraft_qa.worker_matches_form(bread, "not-a-resident", tags))
+
+    def test_same_named_residents_do_not_make_the_admitted_uuid_ambiguous(self) -> None:
+        form = {"ui_nodes": [{"id": "dialog/input/worker", "label": "Resident: Павел"}]}
+        tags = {"one": "Павел · безработный · работа", "two": "Павел · картограф · работа"}
+        self.assertTrue(autocraft_qa.worker_matches_form(form, "two", tags))
 
 
 if __name__ == "__main__":

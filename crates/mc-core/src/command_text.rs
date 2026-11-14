@@ -8,7 +8,7 @@
 use mc_nbt::{ListTag, Tag};
 
 use crate::boundary::EntityId;
-use crate::commands::CommandError;
+use crate::command_args::CommandError;
 use crate::tick::TickState;
 
 /// Parse a vanilla text-component argument (SNBT: a quoted/unquoted string, a
@@ -191,9 +191,9 @@ impl TitleAction {
 pub(crate) fn parse_tellraw(
     args: &[&str],
     command: &str,
-) -> Result<(crate::commands::Target, mc_nbt::Tag), crate::commands::CommandError> {
+) -> Result<(crate::commands::Target, mc_nbt::Tag), crate::command_args::CommandError> {
     let [target_word, ..] = args else {
-        return Err(crate::commands::CommandError::Usage(
+        return Err(crate::command_args::CommandError::Usage(
             "tellraw <targets> <message>",
         ));
     };
@@ -207,9 +207,9 @@ pub(crate) fn parse_tellraw(
 pub(crate) fn parse_title(
     args: &[&str],
     command: &str,
-) -> Result<(crate::commands::Target, TitleAction), crate::commands::CommandError> {
+) -> Result<(crate::commands::Target, TitleAction), crate::command_args::CommandError> {
     let [target_word, verb, ..] = args else {
-        return Err(crate::commands::CommandError::Usage(
+        return Err(crate::command_args::CommandError::Usage(
             "title <targets> <clear|reset|title|subtitle|actionbar|times> ...",
         ));
     };
@@ -228,7 +228,7 @@ pub(crate) fn parse_title(
         }
         "times" if args.len() == 5 => {
             let [_, _, fade_in, stay, fade_out, ..] = args else {
-                return Err(crate::commands::CommandError::Usage(
+                return Err(crate::command_args::CommandError::Usage(
                     "title <targets> times <fadeIn> <stay> <fadeOut>",
                 ));
             };
@@ -239,7 +239,7 @@ pub(crate) fn parse_title(
             }
         }
         _ => {
-            return Err(crate::commands::CommandError::Usage(
+            return Err(crate::command_args::CommandError::Usage(
                 "title <targets> <clear|reset|title|subtitle|actionbar|times> ...",
             ));
         }
@@ -249,16 +249,16 @@ pub(crate) fn parse_title(
 
 /// Vanilla `TimeArgument` for title times: bare ticks or `<float>d|s|t`,
 /// rounded, clamped to `i32`, min 0 (negative is a usage error).
-fn title_time(word: &str) -> Result<i32, crate::commands::CommandError> {
-    let ticks = crate::commands::time_ticks(word).ok_or(crate::commands::CommandError::Message(
-        format!("Invalid time '{word}'"),
-    ))?;
+fn title_time(word: &str) -> Result<i32, crate::command_args::CommandError> {
+    let ticks = crate::commands::time_ticks(word).ok_or(
+        crate::command_args::CommandError::Message(format!("Invalid time '{word}'")),
+    )?;
     i32::try_from(ticks)
-        .map_err(|_| crate::commands::CommandError::Message(format!("Invalid time '{word}'")))
+        .map_err(|_| crate::command_args::CommandError::Message(format!("Invalid time '{word}'")))
         .and_then(|ticks| {
             (ticks >= 0)
                 .then_some(ticks)
-                .ok_or(crate::commands::CommandError::Message(format!(
+                .ok_or(crate::command_args::CommandError::Message(format!(
                     "Invalid time '{word}'"
                 )))
         })
@@ -268,8 +268,11 @@ fn title_time(word: &str) -> Result<i32, crate::commands::CommandError> {
 /// `command_bossbar::tail_after` but local to this module so BossBar need not
 /// expose its helper). `command_words` keeps balanced `{..}`/`[..]`/quoted
 /// text as one word, so component JSON survives intact here.
-fn tail_after(command: &str, leading: &[&str]) -> Result<String, crate::commands::CommandError> {
-    use crate::commands::CommandError;
+fn tail_after(
+    command: &str,
+    leading: &[&str],
+) -> Result<String, crate::command_args::CommandError> {
+    use crate::command_args::CommandError;
     let mut rest = command.trim_start();
     rest = rest.strip_prefix('/').unwrap_or(rest);
     for word in leading {

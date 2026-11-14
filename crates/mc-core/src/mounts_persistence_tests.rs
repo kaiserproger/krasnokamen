@@ -206,5 +206,45 @@ fn happy_ghast_admission_leave_and_reconnect_survive_wal_recovery() {
                 .riders,
             vec![expected]
         );
+        run_tick(&mut restored, &[]);
+        assert_eq!(
+            restored
+                .entities
+                .row(restored_slot)
+                .entity_life
+                .mount
+                .riders,
+            vec![expected],
+            "a recovered passenger need not reconnect on the first tick"
+        );
+        run_tick(
+            &mut restored,
+            &[PlayerInput::Join {
+                connection: ConnectionId(21),
+                uuid: expected,
+                name: "retained".into(),
+                permission_level: 0,
+            }],
+        );
+        let retained = restored.connections.entity_of(ConnectionId(21)).unwrap();
+        assert_eq!(
+            crate::mounts::vehicle(&restored, retained),
+            Some(restored_slot)
+        );
+        run_tick(
+            &mut restored,
+            &[PlayerInput::Leave {
+                connection: ConnectionId(21),
+            }],
+        );
+        assert!(
+            restored
+                .entities
+                .row(restored_slot)
+                .entity_life
+                .mount
+                .riders
+                .is_empty()
+        );
     }
 }

@@ -153,29 +153,27 @@ pub(super) fn options_match(
             return false;
         }
     }
-    predicates_match(state, body.id, holder, selector)
+    true
 }
 
-/// `predicate=<id>` / `predicate=!<id>`: evaluate each named datapack loot
-/// predicate with the candidate as `this`. A predicate no datapack defines
-/// never matches the candidate (the command itself still runs).
-fn predicates_match(
-    state: &TickState,
-    entity: EntityId,
-    holder: Option<&str>,
-    selector: &Selector,
-) -> bool {
-    if selector.predicates.is_empty() {
-        return true;
-    }
+/// The loot-context facts a `predicate=` option evaluates against: the candidate
+/// as `this`, with its own scores and location, the day time, weather and a fresh
+/// random draw. Vanilla binds `distance` to the candidate itself, so it is zero.
+fn predicate_event(state: &TickState, entity: EntityId) -> serde_json::Value {
     let mut player = crate::advancements::entity_snapshot(state, entity);
-    let name = state.connections.name_of(entity).map(str::to_owned);
-    let holder = holder.map(str::to_owned).or(name).or_else(|| {
-        state
-            .entities
-            .slot_of(entity)
-            .map(|slot| state.entities.row(slot).uuid.hyphenated().to_string())
+    player["distance"] = serde_json::json!({
+        "x":0.0, "y":0.0, "z":0.0, "horizontal":0.0, "absolute":0.0
     });
+    let holder = state
+        .connections
+        .name_of(entity)
+        .map(str::to_owned)
+        .or_else(|| {
+            state
+                .entities
+                .slot_of(entity)
+                .map(|slot| state.entities.row(slot).uuid.hyphenated().to_string())
+        });
     if let (serde_json::Value::Object(fields), Some(holder)) = (&mut player, holder) {
         let scores = state.scoreboard.scores.get(&holder).map(|scores| {
             scores
@@ -200,7 +198,7 @@ fn predicates_match(
     stream = (stream ^ (stream >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
     stream = (stream ^ (stream >> 27)).wrapping_mul(0x94d049bb133111eb);
     let draw = ((stream ^ (stream >> 31)) >> 11) as f64 / (1u64 << 53) as f64;
-    let event = serde_json::json!({
+    serde_json::json!({
         "player": player,
         "location": crate::advancements::location_snapshot(state, entity),
         "time": state.day_time,
@@ -209,17 +207,7 @@ fn predicates_match(
             "thundering": state.thundering,
         },
         "random": draw,
-    });
-    for (id, negated) in &selector.predicates {
-        let Some(predicate) = state.registry.predicates.get(id) else {
-            return false;
-        };
-        let matched = mc_data::advancements::evaluate_predicate(predicate, &event).matches;
-        if matched == *negated {
-            return false;
-        }
-    }
-    true
+    })
 }
 
 pub(crate) fn selector(
@@ -228,6 +216,13 @@ pub(crate) fn selector(
     selector: &Selector,
     packs: &crate::datapacks::PackSet,
 ) -> Result<Vec<EntityId>, String> {
+    // Vanilla resolves the id only at evaluation time and treats a missing one
+    // as "this candidate does not match", before the `!` inversion is applied
+    // (`EntitySelectorOptions.lambda$bootStrap$56`: registry lookup, then
+    // `Optional.isEmpty -> false`; `ixor` with the invert flag only after it).
+    // So `predicate=<missing>` and `predicate=!<missing>` both select nothing,
+    // while `/execute if predicate <missing>` stays a parse error
+    // (`ResourceOrIdArgument.ErrorReferenceResult`, `resource_or_id.no_such_element`).
     let predicates = selector
         .predicates
         .iter()
@@ -236,9 +231,8 @@ pub(crate) fn selector(
                 .predicates
                 .get(id.as_str())
                 .map(|predicate| (predicate, *inverted))
-                .ok_or_else(|| format!("Unknown predicate {id}"))
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Vec<_>>();
     let origin = crate::command_console::pose(state, executor)
         .map(|(position, _)| position)
         .unwrap_or_else(|| state.world.world_spawn_position());
@@ -327,16 +321,18 @@ pub(crate) fn selector(
         })
         .collect();
     if !predicates.is_empty() {
+        // A missing predicate fails for every candidate and is not rescued by
+        // `!`, so the whole selection is empty without touching the world.
+        let Some(predicates) = predicates.iter().copied().collect::<Option<Vec<_>>>() else {
+            return Ok(Vec::new());
+        };
         for index in (0..candidates.len()).rev() {
-            let mut entity = crate::advancements::entity_snapshot(state, candidates[index].0);
-            // Vanilla selector loot contexts bind ORIGIN to THIS_ENTITY's own
-            // position, not the command source or selector-origin override.
-            entity["distance"] = serde_json::json!({
-                "x":0.0, "y":0.0, "z":0.0, "horizontal":0.0, "absolute":0.0
-            });
+            // `evaluate_predicate` reads the loot-context facts, so the candidate
+            // must be bound as `this` inside the event, not passed as the event.
+            let event = predicate_event(state, candidates[index].0);
             let mut matched = true;
             for (predicate, inverted) in &predicates {
-                let evaluation = mc_data::advancements::evaluate_predicate(predicate, &entity);
+                let evaluation = mc_data::advancements::evaluate_predicate(predicate, &event);
                 if !evaluation.unsupported.is_empty() {
                     return Err(format!(
                         "Unsupported predicate: {:?}",

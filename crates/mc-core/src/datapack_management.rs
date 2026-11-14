@@ -128,7 +128,7 @@ fn dispatch(
         ["datapack", "create", id, description] => {
             if permission(state) < 4 {
                 return Err(Failure::Text(
-                    crate::commands::CommandError::Unknown.message(),
+                    crate::command_args::CommandError::Unknown.message(),
                 ));
             }
             create(state, connection, id, description)
@@ -267,25 +267,6 @@ fn present(state: &mut TickState, connection: ConnectionId, scope: ListScope, li
     }
 }
 
-fn cached_listing(state: &TickState) -> Listing {
-    let packs = state.datapacks.packs();
-    let describe = |id: &String| {
-        (
-            id.clone(),
-            state
-                .datapacks
-                .catalog()
-                .get(id)
-                .cloned()
-                .unwrap_or_else(|| Tag::String(String::new())),
-        )
-    };
-    Listing {
-        enabled: packs.selection.enabled.iter().map(describe).collect(),
-        available: packs.selection.disabled.iter().map(describe).collect(),
-    }
-}
-
 pub(super) fn counted(listing: &Listing, scope: ListScope) -> i32 {
     let count = match scope {
         ListScope::Enabled => listing.enabled.len(),
@@ -325,7 +306,16 @@ fn json(tag: &Tag) -> serde_json::Value {
         Tag::Compound(fields) => Value::Object(
             fields
                 .iter()
-                .map(|(key, value)| (key.clone(), json(value)))
+                .map(|(key, value)| {
+                    let value = match (key.as_str(), value) {
+                        (
+                            "bold" | "italic" | "underlined" | "strikethrough" | "obfuscated",
+                            Tag::Byte(value),
+                        ) => Value::Bool(*value != 0),
+                        _ => json(value),
+                    };
+                    (key.clone(), value)
+                })
                 .collect(),
         ),
         Tag::List(list) => Value::Array(list.elements.iter().map(json).collect()),
@@ -377,16 +367,10 @@ fn move_enabled(selection: &mut Selection, id: &str, rest: &[&str]) -> Result<()
         .position(|entry| entry == id)
         .expect("pack was just enabled");
     let entry = selection.enabled.remove(position);
-    // `vanilla` stays first: ordering before it is unsupported.
-    let floor = usize::from(
-        selection
-            .enabled
-            .first()
-            .is_some_and(|first| first == "vanilla"),
-    );
+    // The explicit first/before placements may precede even the vanilla pack.
     let at = match rest {
         [] | ["last"] => selection.enabled.len(),
-        ["first"] => floor,
+        ["first"] => 0,
         [placement @ ("before" | "after"), other] => {
             let other = pack_name(other).ok_or_else(|| unknown(other))?;
             let at = selection
@@ -394,11 +378,7 @@ fn move_enabled(selection: &mut Selection, id: &str, rest: &[&str]) -> Result<()
                 .iter()
                 .position(|entry| entry == &other)
                 .ok_or_else(|| unknown(&other))?;
-            if *placement == "after" {
-                at + 1
-            } else {
-                at.max(floor)
-            }
+            if *placement == "after" { at + 1 } else { at }
         }
         _ => {
             return Err(Failure::Text(

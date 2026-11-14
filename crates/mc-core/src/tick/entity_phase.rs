@@ -480,7 +480,7 @@ pub(super) fn early_entity_rest(
     targets_empty: bool,
 ) -> bool {
     let flags = view.entities.motion_flags(slot);
-    let battle = view.bodies[slot.0 as usize].faction != 0;
+    let battle = crate::battle::battle_row(view.bodies[slot.0 as usize].faction);
     let battle_thrust = view
         .hostile
         .battle
@@ -496,6 +496,12 @@ pub(super) fn early_entity_rest(
             && crate::turtle::drive(view.entities.row(slot)).is_some()
         || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::frog::is_frog(type_id))
             && crate::frog::drive(view.entities.row(slot)).is_some()
+        || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::cat::is_cat(type_id))
+            && crate::cat::drive(
+                view.entities.row(slot).entity_life.cat_relax.as_ref(),
+                view.entities.row(slot).speed,
+            )
+            .is_some()
         || view
             .entities
             .row(slot)
@@ -1092,7 +1098,8 @@ pub(super) fn read_row(
     rare: &RarePrep,
 ) -> (ReadRow, bool) {
     let body = &view.bodies[slot.0 as usize];
-    let battle = body.faction != 0 && matches!(body.kind, EntityKind::Mob { .. });
+    let battle =
+        crate::battle::battle_row(body.faction) && matches!(body.kind, EntityKind::Mob { .. });
     let think = battle || motion_thinks(view.tick, flags, period);
     let row = view.entities.row(slot);
     let observed = rare.observed;
@@ -1400,8 +1407,6 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     };
     laps.lap("battle");
     laps.lap("pre");
-    let prep_start = std::time::Instant::now();
-    let pre_time = prep_start.duration_since(pre_start);
     state.entities.prepare_motion_hints(&state.registry);
     laps.lap("motion_hints");
     let unchanged_since = state.entity_phase_revision;
@@ -1740,7 +1745,6 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     zoglin_grid.batch(searches.filter(|row| row.hunts_living).map(query));
     laps.lap("target_grids");
     let cows_ref = &cow_cells;
-    let scope_start = std::time::Instant::now();
     // Work-stealing over the core's long-lived rayon workers (no threads
     // spawned per tick); `collect` keeps slot order.
     let ctx = StepCtx {
@@ -1775,7 +1779,6 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     };
     system_graph::run(&ctx, &mut ordered);
     laps.lap("step_scope");
-    let scope_time = scope_start.elapsed();
     #[cfg(all(test, debug_assertions))]
     {
         let grids = [
@@ -1790,16 +1793,13 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             grids.iter().map(|grid| grid.batch_count()).sum(),
         ));
     }
-    let prep_time = scope_start.duration_since(prep_start);
-    let commit_start = std::time::Instant::now();
-    let resting_count = resting.len();
     let mut seq = std::mem::take(&mut state.seq_counter);
     let mut intents = battle_intents;
     let physical_profiles = state.registry.item_facts.has_physical_profiles();
     retain_resting_writeback(state, &mut resting);
     for slot in resting.drain(..) {
         let body = state.entities.body(slot);
-        if body.faction == 0 {
+        if !crate::battle::battle_row(body.faction) {
             let aggressive = state.hostile.targets.contains_key(&body.id);
             crate::hostile::set_zombie_aggressive(state, slot, aggressive);
         }
@@ -1956,15 +1956,10 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     }
     laps.lap("ordered_writeback");
     state.seq_counter = seq;
-    let item_merge_start = std::time::Instant::now();
-    let merge_items = if sim {
-        crate::item_motion::merge_neighbours(state)
-    } else {
-        0
-    };
-    let item_merge_time = item_merge_start.elapsed();
+    if sim {
+        crate::item_motion::merge_neighbours(state);
+    }
     laps.lap("item_merge");
-    let commit_time = commit_start.elapsed();
     let post_start = std::time::Instant::now();
     state.projectiles.post = crate::projectiles::PostTimes::default();
     // Pickup intents: players collect mature item entities in reach.
@@ -1973,20 +1968,49 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     if sim {
         collect_pickup_intents(state, &mut intents);
     }
+    state.projectiles.post.pickup_us = pickup_start.elapsed().as_micros() as u64;
     laps.lap("pickup_intents");
     // Shooting skeletons, flying arrows, swelling creepers (serial: they
     // read the world and every entity).
     if sim {
+        let hostile_start = std::time::Instant::now();
         crate::hostile::run(state, &mut intents, &specials);
+        state.projectiles.post.hostile_us = hostile_start.elapsed().as_micros() as u64;
         laps.lap("hostile");
         crate::projectiles::run(state, &mut intents, &specials);
         laps.lap("projectiles");
     }
-    state.projectiles.post.pickup_us = pickup_start.elapsed().as_micros() as u64;
     let post_time = post_start.elapsed();
     state.projectiles.post.total_us = post_time.as_micros() as u64;
     if std::env::var("MC_CORE_PHASE_LOG").is_ok() {
         laps.print("entity phase");
+        let post = state.projectiles.post;
+        eprintln!(
+            "  post detail us: pickup={} hostile={} weapons={} hittables={} candidates={} shots={} projectiles={} grounded={}",
+            post.pickup_us,
+            post.hostile_us,
+            post.weapons_us,
+            post.hittables_us,
+            post.candidates_us,
+            post.shots_us,
+            post.shots,
+            post.grounded,
+        );
+        let battle = state.hostile.battle.timings;
+        eprintln!(
+            "  battle detail us: total={} counters={} formation={} columns={} targets={} retaliation={} steering={} combat={} morale={} projection={} emit={}",
+            battle.total_us,
+            battle.counters_us,
+            battle.formation_us,
+            battle.columns_us,
+            battle.targeting_us,
+            battle.retaliation_us,
+            battle.steering_us,
+            battle.combat_us,
+            battle.morale_us,
+            battle.projection_us,
+            battle.emit_us,
+        );
     }
     rows.clear();
     specials.clear();
@@ -2196,6 +2220,14 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
         look_target = Some(target);
     } else if crate::frog::is_frog(row.type_id)
         && let Some((target, speed)) = crate::frog::drive(ctx.entities.row(row.slot))
+    {
+        vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
+        look_target = Some(target);
+    } else if crate::cat::is_cat(row.type_id)
+        && let Some((target, speed)) = crate::cat::drive(
+            ctx.entities.row(row.slot).entity_life.cat_relax.as_ref(),
+            ctx.entities.row(row.slot).speed,
+        )
     {
         vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
         look_target = Some(target);

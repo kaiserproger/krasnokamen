@@ -1,7 +1,7 @@
 //! Native item arguments for the supported give/debug-give/clear commands.
 //! ItemParser$State and ComponentPredicateParser (26.1.2) use bracketed
 //! component patches, SNBT values, negation, and predicate alternatives.
-use crate::{commands::CommandError, inventory::ItemRules};
+use crate::{command_args::CommandError, inventory::ItemRules};
 use mc_data::{Identifier, ItemStack, items::ItemRegistry};
 use mc_nbt::Tag;
 

@@ -6,8 +6,8 @@
 use mc_nbt::Tag;
 
 use crate::boundary::{ConnectionId, PlayerChange};
+use crate::command_args::CommandError;
 use crate::command_feedback::{text, translated};
-use crate::commands::CommandError;
 use crate::tick::TickState;
 use crate::tick_control::{announce_state, announce_step};
 

@@ -93,6 +93,26 @@ fn command(state: &mut TickState, actor: crate::boundary::EntityId, text: &str) 
 }
 
 #[test]
+fn data_view_uses_live_sculk_frequency() {
+    let mut state = state(None);
+    place(&mut state, SENSOR, "sculk_sensor", &[]);
+    state.sculk.entries.insert(
+        SENSOR,
+        Entry::Sensor {
+            frequency: 7,
+            deadline: 0,
+        },
+    );
+    let Tag::Compound(fields) = crate::command_data::block(&state, SENSOR).unwrap() else {
+        panic!("expected sensor compound");
+    };
+    assert_eq!(
+        mc_data::item_nbt::field(&fields, "last_vibration_frequency"),
+        Some(&Tag::Int(7))
+    );
+}
+
+#[test]
 fn setblock_rejects_malformed_sculk_records_without_world_mutation() {
     let (mut state, actor) = crate::crafter::tests::fixture(None);
     let pos = BlockPos { x: 8, y: 201, z: 8 };

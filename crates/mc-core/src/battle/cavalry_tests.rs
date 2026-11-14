@@ -862,7 +862,7 @@ fn riders_attacking_one_foe_fan_out_round_it() {
         .map(|&(_, horse)| {
             let d = battle.columns.drive[index(&state, &battle, horse)];
             assert!(d[0] > 0.0, "every rider closes on the foe: {d:?}");
-            d[2].atan2(d[0]).to_degrees()
+            mc_physics::mth::atan2(d[2], d[0]).to_degrees()
         })
         .collect();
     let fan = angles.iter().copied().fold(f64::NEG_INFINITY, f64::max)

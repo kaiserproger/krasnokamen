@@ -66,6 +66,25 @@ impl Columns {
         self.facts.push(StaticFacts::default());
     }
 
+    /// Every per-row column keeps the roster length; `append` pushes the same set.
+    fn truncate(&mut self, len: usize) {
+        self.ids.truncate(len);
+        self.slots.truncate(len);
+        self.factions.truncate(len);
+        self.positions.truncate(len);
+        self.targets.truncate(len);
+        self.drive.truncate(len);
+        self.escape.truncate(len);
+        self.ranged.truncate(len);
+        self.reach.truncate(len);
+        self.active.truncate(len);
+        self.carried.truncate(len);
+        self.targetable.truncate(len);
+        self.classification.truncate(len);
+        self.equipment_dirty.truncate(len);
+        self.facts.truncate(len);
+    }
+
     /// Slot/identity changes independently force refresh during preparation.
     pub fn invalidate(&mut self, id: EntityId, slot: EntitySlot) {
         if let Some(bi) = self.index(slot)
@@ -158,8 +177,9 @@ impl Columns {
             facts.valid = true;
         }
         let facts = &mut self.facts[bi];
-        let member_visible =
-            expected_faction.is_none_or(|expected| facts.health > 0.0 && body.faction == expected);
+        let member_visible = expected_faction.is_none_or(|expected| {
+            facts.health > 0.0 && super::relation(body.faction, expected) == super::Relation::Same
+        });
         if !member_visible || (expected_faction.is_none() && facts.health <= 0.0) {
             facts.valid = false;
             self.targets[bi] = None;
@@ -170,7 +190,8 @@ impl Columns {
         self.positions[bi] = frame.entities.pos(slot);
         self.factions[bi] = body.faction;
         self.carried[bi] = facts.carried;
-        self.targetable[bi] = body.faction != 0 && facts.health > 0.0 && facts.targetable;
+        self.targetable[bi] =
+            super::battle_row(body.faction) && facts.health > 0.0 && facts.targetable;
         let chunk = frame.entities.chunk_of(slot);
         self.active[bi] =
             self.targetable[bi] && !facts.no_ai && frame.world.is_active_position(chunk.x, chunk.z);
@@ -234,20 +255,7 @@ impl Columns {
             }
         }
         counters.finish();
-        self.ids.truncate(len);
-        self.slots.truncate(len);
-        self.factions.truncate(len);
-        self.positions.truncate(len);
-        self.targets.truncate(len);
-        self.drive.truncate(len);
-        self.ranged.truncate(len);
-        self.reach.truncate(len);
-        self.active.truncate(len);
-        self.carried.truncate(len);
-        self.targetable.truncate(len);
-        self.classification.truncate(len);
-        self.equipment_dirty.truncate(len);
-        self.facts.truncate(len);
+        self.truncate(len);
         self.clear_projection(frame.entities.len());
     }
 
@@ -274,5 +282,43 @@ impl Columns {
                 self.look_by_slot[slot.0 as usize] = self.targets[bi].map(|target| target.pos);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Columns;
+
+    fn row_lengths(columns: &Columns) -> [usize; 15] {
+        [
+            columns.ids.len(),
+            columns.slots.len(),
+            columns.factions.len(),
+            columns.positions.len(),
+            columns.targets.len(),
+            columns.drive.len(),
+            columns.escape.len(),
+            columns.ranged.len(),
+            columns.reach.len(),
+            columns.active.len(),
+            columns.carried.len(),
+            columns.targetable.len(),
+            columns.classification.len(),
+            columns.equipment_dirty.len(),
+            columns.facts.len(),
+        ]
+    }
+
+    #[test]
+    fn tail_churn_keeps_every_row_column_at_the_roster_length() {
+        let mut columns = Columns::default();
+        for _ in 0..3 {
+            for _ in 0..4 {
+                columns.append();
+            }
+            columns.truncate(1);
+        }
+        columns.append();
+        assert_eq!(row_lengths(&columns), [2; 15]);
     }
 }

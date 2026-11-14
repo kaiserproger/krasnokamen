@@ -315,6 +315,9 @@ def cmd_run(argv: list[str]) -> int:
                         help="native graphical validation under owned Xvfb, with GPU capture")
     parser.add_argument("--server-bin", type=Path, default=None,
                         help="immutable krasnokamen executable (loader-live or matrix profiles)")
+    parser.add_argument("--parts", type=int, default=1,
+                        help="split a long real-client gate into N independent concurrent parts, "
+                             "each its own server, client and scene slot on the same binary")
     if scenario_error is None:
         args, extra = parser.parse_known_args(argv)
         profile = args.profile
@@ -338,6 +341,12 @@ def cmd_run(argv: list[str]) -> int:
                 env_server = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
                 args.server_bin = Path(env_server) if env_server else None
     spec = catalog.PROFILES.get(profile)
+    split_profiles = {"buildings-qa", "civilization-seed-qa", "screens-voice-qa"}
+    if scenario_error is None and args.parts < 1:
+        scenario_error = "--parts must be at least 1"
+    elif scenario_error is None and args.parts > 1 and profile not in split_profiles:
+        scenario_error = (f"--parts is implemented by {', '.join(sorted(split_profiles))}; "
+                          f"{profile} has no independent parts")
     if scenario_error is None and args.server_bin is not None and profile not in {"loader-live", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}:
         scenario_error = "--server-bin is only supported by loader-live or matrix profiles"
     started_at = _utc_now()
@@ -501,6 +510,7 @@ def cmd_run(argv: list[str]) -> int:
         plugins_dir=args.plugins_dir,
         windowed=args.windowed,
         server_bin=args.server_bin,
+        parts=args.parts,
     )
     interrupted_signal = signal.SIGINT
     def terminate(signum: int, frame: Any) -> None:

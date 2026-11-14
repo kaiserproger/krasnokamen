@@ -72,10 +72,6 @@ fn capabilities(state: &TickState, slot: EntitySlot) -> crate::blueprint::Capabi
         .map(|blueprint| blueprint.capabilities)
         .unwrap_or_default()
 }
-fn contains_passenger(mount: &MountState, uuid: Uuid) -> bool {
-    mount.riders.contains(&uuid)
-}
-
 pub(crate) fn vehicle(state: &TickState, actor: EntityId) -> Option<EntitySlot> {
     let actor = state.entities.row(state.entities.slot_of(actor)?);
     let slot = state
@@ -821,9 +817,6 @@ fn controllable(state: &TickState, slot: EntitySlot, actor: EntityId) -> bool {
         return kind == crate::vehicles::VehicleKind::Boat;
     }
     let row = state.entities.row(slot);
-    if rider(state, slot).is_none_or(|rider| state.entities.body(rider).id != actor) {
-        return false;
-    }
     if name(state, slot) == "minecraft:happy_ghast" {
         return row.loot.body_armor.is_some();
     }
@@ -1039,20 +1032,42 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             continue;
         }
         // The cooldown is persisted: write only while it is running.
-        let cooldown = match state.entities.row(slot).entity_life.mount.dash_cooldown {
-            0 => 0,
-            running => {
-                let cooldown = running - 1;
-                state.entities.row_mut(slot).entity_life.mount.dash_cooldown = cooldown;
-                cooldown
-            }
+        let cooldown = state.entities.row(slot).entity_life.mount.dash_cooldown;
+        if cooldown > 0 {
+            state.entities.row_mut(slot).entity_life.mount.dash_cooldown = cooldown - 1;
+        }
+        let dashing = state.entities.row(slot).appearance.extra.contains(&(
+            CAMEL_DASH_INDEX,
+            crate::boundary::EntityDataValue::Boolean(true),
+        ));
+        let liquid = if dashing && cooldown < 50 && !state.entities.ground(slot) {
+            let body = state.entities.body(slot);
+            let x = (pos[0] - body.half_width).floor() as i32
+                ..=(pos[0] + body.half_width).floor() as i32;
+            let y = pos[1].floor() as i32..=(pos[1] + body.height).floor() as i32;
+            let z = (pos[2] - body.half_width).floor() as i32
+                ..=(pos[2] + body.half_width).floor() as i32;
+            x.into_iter().any(|x| {
+                z.clone().any(|z| {
+                    y.clone().any(|y| {
+                        state
+                            .world
+                            .block_at(x, y, z)
+                            .and_then(|block| crate::fluids::contained(state, block))
+                            .is_some()
+                    })
+                })
+            })
+        } else {
+            false
         };
+        // Vanilla Camel.tick (26.3 javap): isDashing && dashCooldown < 50 &&
+        // (onGround || isInLiquid || isPassenger), checked before the decrement.
         if cooldown < 50
-            && state.entities.ground(slot)
-            && state.entities.row(slot).appearance.extra.contains(&(
-                CAMEL_DASH_INDEX,
-                crate::boundary::EntityDataValue::Boolean(true),
-            ))
+            && (state.entities.ground(slot)
+                || liquid
+                || vehicle(state, state.entities.body(slot).id).is_some())
+            && dashing
         {
             crate::special_mobs::metadata(
                 state,
@@ -1078,7 +1093,9 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         let mut index = 0;
         while index < state.entities.row(slot).entity_life.mount.riders.len() {
             let uuid = state.entities.row(slot).entity_life.mount.riders[index];
-            let live = state.entities.slot_of_uuid(uuid).is_some_and(|r| {
+            // Recovered player passengers have no live body until they join.
+            // Absence is not a dismount; leave/death explicitly clears custody.
+            let live = state.entities.slot_of_uuid_any(uuid).is_none_or(|r| {
                 let body = state.entities.body(r);
                 body.alive
                     && match body.kind {

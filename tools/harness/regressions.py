@@ -15,15 +15,15 @@ from .ledger_base_fixed import BASE_FIXED
 from .runtime import REPO_ROOT
 
 REQUIRED = {'id', 'title', 'area', 'repro', 'severity', 'status', 'source', 'regression'}
-OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_proof'}
+OPTIONAL = {'repro_check', 'failing_first', 'fix_commit', 'promotion', 'ingress_proof', 'proving_assertions'}
 PROMOTION_DIR = 'docs/bugs/promotions'
 
 
 def _promotion_errors(ident, bug):
     """Why this row's `fixed` status or `promotion` field is not acceptable, if it is not."""
     promotion, fix_commit = bug.get('promotion'), bug.get('fix_commit')
-    if 'fix_commit' in bug and (not isinstance(fix_commit, str) or not re.fullmatch(r'[0-9a-f]{7,40}|patch:[0-9a-f]{64}', fix_commit)):
-        return [f'{ident}: fix_commit must be a lowercase hex commit id or patch:<sha256> of an uncommitted fix']
+    if 'fix_commit' in bug and (not isinstance(fix_commit, str) or not re.fullmatch(r'(?:client:)?[0-9a-f]{7,40}|patch:[0-9a-f]{64}', fix_commit)):
+        return [f'{ident}: fix_commit must be a lowercase hex commit id, client:<commit> or patch:<sha256>']
     if promotion is None:
         if bug.get('status') == 'fixed' and ident not in BASE_FIXED:
             return [f'{ident}: fixed without a promotion receipt; only `python3 -m tools.harness ledger promote` may set fixed']
@@ -512,6 +512,8 @@ def run(ctx):
     ids = set()
     cargo = defaultdict(lambda: defaultdict(set))
     clients = defaultdict(set)
+    python_refs = defaultdict(set)
+    client_tests = defaultdict(set)
     errors = []
     for bug in bugs:
         if not isinstance(bug, dict):
@@ -547,6 +549,10 @@ def run(ctx):
         if not isinstance(refs, list) or any(not isinstance(ref, str) for ref in refs):
             errors.append(f'{ident}: regression must be a list of check refs')
             continue
+        if 'proving_assertions' in bug and (not isinstance(bug['proving_assertions'], dict) or any(
+                ref not in refs or not isinstance(assertion, str) or not assertion
+                for ref, assertion in bug['proving_assertions'].items())):
+            errors.append(f'{ident}: proving_assertions must map registered refs to assertion names')
         if bug.get('status') == 'fixed' and not refs:
             errors.append(f'{ident}: fixed without regression')
         for ref in refs:
@@ -557,6 +563,10 @@ def run(ctx):
                 continue
             if kind == 'cargo':
                 cargo[first][second].add(ident)
+            elif kind == 'python':
+                python_refs[(first, second)].add(ident)
+            elif kind == 'client':
+                client_tests[(first, second)].add(ident)
             else:
                 clients[ref].add(ident)
         if bug.get('status') == 'fixed' and needs_real_client(bug) and not any(is_graphical_ref(ref) for ref in refs):
@@ -568,6 +578,15 @@ def run(ctx):
     if errors:
         raise ValueError('; '.join(errors))
     failures = []
+    from . import ledger as ledger_tool
+    for refs, execute in ((python_refs, ledger_tool._run_python),
+                          (client_tests if ctx.include_regression_client else {}, ledger_tool._run_client)):
+        if refs:
+            results = execute(ctx, set(refs), REPO_ROOT)
+            for test, ids in refs.items():
+                state, detail = results.get(test, (ledger_tool.UNRUNNABLE, 'no result'))
+                if state != ledger_tool.GREEN:
+                    failures.append(f"{', '.join(sorted(ids))}: {test}: {state}: {detail}")
     if cargo:
         expression = ' | '.join(
             f'(package({crate}) & test(={name}))'

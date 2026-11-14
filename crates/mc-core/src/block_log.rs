@@ -24,7 +24,7 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::boundary::{BlockPos, ChunkPos, ConnectionId, EntityId, PlayerChange};
-use crate::commands::CommandError;
+use crate::command_args::CommandError;
 use crate::config::{BlockLogSettings, CoreError};
 use crate::dimensions::Dimension;
 use crate::entities::EntityKind;

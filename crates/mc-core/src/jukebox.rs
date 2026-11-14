@@ -101,7 +101,14 @@ impl Jukebox {
     }
     fn encode(&self, pos: BlockPos, items: &mc_data::items::ItemRegistry) -> Vec<u8> {
         let mut fields = vec![
-            ("id".into(), Tag::String("minecraft:jukebox".into())),
+            (
+                "id".into(),
+                Tag::String(
+                    mc_data::block_entity_kinds::BlockEntityKind::Jukebox
+                        .vanilla_id()
+                        .into(),
+                ),
+            ),
             ("x".into(), Tag::Int(pos.x)),
             ("y".into(), Tag::Int(pos.y)),
             ("z".into(), Tag::Int(pos.z)),

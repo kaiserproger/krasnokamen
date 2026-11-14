@@ -16,18 +16,27 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
             }
             attempt(&mut state, id, slot);
         }
-        assert_eq!(state.world.block_at(cell[0], cell[1], cell[2]), Some(expected));
+        assert_eq!(
+            state.world.block_at(cell[0], cell[1], cell[2]),
+            Some(expected)
+        );
         assert!(state.settlements.get(id).unwrap().project.is_some());
-        let log = state.registry.items.id_of(
-            &mc_data::Identifier::parse("minecraft:oak_log").unwrap()
-        ).unwrap();
+        let log = state
+            .registry
+            .items
+            .id_of(&mc_data::Identifier::parse("minecraft:oak_log").unwrap())
+            .unwrap();
         let slots = &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots;
         let spare = slots.iter_mut().find(|stack| stack.is_empty()).unwrap();
         *spare = mc_data::ItemStack::new(log, 1);
-        state.world.set_block(cell[0], cell[1], cell[2], state.registry.states.air);
+        state
+            .world
+            .set_block(cell[0], cell[1], cell[2], state.registry.states.air);
         for _ in 0..4096 {
             let snapshot = executor::status(&state, id, &project.structure).unwrap();
-            if snapshot.stages.get(snapshot.current_stage_index as usize)
+            if snapshot
+                .stages
+                .get(snapshot.current_stage_index as usize)
                 .is_some_and(|stage| stage.stage == "repair")
             {
                 break;
@@ -36,57 +45,116 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
         }
         let snapshot = executor::status(&state, id, &project.structure).unwrap();
         assert_eq!(
-            snapshot.stages.get(snapshot.current_stage_index as usize).map(|stage| stage.stage.as_str()),
+            snapshot
+                .stages
+                .get(snapshot.current_stage_index as usize)
+                .map(|stage| stage.stage.as_str()),
             Some("repair"),
             "the broken cell must be re-queued before the project completes"
         );
-        assert_eq!(executor::next_cell(&state, id, &project.structure).unwrap(), Some(cell));
+        assert_eq!(
+            executor::next_cell(&state, id, &project.structure).unwrap(),
+            Some(cell)
+        );
         crate::plugin_structures::validate(&state).unwrap();
         // With no replacement log, the existing shortage path reports the
         // repair and does not place for free.
         let saved_stock = state.block_entities[&(1, 201, 1)].slots.clone();
-        let saved_carry = state.entities.row(slot).villager.as_ref().unwrap().inventory.clone();
+        let saved_carry = state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .unwrap()
+            .inventory
+            .clone();
         for stack in &mut state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots {
             if stack.item_id == log {
                 *stack = mc_data::ItemStack::EMPTY;
             }
         }
-        for stack in &mut state.entities.row_mut(slot).villager.as_mut().unwrap().inventory {
+        for stack in &mut state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .inventory
+        {
             if stack.as_ref().is_some_and(|item| item.item_id == log) {
                 *stack = None;
             }
         }
-        assert_eq!(executor::missing(&state, id, &project.structure).unwrap()
-            .get("minecraft:oak_log"), Some(&1));
+        assert_eq!(
+            executor::missing(&state, id, &project.structure)
+                .unwrap()
+                .get("minecraft:oak_log"),
+            Some(&1)
+        );
         attempt(&mut state, id, slot);
-        assert_eq!(state.world.block_at(cell[0], cell[1], cell[2]), Some(state.registry.states.air));
+        assert_eq!(
+            state.world.block_at(cell[0], cell[1], cell[2]),
+            Some(state.registry.states.air)
+        );
         assert!(state.settlements.get(id).unwrap().project.is_some());
         state.block_entities.get_mut(&(1, 201, 1)).unwrap().slots = saved_stock;
-        state.entities.row_mut(slot).villager.as_mut().unwrap().inventory = saved_carry;
+        state
+            .entities
+            .row_mut(slot)
+            .villager
+            .as_mut()
+            .unwrap()
+            .inventory = saved_carry;
 
         if restart {
             let rows = super::super::persistence::checkpoint_rows(&state, state.tick).unwrap();
-            let ledger = state.plugins.get_domain("@native-structures", "ledger").unwrap().clone();
+            let ledger = state
+                .plugins
+                .get_domain("@native-structures", "ledger")
+                .unwrap()
+                .clone();
             let carry = state.entities.row(slot).villager.clone();
             let (mut restored, restored_id, restored_slot) = fixture();
             assert_eq!(restored_id, id);
             restored.settlements = super::super::Registry::default();
             super::super::persistence::hydrate_dimension(
-                &mut restored, &rows, &crate::journal::Replay::default(), id.0,
-            ).unwrap();
-            restored.plugins.set_domain("@native-structures", "ledger", ledger);
+                &mut restored,
+                &rows,
+                &crate::journal::Replay::default(),
+                id.0,
+            )
+            .unwrap();
+            restored
+                .plugins
+                .set_domain("@native-structures", "ledger", ledger);
             restored.entities.row_mut(restored_slot).villager = carry;
             restored.block_entities.get_mut(&(1, 201, 1)).unwrap().slots =
                 state.block_entities[&(1, 201, 1)].slots.clone();
             for (position, block) in &state.plugin_block_writes {
-                restored.world.set_block(position.x, position.y, position.z, *block);
+                restored
+                    .world
+                    .set_block(position.x, position.y, position.z, *block);
             }
-            restored.world.set_block(cell[0], cell[1], cell[2], restored.registry.states.air);
+            restored
+                .world
+                .set_block(cell[0], cell[1], cell[2], restored.registry.states.air);
             state = restored;
         }
         let stock = |state: &TickState| -> i32 {
-            state.block_entities[&(1, 201, 1)].slots.iter()
-                .chain(state.entities.row(slot).villager.as_ref().unwrap().inventory.iter().flatten())
+            state.block_entities[&(1, 201, 1)]
+                .slots
+                .iter()
+                .chain(
+                    state
+                        .entities
+                        .row(slot)
+                        .villager
+                        .as_ref()
+                        .unwrap()
+                        .inventory
+                        .iter()
+                        .flatten(),
+                )
                 .filter(|stack| stack.item_id == log)
                 .map(|stack| stack.count)
                 .sum()
@@ -101,7 +169,11 @@ fn broken_placed_house_cell_is_rebuilt_before_completion_even_after_restart() {
         }
         assert_eq!(stock(&state), before - 1, "repair must debit one real log");
         complete(&mut state, id, slot);
-        assert_eq!(state.world.block_at(cell[0], cell[1], cell[2]), Some(expected), "restart={restart}");
+        assert_eq!(
+            state.world.block_at(cell[0], cell[1], cell[2]),
+            Some(expected),
+            "restart={restart}"
+        );
         assert!(state.settlements.get(id).unwrap().project.is_none());
     }
 }

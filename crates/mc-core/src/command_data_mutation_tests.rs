@@ -1,6 +1,26 @@
 use super::*;
 use crate::command_execution::CommandResult::{Failed, Success};
 
+fn mutate(state: &mut TickState, context: Context, text: &str) -> Result<i32, String> {
+    match data(state, context, text) {
+        -1 => Err("data command failed".into()),
+        value => Ok(value),
+    }
+}
+
+fn prepare(
+    state: &TickState,
+    context: Context,
+    original: &Tag,
+    action: &str,
+    mut arguments: &str,
+) -> Result<(i32, Tag), String> {
+    let mut candidate = original.clone();
+    let count =
+        crate::command_storage::mutate(state, context, action, &mut candidate, &mut arguments)?;
+    Ok((count, candidate))
+}
+
 #[test]
 fn data_mutation_sources_read_live_entity_and_block_owners_atomically() {
     let (mut state, id, context) = fixture();
@@ -58,7 +78,7 @@ fn data_mutation_sources_read_live_entity_and_block_owners_atomically() {
 fn data_mutation_preparation_does_not_commit_partial_nbt_edits() {
     let (state, _, context) = fixture();
     let original = crate::command_snbt::parse("{values:[1,2],nested:{keep:3}}").unwrap();
-    let (count, candidate) = crate::command_storage::prepare(
+    let (count, candidate) = prepare(
         &state,
         context,
         &original,
@@ -77,8 +97,7 @@ fn data_mutation_preparation_does_not_commit_partial_nbt_edits() {
         "nested.keep set from storage test:missing value",
     ] {
         assert!(
-            crate::command_storage::prepare(&state, context, &original, "modify", arguments,)
-                .is_err(),
+            prepare(&state, context, &original, "modify", arguments,).is_err(),
             "{arguments}"
         );
         assert_eq!(*get(&original, "nested.keep").unwrap(), Tag::Int(3));
@@ -150,23 +169,15 @@ fn data_mutation_entity_preflight_is_atomic_and_players_are_rejected() {
     let slot = state.entities.slot_of(id).unwrap();
     let row = state.entities.row(slot).clone();
     let body = *state.entities.body(slot);
-    let before = entity(&state, id).unwrap();
-    let (_, candidate) = crate::command_storage::prepare(
-        &state,
+    assert!(mutate(
+        &mut state,
         context,
-        &before,
-        "merge",
-        "{Health:7.0f,equipment:{not_a_slot:{id:'minecraft:stone'}}}",
-    )
-    .unwrap();
-    assert!(crate::command_summon::data::update(&mut state, id, &before, &candidate).is_err());
+        "data merge entity @e[type=minecraft:cow,limit=1] {Health:7.0f,equipment:{not_a_slot:{id:'minecraft:stone'}}}",
+    ).is_err());
     assert_eq!(state.entities.row(slot), &row);
     assert_eq!(state.entities.body(slot), &body);
     let before = entity(&state, player).unwrap();
-    let (_, candidate) =
-        crate::command_storage::prepare(&state, context, &before, "merge", "{Health:1.0f}")
-            .unwrap();
-    assert!(crate::command_summon::data::update(&mut state, player, &before, &candidate).is_err());
+    assert!(mutate(&mut state, context, "data merge entity @s {Health:1.0f}").is_err());
     assert_eq!(entity(&state, player).unwrap(), before);
 }
 
@@ -176,11 +187,13 @@ fn data_mutation_block_commits_live_inventory_without_resetting_furnace() {
     let pos = BlockPos { x: 4, y: 60, z: 4 };
     run(&mut state, context, "setblock 4 60 4 minecraft:furnace");
     let stack = item(&state, "minecraft:iron_ingot", 3);
-    let mut furnace = crate::inventory::furnace::FurnaceState::default();
-    furnace.lit_remaining = 87;
-    furnace.lit_total = 1600;
-    furnace.cook_progress = 31;
-    furnace.cook_total = 200;
+    let furnace = crate::inventory::furnace::FurnaceState {
+        lit_remaining: 87,
+        lit_total: 1600,
+        cook_progress: 31,
+        cook_total: 200,
+        ..Default::default()
+    };
     state.block_entities.insert(
         (4, 60, 4),
         crate::tick::BlockEntityState {

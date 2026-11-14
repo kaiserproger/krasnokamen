@@ -329,7 +329,7 @@ impl FormationRuntime {
         spec: RegimentSpec,
         ids: &[EntityId],
     ) -> Result<(), &'static str> {
-        if spec.faction == 0
+        if !super::battle_row(spec.faction)
             || spec.files == 0
             || ids.is_empty()
             || ids.len() > 1000
@@ -611,10 +611,12 @@ impl FormationRuntime {
         m.slot = None;
         m.alive = sample.is_some_and(|sample| {
             m.pos = sample.pos;
-            m.slot = sample
-                .slot
-                .filter(|_| sample.health > 0.0 && sample.faction == expected);
-            sample.health > 0.0 && sample.faction == expected
+            m.slot = sample.slot.filter(|_| {
+                sample.health > 0.0
+                    && super::relation(sample.faction, expected) == super::Relation::Same
+            });
+            sample.health > 0.0
+                && super::relation(sample.faction, expected) == super::Relation::Same
         });
         if m.alive {
             let r = &mut self.regiments[m.regiment];
@@ -955,7 +957,12 @@ impl FormationRuntime {
                 continue;
             }
             for j in 0..self.regiments.len() {
-                if i == j || self.regiments[i].spec.faction != self.regiments[j].spec.faction {
+                if i == j
+                    || super::relation(
+                        self.regiments[i].spec.faction,
+                        self.regiments[j].spec.faction,
+                    ) != super::Relation::Same
+                {
                     continue;
                 }
                 self.work.morale_neighbours += 1;

@@ -421,11 +421,22 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
         elif kind == "falling_block_capture":
             valid = client == "native" and isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_-]+", value)
         elif kind == "mob_motion":
-            valid = (isinstance(value, dict) and set(value) == {"samples", "name"}
+            valid = (isinstance(value, dict) and set(value) == {"samples", "name", "types"}
                      and isinstance(value["name"], str) and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
                      and isinstance(value["samples"], list) and len(value["samples"]) == 3
                      and all(isinstance(item, str) and re.fullmatch(r"[A-Za-z0-9_-]+", item)
-                             for item in value["samples"]))
+                             for item in value["samples"])
+                     and isinstance(value["types"], list) and bool(value["types"])
+                     and all((isinstance(item, str)
+                              and re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", item))
+                             or (isinstance(item, dict)
+                                 and set(item) == {"id", "min_speed", "max_speed"}
+                                 and isinstance(item["id"], str)
+                                 and re.fullmatch(r"[a-z0-9_.-]+:[a-z0-9_./-]+", item["id"])
+                                 and all(type(item[key]) in (int, float) and math.isfinite(item[key])
+                                         and item[key] >= 0 for key in ("min_speed", "max_speed"))
+                                 and item["min_speed"] < item["max_speed"])
+                             for item in value["types"]))
         elif kind == "assert_entities":
             valid = (client == "native" and isinstance(value, dict)
                      and set(value) <= {"name", "args", "entity_type", "box", "min", "max",
@@ -964,10 +975,22 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
             from . import mob_motion_oracle
 
             samples = [json.loads((artifact / f"{item}.json").read_text()) for item in value["samples"]]
-            measurement = mob_motion_oracle.measure(samples, ["minecraft:zombie", "minecraft:spider"])
+            # Only the kinds this window drives: asserting another kind's motion in a
+            # window that leaves it standing reads its standstill as a client defect.
+            kinds = [entry if isinstance(entry, str) else entry["id"] for entry in value["types"]]
+            measurement = mob_motion_oracle.measure(samples, kinds)
             (artifact / f"{value['name']}.json").write_text(json.dumps(measurement, indent=2) + "\n")
-            for entity, row in measurement.items():
-                probe.check("mob_moved_" + entity.split(":")[1], row["total_displacement_blocks"] > 0.1)
+            for entry in value["types"]:
+                kind = entry if isinstance(entry, str) else entry["id"]
+                slug = kind.split(":")[1]
+                row = measurement[kind]
+                probe.check("mob_moved_" + slug, row["total_displacement_blocks"] > 0.1)
+                if isinstance(entry, dict):
+                    # A displacement alone passes a frozen or wrongly paced gait: every
+                    # segment's client-visible rate must sit inside the declared range.
+                    rates = [segment["blocks_per_client_tick"] for segment in row["segments"]]
+                    probe.check("mob_speed_" + slug,
+                                all(entry["min_speed"] <= rate <= entry["max_speed"] for rate in rates))
         elif kind in ("scan_blocks", "read_block", "navigate_to_block", "list_entities"):
             name, args = value.get("name"), value.get("args")
             result = probe.call(SCENE_TOOLS[kind], args)
@@ -1342,6 +1365,9 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-village-breeding": "village_breeding_scene.json",
         "native-settlement-radius-growth": "settlement_radius_scene.json",
         "native-settlement-buildings-upgrade": "settlement_buildings_scene.json",
+        "issue1-01-villager-leg": "issue1_01_villager_leg_scene.json",
+        "issue1-18-sheep-goat": "issue1_18_sheep_goat_scene.json",
+        "issue1-19-hostile-motion": "issue1_19_hostile_motion_scene.json",
     }
     if ctx.scenario_id in named_fixtures:
         if ctx.client != "native" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):

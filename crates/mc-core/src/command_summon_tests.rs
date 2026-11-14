@@ -30,7 +30,10 @@ fn summon_faction_is_native() {
     let Tag::Compound(public) = crate::command_data::entity(&state, id).unwrap() else {
         panic!("expected public entity compound");
     };
-    assert!(public.iter().all(|(key, _)| key != "krasnokamen:Faction"));
+    assert_eq!(
+        mc_data::item_nbt::field(&public, "krasnokamen:Faction"),
+        Some(&Tag::Int(65535))
+    );
     assert_eq!(
         crate::command_data::command(
             &mut state,
@@ -38,7 +41,7 @@ fn summon_faction_is_native() {
             id,
             &format!("data get entity {uuid} \"krasnokamen:Faction\""),
         ),
-        crate::command_execution::CommandResult::Failed
+        crate::command_execution::CommandResult::Success(65535)
     );
     assert_eq!(
         crate::command_data::command(
@@ -123,10 +126,12 @@ fn summon_faction_is_native() {
         assert!(image.opaque_entity_fields.is_empty());
         let json = serde_json::to_value(&image).unwrap();
         assert!(json.get("faction").is_none(), "zero adds no WAL bytes");
-        assert_eq!(
-            serde_json::from_value::<crate::journal::EntityStateImage>(json).unwrap(),
-            image
-        );
+        // Blueprint-derived loot fields (base armor) are serde(skip) and rebuilt at
+        // restore, so compare the serialized JSON image, not the in-memory image.
+        let decoded =
+            serde_json::from_value::<crate::journal::EntityStateImage>(json.clone()).unwrap();
+        assert_eq!(decoded.faction, 0);
+        assert_eq!(serde_json::to_value(&decoded).unwrap(), json);
         assert!(
             image
                 .to_fields(&state.registry.blocks)

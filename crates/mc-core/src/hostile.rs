@@ -123,7 +123,7 @@ pub(crate) fn refresh_targets(state: &mut TickState) {
             let EntityKind::Mob { type_id } = state.entities.body(slot).kind else {
                 return false;
             };
-            if state.entities.body(slot).faction != 0 {
+            if crate::battle::battle_row(state.entities.body(slot).faction) {
                 return false; // BattleState is the sole battle target owner.
             }
             let Some(blueprint) = state.registry.blueprint(type_id) else {
@@ -204,7 +204,7 @@ pub(crate) fn retaliate(state: &mut TickState, victim: EntitySlot, attacker: Ent
     };
     // Battle allegiance owns targeting, including after friendly projectile
     // hits: a battle unit answers through the battle (retaliation.rs).
-    if body.faction != 0 {
+    if crate::battle::battle_row(body.faction) {
         crate::battle::retaliation::hurt(state, victim, attacker);
         return;
     }
@@ -411,7 +411,7 @@ fn nearest(
     reach: f64,
 ) -> Option<([f64; 3], f64)> {
     if let Some(slot) = state.entities.slot_of(actor)
-        && state.entities.body(slot).faction != 0
+        && crate::battle::battle_row(state.entities.body(slot).faction)
     {
         return None; // Battle archery owns faction shots and cadence.
     }

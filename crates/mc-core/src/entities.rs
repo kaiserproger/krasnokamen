@@ -107,8 +107,6 @@ pub struct ColdRow {
     pub frog_prey: Option<(EntityId, [f64; 3])>,
     /// Runtime only: ticks of the running tongue attack.
     pub frog_tongue_ticks: u8,
-    /// Runtime only: ticks a tamed cat has rested beside a sleeping owner.
-    pub cat_bed_ticks: u32,
 }
 
 /// Store `value` in a boxed rare component, overwriting an existing box
@@ -810,7 +808,6 @@ impl EntityStore {
             last_player_hit: None,
             frog_prey: None,
             frog_tongue_ticks: 0,
-            cat_bed_ticks: 0,
         });
         self.touched_flag.push(true);
         self.changed_tick.push(self.captured_tick + 1);
@@ -1254,7 +1251,7 @@ impl EntityStore {
         if body.faction == faction {
             return;
         }
-        if faction == 0 {
+        if !crate::battle::battle_row(faction) {
             self.battle_members.remove(&slot);
         } else {
             self.battle_members.insert(slot);
@@ -1864,7 +1861,7 @@ impl EntityStore {
 
     fn index_tick_members(&mut self, slot: EntitySlot) {
         let body = &self.bodies[slot.0 as usize];
-        if body.faction != 0 {
+        if crate::battle::battle_row(body.faction) {
             self.battle_members.insert(slot);
         }
         match body.kind {

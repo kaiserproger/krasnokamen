@@ -46,7 +46,7 @@ fn add_item(layout: &mut Layout, stack: &mc_data::ItemStack, owner: Owner) {
                 name.clone(),
                 OwnedItem {
                     item_id: stack.item_id,
-                    count: i32::from(stack.count),
+                    count: stack.count,
                     owner
                 }
             )
@@ -345,18 +345,41 @@ impl Drill {
                     .any(|stack| stack.custom_name.is_some()),
                 "the model must prepare nonempty custody before a break"
             );
-            crate::tick::mining_tests::ready_to_finish(&mut self.state, ConnectionId(1), POS);
-            return self.apply_operation(
-                op,
-                None,
-                &[PlayerInput::Dig {
-                    connection: ConnectionId(1),
-                    position: POS,
-                    action: DigAction::Finish,
-                    sequence: 2,
-                }],
-                loss,
+            let block = self.state.world.block_at(POS.x, POS.y, POS.z).unwrap();
+            if self.state.registry.mining.destroy_speed(block).is_none() {
+                Arc::make_mut(&mut self.state.registry).mining = mc_data::block_mining::load(
+                    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("../../data/vanilla/reports/block_mining.json"),
+                )
+                .unwrap();
+            }
+            self.run(&[PlayerInput::Dig {
+                connection: ConnectionId(1),
+                position: POS,
+                action: DigAction::Start,
+                sequence: 1,
+            }])
+            .unwrap();
+            let actor = self.state.connections.entity_of(ConnectionId(1)).unwrap();
+            let finish = PlayerInput::Dig {
+                connection: ConnectionId(1),
+                position: POS,
+                action: DigAction::Finish,
+                sequence: 2,
+            };
+            // The ordinary helper jumps state.tick without appending WAL.
+            // Here every preparation tick must pass through the real writer.
+            for _ in 0..100_000 {
+                if crate::tick::plan_client_build(&self.state, actor, &finish).is_some() {
+                    break;
+                }
+                self.run(&[]).unwrap();
+            }
+            assert!(
+                crate::tick::plan_client_build(&self.state, actor, &finish).is_some(),
+                "fixture mining did not finish"
             );
+            return self.apply_operation(op, None, &[finish], loss);
         }
         let Some((id, window, state_id)) = self.open_chest() else {
             let layout = self.layout();
@@ -422,7 +445,11 @@ impl Drill {
         let faulted = result.is_err();
         if faulted {
             assert!(loss.is_some());
-            assert!(result.unwrap_err().to_string().contains("No space left"));
+            let error = result.unwrap_err();
+            assert!(
+                error.to_string().contains("No space left"),
+                "expected injected ENOSPC, got {error:?}"
+            );
             assert!(
                 crate::journal::WAL_WRITE_FAILURE.get().is_none(),
                 "fault actually consumed"

@@ -59,7 +59,7 @@ pub(in crate::battle) fn command(
     staging::execute(state, changes, ORIGIN, &command)
 }
 
-fn parse(text: &str) -> Result<BattleCommand, crate::commands::CommandError> {
+fn parse(text: &str) -> Result<BattleCommand, crate::command_args::CommandError> {
     let words: Vec<&str> = text.split(' ').collect();
     staging::parse(&words)
 }
@@ -268,7 +268,7 @@ fn assert_in_rank_with_kit(state: &TickState, player: EntityId) {
     // A block ahead of the front soldier, not on his centre; one tick of the
     // soldier's walk since.
     let offset = [at[0] - front[0], at[2] - front[2]];
-    let distance = offset[0].hypot(offset[1]);
+    let distance = (offset[0] * offset[0] + offset[1] * offset[1]).sqrt();
     let ahead = offset[0] * r.spec.facing[0] + offset[1] * r.spec.facing[1];
     assert!(
         (0.5..1.6).contains(&distance) && ahead > 0.0,
@@ -1266,4 +1266,40 @@ fn the_bound_spectator_goes_behind_the_holder_again_after_a_respawn_and_a_rearm(
     let reply = command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
     assert!(reply.starts_with("Battle live rearmed: PovRed "), "{reply}");
     assert_behind(&state, viewer, player);
+}
+
+fn team(state: &mut TickState, executor: EntityId, args: &[&str]) -> Result<String, String> {
+    let command = crate::scoreboard::ScoreboardCommand::parse("team", args).unwrap();
+    match crate::scoreboard::execute(state, executor, &command) {
+        (reply, crate::command_execution::CommandResult::Failed) => Err(reply),
+        (reply, _) => Ok(reply),
+    }
+}
+
+/// The other side of the rule: `/team join` refuses a holder's name and a
+/// battle soldier's UUID, and changes nothing; an ordinary entry still joins.
+#[test]
+fn team_join_refuses_a_holder_and_a_faction_entity() {
+    let (mut state, ids) = staged(&["PovRed", "Other"]);
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    team(&mut state, ids[0], &["add", "allies"]).unwrap();
+    assert_eq!(
+        team(&mut state, ids[0], &["join", "allies", "PovRed"]).unwrap_err(),
+        "PovRed holds a battle slot of side 1; a holder cannot join a team"
+    );
+    let soldier = state
+        .entities
+        .slot_of(state.hostile.battle.formation.members[0].id)
+        .unwrap();
+    let uuid = state.entities.row(soldier).uuid.to_string();
+    let faction = state.entities.body(soldier).faction;
+    assert_ne!(faction, 0);
+    assert_eq!(
+        team(&mut state, ids[0], &["join", "allies", &uuid]).unwrap_err(),
+        format!("{uuid} is an entity of battle faction {faction}; it cannot join a team")
+    );
+    assert!(state.scoreboard.teams["allies"].members.is_empty());
+    team(&mut state, ids[0], &["join", "allies", "Other"]).unwrap();
+    assert!(state.scoreboard.teams["allies"].members.contains("Other"));
 }

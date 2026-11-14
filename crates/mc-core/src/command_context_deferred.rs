@@ -67,7 +67,7 @@ pub(crate) fn source_entity(state: &TickState, connection: ConnectionId) -> Opti
     })
 }
 
-pub(super) fn suspend(
+pub(crate) fn suspend(
     state: &mut TickState,
     id: CompletionId,
     context: Context,
@@ -135,9 +135,20 @@ fn source_is_current(state: &TickState, context: Context, source: Option<EntityI
 }
 
 pub(crate) fn execute_job(state: &mut TickState, job: &super::Job, changes: &mut ChangeSet) {
-    if !source_is_current(state, job.context, job.source) {
+    let observed = state.plugin_players.permission(job.context.connection);
+    let Some(world) = crate::dimensions::travel::world(state, job.context.dimension) else {
         return;
+    };
+    if job_source_is_current(world, observed, job) {
+        // Keep the shared runtime and every loaded world reachable. `native`
+        // selects the source dimension through `execute_context`, which moves
+        // the runtime with it; running on a detached child loses global targets,
+        // continuations and the shared-command authority.
+        run_job(state, job, changes);
     }
+}
+
+fn run_job(state: &mut TickState, job: &super::Job, changes: &mut ChangeSet) {
     if let Some(pos) = job.block {
         crate::dimensions::travel::execute_block_chain(
             state,
@@ -148,6 +159,28 @@ pub(crate) fn execute_job(state: &mut TickState, job: &super::Job, changes: &mut
     } else {
         super::run(state, &job.text, job.context, changes);
     }
+}
+
+/// Whether a queued job's source still owns its world. The connection and the
+/// executor entity live in the world the command was queued from, while the
+/// permission observed during that world's phase lands in the root's plugin
+/// player table (`swap_globals` moves the table), so either table answers for it.
+fn job_source_is_current(world: &TickState, observed: Option<u8>, job: &super::Job) -> bool {
+    let context = job.context;
+    if context.connection == crate::command_console::CONNECTION {
+        return true;
+    }
+    let Some(source) = job.source else {
+        return false;
+    };
+    if world.connections.entity_of(context.connection) != Some(source) {
+        return false;
+    }
+    world
+        .plugin_players
+        .permission(context.connection)
+        .or(observed)
+        .is_some_and(|permission| permission >= context.permission)
 }
 
 /// Called only at the same authority boundary as ordinary native commands.

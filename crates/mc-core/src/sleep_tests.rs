@@ -220,8 +220,21 @@ fn tamed_cat_relaxes_and_waking_rolls_gift_table() {
             row.entity_life.taming.rolls += 1;
         }
     }
-    crate::cat::run(&mut rig.state);
+    rig.run(1);
     assert!(rig.state.entities.row(slot).entity_life.cat_relax.is_some());
+    assert!(matches!(
+        crate::command_data::command(
+            &mut rig.state,
+            crate::command_console::CONNECTION,
+            cat,
+            "data merge entity @s {CustomName:'\"Bed cat\"'}",
+        ),
+        crate::command_execution::CommandResult::Success(_)
+    ));
+    assert!(
+        rig.state.entities.row(slot).entity_life.cat_relax.is_some(),
+        "unrelated data edits must not cancel the live sleep goal"
+    );
     rig.state.sleepers.get_mut(&rig.player).unwrap().ticks = 100;
     rig.state.day_time = 0;
     let (output, _, _) = run_tick(&mut rig.state, &[]);
@@ -296,7 +309,7 @@ fn sitting_cat_does_not_join_sleeping_owner() {
     row.entity_life.tamed = true;
     row.entity_life.taming.owner = Some(owner);
     row.entity_life.sitting = true;
-    crate::cat::run(&mut rig.state);
+    rig.run(1);
     assert!(rig.state.entities.row(slot).entity_life.cat_relax.is_none());
 }
 

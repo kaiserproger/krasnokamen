@@ -390,8 +390,8 @@ pub(crate) fn data_updated(state: &mut TickState, pos: BlockPos, old_auto: bool)
 }
 
 /// Apply a `data` edit (`previous` public image to `edited`) to the command
-/// block at `pos`. Only `Command` and `auto` are authorable; any other changed
-/// field refuses the whole edit and leaves the block untouched.
+/// block at `pos`. `Command`, `auto` and the persisted `SuccessCount` are
+/// authorable; any other changed field refuses the whole edit atomically.
 pub(crate) fn edit(
     state: &mut TickState,
     pos: BlockPos,
@@ -412,6 +412,8 @@ pub(crate) fn edit(
         match (key.as_str(), value) {
             ("Command", Tag::String(text)) if text.len() <= 32767 => {}
             ("auto", Tag::Byte(0 | 1)) => {}
+            // Vanilla BaseCommandBlock.load reads SuccessCount with getIntOr.
+            ("SuccessCount", Tag::Int(_)) => {}
             _ => return Err(unsupported(key)),
         }
         put(&mut fields, key, value.clone());
@@ -420,7 +422,7 @@ pub(crate) fn edit(
         if identity(key) || edited.iter().any(|(k, _)| k == key) {
             continue;
         }
-        if !matches!(key.as_str(), "Command" | "auto") {
+        if !matches!(key.as_str(), "Command" | "auto" | "SuccessCount") {
             return Err(unsupported(key));
         }
         fields.retain(|(name, _)| name != key);

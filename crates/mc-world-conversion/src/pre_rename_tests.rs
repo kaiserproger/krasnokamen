@@ -438,19 +438,29 @@ fn rc5_export_with_a_player_rider_keeps_its_fields_and_the_rider() {
         !mentions_pre_rename(&exported_player),
         "{exported_player:?}"
     );
+    // Export writes the vanilla player shape: the native recipe field is folded
+    // into `recipeBook.recipes`, which is what a vanilla server reads.
     let Tag::Compound(fields) = &exported_player else {
         unreachable!()
     };
-    // Export projects native recipe custody into vanilla's recipe book.
-    let Some(Tag::Compound(book)) = mc_data::item_nbt::field(fields, "recipeBook") else {
-        panic!("recipeBook compound: {exported_player:?}")
+    let Some(Tag::Compound(book)) = fields
+        .iter()
+        .find(|(name, _)| name == "recipeBook")
+        .map(|(_, value)| value)
+    else {
+        panic!("exported player has no recipeBook: {exported_player:?}")
     };
-    assert_eq!(
-        mc_data::item_nbt::field(book, "recipes"),
-        Some(&Tag::List(ListTag {
-            element_type: tag_type::STRING,
-            elements: vec![Tag::String("minecraft:crafting_table".into())],
-        }))
+    assert!(
+        book.iter().any(|(name, value)| name == "recipes"
+            && matches!(value, Tag::List(list)
+                if list.elements.contains(&Tag::String("minecraft:crafting_table".into())))),
+        "{exported_player:?}"
+    );
+    assert!(
+        !fields
+            .iter()
+            .any(|(name, _)| name == "KrasnokamenUnlockedRecipes"),
+        "{exported_player:?}"
     );
 }
 

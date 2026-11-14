@@ -9,7 +9,12 @@ use mc_data::loot::{BlockLootContext, LootContextItem, LootRandomBinding, LootTa
 use mc_data::tags::TagsData;
 use mc_world::{Block, BlockRegistry, BlockStateId};
 
-use crate::inventory::ItemRules;
+/// Item data needed by block loot and tool checks.
+pub trait BlockDropItems {
+    fn items(&self) -> &mc_data::items::ItemRegistry;
+    fn facts(&self) -> &mc_data::item_components::ItemFactsTable;
+    fn tags(&self) -> &TagsData;
+}
 
 /// Immutable block data the drops read; built once at startup.
 #[derive(Clone, Copy)]
@@ -23,7 +28,7 @@ pub struct BlockDropRules<'a> {
 /// (empty stack for a bare hand). `seed` drives the loot rolls.
 pub fn block_drops(
     drops: &BlockDropRules<'_>,
-    items: &ItemRules<'_>,
+    items: &impl BlockDropItems,
     state: u32,
     tool: &ItemStack,
     seed: u64,
@@ -46,7 +51,7 @@ pub fn block_drops(
 
 pub(crate) fn explosion_drops(
     drops: &BlockDropRules<'_>,
-    items: &ItemRules<'_>,
+    items: &impl BlockDropItems,
     state: u32,
     seed: u64,
     block_entity: Option<&mc_nbt::Tag>,
@@ -65,7 +70,7 @@ pub(crate) fn explosion_drops(
 
 fn evaluate(
     drops: &BlockDropRules<'_>,
-    items: &ItemRules<'_>,
+    items: &impl BlockDropItems,
     state: u32,
     tool: &ItemStack,
     seed: u64,
@@ -103,7 +108,7 @@ fn evaluate(
     };
     let mut stacks = Vec::with_capacity(rolled.len());
     for drop in rolled {
-        let Some(id) = items.items.id_of(&drop.item) else {
+        let Some(id) = items.items().id_of(&drop.item) else {
             continue;
         };
         let Some(count) = drop
@@ -119,7 +124,7 @@ fn evaluate(
         }
         let stack = if let Some(components) = drop.components {
             mc_data::item_nbt::stack_from_fields(
-                items.items,
+                items.items(),
                 &[
                     (
                         "id".into(),
@@ -148,7 +153,7 @@ fn evaluate(
 /// Vanilla block-break experience, suppressed by silk touch and tool gating.
 pub(crate) fn block_experience(
     drops: &BlockDropRules<'_>,
-    items: &ItemRules<'_>,
+    items: &impl BlockDropItems,
     state: u32,
     tool: &ItemStack,
     seed: u64,
@@ -189,16 +194,16 @@ pub(crate) fn block_experience(
 
 /// The tool as loot context: item id and its enchantments (silk touch,
 /// fortune). Plugin items are not their carrier and count as a bare hand.
-fn loot_tool(items: &ItemRules<'_>, tool: &ItemStack) -> Option<LootContextItem> {
+fn loot_tool(items: &impl BlockDropItems, tool: &ItemStack) -> Option<LootContextItem> {
     if tool.is_empty()
         || tool
             .item_model
             .as_deref()
-            .is_some_and(|model| items.facts.custom(model).is_some())
+            .is_some_and(|model| items.facts().custom(model).is_some())
     {
         return Some(LootContextItem::empty());
     }
-    let name = items.items.name_of(tool.item_id)?;
+    let name = items.items().name_of(tool.item_id)?;
     let mut context = LootContextItem::new(name.clone());
     for enchantment in &tool.enchantments {
         context = context
@@ -213,15 +218,15 @@ fn loot_tool(items: &ItemRules<'_>, tool: &ItemStack) -> Option<LootContextItem>
 
 /// Vanilla `Tool.isCorrectForDrops`: the first rule that matches the block
 /// and states `correct_for_drops` decides.
-pub(crate) fn correct_tool(items: &ItemRules<'_>, block: &Block, tool: &ItemStack) -> bool {
+pub(crate) fn correct_tool(items: &impl BlockDropItems, block: &Block, tool: &ItemStack) -> bool {
     let Some(facts) = (!tool.is_empty())
-        .then(|| items.facts.facts_for_stack(tool, items.items))
+        .then(|| items.facts().facts_for_stack(tool, items.items()))
         .flatten()
         .and_then(|facts| facts.tool.as_ref())
     else {
         return false;
     };
-    first_drop_rule(facts, block, items.tags) == Some(true)
+    first_drop_rule(facts, block, items.tags()) == Some(true)
 }
 
 fn first_drop_rule(tool: &ToolFacts, block: &Block, tags: &TagsData) -> Option<bool> {

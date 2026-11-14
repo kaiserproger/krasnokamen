@@ -211,14 +211,25 @@ fn h07_quiet_cost_fence_counts_cauldron_tail_separately() {
     assert!(portals(&mut state, false).is_empty());
     let contact_counts = contact_hazards::take_work_counts();
     let portal = take_work_counts();
-    // Idle quiet rows and the cauldron tail (no cauldron cell) are resolved
-    // by the classifier: the serial owner reads none of their cold rows.
-    assert_eq!((contact_counts, portal), ([128, 0, 0, 0, 0], [128, 0, 0]));
+    // c4d9f3da4 moved these reads to the classifier. Counters 2 and 4
+    // count classifier quiet verdicts and feet-cell probes, not serial work.
+    // Exact scans/samples remain zero; every row is quiet and probes air once.
+    assert_eq!(
+        (contact_counts, portal),
+        ([128, 0, 128, 0, 128], [128, 0, 0])
+    );
     println!("H07 quiet contact={contact_counts:?} portals={portal:?}");
-    // A live burn clock still reaches the serial quiet body, and only that row.
+    // A live burn still executes retained_burn on just the ignited row.
     contact_hazards::ignite(&mut state, cows[7], 40);
     contact(&mut state, false);
-    assert_eq!(contact_hazards::take_work_counts(), [128, 0, 1, 0, 0]);
+    assert_eq!(contact_hazards::take_work_counts(), [128, 0, 128, 0, 128]);
+    for (index, id) in cows.into_iter().enumerate() {
+        let slot = state.entities.slot_of(id).unwrap();
+        assert_eq!(
+            state.entities.body(slot).burn_ticks,
+            if index == 7 { 39 } else { 0 }
+        );
+    }
 }
 
 #[test]

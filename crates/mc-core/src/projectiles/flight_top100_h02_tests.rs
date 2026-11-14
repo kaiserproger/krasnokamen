@@ -202,14 +202,26 @@ fn exhaustive_flight_oracle_covers_negative_seams_long_sweeps_ties_and_swap_remo
 fn snapshot_restricts_remote_bodies_but_keeps_global_armor_stands() {
     let (mut state, player) = scene();
     for index in 0..4096 {
-        mob(&mut state, "minecraft:cow", [1000.0 + index as f64, 201.0, 1000.0]);
+        mob(
+            &mut state,
+            "minecraft:cow",
+            [1000.0 + index as f64, 201.0, 1000.0],
+        );
     }
     let stand = mob(&mut state, "minecraft:armor_stand", [1000.0, 201.0, 1000.0]);
     let id = arrow(&mut state, player, [-16.7, 201.7, -0.1], [2.0, 0.0, 0.0], 0);
     run(&mut state, &mut Vec::new(), std::iter::once(id));
     let bodies = &state.projectiles.bodies;
-    assert!(bodies.len() < 10, "remote cows must not enter the snapshot: {}", bodies.len());
-    assert!(bodies.iter().any(|body| body.id == stand && body.deployed_candidate));
+    assert!(
+        bodies.len() < 10,
+        "remote cows must not enter the snapshot: {}",
+        bodies.len()
+    );
+    assert!(
+        bodies
+            .iter()
+            .any(|body| body.id == stand && body.deployed_candidate)
+    );
 }
 
 #[test]

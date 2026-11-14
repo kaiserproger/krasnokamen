@@ -5,7 +5,7 @@
 //! `MovingBorderExtent` (from size, target size, remaining ticks) that the
 //! native tick advances once per tick. Damage/warning fields ride the same
 //! struct so checkpoints and the init packet observe one owner.
-use crate::commands::{CommandError, Coord, coord};
+use crate::command_args::{CommandError, Coord, coord};
 use serde::{Deserialize, Serialize};
 
 pub const MAX_SIZE: f64 = 59_999_968.0;
@@ -130,6 +130,7 @@ impl Border {
             && z < edge(self.center_z, 1.0)
     }
 }
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BorderCommand {
     Center([Coord; 2]),
@@ -144,7 +145,7 @@ pub enum BorderCommand {
 /// Vanilla `TimeArgument` units (TimeArgument.javap static init:
 /// d=24000, s=20, t=1, bare=1); minimum 0 for the border time argument
 /// (`TimeArgument.time(0)` at WorldBorderCommand.javap registration).
-pub fn parse_time(raw: &str) -> Option<i64> {
+fn parse_border_time(raw: &str) -> Option<i64> {
     let (number, unit) = if let Some(prefix) = raw.strip_suffix('d') {
         (prefix, 24_000_i64)
     } else if let Some(prefix) = raw.strip_suffix('s') {
@@ -161,7 +162,7 @@ pub fn parse_time(raw: &str) -> Option<i64> {
     let scaled = (value * unit as f64).round();
     (scaled < i64::MAX as f64).then_some(scaled as i64)
 }
-pub fn parse(args: &[&str]) -> Result<BorderCommand, CommandError> {
+pub(crate) fn parse(args: &[&str]) -> Result<BorderCommand, CommandError> {
     let invalid = || {
         CommandError::Usage(
             "worldborder <center x z|set size [time]|add size [time]|damage buffer|damage amount|warning distance|warning time|get>",
@@ -226,7 +227,7 @@ pub fn parse(args: &[&str]) -> Result<BorderCommand, CommandError> {
         }
         [mode @ ("set" | "add"), size, time] => {
             let size = number(size)?;
-            let time = parse_time(time).ok_or_else(invalid)?;
+            let time = parse_border_time(time).ok_or_else(invalid)?;
             if *mode == "set" {
                 if !(1.0..=MAX_SIZE).contains(&size) {
                     return Err(invalid());

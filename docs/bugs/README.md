@@ -155,22 +155,27 @@ worker, runs the negative control.
    the core checkout), resolved there and refused when unknown. It is a client
    behaviour change, so it is proved by receipts, not by reversing server
    hunks: `--client-control-receipt` is a real-client `result.json` of the
-   **pre-fix** client (one that does not contain `<sha>`, e.g. `<sha>^`) whose
-   client ref is **red**, and `--client-receipt` is a `passed` one of the client
-   that contains `<sha>` with the same ref **green**. Both ran on the tree being
+   candidate client with only the fix's non-test hunks reversed, whose client ref
+   is **red**; `--client-receipt` is a `passed` one of the client that contains
+   `<sha>` with the same ref **green**. Their pinned clean commits must differ by
+   exactly the fix's non-test patch (verbatim patch ID); an unrelated change, even
+   on the same path, refuses. Both ran on the tree being
    promoted (the same `tree` identity and server-binary registry checks as rule
    3). The client is bound to its source through the pin-release manifest, not
    the checkout beside it: each receipt records `client_binary` at run start
    (the binary's sha256, hashed then, its `manifest.json`, and the manifest's
    `head`/`dirty`), and promotion refuses a receipt without it, a manifest that
    pins another binary than the one that ran, a `dirty` pin, or a pin without a
-   head. The ancestry checks use the pinned head: the control's head must not
-   contain `<sha>`, the restore's must. **Red is an observed assertion failure**:
-   the control receipt has to be `status = "failed"` with the scenario's own
-   assertion recorded false. A `timeout`, a launch error, a preflight failure or
-   a crashed client never observed the bug and is refused as a control. No
-   worktree, patch reversal or ref run is involved, and a row whose only refs are
-   unit tests cannot use this form. The candidate is the
+   head. The restore's pinned head must contain `<sha>`; the control may be a
+   descendant with a committed reversal. **Red is an observed assertion failure**:
+   the control receipt has to be `status = "failed"` with the registered proving
+   assertion recorded false. For a named scenario, record it on the row as an
+   inline map, for example `proving_assertions = { "harness:entities:native-v2-craft-drag" = "initial_drag_keeps_server_cursor" }`.
+   Choose the assertion that proves this row's symptom, not a setup assertion.
+   A missing mapping, timeout, launch error or crash cannot carry the control.
+   The restore receipt covers only its reported refs; every other registered ref
+   must run green on the candidate. A row whose only refs are unit tests cannot
+   use this form. The candidate is the
    exact tree: `HEAD` plus its uncommitted diff and untracked files
    (`docs/bugs/` aside), identified by a fingerprint; no commit is needed. The
    control and the restore worktrees reproduce it, verified by that fingerprint.
@@ -229,7 +234,7 @@ worker, runs the negative control.
    nothing about this source and is refused. A unit test cannot close a client
    failure.
 4. Automatic negative control: the fix commit's non-test hunks (test files,
-   `docs/` and Rust hunks after the first `#[cfg(test)] mod` stay) are
+   `docs/` and Rust hunks inside inline `#[cfg(test)]` modules stay) are
    reverse-applied onto the candidate in a temporary worktree; only if
    they no longer apply there, onto a worktree at `fix_commit`
    (`control_tree: head|fix_commit` in `promote.json`). Then every ref runs
@@ -238,6 +243,7 @@ worker, runs the negative control.
    so tests do not need its new API, or promote nothing). A hunk straddling
    the test-module boundary is refused. Graphical refs run in the control on
    the real client.
+   A deletion at an inline module boundary is ambiguous and is refused.
 5. The restore, always on a worktree of the exact candidate (never at
    `fix_commit`): every ref is **green**, so a regression after the fix
    refuses promotion. A ref already passed by the supplied client receipt (same

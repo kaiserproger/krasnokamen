@@ -570,7 +570,11 @@ class NativeV2ProbeTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            with mock.patch.object(Path, "is_file", return_value=True), \
+            # `main_checkout` shells out to git; patching the global `subprocess.Popen`
+            # below would hand that `subprocess.run` a Mock, so the sibling root is
+            # pinned instead of depending on a warm lru_cache from an earlier test.
+            with mock.patch.object(runtime, "main_checkout", return_value=root), \
+                    mock.patch.object(Path, "is_file", return_value=True), \
                     mock.patch.object(runtime.os, "access", return_value=True), \
                     mock.patch.object(runtime, "port_open", return_value=False), \
                     mock.patch.object(runtime, "wait_port"), \

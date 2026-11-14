@@ -324,7 +324,7 @@ pub(crate) fn launch(
     ) && record
         .owner
         .and_then(|uuid| state.entities.slot_of_uuid(uuid))
-        .is_some_and(|owner| state.entities.body(owner).faction != 0)
+        .is_some_and(|owner| crate::battle::battle_row(state.entities.body(owner).faction))
     {
         // Capture at launch: owner death/unload must not extend ground lifetime.
         record.ground_lifetime = BATTLE_ARROW_GROUND_LIFETIME;

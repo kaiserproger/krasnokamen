@@ -43,7 +43,7 @@ from typing import Any
 from .. import runtime
 from ..audio import SoundCapture, tone_amplitudes
 from ..mcp import McpClient
-from ..profiles import ProfileContext
+from ..profiles import ProfileContext, SplitPart, run_split, split_part_label
 from . import native_client, native_focus
 from .gameplay import prepare_operator_fixture
 from .native_craft_drag import Pointer
@@ -86,8 +86,56 @@ def plugins_source(ctx: ProfileContext) -> Path:
     return work / "scenarios" / "live-plugins"
 
 
+def split_legs() -> tuple[str, ...]:
+    """The parts of a split: the legs this run covers."""
+    leg = os.environ.get(LEG_ENV)
+    return (leg,) if leg else LEGS
+
+
+def merge_leg_parts(blocks: list[dict[str, Any]], legs: tuple[str, ...]) -> dict[str, Any]:
+    """One gate verdict from per-leg parts; a leg with no verdicts is not a pass."""
+    verdicts: dict[str, bool] = {}
+    owners: dict[str, str] = {}
+    parts = []
+    for leg, block in zip(legs, blocks, strict=True):
+        part_verdicts = dict((block.get("details") or {}).get("verdicts") or {})
+        if not part_verdicts:
+            raise RuntimeError(f"{leg} part published no verdicts")
+        for name, value in part_verdicts.items():
+            if name == "all":
+                continue
+            if name in owners:
+                raise RuntimeError(f"verdict {name} reported by parts {owners[name]} and {leg}")
+            owners[name] = leg
+            verdicts[name] = value
+        parts.append({"leg": leg, "label": block.get("label"), "status": block.get("status"),
+                      "artifact": block.get("artifact"), "log": block.get("log")})
+    failed = [name for name, value in verdicts.items() if value is not True]
+    if failed:
+        raise RuntimeError(f"screens-voice-qa verdicts failed: {failed}")
+    verdicts["all"] = True
+    return {"verdicts": verdicts, "parts": parts}
+
+
+def _split_run(ctx: ProfileContext, timeout: float) -> dict[str, Any]:
+    """Run each leg as its own child, each with its own Xvfb and audio graph."""
+    if os.environ.get("KRASNOKAMEN_PW_ROOT"):
+        raise ValueError(
+            "screens-voice-qa cannot split inside a private audio graph: every part needs its own "
+            "graph and sink, and the children would inherit this one")
+    legs = split_legs()
+    if len(legs) != ctx.parts:
+        raise ValueError(f"--parts {ctx.parts} must equal the number of legs to run "
+                         f"({len(legs)}: {', '.join(legs)}); a leg is one client session")
+    blocks = run_split(ctx, "screens-voice-qa", [SplitPart(leg, {LEG_ENV: leg}) for leg in legs])
+    return merge_leg_parts(blocks, legs)
+
+
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
+    if ctx.parts > 1 and split_part_label() is None:
+        # Before any graph re-entry: each child must build its own graph.
+        return _split_run(ctx, timeout)
     if not os.environ.get("KRASNOKAMEN_PW_ROOT"):
         return _run_in_private_graph(ctx, timeout)
     legs = (os.environ[LEG_ENV],) if os.environ.get(LEG_ENV) else LEGS

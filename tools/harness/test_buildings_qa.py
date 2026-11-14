@@ -1,7 +1,10 @@
+import tempfile
 import unittest
+from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
 
+from tools.harness import profiles
 from tools.harness.backends import buildings_qa
 
 
@@ -615,6 +618,101 @@ class SequentialFlowTest(unittest.TestCase):
                 self.run_flow("gate", 3, order_admitted=True, cert_after_order=False)
         self.assertEqual(send.call_args.args[1], "settlement build gate")
         self.assertIs(probe.report["assertions"]["buildings_gate_L1_order_available"], False)
+
+
+class SplitPartsTest(unittest.TestCase):
+    """`--parts N` cuts the blueprint list into independent child gate parts."""
+
+    def test_selected_targets_keeps_all_and_accepts_a_comma_group(self):
+        self.assertEqual(buildings_qa.selected_targets(None), buildings_qa.BLUEPRINTS)
+        self.assertEqual(buildings_qa.selected_targets("ALL"), buildings_qa.BLUEPRINTS)
+        self.assertEqual(buildings_qa.selected_targets("house"), ("house",))
+        self.assertEqual(buildings_qa.selected_targets("house, storage"), ("house", "storage"))
+        self.assertEqual(buildings_qa.selected_targets(buildings_qa.PERIMETER),
+                         (buildings_qa.PERIMETER,))
+
+    def test_selected_targets_rejects_unknown_repeats_and_mixed_perimeter(self):
+        for value in ("house,nope", "house,house", "ALL,house",
+                      f"{buildings_qa.PERIMETER},house", ""):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    buildings_qa.selected_targets(value)
+
+    def test_groups_cover_every_selected_target_exactly_once(self):
+        for count in (len(buildings_qa.BLUEPRINTS), 5, 3, 2, 1):
+            for parts in (1, 2, 3, 4, 8):
+                with self.subTest(count=count, parts=parts):
+                    targets = buildings_qa.BLUEPRINTS[:count]
+                    groups = buildings_qa.split_groups(targets, parts)
+                    self.assertLessEqual(len(groups), max(1, min(parts, count)))
+                    self.assertEqual([bp for group in groups for bp in group], list(targets))
+                    self.assertTrue(all(groups))
+                    self.assertTrue(all(1 <= len(group) for group in groups))
+
+    def block(self, label, blueprints, status="passed"):
+        return {"label": label, "status": status, "artifact": f"/a/{label}",
+                "log": f"/a/{label}.log", "exit": 0,
+                "details": {"buildings_acceptance": {"blueprints": blueprints,
+                                                     "behaviour": {f"{label}_ok": "PASS"}}}}
+
+    def house(self, level=1, verdict="PASS"):
+        return {"behaviour": {f"L{level}_blockmatch": verdict,
+                              f"L{level}_entrance": verdict,
+                              f"L{level}_light": verdict}}
+
+    def test_the_merged_matrix_requires_every_blueprint_of_every_part(self):
+        blocks = [self.block("part1", {"house": self.house(1)}),
+                  self.block("part2", {"storage": self.house(1, "FAIL")})]
+        merged = buildings_qa.merge_split_parts(blocks, ("house", "storage"))["scenario"]["buildings_acceptance"]
+        self.assertEqual(merged["mode"], "split-independent-parts")
+        self.assertEqual(merged["matrix_19"]["house L1"], "PASS")
+        self.assertEqual(merged["matrix_19"]["storage L1"], "FAIL")
+        self.assertEqual(merged["matrix_19"]["barracks L1"], "NOT-RUN")
+        self.assertEqual([part["label"] for part in merged["parts"]], ["part1", "part2"])
+        self.assertEqual(merged["behaviour"], {"part1_ok": "PASS", "part2_ok": "PASS"})
+
+    def test_a_blueprint_no_part_reported_fails_the_merge(self):
+        blocks = [self.block("part1", {"house": self.house(1)})]
+        with self.assertRaisesRegex(RuntimeError, "did not cover: storage"):
+            buildings_qa.merge_split_parts(blocks, ("house", "storage"))
+
+    def test_two_parts_claiming_one_blueprint_fail_the_merge(self):
+        blocks = [self.block("part1", {"house": self.house(1)}),
+                  self.block("part2", {"house": self.house(2)})]
+        with self.assertRaisesRegex(RuntimeError, "house reported by parts part1 and part2"):
+            buildings_qa.merge_split_parts(blocks, ("house",))
+
+    def test_a_part_child_runs_its_own_selection_instead_of_splitting(self):
+        ctx = SimpleNamespace(client="native", extra_args=[], platform=None,
+                             timeout_seconds=600.0, parts=4,
+                             artifact_dir=Path(tempfile.mkdtemp()))
+        with mock.patch.dict("os.environ", {"BUILDINGS_QA_SELECT": "house,storage",
+                                            profiles.SPLIT_PART_ENV: "part2",
+                                            "KRASNOKAMEN_SERVER_BINARY": ""}), \
+                mock.patch.object(buildings_qa, "run_split") as split, \
+                mock.patch.object(buildings_qa, "_load_blueprints", return_value={}):
+            with self.assertRaisesRegex(RuntimeError, "KRASNOKAMEN_SERVER_BINARY"):
+                buildings_qa.run(ctx)
+        split.assert_not_called()
+
+    def test_the_parent_cuts_the_selection_into_children_and_merges_them(self):
+        ctx = SimpleNamespace(client="native", extra_args=[], platform=None,
+                             timeout_seconds=600.0, parts=2,
+                             artifact_dir=Path(tempfile.mkdtemp()))
+        blocks = [self.block("part1", {"house": self.house(1)}),
+                  self.block("part2", {"storage": self.house(1)})]
+        with mock.patch.dict("os.environ", {"BUILDINGS_QA_SELECT": "house,storage"}), \
+                mock.patch.dict("os.environ", {profiles.SPLIT_PART_ENV: ""}), \
+                mock.patch.object(buildings_qa, "run_split", return_value=blocks) as split:
+            report = buildings_qa.run(ctx)
+        parts = split.call_args.args[2]
+        self.assertEqual([(part.label, part.env["BUILDINGS_QA_SELECT"]) for part in parts],
+                         [("part1", "house"), ("part2", "storage")])
+        self.assertEqual(split.call_args.args[1], "buildings-qa")
+        matrix = report["scenario"]["buildings_acceptance"]["matrix_19"]
+        self.assertEqual(matrix["house L1"], "PASS")
+        self.assertEqual(matrix["storage L1"], "PASS")
+        self.assertEqual(matrix["barracks L1"], "NOT-RUN")
 
 
 if __name__ == "__main__":

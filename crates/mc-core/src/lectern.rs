@@ -179,7 +179,14 @@ pub(crate) fn apply_chunk(
 }
 fn persist(state: &mut TickState, pos: BlockPos) {
     let mut fields = vec![
-        ("id".into(), Tag::String("minecraft:lectern".into())),
+        (
+            "id".into(),
+            Tag::String(
+                mc_data::block_entity_kinds::BlockEntityKind::Lectern
+                    .vanilla_id()
+                    .into(),
+            ),
+        ),
         ("x".into(), Tag::Int(pos.x)),
         ("y".into(), Tag::Int(pos.y)),
         ("z".into(), Tag::Int(pos.z)),

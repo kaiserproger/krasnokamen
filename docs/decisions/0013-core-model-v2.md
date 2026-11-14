@@ -61,6 +61,12 @@ field are refused outright, so an old image fails the load instead of silently
 unseating its rider. Deploy this build after a clean stop: an unclean WAL tail
 written by an older build still carries `rider` and is refused at startup.
 
+A recovered rider UUID remains vehicle-owned while the player has no live body.
+An unrelated join or an idle tick must not erase that seat before its passenger
+reconnects; `mounts::join` rebuilds the reverse link. Explicit leave/dismount,
+death, or a known dead/invalid passenger clears the relation. The WAL recovery
+regression is `happy_ghast_admission_leave_and_reconnect_survive_wal_recovery`.
+
 ## Threads and backpressure
 
 Long-lived core workers perform parallel gameplay work; edge socket and fanout
@@ -95,11 +101,10 @@ each world queue's free frame slots and bytes, so a slow viewer's backlog is
 bounded in bytes and its nearest, longest-waiting entity updates go first. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
-Datapack reloads and `/debug function` trace-file writes each run on one
-short-lived thread of their own (`datapack-worker`, `datapack-trace`;
-`crates/mc-core/src/datapacks.rs:1272-1277` and `:1288-1316`), handing the
-result back over a bounded `sync_channel(1)`, so they execute outside the
-tick and never hold it.
+Datapack reloads and `/debug function` trace-file writes run as jobs on a
+short-lived `datapack-worker` thread (`crates/mc-core/src/datapacks.rs:1322-1326`),
+handing the result back over a bounded `sync_channel(1)`, so they execute
+outside the tick and never hold it.
 
 Durable plugin events are bounded by their own queue, and one slow guest
 callback stalls every plugin's delivery. The core therefore refuses new plugin

@@ -25,8 +25,10 @@ const DEFAULT: Attachments = Attachments {
     vehicle: [0.0; 3],
 };
 
+type AttachmentEntry = (&'static str, Option<[f32; 3]>, [f32; 3]);
+
 /// Types whose attachments differ from the fallback, sorted by name.
-const TABLE: &[(&str, Option<[f32; 3]>, [f32; 3])] = &[
+const TABLE: &[AttachmentEntry] = &[
     ("minecraft:allay", None, [0.0, -0.04, 0.0]),
     ("minecraft:bogged", None, [0.0, 0.7, 0.0]),
     ("minecraft:cat", Some([0.0, 0.5125, 0.0]), [0.0, 0.0, 0.0]),

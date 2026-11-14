@@ -153,7 +153,7 @@ async fn computer_worker_reopen_and_close_reopen_at_capacity() {
         BlockStateId,
         chunk::{Chunk, ChunkPos},
     };
-    let (mut server, dir) = crate::server::admin_tests::fixture();
+    let (mut server, _dir) = crate::server::admin_tests::fixture_in_temp_dir();
     server.cfg.computer.enabled = true;
     server.cfg.computer.command = vec!["/bin/cat".into()];
     server.cfg.computer.working_directory = "/tmp".into();
@@ -296,7 +296,7 @@ async fn computer_worker_reopen_and_close_reopen_at_capacity() {
     second_task.await.unwrap().unwrap();
     task.await.unwrap().unwrap();
     server.hub.shutdown();
-    std::fs::remove_dir_all(dir).unwrap();
+    // `dir` drops here and removes the world, exactly as a panic does.
 }
 
 #[test]

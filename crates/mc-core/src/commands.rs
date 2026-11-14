@@ -6,6 +6,7 @@
 use mc_data::{Identifier, ItemStack};
 use mc_physics::mth;
 
+use crate::command_args::{CommandError, Coord, coord};
 use crate::inventory::{ItemRules, PlayerInventory};
 use crate::survival::{Difficulty, Experience};
 
@@ -170,25 +171,6 @@ pub struct Selector {
     pub extent: [Option<f64>; 3],
     pub limit: Option<usize>,
     pub sort: Option<SelectorSort>,
-}
-
-/// Absolute, `~`-relative, or `^`-local command coordinate.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Coord {
-    pub relative: bool,
-    pub local: bool,
-    pub value: f64,
-}
-
-impl Coord {
-    #[must_use]
-    pub fn resolve(self, base: f64) -> f64 {
-        if self.relative {
-            base + self.value
-        } else {
-            self.value
-        }
-    }
 }
 
 pub(crate) fn resolve_coords(coords: [Coord; 3], origin: [f64; 3], rotation: [f32; 2]) -> [f64; 3] {
@@ -424,26 +406,6 @@ pub enum Command {
     DebugFunction {
         name: String,
     },
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommandError {
-    /// Unknown command, or one the sender may not see (vanilla hides
-    /// operator commands from non-operators).
-    Unknown,
-    Usage(&'static str),
-    Message(String),
-}
-
-impl CommandError {
-    #[must_use]
-    pub fn message(&self) -> String {
-        match self {
-            Self::Unknown => "Unknown or incomplete command, see below for error".to_owned(),
-            Self::Usage(_) => "Unknown or incomplete command, see below for error".to_owned(),
-            Self::Message(message) => message.clone(),
-        }
-    }
 }
 
 /// Parses the supported vanilla command syntax. Administration commands are
@@ -966,31 +928,6 @@ fn item_id(word: &str) -> Option<Identifier> {
         format!("minecraft:{word}")
     };
     Identifier::parse(name).ok()
-}
-
-pub(crate) fn coord(word: &str) -> Option<Coord> {
-    if let Some(rest) = word.strip_prefix('~').or_else(|| word.strip_prefix('^')) {
-        let value = if rest.is_empty() {
-            0.0
-        } else {
-            rest.parse().ok()?
-        };
-        return value_ok(value).then_some(Coord {
-            relative: true,
-            local: word.starts_with('^'),
-            value,
-        });
-    }
-    let value: f64 = word.parse().ok()?;
-    value_ok(value).then_some(Coord {
-        relative: false,
-        local: false,
-        value,
-    })
-}
-
-fn value_ok(value: f64) -> bool {
-    value.is_finite() && value.abs() <= 30_000_000.0
 }
 
 pub(crate) fn coords(words: &[&str]) -> Option<[Coord; 3]> {

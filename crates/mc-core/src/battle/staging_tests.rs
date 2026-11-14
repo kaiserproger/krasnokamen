@@ -1190,7 +1190,8 @@ fn staged_fighters_and_horses_face_the_enemy_line_at_spawn() {
         let yaw = f64::from(rotation[0]).to_radians();
         let enemy = (centroid_z[1 - side] - state.entities.pos(slot)[2]).signum();
         assert!(
-            (-yaw.sin()).abs() < 1e-6 && yaw.cos() * enemy > 0.999,
+            f64::from(-mc_physics::mth::sin(yaw)).abs() < 1e-6
+                && f64::from(mc_physics::mth::cos(yaw)) * enemy > 0.999,
             "side {} body faces yaw {} away from the enemy",
             side + 1,
             yaw.to_degrees()

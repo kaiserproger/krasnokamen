@@ -3,6 +3,9 @@ use crate::boundary::ChangeSet;
 use crate::entities::EntityKind;
 use mc_data::{Identifier, ItemStack};
 
+#[path = "command_data_mutation_tests.rs"]
+mod mutation_tests;
+
 fn fixture() -> (TickState, EntityId, Context) {
     let (mut state, id, _) = crate::hostile_tests::setup(8.0);
     let slot = state.entities.slot_of(id).unwrap();
@@ -826,6 +829,61 @@ fn cow_uuid_and_pos(state: &TickState) -> (uuid::Uuid, [f64; 3]) {
 }
 
 #[test]
+fn data_tags_and_armor_stand_fields_commit_together() {
+    let (mut state, _, context) = fixture();
+    run(&mut state, context, "summon minecraft:armor_stand 4 60 4");
+    let target = "@e[type=minecraft:armor_stand,limit=1]";
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {target} {{Small:1b,Tags:['guard']}}")
+        ),
+        1
+    );
+    assert_eq!(
+        query(
+            &mut state,
+            context,
+            &format!("data get entity {target} Small")
+        )
+        .unwrap(),
+        1
+    );
+    assert_eq!(
+        query(
+            &mut state,
+            context,
+            &format!("data get entity {target} Tags[0]")
+        )
+        .unwrap(),
+        5
+    );
+}
+
+#[test]
+fn data_entity_edit_preserves_unrelated_runtime_state() {
+    let (mut state, _, context) = fixture();
+    run(&mut state, context, "summon minecraft:cow 4 60 4");
+    let (uuid, _) = cow_uuid_and_pos(&state);
+    let slot = state.entities.slot_of_uuid(uuid).unwrap();
+    state.entities.body_mut(slot).attack_cooldown = 17;
+    state.entities.row_mut(slot).breed_cooldown = 35;
+    state.entities.row_mut(slot).entity_life.taming.rolls = 123;
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            "data merge entity @e[type=minecraft:cow,limit=1] {Health:7.5f,NoAI:1b}"
+        ),
+        1
+    );
+    assert_eq!(state.entities.body(slot).attack_cooldown, 17);
+    assert_eq!(state.entities.row(slot).breed_cooldown, 35);
+    assert_eq!(state.entities.row(slot).entity_life.taming.rolls, 123);
+}
+
+#[test]
 fn data_merge_modify_and_remove_edit_a_mobs_data_and_keep_its_identity() {
     let (mut state, _, context) = fixture();
     run(
@@ -1203,6 +1261,60 @@ fn data_modify_and_merge_edit_any_block_entity_through_its_native_owner() {
 }
 
 #[test]
+fn data_block_reads_live_campfire_progress_before_metadata_edit() {
+    let (mut state, _, context) = fixture();
+    place(&mut state, context, "campfire");
+    let fields = vec![
+        ("CookingTimes".into(), Tag::IntArray(vec![17, 0, 0, 0])),
+        (
+            "CookingTotalTimes".into(),
+            Tag::IntArray(vec![200, 0, 0, 0]),
+        ),
+    ];
+    let campfire =
+        crate::campfire::CampfireState::from_fields(&fields, &state.registry.items).unwrap();
+    state.campfires.insert((4, 60, 4), campfire);
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 CookingTimes[0]"),
+        17
+    );
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            "data merge block 4 60 4 {CustomName:'test'}"
+        ),
+        1
+    );
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 CookingTimes[0]"),
+        17
+    );
+}
+
+#[test]
+fn data_block_metadata_edit_preserves_live_brewing_owner() {
+    let (mut state, _, context) = fixture();
+    place(&mut state, context, "brewing_stand");
+    let mut brewing = crate::brewing::BrewingState::default();
+    brewing.brew_time = 123;
+    brewing.fuel = 8;
+    state.brewing.insert((4, 60, 4), brewing.clone());
+
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            "data merge block 4 60 4 {CustomName:'test'}"
+        ),
+        1,
+        "{}",
+        said(&mut state)
+    );
+    assert_eq!(state.brewing.get(&(4, 60, 4)), Some(&brewing));
+}
+
+#[test]
 fn data_block_edits_are_refused_without_changing_anything() {
     let (mut state, _, context) = fixture();
     place(&mut state, context, "chest");
@@ -1277,12 +1389,25 @@ fn data_edits_a_command_block_through_the_same_command_path() {
         data(&mut state, context, "data get block 4 60 4 Command"),
         6
     );
-    // Fields the command block owner does not author are refused whole.
+    // Vanilla BaseCommandBlock.load restores SuccessCount as well as Command.
     assert_eq!(
         data(
             &mut state,
             context,
-            "data merge block 4 60 4 {Command:'say no',SuccessCount:9}"
+            "data merge block 4 60 4 {SuccessCount:9}"
+        ),
+        1
+    );
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 SuccessCount"),
+        9
+    );
+    // Invalid native field types refuse the whole edit, including Command.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            "data merge block 4 60 4 {Command:'say no',SuccessCount:'invalid'}"
         ),
         -1
     );
@@ -1290,6 +1415,10 @@ fn data_edits_a_command_block_through_the_same_command_path() {
     assert_eq!(
         data(&mut state, context, "data get block 4 60 4 Command"),
         6
+    );
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 SuccessCount"),
+        9
     );
     assert_eq!(
         data(&mut state, context, "data remove block 4 60 4 Command"),

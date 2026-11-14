@@ -123,7 +123,7 @@ pub(crate) fn work(
     slot: EntitySlot,
     v: &mut VillagerState,
 ) -> Option<(BlockPos, bool)> {
-    if state.entities.body(slot).faction != 0 {
+    if crate::battle::battle_row(state.entities.body(slot).faction) {
         return None;
     }
     let order_goal = goal(state, slot, v)?;
@@ -163,7 +163,7 @@ pub(crate) fn attacks(state: &mut TickState, intents: &mut Vec<Intent>, changes:
             .flat_map(|ids| ids.iter())
             .filter_map(|id| state.entities.slot_of(*id))
             .filter(|&slot| {
-                state.entities.body(slot).faction == 0
+                !crate::battle::battle_row(state.entities.body(slot).faction)
                     && crate::settlements::allocator::active(state, slot)
                     && state.entities.row(slot).villager.as_ref().is_some_and(|v| {
                         v.data.profession == super::VillagerProfession::Soldier

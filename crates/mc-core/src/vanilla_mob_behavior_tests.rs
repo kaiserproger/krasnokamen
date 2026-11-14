@@ -1210,13 +1210,12 @@ fn runtime_only_mob_state_is_not_part_of_the_journaled_image() {
     let row = state.entities.row_mut(frog_slot);
     row.frog_prey = Some((target, [1.0, 2.0, 3.0]));
     row.frog_tongue_ticks = 7;
-    row.cat_bed_ticks = 99;
     assert!(
         image.matches(
             state.entities.body(frog_slot),
             state.entities.row(frog_slot)
         ),
-        "frog_prey, frog_tongue_ticks or cat_bed_ticks would write an EntityState WAL record"
+        "frog runtime state would write an EntityState WAL record"
     );
 }
 

@@ -211,7 +211,7 @@ pub(crate) fn nearest_front(
     for (index, enemy) in regiments
         .iter()
         .enumerate()
-        .filter(|(_, r)| r.spec.faction != own.spec.faction && r.removed < r.len)
+        .filter(|(_, r)| super::enemies(r.spec.faction, own.spec.faction) && r.removed < r.len)
     {
         examined += 1;
         let right = [enemy.spec.facing[1], -enemy.spec.facing[0]];

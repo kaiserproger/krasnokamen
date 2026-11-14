@@ -136,7 +136,7 @@ def _run_client(ctx, tests, root):
             results[(crate, name)] = (UNRUNNABLE, 'no test summary (build error?)')
             continue
         passed, failed = int(summary.group(2)), int(summary.group(3))
-        if passed == 0:
+        if passed + failed == 0:
             results[(crate, name)] = (UNRUNNABLE, 'ran no matching test')
         elif failed or not ok:
             results[(crate, name)] = (RED, f'{failed} failed of {passed + failed}')
@@ -154,14 +154,18 @@ def _run_python(ctx, tests, tree):
     for module, test in sorted(tests):
         argv = [sys.executable, '-m', 'unittest', f'{module}.{test}']
         ok, text = _exec(ctx, argv, f'python-{test.rsplit(".", 1)[-1][:24]}', tree, None)
-        if ok:
+        summary = re.search(r'(?m)^Ran (\d+) tests? in ', text)
+        skipped = re.search(r'\bskipped=(\d+)', text)
+        count = int(summary.group(1)) if summary else 0
+        skipped_count = int(skipped.group(1)) if skipped else 0
+        if not summary or count <= skipped_count or re.search(r'(?m)^ERROR:', text):
+            results[(module, test)] = (UNRUNNABLE, 'no executed test or unittest error; see log')
+        elif ok and re.search(r'(?m)^OK(?: \(|$)', text):
             results[(module, test)] = (GREEN, '')
-            continue
-        detail = 'test failed' if re.search(r'(?m)^(FAIL|ERROR):', text) else 'test did not run (import error, unknown test?)'
-        if 'ModuleNotFoundError' in text or 'AttributeError' in text and 'has no attribute' in text:
-            results[(module, test)] = (UNRUNNABLE, 'module or test not found in this tree')
+        elif not ok and re.search(r'(?m)^FAIL:', text):
+            results[(module, test)] = (RED, 'test assertion failed')
         else:
-            results[(module, test)] = (RED, detail)
+            results[(module, test)] = (UNRUNNABLE, 'no conclusive unittest result; see log')
     return results
 
 
@@ -421,18 +425,84 @@ def format_row(ident, row):
 _TEST_PATH = re.compile(r'(^|/)(tests?|testdata|fixtures?)/|(^|/)[^/]*_tests?(\.rs|\.py|/)|(^|/)tests?\.rs$|(^|/)test_[^/]*\.py$')
 _CFG_TEST_MOD = re.compile(r'^[ \t]*#\[cfg\(test\)\][ \t]*\n(?:[ \t]*#\[[^\n]*\][ \t]*\n)*[ \t]*(?:pub(?:\([^)]*\))? )?mod \w+\s*\{', re.MULTILINE)
 _HUNK = re.compile(r'^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@')
+_RUST_RAW_STRING = re.compile(r'(?:br|rb|r)(#*)"')
+_RUST_CHAR = re.compile(r"(?:b)?'(?:\\.|[^'\\\n])'")
+
+
+def _rust_test_ranges(source):
+    """Line ranges of inline cfg(test) modules, ignoring braces in Rust literals and comments."""
+    masked = list(source)
+    pos = 0
+    while pos < len(source):
+        start = pos
+        if source.startswith('//', pos):
+            end = source.find('\n', pos)
+            pos = len(source) if end < 0 else end
+        elif source.startswith('/*', pos):
+            pos += 2
+            depth = 1
+            while pos < len(source) and depth:
+                if source.startswith('/*', pos):
+                    depth += 1
+                    pos += 2
+                elif source.startswith('*/', pos):
+                    depth -= 1
+                    pos += 2
+                else:
+                    pos += 1
+            if depth:
+                raise Refused('unterminated Rust block comment while splitting test hunks')
+        else:
+            raw = _RUST_RAW_STRING.match(source, pos)
+            char = _RUST_CHAR.match(source, pos)
+            if raw:
+                end = source.find('"' + raw.group(1), raw.end())
+                if end < 0:
+                    raise Refused('unterminated Rust raw string while splitting test hunks')
+                pos = end + 1 + len(raw.group(1))
+            elif char:
+                pos = char.end()
+            elif source[pos] == '"':
+                pos += 1
+                while pos < len(source) and source[pos] != '"':
+                    pos += 2 if source[pos] == '\\' else 1
+                if pos >= len(source):
+                    raise Refused('unterminated Rust string while splitting test hunks')
+                pos += 1
+            else:
+                pos += 1
+                continue
+        for index in range(start, pos):
+            if source[index] != '\n':
+                masked[index] = ' '
+    code = ''.join(masked)
+    ranges = []
+    for match in _CFG_TEST_MOD.finditer(code):
+        depth = 1
+        pos = match.end()
+        while pos < len(code) and depth:
+            if code[pos] == '{':
+                depth += 1
+            elif code[pos] == '}':
+                depth -= 1
+            pos += 1
+        if depth:
+            raise Refused('unterminated Rust test module while splitting test hunks')
+        ranges.append((source.count('\n', 0, match.start()) + 1,
+                       source.count('\n', 0, pos - 1) + 1))
+    return ranges
 
 
 def _hunk_changed_lines(hunk):
-    """New-side line numbers of the changed lines of a hunk (a deletion counts at its position)."""
+    """New-side positions and whether each changed line is a deletion."""
     line = int(_HUNK.match(hunk[0]).group(3))
     changed = []
     for text in hunk[1:]:
         if text.startswith('+'):
-            changed.append(line)
+            changed.append((line, False))
             line += 1
         elif text.startswith('-'):
-            changed.append(line)
+            changed.append((line, True))
         elif text.startswith(' '):
             line += 1
     return changed
@@ -447,8 +517,8 @@ def non_test_patch(root, commit):
 def _split_non_test(diff, source_of):
     """Split a diff into (patch text of its non-test hunks, reversed files, kept test files).
 
-    Test hunks are those in test files and, for Rust, those after the first
-    `#[cfg(test)] mod`. A hunk straddling that boundary refuses: it cannot be split.
+    Test hunks are those in test files or inside Rust inline `#[cfg(test)]` modules.
+    A hunk straddling a module boundary refuses: it cannot be split.
     `source_of(path)` is the post-change text of a file.
     """
     patch, reversed_files, test_files = [], [], []
@@ -470,23 +540,19 @@ def _split_non_test(diff, source_of):
         if _TEST_PATH.search(path):
             test_files.append(path)
             continue
-        threshold = None
-        if path.endswith('.rs') and not any(text.startswith('+++ /dev/null') for text in header):
-            source = source_of(path)
-            found = _CFG_TEST_MOD.search(source)
-            if found:
-                threshold = source.count('\n', 0, found.start()) + 1
-            if threshold is not None and threshold > 1 and any(
-                    text.startswith('new file mode') for text in header):
-                # A file the fix commit adds is one hunk: reversing it deletes the file and
-                # its inline test module together, so there is no boundary to straddle.
-                threshold = None
+        ranges = []
+        if (path.endswith('.rs') and not any(text.startswith(('+++ /dev/null', 'new file mode')) for text in header)):
+            ranges = _rust_test_ranges(source_of(path))
         kept = []
         for hunk in hunks:
             changed = _hunk_changed_lines(hunk)
-            if threshold is not None and changed and all(line >= threshold for line in changed):
+            if any(deleted and any(line in (start, end + 1) for start, end in ranges)
+                   for line, deleted in changed):
+                raise Refused(f'a deletion in {path} touches a #[cfg(test)] module boundary; split the fix commit')
+            in_test = [any(start <= line <= end for start, end in ranges) for line, _ in changed]
+            if in_test and all(in_test):
                 continue
-            if threshold is not None and any(line >= threshold for line in changed):
+            if any(in_test):
                 raise Refused(f'a hunk of {path} straddles its #[cfg(test)] module; split the fix commit')
             kept.append(hunk)
         if kept:
@@ -756,7 +822,7 @@ def client_contains(root, client_head, fix_full):
     return code == 0
 
 
-def _failed_assertion(details):
+def _failed_assertion(details, proving):
     """Name of the first assertion a scenario report records as false, or None when it recorded none."""
     def assertion_maps(node, depth=0):
         if depth > 3 or not isinstance(node, dict):
@@ -770,12 +836,12 @@ def _failed_assertion(details):
 
     for assertions in assertion_maps(details):
         for name, passed in assertions.items():
-            if passed is False:
+            if name == proving and passed is False:
                 return name
     return None
 
 
-def _client_ref_states(receipt, graphical_refs):
+def _client_ref_states(receipt, graphical_refs, proving_assertions=None):
     """{ref: GREEN|RED|None} for the row's real-client refs in one receipt; None means it never reported it."""
     from . import regressions, scenarios
 
@@ -793,7 +859,7 @@ def _client_ref_states(receipt, graphical_refs):
                 # RED is "the scenario ran and an assertion of it failed". A timeout, a launch error or
                 # a crashed client never observed the bug, so it cannot stand as the negative control.
                 states[ref] = RED if (receipt.get('status') == 'failed'
-                                      and _failed_assertion(details) is not None) else None
+                                      and _failed_assertion(details, (proving_assertions or {}).get(ref)) is not None) else None
             continue
         try:
             regressions._profile_verdict(receipt, profile, check)
@@ -824,24 +890,21 @@ def _receipt_identity(root, receipt_path, tree):
     return receipt, path, server, recorded
 
 
-def check_client_control_receipt(root, receipt_path, graphical_refs, fix_full, tree):
+def check_client_control_receipt(root, receipt_path, graphical_refs, fix_full, tree, proving_assertions):
     """Validate the negative control of a `client:<sha>` row -> info dict.
 
-    The control is a real-client receipt of the *pre-fix* client (one that does not contain the fix)
-    on the same server tree, in which the row's ref is red: it shows the fix is what the check sees."""
+    The control is a pinned client on the same server tree with the row's proving ref red.
+    Its exact difference from the restored client is checked after both receipts are read."""
     receipt, path, server, recorded = _receipt_identity(root, receipt_path, tree)
     if not graphical_refs:
         raise Refused('a client:<sha> fix_commit needs a real-client ref to carry the control')
-    states = _client_ref_states(receipt, graphical_refs)
+    states = _client_ref_states(receipt, graphical_refs, proving_assertions)
     red = [ref for ref, state in states.items() if state == RED]
     if not red:
         raise Refused(f"client receipt {path} is not red on any of the row's real-client refs ("
                       + ', '.join(f'{ref}={states[ref] or "unreported"}' for ref in graphical_refs)
                       + '): a control that stays green does not test the fix')
     client_head = _client_pin_of_receipt(root, receipt, path)
-    if client_contains(root, client_head, fix_full):
-        raise Refused(f'client receipt {path} ran the client at {client_head[:12]}, which already contains the '
-                      f'fix {fix_full[:12]}: the control has to be the pre-fix client (e.g. {fix_full[:12]}^)')
     return {'path': str(path), 'client_head': client_head, 'server_binary_sha256': server,
             'red': red, 'states': states}
 
@@ -902,6 +965,26 @@ def check_client_restore_receipt(root, receipt_path, graphical_refs, fix_full, t
             'tree_dirty': bool(recorded.get('dirty')), 'tree_sha256': recorded['sha256']}
 
 
+def _check_client_control_delta(root, control_head, restore_head, fix_full):
+    """Require the control-to-restore production patch to be exactly the fix's production patch."""
+    repo = client_repo(root)
+    fix_patch, fix_paths, _ = non_test_patch(repo, fix_full)
+    _, delta = _git(repo, 'diff', '--no-renames', '--no-color', control_head, restore_head)
+    actual, actual_paths, _ = _split_non_test(delta, lambda path: _git(repo, 'show', f'{restore_head}:{path}')[1])
+    def patch_id(patch):
+        if not patch:
+            return None
+        code, output = _git(repo, 'patch-id', '--verbatim', stdin=patch.encode(errors='surrogateescape'), check=False)
+        return output.split()[0] if code == 0 and output.split() else None
+    expected_id, actual_id = patch_id(fix_patch), patch_id(actual)
+    if expected_id is None or expected_id != actual_id:
+        extra = sorted(set(actual_paths) - set(fix_paths))
+        changed = sorted(set(actual_paths) | set(fix_paths))
+        raise Refused('client control differs from the restore by more than the fix non-test hunks; '
+                      f'extra paths: {", ".join(extra) or "(none; changed hunks in " + ", ".join(changed) + ")"}')
+    return {'fix_patch_id': expected_id, 'paths': fix_paths}
+
+
 def _mark_fixed(text, ident, promotion):
     blocks = re.split(r'(?m)^(?=\[\[bug\]\][ \t]*$)', text)
     for index, block in enumerate(blocks):
@@ -915,11 +998,8 @@ def _mark_fixed(text, ident, promotion):
     raise Refused(f'{ident}: row not found in ledger.toml')
 
 
-def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client_receipt, client_control_receipt):
-    """A `client:<sha>` row: control red on the pre-fix client, restore green on the client containing it.
-
-    The server side is the tree being promoted in both receipts (the fix is not a server change), and
-    no worktree, patch reversal or ref run is involved: the receipts are the evidence."""
+def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client_receipt, client_control_receipt, runner):
+    """A client fix needs a real-client red/green pair and all candidate refs green."""
     fix_full = client_fix_commit(fix, root)
     refs = row['regression']
     if not refs:
@@ -939,17 +1019,28 @@ def _promote_client_fix(ident, *, row, fix, root, tree_now, dry_run, ctx, client
     if not client_receipt:
         raise Refused(f'{ident}: fix_commit {fix} needs the restore (--client-receipt <result.json>): a passed '
                       'receipt of the client that contains the fix with the same ref green')
-    control = check_client_control_receipt(root, client_control_receipt, graphical, fix_full, tree_now)
+    control = check_client_control_receipt(root, client_control_receipt, graphical, fix_full, tree_now,
+                                           row.get('proving_assertions', {}))
     restored_info = check_client_restore_receipt(root, client_receipt, graphical, fix_full, tree_now)
+    delta = _check_client_control_delta(root, control['client_head'], restored_info['client_head'], fix_full)
     if not set(control['red']) & set(restored_info['green']):
         raise Refused(f"{ident}: the control's red refs {control['red']} and the restore's green refs "
                       f"{restored_info['green']} do not overlap: the same check has to flip")
+    remaining = [ref for ref in refs if ref not in restored_info['green']]
+    checked = runner(ctx, remaining, root, True) if remaining else {}
+    bad = {ref: checked.get(ref, {'state': UNRUNNABLE, 'detail': 'no result'})
+           for ref in remaining if checked.get(ref, {}).get('state') != GREEN}
+    if bad:
+        raise Refused(f'{ident}: candidate refs not green: ' + '; '.join(
+            f"{ref}={entry['state']} ({entry['detail']})" for ref, entry in bad.items()))
     receipt = {
         'id': ident, 'verdict': 'promoted', 'fix_commit': fix, 'fix_commit_full': fix_full,
         'promoted_at': datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds'),
         'tree_head': tree_now['head'], 'tree_dirty': tree_now['dirty'], 'tree_sha256': tree_now['sha256'],
         'client_fix': True, 'control_tree': 'client',
         'negative_control': control, 'restored': restored_info, 'client_receipt': restored_info,
+        'client_control_delta': delta,
+        'candidate_refs': checked,
         'artifact_dir': str(ctx.artifact_dir),
     }
     (ctx.artifact_dir / 'promote.json').write_text(json.dumps(receipt, indent=2) + '\n')
@@ -991,7 +1082,7 @@ def promote(ident, *, root=REPO_ROOT, client_receipt=None, client_control_receip
     if fix.startswith('client:'):
         return _promote_client_fix(ident, row=row, fix=fix, root=root, tree_now=tree_now, dry_run=dry_run,
                                    ctx=ctx, client_receipt=client_receipt,
-                                   client_control_receipt=client_control_receipt)
+                                   client_control_receipt=client_control_receipt, runner=runner)
     if client_control_receipt:
         raise Refused(f'{ident}: --client-control-receipt is only for a fix_commit of the form client:<sha>')
     patch_mode = fix.startswith('patch:')

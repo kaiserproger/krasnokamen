@@ -556,89 +556,6 @@ fn features_enabled(metadata: &serde_json::Value) -> bool {
     })
 }
 
-struct DiscoveredPack {
-    path: PathBuf,
-    description: mc_nbt::Tag,
-    features: Vec<String>,
-}
-
-fn discover(
-    root: &Path,
-    remaining: &mut usize,
-) -> Result<BTreeMap<String, DiscoveredPack>, String> {
-    let mut packs = BTreeMap::new();
-    if !root.exists() {
-        return Ok(packs);
-    }
-    if std::fs::symlink_metadata(root)
-        .map_err(|e| e.to_string())?
-        .file_type()
-        .is_symlink()
-    {
-        return Err("Datapack root cannot be a symlink".into());
-    }
-    for entry in std::fs::read_dir(root).map_err(|e| e.to_string())? {
-        if packs.len() >= MAX_RESOURCES - 1 {
-            return Err("Datapack resource limit exceeded".into());
-        }
-        let pack = entry.map_err(|e| e.to_string())?;
-        if !pack.file_type().map_err(|e| e.to_string())?.is_dir() {
-            return Err(format!(
-                "Only directory datapacks are supported: {}",
-                pack.path().display()
-            ));
-        }
-        let id = format!(
-            "file/{}",
-            pack.file_name()
-                .into_string()
-                .map_err(|_| "Non-UTF8 datapack name")?
-        );
-        let raw = read_text(&pack.path().join("pack.mcmeta"), remaining)?;
-        let metadata: serde_json::Value =
-            serde_json::from_str(&raw).map_err(|e| format!("{id}: {e}"))?;
-        let pack_meta = metadata
-            .get("pack")
-            .filter(|value| value.is_object())
-            .ok_or_else(|| format!("{id}: pack.mcmeta requires a pack object"))?;
-        let description = pack_meta
-            .get("description")
-            .map(|value| {
-                crate::command_text::parse_component(&value.to_string())
-                    .map_err(|error| format!("{id}: {}", error.message()))
-            })
-            .transpose()?
-            .unwrap_or_else(|| mc_nbt::Tag::String(String::new()));
-        let features = metadata
-            .get("features")
-            .map(|features| {
-                features
-                    .get("enabled")
-                    .and_then(serde_json::Value::as_array)
-                    .ok_or_else(|| format!("{id}: invalid features.enabled"))?
-                    .iter()
-                    .map(|feature| {
-                        feature
-                            .as_str()
-                            .map(str::to_owned)
-                            .ok_or_else(|| format!("{id}: feature identifier must be a string"))
-                    })
-                    .collect::<Result<Vec<_>, String>>()
-            })
-            .transpose()?
-            .unwrap_or_default();
-        packs.insert(
-            id,
-            DiscoveredPack {
-                path: pack.path(),
-                description,
-                features,
-            },
-        );
-    }
-    Ok(packs)
-}
-
 impl PackSet {
     /// Load the packs on disk. A pack found on disk that the selection has
     /// never seen is enabled, like a pack newly dropped into a world's folder.
@@ -664,7 +581,7 @@ impl PackSet {
         base: &crate::registry::CoreRegistry,
     ) -> Result<Self, String> {
         let usable = |packs: Self| -> Result<Self, String> {
-            packs.install_content(&mut base.clone())?;
+            packs.install_content(&mut base.prepare_content())?;
             Ok(packs)
         };
         let first = match Self::load(root, selection.clone()).and_then(usable) {
@@ -1138,7 +1055,6 @@ impl PackSet {
 #[derive(Default)]
 pub(crate) struct Runtime {
     packs: Arc<PackSet>,
-    discovered: Option<BTreeMap<String, Tag>>,
     root: Option<PathBuf>,
     /// Unmodified startup content (including plugin contributions), used only
     /// to prepare replacement catalogs. TickState.registry remains authoritative.
@@ -1196,7 +1112,7 @@ pub(crate) struct Listing {
 }
 /// A finished worker job.
 enum Completed {
-    Packs(Box<PackSet>),
+    Packs(Box<PackSet>, Option<Arc<crate::registry::CoreRegistry>>),
     Listing(Listing),
     Created,
     DebugReport(Arc<crate::command_debug::Report>),
@@ -1214,7 +1130,6 @@ struct Frame {
     lines: Arc<[String]>,
     next: usize,
     started: bool,
-    trace_name: Option<String>,
     context: crate::command_context::Context,
 }
 
@@ -1250,21 +1165,42 @@ fn create_pack(root: &Path, id: &str, description: &str) -> Result<(), Failure> 
     Ok(())
 }
 
+fn prepare_packs(
+    packs: PackSet,
+    current: &PackSet,
+    base: Option<&crate::registry::CoreRegistry>,
+) -> Result<Completed, Failure> {
+    let registry = if packs.changes_registry(current) {
+        let mut registry = base
+            .ok_or("No base registry for the reload")?
+            .prepare_content();
+        packs.install_content(&mut registry)?;
+        Some(Arc::new(registry))
+    } else {
+        None
+    };
+    Ok(Completed::Packs(Box::new(packs), registry))
+}
+
 /// The worker body: all filesystem access of a job.
 fn work(
     root: &Path,
     selection: Selection,
     job: &Job,
     base: Option<&crate::registry::CoreRegistry>,
+    current: &PackSet,
 ) -> Result<Completed, Failure> {
     match job {
         // Like a start: a new pack that cannot load is skipped with a named warning and the
         // rest applies; a pack the selection holds that cannot load refuses the reload.
-        Job::Reload => Ok(Completed::Packs(Box::new(PackSet::open(
-            root,
-            selection,
-            base.ok_or("No base registry for the reload")?,
-        )?))),
+        Job::Reload => {
+            let packs = PackSet::open(
+                root,
+                selection,
+                base.ok_or("No base registry for the reload")?,
+            )?;
+            prepare_packs(packs, current, base)
+        }
         Job::Activation { action, id } => {
             let packs = PackSet::load_known(root, selection)?;
             if *action == Action::Enable
@@ -1279,7 +1215,7 @@ fn work(
                     args: vec![id.clone()],
                 });
             }
-            Ok(Completed::Packs(Box::new(packs)))
+            prepare_packs(packs, current, base)
         }
         Job::List(_) => Ok(Completed::Listing(PackSet::listing(root, &selection)?)),
         Job::Create { id, description } => {
@@ -1314,7 +1250,6 @@ impl Runtime {
         base: Arc<crate::registry::CoreRegistry>,
     ) {
         self.selection_dirty |= self.packs.selection != packs.selection;
-        self.discovered = None;
         self.packs = Arc::new(packs);
         self.root = Some(root);
         self.base_registry = Some(base);
@@ -1329,9 +1264,6 @@ impl Runtime {
     }
     pub(crate) fn packs(&self) -> &PackSet {
         &self.packs
-    }
-    fn catalog(&self) -> &BTreeMap<String, Tag> {
-        self.discovered.as_ref().unwrap_or(&self.packs.descriptions)
     }
     /// Queue a worker-thread job for the current selection; the old packs and
     /// selection stay authoritative until it reports back. Tick-thread
@@ -1386,12 +1318,13 @@ impl Runtime {
             .clone()
             .ok_or("No datapack directory configured")?;
         let base = self.base_registry.clone();
+        let current = Arc::clone(&self.packs);
         let (tx, receiver) = std::sync::mpsc::sync_channel(1);
         let running = job.clone();
         std::thread::Builder::new()
             .name("datapack-worker".into())
             .spawn(move || {
-                let _ = tx.send(work(&root, selection, &running, base.as_deref()));
+                let _ = tx.send(work(&root, selection, &running, base.as_deref(), &current));
             })
             .map_err(|error| format!("Starting datapack worker: {error}"))?;
         self.reload = Some(Reload {
@@ -1506,7 +1439,6 @@ pub(crate) fn enqueue(
                 lines: runtime.packs.functions[name].clone(),
                 next: 0,
                 started: false,
-                trace_name: state.debug_trace.as_ref().map(|_| name.clone()),
                 context,
             });
         }
@@ -1518,11 +1450,10 @@ pub(crate) fn enqueue(
             .ok_or_else(|| format!("Unknown function {id}"))?
             .clone();
         runtime.pending.push(Frame {
-            id: id.clone(),
+            id,
             lines,
             next: 0,
             started: false,
-            trace_name: state.debug_trace.as_ref().map(|_| id),
             context,
         });
     }
@@ -1657,22 +1588,6 @@ fn trace_line(
     }
 }
 
-/// Run a function or `#tag` to completion on the calling tick: the body of
-/// `/debug function`, which has attached its tracer first.
-pub(crate) fn run_functions(
-    state: &mut TickState,
-    connection: ConnectionId,
-    executor: EntityId,
-    name: &str,
-    changes: &mut ChangeSet,
-) {
-    if let Err(error) = enqueue(state, name, connection, executor) {
-        feedback(state, connection, error);
-        return;
-    }
-    drain(state, changes);
-}
-
 pub(crate) fn command(
     state: &mut TickState,
     connection: ConnectionId,
@@ -1751,19 +1666,8 @@ pub(crate) fn command(
     outcome
 }
 
-/// Rebuild the registry for `packs` from the registry the world started with,
-/// before any datapack, and replace the registry in every world.
-/// The clients get the new recipes and their recipe books again.
-fn install_registry(state: &mut TickState, packs: &PackSet) -> Result<(), String> {
-    let base = Arc::clone(
-        state
-            .datapacks
-            .base_registry
-            .get_or_insert_with(|| Arc::clone(&state.registry)),
-    );
-    let mut registry = (*base).clone();
-    packs.install_content(&mut registry)?;
-    let registry = Arc::new(registry);
+/// Publish the registry prepared by the worker in every world.
+fn install_registry(state: &mut TickState, registry: Arc<crate::registry::CoreRegistry>) {
     if state.dimension_globals.active {
         state
             .dimension_globals
@@ -1776,7 +1680,6 @@ fn install_registry(state: &mut TickState, packs: &PackSet) -> Result<(), String
         world.registry = Arc::clone(&registry);
     }
     adopt_registry(state, registry);
-    Ok(())
 }
 
 /// Use a reloaded registry in this world and tell its clients.
@@ -1797,6 +1700,14 @@ pub(crate) fn adopt_registry(state: &mut TickState, registry: Arc<crate::registr
             },
         );
         if let Some(entity) = state.connections.entity_of(connection) {
+            let changes = state
+                .players
+                .get_mut(&entity)
+                .map(|player| player.reload_recipes(&state.registry.item_rules()))
+                .unwrap_or_default();
+            for change in changes {
+                state.push_player(connection, change);
+            }
             crate::advancements::sync_join(state, entity);
         }
     }
@@ -1824,6 +1735,15 @@ fn finish(
                         "commands.debug.function.traceFailed",
                         Vec::new(),
                     );
+                } else if let (Job::Reload | Job::Activation { .. }, Failure::Text(text)) =
+                    (&reload.job, &failure)
+                {
+                    // The worker refused before anything was installed.
+                    feedback(
+                        state,
+                        connection,
+                        format!("{text}; old packs and selection retained"),
+                    );
                 } else {
                     failure.send(state, connection);
                 }
@@ -1832,23 +1752,13 @@ fn finish(
         }
     };
     match (&reload.job, completed) {
-        (Job::Reload | Job::Activation { .. }, Completed::Packs(packs)) => {
-            if packs.changes_registry(&state.datapacks.packs)
-                && let Err(error) = install_registry(state, &packs)
-            {
-                if deliver {
-                    feedback(
-                        state,
-                        connection,
-                        format!("{error}; old packs and selection retained"),
-                    );
-                }
-                return (false, 0);
+        (Job::Reload | Job::Activation { .. }, Completed::Packs(packs, registry)) => {
+            if let Some(registry) = registry {
+                install_registry(state, registry);
             }
             let count = packs.selection.enabled.len() as i32;
             state.datapacks.selection_dirty |= state.datapacks.packs.selection != packs.selection;
             let warnings = packs.warnings(Some(&state.datapacks.packs));
-            state.datapacks.discovered = None;
             state.datapacks.packs = Arc::new(*packs);
             state.datapacks.load_pending = true;
             if deliver {
@@ -1883,27 +1793,12 @@ fn finish(
             (true, count)
         }
         (Job::List(scope), Completed::Listing(listing)) => {
-            state.datapacks.discovered = Some(
-                listing
-                    .enabled
-                    .iter()
-                    .chain(&listing.available)
-                    .cloned()
-                    .collect(),
-            );
             if deliver {
                 management::listed(state, connection, *scope, &listing);
             }
             (true, management::counted(&listing, *scope))
         }
-        (Job::Create { id, description }, Completed::Created) => {
-            let description = crate::command_text::parse_component(description)
-                .expect("worker accepted validated description");
-            let catalog = state
-                .datapacks
-                .discovered
-                .get_or_insert_with(|| state.datapacks.packs.descriptions.clone());
-            catalog.insert(format!("file/{id}"), description);
+        (Job::Create { id, .. }, Completed::Created) => {
             if deliver {
                 management::created(state, connection, id);
             }
@@ -1933,7 +1828,7 @@ fn finish(
     }
 }
 
-pub(crate) fn poll_worker(state: &mut TickState, changes: &mut ChangeSet) {
+pub(crate) fn poll_worker(state: &mut TickState) {
     if state.dimension_globals.active && !state.command_context.shared {
         return;
     }
@@ -1974,7 +1869,7 @@ pub(crate) fn poll_worker(state: &mut TickState, changes: &mut ChangeSet) {
 }
 
 pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
-    poll_worker(state, changes);
+    poll_worker(state);
     crate::command_context::resume(state, changes);
     if state.command_context.waiting() {
         return;

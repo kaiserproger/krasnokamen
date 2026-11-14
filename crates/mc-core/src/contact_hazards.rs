@@ -30,8 +30,8 @@ fn count_work(index: usize, amount: usize) {
     });
 }
 
-/// Candidates, exact-scan rows, quiet rows with a live burn clock or bit,
-/// exact samples, cauldron samples (classified candidates in the tick path).
+/// Candidates, exact-scan rows, classifier quiet verdicts, exact samples,
+/// classifier cauldron feet-cell probes (including probes that find air).
 #[cfg(test)]
 pub(crate) fn take_work_counts() -> [usize; 5] {
     WORK.with(|work| work.replace([0; 5]))
