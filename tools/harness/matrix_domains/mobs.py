@@ -24,6 +24,21 @@ DEFENDERS={'iron_golem','snow_golem'}
 VICTIM='12345678-1234-1234-1234-123456789d02'
 
 
+def peaceful_removed(history, start, identity):
+    spawns = set()
+    for event in history[start:]:
+        if event.get('uuid') != identity:
+            continue
+        key = (event.get('id'), event.get('uuid'))
+        if key[0] is None:
+            raise MissingCapability('snapshot:entity_lifecycle.identity')
+        if event.get('event') == 'spawn':
+            spawns.add(key)
+        elif event.get('event') == 'remove' and key in spawns:
+            return True
+    return False
+
+
 def require_gameplay_version(vanilla):
     import json
     version=json.loads((Path(vanilla)/'gameplay_version.json').read_text())
@@ -59,16 +74,21 @@ def setup(ctx):
         nbt+=',Size:0'
     if name=='sheep':
         nbt+=',Color:0,Sheared:0b'
+    peaceful=ctx.factors['difficulty']=='peaceful' and name in PEACEFUL_REMOVAL
+    lifecycle_start=len(field(ctx.clients[0],'entity_lifecycle')) if peaceful else 0
     ctx.server.command(f'summon minecraft:{name} 6.5 201 0.5 {{{nbt}}}')
     ctx.state['name']=name
     ctx.state['movement']=move
     ctx.state['combat']=combat
-    ctx.state['peaceful']=ctx.factors['difficulty']=='peaceful' and name in PEACEFUL_REMOVAL
+    ctx.state['peaceful']=peaceful
     ctx.state['samples']=[]
     ctx.state['seen_types']=[]
     ctx.state['checks']=[]
     if ctx.state['peaceful']:
-        ctx.wait_until(lambda:not exists(ctx,UUID),description='peaceful removes summoned hostile')
+        ctx.wait_until(lambda:peaceful_removed(field(ctx.clients[0],'entity_lifecycle'),
+                                               lifecycle_start,UUID),
+                       description='received peaceful hostile spawn then removal')
+        ctx.state['peaceful_lifecycle_start']=lifecycle_start
         return
     ctx.wait_until(lambda:entity(ctx,UUID) is not None,description='received exact summoned mob UUID')
     for observer in ctx.clients[1:]:
@@ -213,7 +233,10 @@ def drop_total(ctx):
 
 def oracle(ctx):
     if ctx.state['peaceful']:
-        return [Check('peaceful_removes_species',not exists(ctx,UUID),ctx.state['name'])]
+        history=field(ctx.clients[0],'entity_lifecycle')
+        return [Check('peaceful_removes_species',
+                      peaceful_removed(history,ctx.state['peaceful_lifecycle_start'],UUID)
+                      and not exists(ctx,UUID),ctx.state['name'])]
     name=ctx.state['name']; movement=ctx.state['movement']; combat=ctx.state['combat']
     samples=ctx.state['samples']
     checks=[Check(**check) for check in ctx.state['checks']]

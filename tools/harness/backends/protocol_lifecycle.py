@@ -30,6 +30,7 @@ import re
 import socket
 import subprocess
 import urllib.request
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -190,7 +191,6 @@ class ProtocolServer:
         self._process: subprocess.Popen[Any] | None = None
         self._log_handle: Any = None
         self._argv: list[str] = []
-        self._command_number = 0
         self._boundary_log_offset = 0
         self.dimension = "overworld"
         self.ensure_loaded_callback = None
@@ -369,9 +369,9 @@ seed = {self.seed}
         return [line for line in text.splitlines() if expect in line][-1]
 
     def command(self, text: str) -> str:
-        """Return exact fresh console feedback, fenced by a unique own echo.
+        """Return fresh console feedback, fenced by a private scoreboard query.
 
-        The echo proves input ordering, NOT command success. Domain oracles
+        The query proves input ordering, NOT command success. Domain oracles
         must inspect actual query feedback or received client state.
         """
         from ..matrix_api import MissingCapability
@@ -384,17 +384,20 @@ seed = {self.seed}
         proc = self._process
         if proc is None or proc.poll() is not None or proc.stdin is None:
             raise RuntimeError("server console unavailable")
-        self._command_number += 1
-        marker = f"MatrixConsoleFence{self._command_number:08}"
+        marker = "MatrixConsoleFence" + uuid.uuid4().hex
+        fence = f"Scores for {marker}: {{}}"
         before = len(self.log_path.read_text(errors="replace"))
-        proc.stdin.write((text + "\nsay " + marker + "\n").encode())
+        proc.stdin.write((text + "\nscoreboard players list " + marker + "\n").encode())
         proc.stdin.flush()
         def reached():
             if proc.poll() is not None:
                 raise RuntimeError(f"server exited {proc.returncode} during command")
             fresh = self.log_path.read_text(errors="replace")[before:]
-            return marker in fresh, fresh
+            return any(line.rstrip('\r\n') == fence for line in fresh.splitlines(keepends=True)), fresh
         fresh = runtime.wait_for_path_condition(self.log_path, self.command_timeout_seconds, reached)
+        lines = fresh.splitlines(keepends=True)
+        fence_index = next(i for i, line in enumerate(lines) if line.rstrip('\r\n') == fence)
+        fresh = ''.join(lines[:fence_index])
         if any(token in fresh for token in ("not implemented", "Unknown command", "Unsupported execute")):
             raise MissingCapability("server_command:" + text.split(" ", 1)[0] + ":" + fresh)
         return fresh

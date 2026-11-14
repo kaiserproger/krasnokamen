@@ -16,6 +16,37 @@ from .test_matrix_api import context
 
 
 class MatrixRuntimeTests(unittest.TestCase):
+    def test_console_fence_is_private_and_requires_fresh_query_result(self):
+        from .matrix_domains import settlements
+        with tempfile.TemporaryDirectory() as temp:
+            log=Path(temp)/'server.log'
+            log.write_text('')
+            server=ProtocolServer(binary=Path('/binary'),run_dir=Path(temp),port=26100,
+                                  vanilla_data=Path('/vanilla'),seed=81)
+            server.log_path=log
+            stdin=Mock()
+            server._process=SimpleNamespace(stdin=stdin,poll=lambda:None)
+            def wait(path, timeout, predicate):
+                marker=stdin.write.call_args.args[0].decode().split('scoreboard players list ')[1].strip()
+                fence=f'Scores for {marker}: {{}}'
+                before=log.read_text()
+                log.write_text(before + '[Player] ' + fence + '\n')
+                self.assertFalse(predicate()[0])
+                town='OtherTown' if stdin.write.call_count == 3 else 'MatrixTown'
+                log.write_text(before + f'Settlements: {town}.\n' + fence + '\n')
+                ok, fresh=predicate()
+                self.assertTrue(ok)
+                return fresh
+            ctx=SimpleNamespace(server=server)
+            with patch('tools.harness.runtime.wait_for_path_condition',side_effect=wait):
+                first=settlements.query(ctx,'settlement list')
+                second=settlements.query(ctx,'settlement list')
+                changed=settlements.query(ctx,'settlement list')
+            self.assertEqual(first,second)
+            self.assertEqual(first,'Settlements: MatrixTown.')
+            self.assertNotEqual(first,changed)
+            self.assertNotEqual(stdin.write.call_args_list[0],stdin.write.call_args_list[1])
+
     def test_non_json_adapter_state_is_rejected_before_actions(self):
         ctx=context(); action=Mock()
         def setup(c): c.state['checks']=[Check('not JSON',True)]
@@ -53,6 +84,26 @@ class MatrixRuntimeTests(unittest.TestCase):
         server.ensure_loaded(((0,0,0),(16,80,16)))
         self.assertEqual(called,[((0,0,0),(16,80,16))])
         server.command.assert_called_once_with('forceload add 0 0 16 16')
+
+    def test_closed_menu_uses_newer_received_player_inventory(self):
+        client=object.__new__(ProtocolMatrixClient)
+        client.items={1:'minecraft:arrow',2:'minecraft:bow'}
+        arrow=lambda n:{'item_id':1,'count':n,'components':{},'removed':[]}
+        bow={'item_id':2,'count':1,'components':{'minecraft:damage':1},'removed':[]}
+        player=[None]*46
+        player[36],player[37]=arrow(3),bow
+        menu=[None]*63
+        menu[-9]=arrow(4)
+        client.observer=SimpleNamespace(condition=threading.RLock(),position=None,events=[],health=None,
+            food=None,revision=3,chunks=set(),menu_errors={},current_window=0,
+            chat_components=[],chat_errors=[],merchant_offers={},merchant_errors={},
+            menu_types={},menu_properties={},menus={
+                0:{'slots':player,'cursor':None,'state_id':3},
+                1:{'slots':menu,'cursor':None,'state_id':2}})
+        inventory=client.snapshot()['inventory']
+        self.assertEqual([(s['item_id'],s['count']) for s in inventory],
+                         [('minecraft:arrow',3),('minecraft:bow',1)])
+        self.assertEqual(inventory[1]['components']['minecraft:damage'],1)
 
     def test_current_menu_suffix_overrides_stale_window_zero(self):
         client=object.__new__(ProtocolMatrixClient); client.items={1:'minecraft:stone'}
@@ -107,6 +158,10 @@ class MatrixRuntimeTests(unittest.TestCase):
         self.assertEqual(entity['type'], 'minecraft:item')
         self.assertEqual(entity['item']['item_id'], 'minecraft:stone')
         self.assertEqual(entity['spawn_position'], [8.5, 64.0, -3.25])
+        tracker.consume(0x4D, varint(1) + varint(7))
+        history=client.snapshot()['entity_lifecycle']
+        self.assertEqual([event['event'] for event in history], ['spawn','remove'])
+        self.assertEqual(history[0]['uuid'],history[1]['uuid'])
         tracker.consume(0x01, b'truncated')
         tracker.consume(0x4D, varint(0))
         snapshot = client.snapshot()

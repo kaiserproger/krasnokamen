@@ -150,6 +150,13 @@ factors. Package-specific configuration remains in the private package copy.
 `dashboard_full_stats()` exposes raw `/stats`; the smaller `dashboard_stats()`
 continues to provide `simulation_tick`, integer `players`, and `uptime_secs`.
 
+Native matrix startup failures before a subject oracle runs are blocked, not
+executed product failures. Before a native row passes, the harness checks the
+live server, its complete log for ERROR/panic, each client's Play state and tick
+response, and advancing server simulation with a fresh, nonempty dashboard tick
+sample whose p50 MSPT is below 50. This final rolling-window observation is not
+proof of every tick throughout the run.
+
 Input submission is not completion. There is no general click/trade/button ACK.
 Wait on the exact expected inventory/cursor/menu/block/feedback state before
 `ctx.boundary()`. `snapshot.revision` is a received-packet revision, not a success
@@ -157,6 +164,8 @@ counter; unrelated updates cannot stand in for the expected effect. While a
 menu is open, protocol inventory uses its fresh 36-slot player suffix instead
 of the stale window-0 cache. Supported received stack component patches are
 preserved; unknown patches and unreceived block states remain unavailable.
+When the server opens a menu ID, previously cached contents and properties for
+that ID are discarded until new contents arrive; server close also invalidates it.
 
 `client.set_auto_auth(False)` disables only the protocol driver's automatic
 register/login commands for subsequent reconnects. It does not disable the
@@ -273,6 +282,14 @@ movement changes current position only; remove/respawn packets invalidate
 tracking. `xp` contains received progress/level/total. Local `effects` uses the
 actual LoginPlay entity ID, never an invented local spawn; effect keys are
 numeric-ID strings resolved with the mob-effect registry above.
+`entity_lifecycle` separately records received spawns and removals in order,
+including the UUID and registry-named type associated with a known removed ID.
+It is per connection; an unknown removal has null UUID and type. On overflow
+(4096 events), or an undecodable spawn or removal, the journal is omitted and
+`observation_errors.entity_lifecycle` reports the reason, even after respawn.
+An empty final census alone cannot distinguish no spawn from later removal. Wire
+events do not carry authoritative simulation ticks: fuse-time checks block rather
+than infer tick counts from receipt timing.
 
 Malformed/unsupported entity packets leave sticky
 `observation_errors.entities` and omit the entity/XP/effect observations until

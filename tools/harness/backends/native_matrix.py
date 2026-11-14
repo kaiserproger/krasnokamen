@@ -44,6 +44,65 @@ def transport_blocker(scenario: dict[str, Any]) -> str | None:
         return 'malformed_packet_injection: ordinary native MCP does not expose raw/stale packet injection'
     return None
 
+def failure_status(oracle_started: bool) -> str:
+    """Startup failures have not exercised the scenario's product oracle."""
+    return 'fail' if oracle_started else 'blocked'
+
+
+def _wait_client_tick(client: Any, steps: ProbeSteps) -> None:
+    remaining = steps.remaining()
+    previous = getattr(client, 'request_timeout_seconds', None)
+    if previous is not None:
+        client.request_timeout_seconds = min(previous, remaining)
+    try:
+        result = client.call_tool('minecraft_wait_ticks', {'ticks': 1})
+        steps.check('client_tick_response', result.get('status') == 'ok')
+    finally:
+        if previous is not None:
+            client.request_timeout_seconds = previous
+
+
+def check_health(lane: Any, steps: ProbeSteps) -> None:
+    """Require observed server and client health before crediting any scenario."""
+    steps.check('server_alive', lane.host.running)
+    log = lane.host.log_path.read_text(errors='replace')
+    steps.check('server_no_error_or_panic', not any(
+        'ERROR' in line or 'panic' in line.lower() for line in log.splitlines()))
+    baseline = lane.host.dashboard_full_stats()
+    baseline_tick = baseline.get('simulation_tick')
+    steps.check('server_tick_baseline', type(baseline_tick) is int)
+    steps.check('clients_present', bool(lane.clients))
+    for index, client in enumerate(lane.clients):
+        state = client.call_tool('minecraft_observe')
+        steps.check(f'client_{index}_in_play', state.get('in_play') is True)
+        _wait_client_tick(client, steps)
+    while True:
+        metrics = lane.host.dashboard_full_stats()
+        current_tick = metrics.get('simulation_tick')
+        tick = metrics.get('tick')
+        source_tick = tick.get('source_tick') if isinstance(tick, dict) else None
+        steps.check('server_metrics_available', type(source_tick) is int)
+        if type(current_tick) is int and current_tick > baseline_tick and source_tick > baseline_tick:
+            break
+        steps.check('server_alive_during_health', lane.host.running)
+        _wait_client_tick(lane.clients[0], steps)
+    tick = metrics.get('tick')
+    samples = tick.get('samples') if isinstance(tick, dict) else None
+    p50 = tick.get('p50_us') if isinstance(tick, dict) else None
+    source_tick = tick.get('source_tick') if isinstance(tick, dict) else None
+    steps.check('server_metrics_fresh',
+                type(source_tick) is int and source_tick > baseline_tick)
+    steps.report['server_health'] = {'baseline_tick': baseline_tick,
+                                     'final_tick': current_tick, 'tick': tick}
+    steps.check('server_mspt_below_50',
+                type(samples) is int and samples > 0 and type(p50) in (int, float)
+                and math.isfinite(p50) and 0 <= p50 < 50000)
+    steps.check('server_alive_after_health', lane.host.running)
+    log = lane.host.log_path.read_text(errors='replace')
+    steps.check('server_no_error_or_panic_after_health', not any(
+        'ERROR' in line or 'panic' in line.lower() for line in log.splitlines()))
+
+
 
 def record_receipt(receipt: dict[str, Any], receipt_path: Path) -> None:
     """Called by cmd_run only after its authoritative result.json exists."""
@@ -238,11 +297,14 @@ class Lane:
             if proof.get('checkpoint_sha256_before_restart')!=self.wal_checkpoint_baseline:
                 raise NotImplementedError('server_kill9_before_next_checkpoint: checkpoint changed during action; WAL-only recovery unproven')
             self.steps.check('ordinary_transfer_not_checkpointed_before_SIGKILL',True)
+        deadline=time.monotonic()+self.timeout
         for client,name in zip(self.clients,self.names):
             state=client.call_tool('minecraft_observe')
             while state.get('in_play'):
                 client.call_tool('minecraft_wait_for_state_change',{'observed_version':state['state_version'],'timeout_seconds':min(self.timeout,120)})
                 state=client.call_tool('minecraft_observe')
+            if state.get('in_play') is not False:
+                raise RuntimeError('client restart observation omitted in_play')
             client.call_tool('minecraft_connect',{'server_addr':self.address})
             self.authenticate(client,name)
             self.settle(client,name)
@@ -602,6 +664,7 @@ def run(ctx: Any) -> dict[str, Any]:
         if blocker:
             row['note']=blocker
         else:
+            oracle_started=False
             try:
                 with Lane(ctx,scenario,directory,binary,native,26301+(index%90),timeout,tuple(sorted(exclusions))) as lane:
                     from ..matrix_api import MissingCapability
@@ -613,6 +676,7 @@ def run(ctx: Any) -> dict[str, Any]:
                     row['excluded_plugins']=list(sorted(exclusions))
                     with ProbeSteps(lane.clients[0],directory/'probe',timeout,scenario['id']) as steps:
                         lane.steps=steps
+                        oracle_started=True
                         if storage_primitive:
                             storage(lane,scenario)
                         elif handler is not None:
@@ -632,12 +696,14 @@ def run(ctx: Any) -> dict[str, Any]:
                                     steps.check(check['name'],check['passed'])
                             finally:
                                 (directory/'adapter-transcript.json').write_text(json.dumps(transcript,indent=2))
+                        check_health(lane,steps)
                         native_client.capture(lane.clients[0],directory,'final')
                         row['status']='pass';row['note']='complete native probe; '+str(directory/'probe/scenario.json')
             except (NotImplementedError, MissingCapability) as error:
                 row['note']=str(error)
             except Exception as error:
-                row['status']='fail';row['note']=f'{type(error).__name__}: {error}; evidence={directory}'
+                row['status']=failure_status(oracle_started)
+                row['note']=f'{type(error).__name__}: {error}; evidence={directory}'
         (directory/'outcome.json').write_text(json.dumps(row,indent=2))
         print('[native-matrix]',row['status'],scenario['id'],row['note'][:180],flush=True)
     counts={status:sum(row['status']==status for row in outcomes) for status in ('pass','fail','blocked','skipped')}

@@ -20,6 +20,33 @@ VANILLA=Path(os.environ.get('KRASNOKAMEN_VANILLA_DATA',
 
 
 class MobOracleTests(unittest.TestCase):
+    def test_peaceful_requires_received_spawn_then_removal(self):
+        from ..protocol_entities import ProtocolEntities
+        from ..test_protocol_entities import add_body,varint
+        import uuid
+        tracker=ProtocolEntities()
+        client=SimpleNamespace(snapshot=lambda:{
+            'entities':tracker.snapshot()['entities'],
+            'entity_lifecycle':tracker.snapshot()['lifecycle']})
+        def wait(predicate,**kwargs):
+            if not predicate():
+                raise TimeoutError('missing lifecycle')
+        def run_case(send_spawn):
+            def command(text):
+                if text.startswith('summon '):
+                    if send_spawn:
+                        tracker.consume(0x01,add_body(entity_id=42,entity_uuid=uuid.UUID(mobs.UUID)))
+                    tracker.consume(0x4d,varint(1)+varint(42))
+            ctx=SimpleNamespace(row={'subject':'mobs.zombie'},
+                factors={'dimension':'overworld','difficulty':'peaceful'},
+                clients=[client],server=SimpleNamespace(command=command),state={},wait_until=wait)
+            with patch.object(mobs,'arena'),patch.object(mobs,'exists',return_value=False):
+                mobs.setup(ctx)
+                return mobs.oracle(ctx)[0].passed
+        self.assertTrue(run_case(True))
+        with self.assertRaisesRegex(TimeoutError,'missing lifecycle'):
+            run_case(False)
+
     def test_mob_guard_uses_gameplay_not_protocol_version(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -96,7 +123,7 @@ class MobOracleTests(unittest.TestCase):
             self.assertTrue(all(check.passed for check in villagers.lightning_oracle(ctx)))
 
     def test_console_fences_do_not_change_settlement_state(self):
-        reply='Settlements: MatrixTown.\nchat.type.announcement: Server, MatrixConsoleFence00000015\n'
+        reply='Settlements: MatrixTown.\n'
         ctx=SimpleNamespace(server=SimpleNamespace(query=lambda _:reply))
         self.assertEqual(settlements.query(ctx,'settlement list'),'Settlements: MatrixTown.')
 
