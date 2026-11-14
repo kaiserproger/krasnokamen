@@ -18,6 +18,13 @@ pub(crate) enum DamageObservation {
 
 pub(super) type DamageObserver<'a> = &'a mut dyn FnMut(&TickState, EntitySlot, DamageObservation);
 
+/// Admission facts emitted from the source tick, before any profiler-specific attribution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DamageObservation {
+    AcceptedVictim,
+    AcceptedReactive,
+}
+
 impl TickState {
     pub(crate) fn commit_damage(
         &mut self,
