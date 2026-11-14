@@ -7,22 +7,33 @@ use crate::commands::CommandError;
 use crate::tick::TickState;
 use mc_nbt::{ListTag, Tag, tag_type};
 
-pub(super) const OWNER: &str = "solaris:battle";
+pub(super) const OWNER: &str = "krasnokamen:battle";
 const TICKET_RADIUS: i32 = 12;
 const MAX_SIDE: usize = 10_000;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BattleCommand {
-    Setup { seed: u64, count: usize },
+    Setup {
+        seed: u64,
+        count: usize,
+    },
     Start,
     Pause,
     Reset,
     Status,
     Roster,
     /// Live network players (live_players.rs).
-    Watch { names: Vec<String> },
-    Live { name: String, side: u16 },
-    Spectate { name: String, target: String },
+    Watch {
+        names: Vec<String>,
+    },
+    Live {
+        name: String,
+        side: u16,
+    },
+    Spectate {
+        name: String,
+        target: String,
+    },
 }
 
 pub fn parse(args: &[&str]) -> Result<BattleCommand, CommandError> {
@@ -196,25 +207,25 @@ fn loadout(seed: u64, side: u16, regiment: u32, index: usize, kind: Kind) -> Loa
         Kind::Infantry => band(
             &mut roll,
             &[
-                (60, "solaris_battle:iron_longsword"),
-                (40, "solaris_battle:iron_flanged_mace"),
+                (60, "krasnokamen_battle:iron_longsword"),
+                (40, "krasnokamen_battle:iron_flanged_mace"),
             ],
         ),
         Kind::Spear => band(
             &mut roll,
             &[
-                (60, "solaris_battle:iron_spear"),
-                (40, "solaris_battle:iron_halberd"),
+                (60, "krasnokamen_battle:iron_spear"),
+                (40, "krasnokamen_battle:iron_halberd"),
             ],
         ),
         Kind::Archer => band(
             &mut roll,
             &[
-                (60, "solaris_battle:iron_longbow_standby"),
-                (40, "solaris_battle:iron_heavy_crossbow_standby"),
+                (60, "krasnokamen_battle:iron_longbow_standby"),
+                (40, "krasnokamen_battle:iron_heavy_crossbow_standby"),
             ],
         ),
-        Kind::Cavalry => "solaris_battle:iron_lance",
+        Kind::Cavalry => "krasnokamen_battle:iron_lance",
     };
     let shield = match kind {
         Kind::Archer => None,
@@ -232,9 +243,9 @@ fn loadout(seed: u64, side: u16, regiment: u32, index: usize, kind: Kind) -> Loa
     let helmet = band(
         &mut roll,
         &[
-            (45, "solaris_battle:iron_plate"),
-            (30, "solaris_battle:crested_helm"),
-            (25, "solaris_battle:holy"),
+            (45, "krasnokamen_battle:iron_plate"),
+            (30, "krasnokamen_battle:crested_helm"),
+            (25, "krasnokamen_battle:holy"),
         ],
     );
     let torso = if shield == Some(Shield::Heater) {
@@ -421,8 +432,8 @@ fn summon_tag(unit: Option<&Loadout>, side: u16) -> Tag {
             vec![worn(
                 "body",
                 coloured(
-                    "solaris_battle:red_caparison",
-                    "solaris_battle:blue_caparison",
+                    "krasnokamen_battle:red_caparison",
+                    "krasnokamen_battle:blue_caparison",
                 ),
             )],
         )),
@@ -436,11 +447,11 @@ fn summon_tag(unit: Option<&Loadout>, side: u16) -> Tag {
                     "mainhand" => vec![item_model(unit.weapon)],
                     "offhand" => vec![item_model(match unit.shield {
                         Some(Shield::Heater) | None => coloured(
-                            "solaris_battle:red_heater_shield",
-                            "solaris_battle:blue_heater_shield",
+                            "krasnokamen_battle:red_heater_shield",
+                            "krasnokamen_battle:blue_heater_shield",
                         ),
-                        Some(Shield::Kite) => "solaris_battle:iron_kite_shield",
-                        Some(Shield::Tower) => "solaris_battle:iron_tower_shield",
+                        Some(Shield::Kite) => "krasnokamen_battle:iron_kite_shield",
+                        Some(Shield::Tower) => "krasnokamen_battle:iron_tower_shield",
                     })],
                     "head" => vec![
                         worn("head", unit.helmet),
@@ -452,10 +463,13 @@ fn summon_tag(unit: Option<&Loadout>, side: u16) -> Tag {
                     "chest" => match unit.torso {
                         Torso::Surcoat => vec![worn(
                             "chest",
-                            coloured("solaris_battle:red_surcoat", "solaris_battle:blue_surcoat"),
+                            coloured(
+                                "krasnokamen_battle:red_surcoat",
+                                "krasnokamen_battle:blue_surcoat",
+                            ),
                         )],
                         Torso::Leather => vec![worn("chest", "minecraft:leather"), dyed.clone()],
-                        Torso::Holy => vec![worn("chest", "solaris_battle:holy")],
+                        Torso::Holy => vec![worn("chest", "krasnokamen_battle:holy")],
                     },
                     _ => unreachable!("battle equipment table contains an unknown slot"),
                 };
@@ -471,7 +485,7 @@ fn summon_tag(unit: Option<&Loadout>, side: u16) -> Tag {
                 Legs::Holy => slots.push((
                     "legs",
                     LEGS_CARRIER,
-                    vec![worn("legs", "solaris_battle:holy")],
+                    vec![worn("legs", "krasnokamen_battle:holy")],
                 )),
             }
         }

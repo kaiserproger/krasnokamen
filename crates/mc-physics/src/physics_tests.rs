@@ -2145,9 +2145,15 @@ fn cross_axis_overlap_under_the_vanilla_epsilon_does_not_collide() {
         };
         let expected = if blocked { 39.0 - 39.01 } else { -0.079 };
         let dz = clip_z(body, -0.079, &[trunk]);
-        assert!((dz - expected).abs() < 1e-12, "clip_z overlap {overlap}: {dz}");
+        assert!(
+            (dz - expected).abs() < 1e-12,
+            "clip_z overlap {overlap}: {dz}"
+        );
         let swept = resolve_horizontal_sweep(body, Vec3::new(0.0, 0.0, -0.079), &[trunk]);
-        assert!((swept.z - expected).abs() < 1e-12, "sweep overlap {overlap}: {swept:?}");
+        assert!(
+            (swept.z - expected).abs() < 1e-12,
+            "sweep overlap {overlap}: {swept:?}"
+        );
         // Walking +x 0.5 toward a block at x 10, z 5 from 0.4 short of it, the
         // body's north side `overlap` into the block's row.
         let post = block([10.0, 0.0, 5.0]);
@@ -2161,7 +2167,10 @@ fn cross_axis_overlap_under_the_vanilla_epsilon_does_not_collide() {
         };
         let expected = if blocked { 10.0 - 9.6 } else { 0.5 };
         let dx = clip_x(body, 0.5, &[post]);
-        assert!((dx - expected).abs() < 1e-12, "clip_x overlap {overlap}: {dx}");
+        assert!(
+            (dx - expected).abs() < 1e-12,
+            "clip_x overlap {overlap}: {dx}"
+        );
         // Falling 0.5 past a block whose column the body's west side overlaps,
         // starting 0.2 above its top.
         let ground = block([0.0, 63.0, 0.0]);
@@ -2175,7 +2184,10 @@ fn cross_axis_overlap_under_the_vanilla_epsilon_does_not_collide() {
         };
         let expected = if blocked { 64.0 - 64.2 } else { -0.5 };
         let dy = clip_y(body, -0.5, &[ground]);
-        assert!((dy - expected).abs() < 1e-12, "clip_y overlap {overlap}: {dy}");
+        assert!(
+            (dy - expected).abs() < 1e-12,
+            "clip_y overlap {overlap}: {dy}"
+        );
     }
 }
 

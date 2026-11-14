@@ -503,7 +503,7 @@ mod tests {
 
     #[test]
     fn exact_sturdy_faces_cover_full_blocks_and_irregular_common_supports() {
-        let report = crate::blocks::solaris_required_blocks_report();
+        let report = crate::blocks::krasnokamen_required_blocks_report();
         let state = |name: &str, expected: &[(&str, &str)]| {
             let block = report
                 .iter()
@@ -605,7 +605,7 @@ mod tests {
 
     #[test]
     fn center_underside_support_accepts_fences_and_every_hanging_rotation_with_exact_fingerprint() {
-        let report = crate::blocks::solaris_required_blocks_report();
+        let report = crate::blocks::krasnokamen_required_blocks_report();
         for name in [
             "minecraft:oak_fence",
             "minecraft:oak_hanging_sign",

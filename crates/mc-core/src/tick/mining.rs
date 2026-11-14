@@ -51,7 +51,7 @@ fn advanced(state: &TickState, entity: EntityId, mut dig: DigProgress) -> Option
         dig.progress = (dig.progress + rate).min(1.0);
         dig.tick = state.tick;
         tracing::trace!(
-            target: "solaris::mining", phase = "tick", tick = state.tick,
+            target: "krasnokamen::mining", phase = "tick", tick = state.tick,
             actor = ?entity, position = ?dig.position, block = dig.block,
             progress = dig.progress, rate,
             on_ground = state.entities.slot_of(entity).is_some_and(|slot| state.entities.ground(slot)),
@@ -227,7 +227,7 @@ pub(super) fn allows(
 
 pub(super) fn trace_finish(state: &TickState, entity: EntityId, position: BlockPos, block: u32) {
     tracing::trace!(
-        target: "solaris::mining", phase = "finish", tick = state.tick,
+        target: "krasnokamen::mining", phase = "finish", tick = state.tick,
         actor = ?entity, ?position, block,
         progress = ?matching(state, entity, position, block).map(|dig| dig.progress),
         rate = crate::effects::mining_progress(state, entity, block),
@@ -245,7 +245,7 @@ pub(super) fn start(state: &mut TickState, entity: EntityId, position: BlockPos,
         tick: state.tick,
     });
     tracing::trace!(
-        target: "solaris::mining", phase = "start", tick = state.tick,
+        target: "krasnokamen::mining", phase = "start", tick = state.tick,
         actor = ?entity, ?position, block, progress = rate.min(1.0), rate,
         on_ground = state.entities.slot_of(entity).is_some_and(|slot| state.entities.ground(slot)),
     );
