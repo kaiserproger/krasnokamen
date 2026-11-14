@@ -37,7 +37,7 @@ fn loads_real_plains_spawns_when_present() {
 
 #[test]
 fn required_spawn_rules_fall_back_to_embedded_land_and_water_defaults() {
-    let rules = solaris_required_biome_spawn_rules();
+    let rules = krasnokamen_required_biome_spawn_rules();
     let forest = Identifier::parse("minecraft:forest").unwrap();
     let deep_ocean = Identifier::parse("minecraft:deep_ocean").unwrap();
 
@@ -71,7 +71,7 @@ fn required_spawn_rules_fall_back_to_embedded_land_and_water_defaults() {
 
 #[test]
 fn exact_spawn_entries_never_inherit_default_biome_rules() {
-    let rules = solaris_required_biome_spawn_rules();
+    let rules = krasnokamen_required_biome_spawn_rules();
     let plains = Identifier::parse("minecraft:plains").unwrap();
     let snowy = Identifier::parse("minecraft:snowy_plains").unwrap();
     let desert = Identifier::parse("minecraft:desert").unwrap();
@@ -90,7 +90,7 @@ fn exact_spawn_entries_never_inherit_default_biome_rules() {
 
 #[test]
 fn required_spawn_rules_cover_common_overworld_biomes_with_distinct_tables() {
-    let rules = solaris_required_biome_spawn_rules();
+    let rules = krasnokamen_required_biome_spawn_rules();
     assert_eq!(rules.len(), 18); // Eight Overworld, five Nether, five End.
 
     let plains = Identifier::parse("minecraft:plains").unwrap();
@@ -161,7 +161,7 @@ fn custom_spawn_rules_do_not_get_implicit_defaults() {
 
 #[test]
 fn embedded_sheep_color_climates_follow_vanilla_variant_tags() {
-    let rules = solaris_required_biome_spawn_rules();
+    let rules = krasnokamen_required_biome_spawn_rules();
 
     for biome in [
         "minecraft:desert",
@@ -214,7 +214,7 @@ fn real_sidecar_sheep_color_climates_match_resolved_variant_tags_when_present() 
     );
 
     let rules = load_biome_spawn_rules(&biome_dir).unwrap();
-    let embedded = solaris_required_biome_spawn_rules();
+    let embedded = krasnokamen_required_biome_spawn_rules();
     let worldgen = load_biome_worldgen_data(&biome_dir, &tags_dir).unwrap();
     let warm = Identifier::parse("minecraft:spawns_warm_variant_farm_animals").unwrap();
     let cold = Identifier::parse("minecraft:spawns_cold_variant_farm_animals").unwrap();

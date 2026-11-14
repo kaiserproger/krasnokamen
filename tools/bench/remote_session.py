@@ -73,7 +73,7 @@ class RemoteSession(compare.CoreSession):
         await asyncio.to_thread(r.open)
         self.root = r.is_root()
         r.run(["mkdir", "-p", self.rdir])
-        await asyncio.to_thread(r.rsync, a.server_bin, f"{self.rdir}/solaris-v2")
+        await asyncio.to_thread(r.rsync, a.server_bin, f"{self.rdir}/krasnokamen")
         await asyncio.to_thread(r.rsync, f"{self.world}/", f"{self.rdir}/world/")
         await asyncio.to_thread(r.rsync, self.directory / "ops.json", f"{self.rdir}/ops.json")
         r.put_text(f"{self.rdir}/server.toml", self.remote_config())
@@ -82,7 +82,7 @@ class RemoteSession(compare.CoreSession):
                    "-p", f"StandardError=append:{self.rdir}/server.log", "-p", "MemoryAccounting=yes"]
         if a.remote_memory_max:
             command += ["-p", f"MemoryMax={a.remote_memory_max}", "-p", "MemorySwapMax=0"]
-        command += ["--", "taskset", "-c", a.server_cpus, f"{self.rdir}/solaris-v2",
+        command += ["--", "taskset", "-c", a.server_cpus, f"{self.rdir}/krasnokamen",
                     "--config", f"{self.rdir}/server.toml", "--no-console"]
         load.scale.dump(self.directory / "server-command.json", {"host": a.remote_host, "command": command})
         r.run(command)

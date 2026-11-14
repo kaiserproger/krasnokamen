@@ -59,21 +59,21 @@ class ProcessStopTests(unittest.TestCase):
 class ClientSettingsTests(unittest.TestCase):
     def test_invalid_username_rejected(self) -> None:
         with mock.patch.dict(os.environ, {
-            "SOLARIS_CLIENT_MCP_TOKEN": "t",
-            "SOLARIS_CLIENT_MCP_USERNAME": "bad-name!",
+            "KRASNOKAMEN_CLIENT_MCP_TOKEN": "t",
+            "KRASNOKAMEN_CLIENT_MCP_USERNAME": "bad-name!",
         }):
             with self.assertRaises(RuntimeError):
                 cli.resolve_client_settings(None)
 
     def test_missing_token_rejected(self) -> None:
         env = {key: value for key, value in os.environ.items()
-               if key != "SOLARIS_CLIENT_MCP_TOKEN"}
+               if key != "KRASNOKAMEN_CLIENT_MCP_TOKEN"}
         with mock.patch.dict(os.environ, env, clear=True):
             with self.assertRaises(RuntimeError):
                 cli.resolve_client_settings(None)
 
     def test_unknown_platform_rejected(self) -> None:
-        with mock.patch.dict(os.environ, {"SOLARIS_CLIENT_MCP_TOKEN": "t"}):
+        with mock.patch.dict(os.environ, {"KRASNOKAMEN_CLIENT_MCP_TOKEN": "t"}):
             with self.assertRaises(ValueError):
                 cli.resolve_client_settings("quilt")
 
@@ -153,7 +153,7 @@ class RunTestPolicyTests(unittest.TestCase):
     def test_ci_short_profile_applies_to_test_but_not_correctness(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             ctx = profiles.ProfileContext(Path(tmp))
-            with mock.patch.dict(os.environ, {"SOLARIS_NEXTEST_PROFILE": "ci"}):
+            with mock.patch.dict(os.environ, {"KRASNOKAMEN_NEXTEST_PROFILE": "ci"}):
                 with mock.patch.object(profiles, "_run_command", return_value={}) as run:
                     with mock.patch.object(profiles, "_test_scope_memory", return_value={}):
                         profiles.run_test(ctx)
@@ -311,7 +311,7 @@ class ReceiptContractTests(unittest.TestCase):
             (Path(tmp) / "resources" / "assets").mkdir(parents=True)
             for name in ("blocks.json", "block_mining.json", "block_light.json", "registries.json"):
                 (reports / name).touch()
-            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), mock.patch("tools.harness.mcp_schema.native_schema", return_value={}), mock.patch.dict(os.environ, {"SOLARIS_CLIENT_DATA_DIR": str(reports.parent), "SOLARIS_SERVER_BINARY": "/bin/true", "SOLARIS_CLIENT_BINARY": "/bin/true"}):
+            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), mock.patch("tools.harness.mcp_schema.native_schema", return_value={}), mock.patch.dict(os.environ, {"KRASNOKAMEN_CLIENT_DATA_DIR": str(reports.parent), "KRASNOKAMEN_SERVER_BINARY": "/bin/true", "KRASNOKAMEN_CLIENT_BINARY": "/bin/true"}):
                 with mock.patch.dict(profiles.PROFILES, {
                     "survival": {"scope": "real-client", "run": missing_tools,
                                  "prerequisites": profiles.PROFILE_PREREQUISITES["survival"]},
@@ -432,7 +432,7 @@ class SharedClientProbeTests(unittest.TestCase):
             (Path(tmp) / "resources" / "assets").mkdir(parents=True)
             for name in ("blocks.json", "block_mining.json", "block_light.json", "registries.json"):
                 (reports / name).touch()
-            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), mock.patch("tools.harness.mcp_schema.native_schema", return_value={}), mock.patch.dict(os.environ, {"SOLARIS_CLIENT_DATA_DIR": str(reports.parent), "SOLARIS_SERVER_BINARY": "/bin/true", "SOLARIS_CLIENT_BINARY": "/bin/true"}), mock.patch.dict(profiles.PROFILES, {
+            with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp)), mock.patch("tools.harness.mcp_schema.native_schema", return_value={}), mock.patch.dict(os.environ, {"KRASNOKAMEN_CLIENT_DATA_DIR": str(reports.parent), "KRASNOKAMEN_SERVER_BINARY": "/bin/true", "KRASNOKAMEN_CLIENT_BINARY": "/bin/true"}), mock.patch.dict(profiles.PROFILES, {
                 "inventory": {"scope": "real-client", "run": probe,
                               "prerequisites": profiles.PROFILE_PREREQUISITES["inventory"]},
             }):
@@ -615,13 +615,13 @@ class ScenarioCatalogTests(unittest.TestCase):
             return {}
 
         with tempfile.TemporaryDirectory() as tmp:
-            server = Path(tmp) / "solaris-v2"
+            server = Path(tmp) / "krasnokamen"
             server.write_text("#!/bin/sh\n")
             server.chmod(0o755)
             patched = dict(profiles.PROFILES["protocol-matrix"], run=run)
             with mock.patch.object(cli, "ARTIFACT_ROOT", Path(tmp) / "artifacts"), \
                     mock.patch.dict(profiles.PROFILES, {"protocol-matrix": patched}), \
-                    mock.patch.dict(os.environ, {"SOLARIS_SERVER_BINARY": str(server)}):
+                    mock.patch.dict(os.environ, {"KRASNOKAMEN_SERVER_BINARY": str(server)}):
                 code = cli.cmd_run(["scenario", "protocol-mob-attack-cow"])
         self.assertEqual(code, 0)
         self.assertEqual(seen["server_bin"], server)

@@ -64,10 +64,10 @@ def _check_port(port: int, name: str, port_range=(PORT_MIN, PORT_MAX)) -> int:
 def _default_lock_dir() -> Path:
     """Portable cross-process lock root: env override, then the shared work
     root when set, otherwise the system temp dir (works on any Linux/CI)."""
-    override = os.environ.get("SOLARIS_PORT_LOCK_DIR")
+    override = os.environ.get("KRASNOKAMEN_PORT_LOCK_DIR")
     if override:
         return Path(override)
-    work_root = os.environ.get("SOLARIS_WORK_ROOT")
+    work_root = os.environ.get("KRASNOKAMEN_WORK_ROOT")
     if work_root:
         return Path(work_root) / "port-locks"
     return Path(tempfile.gettempdir()) / "solaris-port-locks"
@@ -226,7 +226,7 @@ port = {self.port}
 
 [auth]
 online_mode = false
-require_plugin_login = {str(self.plugins_dir is not None and (self.plugins_dir / "solaris-auth").is_dir()).lower()}
+require_plugin_login = {str(self.plugins_dir is not None and (self.plugins_dir / "krasnokamen-auth").is_dir()).lower()}
 
 [dashboard]
 enabled = true

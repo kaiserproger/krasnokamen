@@ -282,11 +282,11 @@ SCENARIOS: dict[str, Scenario] = {
         limits="offline-mode identity (same name, same UUID); no online-auth or plugin-login claimant",
     ),
     "native-v2-auth-budget": _entry(
-        id="native-v2-auth-budget", summary="solaris-auth /register and /login complete on a native client behind the native login gate",
+        id="native-v2-auth-budget", summary="krasnokamen-auth /register and /login complete on a native client behind the native login gate",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-auth-budget",
         requires=("xvfb",),
         sources=("tools/harness/backends/native_auth_budget.py", "tools/harness/backends/client_probes.py"),
-        fixture="private world with the sibling checkout's shipping solaris-auth package and [auth] require_plugin_login = true",
+        fixture="private world with the sibling checkout's shipping krasnokamen-auth package and [auth] require_plugin_login = true",
         proves="the locked session accepts ordinary chat only after /register, and again after a reconnect and /login, i.e. the plugin survives its Argon2 host-import callbacks",
         limits="depends on host hashing time exceeding the retired 100 ms allowance; the negative control is a server whose epoch allowance is the legacy four ticks",
     ),
@@ -312,7 +312,7 @@ SCENARIOS: dict[str, Scenario] = {
                  "tools/harness/backends/client_probes.py"),
         fixture="private world; one jukebox in the player's own chunk, six blocks from the player, record corrupted through an Anvil export and imported again; the same player rejoins",
         proves="when green: the client reaches in_play with a refused chunk under or within about 12 blocks of the camera, as a vanilla client does with a hole in the world",
-        limits="red today (solaris-client play_world_presentation_ready needs the biome-neighbour chunks); a repro, not a regression gate",
+        limits="red today (krasnokamen-client play_world_presentation_ready needs the biome-neighbour chunks); a repro, not a regression gate",
     ),
     "native-command-feedback": _entry(
         id="native-command-feedback",
@@ -774,7 +774,7 @@ SCENARIOS: dict[str, Scenario] = {
         selector=("--script", "tools/harness/matrix_scripts/random-break-seed-4.json", "--vanilla-data", "data/vanilla"),
         sources=("tools/harness/matrix_scripts/random-break-seed-4.json", "tools/harness/matrix_domains/random.py",
                  "tools/harness/protocol_input_verbs.py"),
-        fixture="release server named by --server-bin (default SOLARIS_SERVER_BINARY); two protocol bots, one declared dirt block at Y80, survival",
+        fixture="release server named by --server-bin (default KRASNOKAMEN_SERVER_BINARY); two protocol bots, one declared dirt block at Y80, survival",
         proves="the bot's StartDestroy+Finish PlayerAction pair (26.3 ordinals) makes the server remove the block, received as a block update",
         limits="TCP protocol bots, not a native or Java client; one block, no tool-speed or drop-parity coverage",
     ),
@@ -783,7 +783,7 @@ SCENARIOS: dict[str, Scenario] = {
         owner="core:harness", evidence="tcp", profile="protocol-matrix",
         selector=("--subject", "mobs.cow", "--vanilla-data", "data/vanilla"),
         sources=("tools/harness/matrix_domains/mobs.py", "tools/harness/protocol_matrix_client.py"),
-        fixture="release server named by --server-bin (default SOLARIS_SERVER_BINARY); one protocol bot, normal difficulty, survival, exact 26.1.2 loot data",
+        fixture="release server named by --server-bin (default KRASNOKAMEN_SERVER_BINARY); one protocol bot, normal difficulty, survival, exact 26.1.2 loot data",
         proves="an attack packet at standard reach changes the cow's received health or removes it, then its loot is received once",
         limits="TCP protocol bot, not a native or Java client; one species, no knockback, damage-number or animation coverage",
     ),
@@ -875,11 +875,11 @@ def repo_revisions() -> dict[str, str]:
     turning a run into a failure.
     """
     repos = {
-        "solaris": REPO_ROOT,
-        "solaris-default-plugins": Path(
-            os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", REPO_ROOT.parent / "solaris-default-plugins")
+        "krasnokamen": REPO_ROOT,
+        "krasnokamen-default-plugins": Path(
+            os.environ.get("KRASNOKAMEN_DEFAULT_PLUGINS_ROOT", REPO_ROOT.parent / "solaris-default-plugins")
         ),
-        "solaris-loader": Path(os.environ.get("SOLARIS_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")),
+        "krasnokamen-loader": Path(os.environ.get("KRASNOKAMEN_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")),
     }
     revisions: dict[str, str] = {}
     for name, path in repos.items():

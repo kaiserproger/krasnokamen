@@ -120,7 +120,7 @@ fn partial_output_storage_preserves_tool_and_releases_without_shipping_it() {
         Start {
             job: "planks".into(),
             worker,
-            recipe_name: "solaris-settlements:oak_planks".into(),
+            recipe_name: "krasnokamen-settlements:oak_planks".into(),
             count: 1,
             station: table,
             stand_at,
@@ -176,7 +176,7 @@ fn partial_output_storage_preserves_tool_and_releases_without_shipping_it() {
         Start {
             job: "next-planks".into(),
             worker,
-            recipe_name: "solaris-settlements:oak_planks".into(),
+            recipe_name: "krasnokamen-settlements:oak_planks".into(),
             count: 1,
             station: table,
             stand_at,
@@ -273,7 +273,7 @@ fn authored_remainders_and_different_components_are_not_delivery_obligations() {
         Start {
             job: "cake".into(),
             worker,
-            recipe_name: "solaris-settlements:cake".into(),
+            recipe_name: "krasnokamen-settlements:cake".into(),
             count: 1,
             station: table,
             stand_at,
