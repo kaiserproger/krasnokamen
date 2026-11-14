@@ -45,8 +45,8 @@ fn simulate(runtime: &mut FormationRuntime, tick: u64) {
         .map(|i| steering::movement(runtime, i))
         .collect();
     for (member, drive) in runtime.members.iter_mut().zip(drives) {
-        for axis in 0..3 {
-            member.pos[axis] += drive[axis] * mc_physics::TICK_SECONDS;
+        for (position, velocity) in member.pos.iter_mut().zip(drive) {
+            *position += velocity * mc_physics::TICK_SECONDS;
         }
     }
     runtime.update_morale(tick);

@@ -7,6 +7,7 @@
 use super::formation::{FormationRuntime, Member, Regiment};
 use super::{BattleState, Frame, Output};
 use mc_physics::entity_collision_26_1_2::{EntityPushInput, PushRecipient, vanilla_push_impulse};
+use mc_physics::mth;
 
 pub(crate) const NEIGHBOURS: usize = 5;
 const CELL_CAP: usize = 8;
@@ -153,7 +154,7 @@ impl SeparationGrid {
 }
 
 pub(crate) fn unit(delta: [f64; 2], fallback: [f64; 2]) -> [f64; 2] {
-    let length = delta[0].hypot(delta[1]);
+    let length = mth::length2(delta[0], delta[1]);
     if length < 1e-9 {
         fallback
     } else {
@@ -227,7 +228,7 @@ fn movement_with_neighbours(
         target[2] = target[2].clamp(min[1], max[1]);
     }
     let delta = [target[0] - m.pos[0], target[2] - m.pos[2]];
-    let length = delta[0].hypot(delta[1]);
+    let length = mth::length2(delta[0], delta[1]);
     let mut drive = delta.map(|v| v * (max_step / length.max(max_step)).min(1.0));
     runtime.work.separation_candidates += examined;
     for &(distance, other) in &near {
@@ -261,7 +262,7 @@ fn movement_with_neighbours(
         drive[1] += impulse.z;
     }
     let max_step = max_step.max(0.05);
-    let speed = drive[0].hypot(drive[1]);
+    let speed = mth::length2(drive[0], drive[1]);
     if speed > max_step {
         drive = drive.map(|v| v * max_step / speed);
     }

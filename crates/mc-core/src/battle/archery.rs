@@ -6,6 +6,7 @@
 use super::combat::{Action, CombatRuntime, Weapon};
 use super::{ArrowLaunch, BattleState, Frame, Output};
 use crate::boundary::{EntityEvent, Hand};
+use mc_physics::mth;
 use rustc_hash::FxHashMap;
 
 pub const SUSTAINED_TICKS: u64 = 220; // 5.45/minute
@@ -71,7 +72,7 @@ impl Volley {
 /// this gives ~4.5 blocks/tick and ~24 degrees. Unreachable targets do not debit ammo.
 pub fn aimed_arc(from: [f64; 3], to: [f64; 3]) -> Option<([f64; 3], u32)> {
     let delta = std::array::from_fn::<_, 3, _>(|i| to[i] - from[i]);
-    let horizontal = delta[0].hypot(delta[2]);
+    let horizontal = mth::length2(delta[0], delta[2]);
     if !horizontal.is_finite() || !delta[1].is_finite() || horizontal < 1.0 {
         return None;
     }

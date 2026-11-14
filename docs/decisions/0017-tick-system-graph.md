@@ -127,6 +127,16 @@ faction bodies and horses occupy a derived tail. Targets, classification and
 drive share this index. Slot caches are refreshed before consumers; native
 compaction/removal never gives a cached row authority over another identity.
 
+Production kernels consume indexed contexts and columns directly. Stable-ID
+query adapters, explicit withdrawal/interval controls and diagnostic rank
+fields used only by the regression fixtures are compiled only under `cfg(test)`;
+the production battle API does not retain unused compatibility entry points.
+Order transitions remain production-owned: the staged scenario's guarded
+advance/pursue policy uses the same transition side effects as explicit orders.
+An inactive battle clears the lengths of its native-slot projections without
+resizing or filling them against the world's population; missing entries mean
+zero drive/no look, preserving the ordinary world's sparse fast path.
+
 Workers read slot-indexed drive/look arrays, not ID hash maps. A battle row
 with zero thrust may use the existing rest proof only while grounded, motionless
 and unaffected by impulse/hurt/effects or changed geometry. Moving rows still use
@@ -142,6 +152,12 @@ are checked every tick. All output lanes retain their deterministic order.
 Sub-step timers are exposed only with `MC_CORE_PHASE_LOG`; concurrency is not
 enabled merely by introducing columns. A measured kernel exceeding 5 ms is the
 threshold for evaluating indexed parallel sub-steps on the existing worker pool.
+
+Native battle arrows exclude same-faction mobs from the shared swept collision
+snapshot, equivalent to disabling friendly fire for a battle team. Player
+targets, unaffiliated mobs and existing scoreboard checks are unchanged.
+This prevents rear-rank volleys from killing their own archers and triggering
+casualty/panic routs while ammunition remains.
 
 Population counters use the same sparse native faction membership owner.
 The hook samples pre-motion; publication refreshes the sample after merge before

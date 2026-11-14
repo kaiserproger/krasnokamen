@@ -47,6 +47,8 @@ pub(crate) struct BattleState {
     pub work: Work,
     pub timings: Timings,
     output: Output,
+    #[cfg(test)]
+    trace: Option<trace_tests::FrameTrace>,
 }
 
 #[derive(Debug, Default, Clone, Copy)]
@@ -182,7 +184,8 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
         ..Default::default()
     };
     if !battle.running {
-        battle.columns.clear_projection(state.entities.len());
+        battle.columns.drive_by_slot.clear();
+        battle.columns.look_by_slot.clear();
         battle.output = output;
         timings.total_us = start.map_or(0, |start| start.elapsed().as_micros() as u64);
         battle.timings = timings;
@@ -195,6 +198,9 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
         world: &state.world,
         tick: battle.elapsed_ticks,
     };
+    if state.tickets.contains_key(staging::OWNER) {
+        staging::update_orders(&mut battle.formation);
+    }
     formation::update(&frame, &mut battle);
     timings.formation_us = phase_us(&mut mark);
     battle.columns.prepare(&frame, &battle.formation);
@@ -209,6 +215,10 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     timings.morale_us = phase_us(&mut mark);
     battle.columns.project();
     timings.projection_us = phase_us(&mut mark);
+    #[cfg(test)]
+    if battle.trace.is_some() {
+        battle.trace = Some(trace_tests::frame_digest(&battle, &output));
+    }
     battle.elapsed_ticks += 1;
     state.hostile.events.append(&mut output.events);
     for arrow in output.arrows.drain(..) {
@@ -234,3 +244,6 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod trace_tests;
