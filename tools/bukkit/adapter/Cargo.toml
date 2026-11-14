@@ -1,5 +1,5 @@
 [package]
-name = "solaris-bukkit-adapter"
+name = "krasnokamen-bukkit-adapter"
 version = "0.1.0"
 edition = "2021"
 publish = false
@@ -10,5 +10,5 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-solaris-plugin-sdk = { path = "../../../sdk/rust/solaris-plugin-sdk" }
+krasnokamen-plugin-sdk = { path = "../../../sdk/rust/krasnokamen-plugin-sdk" }
 wit-bindgen = "0.62"

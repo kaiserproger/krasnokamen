@@ -1,6 +1,6 @@
 use mc_data::Identifier;
-use mc_data::blocks::solaris_required_blocks_report;
-use mc_data::items::solaris_required_items;
+use mc_data::blocks::krasnokamen_required_blocks_report;
+use mc_data::items::krasnokamen_required_items;
 use mc_data::loot::chest_26_1_2::ChestLootCatalog;
 use redb::ReadableDatabase;
 
@@ -116,8 +116,8 @@ fn packed_rows_fail_closed_on_any_corruption() {
 
 #[test]
 fn stored_baseline_is_packed_decodes_and_a_flipped_byte_is_refused() {
-    let blocks = BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap();
-    let items = solaris_required_items();
+    let blocks = BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap();
+    let items = krasnokamen_required_items();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("state.redb");
     let position = ChunkPos { x: 5, z: -9 };
