@@ -34,6 +34,14 @@
 # watchdog freeze every preemptible command, waits for the rest to finish, holds new
 # commands at start until it ends, and runs on all CPUs. -p and -x drop
 # nice. Compare -p numbers only with other -p numbers.
+# Release builds (`cargo build|test|run --release`, `--profile release*`) are refused
+# unless the caller is tools/dev/pin-release, the harness/ledger tooling (real-client
+# gates and ledger promote's own candidate and control trees) or Main explicitly
+# (KRASNOKAMEN_RELEASE_BUILD_ALLOW=1): a release binary belongs to one integrated
+# commit and comes from pin-release, which reuses the pin of the same tree and gives
+# a different tree its own. `-x` is a scheduled measurement window: outside
+# tools/dev/measurement-windows it refuses and names the next window (Main only:
+# KRASNOKAMEN_WINDOW_OVERRIDE=1). Debug builds and ordinary tasks are unchanged.
 # Usage: mem-run.sh [-x] [-p] [-m 8G] command args...
 set -euo pipefail
 trap 'echo "mem-run: failed (exit $?) at line $LINENO" >&2' ERR
@@ -60,6 +68,23 @@ fi
 dir=/tmp/solaris-mem-slots
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 mkdir -p "$dir/run"
+# Release builds are pins (owner 2026-11-15): tools/dev/release-build-policy.sh refuses
+# `cargo build|test|run --release` and `--profile release*` unless tools/dev/pin-release,
+# the harness/ledger tooling or Main's override asks for one. Before any slot or token.
+# shellcheck source=release-build-policy.sh
+source "$here/release-build-policy.sh"
+release_build_guard "$@"
+# -x is a quiet measurement window, not a flag: it pauses builds and waits for every
+# running test and server, so it opens only inside a scheduled window
+# (tools/dev/measurement-windows; the refusal names the next one). Main only:
+# KRASNOKAMEN_WINDOW_OVERRIDE=1.
+if [ "$exclusive" = 1 ]; then
+  if [ -n "${KRASNOKAMEN_WINDOW_OVERRIDE:-}" ]; then
+    echo "mem-run: -x: measurement-window schedule overridden (KRASNOKAMEN_WINDOW_OVERRIDE, Main only)" >&2
+  elif ! python3 "$here/measurement-window.py" --config "${KRASNOKAMEN_MEASUREMENT_WINDOWS:-$here/measurement-windows}"; then
+    exit 75
+  fi
+fi
 # Signature: argv without a leading `env` (its -u NAME / -flag / VAR=value words)
 # and without path-like words, so reruns of one command in different worktrees share
 # their measured peaks while different packages/filters stay apart.

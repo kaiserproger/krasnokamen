@@ -39,6 +39,8 @@ class ScopeLifetimeTests(unittest.TestCase):
             runner.chmod(0o755)
             shutil.copy(HERE / 'slot-select.sh', root)
             shutil.copy(HERE / 'heavy-watchdog.py', root)
+            for name in ('release-build-policy.sh', 'measurement-window.py', 'measurement-windows'):
+                shutil.copy(HERE / name, root)
             if (HERE / 'mem-run-guard.py').exists():
                 shutil.copy(HERE / 'mem-run-guard.py', root)
             (root / 'targets' / 'slot-a').mkdir(parents=True)
