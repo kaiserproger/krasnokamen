@@ -889,6 +889,8 @@
     "weapon_damage_per_attack": 2
   },
   "minecraft:copper_spear": {
+    "minimum_attack_charge": 1.0,
+    "piercing_weapon": {},
     "attack_range": {
       "hitbox_margin": 0.125,
       "max_creative_reach": 6.5,
@@ -1203,6 +1205,8 @@
     "weapon_damage_per_attack": 2
   },
   "minecraft:diamond_spear": {
+    "minimum_attack_charge": 1.0,
+    "piercing_weapon": {},
     "attack_range": {
       "hitbox_margin": 0.125,
       "max_creative_reach": 6.5,
@@ -1623,6 +1627,8 @@
     "weapon_damage_per_attack": 2
   },
   "minecraft:golden_spear": {
+    "minimum_attack_charge": 1.0,
+    "piercing_weapon": {},
     "attack_range": {
       "hitbox_margin": 0.125,
       "max_creative_reach": 6.5,
@@ -1952,6 +1958,8 @@
     "weapon_damage_per_attack": 2
   },
   "minecraft:iron_spear": {
+    "minimum_attack_charge": 1.0,
+    "piercing_weapon": {},
     "attack_range": {
       "hitbox_margin": 0.125,
       "max_creative_reach": 6.5,
@@ -2476,6 +2484,8 @@
     "weapon_damage_per_attack": 2
   },
   "minecraft:netherite_spear": {
+    "minimum_attack_charge": 1.0,
+    "piercing_weapon": {},
     "fire_resistant": true,
     "attack_range": {
       "hitbox_margin": 0.125,
@@ -2890,6 +2900,8 @@
     "weapon_damage_per_attack": 2
   },
   "minecraft:stone_spear": {
+    "minimum_attack_charge": 1.0,
+    "piercing_weapon": {},
     "attack_range": {
       "hitbox_margin": 0.125,
       "max_creative_reach": 6.5,
@@ -3199,6 +3211,8 @@
     "weapon_damage_per_attack": 2
   },
   "minecraft:wooden_spear": {
+    "minimum_attack_charge": 1.0,
+    "piercing_weapon": {},
     "attack_range": {
       "hitbox_margin": 0.125,
       "max_creative_reach": 6.5,

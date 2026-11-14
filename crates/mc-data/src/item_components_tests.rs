@@ -111,6 +111,11 @@ fn loads_component_report_fixture() {
                   "max_creative_reach": 6.5,
                   "hitbox_margin": 0.125,
                   "mob_factor": 0.5
+                },
+                "minecraft:minimum_attack_charge": 1.0,
+                "minecraft:piercing_weapon": {
+                  "hit_sound": "minecraft:item.spear_wood.hit",
+                  "sound": "minecraft:item.spear_wood.attack"
                 }
               }
             }"#,
@@ -192,8 +197,15 @@ fn loads_component_report_fixture() {
 
     let spear = facts
         .get(&Identifier::parse("minecraft:wooden_spear").unwrap())
-        .and_then(|facts| facts.attack_range)
-        .expect("wooden spear attack range");
+        .unwrap();
+    assert_eq!(
+        spear.piercing_weapon,
+        Some(PiercingWeaponFacts {
+            deals_knockback: true
+        })
+    );
+    assert_eq!(spear.minimum_attack_charge, Some(1.0));
+    let spear = spear.attack_range.expect("wooden spear attack range");
     assert_eq!(
         spear,
         AttackRangeFacts {
@@ -282,13 +294,23 @@ fn embedded_required_item_facts_cover_spear_attack_range() {
         "minecraft:diamond_spear",
         "minecraft:netherite_spear",
     ] {
-        let range = facts
+        let spear = facts
             .get(&Identifier::parse(id).unwrap())
-            .and_then(|facts| facts.attack_range)
+            .unwrap_or_else(|| panic!("missing {id}"));
+        let range = spear
+            .attack_range
             .unwrap_or_else(|| panic!("missing attack range for {id}"));
         assert_eq!(range.max_reach, 4.5, "{id}");
         assert_eq!(range.max_creative_reach, 6.5, "{id}");
         assert_eq!(range.hitbox_margin, 0.125, "{id}");
+        assert_eq!(
+            spear.piercing_weapon,
+            Some(PiercingWeaponFacts {
+                deals_knockback: true
+            }),
+            "{id}"
+        );
+        assert_eq!(spear.minimum_attack_charge, Some(1.0), "{id}");
     }
 }
 

@@ -227,6 +227,9 @@ pub enum PlayerInput {
         connection: ConnectionId,
         target: EntityId,
     },
+    /// Jab with the main-hand piercing weapon (a spear) along its attack
+    /// range: the client's attack with such an item, which names no target.
+    Stab { connection: ConnectionId },
     /// Interact with an entity (breed, trade, mount).
     InteractEntity {
         connection: ConnectionId,
@@ -430,6 +433,7 @@ impl PlayerInput {
             | Self::SignUpdate { connection, .. }
             | Self::EditBook { connection, .. }
             | Self::Attack { connection, .. }
+            | Self::Stab { connection }
             | Self::InteractEntity { connection, .. }
             | Self::InteractEntitySecondary { connection, .. }
             | Self::VehicleInput { connection, .. }

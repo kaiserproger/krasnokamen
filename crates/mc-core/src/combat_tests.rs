@@ -5,7 +5,9 @@ use mc_data::items::{ItemRegistry, ItemReport};
 use mc_data::tags::TagsData;
 use mc_data::{Identifier, ItemEnchantment, ItemStack};
 
-use super::{HIT_KNOCKBACK, Swing, attack_strength, knockback_velocity, melee_hit};
+use super::{
+    HIT_KNOCKBACK, Swing, attack_strength, below_minimum_charge, knockback_velocity, melee_hit,
+};
 use crate::inventory::ItemRules;
 
 const SWORD: u32 = 1;
@@ -231,4 +233,41 @@ fn same_tick_swap_keeps_old_attributes_but_live_enchantments() {
     }];
     let enchanted_swap = melee_hit_with_attributes(&data.rules(), &sharp_stick, &sword, swing(20));
     assert_eq!(enchanted_swap.damage, 6.0 + 3.0);
+}
+
+/// Vanilla `cannotAttackWithItem(stack, 5)` with the iron spear's
+/// `minimum_attack_charge` 1.0 and 19-tick attack delay (embedded vanilla
+/// facts): refused 13 ticks after the last attack, allowed from 14, from the
+/// item's speed or the player's attribute alike. The sword has no minimum.
+#[test]
+fn spear_minimum_charge_refuses_until_fourteen_ticks() {
+    let items = ItemRegistry::from_report(&[
+        ItemReport {
+            id: id("minecraft:iron_spear"),
+            protocol_id: 1,
+        },
+        ItemReport {
+            id: id("minecraft:iron_sword"),
+            protocol_id: 2,
+        },
+    ]);
+    let facts = mc_data::item_components::krasnokamen_required_item_facts();
+    let tags = TagsData::from_registries(BTreeMap::new());
+    let rules = ItemRules {
+        items: &items,
+        facts: &facts,
+        tags: &tags,
+        recipes: &[],
+    };
+    let spear = ItemStack::new(1, 1);
+    let sword = ItemStack::new(2, 1);
+    let refused = |held: &ItemStack, ticks: u32, attributes: Option<(f64, f64)>| {
+        below_minimum_charge(&rules, held, held, swing(ticks), attributes)
+    };
+    let attribute = Some((3.0, 4.0 - 2.947_368_383_407_592_8));
+    for attributes in [None, attribute] {
+        assert!(refused(&spear, 13, attributes), "{attributes:?}");
+        assert!(!refused(&spear, 14, attributes), "{attributes:?}");
+    }
+    assert!(!refused(&sword, 0, None));
 }

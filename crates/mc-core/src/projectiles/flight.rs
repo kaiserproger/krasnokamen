@@ -94,7 +94,7 @@ fn hittables(state: &TickState, bodies: &mut Vec<Hittable>) {
 /// The entity store indexes feet, not bounds. Expand by its retained maximum
 /// body width before visiting chunks; callers retain their exact narrow phase.
 /// Slot order preserves the exhaustive pickup/riptide order, including swaps.
-pub(super) fn swept_slots(
+pub(crate) fn swept_slots(
     state: &TickState,
     start: [f64; 3],
     end: [f64; 3],
@@ -190,7 +190,7 @@ fn shot_candidates(
     candidates.extend_from_slice(exceptional);
 }
 
-pub(super) fn segment_enters(
+pub(crate) fn segment_enters(
     origin: [f64; 3],
     delta: [f64; 3],
     min: [f64; 3],

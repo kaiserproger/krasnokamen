@@ -111,10 +111,7 @@ pub(crate) fn melee_hit_with_effective_attributes(
             |(damage, _)| damage,
         )
         .max(0.0) as f32;
-    let speed = attributes.map_or_else(
-        || attack_speed(rules, attribute_held) * swing.attack_speed_multiplier,
-        |(_, speed)| speed,
-    );
+    let speed = swing_speed(rules, attribute_held, swing, attributes);
     let strength =
         ((f64::from(swing.ticks_since_reset) + 0.5) * speed / 20.0).clamp(0.0, 1.0) as f32;
     let full = strength > 0.9;
@@ -149,6 +146,38 @@ pub(crate) fn melee_hit_with_effective_attributes(
         weapon_wear,
         strength,
     }
+}
+
+/// Attacks per second of `swing`: the player's `attack_speed` attribute when
+/// known, else the held item's with the swing's effect multiplier.
+fn swing_speed(
+    rules: &ItemRules<'_>,
+    attribute_held: &ItemStack,
+    swing: Swing,
+    attributes: Option<(f64, f64)>,
+) -> f64 {
+    attributes.map_or_else(
+        || attack_speed(rules, attribute_held) * swing.attack_speed_multiplier,
+        |(_, speed)| speed,
+    )
+}
+
+/// Vanilla `Player.cannotAttackWithItem(stack, 5)`: the swing's charge five
+/// ticks ahead is below the held item's `minimum_attack_charge`.
+pub(crate) fn below_minimum_charge(
+    rules: &ItemRules<'_>,
+    held: &ItemStack,
+    attribute_held: &ItemStack,
+    swing: Swing,
+    attributes: Option<(f64, f64)>,
+) -> bool {
+    let Some(minimum) = facts(rules, held).and_then(|facts| facts.minimum_attack_charge) else {
+        return false;
+    };
+    let charge = (f64::from(swing.ticks_since_reset) + 5.0)
+        * swing_speed(rules, attribute_held, swing, attributes)
+        / 20.0;
+    minimum > 0.0 && charge < f64::from(minimum)
 }
 
 /// Fall and enchantment context retained until hit admission.
