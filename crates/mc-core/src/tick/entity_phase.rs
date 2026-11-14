@@ -496,6 +496,8 @@ pub(super) fn early_entity_rest(
             && crate::turtle::drive(view.entities.row(slot)).is_some()
         || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::frog::is_frog(type_id))
             && crate::frog::drive(view.entities.row(slot)).is_some()
+        || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id } if crate::cat::is_cat(type_id))
+            && crate::cat::drive(view.entities.row(slot)).is_some()
         || view
             .entities
             .row(slot)
@@ -1961,20 +1963,49 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     if sim {
         collect_pickup_intents(state, &mut intents);
     }
+    state.projectiles.post.pickup_us = pickup_start.elapsed().as_micros() as u64;
     laps.lap("pickup_intents");
     // Shooting skeletons, flying arrows, swelling creepers (serial: they
     // read the world and every entity).
     if sim {
+        let hostile_start = std::time::Instant::now();
         crate::hostile::run(state, &mut intents, &specials);
+        state.projectiles.post.hostile_us = hostile_start.elapsed().as_micros() as u64;
         laps.lap("hostile");
         crate::projectiles::run(state, &mut intents, &specials);
         laps.lap("projectiles");
     }
-    state.projectiles.post.pickup_us = pickup_start.elapsed().as_micros() as u64;
     let post_time = post_start.elapsed();
     state.projectiles.post.total_us = post_time.as_micros() as u64;
     if std::env::var("MC_CORE_PHASE_LOG").is_ok() {
         laps.print("entity phase");
+        let post = state.projectiles.post;
+        eprintln!(
+            "  post detail us: pickup={} hostile={} weapons={} hittables={} candidates={} shots={} projectiles={} grounded={}",
+            post.pickup_us,
+            post.hostile_us,
+            post.weapons_us,
+            post.hittables_us,
+            post.candidates_us,
+            post.shots_us,
+            post.shots,
+            post.grounded,
+        );
+        let battle = state.hostile.battle.timings;
+        eprintln!(
+            "  battle detail us: total={} counters={} formation={} columns={} targets={} retaliation={} steering={} combat={} morale={} projection={} emit={}",
+            battle.total_us,
+            battle.counters_us,
+            battle.formation_us,
+            battle.columns_us,
+            battle.targeting_us,
+            battle.retaliation_us,
+            battle.steering_us,
+            battle.combat_us,
+            battle.morale_us,
+            battle.projection_us,
+            battle.emit_us,
+        );
     }
     rows.clear();
     specials.clear();
@@ -2184,6 +2215,11 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
         look_target = Some(target);
     } else if crate::frog::is_frog(row.type_id)
         && let Some((target, speed)) = crate::frog::drive(ctx.entities.row(row.slot))
+    {
+        vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
+        look_target = Some(target);
+    } else if crate::cat::is_cat(row.type_id)
+        && let Some((target, speed)) = crate::cat::drive(ctx.entities.row(row.slot))
     {
         vel = crate::entity_motion::steer(row.movement, row.pos, target, speed);
         look_target = Some(target);

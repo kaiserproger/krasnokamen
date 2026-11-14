@@ -152,6 +152,8 @@ capacity claim from the profiled run.
   and `  prepare rows detail ms:` (preparation and writeback inside the entity
   phase). The step scope itself is one parallel lap (`step_scope`): split it
   with perf, not laps.
+  `post detail us:` separates pickup, hostile work and projectile substeps;
+  `battle detail us:` includes the battle counters and phase clocks.
 - **Worldgen:** prefer the test-only stage clocks in
   `crates/mc-worldgen/src/terrain/profile_tests.rs` over call graphs; to split a
   stage add an `end(new_index)` call and widen the totals. Use `--exact`

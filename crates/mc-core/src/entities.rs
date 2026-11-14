@@ -107,8 +107,6 @@ pub struct ColdRow {
     pub frog_prey: Option<(EntityId, [f64; 3])>,
     /// Runtime only: ticks of the running tongue attack.
     pub frog_tongue_ticks: u8,
-    /// Runtime only: ticks a tamed cat has rested beside a sleeping owner.
-    pub cat_bed_ticks: u32,
 }
 
 /// Store `value` in a boxed rare component, overwriting an existing box
@@ -810,7 +808,6 @@ impl EntityStore {
             last_player_hit: None,
             frog_prey: None,
             frog_tongue_ticks: 0,
-            cat_bed_ticks: 0,
         });
         self.touched_flag.push(true);
         self.changed_tick.push(self.captured_tick + 1);
