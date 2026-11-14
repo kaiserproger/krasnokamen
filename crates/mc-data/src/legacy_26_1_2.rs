@@ -25,7 +25,7 @@ static LEGACY: LazyLock<LegacyIds> = LazyLock::new(|| {
 
 /// Current block registry ids by name, in block registration order.
 static BLOCK_IDS: LazyLock<HashMap<Identifier, u32>> = LazyLock::new(|| {
-    let mut blocks = crate::blocks::solaris_required_blocks_report();
+    let mut blocks = crate::blocks::krasnokamen_required_blocks_report();
     blocks.sort_by_key(|block| {
         block
             .states
@@ -42,10 +42,10 @@ static BLOCK_IDS: LazyLock<HashMap<Identifier, u32>> = LazyLock::new(|| {
 });
 
 static ITEMS: LazyLock<crate::items::ItemRegistry> =
-    LazyLock::new(crate::items::solaris_required_items);
+    LazyLock::new(crate::items::krasnokamen_required_items);
 
 static ENTITY_TYPES: LazyLock<crate::entity_types::EntityTypeRegistry> =
-    LazyLock::new(crate::entity_types::solaris_required_entity_types);
+    LazyLock::new(crate::entity_types::krasnokamen_required_entity_types);
 
 #[must_use]
 pub fn block_name(id: u32) -> Option<&'static Identifier> {

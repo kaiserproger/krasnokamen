@@ -26,10 +26,10 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use mc_plugin_host::bindings::exports::solaris::plugin::events::{
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::events::{
     Event, EventContext, PlayerJoined,
 };
-use mc_plugin_host::bindings::exports::solaris::plugin::lifecycle::InitContext;
+use mc_plugin_host::bindings::exports::krasnokamen::plugin::lifecycle::InitContext;
 use mc_plugin_host::{
     CompiledPlugin, DeploymentConfig, DiscoveryMode, HostQueues, HostServices, LogLevel,
     PlayerSessions, PluginInstance, PluginLimits, PluginStartup, engine, linker, start_deployment,

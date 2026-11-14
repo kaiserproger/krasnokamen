@@ -35,13 +35,18 @@ fn damage_observer_counts_real_admitted_victims_and_thorns_reaction() {
         100.0,
     );
     let target_slot = state.entities.slot_of(target).unwrap();
-    let item = state.registry.items.id_of(&Identifier::parse("minecraft:diamond_chestplate").unwrap()).unwrap();
+    let item = state
+        .registry
+        .items
+        .id_of(&Identifier::parse("minecraft:diamond_chestplate").unwrap())
+        .unwrap();
     let mut armor = ItemStack::new(item, 1);
     armor.enchantments.push(ItemEnchantment {
         id: Identifier::parse("minecraft:thorns").unwrap(),
         level: 10,
     });
-    std::sync::Arc::make_mut(&mut state.entities.row_mut(target_slot).appearance).equipment[4] = Some(armor);
+    std::sync::Arc::make_mut(&mut state.entities.row_mut(target_slot).appearance).equipment[4] =
+        Some(armor);
     let blocked = state.spawn_mob(
         state.registry.zombie_type_id,
         [pos[0] + 2.0, pos[1], pos[2]],
@@ -50,16 +55,33 @@ fn damage_observer_counts_real_admitted_victims_and_thorns_reaction() {
     let blocked_slot = state.entities.slot_of(blocked).unwrap();
     state.entities.row_mut(blocked_slot).controls.invulnerable = true;
     let source = DamageSource::Melee {
-        attacker: actor, position: pos, yaw: 0.0, bonus_knockback: 0.0,
-        sweep: false, fire_ticks: 0, bane_ticks: 0,
+        attacker: actor,
+        position: pos,
+        yaw: 0.0,
+        bonus_knockback: 0.0,
+        sweep: false,
+        fire_ticks: 0,
+        bane_ticks: 0,
     };
     hit(&mut state, target, DamageKind::Melee, Some(source));
     hit(&mut state, blocked, DamageKind::Melee, Some(source));
     let mut observed = Vec::new();
     state.commit_damage(Some(&mut |_, slot, fact| observed.push((slot, fact))));
-    assert_eq!(observed.iter().filter(|(_, fact)| *fact == DamageObservation::AcceptedReactive).count(), 1);
+    assert_eq!(
+        observed
+            .iter()
+            .filter(|(_, fact)| *fact == DamageObservation::AcceptedReactive)
+            .count(),
+        1
+    );
     assert!(observed.contains(&(actor_slot, DamageObservation::AcceptedReactive)));
-    assert_eq!(observed.iter().filter(|(_, fact)| *fact == DamageObservation::AcceptedVictim).count(), 2);
+    assert_eq!(
+        observed
+            .iter()
+            .filter(|(_, fact)| *fact == DamageObservation::AcceptedVictim)
+            .count(),
+        2
+    );
     assert!(observed.contains(&(actor_slot, DamageObservation::AcceptedVictim)));
     assert!(observed.contains(&(target_slot, DamageObservation::AcceptedVictim)));
     assert!(!observed.iter().any(|(slot, _)| *slot == blocked_slot));
@@ -477,10 +499,14 @@ fn custom_death_protection_removes_only_effects_in_named_tag() {
     use crate::effects::{ActiveEffect, EffectId};
     let (mut state, player, _) = flat_player_fixture();
     let registry = std::sync::Arc::make_mut(&mut state.registry);
-    std::sync::Arc::make_mut(&mut registry.tags).registries
+    std::sync::Arc::make_mut(&mut registry.tags)
+        .registries
         .entry(mc_data::Identifier::parse("minecraft:mob_effect").unwrap())
         .or_default()
-        .insert(mc_data::Identifier::parse("example:cleansed").unwrap(), vec![EffectId::Poison as i32]);
+        .insert(
+            mc_data::Identifier::parse("example:cleansed").unwrap(),
+            vec![EffectId::Poison as i32],
+        );
     let stack = ItemArgument::parse(
         "stick[death_protection={death_effects:[{type:'minecraft:remove_effects',effects:'#example:cleansed'}]}]",
     ).unwrap().stack(&state.registry.items).unwrap();

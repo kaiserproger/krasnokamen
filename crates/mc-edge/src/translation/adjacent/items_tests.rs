@@ -64,7 +64,11 @@ fn death_protection_remaps_action_effect_and_sound_holders_both_ways() {
     let mut t = tables(&["death_protection"]);
     t.registry_ids.insert(
         "consume_effect_type".into(),
-        IdMap::by_name([("remove", 1), ("sound", 4)], [("remove", 4), ("sound", 1)], |_| None),
+        IdMap::by_name(
+            [("remove", 1), ("sound", 4)],
+            [("remove", 4), ("sound", 1)],
+            |_| None,
+        ),
     );
     t.registry_ids.insert(
         "mob_effect".into(),

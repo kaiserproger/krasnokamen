@@ -343,7 +343,10 @@ impl TickState {
                             Some(id),
                         );
                         totem::apply(self, id, &mut rescue);
-                        events.push(EntityEvent::Status { entity: id, event: 35 });
+                        events.push(EntityEvent::Status {
+                            entity: id,
+                            event: 35,
+                        });
                         crate::effects::sync_appearance(self, id);
                     }
                     if let Some((dealt, absorbed, resisted)) = credit {
@@ -665,7 +668,7 @@ impl TickState {
                             _ => None,
                         });
                     tracing::warn!(
-                        target: "solaris::settlement",
+                        target: "krasnokamen::settlement",
                         tick = self.tick,
                         game_time = self.day_time,
                         entity = ?id,

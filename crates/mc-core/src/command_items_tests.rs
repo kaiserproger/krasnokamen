@@ -146,7 +146,11 @@ fn give_all_new_26_3_components_survive_saved_inventory() {
 
 #[test]
 fn give_death_protection_admits_actions_and_rejects_invalid_data() {
-    for value in ["{}", "{death_effects:[]}", "{death_effects:[{type:'minecraft:clear_all_effects'}]}"] {
+    for value in [
+        "{}",
+        "{death_effects:[]}",
+        "{death_effects:[{type:'minecraft:clear_all_effects'}]}",
+    ] {
         let stack = argument(&format!("give @s stick[death_protection={value}]"))
             .stack(&registry().items)
             .unwrap();

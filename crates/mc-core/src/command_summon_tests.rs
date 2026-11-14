@@ -97,12 +97,25 @@ fn summon_no_gravity_and_invulnerable_are_effective_and_persistent() {
     let (mut state, id) = summon("cow", "{NoGravity:1b,Invulnerable:1b,NoAI:1b}");
     let slot = state.entities.slot_of(id).unwrap();
     let metadata = |state: &TickState| {
-        state.entities.row(slot).appearance.extra.iter().find(|(index, _)| *index == 5).cloned()
+        state
+            .entities
+            .row(slot)
+            .appearance
+            .extra
+            .iter()
+            .find(|(index, _)| *index == 5)
+            .cloned()
     };
-    assert_eq!(metadata(&state), Some((5, crate::boundary::EntityDataValue::Boolean(true))));
+    assert_eq!(
+        metadata(&state),
+        Some((5, crate::boundary::EntityDataValue::Boolean(true)))
+    );
     state.appearance_changed.clear();
     crate::entity_controls::set_no_gravity(&mut state, slot, false);
-    assert_eq!(metadata(&state), Some((5, crate::boundary::EntityDataValue::Boolean(false))));
+    assert_eq!(
+        metadata(&state),
+        Some((5, crate::boundary::EntityDataValue::Boolean(false)))
+    );
     assert!(state.appearance_changed.contains(&id));
     crate::entity_controls::set_no_gravity(&mut state, slot, true);
     let mut pos = state.entities.pos(slot);
@@ -150,7 +163,11 @@ fn summon_no_gravity_floats_in_multiple_mob_motion_lanes() {
         for no_gravity in [false, true] {
             let (mut state, id) = summon(
                 kind,
-                if no_gravity { "{NoGravity:1b}" } else { "{NoGravity:0b}" },
+                if no_gravity {
+                    "{NoGravity:1b}"
+                } else {
+                    "{NoGravity:0b}"
+                },
             );
             let slot = state.entities.slot_of(id).unwrap();
             let mut pos = state.entities.pos(slot);
@@ -475,7 +492,10 @@ fn summon_common_state_survives_real_wal_replay_and_native_region_restart() {
     let uuid = state.entities.row(slot).uuid;
     let expected_equipment = state.entities.row(slot).appearance.equipment.clone();
     let expected_body = state.entities.row(slot).loot.body_armor.clone();
-    let root = std::env::temp_dir().join(format!("solaris-summon-common-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!(
+        "krasnokamen-summon-common-{}",
+        uuid::Uuid::new_v4()
+    ));
     let entries = crate::core::journal_entries_for_tick(&mut state, &output);
     let mut writer = crate::journal::JournalWriter::open(&root, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
@@ -742,8 +762,10 @@ fn summon_equipment_components_match_give_and_survive_native_anvil() {
         serde_json::from_slice(&serde_json::to_vec(&wal).unwrap()).unwrap();
     assert_eq!(wal.equipment, row.appearance.equipment);
     let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
-    let root =
-        std::env::temp_dir().join(format!("solaris-summon-equipment-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!(
+        "krasnokamen-summon-equipment-{}",
+        uuid::Uuid::new_v4()
+    ));
     mc_world::anvil::write_entity_regions(&root, &state.registry.items, &chunks, 0).unwrap();
     let reopened = mc_world::anvil::read_entity_regions(&root, &state.registry.items).unwrap();
     let native = reopened
@@ -823,8 +845,11 @@ fn item_summon_no_gravity_and_invulnerability_survive_checkpoint() {
     assert_eq!(state.entities.pos(slot)[1], pos[1]);
     let row = state.entities.row(slot);
     let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
-    let record = chunks.values().flat_map(|chunk| &chunk.entities)
-        .find(|entity| entity.uuid == row.uuid).unwrap();
+    let record = chunks
+        .values()
+        .flat_map(|chunk| &chunk.entities)
+        .find(|entity| entity.uuid == row.uuid)
+        .unwrap();
     let restored = EntityStateImage::from_record(&state.registry, record).unwrap();
     assert!(restored.controls.no_gravity && restored.controls.invulnerable);
 }

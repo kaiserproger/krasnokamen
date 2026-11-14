@@ -3,8 +3,8 @@ use super::{invalid, registry_id, registry_name};
 use crate::codec::{ReadMc, WriteMc};
 use crate::error::CodecError;
 use bytes::{Buf, BufMut};
-use mc_data::item_stack::death_protection::{self, DeathEffect, EffectTargets, Sound};
 use mc_data::Identifier;
+use mc_data::item_stack::death_protection::{self, DeathEffect, EffectTargets, Sound};
 use mc_nbt::Tag;
 
 fn identifier(value: String) -> Result<Identifier, CodecError> {
@@ -16,7 +16,10 @@ pub(super) fn encode<B: BufMut>(buf: &mut B, value: &Tag) -> Result<(), CodecErr
     super::super::write_bounded_count(buf, effects.len(), 256)?;
     for effect in effects {
         match effect {
-            DeathEffect::Apply { effects, probability } => {
+            DeathEffect::Apply {
+                effects,
+                probability,
+            } => {
                 buf.write_varint(0);
                 super::super::write_bounded_count(buf, effects.len(), 256)?;
                 for effect in effects {
@@ -71,35 +74,61 @@ pub(super) fn decode<B: Buf>(buf: &mut B) -> Result<Tag, CodecError> {
                     let id = identifier(registry_name("mob_effect", buf.read_varint()?)?)?;
                     super::super::station_components::decode_effect_details(buf, id, 0)
                 })?;
-                DeathEffect::Apply { effects, probability: buf.read_f32()? }
+                DeathEffect::Apply {
+                    effects,
+                    probability: buf.read_f32()?,
+                }
             }
             1 => {
                 let count = buf.read_varint()?;
                 let targets = if count == 0 {
                     EffectTargets::NamedTag(buf.read_identifier()?)
                 } else {
-                    if count < 1 { return Err(invalid()); }
+                    if count < 1 {
+                        return Err(invalid());
+                    }
                     let count = usize::try_from(count - 1).map_err(|_| invalid())?;
-                    if count > 256 { return Err(invalid()); }
+                    if count > 256 {
+                        return Err(invalid());
+                    }
                     let mut ids = Vec::with_capacity(count);
                     for _ in 0..count {
-                        ids.push(identifier(registry_name("mob_effect", buf.read_varint()?)?)?);
+                        ids.push(identifier(registry_name(
+                            "mob_effect",
+                            buf.read_varint()?,
+                        )?)?);
                     }
                     EffectTargets::Direct(ids)
                 };
                 DeathEffect::Remove(targets)
             }
             2 => DeathEffect::Clear,
-            3 => DeathEffect::Teleport { diameter: buf.read_f32()? },
+            3 => DeathEffect::Teleport {
+                diameter: buf.read_f32()?,
+            },
             4 => {
                 let holder = buf.read_varint()?;
                 let sound = if holder == 0 {
                     let id = buf.read_identifier()?;
-                    let fixed_range = if buf.read_bool()? { Some(buf.read_f32()?) } else { None };
-                    Sound { id, fixed_range, registered: false }
+                    let fixed_range = if buf.read_bool()? {
+                        Some(buf.read_f32()?)
+                    } else {
+                        None
+                    };
+                    Sound {
+                        id,
+                        fixed_range,
+                        registered: false,
+                    }
                 } else {
-                    if holder < 1 { return Err(invalid()); }
-                    Sound { id: identifier(registry_name("sound_event", holder - 1)?)?, fixed_range: None, registered: true }
+                    if holder < 1 {
+                        return Err(invalid());
+                    }
+                    Sound {
+                        id: identifier(registry_name("sound_event", holder - 1)?)?,
+                        fixed_range: None,
+                        registered: true,
+                    }
                 };
                 DeathEffect::PlaySound(sound)
             }
@@ -123,7 +152,10 @@ mod tests {
                 bytes.write_varint(1);
                 bytes.write_varint(kind);
                 bytes.write_varint(value);
-                assert!(decode(&mut bytes.as_slice()).is_err(), "kind={kind} value={value}");
+                assert!(
+                    decode(&mut bytes.as_slice()).is_err(),
+                    "kind={kind} value={value}"
+                );
             }
         }
     }

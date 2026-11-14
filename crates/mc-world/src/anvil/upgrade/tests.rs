@@ -24,7 +24,7 @@ fn old_item(name: &str, count: i8) -> Tag {
     c(vec![("id", s(name)), ("Count", Tag::Byte(count))])
 }
 fn items() -> mc_data::items::ItemRegistry {
-    mc_data::items::solaris_required_items()
+    mc_data::items::krasnokamen_required_items()
 }
 fn blocks() -> BlockRegistry {
     let names = [
