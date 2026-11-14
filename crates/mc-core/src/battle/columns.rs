@@ -48,6 +48,21 @@ struct StaticFacts {
     targetable: bool,
 }
 
+/// Cold-row facts, valid only until the next native wire mutation. The slot is
+/// merely an identity-checked lookup hint, including for dead retained bodies.
+#[derive(Debug, Default)]
+struct StaticFacts {
+    slot: Option<EntitySlot>,
+    valid: bool,
+    health: f32,
+    no_ai: bool,
+    carried: bool,
+    targetable: bool,
+}
+
+/// Mob type id with main- and off-hand item ids: archer classification inputs.
+type ClassificationKey = (u32, Option<u32>, Option<u32>);
+
 #[derive(Debug, Default)]
 pub(crate) struct Columns {
     pub ids: Vec<EntityId>,
@@ -56,6 +71,10 @@ pub(crate) struct Columns {
     pub positions: Vec<[f64; 3]>,
     pub targets: Vec<Option<EnemyTarget>>,
     pub drive: Vec<[f64; 3]>,
+    /// A horse's way out of a terrain pocket (`ground::deflect_mounted`).
+    pub escape: Vec<Option<super::ground::Escape>>,
+    /// A horse's local path out of a terrain pocket (`ground::deflect`).
+    pub detour: Vec<Option<super::ground::Detour>>,
     pub ranged: Vec<bool>,
     pub reach: Vec<f64>,
     pub active: Vec<bool>,
@@ -77,6 +96,8 @@ impl Columns {
         self.positions.push([0.0; 3]);
         self.targets.push(None);
         self.drive.push([0.0; 3]);
+        self.escape.push(None);
+        self.detour.push(None);
         self.ranged.push(false);
         self.reach.push(0.0);
         self.active.push(false);

@@ -24,7 +24,7 @@ fn film_nerve_keeps_a_rear_trickle_above_the_regiment_break_threshold() {
 fn steady_regiment_breaks_near_ten_percent_not_fifty() {
     let mut morale = Morale::default();
     let mut broke_at = None;
-    for losses in 0..=15 {
+    for losses in 0..=30 {
         morale.update(losses as u64 * 10, 1000, losses * 10, 100.0, false);
         if morale.broken {
             broke_at = Some(losses);
@@ -32,7 +32,7 @@ fn steady_regiment_breaks_near_ten_percent_not_fifty() {
         }
     }
     assert!(
-        (8..=12).contains(&broke_at.expect("regiment must break")),
+        (16..=20).contains(&broke_at.expect("regiment must break")),
         "break={broke_at:?}"
     );
 }
@@ -54,7 +54,7 @@ fn rear_rank_flight_precedes_front_and_then_whole_regiment_breaks() {
             &(1..=100).map(EntityId).collect::<Vec<_>>(),
         )
         .unwrap();
-    for i in 0..8 {
+    for i in 0..16 {
         runtime.mark_wounded(EntityId(i + 1));
     }
     runtime.prepare(0, |id| {
@@ -78,7 +78,7 @@ fn rear_rank_flight_precedes_front_and_then_whole_regiment_breaks() {
         .count();
     assert!(rear > front, "front={front}, rear={rear}");
     assert!(!runtime.regiments[0].morale.broken);
-    for i in 8..10 {
+    for i in 16..18 {
         runtime.mark_wounded(EntityId(i + 1));
     }
     runtime.prepare(10, |id| {
@@ -92,6 +92,55 @@ fn rear_rank_flight_precedes_front_and_then_whole_regiment_breaks() {
     runtime.update_morale(10);
     assert!(runtime.regiments[0].morale.broken);
     assert!(runtime.members.iter().all(|m| m.routing));
+}
+
+/// Riders who fled to the edge of the field rally there and ride back until
+/// they fall, even when their regiment has broken: mounted regiments broke at
+/// 25-40 % losses in the G1 rehearsals and their fled riders (groups of
+/// 100-175) stood idle on the bounds from t 150 to the end. Riders short of
+/// the edge and foot fugitives at the edge keep fleeing.
+#[test]
+fn riders_who_fled_to_the_edge_rally_and_ride_back() {
+    let mut runtime = FormationRuntime::default();
+    runtime.set_bounds([-50.0, -50.0], [50.0, 50.0]).unwrap();
+    for (id, frontage, first) in [(0, 2.0, 1), (1, 1.0, 101)] {
+        runtime
+            .add_regiment(
+                RegimentSpec {
+                    frontage,
+                    id,
+                    faction: 1,
+                    origin: [0.0, 64.0, 0.0],
+                    facing: [0.0, 1.0],
+                    files: 10,
+                    order: Order::Hold,
+                },
+                &(first..first + 100).map(EntityId).collect::<Vec<_>>(),
+            )
+            .unwrap();
+    }
+    // Both regiments have broken: every soldier runs.
+    for r in &mut runtime.regiments {
+        r.morale.broken = true;
+    }
+    // Even ids have fled to the +x edge, odd ids are still on their way.
+    let sample = |id: EntityId| {
+        Some(SoldierSample {
+            slot: None,
+            pos: [if id.0 % 2 == 0 { 49.5 } else { 0.0 }, 64.0, 0.0],
+            health: 20.0,
+            faction: 1,
+        })
+    };
+    // Regiment `id` decides on ticks with tick % 10 == id.
+    for tick in [0, 1, 10, 11, 20, 21] {
+        runtime.prepare(tick, sample);
+        runtime.update_morale(tick);
+    }
+    for (i, m) in runtime.members.iter().enumerate() {
+        let rallied = i < 100 && m.id.0 % 2 == 0;
+        assert_eq!(!m.routing, rallied, "member {i} at x {}", m.pos[0]);
+    }
 }
 
 #[test]
@@ -136,10 +185,10 @@ fn kills_raise_morale_and_panic_and_recent_casualties_reduce_it() {
     morale.update(20, 100, 0, 100.0, false);
     assert_eq!(morale.value, 58.0);
     morale.update(30, 100, 3, 100.0, false);
-    assert_eq!(morale.value, 35.0);
+    assert_eq!(morale.value, 44.0);
     morale.update(240, 100, 3, 100.0, false);
     assert_eq!(
-        morale.value, 40.0,
+        morale.value, 49.0,
         "rate penalty must expire after 200 ticks"
     );
 }
@@ -153,12 +202,12 @@ fn missile_cause_survives_deferred_damage_and_is_not_counted_twice() {
     };
     missile.update(0, 100, 1, 100.0, false);
     melee.update(0, 100, 1, 100.0, false);
-    assert_eq!(missile.value - melee.value, 2.0);
+    assert_eq!(missile.value - melee.value, 1.0);
     missile.update(10, 100, 2, 100.0, false);
     melee.update(10, 100, 2, 100.0, false);
     assert_eq!(
         missile.value - melee.value,
-        2.0,
+        1.0,
         "second melee loss must not become a missile loss"
     );
 }

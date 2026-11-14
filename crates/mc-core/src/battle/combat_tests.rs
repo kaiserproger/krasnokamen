@@ -257,6 +257,76 @@ fn stale_target_faction_change_cancels_damage_at_impact() {
     assert_eq!(battle.combat.work.strikes, 0);
 }
 
+fn kill_intents(out: &Output, victim: EntityId) -> usize {
+    out.intents
+        .iter()
+        .filter(|intent| {
+            matches!(intent.kind, IntentKind::DamageEntity {
+                target,
+                kind: crate::survival::DamageKind::GenericKill,
+                ..
+            } if target == victim)
+        })
+        .count()
+}
+
+#[test]
+fn landed_blow_finishes_a_withdrawing_wounded_man() {
+    let (state, mut battle, actor, victim) = pair();
+    // A swing whose own roll is only a wound: the wounded target still dies.
+    let start = (0..10_000)
+        .find(|&s| outcome(roll(actor, s, victim.0 as u64), false, 0.0) == Outcome::Wound)
+        .unwrap();
+    let a = index(&state, &battle, actor);
+    let b = index(&state, &battle, victim);
+    battle.combat.fighters[a].action = Action::Windup {
+        target: victim,
+        start,
+        weapon: Weapon::Sword,
+    };
+    battle.combat.fighters[b].action = Action::Wounded;
+    let out = step_at(
+        &state,
+        &mut battle,
+        start + u64::from(Weapon::Sword.windup()),
+    );
+    assert_eq!(battle.combat.work.strikes, 1);
+    assert_eq!(kill_intents(&out, victim), 1, "wounded man stayed immune");
+    assert_eq!(battle.combat.work.killed, 1);
+}
+
+#[test]
+fn second_attacker_in_one_pass_cannot_kill_the_reserved_casualty() {
+    let (mut state, mut battle, actor, victim) = pair();
+    let pos = state.entities.pos(slot(&state, victim));
+    let second = spawn(&mut state, "husk", [pos[0], pos[1], pos[2] + 2.0]);
+    let second_slot = slot(&state, second);
+    state.entities.set_faction(second_slot, 1);
+    prepare(&state, &mut battle, 0);
+    let start = (0..10_000)
+        .find(|&s| {
+            [actor, second]
+                .iter()
+                .all(|id| outcome(roll(*id, s, victim.0 as u64), false, 0.0) == Outcome::Kill)
+        })
+        .unwrap();
+    for id in [actor, second] {
+        let bi = index(&state, &battle, id);
+        battle.combat.fighters[bi].action = Action::Windup {
+            target: victim,
+            start,
+            weapon: Weapon::Sword,
+        };
+    }
+    let out = step_at(
+        &state,
+        &mut battle,
+        start + u64::from(Weapon::Sword.windup()),
+    );
+    assert_eq!(kill_intents(&out, victim), 1);
+    assert_eq!(battle.combat.work.killed, 1);
+}
+
 #[test]
 fn twenty_thousand_idle_fighters_do_no_pair_or_arc_searches() {
     let (mut state, _, pos) = fixture();
@@ -311,4 +381,97 @@ fn dense_fighter_layout_changes_preserve_action_and_ammunition_by_identity() {
         combat.remap.is_empty(),
         "removed identity cannot retain combat custody"
     );
+}
+
+#[test]
+fn front_rank_outside_a_pulse_still_strikes_an_enemy_in_reach() {
+    use super::super::formation::{Order, RegimentSpec};
+    let (state, mut battle, actor, victim) = pair();
+    let origin = state.entities.pos(slot(&state, actor));
+    battle
+        .formation
+        .add_regiment(
+            RegimentSpec {
+                id: 0,
+                faction: 1,
+                origin,
+                facing: [1.0, 0.0],
+                files: 1,
+                frontage: 1.0,
+                order: Order::Hold,
+            },
+            &[actor],
+        )
+        .unwrap();
+    prepare(&state, &mut battle, 0);
+    let a = index(&state, &battle, actor);
+    assert!(
+        !battle.formation.can_attack_at(a),
+        "no regiment in contact, so no pulse"
+    );
+    let target = super::super::EnemyTarget {
+        id: victim,
+        pos: state.entities.pos(slot(&state, victim)),
+        distance: 2.0,
+    };
+    let swings = (0..1000)
+        .filter(|&tick| {
+            battle.columns.targets[a] = Some(target);
+            let out = step_at(&state, &mut battle, tick);
+            out.events.iter().any(|event| {
+                matches!(event, EntityEvent::Swing { entity, hand: Hand::Main, .. } if *entity == actor)
+            })
+        })
+        .count();
+    // Fifty cautious decisions: about one in six swings, never an aggressive surge.
+    assert!((1..=20).contains(&swings), "swings={swings}");
+}
+
+#[test]
+fn a_broken_fugitive_at_bay_still_strikes_an_enemy_in_reach() {
+    use super::super::formation::{Order, RegimentSpec};
+    let (state, mut battle, actor, victim) = pair();
+    let origin = state.entities.pos(slot(&state, actor));
+    battle
+        .formation
+        .add_regiment(
+            RegimentSpec {
+                id: 0,
+                faction: 1,
+                origin,
+                facing: [1.0, 0.0],
+                files: 1,
+                frontage: 1.0,
+                order: Order::Hold,
+            },
+            &[actor],
+        )
+        .unwrap();
+    // The bound sits one block behind the fugitive: he can run no further.
+    battle
+        .formation
+        .set_bounds(
+            [origin[0] - 1.0, origin[2] - 50.0],
+            [origin[0] + 50.0, origin[2] + 50.0],
+        )
+        .unwrap();
+    prepare(&state, &mut battle, 0);
+    let a = index(&state, &battle, actor);
+    battle.formation.members[a].routing = true;
+    battle.formation.members[a].wavering = true;
+    let target = super::super::EnemyTarget {
+        id: victim,
+        pos: state.entities.pos(slot(&state, victim)),
+        distance: 2.0,
+    };
+    let swings = (0..1000)
+        .filter(|&tick| {
+            battle.columns.targets[a] = Some(target);
+            let out = step_at(&state, &mut battle, tick);
+            out.events.iter().any(|event| {
+                matches!(event, EntityEvent::Swing { entity, hand: Hand::Main, .. } if *entity == actor)
+            })
+        })
+        .count();
+    assert!(swings > 0, "a cornered fugitive never turned at bay");
 }

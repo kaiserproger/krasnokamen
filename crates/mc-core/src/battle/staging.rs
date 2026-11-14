@@ -8,15 +8,29 @@ use mc_nbt::{ListTag, Tag, tag_type};
 const OWNER: &str = "krasnokamen:battle";
 const TICKET_RADIUS: i32 = 12;
 const MAX_SIDE: usize = 10_000;
+/// `battle trace` bounds: radius in blocks and listed members per call.
+const TRACE_RADIUS: f64 = 32.0;
+const TRACE_MEMBERS: usize = 400;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BattleCommand {
-    Setup { seed: u64, count: usize },
+    Setup {
+        seed: u64,
+        count: usize,
+    },
     Start,
     Pause,
     Reset,
     Status,
     Roster,
+    /// Per-member movement state round (x, z), for the console: why bodies
+    /// stand where they stand (r11: a pile at the foot of a riser whose
+    /// heading source the take records could not show).
+    Trace {
+        x: f64,
+        z: f64,
+        radius: f64,
+    },
 }
 
 pub fn parse(args: &[&str]) -> Result<BattleCommand, CommandError> {
@@ -48,6 +62,15 @@ pub fn parse(args: &[&str]) -> Result<BattleCommand, CommandError> {
         ["reset"] => Ok(BattleCommand::Reset),
         ["status"] => Ok(BattleCommand::Status),
         ["roster"] => Ok(BattleCommand::Roster),
+        ["trace", x, z, radius] => {
+            let number = |s: &str| s.parse::<f64>().ok().filter(|v| v.is_finite());
+            match (number(x), number(z), number(radius)) {
+                (Some(x), Some(z), Some(radius)) if radius > 0.0 && radius <= TRACE_RADIUS => {
+                    Ok(BattleCommand::Trace { x, z, radius })
+                }
+                _ => Err(usage()),
+            }
+        }
         _ => Err(usage()),
     }
 }
@@ -60,7 +83,8 @@ enum Kind {
     Cavalry,
 }
 
-// Vanilla item identities retain their combat behaviour; components select authored visuals.
+// Vanilla item identities retain their combat behaviour (weapon class, shield
+// blocking, armour points); components select authored visuals.
 fn equipment(kind: Kind) -> &'static [(&'static str, &'static str)] {
     match kind {
         Kind::Infantry => &[
@@ -276,9 +300,10 @@ fn setup(
         for side in 1..=2_u16 {
             let horse_loadout = summon_tag(None, side);
             for (spec, kind, size) in plan(seed, count, origin, side) {
-                let loadout = summon_tag(Some(kind), side);
+                let yaw = facing_yaw(spec.facing);
                 let mut members = Vec::with_capacity(size);
                 for index in 0..size {
+                    let unit = loadout(seed, side, spec.id, index, kind);
                     let pos = slot_position(&spec, index);
                     let id = spawn(
                         state,
@@ -291,11 +316,15 @@ fn setup(
                     )?;
                     let slot = state.entities.slot_of(id).expect("battle unit");
                     state.entities.set_faction(slot, side);
+                    state.entities.set_rot(slot, yaw, 0.0);
+                    // A horse carries its rider: settle the pair through the horse.
+                    let mut grounded = id;
                     if kind == Kind::Cavalry {
                         let horse = spawn(state, changes, "minecraft:horse", pos, None, &tag)?;
                         crate::battle::cavalry::mount(state, id, horse)
                             .map_err(|e| format!("battle mount: {e}"))?;
                     }
+                    state.hostile.battle.ground_pending.push(grounded);
                     members.push(id);
                 }
                 state
@@ -402,6 +431,54 @@ pub(crate) fn execute(
                 }
                 let slot = state.entities.slot_of_any(*id).expect("tagged entity");
                 write!(&mut result, "{}", state.entities.row(slot).uuid).expect("write to string");
+            }
+            Ok(result)
+        }
+        BattleCommand::Trace { x, z, radius } => {
+            use std::fmt::Write;
+            let formation = &state.hostile.battle.formation;
+            if formation.regiments.is_empty() {
+                return Err("no staged formation; setup required".into());
+            }
+            let mut result = String::from("Battle trace:");
+            let mut listed = 0;
+            for (index, m) in formation.members.iter().enumerate() {
+                let (dx, dz) = (m.pos[0] - x, m.pos[2] - z);
+                if !m.alive || (dx * dx + dz * dz).sqrt() > *radius {
+                    continue;
+                }
+                if listed == TRACE_MEMBERS {
+                    result.push_str(" (more)");
+                    break;
+                }
+                listed += 1;
+                let r = &formation.regiments[m.regiment];
+                let to = formation.heading_target(index);
+                let flags = [
+                    (m.routing, " routing"),
+                    (m.wavering, " wavering"),
+                    (m.rallied, " rallied"),
+                    (m.wounded, " wounded"),
+                    (r.morale.broken, " broken"),
+                    (r.enemy_routing, " enemy-routing"),
+                ];
+                write!(
+                    &mut result,
+                    " {} side{} r{} {:?}",
+                    m.id.0, r.spec.faction, r.spec.id, r.spec.order
+                )
+                .expect("write to string");
+                for (set, name) in flags {
+                    if set {
+                        result.push_str(name);
+                    }
+                }
+                write!(
+                    &mut result,
+                    " at {:.1},{:.1},{:.1} to {:.1},{:.1};",
+                    m.pos[0], m.pos[1], m.pos[2], to[0], to[2]
+                )
+                .expect("write to string");
             }
             Ok(result)
         }

@@ -2000,6 +2000,18 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             post.shots,
             post.grounded,
         );
+        let post = state.projectiles.post;
+        eprintln!(
+            "  post detail us: pickup={} hostile={} weapons={} hittables={} candidates={} shots={} projectiles={} grounded={}",
+            post.pickup_us,
+            post.hostile_us,
+            post.weapons_us,
+            post.hittables_us,
+            post.candidates_us,
+            post.shots_us,
+            post.shots,
+            post.grounded,
+        );
         let battle = state.hostile.battle.timings;
         eprintln!(
             "  battle detail us: total={} counters={} formation={} columns={} targets={} steering={} combat={} morale={} projection={} emit={}",

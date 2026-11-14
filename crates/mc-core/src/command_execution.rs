@@ -354,8 +354,11 @@ pub(crate) fn execute(
 ) -> CommandResult {
     match command {
         Command::Battle(command) => {
-            if matches!(command, crate::battle::staging::BattleCommand::Roster)
-                && connection != crate::command_console::CONNECTION
+            if matches!(
+                command,
+                crate::battle::staging::BattleCommand::Roster
+                    | crate::battle::staging::BattleCommand::Trace { .. }
+            ) && connection != crate::command_console::CONNECTION
             {
                 error(
                     state,

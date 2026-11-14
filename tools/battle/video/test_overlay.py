@@ -34,7 +34,7 @@ class OverlayTests(unittest.TestCase):
             self.assertEqual(data[1][-1][1],20.0)
 
     def test_host_deltas_and_missing(self):
-        host1 = {'sampled_unix_ns':1_000_000_000,'cgroup_memory_current_bytes':2**30,
+        host1 = {'sampled_unix_ns':1_000_000_000,'cgroup_memory_current_bytes':3*2**30,'process_rss_bytes':2**30,
                  'cgroup_cpu_usage_usec':1000,'cpu_total_ticks':100,'cpu_steal_ticks':10}
         host2 = dict(host1, sampled_unix_ns=2_000_000_000,cgroup_cpu_usage_usec=501000,
                      cpu_total_ticks=200,cpu_steal_ticks=15)
@@ -42,9 +42,42 @@ class OverlayTests(unittest.TestCase):
             p=pathlib.Path(d)/'t.jsonl'
             p.write_text('\n'.join(json.dumps(x) for x in [sample(1,1_000_000_000,host1), sample(2,2_000_000_000,host2), sample(3,3_000_000_000)])+'\n')
             data=overlay.load(p)
+            # Memory is the server process RSS (1 GiB), not the 3 GiB cgroup that also holds the recorder.
             self.assertEqual(data[1][2:5],(None,None,1.0))
             self.assertEqual(data[2][2:5],(50.0,5.0,1.0))
             self.assertEqual(data[3][2:5],(50.0,5.0,1.0))
+
+    def test_memory_never_falls_back_to_cgroup(self):
+        host = {'sampled_unix_ns':1_000_000_000,'cgroup_memory_current_bytes':3*2**30,'process_rss_bytes':None,
+                'cgroup_cpu_usage_usec':1000,'cpu_total_ticks':100,'cpu_steal_ticks':10}
+        with tempfile.TemporaryDirectory() as d:
+            p=pathlib.Path(d)/'t.jsonl'
+            p.write_text(json.dumps(sample(1,1_000_000_000,host))+'\n')
+            data=overlay.load(p)[1]
+            self.assertIsNone(data[4])
+            self.assertEqual(data[5],((1,None),))
+
+    def test_rss_graph_pixels(self):
+        def host(tick, rss):
+            return {'sampled_unix_ns':1_000_000_000+tick*50_000_000,'cgroup_memory_current_bytes':3*2**30,'process_rss_bytes':rss,
+                    'cgroup_cpu_usage_usec':1000*tick,'cpu_total_ticks':100*tick,'cpu_steal_ticks':0}
+        with tempfile.TemporaryDirectory() as d:
+            p=pathlib.Path(d)/'t.jsonl'
+            # Axis is the whole-file peak (3 GiB) rounded up; tick 1 at 1 GiB, tick 41 at 3 GiB.
+            p.write_text('\n'.join(json.dumps(sample(t,1_000_000_000+t*50_000_000,host(t,r) if t in (1,41) else None)) for t,r in [(1,2**30)]+[(t,0) for t in range(2,41)]+[(41,3*2**30)])+'\n')
+            data=overlay.load(p)
+            self.assertEqual(data[41][6],3)
+            self.assertEqual(overlay.rss_y(3,3),overlay.RSS_TOP)
+            self.assertEqual(overlay.rss_y(1,3),overlay.RSS_TOP+overlay.RSS_HEIGHT-12)
+            image=overlay.render(*data[41])
+            length=struct.unpack('>I',image[33:37])[0]
+            raw=zlib.decompress(image[41:41+length])
+            def pixel(x,y):
+                o=y*(overlay.W*4+1)+1+x*4
+                return raw[o:o+4]
+            end_x=12+(41-(41-overlay.RSS_WINDOW_TICKS))*360//overlay.RSS_WINDOW_TICKS
+            self.assertEqual(pixel(end_x,overlay.RSS_TOP),bytes((99,220,255,255)))
+            self.assertEqual(overlay.H,304)
 
     def test_missing_tick_rejected(self):
         import subprocess, sys

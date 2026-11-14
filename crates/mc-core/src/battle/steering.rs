@@ -1,11 +1,16 @@
 //! Sparse per-team regiment distance samples plus bounded local steering.
-//! The filmed battlefield is flat: no per-soldier path search is needed.
+//! The battlefield is natural relief: soldiers keep the formation's
+//! horizontal drive, physics jumps one-block steps and gravity takes them down
+//! slopes; a drive into a trunk or a wall of two or more blocks turns aside
+//! ([`super::ground::deflect`]). There is no per-soldier path search, except
+//! a short local one for a rider boxed in a terrain pocket.
 //! Nearest front points are shared for ten ticks (AoE4 virtual-leader pattern).
 //! Separation: PSCrowd's five nearest neighbours, capped cell inspection;
 //! impulses use the existing mc-physics contact kernel, never mutate neighbours.
 
 use super::formation::{FormationRuntime, Member, Regiment};
 use super::{BattleState, Frame, Output};
+use crate::entities::EntitySlot;
 use mc_physics::entity_collision_26_1_2::{EntityPushInput, PushRecipient, vanilla_push_impulse};
 use mc_physics::mth;
 use rayon::prelude::*;
@@ -323,7 +328,7 @@ fn drive_with_neighbours(
     )
 }
 
-pub(crate) fn step(_frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {
+pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, _out: &mut Output) {
     battle
         .formation
         .neighbours

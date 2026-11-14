@@ -165,16 +165,114 @@ fn scenario_pursues_only_routing_enemies_and_resumes_fighting_afterward() {
     assert_eq!(formation.regiments[melee].spec.order, Order::Advance);
 }
 
+fn components(state: &TickState, stack: &mc_data::ItemStack) -> Vec<(String, Tag)> {
+    let fields = mc_data::item_nbt::stack_to_fields(&state.registry.items, stack).unwrap();
+    match mc_data::item_nbt::field(&fields, "components") {
+        Some(Tag::Compound(components)) => components.clone(),
+        _ => Vec::new(),
+    }
+}
+
+/// The `(slot, asset_id)` of a stack's `minecraft:equippable` component.
+fn worn_asset(components: &[(String, Tag)]) -> Option<(String, String)> {
+    let Some(Tag::Compound(value)) = mc_data::item_nbt::field(components, "minecraft:equippable")
+    else {
+        return None;
+    };
+    match (
+        mc_data::item_nbt::field(value, "slot"),
+        mc_data::item_nbt::field(value, "asset_id"),
+    ) {
+        (Some(Tag::String(slot)), Some(Tag::String(asset))) => Some((slot.clone(), asset.clone())),
+        _ => None,
+    }
+}
+
+fn dyed(components: &[(String, Tag)]) -> Option<i32> {
+    match mc_data::item_nbt::field(components, "minecraft:dyed_color") {
+        Some(Tag::Int(rgb)) => Some(*rgb),
+        _ => None,
+    }
+}
+
+/// Side-colour rule read back from a spawned husk, independent of `Loadout`:
+/// a side surcoat or side-dyed leather torso, or the side heater shield.
+fn husk_shows_side_colour(state: &TickState, slot: crate::entities::EntitySlot, side: u16) -> bool {
+    let row = state.entities.row(slot);
+    let (surcoat, heater, shades) = if side == 1 {
+        (
+            "krasnokamen_battle:red_surcoat",
+            "krasnokamen_battle:red_heater_shield",
+            RED_SHADES,
+        )
+    } else {
+        (
+            "krasnokamen_battle:blue_surcoat",
+            "krasnokamen_battle:blue_heater_shield",
+            BLUE_SHADES,
+        )
+    };
+    let chest = components(state, row.appearance.equipment[4].as_ref().unwrap());
+    let torso = match worn_asset(&chest) {
+        Some((slot, asset)) if slot == "chest" && asset == surcoat => true,
+        Some((slot, asset)) if slot == "chest" && asset == "minecraft:leather" => {
+            dyed(&chest).is_some_and(|rgb| shades.contains(&rgb))
+        }
+        _ => false,
+    };
+    torso
+        || row.appearance.equipment[1]
+            .as_ref()
+            .and_then(|shield| shield.item_model.as_deref())
+            .is_some_and(|model| model.as_str() == heater)
+}
+
+/// No piece carries the other side's colour: no other-side `red_`/`blue_` model or
+/// asset, every dye from the own palette, and the helmet plume dyed the own colour.
+fn only_own_side(pieces: &[Vec<(String, Tag)>], head: Option<&[(String, Tag)]>, side: u16) -> bool {
+    let (foreign, palette, plume) = if side == 1 {
+        (
+            "krasnokamen_battle:blue_",
+            [&RED_SHADES[..], &[RED_PLUME]].concat(),
+            RED_PLUME,
+        )
+    } else {
+        (
+            "krasnokamen_battle:red_",
+            [&BLUE_SHADES[..], &[BLUE_PLUME]].concat(),
+            BLUE_PLUME,
+        )
+    };
+    pieces.iter().all(|components| {
+        let model = matches!(
+            mc_data::item_nbt::field(components, "minecraft:item_model"),
+            Some(Tag::String(model)) if model.starts_with(foreign)
+        );
+        let asset = worn_asset(components).is_some_and(|(_, asset)| asset.starts_with(foreign));
+        let dye = dyed(components).is_some_and(|rgb| !palette.contains(&rgb));
+        !model && !asset && !dye
+    }) && head.is_none_or(|head| dyed(head) == Some(plume))
+}
+
 #[test]
-fn staged_equipment_exposes_authored_assets_for_both_sides_and_all_kinds() {
+fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighter() {
     let mut state = fixture();
     let mut changes = ChangeSet::default();
-    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 42, 100).unwrap();
-    let mut seen = [[false; 5]; 2];
-    for id in changes.entities_spawned {
+    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 42, 1_000).unwrap();
+    let name = |state: &TickState, stack: &mc_data::ItemStack| {
+        state
+            .registry
+            .items
+            .name_of(stack.item_id)
+            .unwrap()
+            .as_str()
+            .to_owned()
+    };
+    let mut seen = std::collections::BTreeSet::new();
+    let mut caparisons = std::collections::BTreeSet::new();
+    for id in changes.entities_spawned.clone() {
         let slot = state.entities.slot_of(id).unwrap();
-        let body = state.entities.body(slot);
-        let side = usize::from(body.faction - 1);
+        let side = state.entities.body(slot).faction;
         let row = state.entities.row(slot);
         let equippable = |stack: &mc_data::ItemStack, expected: &str, expected_slot: &str| {
             let fields = mc_data::item_nbt::stack_to_fields(&state.registry.items, stack).unwrap();
@@ -255,7 +353,6 @@ fn staged_equipment_exposes_authored_assets_for_both_sides_and_all_kinds() {
             );
         }
     }
-    assert_eq!(seen, [[true; 5]; 2]);
 }
 
 #[test]
@@ -454,7 +551,7 @@ fn status_counts_a_corpse_as_dead_until_its_body_leaves() {
     };
     let status = execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Status).unwrap();
     assert!(
-        status.contains(sides) && status.ends_with("dead=1"),
+        status.contains(sides) && status.contains(" dead=1 grounding="),
         "{status}"
     );
     let counts = crate::battle::publication_counts(&mut state).unwrap();
@@ -483,7 +580,7 @@ fn status_counts_a_corpse_as_dead_until_its_body_leaves() {
     assert!(state.entities.slot_of_any(victim).is_none());
     let status = execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Status).unwrap();
     assert!(
-        status.contains(sides) && status.ends_with("dead=0"),
+        status.contains(sides) && status.contains(" dead=0 grounding="),
         "{status}"
     );
 }

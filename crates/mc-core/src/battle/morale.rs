@@ -3,6 +3,7 @@
 //! Film nerve thresholds delay cascading rear flight, not human action clocks.
 //! Contact modifiers are levels, not an endlessly accumulating tick penalty.
 
+use super::formation::PULSE_MORALE_FLOOR;
 use super::{BattleState, Frame, Output};
 
 // Film nerve: front 3..18, rear 25..40. The rear top must clear the pulse
@@ -21,6 +22,10 @@ pub(crate) struct Pressure {
     pub rear: bool,
     pub flanks_secure: bool,
     pub adjacent_rout: bool,
+    /// The regiment's front touches an unbroken enemy this decision.
+    pub engaged: bool,
+    /// The nearest enemy regiment has broken this decision.
+    pub enemy_broken: bool,
     pub panicking: u16,
 }
 
@@ -75,18 +80,25 @@ impl Morale {
         let new_losses = removed.saturating_sub(self.removed);
         self.losses[(epoch % 20) as usize] += new_losses;
         let scaling = 100.0 / strength.max(1) as f32;
-        // Bannerlord: loss 4, melee .75, ranged .5, casualty-rate factor 2;
+        // Bannerlord: loss 4, melee .75, ranged .5, casualty-rate factor 2 (film: 1);
         // gains 3. Events are aggregate per regiment, normalized to 100 men.
         let ranged = self
             .missile_losses
             .saturating_sub(self.missile_removed)
             .min(new_losses);
-        self.cohesion -=
-            (4.0 * 0.75 * (new_losses - ranged) as f32 + 4.0 * 0.5 * ranged as f32) * 2.0 * scaling;
+        self.cohesion -= (4.0 * 0.75 * (new_losses - ranged) as f32 + 4.0 * 0.5 * ranged as f32)
+            * CASUALTY_RATE
+            * scaling;
         self.cohesion += 3.0 * f32::from(self.kills.min(10)) * scaling;
         self.cohesion -= (f32::from(self.pressure.panicking) * 1.1).min(10.0);
         if self.pressure.adjacent_rout {
             self.cohesion -= 10.0;
+        }
+        if self.pressure.engaged && self.value < PULSE_MORALE_FLOOR + WORN_MARGIN {
+            self.cohesion -= WORN_EROSION;
+        }
+        if self.pressure.enemy_broken {
+            self.cohesion += VICTORY_RECOVERY;
         }
         let loss_fraction = removed as f32 / strength.max(1) as f32;
         let cap = (100.0 - 300.0 * loss_fraction).max(0.0);

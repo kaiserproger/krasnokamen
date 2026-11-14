@@ -8,7 +8,8 @@ import struct
 import zlib
 from collections import deque
 
-W, H = 480, 260
+W, H = 480, 304
+RSS_WINDOW_TICKS = 1200
 # Five-by-seven uppercase glyphs, rows encoded as bits.
 FONT = {
  '0':['01110','10001','10011','10101','11001','10001','01110'], '1':['00100','01100','00100','00100','00100','00100','01110'], '2':['01110','10001','00001','00010','00100','01000','11111'], '3':['11110','00001','00001','01110','00001','00001','11110'], '4':['00010','00110','01010','10010','11111','00010','00010'], '5':['11111','10000','10000','11110','00001','00001','11110'], '6':['01110','10000','10000','11110','10001','10001','01110'], '7':['11111','00001','00010','00100','01000','01000','01000'], '8':['01110','10001','10001','01110','10001','10001','01110'], '9':['01110','10001','10001','01111','00001','00001','01110'],
@@ -88,7 +89,7 @@ def render(sample, history, cpu, steal, memory, label='REPLAY TELEMETRY', units_
             line(p, x0, graph_y(data[index-1][1],20), x1, graph_y(data[index][1],20), (99,165,255,255))
     text(p, 12, 182, 'GREEN MSPT  BLUE TPS', scale=2)
     fmt = lambda x: 'N/A' if x is None else f'{x:.1f}'
-    text(p, 12, 201, f'MEM {fmt(memory)} GIB  CPU {fmt(cpu)}%', scale=2)
+    text(p, 12, 201, f'SRV RSS {fmt(memory)} GIB  CPU {fmt(cpu)}%', scale=2)
     text(p, 12, 220, f'STEAL {fmt(steal)}%', scale=2)
     battle = sample.get('battle') or {}
     alive = battle.get('alive') or {}
@@ -111,7 +112,12 @@ def load(telemetry):
     history = deque(maxlen=180)
     previous = previous_host = None
     memory = cpu = steal = None
-    for s in rows(telemetry):
+    rss_samples = deque()
+    rows_list = list(rows(telemetry))
+    # Axis top: whole-file maximum rounded up to a whole GiB, so it is constant across the edit and needs no per-frame look-ahead.
+    peak = max((r['host'].get('process_rss_bytes') or 0 for r in rows_list if r.get('host')), default=0)
+    axis = max(1, math.ceil(peak/1024**3))
+    for s in rows_list:
         tick, wall = s['tick'], s['wall_start_unix_ns']
         if previous and (tick <= previous['tick'] or wall <= previous['wall_start_unix_ns']):
             raise ValueError('telemetry ticks and wall_start_unix_ns must strictly increase')
@@ -121,8 +127,11 @@ def load(telemetry):
         history.append((s['wall_us']/1000, tps, tick))
         host = s['host']
         if host is not None:
-            mem = host['cgroup_memory_current_bytes']
+            # Server process RSS only. cgroup memory also counts the recorder and other scope members, so it is never a fallback.
+            mem = host.get('process_rss_bytes')
             memory = None if mem is None else mem/1024**3
+            rss_samples.append((tick, mem))
+            while rss_samples[0][0] <= tick-RSS_WINDOW_TICKS: rss_samples.popleft()
             cpu = steal = None
             if previous_host:
                 dt = (host['sampled_unix_ns']-previous_host['sampled_unix_ns'])/1000
@@ -132,7 +141,7 @@ def load(telemetry):
                 c, d = host['cpu_total_ticks'], previous_host['cpu_total_ticks']
                 if None not in (a,b,c,d) and c > d and a >= b: steal = (a-b)/(c-d)*100
             previous_host = host
-        result[tick] = (s, tuple(history), cpu, steal, memory)
+        result[tick] = (s, tuple(history), cpu, steal, memory, tuple(rss_samples), axis)
         previous = s
     return result
 

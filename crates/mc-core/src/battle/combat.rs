@@ -97,6 +97,9 @@ pub(super) struct Fighter {
     reaction_checked: bool,
     pub(super) arrows: u16,
     pub(super) charge: super::cavalry::Charge,
+    /// Frozen-pass tick of a reserved kill: a second attacker must not credit
+    /// the same casualty before native intent merge removes the body.
+    slain: Option<u64>,
 }
 
 impl Default for Fighter {
@@ -110,6 +113,7 @@ impl Default for Fighter {
             reaction_checked: false,
             arrows: 60,
             charge: Default::default(),
+            slain: None,
         }
     }
 }
@@ -271,7 +275,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         if matches!(fighter.action, Action::Wounded) {
             continue;
         }
-        if context(battle, bi).is_some_and(|c| c.routing) {
+        if context(battle, bi).is_some_and(|c| c.routing) && !battle.formation.cornered_at(bi) {
             fighter.action = Action::Guard {
                 until: frame.tick + 20,
             };
@@ -326,7 +330,15 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         }
         let slot = battle.columns.slots[bi].expect("active column");
         let id = battle.columns.ids[bi];
-        if bi < battle.formation.members.len() && !battle.formation.can_attack_at(bi) {
+        // Outside a pulse a steady front-rank man still trades blows with an
+        // enemy already in weapon reach, at the cautious rate, as does a
+        // fugitive at bay (broken, so also wavering): pulses add the surge,
+        // they are not the only contact.
+        let in_order = bi >= battle.formation.members.len() || battle.formation.can_attack_at(bi);
+        if !in_order
+            && !context(battle, bi)
+                .is_some_and(|c| (!c.routing && !c.wavering) || battle.formation.cornered_at(bi))
+        {
             continue;
         }
         let fighter = &mut combat.fighters[bi];
@@ -504,7 +516,7 @@ fn strike(
             combat.fighters[actor_bi].action,
             Action::Wounded | Action::Stagger { .. }
         )
-        || matches!(combat.fighters[target_bi].action, Action::Wounded)
+        || combat.fighters[target_bi].slain == Some(frame.tick)
     {
         return;
     }
@@ -538,9 +550,17 @@ fn strike(
     if result == Outcome::Glance {
         return;
     }
-    // Reserve this removal once within the frozen pass; later paired attackers
-    // must not credit the same casualty again before native intent merge.
+    // A withdrawing wounded man is not immune: any landed blow finishes him.
+    // Otherwise he stays the nearest target forever and freezes the front.
+    let result = if matches!(combat.fighters[target_bi].action, Action::Wounded) {
+        Outcome::Kill
+    } else {
+        result
+    };
     combat.fighters[target_bi].action = Action::Wounded;
+    if result == Outcome::Kill {
+        combat.fighters[target_bi].slain = Some(frame.tick);
+    }
     let amount = if result == Outcome::Kill {
         combat.work.killed += 1;
         // Bypass armour through the native generic kill damage kind below.

@@ -344,3 +344,176 @@ fn native_slot_cache_refreshes_and_archers_choose_current_nearest_live_roster() 
         );
     }
 }
+
+#[test]
+fn long_contact_keeps_rotating_pulses_instead_of_an_exhausted_standstill() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 60, Order::Hold), 1, 240);
+    add(&mut runtime, spec(1, 2, 4.0, 60, Order::Hold), 241, 240);
+    let mut exposure = 0;
+    for tick in 0..3600 {
+        simulate(&mut runtime, tick);
+        if tick >= 2400 {
+            let r = &runtime.regiments[0];
+            exposure += r.sections[..3]
+                .iter()
+                .filter(|s| s.pulse_until > tick)
+                .count();
+        }
+    }
+    let r = &runtime.regiments[0];
+    assert!(r.gap <= 6.0, "fronts lost contact: gap={}", r.gap);
+    // Three front sections over the last minute of a three-minute contact.
+    let share = exposure as f64 / (3.0 * 1200.0);
+    assert!(
+        share >= 0.15,
+        "front fighting share {share}, stamina {}",
+        r.stamina
+    );
+    assert!(
+        r.stamina >= EXHAUSTED_STAMINA - 1.0,
+        "stamina {}",
+        r.stamina
+    );
+}
+
+#[test]
+fn riders_and_pursuers_fight_from_any_rank_but_routers_never_do() {
+    let mut runtime = FormationRuntime::default();
+    let mut horse = spec(0, 1, 0.0, 5, Order::Advance);
+    horse.frontage = 2.0;
+    add(&mut runtime, horse, 1, 15);
+    add(&mut runtime, spec(1, 1, -40.0, 5, Order::Advance), 101, 15);
+    simulate(&mut runtime, 0);
+    let rear_rider = runtime.index[&EntityId(11)];
+    let rear_foot = runtime.index[&EntityId(111)];
+    assert!(runtime.can_attack_at(rear_rider));
+    assert!(!runtime.can_attack_at(rear_foot));
+    runtime.regiments[1].spec.order = Order::Pursue;
+    runtime.regiments[1].enemy_routing = true;
+    assert!(runtime.can_attack_at(rear_foot));
+    runtime.members[rear_rider].routing = true;
+    assert!(!runtime.can_attack_at(rear_rider));
+}
+
+#[test]
+fn fugitives_pinned_at_the_bounds_turn_at_bay() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 5, Order::Advance), 1, 10);
+    runtime.set_bounds([-10.0, -10.0], [10.0, 10.0]).unwrap();
+    simulate(&mut runtime, 0);
+    runtime.members[0].routing = true;
+    runtime.members[0].pos = [9.5, 64.0, 0.0];
+    runtime.members[1].routing = true;
+    runtime.members[1].pos = [0.0, 64.0, 0.0];
+    runtime.members[2].pos = [9.5, 64.0, 1.0];
+    assert!(runtime.cornered_at(0));
+    assert!(
+        !runtime.cornered_at(1),
+        "a fugitive with room to run keeps running"
+    );
+    assert!(!runtime.cornered_at(2), "steady men are not fugitives");
+    runtime.members[0].wounded = true;
+    assert!(!runtime.cornered_at(0), "the wounded only withdraw");
+}
+
+/// A fugitive that reaches an edge of the battle stays where it met it. It no
+/// longer runs on along the edge, which herded routed regiments into the
+/// corners (heaps of up to 50 riders on the bounds in the G1 rehearsals).
+#[test]
+fn fugitives_at_an_edge_stop_where_they_met_it() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 5, Order::Advance), 1, 10);
+    runtime.set_bounds([-10.0, -10.0], [10.0, 10.0]).unwrap();
+    simulate(&mut runtime, 0);
+    // The enemy stands diagonally ahead: flight runs toward the -x/-z corner.
+    runtime.regiments[0].enemy = Some([5.0, 64.0, 5.0]);
+    for (i, pos) in [
+        [-9.5, 64.0, 3.0],
+        [2.0, 64.0, -9.5],
+        [-9.5, 64.0, -9.5],
+        [0.0, 64.0, 0.0],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        runtime.members[i].routing = true;
+        runtime.members[i].pos = pos;
+    }
+    let (x_edge, speed) = runtime.destination(0);
+    assert_eq!(speed, 0.2);
+    assert!(
+        x_edge[2] == 3.0 && x_edge[0] < -9.5,
+        "ran on along the -x edge: {x_edge:?}"
+    );
+    let (z_edge, _) = runtime.destination(1);
+    assert!(
+        z_edge[0] == 2.0 && z_edge[2] < -9.5,
+        "ran on along the -z edge: {z_edge:?}"
+    );
+    let (corner, _) = runtime.destination(2);
+    assert_eq!([corner[0], corner[2]], [-9.5, -9.5]);
+    let (free, _) = runtime.destination(3);
+    assert!(
+        free[0] < -5.0 && free[2] < -5.0,
+        "a fugitive with room runs on: {free:?}"
+    );
+}
+
+/// A pursuing regiment closes on the routed enemy's front point as a block,
+/// each member from its own slot, and stands there spread, not in one cell:
+/// one shared point for every member piled 289 blue bodies within 0.4 block
+/// of each other on the north bound in rehearsal r10.
+#[test]
+fn pursuers_stand_round_the_enemy_point_in_their_slots() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 5, Order::Advance), 1, 20);
+    let mut horse = spec(1, 1, -10.0, 5, Order::Advance);
+    horse.frontage = 2.0;
+    add(&mut runtime, horse, 101, 20);
+    simulate(&mut runtime, 0);
+    let points = [[0.0, 64.0, 40.0], [30.0, 64.0, 40.0]];
+    for (r, point) in runtime.regiments.iter_mut().zip(points) {
+        r.spec.order = Order::Pursue;
+        r.enemy_routing = true;
+        r.enemy = Some(point);
+    }
+    // Ride and march there and stand: the formation drive with its crowd
+    // separation.
+    for _ in 0..600 {
+        runtime.neighbours.rebuild(&runtime.members);
+        let drives: Vec<_> = (0..40)
+            .map(|i| steering::movement(&mut runtime, i))
+            .collect();
+        for (member, drive) in runtime.members.iter_mut().zip(drives) {
+            for (position, velocity) in member.pos.iter_mut().zip(drive) {
+                *position += velocity * mc_physics::TICK_SECONDS;
+            }
+        }
+    }
+    for (members, point) in [&runtime.members[..20], &runtime.members[20..40]]
+        .into_iter()
+        .zip(points)
+    {
+        let arrived = members
+            .iter()
+            .all(|m| mc_physics::mth::length2(m.pos[0] - point[0], m.pos[2] - point[2]) < 10.0);
+        assert!(arrived, "a pursuer did not reach the enemy point {point:?}");
+        let crowd = members
+            .iter()
+            .map(|a| {
+                members
+                    .iter()
+                    .filter(|b| {
+                        mc_physics::mth::length2(a.pos[0] - b.pos[0], a.pos[2] - b.pos[2]) < 1.0
+                    })
+                    .count()
+            })
+            .max()
+            .unwrap();
+        assert!(
+            crowd <= 3,
+            "{crowd} of 20 pursuers stand within a block of one at {point:?}"
+        );
+    }
+}
