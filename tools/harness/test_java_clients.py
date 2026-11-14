@@ -134,7 +134,6 @@ class JavaClientsTests(unittest.TestCase):
 
     def _start_patches(self) -> None:
         patchers = [
-            mock.patch("tools.harness.audio.private_audio_preflight"),
             mock.patch.object(
                 java_clients.runtime, "start_xvfb",
                 return_value=(self.xvfb_proc, ":99", self.xvfb_log),
@@ -398,20 +397,19 @@ class JavaClientsTests(unittest.TestCase):
         self.assertTrue(self.xvfb_log.closed)
         self.assertIn(self.xvfb_proc, self.stopped)
 
-    def test_final_audio_links_are_captured_on_scenario_and_startup_failure(self) -> None:
+    def test_group_never_touches_the_private_audio_graph_on_scenario_and_startup_failure(self) -> None:
         self._start_patches()
         with mock.patch("tools.harness.audio.private_audio_preflight") as preflight:
             with self.assertRaisesRegex(RuntimeError, "scenario oracle failed"):
                 with java_clients.client_group(self.artifact, 2, "127.0.0.1:25567"):
                     raise RuntimeError("scenario oracle failed")
-            preflight.assert_called_once_with(self.artifact / "capture-links")
-        self.fail_usernames = {"JMatrix01"}
-        with mock.patch("tools.harness.audio.private_audio_preflight") as preflight:
+            self.fail_usernames = {"JMatrix01"}
             with self.assertRaisesRegex(RuntimeError, "injected launch failure"):
                 with java_clients.client_group(self.artifact, 2, "127.0.0.1:25567"):
                     self.fail("partial startup cannot yield")
-            preflight.assert_called_once_with(self.artifact / "capture-links")
-
+            preflight.assert_not_called()
+        for handle in self.handles:
+            self.assertTrue(handle.closed)
 
     def test_authenticate_registers_each_client_with_fresh_acks(self) -> None:
         self._start_patches()
@@ -578,8 +576,8 @@ class JavaClientsTests(unittest.TestCase):
                 pass
         self.assertEqual(len(snapshots), 1)
         self.assertNotIn("WAYLAND_DISPLAY", snapshots[0])
-        self.assertEqual(snapshots[0]["PULSE_SINK"], "agents-null")
-        self.assertEqual(snapshots[0]["PIPEWIRE_NODE"], "agents-null")
+        self.assertNotIn("PIPEWIRE_NODE", snapshots[0])
+        self.assertEqual(snapshots[0]["PULSE_SINK"], "owner-sink")  # start_client strips it per child env
         self.assertEqual(os.environ.get("WAYLAND_DISPLAY"), "wayland-9")
         self.assertEqual(os.environ.get("PULSE_SINK"), "owner-sink")
         self.assertNotIn("PIPEWIRE_NODE", os.environ)
