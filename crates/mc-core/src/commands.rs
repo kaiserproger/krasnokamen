@@ -72,7 +72,6 @@ pub const ROOTS: &[(&str, u8)] = &[
     ("tag", 2),
     ("playsound", 2),
     ("particle", 2),
-    ("swing", 2),
     ("tick", 3),
     ("kick", 3),
     ("mute", 3),
