@@ -1008,6 +1008,7 @@ impl EntityStore {
             pitch: rot[1],
             head_yaw: rot[2],
             on_ground: self.ground[slot],
+            faction: body.faction,
             appearance: if row.villager.is_some() {
                 Arc::clone(
                     &self

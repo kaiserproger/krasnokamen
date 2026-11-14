@@ -1061,3 +1061,91 @@ fn the_bound_spectator_goes_behind_the_holder_again_after_a_respawn_and_a_rearm(
     assert!(reply.starts_with("Battle live rearmed: PovRed "), "{reply}");
     assert_behind(&state, viewer, player);
 }
+
+fn team(state: &mut TickState, executor: EntityId, args: &[&str]) -> Result<String, String> {
+    let command = crate::scoreboard::ScoreboardCommand::parse("team", args).unwrap();
+    match crate::scoreboard::execute(state, executor, &command) {
+        (reply, crate::command_execution::CommandResult::Failed) => Err(reply),
+        (reply, _) => Ok(reply),
+    }
+}
+
+/// Entry-free rule (`scoreboard::require_no_team`): a player in a `/team`
+/// team takes no slot. The edge would move his entry into his side's faction
+/// team, and a later `/team leave` (method 4) would disconnect him.
+#[test]
+fn a_player_in_a_team_cannot_take_a_slot() {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let mut changes = ChangeSet::default();
+    team(&mut state, ids[0], &["add", "allies"]).unwrap();
+    team(&mut state, ids[0], &["join", "allies", "PovRed"]).unwrap();
+    assert_eq!(
+        command(&mut state, &mut changes, live_cmd("PovRed")).unwrap_err(),
+        "PovRed is in team allies; an entry in a team cannot join a battle faction (team leave PovRed first)"
+    );
+    assert!(state.hostile.battle.live.holds.is_empty());
+    team(&mut state, ids[0], &["leave", "PovRed"]).unwrap();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    assert_eq!(state.hostile.battle.live.holds.len(), 1);
+}
+
+/// The other side of the rule: `/team join` refuses a holder's name and a
+/// battle soldier's UUID, and changes nothing; an ordinary entry still joins.
+#[test]
+fn team_join_refuses_a_holder_and_a_faction_entity() {
+    let (mut state, ids) = staged(&["PovRed", "Other"]);
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    team(&mut state, ids[0], &["add", "allies"]).unwrap();
+    assert_eq!(
+        team(&mut state, ids[0], &["join", "allies", "PovRed"]).unwrap_err(),
+        "PovRed holds a battle slot of side 1; a holder cannot join a team"
+    );
+    let soldier = state
+        .entities
+        .slot_of(state.hostile.battle.formation.members[0].id)
+        .unwrap();
+    let uuid = state.entities.row(soldier).uuid.to_string();
+    let faction = state.entities.body(soldier).faction;
+    assert_ne!(faction, 0);
+    assert_eq!(
+        team(&mut state, ids[0], &["join", "allies", &uuid]).unwrap_err(),
+        format!("{uuid} is an entity of battle faction {faction}; it cannot join a team")
+    );
+    assert!(state.scoreboard.teams["allies"].members.is_empty());
+    team(&mut state, ids[0], &["join", "allies", "Other"]).unwrap();
+    assert!(state.scoreboard.teams["allies"].members.contains("Other"));
+}
+
+/// `WorldSnapshot::player_factions`: every hold's side by name, the same
+/// `Arc` while the holds are unchanged, empty again after `battle reset`.
+#[test]
+fn holds_publish_player_factions_in_one_arc() {
+    let (mut state, _) = staged(&["PovRed", "PovBlue"]);
+    let mut changes = ChangeSet::default();
+    let (before, _, _) = run_tick(&mut state, &[]);
+    assert!(before.snapshot.player_factions.is_empty());
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(
+        &mut state,
+        &mut changes,
+        BattleCommand::Live {
+            name: "PovBlue".into(),
+            side: 2,
+        },
+    )
+    .unwrap();
+    let (first, _, _) = run_tick(&mut state, &[]);
+    assert_eq!(
+        *first.snapshot.player_factions,
+        [("PovBlue".to_owned(), 2), ("PovRed".to_owned(), 1)]
+    );
+    let (second, _, _) = run_tick(&mut state, &[]);
+    assert!(std::sync::Arc::ptr_eq(
+        &first.snapshot.player_factions,
+        &second.snapshot.player_factions
+    ));
+    command(&mut state, &mut changes, BattleCommand::Reset).unwrap();
+    let (reset, _, _) = run_tick(&mut state, &[]);
+    assert!(reset.snapshot.player_factions.is_empty());
+}

@@ -384,6 +384,55 @@ fn publish(state: &mut TickState, events: Vec<ScoreboardEvent>) {
     }
 }
 
+/// [`crate::boundary::WorldSnapshot::team_names`]: rebuilt only when the team
+/// names changed, so a quiet scoreboard publishes the same `Arc`.
+pub(crate) fn snapshot_team_names(state: &mut TickState) -> std::sync::Arc<Vec<String>> {
+    if !state.team_names.iter().eq(state.scoreboard.teams.keys()) {
+        state.team_names = std::sync::Arc::new(state.scoreboard.teams.keys().cloned().collect());
+    }
+    std::sync::Arc::clone(&state.team_names)
+}
+
+/// Entry-free rule of the edge's battle-faction teams (`mc-edge`
+/// `faction_teams`): an entry that gets a battle faction (summon with `UUID`
+/// and `solaris:Faction`, `battle::cavalry::mount` of a horse, `battle live`)
+/// must be in no `/team` team. The edge adds it to its faction team, which
+/// moves it out of the `/team` team on the client; a later `/team leave` or
+/// `empty` (method 4) would then name an entry that team no longer holds
+/// there, and vanilla `Scoreboard.removePlayerFromTeam` throws (javap 26.1.2
+/// and 26.3), which disconnects the player.
+pub(crate) fn require_no_team(scoreboard: &Scoreboard, entry: &str) -> Result<(), String> {
+    match scoreboard
+        .teams
+        .iter()
+        .find(|(_, team)| team.members.contains(entry))
+    {
+        Some((name, _)) => Err(format!(
+            "{entry} is in team {name}; an entry in a team cannot join a battle faction (team leave {entry} first)"
+        )),
+        None => Ok(()),
+    }
+}
+
+/// The other side of [`require_no_team`]: `/team join` refuses an entry the
+/// edge projects into a faction team, the UUID of a battle-faction entity or
+/// the name of a live player holding a battle slot.
+fn faction_entry_refusal(state: &TickState, member: &str) -> Option<String> {
+    if let Ok(uuid) = uuid::Uuid::parse_str(member)
+        && let Some(slot) = state.entities.slot_of_uuid(uuid)
+    {
+        let faction = state.entities.body(slot).faction;
+        if faction != 0 {
+            return Some(format!(
+                "{member} is an entity of battle faction {faction}; it cannot join a team"
+            ));
+        }
+    }
+    crate::battle::live_players::held_side(state, member).map(|side| {
+        format!("{member} holds a battle slot of side {side}; a holder cannot join a team")
+    })
+}
+
 /// Apply an execute callback through the scoreboard's persistence/broadcast owner.
 pub(crate) fn store_result(state: &mut TickState, holders: &[String], objective: &str, value: i32) {
     let mut events = Vec::with_capacity(holders.len());
@@ -557,6 +606,13 @@ fn execute_inner(
                 let members = holders(state, executor, input)?;
                 if a[0] == "join" && !state.scoreboard.teams.contains_key(&a[1]) {
                     return Err("Unknown team".to_owned());
+                }
+                if a[0] == "join"
+                    && let Some(refusal) = members
+                        .iter()
+                        .find_map(|member| faction_entry_refusal(state, member))
+                {
+                    return Err(refusal);
                 }
                 for member in &members {
                     for (name, team) in &mut state.scoreboard.teams {
@@ -1188,5 +1244,29 @@ mod tests {
         ] {
             assert!(ScoreboardCommand::parse(root, &args).is_err());
         }
+    }
+
+    /// The edge names faction teams `sf <n>` and skips a faction whose name a
+    /// team in `WorldSnapshot::team_names` holds. `/team add sf:1` stays an
+    /// ordinary team that saves and loads unchanged, and the tokenizer keeps
+    /// quotes in a word, so no command can name a team `sf 1`.
+    #[test]
+    fn team_names_share_one_arc_and_sf_colon_stays_an_ordinary_team() {
+        use std::sync::Arc;
+        let (mut state, actor, _) = crate::hostile_tests::setup(8.0);
+        let empty = snapshot_team_names(&mut state);
+        assert!(empty.is_empty());
+        assert!(Arc::ptr_eq(&empty, &snapshot_team_names(&mut state)));
+        let add = ScoreboardCommand::parse("team", &["add", "sf:1"]).unwrap();
+        assert_eq!(execute(&mut state, actor, &add).0, "Created team sf:1");
+        let named = snapshot_team_names(&mut state);
+        assert_eq!(*named, ["sf:1"]);
+        assert!(Arc::ptr_eq(&named, &snapshot_team_names(&mut state)));
+        let saved = Scoreboard::from_nbt(&state.scoreboard.to_nbt()).unwrap();
+        assert_eq!(saved, state.scoreboard);
+        assert_eq!(
+            crate::commands::command_words("team add \"sf 1\"").unwrap(),
+            ["team", "add", "\"sf 1\""]
+        );
     }
 }

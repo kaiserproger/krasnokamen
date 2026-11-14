@@ -984,3 +984,42 @@ fn riders_closing_on_one_foe_stay_a_horse_width_apart() {
         "horses inside each other: closest pair {closest:.2}: {horses:?}"
     );
 }
+
+fn team(state: &mut TickState, executor: EntityId, args: &[&str]) -> String {
+    let command = crate::scoreboard::ScoreboardCommand::parse("team", args).unwrap();
+    crate::scoreboard::execute(state, executor, &command).0
+}
+
+/// Entry-free rule (`scoreboard::require_no_team`): a horse whose UUID is in a
+/// `/team` team gets no faction, so the edge's faction team never moves an
+/// entry that a later `/team leave` names.
+#[test]
+fn battle_mount_refuses_a_horse_in_a_team() {
+    let (mut state, actor, pos) = fixture();
+    let horse = spawn(&mut state, "horse", pos);
+    let rider = spawn(&mut state, "husk", pos);
+    state.entities.set_faction(slot(&state, rider), 1);
+    let entry = state.entities.row(slot(&state, horse)).uuid.to_string();
+    team(&mut state, actor, &["add", "allies"]);
+    team(&mut state, actor, &["join", "allies", &entry]);
+    let refusal = mount(&mut state, rider, horse).unwrap_err().to_string();
+    assert!(
+        refusal.contains(&format!(
+            "{entry} is in team allies; an entry in a team cannot join a battle faction"
+        )),
+        "{refusal}"
+    );
+    assert_eq!(state.entities.body(slot(&state, horse)).faction, 0);
+    assert_eq!(
+        state
+            .entities
+            .row(slot(&state, horse))
+            .entity_life
+            .mount
+            .rider,
+        None
+    );
+    team(&mut state, actor, &["leave", &entry]);
+    mount(&mut state, rider, horse).unwrap();
+    assert_eq!(state.entities.body(slot(&state, horse)).faction, 1);
+}

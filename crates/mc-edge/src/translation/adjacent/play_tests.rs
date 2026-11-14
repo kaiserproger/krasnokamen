@@ -593,6 +593,55 @@ fn animations_and_team_parameters_follow_the_old_layout() {
     assert_eq!(out, expected);
 }
 
+/// The battle-faction projection's exact packets reach a 26.1.2 client: an
+/// empty create keeps its explicit parameters (nametag never, collision
+/// always, red) in the old order, and a full 4096-entry add passes whole.
+#[test]
+fn faction_team_create_and_full_add_translate_to_776() {
+    use crate::faction_teams::{ADD, CREATE, MEMBERS_PER_PACKET, team};
+    use mc_protocol::packets::Packet;
+    let mut s = session();
+    let text = |s: &str| {
+        let mut out = Vec::new();
+        mc_nbt::write_network_value(&mut out, &mc_nbt::Tag::String(s.into())).unwrap();
+        out
+    };
+    let mut body = Vec::new();
+    team(1, CREATE, Vec::new()).encode(&mut body).unwrap();
+    let out = clientbound(&mut s, "minecraft:set_player_team", &body)
+        .unwrap()
+        .unwrap();
+    let mut expected = Vec::new();
+    expected.write_string("sf 1", 32767).unwrap();
+    expected.write_u8(0);
+    expected.extend_from_slice(&text("Red"));
+    expected.write_u8(0b01);
+    expected.write_varint(1); // nametag never
+    expected.write_varint(0); // collision always
+    expected.write_varint(12); // red
+    expected.extend_from_slice(&text(""));
+    expected.extend_from_slice(&text(""));
+    expected.write_varint(0); // no entries
+    assert_eq!(out, expected);
+
+    let members: Vec<String> = (0..MEMBERS_PER_PACKET as u128)
+        .map(|id| uuid::Uuid::from_u128(id).to_string())
+        .collect();
+    let mut body = Vec::new();
+    team(1, ADD, members.clone()).encode(&mut body).unwrap();
+    let out = clientbound(&mut s, "minecraft:set_player_team", &body)
+        .unwrap()
+        .unwrap();
+    let mut expected = Vec::new();
+    expected.write_string("sf 1", 32767).unwrap();
+    expected.write_u8(3);
+    expected.write_varint(4096);
+    for member in &members {
+        expected.write_string(member, 32767).unwrap();
+    }
+    assert_eq!(out, expected);
+}
+
 #[test]
 fn serverbound_actions_signs_and_teleports_gain_26_3_fields() {
     let mut s = session();

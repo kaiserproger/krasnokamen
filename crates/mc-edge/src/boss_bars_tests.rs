@@ -17,6 +17,7 @@ fn wither(health: f32, invulnerable: i32) -> EntityView {
         pitch: 0.0,
         head_yaw: 0.0,
         on_ground: false,
+        faction: 0,
         appearance: Arc::new(EntityAppearance {
             health,
             extra: vec![(19, EntityDataValue::VarInt(invulnerable))],

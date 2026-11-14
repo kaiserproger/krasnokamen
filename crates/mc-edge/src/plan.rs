@@ -525,6 +525,9 @@ pub struct ViewerState {
     /// Snapshot dimension the label image was built from; a mismatch means
     /// the client's fresh level holds none of these virtual entities.
     pub(crate) label_dimension: Option<mc_core::dimensions::Dimension>,
+    /// Battle-faction teams this client holds ([`crate::faction_teams`]);
+    /// respawns keep them.
+    pub(crate) teams: crate::faction_teams::TeamBaseline,
     /// Last sent `(tick, day_time, rate)`; None forces an authoritative sync.
     clock_baseline: Option<(u64, i64, f32)>,
     scratch: PlanScratch,
@@ -575,6 +578,7 @@ impl ViewerState {
             labels: crate::settlement_labels::LabelBaseline::default(),
             seats: HashMap::default(),
             label_dimension: None,
+            teams: crate::faction_teams::TeamBaseline::default(),
             clock_baseline: None,
             scratch: PlanScratch::default(),
             window: ViewWindow::default(),
@@ -931,6 +935,7 @@ fn plan_viewer_inner(
         chunk_stat!(stats.probes += viewer.light_baseline.len());
         viewer.light_baseline.retain_held(&viewer.loaded_chunks);
     }
+    crate::faction_teams::plan_teams(snapshot, index.faction_delta(), viewer, &mut out);
     if viewer.forget_all && !forget_everything(viewer, &mut out, &mut credit, scratch) {
         return out;
     }

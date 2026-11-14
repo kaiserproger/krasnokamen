@@ -54,6 +54,7 @@ fn scene(tick: u64, horse: Option<bool>) -> TickOutput {
         pitch: 0.0,
         head_yaw: 0.0,
         on_ground: true,
+        faction: 0,
         appearance: Arc::new(EntityAppearance {
             passengers,
             ..Default::default()

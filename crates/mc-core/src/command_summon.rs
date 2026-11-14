@@ -534,6 +534,10 @@ pub(crate) fn prepare(
     };
     let image = EntityStateImage::from_record(&state.registry, &native)
         .map_err(|e| error(e.to_string()))?;
+    if uuid_authored && image.faction != 0 {
+        crate::scoreboard::require_no_team(&state.scoreboard, &native.uuid.to_string())
+            .map_err(error)?;
+    }
     let equipment = if authored.iter().any(|(key, _)| key == "equipment") {
         Some(
             crate::entity_loot::equipment_from_fields(&state.registry.items, &native.extra_fields)

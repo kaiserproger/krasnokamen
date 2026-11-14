@@ -14,6 +14,7 @@ fn view(id: i32, x: f64, z: f64, appearance: &Arc<EntityAppearance>) -> EntityVi
         pitch: 0.0,
         head_yaw: 0.0,
         on_ground: true,
+        faction: 0,
         appearance: Arc::clone(appearance),
     }
 }
