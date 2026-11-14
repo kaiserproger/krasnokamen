@@ -12,7 +12,7 @@ use std::sync::Arc;
 pub(crate) fn native_identity(config: &CoreConfig) -> [u8; 32] {
     // Fixed 16-byte format tag, followed by seed and generator revision (BE).
     let mut identity = [0; 32];
-    const TAG: [u8; 16] = *b"SolarisV2Native\0";
+    const TAG: [u8; 16] = *b"KrasnoV2Native\0\0";
     identity[..16].copy_from_slice(&TAG);
     identity[16..24].copy_from_slice(&config.seed.to_be_bytes());
     identity[24..].copy_from_slice(&(mc_worldgen::WORLDGEN_REVISION as u64).to_be_bytes());
@@ -205,7 +205,7 @@ pub(crate) fn validate_manifest(manifest: &CheckpointManifest) -> Result<(), Cor
             owner.is_empty()
                 || *tick > manifest.tick
                 || *radius < 0
-                || owner.starts_with("solaris:portal:")
+                || owner.starts_with("krasnokamen:portal:")
         }) {
             return Err(CoreError::Storage(
                 "native checkpoint: invalid durable ticket postimage".into(),
@@ -276,7 +276,7 @@ pub(crate) fn recover_offline(config: &CoreConfig) -> Result<RecoveredWorld, Cor
 
 pub(crate) fn import_required(config: &CoreConfig) -> CoreError {
     CoreError::Storage(format!(
-        "{} has persisted history but no native checkpoint; use solaris-v2 world import-anvil --source ANVIL --destination NATIVE --receipt JSON",
+        "{} has persisted history but no native checkpoint; use krasnokamen world import-anvil --source ANVIL --destination NATIVE --receipt JSON",
         config.world_dir.display()
     ))
 }
@@ -327,7 +327,7 @@ pub(crate) fn hydrate_visited_entity(
             .and_then(|name| registry.entity_types.id_of(&name))
             .map(i64::from)
             .unwrap_or(-1);
-        let wire_id = match field("solaris:WireId") {
+        let wire_id = match field("krasnokamen:WireId") {
             Some(Tag::Int(id)) => id.to_string(),
             value => format!("{value:?}"),
         };

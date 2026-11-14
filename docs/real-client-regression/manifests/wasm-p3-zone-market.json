@@ -3,7 +3,7 @@
   "pack_id": "wasm-p3-zone-market",
   "quality_label": "draft",
   "minecraft_version": "26.1.2",
-  "server_command": "cargo run -p mc-edge --bin solaris-v2 -- --config <run-dir>/server.toml (prepared from SOLARIS_REAL_CLIENT_SERVER_CONFIG)",
+  "server_command": "cargo run -p mc-edge --bin krasnokamen -- --config <run-dir>/server.toml (prepared from KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG)",
   "artifact_root": ".analysis/real-client-runs",
   "deployment": {
     "server_config": ".analysis/codex-logs/wasm-p3-zone-20260916/server.toml",
@@ -38,13 +38,13 @@
     },
     "build_recipe": [
       "rustup target add wasm32-unknown-unknown (once per toolchain)",
-      "cd sdk/rust && cargo build --release --target wasm32-unknown-unknown -p solaris-hello-plugin",
-      "target/debug/p1-component-packager sdk/rust/target/wasm32-unknown-unknown/release/solaris_hello_plugin.wasm .analysis/codex-logs/wasm-p3-zone-20260916/deployment/inventory-compat/plugin.wasm",
+      "cd sdk/rust && cargo build --release --target wasm32-unknown-unknown -p krasnokamen-hello-plugin",
+      "target/debug/p1-component-packager sdk/rust/target/wasm32-unknown-unknown/release/krasnokamen_hello_plugin.wasm .analysis/codex-logs/wasm-p3-zone-20260916/deployment/inventory-compat/plugin.wasm",
       "the encoder is the recorded build artifact (sha256 7becacf5e6900a289e8b38722dfc51307d6433a888b6330036a224e3f9113672, recorded at .analysis/codex-logs/wasm-p2-live-20260916/prerequisites.json); plugin.toml and config.toml beside plugin.wasm are already written in that deployment directory"
     ],
-    "operator_env": "SOLARIS_REAL_CLIENT_MANIFEST=docs/real-client-regression/manifests/wasm-p3-zone-market.json SOLARIS_REAL_CLIENT_AGENT_SCENARIO=wasm-p3-zone-market SOLARIS_REAL_CLIENT_SERVER_CONFIG=.analysis/codex-logs/wasm-p3-zone-20260916/server.toml SOLARIS_REAL_CLIENT_SERVER_ADDR=127.0.0.1:43655 SOLARIS_REAL_CLIENT_FRESH_WORLD=1 python3 -m tools.harness run regression --timeout-seconds 900"
+    "operator_env": "KRASNOKAMEN_REAL_CLIENT_MANIFEST=docs/real-client-regression/manifests/wasm-p3-zone-market.json KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO=wasm-p3-zone-market KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG=.analysis/codex-logs/wasm-p3-zone-20260916/server.toml KRASNOKAMEN_REAL_CLIENT_SERVER_ADDR=127.0.0.1:43655 KRASNOKAMEN_REAL_CLIENT_FRESH_WORLD=1 python3 -m tools.harness run regression --timeout-seconds 900"
   },
-  "client_requirement": "A real graphical Minecraft Java Edition 26.1.2 client must execute this scenario through the repo-native Gradle runClient adapter (:fabric-agent:runClientAgent, net.neoforged.moddev). That client carries the repo's JVM client-agent bridge for observation and input only and deliberately does NOT load the Solaris Loader mod, so every /trade answer, every zone marker and every window arrives over the ordinary play protocol; it is a no-Loader development client, not an uninstrumented production binary. Protocol bots, wire probes and mock clients do not satisfy this gate. The scenario crosses the zone boundary with the client's own forward input, dispatches its menu clicks through the bridge's real container-click action, and takes the one teleport exit through the server's own /tp command.",
+  "client_requirement": "A real graphical Minecraft Java Edition 26.1.2 client must execute this scenario through the repo-native Gradle runClient adapter (:fabric-agent:runClientAgent, net.neoforged.moddev). That client carries the repo's JVM client-agent bridge for observation and input only and deliberately does NOT load the Krasnokamen Loader mod, so every /trade answer, every zone marker and every window arrives over the ordinary play protocol; it is a no-Loader development client, not an uninstrumented production binary. Protocol bots, wire probes and mock clients do not satisfy this gate. The scenario crosses the zone boundary with the client's own forward input, dispatches its menu clicks through the bridge's real container-click action, and takes the one teleport exit through the server's own /tp command.",
   "forbidden_client_evidence": [
     "wire-probe",
     "mc_vanilla::wire_client::Client",
@@ -68,19 +68,19 @@
     "agent_driver": "tools/harness/backends/driver.py",
     "client_adapter": "../solaris-loader/gradlew -p ../solaris-loader --no-configuration-cache :fabric-agent:runClientAgent",
     "client_adapter_source": "auto-gradle-runclient",
-    "client_isolation": "The primary Gradle runClient uses a per-run game directory and the fixed offline username SolarisPrimary.",
+    "client_isolation": "The primary Gradle runClient uses a per-run game directory and the fixed offline username KrasnoPrimary.",
     "modes": [
       "--check",
       "--prepare",
       "--run",
       "--validate-run"
     ],
-    "agent_scenario_env": "SOLARIS_REAL_CLIENT_AGENT_SCENARIO",
-    "agent_secret_env": "SOLARIS_REAL_CLIENT_AGENT_SECRET",
-    "agent_port_env": "SOLARIS_REAL_CLIENT_AGENT_PORT",
-    "agent_server_addr_env": "SOLARIS_REAL_CLIENT_SERVER_ADDR",
-    "server_config_env": "SOLARIS_REAL_CLIENT_SERVER_CONFIG",
-    "fresh_world_env": "SOLARIS_REAL_CLIENT_FRESH_WORLD",
+    "agent_scenario_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO",
+    "agent_secret_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_SECRET",
+    "agent_port_env": "KRASNOKAMEN_REAL_CLIENT_AGENT_PORT",
+    "agent_server_addr_env": "KRASNOKAMEN_REAL_CLIENT_SERVER_ADDR",
+    "server_config_env": "KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG",
+    "fresh_world_env": "KRASNOKAMEN_REAL_CLIENT_FRESH_WORLD",
     "default_agent_scenario": "wasm-p3-zone-market",
     "prepared_status": "prepared-owner-run",
     "passing_gate": "agent-run real-client"
@@ -97,8 +97,8 @@
       "bounded_time_minutes": 24,
       "screenshots_required": true,
       "steps": [
-        "Start Solaris from a fresh world with runtime = \"wasm\", strict = true, expected = [\"inventory-compat\"], the explicit storage/inventory_storage_transactions/inventory_menus/zones grants, and config.toml mode = \"zone-market\". The package declares player_commands = [\"trade\"] and events = [\"player.joined\", \"player.left\", \"inventory.menu.clicked\", \"player.zone_entered\", \"player.zone_exited\"]. The trade-ledger key must start absent.",
-        "Launch the real graphical 26.1.2 client through the repo-native Gradle runClient adapter (no Solaris Loader mod) and let the agent driver connect it to the loopback server address.",
+        "Start Krasnokamen from a fresh world with runtime = \"wasm\", strict = true, expected = [\"inventory-compat\"], the explicit storage/inventory_storage_transactions/inventory_menus/zones grants, and config.toml mode = \"zone-market\". The package declares player_commands = [\"trade\"] and events = [\"player.joined\", \"player.left\", \"inventory.menu.clicked\", \"player.zone_entered\", \"player.zone_exited\"]. The trade-ledger key must start absent.",
+        "Launch the real graphical 26.1.2 client through the repo-native Gradle runClient adapter (no Krasnokamen Loader mod) and let the agent driver connect it to the loopback server address.",
         "Fixture setup at the world spawn, declared debug and never claimed as no-debug survival: gamemode survival, /give minecraft:emerald 4, /give minecraft:diamond_pickaxe 1, /summon minecraft:pig beside the player, select the pickaxe, and land one real survival attack so the pickaxe carries a non-zero client-visible damage component. This runs before the walkway exists so the summoned target never stands in the crossing path.",
         "Operator platform, declared debug: four /debug water-corridor builder commands (x = 6, 9, 12 and 15 at y = 78, z = 13) whose z = 12 end caps form one continuous stone walkway at y 78..79 from x = 5 to x = 16. Each command is accepted only on its own fresh feedback line 'Debug water corridor at <x> 78 13 verified 68/68 block states', which is the server's own read-back of the 68 block states it wrote.",
         "Platform verification through the client: one block scan of x 5..16, y 79..80 at z = 12 must show every column solid at y = 79 (the layer the walk happens on, i.e. a stone platform at y79) and air at y = 80 (the layer the player stands in). Then /tp 8.5 80.0 12.5 puts the player on that walkway outside the box, and the landing is accepted only once the client reports that position with a solid block under it and air at its feet.",
@@ -125,7 +125,7 @@
       "wasm_zone_market_expectation": {
         "package_id": "inventory-compat",
         "mode": "zone-market",
-        "player_username": "SolarisPrimary",
+        "player_username": "KrasnoPrimary",
         "command_root": "trade",
         "ledger_key": "trade-ledger",
         "marker_prefix": "P3_TRADE",

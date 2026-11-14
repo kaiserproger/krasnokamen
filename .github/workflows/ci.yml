@@ -10,8 +10,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  SOLARIS_LOADER_REVISION: 060cf44b264a8404a6c8cf629c14867d6e5cd212
-  SOLARIS_PLUGINS_REVISION: 7fe8efaf6aa76735a88c066236fc6bad2c18318f
+  KRASNOKAMEN_LOADER_REVISION: 060cf44b264a8404a6c8cf629c14867d6e5cd212
+  KRASNOKAMEN_PLUGINS_REVISION: 7fe8efaf6aa76735a88c066236fc6bad2c18318f
 
 permissions:
   contents: read
@@ -54,9 +54,9 @@ jobs:
       matrix:
         shard: [1, 2, 3, 4]
     env:
-      SOLARIS_HARNESS_MEMORY_MAX: 8G
+      KRASNOKAMEN_HARNESS_MEMORY_MAX: 8G
       # Short run; the full suite is the local L2 `run correctness` gate.
-      SOLARIS_NEXTEST_PROFILE: ci
+      KRASNOKAMEN_NEXTEST_PROFILE: ci
     defaults:
       run:
         working-directory: solaris
@@ -66,13 +66,13 @@ jobs:
           path: solaris
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/solaris-default-plugins
-          ref: ${{ env.SOLARIS_PLUGINS_REVISION }}
+          repository: ${{ github.repository_owner }}/krasnokamen-default-plugins
+          ref: ${{ env.KRASNOKAMEN_PLUGINS_REVISION }}
           path: solaris-default-plugins
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/solaris-loader
-          ref: ${{ env.SOLARIS_LOADER_REVISION }}
+          repository: ${{ github.repository_owner }}/krasnokamen-loader
+          ref: ${{ env.KRASNOKAMEN_LOADER_REVISION }}
           path: solaris-loader
       - uses: dtolnay/rust-toolchain@1.94
         with:
@@ -151,8 +151,8 @@ jobs:
     name: Loader modules
     runs-on: ubuntu-24.04
     env:
-      SOLARIS_CLIENT_JAR: ${{ github.workspace }}/solaris-loader/.analysis/client.jar
-      SOLARIS_HARNESS_MEMORY_MAX: 8G
+      KRASNOKAMEN_CLIENT_JAR: ${{ github.workspace }}/solaris-loader/.analysis/client.jar
+      KRASNOKAMEN_HARNESS_MEMORY_MAX: 8G
     defaults:
       run:
         working-directory: solaris
@@ -162,8 +162,8 @@ jobs:
           path: solaris
       - uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/solaris-loader
-          ref: ${{ env.SOLARIS_LOADER_REVISION }}
+          repository: ${{ github.repository_owner }}/krasnokamen-loader
+          ref: ${{ env.KRASNOKAMEN_LOADER_REVISION }}
           path: solaris-loader
       - uses: actions/setup-java@v4
         with:
@@ -198,7 +198,7 @@ jobs:
               content = response.read()
           if hashlib.sha1(content).hexdigest() != client["sha1"]:
               raise SystemExit("Minecraft client checksum mismatch")
-          destination = Path(os.environ["SOLARIS_CLIENT_JAR"])
+          destination = Path(os.environ["KRASNOKAMEN_CLIENT_JAR"])
           destination.parent.mkdir(parents=True, exist_ok=True)
           destination.write_bytes(content)
           print(f"Verified Minecraft {version} client: {client['sha1']}")
@@ -260,21 +260,21 @@ jobs:
       - name: Build server binary
         env:
           TARGET: ${{ matrix.target }}
-        run: cargo build --locked --release -p mc-edge --bin solaris-v2 --target "$TARGET"
+        run: cargo build --locked --release -p mc-edge --bin krasnokamen --target "$TARGET"
       - name: Package release asset
         env:
           TARGET: ${{ matrix.target }}
         run: |
           set -euo pipefail
-          asset="solaris-${TARGET}.tar.gz"
+          asset="krasnokamen-${TARGET}.tar.gz"
           package_dir="dist/package-${TARGET}"
           mkdir -p "$package_dir"
-          install -m 0755 "target/${TARGET}/release/solaris-v2" "$package_dir/solaris"
+          install -m 0755 "target/${TARGET}/release/krasnokamen" "$package_dir/krasnokamen"
           install -m 0644 README.md example.toml LICENSE-APACHE LICENSE-MIT "$package_dir/"
           install -m 0644 "docs/releases/${GITHUB_REF_NAME}.md" "$package_dir/CHANGELOG.md"
           printf '%s\n' "$GITHUB_REF_NAME" > "$package_dir/VERSION"
           tar -C "$package_dir" -czf "dist/${asset}" \
-            solaris README.md CHANGELOG.md example.toml LICENSE-APACHE LICENSE-MIT VERSION
+            krasnokamen README.md CHANGELOG.md example.toml LICENSE-APACHE LICENSE-MIT VERSION
           (
             cd dist
             sha256sum "$asset" > "${asset}.sha256"
@@ -285,23 +285,23 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          archive="dist/solaris-${TARGET}.tar.gz"
+          archive="dist/krasnokamen-${TARGET}.tar.gz"
           smoke_dir="dist/smoke-${TARGET}"
           mkdir -p "$smoke_dir"
           tar -xzf "$archive" -C "$smoke_dir"
           test "$(cat "$smoke_dir/VERSION")" = "$TAG"
-          "$smoke_dir/solaris" --help >/dev/null
+          "$smoke_dir/krasnokamen" --help >/dev/null
           (
             cd "$smoke_dir"
             # Content startup requires the operator's licensed cache.
-            ./solaris --config example.toml content verify --help >/dev/null
+            ./krasnokamen --config example.toml content verify --help >/dev/null
           )
       - uses: actions/upload-artifact@v4
         with:
-          name: solaris-${{ matrix.target }}
+          name: krasnokamen-${{ matrix.target }}
           path: |
-            dist/solaris-${{ matrix.target }}.tar.gz
-            dist/solaris-${{ matrix.target }}.tar.gz.sha256
+            dist/krasnokamen-${{ matrix.target }}.tar.gz
+            dist/krasnokamen-${{ matrix.target }}.tar.gz.sha256
           if-no-files-found: error
           # Consumed by the release job in the same run; release assets live on the GitHub release.
           retention-days: 1
@@ -317,7 +317,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          pattern: solaris-*
+          pattern: krasnokamen-*
           path: dist
           merge-multiple: true
       - name: Create release and upload binaries
@@ -326,7 +326,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          release_args=(--repo "$GITHUB_REPOSITORY" --verify-tag --title "Solaris ${TAG}")
+          release_args=(--repo "$GITHUB_REPOSITORY" --verify-tag --title "Krasnokamen ${TAG}")
           # Every 0.x release is preliminary (draft maturity); keep it off `latest`.
           if [[ "$TAG" == *-* || "$TAG" == v0.* ]]; then
             release_args+=(--prerelease)

@@ -614,7 +614,7 @@ impl Core {
         let is_stage = |path: &std::path::Path| {
             path.file_name()
                 .and_then(std::ffi::OsStr::to_str)
-                .is_some_and(|name| name.starts_with(".solaris-conversion-"))
+                .is_some_and(|name| name.starts_with(".krasnokamen-conversion-"))
         };
         if is_stage(&config.world_dir)
             || std::fs::canonicalize(&config.world_dir).is_ok_and(|path| is_stage(&path))
@@ -2103,8 +2103,8 @@ struct EntityCaptureExtras {
     end_fight: Vec<(String, mc_nbt::Tag)>,
 }
 
-/// Entity base as vanilla records grouped by chunk. The Solaris wire id rides
-/// as `solaris:WireId` so journal tail entries (keyed by wire id) still match
+/// Entity base as vanilla records grouped by chunk. The Krasnokamen wire id rides
+/// as `krasnokamen:WireId` so journal tail entries (keyed by wire id) still match
 /// after recovery. Records are built in parallel (about 10 us each: 110-137 ms
 /// serial at 11.5k entities, on the tick thread) and grouped serially in slot
 /// order, so the output is identical to a serial slot-order capture.
@@ -2590,7 +2590,7 @@ pub(crate) fn checkpoint_tickets(
     state
         .tickets
         .iter()
-        .filter(|(owner, _)| !owner.starts_with("solaris:portal:"))
+        .filter(|(owner, _)| !owner.starts_with("krasnokamen:portal:"))
         .map(|(owner, (centre, radius))| (owner.clone(), ([centre.x, centre.z], (tick, *radius))))
         .collect()
 }
@@ -2857,7 +2857,7 @@ pub(crate) fn journal_entries_for_tick(
         });
     }
     for (owner, (centre, radius)) in &state.tickets {
-        if owner.starts_with("solaris:portal:") {
+        if owner.starts_with("krasnokamen:portal:") {
             continue;
         }
         entries.push(JournalEntry::Ticket {
@@ -3490,7 +3490,7 @@ mod motion_tests {
         let fields = mc_data::entity_nbt::entity_to_fields(&registry.items, record).expect("NBT");
         assert!(fields.contains(&("Color".to_owned(), mc_nbt::Tag::Byte(15))));
         assert!(fields.contains(&("Sheared".to_owned(), mc_nbt::Tag::Byte(1))));
-        let dir = std::env::temp_dir().join(format!("solaris-sheep-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("krasnokamen-sheep-{}", uuid::Uuid::new_v4()));
         mc_world::anvil::entity_regions::write_entity_regions(&dir, &registry.items, &chunks, 1)
             .expect("write checkpoint entities");
         let back = mc_world::anvil::entity_regions::read_entity_regions(&dir, &registry.items)
@@ -3704,7 +3704,7 @@ mod ticket_checkpoint_tests {
         for (owner, chunk) in [
             ("example:forced", crate::boundary::ChunkPos { x: 3, z: 4 }),
             (
-                "solaris:portal:test",
+                "krasnokamen:portal:test",
                 crate::boundary::ChunkPos { x: 9, z: 10 },
             ),
         ] {
@@ -3754,7 +3754,7 @@ mod ticket_checkpoint_tests {
         let recovered = read_manifest(&config).unwrap();
         assert_eq!(recovered.tickets.len(), 1);
         assert_eq!(recovered.tickets["example:forced"].0, [3, 4]);
-        assert!(!recovered.tickets.contains_key("solaris:portal:test"));
+        assert!(!recovered.tickets.contains_key("krasnokamen:portal:test"));
         restored.shutdown();
     }
 
@@ -3793,7 +3793,7 @@ mod ticket_checkpoint_tests {
                 ),
             );
             world.tickets.insert(
-                "solaris:portal:transient".into(),
+                "krasnokamen:portal:transient".into(),
                 (crate::boundary::ChunkPos { x: 20, z: 20 }, 0),
             );
         }
@@ -4035,7 +4035,7 @@ mod village_generation_tests {
         let directory = tempfile::tempdir().unwrap();
         let mut config = CoreConfig::new(directory.path().to_owned(), 81);
         config.vanilla_data_dir = Some(
-            std::env::var_os("SOLARIS_CONTENT_CACHE")
+            std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
                 .map(PathBuf::from)
                 .unwrap_or_else(|| {
                     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")

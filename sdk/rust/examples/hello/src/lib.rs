@@ -1,4 +1,4 @@
-//! Example Solaris plugin.
+//! Example Krasnokamen plugin.
 //!
 //! By default it is server-only and does two things a player can see: it greets a player who
 //! joins, and it answers the `/hello` command. Both are staged commands the host
@@ -43,12 +43,12 @@
 //! `settlement_ops.rs`: a player's `settlement-api` command answers exactly one
 //! native settlement operation per action against the id the query observed.
 
-use solaris_plugin_sdk::events::{
+use krasnokamen_plugin_sdk::events::{
     OperationOutcome, OperationPayload, PlayerTeleportFailure, PlayerTeleportOutcome,
     ZoneCommandOutcome,
 };
-use solaris_plugin_sdk::operation_types::OperationFailure;
-use solaris_plugin_sdk::{
+use krasnokamen_plugin_sdk::operation_types::OperationFailure;
+use krasnokamen_plugin_sdk::{
     broadcast, commands, disconnect_player, export_plugin, lifecycle, list_online_players, log,
     message_player, storage, storage_cas, storage_get, types, BuildContext, BuildDecision,
     BuildResult, Command, Config, DamageContext, DamageDecision, DamageResult, Event, EventContext,

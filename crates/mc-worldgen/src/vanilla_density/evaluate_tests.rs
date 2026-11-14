@@ -86,7 +86,7 @@ fn kind(node: &Node) -> &'static str {
 #[test]
 #[ignore = "explicit density work measurement; run with --ignored --nocapture"]
 fn vanilla_overworld_density_evaluation_counts() {
-    let root = std::env::var_os("SOLARIS_CONTENT_CACHE")
+    let root = std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
@@ -238,7 +238,7 @@ fn min_max_short_circuit_skips_proven_arm() {
         }
         fn put_cell(&mut self, _id: Id, _cell: Cell) {}
     }
-    let root = std::env::var_os("SOLARIS_CONTENT_CACHE")
+    let root = std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
@@ -382,7 +382,7 @@ fn min_max_short_circuit_skips_proven_arm() {
 /// across Y), while a Y-free wrapper hits the last-(x, z) entry.
 #[test]
 fn cache_2d_key_drops_y_only_when_y_free() {
-    let root = std::env::var_os("SOLARIS_CONTENT_CACHE")
+    let root = std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
@@ -463,7 +463,7 @@ fn cache_2d_key_drops_y_only_when_y_free() {
 /// Min/Max/Mul short-circuits — without changing sampled values.
 #[test]
 fn diagnostic_counters_are_gated_and_value_neutral() {
-    let root = std::env::var_os("SOLARIS_CONTENT_CACHE")
+    let root = std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
@@ -528,7 +528,7 @@ fn diagnostic_counters_are_gated_and_value_neutral() {
 /// and branch-edge heights (sea level / min_y edges).
 #[test]
 fn scalar_density_bits_stable_across_entry_points() {
-    let root = std::env::var_os("SOLARIS_CONTENT_CACHE")
+    let root = std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
@@ -613,7 +613,7 @@ fn scalar_density_bits_stable_across_entry_points() {
 /// recorded and bits match the plain baseline.
 #[test]
 fn min_max_short_circuit_never_fires_at_equality() {
-    let root = std::env::var_os("SOLARIS_CONTENT_CACHE")
+    let root = std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
@@ -686,7 +686,7 @@ fn min_max_short_circuit_never_fires_at_equality() {
 /// scalar executions backing it.
 #[test]
 fn lerp_call_counts_match_stage_accounting() {
-    let root = std::env::var_os("SOLARIS_CONTENT_CACHE")
+    let root = std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")

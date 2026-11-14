@@ -29,7 +29,7 @@ fn advancement_reward_loot_uses_existing_rolls_without_weakening_chest_type() {
         "entries":[{"type":"minecraft:item","name":"minecraft:bread",
             "functions":[{"function":"minecraft:set_count","count":3}]}]}]}"#;
     let table = ChestLootTable::compile_advancement_reward(id("test:reward"), raw).unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let drops = table.roll(&mut ChestRng::new(7), &items, 0.0).unwrap();
     assert_eq!(drops.len(), 1);
     assert_eq!(
@@ -73,7 +73,7 @@ fn random_book_loot_is_an_enchanted_book_with_canonical_stored_enchantments() {
         }]}]}"##,
     )
     .unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let stack = table
         .roll(&mut ChestRng::new(7), &items, 0.0)
         .unwrap()
@@ -105,7 +105,7 @@ fn opening_luck_adds_floored_bonus_rolls_and_rejects_unbounded_context() {
             "entries":[{"type":"minecraft:item","name":"minecraft:bread"}]}]}"#,
     )
     .unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let drops = table.roll(&mut ChestRng::new(7), &items, 2.5).unwrap();
     assert_eq!(drops.iter().map(|stack| stack.count).sum::<i32>(), 3);
     assert!(table.roll(&mut ChestRng::new(7), &items, f32::NAN).is_err());
@@ -123,7 +123,7 @@ fn all_empty_pool_rolls_nothing() {
         table
             .roll(
                 &mut ChestRng::new(1),
-                &crate::items::solaris_required_items(),
+                &crate::items::krasnokamen_required_items(),
                 0.0
             )
             .unwrap()
@@ -142,7 +142,7 @@ fn missing_table_file_fails_closed() {
 
 #[test]
 fn luck_quality_can_suppress_entries_and_an_entire_pool() {
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let table = ChestLootTable::compile(
         id("minecraft:chests/quality"),
         r#"{
@@ -186,7 +186,7 @@ fn fractional_bonus_uses_vanilla_float_multiplication_before_floor() {
         ]}]}"#,
     )
     .unwrap();
-    let items = crate::items::solaris_required_items();
+    let items = crate::items::krasnokamen_required_items();
     let drops = table.roll(&mut ChestRng::new(7), &items, 100.0).unwrap();
     assert_eq!(drops.iter().map(|stack| stack.count).sum::<i32>(), 30);
 }

@@ -154,7 +154,9 @@ pub(super) fn convert(
                     )));
                 }
                 // Native journal decisions are not portable Anvil metadata.
-                chunk.extras.retain(|(key, _)| key != "SolarisJournalLsn");
+                chunk
+                    .extras
+                    .retain(|(key, _)| key != "KrasnokamenJournalLsn");
                 if let Some(image) = replay.inhabited_time.get(&[x, z]) {
                     image.apply(&mut chunk, replay.tick);
                 }
@@ -408,10 +410,10 @@ pub(super) fn convert(
         fields.retain(|(key, _)| {
             !matches!(
                 key.as_str(),
-                "SolarisAdvancements"
-                    | "SolarisUnlockedRecipes"
-                    | "SolarisStatistics"
-                    | "SolarisWardenWarning"
+                "KrasnokamenAdvancements"
+                    | "KrasnokamenUnlockedRecipes"
+                    | "KrasnokamenStatistics"
+                    | "KrasnokamenWardenWarning"
             )
         });
         let book_index = fields.iter().position(|(key, _)| key == "recipeBook");
@@ -486,7 +488,7 @@ fn filter_claimed_generated_markers(chunk: &mut Chunk, claims: &BTreeSet<String>
         return;
     }
     for (key, tag) in &mut chunk.extras {
-        if key != "SolarisGeneratedEntities" {
+        if key != "KrasnokamenGeneratedEntities" {
             continue;
         }
         if let Tag::List(list) = tag {
@@ -524,13 +526,13 @@ fn portable_hopper_cooldowns(tag: &mut Tag, tick: u64) -> Result<(), CoreError> 
     for tag in &mut list.elements {
         let fields = compound_mut(tag)?;
         let Some(Tag::Long(until)) =
-            mc_data::item_nbt::field(fields, "solaris:TransferCooldownUntil")
+            mc_data::item_nbt::field(fields, "krasnokamen:TransferCooldownUntil")
         else {
             continue;
         };
         let remaining = (*until).max(0) as u64;
         let remaining = remaining.saturating_sub(tick).min(8) as i32;
-        fields.retain(|(key, _)| key != "solaris:TransferCooldownUntil");
+        fields.retain(|(key, _)| key != "krasnokamen:TransferCooldownUntil");
         put(fields, "TransferCooldown", Tag::Int(remaining));
     }
     Ok(())

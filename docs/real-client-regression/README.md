@@ -5,7 +5,7 @@ These manifests are not protocol harnesses and do not count as client evidence
 until the repo-native Gradle `runClient` adapter launches a normal vanilla
 26.1.2 client and the required artifacts are recorded.
 
-Current launches use `mc-edge`'s `solaris-v2` over `mc-core` (ADR 0014).
+Current launches use `mc-edge`'s `krasnokamen` over `mc-core` (ADR 0014).
 Recorded September fixture paths, grants and terrain assumptions in older
 manifest deployment metadata are historical provenance, not current TOML
 settings or native-runtime acceptance. Use [OPERATING.md](../OPERATING.md) and
@@ -16,7 +16,7 @@ Artifacts from a run stay local under `.analysis/real-client-runs/<run_id>/`:
 
 - `manifest.json` copied from the tracked scenario manifest.
 - `client.log` from the real client.
-- `server.log` from `cargo run -p mc-edge --bin solaris-v2 -- --config <config>`; `--run`
+- `server.log` from `cargo run -p mc-edge --bin krasnokamen -- --config <config>`; `--run`
   uses a per-run `server.toml` copied from the selected source config, defaulting
   to `example.toml`.
 - `observations.json` with structured pass/fail notes for each step.
@@ -43,14 +43,14 @@ bash tools/run-real-client-regression.sh --prepare
 bash tools/run-real-client-regression.sh --run
 ```
 
-Set `SOLARIS_REAL_CLIENT_SERVER_CONFIG=<path>` to use an explicit local config,
+Set `KRASNOKAMEN_REAL_CLIENT_SERVER_CONFIG=<path>` to use an explicit local config,
 for example a copy of `example.toml` with `data.vanilla_data_dir` enabled.
 During `--run`, the runner writes an effective `server.toml` into the artifact
 directory and writes vanilla `ops.json` beside it for the explicitly privileged
-offline scenario identities (`SolarisPrimary`/`SolarisSecondary`). It does not
+offline scenario identities (`KrasnoPrimary`/`KrasnoSecondary`). It does not
 change tracked config or grant operators to a no-debug survival scenario.
 
-`--run` starts Solaris and executes the sibling `../solaris-loader` Gradle
+`--run` starts Krasnokamen and executes the sibling `../solaris-loader` Gradle
 `:fabric-agent:runClientAgent` task with `--no-configuration-cache`, writing
 the local artifact directory. It does not mark scenarios passed unless the
 in-client agent driver records executed observations. After a real client
@@ -62,7 +62,7 @@ bash tools/run-real-client-regression.sh --validate-run .analysis/real-client-ru
 
 Validation checks the artifact shape, fails while the observations remain
 `not-run`/prepared, requires exact
-`"schema": "solaris.real_client_observations.v1"` and
+`"schema": "krasnokamen.real_client_observations.v1"` and
 `"client_gate": "agent-run-real-client"` plus exact
 `"quality_label": "stabilization"`, rejects observed scenario ids that are
 absent from the manifest, and rejects a passed observed scenario when its
@@ -75,7 +75,7 @@ artifacts before writing a passed observation.
 
 ## In-Client Agent Driver
 
-The invasive real-client path uses a Solaris-owned client agent that exposes a
+The invasive real-client path uses a Krasnokamen-owned client agent that exposes a
 loopback-only JSON bridge from inside the actual Minecraft client process. The
 approved external driver is `tools/real-client-agent-driver.py`.
 
@@ -86,36 +86,36 @@ secret for the primary Gradle client when one is not provided:
 bash tools/run-real-client-regression.sh --run
 ```
 
-The primary and secondary client bridges are loaded by the Solaris client-agent
-NeoForge mod in `client-mod/solaris-client-agent/fabric-agent`. The runner starts
+The primary and secondary client bridges are loaded by the Krasnokamen client-agent
+NeoForge mod in `client-mod/krasnokamen-client-agent/fabric-agent`. The runner starts
 both clients with the repo-native Gradle adapter:
 
 ```sh
-client-mod/solaris-client-agent/gradlew --no-configuration-cache :fabric-agent:runClientAgent
+client-mod/krasnokamen-client-agent/gradlew --no-configuration-cache :fabric-agent:runClientAgent
 ```
 
 The runner picks a free per-run bridge port unless
-`SOLARIS_REAL_CLIENT_AGENT_PORT` or `SOLARIS_REAL_CLIENT_AGENT_BRIDGE_URL` is set
+`KRASNOKAMEN_REAL_CLIENT_AGENT_PORT` or `KRASNOKAMEN_REAL_CLIENT_AGENT_BRIDGE_URL` is set
 explicitly. The per-run bridge secret is passed through
-`SOLARIS_CLIENT_AGENT_SECRET` and the Gradle property
-`-Psolaris.clientAgent.secret`, not on a free-form shell command.
+`KRASNOKAMEN_CLIENT_AGENT_SECRET` and the Gradle property
+`-Pkrasnokamen.clientAgent.secret`, not on a free-form shell command.
 
-Two-client agent gates require `SOLARIS_REAL_CLIENT_SECOND_AGENT_SECRET`;
-`SOLARIS_REAL_CLIENT_SECOND_AGENT_PORT` or
-`SOLARIS_REAL_CLIENT_SECOND_AGENT_BRIDGE_URL` can pin the second bridge.
+Two-client agent gates require `KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_SECRET`;
+`KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_PORT` or
+`KRASNOKAMEN_REAL_CLIENT_SECOND_AGENT_BRIDGE_URL` can pin the second bridge.
 Otherwise the runner selects a second free loopback port when the second secret
 is set. Primary and secondary Gradle launches use separate per-run game
 directories under the artifact directory and distinct offline usernames
-(`SolarisPrimary` and `SolarisSecondary`).
+(`KrasnoPrimary` and `KrasnoSecondary`).
 
-Set `SOLARIS_REAL_CLIENT_SERVER_ADDR=<host:port>` when the in-client driver
-should connect to a different loopback Solaris address than `127.0.0.1:25565`;
+Set `KRASNOKAMEN_REAL_CLIENT_SERVER_ADDR=<host:port>` when the in-client driver
+should connect to a different loopback Krasnokamen address than `127.0.0.1:25565`;
 the driver accepts only `127.0.0.1`, `localhost`, or `[::1]` targets. The
 default scenario is `m94-02b-rejected-block-resync`; override it with
-`SOLARIS_REAL_CLIENT_AGENT_SCENARIO`.
+`KRASNOKAMEN_REAL_CLIENT_AGENT_SCENARIO`.
 
 The Java-agent `m94-02a-solid-place-break-drop` scenario prepares held items
-through Solaris `/debug give` commands, uses the real client's item-use path for
+through Krasnokamen `/debug give` commands, uses the real client's item-use path for
 placement, and sends named vanilla `ServerboundPlayerActionPacket` destroy
 actions from inside the real client process for the server-timed break/drop
 check. `m94-02b-rejected-block-resync` prepares held items the same way and uses
@@ -171,7 +171,7 @@ cursor recovery, malformed clicks, barrels, furnace-family UIs, common
 stations, deliberate stale-click injection, performance, vanilla oracle, and
 soak evidence remain degraded or unrun.
 `m94-05-entities-combat-death-respawn` summons a visible cow near the real
-client, kills the survival player through Solaris' debug damage path, observes
+client, kills the survival player through Krasnokamen' debug damage path, observes
 the real `DeathScreen`, performs the vanilla respawn client command, and waits
 for the client to leave the level-loading screen. It intentionally returns
 `blocked`, not `passed`, until hostile combat, melee damage/knockback, mob
@@ -179,10 +179,10 @@ drops, XP pickup, projectiles, shield timing, vehicles, and broad AI/pathing
 have dedicated in-client primitives and server evidence.
 `m94-06-save-restart-two-client-visibility` is runner-managed. The public broad
 scenario id stays blocked on its own; the approved runner decomposes it into
-`m94-06-save-restart-before`, a graceful Solaris restart, and
+`m94-06-save-restart-before`, a graceful Krasnokamen restart, and
 `m94-06-save-restart-after`. The before phase places a dirt marker through the
 real client, sends `save-all`, and writes marker coordinates into the run
-directory. The runner stops Solaris with `kill -INT`, restarts it, then calls the
+directory. The runner stops Krasnokamen with `kill -INT`, restarts it, then calls the
 after phase with `--append-observations` so both phase results stay in one
 `observations.json`. The after phase reconnects the same real client and checks
 that the marker persisted. If the second-client environment is configured, the
@@ -231,14 +231,14 @@ checks prove artifact shape only, not screenshot content quality or gameplay
 correctness. Observed scenario ids must exist in the copied manifest, so a typo
 or fabricated id cannot validate as M94 coverage.
 
-The Solaris-owned bridge source lives under
-`client-mod/solaris-client-agent/`. The `bridge-core` module is a pure Java
+The Krasnokamen-owned bridge source lives under
+`client-mod/krasnokamen-client-agent/`. The `bridge-core` module is a pure Java
 loopback JSON-RPC transport plus fakeable command facade and can be checked
 without a Minecraft client:
 
 ```sh
-client-mod/solaris-client-agent/gradlew \
-  -p client-mod/solaris-client-agent :bridge-core:test --no-daemon
+client-mod/krasnokamen-client-agent/gradlew \
+  -p client-mod/krasnokamen-client-agent :bridge-core:test --no-daemon
 ```
 
 Passing `bridge-core` tests prove only transport/command-contract behavior.

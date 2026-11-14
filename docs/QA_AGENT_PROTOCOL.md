@@ -1,6 +1,6 @@
-# Solaris graphical QA agent protocol
+# Krasnokamen graphical QA agent protocol
 
-This is the default process for independent QA of client-visible Solaris changes.
+This is the default process for independent QA of client-visible Krasnokamen changes.
 The owner-facing entrypoint is CodexPro `spawn_pi_qa_detached`; do not replace it
 with ad-hoc tmux/process polling.
 
@@ -16,7 +16,7 @@ with ad-hoc tmux/process polling.
 - Display: a fresh Xvfb display. A missing host `DISPLAY` is not a reason to skip
   graphical QA.
 - Client: the real Minecraft Java Edition 26.1.2 graphical client and the existing
-  Solaris bridge/MCP runner. Raw-TCP/test-client coverage is supplemental.
+  Krasnokamen bridge/MCP runner. Raw-TCP/test-client coverage is supplemental.
 
 ## Mandatory order
 

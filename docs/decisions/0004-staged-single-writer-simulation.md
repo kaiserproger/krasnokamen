@@ -18,7 +18,7 @@ The bounded command channel wakes the owner directly. Queue closure or capacity
 rejection happens before mutation. Once mutation begins, requester or socket
 progress cannot decide whether the mutation committed.
 
-A command that cannot determine its commit outcome is fatal. Solaris stops the
+A command that cannot determine its commit outcome is fatal. Krasnokamen stops the
 owning runtime rather than retrying, guessing, or publishing a result that might
 not match authority.
 
@@ -376,7 +376,7 @@ a retained cache. Full-source propagation comparison guards the optimization.
 If direct sky no longer forms a top-open interval, replace this seeding rule;
 there is no legacy scan fallback or runtime switch. Historical measurement and
 client evidence for this v1 change is in the `streaming-light` checkpoint of the
-[pre-cleanup cursor](https://github.com/kaiserproger/solaris/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/MEMORY.md).
+[pre-cleanup cursor](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/MEMORY.md).
 
 ## Invariants
 
@@ -596,7 +596,7 @@ remaining work is limited to real caller cutovers:
   remain non-atomic.
 
 Each cutover removes the old helper, mirror, alias, and test path in the same
-change. Solaris has no compatibility obligation to superseded internal APIs.
+change. Krasnokamen has no compatibility obligation to superseded internal APIs.
 
 ## Rejected alternatives
 

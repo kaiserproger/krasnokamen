@@ -619,7 +619,7 @@ pub(crate) fn villager_to_fields(
                 .into(),
             ),
         ),
-        // Vanilla compact Inventory omits holes, but Solaris retains exact custody slots.
+        // Vanilla compact Inventory omits holes, but Krasnokamen retains exact custody slots.
         (
             "inventory_slots".into(),
             Tag::IntArray(
@@ -751,7 +751,7 @@ pub(crate) fn villager_to_fields(
             "Brain".into(),
             Tag::Compound(vec![("memories".into(), Tag::Compound(memories))]),
         ),
-        ("solaris:VillagerRuntime".into(), Tag::Compound(runtime)),
+        ("krasnokamen:VillagerRuntime".into(), Tag::Compound(runtime)),
     ];
     if state.wandering {
         fields.push((
@@ -795,7 +795,7 @@ pub(crate) fn owns_field(key: &str) -> bool {
             | "LastGossipDecay"
             | "Inventory"
             | "Brain"
-            | "solaris:VillagerRuntime"
+            | "krasnokamen:VillagerRuntime"
             | "DespawnDelay"
             | "sleeping_pos"
             | "ConversionTime"
@@ -863,8 +863,8 @@ pub(crate) fn villager_from_fields(
     if stacks.len() > 8 {
         return Err(VillagerNbtError::Invalid("Inventory"));
     }
-    let runtime = field(fields, "solaris:VillagerRuntime")?
-        .map(|tag| compound(tag, "solaris:VillagerRuntime"))
+    let runtime = field(fields, "krasnokamen:VillagerRuntime")?
+        .map(|tag| compound(tag, "krasnokamen:VillagerRuntime"))
         .transpose()?
         .unwrap_or(&[]);
     state.wandering = boolean(runtime, "wandering_trader", false)?;

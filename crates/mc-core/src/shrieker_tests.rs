@@ -206,7 +206,7 @@ fn warning_and_inflight_shriek_survive_wal_checkpoint_restart_without_duplicate_
         .to_string();
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
     let entries = crate::core::journal_entries_for_tick(&mut state, &output);
-    let root = std::env::temp_dir().join(format!("solaris-shrieker-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("krasnokamen-shrieker-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).unwrap();
     let mut writer = JournalWriter::open(&root, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
@@ -423,7 +423,11 @@ fn lazy_warning_decay_survives_native_checkpoint_wal_restart_and_anvil_export() 
     let Tag::Compound(fields) = tag else {
         panic!("exported player compound")
     };
-    assert!(!fields.iter().any(|(key, _)| key == "SolarisWardenWarning"));
+    assert!(
+        !fields
+            .iter()
+            .any(|(key, _)| key == "KrasnokamenWardenWarning")
+    );
     let warning = Warning::read(&fields).unwrap();
     assert_eq!(
         (

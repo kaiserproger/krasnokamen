@@ -1,7 +1,7 @@
-# Agent Guide — Solaris
+# Agent Guide — Krasnokamen
 
-Solaris is a draft Rust Minecraft Java 26.1.2 server; v0.0.8 is a prerelease.
-The current binary is `mc-edge`'s `solaris-v2` over native `mc-core`; v1 is retired.
+Krasnokamen is a draft Rust Minecraft Java 26.1.2 server; v0.0.8 is a prerelease.
+The current binary is `mc-edge`'s `krasnokamen` over native `mc-core`; v1 is retired.
 `CLAUDE.md` is a symlink to this guide. Owner identity is
 `kaiserproger <kaisergrobe@gmail.com>`; never change Git configuration.
 
@@ -45,9 +45,9 @@ The current binary is `mc-edge`'s `solaris-v2` over native `mc-core`; v1 is reti
 From the repository root (debug by default):
 
 ```sh
-cargo build -p mc-edge --bin solaris-v2
-cargo run -p mc-edge --bin solaris-v2 -- content import --version 26.1.2 --download
-cargo run -p mc-edge --bin solaris-v2 -- --config example.toml
+cargo build -p mc-edge --bin krasnokamen
+cargo run -p mc-edge --bin krasnokamen -- content import --version 26.1.2 --download
+cargo run -p mc-edge --bin krasnokamen -- --config example.toml
 python3 -m tools.harness list
 python3 -m tools.harness run test -p mc-core --lib <filter>  # L0: affected scope
 python3 -m tools.harness run fmt                          # L1, plus focused tests
@@ -109,8 +109,8 @@ python3 -m tools.harness run correctness                  # L2: major phase/code
 - Core v2 persists only native store + tick WAL: no dual-write or Anvil fallback; corrupt/unsupported state fails closed.
   Gameplay authority stays in native tick/intent merge; edge owns presentation/connection state.
   Root orchestration routes work, not domain policy; substantial tests belong in focused sibling `*_tests.rs` modules.
-- No released Solaris compatibility surface: migrate callers and delete superseded APIs/schemas/authorities/adapters/flags/fallbacks.
-  Compatibility targets are vanilla protocol and Anvil, not old Solaris storage. Architecture/authority/threading/waiting/
+- No released Krasnokamen compatibility surface: migrate callers and delete superseded APIs/schemas/authorities/adapters/flags/fallbacks.
+  Compatibility targets are vanilla protocol and Anvil, not old Krasnokamen storage. Architecture/authority/threading/waiting/
   persistence-order/module-policy changes update the owning ADR; desired migration is not runtime truth.
 - Debug builds by default; `--release` only for an explicitly required performance/release gate.
   Measured narrow optimization hacks must document bottleneck, boundary, correctness fence, effect and fallback/removal path.
@@ -127,8 +127,8 @@ python3 -m tools.harness run correctness                  # L2: major phase/code
   use path-limited status/diffs. Never stage local `.analysis/`, `data/vanilla/`, `.serena/`, `.opencode/`,
   `x-ui-pro/`, `YOLO_MODE.md`, `log.log`, `opencode.json` overlays or other ignored agent/tool artifacts unless explicitly requested.
 - This repo owns core Rust/runtime and canonical harness. `../solaris-loader` owns Java/client scenarios
-  (`SOLARIS_LOADER_ROOT` override allowed); never duplicate a client-mod source tree here.
-- `../solaris-default-plugins` owns first-party Wasmtime packages (`solaris:plugin@0.7.0`), deployed via `[plugins].directory`;
+  (`KRASNOKAMEN_LOADER_ROOT` override allowed); never duplicate a client-mod source tree here.
+- `../solaris-default-plugins` owns first-party Wasmtime packages (`krasnokamen:plugin@0.7.0`), deployed via `[plugins].directory`;
   no compiled-in package list or `plugins.bundled` compatibility path. Core production builds require neither sibling;
   integration gates require the sibling they exercise. Each sibling owns its README/AGENTS/Git metadata;
   creating it locally never authorizes staging, commits, remotes, pushes or publication.

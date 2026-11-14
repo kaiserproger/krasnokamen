@@ -155,15 +155,16 @@ impl EdgeServer {
             anyhow::anyhow!("worldgen/biome registry missing: chunk encoding impossible")
         })?;
         let blocks = mc_world::BlockRegistry::from_report(
-            &mc_data::blocks::solaris_required_blocks_report(),
+            &mc_data::blocks::krasnokamen_required_blocks_report(),
         )
         .map_err(|e| anyhow::anyhow!("block registry: {e}"))?;
         let wire = WireRegistries {
             dimension_type_ids: crate::dimensions::registry_ids(&data)?,
             biomes,
             blocks,
-            items: mc_data::items::solaris_required_items(),
-            block_entity_types: mc_data::block_entity_types::solaris_required_block_entity_types(),
+            items: mc_data::items::krasnokamen_required_items(),
+            block_entity_types:
+                mc_data::block_entity_types::krasnokamen_required_block_entity_types(),
         };
         let recipes = crate::recipes::RecipePackets::new(hub.registry())?;
         let admin = crate::admin::Admin::open(&cfg.server_dir)?;
@@ -179,7 +180,7 @@ impl EdgeServer {
             .iter()
             .map(|(name, _)| name.to_string())
             .collect();
-        let suggestion_blocks = mc_data::blocks::solaris_required_blocks_report()
+        let suggestion_blocks = mc_data::blocks::krasnokamen_required_blocks_report()
             .into_iter()
             .map(|block| block.id.to_string())
             .collect();
@@ -1808,7 +1809,7 @@ pub fn load_tags(
     } else {
         &cfg.data.vanilla_data_dir
     };
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let tags = crate::startup_data::load_effective_tags(root, data, &items)?;
     Ok(Arc::new(tags))
 }

@@ -664,7 +664,7 @@ pub struct ChestLootCatalog {
     tables: BTreeMap<Identifier, ChestLootTable>,
 }
 
-/// Load the tables used by production Solaris structures, saved vanilla chests
+/// Load the tables used by production Krasnokamen structures, saved vanilla chests
 /// and saved container vehicles from the startup-selected content root.
 /// Unknown saved tables are rejected explicitly by the materialization boundary.
 ///

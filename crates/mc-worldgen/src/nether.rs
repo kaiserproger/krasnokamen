@@ -88,7 +88,7 @@ impl NetherGenerator {
 
     fn column_height(&self, wx: i32, wz: i32) -> i32 {
         let field = fbm_2d(wx as f64 / 64.0, wz as f64 / 64.0, self.seed, 3, 0.5);
-        // Solaris-owned tuning range (not a vanilla claim): dips at/below the
+        // Krasnokamen-owned tuning range (not a vanilla claim): dips at/below the
         // lava level form lava lakes, higher ground rises toward the ceiling.
         // Vanilla side-by-side terrain comparison is queued.
         (52.0 + 30.0 * field).round().clamp(22.0, 82.0) as i32

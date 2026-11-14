@@ -23,7 +23,7 @@ client-visible gameplay and wire compatibility:
   inventory mutation are kept outside the world lock.
 
 This shape is not the final single-writer simulation model from the project
-spec, but it is the architecture Solaris has shipped through M68.
+spec, but it is the architecture Krasnokamen has shipped through M68.
 
 ## Decision
 
@@ -81,7 +81,7 @@ Positive:
 
 Negative:
 
-- Solaris still has coarse world-storage serialization during concurrent player
+- Krasnokamen still has coarse world-storage serialization during concurrent player
   interactions.
 - Some interaction handlers still mix protocol, inventory, world I/O, and
   visibility dispatch; M68 cleanup reduces this but does not eliminate it.

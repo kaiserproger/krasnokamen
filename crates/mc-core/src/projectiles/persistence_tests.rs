@@ -5,7 +5,7 @@ use crate::journal::{
 };
 
 fn items() -> ItemRegistry {
-    mc_data::items::solaris_required_items()
+    mc_data::items::krasnokamen_required_items()
 }
 fn stack(items: &ItemRegistry, name: &str) -> ItemStack {
     ItemStack::new(
@@ -16,7 +16,7 @@ fn stack(items: &ItemRegistry, name: &str) -> ItemStack {
     )
 }
 fn type_id(kind: ProjectileKind) -> u32 {
-    mc_data::entity_types::solaris_required_entity_types()
+    mc_data::entity_types::krasnokamen_required_entity_types()
         .id_of(&mc_data::Identifier::parse(kind.name()).unwrap())
         .unwrap()
 }
@@ -101,7 +101,7 @@ fn entry(state: &ProjectileState, position: [f64; 3], velocity: [f64; 3]) -> Jou
 }
 fn world(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
-        "solaris-projectiles-{label}-{}",
+        "krasnokamen-projectiles-{label}-{}",
         uuid::Uuid::new_v4()
     ))
 }
@@ -857,7 +857,7 @@ fn malformed_projectile_native_open_and_offline_import_preserve_custody_and_loca
                 .find(|(key, _)| key == "state")
                 .unwrap()
                 .1 = Tag::String(serde_json::to_string(&projectile).unwrap());
-            "solaris:ProjectileRuntime.state.hit: duplicate UUID"
+            "krasnokamen:ProjectileRuntime.state.hit: duplicate UUID"
         } else {
             let Some(Tag::Compound(item)) = malformed
                 .extra_fields

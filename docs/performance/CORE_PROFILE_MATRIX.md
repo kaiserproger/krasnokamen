@@ -1,4 +1,4 @@
-# Solaris core performance profiles
+# Krasnokamen core performance profiles
 
 **Historical campaign:** preserved pre-cutover v1 profile contracts and
 measurements. ADR 0014 Phase 5 deleted their runtime/profile commands; the
@@ -185,7 +185,7 @@ Receipt: `.analysis/codex-logs/player-scale/prepared-ladder/20261002T123923-a38f
 
 ### Pregenerated combined-release rerun
 
-The owner-authorized rerun used the exact release copy `.analysis/codex-logs/main-build/bin/mc-server-release-nativeplat`, SHA256 `51362c9923f0251f51d889b1008a6e4e54828c8a34945e397dd3ed4c1bcc4046`, after green combined-tree L2 (`20261002T143348`). This includes saving, absorption, and tick changes; it is not an isolated saving-only comparison. The bots remained the frozen `fbcd0fe1…` build. The fixture, independent pregenerated-world copy, VD6, routes, server CPU `2`, one chunk worker, unused SMT sibling `3`, bots/orchestrator CPUs `4-11`, and ordinary `mem-run` limits were unchanged. `SOLARIS_HARNESS_LOG_STDOUT=1` retained a run-local server log.
+The owner-authorized rerun used the exact release copy `.analysis/codex-logs/main-build/bin/mc-server-release-nativeplat`, SHA256 `51362c9923f0251f51d889b1008a6e4e54828c8a34945e397dd3ed4c1bcc4046`, after green combined-tree L2 (`20261002T143348`). This includes saving, absorption, and tick changes; it is not an isolated saving-only comparison. The bots remained the frozen `fbcd0fe1…` build. The fixture, independent pregenerated-world copy, VD6, routes, server CPU `2`, one chunk worker, unused SMT sibling `3`, bots/orchestrator CPUs `4-11`, and ordinary `mem-run` limits were unchanged. `KRASNOKAMEN_HARNESS_LOG_STDOUT=1` retained a run-local server log.
 
 | Clients | Tick p50 / p95 / p99 | Actual TPS | Server CPU, one-core basis | Peak server RSS | Saving / generation CPU share | Outcome |
 |---:|---:|---:|---:|---:|---:|---|

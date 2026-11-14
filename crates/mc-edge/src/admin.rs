@@ -383,7 +383,7 @@ mod tests {
     use super::*;
     #[test]
     fn ops_round_trip_and_banned_uuid_admission() {
-        let dir = std::env::temp_dir().join(format!("solaris-admin-{}", Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("krasnokamen-admin-{}", Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
         let uuid = Uuid::new_v4();
         let admin = Admin::open(&dir).unwrap();

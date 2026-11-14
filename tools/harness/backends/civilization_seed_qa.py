@@ -109,14 +109,14 @@ def verify_birth_snapshot(snapshot: dict[str, Any], name: str, baseline: int, fi
         return fail("post-baseline tick is missing or outside the checkpoint")
     rows = [row for row in snapshot.get("entities", []) if row.get("active") and
             (row.get("payload") or {}).get("id") == "minecraft:villager" and
-            (row["payload"].get("solaris:VillagerRuntime") or {}).get("settlement") == settlement and
+            (row["payload"].get("krasnokamen:VillagerRuntime") or {}).get("settlement") == settlement and
             (row["payload"].get("Health") or 0) > 0]
     ids = [row.get("uuid") for row in rows]
     if len(rows) != final or any(not isinstance(uuid, str) or not uuid for uuid in ids) or len(set(ids)) != len(ids):
         return fail("snapshot member census does not match the observed count")
     if final < baseline + 2:
         return fail("population growth is below two")
-    by_id = {row["uuid"]: row["payload"]["solaris:VillagerRuntime"] for row in rows}
+    by_id = {row["uuid"]: row["payload"]["krasnokamen:VillagerRuntime"] for row in rows}
     proven: set[str] = set()
     for child, born_in, household, tick in births:
         info = by_id.get(child)

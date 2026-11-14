@@ -1,14 +1,14 @@
-# Operating Solaris
+# Operating Krasnokamen
 
-The current binary is `solaris-v2` (`mc-edge` + `mc-core`). Start from
+The current binary is `krasnokamen` (`mc-edge` + `mc-core`). Start from
 [`example.toml`](../example.toml). This guide covers the native runtime after
 [ADR 0014](decisions/0014-v1-core-retirement.md), not the published historical
 v0.0.7 preliminary binary.
 
 ```sh
-cargo run -p mc-edge --bin solaris-v2 -- --config example.toml
-# Direct Cargo-built binary (release packaging may name it `solaris`):
-solaris-v2 --config server.toml
+cargo run -p mc-edge --bin krasnokamen -- --config example.toml
+# Direct Cargo-built binary (release packaging may name it `krasnokamen`):
+krasnokamen --config server.toml
 ```
 
 `--config` defaults to `server.toml`. Unknown sections/keys warn and are ignored;
@@ -18,14 +18,14 @@ offline `operator` CLI, TUI/profile command, `check-world`, or rectangle
 
 ## Vanilla content cache
 
-Solaris does not distribute Minecraft data. Derive a complete cache from your
+Krasnokamen does not distribute Minecraft data. Derive a complete cache from your
 licensed 26.1.2 server bundle with JDK 25 (`JAVA`/`JAVAC` may select it):
 
 ```sh
-solaris-v2 content import --from /path/to/server.jar --cache /path/to/cache
+krasnokamen content import --from /path/to/server.jar --cache /path/to/cache
 # Alternative: download Mojang's pinned artifact, verifying size and SHA-1.
-solaris-v2 content import --version 26.1.2 --download --cache /path/to/cache
-solaris-v2 content verify --cache /path/to/cache
+krasnokamen content import --version 26.1.2 --download --cache /path/to/cache
+krasnokamen content verify --cache /path/to/cache
 ```
 
 Import stages, validates and publishes the cache; a failed derivation preserves
@@ -33,9 +33,9 @@ the previous cache. Verify is offline and checks the same content used by
 startup, not the complete server/plugin deployment. Serving never downloads
 implicitly. Missing or incomplete content fails before world/listener startup.
 
-Selection order: `[data].vanilla_data_dir`, `SOLARIS_CONTENT_CACHE`,
-`$XDG_DATA_HOME/solaris/content/26.1.2` (otherwise
-`~/.local/share/solaris/content/26.1.2`), then `data/vanilla` in the working
+Selection order: `[data].vanilla_data_dir`, `KRASNOKAMEN_CONTENT_CACHE`,
+`$XDG_DATA_HOME/krasnokamen/content/26.1.2` (otherwise
+`~/.local/share/krasnokamen/content/26.1.2`), then `data/vanilla` in the working
 directory and checkout ancestors. An explicit invalid override fails without
 silently choosing another source. `--cache` affects only that offline command.
 
@@ -43,8 +43,8 @@ silently choosing another source. `--cache` affects only that offline command.
 
 ```toml
 [server]
-name = "Solaris"
-motd = "Solaris native server"
+name = "Krasnokamen"
+motd = "Krasnokamen native server"
 max_players = 20
 view_distance = 8
 simulation_distance = 6
@@ -130,9 +130,9 @@ Stop source worlds before conversion. Destinations must not exist; conversion
 keeps the source unchanged and emits a receipt:
 
 ```sh
-solaris-v2 --config server.toml world import-anvil \
+krasnokamen --config server.toml world import-anvil \
   --source /srv/anvil-world --destination /srv/native-world --receipt /srv/import.json
-solaris-v2 --config server.toml world export-anvil \
+krasnokamen --config server.toml world export-anvil \
   --source /srv/native-world --destination /srv/exported-world --receipt /srv/export.json
 ```
 
@@ -147,9 +147,9 @@ Stop the server first. Commands use the same exclusive world-directory lease
 as startup, also lock the native database and refuse live worlds:
 
 ```sh
-solaris-v2 backup --world-dir /srv/solaris/world --out /backups/world-2026-10-15
-solaris-v2 restore --from /backups/world-2026-10-15 --world-dir /srv/solaris/restored
-solaris-v2 --config restored-server.toml
+krasnokamen backup --world-dir /srv/krasnokamen/world --out /backups/world-2026-10-15
+krasnokamen restore --from /backups/world-2026-10-15 --world-dir /srv/krasnokamen/restored
+krasnokamen --config restored-server.toml
 ```
 
 The backup contains native database, WAL/journal and other world files with a
@@ -176,7 +176,7 @@ Manifest `before-build` hooks register in deterministic package-id order with
 fail-closed policy. Unsupported hooks, including `before-damage`, fail startup.
 Server-only packages accept vanilla clients; client bundles require the matching
 Loader and player permission approval. See [PLUGINS.md](PLUGINS.md) and
-[SOLARIS_LOADER.md](SOLARIS_LOADER.md). Production builds do not need sibling
+[KRASNOKAMEN_LOADER.md](KRASNOKAMEN_LOADER.md). Production builds do not need sibling
 plugin source or compile guests at startup.
 
 ## Dashboard

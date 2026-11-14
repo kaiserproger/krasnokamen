@@ -1589,7 +1589,7 @@ impl Bot {
             self.landed = true;
             return Ok(client);
         }
-        // Commands must follow the initial teleport ACK: Solaris deliberately
+        // Commands must follow the initial teleport ACK: Krasnokamen deliberately
         // rejects /tp while that initial synchronization is still unconfirmed.
         client
             .write_packet(&ServerboundClientInformation {

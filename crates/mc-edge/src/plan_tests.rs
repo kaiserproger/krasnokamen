@@ -754,7 +754,7 @@ fn limited_credit_rotates_entity_moves() {
 #[test]
 fn village_motion_frames_reach_tracked_viewer_while_streaming_chunks() {
     use mc_protocol::packets::play::{LevelChunkWithLight, MoveEntityPos};
-    let kind = mc_data::entity_types::solaris_required_entity_types()
+    let kind = mc_data::entity_types::krasnokamen_required_entity_types()
         .id_of(&mc_data::Identifier::parse("minecraft:villager").unwrap())
         .unwrap();
     let mut villager = entity(10, [2.5, 64.0, 2.5]);
@@ -1035,7 +1035,7 @@ fn item_appearance_omits_living_health() {
             ..Default::default()
         });
         // Force the item type id (test entities default to type 1).
-        let item_type = mc_data::entity_types::solaris_required_entity_types()
+        let item_type = mc_data::entity_types::krasnokamen_required_entity_types()
             .id_of(&mc_data::Identifier::parse("minecraft:item").expect("static id parses"))
             .expect("item type present");
         e.type_id = item_type;
@@ -1069,7 +1069,7 @@ fn experience_orb_spawn_uses_add_entity_and_value_metadata_without_living_access
     with_cache(|cache| {
         let (pos, chunk) = chunk_at(0, 0);
         let mut orb = entity(2, [8.0, 78.0, 8.0]);
-        orb.type_id = mc_data::entity_types::solaris_required_entity_types()
+        orb.type_id = mc_data::entity_types::krasnokamen_required_entity_types()
             .id_of(&mc_data::Identifier::parse("minecraft:experience_orb").unwrap())
             .unwrap();
         orb.appearance = Arc::new(EntityAppearance {
@@ -2213,7 +2213,7 @@ fn explosion_reaches_nearby_viewers_with_their_knockback() {
 /// client's `PIERCE_LEVEL` byte accessor and kill the session.
 #[test]
 fn arrow_entity_data_carries_no_health() {
-    let types = mc_data::entity_types::solaris_required_entity_types();
+    let types = mc_data::entity_types::krasnokamen_required_entity_types();
     let id = |name: &str| {
         types
             .id_of(&mc_data::Identifier::parse(name).expect("id"))
@@ -2483,7 +2483,7 @@ fn shield_cooldown_is_reliable_and_only_reaches_the_owner() {
 
 #[test]
 fn villager_growth_resets_baby_metadata_and_preserves_villager_data() {
-    let types = mc_data::entity_types::solaris_required_entity_types();
+    let types = mc_data::entity_types::krasnokamen_required_entity_types();
     let type_id = types
         .id_of(&mc_data::Identifier::parse("minecraft:villager").unwrap())
         .unwrap();
@@ -2525,7 +2525,7 @@ fn villager_growth_resets_baby_metadata_and_preserves_villager_data() {
 #[test]
 fn villager_conversion_replaces_known_entity_type_before_respawning_same_identity() {
     with_cache(|cache| {
-        let types = mc_data::entity_types::solaris_required_entity_types();
+        let types = mc_data::entity_types::krasnokamen_required_entity_types();
         let id = |name: &str| {
             types
                 .id_of(&mc_data::Identifier::parse(name).unwrap())
@@ -2581,7 +2581,7 @@ fn villager_conversion_replaces_known_entity_type_before_respawning_same_identit
 
 #[test]
 fn animal_growth_clears_child_metadata_for_every_breeder_schema() {
-    let types = mc_data::entity_types::solaris_required_entity_types();
+    let types = mc_data::entity_types::krasnokamen_required_entity_types();
     for name in [
         "cow",
         "pig",
@@ -2664,7 +2664,7 @@ fn animal_growth_clears_child_metadata_for_every_breeder_schema() {
 
 #[test]
 fn body_and_saddle_equipment_use_exact_slots_and_clear_after_removal() {
-    let type_id = mc_data::entity_types::solaris_required_entity_types()
+    let type_id = mc_data::entity_types::krasnokamen_required_entity_types()
         .id_of(&mc_data::Identifier::parse("minecraft:horse").unwrap())
         .unwrap();
     let equipped = EntityAppearance {
@@ -2721,7 +2721,7 @@ fn body_and_saddle_equipment_use_exact_slots_and_clear_after_removal() {
 
 #[test]
 fn armor_stand_equipment_and_stored_pose_project_to_vanilla_packets_and_clear_slots() {
-    let type_id = mc_data::entity_types::solaris_required_entity_types()
+    let type_id = mc_data::entity_types::krasnokamen_required_entity_types()
         .id_of(&mc_data::Identifier::parse("minecraft:armor_stand").unwrap())
         .unwrap();
     let mut equipped = EntityAppearance::default();
@@ -2893,7 +2893,7 @@ fn warden_emerging_spawn_data_and_all_warden_poses_use_verified_ordinals() {
         ] {
             let (pos, chunk) = chunk_at(0, 0);
             let mut warden = entity(2, [8.0, 78.0, 8.0]);
-            warden.type_id = mc_data::entity_types::solaris_required_entity_types()
+            warden.type_id = mc_data::entity_types::krasnokamen_required_entity_types()
                 .id_of(&mc_data::Identifier::parse("minecraft:warden").unwrap())
                 .unwrap();
             warden.appearance = Arc::new(EntityAppearance {
@@ -2945,7 +2945,7 @@ mod bottles;
 #[test]
 fn player_equipment_reaches_trackers_but_never_the_owner() {
     with_cache(|cache| {
-        let player_type = mc_data::entity_types::solaris_required_entity_types()
+        let player_type = mc_data::entity_types::krasnokamen_required_entity_types()
             .id_of(&mc_data::Identifier::parse("minecraft:player").unwrap())
             .unwrap();
         let (pos, chunk) = chunk_at(0, 0);

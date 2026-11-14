@@ -1,4 +1,4 @@
-# Solaris core architecture
+# Krasnokamen core architecture
 
 Status: current runtime after [ADR 0014](decisions/0014-v1-core-retirement.md)
 Phase 5. [ADR 0013](decisions/0013-core-model-v2.md) owns the native core model;
@@ -8,7 +8,7 @@ production paths. This document is a navigation summary, not a second authority.
 ## Composition and dependencies
 
 ```text
-solaris-v2 (mc-edge binary)
+krasnokamen (mc-edge binary)
   mc-edge: configuration, CLI, authentication, sockets, console, dashboard,
            per-viewer fanout and Loader negotiation
     mc-core: authoritative gameplay, native tick, snapshots, intents/merge,
@@ -86,7 +86,7 @@ fails closed. Earth WorldPlan remains proposed for this runtime (ADR 0012).
 ## Plugins and Loader
 
 `mc-plugin-host` executes independently built Wasmtime components implementing
-`solaris:plugin@0.7.0`; `mc-script` owns runtime-independent values, capabilities
+`krasnokamen:plugin@0.7.0`; `mc-script` owns runtime-independent values, capabilities
 and admission. `[plugins].directory` selects the exact deployment. Invalid
 packages and unsupported declarations refuse startup. Legacy per-deployment
 strict/expected/grants/reload settings are not current configuration.
@@ -100,7 +100,7 @@ approvals; unsupported hooks fail startup rather than being ignored.
 
 Optional authored client bundles use `mc-loader`; the Loader is presentation
 and transport, not gameplay authority. Server-only packages accept vanilla
-26.1.2 clients. See [PLUGINS.md](PLUGINS.md) and [SOLARIS_LOADER.md](SOLARIS_LOADER.md).
+26.1.2 clients. See [PLUGINS.md](PLUGINS.md) and [KRASNOKAMEN_LOADER.md](KRASNOKAMEN_LOADER.md).
 
 ## Compatibility, overload and evidence
 

@@ -257,10 +257,10 @@ fn convert(
                 .file_name()
                 .ok_or_else(|| fail("destination has no filename"))?,
         );
-        if destination
-            .file_name()
-            .is_some_and(|name| name.to_string_lossy().starts_with(".solaris-conversion-"))
-        {
+        if destination.file_name().is_some_and(|name| {
+            name.to_string_lossy()
+                .starts_with(".krasnokamen-conversion-")
+        }) {
             return Err(fail(
                 "destination uses reserved unpublished conversion staging name",
             ));
@@ -282,7 +282,7 @@ fn convert(
             return Err(fail("receipt must be outside source and destination"));
         }
         receipt.input_hashes = hashes(&source)?;
-        let stage = parent.join(format!(".solaris-conversion-{}", uuid::Uuid::new_v4()));
+        let stage = parent.join(format!(".krasnokamen-conversion-{}", uuid::Uuid::new_v4()));
         fs::create_dir(&stage).map_err(fail)?;
         staging = Some(stage.clone());
         let stats = adapter(config, &source, &stage)?;

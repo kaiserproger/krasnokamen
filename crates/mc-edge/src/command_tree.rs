@@ -17,7 +17,7 @@
 //! BanIpCommands.java:26-38, PardonIpCommand.java:22-31.
 //! KillCommand.java:17-23, SayCommand.java:15-28, SeedCommand.java:12-21,
 //! OpCommand.java:23-38, DeOpCommands.java:21-31, PardonCommand.java:21-31,
-//! StopCommand.java:11-18. Debug give is a retained Solaris fixture.
+//! StopCommand.java:11-18. Debug give is a retained Krasnokamen fixture.
 //! EffectCommands.java:32-151.
 //! AdvancementCommands.java:33-229 (resource-key advancement and greedy criterion).
 //! Suggestion provider names: net/minecraft/commands/synchronization/
@@ -745,7 +745,7 @@ pub(crate) fn tree(op_level: u8, plugins: &[(String, u8)]) -> ClientboundCommand
         }
     }
     if let Some(root) = t.root("debug", false) {
-        // Solaris's retained fixture, not vanilla DebugCommand's profiling tree.
+        // Krasnokamen's retained fixture, not vanilla DebugCommand's profiling tree.
         let give = t.literal(root, "give", false);
         let item = t.argument(give, "item", Parser::ItemStack, true);
         let count = t.argument(item, "count", integer(None, None), true);

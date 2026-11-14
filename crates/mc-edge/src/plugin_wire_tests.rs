@@ -1,5 +1,5 @@
 //! Explicit sibling gate, not a graphical-client or siege/war receipt.
-//! SOLARIS_DEFAULT_PLUGINS_ROOT must name the unchanged packages-matched-sdk deployment.
+//! KRASNOKAMEN_DEFAULT_PLUGINS_ROOT must name the unchanged packages-matched-sdk deployment.
 //! Run: cargo test -p mc-edge --lib plugin_wire_tests::real_six_town_claim_protects_tcp_builds -- --exact --ignored --nocapture
 //!
 //! Wire evidence is local mc-protocol: login/configuration codecs; play
@@ -46,11 +46,11 @@ const STRANGER: &str = "ClaimWireGuest";
 const CLEANUP: &str = "ClaimWireCleanup";
 const PACKAGES: [&str; 6] = [
     "basic-economy",
-    "solaris-audit",
-    "solaris-economy",
-    "solaris-essentials",
-    "solaris-permissions",
-    "solaris-towns",
+    "krasnokamen-audit",
+    "krasnokamen-economy",
+    "krasnokamen-essentials",
+    "krasnokamen-permissions",
+    "krasnokamen-towns",
 ];
 
 struct TestDirectory(PathBuf);
@@ -58,7 +58,7 @@ struct TestDirectory(PathBuf);
 impl TestDirectory {
     fn new() -> Self {
         let path =
-            std::env::temp_dir().join(format!("solaris-plugin-wire-{}", uuid::Uuid::new_v4()));
+            std::env::temp_dir().join(format!("krasnokamen-plugin-wire-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&path).expect("create isolated wire gate directory");
         Self(path)
     }
@@ -282,7 +282,7 @@ impl WireClient {
                     let ack = mc_loader::LoaderClientAck {
                         protocol: manifest.protocol,
                         platform: mc_loader::LoaderPlatform::Native,
-                        loader_version: "solaris-wire-integration".into(),
+                        loader_version: "krasnokamen-wire-integration".into(),
                         accepted_permissions: permissions.into_iter().collect(),
                         cached_bundles: artifacts.keys().cloned().collect(),
                         carrier_block_state_ids: BTreeMap::new(),
@@ -623,8 +623,8 @@ fn real_six_town_claim_protects_tcp_builds() {
 
 async fn genuine_claim_gate() {
     let directory = TestDirectory::new();
-    let deployment = PathBuf::from(std::env::var_os("SOLARIS_DEFAULT_PLUGINS_ROOT").expect(
-        "SOLARIS_DEFAULT_PLUGINS_ROOT must point to packages-matched-sdk; no substitute deployment",
+    let deployment = PathBuf::from(std::env::var_os("KRASNOKAMEN_DEFAULT_PLUGINS_ROOT").expect(
+        "KRASNOKAMEN_DEFAULT_PLUGINS_ROOT must point to packages-matched-sdk; no substitute deployment",
     ))
     .canonicalize()
     .unwrap();
@@ -642,10 +642,11 @@ async fn genuine_claim_gate() {
                 .unwrap();
         assert_eq!(manifest["id"].as_str(), Some(name));
     }
-    let towns: toml::Value = std::fs::read_to_string(deployment.join("solaris-towns/config.toml"))
-        .unwrap()
-        .parse()
-        .unwrap();
+    let towns: toml::Value =
+        std::fs::read_to_string(deployment.join("krasnokamen-towns/config.toml"))
+            .unwrap()
+            .parse()
+            .unwrap();
     assert_eq!(towns["dimension"].as_str(), Some("minecraft:overworld"));
     assert!(
         towns["minimum_y"].as_integer().unwrap() <= 161
@@ -934,7 +935,7 @@ async fn genuine_claim_gate() {
     // Wire resync is not the only inventory oracle: inspect the real native
     // player records captured by production graceful shutdown.
     let mut identity = [0; 32];
-    identity[..16].copy_from_slice(b"SolarisV2Native\0");
+    identity[..16].copy_from_slice(b"KrasnoV2Native\0\0");
     identity[16..24].copy_from_slice(&81_i64.to_be_bytes());
     identity[24..].copy_from_slice(&(mc_worldgen::WORLDGEN_REVISION as u64).to_be_bytes());
     let image = mc_world::native::NativeReadOnlyStore::open_with_cache(
@@ -982,7 +983,7 @@ async fn genuine_claim_gate() {
         "plugin-v2 genuine TCP claim receipt: packages={actual:?} town={town:?} \
          denied_sequences=[101,102] admitted_sequences=[201,202] \
          persisted_survival_stone={STRANGER}:8,{LEADER}:7; \
-         claim_policy=solaris-towns/native-zone; settlement_catalog=native; \
+         claim_policy=krasnokamen-towns/native-zone; settlement_catalog=native; \
          not_a_siege_veto_or_graphical_client_receipt"
     );
     drop(cleanup);

@@ -562,7 +562,7 @@ fn native_nbt_keeps_size_attributes_equipment_credit_and_death_marker() {
     assert_eq!(native.saddle, expected.saddle);
     let fields: Vec<_> = fields
         .into_iter()
-        .filter(|(key, _)| key != "solaris:entity_loot")
+        .filter(|(key, _)| key != "krasnokamen:entity_loot")
         .collect();
     let vanilla = from_fields(&fields).unwrap();
     assert_eq!(vanilla.slime_size, Some(4));

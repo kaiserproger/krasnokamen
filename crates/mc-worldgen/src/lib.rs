@@ -2,7 +2,7 @@
 //!
 //! Generation pipeline, biomes, structures.
 //!
-//! Solaris-owned density-routed terrain with data-fed biomes, caves, ores,
+//! Krasnokamen-owned density-routed terrain with data-fed biomes, caves, ores,
 //! decorations, and optional structures. Generation is deterministic from
 //! seed and world coordinates and does not depend on chunk generation order.
 
@@ -70,7 +70,7 @@ pub use terrain::{
 #[cfg(feature = "worldgen-counters")]
 pub use terrain::{HeightContextStats, height_context_stats, reset_height_context_stats};
 
-/// Changes whenever Solaris intentionally changes newly generated terrain.
+/// Changes whenever Krasnokamen intentionally changes newly generated terrain.
 ///
 /// 22: core generates vanilla jigsaw villages —
 /// jigsaw-assembled pieces with their processors, and their

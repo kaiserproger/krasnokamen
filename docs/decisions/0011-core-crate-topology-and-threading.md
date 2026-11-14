@@ -10,7 +10,7 @@ General constraints (one gameplay authority, protocol ownership, no production
 dependency on the test harness) remain reflected in the current model; the
 specific v1 crates, owners and durable streams no longer exist.
 **Evidence:** historical
-[`core-architecture-audit-2026-09-28.md`](https://github.com/kaiserproger/solaris/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/core-architecture-audit-2026-09-28.md).
+[`core-architecture-audit-2026-09-28.md`](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/core-architecture-audit-2026-09-28.md).
 
 ## Decision
 
@@ -91,10 +91,10 @@ Rules, each of which is a Cargo edge or its absence:
 ## Threading model
 
 ```text
-solaris-sim      one dedicated OS thread: SimulationOwner command batches, the 50 ms tick,
+krasnokamen-sim      one dedicated OS thread: SimulationOwner command batches, the 50 ms tick,
                  and every phase that waits synchronously on regional lanes
 regional lanes   OS threads (ADR 0005), bounded 64, lease/epoch fenced
-solaris-journal  one OS thread, bounded 64 (world-chunk + entity WAL); write-behind for
+krasnokamen-journal  one OS thread, bounded 64 (world-chunk + entity WAL); write-behind for
                  ordinary decisions (ADR 0005), fsync-before-reply for receipt-bearing
                  decisions, flush and checkpoint
 mc-plugin-host   one OS thread for guest callbacks + epoch watchdog thread
@@ -159,7 +159,7 @@ uses:
 | --- | --- | --- | --- |
 | world-chunk WAL | `mc-simulation` journal | journaled block-edit runs, receipt-bearing chest/warehouse composites with their inventory receipt | write-behind; fsync before reply only for receipt-bearing runs, `flush`, `checkpoint_through` |
 | regional entity WAL | `mc-entity` decisions via the same writer thread | regional commit decisions | write-behind (ADR 0005) |
-| plugin-storage journal (`solaris/plugin-storage-v1/journal-v1.bin`) | `mc-simulation::services::storage` | plugin records and the settlement/resident/order ledgers (`commit_batch`) | fsync before the projection is installed |
+| plugin-storage journal (`krasnokamen/plugin-storage-v1/journal-v1.bin`) | `mc-simulation::services::storage` | plugin records and the settlement/resident/order ledgers (`commit_batch`) | fsync before the projection is installed |
 | player `.dat` checkpoint | `mc-simulation` persistence | player state and inventory at checkpoint/save | fsync + atomic replace at save |
 
 A receipt-bearing composite (warehouse transfer, resident haul) is decided in

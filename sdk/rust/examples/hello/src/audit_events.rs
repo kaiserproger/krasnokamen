@@ -29,8 +29,8 @@
 
 use std::collections::VecDeque;
 
-use solaris_plugin_sdk::events::{CommandInvoked, EventContext};
-use solaris_plugin_sdk::{log, message_player, Command, Config, Event, Failure, LogLevel};
+use krasnokamen_plugin_sdk::events::{CommandInvoked, EventContext};
+use krasnokamen_plugin_sdk::{log, message_player, Command, Config, Event, Failure, LogLevel};
 
 /// The prefix of every line this fixture publishes, so a driver can wait on its
 /// own reports while the server interleaves frames of its own.

@@ -7,7 +7,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::WorldError;
 
-const WORLD_LEASE_FILE_NAME: &str = ".solaris-world.lock";
+const WORLD_LEASE_FILE_NAME: &str = ".krasnokamen-world.lock";
 const WORLD_LEASE_METADATA_MAX_BYTES: usize = 4 * 1024;
 static WORLD_LEASES: OnceLock<Mutex<HashMap<PathBuf, Weak<WorldRootLease>>>> = OnceLock::new();
 

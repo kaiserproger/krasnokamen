@@ -7,10 +7,10 @@
 //! traps, runs out of budget, or answers something the contract does not allow.
 
 use crate::PluginLimits;
-use crate::bindings::solaris::plugin::client_presentation::{
+use crate::bindings::krasnokamen::plugin::client_presentation::{
     ClientCommand, ViewFieldValue, ViewModel,
 };
-use crate::bindings::solaris::plugin::commands::{Command, StorageMutation};
+use crate::bindings::krasnokamen::plugin::commands::{Command, StorageMutation};
 
 /// Why a batch was refused while it was being staged.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -119,7 +119,7 @@ fn command_text_bytes(command: &Command) -> usize {
         // A probe carries the two ids and nothing else.
         Command::OperationStatus(status) => status.request.len(),
         Command::Operation(request) => {
-            use crate::bindings::solaris::plugin::domain_operations::DomainOperation;
+            use crate::bindings::krasnokamen::plugin::domain_operations::DomainOperation;
             let largest = match &request.operation {
                 DomainOperation::WorldStructure(value) => {
                     crate::domain_world_structures::max_text_bytes(value)

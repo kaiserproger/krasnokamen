@@ -17,7 +17,7 @@ fn definition() -> WorldDefinition {
 
 fn registry() -> Arc<BlockRegistry> {
     Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     )
 }
 
@@ -256,7 +256,7 @@ fn prepared_site_consumer_reports_only_villages_written_into_exact_base() {
         .unwrap(),
     );
     let loot = ChestLootCatalog::new();
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let cache = EarthSourceCache::default();
     let base = EarthBaseSource::new(
         &definition,

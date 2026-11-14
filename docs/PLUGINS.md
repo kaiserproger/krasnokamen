@@ -1,7 +1,7 @@
 # Plugins
 
-Solaris production plugins are Wasmtime components implementing the versioned
-WIT contract `solaris:plugin@0.7.0`. The host crate is
+Krasnokamen production plugins are Wasmtime components implementing the versioned
+WIT contract `krasnokamen:plugin@0.7.0`. The host crate is
 `crates/mc-plugin-host`; the WIT source is `crates/mc-script/wit`; Rust guest
 source and the SDK live in the separate `sdk/rust/` workspace. The server
 loads a compiled component artifact. It neither compiles guest source nor
@@ -27,13 +27,13 @@ plugins/
 `plugin.toml` declares the package identity, API version, subscriptions,
 command roots, requested capabilities, and optional client, world-generation,
 or precommit declarations. `plugin.wasm` is a WebAssembly **component** for
-`solaris:plugin@0.7.0`, not an unencoded core Wasm module. `config.toml` is
+`krasnokamen:plugin@0.7.0`, not an unencoded core Wasm module. `config.toml` is
 optional opaque package configuration: the host passes its text to the guest,
 which defines and validates its own settings.
 
 ### Native server
 
-`solaris-v2` uses the production component host with a directory-only deployment:
+`krasnokamen` uses the production component host with a directory-only deployment:
 
 ```toml
 [plugins]
@@ -41,7 +41,7 @@ directory = "plugins"
 ```
 
 ```sh
-solaris-v2 --config server.toml
+krasnokamen --config server.toml
 ```
 
 Every entry must be a valid package directory; malformed manifests or WASM,
@@ -141,11 +141,11 @@ directory is the operator authorization decision.
 
 Packages without `[client]` bundles are `server_only` and support ordinary
 vanilla clients. Any package that declares client bundles makes the relevant
-deployment `server_and_client`: connecting players need a compatible Solaris
+deployment `server_and_client`: connecting players need a compatible Krasnokamen
 Loader and must approve the bundle's requested client permissions. Bundle paths,
 hashes, sizes, content kinds, supported loaders, and permissions are validated
 before a player is served content. There is no server-only substitute for a
-package that requires client content. See [`SOLARIS_LOADER.md`](SOLARIS_LOADER.md)
+package that requires client content. See [`KRASNOKAMEN_LOADER.md`](KRASNOKAMEN_LOADER.md)
 for player installation.
 
 ## Build, encode, and deploy a Rust guest
@@ -169,14 +169,14 @@ types cannot become a deployable artifact. The plugin repository owns
 `plugin.toml` and optional `config.toml`; the core repository neither ships nor
 compiles first-party product plugins.
 
-Authors implement `solaris_plugin_sdk::Plugin` (or bindings for the same WIT
+Authors implement `krasnokamen_plugin_sdk::Plugin` (or bindings for the same WIT
 world) and use the WIT and SDK definitions as the API reference. Do not copy
 internal host types into a guest or rely on a host implementation detail.
 
 WIT record layout changes require regenerating both host and guest bindings.
 Rebuild every guest that uses `client-presentation` after the optional marker
 position extension; an older component's record layout is not a compatible
-fallback, even when its package version is still `solaris:plugin@0.7.0`.
+fallback, even when its package version is still `krasnokamen:plugin@0.7.0`.
 
 ## Lifecycle and configuration
 

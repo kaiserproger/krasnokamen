@@ -356,8 +356,8 @@ fn fixture() -> Fixture {
             branch: "none".into(),
             level: 0,
             buildings: vec![
-                worksite(&src, "solaris:warehouse"),
-                worksite(&dst, "solaris:warehouse"),
+                worksite(&src, "krasnokamen:warehouse"),
+                worksite(&dst, "krasnokamen:warehouse"),
             ],
         },
     )
@@ -374,12 +374,12 @@ fn fixture() -> Fixture {
         state,
         settlement,
         source: ContainerRef {
-            building: worksite(&src, "solaris:warehouse"),
+            building: worksite(&src, "krasnokamen:warehouse"),
             dimension: dimension.clone(),
             position: SRC_CHEST,
         },
         destination: ContainerRef {
-            building: worksite(&dst, "solaris:warehouse"),
+            building: worksite(&dst, "krasnokamen:warehouse"),
             dimension,
             position: DST_CHEST,
         },
@@ -890,12 +890,12 @@ fn state_contracts_hold_policy_and_receipts_only() {
             owner: OWNER.into(),
             settlement: SettlementId(7),
             source: ContainerRef {
-                building: worksite("w", "solaris:warehouse"),
+                building: worksite("w", "krasnokamen:warehouse"),
                 dimension: "minecraft:overworld".into(),
                 position: SRC_CHEST,
             },
             destination: ContainerRef {
-                building: worksite("w", "solaris:warehouse"),
+                building: worksite("w", "krasnokamen:warehouse"),
                 dimension: "minecraft:overworld".into(),
                 position: DST_CHEST,
             },
@@ -1079,7 +1079,7 @@ fn production_and_caravan_share_one_real_body_without_conflicting_goals() {
             ],
         },
     );
-    let building = worksite(&workshop, "solaris:workshop");
+    let building = worksite(&workshop, "krasnokamen:workshop");
     let record = f.state.settlements.get(f.settlement).unwrap();
     let revision = record.revision;
     let mut plan = record.district.clone().unwrap();
@@ -1091,7 +1091,7 @@ fn production_and_caravan_share_one_real_body_without_conflicting_goals() {
         economy::Request::Production(production::Request::Start {
             job: "body-job".into(),
             worker: f.carrier_uuid,
-            recipe: "solaris-settlements:stick".into(),
+            recipe: "krasnokamen-settlements:stick".into(),
             count: 1,
             station,
             stand_at,

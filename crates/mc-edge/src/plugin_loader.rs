@@ -19,7 +19,7 @@ pub(crate) async fn negotiate(
     let result = negotiate_inner(conn, manifest, view_distance).await;
     if let Err(error) = &result {
         let reason = format!(
-            "This server requires the Solaris Loader client mod. Install it and reconnect. \
+            "This server requires the Krasnokamen Loader client mod. Install it and reconnect. \
              (Loader negotiation failed: {error})"
         );
         if let Ok(reason_nbt) = text_component_nbt(&reason) {

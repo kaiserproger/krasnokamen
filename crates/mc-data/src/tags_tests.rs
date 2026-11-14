@@ -228,9 +228,9 @@ fn missing_registries_json_is_reported_clearly() {
 }
 
 #[test]
-fn solaris_required_item_tags_cover_recipe_baseline() {
-    let items = crate::items::solaris_required_items();
-    let tags = solaris_required_item_tags(&items);
+fn krasnokamen_required_item_tags_cover_recipe_baseline() {
+    let items = crate::items::krasnokamen_required_items();
+    let tags = krasnokamen_required_item_tags(&items);
     let item_tags = tags
         .registries
         .get(&Identifier::parse("minecraft:item").unwrap())
@@ -298,8 +298,8 @@ fn recipe_book_tag_references_resolve_in_required_item_tags() {
             .collect()
     }
 
-    let items = crate::items::solaris_required_items();
-    let tags = solaris_required_item_tags(&items);
+    let items = crate::items::krasnokamen_required_items();
+    let tags = krasnokamen_required_item_tags(&items);
     let item_tags = tags
         .registries
         .get(&Identifier::parse("minecraft:item").unwrap())
@@ -308,7 +308,7 @@ fn recipe_book_tag_references_resolve_in_required_item_tags() {
     // resolves whenever the local vanilla checkout is present. A missing
     // tag kicks real clients in recipe_book_add (vanilla HolderSet tag
     // lookup throws on unknown tags).
-    let mut recipes = crate::recipes::solaris_required_recipes();
+    let mut recipes = crate::recipes::krasnokamen_required_recipes();
     let sidecar =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla/data/minecraft/recipe");
     if sidecar.is_dir() {
@@ -332,8 +332,8 @@ fn recipe_book_tag_references_resolve_in_required_item_tags() {
 
 #[test]
 fn embedded_fuel_snapshot_covers_canonical_vanilla_2612_set() {
-    let items = crate::items::solaris_required_items();
-    let tags = solaris_required_item_tags(&items).with_vanilla_fuel_values(&items);
+    let items = crate::items::krasnokamen_required_items();
+    let tags = krasnokamen_required_item_tags(&items).with_vanilla_fuel_values(&items);
     let fuels = tags.fuel_values();
 
     assert_eq!(
@@ -367,8 +367,8 @@ fn embedded_fuel_snapshot_covers_canonical_vanilla_2612_set() {
 
 #[test]
 fn fuel_snapshot_does_not_change_wire_registries() {
-    let items = crate::items::solaris_required_items();
-    let tags = solaris_required_item_tags(&items);
+    let items = crate::items::krasnokamen_required_items();
+    let tags = krasnokamen_required_item_tags(&items);
     let registries = tags.registries.clone();
 
     let tags = tags.with_vanilla_fuel_values(&items);
@@ -377,10 +377,10 @@ fn fuel_snapshot_does_not_change_wire_registries() {
 }
 
 #[test]
-fn solaris_required_client_tags_bind_vanilla_261_configuration_dependencies() {
-    let items = crate::items::solaris_required_items();
-    let blocks = crate::blocks::solaris_required_blocks_report();
-    let tags = solaris_required_client_tags(&items, &blocks);
+fn krasnokamen_required_client_tags_bind_vanilla_261_configuration_dependencies() {
+    let items = crate::items::krasnokamen_required_items();
+    let blocks = crate::blocks::krasnokamen_required_blocks_report();
+    let tags = krasnokamen_required_client_tags(&items, &blocks);
 
     for (registry, required_tags) in [
         (
@@ -532,10 +532,10 @@ fn solaris_required_client_tags_bind_vanilla_261_configuration_dependencies() {
 }
 
 #[test]
-fn solaris_required_client_tags_bind_builtin_fluid_membership() {
-    let items = crate::items::solaris_required_items();
-    let blocks = crate::blocks::solaris_required_blocks_report();
-    let tags = solaris_required_client_tags(&items, &blocks);
+fn krasnokamen_required_client_tags_bind_builtin_fluid_membership() {
+    let items = crate::items::krasnokamen_required_items();
+    let blocks = crate::blocks::krasnokamen_required_blocks_report();
+    let tags = krasnokamen_required_client_tags(&items, &blocks);
     let fluid_tags = tags
         .registries
         .get(&Identifier::parse("minecraft:fluid").unwrap())
@@ -556,10 +556,10 @@ fn solaris_required_client_tags_bind_builtin_fluid_membership() {
 }
 
 #[test]
-fn solaris_required_client_tags_bind_pickaxe_progression_blocks() {
-    let items = crate::items::solaris_required_items();
-    let blocks = crate::blocks::solaris_required_blocks_report();
-    let tags = solaris_required_client_tags(&items, &blocks);
+fn krasnokamen_required_client_tags_bind_pickaxe_progression_blocks() {
+    let items = crate::items::krasnokamen_required_items();
+    let blocks = crate::blocks::krasnokamen_required_blocks_report();
+    let tags = krasnokamen_required_client_tags(&items, &blocks);
     let block_tags = tags
         .registries
         .get(&Identifier::parse("minecraft:block").unwrap())
@@ -577,10 +577,10 @@ fn solaris_required_client_tags_bind_pickaxe_progression_blocks() {
 }
 
 #[test]
-fn solaris_required_client_tags_bind_complete_pickaxe_oracle_membership() {
-    let items = crate::items::solaris_required_items();
-    let blocks = crate::blocks::solaris_required_blocks_report();
-    let tags = solaris_required_client_tags(&items, &blocks);
+fn krasnokamen_required_client_tags_bind_complete_pickaxe_oracle_membership() {
+    let items = crate::items::krasnokamen_required_items();
+    let blocks = crate::blocks::krasnokamen_required_blocks_report();
+    let tags = krasnokamen_required_client_tags(&items, &blocks);
     let pickaxe = tags
         .registries
         .get(&Identifier::parse("minecraft:block").unwrap())
@@ -621,10 +621,10 @@ fn solaris_required_client_tags_bind_complete_pickaxe_oracle_membership() {
 }
 
 #[test]
-fn solaris_required_client_tags_bind_common_survival_tools() {
-    let items = crate::items::solaris_required_items();
-    let blocks = crate::blocks::solaris_required_blocks_report();
-    let tags = solaris_required_client_tags(&items, &blocks);
+fn krasnokamen_required_client_tags_bind_common_survival_tools() {
+    let items = crate::items::krasnokamen_required_items();
+    let blocks = crate::blocks::krasnokamen_required_blocks_report();
+    let tags = krasnokamen_required_client_tags(&items, &blocks);
     let block_tags = tags
         .registries
         .get(&Identifier::parse("minecraft:block").unwrap())
@@ -648,10 +648,10 @@ fn solaris_required_client_tags_bind_common_survival_tools() {
 }
 
 #[test]
-fn solaris_required_client_tags_bind_complete_axe_oracle_membership() {
-    let items = crate::items::solaris_required_items();
-    let blocks = crate::blocks::solaris_required_blocks_report();
-    let tags = solaris_required_client_tags(&items, &blocks);
+fn krasnokamen_required_client_tags_bind_complete_axe_oracle_membership() {
+    let items = crate::items::krasnokamen_required_items();
+    let blocks = crate::blocks::krasnokamen_required_blocks_report();
+    let tags = krasnokamen_required_client_tags(&items, &blocks);
     let axe = tags
         .registries
         .get(&Identifier::parse("minecraft:block").unwrap())

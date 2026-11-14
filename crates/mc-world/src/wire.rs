@@ -248,8 +248,8 @@ fn strip_persistent_block_entity_fields(tag: Tag) -> Tag {
                         | "z"
                         | "CookingTimes"
                         | "CookingTotalTimes"
-                        | "solaris_cooking_remaining"
-                        | "solaris_cooking_total"
+                        | "krasnokamen_cooking_remaining"
+                        | "krasnokamen_cooking_total"
                 )
             })
             .collect(),

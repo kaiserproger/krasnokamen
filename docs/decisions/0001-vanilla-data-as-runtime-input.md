@@ -6,7 +6,7 @@ startup descriptions are superseded.
 
 ## Contract
 
-Solaris targets Minecraft Java 26.1.2. Registry, tag, recipe, loot, component,
+Krasnokamen targets Minecraft Java 26.1.2. Registry, tag, recipe, loot, component,
 block-property, protocol and world-format facts come from the matching local
 vanilla distribution, not remembered layouts or guessed values. The local
 owner-supplied oracle is `.analysis/server.jar`.
@@ -27,13 +27,13 @@ not redistributed in Git, crates or release bundles. `.analysis/` and extracted
 - Protocol layouts and provenance belong to ADR 0002.
 
 The operator explicitly derives the complete content cache from a licensed
-artifact with `solaris-v2 content import --version 26.1.2 --from <jar>` or
+artifact with `krasnokamen content import --version 26.1.2 --from <jar>` or
 `--download` (Mojang metadata pins size and SHA-1). Import stages and validates
 before publishing; failure preserves the previous cache. `content verify`
 validates offline without starting the world/listener.
 
 Serving only discovers and validates: `[data].vanilla_data_dir` →
-`SOLARIS_CONTENT_CACHE` → XDG/home cache → working-directory/checkout
+`KRASNOKAMEN_CONTENT_CACHE` → XDG/home cache → working-directory/checkout
 `data/vanilla`. Explicit invalid overrides fail rather than falling back.
 Missing/incomplete content reports the searched locations and import command;
 normal startup does not download or derive a replacement implicitly.

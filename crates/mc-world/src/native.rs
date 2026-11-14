@@ -342,7 +342,7 @@ impl NativeStore {
 
     /// Imported full chunks, including all-air chunks, are canonical durable
     /// baseline records, not overlay/cache entries. Never overwrites coverage.
-    /// W0 accepts normalized Solaris compact chunks, not arbitrary Java saves.
+    /// W0 accepts normalized Krasnokamen compact chunks, not arbitrary Java saves.
     pub fn import_chunk(
         &self,
         dimension: u32,

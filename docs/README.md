@@ -1,13 +1,13 @@
-# Solaris documentation
+# Krasnokamen documentation
 
-Solaris v0.0.8 is a **draft prerelease** for Minecraft Java 26.1.2. Start with the
+Krasnokamen v0.0.8 is a **draft prerelease** for Minecraft Java 26.1.2. Start with the
 [project README](../README.md) for installation and a source quick start.
 
-## Running and extending Solaris
+## Running and extending Krasnokamen
 
 - [Operating guide](OPERATING.md): configuration, content, console, backups and world conversion.
 - [Plugins](PLUGINS.md): Wasmtime package deployment and authoring.
-- [Solaris Loader](SOLARIS_LOADER.md): optional client adapters and client bundles.
+- [Krasnokamen Loader](KRASNOKAMEN_LOADER.md): optional client adapters and client bundles.
 - [Project scope](PROJECT_SPEC.md) and [village generation](VILLAGE_GENERATION.md).
 - [Release notes](releases/): versioned changes, not current configuration reference.
 

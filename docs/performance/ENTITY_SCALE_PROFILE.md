@@ -27,7 +27,7 @@ tools/profile-entity-scale.sh
 
 Artifacts are written to `.analysis/bench/entity-scale/`:
 
-- `baseline.json`: Solaris tick-phase, queue, memory, client and workload data.
+- `baseline.json`: Krasnokamen tick-phase, queue, memory, client and workload data.
 - `baseline.log`: complete benchmark output.
 - `baseline.time.txt`: `/usr/bin/time -v` process statistics.
 - `metadata.txt`: commit, toolchain, kernel, CPU and workload parameters.
@@ -46,7 +46,7 @@ sudo sysctl kernel.perf_event_paranoid=1
 Then rerun the script. To request only the profiled run:
 
 ```bash
-SOLARIS_ENTITY_BENCH_MODE=perf tools/profile-entity-scale.sh
+KRASNOKAMEN_ENTITY_BENCH_MODE=perf tools/profile-entity-scale.sh
 ```
 
 The release profile receives debug symbols through environment overrides; no repository-wide Cargo profile is changed.
@@ -54,17 +54,17 @@ The release profile receives debug symbols through environment overrides; no rep
 ## Useful overrides
 
 ```bash
-SOLARIS_ENTITY_BENCH_MODE=baseline \
-SOLARIS_ENTITY_BENCH_CPUSET=0-5 \
-SOLARIS_ENTITY_BENCH_CLIENTS=60 \
-SOLARIS_ENTITY_BENCH_REGIONS=16 \
-SOLARIS_ENTITY_BENCH_ENTITIES_PER_REGION=2500 \
-SOLARIS_ENTITY_BENCH_WARMUP_TICKS=200 \
-SOLARIS_ENTITY_BENCH_MEASURE_TICKS=1200 \
+KRASNOKAMEN_ENTITY_BENCH_MODE=baseline \
+KRASNOKAMEN_ENTITY_BENCH_CPUSET=0-5 \
+KRASNOKAMEN_ENTITY_BENCH_CLIENTS=60 \
+KRASNOKAMEN_ENTITY_BENCH_REGIONS=16 \
+KRASNOKAMEN_ENTITY_BENCH_ENTITIES_PER_REGION=2500 \
+KRASNOKAMEN_ENTITY_BENCH_WARMUP_TICKS=200 \
+KRASNOKAMEN_ENTITY_BENCH_MEASURE_TICKS=1200 \
 tools/profile-entity-scale.sh
 ```
 
-`SOLARIS_ENTITY_BENCH_REGIONS` must be a perfect square. `entities_per_region` is bounded at 3,000 by the benchmark.
+`KRASNOKAMEN_ENTITY_BENCH_REGIONS` must be a perfect square. `entities_per_region` is bounded at 3,000 by the benchmark.
 
 ## Exact release evidence
 

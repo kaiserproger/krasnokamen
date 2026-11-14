@@ -42,7 +42,7 @@ the same temperature and transition-domain field as inland and riparian biomes.
 Deep oceans retain their depth thresholds and have no invented deep-warm variant;
 their warmest available vanilla variant is deep lukewarm ocean. The separate
 deep-ocean region-noise picker is removed. Both modes share coastal selection.
-Ocean thresholds are Solaris policy, not vanilla-captured values: -0.25 reuses
+Ocean thresholds are Krasnokamen policy, not vanilla-captured values: -0.25 reuses
 the inland/riparian cold boundary and 0.12 reuses the inland warm boundary.
 The added -0.12 and 0.25 thresholds mirror those magnitudes to separate cold
 from neutral water and warm from lukewarm water without another climate field.
@@ -182,7 +182,7 @@ Worldgen revision 9 removes the filled 3x3 upper leaf boxes left by revision 8.
 Oak and jungle trees retain a broad main canopy but use a connected,
 deterministically rotated irregular crown above it. This changes generated
 chunks, so the persisted revision advances instead of mixing both silhouettes
-inside one Solaris world.
+inside one Krasnokamen world.
 
 Worldgen revision 8 retains the revision-7 pipeline and corrects terrain that a
 real 26.1.2 client exposed as broad flat gravel plateaus. Long rolling relief
@@ -253,7 +253,7 @@ Generation remains stateless and coordinate-derived. Parallel generation of the
 same chunk or neighbouring chunks in any order produces identical output. Every
 new native world validates its generation identity before recovery/generation.
 Serving uses native storage and one tick WAL (ADR 0013), never live Anvil fallback.
-Anvil import/export is explicit offline conversion. Earlier `solaris/world.json`,
+Anvil import/export is explicit offline conversion. Earlier `krasnokamen/world.json`,
 unversioned read-only Anvil startup and v1 fixture-path descriptions are retired
 under ADR 0014; their recorded receipts are not relabelled as native evidence.
 
@@ -306,7 +306,7 @@ where old connected growth could emit at most 17. The old rejected-parent
 filter also removed descendants rather than independently filtering ore cells.
 The unchanged upper pass is 30 attempts at Y=136..319, uniform, discard=0;
 the lower pass is 20 attempts at Y=0..192, trapezoid, discard=0.5; both size=17.
-The 114 figure is the source-derived geometry applied to this Solaris lowland
+The 114 figure is the source-derived geometry applied to this Krasnokamen lowland
 sample and its replacement/exposure filters, not a universal vanilla-world
 average. The 64-chunk regression measures the resulting blocks directly.
 

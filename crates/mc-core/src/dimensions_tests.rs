@@ -1764,7 +1764,7 @@ fn legacy_only_dimension_layout_is_rejected_without_creating_modern_world() {
         let error = crate::Core::open(import_config(&directory.0))
             .unwrap_err()
             .to_string();
-        assert!(error.contains("solaris-v2 world import-anvil"), "{error}");
+        assert!(error.contains("krasnokamen world import-anvil"), "{error}");
         assert!(!directory.0.join("dimensions").exists());
         assert!(!directory.0.join("CHECKPOINT-MANIFEST.json").exists());
     }
@@ -1776,22 +1776,23 @@ fn legacy_only_dimension_layout_is_rejected_without_creating_modern_world() {
 #[ignore = "requires the real vanilla 26.1.2 headless round-trip driver"]
 fn vanilla_headless_world_roundtrip() {
     let root = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_WORLD").expect("round-trip world path"),
+        std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_WORLD").expect("round-trip world path"),
     );
-    let phase = std::env::var("SOLARIS_VANILLA_ROUNDTRIP_PHASE").expect("round-trip phase");
+    let phase = std::env::var("KRASNOKAMEN_VANILLA_ROUNDTRIP_PHASE").expect("round-trip phase");
     assert!(matches!(phase.as_str(), "create" | "verify"));
     let verified = phase == "verify";
     let anvil = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_ANVIL").expect("Anvil conversion path"),
+        std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_ANVIL").expect("Anvil conversion path"),
     );
     let receipt = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_RECEIPT").expect("conversion receipt path"),
+        std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_RECEIPT").expect("conversion receipt path"),
     );
     let export = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_EXPORT").expect("Anvil export destination"),
+        std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_EXPORT").expect("Anvil export destination"),
     );
     let export_receipt = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_VANILLA_ROUNDTRIP_EXPORT_RECEIPT").expect("export receipt path"),
+        std::env::var_os("KRASNOKAMEN_VANILLA_ROUNDTRIP_EXPORT_RECEIPT")
+            .expect("export receipt path"),
     );
     let config = import_config(&root);
     assert!(
@@ -2014,7 +2015,7 @@ fn vanilla_headless_world_roundtrip() {
     drop(store);
     crate::world_conversion::export_anvil(&config, &root, &export, &export_receipt)
         .expect("offline native Anvil export");
-    println!("SOLARIS_VANILLA_ROUNDTRIP_{}_OK", phase.to_uppercase());
+    println!("KRASNOKAMEN_VANILLA_ROUNDTRIP_{}_OK", phase.to_uppercase());
 }
 
 #[test]

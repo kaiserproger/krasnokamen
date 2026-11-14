@@ -266,7 +266,7 @@ fn post_load_insert_unload_restart_reload_does_not_reuse_debt() {
 #[ignore = "child process of post_load_insert_kill9_recovery_does_not_reuse_debt"]
 fn crash_child() {
     use std::io::Write;
-    let directory = std::env::var_os("SOLARIS_ABSTRACT_CRASH_DIR").expect("parent directory");
+    let directory = std::env::var_os("KRASNOKAMEN_ABSTRACT_CRASH_DIR").expect("parent directory");
     let (mut state, entries) = late_insert_batch(std::path::Path::new(&directory));
     let mut writer =
         crate::journal::JournalWriter::open(std::path::Path::new(&directory), 1).unwrap();
@@ -291,7 +291,7 @@ fn post_load_insert_kill9_recovery_does_not_reuse_debt() {
             "--ignored",
             "--nocapture",
         ])
-        .env("SOLARIS_ABSTRACT_CRASH_DIR", directory.path())
+        .env("KRASNOKAMEN_ABSTRACT_CRASH_DIR", directory.path())
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
         .spawn()

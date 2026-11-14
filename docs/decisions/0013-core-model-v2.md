@@ -65,7 +65,7 @@ do not replace the next real-scene/1–2-core native-client tick gate.
 ## G1/G2 measured row-custody costs (2026-10-16)
 
 The frozen G2 journal compared all 11,557 scene rows each tick despite the
-touched-set implementation. Opt-in, test-only `SOLARIS_TRACE_ROW_MUT=1`
+touched-set implementation. Opt-in, test-only `KRASNOKAMEN_TRACE_ROW_MUT=1`
 attribution over the warmed 120-tick fixture identified portal timer custody:
 `portals::travel::finish` took `row_mut` on every row, including all 10,000
 villagers and inactive dropped items. The persistent despawn scan also reset
@@ -1483,7 +1483,7 @@ through the shared swept projectile authority; accepted hits apply levitation.
 
 Pillager phase/deadline, witch potion choice, fang owner/warmup/life, vex
 owner/lifetime and wither spawn invulnerability ride `EntityStateImage` compact
-WAL images and checkpoint `solaris:SpecialMob`. Bullet target UUIDs ride retained
+WAL images and checkpoint `krasnokamen:SpecialMob`. Bullet target UUIDs ride retained
 projectile images and vanilla `Target`. Other decision timers intentionally reset
 on restart, matching OLD's retained/transient split. Restoration reprojects
 retained crossbow/wither metadata and clears transient beam/drinking/casting
@@ -1645,7 +1645,7 @@ them with no downtime catch-up.
   required versioned generation and dimension records, binding its world
   identity to the seed, generator revisions, mode, ore profile and geometry.
   `Core::open` validates them against configuration before owners start.
-  There is no v2 `solaris/world.json`, child DB, runtime Anvil fallback,
+  There is no v2 `krasnokamen/world.json`, child DB, runtime Anvil fallback,
   dual-write, or automatic historical-schema migration. Imported coverage,
   including all-air chunks, wins over generation; only genuinely absent
   coverage may generate. Stored read/identity/version failures fail closed.
@@ -1803,8 +1803,8 @@ them with no downtime catch-up.
   WAL batch strictly after its tick, routed across all dimensions in one fold.
   WAL at or below the checkpoint is ignored even if pruning or ACK failed.
   No Anvil domain files or JSON manifest participate in runtime recovery.
-- **Plugin native authority (2026-10-14).** `solaris-v2` discovers the complete
-  `[plugins].directory` and runs the production `solaris:plugin@0.7.0` component
+- **Plugin native authority (2026-10-14).** `krasnokamen` discovers the complete
+  `[plugins].directory` and runs the production `krasnokamen:plugin@0.7.0` component
   host, not the v1 simulation runtime. Invalid packages, duplicate ids/commands,
   failed guest startup and unsupported startup declarations refuse startup.
   Manifest-declared `before-build` hooks register automatically in deterministic
@@ -1836,7 +1836,7 @@ them with no downtime catch-up.
   Known cost: receipt memory and checkpoint size grow with the world's total
   operation count, because operation ids are free-form plugin strings and the
   host cannot tell an expired id from a new one. Planned fix (next WIT minor,
-  `solaris:plugin@0.8.0`): the host issues per-plugin monotonic operation ids;
+  `krasnokamen:plugin@0.9.0`): the host issues per-plugin monotonic operation ids;
   receipts older than a documented horizon are dropped and a persisted
   low-watermark refuses (never re-executes) ids below it.
   Receipt memory and checkpoint size remain intentionally unbounded, while
@@ -1900,13 +1900,13 @@ them with no downtime catch-up.
 
 #### Offline Anvil conversion
 
-The existing serving syntax remains `solaris-v2 --config PATH`; omitting the
+The existing serving syntax remains `krasnokamen --config PATH`; omitting the
 option uses `server.toml`. Conversion commands dispatch before any network,
 runtime, tick, chunk or journal owner starts:
 
 ```sh
-solaris-v2 --config PATH world import-anvil --source ANVIL --destination NATIVE --receipt JSON
-solaris-v2 --config PATH world export-anvil --source NATIVE --destination ANVIL --receipt JSON
+krasnokamen --config PATH world import-anvil --source ANVIL --destination NATIVE --receipt JSON
+krasnokamen --config PATH world export-anvil --source NATIVE --destination ANVIL --receipt JSON
 ```
 
 Both commands use `mc_core::world_conversion::{import_anvil,export_anvil}`
@@ -1965,7 +1965,7 @@ and still fail closed. Import receipts list that known gap explicitly.
 Native runtime and converters share an exclusive directory lease. Anvil import
 also holds a read-only POSIX record lock on Java's `session.lock`, interoperating
 with `FileChannel.tryLock`; it never rewrites lock bytes. Reserved
-`.solaris-conversion-*` staging paths, including symlink aliases, refuse runtime
+`.krasnokamen-conversion-*` staging paths, including symlink aliases, refuse runtime
 admission before any directory, database or owner writes.
 
 Unknown entity fields, including `Silent`, `NoGravity`, `Tags`, `LeftHanded`,
@@ -2008,7 +2008,7 @@ its family. WAL, checkpoint capture and Anvil export preserve that ID: vanilla
 executes a scheduled fluid tick only when it matches the cell's exact fluid type.
 Runtime scheduling likewise selects source IDs for sources/waterlogged cells
 and flowing IDs for non-source fluid levels.
-Native `SolarisJournalLsn` chunk metadata is excluded from Anvil export and
+Native `KrasnokamenJournalLsn` chunk metadata is excluded from Anvil export and
 discarded on import: Java may preserve it as an unknown field, but an offline
 import starts a new native journal lineage rather than trusting source decisions.
 
@@ -2429,7 +2429,7 @@ frame shows lit nearby terrain and trees, but incomplete distant terrain;
 `geometry_ready=false` and 800 pending client mesh sections prevent claiming
 the separate no-dark/no-missing visual acceptance criterion. A chat smoke pass
 must not be reported as that visual gate passing. The current harness selects
-v2 through `SOLARIS_SERVER_BINARY`, not the obsolete `--server-variant` flag,
+v2 through `KRASNOKAMEN_SERVER_BINARY`, not the obsolete `--server-variant` flag,
 and the existing native fixture environment must be exported.
 
 Receipts: `.analysis/codex-logs/admission-budget/solver-mix/{summary,acceptance}.json`,
@@ -3199,7 +3199,7 @@ and `DIM1` layouts are rejected by import rather than inferred or generated over
 
 The converter uses 26.1 `Data.spawn` RespawnData (`dimension`, `pos` integer
 array, `yaw`, `pitch`) and lowercase player `respawn` with optional `forced`,
-never legacy SpawnX/SpawnDimension or Solaris respawn aliases. Native checkpoint
+never legacy SpawnX/SpawnDimension or Krasnokamen respawn aliases. Native checkpoint
 state is authoritative; offline export derives `level.dat` (`Time`, `DataVersion`,
 `Version`, `version`, modern `spawn`) from recovered native state and retained
 templates. Vanilla 26.1 climate, game rules and world generation use
@@ -3260,7 +3260,7 @@ portal-only load tickets are derived and never journaled as permanent tickets.
 Players retain the creative/default portal-delay gamerules, four-tick timer
 decay, and 10-tick cooldown; other entities retain a 300-tick cooldown. Standing
 inside a portal refreshes cooldown rather than bouncing between worlds.
-The timers use vanilla `PortalCooldown` plus a Solaris retained elapsed image
+The timers use vanilla `PortalCooldown` plus a Krasnokamen retained elapsed image
 in player/entity NBT and absolute WAL records.
 Riding and ridden entities are currently excluded from portal admission; atomic
 passenger-graph transfer remains a gameplay gap.
@@ -3272,7 +3272,7 @@ the 5x5 obsidian platform at Y=48 and clears Y=49..51; players arrive at Y=49,
 other entities at Y=50. Exit portals use the personal bed/forced spawn validator
 without copying player custody. Gateway pairs retain vanilla `Age`,
 `ExactTeleport`, and **`exit_portal` as a three-int array**, plus an absolute
-Solaris cooldown deadline in the existing opaque block-entity WAL/checkpoint
+Krasnokamen cooldown deadline in the existing opaque block-entity WAL/checkpoint
 path. Gateway teleport locks for 40 ticks; resident age advances in memory and
 is materialized at checkpoint, while links, cooldowns and beam transitions are
 journaled. The native 2400-tick beam event remains tick-driven. Construction
@@ -3316,7 +3316,7 @@ wire IDs when absent, reserving multipart children and retaining the high-water
 mark without rewriting source entity regions. Interrupted staging publishes no
 destination and cannot resume as a runtime base. Any WAL without its required
 native DB refuses recovery; complete native bases, including tick zero, require
-positive Solaris wire IDs.
+positive Krasnokamen wire IDs.
 Registered type validation uses the complete entity-type contract, not the mob
 AI blueprint subset; non-mob controllers restore canonical physical dimensions.
 Scalar health is authoritative for restored wire appearance, including WAL-only
@@ -3336,7 +3336,7 @@ Shared difficulty is frozen into the checkpoint and folded from absolute WAL
 post-images, so subsequent login/query responses use the recovered value.
 Root and child native checkpoint images retain their durable API ticket
 post-images; an empty WAL tail after prune cannot discard forced loading. Derived
-`solaris:portal:` tickets remain restart-local and are rebuilt by portal owners.
+`krasnokamen:portal:` tickets remain restart-local and are rebuilt by portal owners.
 
 
 Native spawning uses local geometry, biome tables, observer caps and despawn
@@ -3558,7 +3558,7 @@ placement produces the one-emerald merchant result preview.
 
 Item admission rejects negative or unknown outer, template and merchant item
 IDs before native custody, with an independent creative-slot guard; holder
-offsets use checked arithmetic. Bundles have a Solaris admission bound of 64
+offsets use checked arithmetic. Bundles have a Krasnokamen admission bound of 64
 entries (vanilla's list stream codec itself is unbounded). Actual main-hand
 slot changes and hand swaps cancel matching projectile charges, and stale
 charges do not swallow generic shield release. Dropped-item lava, fire and
@@ -3666,8 +3666,8 @@ redb copy-on-write overhead. These are separate from live logical user-table
 bytes and the native file length: free pages and delayed reuse can enlarge a
 file without duplicating live authority. The Linux no-op regression
 `core::native_checkpoint_noop_tests::native_noop_save_twice_keeps_chunks_and_size`
-opens a world once and saves twice without simulation; `SOLARIS_NOOP_ROOT`
-selects an existing disposable copy, with its seed in `SOLARIS_NOOP_SEED`.
+opens a world once and saves twice without simulation; `KRASNOKAMEN_NOOP_ROOT`
+selects an existing disposable copy, with its seed in `KRASNOKAMEN_NOOP_SEED`.
 It records `noop-saves.json` and requires the second save to capture no chunks,
 rewrite no chunks/entities, write no such payload bytes, and leave file length flat.
 Correctness receipt: `.analysis/codex-logs/g6-storage/noop-result.yaml`.
@@ -3679,8 +3679,8 @@ adds one real house, bed and composter POI. It exercises ordinary eager
 checkpoint capture/write, SIGKILLs the writer with owners still open, then
 reopens through runtime recovery and checks count and sampled durable state.
 The default 300-villager case runs in focused tests. For the large correctness
-gate, set `SOLARIS_POPULATION_COUNT=500000` and an unused absolute
-`SOLARIS_POPULATION_ROOT`, then run:
+gate, set `KRASNOKAMEN_POPULATION_COUNT=500000` and an unused absolute
+`KRASNOKAMEN_POPULATION_ROOT`, then run:
 
 ```sh
 .analysis/tools/mem-run.sh -m 6G cargo test -p mc-core --lib \

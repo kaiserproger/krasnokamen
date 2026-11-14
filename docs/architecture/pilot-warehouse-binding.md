@@ -66,7 +66,7 @@ The line anchors in this table are from the CP-REFACTOR-030 tree.
 | deterministic manual handle | `manual_warehouse_handle` (`warehouse.rs:197`) |
 | DTO / result | `ScriptWarehouseBinding` (`crates/mc-script/src/settlement_operations.rs:1135`, validation `:1196`); the operation input for the three binds is validated in the same file (`:1441-1450`) |
 | host conversion | `crates/mc-plugin-host/src/domain_settlements.rs` |
-| SDK surface | `sdk/rust/solaris-plugin-sdk/src/settlement_ops.rs:321/344/367` (+ example `sdk/rust/examples/hello/src/settlement_ops.rs`) |
+| SDK surface | `sdk/rust/krasnokamen-plugin-sdk/src/settlement_ops.rs:321/344/367` (+ example `sdk/rust/examples/hello/src/settlement_ops.rs`) |
 | native tests | `script/storage/settlement/warehouse_tests.rs:8/79/215` via `settlement_tests::warehouse_tests`; catalog ids `warehouse-bind-manual` / `warehouse-bind-refusals` |
 
 ## Preserved semantics (must not change in this slice)

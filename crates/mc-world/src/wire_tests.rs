@@ -267,7 +267,7 @@ fn client_block_entities_emit_stripped_chest_update_tag() {
 }
 
 #[test]
-fn client_block_entities_strip_solaris_campfire_persistence_fields() {
+fn client_block_entities_strip_krasnokamen_campfire_persistence_fields() {
     let registry = air_chest_registry();
     let items = item_registry();
     let mut chunk = empty_chunk();
@@ -287,11 +287,11 @@ fn client_block_entities_strip_solaris_campfire_persistence_fields() {
         ("CookingTimes".into(), Tag::IntArray(vec![1, 0, 0, 0])),
         ("CookingTotalTimes".into(), Tag::IntArray(vec![4, 0, 0, 0])),
         (
-            "solaris_cooking_remaining".into(),
+            "krasnokamen_cooking_remaining".into(),
             Tag::IntArray(vec![3, 0, 0, 0]),
         ),
         (
-            "solaris_cooking_total".into(),
+            "krasnokamen_cooking_total".into(),
             Tag::IntArray(vec![4, 0, 0, 0]),
         ),
     ]);
@@ -315,8 +315,8 @@ fn client_block_entities_strip_solaris_campfire_persistence_fields() {
                 | "z"
                 | "CookingTimes"
                 | "CookingTotalTimes"
-                | "solaris_cooking_remaining"
-                | "solaris_cooking_total"
+                | "krasnokamen_cooking_remaining"
+                | "krasnokamen_cooking_total"
         )
     }));
 }

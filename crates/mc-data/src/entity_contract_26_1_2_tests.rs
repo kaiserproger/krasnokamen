@@ -7,7 +7,7 @@ use crate::entity_types::{
     EntityTypeRegistryValidationError, EntityTypeReport, MINECRAFT_VERSION, MobCategory,
     PhysicalSimulationClass, ProjectileKind, SpawnDataCategory,
     ender_dragon_part_instance_contract_26_1_2, entity_type_contract_26_1_2_by_name,
-    entity_type_contract_26_1_2_by_protocol_id, solaris_required_entity_types,
+    entity_type_contract_26_1_2_by_protocol_id, krasnokamen_required_entity_types,
 };
 
 // This checksum only detects drift in the committed, reviewed contract data.
@@ -665,7 +665,7 @@ fn strict_registry_accepts_complete_report_in_any_order() {
 
 #[test]
 fn embedded_production_registry_is_strict_and_canonical() {
-    let registry = solaris_required_entity_types();
+    let registry = krasnokamen_required_entity_types();
     assert_eq!(registry.len(), ENTITY_TYPE_COUNT);
 
     let salmon = registry
@@ -790,7 +790,7 @@ fn strict_registry_rejects_an_out_of_range_id() {
 
 #[test]
 fn strict_registry_exposes_canonical_facts() {
-    let registry = solaris_required_entity_types();
+    let registry = krasnokamen_required_entity_types();
 
     let salmon = registry
         .facts_of(&Identifier::parse("minecraft:salmon").unwrap())

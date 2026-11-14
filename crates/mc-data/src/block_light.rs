@@ -1,5 +1,5 @@
 //! Per-block-state light metadata. When a vanilla sidecar is configured,
-//! Solaris loads `data/vanilla/reports/block_light.json` as a required
+//! Krasnokamen loads `data/vanilla/reports/block_light.json` as a required
 //! runtime oracle. Without a sidecar, local fallback mode builds a
 //! conservative table from the embedded blocks report.
 //!

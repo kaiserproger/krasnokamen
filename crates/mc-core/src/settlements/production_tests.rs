@@ -192,7 +192,7 @@ fn shop(
 }
 
 fn worksite_ref(id: &str) -> ScriptSettlementBuildingRef {
-    ScriptSettlementBuildingRef::new("worksite".into(), id.into(), "solaris:workshop".into())
+    ScriptSettlementBuildingRef::new("worksite".into(), id.into(), "krasnokamen:workshop".into())
 }
 
 fn certify(state: &mut TickState, id: SettlementId, worksite: &str) {
@@ -343,7 +343,7 @@ fn cake_inputs_become_cake_after_reach_and_deadline() {
             Start {
                 job: "bake-one".into(),
                 worker,
-                recipe_name: "solaris-settlements:cake".into(),
+                recipe_name: "krasnokamen-settlements:cake".into(),
                 count: 1,
                 station: table,
                 stand_at,
@@ -400,7 +400,7 @@ fn missing_inputs_station_and_capacity_pause_without_loss() {
             Start {
                 job: "hungry".into(),
                 worker,
-                recipe_name: "solaris-settlements:cake".into(),
+                recipe_name: "krasnokamen-settlements:cake".into(),
                 count: 1,
                 station: table,
                 stand_at,
@@ -450,7 +450,7 @@ fn missing_inputs_station_and_capacity_pause_without_loss() {
         Start {
             job: "capacity".into(),
             worker,
-            recipe_name: "solaris-settlements:oak_planks".into(),
+            recipe_name: "krasnokamen-settlements:oak_planks".into(),
             count: 1,
             station: table,
             stand_at,
@@ -487,7 +487,7 @@ fn cancel_and_replay_never_duplicate() {
             Start {
                 job: "once".into(),
                 worker,
-                recipe_name: "solaris-settlements:cake".into(),
+                recipe_name: "krasnokamen-settlements:cake".into(),
                 count: 1,
                 station: table,
                 stand_at,
@@ -505,7 +505,7 @@ fn cancel_and_replay_never_duplicate() {
             Start {
                 job: "once".into(),
                 worker,
-                recipe_name: "solaris-settlements:cake".into(),
+                recipe_name: "krasnokamen-settlements:cake".into(),
                 count: 1,
                 station: table,
                 stand_at,
@@ -523,7 +523,7 @@ fn cancel_and_replay_never_duplicate() {
             Start {
                 job: "once".into(),
                 worker,
-                recipe_name: "solaris-settlements:stick".into(),
+                recipe_name: "krasnokamen-settlements:stick".into(),
                 count: 1,
                 station: table,
                 stand_at,
@@ -597,7 +597,7 @@ fn component_tool_and_remainder_paths_use_native_identity() {
             Start {
                 job: "planks".into(),
                 worker,
-                recipe_name: "solaris-settlements:oak_planks".into(),
+                recipe_name: "krasnokamen-settlements:oak_planks".into(),
                 count: 1,
                 station: table,
                 stand_at,
@@ -644,7 +644,7 @@ fn component_tool_and_remainder_paths_use_native_identity() {
             Start {
                 job: "cake".into(),
                 worker,
-                recipe_name: "solaris-settlements:cake".into(),
+                recipe_name: "krasnokamen-settlements:cake".into(),
                 count: 1,
                 station: table,
                 stand_at,
@@ -678,7 +678,7 @@ fn policy_roundtrip_preserves_jobs_and_counters() {
             Start {
                 job: "round".into(),
                 worker,
-                recipe_name: "solaris-settlements:cake".into(),
+                recipe_name: "krasnokamen-settlements:cake".into(),
                 count: 1,
                 station: table,
                 stand_at,
@@ -712,7 +712,7 @@ fn retry_timer_changes_are_reported_but_early_ticks_leave_policy_untouched() {
         Start {
             job: "retry".into(),
             worker,
-            recipe_name: "solaris-settlements:cake".into(),
+            recipe_name: "krasnokamen-settlements:cake".into(),
             count: 1,
             station: table,
             stand_at,
@@ -769,7 +769,7 @@ fn due_portion_budget_rotates_instead_of_starving_the_seventeenth_worker() {
             Start {
                 job: format!("rotated-{index:02}"),
                 worker,
-                recipe_name: "solaris-settlements:stick".into(),
+                recipe_name: "krasnokamen-settlements:stick".into(),
                 count: 20,
                 station: table,
                 stand_at,

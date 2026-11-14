@@ -5,11 +5,11 @@ and historical two-owner gate contract. The old automatic fixture-server
 lifecycle is deleted. Its recorded interaction/audio expectations below are
 not current native-runtime acceptance receipts or a default `loader-live` path.
 
-**Deployment: Requires Solaris Loader on client.** A client profile without
-Solaris Loader protocol support is rejected during Configuration with the
+**Deployment: Requires Krasnokamen Loader on client.** A client profile without
+Krasnokamen Loader protocol support is rejected during Configuration with the
 supported loader platforms and required bundle identities.
 
-This is the isolated two-owner input for the Solaris Loader real-client gate.
+This is the isolated two-owner input for the Krasnokamen Loader real-client gate.
 It uses production plugin discovery and artifact transfer; it does not alter a
 PrismLauncher instance.
 
@@ -20,7 +20,7 @@ manifest, their client bundle and the ids they own rather than by a second
 program, and a third plugin id fails its instance instead of being served as one
 of the two.
 
-The server supports only Wasmtime components over `solaris:plugin@0.7.0`.
+The server supports only Wasmtime components over `krasnokamen:plugin@0.7.0`.
 The current config selects `[plugins].directory`; no runtime selector or Luau
 fallback exists. Build artifacts must match the current host/SDK.
 
@@ -88,7 +88,7 @@ independently staged packages; the harness does not prepare this old fixture:
 
 ```sh
 python3 -m tools.harness run scenario loader-v2-settlements-smoke --platform fabric \
-  --server-bin /absolute/solaris-v2 --plugins-dir /absolute/matched-packages
+  --server-bin /absolute/krasnokamen --plugins-dir /absolute/matched-packages
 ```
 
 Use the current catalog and `docs/AGENT_TOOLING.md` for scenario scope and
@@ -136,13 +136,13 @@ For manual inspection, prepare the deployment and start the server with:
 
 ```sh
 tools/build-loader-live-gate-fixture.sh --prepare
-cargo run -p mc-edge --bin solaris-v2 -- --config examples/loader-live-gate/playable.toml
+cargo run -p mc-edge --bin krasnokamen -- --config examples/loader-live-gate/playable.toml
 ```
 
 and launch one isolated client with a per-run MCP bearer token:
 
 ```sh
-SOLARIS_CLIENT_MCP_TOKEN=change-me \
+KRASNOKAMEN_CLIENT_MCP_TOKEN=change-me \
 python3 -m tools.harness client --platform <fabric|neoforge|forge>
 ```
 

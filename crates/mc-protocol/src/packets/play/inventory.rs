@@ -669,7 +669,7 @@ impl Packet for ClientboundRecipeBookSettings {
     }
 }
 
-/// The slot-display variants Solaris emits in initial recipe-book entries.
+/// The slot-display variants Krasnokamen emits in initial recipe-book entries.
 /// Registry ids are pinned to the bundled 26.1.2 `minecraft:slot_display`
 /// registry report.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -949,7 +949,7 @@ impl RecipeBookIngredient {
     }
 }
 
-/// Recipe display variants currently backed by Solaris' recipe executor.
+/// Recipe display variants currently backed by Krasnokamen' recipe executor.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RecipeBookDisplay {
     Shapeless {

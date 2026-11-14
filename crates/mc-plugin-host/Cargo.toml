@@ -1,6 +1,6 @@
 [package]
 name = "mc-plugin-host"
-description = "WASM (Wasmtime) plugin host for Solaris: component loading, bounded callbacks, staging batches."
+description = "WASM (Wasmtime) plugin host for Krasnokamen: component loading, bounded callbacks, staging batches."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

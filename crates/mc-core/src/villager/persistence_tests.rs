@@ -122,7 +122,7 @@ fn replace(fields: &mut Vec<(String, Tag)>, key: &str, value: Tag) {
 
 #[test]
 fn exact_vanilla_fields_roundtrip_components_gossip_pois_and_memories() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let state = fixture(&items);
     let fields = villager_to_fields(&items, &state, 100).unwrap();
     assert_eq!(field(&fields, "FoodLevel").unwrap(), Some(&Tag::Byte(12)));
@@ -160,7 +160,7 @@ fn exact_vanilla_fields_roundtrip_components_gossip_pois_and_memories() {
 
 #[test]
 fn zombie_conversion_preserves_retained_villager_fields() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut state = fixture(&items);
     state.sleeping = false;
     state.conversion_time = Some(2345);
@@ -186,11 +186,11 @@ fn zombie_conversion_preserves_retained_villager_fields() {
 }
 
 #[test]
-fn vanilla_without_solaris_fields_uses_compact_inventory_and_relative_ttl() {
-    let items = mc_data::items::solaris_required_items();
+fn vanilla_without_krasnokamen_fields_uses_compact_inventory_and_relative_ttl() {
+    let items = mc_data::items::krasnokamen_required_items();
     let original = fixture(&items);
     let mut fields = villager_to_fields(&items, &original, 100).unwrap();
-    fields.retain(|(name, _)| !name.starts_with("solaris:"));
+    fields.retain(|(name, _)| !name.starts_with("krasnokamen:"));
     let loaded = villager_from_fields(&items, &fields, 300).unwrap();
     assert_eq!(loaded.golem_detected_until, Some(700));
     assert_eq!(loaded.inventory[0], original.inventory[1]);
@@ -211,7 +211,7 @@ fn vanilla_without_solaris_fields_uses_compact_inventory_and_relative_ttl() {
 
 #[test]
 fn vanilla_villager_level_minimum_normalizes_without_mutating_input() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let original = fixture(&items);
     for level in [i32::MIN, -1, 0, 1, 5, 7, i32::from(u8::MAX)] {
         let mut fields = villager_to_fields(&items, &original, 100).unwrap();
@@ -358,7 +358,7 @@ fn real_vanilla_level_seven_villager_preserves_body_and_master_trades() {
 
 #[test]
 fn malformed_present_fields_never_decode_as_cleared_state() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let original = fixture(&items);
     let fields = villager_to_fields(&items, &original, 100).unwrap();
     for (key, value) in [
@@ -386,7 +386,7 @@ fn malformed_present_fields_never_decode_as_cleared_state() {
     let mut bad_slots = fields.clone();
     let runtime = bad_slots
         .iter_mut()
-        .find(|(name, _)| name == "solaris:VillagerRuntime")
+        .find(|(name, _)| name == "krasnokamen:VillagerRuntime")
         .unwrap();
     let Tag::Compound(runtime) = &mut runtime.1 else {
         panic!("runtime");
@@ -401,7 +401,7 @@ fn malformed_present_fields_never_decode_as_cleared_state() {
 
 #[test]
 fn malformed_components_and_offer_prices_fail_before_saving() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut state = fixture(&items);
     state.offers[0].price_multiplier = f32::NAN;
     assert!(villager_to_fields(&items, &state, 100).is_err());
@@ -419,7 +419,7 @@ fn malformed_components_and_offer_prices_fail_before_saving() {
 
 #[test]
 fn journal_images_ignore_only_navigation_cache() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut state = fixture(&items);
     state.navigation_path.push(BlockPos { x: 1, y: 2, z: 3 });
     state.navigation_target = Some(BlockPos { x: 8, y: 9, z: 10 });
@@ -513,7 +513,7 @@ fn journal_clock_projection_preserves_events_and_paused_brains() {
     assert_eq!(frozen.age, unchanged.age);
     assert_eq!(frozen.last_gossip_decay, unchanged.last_gossip_decay);
     assert_eq!(frozen.last_gossip, unchanged.last_gossip);
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let fields = villager_to_fields(&items, &frozen, 225).unwrap();
     assert_eq!(villager_from_fields(&items, &fields, 225).unwrap(), frozen);
     let mut legacy_json = serde_json::to_value(&working).unwrap();
@@ -523,7 +523,7 @@ fn journal_clock_projection_preserves_events_and_paused_brains() {
     let mut legacy_fields = villager_to_fields(&items, &working, 225).unwrap();
     let runtime = legacy_fields
         .iter_mut()
-        .find(|(key, _)| key == "solaris:VillagerRuntime")
+        .find(|(key, _)| key == "krasnokamen:VillagerRuntime")
         .unwrap();
     let Tag::Compound(runtime) = &mut runtime.1 else {
         panic!("runtime compound");
@@ -538,7 +538,7 @@ fn journal_clock_projection_preserves_events_and_paused_brains() {
 
 #[test]
 fn entity_region_codec_preserves_species_fields_without_duplicate_age() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let state = fixture(&items);
     let record = mc_data::entity_nbt::VanillaEntity {
         id: "minecraft:zombie_villager".into(),
@@ -564,7 +564,7 @@ fn entity_region_codec_preserves_species_fields_without_duplicate_age() {
 
 #[test]
 fn golem_memory_ttl_matches_inclusive_brain_deadline_and_handles_expired_or_permanent() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     for until in [Some(100), Some(99), Some(500), Some(u64::MAX), None] {
         let state = VillagerState {
             golem_detected_until: until,
@@ -598,7 +598,7 @@ fn golem_memory_ttl_matches_inclusive_brain_deadline_and_handles_expired_or_perm
 
 #[test]
 fn malformed_brain_values_and_known_component_shapes_fail_closed() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     for value in [
         Tag::Int(1),
         Tag::Compound(vec![("value".into(), Tag::Int(1))]),
@@ -636,7 +636,7 @@ fn malformed_brain_values_and_known_component_shapes_fail_closed() {
 
 #[test]
 fn retained_trade_and_inventory_counts_must_fit_one_to_sixty_four() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     for count in [0, 65] {
         for kind in 0..4 {
             let mut state = fixture(&items);

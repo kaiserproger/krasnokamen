@@ -1,6 +1,6 @@
-# Contributing to Solaris
+# Contributing to Krasnokamen
 
-Solaris is a draft project developed by the owner. Read [AGENTS.md](AGENTS.md)
+Krasnokamen is a draft project developed by the owner. Read [AGENTS.md](AGENTS.md)
 for the working contract, project invariants and validation tiers, and use the
 [documentation index](docs/README.md) to find the guide for the area you change.
 Keep changes focused; discuss material scope or design choices before expanding

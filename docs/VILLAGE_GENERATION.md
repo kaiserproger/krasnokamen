@@ -21,7 +21,7 @@ The shared vanilla-like generator loads the 26.1.2 overworld noise settings,
 density functions, noise parameters and expanded multi-noise biome preset from
 the local content cache. `tools/extract-vanilla-data.sh` exports these bootstrap
 registries with `tools/extract-vanilla-worldgen.sh`; extracted Mojang data stays
-outside Git. The current packaged `solaris-v2 content import` path embeds the Java
+outside Git. The current packaged `krasnokamen content import` path embeds the Java
 exporter; cache discovery requires its native routing outputs. Export-only
 invocations do not require biome tags or structure templates.
 
@@ -46,7 +46,7 @@ queries outside the bounded cache.
 
 The headless Java oracle (`tools/VanillaWorldgenOracle.java`) constructs real
 26.1.2 `RandomState`, `NoiseBasedChunkGenerator` and structure starts. The
-`vanilla_worldgen_compare` binary compares Solaris with its output and also
+`vanilla_worldgen_compare` binary compares Krasnokamen with its output and also
 records the old analogue baseline. Observed results for 1,089 biome/climate and
 height columns per seed (XZ −2,048 through 2,048, step 128, climate Y 64):
 
@@ -67,7 +67,7 @@ executor are not implemented in the native density lane; the maximum sampled
 height errors were 12, 30 and 27 blocks respectively. Surface decoration and
 ores still use the existing analogues, and village terrain adaptation remains
 the column-height analogue described below. The oracle records other surface
-structure sets and separately audits stronghold rings, but Solaris does not
+structure sets and separately audits stronghold rings, but Krasnokamen does not
 yet generate those common structures or concentric-ring starts. The start
 agreement above is specifically for villages, not all structures.
 
@@ -134,14 +134,14 @@ are leaves of the growth, and each is run through the placed-feature executor
 with the random vanilla's `FEATURES` step seeds (see [Village decor](#village-decor)).
 
 These are vanilla's own numbers and are read from the derived content cache, not
-from Solaris constants: `data/minecraft/worldgen/structure_set/villages.json`,
+from Krasnokamen constants: `data/minecraft/worldgen/structure_set/villages.json`,
 `data/minecraft/worldgen/structure/village_*.json`, the
 `data/minecraft/tags/worldgen/biome/has_structure/village_*.json` tags, and the
 `worldgen/template_pool/`, `worldgen/processor_list/` and `structure/` data
 underneath them. There is no separate village dataset to install — villages use
 the same derived content cache as the rest of vanilla worldgen (see
 [content cache guide](OPERATING.md#vanilla-content-cache) and
-`solaris-v2 content import`).
+`krasnokamen content import`).
 
 Code paths:
 
@@ -245,9 +245,9 @@ offsets `+12`, `e^(−d²/16)`) by `−dyWithOffset × fastInvSqrt(distance²/2)
 Because the result is a density value, it flows through the normal surface and
 solidity pipeline and can add or remove material at any height in the box.
 
-### What Solaris does instead
+### What Krasnokamen does instead
 
-Solaris terrain is a 2D per-column surface
+Krasnokamen terrain is a 2D per-column surface
 (`TerrainGenerator::surface_height`, `crates/mc-worldgen/src/terrain.rs`) plus
 cave carving, so there is no 3D density array for the term to enter. The
 analogue keeps the same numbers — the same 24³ kernel support, the same
@@ -338,7 +338,7 @@ implement; no structure in the villages set uses them.
 
 Vanilla places a structure into a `WorldGenRegion` that holds the chunk being
 generated *and its already-generated neighbours*, so a piece or a decor tree at a
-chunk edge writes the part that falls in the neighbour. Solaris fills one chunk
+chunk edge writes the part that falls in the neighbour. Krasnokamen fills one chunk
 at a time and has no neighbour access, so a decor feature's writes outside the
 chunk being filled are dropped, and the neighbour does not place them later: the
 leaf piece that carries the feature belongs to one chunk.
@@ -400,7 +400,7 @@ authors one entity in its NBT `entities` list — a `minecraft:villager` with it
 `VillagerData` (`type`, `profession`, `level`) and `Age`, a `blockPos` and a
 double `pos`.
 
-Solaris reads that list and places the villagers the way vanilla's
+Krasnokamen reads that list and places the villagers the way vanilla's
 `StructureTemplate.placeEntities` does: the entity's `blockPos` goes through the
 piece's block transform, and it is dropped when the transformed block is outside
 the chunk being filled — the same per-chunk box the piece's blocks are clipped to,
@@ -416,7 +416,7 @@ are the templates' own values: the adult villager templates author
 `Rotation = [0.0, -25.827711]` and `Age = -21359`.
 
 The placement does not spawn an entity at generation time. It writes a **chunk
-inhabitant marker** (the `SolarisSettlementInhabitants` entry in the chunk's
+inhabitant marker** (the `KrasnokamenSettlementInhabitants` entry in the chunk's
 extras, `mc_world::SettlementInhabitantMarker`), which is the core's one
 generation-to-runtime handoff in the historical v1 integration: when streamed,
 the now-deleted `mc-net` adopter resolved each marker against the registry — types
@@ -463,7 +463,7 @@ placement rather than a bed.
 
 The current server persists native state plus one tick WAL and validates its
 generation identity before recovery/generation. It does not serve an unversioned
-Anvil world or use `solaris/world.json` as an operator migration API. Use explicit
+Anvil world or use `krasnokamen/world.json` as an operator migration API. Use explicit
 offline Anvil conversion, retain source worlds, back up before upgrades and never
 bypass an identity refusal by hand-editing metadata. See [OPERATING.md](OPERATING.md).
 
@@ -510,7 +510,7 @@ they are deliberate:
 - **Non-village structures.** Only the `minecraft:villages` structure set is
   assembled. The other structure sets in the content cache (ancient cities,
   mineshafts, ocean monuments, ruined portals, strongholds, mansions, and the
-  rest) are not placed by Solaris, and the data layer only accepts
+  rest) are not placed by Krasnokamen, and the data layer only accepts
   `minecraft:jigsaw` structures driven by `minecraft:random_spread` placement.
   A structure or placement of another type fails the load by name instead of
   being approximated.

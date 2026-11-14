@@ -61,7 +61,7 @@ pub(super) fn run_code_health() -> Result<(), i32> {
     scan_harness_catalog_ownership(&root, &mut findings);
     scan_api_manifests(&root, &mut findings);
 
-    println!("Solaris code-health report");
+    println!("Krasnokamen code-health report");
     println!();
 
     if findings.is_empty() {

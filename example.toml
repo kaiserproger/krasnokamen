@@ -1,6 +1,6 @@
 [server]
-name = "solaris-alpha"
-motd = "Solaris public alpha"
+name = "krasnokamen-alpha"
+motd = "Krasnokamen public alpha"
 view_distance = 8
 simulation_distance = 8
 
@@ -32,7 +32,7 @@ directory = "plugins"
 # do not point this directory at an existing Anvil world.
 world_dir = "world"
 # Discover an existing licensed vanilla content cache, or derive one explicitly:
-#   solaris-v2 content import --version 26.1.2 --download
+#   krasnokamen content import --version 26.1.2 --download
 # Content is never redistributed. Verify a cache with `content verify`.
 # vanilla_data_dir = "data/vanilla"
 # Changing the seed requires a fresh world directory.

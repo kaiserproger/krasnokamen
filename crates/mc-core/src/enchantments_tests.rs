@@ -47,8 +47,8 @@ fn unbreaking_draws_per_damage_point_and_armor_retains_sixty_percent_floor() {
 
 #[test]
 fn unbreaking_existing_player_tool_wear_skips_and_breaks_only_on_admitted_damage() {
-    let items = mc_data::items::solaris_required_items();
-    let facts = mc_data::item_components::solaris_required_item_facts();
+    let items = mc_data::items::krasnokamen_required_items();
+    let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = mc_data::tags::TagsData::default();
     let rules = crate::inventory::ItemRules {
         items: &items,
@@ -92,8 +92,8 @@ fn unbreaking_existing_player_tool_wear_skips_and_breaks_only_on_admitted_damage
 
 #[test]
 fn binding_curse_blocks_every_armor_removal_path_but_allows_creative() {
-    let items = mc_data::items::solaris_required_items();
-    let facts = mc_data::item_components::solaris_required_item_facts();
+    let items = mc_data::items::krasnokamen_required_items();
+    let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = mc_data::tags::TagsData::default();
     let rules = crate::inventory::ItemRules {
         items: &items,
@@ -136,8 +136,8 @@ fn binding_curse_blocks_every_armor_removal_path_but_allows_creative() {
 
 #[test]
 fn vanishing_curse_destroys_inventory_and_full_inventory_cursor_on_death() {
-    let items = mc_data::items::solaris_required_items();
-    let facts = mc_data::item_components::solaris_required_item_facts();
+    let items = mc_data::items::krasnokamen_required_items();
+    let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = mc_data::tags::TagsData::default();
     let rules = crate::inventory::ItemRules {
         items: &items,
@@ -176,8 +176,8 @@ fn vanishing_curse_destroys_inventory_and_full_inventory_cursor_on_death() {
 
 #[test]
 fn existing_knockback_enchantment_adds_strength_without_changing_weapon_damage() {
-    let items = mc_data::items::solaris_required_items();
-    let facts = mc_data::item_components::solaris_required_item_facts();
+    let items = mc_data::items::krasnokamen_required_items();
+    let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = mc_data::tags::TagsData::default();
     let rules = crate::inventory::ItemRules {
         items: &items,

@@ -781,7 +781,7 @@ pub fn to_fields(life: &EntityLifeState, love: u32) -> Vec<(String, mc_nbt::Tag)
             Tag::Byte(i8::from(life.age_lock.locked)),
         ),
         (
-            "solaris:AgeLockCooldownUntil".into(),
+            "krasnokamen:AgeLockCooldownUntil".into(),
             Tag::Long(life.age_lock.cooldown_until.min(i64::MAX as u64) as i64),
         ),
     ];

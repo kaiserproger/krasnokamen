@@ -333,7 +333,7 @@ fn unversioned_v2_history_refuses_without_stamping_current_revision() {
         assert_eq!(
             error,
             format!(
-                "storage: {} has persisted history but no native checkpoint; use solaris-v2 world import-anvil --source ANVIL --destination NATIVE --receipt JSON",
+                "storage: {} has persisted history but no native checkpoint; use krasnokamen world import-anvil --source ANVIL --destination NATIVE --receipt JSON",
                 dir.display(),
             )
         );

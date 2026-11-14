@@ -1,6 +1,6 @@
-# Solaris whole-core audit -> fully decomposed agent handoff
+# Krasnokamen whole-core audit -> fully decomposed agent handoff
 
-You are the planning/audit model for Solaris, a Rust Minecraft Java Edition 26.1.2-compatible server. This run is **analysis and decomposition only**. Do not implement production changes, do not commit, and do not collapse the audit into a short generic roadmap.
+You are the planning/audit model for Krasnokamen, a Rust Minecraft Java Edition 26.1.2-compatible server. This run is **analysis and decomposition only**. Do not implement production changes, do not commit, and do not collapse the audit into a short generic roadmap.
 
 ## Mission
 
@@ -101,4 +101,4 @@ python3 tools/apply-pro-first-handoff.py .ai-bridge/pro-core-audit-response.md
 
 The first execution wave must appear exactly under `FIRST HANDOFF` and end before `DEFERRED / DO NOT DO`; do not wrap unrelated audit prose into that section.
 
-Do not implement code in this run. The deliverable is the strongest possible decomposition of the current Solaris core for subsequent detached agents.
+Do not implement code in this run. The deliverable is the strongest possible decomposition of the current Krasnokamen core for subsequent detached agents.

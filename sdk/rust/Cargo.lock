@@ -181,15 +181,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "solaris-hello-plugin"
+name = "krasnokamen-hello-plugin"
 version = "0.1.0"
 dependencies = [
- "solaris-plugin-sdk",
+ "krasnokamen-plugin-sdk",
  "wit-bindgen",
 ]
 
 [[package]]
-name = "solaris-plugin-sdk"
+name = "krasnokamen-plugin-sdk"
 version = "0.1.0"
 dependencies = [
  "serde",

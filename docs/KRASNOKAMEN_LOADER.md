@@ -1,19 +1,19 @@
-# Install Solaris Loader on a client
+# Install Krasnokamen Loader on a client
 
-Solaris Loader is an optional **client-side** mod for Solaris plugins that ship
+Krasnokamen Loader is an optional **client-side** mod for Krasnokamen plugins that ship
 verified UI (screens/HUD), assets, sounds, items, blocks, or UI/keyboard interactions. It is not
 needed when every selected server plugin is `server_only`.
 
 The current Loader prototype targets exactly **Minecraft Java Edition 26.1.2**
 and **Java 25**. Use the adapter matching the mod loader in that Minecraft
-instance; do not install more than one Solaris Loader adapter in the same
+instance; do not install more than one Krasnokamen Loader adapter in the same
 profile.
 
 ## Compatibility matrix
 
 The repository currently builds and tests against:
 
-| Client platform | Supported baseline for 26.1.2 | Solaris jar |
+| Client platform | Supported baseline for 26.1.2 | Krasnokamen jar |
 | --- | --- | --- |
 | Fabric | Fabric Loader `0.19.3`, Fabric API `0.155.2+26.1.2` | `loader-fabric-0.1.0.jar` |
 | NeoForge | NeoForge `26.1.2.76` | `loader-neoforge-0.1.0.jar` |
@@ -24,19 +24,19 @@ Fabric Loader 0.19.3 or newer; the validated baseline above is preferred.
 NeoForge requires 26.1.2.76 or newer within the 26.1.2 line. Forge requires
 loader major 64 within the 26.1 line. The exact versions in the table are the
 field-tested development matrix; other newer compatible loader builds are not a
-Solaris alpha release claim.
+Krasnokamen alpha release claim.
 
 ## Download or build the client jars
 
 Download the matching platform JAR and `SHA256SUMS` from
-[Solaris Loader releases](https://github.com/kaiserproger/solaris-loader/releases).
+[Krasnokamen Loader releases](https://github.com/kaiserproger/krasnokamen-loader/releases).
 The server's curl installer does not install client mods. Select the release
-required by your server, not GitHub's source-code ZIP, and keep only one Solaris
+required by your server, not GitHub's source-code ZIP, and keep only one Krasnokamen
 Loader adapter in the instance. Verify the selected JAR's SHA-256 against
 `SHA256SUMS` before installation.
 
 To build instead, use
-[`solaris-loader`](https://github.com/kaiserproger/solaris-loader). Its Git
+[`krasnokamen-loader`](https://github.com/kaiserproger/krasnokamen-loader). Its Git
 history and release version are independent of core: a server tag is not a
 Loader revision. Alpha protocol and bundle contracts can change between
 revisions. Current Loader wire protocol is **3** with artifact index schema 2,
@@ -69,12 +69,12 @@ loader-neoforge/build/libs/loader-neoforge-0.1.0.jar
 loader-forge/build/libs/loader-forge-0.1.0.jar
 ```
 
-These are client mods, not Solaris server plugins. Do not put them in the
+These are client mods, not Krasnokamen server plugins. Do not put them in the
 server's `[plugins].directory`.
 
 ## Choose the correct launcher instance
 
-Solaris Loader is installed like another mod for the chosen platform. It does
+Krasnokamen Loader is installed like another mod for the chosen platform. It does
 not require an MCP token or the development client agent.
 
 | Launcher | Destination |
@@ -96,10 +96,10 @@ for every launcher.
 
 1. Create/select a Minecraft **26.1.2** Fabric instance using Java 25.
 2. Install Fabric Loader and Fabric API; use the validated versions above when
-   reproducing a Solaris field test.
+   reproducing a Krasnokamen field test.
 3. Open that instance's game directory and create `mods/` if needed.
 4. Copy `loader-fabric-0.1.0.jar` into `mods/`.
-5. Start that same instance and connect to the Solaris server.
+5. Start that same instance and connect to the Krasnokamen server.
 
 For PrismLauncher, right-click the instance, choose **Folder**, and place the jar
 in that folder's `minecraft/mods/` directory (or use the instance's Mods page).
@@ -127,7 +127,7 @@ metadata; their networking adapters are different.
 
 ## First connection and permissions
 
-When the server requires Loader content, Solaris sends a manifest during the
+When the server requires Loader content, Krasnokamen sends a manifest during the
 Minecraft Configuration phase. On the first connection for an exact normalized
 server address and requested permission set, Loader opens a Minecraft
 confirmation screen.
@@ -144,14 +144,14 @@ confirmation screen.
 The default cache is:
 
 ```text
-~/.solaris/loader-cache/
+~/.krasnokamen/loader-cache/
 ```
 
 It contains `permissions.properties` plus content-addressed bundle data. The JVM
 property below overrides the cache for an isolated profile:
 
 ```text
--Dsolaris.loader.cacheDir=/absolute/path/to/loader-cache
+-Dkrasnokamen.loader.cacheDir=/absolute/path/to/loader-cache
 ```
 
 Do not copy a permission file between untrusted server addresses. Cached bundle
@@ -168,7 +168,7 @@ with an ordinary vanilla 26.1.2 client. If one or more selected plugins declare
 A missing Loader, wrong platform/version, denied permission, missing
 acknowledgement, invalid bundle, size/hash mismatch, or activation failure stops
 login during Configuration. The server disconnect reason names the supported
-loader platforms and required bundle identities where available; Solaris does
+loader platforms and required bundle identities where available; Krasnokamen does
 not silently replace custom content with vanilla content.
 
 Loader clears activated registries, HUD state, and transient resources when the
@@ -195,7 +195,7 @@ validates only the vanilla content cache. See
 Confirm the jar is in the `mods/` directory of the instance that was actually
 launched, confirm Minecraft reports 26.1.2, and confirm the adapter matches
 Fabric/NeoForge/Forge. Fabric also needs Fabric API. Check the client log for
-`solaris_loader` loading before retrying.
+`krasnokamen_loader` loading before retrying.
 
 ### No permission prompt appears
 
@@ -222,7 +222,7 @@ manifest identity.
 ### Platform/version mismatch
 
 Use the compatibility table above. Do not rename one platform jar to make a
-loader accept it. Capture both the Minecraft client log and Solaris disconnect
+loader accept it. Capture both the Minecraft client log and Krasnokamen disconnect
 reason when reporting a failure.
 
 ## Developer compatibility gate

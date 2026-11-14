@@ -6,9 +6,9 @@
 //! `configured_feature` → state providers, placement modifiers, int providers
 //! and block predicates down to their leaves. It loads only that closure:
 //! entries that are not transitively reachable are never read, so the parts of
-//! the vanilla registries Solaris does not implement can never fail a load.
+//! the vanilla registries Krasnokamen does not implement can never fail a load.
 //!
-//! Anything the closure *does* reach that Solaris does not implement fails
+//! Anything the closure *does* reach that Krasnokamen does not implement fails
 //! closed ([`ClosureError::UnsupportedType`]), naming the type id and the entry
 //! that referenced it. The reader executes nothing; the typed specs it returns
 //! are compiled and placed by `mc-worldgen`.

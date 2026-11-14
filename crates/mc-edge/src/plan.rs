@@ -1401,7 +1401,7 @@ fn baby_metadata_index(type_id: u32) -> Option<u8> {
 fn player_entity_type_id() -> u32 {
     use std::sync::LazyLock;
     static ID: LazyLock<u32> = LazyLock::new(|| {
-        mc_data::entity_types::solaris_required_entity_types()
+        mc_data::entity_types::krasnokamen_required_entity_types()
             .id_of(&mc_data::Identifier::parse("minecraft:player").expect("static id parses"))
             .expect("player entity type present")
     });

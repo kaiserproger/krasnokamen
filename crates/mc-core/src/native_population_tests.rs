@@ -3,11 +3,11 @@
 //!
 //! The default remains a new seed-42 world, 300 villagers and one shared house.
 //! To extend an IMPORTED COPY (never the pristine import), explicitly set:
-//! SOLARIS_POPULATION_EXISTING=1 SOLARIS_POPULATION_SEED=-712714449760912068
-//! SOLARIS_POPULATION_COUNT=5000 SOLARIS_POPULATION_HOUSES=1
-//! SOLARIS_POPULATION_ROOT=<copied native world>
-//! SOLARIS_POPULATION_ORIGIN_X=8192 SOLARIS_POPULATION_ORIGIN_Y=310
-//! SOLARIS_POPULATION_ORIGIN_Z=8192
+//! KRASNOKAMEN_POPULATION_EXISTING=1 KRASNOKAMEN_POPULATION_SEED=-712714449760912068
+//! KRASNOKAMEN_POPULATION_COUNT=5000 KRASNOKAMEN_POPULATION_HOUSES=1
+//! KRASNOKAMEN_POPULATION_ROOT=<copied native world>
+//! KRASNOKAMEN_POPULATION_ORIGIN_X=8192 KRASNOKAMEN_POPULATION_ORIGIN_Y=310
+//! KRASNOKAMEN_POPULATION_ORIGIN_Z=8192
 //! Run this exact test with --nocapture. Origin is the northwest FLOOR block;
 //! house mode requires an entirely air-filled, valid-height rectangular volume.
 //! Houses occupy 6x6 blocks on a 7-block grid with a continuous stone walkway.
@@ -23,13 +23,13 @@
 use super::*;
 use std::io::{BufRead, Write};
 
-const CHILD: &str = "SOLARIS_POPULATION_CHILD";
-const COUNT: &str = "SOLARIS_POPULATION_COUNT";
-const ROOT: &str = "SOLARIS_POPULATION_ROOT";
+const CHILD: &str = "KRASNOKAMEN_POPULATION_CHILD";
+const COUNT: &str = "KRASNOKAMEN_POPULATION_COUNT";
+const ROOT: &str = "KRASNOKAMEN_POPULATION_ROOT";
 const READY: &str = "NATIVE_POPULATION_DURABLE";
-const EXISTING: &str = "SOLARIS_POPULATION_EXISTING";
-const SEED: &str = "SOLARIS_POPULATION_SEED";
-const HOUSES: &str = "SOLARIS_POPULATION_HOUSES";
+const EXISTING: &str = "KRASNOKAMEN_POPULATION_EXISTING";
+const SEED: &str = "KRASNOKAMEN_POPULATION_SEED";
+const HOUSES: &str = "KRASNOKAMEN_POPULATION_HOUSES";
 
 fn opt_in(name: &str) -> bool {
     match std::env::var(name) {
@@ -217,7 +217,7 @@ impl HouseGrid {
             }
         }
         for chunk in chunks.keys() {
-            let owner = format!("solaris:population-grid:{}:{}", chunk.x, chunk.z);
+            let owner = format!("krasnokamen:population-grid:{}:{}", chunk.x, chunk.z);
             assert!(
                 !state.tickets.contains_key(&owner),
                 "population ticket already exists"
@@ -444,7 +444,7 @@ fn native_offline_population_save_kill_reopen() {
     }
     let grid = opt_in(HOUSES).then(|| {
         let coordinate = |axis, default| {
-            std::env::var(format!("SOLARIS_POPULATION_ORIGIN_{axis}"))
+            std::env::var(format!("KRASNOKAMEN_POPULATION_ORIGIN_{axis}"))
                 .map(|value| value.parse::<i32>().unwrap())
                 .unwrap_or(default)
         };
@@ -472,7 +472,7 @@ fn native_offline_population_save_kill_reopen() {
         } else {
             assert!(
                 !root.join("native/state.redb").exists(),
-                "fixture refuses an existing world without SOLARIS_POPULATION_EXISTING=1"
+                "fixture refuses an existing world without KRASNOKAMEN_POPULATION_EXISTING=1"
             );
         }
         let config = CoreConfig::new(root.clone(), seed);
@@ -823,7 +823,7 @@ fn native_offline_population_save_kill_reopen() {
         }
         for chunk in grid.chunks().keys() {
             assert_eq!(
-                state.tickets[&format!("solaris:population-grid:{}:{}", chunk.x, chunk.z)],
+                state.tickets[&format!("krasnokamen:population-grid:{}:{}", chunk.x, chunk.z)],
                 (*chunk, 0)
             );
         }

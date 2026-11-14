@@ -2,7 +2,7 @@
 
 Read the ADR owning the decision. Later explicit supersession takes priority;
 milestone notes and desired migrations do not silently change runtime truth.
-The current server is `mc-edge`/`solaris-v2` + `mc-core`, defined by
+The current server is `mc-edge`/`krasnokamen` + `mc-core`, defined by
 [ADR 0013](0013-core-model-v2.md); [ADR 0014](0014-v1-core-retirement.md)
 records the completed v1 source retirement. [ARCHITECTURE.md](../ARCHITECTURE.md)
 summarizes current boundaries.
@@ -18,7 +18,7 @@ summarizes current boundaries.
 | [0007](0007-connection-liveness-under-outbound-pressure.md) | Liveness principle retained; v1 implementation historical | Keepalive and bounded publication under pressure; current edge behavior governed by 0013 |
 | [0008](0008-overworld-density-router.md) | Accepted worldgen design | Worldgen shape authority and deterministic pipeline; old serving-storage descriptions retired |
 | [0009](0009-regional-plugin-boundary.md) | Isolation/admission principles retained; v1 implementation superseded | Serial plugins over bounded values; current native host/commit model in 0013 |
-| [0010](0010-solaris-loader-contract.md) | Accepted | Untrusted client bundles, Configuration handshake, permissions and cache identity; wire owner `mc-loader` |
+| [0010](0010-krasnokamen-loader-contract.md) | Accepted | Untrusted client bundles, Configuration handshake, permissions and cache identity; wire owner `mc-loader` |
 | [0011](0011-core-crate-topology-and-threading.md) | V1 topology/threading/durability superseded by 0013/0014 | Historical extraction and multiple durable streams; general ownership principles retained |
 | [0012](0012-earth-worldplan-and-native-overlay.md) | Proposed for native v2; not ported | Earth WorldPlan/base/overlay proposal; v1 W0–W5 evidence is historical |
 | [0013](0013-core-model-v2.md) | Accepted; sole current core model | Data-parallel snapshot/intents/merge, native state, one tick WAL, off-tick plugins and remote tickets |

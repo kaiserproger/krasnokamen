@@ -42,7 +42,7 @@ use mc_script::{
 };
 
 use crate::adapter::{AdapterError, PlayerSessions, to_script_batch};
-use crate::bindings::exports::solaris::plugin::events::{
+use crate::bindings::exports::krasnokamen::plugin::events::{
     ChatSent, CommandInvoked, Event, EventContext, InventoryClick, InventoryMenuClicked,
     InventoryStorageOutcome, InventoryStorageTransactionAnswered, OnlinePlayersAnswered,
     OperationAnswered, OperationCommitted, OperationOutcome, OperationPayload, OperationRefused,
@@ -50,12 +50,12 @@ use crate::bindings::exports::solaris::plugin::events::{
     PlayerTeleportOutcome, PlayerZoneTransition, StorageCasAnswered, StorageGetAnswered,
     TimerFired, ZoneCommandAnswered, ZoneCommandOutcome,
 };
-use crate::bindings::exports::solaris::plugin::lifecycle::InitContext;
-use crate::bindings::solaris::plugin::operation_types::OperationFailure;
-use crate::bindings::solaris::plugin::storage::{
+use crate::bindings::exports::krasnokamen::plugin::lifecycle::InitContext;
+use crate::bindings::krasnokamen::plugin::operation_types::OperationFailure;
+use crate::bindings::krasnokamen::plugin::storage::{
     StorageCasOutcome, StorageChange, StorageFailure, StorageGetOutcome, StorageRecord,
 };
-use crate::bindings::solaris::plugin::types::{LogLevel, Position};
+use crate::bindings::krasnokamen::plugin::types::{LogLevel, Position};
 use crate::discovery::DiscoveryError;
 use crate::package::LoadedPackage;
 use crate::startup::{DeploymentContribution, DeploymentSurface, aggregate_deployment};

@@ -160,7 +160,7 @@ const MIN_BLOCK_ENTITY_BYTES: usize = 5;
 const MAX_ENTITY_DATA_VALUES: usize = 64;
 const MAX_CONTAINER_CLICK_CHANGED_SLOTS: usize = 128;
 const MAX_HASHED_STACK_COMPONENT_HASHES: usize = 256;
-/// Solaris packet-wide allocation fence for serverbound Container Click.
+/// Krasnokamen packet-wide allocation fence for serverbound Container Click.
 /// Vanilla bounds each collection independently; this additional aggregate
 /// ceiling prevents one packet from allocating tens of thousands of hashes.
 const MAX_CONTAINER_CLICK_COMPONENT_HASHES: usize = 4096;

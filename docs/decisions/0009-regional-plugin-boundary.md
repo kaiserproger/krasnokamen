@@ -15,7 +15,7 @@ v1 source paths/commands; present-tense v1 descriptions apply only to their era.
 
 ## Problem
 
-Solaris is moving mutable world and entity simulation to regional single-writer
+Krasnokamen is moving mutable world and entity simulation to regional single-writer
 owners. Exposing that ownership model to Luau would force every plugin author to
 handle migration, concurrency, stale references, and cross-region commit. A
 globally mutable lock-free world would avoid visible regions only by moving the
@@ -43,7 +43,7 @@ helper may wrap those events but cannot introduce polling or elapsed-time
 success.
 
 Source ownership (2026-09-06): first-party Luau packages live in the independent
-sibling `solaris-default-plugins` repository. Production core discovers deployed
+sibling `krasnokamen-default-plugins` repository. Production core discovers deployed
 packages through the existing `plugins.directory` boundary; it no longer embeds
 first-party source or exposes `plugins.bundled`. Strict/expected deployment
 validation still covers the complete discovered set. Core builds without the
@@ -53,7 +53,7 @@ grant first-party packages access beyond the ordinary plugin boundary.
 
 ### Component migration (2026-09-16)
 
-The owner-selected successor is WIT `solaris:plugin@0.7.0` with Wasmtime in
+The owner-selected successor is WIT `krasnokamen:plugin@0.7.0` with Wasmtime in
 `mc-plugin-host`. The composition root selects one runtime per deployment, not
 both. Each component has its own Store; callbacks run serially on the host
 worker, outside simulation owners, and publish validated batches through the
@@ -106,7 +106,7 @@ reload and final Luau removal still need their own acceptance evidence.
 
 ### Native core v2 deployment (2026-10-14)
 
-`solaris-v2` now composes the same production component host through the
+`krasnokamen` now composes the same production component host through the
 existing bounded `mc-script` boundary. It does not instantiate v1 regions,
 storage actors or `mc-server`. One serial Wasmtime worker remains outside
 the native tick; admission delivers owned commands that the native owner
@@ -263,7 +263,7 @@ taking the same mutex).
 
 This records implementation ownership, not completed graphical acceptance or
 release readiness. Historical P5 evidence and remaining gates for this v1 design
-are in the [pre-cleanup cursor](https://github.com/kaiserproger/solaris/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/MEMORY.md);
+are in the [pre-cleanup cursor](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/MEMORY.md);
 component reload and final Luau removal were later migration outcomes.
 
 ## Event and mutation classes
@@ -305,7 +305,7 @@ placement, tree selection, and clay deposits; it supplies no callbacks to
 entity ticks or chunk generation. A single plugin owns the plan. Startup
 materializes it before generation and persists its resolved fingerprint in
 the world contract. Adding, removing, or changing that plan requires a fresh
-Solaris world and is rejected by live reload. Script formatting alone does
+Krasnokamen world and is rejected by live reload. Script formatting alone does
 not change the resolved contract.
 
 If an uncommon custom decision later needs synchronous-looking admission, its
@@ -391,8 +391,8 @@ inventory/storage transaction remains an explicit typed coordinator with an
 internal session gate shared with standalone inventory owner commands; this
 keeps their plan, durable mutation, and ordered owner application serialized.
 
-Package discovery type-checks all callable `solaris` functions against the
-check-only `mc-plugin-host/src/legacy_luau/solaris.d.luau` declarations. Known-name/argument errors fail
+Package discovery type-checks all callable `krasnokamen` functions against the
+check-only `mc-plugin-host/src/legacy_luau/krasnokamen.d.luau` declarations. Known-name/argument errors fail
 before VM startup, including in handlers not executed by `--check`. Dynamic
 `any` values, advanced record shapes, resource bounds and authority checks remain
 runtime responsibilities. The declarations do not add a runtime SDK or change
@@ -402,7 +402,7 @@ The existing world journal owns the compound commit decision: its inventory
 frame contains canonical named-item player after-images and the prepared ledger
 batch. Storage and playerdata are durable projections, completed before live
 inventory publication. Player after-images include cursor and open crafting,
-enchanting and merchant inputs. `SolarisInventoryWorldJournalLsn` fences replay
+enchanting and merchant inputs. `KrasnokamenInventoryWorldJournalLsn` fences replay
 and stale saves; plugin-storage revision is a separate ordering domain.
 The live projection uses the existing server save coordinator. Startup replays
 chunks and inventory decisions before save/gameplay admission, even without Lua.

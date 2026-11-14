@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn content_import_accepts_licensed_jar_or_download_and_pinned_default() {
     for source in [vec![], vec!["--download"], vec!["--from", "server.jar"]] {
-        let mut args = vec!["solaris-v2", "content", "import", "--cache", "cache"];
+        let mut args = vec!["krasnokamen", "content", "import", "--cache", "cache"];
         args.extend(source);
         let cli = Cli::try_parse_from(args).unwrap();
         let Some(Command::Content {
@@ -17,7 +17,7 @@ fn content_import_accepts_licensed_jar_or_download_and_pinned_default() {
     }
     assert!(
         Cli::try_parse_from([
-            "solaris-v2",
+            "krasnokamen",
             "content",
             "import",
             "--from",
@@ -26,14 +26,14 @@ fn content_import_accepts_licensed_jar_or_download_and_pinned_default() {
         ])
         .is_err()
     );
-    assert!(Cli::try_parse_from(["solaris-v2", "content", "verify", "--download"]).is_err());
+    assert!(Cli::try_parse_from(["krasnokamen", "content", "verify", "--download"]).is_err());
 }
 
 #[test]
 fn offline_commands_require_exact_paths_and_global_config() {
     for name in ["import-anvil", "export-anvil"] {
         let cli = Cli::try_parse_from([
-            "solaris-v2",
+            "krasnokamen",
             "world",
             name,
             "--source",
@@ -59,7 +59,7 @@ fn offline_commands_require_exact_paths_and_global_config() {
         assert_eq!(paths.receipt, PathBuf::from("receipt.json"));
         assert!(
             Cli::try_parse_from([
-                "solaris-v2",
+                "krasnokamen",
                 "world",
                 name,
                 "--source",
@@ -71,7 +71,7 @@ fn offline_commands_require_exact_paths_and_global_config() {
         );
     }
     for command in ["backup", "restore"] {
-        assert!(Cli::try_parse_from(["solaris-v2", command, "--world-dir", "world"]).is_err());
+        assert!(Cli::try_parse_from(["krasnokamen", command, "--world-dir", "world"]).is_err());
         let option = if command == "backup" {
             "--out"
         } else {
@@ -79,7 +79,7 @@ fn offline_commands_require_exact_paths_and_global_config() {
         };
         assert!(
             Cli::try_parse_from([
-                "solaris-v2",
+                "krasnokamen",
                 command,
                 option,
                 "backup",
@@ -94,7 +94,7 @@ fn offline_commands_require_exact_paths_and_global_config() {
 #[test]
 fn world_census_takes_source_and_receipt_only() {
     let cli = Cli::try_parse_from([
-        "solaris-v2",
+        "krasnokamen",
         "--config",
         "census.toml",
         "world",
@@ -126,7 +126,7 @@ fn world_census_takes_source_and_receipt_only() {
             "out",
         ],
     ] {
-        let mut args = vec!["solaris-v2", "world", "census"];
+        let mut args = vec!["krasnokamen", "world", "census"];
         args.extend(missing);
         assert!(Cli::try_parse_from(args).is_err());
     }
@@ -135,11 +135,11 @@ fn world_census_takes_source_and_receipt_only() {
 #[test]
 fn serving_syntax_keeps_no_console_flag() {
     let cli =
-        Cli::try_parse_from(["solaris-v2", "--config", "serve.toml", "--no-console"]).unwrap();
+        Cli::try_parse_from(["krasnokamen", "--config", "serve.toml", "--no-console"]).unwrap();
     assert_eq!(cli.config, PathBuf::from("serve.toml"));
     assert!(cli.no_console);
     assert!(cli.command.is_none());
-    let cli = Cli::try_parse_from(["solaris-v2"]).unwrap();
+    let cli = Cli::try_parse_from(["krasnokamen"]).unwrap();
     assert!(!cli.no_console);
     assert_eq!(cli.config, PathBuf::from("server.toml"));
 }
@@ -149,7 +149,7 @@ async fn offline_verify_missing_cache_reports_import_instruction_without_opening
     let dir = tempfile::tempdir().unwrap();
     let missing = dir.path().join("missing-cache");
     let cli = Cli::try_parse_from([
-        "solaris-v2",
+        "krasnokamen",
         "content",
         "verify",
         "--cache",
@@ -180,20 +180,20 @@ fn path_only_offline_commands_do_not_require_a_serving_config() {
             "cache",
         ],
     ] {
-        let mut args = vec!["solaris-v2", "--config", missing.to_str().unwrap()];
+        let mut args = vec!["krasnokamen", "--config", missing.to_str().unwrap()];
         args.extend(command);
         assert!(load_config(&Cli::try_parse_from(args).unwrap()).is_ok());
     }
     assert!(
         load_config(
-            &Cli::try_parse_from(["solaris-v2", "--config", missing.to_str().unwrap(),]).unwrap()
+            &Cli::try_parse_from(["krasnokamen", "--config", missing.to_str().unwrap(),]).unwrap()
         )
         .is_err()
     );
     let invalid = dir.path().join("invalid.toml");
     std::fs::write(&invalid, "not toml = [").unwrap();
     let cli = Cli::try_parse_from([
-        "solaris-v2",
+        "krasnokamen",
         "--config",
         invalid.to_str().unwrap(),
         "backup",
@@ -205,7 +205,7 @@ fn path_only_offline_commands_do_not_require_a_serving_config() {
     .unwrap();
     assert!(load_config(&cli).is_ok());
     let cli = Cli::try_parse_from([
-        "solaris-v2",
+        "krasnokamen",
         "--config",
         invalid.to_str().unwrap(),
         "content",
