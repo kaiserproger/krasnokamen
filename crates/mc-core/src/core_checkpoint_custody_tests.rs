@@ -59,17 +59,18 @@ fn stored_image(config: &CoreConfig) -> Image {
     image
 }
 
-/// Non-player identities in every dimension's `EntityStore`, read from the
-/// identity column rather than through checkpoint capture.
+/// Durable non-player identities in every dimension's `EntityStore`, read from
+/// the identity column rather than through checkpoint capture. A corpse (a row
+/// on the dying clock) is excluded: its death is its durable removal. Other
+/// dead rows stay durable.
 fn store_uuids(state: &TickState) -> BTreeSet<uuid::Uuid> {
     worlds(state)
         .flat_map(|world| {
             world.entities.slots().filter_map(move |slot| {
-                let player = matches!(
-                    world.entities.body(slot).kind,
-                    crate::entities::EntityKind::Player { .. }
-                );
-                (!player).then(|| world.entities.row(slot).uuid)
+                let body = world.entities.body(slot);
+                let player = matches!(body.kind, crate::entities::EntityKind::Player { .. });
+                (!player && !world.entities.is_dying(body.id))
+                    .then(|| world.entities.row(slot).uuid)
             })
         })
         .collect()
@@ -324,6 +325,307 @@ fn battle_faction_survives_native_checkpoint_wal_and_restart() {
     let restored = world.state.entities.slot_of_uuid(uuid).unwrap();
     assert_eq!(world.state.entities.body(restored).faction, 0);
     assert!(world.state.entities.battle_slots().next().is_none());
+}
+
+/// A lethal hit through the ordinary merge-commit damage path.
+fn kill(state: &mut TickState, id: EntityId) {
+    let (world, slot) = world_mut(state, id);
+    world.merge_damage.push((
+        slot,
+        crate::tick::DamagePiece {
+            amount: 1000.0,
+            kind: crate::survival::DamageKind::GenericKill,
+            source: None,
+            physical: None,
+            custom_armor: false,
+        },
+    ));
+}
+
+fn item_uuids(state: &TickState) -> BTreeSet<uuid::Uuid> {
+    worlds(state)
+        .flat_map(|world| {
+            world.entities.slots().filter_map(move |slot| {
+                matches!(
+                    world.entities.body(slot).kind,
+                    crate::entities::EntityKind::Item { .. }
+                )
+                .then(|| world.entities.row(slot).uuid)
+            })
+        })
+        .collect()
+}
+
+/// Vanilla keeps a killed mob's body 20 ticks (`deathTime`), but the death is
+/// its durable removal: no crash, checkpoint taken while the body lies there
+/// or reopen brings it back, and its loot exists exactly once.
+#[test]
+fn corpse_is_a_durable_removal_across_checkpoint_crash_and_reopen() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let cow = world.spawn("minecraft:cow", [0.5, 80.0, 0.5]);
+    let uuid = uuid_of(&mut world.state, cow);
+    world.checkpoint();
+    world.tick(|state| kill(state, cow));
+    let corpse = slot(&world.state, cow);
+    assert!(
+        !world.state.entities.body(corpse).alive,
+        "the body lies dead"
+    );
+    let loot = item_uuids(&world.state);
+    assert!(!loot.is_empty(), "the death dropped loot");
+    // Crash while the body lies there: the WAL fence holds no cow, loot once.
+    let mut world = world.crash();
+    assert!(world.state.entities.slot_of_uuid_any(uuid).is_none());
+    assert_eq!(item_uuids(&world.state), loot);
+    // A checkpoint taken while the body lies there tombstones the stored row.
+    let cow = world.spawn("minecraft:cow", [0.5, 80.0, 0.5]);
+    let uuid = uuid_of(&mut world.state, cow);
+    world.checkpoint();
+    assert!(stored_image(&world.config).contains_key(&uuid));
+    world.tick(|state| kill(state, cow));
+    let loot = item_uuids(&world.state);
+    world.checkpoint();
+    assert!(
+        world.state.entities.slot_of_any(cow).is_some(),
+        "the body lies there"
+    );
+    assert!(!stored_image(&world.config).contains_key(&uuid));
+    // Five more corpse ticks journal its motion; a crash replays that WAL tail
+    // over the checkpoint without bringing the body or its loot back.
+    for _ in 0..5 {
+        world.tick(|_| {});
+    }
+    assert!(
+        world.state.entities.slot_of_any(cow).is_some(),
+        "the body still lies there"
+    );
+    let world = world.crash();
+    assert!(world.state.entities.slot_of_uuid_any(uuid).is_none());
+    assert_eq!(item_uuids(&world.state), loot);
+    let config = world.config.clone();
+    drop(world);
+    let mut world = World::open(config);
+    assert!(world.state.entities.slot_of_uuid_any(uuid).is_none());
+    assert_eq!(item_uuids(&world.state), loot);
+    // The body leaves after 20 ticks without a trace in WAL or store.
+    let cow = world.spawn("minecraft:cow", [0.5, 80.0, 0.5]);
+    world.tick(|state| kill(state, cow));
+    let loot = item_uuids(&world.state);
+    for _ in 0..20 {
+        world.tick(|_| {});
+    }
+    assert!(world.state.entities.slot_of_any(cow).is_none());
+    let mut world = world.crash();
+    assert_eq!(item_uuids(&world.state), loot);
+    world.checkpoint();
+}
+
+/// One script request of the `owner` plugin through `plugin_npcs::execute`.
+fn npc_request(
+    state: &mut TickState,
+    operation: mc_script::ScriptOperation,
+) -> mc_script::ScriptOperationOutcome {
+    let request = mc_script::ScriptOperationRequest::try_new("custody-request", operation).unwrap();
+    crate::plugin_npcs::execute(state, "owner", &request)
+}
+
+/// Stacks carrying the deployable `example:pavise` model, wherever they sit.
+fn pavises(state: &TickState) -> usize {
+    let pavise = |stack: &mc_data::ItemStack| {
+        stack
+            .item_model
+            .as_deref()
+            .is_some_and(|model| model.as_str() == "example:pavise")
+    };
+    worlds(state)
+        .flat_map(|world| {
+            world.entities.slots().map(move |slot| {
+                let row = world.entities.row(slot);
+                let carried = row.appearance.equipment.iter().flatten();
+                let dropped = row.item.as_ref().map(|item| item.full_stack());
+                carried.filter(|&stack| pavise(stack)).count()
+                    + usize::from(dropped.is_some_and(|stack| pavise(&stack)))
+            })
+        })
+        .sum()
+}
+
+/// A scripted NPC's deployed item returns to it on retraction, which leaves
+/// the stand an inert dead row that is not a corpse. A checkpoint after the
+/// retraction must rewrite the stand without the item, or the stored
+/// deploy-time stand brings a second copy back on restart.
+#[test]
+fn retracted_stand_checkpoint_keeps_the_returned_item_single_across_restart() {
+    use mc_data::item_components::{CustomItemDefinition, ItemFacts};
+    use mc_data::item_profiles::{PhysicalItemProfile, ShieldProfile};
+    use mc_data::{Identifier, ItemStack};
+    use mc_script::{
+        ScriptBlockPosition, ScriptNpcOperation, ScriptNpcOrderOperation, ScriptNpcOrderResult,
+        ScriptNpcResult, ScriptOperation, ScriptOperationPayload, ScriptPosition,
+    };
+
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let id = |name: &str| Identifier::parse(name).unwrap();
+    let mut registry = (*world.state.registry).clone();
+    registry.item_facts = registry
+        .item_facts
+        .clone()
+        .with_custom_items(
+            [CustomItemDefinition {
+                id: id("example:pavise"),
+                carrier: id("minecraft:paper"),
+                name: "Pavise".into(),
+                crafting_ingredient: None,
+                facts: ItemFacts {
+                    max_stack_size: Some(1),
+                    max_damage: Some(360),
+                    physical_profile: Some(Box::new(PhysicalItemProfile {
+                        attacks: Vec::new(),
+                        armor: None,
+                        stamina_capacity: 100.0,
+                        stamina_recovery_per_tick: 0.5,
+                        shield: Some(ShieldProfile {
+                            width_blocks: 1.0,
+                            height_blocks: 1.75,
+                            forward_offset_blocks: 0.55,
+                            bottom_offset_blocks: 0.0,
+                            activation_ticks: 8,
+                            manual: true,
+                            deployable: true,
+                            block_stamina_cost: 14.0,
+                            block_wear_per_damage_hp: 0.75,
+                            max_durability: 360,
+                            hook_disables_ticks: 30,
+                            impulse_limit: 1.2,
+                        }),
+                    })),
+                    ..ItemFacts::default()
+                },
+            }],
+            &registry.items,
+        )
+        .unwrap();
+    world.state.registry = std::sync::Arc::new(registry);
+    let entity_uuid = uuid::Uuid::new_v4();
+    let mut deployed_revision = 0;
+    let mut handle = String::new();
+    world.tick(|state| {
+        let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };
+        state
+            .world
+            .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+        state
+            .world
+            .set_block(4, 199, 2, state.registry.states.stone);
+        state.world.fold_overlay();
+        let spawned = npc_request(
+            state,
+            ScriptOperation::Npc {
+                operation: ScriptNpcOperation::Spawn {
+                    operation_id: "spawn-pavise".into(),
+                    generation_id: "pavise-carrier".into(),
+                    position: ScriptPosition::try_new(2.5, 200.0, 2.5).unwrap(),
+                    entity_type: "minecraft:villager".into(),
+                },
+            },
+        );
+        let ScriptOperationPayload::Npc { result } = spawned.payload() else {
+            panic!("NPC spawn: {spawned:?}");
+        };
+        let ScriptNpcResult::Snapshot { npc } = &**result else {
+            panic!("NPC snapshot: {spawned:?}");
+        };
+        let carrier = crate::plugin_npcs::owned_slot(state, "owner", &npc.handle).unwrap();
+        let mut stack = ItemStack::new(
+            state.registry.items.id_of(&id("minecraft:paper")).unwrap(),
+            1,
+        );
+        stack.item_model = Some(std::sync::Arc::new(id("example:pavise")));
+        stack.damage = Some(17);
+        std::sync::Arc::make_mut(&mut state.entities.row_mut(carrier).appearance).equipment[0] =
+            Some(stack);
+        let deployed = npc_request(
+            state,
+            ScriptOperation::NpcOrder {
+                operation: ScriptNpcOrderOperation::DeployItem {
+                    operation_id: "deploy-pavise".into(),
+                    handle: npc.handle.clone(),
+                    equipment_slot: 0,
+                    expected_revision: 0,
+                    execution_permit: None,
+                    entity_uuid: entity_uuid.to_string(),
+                    support: ScriptBlockPosition::new(4, 199, 2),
+                    position: ScriptPosition::try_new(4.5, 200.0, 2.5).unwrap(),
+                    heading_degrees: 0,
+                },
+            },
+        );
+        let ScriptOperationPayload::NpcOrder { result } = deployed.payload() else {
+            panic!("deployment: {deployed:?}");
+        };
+        let ScriptNpcOrderResult::ItemDeployed { revision, .. } = &**result else {
+            panic!("deployment: {deployed:?}");
+        };
+        deployed_revision = *revision;
+        handle = npc.handle.clone();
+    });
+    let stand = world
+        .state
+        .entities
+        .slot_of_uuid(entity_uuid)
+        .expect("deployed stand");
+    assert!(world.state.entities.row(stand).appearance.equipment[0].is_some());
+    assert_eq!(
+        pavises(&world.state),
+        1,
+        "the deployed item moved to the stand"
+    );
+    world.checkpoint();
+    world.tick(|state| {
+        let retracted = npc_request(
+            state,
+            ScriptOperation::NpcOrder {
+                operation: ScriptNpcOrderOperation::RetractItem {
+                    operation_id: "retract-pavise".into(),
+                    handle,
+                    expected_revision: deployed_revision,
+                    execution_permit: None,
+                    entity_uuid: entity_uuid.to_string(),
+                    equipment_slot: 0,
+                },
+            },
+        );
+        assert!(retracted.failure().is_none(), "retraction: {retracted:?}");
+    });
+    let stand = world.state.entities.slot_of_uuid_any(entity_uuid).unwrap();
+    assert!(
+        !world.state.entities.body(stand).alive,
+        "the stand is retired"
+    );
+    assert!(
+        !world
+            .state
+            .entities
+            .is_dying(world.state.entities.body(stand).id)
+    );
+    assert_eq!(pavises(&world.state), 1, "the item returned to its carrier");
+    // Commit without the fence oracle so the restart shows the custody result.
+    let (job, done) = world.capture();
+    let ack = world.commit(job, &done);
+    assert!(ack.is_some());
+    acknowledge_checkpoint(&mut world.state, ack);
+    let config = world.config.clone();
+    drop(world);
+    let world = World::open(config);
+    assert_eq!(
+        pavises(&world.state),
+        1,
+        "restart restored the deploy-time stand with a second copy"
+    );
 }
 
 /// UUIDs of every row a capture presents.

@@ -181,6 +181,10 @@ pub struct EntityStore {
     battle_members: std::collections::BTreeSet<EntitySlot>,
     /// Sparse, sorted native warden IDs; vibration delivery never scans other bodies.
     wardens: Vec<EntityId>,
+    /// Corpses: dead non-player living rows kept visible and inert for vanilla
+    /// `LivingEntity.deathTime`, keyed by stable id with simulated ticks since
+    /// death. Their removal is already durable (see [`Self::begin_dying`]).
+    dying: std::collections::BTreeMap<EntityId, u8>,
     /// Journal custody (see [`Self::row_mut`]): per-slot flag deduplicating the
     /// ids of rows whose owner took `row_mut` (or that entered the store).
     touched_flag: Vec<bool>,
@@ -719,6 +723,7 @@ impl EntityStore {
         self.orbs.remove(&removed_id);
         self.tnt.remove(&removed_id);
         self.unregister_warden(removed_id);
+        self.dying.remove(&removed_id);
         self.pos.swap_remove(idx);
         self.vel.swap_remove(idx);
         self.rot.swap_remove(idx);
@@ -801,6 +806,7 @@ impl EntityStore {
         let orb = self.orbs.remove(&id);
         let tnt = self.tnt.remove(&id);
         let warden = self.unregister_warden(id);
+        let dying = self.dying.remove(&id);
         if index != self.bodies.len() {
             let moved = &self.bodies[index];
             self.id_index.insert(moved.id, EntitySlot(index as u32));
@@ -858,6 +864,9 @@ impl EntityStore {
         }
         if warden {
             destination.register_warden(id);
+        }
+        if let Some(time) = dying {
+            destination.dying.insert(id, time);
         }
         destination.index_tick_members(target);
         target
@@ -1056,6 +1065,44 @@ impl EntityStore {
 
     pub(crate) fn battle_slots(&self) -> impl Iterator<Item = EntitySlot> + '_ {
         self.battle_members.iter().copied()
+    }
+
+    /// Keep a dead non-player row as a corpse at vanilla `deathTime` 0. Death
+    /// is the durable removal: the UUID enters the removal log now, and a row
+    /// on the dying clock never yields a checkpoint record ([`Self::is_dying`]).
+    pub(crate) fn begin_dying(&mut self, slot: EntitySlot) {
+        let index = slot.0 as usize;
+        let body = &self.bodies[index];
+        debug_assert!(!body.alive && !matches!(body.kind, EntityKind::Player { .. }));
+        let (id, kind) = (body.id, body.kind);
+        self.dying.insert(id, 0);
+        self.log_removal(kind, self.cold[index].uuid);
+        self.mark_motion_dirty(index);
+    }
+
+    /// Whether `id` is a corpse: a row on the dying clock (see
+    /// [`Self::begin_dying`]). Other dead rows keep their checkpoint custody.
+    pub(crate) fn is_dying(&self, id: EntityId) -> bool {
+        self.dying.contains_key(&id)
+    }
+
+    /// The next corpse id after `after` (ascending); removal-safe cursor.
+    pub(crate) fn next_dying(&self, after: Option<EntityId>) -> Option<EntityId> {
+        match after {
+            None => self.dying.keys().next().copied(),
+            Some(after) => self
+                .dying
+                .range((std::ops::Bound::Excluded(after), std::ops::Bound::Unbounded))
+                .next()
+                .map(|(&id, _)| id),
+        }
+    }
+
+    /// Advance one corpse clock by a simulated tick; returns the new value.
+    pub(crate) fn tick_dying(&mut self, id: EntityId) -> u8 {
+        let time = self.dying.get_mut(&id).expect("ticked corpse is dying");
+        *time = time.saturating_add(1);
+        *time
     }
 
     /// Mutable body custody: same marks as [`Self::row_mut`] (motion-dirty,
@@ -1781,9 +1828,11 @@ impl EntityStore {
     }
 }
 
-/// Exact tick native-motion gate shared with the entity phase.
+/// Exact tick native-motion gate shared with the entity phase. Corpses move
+/// only through `tick::dying` (vanilla dead bodies run no AI).
 fn motion_owned(body: &Body, row: &ColdRow) -> bool {
-    !crate::special_mobs::raiders::owns(body.kind)
+    (body.alive || matches!(body.kind, EntityKind::Player { .. }))
+        && !crate::special_mobs::raiders::owns(body.kind)
         && row.falling.is_none()
         && row.tnt.is_none()
         && row.entity_life.vehicle.is_none()
@@ -1794,7 +1843,8 @@ fn motion_owned(body: &Body, row: &ColdRow) -> bool {
         && !matches!(body.kind, EntityKind::ExperienceOrb { .. })
 }
 
-/// Blueprint special visible to motion gating: mobs without NoAI only.
+/// Blueprint special visible to motion gating: living mobs without NoAI only
+/// (a corpse runs no AI).
 fn effective_special(
     registry: &crate::registry::CoreRegistry,
     body: &Body,
@@ -1803,7 +1853,7 @@ fn effective_special(
     let EntityKind::Mob { type_id } = body.kind else {
         return None;
     };
-    if row.controls.no_ai {
+    if !body.alive || row.controls.no_ai {
         return None;
     }
     registry
