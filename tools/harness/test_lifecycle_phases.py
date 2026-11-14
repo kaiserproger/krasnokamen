@@ -91,8 +91,7 @@ class LifecyclePhases(unittest.TestCase):
             wrapper = root / 'gradlew'
             wrapper.write_text('#!/bin/sh\nexit 37\n')
             wrapper.chmod(0o755)
-            with patch.dict(os.environ, {'KRASNOKAMEN_LOADER_ROOT': str(root)}), \
-                    patch('tools.harness.audio.private_audio_preflight'):
+            with patch.dict(os.environ, {'KRASNOKAMEN_LOADER_ROOT': str(root)}):
                 with self.assertRaises(runtime.ChildExited) as caught:
                     runtime.start_client(game_dir=root / 'game', log_path=root / 'java.log',
                                          token='test', mcp_port=runtime.reserve_port(),

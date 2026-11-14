@@ -26,10 +26,10 @@ Contract the matrix runner relies on:
 * Startup is bounded-parallel (``ThreadPoolExecutor`` with ``count``
   workers) and every wait is event-driven via ``runtime`` helpers
   (port/state inotify+pidfd, MCP push waits); nothing sleeps.
-* Headless audio isolation applies while clients launch
-  (``WAYLAND_DISPLAY`` unset, ``PIPEWIRE_NODE``/``PULSE_SINK`` pointed at
-  the ``agents-null`` sink) and the previous environment is restored
-  before the group yields.
+* Headless isolation applies while clients launch (``WAYLAND_DISPLAY``
+  unset) and the previous environment is restored before the group yields.
+  Audio isolation (OpenAL ``null``, no audio server) is forced per client by
+  ``runtime.start_client`` and recorded in each ``game/java-audio-isolation.json``.
 * ``authenticate=True`` registers every Play session through the live
   ``krasnokamen-auth`` plugin (``/register <pw> <pw>`` with a generated
   password, then fresh ``'registered'`` and ``'logged in'`` chat
@@ -77,7 +77,6 @@ def _client_options(platform: str | None) -> str:
         "renderDistance:4",
         "simulationDistance:5",
         "maxFps:30",
-        "soundDevice:KrasnokamenAgentsNull",
         "soundCategory_master:0.0",
         "soundCategory_music:0.0",
         "pauseOnLostFocus:false",
@@ -382,12 +381,9 @@ def client_group(
 
     _sentinel = object()
     saved_env: dict[str, Any] = {
-        name: os.environ.get(name, _sentinel)
-        for name in ("WAYLAND_DISPLAY", "PIPEWIRE_NODE", "PULSE_SINK", "JDK_JAVA_OPTIONS")
+        name: os.environ.get(name, _sentinel) for name in ("WAYLAND_DISPLAY", "JDK_JAVA_OPTIONS")
     }
     os.environ.pop("WAYLAND_DISPLAY", None)
-    os.environ["PIPEWIRE_NODE"] = "agents-null"
-    os.environ["PULSE_SINK"] = "agents-null"
     # N8 heap safety: cap each vanilla/Loader client JVM; an explicit
     # operator value is respected instead.
     heap_overrode = "JDK_JAVA_OPTIONS" not in os.environ
@@ -424,8 +420,4 @@ def client_group(
                 pass
         raise
     finally:
-        try:
-            from .audio import private_audio_preflight
-            private_audio_preflight(artifact_dir / "capture-links")
-        finally:
-            close_all()
+        close_all()

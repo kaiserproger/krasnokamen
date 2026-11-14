@@ -91,5 +91,68 @@ class PrivateAudioTest(unittest.TestCase):
                     audio.private_audio_preflight(root)
 
 
+class JavaAudioIsolationTest(unittest.TestCase):
+    """Owner rule: an agent Java client never reaches the owner's speakers or microphone."""
+
+    PARENT = {"ALSOFT_DRIVERS": "pulse", "PULSE_SERVER": "unix:/run/user/1000/pulse/native",
+              "PULSE_SINK": "agents-null", "PIPEWIRE_NODE": "agents-null",
+              "XDG_RUNTIME_DIR": "/run/user/1000"}
+
+    def forced(self, game):
+        env = dict(self.PARENT)
+        audio.force_java_audio_isolation(env, game)
+        return env
+
+    def test_forcing_overrides_a_pulse_parent_and_receipt_is_recorded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory) / "game"
+            env = self.forced(game)
+            self.assertEqual(env["ALSOFT_DRIVERS"], "null")
+            self.assertEqual(env["PULSE_SERVER"], "unix:/nonexistent")
+            self.assertEqual(env["PIPEWIRE_REMOTE"], "/nonexistent")
+            self.assertEqual(env["XDG_RUNTIME_DIR"], str(game / ".audio/runtime"))
+            self.assertEqual(Path(env["ALSA_CONFIG_PATH"]).read_text(), audio.JAVA_NULL_ALSA_CONFIG)
+            self.assertNotIn("PULSE_SINK", env)
+            self.assertNotIn("PIPEWIRE_NODE", env)
+            result = audio.require_java_audio_isolation(env, game)
+            self.assertEqual(result["openal_backend"], "null")
+            self.assertEqual(json.loads((game / audio.JAVA_AUDIO_RECEIPT).read_text()), result)
+
+    def test_any_other_driver_is_refused_without_a_receipt(self):
+        for driver in ("pulse", "alsa", "pipewire", "wave", None):
+            with self.subTest(driver=driver), tempfile.TemporaryDirectory() as directory:
+                game = Path(directory) / "game"
+                env = self.forced(game)
+                if driver is None:
+                    del env["ALSOFT_DRIVERS"]
+                else:
+                    env["ALSOFT_DRIVERS"] = driver
+                with self.assertRaisesRegex(MissingCapability, "java_audio:ALSOFT_DRIVERS"):
+                    audio.require_java_audio_isolation(env, game)
+                self.assertFalse((game / audio.JAVA_AUDIO_RECEIPT).exists())
+
+    def test_reachable_audio_server_or_foreign_alsa_config_is_refused(self):
+        cases = {
+            "PULSE_SERVER": "unix:/run/user/1000/pulse/native",
+            "PIPEWIRE_REMOTE": "pipewire-0",
+            "XDG_RUNTIME_DIR": "/run/user/1000",
+            "ALSA_CONFIG_PATH": "/etc/alsa.conf",
+            "PULSE_SINK": "agents-null",
+        }
+        for name, value in cases.items():
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                game = Path(directory) / "game"
+                env = self.forced(game)
+                env[name] = value
+                with self.assertRaisesRegex(MissingCapability, "java_audio"):
+                    audio.require_java_audio_isolation(env, game)
+        with tempfile.TemporaryDirectory() as directory:
+            game = Path(directory) / "game"
+            env = self.forced(game)
+            Path(env["ALSA_CONFIG_PATH"]).write_text("pcm.!default { type pulse }\n")
+            with self.assertRaisesRegex(MissingCapability, "private_null_alsa_config"):
+                audio.require_java_audio_isolation(env, game)
+
+
 if __name__ == "__main__":
     unittest.main()

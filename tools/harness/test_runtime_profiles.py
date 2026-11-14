@@ -34,7 +34,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from . import runtime
+from . import audio, runtime
+from .matrix_api import MissingCapability
 
 
 def _valid_kwargs(game_dir: Path, log_path: Path, **overrides):
@@ -63,25 +64,89 @@ def _gradlew_present() -> mock._patch:
 
 
 class ProfileTaskTests(unittest.TestCase):
-    def setUp(self) -> None:
-        patcher = mock.patch("tools.harness.audio.private_audio_preflight")
-        self.preflight = patcher.start()
-        self.addCleanup(patcher.stop)
+    def _force_driver(self, driver: str):
+        """Run the real forcing, then leave ``driver`` in the env (a broken forcing)."""
+        real = audio.force_java_audio_isolation
 
-    def test_every_lane_fails_closed_before_launch_when_audio_is_unsafe(self) -> None:
-        self.preflight.side_effect = RuntimeError("unsafe hardware audio graph")
+        def broken(env, game_dir):
+            real(env, game_dir)
+            env["ALSOFT_DRIVERS"] = driver
+
+        return mock.patch("tools.harness.audio.force_java_audio_isolation", side_effect=broken)
+
+    def test_every_lane_refuses_launch_when_child_env_would_carry_another_driver(self) -> None:
         with tempfile.TemporaryDirectory() as directory, \
                 mock.patch.object(runtime, "_stage_profile_mods"), \
-                mock.patch.object(runtime.subprocess, "Popen") as launch:
+                mock.patch.object(runtime, "port_open", return_value=False), \
+                mock.patch.object(runtime.subprocess, "Popen") as launch, \
+                self._force_driver("pulse"):
             root = Path(directory)
             for profile, platform in ((None, None), ("vanilla", None), ("loader", "fabric"),
                                       ("loader", "neoforge"), ("loader", "forge"),
                                       ("svc", None), ("dh", None)):
+                game = root / str(profile) / str(platform)
                 with self.subTest(profile=profile, platform=platform), \
-                        self.assertRaisesRegex(RuntimeError, "unsafe hardware audio graph"):
-                    runtime.start_client(**_valid_kwargs(root / str(profile) / str(platform),
-                        root / "client.log", client_profile=profile, platform=platform))
+                        self.assertRaisesRegex(MissingCapability, "java_audio:ALSOFT_DRIVERS"):
+                    runtime.start_client(**_valid_kwargs(
+                        game, root / "client.log", client_profile=profile, platform=platform))
+                self.assertFalse((game / audio.JAVA_AUDIO_RECEIPT).exists())
             launch.assert_not_called()
+
+    def test_child_env_forces_null_audio_over_a_pulse_wrapper(self) -> None:
+        wrapper_env = {
+            "ALSOFT_DRIVERS": "pulse", "PULSE_SERVER": "unix:/run/user/1000/pulse/native",
+            "PULSE_SINK": "agents-null", "PULSE_SOURCE": "agents-silent-input",
+            "PIPEWIRE_NODE": "agents-null", "PIPEWIRE_RUNTIME_DIR": "/run/user/1000",
+            "XDG_RUNTIME_DIR": "/run/user/1000", "ALSA_CONFIG_PATH": "/etc/alsa.conf",
+        }
+        for profile in (None, "vanilla"):
+            with self.subTest(profile=profile), tempfile.TemporaryDirectory() as directory, \
+                    _gradlew_present(), \
+                    mock.patch.dict(os.environ, wrapper_env), \
+                    mock.patch.object(runtime.os, "access", return_value=True), \
+                    mock.patch.object(runtime, "port_open", return_value=False), \
+                    mock.patch.object(runtime, "wait_port"), \
+                    mock.patch.object(runtime, "wait_for_path_condition"), \
+                    mock.patch("tools.harness.java_launcher.vanilla_command",
+                               return_value=["java", "Main"]), \
+                    mock.patch.object(runtime, "_agent_jar_path", return_value=Path(directory) / "a.jar"), \
+                    mock.patch.object(runtime.subprocess, "Popen") as launch:
+                root = Path(directory)
+                launch.return_value = mock.Mock()
+                _, handle = runtime.start_client(**_valid_kwargs(
+                    root / "game", root / "client.log", client_profile=profile))
+                handle.close()
+                env = launch.call_args.kwargs["env"]
+                private = root / "game" / ".audio"
+                self.assertEqual(env["ALSOFT_DRIVERS"], "null")
+                self.assertEqual(env["ALSA_CONFIG_PATH"], str(private / "alsa-null.conf"))
+                self.assertEqual((private / "alsa-null.conf").read_text(),
+                                 "pcm.!default { type null }\nctl.!default { type null }\n")
+                self.assertEqual(env["PIPEWIRE_REMOTE"], "/nonexistent")
+                self.assertEqual(env["PULSE_SERVER"], "unix:/nonexistent")
+                self.assertEqual(env["XDG_RUNTIME_DIR"], str(private / "runtime"))
+                for name in ("PULSE_SINK", "PULSE_SOURCE", "PIPEWIRE_NODE", "PIPEWIRE_RUNTIME_DIR"):
+                    self.assertNotIn(name, env)
+                receipt = json.loads((root / "game" / audio.JAVA_AUDIO_RECEIPT).read_text())
+                self.assertEqual(receipt["openal_backend"], "null")
+                self.assertEqual(receipt["isolation"]["ALSOFT_DRIVERS"], "null")
+                self.assertEqual(os.environ["ALSOFT_DRIVERS"], "pulse")
+
+    def test_launch_needs_no_private_pulse_graph(self) -> None:
+        with tempfile.TemporaryDirectory() as directory, _gradlew_present(), \
+                mock.patch.dict(os.environ, {}), \
+                mock.patch("tools.harness.audio.private_audio_preflight") as graph, \
+                mock.patch.object(runtime.os, "access", return_value=True), \
+                mock.patch.object(runtime, "port_open", return_value=False), \
+                mock.patch.object(runtime, "wait_port"), \
+                mock.patch.object(runtime.subprocess, "Popen") as launch:
+            os.environ.pop("KRASNOKAMEN_PW_ROOT", None)
+            root = Path(directory)
+            launch.return_value = mock.Mock()
+            _, handle = runtime.start_client(**_valid_kwargs(root / "game", root / "client.log"))
+            handle.close()
+            graph.assert_not_called()
+            self.assertEqual(launch.call_args.kwargs["env"]["ALSOFT_DRIVERS"], "null")
 
     def test_legacy_default_keeps_legacy_task(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -104,8 +169,8 @@ class ProfileTaskTests(unittest.TestCase):
                     env = launch.call_args.kwargs["env"]
                     self.assertEqual(env["DISPLAY"], ":99")
                     self.assertNotIn("WAYLAND_DISPLAY", env)
-                    self.assertEqual(env["PIPEWIRE_NODE"], "agents-null")
-                    self.assertEqual(env["PULSE_SINK"], "agents-null")
+                    self.assertEqual(env["ALSOFT_DRIVERS"], "null")
+                    self.assertNotIn("PULSE_SINK", env)
                     self.assertEqual(env["JDK_JAVA_OPTIONS"], "-Xmx512M")
                     seen["env"] = env
                 finally:
@@ -216,11 +281,6 @@ def _mod_entry(profile: str, platform: str) -> dict:
 
 
 class ModProvisioningTests(unittest.TestCase):
-    def setUp(self) -> None:
-        patcher = mock.patch("tools.harness.audio.private_audio_preflight")
-        patcher.start()
-        self.addCleanup(patcher.stop)
-
     def _write_jar(self, directory: Path, entry: dict, payload: bytes) -> Path:
         jar = directory / entry["filename"]
         jar.write_bytes(payload)
@@ -234,7 +294,6 @@ class ModProvisioningTests(unittest.TestCase):
             source_dir.mkdir()
             payload = b"svc-bytes-" + entry["filename"].encode()
             with mock.patch.object(runtime, "_select_mod_entry", return_value=dict(entry)), \
-                    mock.patch("tools.harness.audio.private_audio_preflight"), \
                     mock.patch.object(runtime, "_profile_jar_path",
                                       return_value=self._write_jar(source_dir, entry, payload)), \
                     mock.patch.object(runtime, "_verify_mod_jar") as verify, \

@@ -353,8 +353,14 @@ Select a frozen protocol row with `--matrix tools/harness/matrix_specs/matrix.ya
 --matrix-id ID` instead of `--subject`. Java uses `--matrix`, `--id`,
 `--ledger`, `--data-dir`; native uses `--client native --windowed --matrix`,
 `--only-id`, `--ledger`, `--run-root`. Both graphical lanes require
-`--plugins-dir` and the private hardware-free `tools/harness/screen_audio_graph.sh`
-wrapper. On the owner host wrap every run in Main's absolute
+`--plugins-dir`; the native lane also requires the private hardware-free
+`tools/harness/screen_audio_graph.sh` wrapper. Every harness-launched Java
+client gets `ALSOFT_DRIVERS=null` in its own environment whatever the caller
+exported, plus a private null ALSA config, `PIPEWIRE_REMOTE=/nonexistent`,
+`PULSE_SERVER=unix:/nonexistent` and a private `XDG_RUNTIME_DIR`; launch is
+refused (`MissingCapability java_audio:*`) if the child environment would carry
+anything else, and the check is recorded in `<game dir>/java-audio-isolation.json`.
+The Java lane needs no wrapper. On the owner host wrap every run in Main's absolute
 `tools/dev/mem-run.sh -m 6G` invocation.
 
 The wrapper points `XDG_DATA_HOME` at its private graph, where the native client

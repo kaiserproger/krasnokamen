@@ -28,7 +28,6 @@ class LoaderV2Tests(unittest.TestCase):
                      mock.patch.object(runtime.os, "access", return_value=True), \
                      mock.patch.object(runtime, "port_open", return_value=False), \
                      mock.patch.object(runtime, "wait_port"), \
-                     mock.patch("tools.harness.audio.private_audio_preflight"), \
                      mock.patch.object(runtime.subprocess, "Popen") as launch:
                     _, handle = runtime.start_client(
                         game_dir=root / "game", log_path=root / "client.log",

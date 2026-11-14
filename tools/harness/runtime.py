@@ -936,15 +936,12 @@ def start_client(
     game_dir = REPO_ROOT / game_dir if not game_dir.is_absolute() else game_dir
     game_dir.mkdir(parents=True, exist_ok=True)
     options = game_dir / "options.txt"
-    audio_options = {"soundDevice": "KrasnokamenAgentsNull",
-                     "soundCategory_master": "0.0", "soundCategory_music": "0.0"}
+    audio_options = {"soundCategory_master": "0.0", "soundCategory_music": "0.0"}
     lines = options.read_text().splitlines() if options.exists() else ["version:4790", "onboardAccessibility:false"]
-    lines = [line for line in lines if line.partition(":")[0] not in audio_options]
+    lines = [line for line in lines if line.partition(":")[0] not in (*audio_options, "soundDevice")]
     options.write_text("\n".join(lines + [f"{key}:{value}" for key, value in audio_options.items()]) + "\n")
     if client_profile in ("svc", "dh"):
         _stage_profile_mods(client_profile, resolved["platform"], game_dir)
-    from .audio import private_audio_preflight
-    private_audio_preflight(game_dir)
     if port_open(mcp_port):
         raise RuntimeError(
             f"MCP port {mcp_port} is already in use; stop the existing client first"
@@ -958,7 +955,9 @@ def start_client(
     env["JAVA_TOOL_OPTIONS"] = (
         f'{env.get("JAVA_TOOL_OPTIONS", "")} -Duser.home="{home}"'
     ).strip()
-    # Only the harness-owned Xvfb and private Pulse graph may reach this client.
+    # Only the harness-owned Xvfb may reach this client; audio is the OpenAL
+    # null backend with no audio server reachable (owner rule, never the
+    # owner's speakers or microphone).
     env.pop("WAYLAND_DISPLAY", None)
     env.update(
         {
@@ -967,14 +966,15 @@ def start_client(
             "SDL_VIDEO_DRIVER": "x11",
             "GDK_BACKEND": "x11",
             "XDG_SESSION_TYPE": "x11",
-            "PIPEWIRE_NODE": "agents-null",
-            "PULSE_SINK": "agents-null",
             "KRASNOKAMEN_CLIENT_MCP_TOKEN": token,
             "KRASNOKAMEN_CLIENT_MCP_PORT": str(mcp_port),
             "KRASNOKAMEN_CLIENT_MCP_GAME_DIR": str(game_dir),
             "KRASNOKAMEN_CLIENT_MCP_USERNAME": username,
         }
     )
+    from .audio import force_java_audio_isolation, require_java_audio_isolation
+    force_java_audio_isolation(env, game_dir)
+    require_java_audio_isolation(env, game_dir)
     env.setdefault("JDK_JAVA_OPTIONS", _CLIENT_MAX_HEAP)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_handle = log_path.open("wb")

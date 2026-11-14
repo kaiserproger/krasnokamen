@@ -181,12 +181,72 @@ def private_alsa_config(root: Path) -> str:
     )
 
 
+JAVA_NULL_ALSA_CONFIG = "pcm.!default { type null }\nctl.!default { type null }\n"
+JAVA_AUDIO_RECEIPT = "java-audio-isolation.json"
+_NO_SERVER = "/nonexistent"
+
+
+def force_java_audio_isolation(env: dict[str, str], game_dir: Path) -> None:
+    """Overwrite ``env`` so a Java client can reach neither speakers nor microphone.
+
+    Owner rule (docs/development/real-client-gates.md "Isolation"): OpenAL runs
+    the ``null`` backend whatever the caller exported; ALSA resolves only to a
+    private null config, PipeWire and Pulse point at nothing, and the runtime
+    directory is private to this client.
+    """
+    root = game_dir / ".audio"
+    runtime_dir = root / "runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    runtime_dir.chmod(0o700)
+    alsa = root / "alsa-null.conf"
+    alsa.write_text(JAVA_NULL_ALSA_CONFIG)
+    for name in ("PULSE_SINK", "PULSE_SOURCE", "PIPEWIRE_NODE", "PIPEWIRE_RUNTIME_DIR"):
+        env.pop(name, None)
+    env.update({
+        "ALSOFT_DRIVERS": "null",
+        "ALSA_CONFIG_PATH": str(alsa),
+        "PIPEWIRE_REMOTE": _NO_SERVER,
+        "PULSE_SERVER": "unix:" + _NO_SERVER,
+        "XDG_RUNTIME_DIR": str(runtime_dir),
+    })
+
+
+def require_java_audio_isolation(env: dict[str, str], game_dir: Path) -> dict[str, Any]:
+    """Fail closed unless the child ``env`` carries the null OpenAL backend and no audio server.
+
+    Records ``java-audio-isolation.json`` in ``game_dir`` (the run artifacts)
+    only after every check passed.
+    """
+    root = game_dir / ".audio"
+    alsa = root / "alsa-null.conf"
+    expected = {
+        "ALSOFT_DRIVERS": "null",
+        "ALSA_CONFIG_PATH": str(alsa),
+        "PIPEWIRE_REMOTE": _NO_SERVER,
+        "PULSE_SERVER": "unix:" + _NO_SERVER,
+        "XDG_RUNTIME_DIR": str(root / "runtime"),
+    }
+    for name, value in expected.items():
+        if env.get(name) != value:
+            raise MissingCapability(f"java_audio:{name}_must_be_{value}_got_{env.get(name)!r}")
+    for name in ("PULSE_SINK", "PULSE_SOURCE", "PIPEWIRE_NODE", "PIPEWIRE_RUNTIME_DIR"):
+        if name in env:
+            raise MissingCapability(f"java_audio:{name}_must_be_unset")
+    if not alsa.is_file() or alsa.read_text() != JAVA_NULL_ALSA_CONFIG:
+        raise MissingCapability("java_audio:private_null_alsa_config_required")
+    result = {"openal_backend": "null", "isolation": expected, "alsa_config": JAVA_NULL_ALSA_CONFIG}
+    game_dir.mkdir(parents=True, exist_ok=True)
+    (game_dir / JAVA_AUDIO_RECEIPT).write_text(json.dumps(result, indent=2) + "\n")
+    return result
+
+
 def private_audio_preflight(artifact_dir: Path, *, require_source: bool = True,
                             require_alsa: bool = False) -> dict[str, Any]:
-    """Fail before any SVC JVM starts unless capture is hardware-free.
+    """Fail before any native client starts unless capture is hardware-free.
 
-    The ScreenAudio wrapper owns the graph. Forced Pulse-only OpenAL plus an
-    explicit private Pulse socket prevents ALSA/default-server fallback.
+    Native client only: Java clients never use this graph (they run OpenAL
+    ``null``, see ``require_java_audio_isolation``). The ScreenAudio wrapper
+    owns the graph; an explicit private Pulse socket prevents ALSA/default-server fallback.
     """
     root_text = os.environ.get("KRASNOKAMEN_PW_ROOT")
     if not root_text:
