@@ -426,10 +426,30 @@ class CivilizationEvidenceTests(unittest.TestCase):
 
     def scan(self, buildings, response):
         probe = Mock()
+        probe.observe.return_value = {"player": {"x": 0.0, "y": 70.0, "z": 0.0}}
         probe.call.return_value = response
         with patch.object(qa.village, "_listed_buildings", return_value=buildings):
-            evidence = qa.building_blocks(probe, [])
+            evidence = qa.building_blocks(probe, [], Mock())
         return probe, evidence
+
+    def test_remote_building_loads_each_chunk_and_returns_observer(self):
+        building = {"natural": False, "min": [234, 72, -213], "max": [240, 76, -207]}
+        probe = Mock()
+        probe.observe.return_value = {"player": {"x": 131.5, "y": 78.0, "z": -217.5}}
+        probe.remaining.return_value = 120.0
+        probe.call.return_value = {"blocks": [{"block_id": "minecraft:red_bed"}], "truncated": False}
+        server = Mock()
+        with patch.object(qa.village, "_listed_buildings", return_value=[building]), \
+             patch.object(qa.item_merge, "_console") as console:
+            evidence = qa.building_blocks(probe, [], server)
+        self.assertEqual(evidence[0]["blocks"][0]["block_id"], "minecraft:red_bed")
+        self.assertEqual([call.args[0] for call in probe.call.call_args_list], [
+            "minecraft_wait_for_loaded_block", "minecraft_wait_for_loaded_block",
+            "minecraft_wait_for_loaded_block", "minecraft_wait_for_loaded_block",
+            "minecraft_scan_blocks", "minecraft_wait_for_loaded_block"])
+        self.assertEqual(console.call_count, 2)
+        self.assertEqual([call.args[1] for call in probe.wait.call_args_list],
+                         ["building_scan_observer_arrived", "building_scan_observer_returned"])
 
     def test_retains_beds_and_furnaces_with_truncation_flag(self):
         building = {"natural": False, "min": [0, 64, 0], "max": [2, 67, 2]}
