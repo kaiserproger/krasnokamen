@@ -238,6 +238,26 @@ WAL recovery, despawn, POI exclusivity, warning-clock and bee custody assertions
 Both offline crates supply the actual vanilla cache in tests rather than
 relying on the core's `cfg(test)` defaults or publishing private fixture APIs.
 
+The converter's `live_capture_tests.rs` keeps portable runtime-checkpoint round
+trips for wandering-trader purchases, shrieker warning aging, villager job-site
+claims and inhabited time. Mutations use public `Core` input queues and observed
+outputs; mutable journal capture and dimension hydration remain private. The
+inhabited-time case requires a nonzero checkpoint contribution plus later active
+intervals separated by a spectator interval.
+
+The additional checkpoint-plus-WAL crash/export chain in
+`live_capture_crash_tests.rs` is **Linux-only** (`cfg(target_os = "linux")`).
+A child runs the same public-Core scenario, obtains its baseline through the
+unchanged `Core::backup` checkpoint path, then performs the domain actions.
+Inotify only wakes the observer: native WAL decoding must validate published
+payloads, checksums and contiguous coverage through the observed action tick.
+The child exits without Core destructors, so no shutdown checkpoint can absorb
+the tail; the parent exports offline and checks both checkpoint/replay ticks and
+Anvil/NBT state. This does not claim power-loss testing or cross-platform crash
+coverage. The revised scenarios and their capture-negative controls are pending
+execution while the owner-host heavy-run hold is in force; prior results from
+the manually driven TickState candidate do not validate this revision.
+
 Harness source paths and test discovery follow the new owners. The path-only
 matrix migration is kept separate from implementation commits.
 

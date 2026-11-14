@@ -3,7 +3,7 @@ mod live_capture;
 
 use mc_core::dimensions::Dimension;
 use mc_core::native_checkpoint as bridge;
-use mc_data::{Identifier, ItemStack};
+use mc_data::Identifier;
 use mc_nbt::Tag;
 use mc_world::native::NativeCheckpoint;
 use std::sync::Arc;
