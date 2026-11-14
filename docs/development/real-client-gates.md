@@ -20,10 +20,15 @@ checked out beside this repository unless an environment variable says otherwise
 
 ### 1. Build the release server and the native client
 
-- Server: `cargo build --release -p mc-edge --bin krasnokamen`
+Release binaries come from `tools/dev/pin-release`, one pin per tree (owner,
+2026-11-15: the runner refuses an ad-hoc `cargo build --release`, and a pin of the
+same tree and build parameters is reused rather than rebuilt):
+
+- Server: `tools/dev/pin-release <core tree>` prints
+  `KRASNOKAMEN_SERVER_BINARY=<pin>/krasnokamen`
   (the harness reads it from `KRASNOKAMEN_SERVER_BINARY`; debug servers drop to 2-9
   TPS while chunks generate, so timing-sensitive gates need release).
-- Client (in the client checkout): `cargo build --release --bin krasnokamen-client`.
+- Client (in the client checkout): `tools/dev/pin-release <client tree> --client`.
   On Linux it links ALSA and needs the distro development packages (the client's
   release workflow installs `pkg-config libasound2-dev libudev-dev
   libxkbcommon-dev libwayland-dev libx11-dev libxcursor-dev libxi-dev
@@ -40,8 +45,11 @@ checked out beside this repository unless an environment variable says otherwise
   `B=<sysroot>/usr/lib/x86_64-linux-gnu`. Missing `PKG_CONFIG_PATH` makes
   `alsa-sys` panic; missing `LIBRARY_PATH` fails linking `-lasound`. Check the
   binary's mtime afterwards: an early-exiting wrapped build leaves the old binary.
-  On the shared host wrap the build:
-  `<work>/solaris/tools/dev/mem-run.sh -m 10G cargo build --release --bin krasnokamen-client`.
+  On the shared host pin it instead of building ad hoc (the runner refuses a
+  bare `cargo build --release`, owner 2026-11-15):
+  `<work>/solaris/tools/dev/pin-release <client tree> --client`, with the sysroot
+  environment exported; it prints `KRASNOKAMEN_CLIENT_BINARY=<pin>/krasnokamen-client`
+  and reuses that pin for the same tree and environment.
 
 ### 2. Build the client data root from public sources
 
@@ -156,6 +164,11 @@ into the run's artifact dir.
   host and the gate's scope outranks tests and builds for CPU:
   `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G
   python3 -m tools.harness run <profile> --client native --windowed`.
+  Six is the measured budget, not a guess: one scene (release server + native
+  client + Xvfb, or a Java oracle) measured about 1.5 cores and 3.5 GB
+  (2026-11-11), so six gates hold about 9 of the host's physical cores and 21 GB
+  beside the builds and tests. More slots would starve the three build tokens;
+  fewer would queue graphical gates behind each other.
 
 ### 4. Which gates need owner-held access
 

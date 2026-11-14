@@ -1,0 +1,14 @@
+# Quiet measurement windows for `mem-run -x` (owner 2026-11-15).
+#
+# `-x` pauses build-only commands, waits for every running test and server to
+# finish and holds new commands at start: it is a measurement window, not a
+# convenience flag, so it runs only inside a scheduled window below. Times are
+# local, one `HH:MM-HH:MM` per line, `#` starts a comment; a window must start
+# before it ends (no overnight window, so "the next window" is always a simple
+# same-day or tomorrow answer). Main may override one run with
+# KRASNOKAMEN_WINDOW_OVERRIDE=1; agents never do.
+#
+# The nightly network fuzz is a systemd timer at 03:00
+# (tools/dev/scenario-nightly `OnCalendar=*-*-* 03:00:00`); a campaign holds
+# builds for its whole duration, so the default window ends before it starts.
+01:00-02:30

@@ -73,6 +73,31 @@ to keep that from happening again without idling the machine.
   already holds a slot (`KRASNOKAMEN_SCENE_SLOT_PID`) and otherwise refuses with exit 75. Call
   `scene-slot.sh`, never `slot-lock.py` with the scene lock names directly. Tests:
   `python3 tools/dev/test_scene_slot.py`.
+- **Release builds are pins** (owner, 2026-11-15). One release binary belongs to one
+  integrated commit: `cargo build|test|run --release` and `--profile release*` are
+  refused by the runner, before it takes a slot or a build token, unless
+  `tools/dev/pin-release` asks for it (it sets `KRASNOKAMEN_PIN_RELEASE`), the caller
+  is the harness/ledger tooling (real-client gates and ledger promote's own candidate
+  and control trees, which pin their own tree), or Main overrides one run with
+  `KRASNOKAMEN_RELEASE_BUILD_ALLOW=1`. The refusal names `tools/dev/pin-release`:
+  pin the commit once and pass the printed `KRASNOKAMEN_SERVER_BINARY` /
+  `KRASNOKAMEN_CLIENT_BINARY` / `KRASNOKAMEN_BOTS_BINARY` to the gate or measurement.
+  `pin-release` reuses the pin of the same tree and the same build parameters
+  (source inputs, repo, kind, target, incremental flag and the codegen environment
+  cargo records) instead of rebuilding, and gives a different tree — a ledger control,
+  a branch — its own pin, never the shared one. Debug builds, clippy and every
+  non-release command are unchanged. Tests:
+  `python3 tools/dev/test_mem_run_release_policy.py`.
+- **`-x` runs only inside a scheduled measurement window** (owner, 2026-11-15). A `-x`
+  window freezes build-only commands and waits for every running test and server, so it
+  is a measurement, not a convenience flag. The schedule is
+  `tools/dev/measurement-windows` (local `HH:MM-HH:MM` lines; the shipped default is
+  `01:00-02:30`, which ends before the nightly network fuzz at 03:00 —
+  `tools/dev/scenario-nightly` installs `OnCalendar=*-*-* 03:00:00`). Outside every
+  window the runner refuses with exit 75 and names the next window; Main may override
+  one run with `KRASNOKAMEN_WINDOW_OVERRIDE=1`. The check runs before the scene-slot
+  and `-x` locks, so a refusal never holds anything. Tests:
+  `python3 tools/dev/test_measurement_window.py`.
 - **Scope properties.** `MemoryMax=<cap>`, `MemorySwapMax=1G`,
   `CPUQuota=<physical cores x 100>%`, `CPUWeight=50`, `nice 19`. These are the
   harness's own scope properties, so harness runs keep their canonical CPU

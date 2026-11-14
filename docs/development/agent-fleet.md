@@ -13,10 +13,12 @@ records how fleets were run on the owner's machine and what went wrong.
   concurrent builders (enforced since 2026-11-11 by the runner's
   [build tokens](heavy-commands-and-memory.md#how-toolsdevmem-runsh-works-current-since-2026-10-28));
   no child agent for a part under 30 minutes; reserve the
-  review and breaker budget before spawning builders. Prefer one long-lived
-  lane per ledger area that batches rows; split a lane when its queue exceeds
-  eight rows. Larger fleets (the 22-slice QA hunt of 2026-10-29) run only on
-  explicit owner request.
+  review and breaker budget before spawning builders. One agent session per
+  bounded task (a batch of related rows): the agent returns when the task is
+  done and Main starts a fresh agent for the next task, instead of one agent
+  running for many hours (owner, 2026-11-15: BvItemCache ran 16.9 h and 1080
+  turns; long sessions re-read their own growing context every turn). Larger
+  fleets (the 22-slice QA hunt of 2026-10-29) run only on explicit owner request.
 - **Batch related bugs.** Give one fixer a batch of related bugs (same module,
   feature or repro) with one combined gate and proof per batch; route to the
   existing owner of the area instead of spawning an agent per bug. Close agents
@@ -60,10 +62,14 @@ memory slots and a GO after the runner dropped both; deleted 2026-11-07).
 # Waiting    waiting only for your own background job or another agent: end the
 #            turn without `wait` and without a tool call; the job result or the
 #            message wakes you. Call `wait` only for the answer to a question
-#            you sent another agent. Never poll. (owner, 2026-11-13: `wait`
-#            returns empty turns at 5 s/10 s/30 s/1 min/5 min steps; two workers
-#            burnt 38 and 41 empty turns, about 12 M tokens each, in one hour;
-#            an ended turn stays idle with zero turns until the wake-up)
+#            you sent another agent. Never poll; never run sleep loops in eval
+#            or bash. (owner, 2026-11-13: `wait` returns empty turns at
+#            5 s/10 s/30 s/1 min/5 min steps; two workers burnt 38 and 41 empty
+#            turns, about 12 M tokens each, in one hour; an ended turn stays
+#            idle with zero turns until the wake-up)
+# Turns      batch independent relevant reads into one turn when there are
+#            several; a dependent read may follow (owner, 2026-11-15: LLM time
+#            was 22% of 90 agents' day)
 # Deliver    the result template below
 ```
 

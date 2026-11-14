@@ -141,13 +141,18 @@ python3 -m tools.harness list
   harness runs. The runner points
   `RUSTC_WRAPPER` at `tools/dev/sccache.sh` (shared sccache; empty when its daemon is
   down), so never pass `env RUSTC_WRAPPER=` or plain `RUSTC_WRAPPER=sccache`; an old
-  `env RUSTC_WRAPPER=` still works but is uncached. The runner makes Cargo
-  incremental for debug/test builds and normal-lane `--release` builds, never in
+  `env RUSTC_WRAPPER=` still works but is uncached. The runner refuses release
+  builds (`--release`, `--profile release*`) unless `tools/dev/pin-release`, the
+  harness/ledger tooling or Main's override asks (owner, 2026-11-15): one release
+  binary per integrated tree, reused only for the same tree and build inputs; a
+  negative control gets its own reverted tree and its own binary. The runner makes
+  Cargo incremental for debug/test builds and normal-lane pin builds, never in
   `-p`/`-x` or `--profile` builds: a binary for a performance window comes from
   `pin-release --no-incremental` (or `env CARGO_INCREMENTAL=0`), and bench,
   coreperf, the perf harness profiles and the battle runner refuse incremental pins. `-p` is serialized
   timing/profiling, never builds; `-x` is a quiet measurement window (pauses
-  builds, waits for running tests and servers). Both lanes serialize
+  builds, waits for running tests and servers) that opens only inside
+  `tools/dev/measurement-windows`. Both lanes serialize
   themselves: no GO is needed. Compare only matching lanes on a frozen tree
   named in the brief. Replace shared
   runner scripts atomically, never in place; cancel the parent job, not only its
@@ -251,7 +256,8 @@ python3 -m tools.harness list
   new transition in an area with one open; finishing one deletes the old side.
 - Debug builds by default; `--release` only for a required performance, release
   or real-client gate. Real-client gates run a release server (owner,
-  2026-10-27): pass the `--release --locked` binary as `KRASNOKAMEN_SERVER_BINARY`;
+  2026-10-27): pass the release binary as `KRASNOKAMEN_SERVER_BINARY` (on the owner
+  host the `tools/dev/pin-release` pin of that tree);
   a debug server drops to about 10 TPS while a joining player's chunks generate.
 - A measured narrow optimization hack documents its bottleneck, boundary,
   correctness fence, effect and removal path. Never restore operator
