@@ -57,10 +57,13 @@ try:
                 conn.sendall(b'1')
             selector.unregister(listener)
             listener.close()
+        done = False
         if any(key.fd == fifo for key, _ in events):
-            if b'done\n' in os.read(fifo, 4096) and not caller_dead:
-                break
-        if any(key.fd in (wrapper_fd, caller_fd) for key, _ in events):
+            done = b'done\n' in os.read(fifo, 4096) and not caller_dead
+        if done:
+            # Hold the slot locks until the wrapper exits and the scope empties.
+            select.select([wrapper_fd, caller_fd], [], [])
+        if done or any(key.fd in (wrapper_fd, caller_fd) for key, _ in events):
             # Prevent a surviving launcher from creating the scope after our check.
             try:
                 signal.pidfd_send_signal(wrapper_fd, signal.SIGKILL)

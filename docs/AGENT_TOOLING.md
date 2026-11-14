@@ -69,15 +69,19 @@ source of truth is `tools/harness/__main__.py`):
   `tools/harness/__main__.py`; any other profile fails before launching a client.
   Most `list` descriptions say where native is supported.
 - `--release` only changes `build`; every other profile ignores it.
-- `--timeout-seconds N` overrides the scenario default where the backend honors
-  it (`core-client`/`inventory` 600 s, `loader-live` 600 s, `playable` 1500 s,
-  `replay` 180 s).
+- `--timeout-seconds N` sets the per-command deadline for stage commands and
+  overrides the scenario default where the backend honors it
+  (`core-client`/`inventory` 600 s, `loader-live` 600 s,
+  `playable` 1500 s, `replay` 180 s). Stage commands have no default deadline.
 
-Receipt statuses are `passed` | `failed` | `prepared` | `interrupted`. Only real
+Receipt statuses are `passed` | `failed` | `timeout` | `prepared` | `interrupted`. Only real
 completion is `passed`. `--check`/`--prepare` (and other preparation-only modes)
 report `prepared` with exit 0, never a gameplay pass. Unknown profiles,
 unlaunchable or nonzero commands, and missing scenario evidence fail closed with
 a nonzero exit. Every timeout is failure, never success.
+Timed-out stage commands and runs interrupted by SIGINT, SIGTERM or SIGHUP
+terminate their stage descendants, including separate process groups. A timeout
+writes a `timeout` receipt; a signal writes an `interrupted` receipt naming it.
 
 Real-client and functional-native runs check prerequisites before their
 profile launches: set `SOLARIS_SERVER_BINARY` to a pinned executable and, for
