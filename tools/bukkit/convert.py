@@ -1,4 +1,4 @@
-"""Explicit offline Bukkit JAR -> Solaris WIT component conversion (requires PyYAML).
+"""Explicit offline Bukkit JAR -> Krasnokamen WIT component conversion (requires PyYAML).
 
 This compiler toolchain is not a sandbox: convert trusted input only. JDK 17,
 Maven, Binaryen 123, the Rust adapter and plugin_component encoder are inputs.
@@ -88,7 +88,7 @@ def material_source(report):
     lookup = "\n".join(f"if (id >= {first} && id <= {last}) return Material.{name};" for first, last, name in ranges)
     enum = "package org.bukkit;\npublic enum Material {" + ",".join(sorted(names)) + ";\n"
     enum += "public boolean isAir() { return this == AIR || this == CAVE_AIR || this == VOID_AIR; }\n}\n"
-    mapping = "package org.solaris.bukkit;\nimport org.bukkit.Material;\npublic final class Materials {\n"
+    mapping = "package org.krasnokamen.bukkit;\nimport org.bukkit.Material;\npublic final class Materials {\n"
     mapping += "public static Material of(int id) {\n" + lookup
     mapping += '\nthrow new IllegalArgumentException("unknown deployment block state");\n}\n}\n'
     return enum, mapping
@@ -111,7 +111,7 @@ def entry_source(meta, handlers):
         dispatch.append("}")
     registrations = "\n".join(f"Runtime.commands.put({json.dumps(name)}, new PluginCommand({json.dumps(name)}, Runtime.plugin));" for name in meta["commands"])
     usage = "\n".join(f"if (name.equals({json.dumps(name)})) player.sendMessage({json.dumps(options['usage'])}.replace(\"<command>\", name));" for name, options in meta["commands"].items() if options.get("usage"))
-    return """package org.solaris.bukkit;
+    return """package org.krasnokamen.bukkit;
 import org.teavm.interop.Export;
 import org.bukkit.Material;
 import org.bukkit.command.PluginCommand;
@@ -182,7 +182,7 @@ def main():
     compiler_cp = str(ROOT / "target/classes") + ":" + dependencies
     if args.inspect_mod or args.convert_mod:
         inventory = output / "mod-references.tsv"
-        run(java, "-Xmx1g", "-cp", compiler_cp, "org.solaris.bukkit.InspectMods", args.jar, inventory)
+        run(java, "-Xmx1g", "-cp", compiler_cp, "org.krasnokamen.bukkit.InspectMods", args.jar, inventory)
     if args.inspect_mod:
         entries = []
         with inventory.open() as source:
@@ -209,7 +209,7 @@ def main():
         report.write_text(json.dumps(meta, indent=2) + "\n")
         print(report)
         return
-    api = re.search(r"package solaris:plugin@([^;]+);", (ROOT / "../../crates/mc-script/wit/plugin.wit").read_text()).group(1)
+    api = re.search(r"package krasnokamen:plugin@([^;]+);", (ROOT / "../../crates/mc-script/wit/plugin.wit").read_text()).group(1)
     generated = output / "generated"
     generated.mkdir(exist_ok=True)
     if args.convert_mod:
@@ -221,22 +221,22 @@ def main():
         main_class = conversion["main_class"]
     else:
         handler_file = output / "handlers.tsv"
-        run(java, "-Xmx1g", "-cp", compiler_cp, "org.solaris.bukkit.Inspect", args.jar, handler_file)
+        run(java, "-Xmx1g", "-cp", compiler_cp, "org.krasnokamen.bukkit.Inspect", args.jar, handler_file)
         handlers = [line.split("\t") for line in handler_file.read_text().splitlines()]
         linked = output / "linked.jar"
-        run(java, "-Xmx1g", "-cp", compiler_cp, "org.solaris.bukkit.RemapLogger", args.jar, linked)
+        run(java, "-Xmx1g", "-cp", compiler_cp, "org.krasnokamen.bukkit.RemapLogger", args.jar, linked)
         enum, mapping = material_source(args.blocks_report)
         sources = {"EntryPoint.java": entry_source(meta, handlers), "Material.java": enum, "Materials.java": mapping}
         for name, source in sources.items():
             (generated / name).write_text(source)
         shim_sources = sorted((ROOT / "shim").rglob("*.java"))
         generated_sources = [generated / name for name in sources]
-        main_class = "org.solaris.bukkit.EntryPoint"
+        main_class = "org.krasnokamen.bukkit.EntryPoint"
     shim_classes = output / "shim-classes"
     run(javac, "--release", "17", "-proc:none", "-cp", dependencies + ":" + str(linked), "-d", shim_classes,
         *shim_sources, *generated_sources)
     compiled = output / "compiled"
-    run(java, "-Xmx1g", "-cp", compiler_cp, "org.solaris.bukkit.Compile",
+    run(java, "-Xmx1g", "-cp", compiler_cp, "org.krasnokamen.bukkit.Compile",
         main_class, compiled, shim_classes, linked)
     narrowed = output / "java-pruned.wasm"
     narrowed.write_bytes(prune((compiled / "bukkit.wasm").read_bytes(),
@@ -246,7 +246,7 @@ def main():
     adapter = output / "adapter-stripped.wasm"
     run(args.binaryen_bin / "wasm-opt", args.adapter, "--strip-debug", "-o", adapter)
     merged = output / "merged.wasm"
-    run(args.binaryen_bin / "wasm-merge", adapter, "solaris", java_module, "bukkit", ROOT / "faults.wat", "teavm",
+    run(args.binaryen_bin / "wasm-merge", adapter, "krasnokamen", java_module, "bukkit", ROOT / "faults.wat", "teavm",
         "--enable-multimemory", "--enable-bulk-memory", "--rename-export-conflicts", "-o", merged)
     run(args.component_encoder, merged, output / "plugin.wasm")
     if args.convert_mod:

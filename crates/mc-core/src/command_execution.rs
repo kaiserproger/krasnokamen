@@ -300,7 +300,11 @@ pub(crate) fn execute(
             if matches!(command, crate::battle::staging::BattleCommand::Roster)
                 && connection != crate::command_console::CONNECTION
             {
-                error(state, connection, "battle roster is available only to the console");
+                error(
+                    state,
+                    connection,
+                    "battle roster is available only to the console",
+                );
                 return Failed;
             }
             let origin = crate::command_console::pose(state, executor)
@@ -557,7 +561,7 @@ pub(crate) fn execute(
                     state.push_player(
                         connection,
                         PlayerChange::Chat {
-                            message: format!("SOLARIS_MENU {snapshot}"),
+                            message: format!("KRASNOKAMEN_MENU {snapshot}"),
                         },
                     );
                     return CommandResult::Completed;

@@ -2,7 +2,7 @@
 
 One tracked scenario, no hand-rolled lifecycle:
 
-* launch the real ``solaris-v2`` with the graves package directory,
+* launch the real ``krasnokamen`` with the graves package directory,
 * join a real Rust protocol bot (``player-scale-bots``, unassisted login),
 * console ``/give`` the bot stacks and ``/kill`` it, so native custody runs,
 * wait for the package's own journaled ``grave-<x>-<y>-<z>-<hash>`` upsert,
@@ -66,7 +66,7 @@ def _wait_log(
 
 
 def _bot_binary() -> Path:
-    override = os.environ.get("SOLARIS_BOTS_BINARY")
+    override = os.environ.get("KRASNOKAMEN_BOTS_BINARY")
     candidates = (
         [Path(override).expanduser()] if override else []
     ) + [
@@ -77,7 +77,7 @@ def _bot_binary() -> Path:
         if candidate.is_file() and candidate.resolve().stat().st_mode & 0o111:
             return candidate.resolve()
     raise RuntimeError(
-        "missing player-scale-bots executable; build it or set SOLARIS_BOTS_BINARY"
+        "missing player-scale-bots executable; build it or set KRASNOKAMEN_BOTS_BINARY"
     )
 
 

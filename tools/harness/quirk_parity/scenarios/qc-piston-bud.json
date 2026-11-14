@@ -1,7 +1,7 @@
 {
  "id": "qc-piston-bud",
  "family": "quasi-connectivity",
- "description": "Quasi-connectivity: a piston (and sticky piston) is powered by a source adjacent to the block ABOVE it, but only reacts once a neighbouring block update reaches the piston itself (BUD). An unpowered control piston must stay retracted. The power sources are placed one phase after the pistons: vanilla pistons check power synchronously in onPlace, Solaris on the next scheduled tick, so same-tick placement would not be QC but a placement-order race. Solaris polls every reactive cell once after chunk hydration, so the setup settles 4 ticks before any power source exists.",
+ "description": "Quasi-connectivity: a piston (and sticky piston) is powered by a source adjacent to the block ABOVE it, but only reacts once a neighbouring block update reaches the piston itself (BUD). An unpowered control piston must stay retracted. The power sources are placed one phase after the pistons: vanilla pistons check power synchronously in onPlace, Krasnokamen on the next scheduled tick, so same-tick placement would not be QC but a placement-order race. Krasnokamen polls every reactive cell once after chunk hydration, so the setup settles 4 ticks before any power source exists.",
  "box": [
   0,
   60,

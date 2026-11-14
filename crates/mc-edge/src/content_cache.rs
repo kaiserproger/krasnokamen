@@ -1,6 +1,6 @@
 //! The single vanilla-content source: discovery and validation.
 //!
-//! Solaris never redistributes Mojang bytes and never reconstructs their data
+//! Krasnokamen never redistributes Mojang bytes and never reconstructs their data
 //! by guesswork, so every registry, tag, loot table, structure set/template and
 //! report the server runs on must come from one cache derived from the
 //! operator's own licensed Minecraft artifact. `content_import` is the only
@@ -17,14 +17,14 @@ use crate::startup_data::{validate_startup_data, validate_vanilla_sidecar_versio
 /// Explicit override for the derived content cache root — the one documented
 /// escape hatch beside discovery. `[data].vanilla_data_dir` is the file-config
 /// spelling of the same thing.
-pub const CONTENT_CACHE_ENV: &str = "SOLARIS_CONTENT_CACHE";
+pub const CONTENT_CACHE_ENV: &str = "KRASNOKAMEN_CONTENT_CACHE";
 
 /// The command an operator runs to produce a cache by hand.
-pub const IMPORT_COMMAND: &str = "solaris-v2 content import --download";
+pub const IMPORT_COMMAND: &str = "krasnokamen content import --download";
 
 /// User-level cache root: `$XDG_DATA_HOME` (or `~/.local/share`), then
-/// `solaris/content/<target release>`.
-const USER_CACHE_SUBDIR: &str = "solaris/content";
+/// `krasnokamen/content/<target release>`.
+const USER_CACHE_SUBDIR: &str = "krasnokamen/content";
 
 /// Working-directory cache: the extraction tooling's historical output, still
 /// the right place for a source checkout. Gitignored.
@@ -95,7 +95,7 @@ impl ContentCache {
 pub struct ContentSearch {
     /// `[data].vanilla_data_dir`, when configured.
     pub explicit: Option<PathBuf>,
-    /// `SOLARIS_CONTENT_CACHE`, when set.
+    /// `KRASNOKAMEN_CONTENT_CACHE`, when set.
     pub environment: Option<PathBuf>,
     /// Standard locations, in priority order.
     pub standard: Vec<PathBuf>,
@@ -234,7 +234,7 @@ pub async fn prepare_startup(cfg: &mut crate::config::EdgeConfig) -> Result<()> 
 
 /// Resolve the one content cache the server runs on.
 ///
-/// The explicit override and `SOLARIS_CONTENT_CACHE` are authoritative: when
+/// The explicit override and `KRASNOKAMEN_CONTENT_CACHE` are authoritative: when
 /// set, an invalid cache is an error rather than a silent fall-through to
 /// another location, which would quietly change content. Standard locations are
 /// tried in order and the first *complete* cache wins. When nothing is usable
@@ -268,7 +268,7 @@ pub fn discover_content_cache(search: &ContentSearch) -> Result<ContentCache> {
         .collect::<Vec<_>>()
         .join("\n");
     bail!(
-        "no vanilla content cache found. Solaris runs on data derived from your own \
+        "no vanilla content cache found. Krasnokamen runs on data derived from your own \
          licensed Minecraft Java {release} installation and never redistributes or \
          guesses it, so a complete cache is required before startup.\n\
          searched:\n{searched}\n\
