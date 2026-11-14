@@ -171,7 +171,7 @@ fn item_frame_generation_support_and_wal_recovery() {
         ..Default::default()
     });
     let entries = crate::core::journal_entries_for_tick(&mut state, &output);
-    let root = std::env::temp_dir().join(format!("solaris-frame-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("krasnokamen-frame-{}", uuid::Uuid::new_v4()));
     let mut writer = JournalWriter::open(&root, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();

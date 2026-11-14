@@ -233,8 +233,8 @@ pub(super) struct EntityCaptureExtras {
     pub(super) end_fight: Vec<(String, mc_nbt::Tag)>,
 }
 
-/// Complete entity image as vanilla records grouped by chunk. The Solaris wire
-/// id rides as `solaris:WireId` so journal tail entries (keyed by wire id) still
+/// Complete entity image as vanilla records grouped by chunk. The Krasnokamen wire
+/// id rides as `krasnokamen:WireId` so journal tail entries (keyed by wire id) still
 /// match after recovery.
 pub(super) fn checkpoint_entities(
     state: &TickState,
@@ -508,7 +508,7 @@ pub(super) fn entity_capture_record(
             .registry
             .entity_type_name(crate::blueprint::wire_type_id(type_id))?;
         extra_fields.push((
-            "solaris:Presentation".into(),
+            "krasnokamen:Presentation".into(),
             mc_nbt::Tag::String(presentation.into()),
         ));
     }

@@ -74,14 +74,14 @@ def loader_schema(loader: Path) -> dict[str, dict]:
                       .glob(f'*/gson-{version}.jar'))
         if not jars:
             raise ValueError(f'Loader Gson {version} is not in the Gradle cache')
-        source = loader / 'bridge-core/src/main/java/dev/solaris/agent/mcp'
+        source = loader / 'bridge-core/src/main/java/dev/krasnokamen/agent/mcp'
         exporter = Path(__file__).with_name('LoaderSchema.java')
         with tempfile.TemporaryDirectory(prefix='loader-schema-') as directory:
             subprocess.run(['javac', '-J-Xmx128m', '-cp', str(jars[0]), '-d', directory,
                             str(source / 'McpToolDefinition.java'), str(source / 'ClientMcpTools.java'),
                             str(exporter)], capture_output=True, text=True, timeout=60, check=True)
             output = subprocess.run(['java', '-Xmx128m', '-cp', os.pathsep.join((directory, str(jars[0]))),
-                                     'dev.solaris.agent.mcp.LoaderSchema'], capture_output=True,
+                                     'dev.krasnokamen.agent.mcp.LoaderSchema'], capture_output=True,
                                     text=True, timeout=30, check=True)
             tools = json.loads(output.stdout)['tools']
         schemas = {tool['name']: tool['inputSchema'] for tool in tools}

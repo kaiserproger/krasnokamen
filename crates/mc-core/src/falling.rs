@@ -568,7 +568,7 @@ pub fn to_fields(falling: &FallingState, blocks: &BlockRegistry) -> Vec<(String,
         ("Time".into(), Tag::Int(falling.age as i32)),
         ("DropItem".into(), Tag::Byte(1)),
         (
-            "SolarisTouchedWater".into(),
+            "KrasnokamenTouchedWater".into(),
             Tag::Byte(i8::from(falling.touched_water)),
         ),
     ]
@@ -662,10 +662,10 @@ pub fn from_record(
         None => 0,
         _ => return Err("Time: expected nonnegative int".into()),
     };
-    let touched_water = match saved_field(&record.extra_fields, "SolarisTouchedWater")? {
+    let touched_water = match saved_field(&record.extra_fields, "KrasnokamenTouchedWater")? {
         Some(Tag::Byte(value @ (0 | 1))) => *value != 0,
         None => false,
-        _ => return Err("SolarisTouchedWater: expected byte 0 or 1".into()),
+        _ => return Err("KrasnokamenTouchedWater: expected byte 0 or 1".into()),
     };
     Ok(Some(FallingState {
         block_state,

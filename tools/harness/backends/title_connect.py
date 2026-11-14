@@ -72,11 +72,11 @@ def validate_args(ctx: ProfileContext) -> float:
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
     artifact = ctx.artifact_dir
-    override = __import__("os").environ.get("SOLARIS_SERVER_BINARY")
+    override = __import__("os").environ.get("KRASNOKAMEN_SERVER_BINARY")
     if override:
         binary = Path(override).expanduser().resolve()
     else:
-        raise RuntimeError("title-connect requires SOLARIS_SERVER_BINARY (reuse the survival-built server)")
+        raise RuntimeError("title-connect requires KRASNOKAMEN_SERVER_BINARY (reuse the survival-built server)")
     if not binary.is_file():
         raise RuntimeError(f"missing executable server binary: {binary}")
     server_port = runtime.reserve_port()

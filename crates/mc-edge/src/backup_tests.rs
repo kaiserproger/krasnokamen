@@ -40,7 +40,7 @@ fn backup_roundtrip_preserves_real_core_store_wal_and_metadata() {
     drop(core);
 
     let mut identity = [0; 32];
-    identity[..16].copy_from_slice(b"SolarisV2Native\0");
+    identity[..16].copy_from_slice(b"KrasnoV2Native\0\0");
     identity[16..24].copy_from_slice(&42_i64.to_be_bytes());
     identity[24..].copy_from_slice(&(mc_worldgen::WORLDGEN_REVISION as u64).to_be_bytes());
     let store =
@@ -57,7 +57,7 @@ fn backup_roundtrip_preserves_real_core_store_wal_and_metadata() {
     journal.flush().unwrap();
     drop(journal);
     std::fs::write(world.join("world-metadata.json"), b"operator metadata").unwrap();
-    for name in [".solaris-world.lock", "session.lock"] {
+    for name in [".krasnokamen-world.lock", "session.lock"] {
         std::fs::write(world.join(name), b"stale lease, not state").unwrap();
     }
 
@@ -73,7 +73,7 @@ fn backup_roundtrip_preserves_real_core_store_wal_and_metadata() {
             .any(|name| name.starts_with("journal/batch-"))
     );
     assert!(manifest.files.contains_key("world-metadata.json"));
-    assert!(!manifest.files.contains_key(".solaris-world.lock"));
+    assert!(!manifest.files.contains_key(".krasnokamen-world.lock"));
     assert!(!manifest.files.contains_key("session.lock"));
     for (name, hash) in &manifest.files {
         assert_eq!(&digest_file(&backup.join(name)).unwrap(), hash);
@@ -90,7 +90,7 @@ fn backup_roundtrip_preserves_real_core_store_wal_and_metadata() {
     }
     assert!(!restored.join(BACKUP_MANIFEST).exists());
     #[cfg(not(windows))]
-    assert!(!restored.join(".solaris-world.lock").exists());
+    assert!(!restored.join(".krasnokamen-world.lock").exists());
     let recovered = mc_core::Core::open({
         let mut config = mc_core::CoreConfig::new(restored, 42);
         config.vanilla_data_dir =
@@ -264,7 +264,7 @@ fn restore_rejects_unsafe_manifest_paths_before_creating_target() {
         "native\\state.redb",
         "manifest.json",
         "session.lock",
-        ".solaris-world.lock",
+        ".krasnokamen-world.lock",
         "nul\0file",
     ] {
         let root = tempfile::tempdir().unwrap();

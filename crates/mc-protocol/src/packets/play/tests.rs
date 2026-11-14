@@ -146,7 +146,7 @@ fn clientbound_custom_payload_id_and_layout_match_local_decompiled_sources() {
     assert_eq!(ClientboundCustomPayload::ID, 0x18);
     let packet = ClientboundCustomPayload {
         payload: CustomPayload::Unknown {
-            channel: Identifier::parse("solaris:test").unwrap(),
+            channel: Identifier::parse("krasnokamen:test").unwrap(),
             payload: vec![0xDE, 0xAD, 0xBE, 0xEF],
         },
     };
