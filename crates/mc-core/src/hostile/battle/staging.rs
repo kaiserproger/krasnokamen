@@ -11,7 +11,7 @@ use mc_data::items::{
 };
 use mc_nbt::{ListTag, Tag, tag_type};
 
-pub(super) const OWNER: &str = "solaris:battle";
+pub(super) const OWNER: &str = "krasnokamen:battle";
 const TICKET_RADIUS: i32 = 12;
 const MAX_SIDE: usize = 10_000;
 
@@ -229,27 +229,31 @@ fn summon_tag(kind: Option<Kind>, side: u16) -> Tag {
         .map(|&(slot, item)| {
             let component = match (kind, slot, side) {
                 (Some(Kind::Infantry), "mainhand", _) => {
-                    (ITEM_MODEL_COMPONENT, "solaris_battle:iron_longsword")
+                    (ITEM_MODEL_COMPONENT, "krasnokamen_battle:iron_longsword")
                 }
                 (Some(Kind::Spear), "mainhand", _) => {
-                    (ITEM_MODEL_COMPONENT, "solaris_battle:iron_spear")
+                    (ITEM_MODEL_COMPONENT, "krasnokamen_battle:iron_spear")
                 }
-                (Some(Kind::Archer), "mainhand", _) => {
-                    (ITEM_MODEL_COMPONENT, "solaris_battle:iron_longbow_standby")
-                }
+                (Some(Kind::Archer), "mainhand", _) => (
+                    ITEM_MODEL_COMPONENT,
+                    "krasnokamen_battle:iron_longbow_standby",
+                ),
                 (Some(Kind::Cavalry), "mainhand", _) => {
-                    (ITEM_MODEL_COMPONENT, "solaris_battle:iron_lance")
+                    (ITEM_MODEL_COMPONENT, "krasnokamen_battle:iron_lance")
                 }
-                (_, "offhand", 1) => (ITEM_MODEL_COMPONENT, "solaris_battle:red_heater_shield"),
-                (_, "offhand", _) => (ITEM_MODEL_COMPONENT, "solaris_battle:blue_heater_shield"),
+                (_, "offhand", 1) => (ITEM_MODEL_COMPONENT, "krasnokamen_battle:red_heater_shield"),
+                (_, "offhand", _) => (
+                    ITEM_MODEL_COMPONENT,
+                    "krasnokamen_battle:blue_heater_shield",
+                ),
                 (Some(Kind::Cavalry), "head", _) => {
-                    (EQUIPPABLE_COMPONENT, "solaris_battle:crested_helm")
+                    (EQUIPPABLE_COMPONENT, "krasnokamen_battle:crested_helm")
                 }
-                (_, "head", _) => (EQUIPPABLE_COMPONENT, "solaris_battle:iron_plate"),
-                (_, "chest", 1) => (EQUIPPABLE_COMPONENT, "solaris_battle:red_surcoat"),
-                (_, "chest", _) => (EQUIPPABLE_COMPONENT, "solaris_battle:blue_surcoat"),
-                (_, "body", 1) => (EQUIPPABLE_COMPONENT, "solaris_battle:red_caparison"),
-                (_, "body", _) => (EQUIPPABLE_COMPONENT, "solaris_battle:blue_caparison"),
+                (_, "head", _) => (EQUIPPABLE_COMPONENT, "krasnokamen_battle:iron_plate"),
+                (_, "chest", 1) => (EQUIPPABLE_COMPONENT, "krasnokamen_battle:red_surcoat"),
+                (_, "chest", _) => (EQUIPPABLE_COMPONENT, "krasnokamen_battle:blue_surcoat"),
+                (_, "body", 1) => (EQUIPPABLE_COMPONENT, "krasnokamen_battle:red_caparison"),
+                (_, "body", _) => (EQUIPPABLE_COMPONENT, "krasnokamen_battle:blue_caparison"),
                 _ => unreachable!("battle equipment table contains an unknown slot"),
             };
             let value = if component.0 == EQUIPPABLE_COMPONENT {

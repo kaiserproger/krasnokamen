@@ -39,7 +39,9 @@ fn equippable_remaps_sound_and_entity_holders_on_both_adjacent_steps() {
         t.entities = IdMap::by_name([("zombie", 2)], [("zombie", 9)], |_| None);
         for named in [false, true] {
             let mut source = vec![1, 10, 1, 0, 0, 4, 6, 1];
-            source.write_string("solaris_battle:holy", 32767).unwrap();
+            source
+                .write_string("krasnokamen_battle:holy", 32767)
+                .unwrap();
             source.extend([0, 1]);
             if named {
                 source.write_varint(0);

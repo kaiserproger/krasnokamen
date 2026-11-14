@@ -1,4 +1,4 @@
-//! P4 loader-live fixture: the two-owner Solaris Loader gate as a real component.
+//! P4 loader-live fixture: the two-owner Krasnokamen Loader gate as a real component.
 //!
 //! `mode = "loader-live"` runs this module for both Loader gate packages. One
 //! guest artifact serves both owners: the owner is the plugin id the host bound
@@ -47,13 +47,13 @@
 
 use std::collections::BTreeMap;
 
-use solaris_plugin_sdk::bindings::solaris::plugin::client_presentation as presentation;
-use solaris_plugin_sdk::commands;
-use solaris_plugin_sdk::events::{
+use krasnokamen_plugin_sdk::bindings::krasnokamen::plugin::client_presentation as presentation;
+use krasnokamen_plugin_sdk::commands;
+use krasnokamen_plugin_sdk::events::{
     ClientViewOpened, ClientViewOutcome, CommandInvoked, EventContext, LoaderItemGrantFailure,
     LoaderItemGrantOutcome, LoaderItemGrantResult, LoaderViewAction, ViewFailure,
 };
-use solaris_plugin_sdk::{Command, Event, Failure, LogLevel, log, types};
+use krasnokamen_plugin_sdk::{Command, Event, Failure, LogLevel, log, types};
 
 /// What one refused view open is logged with, so an operator reading the server
 /// log sees which request the owner rejected and why rather than a bare silence.

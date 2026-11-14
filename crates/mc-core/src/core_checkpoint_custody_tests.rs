@@ -949,7 +949,7 @@ fn unblocked_arrow_wear_break_removes_the_stand_without_stale_arrow_slot() {
 fn battle_restart_reset_removes_checkpoint_roster_and_ticket_durably() {
     use crate::boundary::ChangeSet;
     use crate::hostile::battle::staging::{BattleCommand, execute};
-    const OWNER: &str = "solaris:battle";
+    const OWNER: &str = "krasnokamen:battle";
     let directory = tempfile::tempdir().unwrap();
     let mut world = World::new(directory.path());
     world.tick(|_| {});
@@ -2300,7 +2300,7 @@ fn opaque_item_owner_refuses_unloadable_replay(kind: &str) {
         .to_fields(&registry.items)
     } else {
         vec![(
-            "solaris:ominous_item".into(),
+            "krasnokamen:ominous_item".into(),
             Tag::Compound(vec![
                 (
                     "uuid".into(),

@@ -563,7 +563,7 @@ pub(crate) fn execute(
                     state.push_player(
                         connection,
                         PlayerChange::Chat {
-                            message: format!("SOLARIS_MENU {snapshot}"),
+                            message: format!("KRASNOKAMEN_MENU {snapshot}"),
                         },
                     );
                     return CommandResult::Completed;

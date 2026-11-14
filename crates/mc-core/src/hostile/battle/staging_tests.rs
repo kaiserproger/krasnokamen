@@ -201,9 +201,9 @@ fn staged_equipment_exposes_authored_assets_for_both_sides_and_all_kinds() {
             equippable(
                 armor,
                 if side == 0 {
-                    "solaris_battle:red_caparison"
+                    "krasnokamen_battle:red_caparison"
                 } else {
-                    "solaris_battle:blue_caparison"
+                    "krasnokamen_battle:blue_caparison"
                 },
                 "body",
             );
@@ -217,10 +217,10 @@ fn staged_equipment_exposes_authored_assets_for_both_sides_and_all_kinds() {
             .unwrap()
             .as_str();
         let (kind, model) = match (item, row.entity_life.mount.vehicle.is_some()) {
-            ("minecraft:trident", _) => (1, "solaris_battle:iron_spear"),
-            ("minecraft:bow", _) => (2, "solaris_battle:iron_longbow_standby"),
-            ("minecraft:iron_sword", true) => (3, "solaris_battle:iron_lance"),
-            ("minecraft:iron_sword", false) => (0, "solaris_battle:iron_longsword"),
+            ("minecraft:trident", _) => (1, "krasnokamen_battle:iron_spear"),
+            ("minecraft:bow", _) => (2, "krasnokamen_battle:iron_longbow_standby"),
+            ("minecraft:iron_sword", true) => (3, "krasnokamen_battle:iron_lance"),
+            ("minecraft:iron_sword", false) => (0, "krasnokamen_battle:iron_longsword"),
             _ => panic!("unexpected battle weapon {item}"),
         };
         seen[side][kind] = true;
@@ -228,18 +228,18 @@ fn staged_equipment_exposes_authored_assets_for_both_sides_and_all_kinds() {
         equippable(
             row.appearance.equipment[5].as_ref().unwrap(),
             if kind == 3 {
-                "solaris_battle:crested_helm"
+                "krasnokamen_battle:crested_helm"
             } else {
-                "solaris_battle:iron_plate"
+                "krasnokamen_battle:iron_plate"
             },
             "head",
         );
         equippable(
             row.appearance.equipment[4].as_ref().unwrap(),
             if side == 0 {
-                "solaris_battle:red_surcoat"
+                "krasnokamen_battle:red_surcoat"
             } else {
-                "solaris_battle:blue_surcoat"
+                "krasnokamen_battle:blue_surcoat"
             },
             "chest",
         );
@@ -248,9 +248,9 @@ fn staged_equipment_exposes_authored_assets_for_both_sides_and_all_kinds() {
             assert_eq!(
                 shield.item_model.as_ref().unwrap().as_str(),
                 if side == 0 {
-                    "solaris_battle:red_heater_shield"
+                    "krasnokamen_battle:red_heater_shield"
                 } else {
-                    "solaris_battle:blue_heater_shield"
+                    "krasnokamen_battle:blue_heater_shield"
                 }
             );
         }
