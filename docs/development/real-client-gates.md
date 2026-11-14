@@ -338,6 +338,21 @@ tolerance. For the Java lane copy the fixture and set `java_plain` and
 pose against the measured Java horn edge; its four-row bracket shifts down one
 pixel when rasterization moves the horn top below the first row. It is not a
 general image comparator.
+`death_tilt` takes `empty` and `shots`, names of earlier screenshots (`t00`..`t18`,
+one per stepped tick) from the fixed zombie pose of
+`tools/harness/death_tilt_scene.json`, the registered `native-death-tilt` scenario.
+For each shot it takes what differs from the empty frame inside a region clear of
+clouds, hotbar and hand, and checks the silhouette's top row and tipping-side column
+against the Java 26.3 frame of the same step or the step before (±2 px; the table is
+in `backends/death_tilt_oracle.py`). Java renders a frozen entity at partial tick 1.0,
+the native client at 0, so native step `s` equals Java step `s - 1` pixel for pixel
+today and Java step `s` once the client takes the vanilla partial. A client that turns
+the dying body about any point other than its feet, or on another deathTime curve,
+fails. The scene needs a server that keeps the dead body until its 20th dead tick, as
+vanilla does (`b874a4ea`, on the battle line, not yet in main: a server without it
+removes the body at death and the scenario fails with `silhouette missing`). The Java
+frames are recalibrated with `SCENE_SHOT_SCENARIO=<scene without the death_tilt step>`
+and `--client java`.
 `assert_chat` (native only) records the current observation and checks `contains`
 and `excludes` substrings against `recent_chat`. At least one expected substring
 is required; use an ordered chat fence after the commands under test before
