@@ -2214,6 +2214,15 @@ fn map_extra(index: u8, value: &mc_core::boundary::EntityDataValue) -> WireEntit
         mc_core::boundary::EntityDataValue::ChickenVariant(value) => {
             WireEntityDataValue::ChickenVariant { index, value }
         }
+        mc_core::boundary::EntityDataValue::CowVariant(value) => {
+            WireEntityDataValue::CowVariant { index, value }
+        }
+        mc_core::boundary::EntityDataValue::PigVariant(value) => {
+            WireEntityDataValue::PigVariant { index, value }
+        }
+        mc_core::boundary::EntityDataValue::ZombieNautilusVariant(value) => {
+            WireEntityDataValue::ZombieNautilusVariant { index, value }
+        }
         mc_core::boundary::EntityDataValue::WeatheringCopper(value) => {
             WireEntityDataValue::WeatheringCopper { index, value }
         }

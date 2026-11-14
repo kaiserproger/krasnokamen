@@ -17,6 +17,8 @@ pub(crate) struct Image {
     uuid_authored: bool,
     /// Painting direction (`add_entity` data 2..=5) and variant registry index.
     painting: Option<(u8, u32)>,
+    /// Validated once during preflight, then moved into the new appearance.
+    variant: Option<(u8, EntityDataValue)>,
 }
 fn error(text: impl Into<String>) -> CommandError {
     CommandError::Message(text.into())
@@ -190,6 +192,7 @@ pub(crate) fn prepare(
         .blueprint(type_id)
         .is_some_and(|b| b.offspring.is_some() || b.capabilities.ageable);
     let mut fields = Vec::with_capacity(authored.len());
+    let mut variant = None;
     for (key, value) in authored {
         if fields.iter().any(|(seen, _)| seen == key) {
             return Err(error(format!("Duplicate summon NBT field {key}")));
@@ -233,7 +236,10 @@ pub(crate) fn prepare(
             "Small" | "ShowArms" | "NoBasePlate" | "Marker" | "Invisible" | "DisabledSlots"
             | "Pose" => name == "minecraft:armor_stand",
             "Size" => matches!(name, "minecraft:slime" | "minecraft:magma_cube"),
-            "facing" | "variant" => name == "minecraft:painting",
+            "facing" => name == "minecraft:painting",
+            "variant" => {
+                name == "minecraft:painting" || crate::blueprint::variant_registry(name).is_some()
+            }
             "CustomName" | "CustomNameVisible" | "Invulnerable" | "NoGravity" | "Motion"
             | "Rotation" | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
             _ => {
@@ -297,10 +303,19 @@ pub(crate) fn prepare(
                 let Tag::String(raw) = value else {
                     return Err(error("Invalid variant: expected string"));
                 };
-                let id = mc_data::Identifier::parse(raw.clone())
-                    .map_err(|_| error(format!("Invalid painting variant {raw}")))?;
-                if !state.registry.paintings.iter().any(|v| v.name == id) {
-                    return Err(error(format!("Unknown painting variant {raw}")));
+                let species = name.strip_prefix("minecraft:").unwrap_or(name);
+                let id = mc_data::Identifier::parse(raw.as_str())
+                    .map_err(|_| error(format!("Invalid {species} variant {raw}")))?;
+                let known = if name == "minecraft:painting" {
+                    state.registry.paintings.iter().any(|v| v.name == id)
+                } else {
+                    variant = crate::blueprint::variant_registry(name)
+                        .and_then(|registry| mc_data::required_registry_entry_id(registry, &id))
+                        .and_then(|value| crate::blueprint::variant_data(name, value));
+                    variant.is_some()
+                };
+                if !known {
+                    return Err(error(format!("Unknown {species} variant {raw}")));
                 }
                 Tag::String(id.as_str().into())
             }
@@ -566,6 +581,7 @@ pub(crate) fn prepare(
         equipment,
         uuid_authored,
         painting,
+        variant,
     })
 }
 pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
@@ -656,6 +672,10 @@ pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     appearance.health = native.health;
     appearance.baby = baby;
     crate::entity_controls::sync_no_gravity(appearance, row.controls.no_gravity);
+    if let Some((index, value)) = image.variant {
+        appearance.extra.retain(|(existing, _)| *existing != index);
+        appearance.extra.push((index, value));
+    }
     if body.burn_ticks > 0 {
         appearance.shared_flags |= 1;
     }

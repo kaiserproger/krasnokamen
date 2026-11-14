@@ -729,6 +729,15 @@ pub(super) fn restore_data_value(
         crate::journal::EntityDataValueImage::ChickenVariant(v) => {
             crate::boundary::EntityDataValue::ChickenVariant(*v)
         }
+        crate::journal::EntityDataValueImage::CowVariant(v) => {
+            crate::boundary::EntityDataValue::CowVariant(*v)
+        }
+        crate::journal::EntityDataValueImage::PigVariant(v) => {
+            crate::boundary::EntityDataValue::PigVariant(*v)
+        }
+        crate::journal::EntityDataValueImage::ZombieNautilusVariant(v) => {
+            crate::boundary::EntityDataValue::ZombieNautilusVariant(*v)
+        }
         crate::journal::EntityDataValueImage::VillagerData {
             kind,
             profession,
@@ -774,6 +783,24 @@ pub(super) fn restore_data_value(
         }
         crate::journal::EntityDataValueImage::OptionalLivingEntityReference(v) => {
             crate::boundary::EntityDataValue::OptionalLivingEntityReference(*v)
+        }
+    }
+}
+
+#[cfg(test)]
+mod variant_tests {
+    #[test]
+    fn climate_variant_journal_images_restore_the_same_typed_value() {
+        use crate::boundary::EntityDataValue;
+        for value in [
+            EntityDataValue::ChickenVariant(1),
+            EntityDataValue::CowVariant(2),
+            EntityDataValue::PigVariant(3),
+            EntityDataValue::ZombieNautilusVariant(4),
+        ] {
+            let image = crate::journal::EntityDataValueImage::from(&value);
+            let decoded = serde_json::from_slice(&serde_json::to_vec(&image).unwrap()).unwrap();
+            assert_eq!(super::restore_data_value(&decoded), value);
         }
     }
 }
