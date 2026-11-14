@@ -836,7 +836,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#NATIVE-SCREEN-AUDIO-CONSENT"
 regression = ["harness:screens-voice-qa:owner_consent_names_app_audio", "harness:screens-voice-qa:owner_deny_sends_no_audio"]
-
+fix_commit = "client:a35187ca"
+repro_check = "candidate: the dialog title/body/choice strings live in src/computer/native/sharing.rs and the only registered check is the real-client screens-voice-qa gate (owner_consent_names_app_audio, owner_deny_sends_no_audio), which cannot run here - the profile had no real run in stage 2; stage 3"
 [[bug]]
 id = "HS-1"
 title = "Destroy an open single chest, then click before ordinary commit: extraction duplicates the staged drop; insertion is discarded."
@@ -1336,6 +1337,18 @@ source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-1"
 regression = ["harness:screens-voice-qa:native_voice_resets_on_non_voice_server"]
 
 [[bug]]
+id = "HARNESS-ADMIN-TEST-TEMP-DIR-LEAK"
+title = "A failing mc-edge admin test leaked its /tmp/mc-edge-admin-* fixture directory"
+area = "harness"
+repro = "cargo"
+severity = "minor"
+status = "open"
+source = "crates/mc-edge/src/admin_tests.rs created /tmp/mc-edge-admin-* directories by hand instead of through a TempDir, so a failing (or panicking) test left them behind and a later test could remove a directory it did not own; the shared host accumulated them across runs."
+regression = ["cargo:mc-edge:admin_tests::a_failing_admin_test_leaves_no_temp_dir_and_removes_no_other", "cargo:mc-edge:admin_tests::a_passing_admin_test_leaves_no_temp_dir"]
+fix_commit = "abc5fd559"
+repro_check = "real-hunk control receipts/XHarnessJava/NC-ADMIN-TEMPDIR-reverse-abc5fd559.log: reversing abc5fd559's non-test hunks makes both refs red with the leaked directory listed; the refs live on wt/XHarnessJava 730d9a79c and become runnable after Main merges that branch."
+
+[[bug]]
 id = "CLIENT-HELD-DROP-KEY-DOUBLE-DROP"
 title = "Holding the drop (Q) key across a tick sent two drop packets (press-edge dispatch + held-key tick edge)"
 area = "client"
@@ -1469,7 +1482,8 @@ severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#QA5-STARTUP-GREY"
 regression = []
-
+fix_commit = "client:9102bbd4"
+repro_check = "candidate: the fix keeps the window hidden (wayland ignores set_visible and maps on the first buffer) and presents one frame in `resumed` before set_visible, but window-mapping timing has no unit seam; the 25-60 s grey period must be measured on a real window (stage 3), including the Windows/macOS launchers"
 [[bug]]
 id = "INPUTLOG-AUTHORIZED"
 title = "Consumed AuthorizedBuild records contain only kind/connection, so a fresh placement/dig/use cannot be distinguished from stale queued authorization by sequence/payload/tick. Strict concurrency evidence must block rather than match this ambiguous marker."
@@ -1707,8 +1721,9 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HC-4"
-regression = []
-
+regression = ["client:krasnokamen-client:ui::dialog::tests::ime_preedit_and_cjk_commit_edit_the_focused_field"]
+fix_commit = "client:7cd21ceb"
+repro_check = "candidate: no control - 7cd21ceb bundles the IME plumbing with 17 files of unrelated rc1 work and its non-test hunks no longer apply, and removing only the UiIntent::Composition arm makes the match non-exhaustive (compile error); the ref (added by c53b0d40) asserts the state-layer symptom (preedit in place, CJK commit as text, no composition without field focus); window-level set_ime_allowed is untested by design; area=client, real-client check required"
 [[bug]]
 id = "HC-5"
 title = "Launcher Cancel cannot interrupt headers-stalled HTTP send and may retry20-minute requests."
@@ -3547,8 +3562,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/sonnet-model-remainder-20261103.md:125"
-regression = []
-
+regression = ["client:krasnokamen-client:ui::state::item_projection_tests::gui_blended_item_draws_only_the_facing_side_after_rotation"]
+fix_commit = "client:83994480"
+repro_check = "control receipts/XClientUi/controls-2.log: 83994480's cull hunk no longer applies as a patch (reflowed by 9a645aa9), so its added lines were removed verbatim (quoted byte-identical in controls/pane-alpha-reverted-lines.txt) -> 12 vs 6 indices, both slab faces blended. The ref asserts the mechanism (one viewer-facing blended quad), a proxy for the audit's 0.70-vs-0.46 pixel value; the pixel check is the stage-3 GUI gate. area=client, candidate"
 [[bug]]
 id = "MODEL-SHADE-OVERRIDE"
 title = "26.3 `shade_direction_override` is not implemented. 190/1,288 blockstates (all cross plants incl. short/tall grass, ferns, flowers, saplings, crops, sugar cane, vines, kelp, seagrass, corals; torches, lanterns, chains, fire, campfire, redstone wire, repeater/comparator, tripwire, cobweb, snow layer 2, flowerbeds, poplar sapling) get directional face shading that vanilla 26.3 does not apply"
@@ -3578,8 +3594,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:86"
-regression = ["harness:scene-shot:native-item-bars"]
-
+regression = ["harness:scene-shot:native-item-bars", "client:krasnokamen-client:ui::state::item_bar_tests::every_retained_stack_paint_uses_shared_decoration_in_real_renderer", "client:krasnokamen-client:ui::state::item_bar_tests::damaged_stack_emits_shrinking_green_yellow_red_bar_quads", "client:krasnokamen-client:ui::state::item_bar_tests::bundle_fullness_scales_and_changes_blue_to_red_only_when_full"]
+fix_commit = "client:e8fe40c2"
+repro_check = "real-hunk control receipts/XClientUi/controls-2.log: reversing ebed661d's only non-test hunk gives 16 vs 8 vertices (two bars per stack) in the real append_stack_item path. Bars are e8fe40c2, one-bar-per-stack is ebed661d; area=client, candidate: real-client check required"
 [[bug]]
 id = "MODEL-SHIELD-GUI"
 title = "Shield GUI cell narrow: runtime corroboration of Opus S3 (10×16) on rig bytes = W `273a83141a8f`"
@@ -3589,7 +3606,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:92"
 regression = []
-
+repro_check = "blocked on rig content: needs assets/krasnokamen/models/entity/shield.json (owner: entity/model rigs). The in-tree plate is origin [-5,-8,-0.5] size [10,16,1] at uv(0,6) while vanilla 26.3 ShieldModel is addBox(-6,-11,-2,12,22,1) at texOffs(0,0) plus a handle addBox(-1,-3,-1,2,6,6) at texOffs(26,0) (decompiled in solaris-client/.analysis/entity-render-special/source/.../ShieldModel.java); the GUI display matrix is already vanilla (scale 0.65 from minecraft:item/shield). XClientUi round 2 re-authors shield.json; evidence receipts/XClientUi/MODEL-SHIELD-GUI-gap.md. The cited vanilla geometry is recorded here for that authoring"
 [[bug]]
 id = "COPPER-WEATHERING"
 title = "Weathering did not cover the vanilla copper families"
@@ -3884,8 +3901,9 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Promote gate 20261104T213104-native-v2-map-frame-waypoint-lhku9sjo (promotion-wire-receipts.json, screenshots/map-distant-held-clone.png)"
-regression = []
-
+regression = ["client:krasnokamen-client:ui::packets::held_map_tests::received_map_decorations_face_the_map_and_use_their_atlas_regions", "client:krasnokamen-client:ui::packets::map_lifecycle_tests::received_map_marker_replacements_remove_old_icons_and_omitted_updates_preserve_them"]
+fix_commit = "client:e1b22a5a"
+repro_check = "real-hunk control receipts/XClientUi/controls-2.log: reversing e1b22a5a's non-test hunk reds held_map_tests at src/ui/packets.rs:1196 ('decoration must face the map viewer'), i.e. the cause (marker winding/UV flip), not the held-map pixels; repro=client, candidate: real-client check required"
 [[bug]]
 id = "NATIVE-FRAMED-MAP"
 title = "The native client never draws a map inside an item frame: src/entities/render_special/item_frame.rs:84-91 draws only the baked item model, and the frame render path has no map state."
@@ -3894,8 +3912,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/MapMarkers (agent finding, client 815c708)"
-regression = []
-
+regression = ["client:krasnokamen-client:entities::render_special::item_frame::map_tests::framed_map_uses_received_identity_replacement_and_removal", "client:krasnokamen-client:entities::render_special::item_frame::map_tests::framed_map_quarter_turns_face_outward_on_all_surfaces"]
+fix_commit = "client:83994480"
+repro_check = "candidate: no control - reversing 83994480's item_frame.rs hunks removes ItemFrameResources.maps, which the regression fixture constructs, so the ref stops compiling instead of going red; area=client, real-client check required"
 [[bug]]
 id = "NATIVE-DEATH-TILT-PIVOT"
 title = "The native client tilts a dying living entity about the model origin on a sqrt(t/20) curve, so the body turns about chest height and the upright legs lift off the ground; vanilla LivingEntityRenderer.setupRotations turns about the feet with min(sqrt((deathTime-1)/20*1.6),1) * flipDegrees (180 for spider, cave spider, silverfish, endermite). The local avatar never tilted because local.rs reset its death tick every tick."
@@ -3915,8 +3934,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "Promote agent finding on client e1b22a5"
-regression = []
-
+regression = ["client:krasnokamen-client:session::packets::map_effect_packet_tests::received_potion_impact_uses_event_rgb_and_effect_family_until_expiry"]
+fix_commit = "client:83994480"
+repro_check = "candidate: no faithful reverse - 83994480's block_effects.rs hunks no longer apply (3-way conflicts after 54b79f73 rewrote the file); area=client, real-client check required"
 [[bug]]
 id = "WORLD-FIRST-START-INTERRUPTED"
 title = "A new world whose first start is stopped before the initial checkpoint can never be opened: Core::open creates native/state.redb before the first global/checkpoint, so the next start is not fresh and fails with 'native global/checkpoint: missing'. The native client's 180 s singleplayer start limit triggers it on slow or busy machines."
@@ -4714,9 +4734,10 @@ repro = "source"
 severity = "minor"
 status = "open"
 source = "solaris-client 2edbb590 src/ui/packets.rs read_advancements reads the show-toast flag as `let _show` and discards it; no toast renderer exists anywhere in solaris-client/src. Paired frames: Java receipts/VisualItemsClient/20261111T140325-scene-shot-znvexbrh statue-sitting.png and framed-map.png show 'New Recipe(s) Unlocked!'; the native frames of the same scene (20261111T135619-scene-shot-gmao8eqn) show none (Main, 2026-11-11). Client fix 8deb8fd7 (wt/ClientEntityParity): src/ui/toasts.rs follows 26.3 ToastManager/AdvancementToast/RecipeToast/SystemToast (javap receipts/ClientEntityParity/javap/toast-*.txt; Java HashMap progress order java-oracle/hashmap-order.txt). ui::advancements::tests::completed_show_toast_advancements_raise_stacked_toasts is red with only the wiring hunks reverted (receipts/ClientEntityParity/negative-control/toasts-reverted.txt); ui::toasts::tests cover slots, slide timing, recipe merge and the unsecure-server toast. Graphical native-vs-Java toast frames not yet captured."
-regression = []
+regression = ["client:krasnokamen-client:ui::toasts::tests"]
 failing_first = "reported"
-
+fix_commit = "client:8deb8fd7"
+repro_check = "candidate: no control - the fix adds src/ui/toasts.rs and its paint calls, so reversing the non-test hunks deletes the module the refs live in (compile error, not red); six toasts tests plus the advancements stacking test are green (receipts/XClientUi/tests-green-5.log); area=client, real-client check required"
 [[bug]]
 id = "CLIENT-HELD-TRIDENT-ORIENTATION"
 title = "Shared trident geometry uses the wrong shaft and held-grip frame"

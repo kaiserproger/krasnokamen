@@ -125,15 +125,23 @@ def _run_client(ctx, tests, root):
         return {test: (UNRUNNABLE, f'no client checkout at {repo} (set KRASNOKAMEN_CLIENT_ROOT)') for test in tests}
     results = {}
     for crate, name in sorted(tests):
+        # A ref may name one test or a whole module (`ui::toasts::tests`): cargo's filter selects it
+        # either way, and `--exact` would find nothing for the module form. Green needs at least one
+        # selected test and no failure, so a ref can never pass by selecting nothing.
         argv, env = regressions.tree_build_command(
-            repo, ['cargo', 'test', '-p', crate, '--lib', '--', name, '--exact'])
+            repo, ['cargo', 'test', '-p', crate, '--lib', '--', name])
         ok, text = _exec(ctx, argv, f'client-{name.rsplit("::", 1)[-1][:24]}', repo, env)
-        if ok and f'test {name} ... ok' in text:
-            results[(crate, name)] = (GREEN, '')
-        elif ok:
-            results[(crate, name)] = (UNRUNNABLE, 'cargo exited zero but ran no matching test')
+        summary = re.search(r'test result: (\w+)\. (\d+) passed; (\d+) failed', text)
+        if summary is None:
+            results[(crate, name)] = (UNRUNNABLE, 'no test summary (build error?)')
+            continue
+        passed, failed = int(summary.group(2)), int(summary.group(3))
+        if passed == 0:
+            results[(crate, name)] = (UNRUNNABLE, 'ran no matching test')
+        elif failed or not ok:
+            results[(crate, name)] = (RED, f'{failed} failed of {passed + failed}')
         else:
-            results[(crate, name)] = (RED, 'test failed' if ' FAILED' in text else 'no result line (build error or no matching test)')
+            results[(crate, name)] = (GREEN, '')
     return results
 
 

@@ -56,8 +56,9 @@ A ref is `cargo:<crate>:<test>` and `harness:<profile>:<scenario|verdict>` for t
 `python:<dotted module>:<TestClass.test_method>` for a fix in the harness/tooling code itself
 (`ledger promote` runs it with `unittest` in the candidate tree), and
 `client:<crate>:<test>` for a fix in the client repository (`ledger promote` runs
-`cargo test -p <crate> --lib -- <test> --exact` in `KRASNOKAMEN_CLIENT_ROOT` or the sibling
-`krasnokamen-client` checkout). A ref the tooling cannot find is unrunnable, never green: a client
+`cargo test -p <crate> --lib -- <test>` in `KRASNOKAMEN_CLIENT_ROOT` or the sibling
+`krasnokamen-client` checkout, so the ref may name one test or a whole module; it is green only when
+it selected at least one test and none failed). A ref the tooling cannot find is unrunnable, never green: a client
 test that does not exist yet at that checkout reports "ran no matching test" rather than passing.
 
 `fix_commit` (optional until promotion) is the lowercase hex id of the commit
