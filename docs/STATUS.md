@@ -3,7 +3,7 @@
 Where Krasnokamen stands and what to work on next. Update this page when a release
 ships, a known 1.0 gap opens or closes, or a transition opens or closes;
 day-to-day progress belongs in commits and the [bug ledger](bugs/README.md),
-not here. Last updated 2026-11-09.
+not here. Last updated 2026-11-14.
 
 ## Release
 
@@ -123,7 +123,9 @@ are accepted designs with draft implementations and pending real-client QA.
 in `core/capture.rs`; the materialized capture that remains serves offline
 conversion, Anvil export and tests by design) but was accepted with the strict
 latency criterion unmet: the 1–2-core profile, the exact-UUID offline fold
-after reopen and SIGKILL after a committed checkpoint were never run.
+after reopen and SIGKILL after a committed checkpoint were never run
+(revalidated on main `73761dc5`, 2026-11-14: still unrun; only the
+custody-oracle tests have measurements on record).
 
 ## Known gaps before 1.0
 

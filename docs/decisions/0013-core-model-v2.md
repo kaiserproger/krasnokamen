@@ -79,6 +79,12 @@ edge queues the burst's frames as one item. World fanout
 may reconcile to a newer snapshot. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
+Datapack reloads and `/debug function` trace-file writes each run on one
+short-lived thread of their own (`datapack-worker`, `datapack-trace`;
+`crates/mc-core/src/datapacks.rs:1272-1277` and `:1288-1316`), handing the
+result back over a bounded `sync_channel(1)`, so they execute outside the
+tick and never hold it.
+
 Durable plugin events are bounded by their own queue, and one slow guest
 callback stalls every plugin's delivery. The core therefore refuses new plugin
 commands and drops plugin-menu clicks while a quarter of the queue capacity is

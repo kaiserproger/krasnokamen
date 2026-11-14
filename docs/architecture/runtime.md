@@ -32,6 +32,7 @@ are disconnected with the vanilla illegal-characters reason.
 | Authoritative state and tick | `mc-core` | decoded input → native validation → entity intents → deterministic merge → block work → one tick change set |
 | Parallel entity work | core worker pool | reads immutable state; writes disjoint entity next-state data, not shared regional state |
 | Disk/journal/checkpoint I/O | native journal worker | freezes immutable/owned checkpoint images; no synchronous fsync on a gameplay reply path |
+| Datapack reload and function-trace writes | short-lived `datapack-worker` / `datapack-trace` threads in `mc-core` (`datapacks.rs:1272`, `:1300`) | one thread per job, result over a bounded channel, outside the tick |
 | Socket decode/write and sessions | `mc-edge` connection tasks | no independent inventory, world or entity authority |
 | Per-viewer packet planning | edge fanout workers/pump | own workers, bounded connection credit, retained projection revisions |
 | Component execution | `mc-plugin-host` worker | serial bounded guest callbacks outside the tick; `mc-script` owns DTO/admission |

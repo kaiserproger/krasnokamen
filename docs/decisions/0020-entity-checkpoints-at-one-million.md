@@ -220,6 +220,12 @@ The owner accepted the decision with the strict latency criterion unmet.
 The 1–2-core profile, exact-UUID offline fold after reopen and SIGKILL after a
 committed checkpoint were not run. Historical receipts are not available in a
 clean checkout; the proof below describes the required checks, not a pass.
+Revalidated on main `73761dc5` (2026-11-14): the criterion is still unmet and
+pending. The only post-cutover measurements on record are the custody-oracle
+unit tests (all passing; the Ckpt1M cutover receipts record step-3 measurements
+pending). No 1–2-core latency profile, no 1M memory/SIGKILL arm and no
+exact-UUID offline fold after reopen has been run. Closing the criterion needs
+the Proof section below on a pinned release binary in an exclusive `-x` window.
 
 
 ## Proof
