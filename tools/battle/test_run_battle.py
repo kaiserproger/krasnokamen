@@ -209,6 +209,19 @@ class BattleRunnerTests(unittest.TestCase):
         self.assertNotIn('resource_pack', tomllib.loads(
             runner.server_config_text(args, 'battle', '/world', '/cache')))
 
+    def test_non_ascii_pack_url_is_refused_not_written_as_surrogates(self):
+        # Red before the fix: a non-BMP character became a \ud83d\ude00 surrogate pair, and TOML
+        # rejects that escape, so the server never started with a readable config.
+        runner = load_runner()
+        argv = ['run-battle.py', '--dry-run', '--pin', '/pin', '--client', '/client',
+                '--client-data', '/data', '--cache', '/cache', '--run-dir', '/run',
+                '--resource-pack-url', 'http://127.0.0.1:8088/\U0001F600.zip',
+                '--resource-pack-sha1', 'a' * 40]
+        with unittest.mock.patch('sys.argv', argv):
+            args = runner.arguments()
+        with self.assertRaisesRegex(ValueError, 'ASCII'):
+            runner.server_config_text(args, 'battle', '/world', '/cache')
+
     def test_invalid_count_fails_without_starting(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
