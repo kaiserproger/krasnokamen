@@ -854,7 +854,7 @@ mod tests {
         assert_eq!(stats.get_custom(CustomStat::SleepInBed), 3);
         assert_eq!(stats.get_custom(CustomStat::SleepInStrawBed), 0);
         assert_eq!(stats.get_custom(CustomStat::OpenShulkerBox), 7);
-        let current_diamond = crate::items::solaris_required_items()
+        let current_diamond = crate::items::krasnokamen_required_items()
             .id_of(&diamond)
             .unwrap();
         assert_ne!(current_diamond, legacy_diamond);

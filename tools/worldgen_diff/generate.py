@@ -1,4 +1,4 @@
-"""Generate one chunk rectangle with stock vanilla 26.1.2 and with Solaris.
+"""Generate one chunk rectangle with stock vanilla 26.1.2 and with Krasnokamen.
 
 Vanilla: the local server bundle runs headless with `tick freeze` in a datapack
 load function before world ticks, so block/fluid/random ticks and entities never change the
@@ -7,7 +7,7 @@ halo around forced chunks, so every compared chunk carries its neighbours'
 features). Readiness is a datapack function run from the console once per server
 tick until every forced chunk reports loaded; then `save-all flush` and `stop`.
 
-Solaris: `world pregenerate` over the same rectangle, then `world export-anvil`.
+Krasnokamen: `world pregenerate` over the same rectangle, then `world export-anvil`.
 Mojang bytes stay in the ignored output directory.
 """
 from __future__ import annotations
@@ -221,11 +221,11 @@ def vanilla_world(seed: int, chunk_min, chunk_max, bundle: Path, java: str, cach
 _COMPLETE = 'pregenerate complete:'
 
 
-def solaris_world(seed: int, chunk_min, chunk_max, server_bin: Path, data_dir: Path,
+def krasnokamen_world(seed: int, chunk_min, chunk_max, server_bin: Path, data_dir: Path,
                   directory: Path) -> dict:
-    """Pregenerate + export a fresh Solaris world into `directory`."""
+    """Pregenerate + export a fresh Krasnokamen world into `directory`."""
     if directory.exists():
-        raise RuntimeError(f'{directory} already exists; Solaris worlds are never reused')
+        raise RuntimeError(f'{directory} already exists; Krasnokamen worlds are never reused')
     (directory / 'plugins').mkdir(parents=True)
     config = directory / 'server.toml'
     _put(config, f'''[plugins]
@@ -239,7 +239,7 @@ seed = {seed}
     # pregenerate takes a block radius around a block center (inclusive edges).
     radius = (chunk_max[0] - chunk_min[0] + 1) * 8 - 8
     if (chunk_max[1] - chunk_min[1] + 1) * 8 - 8 != radius:
-        raise ValueError('Solaris pregenerate needs a square rectangle')
+        raise ValueError('Krasnokamen pregenerate needs a square rectangle')
     center = (chunk_min[0] * 16 + radius, chunk_min[1] * 16 + radius)
     base = [str(server_bin), '--config', str(config), 'world']
     pregenerate = base + ['pregenerate', f'--radius={radius}', f'--center={center[0]},{center[1]}']
@@ -267,7 +267,7 @@ seed = {seed}
         raise RuntimeError(f'export-anvil failed ({out.returncode}): {out.stderr[-2000:]}')
     chunks = (chunk_max[0] - chunk_min[0] + 1) * (chunk_max[1] - chunk_min[1] + 1)
     return {
-        'engine': 'solaris', 'seed': seed, 'world': str(directory / 'anvil'),
+        'engine': 'krasnokamen', 'seed': seed, 'world': str(directory / 'anvil'),
         'server_bin': str(server_bin), 'pregenerate_wall_s': round(elapsed, 3),
         'setup_s': setup, 'generate_s': round(total - setup, 3),
         'pregenerate_summary': summary.strip(), 'requested_chunks': chunks,

@@ -496,7 +496,10 @@ fn summon_common_state_survives_real_wal_replay_and_native_region_restart() {
     let uuid = state.entities.row(slot).uuid;
     let expected_equipment = state.entities.row(slot).appearance.equipment.clone();
     let expected_body = state.entities.row(slot).loot.body_armor.clone();
-    let root = std::env::temp_dir().join(format!("solaris-summon-common-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!(
+        "krasnokamen-summon-common-{}",
+        uuid::Uuid::new_v4()
+    ));
     let entries = crate::core::journal_entries_for_tick(&mut state, &output);
     let mut writer = crate::journal::JournalWriter::open(&root, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
@@ -763,8 +766,10 @@ fn summon_equipment_components_match_give_and_survive_native_anvil() {
         serde_json::from_slice(&serde_json::to_vec(&wal).unwrap()).unwrap();
     assert_eq!(wal.equipment, row.appearance.equipment);
     let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
-    let root =
-        std::env::temp_dir().join(format!("solaris-summon-equipment-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!(
+        "krasnokamen-summon-equipment-{}",
+        uuid::Uuid::new_v4()
+    ));
     mc_world::anvil::write_entity_regions(&root, &state.registry.items, &chunks, 0).unwrap();
     let reopened = mc_world::anvil::read_entity_regions(&root, &state.registry.items).unwrap();
     let native = reopened
@@ -891,39 +896,67 @@ fn villager_summon_keeps_its_authored_profession_and_rejects_bad_data() {
 #[test]
 fn climate_variant_summons_publish_and_checkpoint_typed_variants() {
     for (kind, registry, index, variants) in [
-        ("chicken", "chicken_variant", 18, &["temperate", "cold", "warm"][..]),
+        (
+            "chicken",
+            "chicken_variant",
+            18,
+            &["temperate", "cold", "warm"][..],
+        ),
         ("cow", "cow_variant", 18, &["temperate", "cold", "warm"][..]),
         ("pig", "pig_variant", 19, &["temperate", "cold", "warm"][..]),
-        ("zombie_nautilus", "zombie_nautilus_variant", 21, &["temperate", "warm"][..]),
+        (
+            "zombie_nautilus",
+            "zombie_nautilus_variant",
+            21,
+            &["temperate", "warm"][..],
+        ),
     ] {
         for variant in variants {
             let name = format!("minecraft:{variant}");
             let variant_id = mc_data::required_registry_entry_id(
                 registry,
                 &mc_data::Identifier::parse(name.as_str()).unwrap(),
-            ).unwrap();
+            )
+            .unwrap();
             let expected = match kind {
                 "chicken" => EntityDataValue::ChickenVariant(variant_id),
                 "cow" => EntityDataValue::CowVariant(variant_id),
                 "pig" => EntityDataValue::PigVariant(variant_id),
                 _ => EntityDataValue::ZombieNautilusVariant(variant_id),
             };
-            let ages: &[i32] = if kind == "zombie_nautilus" { &[0] } else { &[0, -24000] };
+            let ages: &[i32] = if kind == "zombie_nautilus" {
+                &[0]
+            } else {
+                &[0, -24000]
+            };
             for age in ages {
                 let (state, id) = summon(kind, &format!("{{variant:'{name}',Age:{age}}}"));
                 let slot = state.entities.slot_of(id).unwrap();
                 let row = state.entities.row(slot);
-                assert!(row.appearance.extra.contains(&(index, expected.clone())), "{kind}/{variant}");
+                assert!(
+                    row.appearance.extra.contains(&(index, expected.clone())),
+                    "{kind}/{variant}"
+                );
                 assert_eq!(row.appearance.baby, *age < 0, "{kind}/{variant}");
                 assert!(state.appearance_changed.contains(&id));
                 let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
-                let native = chunks.values().flat_map(|chunk| &chunk.entities)
-                    .find(|record| record.uuid == row.uuid).unwrap();
-                assert!(native.extra_fields.contains(&("variant".into(), Tag::String(name.clone()))));
+                let native = chunks
+                    .values()
+                    .flat_map(|chunk| &chunk.entities)
+                    .find(|record| record.uuid == row.uuid)
+                    .unwrap();
+                assert!(
+                    native
+                        .extra_fields
+                        .contains(&("variant".into(), Tag::String(name.clone())))
+                );
                 let imported = crate::core::appearance_from_vanilla_entity(native);
                 let image: crate::journal::EntityAppearanceImage =
                     serde_json::from_slice(&serde_json::to_vec(&imported).unwrap()).unwrap();
-                assert!(image.extra.contains(&(index, (&expected).into())), "{kind}/{variant}");
+                assert!(
+                    image.extra.contains(&(index, (&expected).into())),
+                    "{kind}/{variant}"
+                );
             }
         }
     }

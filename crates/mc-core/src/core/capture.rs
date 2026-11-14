@@ -163,8 +163,8 @@ pub(super) struct EntityCaptureExtras {
     pub(super) end_fight: Vec<(String, mc_nbt::Tag)>,
 }
 
-/// Complete entity image as vanilla records grouped by chunk. The Solaris wire
-/// id rides as `solaris:WireId` so journal tail entries (keyed by wire id) still
+/// Complete entity image as vanilla records grouped by chunk. The Krasnokamen wire
+/// id rides as `krasnokamen:WireId` so journal tail entries (keyed by wire id) still
 /// match after recovery.
 pub(super) fn checkpoint_entities(
     state: &TickState,
@@ -400,14 +400,26 @@ pub(super) fn entity_capture_record(
     if let Some(registry) = crate::blueprint::variant_registry(&name)
         && let Some(variant) = row.appearance.extra.iter().find_map(|(index, value)| {
             let id = match (name.as_str(), *index, value) {
-                ("minecraft:chicken", crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
-                    crate::boundary::EntityDataValue::ChickenVariant(id))
-                | ("minecraft:cow", crate::blueprint::COW_VARIANT_DATA_INDEX,
-                    crate::boundary::EntityDataValue::CowVariant(id))
-                | ("minecraft:pig", crate::blueprint::PIG_VARIANT_DATA_INDEX,
-                    crate::boundary::EntityDataValue::PigVariant(id))
-                | ("minecraft:zombie_nautilus", crate::blueprint::ZOMBIE_NAUTILUS_VARIANT_DATA_INDEX,
-                    crate::boundary::EntityDataValue::ZombieNautilusVariant(id)) => *id,
+                (
+                    "minecraft:chicken",
+                    crate::blueprint::CHICKEN_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::ChickenVariant(id),
+                )
+                | (
+                    "minecraft:cow",
+                    crate::blueprint::COW_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::CowVariant(id),
+                )
+                | (
+                    "minecraft:pig",
+                    crate::blueprint::PIG_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::PigVariant(id),
+                )
+                | (
+                    "minecraft:zombie_nautilus",
+                    crate::blueprint::ZOMBIE_NAUTILUS_VARIANT_DATA_INDEX,
+                    crate::boundary::EntityDataValue::ZombieNautilusVariant(id),
+                ) => *id,
                 _ => return None,
             };
             mc_data::required_registry_entry(registry, id)
@@ -426,7 +438,7 @@ pub(super) fn entity_capture_record(
             .registry
             .entity_type_name(crate::blueprint::wire_type_id(type_id))?;
         extra_fields.push((
-            "solaris:Presentation".into(),
+            "krasnokamen:Presentation".into(),
             mc_nbt::Tag::String(presentation.into()),
         ));
     }

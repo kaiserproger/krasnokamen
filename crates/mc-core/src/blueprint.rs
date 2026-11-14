@@ -660,7 +660,10 @@ pub(crate) fn variant_data(
 ) -> Option<(u8, crate::boundary::EntityDataValue)> {
     use crate::boundary::EntityDataValue;
     Some(match entity {
-        "minecraft:chicken" => (CHICKEN_VARIANT_DATA_INDEX, EntityDataValue::ChickenVariant(value)),
+        "minecraft:chicken" => (
+            CHICKEN_VARIANT_DATA_INDEX,
+            EntityDataValue::ChickenVariant(value),
+        ),
         "minecraft:cow" => (COW_VARIANT_DATA_INDEX, EntityDataValue::CowVariant(value)),
         "minecraft:pig" => (PIG_VARIANT_DATA_INDEX, EntityDataValue::PigVariant(value)),
         "minecraft:zombie_nautilus" => (
