@@ -1,6 +1,6 @@
 # Krasnokamen gameplay/server scenario matrix — summary
 
-Generated 2026-10-24 by `tools/harness/matrix_specs/gen_matrix.py` (deterministic, seed 20261024) from code at solaris@04af6cc1f, solaris-default-plugins@9b407a4, solaris-loader@6b79ace, solaris-client@54b79f73. Machine-readable source: `matrix.yaml`.
+Generated 2026-10-24 by `tools/harness/matrix_specs/gen_matrix.py` (deterministic, seed 20261024) from code at solaris@7cff6cb35, solaris-default-plugins@9b407a4, solaris-loader@6b79ace, solaris-client@55d8b2c6. Machine-readable source: `matrix.yaml`.
 
 ## Totals
 
