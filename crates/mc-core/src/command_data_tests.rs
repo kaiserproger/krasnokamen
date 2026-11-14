@@ -1203,6 +1203,31 @@ fn data_modify_and_merge_edit_any_block_entity_through_its_native_owner() {
 }
 
 #[test]
+fn data_block_reads_live_campfire_progress_before_metadata_edit() {
+    let (mut state, _, context) = fixture();
+    place(&mut state, context, "campfire");
+    let fields = vec![
+        ("CookingTimes".into(), Tag::IntArray(vec![17, 0, 0, 0])),
+        ("CookingTotalTimes".into(), Tag::IntArray(vec![200, 0, 0, 0])),
+    ];
+    let campfire =
+        crate::campfire::CampfireState::from_fields(&fields, &state.registry.items).unwrap();
+    state.campfires.insert((4, 60, 4), campfire);
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 CookingTimes[0]"),
+        17
+    );
+    assert_eq!(
+        data(&mut state, context, "data merge block 4 60 4 {CustomName:'test'}"),
+        1
+    );
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 CookingTimes[0]"),
+        17
+    );
+}
+
+#[test]
 fn data_block_metadata_edit_preserves_live_brewing_owner() {
     let (mut state, _, context) = fixture();
     place(&mut state, context, "brewing_stand");

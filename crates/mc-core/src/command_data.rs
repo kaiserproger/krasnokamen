@@ -105,7 +105,7 @@ pub(crate) fn entity(state: &TickState, id: EntityId) -> Result<Tag, String> {
 }
 
 /// A block entity's full native image: public NBT plus the private native
-/// fields, with live owner state (inventory, furnace, brewing, jukebox) folded in.
+/// fields, with live inventory, furnace, brewing, campfire and jukebox state.
 pub(crate) fn block_image(
     state: &TickState,
     pos: BlockPos,
@@ -224,6 +224,11 @@ pub(crate) fn block_image(
     if let Some(stand) = state.brewing.get(&key) {
         put(&mut fields, "BrewTime", Tag::Short(stand.brew_time));
         put(&mut fields, "Fuel", Tag::Byte(stand.fuel as i8));
+    }
+    if let Some(campfire) = state.campfires.get(&key) {
+        for (name, value) in campfire.data_fields(&state.registry.items) {
+            put(&mut fields, &name, value);
+        }
     }
     if let Some(jukebox) = state.jukeboxes.get(&key) {
         fields.retain(|(key, _)| key != "RecordItem" && key != "ticks_since_song_started");
