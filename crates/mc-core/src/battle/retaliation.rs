@@ -126,7 +126,14 @@ fn opponent(
     }
     let pos = entities.pos(slot);
     let distance = crate::target_grid::distance(from, pos);
-    Some((slot, EnemyTarget { id: attacker, pos, distance }))
+    Some((
+        slot,
+        EnemyTarget {
+            id: attacker,
+            pos,
+            distance,
+        },
+    ))
 }
 
 /// Where a foot soldier stands to strike `enemy` with `range`: where he is
@@ -181,7 +188,14 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState) {
             continue;
         };
         if victim == attacker
-            || opponent(entities, live, entities.body(slot).faction, [0.0; 3], attacker).is_none()
+            || opponent(
+                entities,
+                live,
+                entities.body(slot).faction,
+                [0.0; 3],
+                attacker,
+            )
+            .is_none()
         {
             continue;
         }
@@ -223,11 +237,17 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState) {
         if !grudge.fresh(tick) {
             return false;
         }
-        let Some(bi) = entities.slot_of(victim).and_then(|slot| columns.index(slot)) else {
+        let Some(bi) = entities
+            .slot_of(victim)
+            .and_then(|slot| columns.index(slot))
+        else {
             return false;
         };
         let slot = columns.slots[bi].expect("indexed column");
-        if grudge.other.is_some_and(|(_, at)| tick.saturating_sub(at) > GRUDGE_TICKS) {
+        if grudge
+            .other
+            .is_some_and(|(_, at)| tick.saturating_sub(at) > GRUDGE_TICKS)
+        {
             grudge.other = None;
         }
         let (faction, pos) = (columns.factions[bi], columns.positions[bi]);
@@ -236,7 +256,11 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState) {
             && !columns.ranged[bi];
         let enemy = opponent(entities, live, faction, pos, grudge.attacker);
         let due = super::retarget_due(victim, tick);
-        let reach = if grudge.helping { HELP_RADIUS } else { MELEE_ENGAGEMENT_REACH };
+        let reach = if grudge.helping {
+            HELP_RADIUS
+        } else {
+            MELEE_ENGAGEMENT_REACH
+        };
         let was = grudge.answering;
         if !able {
             grudge.answering = false;
@@ -297,7 +321,9 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState) {
     work.handoffs = handoffs.len() as u64;
     for index in 0..state.handoffs.len() {
         let (victim, attacker) = state.handoffs[index];
-        hand_off(frame, columns, formation, combat, grid, live, state, victim, attacker);
+        hand_off(
+            frame, columns, formation, combat, grid, live, state, victim, attacker,
+        );
     }
     state.handoffs.clear();
 }
@@ -331,7 +357,9 @@ fn hand_off(
         return;
     }
     let (Some(victim_bi), Some(attacker_slot)) = (
-        entities.slot_of(victim).and_then(|slot| columns.index(slot)),
+        entities
+            .slot_of(victim)
+            .and_then(|slot| columns.index(slot)),
         entities.slot_of(attacker),
     ) else {
         return;
@@ -348,7 +376,10 @@ fn hand_off(
     let mut examined = 0;
     grid.friends_within(around, HELP_RADIUS, |unit, d2| {
         examined += 1;
-        let Some(bi) = entities.slot_of(unit.id).and_then(|slot| columns.index(slot)) else {
+        let Some(bi) = entities
+            .slot_of(unit.id)
+            .and_then(|slot| columns.index(slot))
+        else {
             return;
         };
         if bi >= formation.members.len()

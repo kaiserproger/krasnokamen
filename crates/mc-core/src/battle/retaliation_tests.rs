@@ -1,9 +1,9 @@
 use super::*;
+use crate::battle::RETARGET_TICKS;
 use crate::battle::combat::Action;
 use crate::battle::formation::Order;
 use crate::battle::live_players::tests::{facing_blue, hold};
 use crate::boundary::{ConnectionId, EntityEvent, PlayerInput};
-use crate::battle::RETARGET_TICKS;
 use crate::tick::run_tick;
 
 /// His regiment holds its ground, so nothing but an answer moves him toward
@@ -118,7 +118,10 @@ fn a_soldier_jabbed_from_beyond_his_reach_turns_steps_in_and_strikes_back() {
         nearest = nearest.min(distance(&state, player, blue));
         if swung_at.is_none() && crate::battle::live_players::tests::swung(&output, blue) {
             let battle = &state.hostile.battle;
-            let bi = battle.columns.index(state.entities.slot_of(blue).unwrap()).unwrap();
+            let bi = battle
+                .columns
+                .index(state.entities.slot_of(blue).unwrap())
+                .unwrap();
             if let Action::Windup { target, .. } = battle.combat.fighters[bi].action {
                 assert_eq!(target, player, "his swing is at PovRed");
                 swung_at = Some(tick);
@@ -130,25 +133,45 @@ fn a_soldier_jabbed_from_beyond_his_reach_turns_steps_in_and_strikes_back() {
     }
     let turned = turned.expect("the soldier never took PovRed as his target");
     assert!(turned <= RETARGET_TICKS, "turned only after {turned} ticks");
-    assert!(nearest < start - 0.5, "he never stepped in: {start:.2} -> {nearest:.2}");
+    assert!(
+        nearest < start - 0.5,
+        "he never stepped in: {start:.2} -> {nearest:.2}"
+    );
     let swung_at = swung_at.expect("he never swung at PovRed within three seconds");
     let struck = struck.expect("his blow never landed on PovRed");
-    assert!(struck > swung_at, "hit {struck} before the swing {swung_at}");
+    assert!(
+        struck > swung_at,
+        "hit {struck} before the swing {swung_at}"
+    );
     // No more jabs: the grudge lapses 60 ticks after the jab, at his next
     // re-pick at the latest, and he walks back to his slot out of reach.
     for _ in 61..=(GRUDGE_TICKS + RETARGET_TICKS + 1) {
         ready(&mut state, player, blue, spot);
         run_tick(&mut state, &[]);
     }
-    assert_ne!(column_target(&state, blue), Some(player), "the grudge never lapsed");
+    assert_ne!(
+        column_target(&state, blue),
+        Some(player),
+        "the grudge never lapsed"
+    );
     assert_eq!(state.hostile.battle.retaliation.answering(blue), None);
-    let index = state.hostile.battle.formation.members.iter().position(|m| m.id == blue).unwrap();
+    let index = state
+        .hostile
+        .battle
+        .formation
+        .members
+        .iter()
+        .position(|m| m.id == blue)
+        .unwrap();
     assert_eq!(state.hostile.battle.formation.members[index].close_on, None);
     for _ in 0..40 {
         ready(&mut state, player, blue, spot);
         run_tick(&mut state, &[]);
     }
-    assert!(distance(&state, player, blue) > 3.0, "he stayed on PovRed after the grudge lapsed");
+    assert!(
+        distance(&state, player, blue) > 3.0,
+        "he stayed on PovRed after the grudge lapsed"
+    );
 }
 
 /// The jabbed soldier cannot step in (held where he stands, as when his own
@@ -169,7 +192,11 @@ fn an_attacker_out_of_reach_goes_to_at_most_two_idle_friends() {
     for tick in 0..200_u64 {
         ready(&mut state, player, blue, spot);
         put(&mut state, blue, at);
-        let input = if tick % 20 == 0 { vec![jab()] } else { Vec::new() };
+        let input = if tick % 20 == 0 {
+            vec![jab()]
+        } else {
+            Vec::new()
+        };
         let (output, ..) = run_tick(&mut state, &input);
         if hurt_by(&output, blue, player) {
             first.get_or_insert(tick);
@@ -181,7 +208,10 @@ fn an_attacker_out_of_reach_goes_to_at_most_two_idle_friends() {
             if id == blue || battle.columns.targets[bi].map(|t| t.id) != Some(player) {
                 continue;
             }
-            assert_eq!(battle.columns.factions[bi], 2, "a red soldier targets PovRed");
+            assert_eq!(
+                battle.columns.factions[bi], 2,
+                "a red soldier targets PovRed"
+            );
             let Some((attacker, helping)) = battle.retaliation.answering(id) else {
                 panic!("{id:?} targets PovRed neither hurt by him nor handed him");
             };
@@ -222,7 +252,13 @@ fn a_soldier_hurt_by_two_enemies_hands_both_on() {
         .formation
         .members
         .iter()
-        .find(|m| state.hostile.battle.formation.regiments[m.regiment].spec.faction == 1 && m.rank == 0)
+        .find(|m| {
+            state.hostile.battle.formation.regiments[m.regiment]
+                .spec
+                .faction
+                == 1
+                && m.rank == 0
+        })
         .unwrap()
         .id;
     let red_at = [at[0] + 1.5, at[1], at[2] - 1.0];
@@ -254,7 +290,11 @@ fn a_soldier_hurt_by_two_enemies_hands_both_on() {
         }
         most = [most[0].max(count[0]), most[1].max(count[1])];
     }
-    assert_eq!(most, [HELPERS, HELPERS], "helpers for PovRed and for the red soldier");
+    assert_eq!(
+        most,
+        [HELPERS, HELPERS],
+        "helpers for PovRed and for the red soldier"
+    );
 }
 
 /// Between soldiers a landed blow wounds or kills, so a soldier-only contact
@@ -278,7 +318,11 @@ fn soldier_blows_between_soldiers_turn_nobody_from_the_nearest_enemy() {
         contact += usize::from(battle.combat.work.in_weapon_reach > 0);
         remembered = remembered.max(battle.retaliation.work.remembered);
         for &id in &battle.columns.ids {
-            assert_eq!(battle.retaliation.answering(id), None, "{id:?} answers a soldier");
+            assert_eq!(
+                battle.retaliation.answering(id),
+                None,
+                "{id:?} answers a soldier"
+            );
         }
         if contact >= 600 {
             break;
@@ -286,6 +330,9 @@ fn soldier_blows_between_soldiers_turn_nobody_from_the_nearest_enemy() {
     }
     assert!(contact >= 600, "only {contact} ticks of contact");
     let (dead, removed, _) = crate::battle::tests::native_battle_losses(&state);
-    assert!(removed.iter().sum::<usize>() > 0, "no blow landed: dead {dead:?}");
+    assert!(
+        removed.iter().sum::<usize>() > 0,
+        "no blow landed: dead {dead:?}"
+    );
     assert!(remembered > 0, "no soldier's blow reached retaliation");
 }

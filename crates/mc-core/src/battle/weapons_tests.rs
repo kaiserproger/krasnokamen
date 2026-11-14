@@ -4,9 +4,9 @@ use crate::battle::formation::{Order, RegimentSpec};
 use crate::mounts::tests::{slot, spawn};
 use mc_nbt::Tag;
 
-const SPEAR: (&str, &str) = ("minecraft:iron_spear", "solaris_battle:iron_spear");
-const SWORD: (&str, &str) = ("minecraft:iron_sword", "solaris_battle:iron_longsword");
-const BOW: (&str, &str) = ("minecraft:bow", "solaris_battle:iron_longbow_standby");
+const SPEAR: (&str, &str) = ("minecraft:iron_spear", "krasnokamen_battle:iron_spear");
+const SWORD: (&str, &str) = ("minecraft:iron_sword", "krasnokamen_battle:iron_longsword");
+const BOW: (&str, &str) = ("minecraft:bow", "krasnokamen_battle:iron_longbow_standby");
 
 fn stack(state: &TickState, (item, model): (&str, &str)) -> ItemStack {
     mc_data::item_nbt::stack_from_component_patch(

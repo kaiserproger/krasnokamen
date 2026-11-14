@@ -10,12 +10,12 @@
 //!   sends stay unsent);
 //! - a larger world queue ([`crate::server::RECORDER_WORLD_QUEUE_FRAMES`]
 //!   frames, `world_queue_bytes` bytes), so a loopback recorder is never thinned;
-//! - a `solaris:tick` custom payload as the first world frame of every
+//! - a `krasnokamen:tick` custom payload as the first world frame of every
 //!   publish that has a free world-queue frame slot: `tick` then `wall_ns`,
 //!   both u64 big-endian, where `wall_ns` is the core tick's UNIX wall start
 //!   (`wall_start_unix_ns` of the same tick in `/load-metrics` and
 //!   `/telemetry.jsonl`). Every world frame after marker T and before the
-//!   next marker was planned from tick T, except `solaris:lod/tile` frames,
+//!   next marker was planned from tick T, except `krasnokamen:lod/tile` frames,
 //!   which another task queues when their tile is ready. Reliable-queue
 //!   packets are not ordered against the world queue.
 //!
@@ -32,7 +32,7 @@ use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 
 /// Custom payload channel of the per-tick marker.
-pub const TICK_MARKER_CHANNEL: &str = "solaris:tick";
+pub const TICK_MARKER_CHANNEL: &str = "krasnokamen:tick";
 
 /// `[recorder]`: connections that record the server stream.
 #[derive(Debug, Clone, Deserialize)]
@@ -78,7 +78,7 @@ impl RecorderSection {
     }
 }
 
-/// The framed `solaris:tick` marker for one published tick.
+/// The framed `krasnokamen:tick` marker for one published tick.
 pub(crate) fn tick_marker_frame(tick: u64, wall_unix_ns: u64) -> bytes::Bytes {
     static CHANNEL: LazyLock<mc_data::Identifier> = LazyLock::new(|| {
         mc_data::Identifier::parse(TICK_MARKER_CHANNEL).expect("valid tick marker channel")

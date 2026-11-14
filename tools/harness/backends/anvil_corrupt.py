@@ -3,7 +3,7 @@
 The harness exports a stopped native world with the shipping CLI, flips one field
 of each chosen block entity to a value the core's hydration owner must refuse
 (an unknown item id, an out-of-range level), and imports the result again. That is
-the real route by which a record Solaris cannot decode reaches a resident chunk: a
+the real route by which a record Krasnokamen cannot decode reaches a resident chunk: a
 vanilla, modded or hand-edited world. Tags keep their exact NBT type, so every
 byte outside the edited field is unchanged.
 """

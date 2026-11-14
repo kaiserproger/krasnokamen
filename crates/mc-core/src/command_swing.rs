@@ -1,6 +1,6 @@
 //! Operator `/swing <targets> <mainhand|offhand> <none|whack|stab> <ticks>`: makes living
 //! entities play an attack presentation through the ordinary `EntityEvent::Swing`, which
-//! the edge sends as the 26.3 `swing_animation` packet. Solaris staging and QA aid (battle
+//! the edge sends as the 26.3 `swing_animation` packet. Krasnokamen staging and QA aid (battle
 //! video clips are chosen client-side from hand, type and duration); vanilla has no such
 //! command. It changes no gameplay state.
 use crate::boundary::{ChangeSet, EntityEvent, EntityId, Hand, SwingKind};

@@ -180,7 +180,12 @@ impl TargetGrid {
     /// cells visited ring by ring outwards: a melee range test needs any enemy
     /// in range, not only the nearest (inside a spear's minimum, or across a
     /// height step, the nearest one can fail where another passes).
-    pub fn any_enemy(&self, actor: Unit, reach: f64, mut accept: impl FnMut(&Unit) -> bool) -> Option<Unit> {
+    pub fn any_enemy(
+        &self,
+        actor: Unit,
+        reach: f64,
+        mut accept: impl FnMut(&Unit) -> bool,
+    ) -> Option<Unit> {
         if actor.faction == 0 || !reach.is_finite() || reach < 0.0 {
             return None;
         }
