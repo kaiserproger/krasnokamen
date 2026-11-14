@@ -423,3 +423,138 @@ fn csr_preserves_hash_grid_overflow_candidate_work_and_bitwise_drive() {
     assert_eq!(runtime.neighbours.offsets, vec![0]);
     assert_eq!(runtime.neighbours.overflow, 0);
 }
+
+/// Net displacement and direction reversals of one body over a 2 s window, as
+/// the client sees it: positions every second tick, steps under 0.01 ignored.
+fn window_jitter(window: &[[f64; 2]]) -> (f64, usize) {
+    let samples: Vec<_> = window.iter().step_by(2).collect();
+    let (first, last) = (samples[0], samples[samples.len() - 1]);
+    let net = (last[0] - first[0]).hypot(last[1] - first[1]);
+    let steps: Vec<_> = samples
+        .windows(2)
+        .map(|pair| [pair[1][0] - pair[0][0], pair[1][1] - pair[0][1]])
+        .filter(|step| step[0].hypot(step[1]) > 0.01)
+        .collect();
+    let reversals = steps
+        .windows(2)
+        .filter(|pair| pair[0][0] * pair[1][0] + pair[0][1] * pair[1][1] < 0.0)
+        .count();
+    (net, reversals)
+}
+
+/// `side` x `side` one-man regiments whose slots lie `slot_spacing` apart, the
+/// bodies standing a good deal wider apart: slots closer than the body spacing,
+/// as in the pressed ranks of a stalled contact line, so every body is pulled
+/// into the ones around it.
+fn pressed_block(side: usize, slot_spacing: f64) -> FormationRuntime {
+    let mut runtime = FormationRuntime::default();
+    for row in 0..side {
+        for file in 0..side {
+            let id = (row * side + file) as i32 + 1;
+            runtime
+                .add_regiment(
+                    RegimentSpec {
+                        frontage: 1.0,
+                        id: id as u32,
+                        faction: 1,
+                        origin: [
+                            file as f64 * slot_spacing,
+                            64.0,
+                            row as f64 * slot_spacing,
+                        ],
+                        facing: [1.0, 0.0],
+                        files: 1,
+                        order: Order::Hold,
+                    },
+                    &[EntityId(id)],
+                )
+                .unwrap();
+            let m = &mut runtime.members[(id - 1) as usize];
+            // A fixed, uneven start: no two bodies start on a symmetric spot.
+            m.pos[0] = file as f64 * 0.9 + (id * 7 % 11) as f64 * 0.01;
+            m.pos[2] = row as f64 * 0.9 + (id * 5 % 13) as f64 * 0.01;
+        }
+    }
+    runtime
+}
+
+/// G2L5 take, minutes 2-4: a quarter of the standing soldiers in contact reversed
+/// their direction four or more times in 2 s, 0.04 blocks at a time. The
+/// separation push was a step at the body spacing and the slot pull had no dead
+/// zone, so a body pressed against its neighbours was shoved out and pulled
+/// back every other tick.
+#[test]
+fn pressed_ranks_stand_still_instead_of_trading_pushes_and_pulls() {
+    let mut runtime = pressed_block(6, 0.5);
+    let mut tracks: Vec<Vec<[f64; 2]>> = vec![Vec::new(); runtime.members.len()];
+    for tick in 0..300_u64 {
+        integrate(&mut runtime, tick);
+        if tick >= 260 {
+            for (track, m) in tracks.iter_mut().zip(&runtime.members) {
+                track.push([m.pos[0], m.pos[2]]);
+            }
+        }
+    }
+    let jittery: Vec<_> = tracks
+        .iter()
+        .enumerate()
+        .filter_map(|(member, track)| {
+            let (net, reversals) = window_jitter(track);
+            (net < 0.3 && reversals >= 4).then_some((member, reversals))
+        })
+        .collect();
+    assert!(
+        jittery.is_empty(),
+        "standing bodies that reversed 4+ times in 2 s: {jittery:?}"
+    );
+    // Easing the push must not let the block collapse on itself (the step push
+    // left pairs 0.03 apart in the same block).
+    let mut closest = f64::INFINITY;
+    for (a, first) in runtime.members.iter().enumerate() {
+        for second in &runtime.members[a + 1..] {
+            closest = closest.min(mth::length2(first.pos[0] - second.pos[0], first.pos[2] - second.pos[2]));
+        }
+    }
+    assert!(closest >= 0.4, "closest pair {closest}");
+}
+
+/// The separation push grows from nothing at the body spacing: a body a hair
+/// inside it is nudged, not shoved a tenth of a block.
+#[test]
+fn separation_push_ramps_in_from_the_body_spacing() {
+    let push_at = |gap: f64| {
+        let mut runtime = FormationRuntime::default();
+        single(&mut runtime, 10, 1, 0.0, Order::Hold);
+        single(&mut runtime, 20, 2, gap, Order::Hold);
+        // The second body's slot is where it stands, the first one's is the
+        // spot it stands on: only the push moves it.
+        runtime.neighbours.rebuild(&runtime.members);
+        movement(&mut runtime, 0)[0].abs() * mc_physics::TICK_SECONDS
+    };
+    assert!(push_at(MIN_SPACING - 0.005) < 0.005, "{}", push_at(MIN_SPACING - 0.005));
+    assert!(push_at(MIN_SPACING - 0.08) > 0.0);
+    assert!(push_at(MIN_SPACING - 0.08) < push_at(MIN_SPACING - 0.15));
+    assert!(push_at(0.4) > 0.02);
+}
+
+/// Inside the dead zone a crowded body does not chase its slot; outside it,
+/// and when nothing presses on it, it does.
+#[test]
+fn crowded_body_ignores_a_slot_within_the_dead_zone() {
+    let drive_for = |neighbour: bool, offset: f64| {
+        let mut runtime = FormationRuntime::default();
+        single(&mut runtime, 10, 1, 0.0, Order::Hold);
+        if neighbour {
+            // Beside the body, outside the body spacing: crowding, no push.
+            single(&mut runtime, 20, 1, 0.0, Order::Hold);
+            runtime.members[1].pos[2] = 0.7;
+        }
+        runtime.members[0].pos[0] = offset;
+        runtime.neighbours.rebuild(&runtime.members);
+        movement(&mut runtime, 0)[0]
+    };
+    // Slot at x = 0; the neighbour 0.7 to the side crowds the body.
+    assert_eq!(drive_for(true, -0.1), 0.0, "inside the dead zone");
+    assert!(drive_for(true, -0.3) > 0.0, "outside the dead zone");
+    assert!(drive_for(false, -0.1) > 0.0, "alone it dresses to its slot");
+}
