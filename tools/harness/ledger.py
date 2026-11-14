@@ -113,6 +113,30 @@ def _run_cargo(ctx, tests, tree):
     return results
 
 
+def _run_client(ctx, tests, root):
+    """Run exact client-crate tests {(crate, name)} in the client checkout -> {(crate, name): (state, detail)}.
+
+    A `client:<crate>:<test>` ref is a fix in the client repository: it never builds here, so the
+    checkout is `runtime.sibling_root('client')` (KRASNOKAMEN_CLIENT_ROOT or the sibling repo)."""
+    from . import runtime
+
+    repo = client_repo(root)
+    if not repo.is_dir():
+        return {test: (UNRUNNABLE, f'no client checkout at {repo} (set KRASNOKAMEN_CLIENT_ROOT)') for test in tests}
+    results = {}
+    for crate, name in sorted(tests):
+        argv, env = regressions.tree_build_command(
+            repo, ['cargo', 'test', '-p', crate, '--lib', '--', name, '--exact'])
+        ok, text = _exec(ctx, argv, f'client-{name.rsplit("::", 1)[-1][:24]}', repo, env)
+        if ok and f'test {name} ... ok' in text:
+            results[(crate, name)] = (GREEN, '')
+        elif ok:
+            results[(crate, name)] = (UNRUNNABLE, 'cargo exited zero but ran no matching test')
+        else:
+            results[(crate, name)] = (RED, 'test failed' if ' FAILED' in text else 'no result line (build error or no matching test)')
+    return results
+
+
 def _run_python(ctx, tests, tree):
     """Run exact unittest targets {(module, dotted test)} in `tree` -> {(module, test): (state, detail)}.
 
@@ -306,7 +330,7 @@ def run_refs(ctx, refs, tree, client):
     A failed client run is red only when its receipt carries an explicitly failing verdict for the
     referenced profile check. A timeout, a client that never reached play or any other failure
     without a negative verdict is unrunnable: it is not evidence about the check."""
-    out, cargo, harness, python = {}, set(), [], set()
+    out, cargo, harness, python, client_tests = {}, set(), [], set(), set()
     for ref in refs:
         try:
             kind, first, second = regressions._parse_ref(ref)
@@ -317,6 +341,8 @@ def run_refs(ctx, refs, tree, client):
             cargo.add((first, second))
         elif kind == 'python':
             python.add((first, second))
+        elif kind == 'client':
+            client_tests.add((first, second))
         elif client:
             harness.append(ref)
         else:
@@ -331,6 +357,9 @@ def run_refs(ctx, refs, tree, client):
         if python:
             for (module, test), (state, detail) in _run_python(ctx, python, tree).items():
                 out[f'python:{module}:{test}'] = {'state': state, 'detail': detail}
+        if client_tests:
+            for (crate, name), (state, detail) in _run_client(ctx, client_tests, tree).items():
+                out[f'client:{crate}:{name}'] = {'state': state, 'detail': detail}
     return out
 
 

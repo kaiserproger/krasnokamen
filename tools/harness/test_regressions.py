@@ -608,6 +608,31 @@ regression = ["{ref}"]
 {extra}'''
 
 
+class ClientRefTests(unittest.TestCase):
+    """A client fix's test runs in the client checkout, so a client row can register a real ref."""
+
+    def test_a_client_ref_parses_and_names_crate_and_test(self):
+        ref = 'client:krasnokamen-client:session::actions::fast_click_tests::press_released_before_the_next_tick_still_starts_the_attack'
+        self.assertEqual(regressions._parse_ref(ref),
+                         ('client', 'krasnokamen-client',
+                          'session::actions::fast_click_tests::press_released_before_the_next_tick_still_starts_the_attack'))
+        with self.assertRaises(ValueError):
+            regressions._parse_ref('client:krasnokamen-client')          # no test named
+        with self.assertRaises(ValueError):
+            regressions._parse_ref('client:../evil:crate::test')         # not a crate name
+
+    def test_a_client_ref_is_unrunnable_without_a_client_checkout(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            ctx = profiles.ProfileContext(Path(directory) / 'artifacts')
+            (Path(directory) / 'artifacts').mkdir()
+            ref = 'client:krasnokamen-client:session::actions::fast_click_tests::x'
+            with patch.dict(os.environ, {'KRASNOKAMEN_CLIENT_ROOT': str(root / 'absent')}):
+                out = ledger.run_refs(ctx, [ref], root, False)
+            self.assertEqual(out[ref]['state'], ledger.UNRUNNABLE)
+            self.assertIn('no client checkout', out[ref]['detail'])
+
+
 class LedgerRefContractTests(unittest.TestCase):
     """Every ref in the real ledger resolves: a ref nobody can run is not a regression guard."""
 

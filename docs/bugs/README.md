@@ -52,10 +52,13 @@ failing_first = "not recorded"
 - `failing_first` is optional and, when present, is `reported` or `not recorded`;
   report the actual pre-fix evidence, never infer it from a passing test.
 
-A ref is `cargo:<crate>:<test>`, `harness:<profile>:<scenario|verdict>` or,
-for a fix in the harness/tooling code itself, `python:<dotted module>:<TestClass.test_method>`
-(`ledger promote` runs it with `unittest` in the candidate tree; a module or test it cannot find is
-unrunnable, never green).
+A ref is `cargo:<crate>:<test>` and `harness:<profile>:<scenario|verdict>` for this repository,
+`python:<dotted module>:<TestClass.test_method>` for a fix in the harness/tooling code itself
+(`ledger promote` runs it with `unittest` in the candidate tree), and
+`client:<crate>:<test>` for a fix in the client repository (`ledger promote` runs
+`cargo test -p <crate> --lib -- <test> --exact` in `KRASNOKAMEN_CLIENT_ROOT` or the sibling
+`krasnokamen-client` checkout). A ref the tooling cannot find is unrunnable, never green: a client
+test that does not exist yet at that checkout reports "ran no matching test" rather than passing.
 
 `fix_commit` (optional until promotion) is the lowercase hex id of the commit
 that fixes the row; `promotion` is set only by `ledger promote`, see

@@ -477,6 +477,11 @@ def _parse_ref(ref):
     if len(parts) == 3 and parts[0] == 'harness':
         _check_command(parts[1], parts[2])
         return tuple(parts)
+    # A fix in the client repository: the test runs in the client checkout, not in this one.
+    # `client:<crate>:<test>` (both resolved by cargo in runtime.sibling_root('client')).
+    if (len(parts) == 3 and parts[0] == 'client'
+            and re.fullmatch(r'[A-Za-z0-9_-]+', parts[1]) and re.fullmatch(r'[A-Za-z0-9_:]+', parts[2])):
+        return tuple(parts)
     # A python fix in tools/** has no cargo check and no windowed profile: its own unittest is the
     # regression guard. `python:<dotted module>:<dotted TestClass.test_method>`.
     if (len(parts) == 3 and parts[0] == 'python'
