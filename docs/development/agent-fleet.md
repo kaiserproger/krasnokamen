@@ -67,8 +67,9 @@ memory slots and a GO after the runner dropped both; deleted 2026-11-07).
 #            5 s/10 s/30 s/1 min/5 min steps; two workers burnt 38 and 41 empty
 #            turns, about 12 M tokens each, in one hour; an ended turn stays
 #            idle with zero turns until the wake-up)
-# Turns      read several files in one turn (parallel reads), never one file
-#            per turn (owner, 2026-11-15: LLM time was 22% of 90 agents' day)
+# Turns      batch independent relevant reads into one turn when there are
+#            several; a dependent read may follow (owner, 2026-11-15: LLM time
+#            was 22% of 90 agents' day)
 # Deliver    the result template below
 ```
 
