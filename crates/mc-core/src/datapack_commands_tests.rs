@@ -803,6 +803,24 @@ fn enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clien
     assert_ne!(vanilla_bone_meal.as_deref(), Some("minecraft:diamond"));
     assert_ne!(vanilla_drops, ["minecraft:diamond"]);
     state.outbox.clear();
+    let entity = state
+        .connections
+        .entity_of(crate::boundary::ConnectionId(1))
+        .unwrap();
+    let bone = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:bone").unwrap())
+        .unwrap();
+    let diamond = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+        .unwrap();
+    let player = state.players.get_mut(&entity).unwrap();
+    player.inventory_menu.grid[0] = mc_data::ItemStack::new(bone, 1);
+    player.inventory_menu.reload_recipes(&state.registry.item_rules());
+    assert_ne!(player.inventory_menu.result.item_id, diamond);
     // The cell a joining player's recipes are read from (a core with nobody
     // online still follows the reload).
     let published = Arc::new(std::sync::RwLock::new(Arc::clone(&state.registry)));
@@ -826,6 +844,8 @@ fn enabling_and_disabling_a_pack_installs_its_recipes_and_loot_and_resyncs_clien
     );
     assert_eq!(stone_drops(&state.registry), ["minecraft:diamond"]);
     assert_eq!(state.registry.recipes.len(), recipes_before + 1);
+    assert_eq!(state.players[&entity].inventory_menu.result.item_id, diamond);
+    assert_eq!(state.players[&entity].inventory_menu.grid[0].item_id, bone);
     let player = crate::boundary::ConnectionId(1);
     let sent = state.outbox.get(&player).cloned().unwrap_or_default();
     let announced = sent

@@ -594,7 +594,9 @@ or `t`/`s`/`d`; zero or negative delays are rejected. Schedules survive restart.
 functions and tags at a tick boundary and also **install the changed recipes,
 block loot and predicates**: the registry is rebuilt from the world's start
 content plus the enabled packs, every world adopts it, and each client receives
-the new recipe list and its recipe book again. A candidate with load errors, or
+the new recipe list and its recipe book again. Open crafting outputs are
+recomputed from the new catalog without changing their inputs or cursor.
+A candidate with load errors, or
 with a recipe the server cannot encode, is refused whole and the old packs, selection
 and registry are kept. The enabled/disabled selection is saved with the world,
 so a restart loads the same packs, recipes and loot. A pack that appears on disk is

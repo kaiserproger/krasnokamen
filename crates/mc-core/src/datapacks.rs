@@ -1792,6 +1792,14 @@ pub(crate) fn adopt_registry(state: &mut TickState, registry: Arc<crate::registr
             },
         );
         if let Some(entity) = state.connections.entity_of(connection) {
+            let changes = state
+                .players
+                .get_mut(&entity)
+                .map(|player| player.reload_recipes(&state.registry.item_rules()))
+                .unwrap_or_default();
+            for change in changes {
+                state.push_player(connection, change);
+            }
             crate::advancements::sync_join(state, entity);
         }
     }
