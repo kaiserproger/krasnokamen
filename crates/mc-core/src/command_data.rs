@@ -241,6 +241,18 @@ pub(crate) fn block_image(
             put(&mut fields, &name, value);
         }
     }
+    let vibration = match kind {
+        BlockEntityKind::SculkSensor
+        | BlockEntityKind::CalibratedSculkSensor
+        | BlockEntityKind::SculkCatalyst => crate::sculk::data_fields(state, pos),
+        BlockEntityKind::SculkShrieker => crate::shrieker::data_fields(state, pos),
+        _ => None,
+    };
+    if let Some(vibration) = vibration {
+        for (name, value) in vibration {
+            put(&mut fields, &name, value);
+        }
+    }
     Ok((kind, fields))
 }
 
@@ -318,59 +330,6 @@ pub(crate) fn block_target(context: Context, input: &mut &str) -> Result<BlockPo
     }
     let [x, y, z] = position.map(|v| v.floor() as i32);
     Ok(BlockPos { x, y, z })
-}
-
-/// Resolve an accessor once so command stores and reads use the same owner.
-pub(crate) enum Accessor {
-    Storage(String),
-    Entity(crate::dimensions::Dimension, EntityId),
-    Block(crate::dimensions::Dimension, BlockPos),
-}
-
-impl Accessor {
-    pub(crate) fn parse(
-        state: &TickState,
-        context: Context,
-        input: &mut &str,
-    ) -> Result<Self, String> {
-        match argument(input)? {
-            "storage" => {
-                let name = mc_data::Identifier::parse(argument(input)?)
-                    .map_err(|error| error.to_string())?;
-                Ok(Self::Storage(name.to_string()))
-            }
-            "entity" => {
-                let id = single_entity(state, context, argument(input)?)?;
-                let (dimension, _) =
-                    crate::dimensions::travel::locate(state, id).ok_or("No entity was found")?;
-                Ok(Self::Entity(dimension, id))
-            }
-            "block" => Ok(Self::Block(
-                context.dimension,
-                block_target(context, input)?,
-            )),
-            _ => Err("Expected storage, entity or block".into()),
-        }
-    }
-
-    pub(crate) fn read(&self, state: &TickState) -> Result<Tag, String> {
-        match self {
-            Self::Storage(name) => Ok(state
-                .command_storage
-                .get(name)
-                .cloned()
-                .unwrap_or_else(|| Tag::Compound(Vec::new()))),
-            Self::Entity(dimension, id) => entity(
-                crate::dimensions::travel::world(state, *dimension)
-                    .ok_or("Entity dimension unavailable")?,
-                *id,
-            ),
-            Self::Block(dimension, pos) => block(
-                crate::dimensions::travel::world(state, *dimension).ok_or("Unknown dimension")?,
-                *pos,
-            ),
-        }
-    }
 }
 
 /// The NBT of an `entity <selector>` or `block <x> <y> <z>` data target, with
