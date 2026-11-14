@@ -3218,9 +3218,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:129"
-regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::axolotl_gill_fans_and_tail_are_flat_vanilla_planes"]
-fix_commit = "client:4092ac53"
-repro_check = "candidate: same real revert run (red); cod/salmon/pufferfish parts stay blocked on the shared animation contract; area=client, real-client check required"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::axolotl_gill_fans_and_tail_are_flat_vanilla_planes", "client:krasnokamen-client:entities::krasnokamen_models::tests::post_rc4_reauthored_rigs_keep_their_reference_silhouettes"]
+fix_commit = "client:92dcb25d"
+repro_check = "candidate: same real revert run (red); cod/salmon/pufferfish parts stay blocked on the shared animation contract; area=client, real-client check required; round 3 adds cod (client:92dcb25d) with its real revert control; salmon, tropical_fish and the adult pufferfish are deliberately unchanged - vanilla 26.1.2 samples outside the 32x32 atlas and adopting them needs the 26.3 dump and a decision on out-of-atlas UVs in the shared checker (receipts/XHarnessGates/fish-uv-evidence.md); area=client, candidate: real-client check required"
 [[bug]]
 id = "MODEL-OPUS-10"
 title = "Hoglin ears and tusks, baby bee limbs, guardian spikes and strider bristles or proportions are missing or malformed"
@@ -3229,9 +3229,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:135"
-regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::hoglin_strider_and_bee_keep_their_signature_parts"]
-fix_commit = "client:4092ac53"
-repro_check = "candidate: same real revert run (red); guardian/elder_guardian blocked on named-part animation; area=client, real-client check required"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::hoglin_strider_and_bee_keep_their_signature_parts", "client:krasnokamen-client:entities::animation_tests::animation_roleless_named_parts_move_without_erasing_authored_orientation"]
+fix_commit = "client:92dcb25d"
+repro_check = "candidate: same real revert run (red); guardian/elder_guardian blocked on named-part animation; area=client, real-client check required; round 3 adds guardian/elder_guardian (client:92dcb25d) with its real revert control; area=client, candidate: real-client check required"
 [[bug]]
 id = "MODEL-OPUS-11"
 title = "Allay, rabbit, fox, panda, vex and horse family rigs have incorrect silhouettes or sizes"
@@ -3240,9 +3240,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:142"
-regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::rabbit_fox_panda_and_vex_shapes_match_the_vanilla_proportions"]
-fix_commit = "client:4092ac53"
-repro_check = "candidate: same real revert run (red); allay/horse family blocked on the bone inventory; area=client, real-client check required"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::rabbit_fox_panda_and_vex_shapes_match_the_vanilla_proportions", "client:krasnokamen-client:entities::asset_model_regression_tests::adult_horse_rig_has_vanilla_equine_proportions", "client:krasnokamen-client:entities::equipment::tests::horse_overlay_joints_follow_authored_horse_pose"]
+fix_commit = "client:92dcb25d"
+repro_check = "candidate: same real revert run (red); allay/horse family blocked on the bone inventory; area=client, real-client check required; round 3 adds the horse family (client:92dcb25d, vanilla bones) with a real revert control (receipts/XHarnessGates/client-r3-*.log, models/audit-r3-after.json); area=client, candidate: real-client check required"
 [[bug]]
 id = "MODEL-OPUS-12"
 title = "Vindicator samples the wrong texture regions."
