@@ -7,7 +7,7 @@ use mc_nbt::Tag;
 fn anvil_import_ignores_a_malformed_variant_and_keeps_a_valid_one() {
     let dir = tempfile::tempdir().unwrap();
     let source = crate::projectile_import_tests::projectile_anvil_source(dir.path());
-    let items = crate::test_support::registry().unwrap().items;
+    let items = std::sync::Arc::clone(&crate::test_support::registry().unwrap().items);
     let chicken = uuid::Uuid::from_u128(0xc41c);
     let pig = uuid::Uuid::from_u128(0x9199);
     let animal = |id: &str, uuid, wire_id, variant: Tag| mc_data::entity_nbt::VanillaEntity {

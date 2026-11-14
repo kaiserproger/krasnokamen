@@ -116,3 +116,11 @@ No new packet ID or layout is introduced. The local command receipt is
 Adjacent 26.1.2/26.2 clients retain their existing generic-swing downgrade;
 only 26.3 carries these timing/type semantics. NONE is omitted for 26.1.2/26.2
 because their generic arm animation cannot represent a no-swing stagger.
+
+The 26.3 `SwingCommand` and `ArgumentTypeInfos` registrations were inspected
+with `javap` (`receipts/PortB4/REPORT.md` in the work root): `/swing` takes
+optional targets, `mainhand`/`offhand`, animation (`none`, `whack`, `stab`;
+default `whack`) and duration (default 6 ticks); 26.1.2 and 26.2 have no
+animation or duration children. Its `minecraft:swing_animation` argument is
+registry ID 60 and is translated to a Brigadier word for older clients that
+lack that parser. Real-client G2 is separate from these wire tests.

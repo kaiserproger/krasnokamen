@@ -534,8 +534,8 @@ pub fn open_refusal(
              export-anvil` (binary `solaris` in the release archive, `solaris-v2` from \
              source) and import the export with `krasnokamen world import-anvil` into a \
              directory that does not exist yet; blocks, containers, entities and players \
-             carry over, but plugin state, settlements and the block log are lost and \
-             pre-rename solaris:* entity data is kept but not read"
+             carry over and the import renames the export's solaris:* fields to the names \
+             this build reads, but plugin state, settlements and the block log are lost"
         ));
     }
     CoreError::Storage(error.to_string())

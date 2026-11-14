@@ -584,5 +584,78 @@ fn cancelling_a_finished_dependency_cancels_the_unfinished_rest_of_its_order() {
     assert_eq!(policy.cancelled, 1);
 }
 
+/// A second bound resident standing away from the workshop.
+fn second_resident(town: &mut Village) -> (crate::entities::EntitySlot, Uuid) {
+    let slot = villager(&mut town.state, [12.5, 201.0, 9.5]);
+    let entity = town.state.entities.body(slot).id;
+    crate::settlements::bind(&mut town.state, town.id, entity).unwrap();
+    (slot, town.state.entities.row(slot).uuid)
+}
+
+#[test]
+fn an_order_whose_worker_dies_passes_to_a_free_resident_and_finishes() {
+    let mut town = village(&[("minecraft:wheat", 9)]);
+    let (slot, heir) = second_resident(&mut town);
+    let steps = town
+        .submit("bake", "krasnokamen-settlements:bread", 3)
+        .unwrap();
+    assert_eq!(describe(&steps), "bread x3");
+    town.state.entities.body_mut(town.slot).alive = false;
+    for _ in 0..2_000 {
+        if town.jobs()["bake"].delivery_complete() {
+            break;
+        }
+        town.state.tick += 5;
+        if let Some(target) = economy::target(&town.state, Some(town.id), heir) {
+            let pos = [
+                f64::from(target.x) + 0.5,
+                f64::from(target.y),
+                f64::from(target.z) + 0.5,
+            ];
+            town.state.entities.set_pos(slot, pos);
+        }
+        economy::tick(&mut town.state);
+    }
+    let job = &town.jobs()["bake"];
+    assert_eq!(job.worker, heir, "the dead worker's order passes on");
+    assert_eq!((job.done, job.receipts.len()), (3, 3), "{job:?}");
+    assert!(job.delivery_complete(), "{job:?}");
+    assert_eq!(town.stored("minecraft:bread"), 3);
+    assert_eq!(town.stored("minecraft:wheat"), 0);
+    assert_eq!(
+        town.carried("minecraft:wheat"),
+        0,
+        "the dead worker took nothing"
+    );
+    validate_record(town.state.settlements.get(town.id).unwrap()).unwrap();
+}
+
+#[test]
+fn resuming_a_held_order_of_a_dead_worker_hands_it_to_a_free_resident() {
+    let mut town = village(&[("minecraft:wheat", 3)]);
+    let (_, heir) = second_resident(&mut town);
+    town.submit("bake", "krasnokamen-settlements:bread", 1)
+        .unwrap();
+    let pause = production::Request::Pause { job: "bake".into() };
+    economy::execute(
+        &mut town.state,
+        town.id,
+        economy::Request::Production(pause),
+    )
+    .unwrap();
+    town.state.entities.body_mut(town.slot).alive = false;
+    let resume = production::Request::Resume { job: "bake".into() };
+    assert_eq!(
+        economy::execute(
+            &mut town.state,
+            town.id,
+            economy::Request::Production(resume)
+        ),
+        Ok(())
+    );
+    let job = &town.jobs()["bake"];
+    assert_eq!((job.worker, job.paused.as_deref()), (heir, None));
+}
+
 #[path = "autocraft_delivery_tests.rs"]
 mod output_delivery;

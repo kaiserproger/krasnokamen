@@ -849,6 +849,9 @@ pub(super) fn convert(
     let mut metadata = mc_core::level_metadata::MetadataTags::new();
     let level_path = source.join("level.dat");
     let mut level = read_nbt(&level_path)?;
+    stats
+        .pre_rename
+        .rename(&mut level, &|| "level.dat".into())?;
     let level_version = source_version(&level, &level_path)?;
     stats.data_version = level_version.max(mc_world::anvil::TARGET_DATA_VERSION);
     let data = field(&level, "Data")?.ok_or_else(|| fail("level.dat: missing Data"))?;
@@ -954,7 +957,8 @@ pub(super) fn convert(
     for path in METADATA.into_iter().filter(|path| *path != "level.dat") {
         let relative = PathBuf::from(path);
         if paths.contains(&relative) {
-            let tag = read_nbt(&source.join(path))?;
+            let mut tag = read_nbt(&source.join(path))?;
+            stats.pre_rename.rename(&mut tag, &|| path.into())?;
             check_version(&tag, &source.join(path))?;
             metadata.insert(path.into(), tag);
             consumed.insert(relative);
@@ -978,6 +982,9 @@ pub(super) fn convert(
         }
         let path = source.join(relative);
         let mut tag = read_nbt(&path)?;
+        stats
+            .pre_rename
+            .rename(&mut tag, &|| relative.display().to_string())?;
         let version = saved_data_source_version(&tag, &path)?;
         // No saved-data payload fixer is registered between 4790 and 5023.
         // File-only hardcore spectator settings do not change these codecs.
@@ -1334,6 +1341,9 @@ pub(super) fn convert(
                 .binary_search(&entities.join(relative.file_name().expect("region filename")))
                 .is_ok();
             visit(&path, |pos, mut tag, _| {
+                stats.pre_rename.rename(&mut tag, &|| {
+                    format!("{}#chunk({}, {})", relative.display(), pos.x, pos.z)
+                })?;
                 let from = source_version(&tag, &path)?;
                 // `__context.generator` is the worldgen generator type for this
                 // dimension (absent stays absent: vanilla defaults to empty and
@@ -1705,6 +1715,9 @@ pub(super) fn convert(
         {
             let path = source.join(relative);
             visit(&path, |pos, mut tag, _| {
+                stats.pre_rename.rename(&mut tag, &|| {
+                    format!("{}#chunk({}, {})", relative.display(), pos.x, pos.z)
+                })?;
                 let from = source_version(&tag, &path)?;
                 let report = upgrade::upgrade_entity_region(&mut tag, from).map_err(|error| {
                     fail(format!(
@@ -2037,6 +2050,9 @@ pub(super) fn convert(
         }
         let path = source.join(relative);
         let mut tag = read_nbt(&path)?;
+        stats
+            .pre_rename
+            .rename(&mut tag, &|| relative.display().to_string())?;
         let source_location = player_missing_dimension_source(&tag)?;
         // Versionless players report -1 (vanilla PlayerDataStorage/NbtUtils
         // default), NOT 1343: -1 runs the full legacy fixer chain, while

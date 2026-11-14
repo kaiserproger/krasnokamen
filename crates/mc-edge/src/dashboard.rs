@@ -1217,7 +1217,7 @@ fn prometheus(state: &DashboardState) -> String {
         "krasnokamen_pump_skipped_ticks_total",
         snapshot.pump_skipped_ticks,
     );
-    if let Some(bytes) = resident_memory_bytes() {
+    if let Some(bytes) = crate::host_telemetry::resident_memory_bytes() {
         prometheus_gauge(&mut out, "krasnokamen_process_resident_memory_bytes", bytes);
     }
     let load_metrics = state.load_snapshot(None);

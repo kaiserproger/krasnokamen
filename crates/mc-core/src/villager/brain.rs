@@ -730,28 +730,53 @@ fn nearest_threat(
 /// Recover an awake resident embedded in actual block collision geometry.
 /// Unloaded cells do not authorize relocation; candidates are bounded to two
 /// blocks and must have the navigator's normal supported standing clearance.
+/// A suffocating block at eye height is vanilla's in-wall case: the resident
+/// takes suffocation damage there and is not moved; only geometry that cannot
+/// suffocate (stairs, slabs) is recovered from.
 fn recover_penetration(state: &mut TickState, slot: EntitySlot) {
     let pos = state.entities.pos(slot);
     let body = state.entities.body(slot);
     let width = body.half_width;
     let height = body.height;
+    // Eye cell as `contact_hazards` reads it for suffocation.
+    let eye = state.world.block_at(
+        pos[0].floor() as i32,
+        (pos[1] + height * 0.9).floor() as i32,
+        pos[2].floor() as i32,
+    );
+    if eye.is_some_and(|id| state.registry.light.suffocating(id) == Some(true)) {
+        return;
+    }
     let bounds = [
-        pos[0] - width, pos[1], pos[2] - width,
-        pos[0] + width, pos[1] + height, pos[2] + width,
+        pos[0] - width,
+        pos[1],
+        pos[2] - width,
+        pos[0] + width,
+        pos[1] + height,
+        pos[2] + width,
     ];
     let mut embedded = false;
     for x in bounds[0].floor() as i32..=bounds[3].floor() as i32 {
         for y in (bounds[1].floor() as i32 - 1)..=bounds[4].floor() as i32 {
             for z in bounds[2].floor() as i32..=bounds[5].floor() as i32 {
-                let Some(id) = state.world.block_at(x, y, z) else { return };
-                let Some(shapes) = state.registry.collision_boxes.get(id as usize) else { return };
+                let Some(id) = state.world.block_at(x, y, z) else {
+                    return;
+                };
+                let Some(shapes) = state.registry.collision_boxes.get(id as usize) else {
+                    return;
+                };
                 for shape in shapes.iter() {
                     let b = shape.as_blocks();
                     let obstacle = [
-                        f64::from(x) + b[0], f64::from(y) + b[1], f64::from(z) + b[2],
-                        f64::from(x) + b[3], f64::from(y) + b[4], f64::from(z) + b[5],
+                        f64::from(x) + b[0],
+                        f64::from(y) + b[1],
+                        f64::from(z) + b[2],
+                        f64::from(x) + b[3],
+                        f64::from(y) + b[4],
+                        f64::from(z) + b[5],
                     ];
-                    embedded |= mc_physics::aabb_intersects_deflated_obstacle(bounds, obstacle, 1e-6);
+                    embedded |=
+                        mc_physics::aabb_intersects_deflated_obstacle(bounds, obstacle, 1e-6);
                 }
             }
         }
@@ -764,7 +789,11 @@ fn recover_penetration(state: &mut TickState, slot: EntitySlot) {
     for dx in -2..=2 {
         for dy in -2..=2 {
             for dz in -2..=2 {
-                let cell = BlockPos { x: origin.x + dx, y: origin.y + dy, z: origin.z + dz };
+                let cell = BlockPos {
+                    x: origin.x + dx,
+                    y: origin.y + dy,
+                    z: origin.z + dz,
+                };
                 if let Some(point) = standing(&state.world, &state.registry, cell, width, height) {
                     let d = distance(pos, point);
                     if best.is_none_or(|(_, previous)| d < previous) {
@@ -813,7 +842,13 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         }
         let slot = cache.residents[index];
         let id = cache.resident_data[index].id;
-        if state.entities.row(slot).villager.as_ref().is_some_and(|v| !v.sleeping) {
+        if state
+            .entities
+            .row(slot)
+            .villager
+            .as_ref()
+            .is_some_and(|v| !v.sleeping)
+        {
             recover_penetration(state, slot);
         }
         let merchant_busy = cache.merchants.binary_search(&id).is_ok();
