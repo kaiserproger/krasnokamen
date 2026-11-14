@@ -52,6 +52,9 @@ pub(crate) const STALL_TICKS: u64 = 200;
 pub(crate) const SOLDIER_KNOCKBACK_RESISTANCE: f64 = 0.8;
 /// Pursuers close with ranks this share of the marching depth apart (a block, not two).
 const PURSUIT_RANK_SQUEEZE: f64 = 0.5;
+/// A soldier stepping in on an attacker he answers (`Member::close_on`) moves
+/// at a pressing file's surge pace (blocks per tick), as a pulse does.
+const CLOSE_STEP: f64 = 0.10;
 
 /// Whether `pos` lies within `margin` blocks of the battle bounds, or past them.
 pub(crate) fn near_bounds(
@@ -188,6 +191,9 @@ pub(crate) struct Member {
     pub rallied: bool,
     /// Position at the start of the current stall window, (x, z).
     pub anchor: [f64; 2],
+    /// Where he steps to strike an attacker he answers (retaliation.rs),
+    /// instead of his slot; set for one tick at a time.
+    pub close_on: Option<[f64; 3]>,
 }
 
 #[derive(Debug)]
@@ -378,6 +384,7 @@ impl FormationRuntime {
                 nerve: nerve(id.0, rank, ranks),
                 rallied: false,
                 anchor: [pos[0], pos[2]],
+                close_on: None,
             });
         }
         self.regiments.push(Regiment {
@@ -989,6 +996,11 @@ impl FormationRuntime {
             }
             return (target, 0.2);
         }
+        if let Some(at) = m.close_on
+            && !m.wounded
+        {
+            return ([at[0], m.pos[1], at[2]], CLOSE_STEP);
+        }
         if r.spec.order == Order::Pursue
             && r.enemy_routing
             && !m.wounded
@@ -1054,7 +1066,11 @@ impl FormationRuntime {
     pub fn heading_target(&self, index: usize) -> [f64; 3] {
         let m = &self.members[index];
         let r = &self.regiments[m.regiment];
-        if m.routing || m.wounded || (r.spec.order == Order::Pursue && r.enemy_routing) {
+        if m.routing
+            || m.wounded
+            || m.close_on.is_some()
+            || (r.spec.order == Order::Pursue && r.enemy_routing)
+        {
             return self.destination(index).0;
         }
         slot_target(r, m.file, m.rank)

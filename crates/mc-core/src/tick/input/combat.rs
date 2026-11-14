@@ -27,6 +27,23 @@ pub(in crate::tick) fn attack(
     {
         return;
     }
+    // Vanilla's ordinary entity attack refuses piercing weapons; those use STAB.
+    let rules = state.registry.item_rules();
+    if state
+        .players
+        .get(&entity)
+        .and_then(|player| {
+            player
+                .inventory
+                .slots
+                .get(usize::from(player.inventory.selected.min(8)))
+        })
+        .filter(|held| !held.is_empty())
+        .and_then(|held| rules.facts.facts_for_stack(held, rules.items))
+        .is_some_and(|facts| facts.piercing_weapon.is_some())
+    {
+        return;
+    }
     if !within_entity_reach(state, entity, *target) {
         return;
     }
