@@ -7282,6 +7282,30 @@ fn orb_despawns_at_six_thousand_ticks() {
 }
 
 #[test]
+fn no_gravity_experience_orb_hovers_without_suppressing_normal_gravity() {
+    for no_gravity in [false, true] {
+        let (mut state, _, pos) = flat_player_fixture();
+        let at = [pos[0] + 4.0, pos[1] + 8.0, pos[2]];
+        let mut spawned = Vec::new();
+        crate::experience_orbs::award(&mut state, at, 3, &mut spawned);
+        let slot = state.entities.slot_of(spawned[0]).unwrap();
+        state.entities.set_vel(slot, [0.0; 3]);
+        state.entities.row_mut(slot).controls.no_gravity = no_gravity;
+        crate::experience_orbs::run(
+            &mut state,
+            &mut crate::boundary::ChangeSet::default(),
+            &mut Vec::new(),
+        );
+        let y = state.entities.pos(slot)[1];
+        if no_gravity {
+            assert_eq!(y, at[1]);
+        } else {
+            assert!(y < at[1]);
+        }
+    }
+}
+
+#[test]
 fn locked_session_collects_no_xp_and_orb_stays() {
     let (mut state, player, pos) = flat_player_fixture();
     state.require_plugin_login = true;

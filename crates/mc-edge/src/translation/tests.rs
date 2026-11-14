@@ -59,16 +59,44 @@ fn geyser_step(upper: i32, lower: i32) -> Step {
     use adjacent::tables::IdMap;
     let reports = Reports::parse(PACKETS, "{}", "{}").unwrap();
     let mut names = vec![String::new(); 81];
-    for (name, id) in [("geyser", 7), ("geyser_base", 8), ("geyser_poof", 9), ("geyser_plume", 10), ("splash", if upper == 777 { 80 } else { 77 }), ("poof", if upper == 777 { 69 } else { 66 })] {
+    for (name, id) in [
+        ("geyser", 7),
+        ("geyser_base", 8),
+        ("geyser_poof", 9),
+        ("geyser_plume", 10),
+        ("splash", if upper == 777 { 80 } else { 77 }),
+        ("poof", if upper == 777 { 69 } else { 66 }),
+    ] {
         names[id] = format!("minecraft:{name}");
     }
     let source = if upper == 777 {
-        vec![("geyser", 7), ("geyser_base", 8), ("geyser_poof", 9), ("geyser_plume", 10), ("splash", 80), ("poof", 69)]
+        vec![
+            ("geyser", 7),
+            ("geyser_base", 8),
+            ("geyser_poof", 9),
+            ("geyser_plume", 10),
+            ("splash", 80),
+            ("poof", 69),
+        ]
     } else {
-        vec![("geyser", 7), ("geyser_base", 8), ("geyser_poof", 9), ("geyser_plume", 10), ("splash", 77), ("poof", 66)]
+        vec![
+            ("geyser", 7),
+            ("geyser_base", 8),
+            ("geyser_poof", 9),
+            ("geyser_plume", 10),
+            ("splash", 77),
+            ("poof", 66),
+        ]
     };
     let target = if lower == 776 {
-        vec![("geyser", 7), ("geyser_base", 8), ("geyser_poof", 9), ("geyser_plume", 10), ("splash", 77), ("poof", 66)]
+        vec![
+            ("geyser", 7),
+            ("geyser_base", 8),
+            ("geyser_poof", 9),
+            ("geyser_plume", 10),
+            ("splash", 77),
+            ("poof", 66),
+        ]
     } else {
         vec![("splash", 70), ("poof", 59)]
     };
@@ -80,7 +108,11 @@ fn geyser_step(upper: i32, lower: i32) -> Step {
             packets: Packets::new(&reports, &reports),
             particle_names: names,
             particles: IdMap::by_name(source, target, |_| None),
-            block_states: IdMap::by_name([("stone", 90), ("stone2", 40)], [("stone", 40), ("stone2", 7)], |_| None),
+            block_states: IdMap::by_name(
+                [("stone", 90), ("stone2", 40)],
+                [("stone", 40), ("stone2", 7)],
+                |_| None,
+            ),
             ..Tables::default()
         })),
     }
@@ -99,13 +131,21 @@ fn full_chain_geyser_options_translate_and_session_remains_usable() {
         let mut input = vec![kind];
         input.extend(options);
         input.extend([1, 0]);
-        for value in [1.0, 2.0, 3.0] { input.write_f64(value); }
-        for value in [0.25, 0.5, 0.75, 1.0, 1.0, 1.0] { input.write_f32(value); }
+        for value in [1.0, 2.0, 3.0] {
+            input.write_f64(value);
+        }
+        for value in [0.25, 0.5, 0.75, 1.0, 1.0, 1.0] {
+            input.write_f32(value);
+        }
         input.extend([2, 0]);
         let (_, actual) = session.clientbound(11, &input).unwrap().unwrap();
         let mut expected = vec![1, 0];
-        for value in [1.0, 2.0, 3.0] { expected.write_f64(value); }
-        for value in [0.25, 0.5, 0.75, 1.0] { expected.write_f32(value); }
+        for value in [1.0, 2.0, 3.0] {
+            expected.write_f64(value);
+        }
+        for value in [0.25, 0.5, 0.75, 1.0] {
+            expected.write_f32(value);
+        }
         expected.write_i32(2);
         expected.push(target);
         assert_eq!(actual, expected, "geyser kind {kind}");
@@ -301,6 +341,15 @@ fn endpoint(root: &Path, version: Version) {
         "recipe_display",
     ] {
         registries.insert(format!("minecraft:{name}"), json!({"entries":{"minecraft:stone":{"protocol_id":0},"minecraft:brick":{"protocol_id":1}}}));
+    }
+    if version.protocol == 777 {
+        let entries: serde_json::Map<String, serde_json::Value> =
+            mc_data::builtin_sounds_26_3::names()
+                .iter()
+                .enumerate()
+                .map(|(id, name)| (name.clone(), json!({"protocol_id":id})))
+                .collect();
+        registries.insert("minecraft:sound_event".into(), json!({"entries":entries}));
     }
     write_json(root, "reports/registries.json", registries.into());
     for (registry, directory) in mc_data::KNOWN_REGISTRIES {

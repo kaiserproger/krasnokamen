@@ -100,6 +100,82 @@ turn when terrain is missing/unwalkable or the height change is too large;
 It is not flying, teleport spam, or a promise that every client advances
 indefinitely through terrain. Login includes operator-assisted safe landing.
 
+### Noncanonical resident-scale variants
+
+`scale-{100k,500k,1m}-{all-active,mostly-resting,sparse-active}` is a
+separate public-command recipe, not a replacement for either official heavy
+profile. The all-active and sparse-active recipes use the same eight mob
+species as the native control; mostly-resting uses 90% cows and 10% zombies
+and rejects a window unless more motion rows actually rested than ran fully.
+The motion rest fence treats held stacks as potential temptation only when a
+registered temptable blueprint lists that item as breeding food; unrelated edit
+materials do not make every temptable animal execute its full decision row.
+Sparse-active requests 10% of residents active. An observer is assigned to
+every advertised active pen, while adjacent forced-chunk tickets retain the
+cold pens without ticking their entity columns. No AI or damage relief is
+added. This setup is a stress fixture, not a representative settlement.
+
+Each source-tick sample carries opt-in per-region active-chunk and marked-cohort
+motion admission/full/rest counts. The runner checks the exact tick ID, every
+region's expected active chunk coverage and marked admissions, an exact
+full-plus-resting partition of motion admissions, and a lower bound
+on all live resident rows. The saved snapshot separately checks typed fixture
+UUIDs before and after the run. Live resident totals include players and natural
+entities; they are not represented as exact fixture-only counts. Edge fanout
+also records entity-viewer tracked pairs tagged with their source tick; pairs
+are not distinct entities or proof of packet delivery. Before warmup, one
+opt-in cold capture deduplicates the currently tracked non-self IDs after the
+all-viewer pump and requires a matching core source-tick sample. It is capped
+at 1,000,000 pairs: overflow blocks the row, records a null unique count and
+reports the required pair visits and potential ID count. The resulting unique count is
+pre-warmup server-tracked state, not measured-window, geometric or delivered
+visibility. Results are noncanonical and make no capacity claim.
+
+For each name, `--smoke --smoke-residents 80` uses the same recipe shape at a
+smaller resident count, 2 s warmup and 5 s observation. This is a lifecycle
+check only, not a measurement of the advertised ladder size. Full recipes keep
+the ordinary 30 s/120 s windows and seed 42; resource failure or missing
+coverage fails the run rather than shrinking it.
+
+The scale profiles also accept one noncanonical stress selector:
+
+- `--projectiles 0|100|1000` pulses a fixed-size bank of ordinary arrow-filled
+  dispensers. The count is a required source-tick **peak** of flight candidates,
+  not sustained concurrency; the unarmed control retains the same bank.
+- `--xp-orbs 0|10000|100000` uses banks of ordinary experience-bottle
+  dispensers. The count is a required peak of active orb bodies processed by the
+  XP owner, not the number of bottles offered or a sustained-orb claim.
+- `--containers 1000|100000` creates that many chests and five brewing stands.
+  Public item-replace commands supply the stands; periodic water-bottle inputs
+  keep useful brewing work present. The source receipt checks discovery counts
+  by region, active stands, and a tick where all five actual timers advance.
+- `--productive-npcs` is unavailable for every value, including `0`, until
+  CivSim 3/3 and the actual brain-owner callsites are integrated. The following
+  describes the retained acceptance requirements, not an available workload.
+- `--productive-npcs 0|1000|10000` replaces the same number of background mobs
+  with unbound villagers in isolated farm cells. Each cell has a composter and
+  one crop; cells are separated beyond local harvesting reach and public inputs
+  periodically restore mature wheat. The receipt requires each occupied cell
+  to change during the villager-brain phase in the measured interval. This
+  proves isolated crop work, not certified-settlement stock delivery.
+- `--damage-victims 1|1000|10000|100000` replaces that many background mobs
+  with isolated cows over powered arrow dispensers. The cows are summoned with
+  100 health to survive repeated real damage; this is an authored stress
+  condition, not vanilla health or a canonical control. The receipt requires
+  the requested number of distinct accepted victims in a single source tick
+  and separately reports accepted reactive pieces, not command offers.
+- `--map-frames 0|10000|100000` replaces background mobs with item frames.
+  During preparation an ordinary protocol player creates a new filled map in
+  survival for each batch of at most 256 frames, then switches to creative and
+  interacts with each summoned frame; received item metadata is required.
+  Saved before/after images must contain the same frame-to-map identities and
+  native map records validated by the server's recovery decoder.
+
+For a small lifecycle check, `--smoke` permits smaller positive stress counts
+and `--smoke-residents`; it is not evidence for the named full-size points.
+The runner rejects missing source counters, insufficient observed peaks and
+dropped trigger writes. Requested work is never substituted for observation.
+
 ### Windows and metric definitions
 
 - A fresh server process opens the prepared world. Fixture generation and all
@@ -198,6 +274,15 @@ Public input-echo fences during preparation share the bot's total
 `--prepare-seconds` readiness deadline rather than a separate per-batch timeout.
 Regional fixture clients use open-loop readiness to complete their setup before
 Ready; no Run event is issued and their required schedule is never started.
+The setup client executes fixture commands before selecting its landing, retaining
+received chunk states and updates so the landing uses the final received support
+and clearance rather than terrain that the fixture later replaced.
+After setup commands, the operator requests a viewer-world fence. The edge
+waits until the post-request snapshot has no owed block or chunk repairs and
+queues the response behind those world frames; the bot processes them before
+selecting its landing. The separate chat echo fences input order only.
+Scale-pen spawn centers are inset from the walls for the widest cohort body
+(the 1.4-block spider), including at full 1,024-resident grid capacity.
 The bot continues processing packets and replying to heartbeats while waiting
 for a slow `save-all flush` to complete; measured open-loop demand is unchanged.
 

@@ -145,8 +145,12 @@ fn give_all_new_26_3_components_survive_saved_inventory() {
 }
 
 #[test]
-fn give_death_protection_admits_empty_actions_and_rejects_custom_actions() {
-    for value in ["{}", "{death_effects:[]}"] {
+fn give_death_protection_admits_actions_and_rejects_invalid_data() {
+    for value in [
+        "{}",
+        "{death_effects:[]}",
+        "{death_effects:[{type:'minecraft:clear_all_effects'}]}",
+    ] {
         let stack = argument(&format!("give @s stick[death_protection={value}]"))
             .stack(&registry().items)
             .unwrap();
@@ -156,16 +160,11 @@ fn give_death_protection_admits_empty_actions_and_rejects_custom_actions() {
             .unwrap();
         assert_eq!(restored, stack);
     }
-    let error = argument(
-        "give @s stick[death_protection={death_effects:[{type:'minecraft:clear_all_effects'}]}]",
-    )
-    .stack(&registry().items)
-    .unwrap_err();
-    assert!(
-        error.contains("nonempty custom death_protection"),
-        "{error}"
-    );
-    for value in ["1", "{death_effects:1}"] {
+    for value in [
+        "1",
+        "{death_effects:1}",
+        "{death_effects:[{type:'minecraft:play_sound',sound:'example:unregistered'}]}",
+    ] {
         assert!(
             argument(&format!("give @s stick[death_protection={value}]"))
                 .stack(&registry().items)

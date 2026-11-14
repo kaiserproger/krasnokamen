@@ -40,13 +40,25 @@ impl Profile {
         );
         let (upper_reports, upper_data) = super::snapshots::load_side(&root.join("upper"), upper)?;
         let (lower_reports, lower_data) = super::snapshots::load_side(&root.join("lower"), lower)?;
-        let mut tables = Tables::new(&upper_reports, &lower_reports, &upper_data, &lower_data)?;
+        let mut tables = Tables::new(
+            &upper_reports,
+            &lower_reports,
+            &upper_data,
+            &lower_data,
+            upper,
+        )?;
         tables.formats = tables::Formats { upper, lower };
         tables.configure_metadata(&upper_reports)?;
         let upgrade = if (upper, lower) == (777, 776) {
             // Build the opposite mapping from source snapshots, never by
             // inverting a nearest/polyfilled forward entry.
-            let mut tables = Tables::new(&lower_reports, &upper_reports, &lower_data, &upper_data)?;
+            let mut tables = Tables::new(
+                &lower_reports,
+                &upper_reports,
+                &lower_data,
+                &upper_data,
+                lower,
+            )?;
             tables.formats = tables::Formats {
                 upper: lower,
                 lower: upper,

@@ -49,6 +49,85 @@ fn nested_templates_are_item_first_not_optional_slots() {
 }
 
 #[test]
+fn empty_death_protection_needs_no_effect_registry_mapping() {
+    let t = tables(&["death_protection"]);
+    let source = [1, 10, 1, 0, 0, 0];
+    let mut input = source.as_slice();
+    let mut legacy = Vec::new();
+    stack(&t, To::Legacy, &mut input, &mut legacy).unwrap();
+    assert!(input.is_empty());
+    assert_eq!(legacy, [1, 3, 1, 0, 0, 0]);
+}
+
+#[test]
+fn death_protection_remaps_action_effect_and_sound_holders_both_ways() {
+    let mut t = tables(&["death_protection"]);
+    t.registry_ids.insert(
+        "consume_effect_type".into(),
+        IdMap::by_name(
+            [("remove", 1), ("sound", 4)],
+            [("remove", 4), ("sound", 1)],
+            |_| None,
+        ),
+    );
+    t.registry_ids.insert(
+        "mob_effect".into(),
+        IdMap::by_name([("speed", 2)], [("speed", 8)], |_| None),
+    );
+    t.sounds = IdMap::by_name([("bell", 5)], [("bell", 7)], |_| None);
+    // Two actions: one direct effect holder set, then one registered sound holder.
+    let source = [1, 10, 1, 0, 0, 2, 1, 2, 2, 4, 6];
+    let expected = [1, 3, 1, 0, 0, 2, 4, 2, 8, 1, 8];
+    let mut input = source.as_slice();
+    let mut legacy = Vec::new();
+    stack(&t, To::Legacy, &mut input, &mut legacy).unwrap();
+    assert!(input.is_empty());
+    assert_eq!(legacy, expected);
+    let mut input = legacy.as_slice();
+    let mut canonical = Vec::new();
+    stack(&t, To::Canonical, &mut input, &mut canonical).unwrap();
+    assert!(input.is_empty());
+    assert_eq!(canonical, source);
+}
+
+#[test]
+fn death_protection_hidden_effect_limit_matches_canonical_codec_in_both_directions() {
+    let mut t = tables(&["death_protection"]);
+    t.registry_ids.insert(
+        "consume_effect_type".into(),
+        IdMap::by_name([("apply", 0)], [("apply", 0)], |_| None),
+    );
+    t.registry_ids.insert(
+        "mob_effect".into(),
+        IdMap::by_name([("speed", 2)], [("speed", 8)], |_| None),
+    );
+    for depth in [8, 9, 31, 32] {
+        for to in [To::Legacy, To::Canonical] {
+            let (source_item, source_effect, target_item, target_effect) = match to {
+                To::Legacy => (10, 2, 3, 8),
+                To::Canonical => (3, 8, 10, 2),
+            };
+            let mut source = vec![1, source_item, 1, 0, 0, 1, 0, 1, source_effect];
+            for level in 0..=depth {
+                source.extend([0, 1, 0, 1, 1, u8::from(level < depth)]);
+            }
+            source.extend(1.0_f32.to_be_bytes());
+            let mut result = Vec::new();
+            let translated = stack(&t, to, &mut source.as_slice(), &mut result);
+            if depth == 32 {
+                assert!(translated.is_err(), "depth {depth}, {to:?}");
+            } else {
+                translated.unwrap();
+                let mut expected = source;
+                expected[1] = target_item;
+                expected[8] = target_effect;
+                assert_eq!(result, expected, "depth {depth}, {to:?}");
+            }
+        }
+    }
+}
+
+#[test]
 fn pot_decorations_convert_optional_templates_to_four_item_ids() {
     let t = tables(&["pot_decorations"]);
     let body = [1, 10, 1, 0, 0, 1, 10, 1, 0, 0, 0, 1, 11, 1, 0, 0, 0];

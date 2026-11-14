@@ -6,6 +6,7 @@ use super::*;
 pub struct ConnectionRegistry {
     pub(super) next_id: AtomicU64,
     pub(super) inner: parking_lot::Mutex<RegistryInner>,
+    pub(super) setup_fences_pending: AtomicBool,
 }
 
 #[derive(Default)]
@@ -17,6 +18,8 @@ pub(super) struct RegistryInner {
     pub(super) handles: HashMap<ConnectionId, ConnectionHandles>,
     pub(super) names: HashMap<ConnectionId, String>,
     pub(super) view_distances: HashMap<ConnectionId, i32>,
+    /// One operator-requested world-queue fence per connection: (tick, nonce).
+    pub(super) setup_world_fences: HashMap<ConnectionId, (u64, u64)>,
     /// Client locale last admitted to the core (`ClientInformation.language`);
     /// deduplicates Play updates and is cleared on disconnect.
     pub(super) locales: HashMap<ConnectionId, String>,
@@ -43,6 +46,7 @@ impl ConnectionRegistry {
         Self {
             next_id: AtomicU64::new(FIRST_CONNECTION_ID),
             inner: parking_lot::Mutex::new(RegistryInner::default()),
+            setup_fences_pending: AtomicBool::new(false),
         }
     }
 
@@ -243,6 +247,10 @@ impl ConnectionRegistry {
             inner.join_waiters.remove(&id);
             inner.disconnect_reasons.remove(&id);
             inner.view_distances.remove(&id);
+            inner.setup_world_fences.remove(&id);
+            if inner.setup_world_fences.is_empty() {
+                self.setup_fences_pending.store(false, Ordering::Release);
+            }
             inner.locales.remove(&id);
             inner.closers.remove(&id)
         };

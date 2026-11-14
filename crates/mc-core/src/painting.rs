@@ -226,6 +226,7 @@ pub(crate) fn set(state: &mut TickState, slot: EntitySlot, face: u8, variant: u3
         (8, EntityDataValue::Direction(face)),
         (9, EntityDataValue::PaintingVariant(variant)),
     ];
+    crate::entity_controls::sync_no_gravity(appearance, row.controls.no_gravity);
     restore(state, slot);
 }
 pub(crate) fn restore(state: &mut TickState, slot: EntitySlot) {
@@ -287,6 +288,14 @@ pub(crate) fn attack(
         return true;
     };
     if player.spectator() || player.game_mode == crate::commands::GameMode::Adventure {
+        return true;
+    }
+    if crate::entity_controls::blocks_damage(
+        state,
+        slot,
+        crate::survival::DamageKind::Melee,
+        Some(actor),
+    ) {
         return true;
     }
     remove(

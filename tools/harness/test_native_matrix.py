@@ -143,6 +143,21 @@ class NativeMatrixTests(unittest.TestCase):
         self.assertEqual(selects,[1]*7)
         self.assertEqual(lane.custody_boundary.call_count,1)
 
+    def test_sculk_latch_matrix_dispatch_requires_steady_normal_cell(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock, patch
+        from tools.harness.backends import native_matrix_interactions as subject
+        steps = Mock()
+        steps.wait.return_value = {'player': {'x': 0, 'y': 100, 'z': 0, 'on_ground': True}}
+        lane = SimpleNamespace(steps=steps, names=['test'], console=Mock(), custody_boundary=Mock())
+        context = {'player_count': '1', 'network_condition': 'normal', 'server_lifecycle': 'steady'}
+        with patch.object(subject, '_sculk_latch') as latch:
+            subject.run(lane, {'subject': 'redstone.sculk_sensor_signal', 'context': context})
+            latch.assert_called_once_with(steps, (0, 100, 0), fixture=lane.console)
+            with self.assertRaises(NotImplementedError):
+                subject.run(lane, {'subject': 'redstone.sculk_sensor_signal',
+                                   'context': {**context, 'server_lifecycle': 'save_all_checkpoint'}})
+
     def test_ground_custody_copy_is_not_ignored(self):
         from unittest.mock import Mock
         from tools.harness.backends.native_matrix_custody import _no_ground_copy

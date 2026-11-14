@@ -122,6 +122,7 @@ class Session:
         self.failure: dict[str, Any] | None = None
         self.stopping = False
         self.fixture_commands_sent: dict[str, Any] | None = None
+        self.fixture_map_frames: dict[str, Any] | None = None
         self.checkpoints: list[dict[str, Any]] = []
         self.live_complete: dict[str, Any] | None = None
         self.completed_schedule: dict[str, Any] | None = None
@@ -173,6 +174,8 @@ class Session:
                     self.checkpoints.append(event)
                     if len(self.checkpoints) > 4096:
                         del self.checkpoints[0]
+                if event.get("event") == "fixture_map_frames_observed":
+                    self.fixture_map_frames = event
                 if event.get("event") == "login_release":
                     self.login_release = event
                 self.push_event(event)
@@ -208,9 +211,10 @@ class Session:
             raise ClassifiedFailure(outcome, "bot disconnected")
 
 
-    async def http(self, url: str, timeout: float) -> dict[str, Any]:
+    async def http(self, url: str, timeout: float,
+                   bearer_token: str | None = None) -> dict[str, Any]:
         try:
-            return await asyncio.to_thread(scale.http_json, url, timeout)
+            return await asyncio.to_thread(scale.http_json, url, timeout, bearer_token)
         except (OSError, ValueError) as error:
             self.alive()
             raise ClassifiedFailure("INFRA_BLOCKED", f"telemetry unavailable: {error}") from error
@@ -277,6 +281,7 @@ enabled = true
 bind_address = "127.0.0.1"
 port = {dashboard}
 allow_remote = false
+metrics_bearer_token = {json.dumps(getattr(args, "metrics_bearer_token", None) or "")}
 ''')
     if plugins_dir is not None:
         with path.open("a") as handle:
@@ -494,7 +499,14 @@ async def public_region(args: argparse.Namespace, directory: Path, game: int,
     # Using a smaller regional radius discards cached columns that a subsequent
     # landing teleport will not cause the server to resend.
     phase_args.view_distance = args.view_distance
-    commands = {"setup": [*region["commands"], save_command]}
+    frames = region.get("frame_positions", [])
+    if frames:
+        phase_args.readiness_seconds = max(args.readiness_seconds, len(region["commands"]) // 10 + len(frames) * 5 + 120)
+        commands = {"setup": region["commands"], "frame_positions": frames, "save_after_frames": save_command}
+        scale.dump(directory / "mechanic-spec.json",
+                   {"schema_version": 1, "entities": [{"kind": "minecraft:item_frame", "count": len(frames)}]})
+    else:
+        commands = {"setup": [*region["commands"], save_command]}
     scale.dump(directory / "commands.json", commands)
     scale.dump(directory / "anchors.json", [region["anchor"]])
     # Open-loop setup runs inside the total readiness deadline, before Ready.
@@ -507,13 +519,20 @@ async def public_region(args: argparse.Namespace, directory: Path, game: int,
             "--commands-file", str(directory / "commands.json"), "--anchors", str(directory / "anchors.json"),
             "--no-edits", "--name-prefix", "load_setup", "--open-loop",
             "--schedule-file", str(directory / "schedule.json")]
+        if frames:
+            command += ["--mechanic-spec", str(directory / "mechanic-spec.json")]
         if region.get("street_routes"):
             scale.dump(directory / "street-routes.json", region["street_routes"])
             command += ["--street-routes", str(directory / "street-routes.json")]
         row["bot_command"] = command
         await phase.spawn("bots", command, events=True)
-        row["ready"] = await phase.ready(1, args.readiness_seconds)
+        row["ready"] = await phase.ready(1, phase_args.readiness_seconds)
         row.update(await _await_fixture_checkpoint(phase, max(args.readiness_seconds, len(commands["setup"]) / 10)))
+        if frames:
+            observed = phase.fixture_map_frames
+            if not observed or observed.get("count") != len(frames):
+                raise ClassifiedFailure("SETUP_FAILED", "frame interaction metadata evidence incomplete")
+            row["map_frames_observed"] = observed
         row["process_samples"] = phase.process_samples()
     finally:
         await phase.stop()

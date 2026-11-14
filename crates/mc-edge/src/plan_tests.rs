@@ -2169,6 +2169,10 @@ fn deferred_block_update_is_sent_from_the_snapshot() {
         let changed_out = output(vec![(pos, edited)], vec![], changes);
         let changed = plan_viewer(&changed_out, &mut v, 0, c);
         assert!(!changed.iter().any(|p| p.id == BlockUpdate::ID));
+        assert!(
+            !v.geometry_drained(0, &changed_out.snapshot.chunks),
+            "deferred block must hold the world fence"
+        );
         v.world_credit = 512;
         // Same snapshot (same revision), no change set.
         let quiet = TickOutput {
@@ -2189,7 +2193,42 @@ fn deferred_block_update_is_sent_from_the_snapshot() {
                 state_id: 1,
             }]
         );
+        assert!(
+            v.geometry_drained(0, &quiet.snapshot.chunks),
+            "fence may follow the queued update"
+        );
         assert!(updates(plan_viewer(&quiet, &mut v, 0, c)).is_empty());
+        v.geometry_unsent();
+        assert!(
+            !v.geometry_drained(0, &quiet.snapshot.chunks),
+            "failed world send requires repair before fencing"
+        );
+        let repairs = plan_viewer(&quiet, &mut v, 0, c);
+        assert!(
+            repairs
+                .iter()
+                .any(|packet| packet.id == mc_protocol::packets::play::LevelChunkWithLight::ID)
+        );
+        assert!(v.geometry_drained(0, &quiet.snapshot.chunks));
+        assert!(
+            !v.geometry_drained(0, &[]),
+            "missing current snapshot must not fence"
+        );
+        let mut missing_changes = ChangeSet::default();
+        missing_changes.blocks.push(BlockChange {
+            position: mc_world::chunk::BlockPos { x: 3, y: 64, z: 5 },
+            state: 1,
+        });
+        let missing = output(vec![], vec![], missing_changes);
+        plan_viewer(&missing, &mut v, 0, c);
+        assert_eq!(
+            v.pending_blocks.len(),
+            1,
+            "missing snapshot must retain block debt"
+        );
+        assert!(!v.geometry_drained(0, &missing.snapshot.chunks));
+        assert_eq!(updates(plan_viewer(&quiet, &mut v, 0, c)).len(), 1);
+        assert!(v.geometry_drained(0, &quiet.snapshot.chunks));
     });
 }
 
@@ -2593,6 +2632,7 @@ fn command_sound_and_particle_changes_encode_packets() {
     let changes = [
         PlayerChange::CommandSound {
             sound: mc_data::Identifier::parse("minecraft:block.bell.use").unwrap(),
+            fixed_range: None,
             source: 4,
             position: [8, 480, 16],
             volume: 1.0,
@@ -3270,6 +3310,46 @@ fn custom_name_visible_uses_entity_boolean_index_three_on_spawn_and_change() {
                 .iter()
                 .any(|value| matches!(value, WireEntityDataValue::Boolean { index: 3, .. }))
         );
+    }
+}
+
+#[test]
+fn no_gravity_metadata_reaches_viewer_on_spawn_and_change() {
+    let type_id = mc_data::entity_types::entity_type_contract_26_1_2_by_name("minecraft:cow")
+        .unwrap()
+        .protocol_id;
+    for value in [true, false] {
+        let appearance = EntityAppearance {
+            extra: vec![(5, mc_core::boundary::EntityDataValue::Boolean(value))],
+            ..Default::default()
+        };
+        for previous in [
+            None,
+            Some(EntityAppearance {
+                extra: vec![(5, mc_core::boundary::EntityDataValue::Boolean(!value))],
+                ..Default::default()
+            }),
+        ] {
+            let mut packets = Vec::new();
+            push_appearance_for(
+                &mut packets,
+                ConnectionId(1),
+                EntityId(2),
+                &appearance,
+                type_id,
+                previous.as_ref(),
+            );
+            let data = packets
+                .iter()
+                .find(|packet| packet.id == ClientboundSetEntityData::ID)
+                .unwrap();
+            let decoded = ClientboundSetEntityData::decode(&mut body_of(data)).unwrap();
+            assert!(
+                decoded
+                    .values
+                    .contains(&WireEntityDataValue::Boolean { index: 5, value })
+            );
+        }
     }
 }
 

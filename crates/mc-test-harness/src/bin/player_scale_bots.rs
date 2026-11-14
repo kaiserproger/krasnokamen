@@ -270,6 +270,10 @@ struct CommandSchedule {
     setup: Vec<String>,
     #[serde(default)]
     recurring: Vec<RecurringCommands>,
+    #[serde(default)]
+    frame_positions: Vec<[i32; 3]>,
+    #[serde(default)]
+    save_after_frames: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -911,8 +915,10 @@ struct Surface {
     z: i32,
     columns: [Column; 256],
     /// Exact wire cells at y=63,64,65 for the five declared fixture probes.
-    /// Kept separately from advertised heightmaps; no expanded chunk storage.
+    /// Kept separately from advertised heightmaps.
     platform_cells: Option<[i32; 3]>,
+    /// Received state IDs retained for the setup bot while commands edit terrain.
+    setup_cells: Option<Box<[i32]>>,
 }
 
 // A borrowed palette/storage view: no expanded sections, block maps, or chunk body copies.
@@ -1024,7 +1030,7 @@ fn observed_column(
 
 #[cfg(test)]
 fn read_surface(body: &[u8], facts: &Facts) -> Result<Surface> {
-    read_surface_mechanics(body, facts, None)
+    read_surface_mechanics(body, facts, None, false)
 }
 
 type MechanicProbe<'a> = (&'a Arc<MechanicMutex<Mechanics>>, u32, Option<&'a str>);
@@ -1033,6 +1039,7 @@ fn read_surface_mechanics(
     mut body: &[u8],
     facts: &Facts,
     probes: Option<MechanicProbe<'_>>,
+    retain_setup_cells: bool,
 ) -> Result<Surface> {
     let x = body.read_i32()?;
     let z = body.read_i32()?;
@@ -1101,12 +1108,50 @@ fn read_surface_mechanics(
     for (index, column) in columns.iter_mut().enumerate() {
         *column = observed_column(&sections, index, facts)?;
     }
+    let setup_cells = if retain_setup_cells {
+        let mut cells = vec![0; HEIGHT * 256].into_boxed_slice();
+        for (section, blocks) in sections.iter().enumerate() {
+            let blocks = blocks.as_ref().expect("decoded section");
+            for offset in 0..4096 {
+                cells[section * 4096 + offset] = blocks.get(offset)?;
+            }
+        }
+        Some(cells)
+    } else {
+        None
+    };
     Ok(Surface {
         x,
         z,
         columns,
         platform_cells,
+        setup_cells,
     })
+}
+
+fn updated_column(cells: &[i32], index: usize, facts: &Facts) -> Column {
+    let (mut above_one, mut above_two) = (true, true);
+    let mut obstructed = false;
+    for y in (0..HEIGHT).rev() {
+        let state_id = cells[y * 256 + index];
+        let state = facts.get(state_id);
+        if state.support && above_one && above_two {
+            return Column {
+                feet_y: (MIN_Y + y as i32 + 1) as i16,
+                top: state_id,
+                below: if y > 0 {
+                    cells[(y - 1) * 256 + index]
+                } else {
+                    -1
+                },
+                walkable: !obstructed,
+            };
+        }
+        obstructed |= state.support;
+        above_two = above_one;
+        above_one = state.passable;
+    }
+    Column::default()
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -1735,6 +1780,7 @@ impl Bot {
             args.view_distance as i32,
         )
         .await?;
+        let mut setup_done = false;
         loop {
             let frame = client.read_frame().await?;
             self.frame(&mut client, frame, args.view_distance as i32, true)
@@ -1744,6 +1790,14 @@ impl Bot {
                 && self.center_sync
                 && self.window_complete(args.view_distance as i32)
             {
+                if !setup_done && self.index == 0 && args.open_loop {
+                    self.setup_commands(&mut client, true).await?;
+                    if !self.commands.setup.is_empty() || !self.commands.frame_positions.is_empty()
+                    {
+                        self.setup_world_fence(&mut client).await?;
+                    }
+                    setup_done = true;
+                }
                 if !self.landed {
                     let base_x = self.desired_x.floor() as i32;
                     let base_z = self.desired_z.floor() as i32;
@@ -1870,9 +1924,6 @@ impl Bot {
                     }
                 }
                 if args.open_loop {
-                    if self.index == 0 {
-                        self.setup_commands(&mut client, true).await?;
-                    }
                     self.setup_fence(&mut client, "ready", true).await?;
                 }
                 ensure!(
@@ -2080,16 +2131,15 @@ impl Bot {
                     )
                 };
                 if (cx - local_center.0).abs() <= vd && (cz - local_center.1).abs() <= vd {
-                    // Keep only height/top-support summaries for the current view
-                    // neighborhood. Already streamed chunks are not resent when
-                    // walking toward them; a 3x3-only cache would stall at its edge.
-                    // Never retain packet bodies, section arrays, entities or light.
+                    // Retain bounded summaries for the current view; only the
+                    // setup bot also retains collision cells for fixture edits.
                     let surface = read_surface_mechanics(
                         frame.body.as_ref(),
                         &self.facts,
                         self.mechanics
                             .as_ref()
                             .map(|shared| (shared, self.index, mechanic_window.as_deref())),
+                        self.index == 0 && self.open_loop && !self.commands.setup.is_empty(),
                     )?;
                     self.surfaces.retain(|&(x, z), _| {
                         (x - local_center.0).abs() <= vd && (z - local_center.1).abs() <= vd
@@ -2434,7 +2484,15 @@ impl Bot {
             !observed
         });
         let (x, y, z) = unpack_block_pos(position);
-        if let Some(surface) = self.surfaces.get_mut(&(x.div_euclid(16), z.div_euclid(16))) {
+        if let Some(surface) = self.surfaces.get_mut(&(x.div_euclid(16), z.div_euclid(16)))
+            && let Some(cells) = surface.setup_cells.as_mut()
+            && (MIN_Y..MIN_Y + HEIGHT as i32).contains(&y)
+        {
+            let column = z.rem_euclid(16) as usize * 16 + x.rem_euclid(16) as usize;
+            cells[(y - MIN_Y) as usize * 256 + column] = state;
+            surface.columns[column] = updated_column(cells, column, &self.facts);
+        } else if let Some(surface) = self.surfaces.get_mut(&(x.div_euclid(16), z.div_euclid(16))) {
+            // Other bots retain only the compact surface summary.
             let column = &mut surface.columns[(z.rem_euclid(16) * 16 + x.rem_euclid(16)) as usize];
             let feet = i32::from(column.feet_y);
             if y == feet - 1 {

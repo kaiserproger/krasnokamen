@@ -93,11 +93,36 @@ fn invulnerable_is_applied() {
 }
 
 #[test]
-#[ignore = "known open SUMMON-NOGRAVITY-INVULNERABLE; run explicitly with --ignored"]
 fn summon_no_gravity_and_invulnerable_are_effective_and_persistent() {
     let (mut state, id) = summon("cow", "{NoGravity:1b,Invulnerable:1b,NoAI:1b}");
     let slot = state.entities.slot_of(id).unwrap();
-    let y = state.entities.pos(slot)[1];
+    let metadata = |state: &TickState| {
+        state
+            .entities
+            .row(slot)
+            .appearance
+            .extra
+            .iter()
+            .find(|(index, _)| *index == 5)
+            .cloned()
+    };
+    assert_eq!(
+        metadata(&state),
+        Some((5, crate::boundary::EntityDataValue::Boolean(true)))
+    );
+    state.appearance_changed.clear();
+    crate::entity_controls::set_no_gravity(&mut state, slot, false);
+    assert_eq!(
+        metadata(&state),
+        Some((5, crate::boundary::EntityDataValue::Boolean(false)))
+    );
+    assert!(state.appearance_changed.contains(&id));
+    crate::entity_controls::set_no_gravity(&mut state, slot, true);
+    let mut pos = state.entities.pos(slot);
+    pos[1] += 6.0;
+    state.entities.set_pos(slot, pos);
+    state.entities.set_ground(slot, false);
+    let y = pos[1];
     assert_eq!(
         state
             .entities
@@ -125,6 +150,42 @@ fn summon_no_gravity_and_invulnerable_are_effective_and_persistent() {
             .extra_fields
             .contains(&("Invulnerable".into(), Tag::Byte(1)))
     );
+    let restored = EntityStateImage::from_record(&state.registry, native).unwrap();
+    assert!(restored.controls.no_gravity && restored.controls.invulnerable);
+    let wal: EntityStateImage =
+        serde_json::from_slice(&serde_json::to_vec(&restored).unwrap()).unwrap();
+    assert!(wal.controls.no_gravity && wal.controls.invulnerable);
+}
+
+#[test]
+fn summon_no_gravity_floats_in_multiple_mob_motion_lanes() {
+    for kind in ["cow", "villager", "pillager", "copper_golem"] {
+        for no_gravity in [false, true] {
+            let (mut state, id) = summon(
+                kind,
+                if no_gravity {
+                    "{NoGravity:1b}"
+                } else {
+                    "{NoGravity:0b}"
+                },
+            );
+            let slot = state.entities.slot_of(id).unwrap();
+            let mut pos = state.entities.pos(slot);
+            pos[1] += 6.0;
+            state.entities.set_pos(slot, pos);
+            state.entities.set_vel(slot, [0.0; 3]);
+            state.entities.set_ground(slot, false);
+            for _ in 0..10 {
+                crate::tick::run_tick(&mut state, &[]);
+            }
+            let y = state.entities.pos(slot)[1];
+            if no_gravity {
+                assert_eq!(y, pos[1], "{kind} must hover");
+            } else {
+                assert!(y < pos[1], "{kind} must fall");
+            }
+        }
+    }
 }
 
 #[test]
@@ -314,7 +375,6 @@ fn custom_name_visible_is_authoritative_and_can_clear() {
     }
 }
 unsupported_tag!(silent_is_explicitly_unsupported, "Silent", "1b");
-unsupported_tag!(no_gravity_is_explicitly_unsupported, "NoGravity", "1b");
 unsupported_tag!(glowing_is_explicitly_unsupported, "Glowing", "1b");
 unsupported_tag!(tags_are_explicitly_unsupported, "Tags", "['probe']");
 unsupported_tag!(left_handed_is_explicitly_unsupported, "LeftHanded", "1b");
@@ -404,6 +464,7 @@ fn invalid_supported_tags_reach_sender_chat() {
     for (key, value) in [
         ("PersistenceRequired", "'bad'"),
         ("NoAI", "'bad'"),
+        ("NoGravity", "'bad'"),
         ("Invulnerable", "'bad'"),
         ("Health", "-1f"),
         ("Rotation", "[90f]"),
@@ -759,6 +820,33 @@ fn item_entity_summon_carries_stack_pickup_delay_age_and_motion() {
     assert_eq!(state.entities.body(slot).pickup_delay, 25);
     assert_eq!(row.age, 100);
     assert!((state.entities.vel(slot)[1] - 10.0).abs() < 1e-9);
+}
+
+#[test]
+fn item_summon_no_gravity_and_invulnerability_survive_checkpoint() {
+    let (mut state, id) = summon(
+        "item",
+        "{Item:{id:'minecraft:carrot',count:1},PickupDelay:32767,NoGravity:1b,Invulnerable:1b}",
+    );
+    let slot = state.entities.slot_of(id).unwrap();
+    let mut pos = state.entities.pos(slot);
+    pos[1] += 6.0;
+    state.entities.set_pos(slot, pos);
+    state.entities.set_vel(slot, [0.0; 3]);
+    state.entities.set_ground(slot, false);
+    for _ in 0..10 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    assert_eq!(state.entities.pos(slot)[1], pos[1]);
+    let row = state.entities.row(slot);
+    let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+    let record = chunks
+        .values()
+        .flat_map(|chunk| &chunk.entities)
+        .find(|entity| entity.uuid == row.uuid)
+        .unwrap();
+    let restored = EntityStateImage::from_record(&state.registry, record).unwrap();
+    assert!(restored.controls.no_gravity && restored.controls.invulnerable);
 }
 
 #[test]

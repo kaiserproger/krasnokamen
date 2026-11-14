@@ -450,7 +450,11 @@ fn break_frame(state: &mut TickState, slot: EntitySlot, drop: bool, spawned: &mu
 /// Vanilla frame contents rule: a non-explosive projectile hit on an
 /// occupied frame ejects the displayed item and spares the frame. Returns
 /// true when the hit was consumed by an ejection.
-pub(crate) fn eject_on_projectile(state: &mut TickState, target: EntityId) -> bool {
+pub(crate) fn eject_on_projectile(
+    state: &mut TickState,
+    target: EntityId,
+    owner: Option<EntityId>,
+) -> bool {
     let Some(slot) = state
         .entities
         .slot_of(target)
@@ -458,6 +462,14 @@ pub(crate) fn eject_on_projectile(state: &mut TickState, target: EntityId) -> bo
     else {
         return false;
     };
+    if crate::entity_controls::blocks_damage(
+        state,
+        slot,
+        crate::survival::DamageKind::Projectile,
+        owner,
+    ) {
+        return false;
+    }
     if displayed(state, slot).is_none() {
         return false;
     }
@@ -488,6 +500,14 @@ pub(crate) fn attack(
     // Vanilla frames break by punching even in Adventure (no game-mode
     // gate in the frame damage path); spectators and the dead stay out.
     if player.spectator() || player.vitals.is_dead() {
+        return true;
+    }
+    if crate::entity_controls::blocks_damage(
+        state,
+        slot,
+        crate::survival::DamageKind::Melee,
+        Some(actor),
+    ) {
         return true;
     }
     let drop = !player.creative();

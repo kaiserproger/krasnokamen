@@ -585,6 +585,10 @@ pub(crate) fn restore_entity(
         row.allay = record.state.allay.clone();
         row.opaque_entity_fields = record.state.opaque_entity_fields.clone();
         crate::entity_life::restore_appearance(body, row);
+        crate::entity_controls::sync_no_gravity(
+            Arc::make_mut(&mut row.appearance),
+            row.controls.no_gravity,
+        );
         if body.burn_ticks != 0 {
             Arc::make_mut(&mut row.appearance).shared_flags |= 1;
         }

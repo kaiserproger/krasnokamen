@@ -24,6 +24,9 @@ pub use packets::{Direction, Packet, State};
 /// Crate version, exposed so other crates and the binary can report it.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Operator setup fence: response is queued after the viewer's world geometry debt.
+pub const SETUP_WORLD_FENCE_CHANNEL: &str = "solaris:setup_world_fence";
+
 /// Minecraft Java Edition wire protocol version Solaris targets.
 ///
 /// Locked at the start of M1 from the bundled vanilla server's

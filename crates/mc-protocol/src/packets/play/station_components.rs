@@ -43,7 +43,7 @@ fn read_holder<B: Buf>(buf: &mut B, registry: &str) -> Result<Identifier, CodecE
         .ok_or(CodecError::NotSupported("unknown station registry holder"))
 }
 
-fn encode_effect_details<B: BufMut>(
+pub(super) fn encode_effect_details<B: BufMut>(
     buf: &mut B,
     effect: &PotionEffect,
     depth: usize,
@@ -70,7 +70,7 @@ fn encode_effect_details<B: BufMut>(
     Ok(())
 }
 
-fn decode_effect_details<B: Buf>(
+pub(super) fn decode_effect_details<B: Buf>(
     buf: &mut B,
     id: Identifier,
     depth: usize,

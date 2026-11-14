@@ -166,6 +166,45 @@ fn physics_landing_blocks_reduce_damage_without_trusting_ground_claims() {
 }
 
 #[test]
+fn pointed_dripstone_tip_landing_emits_stalagmite_damage_not_fall() {
+    use crate::boundary::EntityEvent;
+    use crate::survival::DamageKind;
+    for (direction, kind) in [("up", DamageKind::Stalagmite), ("down", DamageKind::Fall)] {
+        let (mut state, player, pos) = flat_player_fixture();
+        let dripstone = crate::farming_tests::block(
+            &state,
+            "pointed_dripstone",
+            &[
+                ("thickness", "tip"),
+                ("vertical_direction", direction),
+                ("waterlogged", "false"),
+            ],
+        );
+        state.world.set_block(
+            pos[0].floor() as i32,
+            pos[1].floor() as i32,
+            pos[2].floor() as i32,
+            dripstone,
+        );
+        state.world.fold_overlay();
+        let slot = state.entities.slot_of(player).unwrap();
+        state.entities.set_pos(slot, [pos[0], pos[1] + 4.0, pos[2]]);
+        state.entities.set_ground(slot, false);
+        state.entities.row_mut(slot).protected_until = 0;
+        state.players.get_mut(&player).unwrap().fall_distance = 2.0;
+        let (output, _, _) = run_tick(&mut state, &[movement([pos[0], pos[1] - 0.1, pos[2]])]);
+        assert!(state.players[&player].vitals.health < 20.0, "{direction}");
+        assert!(
+            output.changes.entity_events.iter().any(|event| matches!(
+                event, EntityEvent::Damage { entity, source_type_id, .. }
+                    if *entity == player && *source_type_id == kind.type_id(None, false)
+            )),
+            "{direction}"
+        );
+    }
+}
+
+#[test]
 fn physics_water_eye_sample_uses_pose_and_flow_height() {
     let (mut state, _, pos) = flat_player_fixture();
     let x = pos[0].floor() as i32;

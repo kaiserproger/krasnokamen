@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::{Identifier, ItemEnchantment};
+pub mod death_protection;
 mod station_nbt;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -21,20 +22,9 @@ pub const CUSTOM_DATA_COMPONENT: &str = "minecraft:custom_data";
 pub const MAX_CUSTOM_DATA_BYTES: usize = 16 * 1024;
 pub const MAX_CUSTOM_DATA_DEPTH: usize = 32;
 
-/// The admitted custom death-protection component has no consume actions.
-/// Vanilla defaults an omitted `death_effects` list to empty; nonempty custom
-/// actions are rejected rather than replaced with the ordinary totem effects.
+/// Validate custom DeathProtection consume effects before retaining the component.
 pub fn validate_death_protection(value: &mc_nbt::Tag) -> Result<(), &'static str> {
-    use mc_nbt::Tag;
-    let Tag::Compound(fields) = value else {
-        return Err("death_protection must be a compound");
-    };
-    match crate::item_nbt::field(fields, "death_effects") {
-        None => Ok(()),
-        Some(Tag::List(list)) if list.elements.is_empty() => Ok(()),
-        Some(Tag::List(_)) => Err("nonempty custom death_protection death_effects are unsupported"),
-        Some(_) => Err("death_protection death_effects must be a list"),
-    }
+    death_protection::parse(value).map(|_| ())
 }
 
 /// DyedItemColor.CODEC uses ExtraCodecs.RGB_COLOR_CODEC: an integer or RGB

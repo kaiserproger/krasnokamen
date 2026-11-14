@@ -417,7 +417,10 @@ fn copy_payload(
 }
 
 fn copy_effect_details(r: &mut &[u8], w: &mut Vec<u8>, depth: usize) -> Result<()> {
-    ensure!(depth <= MAX_DEPTH, "hidden effect nesting too deep");
+    ensure!(
+        depth < mc_data::item_stack::MAX_POTION_HIDDEN_DEPTH,
+        "hidden effect nesting too deep"
+    );
     w.write_varint(r.read_varint()?);
     w.write_varint(r.read_varint()?);
     for _ in 0..3 {

@@ -430,6 +430,16 @@ impl PlayerState {
     /// resets; water, climbing, creative and spectator reset without
     /// damage.
     pub fn fall(&mut self, dy: f64, on_ground: bool, cushioned: bool) -> f32 {
+        self.fall_with_stalagmite(dy, on_ground, cushioned, false)
+    }
+
+    pub(crate) fn fall_with_stalagmite(
+        &mut self,
+        dy: f64,
+        on_ground: bool,
+        cushioned: bool,
+        stalagmite: bool,
+    ) -> f32 {
         if cushioned
             || self.creative()
             || self.spectator()
@@ -460,14 +470,17 @@ impl PlayerState {
                     (self.fall_distance * 100.0).round() as i32,
                 );
             }
-            let damage = crate::survival::fall_damage(
-                (self.fall_distance
-                    - f64::from(
-                        self.active_effects
-                            .level(crate::effects::EffectId::JumpBoost),
-                    ))
-                .max(0.0),
-            );
+            let distance = (self.fall_distance
+                - f64::from(
+                    self.active_effects
+                        .level(crate::effects::EffectId::JumpBoost),
+                ))
+            .max(0.0);
+            let damage = if stalagmite {
+                crate::survival::stalagmite_damage(distance)
+            } else {
+                crate::survival::fall_damage(distance)
+            };
             self.fall_distance = 0.0;
             return damage;
         }

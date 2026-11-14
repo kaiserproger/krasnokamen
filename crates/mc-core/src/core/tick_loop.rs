@@ -409,7 +409,7 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             };
             source.finish_publish(snapshot, supplement, revision);
         }
-        let mut tick_times = output.times;
+        let mut tick_times = output.times.clone();
         let _ = channels.tick_broadcast.send(output);
         // Disconnects sealed before this tick: the edge has had a full tick
         // to drain the `Disconnect`, so remove the player as a Leave would

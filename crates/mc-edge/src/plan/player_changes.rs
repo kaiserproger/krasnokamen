@@ -273,7 +273,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
                             entity_ids: vec![player.entity.0],
                         },
                     );
-                    viewer.entity_interest.removed(player.entity);
+                    viewer.entity_interest.respawn(player.entity);
                 }
             }
             if !removed.is_empty() {
@@ -545,6 +545,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
         ),
         PlayerChange::CommandSound {
             sound,
+            fixed_range,
             source,
             position,
             volume,
@@ -554,7 +555,7 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             conn,
             &ClientboundSound {
                 sound: sound.clone(),
-                fixed_range: None,
+                fixed_range: *fixed_range,
                 source: *source,
                 position: *position,
                 volume: *volume,
