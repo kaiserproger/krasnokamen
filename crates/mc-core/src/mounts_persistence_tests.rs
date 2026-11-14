@@ -20,7 +20,7 @@ fn actual_region_checkpoint_and_wal_tail_restore_tame_owner_collar_and_equipment
     hold(&mut state, actor, "wolf_armor", 1);
     run_tick(&mut state, &[use_entity(wolf)]);
     let (_, regions, _) = checkpoint_data_for(&state, state.tick);
-    let dir = std::env::temp_dir().join(format!("solaris-mount-restart-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("krasnokamen-mount-restart-{}", uuid::Uuid::new_v4()));
     mc_world::anvil::entity_regions::write_entity_regions(
         &dir,
         &state.registry.items,

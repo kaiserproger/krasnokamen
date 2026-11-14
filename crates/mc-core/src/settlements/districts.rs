@@ -29,30 +29,30 @@ pub(super) fn validate(plan: &DistrictPlan) -> Result<(), &'static str> {
 
 fn institutions(branch: &str, level: u8) -> &'static [&'static str] {
     match (branch, level) {
-        ("estate", 1) => &["solaris:manor_hall", "solaris:farm", "solaris:warehouse"],
+        ("estate", 1) => &["krasnokamen:manor_hall", "krasnokamen:farm", "krasnokamen:warehouse"],
         ("estate", 2) => &[
-            "solaris:manor_hall",
-            "solaris:farm",
-            "solaris:warehouse",
-            "solaris:town_hall",
+            "krasnokamen:manor_hall",
+            "krasnokamen:farm",
+            "krasnokamen:warehouse",
+            "krasnokamen:town_hall",
         ],
         ("fortress", 1) => &[
-            "solaris:stone_tower",
-            "solaris:stone_wall",
-            "solaris:warehouse",
+            "krasnokamen:stone_tower",
+            "krasnokamen:stone_wall",
+            "krasnokamen:warehouse",
         ],
         ("fortress", 2) => &[
-            "solaris:stone_tower",
-            "solaris:stone_wall",
-            "solaris:warehouse",
-            "solaris:keep",
+            "krasnokamen:stone_tower",
+            "krasnokamen:stone_wall",
+            "krasnokamen:warehouse",
+            "krasnokamen:keep",
         ],
-        ("town", 1) => &["solaris:market", "solaris:smithy", "solaris:warehouse"],
+        ("town", 1) => &["krasnokamen:market", "krasnokamen:smithy", "krasnokamen:warehouse"],
         ("town", 2) => &[
-            "solaris:market",
-            "solaris:smithy",
-            "solaris:warehouse",
-            "solaris:town_hall",
+            "krasnokamen:market",
+            "krasnokamen:smithy",
+            "krasnokamen:warehouse",
+            "krasnokamen:town_hall",
         ],
         _ => &[],
     }
@@ -64,14 +64,14 @@ fn validate_purpose(purpose: &str, points: &[Point]) -> Result<(), Failure> {
     }
     if matches!(
         purpose,
-        "solaris:workshop" | "solaris:smithy" | "solaris:sawmill"
+        "krasnokamen:workshop" | "krasnokamen:smithy" | "krasnokamen:sawmill"
     ) && !points
         .iter()
         .any(|p| matches!(p, Point::Workstation { .. }))
     {
         return Err(Failure::InvalidRequest);
     }
-    if matches!(purpose, "solaris:warehouse" | "solaris:granary")
+    if matches!(purpose, "krasnokamen:warehouse" | "krasnokamen:granary")
         && !points.iter().any(|p| matches!(p, Point::Container { .. }))
     {
         return Err(Failure::InvalidRequest);

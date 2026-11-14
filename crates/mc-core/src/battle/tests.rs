@@ -227,7 +227,7 @@ fn faction_fields_reject_invalid_native_and_json_values() {
     for tag in [Tag::Int(-1), Tag::Int(65536), Tag::Short(1), Tag::String("2".into())] {
         let record = mc_data::entity_nbt::VanillaEntity {
             id: "minecraft:zombie".into(),
-            extra_fields: vec![("solaris:Faction".into(), tag)],
+            extra_fields: vec![("krasnokamen:Faction".into(), tag)],
             ..Default::default()
         };
         assert!(crate::journal::EntityStateImage::from_record(&state.registry, &record).is_err());

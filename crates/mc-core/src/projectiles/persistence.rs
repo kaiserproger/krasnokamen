@@ -12,7 +12,7 @@ use mc_data::{
 use mc_nbt::Tag;
 use serde::Deserialize;
 
-const RETAINED: &str = "solaris:ProjectileRuntime";
+const RETAINED: &str = "krasnokamen:ProjectileRuntime";
 
 pub(crate) fn validate_state(state: &ProjectileState) -> Result<(), &'static str> {
     if !state.damage.is_finite() || state.damage < 0.0 {

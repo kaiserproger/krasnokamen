@@ -6,7 +6,7 @@ fn multi_portion_final_pickaxes_deliver_without_distributing_chain_intermediates
     let mut town = village(&[("minecraft:oak_log", 2), ("minecraft:wooden_pickaxe", 1)]);
     town.equip("minecraft:wooden_axe");
     let steps = town
-        .submit("pick-two", "solaris-settlements:wooden_pickaxe_ordinary", 2)
+        .submit("pick-two", "krasnokamen-settlements:wooden_pickaxe_ordinary", 2)
         .unwrap();
     assert_eq!(
         describe(&steps),

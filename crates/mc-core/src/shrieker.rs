@@ -204,21 +204,21 @@ fn decode(bytes: &[u8], tick: u64) -> Result<(Shrieker, Option<Pending>), String
         return Err("sculk_shrieker.id: expected minecraft:sculk_shrieker".into());
     }
     let warning_level = integer(&fields, "warning_level", 4)?;
-    let shriek_until = match crate::warden::unique(&fields, "solaris:shriek_until")? {
+    let shriek_until = match crate::warden::unique(&fields, "krasnokamen:shriek_until")? {
         None => 0,
         Some(Tag::Long(n)) if *n >= 0 => *n as u64,
-        _ => return Err("sculk_shrieker.solaris:shriek_until: expected nonnegative long".into()),
+        _ => return Err("sculk_shrieker.krasnokamen:shriek_until: expected nonnegative long".into()),
     };
     let mut pending = crate::warden::unique(&fields, "listener")?
         .map(|tag| vibration::decode_listener(tag, tick))
         .transpose()?
         .flatten();
-    if let Some(tag) = crate::warden::unique(&fields, "solaris:event_arrival")? {
+    if let Some(tag) = crate::warden::unique(&fields, "krasnokamen:event_arrival")? {
         let Tag::Long(n) = tag else {
-            return Err("sculk_shrieker.solaris:event_arrival: expected nonnegative long".into());
+            return Err("sculk_shrieker.krasnokamen:event_arrival: expected nonnegative long".into());
         };
         if *n < 0 {
-            return Err("sculk_shrieker.solaris:event_arrival: expected nonnegative long".into());
+            return Err("sculk_shrieker.krasnokamen:event_arrival: expected nonnegative long".into());
         }
         if let Some(p) = &mut pending {
             p.arrival = *n as u64;
@@ -362,12 +362,12 @@ fn encode(state: &TickState, pos: BlockPos, entry: &Shrieker) -> Vec<u8> {
             vibration::listener_nbt(vibration::pending(state, pos), state.tick),
         ),
         (
-            "solaris:shriek_until".into(),
+            "krasnokamen:shriek_until".into(),
             Tag::Long(entry.shriek_until as i64),
         ),
     ];
     if let Some(p) = vibration::pending(state, pos) {
-        fields.push(("solaris:event_arrival".into(), Tag::Long(p.arrival as i64)));
+        fields.push(("krasnokamen:event_arrival".into(), Tag::Long(p.arrival as i64)));
     }
     let mut bytes = Vec::new();
     mc_nbt::write_network(&mut bytes, &Tag::Compound(fields)).expect("shrieker NBT");

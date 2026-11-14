@@ -442,7 +442,7 @@ fn journal_file_replay_restores_child_cooldown_love_and_harvest_exactly() {
         .entities_spawned
         .extend([id, parent]);
     let first = crate::core::journal_entries_for_tick(&mut state, &output);
-    let dir = std::env::temp_dir().join(format!("solaris-life-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("krasnokamen-life-{}", uuid::Uuid::new_v4()));
     let mut writer = crate::journal::JournalWriter::open(&dir, 1).unwrap();
     writer.append(1, output.tick, &first).unwrap();
     let (second_output, _, _) = run_tick(&mut state, &[]);
@@ -505,7 +505,7 @@ fn vanilla_nbt_preserves_signed_age_stew_and_retained_prerequisites() {
         entity_life::from_record(&decoded, true),
         (life.clone(), 321)
     );
-    let dir = std::env::temp_dir().join(format!("solaris-life-region-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("krasnokamen-life-region-{}", uuid::Uuid::new_v4()));
     let chunks = std::collections::BTreeMap::from([(
         (0, 0),
         mc_world::anvil::EntityChunk {

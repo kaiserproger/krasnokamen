@@ -1,4 +1,4 @@
-schema: solaris-world-adapter-index/1
+schema: krasnokamen-world-adapter-index/1
 domain: farming
 note:
   Documentation index only; execution is the shared Python Adapter interface, not a YAML DSL. Registration is
@@ -206,7 +206,7 @@ subjects:
     server_gap_evidence: []
   - id: farming.mushrooms_vines_spread
     matrix_ids:
-      - pw:farming.mushrooms_vines_spread/forge_solaris_loader/adventure/overworld/hard/N8/duplicate_login/clean_restart_mid_action/op_4
+      - pw:farming.mushrooms_vines_spread/forge_krasnokamen_loader/adventure/overworld/hard/N8/duplicate_login/clean_restart_mid_action/op_4
     status: adapter_authored_not_matrix_verified
     server_evidence:
       - crates/mc-core/src/farming.rs
@@ -261,7 +261,7 @@ subjects:
     server_gap_evidence: []
   - id: farming.grass_mycelium_spread
     matrix_ids:
-      - pw:farming.grass_mycelium_spread/neoforge_solaris_loader/survival/the_nether/easy/2/reconnect_mid_action/crash_kill9_wal_replay/op_2
+      - pw:farming.grass_mycelium_spread/neoforge_krasnokamen_loader/survival/the_nether/easy/2/reconnect_mid_action/crash_kill9_wal_replay/op_2
     status: adapter_authored_not_matrix_verified
     server_evidence:
       - crates/mc-core/src/farming.rs
@@ -371,7 +371,7 @@ subjects:
     server_gap_evidence: []
   - id: farming.milk_cow
     matrix_ids:
-      - pw:farming.milk_cow/fabric_solaris_loader/adventure/overworld/peaceful/2/slow_reader_backpressure/crash_kill9_wal_replay/op_1
+      - pw:farming.milk_cow/fabric_krasnokamen_loader/adventure/overworld/peaceful/2/slow_reader_backpressure/crash_kill9_wal_replay/op_1
       - tr.dupe.two_players_take_same_tick:farming.milk_cow/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
       - tr.dupe.destroy_during_interaction:farming.milk_cow/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
       - tr.dupe.restart_after_interaction:farming.milk_cow/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
