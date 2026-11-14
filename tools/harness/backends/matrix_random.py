@@ -30,7 +30,7 @@ def replay(ctx, row, directory):
             '--server-bin', str(ctx.server_bin), '--script', str(script), *args]
     if ctx.plugins_dir is not None:
         argv += ['--plugins-dir', str(ctx.plugins_dir)]
-    env = dict(os.environ, SOLARIS_VALIDATION_ROOT=str(directory / 'receipts'))
+    env = dict(os.environ, KRASNOKAMEN_VALIDATION_ROOT=str(directory / 'receipts'))
     log = directory / 'replay.log'
     ctx.commands.append(argv)
     ctx.cwds.append(str(runtime.REPO_ROOT))

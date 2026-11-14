@@ -9,7 +9,7 @@ import fcntl, os, sys, threading
 cmd = sys.argv[1:]
 if not cmd:
     sys.exit("usage: scene-slot.sh <command> [args...]")
-lock_dir = os.environ.get("SOLARIS_SCENE_SLOT_DIR", "/tmp")  # tests use a private dir
+lock_dir = os.environ.get("KRASNOKAMEN_SCENE_SLOT_DIR", "/tmp")  # tests use a private dir
 guard, won, chosen = threading.Lock(), threading.Event(), []
 
 def take(slot):
@@ -26,7 +26,7 @@ def take(slot):
 for slot in "abc":
     threading.Thread(target=take, args=(slot,), daemon=True).start()
 # Tests pass a pipe fd and wait on it instead of polling for the queued waiter.
-ready = os.environ.pop("SOLARIS_SCENE_SLOT_READY_FD", None)
+ready = os.environ.pop("KRASNOKAMEN_SCENE_SLOT_READY_FD", None)
 if ready:
     os.write(int(ready), b"w")
     os.close(int(ready))

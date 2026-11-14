@@ -15,8 +15,8 @@ synchronization: received state / console response / dashboard tick counter; no 
 subjects:
 - subject: block_log.co_history_restart
   matrix_ids:
-  - pw:block_log.co_history_restart/fabric_solaris_loader/creative/overworld/peaceful/2/duplicate_login/clean_restart_mid_action/console
-  - pw:block_log.co_history_restart/forge_solaris_loader/survival/the_nether/normal/N8/duplicate_login/steady/non_op_0
+  - pw:block_log.co_history_restart/fabric_krasnokamen_loader/creative/overworld/peaceful/2/duplicate_login/clean_restart_mid_action/console
+  - pw:block_log.co_history_restart/forge_krasnokamen_loader/survival/the_nether/normal/N8/duplicate_login/steady/non_op_0
   preconditions:
     setup_callable: block_log.ADAPTERS['block_log.co_history_restart'].setup
     fixture_calls: []
@@ -37,7 +37,7 @@ subjects:
     - p.block_is(ctx,ctx.state['pos'],'minecraft:stone')
     delegated_helpers:
     - grief(ctx)
-  expected_contract: Solaris extension; no vanilla analogue
+  expected_contract: Krasnokamen extension; no vanilla analogue
   server_gap: []
   additional_matrix_obligations:
     concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
@@ -46,7 +46,7 @@ subjects:
   subject_oracle_text: 'reference: history persisted'
 - subject: block_log.co_inspect
   matrix_ids:
-  - pw:block_log.co_inspect/neoforge_solaris_loader/adventure/the_nether/normal/1/reconnect_mid_action/pause_when_empty_resume/op_3
+  - pw:block_log.co_inspect/neoforge_krasnokamen_loader/adventure/the_nether/normal/1/reconnect_mid_action/pause_when_empty_resume/op_3
   - pw:block_log.co_inspect/protocol_bot/adventure/overworld/easy/N8/malformed_or_stale_packet/crash_kill9_wal_replay/op_4
   preconditions:
     setup_callable: block_log.ADAPTERS['block_log.co_inspect'].setup
@@ -67,7 +67,7 @@ subjects:
     - p.block_is(ctx, ctx.state['pos'], 'minecraft:air')
     delegated_helpers:
     - grief(ctx)
-  expected_contract: Solaris extension; no vanilla analogue
+  expected_contract: Krasnokamen extension; no vanilla analogue
   server_gap: []
   additional_matrix_obligations:
     concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
@@ -97,7 +97,7 @@ subjects:
     - 'p.response(ctx, ''co lookup u:matrix_absent_actor t:1h r:8'', r''Block log: 0 result'')'
     delegated_helpers:
     - grief(ctx)
-  expected_contract: Solaris extension; no vanilla analogue
+  expected_contract: Krasnokamen extension; no vanilla analogue
   server_gap: []
   additional_matrix_obligations:
     concurrent_subject_actors: 'Blocked: concurrent own-target and shared-target execution requires the shared all-actor
@@ -127,7 +127,7 @@ subjects:
     - p.block_is(ctx,ctx.state['pos'],'minecraft:air')
     delegated_helpers:
     - grief(ctx)
-  expected_contract: Solaris extension; no vanilla analogue
+  expected_contract: Krasnokamen extension; no vanilla analogue
   server_gap: []
   implementation_class: complete_adapter
   subject_oracle_text: 'reference: changes re-applied'
@@ -158,7 +158,7 @@ subjects:
     - p.block_is(ctx,ctx.state['pos'],'minecraft:stone')
     delegated_helpers:
     - grief(ctx, chest=True)
-  expected_contract: Solaris extension; no vanilla analogue
+  expected_contract: Krasnokamen extension; no vanilla analogue
   server_gap: []
   additional_matrix_obligations:
     same_tick_admission_fence: 'Blocked: simultaneous custody actions and combined per-player conservation are not
