@@ -6,10 +6,10 @@ use mc_core::boundary::{ChangeSet, EntityId, ExplosionEvent, TickOutput, WorldSn
 async fn explosions_deliver_or_explicitly_close_under_queue_pressure() {
     // A closed world receiver models a competing producer taking the planned
     // capacity: sends fail even though the credit read still reports free slots.
+    let (server, dir) = fixture();
+    let server = Arc::new(server);
     for world_pressure in ["slots", "bytes", "send-refused"] {
         for reliable_full in [false, true] {
-            let (server, dir) = fixture();
-            let server = Arc::new(server);
             let id = server.connections.joining_id();
             let (reliable_tx, mut reliable_rx) = mpsc::channel(8);
             if reliable_full {
@@ -105,7 +105,10 @@ async fn explosions_deliver_or_explicitly_close_under_queue_pressure() {
             .await;
             if reliable_full {
                 assert_eq!(
-                    closed.await.unwrap(),
+                    tokio::time::timeout(std::time::Duration::from_secs(2), closed)
+                        .await
+                        .unwrap_or_else(|_| panic!("no close under {world_pressure} pressure"))
+                        .unwrap(),
                     "reliable-queue-full",
                     "{world_pressure}"
                 );
@@ -131,8 +134,266 @@ async fn explosions_deliver_or_explicitly_close_under_queue_pressure() {
                 assert!(server.connections.get(id).is_some());
             }
             server.connections.remove(id);
-            server.hub.shutdown();
-            std::fs::remove_dir_all(dir).unwrap();
         }
     }
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[tokio::test]
+async fn six_hundred_explosions_coalesce_knockback_without_disconnect() {
+    for visual_only in [false, true] {
+        let (server, dir) = fixture();
+        let server = Arc::new(server);
+        let id = server.connections.joining_id();
+        let (reliable_tx, mut reliable_rx) = mpsc::channel(crate::fanout::RELIABLE_QUEUE_BOUND);
+        let (world_tx, _world_rx) = world_queue(4, WORLD_QUEUE_BYTES);
+        server
+            .connections
+            .register(
+                id,
+                ConnectionHandles {
+                    reliable_tx,
+                    world_tx,
+                },
+            )
+            .unwrap();
+        let (close, mut closed) = tokio::sync::oneshot::channel();
+        server.connections.inner.lock().closers.insert(id, close);
+        let (mut connections, _) = server.connections.routing_snapshot();
+        let mut viewers = HashMap::from([(
+            id,
+            crate::plan::ViewerState::new(id, EntityId(1), [8.0, 64.0, 8.0]),
+        )]);
+        let output = TickOutput {
+            tick: 1,
+            snapshot: Arc::new(WorldSnapshot {
+                tick: 1,
+                ..Default::default()
+            }),
+            changes: Arc::new(ChangeSet {
+                explosions: (0..600)
+                    .map(|_| ExplosionEvent {
+                        center: [8.0, 64.0, 8.0],
+                        radius: 4.0,
+                        blocks: 1,
+                        knockback: vec![(
+                            EntityId(1),
+                            if visual_only {
+                                [0.0; 3]
+                            } else {
+                                [0.125, 0.25, 0.5]
+                            },
+                        )],
+                    })
+                    .collect(),
+                ..Default::default()
+            }),
+            times: Default::default(),
+        };
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .unwrap();
+        publish_and_route(
+            &server,
+            &pool,
+            &mut viewers,
+            &output,
+            &mut crate::plan::ChunkPacketCache::new(),
+            &mut connections,
+        )
+        .await;
+        assert!(server.connections.get(id).is_some());
+        assert!(matches!(
+            closed.try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ));
+        let mut impulses = Vec::new();
+        for _ in 0..reliable_rx.len() {
+            let frame = receive(&mut reliable_rx).await;
+            if frame.id == ClientboundExplode::ID {
+                let packet = ClientboundExplode::decode(&mut &frame.body[..]).unwrap();
+                let push = packet
+                    .knockback
+                    .expect("reliable explosion carries an impulse");
+                impulses.push([push.x, push.y, push.z]);
+            }
+        }
+        assert_eq!(
+            impulses,
+            if visual_only {
+                vec![]
+            } else {
+                vec![[75.0, 150.0, 300.0]]
+            }
+        );
+        server.connections.remove(id);
+        server.hub.shutdown();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[tokio::test]
+async fn broadcast_lag_closes_only_recipients_of_skipped_knockback() {
+    let (server, dir) = fixture();
+    let server = Arc::new(server);
+    let (lost, _lost_rx) = register(&server, "Lost", false);
+    let (current, _current_rx) = register(&server, "Current", false);
+    let (delivered, _delivered_rx) = register(&server, "Delivered", false);
+    let mut closers = Vec::new();
+    for id in [lost, current, delivered] {
+        let (close, closed) = tokio::sync::oneshot::channel();
+        server.connections.inner.lock().closers.insert(id, close);
+        closers.push(closed);
+    }
+    let (mut connections, _) = server.connections.routing_snapshot();
+    let mut viewers = HashMap::new();
+    let mut seen = std::collections::BTreeMap::new();
+    let output = |tick, epochs| TickOutput {
+        tick,
+        snapshot: Arc::new(WorldSnapshot {
+            tick,
+            player_knockback_ticks: Arc::new(epochs),
+            ..Default::default()
+        }),
+        changes: Arc::new(ChangeSet::default()),
+        times: Default::default(),
+    };
+    let (tx, mut rx) = broadcast::channel(1);
+    tx.send(output(1, [(delivered, (1, 1))].into())).unwrap();
+    close_skipped_knockback(
+        &server,
+        &rx.recv().await.unwrap(),
+        &mut seen,
+        &mut viewers,
+        &mut connections,
+    );
+    tx.send(output(2, [(delivered, (1, 1)), (lost, (1, 2))].into()))
+        .unwrap();
+    tx.send(output(
+        3,
+        [(delivered, (1, 1)), (lost, (2, 3)), (current, (1, 3))].into(),
+    ))
+    .unwrap();
+    assert!(matches!(
+        rx.recv().await,
+        Err(broadcast::error::RecvError::Lagged(1))
+    ));
+    let retained = rx.recv().await.unwrap();
+    close_skipped_knockback(
+        &server,
+        &retained,
+        &mut seen,
+        &mut viewers,
+        &mut connections,
+    );
+    assert_eq!(
+        closers[0].try_recv().unwrap(),
+        "skipped-explosion-knockback"
+    );
+    assert!(server.connections.get(lost).is_none());
+    for (index, id) in [(1, current), (2, delivered)] {
+        assert!(server.connections.get(id).is_some());
+        assert!(matches!(
+            closers[index].try_recv(),
+            Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+        ));
+        server.connections.remove(id);
+    }
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+async fn publication_command(core: &Core, text: String) {
+    let (command, completed) = mc_core::command_console::ConsoleCommand::new(text);
+    assert!(core.submit(mc_core::boundary::PlayerInput::ConsoleCommand(command)));
+    tokio::time::timeout(std::time::Duration::from_secs(60), completed)
+        .await
+        .unwrap()
+        .unwrap();
+}
+
+#[tokio::test]
+async fn published_knockback_epochs_count_ticks_not_explosions_and_survive_quiet_ticks() {
+    use mc_core::boundary::PlayerInput;
+    let (server, dir) = fixture();
+    let mut outputs = server.hub.subscribe();
+    let connection = ConnectionId(80);
+    let uuid = uuid::Uuid::from_u128(80);
+    assert!(server.hub.submit(PlayerInput::SetViewDistance {
+        connection,
+        view_distance: 0,
+    }));
+    assert!(server.hub.submit(PlayerInput::Join {
+        connection,
+        uuid,
+        name: "Observer".into(),
+        permission_level: 4,
+    }));
+    let (entity, position) = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        loop {
+            let out = outputs.recv().await.unwrap();
+            server.hub.try_drain_outbox_through(out.tick);
+            if let Some(player) = out.snapshot.entities.iter().find(|e| e.uuid == uuid)
+                && out.snapshot.chunks.iter().any(|chunk| {
+                    chunk.pos.x == (player.position[0].floor() as i32).div_euclid(16)
+                        && chunk.pos.z == (player.position[2].floor() as i32).div_euclid(16)
+                })
+            {
+                break (player.id, player.position);
+            }
+        }
+    })
+    .await
+    .unwrap();
+    publication_command(&server.hub, "tick freeze".into()).await;
+    for _ in 0..2 {
+        publication_command(
+            &server.hub,
+            format!(
+                "summon minecraft:tnt {} {} {} {{fuse:1s,explosion_power:1f}}",
+                position[0] + 1.0,
+                position[1] + 1.0,
+                position[2]
+            ),
+        )
+        .await;
+    }
+    publication_command(&server.hub, "tick step 1".into()).await;
+    let impulse_tick = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        loop {
+            let out = outputs.recv().await.unwrap();
+            server.hub.try_drain_outbox_through(out.tick);
+            let hits = out
+                .changes
+                .explosions
+                .iter()
+                .filter(|explosion| {
+                    explosion
+                        .knockback
+                        .iter()
+                        .any(|&(id, push)| id == entity && push != [0.0; 3])
+                })
+                .count();
+            if !out.changes.explosions.is_empty() {
+                assert_eq!(hits, 2, "both frozen TNT bodies explode in one step");
+                assert_eq!(
+                    out.snapshot.player_knockback_ticks[&connection],
+                    (1, out.tick)
+                );
+                break out.tick;
+            }
+        }
+    })
+    .await
+    .unwrap();
+    let quiet = outputs.recv().await.unwrap();
+    assert!(quiet.changes.explosions.is_empty());
+    assert_eq!(
+        quiet.snapshot.player_knockback_ticks[&connection],
+        (1, impulse_tick)
+    );
+    server.hub.shutdown();
+    std::fs::remove_dir_all(dir).unwrap();
 }

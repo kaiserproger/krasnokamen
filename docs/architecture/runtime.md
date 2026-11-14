@@ -46,12 +46,22 @@ free frame slots (hard) and free bytes (soft: the last admitted group may
 overshoot); entity updates that do not fit wait, ranked by wait time and
 distance, and are planned again from a newer snapshot. Recorder connections
 (`[recorder]`, `crates/mc-edge/src/recorder.rs`) track every entity type to
-their view distance and get a per-tick `krasnokamen:tick` marker. Explosions,
-including the viewer's own knockback, bypass world credit and the competing LOD
-producer through the reliable FIFO: no later snapshot can restore them.
-Reliable per-player results remain ordered; capacity exhaustion disconnects
-rather than dropping them. Socket completion and client rendering are separate
-from native commit.
+their view distance and get a per-tick `krasnokamen:tick` marker. Visual-only
+explosions spend world credit and may drop. Non-zero recipient impulses are
+summed once per publish, independently of visual range, and ride one reliable
+packet rather than filling the FIFO on a large TNT burst. Reliable overflow
+still disconnects explicitly rather than losing an impulse.
+The carrier is also sent to a hit player beyond the 64-block visual range:
+this deliberate exception preserves knockback using `ClientboundExplode`,
+including that packet's particle and sound fields, without another motion path.
+Every published
+snapshot carries cumulative per-player knockback-tick counts and the last such
+tick: after broadcast `Lagged`, the next retained output identifies exactly
+which recipients lost impulses, even if that retained tick also knocks them.
+Those connections close with `skipped-explosion-knockback`; unaffected viewers
+reconcile snapshots. These counters are transient edge observations, not
+gameplay authority or persisted state. Socket completion and client rendering
+are separate from native commit.
 
 ### Tick cost accounting
 

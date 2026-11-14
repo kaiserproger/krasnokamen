@@ -4,6 +4,7 @@
 use super::*;
 use crate::singleplayer_pause::{SingleplayerPause, online_players};
 use crate::tick::phase_laps::Laps;
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Tick loop: 20 TPS, event-driven wake (no sleeps beyond the tick timer).
@@ -64,6 +65,7 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
     let mut empty_ticks = 0u64;
     let mut paused = false;
     let mut singleplayer_pause = SingleplayerPause::default();
+    let mut knockback_ticks = Arc::new(BTreeMap::<ConnectionId, (u64, u64)>::new());
     'ticks: loop {
         let wall_start = std::time::Instant::now();
         let wall_start_unix_ns = std::time::SystemTime::now()
@@ -244,6 +246,43 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             locked = locked_connections(&state, &inputs);
         }
         let (mut output, drains, times) = run_tick(&mut state, &inputs);
+        // Presentation loss detection, not gameplay state or persistence.
+        // Keep cumulative per-connection epochs in every output so a broadcast
+        // receiver can identify exactly whose impulse occurred in skipped ticks.
+        let mut affected = BTreeSet::new();
+        for world in
+            std::iter::once(&state).chain(state.other_dimensions.values().map(|world| &**world))
+        {
+            let Some(dimension) = output.in_dimension(world.dimension) else {
+                continue;
+            };
+            for explosion in &dimension.changes.explosions {
+                for &(entity, push) in &explosion.knockback {
+                    if push != [0.0; 3]
+                        && let Some(connection) = world.connections.entity_connection(entity)
+                    {
+                        affected.insert(connection);
+                    }
+                }
+            }
+        }
+        let live = |connection: &ConnectionId| {
+            std::iter::once(&state)
+                .chain(state.other_dimensions.values().map(|world| &**world))
+                .any(|world| world.connections.entity_of(*connection).is_some())
+        };
+        if !affected.is_empty() || knockback_ticks.keys().any(|id| !live(id)) {
+            let epochs = Arc::make_mut(&mut knockback_ticks);
+            epochs.retain(|id, _| live(id));
+            for connection in affected {
+                let epoch = epochs.entry(connection).or_default();
+                epoch.0 += 1;
+                epoch.1 = output.tick;
+            }
+        }
+        Arc::get_mut(&mut output.snapshot)
+            .expect("tick output is not shared before publication")
+            .player_knockback_ticks = Arc::clone(&knockback_ticks);
         if logging && state.require_plugin_login {
             locked.extend(locked_connections(&state, &inputs));
         }

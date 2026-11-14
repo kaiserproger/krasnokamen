@@ -798,8 +798,8 @@ const CHUNKS_PER_TICK: usize = 16;
 /// (nearest first), entity removals, spawns (nearest first), appearance/moves
 /// (most overdue, nearest first), visual events. Work that does not fit stays
 /// unsent in the viewer cache and is planned again from a newer snapshot.
-/// Explosions, including the viewer's knockback, have no snapshot image to
-/// reconcile and use the reliable FIFO instead of spending world credit.
+/// Recipient knockback has no snapshot image and is summed into one reliable
+/// explosion per publish. Remaining explosion visuals spend world credit.
 #[cfg(test)]
 pub(crate) fn plan_viewer(
     output: &TickOutput,
@@ -894,15 +894,31 @@ fn plan_viewer_inner(
     if let Some(own) = own_entity(snapshot, viewer) {
         viewer.position = own.position;
     }
-    // These events have no later snapshot image to reconcile. In particular,
-    // dropping one loses its recipient's knockback, not just a visual effect.
+    // Impulses are additive on the client. One reliable packet per recipient
+    // preserves their sum without overflowing the FIFO on a large TNT burst.
     index.explosions_near(viewer.position, &mut scratch.events);
+    let impulse = index.knockback.get(&viewer.entity_id);
+    let carrier = impulse.map(|&(event, _)| event);
+    if let Some(&(event, push)) = impulse {
+        push_reliable(
+            &mut out,
+            conn,
+            &explode_packet(&changes.explosions[event], Some(push)),
+        );
+    }
     for &event in &scratch.events {
+        if Some(event) == carrier {
+            continue;
+        }
         let explosion = &changes.explosions[event];
         let [x, y, z] = viewer.position;
         let [cx, cy, cz] = explosion.center;
-        if (x - cx).powi(2) + (y - cy).powi(2) + (z - cz).powi(2) <= EXPLOSION_RANGE_SQ {
-            push_reliable(&mut out, conn, &explode_packet(explosion, viewer.entity_id));
+        if (x - cx).powi(2) + (y - cy).powi(2) + (z - cz).powi(2) <= EXPLOSION_RANGE_SQ
+            && !try_push(&mut out, &mut credit, |out| {
+                push_best_effort(out, conn, &explode_packet(explosion, None));
+            })
+        {
+            break;
         }
     }
     // Heartbeats and discontinuities share the reliable FIFO: an older queued
@@ -2284,31 +2300,23 @@ fn push_entity_event(out: &mut Vec<PlannedPacket>, conn: ConnectionId, event: En
     }
 }
 
-/// Squared distance within which players get an explosion (vanilla 64).
+/// Visual-only blast range (vanilla 64); addressed impulses bypass this bound.
 const EXPLOSION_RANGE_SQ: f64 = 64.0 * 64.0;
 
 /// The explode packet of a blast, as the vanilla TNT fixture shapes it
 /// (26.3 ids: particle explosion_emitter 29, sound reference
 /// entity.generic.explode 703, poof 69 / smoke 72 block particles):
-/// `viewer`'s own knockback rides it.
+/// The publish-wide index supplies an already summed recipient impulse.
 fn explode_packet(
     explosion: &mc_core::boundary::ExplosionEvent,
-    viewer: EntityId,
+    knockback: Option<[f64; 3]>,
 ) -> ClientboundExplode {
     let [x, y, z] = explosion.center;
     ClientboundExplode {
         center: EntityVec3 { x, y, z },
         radius: explosion.radius,
         block_count: i32::try_from(explosion.blocks).unwrap_or(i32::MAX),
-        knockback: explosion
-            .knockback
-            .iter()
-            .find(|(entity, _)| *entity == viewer)
-            .map(|(_, [x, y, z])| EntityVec3 {
-                x: *x,
-                y: *y,
-                z: *z,
-            }),
+        knockback: knockback.map(|[x, y, z]| EntityVec3 { x, y, z }),
         explosion_particle_id: 29,
         sound_reference_id: 703,
         block_particles: vec![

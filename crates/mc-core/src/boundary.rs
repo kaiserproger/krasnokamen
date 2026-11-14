@@ -659,6 +659,11 @@ pub struct WorldSnapshot {
     pub dimension: crate::dimensions::Dimension,
     /// Root output owns the other dimension projections from this same tick.
     pub dimensions: std::collections::BTreeMap<crate::dimensions::Dimension, TickOutput>,
+    /// Edge observation only: connection -> (number of knockback-bearing
+    /// published ticks, most recent such tick). Cumulative counts expose lost
+    /// impulses even when a later retained tick also carries knockback.
+    pub player_knockback_ticks:
+        std::sync::Arc<std::collections::BTreeMap<ConnectionId, (u64, Tick)>>,
     /// Simulated world age; frozen ticks do not advance it.
     pub game_time: u64,
     /// Day time in ticks (0..24000 cycle plus day count).

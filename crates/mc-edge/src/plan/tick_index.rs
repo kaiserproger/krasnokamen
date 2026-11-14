@@ -23,6 +23,8 @@ pub(super) struct EntityDelta {
 pub(crate) struct TickPlanIndex {
     pub(super) blocks: HashMap<(i32, i32), Vec<usize>>,
     pub(super) explosions: HashMap<(i32, i32), Vec<usize>>,
+    /// Recipient impulses are independent of the 64-block visual index.
+    pub(super) knockback: HashMap<EntityId, (usize, [f64; 3])>,
     pub(super) events: HashMap<(i32, i32), Vec<usize>>,
     pub(super) entity_base: Option<u64>,
     /// Anti-xray: hideable ores a block change this tick just exposed, keyed by
@@ -99,6 +101,14 @@ impl TickPlanIndex {
                 .entry(entity_chunk(explosion.center))
                 .or_default()
                 .push(i);
+            for &(recipient, push) in &explosion.knockback {
+                if push != [0.0; 3] {
+                    let (_, sum) = index.knockback.entry(recipient).or_insert((i, [0.0; 3]));
+                    for axis in 0..3 {
+                        sum[axis] += push[axis];
+                    }
+                }
+            }
         }
         for (i, event) in output.changes.entity_events.iter().enumerate() {
             index

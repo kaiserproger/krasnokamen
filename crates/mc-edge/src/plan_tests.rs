@@ -150,16 +150,15 @@ fn one_shot_explosions_are_reliable_without_world_credit() {
                     .iter()
                     .filter(|packet| packet.id == ClientboundExplode::ID)
                     .collect();
-                assert_eq!(blasts.len(), 96);
-                assert!(blasts.iter().all(|packet| packet.reliable));
+                assert_eq!(blasts.len(), 1);
+                assert!(blasts[0].reliable);
                 assert!(packets.iter().all(|packet| packet.reliable));
-                for (n, packet) in blasts.iter().enumerate() {
-                    let blast = ClientboundExplode::decode(&mut &body_of(packet)[..]).unwrap();
-                    assert_eq!(blast.center.x, 8.0 + n as f64 / 100.0);
-                    assert_eq!(
-                        blast.knockback.map(|push| [push.x, push.y, push.z]),
-                        Some([0.1, 0.2, 0.3])
-                    );
+                let blast = ClientboundExplode::decode(&mut &body_of(blasts[0])[..]).unwrap();
+                let push = blast.knockback.unwrap();
+                for (actual, expected) in
+                    [push.x, push.y, push.z].into_iter().zip([9.6, 19.2, 28.8])
+                {
+                    assert!((actual - expected).abs() < 1e-9);
                 }
                 assert_eq!(viewer.forget_all, forget_all);
                 assert_eq!(viewer.chunk_repairs.contains(&(0, 0)), forget_all);
@@ -191,6 +190,44 @@ fn one_shot_explosions_are_reliable_without_world_credit() {
                 }
             }
         }
+    });
+}
+
+#[test]
+fn far_recipient_gets_reliable_explode_carrier_including_visual_fields() {
+    with_cache(|cache| {
+        let out = output(
+            vec![],
+            vec![],
+            ChangeSet {
+                explosions: vec![mc_core::boundary::ExplosionEvent {
+                    center: [0.0, 64.0, 0.0],
+                    radius: 41.0,
+                    blocks: 0,
+                    knockback: vec![(EntityId(1), [0.125, 0.0, 0.0])],
+                }],
+                ..Default::default()
+            },
+        );
+        let mut viewer = viewer_at(1, [81.0, 64.0, 0.0]);
+        viewer.world_credit = 0;
+        let packets = plan_viewer(&out, &mut viewer, 0, cache);
+        let blast = packets
+            .iter()
+            .find(|packet| packet.id == ClientboundExplode::ID)
+            .expect("addressed impulse outside visual index");
+        assert!(blast.reliable);
+        let packet = ClientboundExplode::decode(&mut &body_of(blast)[..]).unwrap();
+        assert!(packet.play_sound);
+        assert_eq!(packet.explosion_particle_id, 29);
+        let push = packet.knockback.unwrap();
+        assert_eq!([push.x, push.y, push.z], [0.125, 0.0, 0.0]);
+        let mut bystander = viewer_at(2, [81.0, 64.0, 0.0]);
+        assert!(
+            !plan_viewer(&out, &mut bystander, 0, cache)
+                .iter()
+                .any(|packet| packet.id == ClientboundExplode::ID)
+        );
     });
 }
 

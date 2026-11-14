@@ -75,9 +75,16 @@ frames as one item, so a large scoreboard does not hit the bound. Chat and
 system-message lines are bounded at their source (the sender's spam budget, the
 command sequence budget), so a connection's trailing run of them compacts into
 one `TextBurst` entry at the cap instead of disconnecting a recipient, and the
-edge queues the burst's frames as one item. Explosions and their recipient's
-knockback also use the reliable FIFO, independently of world credit and LOD
-world-queue producers, because no later snapshot restores a lost impulse.
+edge queues the burst's frames as one item. Only non-zero recipient explosion
+knockback uses the reliable FIFO, summed into one packet per recipient/publish
+independently of the visual spatial index. Visual-only explosions are
+best-effort and may drop; bursts cannot fill the reliable FIFO with visuals.
+No later snapshot restores a lost impulse. Each output therefore carries
+transient cumulative per-player knockback-tick counts plus the last such tick.
+Comparing retained outputs detects lost impulses across broadcast `Lagged`,
+including a skipped impulse followed by another in the retained tick. Only
+affected connections close (`skipped-explosion-knockback`); this observation
+does not alter gameplay authority or persistence.
 World snapshot deltas may reconcile to a newer snapshot; fanout plans within
 each world queue's free frame slots and bytes, so a slow viewer's backlog is
 bounded in bytes and its nearest, longest-waiting entity updates go first. See

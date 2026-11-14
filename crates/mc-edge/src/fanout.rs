@@ -2,17 +2,16 @@
 //!
 //! Split traffic classes:
 //!
-//! - **World state** (chunk packets, entity spawns/moves/removes, block
-//!   deltas, one-shot visuals): best-effort, planned within each viewer's
-//!   world-queue credit (free frame slots and free bytes, see
-//!   [`crate::server::WorldSender`]) so nothing planned is ever dropped. On
-//!   lag the pump skips to the latest tick and reconciles each viewer's held
-//!   world view against it; stale world packets are simply never sent.
-//! - **Player-change-derived packets** (join/sync, acks, menus, cursor,
-//!   health, experience, chat, game-mode): NEVER skipped. They route to a
-//!   separate per-connection **reliable queue** at the server layer, which
-//!   is in-order and bounded; overflow disconnects that connection rather
-//!   than stalling the tick or dropping a change.
+//! - **World state** (chunks, entity snapshots, block deltas) and one-shot
+//!   visuals, including visual-only explosions: best-effort within world
+//!   credit. A competing producer can still refuse a planned send; snapshot
+//!   state is re-planned, but visuals may drop.
+//! - **Player changes and explosion knockback**: reliable FIFO; overflow
+//!   disconnects rather than silently dropping an authoritative effect.
+//!   Each publish sums a recipient's explosion impulses into one packet, so
+//!   a large visual burst cannot fill that FIFO. On broadcast lag, cumulative
+//!   knockback epochs identify affected recipients for an explicit disconnect;
+//!   unaffected viewers reconcile against retained snapshots.
 //!
 //! `publish` plans with `rayon` (one viewer per thread); each packet is
 //! framed once at plan time with threshold-256 compression, and encoded
@@ -40,7 +39,7 @@ pub const RELIABLE_QUEUE_BOUND: usize = 512;
 pub enum Priority {
     /// Never dropped; overflow disconnects the connection.
     Reliable,
-    /// World queue; planned within its free slots, so it never overflows.
+    /// World queue; snapshot state is repaired on refusal, visuals may drop.
     BestEffort,
 }
 
