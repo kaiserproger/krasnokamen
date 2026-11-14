@@ -127,8 +127,7 @@ pub(crate) fn would_use_fence(state: &TickState, actor: EntityId, pos: BlockPos)
         return false;
     };
     let uuid = state.entities.row(slot).uuid;
-    (0..state.entities.len()).any(|index| {
-        let slot = EntitySlot(index as u32);
+    state.entities.leashed_slots().any(|slot| {
         if state.entities.row(slot).entity_life.leash != Some(Holder::Entity(uuid)) {
             return false;
         }
@@ -156,21 +155,24 @@ pub(crate) fn use_fence(state: &mut TickState, actor: EntityId, pos: BlockPos) -
         return false;
     };
     let uuid = state.entities.row(slot).uuid;
-    let mut changed = false;
-    for i in 0..state.entities.len() {
-        let slot = EntitySlot(i as u32);
-        if state.entities.row(slot).entity_life.leash == Some(Holder::Entity(uuid)) {
-            let at = state.entities.pos(slot);
-            let distance = (at[0] - f64::from(pos.x)).powi(2)
-                + (at[1] - f64::from(pos.y)).powi(2)
-                + (at[2] - f64::from(pos.z)).powi(2);
-            if distance <= 144.0 {
-                state.entities.set_leash(slot, Some(Holder::Fence(p)));
-                changed = true;
+    let leashed: Vec<_> = state
+        .entities
+        .leashed_slots()
+        .filter(|&slot| {
+            if state.entities.row(slot).entity_life.leash != Some(Holder::Entity(uuid)) {
+                return false;
             }
-        }
+            let at = state.entities.pos(slot);
+            (at[0] - f64::from(pos.x)).powi(2)
+                + (at[1] - f64::from(pos.y)).powi(2)
+                + (at[2] - f64::from(pos.z)).powi(2)
+                <= 144.0
+        })
+        .collect();
+    for &slot in &leashed {
+        state.entities.set_leash(slot, Some(Holder::Fence(p)));
     }
-    changed
+    !leashed.is_empty()
 }
 pub(crate) fn knot_interact(state: &mut TickState, slot: EntitySlot) -> bool {
     if crate::mounts::name(state, slot) != "minecraft:leash_knot" {
@@ -182,11 +184,13 @@ pub(crate) fn knot_interact(state: &mut TickState, slot: EntitySlot) -> bool {
         at[1].floor() as i32,
         at[2].floor() as i32,
     ];
-    for i in 0..state.entities.len() {
-        let s = EntitySlot(i as u32);
-        if state.entities.row(s).entity_life.leash == Some(Holder::Fence(p)) {
-            detach(state, s);
-        }
+    let leashed: Vec<_> = state
+        .entities
+        .leashed_slots()
+        .filter(|&s| state.entities.row(s).entity_life.leash == Some(Holder::Fence(p)))
+        .collect();
+    for s in leashed {
+        detach(state, s);
     }
     true
 }
@@ -298,3 +302,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
 #[cfg(test)]
 #[path = "leash_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "leash_local_tests.rs"]
+mod local_tests;

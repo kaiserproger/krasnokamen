@@ -287,3 +287,130 @@ fn fed_dolphin_swims_toward_treasure_chest() {
         end[0] - start[0]
     );
 }
+
+#[test]
+fn treasure_swimming_does_not_cross_a_solid_wall() {
+    let (mut state, _, dolphin) = fixture();
+    let slot = state.entities.slot_of(dolphin).unwrap();
+    state
+        .entities
+        .row_mut(slot)
+        .entity_life
+        .dolphin
+        .as_mut()
+        .unwrap()
+        .got_fish = true;
+    let block = |name| {
+        state
+            .registry
+            .blocks
+            .block(&mc_data::Identifier::parse(name).unwrap())
+            .unwrap()
+            .default
+            .0
+    };
+    let stone = block("minecraft:stone");
+    let chest = block("minecraft:chest");
+    for y in 199..=202 {
+        for z in 7..=10 {
+            state.world.set_block(13, y, z, stone);
+        }
+    }
+    state.world.set_block(15, 200, 8, chest);
+    state.world.fold_overlay();
+    treasure_search(&mut state);
+    assert!(
+        state.entities.pos(slot)[0] < 13.0,
+        "dolphin crossed the wall"
+    );
+}
+
+#[test]
+fn treasure_palette_scan_matches_dense_scan_with_overlay_and_ties() {
+    let (mut state, _, dolphin) = fixture();
+    let at = state.entities.pos(state.entities.slot_of(dolphin).unwrap());
+    let chest = state
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:chest").unwrap())
+        .unwrap()
+        .default
+        .0;
+    state.world.set_block(8, 200, 8, chest);
+    state.world.fold_overlay();
+    state.world.set_block(14, 200, 8, chest);
+    state.world.set_block(-17, 200, 8, chest);
+    let (cx, cy, cz) = (floor_i32(at[0]), floor_i32(at[1]), floor_i32(at[2]));
+    let mut expected = None;
+    for x in cx - 48..=cx + 48 {
+        for y in cy - 24..=cy + 24 {
+            for z in cz - 48..=cz + 48 {
+                if state
+                    .world
+                    .block_at(x, y, z)
+                    .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+                    .is_some_and(|b| {
+                        matches!(b.block.id.path(), "chest" | "trapped_chest" | "barrel")
+                    })
+                {
+                    let target = [x as f64 + 0.5, y as f64 + 0.5, z as f64 + 0.5];
+                    let d2 = target
+                        .into_iter()
+                        .zip(at)
+                        .map(|(a, b)| (a - b).powi(2))
+                        .sum::<f64>();
+                    if expected.is_none_or(|(_, distance)| d2 < distance) {
+                        expected = Some((target, d2));
+                    }
+                }
+            }
+        }
+    }
+    let mut cache = crate::world::SectionMatchCache::default();
+    cache.reset(&state.world);
+    assert_eq!(nearest_treasure(&state, at, &mut cache), expected);
+    assert_eq!(expected.unwrap().0, [8.5, 200.5, 8.5]);
+}
+
+#[test]
+#[ignore = "measurement workload; run in the exclusive lane"]
+fn measure_dolphin_treasure_scan() {
+    use std::hint::black_box;
+    use std::time::Instant;
+    let (state, _, dolphin) = fixture();
+    let at = state.entities.pos(state.entities.slot_of(dolphin).unwrap());
+    let (cx, cy, cz) = (floor_i32(at[0]), floor_i32(at[1]), floor_i32(at[2]));
+    let start = Instant::now();
+    for _ in 0..64 {
+        let mut found = 0;
+        for x in cx - 48..=cx + 48 {
+            for y in cy - 24..=cy + 24 {
+                for z in cz - 48..=cz + 48 {
+                    if state
+                        .world
+                        .block_at(x, y, z)
+                        .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
+                        .is_some_and(|b| {
+                            matches!(b.block.id.path(), "chest" | "trapped_chest" | "barrel")
+                        })
+                    {
+                        found += 1;
+                    }
+                }
+            }
+        }
+        black_box(found);
+    }
+    let dense = start.elapsed();
+    let mut cache = crate::world::SectionMatchCache::default();
+    cache.reset(&state.world);
+    let start = Instant::now();
+    for _ in 0..64 {
+        black_box(nearest_treasure(&state, at, &mut cache));
+    }
+    eprintln!(
+        "seekers=64 resident_chunks={} target=none dense={dense:?} gated={:?}",
+        state.world.resident_positions().len(),
+        start.elapsed()
+    );
+}

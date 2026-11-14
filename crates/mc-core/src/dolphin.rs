@@ -192,13 +192,97 @@ pub(crate) fn run(state: &mut TickState) {
     }
 }
 
+fn nearest_treasure(
+    state: &TickState,
+    at: [f64; 3],
+    cache: &mut crate::world::SectionMatchCache,
+) -> Option<([f64; 3], f64)> {
+    let (cx, cy, cz) = (floor_i32(at[0]), floor_i32(at[1]), floor_i32(at[2]));
+    let min = [cx - 48, cy - 24, cz - 48];
+    let max = [cx + 48, cy + 24, cz + 48];
+    let is_treasure = |id: mc_world::BlockStateId| {
+        state
+            .registry
+            .blocks
+            .by_id(id)
+            .is_some_and(|b| matches!(b.block.id.path(), "chest" | "trapped_chest" | "barrel"))
+    };
+    let mut best: Option<([i32; 3], f64)> = None;
+    for ((x, y, z), id) in state.world.overlay_entries() {
+        let p = [x, y, z];
+        if (0..3).all(|i| (min[i]..=max[i]).contains(&p[i]))
+            && is_treasure(mc_world::BlockStateId(id))
+        {
+            let d2 = p
+                .into_iter()
+                .zip(at)
+                .map(|(v, a)| (f64::from(v) + 0.5 - a).powi(2))
+                .sum::<f64>();
+            if best.is_none_or(|(old, distance)| d2 < distance || (d2 == distance && p < old)) {
+                best = Some((p, d2));
+            }
+        }
+    }
+    for sx in min[0].div_euclid(16)..=max[0].div_euclid(16) {
+        for sy in min[1].div_euclid(16)..=max[1].div_euclid(16) {
+            for sz in min[2].div_euclid(16)..=max[2].div_euclid(16) {
+                if !state.world.has_chunk(sx, sz) {
+                    continue;
+                }
+                let lo = [
+                    min[0].max(sx * 16),
+                    min[1].max(sy * 16),
+                    min[2].max(sz * 16),
+                ];
+                let hi = [
+                    max[0].min(sx * 16 + 15),
+                    max[1].min(sy * 16 + 15),
+                    max[2].min(sz * 16 + 15),
+                ];
+                if !state.world.may_hold_matching_state_cached(
+                    (lo[0], lo[1], lo[2]),
+                    (hi[0], hi[1], hi[2]),
+                    cache,
+                    is_treasure,
+                ) {
+                    continue;
+                }
+                for x in lo[0]..=hi[0] {
+                    for y in lo[1]..=hi[1] {
+                        for z in lo[2]..=hi[2] {
+                            if !state
+                                .world
+                                .block_at(x, y, z)
+                                .is_some_and(|id| is_treasure(mc_world::BlockStateId(id)))
+                            {
+                                continue;
+                            }
+                            let p = [x, y, z];
+                            let d2 = p
+                                .into_iter()
+                                .zip(at)
+                                .map(|(v, a)| (f64::from(v) + 0.5 - a).powi(2))
+                                .sum::<f64>();
+                            if best.is_none_or(|(old, distance)| {
+                                d2 < distance || (d2 == distance && p < old)
+                            }) {
+                                best = Some((p, d2));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    best.map(|(p, d2)| (p.map(|v| f64::from(v) + 0.5), d2))
+}
+
 /// DOLPHIN-TREASURE (DolphinSwimToTreasureGoal, 26.1.2): a fed dolphin
 /// with air >= 100 locates the nearest DOLPHIN_LOCATED structure
 /// (ocean_ruin/shipwreck via findNearestMapStructure radius 50) and swims
 /// there; arriving within 4.0 (closerToCenterThan) clears GotFish.
-/// Engine approximation (documented): the engine has no
-/// nearest-structure position lookup, so the nearest treasure container
-/// (chest/trapped chest/barrel) within 48 blocks stands in for the
+/// Engine approximation: the async structure lookup is requester-bound, so
+/// the nearest treasure container within 48 blocks stands in for the
 /// structure position. Gate (air >= 100) and arrival radius (4.0) match
 /// bytecode.
 pub(crate) fn treasure_search(state: &mut TickState) {
@@ -225,43 +309,17 @@ pub(crate) fn treasure_search(state: &mut TickState) {
         }
         seekers.push(slot);
     }
+    if seekers.is_empty() {
+        return;
+    }
+    let mut cache = crate::world::SectionMatchCache::default();
+    cache.reset(&state.world);
     for slot in seekers {
         let at = state.entities.pos(slot);
         if !crate::conduit::water(state, at) {
             continue;
         }
-        // Nearest treasure container in a 48-block cube (loaded chunks
-        // only — block_at misses unloaded cells, which bounds the scan).
-        let mut best: Option<([f64; 3], f64)> = None;
-        let (cx, cy, cz) = (
-            at[0].floor() as i32,
-            at[1].floor() as i32,
-            at[2].floor() as i32,
-        );
-        for x in cx - 48..=cx + 48 {
-            for y in cy - 24..=cy + 24 {
-                for z in cz - 48..=cz + 48 {
-                    let treasure = state
-                        .world
-                        .block_at(x, y, z)
-                        .and_then(|id| state.registry.blocks.by_id(mc_world::BlockStateId(id)))
-                        .is_some_and(|b| {
-                            matches!(b.block.id.path(), "chest" | "trapped_chest" | "barrel")
-                        });
-                    if !treasure {
-                        continue;
-                    }
-                    let dx = x as f64 + 0.5 - at[0];
-                    let dy = y as f64 + 0.5 - at[1];
-                    let dz = z as f64 + 0.5 - at[2];
-                    let d2 = dx * dx + dy * dy + dz * dz;
-                    if best.is_none_or(|(_, b)| d2 < b) {
-                        best = Some(([x as f64 + 0.5, y as f64 + 0.5, z as f64 + 0.5], d2));
-                    }
-                }
-            }
-        }
-        let Some((target, d2)) = best else {
+        let Some((target, d2)) = nearest_treasure(state, at, &mut cache) else {
             continue;
         };
         if d2 < 16.0 {
@@ -275,12 +333,36 @@ pub(crate) fn treasure_search(state: &mut TickState) {
         // applied per 10-tick run: 5-block steps).
         let dist = d2.sqrt();
         let step = (5.0 / dist).min(1.0);
-        let next = [
-            at[0] + (target[0] - at[0]) * step,
-            at[1] + (target[1] - at[1]) * step,
-            at[2] + (target[2] - at[2]) * step,
-        ];
-        state.entities.set_pos(slot, next);
+        let desired = mc_physics::Vec3::new(
+            (target[0] - at[0]) * step,
+            (target[1] - at[1]) * step,
+            (target[2] - at[2]) * step,
+        );
+        let body = state.entities.body(slot);
+        let sampler = crate::tick::TickSampler {
+            world: &state.world,
+            registry: &state.registry,
+        };
+        if let Some(moved) = mc_physics::resolve_collision_displacement(
+            &sampler,
+            mc_physics::Vec3::new(at[0], at[1], at[2]),
+            mc_physics::Aabb {
+                half_width: body.half_width,
+                height: body.height,
+            },
+            desired,
+            false,
+            0.0,
+        ) {
+            state.entities.set_pos(
+                slot,
+                [
+                    at[0] + moved.delta.x,
+                    at[1] + moved.delta.y,
+                    at[2] + moved.delta.z,
+                ],
+            );
+        }
     }
 }
 
