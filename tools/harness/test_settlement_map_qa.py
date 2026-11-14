@@ -562,7 +562,7 @@ class SettlementMapVerdictTests(unittest.TestCase):
 
     def test_run_publishes_the_verdicts_when_the_walk_fails(self):
         from types import SimpleNamespace
-        ctx = SimpleNamespace(client="native", extra_args=[], client_evidence={})
+        ctx = SimpleNamespace(client="native", extra_args=[], client_evidence={}, parts=1)
         probe = SimpleNamespace(report={"assertions": dict(RECORDED_WRONG_CLICK)})
 
         def walk(*_):
@@ -591,7 +591,8 @@ class SettlementMapVerdictTests(unittest.TestCase):
 
     def test_the_native_lane_refuses_russian_because_its_client_cannot_ask_for_it(self):
         from types import SimpleNamespace
-        ctx = SimpleNamespace(client="native", extra_args=["--", "--language", "ru_ru"], client_evidence={})
+        ctx = SimpleNamespace(client="native", extra_args=["--", "--language", "ru_ru"],
+                              client_evidence={}, parts=1)
         with self.assertRaisesRegex(ValueError, "require --client java"):
             gate.run(ctx)
 
