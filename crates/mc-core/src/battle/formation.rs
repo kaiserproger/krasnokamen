@@ -788,7 +788,6 @@ pub(crate) fn roll(regiment: u32, section: usize, tick: u64) -> f64 {
     (x ^ (x >> 31)) as f64 / u64::MAX as f64
 }
 
-
 #[cfg(test)]
 #[path = "formation_tests.rs"]
 mod tests;

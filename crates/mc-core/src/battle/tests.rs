@@ -227,7 +227,9 @@ fn native_target_update_is_sliced_and_rechecks_dead_factions_and_range() {
             world: &state.world,
             tick,
         };
-        battle.columns.prepare(&frame, &mut battle.formation, &mut battle.output.counters);
+        battle
+            .columns
+            .prepare(&frame, &mut battle.formation, &mut battle.output.counters);
         battle.formation.finish_preparation();
         targeting::update(&frame, battle);
     };
@@ -278,7 +280,9 @@ fn archers_target_with_attack_range_not_melee_or_follow_range() {
         world: &state.world,
         tick: i64::from(archer.0).rem_euclid(10) as u64,
     };
-    battle.columns.prepare(&frame, &mut battle.formation, &mut battle.output.counters);
+    battle
+        .columns
+        .prepare(&frame, &mut battle.formation, &mut battle.output.counters);
     battle.formation.finish_preparation();
     targeting::update(&frame, &mut battle);
     assert_eq!(battle.columns.target(slot).unwrap().id, enemy);
@@ -322,7 +326,7 @@ fn faction_fields_reject_invalid_native_and_json_values() {
     ] {
         let record = mc_data::entity_nbt::VanillaEntity {
             id: "minecraft:zombie".into(),
-            extra_fields: vec![("solaris:Faction".into(), tag)],
+            extra_fields: vec![("krasnokamen:Faction".into(), tag)],
             ..Default::default()
         };
         assert!(crate::journal::EntityStateImage::from_record(&state.registry, &record).is_err());
@@ -461,7 +465,9 @@ fn dense_slot_projection_survives_compaction_and_classification_changes() {
             world: &state.world,
             tick: 0,
         };
-        battle.columns.prepare(&frame, &mut battle.formation, &mut battle.output.counters);
+        battle
+            .columns
+            .prepare(&frame, &mut battle.formation, &mut battle.output.counters);
         battle.formation.finish_preparation();
     }
     let bi = battle.columns.index(slot).unwrap();
@@ -481,7 +487,9 @@ fn dense_slot_projection_survives_compaction_and_classification_changes() {
         world: &state.world,
         tick: 1,
     };
-    battle.columns.prepare(&frame, &mut battle.formation, &mut battle.output.counters);
+    battle
+        .columns
+        .prepare(&frame, &mut battle.formation, &mut battle.output.counters);
     battle.formation.finish_preparation();
     assert!(battle.columns.ranged[bi]);
     assert_eq!(battle.columns.drive_by_slot[slot.0 as usize], [0.0; 3]);
@@ -489,18 +497,33 @@ fn dense_slot_projection_survives_compaction_and_classification_changes() {
 
 fn native_cache_fixture() -> (crate::tick::TickState, EntityId, EntityId) {
     let mut state = fixture();
-    state.tickets.insert("battle-cache-regression".into(),
-        (crate::boundary::ChunkPos { x: 0, z: 0 }, 0));
+    state.tickets.insert(
+        "battle-cache-regression".into(),
+        (crate::boundary::ChunkPos { x: 0, z: 0 }, 0),
+    );
     let rider = spawn(&mut state, 1, "minecraft:husk", [4.5, 64.0, 4.5]);
     let horse = spawn(&mut state, 1, "minecraft:horse", [12.5, 64.0, 12.5]);
     for id in [rider, horse] {
         let slot = state.entities.slot_of(id).unwrap();
         state.entities.row_mut(slot).persistent = true;
     }
-    state.hostile.battle.formation.add_regiment(formation::RegimentSpec {
-        id: 1, faction: 1, origin: [4.5, 64.0, 4.5], facing: [0.0, 1.0],
-        files: 1, frontage: 1.0, order: formation::Order::Hold,
-    }, &[rider]).unwrap();
+    state
+        .hostile
+        .battle
+        .formation
+        .add_regiment(
+            formation::RegimentSpec {
+                id: 1,
+                faction: 1,
+                origin: [4.5, 64.0, 4.5],
+                facing: [0.0, 1.0],
+                files: 1,
+                frontage: 1.0,
+                order: formation::Order::Hold,
+            },
+            &[rider],
+        )
+        .unwrap();
     state.hostile.battle.running = true;
     for _ in 0..3 {
         crate::tick::run_tick(&mut state, &[]);
@@ -526,8 +549,11 @@ fn native_cached_facts_invalidate_equipment_and_latch_inactive_changes() {
     let slot = state.entities.slot_of(rider).unwrap();
     state.entities.row_mut(slot).controls.no_ai = true;
     crate::tick::run_tick(&mut state, &[]);
-    let bow = state.registry.items
-        .id_of(&mc_data::Identifier::parse("minecraft:bow").unwrap()).unwrap();
+    let bow = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:bow").unwrap())
+        .unwrap();
     std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).equipment[0] =
         Some(mc_data::ItemStack::new(bow, 1));
     crate::tick::run_tick(&mut state, &[]);
@@ -537,7 +563,10 @@ fn native_cached_facts_invalidate_equipment_and_latch_inactive_changes() {
     state.entities.row_mut(slot).controls.no_ai = false;
     crate::tick::run_tick(&mut state, &[]);
     let bi = state.hostile.battle.columns.index(slot).unwrap();
-    assert_eq!(state.hostile.battle.combat.fighters[bi].weapon, combat::Weapon::Bow);
+    assert_eq!(
+        state.hostile.battle.combat.fighters[bi].weapon,
+        combat::Weapon::Bow
+    );
     assert!(!state.hostile.battle.columns.equipment_dirty[bi]);
 }
 
@@ -575,24 +604,52 @@ fn fused_population_matches_the_native_sparse_scan_after_roster_changes() {
     let zero = spawn(&mut state, 2, "minecraft:husk", [7.5, 64.0, 7.5]);
     let mismatch = spawn(&mut state, 2, "minecraft:husk", [9.5, 64.0, 9.5]);
     let gone = spawn(&mut state, 1, "minecraft:husk", [10.5, 64.0, 10.5]);
-    state.hostile.battle.formation.add_regiment(formation::RegimentSpec {
-        id: 11, faction: 1, origin: [6.5, 64.0, 6.5], facing: [0.0, 1.0],
-        files: 4, frontage: 1.0, order: formation::Order::Hold,
-    }, &[dead, zero, mismatch, gone]).unwrap();
-    state.entities.body_mut(state.entities.slot_of(dead).unwrap()).alive = false;
-    state.entities.row_mut(state.entities.slot_of(zero).unwrap()).health = 0.0;
+    state
+        .hostile
+        .battle
+        .formation
+        .add_regiment(
+            formation::RegimentSpec {
+                id: 11,
+                faction: 1,
+                origin: [6.5, 64.0, 6.5],
+                facing: [0.0, 1.0],
+                files: 4,
+                frontage: 1.0,
+                order: formation::Order::Hold,
+            },
+            &[dead, zero, mismatch, gone],
+        )
+        .unwrap();
+    state
+        .entities
+        .body_mut(state.entities.slot_of(dead).unwrap())
+        .alive = false;
+    state
+        .entities
+        .row_mut(state.entities.slot_of(zero).unwrap())
+        .health = 0.0;
     state.entities.remove(state.entities.slot_of(gone).unwrap());
     let tail_dead = spawn(&mut state, 3, "minecraft:husk", [13.5, 64.0, 13.5]);
-    state.entities.body_mut(state.entities.slot_of(tail_dead).unwrap()).alive = false;
+    state
+        .entities
+        .body_mut(state.entities.slot_of(tail_dead).unwrap())
+        .alive = false;
     spawn(&mut state, 3, "minecraft:husk", [14.5, 64.0, 14.5]);
     spawn(&mut state, 0, "minecraft:husk", [15.5, 64.0, 15.5]);
     let mut expected = UnitCounters::default();
     for round in 0..3 {
         if round == 1 {
-            state.entities.set_faction(state.entities.slot_of(rider).unwrap(), 0);
-            state.entities.set_faction(state.entities.slot_of(horse).unwrap(), 2);
+            state
+                .entities
+                .set_faction(state.entities.slot_of(rider).unwrap(), 0);
+            state
+                .entities
+                .set_faction(state.entities.slot_of(horse).unwrap(), 2);
         } else if round == 2 {
-            state.entities.remove(state.entities.slot_of(mismatch).unwrap());
+            state
+                .entities
+                .remove(state.entities.slot_of(mismatch).unwrap());
         }
         state.tick += 1;
         step(&mut state);
@@ -642,7 +699,9 @@ fn twenty_thousand_registered_archers_use_one_regiment_candidate_per_decision() 
             world: &state.world,
             tick,
         };
-        battle.columns.prepare(&frame, &mut battle.formation, &mut battle.output.counters);
+        battle
+            .columns
+            .prepare(&frame, &mut battle.formation, &mut battle.output.counters);
         battle.formation.finish_preparation();
         targeting::update(&frame, &mut battle);
         assert_eq!(battle.work.retargeted, 2000);
@@ -821,9 +880,17 @@ fn native_tick_pursues_routed_enemies_only_for_the_staged_scenario() {
         if !staged {
             state.tickets.remove(staging::OWNER);
         }
-        let regiment_id = state.hostile.battle.formation.regiments.iter()
+        let regiment_id = state
+            .hostile
+            .battle
+            .formation
+            .regiments
+            .iter()
             .filter(|regiment| regiment.spec.faction == 1 && regiment.spec.order == Order::Advance)
-            .max_by_key(|regiment| regiment.len).unwrap().spec.id;
+            .max_by_key(|regiment| regiment.len)
+            .unwrap()
+            .spec
+            .id;
         // A controlled native morale state, not a mocked staging callback.
         for regiment in &mut state.hostile.battle.formation.regiments {
             if regiment.spec.faction == 2 {
@@ -833,14 +900,33 @@ fn native_tick_pursues_routed_enemies_only_for_the_staged_scenario() {
         for _ in 0..21 {
             crate::tick::run_tick(&mut state, &[]);
         }
-        let regiment = state.hostile.battle.formation.regiments.iter()
-            .find(|regiment| regiment.spec.id == regiment_id).unwrap();
+        let regiment = state
+            .hostile
+            .battle
+            .formation
+            .regiments
+            .iter()
+            .find(|regiment| regiment.spec.id == regiment_id)
+            .unwrap();
         assert!(regiment.enemy_routing);
-        assert_eq!(regiment.spec.order,
-            if staged { Order::Pursue } else { Order::Advance });
-        assert!(state.hostile.battle.formation.regiments.iter()
-            .any(|regiment| regiment.spec.faction == 1 && regiment.spec.order == Order::Hold),
-            "holding archers lost their order");
+        assert_eq!(
+            regiment.spec.order,
+            if staged {
+                Order::Pursue
+            } else {
+                Order::Advance
+            }
+        );
+        assert!(
+            state
+                .hostile
+                .battle
+                .formation
+                .regiments
+                .iter()
+                .any(|regiment| regiment.spec.faction == 1 && regiment.spec.order == Order::Hold),
+            "holding archers lost their order"
+        );
     }
 }
 

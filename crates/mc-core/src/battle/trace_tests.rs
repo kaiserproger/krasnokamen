@@ -67,51 +67,74 @@ pub(super) fn frame_digest(battle: &BattleState, output: &Output) -> FrameTrace 
 }
 
 fn run_trace(threads: usize) -> Vec<FrameTrace> {
-    rayon::ThreadPoolBuilder::new().num_threads(threads).build().unwrap().install(|| {
-        let mut state = tests::staged_flat_fixture(1000);
-        staging::execute(&mut state, &mut crate::boundary::ChangeSet::default(),
-            [8.5, 64.0, 8.5], &staging::BattleCommand::Start).unwrap();
-        let mut contact = false;
-        for _ in 0..1800 {
-            crate::tick::run_tick(&mut state, &[]);
-            if state.hostile.battle.formation.regiments.iter()
-                .any(|regiment| regiment.enemy.is_some() && regiment.gap <= 6.0) {
-                contact = true;
-                break;
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .build()
+        .unwrap()
+        .install(|| {
+            let mut state = tests::staged_flat_fixture(1000);
+            staging::execute(
+                &mut state,
+                &mut crate::boundary::ChangeSet::default(),
+                [8.5, 64.0, 8.5],
+                &staging::BattleCommand::Start,
+            )
+            .unwrap();
+            let mut contact = false;
+            for _ in 0..1800 {
+                crate::tick::run_tick(&mut state, &[]);
+                if state
+                    .hostile
+                    .battle
+                    .formation
+                    .regiments
+                    .iter()
+                    .any(|regiment| regiment.enemy.is_some() && regiment.gap <= 6.0)
+                {
+                    contact = true;
+                    break;
+                }
             }
-        }
-        assert!(contact, "native armies never reached contact");
-        // Contact stress fixture: start real charge pulses through the ordinary
-        // order API. This makes raw intents/events non-vacuous within 300 ticks;
-        // it does not change the production staged scenario's Advance orders.
-        let formation = &mut state.hostile.battle.formation;
-        for index in 0..formation.regiments.len() {
-            let regiment = &formation.regiments[index];
-            if regiment.spec.order == formation::Order::Advance {
-                let id = regiment.spec.id;
-                assert!(formation.set_order(id, formation::Order::Charge));
+            assert!(contact, "native armies never reached contact");
+            // Contact stress fixture: start real charge pulses through the ordinary
+            // order API. This makes raw intents/events non-vacuous within 300 ticks;
+            // it does not change the production staged scenario's Advance orders.
+            let formation = &mut state.hostile.battle.formation;
+            for index in 0..formation.regiments.len() {
+                let regiment = &formation.regiments[index];
+                if regiment.spec.order == formation::Order::Advance {
+                    let id = regiment.spec.id;
+                    assert!(formation.set_order(id, formation::Order::Charge));
+                }
             }
-        }
-        state.hostile.battle.trace = Some(FrameTrace::default());
-        let mut traces = Vec::with_capacity(300);
-        for _ in 0..300 {
-            let previous = state.hostile.battle.elapsed_ticks;
-            crate::tick::run_tick(&mut state, &[]);
-            assert_eq!(state.hostile.battle.elapsed_ticks, previous + 1);
-            traces.push(state.hostile.battle.trace.unwrap());
-        }
-        assert!(traces.iter().any(|trace| trace.intents > 0), "no native battle intents");
-        assert!(traces.iter().any(|trace| trace.events > 0), "no native battle events");
-        traces
-    })
+            state.hostile.battle.trace = Some(FrameTrace::default());
+            let mut traces = Vec::with_capacity(300);
+            for _ in 0..300 {
+                let previous = state.hostile.battle.elapsed_ticks;
+                crate::tick::run_tick(&mut state, &[]);
+                assert_eq!(state.hostile.battle.elapsed_ticks, previous + 1);
+                traces.push(state.hostile.battle.trace.unwrap());
+            }
+            assert!(
+                traces.iter().any(|trace| trace.intents > 0),
+                "no native battle intents"
+            );
+            assert!(
+                traces.iter().any(|trace| trace.events > 0),
+                "no native battle events"
+            );
+            traces
+        })
 }
 
 #[test]
 #[ignore = "native 2x1000 contact trace; run explicitly for before/after receipts"]
 fn native_battle_serial_trace() {
     for (tick, trace) in run_trace(1).iter().enumerate() {
-        println!("BATTLE_TRACE {tick} {:016x} {} {} {}",
-            trace.digest, trace.intents, trace.events, trace.arrows);
+        println!(
+            "BATTLE_TRACE {tick} {:016x} {} {} {}",
+            trace.digest, trace.intents, trace.events, trace.arrows
+        );
     }
 }
 

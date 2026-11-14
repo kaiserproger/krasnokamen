@@ -178,7 +178,6 @@ pub(crate) fn invalidate_wire_facts(state: &mut TickState) {
     state.hostile.battle.columns.invalidate(&state.entities);
 }
 
-
 #[derive(Debug, Default)]
 pub(crate) struct Output {
     pub intents: Vec<BattleIntent>,
@@ -222,7 +221,9 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     if state.tickets.contains_key(staging::OWNER) {
         staging::update_orders(&mut battle.formation);
     }
-    battle.columns.prepare(&frame, &mut battle.formation, &mut output.counters);
+    battle
+        .columns
+        .prepare(&frame, &mut battle.formation, &mut output.counters);
     timings.columns_us = phase_us(&mut mark);
     battle.formation.finish_preparation();
     timings.formation_us = phase_us(&mut mark);

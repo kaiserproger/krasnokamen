@@ -905,12 +905,12 @@ fn missing_required_fields_fail_closed() {
 fn non_vanilla_namespace_fails_closed() {
     let dir = fixture();
     let error = loader(dir.path())
-        .load_structure_set(&identifier("solaris:villages"))
+        .load_structure_set(&identifier("krasnokamen:villages"))
         .expect_err("a non-vanilla structure set fails closed");
     assert!(
         error
             .to_string()
-            .contains("non-minecraft structure set solaris:villages"),
+            .contains("non-minecraft structure set krasnokamen:villages"),
         "{error}"
     );
 }
@@ -1007,11 +1007,11 @@ fn load_all(root: &Path) -> Result<(), VillageDataError> {
 }
 
 /// The local vanilla content cache, when it is present. An explicit
-/// `SOLARIS_CONTENT_CACHE` pins the search to that root — an operator who
+/// `KRASNOKAMEN_CONTENT_CACHE` pins the search to that root — an operator who
 /// names a cache does not want another one silently standing in for it —
 /// otherwise the workspace cache and the documented scratch cache are tried.
 fn real_cache_worldgen() -> Option<PathBuf> {
-    if let Ok(dir) = std::env::var("SOLARIS_CONTENT_CACHE") {
+    if let Ok(dir) = std::env::var("KRASNOKAMEN_CONTENT_CACHE") {
         return find_village_cache([PathBuf::from(dir)]);
     }
     let mut candidates = Vec::new();
@@ -1058,7 +1058,7 @@ fn real_cache_villages_closure_loads() {
     let Some(worldgen) = real_cache_worldgen() else {
         eprintln!(
             "SKIP real_cache_villages_closure_loads: no vanilla content cache with \
-             data/minecraft/worldgen/structure_set/villages.json (set SOLARIS_CONTENT_CACHE, \
+             data/minecraft/worldgen/structure_set/villages.json (set KRASNOKAMEN_CONTENT_CACHE, \
              or place one at /tmp/jdk-cold2)"
         );
         return;

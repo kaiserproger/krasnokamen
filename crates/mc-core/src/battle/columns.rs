@@ -2,7 +2,10 @@
 //! faction rows not in that roster (including carried horses) occupy the tail.
 //! Native rows remain authoritative. Only preparation resolves identity to slot.
 
-use super::{EnemyTarget, Frame, UnitCounters, formation::{FormationRuntime, SoldierSample}};
+use super::{
+    EnemyTarget, Frame, UnitCounters,
+    formation::{FormationRuntime, SoldierSample},
+};
 use crate::boundary::EntityId;
 use crate::entities::{EntityKind, EntitySlot, EntityStore};
 
@@ -70,9 +73,12 @@ impl Columns {
     }
 
     fn native_slot(&self, frame: &Frame<'_>, bi: usize, id: EntityId) -> Option<EntitySlot> {
-        self.facts.get(bi).and_then(|facts| facts.slot)
-            .filter(|slot| (slot.0 as usize) < frame.entities.len()
-                && frame.entities.body(*slot).id == id)
+        self.facts
+            .get(bi)
+            .and_then(|facts| facts.slot)
+            .filter(|slot| {
+                (slot.0 as usize) < frame.entities.len() && frame.entities.body(*slot).id == id
+            })
             .or_else(|| frame.entities.slot_of_any(id))
     }
 
@@ -120,16 +126,20 @@ impl Columns {
             facts.health = row.health;
             facts.no_ai = row.controls.no_ai;
             facts.carried = row.entity_life.mount.rider.is_some();
-            facts.targetable = matches!(body.kind, EntityKind::Mob { .. })
-                && !crate::axolotl::playing_dead(row);
+            facts.targetable =
+                matches!(body.kind, EntityKind::Mob { .. }) && !crate::axolotl::playing_dead(row);
             let type_id = match body.kind {
                 EntityKind::Mob { type_id } => type_id,
                 _ => u32::MAX,
             };
             let held = row.appearance.equipment[0]
-                .as_ref().filter(|stack| !stack.is_empty()).map(|stack| stack.item_id);
+                .as_ref()
+                .filter(|stack| !stack.is_empty())
+                .map(|stack| stack.item_id);
             let offhand = row.appearance.equipment[1]
-                .as_ref().filter(|stack| !stack.is_empty()).map(|stack| stack.item_id);
+                .as_ref()
+                .filter(|stack| !stack.is_empty())
+                .map(|stack| stack.item_id);
             let key = (type_id, held, offhand);
             if self.classification[bi] != Some(key) {
                 self.ranged[bi] = super::combat::is_archer(frame, slot);
@@ -142,8 +152,8 @@ impl Columns {
             facts.valid = true;
         }
         let facts = &mut self.facts[bi];
-        let member_visible = expected_faction
-            .is_none_or(|expected| facts.health > 0.0 && body.faction == expected);
+        let member_visible =
+            expected_faction.is_none_or(|expected| facts.health > 0.0 && body.faction == expected);
         if !member_visible || (expected_faction.is_none() && facts.health <= 0.0) {
             facts.valid = false;
             self.targets[bi] = None;
@@ -156,8 +166,8 @@ impl Columns {
         self.carried[bi] = facts.carried;
         self.targetable[bi] = body.faction != 0 && facts.health > 0.0 && facts.targetable;
         let chunk = frame.entities.chunk_of(slot);
-        self.active[bi] = self.targetable[bi] && !facts.no_ai
-            && frame.world.is_active_position(chunk.x, chunk.z);
+        self.active[bi] =
+            self.targetable[bi] && !facts.no_ai && frame.world.is_active_position(chunk.x, chunk.z);
     }
 
     pub fn prepare(
@@ -200,8 +210,10 @@ impl Columns {
             let counted = formation.has_member(body.id);
             if !body.alive || !matches!(body.kind, EntityKind::Mob { .. }) {
                 if !counted {
-                    counters.record(body.faction,
-                        body.alive && frame.entities.row(slot).health > 0.0);
+                    counters.record(
+                        body.faction,
+                        body.alive && frame.entities.row(slot).health > 0.0,
+                    );
                 }
                 continue;
             }

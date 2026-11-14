@@ -1206,8 +1206,9 @@ impl EntityStore {
         let index = slot.0 as usize;
         #[cfg(test)]
         {
-            static TRACE: std::sync::LazyLock<bool> =
-                std::sync::LazyLock::new(|| std::env::var_os("SOLARIS_TRACE_ROW_MUT").is_some());
+            static TRACE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+                std::env::var_os("KRASNOKAMEN_TRACE_ROW_MUT").is_some()
+            });
             if *TRACE {
                 let caller = std::panic::Location::caller();
                 let counts = self
@@ -1448,11 +1449,13 @@ impl EntityStore {
     /// Read-only mutation witnesses before `views` drains its pending queue.
     /// Motion may also appear here; consumers must invalidate conservatively.
     /// Slot hints are checked because an earlier removal may have compacted rows.
-    pub(crate) fn pending_wire_changes(
-        &self,
-    ) -> impl Iterator<Item = (EntityId, EntitySlot)> + '_ {
+    pub(crate) fn pending_wire_changes(&self) -> impl Iterator<Item = (EntityId, EntitySlot)> + '_ {
         self.wire_pending.iter().filter_map(|&(id, hint)| {
-            let slot = if self.bodies.get(hint.0 as usize).is_some_and(|body| body.id == id) {
+            let slot = if self
+                .bodies
+                .get(hint.0 as usize)
+                .is_some_and(|body| body.id == id)
+            {
                 Some(hint)
             } else {
                 self.id_index.get(&id).copied()
@@ -1981,7 +1984,7 @@ pub struct ColdFields {
 pub(crate) fn player_type_id() -> u32 {
     use std::sync::LazyLock;
     static ID: LazyLock<u32> = LazyLock::new(|| {
-        mc_data::entity_types::solaris_required_entity_types()
+        mc_data::entity_types::krasnokamen_required_entity_types()
             .id_of(&mc_data::Identifier::parse("minecraft:player").expect("static id parses"))
             .expect("player entity type present")
     });

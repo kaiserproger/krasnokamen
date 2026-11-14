@@ -27,8 +27,8 @@ fn guest_sky_creeper_spawns_flies_and_survives_checkpoint_restart() {
     let sdk = fixture::repo_root().join("sdk/rust");
     let bytes = fixture::component_bytes_from_workspace(
         &sdk,
-        "solaris-sky-creeper-plugin",
-        "solaris_sky_creeper_plugin.wasm",
+        "krasnokamen-sky-creeper-plugin",
+        "krasnokamen_sky_creeper_plugin.wasm",
     );
     std::fs::write(package.join("plugin.wasm"), bytes).unwrap();
     std::fs::write(
@@ -175,8 +175,8 @@ fn deploying_an_auth_capable_package_locks_new_sessions_without_the_flag() {
     let sdk = fixture::repo_root().join("sdk/rust");
     let bytes = fixture::component_bytes_from_workspace(
         &sdk,
-        "solaris-sky-creeper-plugin",
-        "solaris_sky_creeper_plugin.wasm",
+        "krasnokamen-sky-creeper-plugin",
+        "krasnokamen_sky_creeper_plugin.wasm",
     );
     std::fs::write(package.join("plugin.wasm"), bytes).unwrap();
     let manifest = include_str!("../../../sdk/rust/examples/sky-creeper/plugin.toml");

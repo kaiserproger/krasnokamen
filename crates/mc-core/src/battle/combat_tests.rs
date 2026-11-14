@@ -18,7 +18,9 @@ pub(in crate::battle) fn prepare(state: &TickState, battle: &mut BattleState, ti
         world: &state.world,
         tick,
     };
-    battle.columns.prepare(&frame, &mut battle.formation, &mut battle.output.counters);
+    battle
+        .columns
+        .prepare(&frame, &mut battle.formation, &mut battle.output.counters);
     battle.formation.finish_preparation();
     battle.combat.prepare(&battle.columns.ids);
 }
