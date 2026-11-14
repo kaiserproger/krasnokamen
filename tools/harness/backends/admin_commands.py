@@ -272,6 +272,147 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
             after = game_time("gametime_after_locate")
             probe.check("game_clock_advanced_during_locate", after > before)
             shot("locate-results")
+
+            # Discover files added after startup; listing must not use the enabled snapshot.
+            packs = artifact / "world" / "datapacks"
+            live_pack = packs / "live_probe"
+            live_pack.mkdir(parents=True)
+            metadata = {
+                "pack": {"description": {"text": "Live pack description", "color": "gold"},
+                         "min_format": [121, 0], "max_format": [121, 0]},
+            }
+            (live_pack / "pack.mcmeta").write_text(json.dumps(metadata))
+            say("datapack list available", "live_probe", "pack_list_discovers_live_addition")
+            (live_pack / "pack.mcmeta").unlink()
+            live_pack.rmdir()
+            removed = say("datapack list available", "available", "pack_list_after_live_removal")
+            probe.check("pack_list_discovers_live_removal",
+                        not any("live_probe" in line for line in removed))
+
+            pack = packs / "command_proof"
+            functions = pack / "data" / "proof" / "function"
+            functions.mkdir(parents=True)
+            (pack / "pack.mcmeta").write_text(json.dumps(metadata))
+            (functions / "inner.mcfunction").write_text(
+                "tellraw @s {text:\"TRACE-INNER\"}\n"
+                "scoreboard players set traced packproof 7\n")
+            (functions / "outer.mcfunction").write_text(
+                "function proof:inner\n"
+                "datapack list enabled\n"
+                "scoreboard players set resumed packproof 9\n")
+            (functions / "recursive.mcfunction").write_text(
+                "debug function proof:inner\n"
+                "tellraw @s {text:\"TRACE-AFTER-RECURSION\"}\n")
+            tags = pack / "data" / "proof" / "tags" / "function"
+            tags.mkdir(parents=True)
+            (tags / "both.json").write_text(json.dumps(
+                {"values": ["proof:inner", "proof:recursive"]}))
+            predicates = pack / "data" / "proof" / "predicate"
+            predicates.mkdir(parents=True)
+            (predicates / "calf.json").write_text(json.dumps({
+                "condition": "minecraft:all_of", "terms": [
+                    {"condition": "minecraft:entity_properties", "entity": "this",
+                     "predicate": {"type": "minecraft:cow", "flags": {"is_baby": True},
+                                   "distance": {"absolute": 0}}},
+                    {"condition": "minecraft:location_check",
+                     "predicate": {"dimension": "minecraft:overworld"}},
+                ],
+            }))
+            say("datapack list available", "command_proof", "pack_list_discovers_functions")
+            say('datapack enable "file/command_proof" first', "selection applied",
+                "pack_enable_publishes_before_success")
+            say('datapack enable "file/command_proof" last', "already enabled",
+                "pack_enable_rejects_duplicate")
+            say("scoreboard objectives add packproof dummy", "packproof", "pack_score_fixture")
+
+            def score(holder: str, expected: int, label: str) -> None:
+                reply = f"{holder} has {expected} [packproof]"
+                say(f"scoreboard players get {holder} packproof", reply, label)
+
+            probe.fixture('summon minecraft:cow ~2 ~ ~ {CustomName:"PredicateCalf",Age:-24000,NoAI:1b}')
+            probe.fixture('summon minecraft:cow ~4 ~ ~ {CustomName:"PredicateAdult",Age:0,NoAI:1b}')
+            say("execute store result score predicates packproof run execute if entity "
+                "@e[type=minecraft:cow,predicate=proof:calf]", "Test passed",
+                "predicate_selects_native_calf")
+            score("predicates", 1, "predicate_count_is_typed")
+            say("execute store result score predicates packproof run execute if entity "
+                "@e[name=PredicateAdult,predicate=!proof:calf]", "Test passed",
+                "inverted_predicate_selects_adult")
+            score("predicates", 1, "inverted_predicate_count_is_typed")
+            say("execute store success score predicates packproof run execute if entity "
+                "@e[name=PredicateCalf,predicate=proof:calf,predicate=!proof:calf]",
+                "Test failed", "repeated_predicates_intersect")
+            score("predicates", 0, "contradictory_predicates_fail")
+            say("execute store success score predicates packproof run kill "
+                "@e[name=PredicateCalf,predicate=!proof:missing]",
+                "Unknown predicate proof:missing", "unknown_predicate_is_an_error")
+            score("predicates", 0, "unknown_predicate_failure_is_typed")
+            say("execute if entity @e[name=PredicateCalf,predicate=proof:calf]",
+                "Test passed", "unknown_predicate_did_not_kill_target")
+            shot("selector-predicate-results")
+
+            debug_dir = artifact / "world" / "debug"
+
+            def trace(command: str, label: str) -> str:
+                before_reports = set(debug_dir.glob("debug-trace-*.txt"))
+                say(command, "debug-trace-", label)
+                reports = set(debug_dir.glob("debug-trace-*.txt")) - before_reports
+                probe.check(f"{label}_one_published_report", len(reports) == 1)
+                report = next(iter(reports))
+                probe.report[label] = str(report)
+                return report.read_text()
+
+            traced = trace("debug function proof:outer", "debug_nested_trace")
+            probe.check("debug_trace_uses_interpreter",
+                        all(part in traced for part in
+                            ("[F] proof:outer", "[F] proof:inner", "[C]", "[R]", "[M]",
+                             "TRACE-INNER", "datapack list enabled", "resumed packproof 9")))
+            score("traced", 7, "debug_trace_mutation_applied")
+            score("resumed", 9, "debug_trace_resumes_after_async_command")
+            tagged = trace("debug function #proof:both", "debug_tag_trace")
+            probe.check("debug_trace_tag_and_recursion",
+                        all(part in tagged for part in
+                            ("proof:inner", "proof:recursive", "commands.debug.function.noRecursion",
+                             "TRACE-AFTER-RECURSION")))
+
+            say('execute store result score created packproof store success score success packproof '
+                'run datapack create created_proof {text:"Created proof",bold:true}',
+                "created_proof", "pack_create_completes")
+            created = json.loads((packs / "created_proof" / "pack.mcmeta").read_text())
+            probe.check("pack_create_preserves_component",
+                        created["pack"]["description"] == {"text": "Created proof", "bold": True})
+            score("created", 1, "pack_create_result_is_final")
+            score("success", 1, "pack_create_success_is_final")
+            say('execute store success score success packproof run datapack create created_proof '
+                '"Must not overwrite"', "Creating datapack", "pack_create_duplicate_fails")
+            score("success", 0, "pack_create_failure_store")
+            probe.check("pack_create_does_not_overwrite",
+                        json.loads((packs / "created_proof" / "pack.mcmeta").read_text()) == created)
+
+            before_profiles = set(debug_dir.glob("profile-results-*.txt"))
+            say("debug start", "Started tick profiling", "debug_profiler_start")
+            say("debug start", "already started", "debug_profiler_duplicate_start")
+            client_ticks(4, "debug_profiler_elapsed_ticks")
+            say("debug stop", "Stopped tick profiling", "debug_profiler_stop")
+            profiles = set(debug_dir.glob("profile-results-*.txt")) - before_profiles
+            probe.check("debug_profiler_publishes_independent_report", len(profiles) == 1)
+            profile = next(iter(profiles))
+            probe.check("debug_profiler_report_has_measurements",
+                        all(part in profile.read_text() for part in
+                            ("Time span:", "Tick span:", "Average TPS:")))
+            probe.report["debug_profile"] = str(profile)
+            say("debug stop", "hasn't started", "debug_profiler_duplicate_stop")
+            shot("datapack-debug-results")
+
+            # Permission checks are last: the source cannot issue tellraw markers after deop.
+            say(f"deop {USERNAME}", f"Command deop completed for {USERNAME}", "deop_trace_source")
+            for command in ("debug start", "debug function proof:inner"):
+                denied = sum("Unknown or incomplete command" in line
+                             for line in _chat(probe.observe()))
+                probe.call("minecraft_send_chat", {"message": command, "command": True})
+                probe.wait(lambda s: sum("Unknown or incomplete command" in line
+                                        for line in _chat(s)) > denied,
+                           f"non_operator_cannot_{command.replace(' ', '_')}")
             probe.report.update(address=address, username=USERNAME)
         if ctx.windowed:
             evidence["capture"] = native_client.capture(mcp, artifact)

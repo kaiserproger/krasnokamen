@@ -986,6 +986,8 @@ pub enum PlayerChange {
         reload: RegistryReload,
     },
     RecipesUnlocked {
+        /// Exact native catalog at this reliable event, including across pump lag.
+        registry: RecipeSource,
         recipes: Vec<String>,
         replace: bool,
     },

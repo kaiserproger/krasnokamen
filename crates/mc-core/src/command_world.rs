@@ -518,7 +518,8 @@ fn execute_inner(
                 y: coordinates[1],
                 z: coordinates[2],
             };
-            let targets = crate::command_execution::resolve_target(state, executor, target);
+            let targets = crate::command_execution::resolve_target(state, executor, target)
+                .map_err(message)?;
             let mut count = 0;
             for target in targets {
                 if let Some(player) = state.players.get_mut(&target) {

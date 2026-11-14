@@ -674,9 +674,10 @@ impl Core {
                 .map_err(|e| CoreError::Storage(e.to_string()))?;
         #[cfg(test)]
         crate::native_checkpoint::tests::register_store(&config, &store)?;
+        let base_registry = Arc::new(registry);
         let (mut tick_state, mut root_manifest, salt_minted) = recover_tick_state(
             &config,
-            &registry,
+            &base_registry,
             &store,
             fresh,
             plugin_runtime,

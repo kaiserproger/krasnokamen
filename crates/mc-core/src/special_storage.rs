@@ -28,7 +28,7 @@ fn fields(state: &TickState, pos: BlockPos) -> Vec<(String, Tag)> {
         })
         .unwrap_or_default()
 }
-fn decode(
+pub(crate) fn decode(
     fields: &[(String, Tag)],
     items: &mc_data::items::ItemRegistry,
 ) -> Result<Vec<ItemStack>, String> {

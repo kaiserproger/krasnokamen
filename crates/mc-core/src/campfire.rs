@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use mc_data::item_nbt::{field, stack_from_fields, stack_to_fields};
+use mc_data::item_nbt::{field, stack_to_fields};
 use mc_data::recipes::{Recipe, RecipeKind, ingredient_accepts_stack};
 use mc_data::{ItemStack, items::ItemRegistry};
 use mc_nbt::{ListTag, Tag};
@@ -341,6 +341,44 @@ pub(crate) fn checkpoint(state: &mut TickState) {
 }
 
 impl CampfireState {
+    pub(crate) fn data_fields(&self, items: &ItemRegistry) -> Vec<(String, Tag)> {
+        let mut fields = self.items_nbt(items);
+        fields.extend([
+            ("CookingTimes".into(), Tag::IntArray(self.progress.to_vec())),
+            (
+                "CookingTotalTimes".into(),
+                Tag::IntArray(self.total.to_vec()),
+            ),
+        ]);
+        fields
+    }
+
+    pub(crate) fn from_fields(
+        fields: &[(String, Tag)],
+        items: &ItemRegistry,
+    ) -> Result<Self, String> {
+        let slots = mc_data::storage_blocks::decode_slots(fields, items, 4)?;
+        let mut campfire = Self {
+            slots: slots.try_into().expect("four admitted slots"),
+            ..Self::default()
+        };
+        for (name, target) in [
+            ("CookingTimes", &mut campfire.progress),
+            ("CookingTotalTimes", &mut campfire.total),
+        ] {
+            match field(fields, name) {
+                None => {}
+                Some(Tag::IntArray(values)) if values.len() == 4 => {
+                    for (slot, value) in target.iter_mut().zip(values) {
+                        *slot = (*value).max(0);
+                    }
+                }
+                _ => return Err(format!("{name}: expected four Ints")),
+            }
+        }
+        Ok(campfire)
+    }
+
     fn encode(&self, pos: BlockPos, items: &ItemRegistry, sync: bool) -> (Vec<u8>, Option<Tag>) {
         let mut fields = self.items_nbt(items);
         let update = sync.then(|| Tag::Compound(fields.clone()));
@@ -385,33 +423,7 @@ impl CampfireState {
         let Tag::Compound(fields) = mc_nbt::read_network(&mut bytes).ok()? else {
             return None;
         };
-        let mut campfire = Self::default();
-        if let Some(Tag::List(list)) = field(&fields, "Items") {
-            for item in &list.elements {
-                let Tag::Compound(fields) = item else {
-                    continue;
-                };
-                let index = match field(fields, "Slot") {
-                    Some(Tag::Byte(index)) => i32::from(*index),
-                    Some(Tag::Int(index)) => *index,
-                    _ => continue,
-                };
-                if (0..4).contains(&index) {
-                    campfire.slots[index as usize] = stack_from_fields(items, fields).ok()??;
-                }
-            }
-        }
-        for (name, target) in [
-            ("CookingTimes", &mut campfire.progress),
-            ("CookingTotalTimes", &mut campfire.total),
-        ] {
-            if let Some(Tag::IntArray(values)) = field(&fields, name) {
-                for (slot, value) in target.iter_mut().zip(values) {
-                    *slot = (*value).max(0);
-                }
-            }
-        }
-        Some(campfire)
+        Self::from_fields(&fields, items).ok()
     }
 }
 

@@ -6,6 +6,10 @@ use crate::dimensions::Dimension;
 use crate::tick::TickState;
 use std::collections::BTreeMap;
 
+#[path = "command_context_deferred.rs"]
+mod deferred;
+pub(crate) use deferred::{CompletionId, complete, completion_context, execute_job, resume};
+
 pub(crate) const LIMIT: usize = 65_536;
 /// Local simulation increments the published tick before shared command commit.
 pub(crate) fn execution_tick(state: &TickState) -> u64 {
@@ -74,6 +78,7 @@ pub(crate) struct Job {
     pub text: String,
     pub context: Context,
     pub block: Option<crate::boundary::BlockPos>,
+    pub source: Option<EntityId>,
 }
 #[derive(Default)]
 pub(crate) struct Runtime {
@@ -85,6 +90,11 @@ pub(crate) struct Runtime {
     limit: usize,
     forks: usize,
     depth: usize,
+    next_completion: u64,
+    waiting: Option<deferred::Waiting>,
+    continuations: std::collections::VecDeque<deferred::Action>,
+    resuming: bool,
+    completed_successes: i32,
     /// Per-selection random draws this tick; each `@r`/`sort=random`
     /// evaluation advances it so repeated same-tick evaluations draw again.
     pub(crate) random_draws: std::cell::Cell<u64>,
@@ -139,6 +149,7 @@ pub(crate) fn submit(state: &mut TickState, text: &str, context: Context, change
                 text: text.to_owned(),
                 context,
                 block: None,
+                source: deferred::source_entity(state, context.connection),
             });
         } else {
             error(state, context, "Command queue budget exceeded");
@@ -151,7 +162,10 @@ pub(crate) fn submit(state: &mut TickState, text: &str, context: Context, change
 /// which clamps the configured sequence length to at least one so a zero
 /// gamerule cannot lock out the restoring gamerule command itself.
 pub(crate) fn begin_sequence(state: &mut TickState) {
-    if state.command_context.depth == 0 {
+    if state.command_context.depth == 0
+        && state.command_context.waiting.is_none()
+        && !state.command_context.resuming
+    {
         state.command_context.used = 0;
         state.command_context.limit = (crate::command_rules::integer(
             state,
@@ -168,6 +182,7 @@ pub(crate) fn exhausted(state: &TickState) -> bool {
 }
 pub(crate) fn charge(state: &mut TickState) -> Result<(), String> {
     if exhausted(state) {
+        crate::command_debug::trace_budget_exhausted(state);
         return Err(format!(
             "Command chain budget exceeded ({})",
             state.command_context.limit
@@ -442,6 +457,19 @@ pub(crate) fn run(
     context: Context,
     changes: &mut ChangeSet,
 ) -> i32 {
+    if state.command_context.waiting() && state.command_context.depth == 0 {
+        if state.command_context.jobs.len() < LIMIT {
+            state.command_context.jobs.push(Job {
+                text: text.to_owned(),
+                context,
+                block: None,
+                source: deferred::source_entity(state, context.connection),
+            });
+        } else {
+            error(state, context, "Command queue budget exceeded");
+        }
+        return 0;
+    }
     if state.command_context.depth >= 64 {
         error(
             state,
@@ -453,23 +481,40 @@ pub(crate) fn run(
     if !state.datapacks.running {
         begin_sequence(state);
     }
+    execute_branches(
+        state,
+        std::collections::VecDeque::from([(
+            text.trim(),
+            context,
+            false,
+            Vec::<crate::command_store::Store>::new(),
+        )]),
+        None,
+        0,
+        0,
+        changes,
+    )
+}
+
+type Branch<'a> = (&'a str, Context, bool, Vec<crate::command_store::Store>);
+
+fn execute_branches(
+    state: &mut TickState,
+    mut branches: std::collections::VecDeque<Branch<'_>>,
+    mut stage: Option<usize>,
+    mut successes: i32,
+    mut produced: usize,
+    changes: &mut ChangeSet,
+) -> i32 {
     state.command_context.depth += 1;
     let previous = state.command_context.current;
-    let mut branches = std::collections::VecDeque::from([(
-        text.trim(),
-        context,
-        false,
-        Vec::<crate::command_store::Store>::new(),
-    )]);
-    let mut stage = None;
-    let mut successes = 0i32;
-    let mut produced = 0usize;
     while let Some((mut text, mut context, mut continuation, mut stores)) = branches.pop_front() {
         let mut resume = false;
+        let mut awaited = false;
         let result = (|| -> Result<Option<(bool, i32)>, String> {
-            let first_in_stage = stage != Some(text.as_ptr());
+            let first_in_stage = stage != Some(text.len());
             if first_in_stage {
-                stage = Some(text.as_ptr());
+                stage = Some(text.len());
                 produced = 0;
             }
             state.command_context.current = Some(context);
@@ -483,6 +528,11 @@ pub(crate) fn run(
                 return match native(state, text, context, changes, !stores.is_empty())? {
                     CommandResult::Success(value) => Ok(Some((true, value))),
                     CommandResult::Failed => Ok(Some((false, 0))),
+                    CommandResult::Deferred(id) => {
+                        deferred::suspend(state, id, context, std::mem::take(&mut stores))?;
+                        awaited = true;
+                        Ok(None)
+                    }
                     CommandResult::Completed if stores.is_empty() => Ok(Some((true, 0))),
                     CommandResult::Completed => Err("Command has no execute-store result".into()),
                     CommandResult::Unavailable if stores.is_empty() => Ok(None),
@@ -704,6 +754,26 @@ pub(crate) fn run(
         if resume {
             branches.push_back((text, context, continuation, stores));
         }
+        if state.command_context.waiting.is_some() {
+            state
+                .command_context
+                .continuations
+                .push_back(deferred::Action::Branches(deferred::PausedExecution {
+                    branches: branches
+                        .into_iter()
+                        .map(|(text, context, continuation, stores)| {
+                            (text.to_owned(), context, continuation, stores)
+                        })
+                        .collect(),
+                    stage,
+                    successes,
+                    produced,
+                    awaited,
+                    depth: state.command_context.depth - 1,
+                    function_running: state.datapacks.running,
+                }));
+            break;
+        }
     }
     state.command_context.current = previous;
     state.command_context.depth -= 1;
@@ -749,7 +819,7 @@ pub(crate) fn native(
         root,
         "function" | "schedule" | "reload" | "datapack" | "data"
     ) {
-        if require_result && !matches!(root, "data" | "datapack") {
+        if require_result && !matches!(root, "data" | "datapack" | "reload") {
             return Err("Command does not support execute store".into());
         }
         return Ok(crate::datapacks::command(

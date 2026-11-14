@@ -2293,7 +2293,7 @@ promotion = "docs/bugs/promotions/PARROT-DANCE-ABSENT.json"
 
 [[bug]]
 id = "DATA-MUTATION-STORAGE"
-title = "Generic entity/storage data operations absent; existing command-block-only merge/get is not general data. Prior DataCommands get+store-score scope did not include merge/modify/storage expansion."
+title = "Generic entity/block data mutation and storage persistence require native-owner and original real-client acceptance."
 area = "gameplay"
 repro = "manual"
 severity = "minor"

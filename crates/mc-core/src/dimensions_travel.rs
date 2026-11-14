@@ -50,17 +50,17 @@ fn targets(
     request: &Request,
     target: &Target,
     origin: [f64; 3],
-) -> Vec<EntityId> {
+) -> Result<Vec<EntityId>, String> {
     if matches!(target, Target::Executor) {
-        return locate(state, request.executor)
+        return Ok(locate(state, request.executor)
             .map(|_| vec![request.executor])
-            .unwrap_or_default();
+            .unwrap_or_default());
     }
     if super::commands::global_target(target) {
         return super::commands::resolve(state, request, target, origin);
     }
     let Some(world) = world(state, request.dimension) else {
-        return Vec::new();
+        return Err("Unknown dimension".into());
     };
     let target = match target {
         Target::Nearest => Target::Selector(Box::new(crate::commands::Selector {
@@ -75,6 +75,7 @@ fn targets(
             pitch: None,
             yaw: None,
             nbt: Vec::new(),
+            predicates: Vec::new(),
             advancements: Vec::new(),
             predicates: Vec::new(),
             distance: None,
@@ -94,7 +95,15 @@ fn targets(
         }
         other => other.clone(),
     };
-    crate::command_execution::resolve_target(world, request.executor, &target)
+    match &target {
+        Target::Selector(selector) => crate::command_execution::selector(
+            world,
+            request.executor,
+            selector,
+            state.datapacks.packs(),
+        ),
+        target => crate::command_execution::resolve_target(world, request.executor, target),
+    }
 }
 
 pub(crate) fn context_targets(
@@ -110,7 +119,7 @@ pub(crate) fn context_targets(
             target: Target::Executor,
         },
     };
-    Ok(targets(state, &request, target, context.position))
+    targets(state, &request, target, context.position)
 }
 
 /// Temporarily select another native world under the shared authority. No entity
@@ -132,6 +141,7 @@ pub(crate) fn execute_context(
         .ok_or("Execute dimension unavailable")?;
     std::mem::swap(&mut state.command_context, &mut destination.command_context);
     std::mem::swap(&mut state.datapacks, &mut destination.datapacks);
+    crate::command_debug::swap_runtime(state, &mut destination);
     super::runtime::swap_globals(state, &mut destination);
     std::mem::swap(
         &mut state.other_dimensions,
@@ -162,19 +172,19 @@ pub(crate) fn execute_context(
     std::mem::swap(&mut state.other_dimensions, &mut original.other_dimensions);
     std::mem::swap(&mut state.command_context, &mut original.command_context);
     std::mem::swap(&mut state.datapacks, &mut original.datapacks);
+    crate::command_debug::swap_runtime(state, &mut original);
     super::runtime::swap_globals(state, &mut original);
     state.other_dimensions.insert(context.dimension, original);
     result
 }
-fn execute_block_chain(
+pub(crate) fn execute_block_chain(
     state: &mut TickState,
     dimension: Dimension,
-    pos: crate::boundary::BlockPos,
+    invocation: crate::command_blocks::Invocation,
     changes: &mut ChangeSet,
 ) {
     if dimension == state.dimension {
-        state.command_blocks_due.push(pos);
-        crate::command_blocks::run(state, changes);
+        crate::command_blocks::invoke(state, changes, invocation);
         return;
     }
     sync_wire_ids(state);
@@ -184,6 +194,7 @@ fn execute_block_chain(
     };
     std::mem::swap(&mut state.command_context, &mut destination.command_context);
     std::mem::swap(&mut state.datapacks, &mut destination.datapacks);
+    crate::command_debug::swap_runtime(state, &mut destination);
     super::runtime::swap_globals(state, &mut destination);
     std::mem::swap(
         &mut state.other_dimensions,
@@ -196,8 +207,7 @@ fn execute_block_chain(
         .changes
         .remove(&dimension)
         .unwrap_or_default();
-    state.command_blocks_due.push(pos);
-    crate::command_blocks::run(state, &mut local);
+    crate::command_blocks::invoke(state, &mut local, invocation);
     sync_wire_ids(state);
     append_changes(
         state.command_context.changes.entry(dimension).or_default(),
@@ -211,6 +221,7 @@ fn execute_block_chain(
     std::mem::swap(&mut state.other_dimensions, &mut original.other_dimensions);
     std::mem::swap(&mut state.command_context, &mut original.command_context);
     std::mem::swap(&mut state.datapacks, &mut original.datapacks);
+    crate::command_debug::swap_runtime(state, &mut original);
     super::runtime::swap_globals(state, &mut original);
     state.other_dimensions.insert(dimension, original);
 }
@@ -491,7 +502,7 @@ pub(crate) fn execute(
     else {
         return Err("Unsupported dimension command".to_owned());
     };
-    let selected = targets(state, &request, target, origin);
+    let selected = targets(state, &request, target, origin)?;
     if selected.is_empty() {
         return Err("argument.entity.notfound.entity".to_owned());
     }
@@ -514,7 +525,7 @@ pub(crate) fn execute(
             None,
         ),
         Destination::Entity(target) => {
-            let ids = targets(state, &request, target, origin);
+            let ids = targets(state, &request, target, origin)?;
             if ids.len() != 1 {
                 return Err(if ids.is_empty() {
                     "argument.entity.notfound.entity"
@@ -698,7 +709,11 @@ pub(crate) fn finish(
     for world in state.other_dimensions.values_mut() {
         jobs.append(&mut world.command_context.jobs);
     }
-    if !requests.is_empty() || !respawns.is_empty() || !jobs.is_empty() {
+    if !requests.is_empty()
+        || !respawns.is_empty()
+        || !jobs.is_empty()
+        || state.command_context.waiting()
+    {
         super::globals::roster(state);
     }
     let mut changes = BTreeMap::new();
@@ -720,18 +735,28 @@ pub(crate) fn finish(
         }
     }
     state.command_context.shared = true;
-    for job in jobs.drain(..) {
+    if state.command_context.waiting() || state.datapacks.pending_work() {
         let dimension = state.dimension;
         let mut local = changes.remove(&dimension).unwrap_or_default();
         state.command_context.changes = changes;
-        if let Some(pos) = job.block {
-            execute_block_chain(state, job.context.dimension, pos, &mut local);
-        } else {
-            crate::command_context::run(state, &job.text, job.context, &mut local);
-        }
+        crate::datapacks::poll_worker(state, &mut local);
+        crate::command_context::resume(state, &mut local);
         changes = std::mem::take(&mut state.command_context.changes);
         append_changes(changes.entry(dimension).or_default(), local);
     }
+    let mut executed = 0;
+    while executed < jobs.len() && !state.command_context.waiting() {
+        let job = &jobs[executed];
+        let dimension = state.dimension;
+        let mut local = changes.remove(&dimension).unwrap_or_default();
+        state.command_context.changes = changes;
+        crate::command_context::execute_job(state, job, &mut local);
+        changes = std::mem::take(&mut state.command_context.changes);
+        append_changes(changes.entry(dimension).or_default(), local);
+        executed += 1;
+    }
+    jobs.drain(..executed);
+    jobs.append(&mut state.command_context.jobs);
     if !changes.is_empty() {
         sync_wire_ids(state);
     }

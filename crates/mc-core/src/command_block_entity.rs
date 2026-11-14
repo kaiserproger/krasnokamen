@@ -39,51 +39,13 @@ pub(crate) fn prepare(
     else {
         return Ok(None);
     };
-    let Tag::Compound(mut fields) =
+    let Tag::Compound(fields) =
         mc_nbt::read_network(&mut &*bytes).map_err(|error| error.to_string())?
     else {
         return Err("Block entity data must be a compound".into());
     };
-    fields.retain(|(name, _)| !matches!(name.as_str(), "id" | "x" | "y" | "z"));
-    fields.push(("id".into(), Tag::String(kind.vanilla_id().into())));
-    mc_data::storage_blocks::validate(&fields, &state.registry.items)?;
-    mc_data::trial_nbt::validate(&fields, Some(&state.registry.items))?;
-    if kind == BlockEntityKind::Conduit {
-        mc_data::conduit_nbt::target(&fields)?;
-    }
-    let storage = if matches!(
-        kind,
-        BlockEntityKind::Furnace | BlockEntityKind::Smoker | BlockEntityKind::BlastFurnace
-    ) {
-        let furnace = mc_world::anvil::chunk_nbt::decode_furnace(&fields, &state.registry.items)
-            .map_err(|error| error.to_string())?;
-        Some(BlockEntityState {
-            slots: furnace
-                .slots
-                .iter()
-                .map(crate::tick::furnace_slot_to_stack)
-                .collect(),
-            furnace: Some(crate::inventory::furnace::FurnaceState {
-                lit_remaining: i32::from(furnace.burn_remaining),
-                lit_total: i32::from(furnace.burn_total),
-                cook_progress: i32::from(furnace.cook_progress),
-                cook_total: i32::from(furnace.cook_total),
-                recipes_used: Arc::new(furnace.recipes_used),
-            }),
-        })
-    } else if kind == BlockEntityKind::ChiseledBookshelf {
-        Some(BlockEntityState {
-            slots: mc_data::storage_blocks::decode_slots(&fields, &state.registry.items, 6)?,
-            furnace: None,
-        })
-    } else if let Some(size) = kind.inventory_size() {
-        Some(BlockEntityState {
-            slots: mc_data::storage_blocks::decode_slots(&fields, &state.registry.items, size)?,
-            furnace: None,
-        })
-    } else {
-        None
-    };
+    let image = prepare_fields(state, kind, fields)?;
+    let fields = &image.fields;
     // Resident hydration must never quarantine a chunk because a command supplied malformed data.
     let mut normalized = Vec::new();
     mc_nbt::write_network(&mut normalized, &Tag::Compound(fields.clone()))
@@ -108,7 +70,7 @@ pub(crate) fn prepare(
         }
         _ => {}
     }
-    Ok(Some(Prepared { fields, storage }))
+    Ok(Some(image))
 }
 
 pub(crate) fn install(state: &mut TickState, pos: BlockPos, mut image: Prepared) {
@@ -197,3 +159,59 @@ fn publish(state: &mut TickState, pos: BlockPos) {
         );
     }
 }
+
+fn prepare_fields(
+    state: &TickState,
+    kind: BlockEntityKind,
+    mut fields: Vec<(String, Tag)>,
+) -> Result<Prepared, String> {
+    fields.retain(|(name, _)| !matches!(name.as_str(), "id" | "x" | "y" | "z"));
+    fields.push(("id".into(), Tag::String(kind.vanilla_id().into())));
+    mc_data::storage_blocks::validate(&fields, &state.registry.items)?;
+    mc_data::trial_nbt::validate(&fields, Some(&state.registry.items))?;
+    if kind == BlockEntityKind::Conduit {
+        mc_data::conduit_nbt::target(&fields)?;
+    }
+    let storage = if matches!(
+        kind,
+        BlockEntityKind::Furnace | BlockEntityKind::Smoker | BlockEntityKind::BlastFurnace
+    ) {
+        let furnace = mc_world::anvil::chunk_nbt::decode_furnace(&fields, &state.registry.items)
+            .map_err(|error| error.to_string())?;
+        Some(BlockEntityState {
+            slots: furnace
+                .slots
+                .iter()
+                .map(crate::tick::furnace_slot_to_stack)
+                .collect(),
+            furnace: Some(crate::inventory::furnace::FurnaceState {
+                lit_remaining: i32::from(furnace.burn_remaining),
+                lit_total: i32::from(furnace.burn_total),
+                cook_progress: i32::from(furnace.cook_progress),
+                cook_total: i32::from(furnace.cook_total),
+                recipes_used: Arc::new(furnace.recipes_used),
+            }),
+        })
+    } else if kind == BlockEntityKind::DecoratedPot {
+        Some(BlockEntityState {
+            slots: crate::special_storage::decode(&fields, &state.registry.items)?,
+            furnace: None,
+        })
+    } else if kind == BlockEntityKind::ChiseledBookshelf {
+        Some(BlockEntityState {
+            slots: mc_data::storage_blocks::decode_slots(&fields, &state.registry.items, 6)?,
+            furnace: None,
+        })
+    } else if let Some(size) = kind.inventory_size() {
+        Some(BlockEntityState {
+            slots: mc_data::storage_blocks::decode_slots(&fields, &state.registry.items, size)?,
+            furnace: None,
+        })
+    } else {
+        None
+    };
+    Ok(Prepared { fields, storage })
+}
+
+#[path = "command_block_entity_data.rs"]
+pub(crate) mod data;

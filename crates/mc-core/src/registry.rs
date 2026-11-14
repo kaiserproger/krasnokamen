@@ -72,6 +72,18 @@ pub(crate) const HAZARD_SOUL_CAMPFIRE: u8 = 0x80;
 /// datapack reload's recipes and loot.
 #[derive(Clone)]
 pub struct CoreRegistry {
+    stable: Arc<RegistryTables>,
+    /// Crafting/furnace recipes, index = recipe display id (contract).
+    pub recipes: Vec<mc_data::recipes::Recipe>,
+    /// First native iron-smelting recipe, resolved when registry content changes.
+    pub(crate) iron_smelting: Option<crate::villager::smelting::IronSmelting>,
+    /// Block loot tables used by native block breaks.
+    pub loot: mc_data::loot::LootTables,
+}
+
+/// Startup-only tables shared by successive native content snapshots.
+#[cfg_attr(test, derive(Clone))]
+pub struct RegistryTables {
     /// Dense global block state table.
     pub blocks: Arc<BlockRegistry>,
     /// Item name <-> protocol id table.
@@ -125,8 +137,6 @@ pub struct CoreRegistry {
     pub(crate) advancement_reward_loot:
         std::collections::BTreeMap<String, mc_data::loot::chest_26_1_2::ChestLootTable>,
     pub enchantments: crate::inventory::enchanting::EnchantmentCatalog,
-    /// Vanilla block loot tables (block breaks).
-    pub loot: mc_data::loot::LootTables,
     /// Immutable catalogs loaded from the same selected vanilla directory.
     pub entity_loot: Arc<mc_data::loot::entity_26_1_2::EntityLootCatalog>,
     pub entity_loot_lookups: Arc<mc_data::loot::entity_26_1_2::VanillaEntityLootLookups>,
@@ -181,6 +191,32 @@ pub struct CoreRegistry {
     /// Datapack loot predicates by `namespace:path` (selector `predicate=`);
     /// validated at load to hold only evaluable conditions.
     pub(crate) predicates: std::collections::BTreeMap<String, serde_json::Value>,
+}
+
+impl std::ops::Deref for CoreRegistry {
+    type Target = RegistryTables;
+
+    fn deref(&self) -> &Self::Target {
+        &self.stable
+    }
+}
+
+impl std::ops::DerefMut for CoreRegistry {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        Arc::get_mut(&mut self.stable).expect("startup registry tables already published")
+    }
+}
+
+#[cfg(test)]
+impl Clone for CoreRegistry {
+    fn clone(&self) -> Self {
+        Self {
+            stable: Arc::new((*self.stable).clone()),
+            recipes: self.recipes.clone(),
+            iron_smelting: self.iron_smelting,
+            loot: self.loot.clone(),
+        }
+    }
 }
 
 impl std::fmt::Debug for CoreRegistry {
@@ -543,35 +579,6 @@ impl CoreRegistry {
             .map(|_| std::sync::OnceLock::new())
             .collect();
         Ok(Self {
-            blocks,
-            shears_item,
-            items: std::sync::Arc::new(items),
-            loot,
-            entity_loot,
-            entity_loot_lookups,
-            chest_loot,
-            fishing_loot,
-            trial_loot,
-            mining,
-            explosion,
-            light,
-            map_colors: map_colors.into(),
-            entity_types,
-            materials,
-            collision_boxes,
-            outlines,
-            max_collision_box_y,
-            max_collision_boxes_per_cell,
-            states,
-            blueprint_index: index_blueprints(&blueprints),
-            blueprints,
-            biome_spawns,
-            item_type_id,
-            cow_type_id,
-            zombie_type_id,
-            item_facts,
-            tags,
-            worldgen_tags,
             recipes,
             construction_crafting,
             iron_smelting,

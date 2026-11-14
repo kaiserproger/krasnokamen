@@ -1715,28 +1715,31 @@ pub(crate) fn can_synchronize_entity_custody(
     let carry = Endpoint::NpcCarry { handle };
     [equipment, carry].iter().all(|endpoint| {
         image_version(state, &endpoint_key(state, endpoint))
-            .is_ok_and(|image| image.is_none_or(|image| image.revision < u64::MAX))
+            .is_ok_and(|image| image.is_none_or(|image| image.revision < MAX_SCRIPT_WORLD_TIME))
     })
 }
 
-pub(crate) fn synchronize_entity_custody(
-    state: &mut TickState,
+/// Exact prospective NPC images, admitted before the entity changes.
+#[derive(Default)]
+pub(crate) struct PreparedEntityCustody {
+    metadata: Option<serde_json::Value>,
+    updates: Vec<(String, serde_json::Value)>,
+}
+
+pub(crate) fn prepare_entity_custody(
+    state: &TickState,
     slot: crate::entities::EntitySlot,
-) -> Result<(), Failure> {
+    candidate: &[Option<ItemStack>; 6],
+) -> Result<PreparedEntityCustody, Failure> {
     let Some((_, handle)) = crate::plugin_npcs::custody_for_entity(state, slot) else {
-        return Ok(());
+        return Ok(PreparedEntityCustody::default());
     };
     let row = state.entities.row(slot);
     let empty = ItemStack::EMPTY;
     let equipment: BTreeMap<_, _> = [0, 1, 5, 4, 3, 2]
         .iter()
         .enumerate()
-        .map(|(script, native)| {
-            (
-                script as u8,
-                row.appearance.equipment[*native].as_ref().unwrap_or(&empty),
-            )
-        })
+        .map(|(script, native)| (script as u8, candidate[*native].as_ref().unwrap_or(&empty)))
         .collect();
     let mut images = vec![(
         Endpoint::NpcEquipment {
@@ -1756,8 +1759,15 @@ pub(crate) fn synchronize_entity_custody(
             hash(&(row.uuid.to_string(), &carry)),
         ));
     }
-    metadata(state)?;
-    let mut updates = Vec::with_capacity(images.len());
+    let metadata = metadata(state)?;
+    let mut prepared = PreparedEntityCustody {
+        metadata: state
+            .plugins
+            .get_domain(OWNER, KEY)
+            .is_none()
+            .then(|| serde_json::to_value(metadata).expect("inventory metadata serialization")),
+        updates: Vec::with_capacity(images.len()),
+    };
     for (endpoint, hash) in images {
         let key = endpoint_key(state, &endpoint);
         let revision = match image_version(state, &key)? {
@@ -1765,14 +1775,38 @@ pub(crate) fn synchronize_entity_custody(
             Some(before) => next(before.revision)?,
             None => 1,
         };
-        updates.push((endpoint, hash, revision));
+        prepared.updates.push((
+            format!("image/{key}"),
+            serde_json::to_value(ImageVersion { hash, revision })
+                .expect("inventory image serialization"),
+        ));
     }
-    for (endpoint, hash, revision) in updates {
-        remember(state, &endpoint, &hash, revision)?;
+    Ok(prepared)
+}
+
+pub(crate) fn apply_entity_custody(state: &mut TickState, prepared: PreparedEntityCustody) {
+    if let Some(metadata) = prepared.metadata {
+        state.plugins.set_domain(OWNER, KEY, metadata);
     }
+    for (key, image) in prepared.updates {
+        state.plugins.set_domain(OWNER, &key, image);
+    }
+}
+
+pub(crate) fn synchronize_entity_custody(
+    state: &mut TickState,
+    slot: crate::entities::EntitySlot,
+) -> Result<(), Failure> {
+    let prepared =
+        prepare_entity_custody(state, slot, &state.entities.row(slot).appearance.equipment)?;
+    apply_entity_custody(state, prepared);
     Ok(())
 }
 
 #[cfg(test)]
 #[path = "plugin_inventories_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "plugin_inventories_command_tests.rs"]
+mod command_tests;

@@ -523,3 +523,7 @@ pub(super) fn activated(state: &mut TickState, connection: ConnectionId, action:
     };
     crate::command_execution::success_feedback(state, connection, key, vec![link]);
 }
+
+#[cfg(test)]
+#[path = "datapack_management_tests.rs"]
+mod tests;

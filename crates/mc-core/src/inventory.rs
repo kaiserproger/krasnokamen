@@ -496,6 +496,23 @@ impl Menu {
         }
     }
 
+    /// Recompute only recipe-backed virtual outputs after atomic catalog
+    /// publication. Inputs, cursor and inventory custody are untouched.
+    pub(crate) fn reload_recipes(&mut self, rules: &ItemRules<'_>) -> bool {
+        let result = match self.kind {
+            MenuKind::Player | MenuKind::CraftingTable => crafting::grid_result(rules, &self.grid),
+            MenuKind::Stonecutter => {
+                self.station.selected = -1;
+                craft_stations::refresh(self.kind, rules, &self.grid, &mut self.station)
+            }
+            _ => return false,
+        };
+        self.result = result;
+        self.state_id = (self.state_id + 1) & 0x7fff;
+        self.quick_craft = QuickCraft::default();
+        true
+    }
+
     /// Full contents in menu slot order, for `MenuContents`.
     #[must_use]
     pub fn contents(&self, inventory: &PlayerInventory, container: &[ItemStack]) -> Vec<ItemStack> {

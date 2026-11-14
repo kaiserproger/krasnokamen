@@ -1,4 +1,4 @@
-//! Operator-only read queries over native entity and block-entity owners.
+//! Operator data access through native entity, block-entity and storage owners.
 use crate::boundary::{BlockPos, ChunkPos, ConnectionId, EntityId};
 use crate::command_context::Context;
 use crate::command_nbt_path::{argument, get, number, result, snbt};
@@ -151,8 +151,18 @@ pub(crate) fn block_image(
         put(&mut fields, key, value);
     }
     let key = (pos.x, pos.y, pos.z);
+    if kind == BlockEntityKind::Hopper
+        && let Some(ticks) = state.redstone_containers.data_cooldown(pos, state.tick)
+    {
+        put(&mut fields, "TransferCooldown", Tag::Int(ticks));
+    }
+    if let Some(clock) = state.gateway_ages.get(&pos) {
+        put(&mut fields, "Age", Tag::Long(clock.age));
+    }
     if let Some(live) = state.block_entities.get(&key) {
-        if kind.inventory_size().is_some() && !fields.iter().any(|(key, _)| key == "LootTable") {
+        if (kind.inventory_size().is_some() || kind == BlockEntityKind::ChiseledBookshelf)
+            && !fields.iter().any(|(key, _)| key == "LootTable")
+        {
             let mut items = Vec::new();
             for (slot, stack) in live
                 .slots
@@ -166,6 +176,19 @@ pub(crate) fn block_image(
                 items.push(Tag::Compound(item));
             }
             put(&mut fields, "Items", list(items, tag_type::COMPOUND));
+        }
+        if kind == BlockEntityKind::DecoratedPot {
+            fields.retain(|(name, _)| name != "item");
+            if let Some(stack) = live.slots.first().filter(|stack| !stack.is_empty()) {
+                put(
+                    &mut fields,
+                    "item",
+                    Tag::Compound(
+                        mc_data::item_nbt::stack_to_fields(&state.registry.items, stack)
+                            .map_err(|error| error.to_string())?,
+                    ),
+                );
+            }
         }
         if let Some(furnace) = &live.furnace {
             for (key, value) in [
@@ -351,6 +374,68 @@ pub(crate) fn query(
     };
     crate::command_execution::success_feedback(state, context.connection, &key, args);
     Ok(value)
+}
+
+pub(crate) fn mutate(
+    state: &mut TickState,
+    context: Context,
+    mut input: &str,
+) -> Result<i32, String> {
+    if context.permission < 2 {
+        return Err(crate::commands::CommandError::Unknown.message());
+    }
+    if argument(&mut input)? != "data" {
+        return Err("Expected data".into());
+    }
+    let action = argument(&mut input)?;
+    let target = Accessor::parse(state, context, &mut input)?;
+    let (kind, args) = target.feedback(state)?;
+    let count = match target {
+        Accessor::Storage(name) => {
+            let empty = Tag::Compound(Vec::new());
+            let previous = state.command_storage.get(&name).unwrap_or(&empty);
+            let (count, next) =
+                crate::command_storage::prepare(state, context, previous, action, input)?;
+            state.command_storage.insert(name, next);
+            state.command_storage_dirty = true;
+            count
+        }
+        target => {
+            let previous = target.read(state)?;
+            let (count, next) =
+                crate::command_storage::prepare(state, context, &previous, action, input)?;
+            let dimension = match target {
+                Accessor::Entity(dimension, _) | Accessor::Block(dimension, _) => dimension,
+                Accessor::Storage(_) => unreachable!(),
+            };
+            let world = if state.dimension == dimension {
+                &mut *state
+            } else {
+                state
+                    .other_dimensions
+                    .get_mut(&dimension)
+                    .map(|world| &mut **world)
+                    .ok_or("Target dimension unavailable")?
+            };
+            match target {
+                Accessor::Entity(_, id) => {
+                    crate::command_summon::data::update(world, id, &previous, &next)?
+                }
+                Accessor::Block(_, pos) => {
+                    crate::command_block_entity::data::update(world, pos, &previous, &next)?
+                }
+                Accessor::Storage(_) => unreachable!(),
+            }
+            count
+        }
+    };
+    crate::command_execution::success_feedback(
+        state,
+        context.connection,
+        &format!("commands.data.{kind}.modified"),
+        args,
+    );
+    Ok(count)
 }
 
 pub(crate) fn command(

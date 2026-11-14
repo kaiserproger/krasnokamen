@@ -17,6 +17,9 @@ pub(crate) enum CommandResult {
     Failed,
     /// The command succeeded, but does not expose a numerical result.
     Completed,
+    /// Admitted I/O has no result yet. The native command owner resumes its
+    /// continuation exactly once when the matching worker completion arrives.
+    Deferred(crate::command_context::CompletionId),
     Unavailable,
 }
 
@@ -438,7 +441,13 @@ pub(crate) fn execute(
                 );
                 return Failed;
             }
-            let targets = player_targets(state, executor, target);
+            let targets = match player_targets(state, executor, target) {
+                Ok(targets) => targets,
+                Err(message) => {
+                    error(state, connection, message);
+                    return Failed;
+                }
+            };
             if targets.is_empty() {
                 feedback(
                     state,
@@ -697,7 +706,13 @@ pub(crate) fn execute(
             destination,
             rotation: facing,
         } => {
-            let targets = resolve_target(state, executor, target);
+            let targets = match resolve_target(state, executor, target) {
+                Ok(targets) => targets,
+                Err(message) => {
+                    error(state, connection, message);
+                    return Failed;
+                }
+            };
             if targets.is_empty() {
                 feedback(
                     state,
@@ -723,7 +738,13 @@ pub(crate) fn execute(
                         feedback(state, connection, "argument.entity.toomany", Vec::new());
                         return Failed;
                     }
-                    let ids = resolve_target(state, executor, target);
+                    let ids = match resolve_target(state, executor, target) {
+                        Ok(targets) => targets,
+                        Err(message) => {
+                            error(state, connection, message);
+                            return Failed;
+                        }
+                    };
                     if ids.len() != 1 {
                         feedback(
                             state,
@@ -1058,7 +1079,13 @@ pub(crate) fn execute(
             return Success(1);
         }
         Command::Kill { target } => {
-            let targets = resolve_target(state, executor, target);
+            let targets = match resolve_target(state, executor, target) {
+                Ok(targets) => targets,
+                Err(message) => {
+                    error(state, connection, message);
+                    return Failed;
+                }
+            };
             if targets.is_empty() {
                 feedback(
                     state,
@@ -1186,7 +1213,13 @@ pub(crate) fn execute(
             ) {
                 text(message)
             } else {
-                expand_message(state, executor, message)
+                match expand_message(state, executor, message) {
+                    Ok(message) => message,
+                    Err(message) => {
+                        error(state, connection, message);
+                        return Failed;
+                    }
+                }
             };
             let content = translated(key, vec![name, message]);
             if connection == crate::command_console::CONNECTION {
@@ -1249,7 +1282,13 @@ pub(crate) fn execute(
                 })
                 .collect();
             let message = if *selectors {
-                expand_message(state, executor, message)
+                match expand_message(state, executor, message) {
+                    Ok(message) => message,
+                    Err(message) => {
+                        error(state, connection, message);
+                        return Failed;
+                    }
+                }
             } else {
                 text(message)
             };
@@ -1292,10 +1331,16 @@ pub(crate) fn execute(
             message,
             selectors,
         } => {
-            let targets: Vec<_> = player_targets(state, executor, target)
-                .into_iter()
-                .filter(|target| !state.entity_session_locked(*target))
-                .collect();
+            let targets: Vec<_> = match player_targets(state, executor, target) {
+                Ok(targets) => targets,
+                Err(message) => {
+                    error(state, connection, message);
+                    return Failed;
+                }
+            }
+            .into_iter()
+            .filter(|target| !state.entity_session_locked(*target))
+            .collect();
             if targets.is_empty() {
                 feedback(
                     state,
@@ -1306,7 +1351,13 @@ pub(crate) fn execute(
                 return Failed;
             }
             let message = if *selectors {
-                expand_message(state, executor, message)
+                match expand_message(state, executor, message) {
+                    Ok(message) => message,
+                    Err(message) => {
+                        error(state, connection, message);
+                        return Failed;
+                    }
+                }
             } else {
                 text(message)
             };
@@ -1403,7 +1454,13 @@ fn command_players(
         );
         return None;
     }
-    let targets = player_targets(state, executor, target);
+    let targets = match player_targets(state, executor, target) {
+        Ok(targets) => targets,
+        Err(message) => {
+            error(state, connection, message);
+            return None;
+        }
+    };
     if targets.is_empty() {
         feedback(
             state,
@@ -1649,7 +1706,7 @@ fn clear(
     }
 }
 
-fn expand_message(state: &TickState, executor: EntityId, message: &str) -> Tag {
+fn expand_message(state: &TickState, executor: EntityId, message: &str) -> Result<Tag, String> {
     let mut components = Vec::new();
     let mut offset = 0;
     let mut literal_start = 0;
@@ -1675,7 +1732,7 @@ fn expand_message(state: &TickState, executor: EntityId, message: &str) -> Tag {
         if literal_start < start {
             components.push(text(&message[literal_start..start]));
         }
-        for (index, entity) in resolve_target(state, executor, &target)
+        for (index, entity) in resolve_target(state, executor, &target)?
             .into_iter()
             .enumerate()
         {
@@ -1688,15 +1745,15 @@ fn expand_message(state: &TickState, executor: EntityId, message: &str) -> Tag {
         literal_start = offset;
     }
     if literal_start == 0 {
-        return text(message);
+        return Ok(text(message));
     }
     if literal_start < message.len() {
         components.push(text(&message[literal_start..]));
     }
     if components.is_empty() {
-        return text("");
+        return Ok(text(""));
     }
-    Tag::Compound(vec![
+    Ok(Tag::Compound(vec![
         ("text".into(), Tag::String(String::new())),
         (
             "extra".into(),
@@ -1705,7 +1762,7 @@ fn expand_message(state: &TickState, executor: EntityId, message: &str) -> Tag {
                 elements: components,
             }),
         ),
-    ])
+    ]))
 }
 
 #[cfg(test)]

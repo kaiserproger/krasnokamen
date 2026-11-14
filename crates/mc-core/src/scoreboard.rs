@@ -486,7 +486,7 @@ fn holders(state: &TickState, executor: EntityId, input: &str) -> Result<Vec<Str
         _ => return Err("Unsupported player selector".to_owned()),
     };
     Ok(
-        crate::command_execution::resolve_target(state, executor, &target)
+        crate::command_execution::resolve_target(state, executor, &target)?
             .into_iter()
             .filter_map(|id| state.connections.name_of(id).map(str::to_owned))
             .collect(),

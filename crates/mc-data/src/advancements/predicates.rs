@@ -72,7 +72,7 @@ pub fn evaluate_criterion(criterion: &Criterion, context: &EventContext<'_>) -> 
                 "item" | "rod" | "fired_from_weapon" => {
                     evaluator.predicate(Kind::Item, predicate, actual, &path)
                 }
-                "location" => evaluator.conditions(predicate, &path),
+                "location" => evaluator.condition_list(predicate, None, &path),
                 "start_position" => evaluator.predicate(Kind::Location, predicate, actual, &path),
                 "damage" => evaluator.predicate(Kind::Damage, predicate, actual, &path),
                 "killing_blow" => evaluator.predicate(Kind::DamageSource, predicate, actual, &path),
@@ -581,25 +581,21 @@ impl Evaluator<'_, '_> {
     }
 
     fn entity_conditions(&mut self, predicate: &Value, actual: &Value, path: &str) -> bool {
-        if let Some(conditions) = predicate.as_array() {
-            let mut matches = true;
-            for condition in conditions {
-                matches &= self.condition(condition, Some(actual), path);
-            }
-            matches
+        if predicate.is_array() {
+            self.condition_list(predicate, Some(actual), path)
         } else {
             self.predicate(Kind::Entity, predicate, actual, path)
         }
     }
 
-    fn conditions(&mut self, predicate: &Value, path: &str) -> bool {
+    fn condition_list(&mut self, predicate: &Value, entity: Option<&Value>, path: &str) -> bool {
         let Some(conditions) = predicate.as_array() else {
             self.unsupported.insert(path.to_string());
             return false;
         };
         let mut matches = true;
         for condition in conditions {
-            matches &= self.condition(condition, None, path);
+            matches &= self.condition(condition, entity, path);
         }
         matches
     }

@@ -141,12 +141,25 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
             }
         }
         PlayerChange::RecipesUnlocked {
-            recipes, replace, ..
+            registry,
+            recipes,
+            replace,
         } => {
+            let catalog = crate::recipes::catalog(&registry.0);
+            if viewer
+                .recipe_catalog
+                .as_ref()
+                .is_none_or(|previous| !std::sync::Arc::ptr_eq(previous, &catalog))
+            {
+                // Catalog precedes book displays and refreshed station menus,
+                // including a join racing reload or multiple lagged reloads.
+                push_reliable(out, conn, &catalog.update);
+                viewer.recipe_catalog = Some(std::sync::Arc::clone(&catalog));
+            }
             let entries = recipes
                 .iter()
                 .filter_map(|id| {
-                    let mut entry = viewer.advancements.recipes.get(id)?.clone();
+                    let mut entry = catalog.entries.get(id)?.clone();
                     if *replace {
                         // Joining never replays the unlock toast.
                         entry.flags = 0;

@@ -9,24 +9,63 @@ use mc_protocol::packets::play::{
     ClientboundRecipeBookAdd, ClientboundUpdateRecipes, RecipeBookDisplay, RecipeBookEntry,
     RecipeBookIngredient, RecipeBookSlotDisplay, RecipePropertySet, StonecutterRecipeEntry,
 };
+use std::collections::BTreeMap;
+use std::sync::{Arc, LazyLock, Weak};
+
+/// Derived wire projection; the native registry remains the only recipe authority.
+#[derive(Debug)]
+pub struct RecipeCatalog {
+    pub update: ClientboundUpdateRecipes,
+    pub entries: BTreeMap<String, RecipeBookEntry>,
+}
+
+/// Reliable events retain their exact catalog until consumed. Cache only its
+/// projection, without retaining obsolete native registries after outbox drain.
+pub fn catalog(registry: &Arc<mc_core::registry::CoreRegistry>) -> Arc<RecipeCatalog> {
+    type Entry = (Weak<mc_core::registry::CoreRegistry>, Arc<RecipeCatalog>);
+    static CATALOGS: LazyLock<parking_lot::Mutex<Vec<Entry>>> =
+        LazyLock::new(|| parking_lot::Mutex::new(Vec::new()));
+    let mut catalogs = CATALOGS.lock();
+    if let Some((_, packets)) = catalogs
+        .iter()
+        .find(|(source, _)| source.as_ptr() == Arc::as_ptr(registry))
+    {
+        return Arc::clone(packets);
+    }
+    catalogs.retain(|(source, _)| source.strong_count() != 0);
+    let packets = Arc::new(RecipeCatalog {
+        update: initial_recipe_update(
+            &registry.recipes,
+            &registry.items,
+            &registry.item_facts,
+            &registry.tags,
+        ),
+        entries: registry
+            .recipes
+            .iter()
+            .enumerate()
+            .filter_map(|(index, recipe)| {
+                recipe_book_entry(index, recipe, &registry.items, &registry.item_facts)
+                    .map(|entry| (recipe.id.to_string(), entry))
+            })
+            .collect(),
+    });
+    catalogs.push((Arc::downgrade(registry), Arc::clone(&packets)));
+    packets
+}
 
 /// The join burst's recipe packets: station admission sets, stonecutter recipes,
 /// and a `RecipeBookAdd` replacing the client's book.
 pub struct RecipePackets {
-    pub update: ClientboundUpdateRecipes,
+    pub catalog: Arc<RecipeCatalog>,
     pub book: ClientboundRecipeBookAdd,
     pub advancements: std::sync::Arc<crate::advancements::AdvancementPackets>,
 }
 
 impl RecipePackets {
-    pub fn new(registry: &mc_core::registry::CoreRegistry) -> anyhow::Result<Self> {
+    pub fn new(registry: &Arc<mc_core::registry::CoreRegistry>) -> anyhow::Result<Self> {
         Ok(Self {
-            update: initial_recipe_update(
-                &registry.recipes,
-                &registry.items,
-                &registry.item_facts,
-                &registry.tags,
-            ),
+            catalog: catalog(registry),
             book: ClientboundRecipeBookAdd {
                 entries: Vec::new(),
                 replace: true,

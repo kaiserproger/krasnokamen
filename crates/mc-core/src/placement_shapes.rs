@@ -308,8 +308,9 @@ mod tests {
     #[test]
     fn indexed_batch_reads_each_distinct_neighbor_once() {
         let registry = CoreRegistry::load(None).expect("registry");
+        let stone = registry.states.stone;
         let mut writes: Vec<_> = (0..16)
-            .flat_map(|x| (0..16).map(move |z| (BlockPos { x, y: 1, z }, registry.states.stone)))
+            .flat_map(|x| (0..16).map(move |z| (BlockPos { x, y: 1, z }, stone)))
             .collect();
         let reads = Cell::new(0usize);
         let read = |_| {

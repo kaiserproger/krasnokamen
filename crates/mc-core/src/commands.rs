@@ -55,7 +55,7 @@ pub const ROOTS: &[(&str, u8)] = &[
     ("enchant", 2),
     ("effect", 2),
     ("advancement", 2),
-    ("debug", 2),
+    ("debug", 3),
     ("team", 2),
     ("tps", 2),
     ("mspt", 2),
@@ -159,6 +159,8 @@ pub struct Selector {
     pub yaw: Option<(Option<f32>, Option<f32>)>,
     /// Repeated, optionally negated NBT compound predicates.
     pub nbt: Vec<(mc_nbt::Tag, bool)>,
+    /// Installed loot predicates, each independently negatable.
+    pub predicates: Vec<(Identifier, bool)>,
     /// Advancement filters (`advancements={id=true}`).
     pub advancements: Vec<(String, bool)>,
     /// Loot-predicate filters (`predicate=<id>` / `predicate=!<id>`) by
@@ -636,6 +638,7 @@ pub(crate) fn target_of(word: &str) -> Result<Target, CommandError> {
         pitch: None,
         yaw: None,
         nbt: Vec::new(),
+        predicates: Vec::new(),
         advancements: Vec::new(),
         predicates: Vec::new(),
         distance: None,

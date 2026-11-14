@@ -17,7 +17,7 @@ fn pack(root: &Path, name: &str, resources: &[(&str, &str)]) {
 
 fn fixture(packs: PackSet) -> TickState {
     let (mut state, _, _) = crate::hostile_tests::setup(8.0);
-    state.datapacks = Runtime::new(packs, PathBuf::new());
+    state.datapacks = Runtime::new(packs, PathBuf::new(), state.registry.clone());
     state
 }
 
@@ -550,4 +550,138 @@ fn function_chat_flood_in_one_tick_reaches_every_recipient() {
             .sum();
         assert_eq!(lines, LINES, "{connection:?}");
     }
+}
+
+fn finish_reload(state: &mut TickState) {
+    let reload = state.datapacks.reload.as_mut().expect("reload queued");
+    let prepared = reload.receiver.recv().expect("worker completed");
+    let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+    sender.send(prepared).unwrap();
+    reload.receiver = receiver;
+    poll_worker(state, &mut ChangeSet::default());
+}
+
+#[test]
+fn content_reload_publishes_recipes_loot_and_open_grid_without_moving_inputs() {
+    let directory = tempfile::tempdir().unwrap();
+    pack(directory.path(), "a", &[]);
+    let mut state = fixture(PackSet::load(directory.path(), Selection::default()).unwrap());
+    state.datapacks.root = Some(directory.path().to_owned());
+    let base = Arc::clone(&state.registry);
+    let entity = state.connections.entity_of(ConnectionId(1)).unwrap();
+    let stick = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:stick").unwrap())
+        .unwrap();
+    let diamond = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+        .unwrap();
+    let player = state.players.get_mut(&entity).unwrap();
+    player.inventory_menu.grid[0] = mc_data::ItemStack::new(stick, 7);
+    player.inventory_menu.carried = mc_data::ItemStack::new(stick, 3);
+    let inventory = player.inventory.slots.clone();
+    for count in [2, 3] {
+        pack(
+            directory.path(),
+            "a",
+            &[
+                (
+                    "test/recipe/from_stick.json",
+                    &format!(
+                        r#"{{"type":"minecraft:crafting_shapeless","ingredients":["minecraft:stick"],"result":{{"id":"minecraft:diamond","count":{count}}}}}"#
+                    ),
+                ),
+                (
+                    "minecraft/loot_table/blocks/stone.json",
+                    r#"{"type":"minecraft:block","pools":[{"rolls":1,"entries":[{"type":"minecraft:item","name":"minecraft:diamond"}]}]}"#,
+                ),
+            ],
+        );
+        let old = Arc::clone(&state.registry);
+        run(&mut state, "reload");
+        assert!(Arc::ptr_eq(&old, &state.registry));
+        finish_reload(&mut state);
+        assert!(!Arc::ptr_eq(&old, &state.registry));
+        assert!(std::ptr::eq(
+            std::ops::Deref::deref(base.as_ref()),
+            std::ops::Deref::deref(state.registry.as_ref()),
+        ));
+        let player = &state.players[&entity];
+        assert_eq!(
+            player.inventory_menu.result,
+            mc_data::ItemStack::new(diamond, count)
+        );
+        assert_eq!(
+            player.inventory_menu.grid[0],
+            mc_data::ItemStack::new(stick, 7)
+        );
+        assert_eq!(
+            player.inventory_menu.carried,
+            mc_data::ItemStack::new(stick, 3)
+        );
+        assert_eq!(player.inventory.slots, inventory);
+        let block = mc_data::Identifier::parse("minecraft:stone").unwrap();
+        let tool = mc_data::loot::LootContextItem::empty();
+        let context = mc_data::loot::BlockLootContext::try_new(
+            &block,
+            &[],
+            &tool,
+            mc_data::loot::LootRandomBinding::new(None, 1),
+        )
+        .unwrap();
+        assert_eq!(
+            state
+                .registry
+                .loot
+                .evaluate_block(&context)
+                .unwrap()
+                .unwrap()[0]
+                .item
+                .as_str(),
+            "minecraft:diamond"
+        );
+    }
+    run(&mut state, "datapack disable file/a");
+    finish_reload(&mut state);
+    crate::command_context::resume(&mut state, &mut ChangeSet::default());
+    assert!(Arc::ptr_eq(&base, &state.registry));
+    let player = &state.players[&entity];
+    assert!(player.inventory_menu.result.is_empty());
+    assert_eq!(
+        player.inventory_menu.grid[0],
+        mc_data::ItemStack::new(stick, 7)
+    );
+    assert_eq!(
+        player.inventory_menu.carried,
+        mc_data::ItemStack::new(stick, 3)
+    );
+    assert_eq!(player.inventory.slots, inventory);
+}
+
+#[test]
+fn invalid_reload_retains_both_content_catalogs_and_pack_selection() {
+    let directory = tempfile::tempdir().unwrap();
+    pack(directory.path(), "a", &[]);
+    let mut state = fixture(PackSet::load(directory.path(), Selection::default()).unwrap());
+    state.datapacks.root = Some(directory.path().to_owned());
+    let registry = Arc::clone(&state.registry);
+    let packs = Arc::clone(&state.datapacks.packs);
+    pack(
+        directory.path(),
+        "a",
+        &[
+            (
+                "test/recipe/good.json",
+                r#"{"type":"minecraft:crafting_shapeless","ingredients":["minecraft:stick"],"result":{"id":"minecraft:diamond"}}"#,
+            ),
+            ("test/loot_table/unsupported.json", "{}"),
+        ],
+    );
+    run(&mut state, "reload");
+    finish_reload(&mut state);
+    assert!(Arc::ptr_eq(&registry, &state.registry));
+    assert!(Arc::ptr_eq(&packs, &state.datapacks.packs));
 }

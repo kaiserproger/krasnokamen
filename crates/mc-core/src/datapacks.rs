@@ -556,6 +556,89 @@ fn features_enabled(metadata: &serde_json::Value) -> bool {
     })
 }
 
+struct DiscoveredPack {
+    path: PathBuf,
+    description: mc_nbt::Tag,
+    features: Vec<String>,
+}
+
+fn discover(
+    root: &Path,
+    remaining: &mut usize,
+) -> Result<BTreeMap<String, DiscoveredPack>, String> {
+    let mut packs = BTreeMap::new();
+    if !root.exists() {
+        return Ok(packs);
+    }
+    if std::fs::symlink_metadata(root)
+        .map_err(|e| e.to_string())?
+        .file_type()
+        .is_symlink()
+    {
+        return Err("Datapack root cannot be a symlink".into());
+    }
+    for entry in std::fs::read_dir(root).map_err(|e| e.to_string())? {
+        if packs.len() >= MAX_RESOURCES - 1 {
+            return Err("Datapack resource limit exceeded".into());
+        }
+        let pack = entry.map_err(|e| e.to_string())?;
+        if !pack.file_type().map_err(|e| e.to_string())?.is_dir() {
+            return Err(format!(
+                "Only directory datapacks are supported: {}",
+                pack.path().display()
+            ));
+        }
+        let id = format!(
+            "file/{}",
+            pack.file_name()
+                .into_string()
+                .map_err(|_| "Non-UTF8 datapack name")?
+        );
+        let raw = read_text(&pack.path().join("pack.mcmeta"), remaining)?;
+        let metadata: serde_json::Value =
+            serde_json::from_str(&raw).map_err(|e| format!("{id}: {e}"))?;
+        let pack_meta = metadata
+            .get("pack")
+            .filter(|value| value.is_object())
+            .ok_or_else(|| format!("{id}: pack.mcmeta requires a pack object"))?;
+        let description = pack_meta
+            .get("description")
+            .map(|value| {
+                crate::command_text::parse_component(&value.to_string())
+                    .map_err(|error| format!("{id}: {}", error.message()))
+            })
+            .transpose()?
+            .unwrap_or_else(|| mc_nbt::Tag::String(String::new()));
+        let features = metadata
+            .get("features")
+            .map(|features| {
+                features
+                    .get("enabled")
+                    .and_then(serde_json::Value::as_array)
+                    .ok_or_else(|| format!("{id}: invalid features.enabled"))?
+                    .iter()
+                    .map(|feature| {
+                        feature
+                            .as_str()
+                            .map(str::to_owned)
+                            .ok_or_else(|| format!("{id}: feature identifier must be a string"))
+                    })
+                    .collect::<Result<Vec<_>, String>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        packs.insert(
+            id,
+            DiscoveredPack {
+                path: pack.path(),
+                description,
+                features,
+            },
+        );
+    }
+    Ok(packs)
+}
+
 impl PackSet {
     /// Load the packs on disk. A pack found on disk that the selection has
     /// never seen is enabled, like a pack newly dropped into a world's folder.
@@ -663,6 +746,7 @@ impl PackSet {
         selection
             .enabled
             .retain(|id| id == "vanilla" || packs.contains_key(id));
+        selection.disabled.retain(|id| packs.contains_key(id));
         for id in packs.keys() {
             if discover && !selection.enabled.contains(id) && !selection.disabled.contains(id) {
                 selection.enabled.push(id.clone());
@@ -1058,6 +1142,9 @@ pub(crate) struct Runtime {
     /// `None` until the first reload (the registry then still is that).
     base: Option<Arc<crate::registry::CoreRegistry>>,
     root: Option<PathBuf>,
+    /// Unmodified startup content (including plugin contributions), used only
+    /// to prepare replacement catalogs. TickState.registry remains authoritative.
+    base_registry: Option<Arc<crate::registry::CoreRegistry>>,
     reload: Option<Reload>,
     load_pending: bool,
     pending: Vec<Frame>,
@@ -1115,12 +1202,14 @@ struct Reload {
     connection: ConnectionId,
     job: Job,
 }
+
 struct Frame {
     /// Function id, for the `/debug function` trace.
     id: String,
     lines: Arc<[String]>,
     next: usize,
     started: bool,
+    trace_name: Option<String>,
     context: crate::command_context::Context,
 }
 
@@ -1196,10 +1285,15 @@ fn work(
 
 impl Runtime {
     #[cfg(test)]
-    pub(crate) fn new(packs: PackSet, root: PathBuf) -> Self {
+    pub(crate) fn new(
+        packs: PackSet,
+        root: PathBuf,
+        base: Arc<crate::registry::CoreRegistry>,
+    ) -> Self {
         Self {
             packs: Arc::new(packs),
             root: Some(root),
+            base_registry: Some(base),
             load_pending: true,
             ..Self::default()
         }
@@ -1211,10 +1305,15 @@ impl Runtime {
         base: Arc<crate::registry::CoreRegistry>,
     ) {
         self.selection_dirty |= self.packs.selection != packs.selection;
+        self.discovered = None;
         self.packs = Arc::new(packs);
         self.root = Some(root);
         self.base = Some(base);
         self.load_pending = true;
+    }
+
+    pub(crate) fn pending_work(&self) -> bool {
+        self.reload.is_some()
     }
     pub(crate) fn selection(&self) -> &Selection {
         &self.packs.selection
@@ -1376,7 +1475,7 @@ fn feedback(state: &mut TickState, connection: ConnectionId, message: impl Into<
     );
 }
 
-fn enqueue(
+pub(crate) fn enqueue(
     state: &mut TickState,
     name: &str,
     connection: ConnectionId,
@@ -1404,6 +1503,7 @@ fn enqueue(
                 lines: runtime.packs.functions[name].clone(),
                 next: 0,
                 started: false,
+                trace_name: state.debug_tracing.then(|| name.clone()),
                 context,
             });
         }
@@ -1419,6 +1519,7 @@ fn enqueue(
             lines,
             next: 0,
             started: false,
+            trace_name: state.debug_tracing.then_some(id),
             context,
         });
     }
@@ -1432,13 +1533,28 @@ pub(crate) fn execute_block(state: &mut TickState, text: &str, changes: &mut Cha
     crate::command_context::submit(state, text, context, changes);
 }
 
-fn drain(state: &mut TickState, changes: &mut ChangeSet) {
+pub(crate) fn drain(state: &mut TickState, changes: &mut ChangeSet) {
     if state.datapacks.running {
         return;
     }
+    drain_until(state, changes, 0);
+}
+
+pub(crate) fn pending_depth(state: &TickState) -> usize {
+    state.datapacks.pending.len()
+}
+
+/// A traced invocation shares the ordinary interpreter and budget, but must
+/// finish its own frames before returning to the caller's pending function.
+pub(crate) fn drain_until(state: &mut TickState, changes: &mut ChangeSet, stop_depth: usize) {
     crate::command_context::begin_sequence(state);
-    state.datapacks.running = true;
-    while let Some(mut frame) = state.datapacks.pending.pop() {
+    let running = std::mem::replace(&mut state.datapacks.running, true);
+    while state.datapacks.pending.len() > stop_depth {
+        let mut frame = state
+            .datapacks
+            .pending
+            .pop()
+            .expect("pending function frame");
         if !frame.started {
             if let Err(error) = crate::command_context::charge(state) {
                 state.datapacks.pending.clear();
@@ -1458,6 +1574,7 @@ fn drain(state: &mut TickState, changes: &mut ChangeSet) {
             continue;
         }
         if crate::command_context::exhausted(state) {
+            crate::command_debug::trace_budget_exhausted(state);
             state.datapacks.pending.clear();
             feedback(
                 state,
@@ -1470,6 +1587,7 @@ fn drain(state: &mut TickState, changes: &mut ChangeSet) {
         let index = frame.next;
         let context = frame.context;
         frame.next += 1;
+        crate::command_debug::trace_command(state, &lines[index]);
         state.datapacks.pending.push(frame);
         if state.debug_trace.is_some() {
             trace_line(state, &lines[index], context, changes);
@@ -1775,6 +1893,15 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             }
             Err(std::sync::mpsc::TryRecvError::Empty) => {}
         }
+        state.command_context.current = previous;
+    }
+}
+
+pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
+    poll_worker(state, changes);
+    crate::command_context::resume(state, changes);
+    if state.command_context.waiting() {
+        return;
     }
     poll_trace_writes(state);
     if std::mem::take(&mut state.datapacks.load_pending)

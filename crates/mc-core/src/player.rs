@@ -512,6 +512,26 @@ impl PlayerState {
         contents_change(&self.inventory_menu, &self.inventory, &[])
     }
 
+    pub(crate) fn reload_recipes(&mut self, rules: &ItemRules<'_>) -> Vec<PlayerChange> {
+        let mut changes = Vec::new();
+        if self.inventory_menu.reload_recipes(rules) {
+            changes.push(self.inventory_contents());
+        }
+        if let Some(menu) = &mut self.open
+            && menu.reload_recipes(rules)
+        {
+            changes.push(contents_change(menu, &self.inventory, &[]));
+            for (property, value) in menu.station.properties.iter().enumerate() {
+                changes.push(PlayerChange::MenuProperty {
+                    window: menu.window,
+                    property: property as i16,
+                    value: *value as i16,
+                });
+            }
+        }
+        changes
+    }
+
     #[must_use]
     pub fn health_change(&self) -> PlayerChange {
         PlayerChange::Health {

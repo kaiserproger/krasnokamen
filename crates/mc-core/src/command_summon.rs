@@ -943,3 +943,6 @@ mod age_tests;
 #[cfg(test)]
 #[path = "command_summon_hanging_tests.rs"]
 mod hanging_tests;
+
+#[path = "command_summon_data.rs"]
+pub(crate) mod data;

@@ -498,6 +498,7 @@ pub struct ViewerState {
     /// Registry indices resolved by the edge from its exact vanilla data.
     pub dimension_type_ids: [i32; 3],
     pub advancements: Arc<crate::advancements::AdvancementPackets>,
+    pub recipe_catalog: Option<Arc<crate::recipes::RecipeCatalog>>,
     /// Chunks the client holds, with the content revision it holds.
     pub loaded_chunks: HashMap<(i32, i32), u64>,
     /// Full repair debt for chunks still held by the client. Kept separately
@@ -580,6 +581,7 @@ impl ViewerState {
             view_distance: None,
             dimension_type_ids: [0; 3],
             advancements: Arc::default(),
+            recipe_catalog: None,
             loaded_chunks: HashMap::default(),
             chunk_repairs: HashSet::default(),
             block_entity_updates: HashSet::default(),

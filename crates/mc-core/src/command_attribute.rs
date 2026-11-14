@@ -70,7 +70,7 @@ pub(crate) fn execute(
     executor: EntityId,
     command: &AttributeCommand,
 ) -> Result<i32, String> {
-    let targets = crate::command_execution::resolve_target(state, executor, &command.target);
+    let targets = crate::command_execution::resolve_target(state, executor, &command.target)?;
     let [entity] = targets.as_slice() else {
         return Err("Attribute requires exactly one entity".into());
     };

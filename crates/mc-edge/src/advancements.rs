@@ -1,9 +1,8 @@
-//! Advancement and recipe wire catalogs resolved once from authoritative data.
+//! Advancement wire catalog resolved once from authoritative static definitions.
 use mc_data::advancements::AdvancementTree;
 use mc_protocol::codec::Identifier;
 use mc_protocol::packets::play::{
     AdvancementDefinition, AdvancementDisplay, AdvancementFrame, ClientboundUpdateAdvancements,
-    RecipeBookEntry,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -11,7 +10,6 @@ use std::collections::BTreeMap;
 #[derive(Debug, Default)]
 pub struct AdvancementPackets {
     pub definitions: BTreeMap<String, AdvancementDefinition>,
-    pub recipes: BTreeMap<String, RecipeBookEntry>,
 }
 impl AdvancementPackets {
     pub fn new(registry: &mc_core::registry::CoreRegistry) -> anyhow::Result<Self> {
@@ -100,24 +98,7 @@ impl AdvancementPackets {
                 },
             );
         }
-        let recipes = registry
-            .recipes
-            .iter()
-            .enumerate()
-            .filter_map(|(index, recipe)| {
-                crate::recipes::recipe_book_entry(
-                    index,
-                    recipe,
-                    &registry.items,
-                    &registry.item_facts,
-                )
-                .map(|entry| (recipe.id.to_string(), entry))
-            })
-            .collect();
-        Ok(Self {
-            definitions,
-            recipes,
-        })
+        Ok(Self { definitions })
     }
     pub fn update(
         &self,

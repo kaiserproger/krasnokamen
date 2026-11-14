@@ -176,6 +176,51 @@ struct Shrieker {
     warning_level: u32,
     shriek_until: u64,
 }
+
+pub(crate) struct PreparedData {
+    entry: Shrieker,
+    pending: Option<Pending>,
+}
+
+pub(crate) fn data_fields(state: &TickState, pos: BlockPos) -> Option<Vec<(String, Tag)>> {
+    Some(fields(
+        state,
+        pos,
+        state.shriekers.entries.get(&key(pos))?,
+        vibration::pending(state, pos),
+    ))
+}
+
+pub(crate) fn prepare_data(
+    state: &TickState,
+    pos: BlockPos,
+    input: &mut Vec<(String, Tag)>,
+    listener_changed: bool,
+) -> Result<PreparedData, String> {
+    let old = state.shriekers.entries.get(&key(pos));
+    if let Some(entry) = old {
+        mc_data::trial_nbt::set(
+            input,
+            "krasnokamen:shriek_until",
+            Tag::Long(entry.shriek_until as i64),
+        );
+    }
+    if listener_changed {
+        input.retain(|(name, _)| name != "krasnokamen:event_arrival");
+    }
+    let (entry, mut pending) = decode_fields(input, state.tick)?;
+    if !listener_changed && old.is_some() {
+        pending = vibration::pending(state, pos).cloned();
+    }
+    *input = fields(state, pos, &entry, pending.as_ref());
+    Ok(PreparedData { entry, pending })
+}
+
+pub(crate) fn apply_data(state: &mut TickState, pos: BlockPos, prepared: PreparedData) {
+    state.shriekers.entries.insert(key(pos), prepared.entry);
+    vibration::listen(state, pos, vibration::centre(pos), 8);
+    vibration::restore(state, pos, prepared.pending);
+}
 fn key(pos: BlockPos) -> (i32, i32, i32) {
     (pos.x, pos.y, pos.z)
 }
@@ -199,7 +244,14 @@ fn decode(bytes: &[u8], tick: u64) -> Result<(Shrieker, Option<Pending>), String
     if !input.is_empty() {
         return Err("sculk_shrieker: trailing NBT bytes".into());
     }
-    if !matches!(crate::warden::unique(&fields,"id")?,Some(Tag::String(id)) if id=="minecraft:sculk_shrieker")
+    decode_fields(&fields, tick)
+}
+
+fn decode_fields(
+    fields: &[(String, Tag)],
+    tick: u64,
+) -> Result<(Shrieker, Option<Pending>), String> {
+    if !matches!(crate::warden::unique(fields,"id")?,Some(Tag::String(id)) if id=="minecraft:sculk_shrieker")
     {
         return Err("sculk_shrieker.id: expected minecraft:sculk_shrieker".into());
     }
@@ -213,7 +265,7 @@ fn decode(bytes: &[u8], tick: u64) -> Result<(Shrieker, Option<Pending>), String
             );
         }
     };
-    let mut pending = crate::warden::unique(&fields, "listener")?
+    let mut pending = crate::warden::unique(fields, "listener")?
         .map(|tag| vibration::decode_listener(tag, tick))
         .transpose()?
         .flatten();
@@ -358,7 +410,12 @@ pub(crate) fn hydrate(state: &mut TickState) {
     }
     state.shriekers.hydrated = Some(stamp);
 }
-fn encode(state: &TickState, pos: BlockPos, entry: &Shrieker) -> Vec<u8> {
+fn fields(
+    state: &TickState,
+    pos: BlockPos,
+    entry: &Shrieker,
+    pending: Option<&Pending>,
+) -> Vec<(String, Tag)> {
     let mut fields = vec![
         ("id".into(), Tag::String("minecraft:sculk_shrieker".into())),
         ("x".into(), Tag::Int(pos.x)),
@@ -367,7 +424,7 @@ fn encode(state: &TickState, pos: BlockPos, entry: &Shrieker) -> Vec<u8> {
         ("warning_level".into(), Tag::Int(entry.warning_level as i32)),
         (
             "listener".into(),
-            vibration::listener_nbt(vibration::pending(state, pos), state.tick),
+            vibration::listener_nbt(pending, state.tick),
         ),
         (
             "krasnokamen:shriek_until".into(),
@@ -380,8 +437,16 @@ fn encode(state: &TickState, pos: BlockPos, entry: &Shrieker) -> Vec<u8> {
             Tag::Long(p.arrival as i64),
         ));
     }
+    fields
+}
+
+fn encode(state: &TickState, pos: BlockPos, entry: &Shrieker) -> Vec<u8> {
     let mut bytes = Vec::new();
-    mc_nbt::write_network(&mut bytes, &Tag::Compound(fields)).expect("shrieker NBT");
+    mc_nbt::write_network(
+        &mut bytes,
+        &Tag::Compound(fields(state, pos, entry, vibration::pending(state, pos))),
+    )
+    .expect("shrieker NBT");
     bytes
 }
 pub(crate) fn persist_listener(state: &mut TickState, pos: BlockPos) -> bool {

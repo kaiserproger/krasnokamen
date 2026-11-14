@@ -202,7 +202,9 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
     if state.enable_command_block {
         let mut remaining = 1024;
         for start in due.drain(..) {
-            if state.dimension_globals.active && !state.command_context.shared {
+            if (state.dimension_globals.active && !state.command_context.shared)
+                || state.command_context.waiting()
+            {
                 if state.command_context.jobs.len() < crate::command_context::LIMIT {
                     let context = crate::command_context::Context::source(
                         state,
@@ -217,6 +219,7 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet) {
                             text: String::new(),
                             context,
                             block: Some(start),
+                            source: None,
                         });
                 }
                 continue;

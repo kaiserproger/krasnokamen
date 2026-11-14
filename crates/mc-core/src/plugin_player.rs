@@ -33,6 +33,10 @@ impl PlayerAuthority {
         self.permissions.insert(connection, level);
     }
 
+    pub(crate) fn permission(&self, connection: ConnectionId) -> Option<u8> {
+        self.permissions.get(&connection).copied()
+    }
+
     pub(crate) fn is_operator(&self, connection: ConnectionId) -> bool {
         self.permissions
             .get(&connection)

@@ -913,6 +913,7 @@ impl TickState {
         {
             return;
         }
+        crate::command_debug::trace_message(self, connection, &change);
         crate::vibration::menu(self, connection, &change);
         let queue = self.outbox.entry(connection).or_default();
         if change.is_text() {
