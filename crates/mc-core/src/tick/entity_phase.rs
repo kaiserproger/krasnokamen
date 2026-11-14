@@ -2043,6 +2043,20 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             battle.projection_us,
             battle.emit_us,
         );
+        let battle = state.hostile.battle.timings;
+        eprintln!(
+            "  battle detail us: total={} counters={} formation={} columns={} targets={} steering={} combat={} morale={} projection={} emit={}",
+            battle.total_us,
+            battle.counters_us,
+            battle.formation_us,
+            battle.columns_us,
+            battle.targeting_us,
+            battle.steering_us,
+            battle.combat_us,
+            battle.morale_us,
+            battle.projection_us,
+            battle.emit_us,
+        );
     }
     rows.clear();
     specials.clear();
