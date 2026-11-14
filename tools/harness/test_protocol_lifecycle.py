@@ -24,7 +24,7 @@ from .backends.protocol_lifecycle import Blocked, ProtocolServer
 def _harness(tmp: str, **overrides: object) -> ProtocolServer:
     root = Path(tmp)
     kwargs: dict[str, object] = {
-        "binary": root / "solaris-v2",
+        "binary": root / "krasnokamen",
         "run_dir": root / "run",
         "port": 26111,
         "vanilla_data": root / "vanilla",
@@ -112,7 +112,7 @@ class LifecycleGuardTests(unittest.TestCase):
 
     def test_start_blocked_without_vanilla_data(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            (Path(tmp) / "solaris-v2").touch()
+            (Path(tmp) / "krasnokamen").touch()
             server = _harness(tmp)
             with self.assertRaises(Blocked):
                 server.start()
@@ -120,7 +120,7 @@ class LifecycleGuardTests(unittest.TestCase):
     def test_start_blocked_without_plugins_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "solaris-v2").touch()
+            (root / "krasnokamen").touch()
             (root / "vanilla").mkdir()
             server = _harness(tmp, plugins_dir=root / "missing-plugins")
             with self.assertRaises(Blocked):
@@ -191,7 +191,7 @@ class LifecycleGuardTests(unittest.TestCase):
             )
             new = SimpleNamespace(pid=13, poll=lambda: None)
             server._process = old
-            server._argv = ["solaris-v2", "--config", "cfg"]
+            server._argv = ["krasnokamen", "--config", "cfg"]
             server._log_handle = SimpleNamespace(close=lambda: None)
             with mock.patch.object(
                 lifecycle.runtime, "wait_port"

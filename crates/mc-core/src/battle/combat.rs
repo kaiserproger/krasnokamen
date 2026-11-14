@@ -430,7 +430,9 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         };
         let decision_tick = (frame.tick + id.0 as u64).is_multiple_of(ATTACK_DECISION_TICKS);
         let soldier = soldier
-            .and_then(|target| super::retained_enemy(frame.entities, slot, target, reach_bound(range)))
+            .and_then(|target| {
+                super::retained_enemy(frame.entities, slot, target, reach_bound(range))
+            })
             .filter(|target| reaches(target.id))
             .or_else(|| {
                 // Any other enemy in range will do; searched only when a
@@ -443,7 +445,9 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
                     faction: battle.columns.factions[bi],
                     pos: battle.columns.positions[bi],
                 };
-                let found = battle.grid.any_enemy(unit, reach_bound(range), |u| reaches(u.id))?;
+                let found = battle
+                    .grid
+                    .any_enemy(unit, reach_bound(range), |u| reaches(u.id))?;
                 super::retained_enemy(frame.entities, slot, found.id, reach_bound(range))
             });
         // A living network player of the other side in reach is one more

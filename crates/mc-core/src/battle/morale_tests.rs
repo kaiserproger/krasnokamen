@@ -54,7 +54,11 @@ fn a_regiment_thirteen_percent_down_keeps_its_rear_ranks() {
     runtime.update_morale(0);
     let morale = &runtime.regiments[0].morale;
     assert!(!morale.broken);
-    assert!((30.0..32.0).contains(&morale.value), "morale={}", morale.value);
+    assert!(
+        (30.0..32.0).contains(&morale.value),
+        "morale={}",
+        morale.value
+    );
     let routing = runtime
         .members
         .iter()

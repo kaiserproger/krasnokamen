@@ -213,14 +213,14 @@ fn husk_shows_side_colour(state: &TickState, slot: crate::entities::EntitySlot, 
     let row = state.entities.row(slot);
     let (surcoat, heater, shades) = if side == 1 {
         (
-            "solaris_battle:red_surcoat",
-            "solaris_battle:red_heater_shield",
+            "krasnokamen_battle:red_surcoat",
+            "krasnokamen_battle:red_heater_shield",
             RED_SHADES,
         )
     } else {
         (
-            "solaris_battle:blue_surcoat",
-            "solaris_battle:blue_heater_shield",
+            "krasnokamen_battle:blue_surcoat",
+            "krasnokamen_battle:blue_heater_shield",
             BLUE_SHADES,
         )
     };
@@ -244,13 +244,13 @@ fn husk_shows_side_colour(state: &TickState, slot: crate::entities::EntitySlot, 
 fn only_own_side(pieces: &[Vec<(String, Tag)>], head: Option<&[(String, Tag)]>, side: u16) -> bool {
     let (foreign, palette, plume) = if side == 1 {
         (
-            "solaris_battle:blue_",
+            "krasnokamen_battle:blue_",
             [&RED_SHADES[..], &[RED_PLUME]].concat(),
             RED_PLUME,
         )
     } else {
         (
-            "solaris_battle:red_",
+            "krasnokamen_battle:red_",
             [&BLUE_SHADES[..], &[BLUE_PLUME]].concat(),
             BLUE_PLUME,
         )
@@ -395,27 +395,27 @@ fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighte
         }
     }
     let expected: std::collections::BTreeSet<_> = [
-        ("weapon", "solaris_battle:iron_spear"),
-        ("weapon", "solaris_battle:iron_halberd"),
-        ("weapon", "solaris_battle:iron_longbow_standby"),
-        ("weapon", "solaris_battle:iron_heavy_crossbow_standby"),
-        ("weapon", "solaris_battle:iron_lance"),
-        ("sidearm", "solaris_battle:iron_longsword"),
-        ("sidearm", "solaris_battle:iron_flanged_mace"),
-        ("shield", "solaris_battle:red_heater_shield"),
-        ("shield", "solaris_battle:blue_heater_shield"),
-        ("shield", "solaris_battle:iron_kite_shield"),
-        ("shield", "solaris_battle:iron_tower_shield"),
-        ("helmet", "solaris_battle:iron_plate"),
-        ("helmet", "solaris_battle:crested_helm"),
-        ("helmet", "solaris_battle:holy"),
-        ("torso", "solaris_battle:red_surcoat"),
-        ("torso", "solaris_battle:blue_surcoat"),
+        ("weapon", "krasnokamen_battle:iron_spear"),
+        ("weapon", "krasnokamen_battle:iron_halberd"),
+        ("weapon", "krasnokamen_battle:iron_longbow_standby"),
+        ("weapon", "krasnokamen_battle:iron_heavy_crossbow_standby"),
+        ("weapon", "krasnokamen_battle:iron_lance"),
+        ("sidearm", "krasnokamen_battle:iron_longsword"),
+        ("sidearm", "krasnokamen_battle:iron_flanged_mace"),
+        ("shield", "krasnokamen_battle:red_heater_shield"),
+        ("shield", "krasnokamen_battle:blue_heater_shield"),
+        ("shield", "krasnokamen_battle:iron_kite_shield"),
+        ("shield", "krasnokamen_battle:iron_tower_shield"),
+        ("helmet", "krasnokamen_battle:iron_plate"),
+        ("helmet", "krasnokamen_battle:crested_helm"),
+        ("helmet", "krasnokamen_battle:holy"),
+        ("torso", "krasnokamen_battle:red_surcoat"),
+        ("torso", "krasnokamen_battle:blue_surcoat"),
         ("torso", "minecraft:leather"),
-        ("torso", "solaris_battle:holy"),
+        ("torso", "krasnokamen_battle:holy"),
         ("legs", "bare"),
         ("legs", "minecraft:leather"),
-        ("legs", "solaris_battle:holy"),
+        ("legs", "krasnokamen_battle:holy"),
     ]
     .into_iter()
     .map(|(part, value)| (part, value.to_owned()))
@@ -425,8 +425,8 @@ fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighte
     assert_eq!(
         caparisons,
         [
-            caparison(1, "solaris_battle:red_caparison"),
-            caparison(2, "solaris_battle:blue_caparison"),
+            caparison(1, "krasnokamen_battle:red_caparison"),
+            caparison(2, "krasnokamen_battle:blue_caparison"),
         ]
         .into_iter()
         .collect()
@@ -524,14 +524,14 @@ fn ten_thousand_side_spreads_every_variant_near_its_share_and_shows_side_colour(
                 let chest = parts("chest");
                 let (surcoat, heater, shades) = if side == 1 {
                     (
-                        "solaris_battle:red_surcoat",
-                        "solaris_battle:red_heater_shield",
+                        "krasnokamen_battle:red_surcoat",
+                        "krasnokamen_battle:red_heater_shield",
                         RED_SHADES,
                     )
                 } else {
                     (
-                        "solaris_battle:blue_surcoat",
-                        "solaris_battle:blue_heater_shield",
+                        "krasnokamen_battle:blue_surcoat",
+                        "krasnokamen_battle:blue_heater_shield",
                         BLUE_SHADES,
                     )
                 };
@@ -563,36 +563,36 @@ fn ten_thousand_side_spreads_every_variant_near_its_share_and_shows_side_colour(
             );
             // Infantry carries the plain spear in, its rolled sword is second.
             for (model, expected) in [
-                ("solaris_battle:iron_longsword", 60.0),
-                ("solaris_battle:iron_flanged_mace", 40.0),
+                ("krasnokamen_battle:iron_longsword", 60.0),
+                ("krasnokamen_battle:iron_flanged_mace", 40.0),
             ] {
                 near(share(&infantry, |l| l.sidearm, model), expected, model);
             }
             assert!(
                 infantry
                     .iter()
-                    .all(|l| l.weapon == "solaris_battle:iron_spear")
+                    .all(|l| l.weapon == "krasnokamen_battle:iron_spear")
             );
             assert!(
                 spears
                     .iter()
                     .chain(&archers)
                     .chain(&cavalry)
-                    .all(|l| l.sidearm == "solaris_battle:iron_longsword")
+                    .all(|l| l.sidearm == "krasnokamen_battle:iron_longsword")
             );
             for (pool, variants) in [
                 (
                     &spears,
                     [
-                        ("solaris_battle:iron_spear", 60.0),
-                        ("solaris_battle:iron_halberd", 40.0),
+                        ("krasnokamen_battle:iron_spear", 60.0),
+                        ("krasnokamen_battle:iron_halberd", 40.0),
                     ],
                 ),
                 (
                     &archers,
                     [
-                        ("solaris_battle:iron_longbow_standby", 60.0),
-                        ("solaris_battle:iron_heavy_crossbow_standby", 40.0),
+                        ("krasnokamen_battle:iron_longbow_standby", 60.0),
+                        ("krasnokamen_battle:iron_heavy_crossbow_standby", 40.0),
                     ],
                 ),
             ] {
@@ -603,7 +603,7 @@ fn ten_thousand_side_spreads_every_variant_near_its_share_and_shows_side_colour(
             assert!(
                 cavalry
                     .iter()
-                    .all(|l| l.weapon == "solaris_battle:iron_lance")
+                    .all(|l| l.weapon == "krasnokamen_battle:iron_lance")
             );
             assert!(archers.iter().all(|l| l.shield.is_none()));
             let foot: Vec<_> = infantry.iter().chain(&spears).copied().collect();
@@ -627,9 +627,9 @@ fn ten_thousand_side_spreads_every_variant_near_its_share_and_shows_side_colour(
             }
             let every: Vec<_> = all.iter().collect();
             for (helmet, expected) in [
-                ("solaris_battle:iron_plate", 45.0),
-                ("solaris_battle:crested_helm", 30.0),
-                ("solaris_battle:holy", 25.0),
+                ("krasnokamen_battle:iron_plate", 45.0),
+                ("krasnokamen_battle:crested_helm", 30.0),
+                ("krasnokamen_battle:holy", 25.0),
             ] {
                 near(share(&every, |l| l.helmet, helmet), expected, helmet);
             }
@@ -999,7 +999,11 @@ fn staged_fighters_and_horses_face_the_enemy_line_at_spawn() {
         let slot = state.entities.slot_of(*id).unwrap();
         let side = usize::from(state.entities.body(slot).faction - 1);
         let rotation = state.entities.rot(slot);
-        assert_eq!((rotation[1], rotation[2]), (0.0, rotation[0]), "level gaze, head on body");
+        assert_eq!(
+            (rotation[1], rotation[2]),
+            (0.0, rotation[0]),
+            "level gaze, head on body"
+        );
         // Vanilla look vector: x = -sin(yaw), z = cos(yaw).
         let yaw = f64::from(rotation[0]).to_radians();
         let enemy = (centroid_z[1 - side] - state.entities.pos(slot)[2]).signum();

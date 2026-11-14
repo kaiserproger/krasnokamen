@@ -74,7 +74,7 @@ fn native_settlement_catalog_admits_items_and_recipes_with_no_package() {
     // Six native items admitted through the facts authority, not a package.
     assert_eq!(registry.plugin_item_ids.len(), 6);
     for item in registry.plugin_items() {
-        assert_eq!(item.id.namespace(), "solaris-settlements");
+        assert_eq!(item.id.namespace(), "krasnokamen-settlements");
         assert!(
             std::ptr::eq(item, registry.item_facts.custom(&item.id).unwrap()),
             "native definitions live in the canonical native item-facts authority",
