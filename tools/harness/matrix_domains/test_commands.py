@@ -179,7 +179,7 @@ class DomainContractTests(unittest.TestCase):
         ctx.state['rejections'][-1] = 'Successfully executed command'
         self.assertFalse(all(c.passed for c in selectors.oracle(ctx, 'invalid_selector')))
 
-    def test_solaris_debug_fixture_is_not_vanilla_profiler_pass(self):
+    def test_krasnokamen_debug_fixture_is_not_vanilla_profiler_pass(self):
         ctx = context()
         ctx.state['command_reply'] = 'Unknown or incomplete command, see below for error'
         self.assertFalse(commands._oracle(ctx, 'debug')[0].passed)

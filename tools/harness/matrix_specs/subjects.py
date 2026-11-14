@@ -1,4 +1,4 @@
-"""Curated gameplay subjects per domain, grounded in Solaris source modules.
+"""Curated gameplay subjects per domain, grounded in Krasnokamen source modules.
 
 Every subject names the module(s) implementing it (`core:` = crates/mc-core/src,
 `edge:` = crates/mc-edge/src, `script:` = crates/mc-script/src,
@@ -39,19 +39,19 @@ domain("session", ["edge:login.rs", "edge:handshake.rs", "edge:configuration.rs"
     ("whitelist_gate", "enable whitelist; join unlisted; /whitelist add; join again", "unlisted join refused with whitelist message; added player joins", {"op": 3, "src": ["edge:admin.rs"]}),
     ("ban_pardon", "/ban player reason; rejoin; /pardon; rejoin; repeat with /ban-ip", "online target kicked with reason; rejoin refused with ban reason; pardon restores access", {"op": 3, "src": ["edge:admin.rs"]}),
     ("kick", "/kick player reason", "target disconnected with reason; others see leave message; saved state intact", {"op": 3, "src": ["edge:admin.rs"]}),
-    ("mute_warn", "/mute target; target chats; /unmute; /warn target", "muted chat and /me,/msg refused natively; unmute restores; warn delivered (Solaris moderation, no vanilla analogue)", {"op": 3, "src": ["edge:admin.rs", "core:boundary.rs"]}),
+    ("mute_warn", "/mute target; target chats; /unmute; /warn target", "muted chat and /me,/msg refused natively; unmute restores; warn delivered (Krasnokamen moderation, no vanilla analogue)", {"op": 3, "src": ["edge:admin.rs", "core:boundary.rs"]}),
     ("transfer", "/transfer <host> <port> target (accepts-transfers=true on target)", "client receives Transfer and reconnects to target server; source saves player", {"op": 3, "caps": ["transfer_follow"]}),
     ("connection_limit", "open connections beyond configured per-IP/global limit", "excess connections refused before login; existing players unaffected", {"src": ["edge:conn_limit.rs"], "caps": ["multi_client_N"]}),
     ("protocol_mismatch", "connect with a different protocol version", "login disconnect with outdated client/server message; no player created", {"src": ["edge:handshake.rs"], "clients": ["protocol_bot"]}),
     ("max_players_full", "join when max-players reached", "refused with server-full message (ops bypass is vanilla-optional)", {"src": ["edge:server_properties.rs"], "caps": ["multi_client_N"]}),
     ("view_distance_negotiation", "client render distance 2/8/32 vs server view-distance/simulation-distance", "server sends min(client, server) view; simulation radius bounded; no chunk holes", {"src": ["core:view_negotiation_tests.rs", "edge:server_view_distance_tests.rs"]}),
-    ("locale_presentation", "client language ru_ru then en_us", "server-translated Solaris texts follow ClientInformation locale; vanilla translatable components untouched", {"src": ["core:boundary.rs"]}),
+    ("locale_presentation", "client language ru_ru then en_us", "server-translated Krasnokamen texts follow ClientInformation locale; vanilla translatable components untouched", {"src": ["core:boundary.rs"]}),
     ("rcon", "RCON login and command; wrong password", "authenticated command output returned; bad password rejected; no gameplay authority bypass", {"src": ["edge:rcon.rs"], "caps": ["admin_protocol_client"], "op": 4}),
     ("query_gs4", "GameSpy4 basic/full stat query", "MOTD/map/player list/version returned; malformed query ignored", {"src": ["edge:query.rs"], "caps": ["admin_protocol_client"]}),
     ("velocity_forwarding", "join through Velocity modern forwarding; direct join when proxy-only", "forwarded IP/UUID/properties used; direct/unsigned join refused", {"src": ["edge:proxy.rs"], "caps": ["velocity_proxy"]}),
     ("msmp_management", "management-protocol requests: players, allowlist, bans, save, stop", "JSON-RPC results match server state; auth required", {"src": ["edge:msmp.rs"], "caps": ["admin_protocol_client"]}),
     ("dashboard_metrics", "read dashboard while players act", "player count/TPS/MSPT/memory values match server state; read-only", {"src": ["edge:dashboard.rs"], "caps": ["admin_protocol_client"]}),
-    ("server_brand_f3", "open F3 debug overlay", "server brand shows Solaris; client keeps play", {"src": ["edge:configuration.rs"], "visual": True, "caps": ["read_hud_ui"]}),
+    ("server_brand_f3", "open F3 debug overlay", "server brand shows Krasnokamen; client keeps play", {"src": ["edge:configuration.rs"], "visual": True, "caps": ["read_hud_ui"]}),
 ])
 
 # ---------------------------------------------------------------- movement

@@ -53,7 +53,7 @@ fn delta_criteria_use_nullable_signed_epoch_millisecond_longs() {
 
 #[test]
 fn display_template_flags_requirements_and_telemetry_follow_javap_order() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let stone = items.id_of(&id("minecraft:stone")).unwrap();
     let packet = ClientboundUpdateAdvancements {
         reset: true,
