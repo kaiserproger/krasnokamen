@@ -40,6 +40,17 @@
         [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
         [".........", ".........", "XXXXXXXXX", ".........", "........."]
       ]
+    }, {
+      "cert": [9, 4, 5],
+      "entrance": [3, 1, 4],
+      "layers": [
+        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC"],
+        ["LCCCCCCCL", "CS.S.cS.C", "C.......C", "C.......C", "LCCoCCCCL"],
+        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL"],
+        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "NNNNNNNNN"],
+        [".........", "xxxxxxxxx", "X.......X", "NNNNNNNNN", "........."],
+        [".........", ".........", "XXXXXXXXX", ".........", "........."]
+      ]
     }
   ]
 }

@@ -9,6 +9,7 @@
     "P": "crafting_table",
     "S": "oak_stairs[facing=north,half=bottom]",
     "X": "oak_planks",
+    "b": "barrel[facing=up]",
     "Z": "oak_slab[type=top]",
     "c": "chest[facing=west]",
     "d": "oak_fence",
@@ -38,6 +39,17 @@
       "layers": [
         ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", ".........", ".........", ".........", "........."],
         ["LCCCCCCCL", "CP.P.f..C", "C.......C", "CP...c..C", "LCCoCCCCL", "p.......p", "pCC...CCp", "p.......p", "pppDppppp"],
+        ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL", ".........", ".C.....C.", ".........", "t.......t"],
+        ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "SSSSSSSSS", ".........", ".........", ".........", "........."],
+        [".........", "xxxxxxxxx", "X.......X", "SSSSSSSSS", ".........", ".........", ".........", ".........", "........."],
+        [".........", ".........", "XXXXXXXXX", ".........", ".........", ".........", ".........", ".........", "........."]
+      ]
+    }, {
+      "cert": [9, 4, 5],
+      "entrance": [3, 1, 4],
+      "layers": [
+        ["CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", "CCCCCCCCC", ".........", ".........", ".........", "........."],
+        ["LCCCCCCCL", "CP.Pbf..C", "C.......C", "CP...c..C", "LCCoCCCCL", "p.......p", "pCC...CCp", "p.......p", "pppDppppp"],
         ["LCdCdCdCL", "C.......C", "Cw......C", "C.......C", "LdCOCdCdL", ".........", ".C.....C.", ".........", "t.......t"],
         ["xxxxxxxxx", "XZZZZZZZX", "XZZZZZZZX", "XZZZZZZZX", "SSSSSSSSS", ".........", ".........", ".........", "........."],
         [".........", "xxxxxxxxx", "X.......X", "SSSSSSSSS", ".........", ".........", ".........", ".........", "........."],

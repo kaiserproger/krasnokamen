@@ -5,26 +5,26 @@ use crate::tick::TickState;
 
 const IDS: [(&str, usize); 21] = [
     ("house", 3),
-    ("storage", 2),
-    ("farm", 2),
-    ("mason", 2),
+    ("storage", 3),
+    ("farm", 3),
+    ("mason", 3),
     ("shepherd", 1),
-    ("lumber_camp", 2),
-    ("mine", 2),
+    ("lumber_camp", 3),
+    ("mine", 3),
     ("barracks", 3),
     ("wall", 3),
     ("watch_tower", 3),
     ("gate", 3),
-    ("armorer", 2),
-    ("butcher", 2),
-    ("cartographer", 2),
-    ("cleric", 2),
-    ("fisherman", 2),
-    ("fletcher", 2),
-    ("leatherworker", 2),
-    ("librarian", 2),
-    ("toolsmith", 2),
-    ("weaponsmith", 2),
+    ("armorer", 3),
+    ("butcher", 3),
+    ("cartographer", 3),
+    ("cleric", 3),
+    ("fisherman", 3),
+    ("fletcher", 3),
+    ("leatherworker", 3),
+    ("librarian", 3),
+    ("toolsmith", 3),
+    ("weaponsmith", 3),
 ];
 
 /// The vanilla job-site block each new workshop is built around.
@@ -464,6 +464,60 @@ fn gate_and_fortifications_reach_level_three() {
         let (settlement, building) = build(&mut state, id, blueprint, 3);
         let record = &state.settlements.get(settlement).unwrap().buildings[&building];
         assert_eq!(record.level, 3, "{id}");
+    }
+}
+
+/// The S5 slice adds a third level to storage, farm, mason, lumber camp, mine
+/// and the ten profession workshops. L3 keeps the L2 certificate and entrance
+/// and the maximum extent, and adds one job-site block (or barrel) inside the
+/// shell: the certificate registers exactly three work points, or three
+/// containers for storage. Dropping an L3 level turns this test red.
+#[test]
+fn production_and_workshops_reach_level_three() {
+    let mut state = test_state();
+    for (id, cert) in [
+        ("storage", [9, 4, 5]),
+        ("farm", [9, 5, 10]),
+        ("mason", [9, 4, 5]),
+        ("lumber_camp", [9, 5, 7]),
+        ("mine", [11, 4, 11]),
+        ("armorer", [9, 4, 5]),
+        ("butcher", [9, 4, 5]),
+        ("cartographer", [9, 4, 5]),
+        ("cleric", [9, 4, 5]),
+        ("fisherman", [9, 4, 5]),
+        ("fletcher", [9, 4, 5]),
+        ("leatherworker", [9, 4, 5]),
+        ("librarian", [9, 4, 5]),
+        ("toolsmith", [9, 4, 5]),
+        ("weaponsmith", [9, 4, 5]),
+    ] {
+        let blueprint = get(&state.registry, id).unwrap();
+        assert_eq!(blueprint.levels.len(), 3, "{id}");
+        assert_eq!(blueprint.levels[2].cert, cert, "{id} L3 cert");
+        assert_eq!(
+            blueprint.levels[2].cert, blueprint.levels[1].cert,
+            "{id} L3 keeps the L2 certificate"
+        );
+        assert_eq!(
+            blueprint.levels[2].entrance, blueprint.levels[1].entrance,
+            "{id} L3 keeps the L1 entrance"
+        );
+        let (settlement, building) = build(&mut state, id, blueprint, 2);
+        let before = state.settlements.get(settlement).unwrap().buildings[&building]
+            .work_points
+            .len();
+        let (settlement, building) = build(&mut state, id, blueprint, 3);
+        let record = &state.settlements.get(settlement).unwrap().buildings[&building];
+        assert_eq!(record.level, 3, "{id}");
+        if id == "storage" {
+            // Storage registers every container (uncapped up to 64): L3 adds
+            // exactly one barrel to the L2 stock.
+            assert_eq!(record.work_points.len(), before + 1, "{id} level 3 stock");
+            assert!(record.work_points.len() >= 3, "{id} level 3 slots");
+        } else {
+            assert_eq!(record.work_points.len(), 3, "{id} level 3 slots");
+        }
     }
 }
 
