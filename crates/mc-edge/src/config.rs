@@ -805,7 +805,17 @@ fn unknown_leaves(table: &toml::Table) -> Vec<String> {
                 "max_processes",
             ],
         ),
-        ("voice", &["enabled", "range_blocks"]),
+        (
+            "voice",
+            &[
+                "enabled",
+                "range_blocks",
+                "svc",
+                "svc_port",
+                "svc_bind_address",
+                "svc_voice_host",
+            ],
+        ),
         (
             "anti_cheat",
             &[

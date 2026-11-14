@@ -1,6 +1,6 @@
 # ADR 0019: proximity voice chat
 
-Status: accepted design; draft implementation, real-client QA pending.
+Status: accepted design; draft implementation (native relay + Simple Voice Chat compatibility), real-client QA pending.
 
 ## Decision
 
@@ -16,8 +16,10 @@ the channel (no VOICE_STATE, no relay). Core authority is untouched: the only
 inputs are poses already published by the native tick; relay runs on the
 connection read task and a tick subscriber, never on the tick.
 
-Rejected: a separate UDP voice port (second NAT/firewall surface; Play TCP
-latency is adequate for a draft), server-side mixing/decoding (CPU, no need),
+Rejected for the native channel: a separate UDP voice port (second NAT/firewall
+surface; Play TCP latency is adequate for a draft). Simple Voice Chat
+compatibility (below) does need UDP because that is the mod's transport.
+Rejected: server-side mixing/decoding (CPU, no need),
 trusting client-claimed positions (the server uses published poses only).
 
 ## Wire (protocol 1)
@@ -54,8 +56,62 @@ Server -> client (native clients only):
   packets or retire a connection. One encoding serves all listeners of a packet.
 - `[voice] enabled = true`, `range_blocks = 48` (1..=1024).
 
+## Simple Voice Chat compatibility
+
+SVC players (Fabric/NeoForge mod `henkelmax/simple-voice-chat`, compatibility
+version 20, wire read from its source: `net/SecretPacket`, `voice/common/*Packet`,
+`NetworkMessage`, `Secret`) and native players hear and talk to each other. The
+server speaks SVC's *server* side in `svc.rs` (pure wire/crypto) and
+`svc_service.rs` (glue); routing stays in `voice.rs`'s relay. Proximity audio
+requires the same dimension, published poses and `range_blocks`, with no self-delivery.
+Opus is forwarded byte for byte; there is no transcoding (both are 48 kHz mono
+20 ms Opus; SVC codec VOIP, MTU 1275).
+
+- Play plugin channels: on join the server sends `minecraft:register` listing the
+  serverbound `voicechat:*` channels. `voicechat:request_secret` (client version
+  must equal 20, otherwise ignored with a log line, like SVC) is answered with
+  `voicechat:states` (all known players) then `voicechat:secret` (random
+  per-player AES-128 key, UDP port, player uuid, codec, MTU, distance, keep-alive
+  1000 ms, groups enabled, voice host, recording off). `voicechat:update_state`
+  (disabled) marks an SVC player deaf; `voicechat:state`/`remove_state` are
+  broadcast to SVC clients as players join/leave. SVC groups support passwords
+  and normal, open and isolated routing; empty ephemeral groups are removed.
+  Group members hear each other non-positionally; normal and isolated speakers
+  are not relayed to native proximity listeners. Native clients do not join groups.
+  Categories and recording are not bridged.
+- UDP socket (`[voice] svc_bind_address:svc_port`, default `0.0.0.0:24454`):
+  datagram `0xFF, uuid, VarInt len, AES-128-GCM(iv12 || ct || tag16)` client ->
+  server; `0xFF, VarInt len, sealed` server -> client. Unknown uuid is only
+  answered if it is the unauthenticated ping (`PING_V1`, raw echo). Authenticate
+  binds the sender address to the player, then
+  `AuthenticateAck`; `ConnectionCheck` -> ack; `KeepAlive` both ways each
+  second (peer dropped after 10 s). `MicPacket` (Opus bytes, whispering) enters
+  the relay as the speaker's AUDIO; an empty mic packet ends the burst.
+- Bridging: SVC mic -> relay -> native listeners as `krasnokamen:voice` AUDIO
+  (sequence from the SVC mic counter) and SVC listeners as `PlayerSoundPacket`
+  (channel id = sender uuid, the client plays it at that entity). Native AUDIO ->
+  SVC listeners as `PlayerSoundPacket` with the native `seq`; a native burst
+  ends (empty sound packet) after the same >200 ms gap rule. Whispering SVC
+  speakers are heard at half range. Rate limits apply to SVC speakers too.
+- Config: opt in with `[voice] svc = true` (default false), `svc_port = 24454`, `svc_bind_address`,
+  `svc_voice_host` (empty = the address the client joined on). Bind failure is
+  logged and native voice keeps working.
+- Deploy: open **UDP 24454** (or `svc_port`) on the host/VPS firewall.
+- Only vanilla-like SVC clients are supported; the SVC server plugin API,
+  proximity categories, audio recording and `forceVoicechat`/permission checks
+  are out of scope.
+
 ## Validation status
 
-Unit tests (`voice_tests.rs`) cover range, dimension, self-exclusion, listening,
+Unit tests (`svc_tests.rs`: handshake bodies, AES vectors cross-checked with the SDK encoding, datagram framing, state packets; `voice_tests.rs`: native<->SVC bridging) and relay tests cover range, dimension, self-exclusion, listening,
 pose requirement, limits, wire decode and disabled mode. Real-client audio QA
 (two native clients, microphone, speakers) is pending.
+
+`svc_service_tests.rs` runs the whole SVC path in-process: plugin-channel
+handshake, a UDP client that writes datagrams exactly like the mod (encrypted
+Authenticate/ConnectionCheck/Mic), SVC<->SVC, SVC<->native bridging, end-of-speech,
+range, forged-secret, disabled-client and disconnect cases. The AES-GCM and
+byte-layout vectors come from a JDK program mirroring SVC's `Secret`/`toBytes`
+code. A real Fabric/NeoForge client with the SVC mod against this server has not
+been run; the protocol 20 layouts were also checked against the
+`voicechat-fabric-2.6.27+26.3.jar` release.

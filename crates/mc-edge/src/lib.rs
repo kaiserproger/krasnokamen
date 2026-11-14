@@ -72,6 +72,8 @@ mod resource_pack;
 mod screen;
 mod screen_service;
 mod server_properties;
+mod svc;
+mod svc_service;
 mod vanilla_items;
 mod voice;
 mod voice_service;

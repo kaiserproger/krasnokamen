@@ -908,6 +908,7 @@ def start_client(
     launch_manifest: Path | None = None,
     client_profile: str | None = None,
     window_size: tuple[int, int] | None = None,
+    sound_sink: str | None = None,
 ) -> tuple[subprocess.Popen[Any], Any]:
     """Launch a real client and return (process, log_handle) once MCP is ready.
 
@@ -928,6 +929,11 @@ def start_client(
     log/process events); the call never returns merely because time passed.
     Profile artifacts stay under the caller's game dir (runs/RunJava or a
     worktree .analysis dir on the games disk), never the root disk.
+    ``sound_sink`` names an audible client's own null sink on the private
+    graph, whose description equals its name: OpenAL opens it by that name
+    (``soundDevice``; OpenAL Soft ignores ``PULSE_SINK`` for its default)
+    and game sound is at full volume. Without it the client plays muted
+    into ``agents-null``.
     """
     if not token:
         raise ValueError("token must not be empty")
@@ -971,6 +977,9 @@ def start_client(
     # null backend with no audio server reachable (owner rule, never the
     # owner's speakers or microphone).
     env.pop("WAYLAND_DISPLAY", None)
+    # Loom wraps Linux client runs in its own `xvfb-run --auto-servernum` whenever CI is set,
+    # which would put the game on an unowned display instead of `display`.
+    env.pop("CI", None)
     env.update(
         {
             "DISPLAY": display,

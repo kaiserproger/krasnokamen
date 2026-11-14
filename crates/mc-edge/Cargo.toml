@@ -45,9 +45,11 @@ clap = { workspace = true }
 rayon = { workspace = true }
 parking_lot = { workspace = true }
 rustc-hash = { workspace = true }
-uuid = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 md-5 = { workspace = true }
 aes = { workspace = true }
+aes-gcm = { workspace = true }
+getrandom = { workspace = true }
 cfb8 = { workspace = true }
 sha1 = { workspace = true }
 sha2 = { workspace = true }

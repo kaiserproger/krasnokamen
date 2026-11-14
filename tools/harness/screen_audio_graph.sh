@@ -35,7 +35,12 @@ exec dbus-run-session -- sh -c '
   if [ -n "${KRASNOKAMEN_AUDIO_RECEIPT_DIR:-}" ]; then
     pipewire-pulse >"$KRASNOKAMEN_PW_ROOT/pulse.log" 2>&1 &
     pulse=$!
-    stop() { kill $pulse $wp $pw 2>/dev/null; wait $pulse $wp $pw 2>/dev/null; }
+    # The graph dir is deleted on exit; the receipt keeps the daemon logs.
+    stop() {
+      kill $pulse $wp $pw 2>/dev/null; wait $pulse $wp $pw 2>/dev/null
+      cp "$KRASNOKAMEN_PW_ROOT/pipewire.log" "$KRASNOKAMEN_PW_ROOT/wireplumber.log" "$KRASNOKAMEN_PW_ROOT/pulse.log" \
+        "$KRASNOKAMEN_AUDIO_RECEIPT_DIR/"
+    }
   fi
   trap stop EXIT
   # WirePlumber publishes its settings metadata once it manages the graph: wait for that event.

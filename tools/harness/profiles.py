@@ -516,6 +516,13 @@ def run_claim_only_qa(ctx: ProfileContext) -> dict[str, Any]:
 
     return claim_only_qa.run(ctx)
 
+def run_screens_voice_qa(ctx: ProfileContext) -> dict[str, Any]:
+    """Screen sharing and SVC/native voice through Krasnokamen with native and Fabric clients."""
+    from .backends import screens_voice_qa
+
+    return screens_voice_qa.run(ctx)
+
+
 def run_buildings_qa(ctx: ProfileContext) -> dict[str, Any]:
     """Millenaire buildings: every blueprint L1..N built by a real Builder, block-match + function (native)."""
     from .backends import buildings_qa
@@ -1023,6 +1030,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Claim/fencing/restart checklist on a settled autonomous world (native --client, windowed)",
         "run": run_claim_only_qa,
     },
+    "screens-voice-qa": {
+        "scope": "real-client",
+        "description": "Screen sharing consent/audio/respawn and SVC proximity/group voice with native, Fabric Loader and Fabric SVC clients on the private audio graph (native --client, windowed)",
+        "run": run_screens_voice_qa,
+    },
     "buildings-qa": {
         "scope": "real-client",
         "description": "Millenaire buildings: every blueprint L1..N built by a real Builder, block-match + function (native --client, windowed for screenshots)",
@@ -1259,6 +1271,7 @@ PROFILE_PREREQUISITES = {
     "scene-shot": _SHARED,
     "settlement-map-qa": _SHARED,
     "claim-only-qa": _NATIVE,
+    "screens-voice-qa": _NATIVE,
     "buildings-qa": _NATIVE,
     "army-qa": _NATIVE,
     "autocraft-qa": _NATIVE,
