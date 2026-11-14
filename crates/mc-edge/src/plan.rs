@@ -794,12 +794,12 @@ const CHUNKS_PER_TICK: usize = 16;
 /// the authoritative snapshot so skipped projections cannot strand a fade.
 ///
 /// Best-effort frames are bounded by [`ViewerState::world_credit`], in
-/// priority order: one-shot explosions, chunk forgets, block updates, light
-/// updates, chunks (nearest first), entity removals, spawns (nearest first),
-/// appearance/moves (most overdue, nearest first), visual events.
-/// Explosions have no snapshot image to reconcile, so they precede even
-/// pending respawn forgets. Other work that does not fit stays unsent in the
-/// viewer cache and is planned again from a newer snapshot.
+/// priority order: chunk forgets, block updates, light updates, chunks
+/// (nearest first), entity removals, spawns (nearest first), appearance/moves
+/// (most overdue, nearest first), visual events. Work that does not fit stays
+/// unsent in the viewer cache and is planned again from a newer snapshot.
+/// Explosions, including the viewer's knockback, have no snapshot image to
+/// reconcile and use the reliable FIFO instead of spending world credit.
 #[cfg(test)]
 pub(crate) fn plan_viewer(
     output: &TickOutput,
@@ -901,12 +901,8 @@ fn plan_viewer_inner(
         let explosion = &changes.explosions[event];
         let [x, y, z] = viewer.position;
         let [cx, cy, cz] = explosion.center;
-        if (x - cx).powi(2) + (y - cy).powi(2) + (z - cz).powi(2) <= EXPLOSION_RANGE_SQ
-            && !try_push(&mut out, &mut credit, |out| {
-                push_best_effort(out, conn, &explode_packet(explosion, viewer.entity_id));
-            })
-        {
-            break;
+        if (x - cx).powi(2) + (y - cy).powi(2) + (z - cz).powi(2) <= EXPLOSION_RANGE_SQ {
+            push_reliable(&mut out, conn, &explode_packet(explosion, viewer.entity_id));
         }
     }
     // Heartbeats and discontinuities share the reliable FIFO: an older queued

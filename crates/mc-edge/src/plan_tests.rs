@@ -111,10 +111,10 @@ fn player_air_supply_is_reliable_own_metadata_without_world_credit() {
 }
 
 #[test]
-fn one_shot_explosions_precede_resumable_world_work_with_bounded_credit() {
+fn one_shot_explosions_are_reliable_without_world_credit() {
     with_cache(|cache| {
         for forget_all in [false, true] {
-            for credit in [0, 96] {
+            for (frames, bytes) in [(0, usize::MAX), (usize::MAX, 0)] {
                 let (pos, chunk) = chunk_at(0, 0);
                 let changes = ChangeSet {
                     explosions: (0..96)
@@ -129,7 +129,8 @@ fn one_shot_explosions_precede_resumable_world_work_with_bounded_credit() {
                 };
                 let out = output(vec![(pos, chunk)], vec![], changes);
                 let mut viewer = viewer_at(1, [8.0, 64.0, 8.0]);
-                viewer.world_credit = credit;
+                viewer.world_credit = frames;
+                viewer.world_bytes = bytes;
                 viewer.forget_all = forget_all;
                 viewer
                     .loaded_chunks
@@ -149,20 +150,22 @@ fn one_shot_explosions_precede_resumable_world_work_with_bounded_credit() {
                     .iter()
                     .filter(|packet| packet.id == ClientboundExplode::ID)
                     .collect();
-                assert_eq!(blasts.len(), credit);
-                assert!(blasts.iter().all(|packet| !packet.reliable));
-                assert_eq!(
-                    packets.iter().filter(|packet| !packet.reliable).count(),
-                    credit
-                );
+                assert_eq!(blasts.len(), 96);
+                assert!(blasts.iter().all(|packet| packet.reliable));
+                assert!(packets.iter().all(|packet| packet.reliable));
                 for (n, packet) in blasts.iter().enumerate() {
                     let blast = ClientboundExplode::decode(&mut &body_of(packet)[..]).unwrap();
                     assert_eq!(blast.center.x, 8.0 + n as f64 / 100.0);
+                    assert_eq!(
+                        blast.knockback.map(|push| [push.x, push.y, push.z]),
+                        Some([0.1, 0.2, 0.3])
+                    );
                 }
                 assert_eq!(viewer.forget_all, forget_all);
                 assert_eq!(viewer.chunk_repairs.contains(&(0, 0)), forget_all);
                 if !forget_all {
                     viewer.world_credit = 512;
+                    viewer.world_bytes = usize::MAX;
                     assert_eq!(viewer.pending_blocks.len(), 256);
                     let quiet = TickOutput {
                         changes: Arc::new(ChangeSet::default()),

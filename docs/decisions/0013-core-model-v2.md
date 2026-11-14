@@ -75,10 +75,12 @@ frames as one item, so a large scoreboard does not hit the bound. Chat and
 system-message lines are bounded at their source (the sender's spam budget, the
 command sequence budget), so a connection's trailing run of them compacts into
 one `TextBurst` entry at the cap instead of disconnecting a recipient, and the
-edge queues the burst's frames as one item. World fanout
-may reconcile to a newer snapshot; it plans within each world queue's free
-frame slots and bytes, so a slow viewer's backlog is bounded in bytes and its
-nearest, longest-waiting entity updates go first. See
+edge queues the burst's frames as one item. Explosions and their recipient's
+knockback also use the reliable FIFO, independently of world credit and LOD
+world-queue producers, because no later snapshot restores a lost impulse.
+World snapshot deltas may reconcile to a newer snapshot; fanout plans within
+each world queue's free frame slots and bytes, so a slow viewer's backlog is
+bounded in bytes and its nearest, longest-waiting entity updates go first. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
 Datapack reloads and `/debug function` trace-file writes each run on one
@@ -109,6 +111,9 @@ The operator snapshot and a permission update for every registered session of
 the target UUID are sent without an intervening await. Queue saturation waits
 for capacity rather than polling or publishing out of order. If the core stops
 while waiting, the operator mutation is not applied.
+Moderation commands re-acquire the same operator-update fence after selector
+resolution and recheck the initiator's live permission and lock before any
+kick, ban or pardon; the fence is held through those effects.
 
 Pickup publishes changed slots in the active menu. Player inventory slots hidden
 by that menu use the dedicated player-inventory packet rather than a window-0

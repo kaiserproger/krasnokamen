@@ -46,10 +46,12 @@ free frame slots (hard) and free bytes (soft: the last admitted group may
 overshoot); entity updates that do not fit wait, ranked by wait time and
 distance, and are planned again from a newer snapshot. Recorder connections
 (`[recorder]`, `crates/mc-edge/src/recorder.rs`) track every entity type to
-their view distance and get a per-tick `krasnokamen:tick` marker. Reliable
-per-player results remain ordered; capacity exhaustion disconnects rather
-than dropping them. Socket completion and client rendering are separate from
-native commit.
+their view distance and get a per-tick `krasnokamen:tick` marker. Explosions,
+including the viewer's own knockback, bypass world credit and the competing LOD
+producer through the reliable FIFO: no later snapshot can restore them.
+Reliable per-player results remain ordered; capacity exhaustion disconnects
+rather than dropping them. Socket completion and client rendering are separate
+from native commit.
 
 ### Tick cost accounting
 

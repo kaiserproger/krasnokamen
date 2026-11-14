@@ -992,9 +992,6 @@ impl EdgeServer {
                             return Ok(true);
                         }
                     };
-                    if id != mc_core::command_console::CONNECTION && self.hub.session_locked(id) {
-                        return Ok(false);
-                    }
                     selected
                         .into_iter()
                         .map(|(connection, uuid, name)| (Some(connection), uuid, name))
@@ -1012,6 +1009,20 @@ impl EdgeServer {
                     self.feedback(id, "Unknown player")?;
                     return Ok(true);
                 };
+            // Selector resolution and this fence both await. A deop admitted
+            // meanwhile must revoke moderation before any ban or disconnect.
+            let _guard = self.operator_updates.lock().await;
+            if id != mc_core::command_console::CONNECTION
+                && (self.hub.session_locked(id)
+                    || !crate::command_tree::permitted(
+                        command,
+                        self.admin.session_level(id),
+                        self.hub.plugin_commands(),
+                    ))
+            {
+                self.feedback(id, "Unknown or incomplete command")?;
+                return Ok(true);
+            }
             let banned = if root == "kick" {
                 Vec::new()
             } else {
