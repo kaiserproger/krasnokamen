@@ -5,7 +5,7 @@ use crate::journal::{
 };
 
 fn items() -> ItemRegistry {
-    mc_data::items::solaris_required_items()
+    mc_data::items::krasnokamen_required_items()
 }
 fn stack(items: &ItemRegistry, name: &str) -> ItemStack {
     ItemStack::new(
@@ -16,7 +16,7 @@ fn stack(items: &ItemRegistry, name: &str) -> ItemStack {
     )
 }
 fn type_id(kind: ProjectileKind) -> u32 {
-    mc_data::entity_types::solaris_required_entity_types()
+    mc_data::entity_types::krasnokamen_required_entity_types()
         .id_of(&mc_data::Identifier::parse(kind.name()).unwrap())
         .unwrap()
 }
@@ -101,7 +101,7 @@ fn entry(state: &ProjectileState, position: [f64; 3], velocity: [f64; 3]) -> Jou
 }
 fn world(label: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!(
-        "solaris-projectiles-{label}-{}",
+        "krasnokamen-projectiles-{label}-{}",
         uuid::Uuid::new_v4()
     ))
 }
@@ -788,9 +788,9 @@ fn anchored_arrow_checkpoint_requires_native_lifetime_age() {
     );
     for replacement in [None, Some(Tag::Int(1))] {
         let mut corrupt = fields.clone();
-        corrupt.retain(|(name, _)| name != "solaris:LifetimeAge");
+        corrupt.retain(|(name, _)| name != "krasnokamen:LifetimeAge");
         if let Some(value) = replacement {
-            corrupt.push(("solaris:LifetimeAge".into(), value));
+            corrupt.push(("krasnokamen:LifetimeAge".into(), value));
         }
         let mut rejected = Replay {
             tick: state.tick,
@@ -803,7 +803,10 @@ fn anchored_arrow_checkpoint_requires_native_lifetime_age() {
             state.tick,
         )
         .unwrap_err();
-        assert!(error.to_string().contains("solaris:LifetimeAge"), "{error}");
+        assert!(
+            error.to_string().contains("krasnokamen:LifetimeAge"),
+            "{error}"
+        );
         assert!(
             rejected.entities.is_empty(),
             "invalid image must not publish a body"
@@ -908,7 +911,7 @@ fn lazy_ground_clock_survives_native_checkpoint_wal_active_pause_and_age_wrap() 
     entity.motion = [0.0; 3];
     entity.extra_fields = to_fields(&arrow, items, entity_age);
     entity.extra_fields.push((
-        "solaris:LifetimeAge".into(),
+        "krasnokamen:LifetimeAge".into(),
         Tag::Long(i64::from(entity_age)),
     ));
     assert_eq!(field(&entity.extra_fields, "life"), Some(&Tag::Short(50)));

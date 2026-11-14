@@ -20,7 +20,7 @@
 //!   the hidden-HUD check, so these teams use `never`.
 //!
 //! Team name `sf <faction>`: no `/team` command can create it. Vanilla
-//! `team add` takes a Brigadier word (`[0-9A-Za-z_.+-]`), and the Solaris
+//! `team add` takes a Brigadier word (`[0-9A-Za-z_.+-]`), and the Krasnokamen
 //! tokenizer (`mc_core::commands::command_words`) keeps whitespace only
 //! inside quotes or brackets, which stay part of the word. A core team of
 //! exactly that name (an imported world, a plugin) blocks its faction: it is

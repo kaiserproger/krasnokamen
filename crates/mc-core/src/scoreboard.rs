@@ -395,7 +395,7 @@ pub(crate) fn snapshot_team_names(state: &mut TickState) -> std::sync::Arc<Vec<S
 
 /// Entry-free rule of the edge's battle-faction teams (`mc-edge`
 /// `faction_teams`): an entry that gets a battle faction (summon with `UUID`
-/// and `solaris:Faction`, `battle::cavalry::mount` of a horse, `battle live`)
+/// and `krasnokamen:Faction`, `battle::cavalry::mount` of a horse, `battle live`)
 /// must be in no `/team` team. The edge adds it to its faction team, which
 /// moves it out of the `/team` team on the client; a later `/team leave` or
 /// `empty` (method 4) would then name an entry that team no longer holds

@@ -8,7 +8,7 @@ current runtime entrypoints.
 ## Entry points
 
 ```text
-crates/mc-edge/src/bin/solaris-v2.rs
+crates/mc-edge/src/bin/krasnokamen.rs
   operator_cli: parse --config (default server.toml), dispatch offline command
   server: resolve/validate content cache and immutable startup tables
   mc_core::Core::open: native world, recovery, gameplay and tick ownership
@@ -45,7 +45,7 @@ free frame slots (hard) and free bytes (soft: the last admitted group may
 overshoot); entity updates that do not fit wait, ranked by wait time and
 distance, and are planned again from a newer snapshot. Recorder connections
 (`[recorder]`, `crates/mc-edge/src/recorder.rs`) track every entity type to
-their view distance and get a per-tick `solaris:tick` marker. Reliable
+their view distance and get a per-tick `krasnokamen:tick` marker. Reliable
 per-player results remain ordered; capacity exhaustion disconnects rather
 than dropping them. Socket completion and client rendering are separate from
 native commit.

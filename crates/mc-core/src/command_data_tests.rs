@@ -112,7 +112,7 @@ fn data_player_queries_read_live_inventory_vitals_and_absent_paths() {
         *get(&tag, "Dimension").unwrap(),
         Tag::String("minecraft:overworld".into())
     );
-    assert!(get(&tag, "SolarisStatistics").is_err());
+    assert!(get(&tag, "KrasnokamenStatistics").is_err());
     assert!(query(&mut state, context, "data get entity @s Pos 2").is_err());
     assert!(query(&mut state, context, "data get entity @s Missing").is_err());
     assert!(query(&mut state, context, "data get entity @a Health").is_err());
@@ -137,16 +137,17 @@ fn data_mob_faction_is_public_only_while_affiliated() {
     let id = state.spawn_mob(kind, [2.0, 60.0, 2.0], 20.0);
     let slot = state.entities.slot_of(id).unwrap();
     let selector =
-        crate::commands::target_of("@e[type=minecraft:cow,nbt={\"solaris:Faction\":7}]").unwrap();
+        crate::commands::target_of("@e[type=minecraft:cow,nbt={\"krasnokamen:Faction\":7}]")
+            .unwrap();
     let path = format!(
-        "data get entity {} \"solaris:Faction\"",
+        "data get entity {} \"krasnokamen:Faction\"",
         state.entities.row(slot).uuid
     );
-    assert!(get(&entity(&state, id).unwrap(), "\"solaris:Faction\"").is_err());
+    assert!(get(&entity(&state, id).unwrap(), "\"krasnokamen:Faction\"").is_err());
     assert!(query(&mut state, context, &path).is_err());
     state.entities.set_faction(slot, 7);
     assert_eq!(
-        *get(&entity(&state, id).unwrap(), "\"solaris:Faction\"").unwrap(),
+        *get(&entity(&state, id).unwrap(), "\"krasnokamen:Faction\"").unwrap(),
         Tag::Int(7)
     );
     assert_eq!(query(&mut state, context, &path).unwrap(), 7);
@@ -155,7 +156,7 @@ fn data_mob_faction_is_public_only_while_affiliated() {
         vec![id]
     );
     state.entities.set_faction(slot, 0);
-    assert!(get(&entity(&state, id).unwrap(), "\"solaris:Faction\"").is_err());
+    assert!(get(&entity(&state, id).unwrap(), "\"krasnokamen:Faction\"").is_err());
     assert!(query(&mut state, context, &path).is_err());
     assert!(crate::command_execution::resolve_target(&state, id, &selector).is_empty());
 }

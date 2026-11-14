@@ -8,7 +8,7 @@ evidence_scope: Specifications and blocked requirements are not runtime passes; 
 subjects:
   - id: selectors.at_a
     matrix_ids:
-      - pw:selectors.at_a/neoforge_solaris_loader/spectator/overworld/hard/N8/normal/save_all_checkpoint/console
+      - pw:selectors.at_a/neoforge_krasnokamen_loader/spectator/overworld/hard/N8/normal/save_all_checkpoint/console
     adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.at_a]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -66,7 +66,7 @@ subjects:
     additional_cases: []
   - id: selectors.at_p
     matrix_ids:
-      - pw:selectors.at_p/fabric_solaris_loader/survival/the_end/normal/2/slow_reader_backpressure/clean_restart_mid_action/op_4
+      - pw:selectors.at_p/fabric_krasnokamen_loader/survival/the_end/normal/2/slow_reader_backpressure/clean_restart_mid_action/op_4
     adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.at_p]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission
@@ -229,19 +229,19 @@ subjects:
     additional_cases: []
     plugin_profiles:
       changed_by:
-        - solaris-essentials
+        - krasnokamen-essentials
       vanilla: 767fbd3331effa358e238e39e2a88ed1345d5623207015671228536e53975f00
       live: 604b4c3f6f818a6ba7e4d7cb3ce39109a332f4ed7c96444d8e07694a123b7c95
     plugin_profile_oracle:
       vanilla: core private messaging semantics; selectors forbidden below op2
       live:
-        solaris-essentials exact-name resolution; @a produces Online player not found or ambiguous.; messages
+        krasnokamen-essentials exact-name resolution; @a produces Online player not found or ambiguous.; messages
         use [to target] and [from sender] prefixes
-      source: /run/media/kaiserroman/games/solaris-work/solaris-default-plugins/sources/solaris-essentials/src/lib.rs:450-471,607-610,636-645,853-863
+      source: /run/media/kaiserroman/games/solaris-work/solaris-default-plugins/sources/krasnokamen-essentials/src/lib.rs:450-471,607-610,636-645,853-863
     additional_executable_cases: zero delivery to every connected recipient
   - id: selectors.opt_distance
     matrix_ids:
-      - pw:selectors.opt_distance/forge_solaris_loader/spectator/the_end/peaceful/N8/slow_reader_backpressure/crash_kill9_wal_replay/op_3
+      - pw:selectors.opt_distance/forge_krasnokamen_loader/spectator/the_end/peaceful/N8/slow_reader_backpressure/crash_kill9_wal_replay/op_3
     adapter: tools.harness.matrix_domains.selectors:ADAPTERS[selectors.opt_distance]
     preconditions:
       context: driver applies exact matrix factors before setup; never override mode,dimension,permission

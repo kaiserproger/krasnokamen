@@ -1,4 +1,4 @@
-schema: solaris-domain-adapter-index/1
+schema: krasnokamen-domain-adapter-index/1
 domain: block_break
 subjects_specified: 24
 vanilla_provenance: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/version.json
@@ -21,7 +21,7 @@ subjects:
     expected: breaks in one tick (hardness 0); item drops
     vanilla_source:
       - https://minecraft.wiki/w/Breaking
-    solaris_sources: &id001
+    krasnokamen_sources: &id001
       - core:tick/mining.rs
       - core:block_drops.rs
       - core:block_drop_context.rs
@@ -68,7 +68,7 @@ subjects:
     expected: drops only with sufficient tier; break time follows hardness/tool speed
     vanilla_source:
       - https://minecraft.wiki/w/Breaking
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
       function: tool_tier_required
@@ -105,7 +105,7 @@ subjects:
     expected: slow break, no drop
     vanilla_source:
       - https://minecraft.wiki/w/Breaking
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
       function: wrong_tool_no_drop
@@ -142,7 +142,7 @@ subjects:
     expected: block itself drops
     vanilla_source:
       - https://minecraft.wiki/w/Silk_Touch
-    solaris_sources:
+    krasnokamen_sources:
       - core:enchantments.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
@@ -178,7 +178,7 @@ subjects:
     expected: drop count distribution increased per vanilla formula
     vanilla_source:
       - https://minecraft.wiki/w/Fortune
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
       function: fortune_drops
@@ -210,7 +210,7 @@ subjects:
       - survival
   - subject: block_break.container_spill
     matrix_ids:
-      - pw:block_break.container_spill/fabric_solaris_loader/spectator/the_end/peaceful/1/normal/clean_restart_mid_action/op_2
+      - pw:block_break.container_spill/fabric_krasnokamen_loader/spectator/the_end/peaceful/1/normal/clean_restart_mid_action/op_2
       - tr.dupe.two_players_take_same_tick:block_break.container_spill/protocol_bot/survival/overworld/normal/2/normal/steady/non_op_0
       - tr.dupe.destroy_during_interaction:block_break.container_spill/vanilla_java_26_1_2/survival/overworld/normal/1/normal/steady/non_op_0
       - tr.dupe.restart_after_interaction:block_break.container_spill/native_linux/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
@@ -220,7 +220,7 @@ subjects:
     expected: all contents drop as item entities exactly once; block item drops
     vanilla_source:
       - https://minecraft.wiki/w/Chest
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
       function: container_spill
@@ -265,7 +265,7 @@ subjects:
     expected: shulker item drops with container contents component; no spill
     vanilla_source:
       - https://minecraft.wiki/w/Shulker_Box
-    solaris_sources:
+    krasnokamen_sources:
       - core:shulker.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
@@ -308,7 +308,7 @@ subjects:
     expected: both halves removed; one item drop; creative bottom-half no drop
     vanilla_source:
       - https://minecraft.wiki/w/Door
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
       function: double_block
@@ -348,7 +348,7 @@ subjects:
     expected: attached blocks pop and drop
     vanilla_source:
       - https://minecraft.wiki/w/Torch
-    solaris_sources:
+    krasnokamen_sources:
       - core:placement.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
@@ -378,14 +378,14 @@ subjects:
       - survival
   - subject: block_break.gravity_trigger
     matrix_ids:
-      - pw:block_break.gravity_trigger/neoforge_solaris_loader/creative/overworld/normal/1/reconnect_mid_action/hot_backup_during_action/op_3
+      - pw:block_break.gravity_trigger/neoforge_krasnokamen_loader/creative/overworld/normal/1/reconnect_mid_action/hot_backup_during_action/op_3
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: falling blocks fall and land
     vanilla_source:
       - https://minecraft.wiki/w/Falling_Block
-    solaris_sources:
+    krasnokamen_sources:
       - core:falling.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
@@ -424,7 +424,7 @@ subjects:
     expected: ice becomes water source (not in nether)
     vanilla_source:
       - https://minecraft.wiki/w/Ice
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
       function: ice_to_water
@@ -457,7 +457,7 @@ subjects:
     expected: "hand: sapling/stick/apple chance; shears: leaf block"
     vanilla_source:
       - https://minecraft.wiki/w/Leaves
-    solaris_sources:
+    krasnokamen_sources:
       - core:leaves.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
@@ -498,7 +498,7 @@ subjects:
     expected: no drop
     vanilla_source:
       - https://minecraft.wiki/w/Glass
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
       function: glass_no_drop
@@ -533,7 +533,7 @@ subjects:
     expected: never breaks; no drop; client resynced
     vanilla_source:
       - https://minecraft.wiki/w/Bedrock
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
       function: unbreakable
@@ -569,7 +569,7 @@ subjects:
     expected: instant break, no drops; sword cannot break blocks
     vanilla_source:
       - https://minecraft.wiki/w/Creative
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
       function: creative_break
@@ -610,7 +610,7 @@ subjects:
     expected: XP orbs spawn per vanilla range (none with silk)
     vanilla_source:
       - https://minecraft.wiki/w/Experience
-    solaris_sources:
+    krasnokamen_sources:
       - core:experience_orbs.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
@@ -651,7 +651,7 @@ subjects:
     expected: 15-43 XP, no item drop
     vanilla_source:
       - https://minecraft.wiki/w/Monster_Spawner
-    solaris_sources:
+    krasnokamen_sources:
       - core:monster_spawner.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
@@ -685,14 +685,14 @@ subjects:
       - orb_experience(ctx)
   - subject: block_break.block_entity_drop
     matrix_ids:
-      - pw:block_break.block_entity_drop/forge_solaris_loader/adventure/the_nether/hard/2/malformed_or_stale_packet/steady/op_3
+      - pw:block_break.block_entity_drop/forge_krasnokamen_loader/adventure/the_nether/hard/2/malformed_or_stale_packet/steady/op_3
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: block entity data kept where vanilla keeps it (banner patterns, bees with silk)
     vanilla_source:
       - https://minecraft.wiki/w/Banner
-    solaris_sources:
+    krasnokamen_sources:
       - core:block_entity_defaults.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
@@ -739,7 +739,7 @@ subjects:
     expected: immature drops seed only; mature drops produce + seeds
     vanilla_source:
       - https://minecraft.wiki/w/Wheat
-    solaris_sources:
+    krasnokamen_sources:
       - core:farming.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
@@ -776,7 +776,7 @@ subjects:
     expected: water source remains
     vanilla_source:
       - https://minecraft.wiki/w/Waterlogging
-    solaris_sources:
+    krasnokamen_sources:
       - core:fluids.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
@@ -810,7 +810,7 @@ subjects:
     expected: silverfish spawns; no drop
     vanilla_source:
       - https://minecraft.wiki/w/Infested_Block
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
       function: infested_block
@@ -844,7 +844,7 @@ subjects:
     expected: break time scales per vanilla multipliers
     vanilla_source:
       - https://minecraft.wiki/w/Breaking
-    solaris_sources:
+    krasnokamen_sources:
       - core:effects.rs
       - core:enchantments.rs
     adapter:
@@ -899,7 +899,7 @@ subjects:
     expected: block intact; no drop; crack animation clears
     vanilla_source:
       - https://minecraft.wiki/w/Breaking
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
       function: abort_dig
@@ -942,7 +942,7 @@ subjects:
     expected: durability consumed per block; tool breaks with break sound/animation
     vanilla_source:
       - https://minecraft.wiki/w/Durability
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_break.py
       function: tool_durability_on_break

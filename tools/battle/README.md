@@ -111,7 +111,7 @@ headless recorder, and the pinned server must contain the recorder/telemetry
 slice. Both are required for an actual run. For example:
 
 ```sh
-tools/battle/run-battle.sh --pin /absolute/server-pin --client /absolute/solaris-client \
+tools/battle/run-battle.sh --pin /absolute/server-pin --client /absolute/krasnokamen-client \
   --client-data /absolute/client-data --cache /absolute/vanilla-cache \
   --world /absolute/stopped-flat-world --run-dir /absolute/new-run \
   --seed 42 --scenario field-10k --duration 180
@@ -122,7 +122,7 @@ adds the vanilla `[resource_pack]` offer to the effective server config.
 The offer is optional because the headless native recorder declines packs;
 Java clients download it from the server URL, not a local resource-pack folder.
 `python3 -m tools.harness run java-battle-functional --client java --platform fabric|neoforge`
-delegates the graphical scenario to `solaris-loader/tools/battle_scenario.py`.
+delegates the graphical scenario to `krasnokamen-loader/tools/battle_scenario.py`.
 
 Add `--dry-run` to print the planned command list without starting processes or
 creating the run directory. The runner verifies the server pin checksum, writes

@@ -45,8 +45,8 @@ class LifecyclePhases(unittest.TestCase):
             root = Path(directory)
             config = root / 'config.toml'
             config.write_text('')
-            with patch.dict('os.environ', {'SOLARIS_VALIDATION_RUN_DIR': directory,
-                                          'SOLARIS_SERVER_BINARY': '/bin/true'}), \
+            with patch.dict('os.environ', {'KRASNOKAMEN_VALIDATION_RUN_DIR': directory,
+                                          'KRASNOKAMEN_SERVER_BINARY': '/bin/true'}), \
                  patch.object(seed_review, 'write_config', return_value=(config, root / 'world')), \
                  patch.object(seed_review, 'prepare_operator_fixture'), \
                  patch.object(runtime, 'start_xvfb', side_effect=RuntimeError('display failed')):
@@ -61,8 +61,8 @@ class LifecyclePhases(unittest.TestCase):
             root = Path(directory)
             config = root / 'config.toml'
             config.write_text('')
-            with patch.dict('os.environ', {'SOLARIS_VALIDATION_RUN_DIR': directory,
-                                          'SOLARIS_SERVER_BINARY': '/bin/true'}), \
+            with patch.dict('os.environ', {'KRASNOKAMEN_VALIDATION_RUN_DIR': directory,
+                                          'KRASNOKAMEN_SERVER_BINARY': '/bin/true'}), \
                  patch.object(seed_review, 'write_config', return_value=(config, root / 'world')), \
                  patch.object(seed_review, 'prepare_operator_fixture'), \
                  patch.object(runtime, 'start_xvfb', side_effect=RuntimeError('display failed')), \
