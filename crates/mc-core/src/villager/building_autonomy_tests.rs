@@ -722,7 +722,8 @@ fn adopted_village_with_resident_shears_produces_stock_and_builds() {
     crate::settlements::construction_crafting::reset_scan_stats();
     // Include the real root's renewable resource growth rather than ticking
     // only settlement and brain systems. Closure is deterministic at tick
-    // 72,901 on this fixture; the bound leaves room without a wall clock.
+    // 52,641 on this fixture (measured 2026-11-15 on 90e282cec); the bound
+    // leaves room without a wall clock.
     state.day_time = 3000;
     for _ in 0..80_000 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
