@@ -648,14 +648,11 @@ impl FormationRuntime {
             self.update_sections(i);
             self.move_leader(i);
         }
-        if self.tick % STALL_TICKS == 0 {
-            self.census_stalls();
-        }
     }
 
     /// Ten-second stall census for operators and relief takes. O(N) once
     /// per window; motion never reads it.
-    fn census_stalls(&mut self) {
+    pub(super) fn census_stalls(&mut self, frame: &super::Frame<'_>, columns: &super::Columns) {
         self.advancing = 0;
         self.stalled = 0;
         for r in &mut self.regiments {
@@ -667,12 +664,31 @@ impl FormationRuntime {
                 && !r.morale.broken
                 && r.gap > 6.0;
             r.anchor = [r.spec.origin[0], r.spec.origin[2]];
-            for m in &mut self.members[r.start..r.start + r.len] {
+            for (offset, m) in self.members[r.start..r.start + r.len]
+                .iter_mut()
+                .enumerate()
+            {
                 if advanced && m.alive && !m.wounded && !m.routing {
-                    self.advancing += 1;
-                    self.stalled += usize::from(
-                        mth::length2(m.pos[0] - m.anchor[0], m.pos[2] - m.anchor[1]) < 1.0,
-                    );
+                    let index = r.start + offset;
+                    // Loose files can reach an enemy ahead of their virtual
+                    // leader. Holding an actual contact is not a terrain stall.
+                    let in_contact = columns.targets[index].is_some_and(|target| {
+                        columns.slots[index].is_some_and(|slot| {
+                            super::faction::retained_enemy(
+                                frame.entities,
+                                slot,
+                                target.id,
+                                super::MELEE_ENGAGEMENT_REACH,
+                            )
+                            .is_some()
+                        })
+                    });
+                    if !in_contact {
+                        self.advancing += 1;
+                        self.stalled += usize::from(
+                            mth::length2(m.pos[0] - m.anchor[0], m.pos[2] - m.anchor[1]) < 1.0,
+                        );
+                    }
                 }
                 m.anchor = [m.pos[0], m.pos[2]];
             }

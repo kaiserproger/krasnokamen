@@ -1004,6 +1004,72 @@ pub(super) fn staged_flat_fixture(side: usize) -> crate::tick::TickState {
 }
 
 #[test]
+fn stall_census_excludes_live_contact_but_not_blocked_or_stale_targets() {
+    let mut state = staged_flat_fixture(100);
+    let mut battle = std::mem::take(&mut state.hostile.battle);
+    battle.columns.prepare(
+        &Frame {
+            entities: &state.entities,
+            registry: &state.registry,
+            world: &state.world,
+            tick: 0,
+        },
+        &mut battle.formation,
+        &mut battle.output.counters,
+        &mut battle.population,
+    );
+    let start = battle.formation.regiments[0].start;
+    let actor = battle.columns.slots[start].unwrap();
+    let faction = state.entities.body(actor).faction;
+    let target = battle
+        .columns
+        .slots
+        .iter()
+        .flatten()
+        .copied()
+        .find(|&slot| {
+            let other = state.entities.body(slot).faction;
+            other != 0 && other != faction
+        })
+        .unwrap();
+    let target_id = state.entities.body(target).id;
+    let actor_pos = state.entities.pos(actor);
+    let target_pos = [actor_pos[0] + 1.0, actor_pos[1], actor_pos[2]];
+    state.entities.set_pos(target, target_pos);
+    battle.columns.targets.fill(None);
+    battle.columns.targets[start] = Some(EnemyTarget {
+        id: target_id,
+        pos: target_pos,
+        distance: 1.0,
+    });
+    for (index, member) in battle.formation.members.iter_mut().enumerate() {
+        member.alive = index == start || index == start + 1;
+        member.wounded = false;
+        member.routing = false;
+        member.anchor = [member.pos[0], member.pos[2]];
+    }
+    for expected in [(1, 1), (2, 2)] {
+        let regiment = &mut battle.formation.regiments[0];
+        regiment.anchor = [regiment.spec.origin[0] - 5.0, regiment.spec.origin[2]];
+        regiment.gap = 10.0;
+        regiment.morale.broken = false;
+        let frame = Frame {
+            entities: &state.entities,
+            registry: &state.registry,
+            world: &state.world,
+            tick: formation::STALL_TICKS,
+        };
+        battle.formation.census_stalls(&frame, &battle.columns);
+        assert_eq!(
+            (battle.formation.advancing, battle.formation.stalled),
+            expected
+        );
+        // A retained target that is no longer an enemy cannot hide a stall.
+        state.entities.set_faction(target, 0);
+    }
+}
+
+#[test]
 fn native_tick_pursues_routed_enemies_only_for_the_staged_scenario() {
     use formation::Order;
     for staged in [true, false] {

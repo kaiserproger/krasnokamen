@@ -464,13 +464,9 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             } else {
                 [velocity[0], velocity[2]]
             };
-            // Only a fugitive turns back out of a pocket: a rider with a target
-            // or a slot keeps pressing toward it, as before.
-            let mover = if routing {
-                super::steering::Mover::Fugitive(&mut battle.columns.escape[horse_bi])
-            } else {
-                super::steering::Mover::Rider
-            };
+            // A target or slot cannot make a canopy-blocked step jumpable:
+            // every mounted body takes the bounded way out of a pocket.
+            let mover = super::steering::Mover::Mounted(&mut battle.columns.escape[horse_bi]);
             let velocity = super::steering::around_obstacles(
                 frame, formation, horse, velocity, heading, mover,
             );
@@ -565,7 +561,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             horse,
             velocity,
             [velocity[0], velocity[2]],
-            super::steering::Mover::Rider,
+            super::steering::Mover::Mounted(&mut battle.columns.escape[horse_bi]),
         );
         let velocity = horse_gap(&battle.formation, bi, &near, position, velocity);
         battle.columns.drive[horse_bi] = velocity;
