@@ -5,7 +5,7 @@ use crate::commands::CommandError;
 use crate::tick::TickState;
 use mc_nbt::{tag_type, ListTag, Tag};
 
-const OWNER: &str = "solaris:battle";
+const OWNER: &str = "krasnokamen:battle";
 const TICKET_RADIUS: i32 = 12;
 const MAX_SIDE: usize = 10_000;
 

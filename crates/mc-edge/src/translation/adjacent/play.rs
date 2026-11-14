@@ -620,7 +620,7 @@ fn state(t: &Tables, id: i32) -> Result<i32> {
     })
 }
 
-/// `ItemCost`: item id, count, exact component predicate (Solaris sends none).
+/// `ItemCost`: item id, count, exact component predicate (Krasnokamen sends none).
 fn item_cost(t: &Tables, r: &mut &[u8], w: &mut Vec<u8>) -> Result<()> {
     w.write_varint(t.items.get(r.read_varint()?).unwrap_or(1));
     w.write_varint(r.read_varint()?);

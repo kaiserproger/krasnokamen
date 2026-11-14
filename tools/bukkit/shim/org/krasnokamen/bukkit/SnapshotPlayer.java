@@ -1,4 +1,4 @@
-package org.solaris.bukkit;
+package org.krasnokamen.bukkit;
 import org.bukkit.entity.Player;
 import java.util.UUID;
 public final class SnapshotPlayer implements Player {

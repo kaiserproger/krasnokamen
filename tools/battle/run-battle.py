@@ -21,7 +21,7 @@ from pathlib import Path
 def arguments():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--pin', required=True, type=Path, help='server pin directory containing manifest.json')
-    p.add_argument('--client', required=True, type=Path, help='recorder-enabled solaris-client binary')
+    p.add_argument('--client', required=True, type=Path, help='recorder-enabled krasnokamen-client binary')
     p.add_argument('--client-data', required=True, type=Path)
     p.add_argument('--cache', required=True, type=Path, help='server content cache')
     p.add_argument('--run-dir', required=True, type=Path, help='new directory; never overwritten')
@@ -139,7 +139,7 @@ def stream_log(pipe, file, messages):
         for line in pipe:
             output.write(line)
             output.flush()
-            if any(marker in line for marker in ('Solaris is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Command failed:', 'Battle error:')):
+            if any(marker in line for marker in ('Krasnokamen is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Command failed:', 'Battle error:')):
                 messages.put(line)
     messages.put(None)
 
@@ -275,7 +275,7 @@ def run(a):
                 server.stdin.flush()
         log_thread = threading.Thread(target=stream_log, args=(server.stdout, root / 'server.log', messages), daemon=True)
         log_thread.start()
-        expect(messages, 'Solaris is listening (edge v2)')
+        expect(messages, 'Krasnokamen is listening (edge v2)')
         header = root / 'header.json'
         header.write_text(json.dumps({'protocol_version': 777, 'server_build': manifest['head'], 'seed': a.seed, 'start_tick': 0, 'wall_time': 0}) + '\n')
         with (root / 'recorder.log').open('x') as recorder_log:

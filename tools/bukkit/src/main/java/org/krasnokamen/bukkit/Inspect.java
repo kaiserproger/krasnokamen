@@ -1,4 +1,4 @@
-package org.solaris.bukkit;
+package org.krasnokamen.bukkit;
 
 import java.nio.file.*;
 import java.util.*;
@@ -20,7 +20,7 @@ public final class Inspect {
                                       String parent, String[] interfaces) {
                         owner = name.replace('/', '.').replace('$', '.');
                         visibility = access;
-                        if (name.startsWith("org/bukkit/") || name.startsWith("org/solaris/"))
+                        if (name.startsWith("org/bukkit/") || name.startsWith("org/krasnokamen/"))
                             throw new IllegalArgumentException("plugin bundles reserved API: " + name);
                     }
                     public MethodVisitor visitMethod(int access, String name, String descriptor,

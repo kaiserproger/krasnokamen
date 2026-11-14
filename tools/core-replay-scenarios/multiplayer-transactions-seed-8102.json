@@ -1,5 +1,5 @@
 {
-  "schema": "solaris.core_replay.scenario.v1",
+  "schema": "krasnokamen.core_replay.scenario.v1",
   "id": "multiplayer-transactions-seed-8102",
   "seed": 8102,
   "actions": [],
@@ -115,7 +115,7 @@
   ],
   "lanes": [
     {
-      "driver": "solaris_protocol",
+      "driver": "krasnokamen_protocol",
       "required_gates": [
         {
           "id": "multiplayer-transaction-replay",

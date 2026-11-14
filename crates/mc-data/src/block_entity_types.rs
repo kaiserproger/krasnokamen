@@ -87,7 +87,7 @@ impl BlockEntityTypeRegistry {
 }
 
 #[must_use]
-pub fn solaris_required_block_entity_types() -> BlockEntityTypeRegistry {
+pub fn krasnokamen_required_block_entity_types() -> BlockEntityTypeRegistry {
     let by_name = crate::block_entity_kinds::BlockEntityKind::ALL
         .iter()
         .map(|kind| {
@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn required_block_entity_type_ids_cover_runtime_emitters() {
-        let registry = solaris_required_block_entity_types();
+        let registry = krasnokamen_required_block_entity_types();
         for id in [
             "minecraft:furnace",
             "minecraft:chest",
@@ -122,7 +122,7 @@ mod tests {
 
     #[test]
     fn bed_has_no_block_entity_type_in_26_3() {
-        let registry = solaris_required_block_entity_types();
+        let registry = krasnokamen_required_block_entity_types();
         assert_eq!(
             registry.id_of(&Identifier::parse("minecraft:bed").unwrap()),
             None,
@@ -132,7 +132,7 @@ mod tests {
 
     #[test]
     fn shrieker_block_entity_type_matches_vanilla_protocol_id() {
-        let registry = solaris_required_block_entity_types();
+        let registry = krasnokamen_required_block_entity_types();
         assert_eq!(
             registry.id_of(&Identifier::parse("minecraft:sculk_shrieker").unwrap()),
             Some(37)
