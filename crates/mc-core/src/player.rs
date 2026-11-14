@@ -471,8 +471,11 @@ impl PlayerState {
                 );
             }
             let distance = (self.fall_distance
-                - f64::from(self.active_effects.level(crate::effects::EffectId::JumpBoost)))
-                .max(0.0);
+                - f64::from(
+                    self.active_effects
+                        .level(crate::effects::EffectId::JumpBoost),
+                ))
+            .max(0.0);
             let damage = if stalagmite {
                 crate::survival::stalagmite_damage(distance)
             } else {

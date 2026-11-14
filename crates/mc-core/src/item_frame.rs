@@ -463,7 +463,10 @@ pub(crate) fn eject_on_projectile(
         return false;
     };
     if crate::entity_controls::blocks_damage(
-        state, slot, crate::survival::DamageKind::Projectile, owner,
+        state,
+        slot,
+        crate::survival::DamageKind::Projectile,
+        owner,
     ) {
         return false;
     }
@@ -500,7 +503,10 @@ pub(crate) fn attack(
         return true;
     }
     if crate::entity_controls::blocks_damage(
-        state, slot, crate::survival::DamageKind::Melee, Some(actor),
+        state,
+        slot,
+        crate::survival::DamageKind::Melee,
+        Some(actor),
     ) {
         return true;
     }

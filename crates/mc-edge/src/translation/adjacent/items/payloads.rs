@@ -1,4 +1,4 @@
-//! Payloads emitted by Solaris's copied/station component codecs. Layout
+//! Payloads emitted by Krasnokamen's copied/station component codecs. Layout
 //! authority: mc-protocol::packets::play::{copied_components,station_components}.
 use super::*;
 
@@ -15,7 +15,7 @@ pub(super) fn registry(
     let offset = i32::from(holder);
     ensure!(
         raw >= offset,
-        "inline {name} holder is not supported by Solaris"
+        "inline {name} holder is not supported by Krasnokamen"
     );
     let ids = t
         .registry_ids
@@ -130,7 +130,10 @@ pub(super) fn extra(
             if n == 0 {
                 return Ok(());
             }
-            let kinds = t.registry_ids.get("consume_effect_type").context("missing consume effect registry")?;
+            let kinds = t
+                .registry_ids
+                .get("consume_effect_type")
+                .context("missing consume effect registry")?;
             for _ in 0..n {
                 let source = r.read_varint()?;
                 let target = map(kinds, to, source).context("unmapped consume effect type")?;
@@ -148,7 +151,10 @@ pub(super) fn extra(
                     }
                     1 => {
                         let count = r.read_varint()?;
-                        ensure!((0..=MAX_LIST + 1).contains(&count), "effect holder set size");
+                        ensure!(
+                            (0..=MAX_LIST + 1).contains(&count),
+                            "effect holder set size"
+                        );
                         w.write_varint(count);
                         if count == 0 {
                             string(r, w)?;
@@ -166,12 +172,18 @@ pub(super) fn extra(
                         if holder == 0 {
                             w.write_varint(0);
                             string(r, w)?;
-                            optional(r, w, |r, w| { w.write_f32(r.read_f32()?); Ok(()) })?;
+                            optional(r, w, |r, w| {
+                                w.write_f32(r.read_f32()?);
+                                Ok(())
+                            })?;
                         } else if let Some(mapped) = map(&t.sounds, to, holder - 1) {
                             *lossy |= to == To::Legacy && t.sounds.back(mapped) != Some(holder - 1);
                             w.write_varint(mapped + 1);
                         } else if to == To::Legacy {
-                            let name = t.sound_names.get((holder - 1) as usize).context("unknown sound holder")?;
+                            let name = t
+                                .sound_names
+                                .get((holder - 1) as usize)
+                                .context("unknown sound holder")?;
                             w.write_varint(0);
                             w.write_string(name, 32767)?;
                             w.write_bool(false);

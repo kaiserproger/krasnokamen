@@ -74,7 +74,12 @@ pub(super) fn rescue(
         player
             .statistics
             .increment(mc_data::statistics::StatType::Used, used.item_id, 1);
-        return Some(Rescue { used, changes, effects, default_effects });
+        return Some(Rescue {
+            used,
+            changes,
+            effects,
+            default_effects,
+        });
     }
     None
 }
@@ -87,33 +92,53 @@ fn active(effect: mc_data::item_stack::PotionEffect) -> Option<ActiveEffect> {
         ambient: effect.ambient,
         show_particles: effect.show_particles,
         show_icon: effect.show_icon,
-        hidden: effect.hidden.and_then(|hidden| active(*hidden)).map(Box::new),
+        hidden: effect
+            .hidden
+            .and_then(|hidden| active(*hidden))
+            .map(Box::new),
     })
 }
 
 fn sound(state: &mut super::TickState, position: [f64; 3], event: Sound) {
     let range = f64::from(event.fixed_range.unwrap_or(16.0).max(0.0));
-    let listeners: Vec<_> = state.players.iter().filter_map(|(id, player)| {
-        let slot = state.entities.slot_of(*id)?;
-        let pos = state.entities.pos(slot);
-        let squared: f64 = (0..3).map(|axis| (pos[axis] - position[axis]).powi(2)).sum();
-        (squared < range * range).then_some(player.connection)
-    }).collect();
+    let listeners: Vec<_> = state
+        .players
+        .iter()
+        .filter_map(|(id, player)| {
+            let slot = state.entities.slot_of(*id)?;
+            let pos = state.entities.pos(slot);
+            let squared: f64 = (0..3)
+                .map(|axis| (pos[axis] - position[axis]).powi(2))
+                .sum();
+            (squared < range * range).then_some(player.connection)
+        })
+        .collect();
     for connection in listeners {
-        state.push_player(connection, PlayerChange::CommandSound {
-            sound: event.id.clone(),
-            fixed_range: event.fixed_range,
-            source: 7,
-            position: position.map(|value| (value * 8.0).floor() as i32),
-            volume: 1.0,
-            pitch: 1.0,
-        });
+        state.push_player(
+            connection,
+            PlayerChange::CommandSound {
+                sound: event.id.clone(),
+                fixed_range: event.fixed_range,
+                source: 7,
+                position: position.map(|value| (value * 8.0).floor() as i32),
+                volume: 1.0,
+                pitch: 1.0,
+            },
+        );
     }
 }
 
 /// Apply in list order between damage pieces, not after the damage batch.
-pub(super) fn apply(state: &mut super::TickState, id: crate::boundary::EntityId, rescue: &mut Rescue) {
-    fn flush(state: &mut super::TickState, id: crate::boundary::EntityId, changes: &mut Vec<PlayerChange>) {
+pub(super) fn apply(
+    state: &mut super::TickState,
+    id: crate::boundary::EntityId,
+    rescue: &mut Rescue,
+) {
+    fn flush(
+        state: &mut super::TickState,
+        id: crate::boundary::EntityId,
+        changes: &mut Vec<PlayerChange>,
+    ) {
         if let Some(connection) = state.connections.entity_connection(id) {
             for change in changes.drain(..) {
                 state.push_player(connection, change);
@@ -129,29 +154,46 @@ pub(super) fn apply(state: &mut super::TickState, id: crate::boundary::EntityId,
                 (EffectId::Absorption, 100, 1),
                 (EffectId::FireResistance, 800, 0),
             ] {
-                rescue.changes.extend(player.give_effect(ActiveEffect::new(effect, duration, amplifier)));
+                rescue
+                    .changes
+                    .extend(player.give_effect(ActiveEffect::new(effect, duration, amplifier)));
             }
         }
     }
     for effect in std::mem::take(&mut rescue.effects) {
         flush(state, id, &mut rescue.changes);
         match effect {
-            DeathEffect::Apply { effects, probability } => {
-                let Some(player) = state.players.get_mut(&id) else { return; };
-                if crate::enchantments::random(&mut player.enchantment_seed) < f64::from(probability) {
+            DeathEffect::Apply {
+                effects,
+                probability,
+            } => {
+                let Some(player) = state.players.get_mut(&id) else {
+                    return;
+                };
+                if crate::enchantments::random(&mut player.enchantment_seed)
+                    < f64::from(probability)
+                {
                     for effect in effects.into_iter().filter_map(active) {
                         rescue.changes.extend(player.give_effect(effect));
                     }
                 }
             }
             DeathEffect::Remove(targets) => {
-                let Some(player) = state.players.get_mut(&id) else { return; };
+                let Some(player) = state.players.get_mut(&id) else {
+                    return;
+                };
                 let mut index = 0;
                 while index < player.active_effects.entries.len() {
                     let effect = player.active_effects.entries[index].id;
                     let matches = match &targets {
-                        EffectTargets::Direct(ids) => ids.iter().any(|id| EffectId::from_name(id.as_str()) == Some(effect)),
-                        EffectTargets::NamedTag(tag) => state.registry.tags.contains_raw_id("minecraft:mob_effect", tag.as_str(), effect as i32),
+                        EffectTargets::Direct(ids) => ids
+                            .iter()
+                            .any(|id| EffectId::from_name(id.as_str()) == Some(effect)),
+                        EffectTargets::NamedTag(tag) => state.registry.tags.contains_raw_id(
+                            "minecraft:mob_effect",
+                            tag.as_str(),
+                            effect as i32,
+                        ),
                     };
                     if matches {
                         rescue.changes.extend(player.clear_effects(Some(effect)));
@@ -166,29 +208,50 @@ pub(super) fn apply(state: &mut super::TickState, id: crate::boundary::EntityId,
                 }
             }
             DeathEffect::Teleport { diameter } => {
-                let Some(slot) = state.entities.slot_of(id) else { return; };
-                let Some(player) = state.players.get_mut(&id) else { return; };
-                let seed = (crate::enchantments::random(&mut player.enchantment_seed) * u64::MAX as f64) as u64;
+                let Some(slot) = state.entities.slot_of(id) else {
+                    return;
+                };
+                let Some(player) = state.players.get_mut(&id) else {
+                    return;
+                };
+                let seed = (crate::enchantments::random(&mut player.enchantment_seed)
+                    * u64::MAX as f64) as u64;
                 let old = state.entities.pos(slot);
-                if let Some(position) = crate::consumables::random_destination(state, old, seed, f64::from(diameter)) {
+                if let Some(position) =
+                    crate::consumables::random_destination(state, old, seed, f64::from(diameter))
+                {
                     crate::mounts::dismount(state, id);
-                    let Some(player) = state.players.get_mut(&id) else { return; };
+                    let Some(player) = state.players.get_mut(&id) else {
+                        return;
+                    };
                     player.fall_distance = 0.0;
                     player.current_impulse_impact_pos = None;
                     let connection = player.connection;
                     let [yaw, pitch, _] = state.entities.rot(slot);
                     state.entities.set_pos(slot, position);
                     state.correct_position(connection, position, yaw, pitch);
-                    crate::vibration::emit(state, old, crate::vibration::GameEvent::Teleport, Some(id));
-                    sound(state, position, Sound {
-                        id: mc_data::Identifier::parse("minecraft:item.chorus_fruit.teleport").unwrap(),
-                        fixed_range: None,
-                        registered: true,
-                    });
+                    crate::vibration::emit(
+                        state,
+                        old,
+                        crate::vibration::GameEvent::Teleport,
+                        Some(id),
+                    );
+                    sound(
+                        state,
+                        position,
+                        Sound {
+                            id: mc_data::Identifier::parse("minecraft:item.chorus_fruit.teleport")
+                                .unwrap(),
+                            fixed_range: None,
+                            registered: true,
+                        },
+                    );
                 }
             }
             DeathEffect::PlaySound(event) => {
-                let Some(slot) = state.entities.slot_of(id) else { return; };
+                let Some(slot) = state.entities.slot_of(id) else {
+                    return;
+                };
                 let position = state.entities.pos(slot).map(|value| value.floor() + 0.5);
                 sound(state, position, event);
             }

@@ -84,21 +84,34 @@ pub(crate) fn blocks_damage(
 ) -> bool {
     state.entities.row(slot).controls.invulnerable
         && !kind.bypasses_invulnerability()
-        && !attacker.and_then(|id| state.players.get(&id)).is_some_and(|player| player.creative())
+        && !attacker
+            .and_then(|id| state.players.get(&id))
+            .is_some_and(|player| player.creative())
 }
 
 /// 26.3 Entity.<clinit> registers DATA_NO_GRAVITY as the sixth
 /// base-entity accessor, with the BOOLEAN serializer.
 pub(crate) fn sync_no_gravity(appearance: &mut crate::boundary::EntityAppearance, value: bool) {
     const DATA_NO_GRAVITY: u8 = 5;
-    if let Some((_, current)) = appearance.extra.iter_mut().find(|(index, _)| *index == DATA_NO_GRAVITY) {
+    if let Some((_, current)) = appearance
+        .extra
+        .iter_mut()
+        .find(|(index, _)| *index == DATA_NO_GRAVITY)
+    {
         *current = crate::boundary::EntityDataValue::Boolean(value);
     } else if value {
-        appearance.extra.push((DATA_NO_GRAVITY, crate::boundary::EntityDataValue::Boolean(true)));
+        appearance.extra.push((
+            DATA_NO_GRAVITY,
+            crate::boundary::EntityDataValue::Boolean(true),
+        ));
     }
 }
 
-pub(crate) fn set_no_gravity(state: &mut crate::tick::TickState, slot: crate::entities::EntitySlot, value: bool) {
+pub(crate) fn set_no_gravity(
+    state: &mut crate::tick::TickState,
+    slot: crate::entities::EntitySlot,
+    value: bool,
+) {
     let row = state.entities.row_mut(slot);
     if row.controls.no_gravity == value {
         return;

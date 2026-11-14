@@ -64,7 +64,11 @@ fn death_protection_remaps_action_effect_and_sound_holders_both_ways() {
     let mut t = tables(&["death_protection"]);
     t.registry_ids.insert(
         "consume_effect_type".into(),
-        IdMap::by_name([("remove", 1), ("sound", 4)], [("remove", 4), ("sound", 1)], |_| None),
+        IdMap::by_name(
+            [("remove", 1), ("sound", 4)],
+            [("remove", 4), ("sound", 1)],
+            |_| None,
+        ),
     );
     t.registry_ids.insert(
         "mob_effect".into(),
@@ -89,10 +93,14 @@ fn death_protection_remaps_action_effect_and_sound_holders_both_ways() {
 #[test]
 fn death_protection_hidden_effect_limit_matches_canonical_codec_in_both_directions() {
     let mut t = tables(&["death_protection"]);
-    t.registry_ids.insert("consume_effect_type".into(),
-        IdMap::by_name([("apply", 0)], [("apply", 0)], |_| None));
-    t.registry_ids.insert("mob_effect".into(),
-        IdMap::by_name([("speed", 2)], [("speed", 8)], |_| None));
+    t.registry_ids.insert(
+        "consume_effect_type".into(),
+        IdMap::by_name([("apply", 0)], [("apply", 0)], |_| None),
+    );
+    t.registry_ids.insert(
+        "mob_effect".into(),
+        IdMap::by_name([("speed", 2)], [("speed", 8)], |_| None),
+    );
     for depth in [8, 9, 31, 32] {
         for to in [To::Legacy, To::Canonical] {
             let (source_item, source_effect, target_item, target_effect) = match to {

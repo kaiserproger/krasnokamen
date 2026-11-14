@@ -6,11 +6,17 @@ use mc_protocol::{Compression, RawFrame};
 use super::tables::{Packets, Reports};
 use super::*;
 
-fn report_registry(root: &std::path::Path, registry: &str) -> serde_json::Map<String, serde_json::Value> {
-    let report: serde_json::Value = serde_json::from_slice(
-        &std::fs::read(root.join("reports/registries.json")).unwrap(),
-    ).unwrap();
-    report[format!("minecraft:{registry}")]["entries"].as_object().unwrap().clone()
+fn report_registry(
+    root: &std::path::Path,
+    registry: &str,
+) -> serde_json::Map<String, serde_json::Value> {
+    let report: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(root.join("reports/registries.json")).unwrap())
+            .unwrap();
+    report[format!("minecraft:{registry}")]["entries"]
+        .as_object()
+        .unwrap()
+        .clone()
 }
 
 fn assert_sound_report_mapping(t: &Tables, source: &std::path::Path, target: &std::path::Path) {
@@ -20,21 +26,37 @@ fn assert_sound_report_mapping(t: &Tables, source: &std::path::Path, target: &st
     for (name, entry) in from {
         let id = entry["protocol_id"].as_i64().unwrap() as i32;
         assert_eq!(&t.sound_names[id as usize], &name);
-        assert_eq!(t.sounds.get(id), to.get(&name).map(|entry| entry["protocol_id"].as_i64().unwrap() as i32), "{name}");
+        assert_eq!(
+            t.sounds.get(id),
+            to.get(&name)
+                .map(|entry| entry["protocol_id"].as_i64().unwrap() as i32),
+            "{name}"
+        );
     }
 }
 
 #[test]
-#[ignore = "requires measured protocol snapshots in SOLARIS_PROTOCOL_CHAIN_FIXTURES"]
+#[ignore = "requires measured protocol snapshots in KRASNOKAMEN_PROTOCOL_CHAIN_FIXTURES"]
 fn death_protection_actual_adjacent_profiles_use_sound_ids_of_each_oriented_source() {
-    let root = std::path::PathBuf::from(std::env::var_os("SOLARIS_PROTOCOL_CHAIN_FIXTURES").expect("fixture root"));
+    let root = std::path::PathBuf::from(
+        std::env::var_os("KRASNOKAMEN_PROTOCOL_CHAIN_FIXTURES").expect("fixture root"),
+    );
     for (upper, lower) in [(777, 776), (776, 775)] {
         let step = root.join("steps").join(format!("{upper}-{lower}"));
         let profile = Profile::load(&step, upper, lower).unwrap();
         assert_sound_report_mapping(&profile.tables, &step.join("upper"), &step.join("lower"));
-        let (upper_reports, upper_data) = super::super::snapshots::load_side(&step.join("upper"), upper).unwrap();
-        let (lower_reports, lower_data) = super::super::snapshots::load_side(&step.join("lower"), lower).unwrap();
-        let reverse = Tables::new(&lower_reports, &upper_reports, &lower_data, &upper_data, lower).unwrap();
+        let (upper_reports, upper_data) =
+            super::super::snapshots::load_side(&step.join("upper"), upper).unwrap();
+        let (lower_reports, lower_data) =
+            super::super::snapshots::load_side(&step.join("lower"), lower).unwrap();
+        let reverse = Tables::new(
+            &lower_reports,
+            &upper_reports,
+            &lower_data,
+            &upper_data,
+            lower,
+        )
+        .unwrap();
         assert_sound_report_mapping(&reverse, &step.join("lower"), &step.join("upper"));
         if let Some(upgrade) = &profile.upgrade {
             assert_sound_report_mapping(&upgrade.tables, &step.join("lower"), &step.join("upper"));
@@ -43,7 +65,11 @@ fn death_protection_actual_adjacent_profiles_use_sound_ids_of_each_oriented_sour
 }
 
 fn fixture_id(root: &std::path::Path, registry: &str, name: &str) -> i32 {
-    report_registry(root, registry).get(&format!("minecraft:{name}")).unwrap()["protocol_id"].as_i64().unwrap() as i32
+    report_registry(root, registry)
+        .get(&format!("minecraft:{name}"))
+        .unwrap()["protocol_id"]
+        .as_i64()
+        .unwrap() as i32
 }
 
 #[derive(Clone, Copy)]
@@ -58,7 +84,11 @@ fn death_wire_fixture(root: &std::path::Path, sound: FixtureSound<'_>) -> Vec<u8
     death_wire_fixture_depth(root, sound, 0)
 }
 
-fn death_wire_fixture_depth(root: &std::path::Path, sound: FixtureSound<'_>, depth: usize) -> Vec<u8> {
+fn death_wire_fixture_depth(
+    root: &std::path::Path,
+    sound: FixtureSound<'_>,
+    depth: usize,
+) -> Vec<u8> {
     use mc_protocol::codec::WriteMc;
     let mut out = Vec::new();
     out.write_varint(1);
@@ -82,21 +112,28 @@ fn death_wire_fixture_depth(root: &std::path::Path, sound: FixtureSound<'_>, dep
     out.write_f32(7.5);
     out.write_varint(fixture_id(root, "consume_effect_type", "play_sound"));
     match sound {
-        FixtureSound::Registered(name) => out.write_varint(fixture_id(root, "sound_event", name) + 1),
+        FixtureSound::Registered(name) => {
+            out.write_varint(fixture_id(root, "sound_event", name) + 1)
+        }
         FixtureSound::Direct(name, range) => {
             out.write_varint(0);
-            out.write_string(&format!("minecraft:{name}"), 32767).unwrap();
+            out.write_string(&format!("minecraft:{name}"), 32767)
+                .unwrap();
             out.write_bool(range.is_some());
-            if let Some(range) = range { out.write_f32(range); }
+            if let Some(range) = range {
+                out.write_f32(range);
+            }
         }
     }
     out
 }
 
 #[test]
-#[ignore = "requires measured protocol snapshots in SOLARIS_PROTOCOL_CHAIN_FIXTURES"]
+#[ignore = "requires measured protocol snapshots in KRASNOKAMEN_PROTOCOL_CHAIN_FIXTURES"]
 fn measured_death_protection_wire_fixtures_translate_both_directions() {
-    let root = std::path::PathBuf::from(std::env::var_os("SOLARIS_PROTOCOL_CHAIN_FIXTURES").expect("fixture root"));
+    let root = std::path::PathBuf::from(
+        std::env::var_os("KRASNOKAMEN_PROTOCOL_CHAIN_FIXTURES").expect("fixture root"),
+    );
     for (upper, lower) in [(777, 776), (776, 775)] {
         let step = root.join("steps").join(format!("{upper}-{lower}"));
         let profile = Profile::load(&step, upper, lower).unwrap();
@@ -123,7 +160,13 @@ fn measured_death_protection_wire_fixtures_translate_both_directions() {
                 let input = death_wire_fixture(&down, sound);
                 let expected = death_wire_fixture(&up, sound);
                 let mut output = Vec::new();
-                items::stack(&reverse.tables, items::To::Legacy, &mut input.as_slice(), &mut output).unwrap();
+                items::stack(
+                    &reverse.tables,
+                    items::To::Legacy,
+                    &mut input.as_slice(),
+                    &mut output,
+                )
+                .unwrap();
                 assert_eq!(output, expected, "production {lower}->{upper}");
             }
         }
@@ -144,38 +187,69 @@ fn measured_death_protection_wire_fixtures_translate_both_directions() {
                     assert!(result.is_err(), "{upper}-{lower} {to:?} depth {depth}");
                 } else {
                     result.unwrap();
-                    assert_eq!(output, death_wire_fixture_depth(target, sound, depth),
-                        "{upper}-{lower} {to:?} depth {depth}");
+                    assert_eq!(
+                        output,
+                        death_wire_fixture_depth(target, sound, depth),
+                        "{upper}-{lower} {to:?} depth {depth}"
+                    );
                 }
             }
         }
         if upper == 777 {
             let input = death_wire_fixture(&up, FixtureSound::Registered("block.red_shrub.place"));
-            let expected = death_wire_fixture(&down, FixtureSound::Direct("block.red_shrub.place", None));
+            let expected =
+                death_wire_fixture(&down, FixtureSound::Direct("block.red_shrub.place", None));
             let mut output = Vec::new();
-            items::stack(&profile.tables, items::To::Legacy, &mut input.as_slice(), &mut output).unwrap();
+            items::stack(
+                &profile.tables,
+                items::To::Legacy,
+                &mut input.as_slice(),
+                &mut output,
+            )
+            .unwrap();
             assert_eq!(output, expected);
         }
         if upper == 776 {
-            let mut unsupported = Session::new(Arc::new(Profile::load(&step, upper, lower).unwrap()));
+            let mut unsupported =
+                Session::new(Arc::new(Profile::load(&step, upper, lower).unwrap()));
             let err = unsupported.orient(super::super::Direction::Up).unwrap_err();
             assert!(err.to_string().contains("no measured upgrade codec"));
         }
         let mut session = Session::new(Arc::new(profile));
-        let full = death_wire_fixture(&up, FixtureSound::Direct("entity.player.levelup", Some(12.5)));
+        let full = death_wire_fixture(
+            &up,
+            FixtureSound::Direct("entity.player.levelup", Some(12.5)),
+        );
         for end in 0..full.len() {
             let mut body = vec![0]; // inventory slot
             body.extend_from_slice(&full[..end]);
-            assert!(play::clientbound_body(&mut session, "minecraft:set_player_inventory", &body).is_err(), "truncation {end} produced output");
+            assert!(
+                play::clientbound_body(&mut session, "minecraft:set_player_inventory", &body)
+                    .is_err(),
+                "truncation {end} produced output"
+            );
         }
         let mut too_deep = vec![0];
-        too_deep.extend(death_wire_fixture_depth(&up, FixtureSound::Direct("entity.player.levelup", None), 32));
-        assert!(play::clientbound_body(&mut session, "minecraft:set_player_inventory", &too_deep).is_err());
+        too_deep.extend(death_wire_fixture_depth(
+            &up,
+            FixtureSound::Direct("entity.player.levelup", None),
+            32,
+        ));
+        assert!(
+            play::clientbound_body(&mut session, "minecraft:set_player_inventory", &too_deep)
+                .is_err()
+        );
         use mc_protocol::codec::WriteMc;
-        for (action, count) in [(None, i32::MIN), (None, i32::MAX),
-            (Some("apply_effects"), i32::MIN), (Some("apply_effects"), i32::MAX),
-            (Some("remove_effects"), i32::MIN), (Some("remove_effects"), i32::MAX),
-            (Some("play_sound"), i32::MIN), (Some("play_sound"), i32::MAX)] {
+        for (action, count) in [
+            (None, i32::MIN),
+            (None, i32::MAX),
+            (Some("apply_effects"), i32::MIN),
+            (Some("apply_effects"), i32::MAX),
+            (Some("remove_effects"), i32::MIN),
+            (Some("remove_effects"), i32::MAX),
+            (Some("play_sound"), i32::MIN),
+            (Some("play_sound"), i32::MAX),
+        ] {
             let mut body = vec![0]; // inventory slot
             body.write_varint(1);
             body.write_varint(fixture_id(&up, "item", "totem_of_undying"));
@@ -187,8 +261,11 @@ fn measured_death_protection_wire_fixtures_translate_both_directions() {
                 body.write_varint(fixture_id(&up, "consume_effect_type", action));
             }
             body.write_varint(count);
-            assert!(play::clientbound_body(&mut session, "minecraft:set_player_inventory", &body).is_err(),
-                "{action:?} {count} produced output");
+            assert!(
+                play::clientbound_body(&mut session, "minecraft:set_player_inventory", &body)
+                    .is_err(),
+                "{action:?} {count} produced output"
+            );
         }
     }
 }
@@ -283,8 +360,8 @@ fn legacy_creative_count_edit_preserves_canonical_player_inventory_item() {
     use mc_data::{Identifier, ItemStack};
     use mc_protocol::codec::WriteMc;
 
-    let items = mc_data::items::solaris_required_items();
-    let facts = mc_data::item_components::solaris_required_item_facts();
+    let items = mc_data::items::krasnokamen_required_items();
+    let facts = mc_data::item_components::krasnokamen_required_item_facts();
     let tags = mc_data::tags::TagsData::default();
     let rules = ItemRules {
         items: &items,

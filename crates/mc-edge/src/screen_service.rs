@@ -1,4 +1,4 @@
-//! Edge glue for the `solaris:screen` relay: connection lifetime, native pose
+//! Edge glue for the `krasnokamen:screen` relay: connection lifetime, native pose
 //! publication and delivery. Policy lives in `screen.rs`; never on the tick.
 use std::{collections::HashMap, sync::OnceLock, time::Instant};
 
@@ -56,7 +56,7 @@ impl World for Published<'_> {
     }
 }
 
-/// The payload of a `solaris:screen` Play custom payload, if it is one.
+/// The payload of a `krasnokamen:screen` Play custom payload, if it is one.
 pub(crate) fn payload(body: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
     let mut body = body;
     let packet = ServerboundCustomPayload::decode(&mut body)?;

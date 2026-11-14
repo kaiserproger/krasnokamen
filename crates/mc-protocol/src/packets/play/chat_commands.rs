@@ -563,7 +563,7 @@ pub struct CommandSuggestionEntry {
 impl Packet for ClientboundCommandSuggestions {
     // `.analysis/protocol-dump.txt`: game CLIENTBOUND_COMMAND_SUGGESTIONS is
     // clientbound registration index 15, wire id 0x0F. Local decompiled source
-    // writes VarInt id/start/length and a list of entries. Solaris currently
+    // writes VarInt id/start/length and a list of entries. Krasnokamen currently
     // emits empty lists, so optional component tooltips are not produced.
     const ID: i32 = 0x0F;
 

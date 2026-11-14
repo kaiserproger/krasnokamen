@@ -291,7 +291,10 @@ pub(crate) fn attack(
         return true;
     }
     if crate::entity_controls::blocks_damage(
-        state, slot, crate::survival::DamageKind::Melee, Some(actor),
+        state,
+        slot,
+        crate::survival::DamageKind::Melee,
+        Some(actor),
     ) {
         return true;
     }

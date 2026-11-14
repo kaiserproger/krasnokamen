@@ -1,4 +1,4 @@
-package org.solaris.bukkit;
+package org.krasnokamen.bukkit;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
 public final class SnapshotBlock implements Block {
