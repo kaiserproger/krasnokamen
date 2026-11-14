@@ -288,7 +288,7 @@ pub const MAX_PLUGIN_PAYLOAD_CHANNELS: usize = 128;
 /// Maximum command-tree nodes added by active plugin roots.
 pub const MAX_PLAYER_COMMAND_TREE_NODES: usize = MAX_PLAYER_COMMAND_ROOTS * 2;
 
-/// Player command roots reserved by Solaris' built-in command parser.
+/// Player command roots reserved by Krasnokamen' built-in command parser.
 pub const BUILT_IN_PLAYER_COMMAND_ROOTS: &[&str] = &[
     "debug",
     "defaultgamemode",

@@ -31,7 +31,7 @@ def run(ctx: Any) -> dict[str, Any]:
     parser.add_argument("--activity-seconds", type=float, default=15)
     parser.add_argument("--max-rss-mib", type=int, default=4096)
     parser.add_argument("--bots-binary", type=Path, default=Path(os.environ.get(
-        "SOLARIS_BOTS_BINARY", str(runtime.REPO_ROOT / "target/release/player-scale-bots"))))
+        "KRASNOKAMEN_BOTS_BINARY", str(runtime.REPO_ROOT / "target/release/player-scale-bots"))))
     args = parser.parse_args(ctx.extra_args)
     if ctx.client != "native" or ctx.platform is not None or ctx.plugins_dir is not None:
         raise ValueError("native-scale requires --client native without Loader/plugins")
@@ -46,7 +46,7 @@ def run(ctx: Any) -> dict[str, Any]:
     timeout = 300 if ctx.timeout_seconds is None else ctx.timeout_seconds
     if not math.isfinite(timeout) or timeout <= 0:
         raise ValueError("timeout must be finite and positive")
-    if not os.environ.get("SOLARIS_HARNESS_CPU_SCOPE"):
+    if not os.environ.get("KRASNOKAMEN_HARNESS_CPU_SCOPE"):
         raise RuntimeError("native-scale must run through the memory-capped harness runner")
     artifact = ctx.artifact_dir
     artifact.mkdir(parents=True, exist_ok=True)
@@ -235,7 +235,7 @@ port = {port}
 online_mode = false
 [data]
 world_dir = {json.dumps(str(artifact / "world"))}
-vanilla_data_dir = {json.dumps(os.environ["SOLARIS_CLIENT_DATA_DIR"])}
+vanilla_data_dir = {json.dumps(os.environ["KRASNOKAMEN_CLIENT_DATA_DIR"])}
 seed = 81
 [dashboard]
 enabled = true

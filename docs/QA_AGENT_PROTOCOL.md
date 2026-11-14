@@ -1,4 +1,4 @@
-# Solaris break-it QA protocol
+# Krasnokamen break-it QA protocol
 
 A gate that walks the author's happy path proves only that path. During the
 2026-10-31 RC2/RC3 release work, broader player-path checks exposed three gaps
@@ -29,7 +29,7 @@ writing to a file on the games disk when audio must be recorded).
   candidate is not tagged, until a breaker has reported on it.
 
 Use a normal player's/admin's expectations and vanilla 26.3 evidence
-(minecraft.wiki, `javap`) where vanilla applies. For Solaris-specific features,
+(minecraft.wiki, `javap`) where vanilla applies. For Krasnokamen-specific features,
 the owner's accepted behaviour is the contract; implementation and green tests
 are not the oracle. The earlier protocol already required bounded adversarial
 exploration: this revision strengthens its execution and coverage evidence.

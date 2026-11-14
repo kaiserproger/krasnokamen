@@ -551,9 +551,9 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
     if owner_order and (SEED != 100 or QA_VILLAGE or os.environ.get("VILLAGE_AUTONOMY_RESUME_WORLD")):
         raise ValueError("village-owner-order-qa requires a fresh seed-100 world and default center")
     resume_world = os.environ.get("VILLAGE_AUTONOMY_RESUME_WORLD", "")
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
-        raise RuntimeError("village-autonomy-qa requires SOLARIS_SERVER_BINARY")
+        raise RuntimeError("village-autonomy-qa requires KRASNOKAMEN_SERVER_BINARY")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing executable server binary: {binary}")
@@ -619,7 +619,7 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
     try:
         server_log = server_log_path.open("wb")
         env = os.environ.copy()
-        env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+        env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
         server = subprocess.Popen(
             [str(binary), "--config", str(config)],
             cwd=runtime.REPO_ROOT,

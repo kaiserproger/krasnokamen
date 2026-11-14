@@ -59,21 +59,21 @@ class ProcessStopTests(unittest.TestCase):
 class ClientSettingsTests(unittest.TestCase):
     def test_invalid_username_rejected(self) -> None:
         with mock.patch.dict(os.environ, {
-            "SOLARIS_CLIENT_MCP_TOKEN": "t",
-            "SOLARIS_CLIENT_MCP_USERNAME": "bad-name!",
+            "KRASNOKAMEN_CLIENT_MCP_TOKEN": "t",
+            "KRASNOKAMEN_CLIENT_MCP_USERNAME": "bad-name!",
         }):
             with self.assertRaises(RuntimeError):
                 cli.resolve_client_settings(None)
 
     def test_missing_token_rejected(self) -> None:
         env = {key: value for key, value in os.environ.items()
-               if key != "SOLARIS_CLIENT_MCP_TOKEN"}
+               if key != "KRASNOKAMEN_CLIENT_MCP_TOKEN"}
         with mock.patch.dict(os.environ, env, clear=True):
             with self.assertRaises(RuntimeError):
                 cli.resolve_client_settings(None)
 
     def test_unknown_platform_rejected(self) -> None:
-        with mock.patch.dict(os.environ, {"SOLARIS_CLIENT_MCP_TOKEN": "t"}):
+        with mock.patch.dict(os.environ, {"KRASNOKAMEN_CLIENT_MCP_TOKEN": "t"}):
             with self.assertRaises(ValueError):
                 cli.resolve_client_settings("quilt")
 
@@ -153,7 +153,7 @@ class RunTestPolicyTests(unittest.TestCase):
     def test_ci_short_profile_applies_to_test_but_not_correctness(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             ctx = profiles.ProfileContext(Path(tmp))
-            with mock.patch.dict(os.environ, {"SOLARIS_NEXTEST_PROFILE": "ci"}):
+            with mock.patch.dict(os.environ, {"KRASNOKAMEN_NEXTEST_PROFILE": "ci"}):
                 with mock.patch.object(profiles, "_run_command", return_value={}) as run:
                     with mock.patch.object(profiles, "_test_scope_memory", return_value={}):
                         profiles.run_test(ctx)

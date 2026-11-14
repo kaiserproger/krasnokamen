@@ -199,8 +199,11 @@ fn vehicle_motion_and_rotation_only_changes_survive_wal_replay() {
 fn zombie_chase_pose_is_journaled_and_cleared_on_recovery() {
     let dir = std::env::temp_dir().join(format!("mc-core-zombie-pose-{}", uuid::Uuid::new_v4()));
     let mut state = fixture();
-    let zombie_type = state.registry.entity_types
-        .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap()).unwrap();
+    let zombie_type = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:zombie").unwrap())
+        .unwrap();
     let zombie = state.spawn_mob(zombie_type, [8.5, 65.0, 8.5], 20.0);
     let slot = state.entities.slot_of(zombie).unwrap();
     state.entities.row_mut(slot).controls.no_ai = true;
@@ -793,7 +796,7 @@ fn moving_rows_journal_microbench() {
 }
 
 #[test]
-#[ignore = "eight-species owner attribution; run with SOLARIS_TRACE_ROW_MUT=1"]
+#[ignore = "eight-species owner attribution; run with KRASNOKAMEN_TRACE_ROW_MUT=1"]
 fn mixed_rows_journal_attribution() {
     let mut state = fixture();
     let chunk = crate::boundary::ChunkPos { x: 0, z: 0 };

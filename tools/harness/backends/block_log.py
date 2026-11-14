@@ -98,9 +98,9 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     if not 0 < timeout <= 3600:
         raise ValueError("block-log --timeout-seconds must be in (0, 3600]")
     artifact = ctx.artifact_dir
-    override = os.environ.get("SOLARIS_SERVER_BINARY")
+    override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
     if not override:
-        raise RuntimeError("block-log requires SOLARIS_SERVER_BINARY (a solaris-v2 built from this tree)")
+        raise RuntimeError("block-log requires KRASNOKAMEN_SERVER_BINARY (a krasnokamen built from this tree)")
     binary = Path(override).expanduser().resolve()
     if not binary.is_file():
         raise RuntimeError(f"missing executable server binary: {binary}")
@@ -127,7 +127,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     server_log = None
     server_log_path = artifact / "server.log"
     env = os.environ.copy()
-    env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+    env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
 
     def start_server() -> subprocess.Popen[bytes]:
         process = subprocess.Popen([str(binary), "--config", str(config), "--no-console"],

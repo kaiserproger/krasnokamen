@@ -17,10 +17,10 @@ class SoundCapture:
 
     def __init__(self, artifact_dir: Path):
         self.path = artifact_dir / "audio.f32le"
-        self.sink = f"solaris_loader_gate_{os.getpid()}"
+        self.sink = f"krasnokamen_loader_gate_{os.getpid()}"
         self.module = subprocess.check_output([
             "pactl", "load-module", "module-null-sink", f"sink_name={self.sink}",
-            "rate=48000", "channels=2", "sink_properties=device.description=SolarisLoaderGate",
+            "rate=48000", "channels=2", "sink_properties=device.description=KrasnokamenLoaderGate",
         ], text=True).strip()
         self.condition = threading.Condition()
         self.written = 0

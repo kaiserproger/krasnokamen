@@ -22,7 +22,7 @@ git -C <work>/solaris worktree add --detach <work>/wt/<Name> <base-commit>
   (create `data/` first, otherwise the contents land in the wrong place). It
   must contain `data/minecraft/advancement/`; extract a full set with
   `tools/extract-vanilla-data.sh` from the local server jar.
-- **`SOLARIS_LOADER_ROOT`** must point at a Loader checkout in worktree gates;
+- **`KRASNOKAMEN_LOADER_ROOT`** must point at a Loader checkout in worktree gates;
   without it the `real_client_manifest` tests in `mc-test-harness` fail on the
   missing Gradle adapter, which is environment, not code.
 - Heavy outputs go under `<work>/targets/`; the runner's pooled target dirs
@@ -71,7 +71,7 @@ no-commit slice:
   file) and wire only compiling code. One owner runs the combined
   `cargo check -p mc-edge` and announces "compiles"; others don't repeat it.
 - When the shared tree is red, run gates against a frozen server with
-  `SOLARIS_SERVER_BINARY=<frozen>` plus the client environment file of the last
+  `KRASNOKAMEN_SERVER_BINARY=<frozen>` plus the client environment file of the last
   green gate.
 - Group a broken build's errors by file and map files to owners via mtimes and
   agent transcripts. Restore a clobbered uncommitted file only from a copy
@@ -128,7 +128,7 @@ For any gate set that must describe one build (release, perf round, QA wave):
    Compare binary SHAs when agents reuse private target dirs: cargo can return
    the previous binary.
 
-The identity is the `solaris-v2` binary from `mc-edge`. Older freeze or snapshot
+The identity is the `krasnokamen` binary from `mc-edge`. Older freeze or snapshot
 recipes in external skills or notes that build or copy `mc-server` describe the
 retired v1 binary ([ADR 0014](../decisions/0014-v1-core-retirement.md)); they
 cannot produce a current acceptance identity. The release procedure is in

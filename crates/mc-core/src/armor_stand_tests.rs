@@ -430,7 +430,7 @@ fn armor_stand_equipment_and_stored_pose_survive_disk_wal_native_checkpoint_rest
         .entities_spawned
         .push(stand);
     let birth = crate::core::journal_entries_for_tick(&mut state, &output);
-    let root = std::env::temp_dir().join(format!("solaris-stand-{}", uuid::Uuid::new_v4()));
+    let root = std::env::temp_dir().join(format!("krasnokamen-stand-{}", uuid::Uuid::new_v4()));
     let mut writer = JournalWriter::open(&root, 1).unwrap();
     writer.append(1, output.tick, &birth).unwrap();
     let mut helmet = item(&state, "minecraft:iron_helmet", 1);

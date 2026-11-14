@@ -64,7 +64,7 @@ fn assert_normalized_metadata(original: &Chunk, decoded: &Chunk) {
 
 #[test]
 fn unopened_chest_preserves_vanilla_table_seed_and_materialized_components() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let source = vec![
         (
             "LootTable".into(),
@@ -480,7 +480,7 @@ fn typed_container_slots_accept_vanilla_bytes_and_existing_ints() {
     })
     .collect();
     let registry = BlockRegistry::from_report(&reports).unwrap();
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let mut chunk = Chunk::empty(
         ChunkPos { x: 0, z: 0 },
         BlockStateId(0),
@@ -735,7 +735,7 @@ fn round_trip_real_vanilla_chunks() {
         );
 
         // Unknown extras stay byte-stable; vanilla's mandatory metadata is
-        // normalized when absent from older Solaris chunks.
+        // normalized when absent from older Krasnokamen chunks.
         assert_eq!(
             non_metadata_extras(&chunk1),
             non_metadata_extras(&chunk2),
@@ -774,7 +774,7 @@ fn real_test_world_carries_dropped_root_fields_in_extras() {
         let vanilla_extras = chunk
             .extras
             .iter()
-            .filter(|(key, _)| key != "SolarisJournalLsn")
+            .filter(|(key, _)| key != "KrasnokamenJournalLsn")
             .collect::<Vec<_>>();
         if !vanilla_extras.is_empty() {
             chunks_with_extras += 1;
@@ -2031,7 +2031,7 @@ fn real_test_world_carries_some_baked_skylight() {
 
 #[test]
 fn container_nbt_rejects_malformed_native_stack_components() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     for (component, value) in [
         (
             mc_data::item_stack::CUSTOM_DATA_COMPONENT,

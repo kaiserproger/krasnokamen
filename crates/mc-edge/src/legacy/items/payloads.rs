@@ -1,4 +1,4 @@
-//! Payloads emitted by Solaris's copied/station component codecs. Layout
+//! Payloads emitted by Krasnokamen's copied/station component codecs. Layout
 //! authority: mc-protocol::packets::play::{copied_components,station_components}.
 use super::*;
 
@@ -14,7 +14,7 @@ pub(super) fn registry(
     let offset = i32::from(holder);
     ensure!(
         raw >= offset,
-        "inline {name} holder is not supported by Solaris"
+        "inline {name} holder is not supported by Krasnokamen"
     );
     let ids = t
         .registry_ids
@@ -107,7 +107,7 @@ pub(super) fn extra(
             let n = r.read_varint()?;
             ensure!(
                 n == 0,
-                "nonempty death protection is unsupported by Solaris"
+                "nonempty death protection is unsupported by Krasnokamen"
             );
             w.write_varint(n);
         }

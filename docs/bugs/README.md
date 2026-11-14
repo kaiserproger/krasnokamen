@@ -118,7 +118,7 @@ The shared native wire observer uses the pinned 26.3 packet IDs and vanilla
 field. KeepAlive is not chunk data.
 
 The operator-only `/debug menu` probe replies privately with one
-`SOLARIS_MENU` JSON line containing the current container ID, carried stack,
+`KRASNOKAMEN_MENU` JSON line containing the current container ID, carried stack,
 and every menu slot. Each stack reports its item identifier and count; an
 empty stack has a null item and zero count. The image comes from server-owned
 menu and backing storage, not client prediction. If the backing state cannot be
@@ -128,10 +128,10 @@ and menu close; the crafting result slot is virtual and excluded from custody
 totals. The paced Java and native probes also check right-button pickup and
 release outside the menu. Screenshots remain necessary for visual review.
 
-Client-tier scenarios run the native client at `SOLARIS_CLIENT_ROOT` (default:
-the sibling `solaris-client` checkout). The P2, mount-kind and map-marker
+Client-tier scenarios run the native client at `KRASNOKAMEN_CLIENT_ROOT` (default:
+the sibling `krasnokamen-client` checkout). The P2, mount-kind and map-marker
 promotions were gated with client branch `pauline/client-post-rc4` (`e1b22a5`);
-the released client `5d34e88` lacks those fixes, so point `SOLARIS_CLIENT_ROOT`
+the released client `5d34e88` lacks those fixes, so point `KRASNOKAMEN_CLIENT_ROOT`
 at a checkout of that branch or later.
 
 Only promote a row after recording its fixed-build and failing pre-fix
