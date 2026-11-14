@@ -48,8 +48,10 @@ Code, tests, config and runtime evidence beat every document: fix the document.
    only that interval's commits, capabilities, gates and time sinks.
 5. Check your own work. Independent read-only review happens at three points:
    a ledger promotion batch of five or more rows; a change to persistence,
-   protocol or custody before Main commits it; two release reviewers before a
-   tag. Docs-only and test-only slices get no reviewer. The owner contract
+   protocol, custody or the battle core before Main commits it (and the design
+   of a client threading or entity-tick change before it is built), reviewed by
+   the `architect-fable` agent (owner, 2026-11-14); two release reviewers before
+   a tag. Docs-only and test-only slices get no reviewer. The owner contract
    authorizes these reviewers; fixing their findings needs no second review.
 6. An autonomous `/goal` is the whole objective and queue: continue until it is
    verified or blocked with nothing actionable. A context handoff neither pauses

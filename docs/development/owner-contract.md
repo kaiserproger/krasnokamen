@@ -44,6 +44,14 @@ read-only release reviewers
 Main therefore commits small slices and pushes `main` often; a not-yet-green
 commit on `main` is acceptable. Tags, releases and publication keep their rules.
 
+> "не забывайте ревью через Fable 5.2 важных критичных участков прогонять" (2026-11-14)
+
+The independent read-only reviewer for critical areas is the `architect-fable`
+agent (Claude Fable 5.2): persistence, protocol, custody and battle-core
+changes before Main commits them, and a design review before implementing a
+change to the native client's threading model or entity tick; the report goes
+next to the slice as `receipts/<slice>/fable-review.md`.
+
 Owner decisions on the agent-work retrospective (2026-11-07, chosen from
 `receipts/AgentRetro/` proposals; AGENTS.md restates them):
 
