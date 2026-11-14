@@ -4,6 +4,7 @@
 use super::*;
 use crate::singleplayer_pause::{SingleplayerPause, online_players};
 use crate::tick::phase_laps::Laps;
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Tick loop: 20 TPS, event-driven wake (no sleeps beyond the tick timer).
@@ -64,6 +65,7 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
     let mut empty_ticks = 0u64;
     let mut paused = false;
     let mut singleplayer_pause = SingleplayerPause::default();
+    let mut knockback_ticks = Arc::new(BTreeMap::<ConnectionId, (u64, u64)>::new());
     'ticks: loop {
         let wall_start = std::time::Instant::now();
         let wall_start_unix_ns = std::time::SystemTime::now()
@@ -244,6 +246,7 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
             locked = locked_connections(&state, &inputs);
         }
         let (mut output, drains, times) = run_tick(&mut state, &inputs);
+        observe_explosion_knockback(&state, &mut output, &mut knockback_ticks);
         if logging && state.require_plugin_login {
             locked.extend(locked_connections(&state, &inputs));
         }

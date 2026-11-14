@@ -205,6 +205,80 @@ async fn queued_op_is_rejected_after_initiator_is_deopped() {
 }
 
 #[tokio::test]
+async fn moderation_selectors_reauthorize_after_deop_during_resolution() {
+    use std::future::Future;
+    for root in ["kick", "ban", "pardon"] {
+        let (server, dir) = fixture();
+        let (operator, mut operator_rx) = register(&server, "Operator", true);
+        let (victim, mut victim_rx) = register(&server, "Victim", false);
+        let victim_uuid = crate::crypto::offline_uuid("Victim");
+        let mut ticks = server.hub.subscribe();
+        for (id, name, level) in [(operator, "Operator", 4), (victim, "Victim", 0)] {
+            assert!(server.hub.submit(mc_core::boundary::PlayerInput::Join {
+                connection: id,
+                uuid: crate::crypto::offline_uuid(name),
+                name: name.into(),
+                permission_level: level,
+            }));
+        }
+        // Observe the actual joined rows rather than counting unrelated ticks.
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let output = ticks.recv().await.unwrap();
+                if ["Operator", "Victim"].iter().all(|name| {
+                    output
+                        .snapshot
+                        .entities
+                        .iter()
+                        .any(|entity| entity.uuid == crate::crypto::offline_uuid(name))
+                }) {
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        if root == "pardon" {
+            server
+                .admin
+                .ban_player_for(victim_uuid, "Victim", "Server", "test", None, true)
+                .unwrap();
+        }
+        let command = format!("{root} @a[name=Victim]");
+        let pending = server.handle_admin_command(operator, &command);
+        tokio::pin!(pending);
+        std::future::poll_fn(|cx| {
+            // The request was enqueued, but this future has not consumed its
+            // reply. Revoke permission before allowing its continuation.
+            assert!(pending.as_mut().poll(cx).is_pending());
+            std::task::Poll::Ready(())
+        })
+        .await;
+        assert!(
+            server
+                .handle_admin_command(mc_core::command_console::CONNECTION, "deop Operator")
+                .await
+                .unwrap()
+        );
+        assert_eq!(server.admin.session_level(operator), 0);
+        while operator_rx.try_recv().is_ok() {}
+        assert!(pending.await.unwrap());
+        assert_eq!(
+            feedback_text(&receive(&mut operator_rx).await),
+            "Unknown or incomplete command"
+        );
+        assert!(
+            victim_rx.try_recv().is_err(),
+            "{root} must not disconnect the target"
+        );
+        assert!(server.connections.get(victim).is_some());
+        assert_eq!(server.admin.bans().0.len(), usize::from(root == "pardon"));
+        server.hub.shutdown();
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+}
+
+#[tokio::test]
 async fn deop_reaches_rejoining_native_session() {
     let (server, _dir) = fixture_in_temp_dir();
     let (operator, _operator_rx) = register(&server, "Operator", true);
@@ -1011,3 +1085,6 @@ mod shelf_update_queue_tests;
 
 #[path = "lost_entity_frames_tests.rs"]
 mod lost_entity_frames_tests;
+
+#[path = "explosion_queue_tests.rs"]
+mod explosion_queue_tests;

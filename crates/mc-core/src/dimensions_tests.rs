@@ -1,6 +1,50 @@
 use super::*;
 
 #[test]
+fn explosion_epoch_survives_same_tick_dimension_transfer() {
+    let (mut state, alice, _) = worlds();
+    command(&mut state, 1, "gamemode survival Alice");
+    let slot = state.entities.slot_of(alice).unwrap();
+    let position = state.entities.pos(slot);
+    command(
+        &mut state,
+        1,
+        &format!(
+            "summon minecraft:tnt {} {} {} {{fuse:1,explosion_power:1}}",
+            position[0] + 1.0,
+            position[1],
+            position[2]
+        ),
+    );
+    let (mut output, drains) = command(&mut state, 1, "execute in the_nether run tp Alice 8 150 8");
+    assert_eq!(travel::locate(&state, alice).unwrap().0, Dimension::Nether);
+    assert!(drains.iter().any(|(connection, changes)| {
+        *connection == ConnectionId(1)
+            && changes.iter().any(|change| {
+                matches!(
+                    change,
+                    PlayerChange::DimensionChanged {
+                        dimension: Dimension::Nether,
+                        ..
+                    }
+                )
+            })
+    }));
+    assert!(output.changes.explosions.iter().any(|blast| {
+        blast
+            .knockback
+            .iter()
+            .any(|&(entity, push)| entity == alice && push != [0.0; 3])
+    }));
+    let mut epochs = Arc::default();
+    crate::core::observe_explosion_knockback(&state, &mut output, &mut epochs);
+    assert_eq!(
+        output.snapshot.player_knockback_ticks.get(&ConnectionId(1)),
+        Some(&(1, output.tick))
+    );
+}
+
+#[test]
 fn execute_in_commits_native_block_change_and_wal_in_destination_only() {
     let (mut state, alice, _) = worlds();
     let (output, _) = command(

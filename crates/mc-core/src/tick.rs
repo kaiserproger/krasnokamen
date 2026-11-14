@@ -1968,6 +1968,7 @@ fn run_dimension_tick_inner<'a>(
         tick: state.tick,
         dimension: state.dimension,
         dimensions: Default::default(),
+        player_knockback_ticks: Default::default(),
         game_time: state.tick_control.game_ticks(state.tick),
         day_time: state.day_time,
         day_time_rate: if crate::command_rules::boolean(

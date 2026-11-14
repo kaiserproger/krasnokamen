@@ -96,7 +96,7 @@ fn indexed_one_shots_keep_commit_order_including_moved_and_removed_subjects() {
         push_best_effort(
             &mut expected,
             viewer.connection,
-            &explode_packet(explosion, viewer.entity_id),
+            &explode_packet(explosion, None),
         );
     }
     for event in &output.changes.entity_events[..3] {

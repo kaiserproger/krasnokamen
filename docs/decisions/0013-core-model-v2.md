@@ -81,10 +81,24 @@ frames as one item, so a large scoreboard does not hit the bound. Chat and
 system-message lines are bounded at their source (the sender's spam budget, the
 command sequence budget), so a connection's trailing run of them compacts into
 one `TextBurst` entry at the cap instead of disconnecting a recipient, and the
-edge queues the burst's frames as one item. World fanout
-may reconcile to a newer snapshot; it plans within each world queue's free
-frame slots and bytes, so a slow viewer's backlog is bounded in bytes and its
-nearest, longest-waiting entity updates go first. See
+edge queues the burst's frames as one item. Only non-zero recipient explosion
+knockback uses the reliable FIFO, summed into one packet per recipient/publish
+independently of the visual spatial index. Visual-only explosions are
+best-effort and may drop; bursts cannot fill the reliable FIFO with visuals.
+No later snapshot restores a lost impulse. Each output therefore carries
+transient cumulative per-player knockback-tick counts plus the last such tick.
+Comparing retained outputs detects lost impulses across broadcast `Lagged`,
+including a skipped impulse followed by another in the retained tick. Only
+affected connections close (`skipped-explosion-knockback`); this observation
+does not alter gameplay authority or persistence.
+Entity ids remain stable through dimension travel: the observer resolves the
+recipient across current worlds after travel commits. If the ordered dimension
+reset moves a viewer away from that tick's explosion projection, the edge closes
+only that recipient (`dimension-switch-explosion-knockback`) instead of silently
+losing the impulse. It does not send an old-world explosion into the new world.
+World snapshot deltas may reconcile to a newer snapshot; fanout plans within
+each world queue's free frame slots and bytes, so a slow viewer's backlog is
+bounded in bytes and its nearest, longest-waiting entity updates go first. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
 Datapack reloads and `/debug function` trace-file writes run as jobs on a
@@ -114,6 +128,9 @@ The operator snapshot and a permission update for every registered session of
 the target UUID are sent without an intervening await. Queue saturation waits
 for capacity rather than polling or publishing out of order. If the core stops
 while waiting, the operator mutation is not applied.
+Moderation commands re-acquire the same operator-update fence after selector
+resolution and recheck the initiator's live permission and lock before any
+kick, ban or pardon; the fence is held through those effects.
 
 Pickup publishes changed slots in the active menu. Player inventory slots hidden
 by that menu use the dedicated player-inventory packet rather than a window-0

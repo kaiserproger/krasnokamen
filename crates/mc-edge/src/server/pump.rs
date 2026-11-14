@@ -3,6 +3,7 @@
 
 use super::*;
 use mc_core::boundary::EntityId;
+use std::collections::BTreeMap;
 
 const COREPERF_COLD_PAIR_LIMIT: usize = 1_000_000;
 
@@ -24,8 +25,9 @@ fn bounded_tracked_union(
 
 /// Single pump task: subscribes to the core, records tick stats, drains the
 /// reliable outbox FIRST, then publishes the world snapshot and routes both.
-/// `Lagged` = world-skip (viewers reconcile on the next output) but the outbox is still
-/// drained: reliable results are never skipped. Fanout runs on its own
+/// `Lagged` skips snapshots; cumulative knockback epochs in the next output
+/// close only recipients whose impulse was skipped. The reliable outbox is
+/// drained independently. Fanout runs on its own
 /// rayon pool: on the global pool the core tick's parallel phases queued
 /// behind whole publishes.
 pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task::JoinHandle<()>> {
@@ -55,16 +57,14 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
         // so a first routed Roster never mass-removes tracked entities.
         let mut latest_roster: Arc<[mc_core::dimensions::RosterPlayer]> = Arc::from(Vec::new());
         let coreperf = std::env::var_os("KRASNOKAMEN_COREPERF_REGIONS").is_some();
+        let mut knockback_ticks = BTreeMap::new();
         loop {
             let out = match rx.recv().await {
                 Ok(out) => out,
                 Err(broadcast::error::RecvError::Lagged(skipped)) => {
-                    // World-skip, not data loss: the next received output
-                    // is reconciled against each viewer's held state. The
-                    // reliable outbox is drained regardless (never
-                    // skipped). A lag is never fatal: the next `recv`
-                    // either returns the newest output or reports a further
-                    // lag handled here again.
+                    // Snapshot state reconciles on the next output. Its
+                    // cumulative epochs also identify recipients of skipped
+                    // knockback, including when that next tick has an impulse.
                     server.dashboard.record_pump_skipped(skipped);
                     for viewer in viewers.values_mut() {
                         viewer.skipped = true;
@@ -106,6 +106,13 @@ pub(super) fn spawn_pump(server: Arc<EdgeServer>) -> anyhow::Result<tokio::task:
                 &mut latest_roster,
             );
             server.console_state.drained(out.tick);
+            close_skipped_knockback(
+                &server,
+                &out,
+                &mut knockback_ticks,
+                &mut viewers,
+                &mut connections,
+            );
             let publish_start = std::time::Instant::now();
             publish_and_route(
                 &server,
@@ -404,6 +411,49 @@ pub(super) fn route_changes(
         }
     }
     true
+}
+
+/// Counts are cumulative across published ticks, not just the latest impulse
+/// tick: a retained impulse must not conceal an earlier, skipped one.
+pub(super) fn close_skipped_knockback(
+    server: &Arc<EdgeServer>,
+    out: &TickOutput,
+    seen: &mut BTreeMap<ConnectionId, u64>,
+    viewers: &mut HashMap<ConnectionId, crate::plan::ViewerState>,
+    connections: &mut HashMap<ConnectionId, ConnectionHandles>,
+) {
+    seen.retain(|id, _| connections.contains_key(id));
+    for (&id, &(count, last_tick)) in out.snapshot.player_knockback_ticks.iter() {
+        if !connections.contains_key(&id) {
+            continue;
+        }
+        let previous = seen.insert(id, count).unwrap_or(0);
+        let current = u64::from(last_tick == out.tick);
+        let reason = if count.saturating_sub(previous) > current {
+            Some("skipped-explosion-knockback")
+        } else if current != 0
+            && count > previous
+            && !viewers.get(&id).is_some_and(|viewer| {
+                out.in_dimension(viewer.dimension).is_some_and(|world| {
+                    world.changes.explosions.iter().any(|blast| {
+                        blast
+                            .knockback
+                            .iter()
+                            .any(|&(entity, push)| entity == viewer.entity_id && push != [0.0; 3])
+                    })
+                })
+            })
+        {
+            Some("dimension-switch-explosion-knockback")
+        } else {
+            None
+        };
+        if let Some(reason) = reason {
+            server.connections.close(id, reason);
+            connections.remove(&id);
+            viewers.remove(&id);
+        }
+    }
 }
 
 /// Publish one tick to all viewers and route the addressed packets.
