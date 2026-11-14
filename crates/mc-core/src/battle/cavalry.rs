@@ -4,6 +4,7 @@ use super::{BattleState, Frame};
 use crate::boundary::EntityId;
 use crate::entities::EntityKind;
 use crate::{CoreError, tick::TickState};
+use mc_physics::mth;
 
 pub const CHARGE_DECAY_TICKS: u64 = 260;
 const REFORM_TICKS: u64 = 400;
@@ -119,7 +120,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             // Carry the formation's approach/withdrawal/rout direction on the
             // horse, never override a routing rider with an enemy pursuit.
             let mut velocity = battle.columns.drive[bi];
-            let speed = velocity[0].hypot(velocity[2]);
+            let speed = mth::length2(velocity[0], velocity[2]);
             if speed > 0.001 {
                 let mut mounted_speed: f64 = if wounded {
                     0.8
@@ -160,7 +161,7 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
         let target = battle.columns.targets[bi].as_ref().expect("targeted rider");
         let position = frame.entities.pos(horse);
         let delta = [target.pos[0] - position[0], target.pos[2] - position[2]];
-        let distance = delta[0].hypot(delta[1]);
+        let distance = mth::length2(delta[0], delta[1]);
         if distance < 0.001 {
             continue;
         }

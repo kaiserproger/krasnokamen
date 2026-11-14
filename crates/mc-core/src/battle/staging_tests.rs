@@ -233,3 +233,76 @@ fn commands_require_operator_and_enforce_count_bounds() {
         crate::command_execution::CommandResult::Failed
     );
 }
+
+#[test]
+fn failed_setup_rolls_back_owned_rows_changes_ticket_rules_and_journal() {
+    use crate::journal::JournalEntry;
+    use std::collections::BTreeSet;
+    let mut state = fixture();
+    state.gamerules.insert("spawn_mobs".into(), "false".into());
+    state.gamerules.insert("mob_drops".into(), "true".into());
+    state.gamerules.insert("mob_griefing".into(), "true".into());
+    state.gamerules_dirty = false;
+    let kind = state.registry.entity_type_id("minecraft:cow").unwrap();
+    let unrelated = state.spawn_mob(kind, [0.0, 80.0, 0.0], 20.0);
+    let removed = state.spawn_mob(kind, [1.0, 80.0, 0.0], 20.0);
+    state.remove_entity(state.entities.slot_of(removed).unwrap());
+    let mut changes = ChangeSet::default();
+    changes.entities_spawned.push(unrelated);
+    changes.entities_removed.push(removed);
+    let spawned_before = changes.entities_spawned.clone();
+    let removed_before = changes.entities_removed.clone();
+    let ids_before: BTreeSet<_> = state
+        .entities
+        .slots()
+        .map(|slot| state.entities.body(slot).id)
+        .collect();
+    let rules_before = state.gamerules.clone();
+    let origin = [0.0, 80.0, 0.0];
+    let mut collision = plan(9, 100, origin, 1)[0].0;
+    collision.files = 1;
+    assert_eq!(collision.id, 0);
+    state
+        .hostile
+        .battle
+        .formation
+        .add_regiment(collision, &[unrelated])
+        .unwrap();
+    assert!(setup(&mut state, &mut changes, origin, 9, 100).is_err());
+    assert!(
+        tagged_ids(&state).is_empty(),
+        "failed setup left battle-owned rows"
+    );
+    assert_eq!(
+        state
+            .entities
+            .slots()
+            .map(|slot| state.entities.body(slot).id)
+            .collect::<BTreeSet<_>>(),
+        ids_before
+    );
+    assert_eq!(changes.entities_spawned, spawned_before);
+    assert_eq!(changes.entities_removed, removed_before);
+    assert!(!state.tickets.contains_key(OWNER));
+    assert_eq!(state.gamerules, rules_before);
+    assert!(!state.gamerules_dirty);
+
+    let (mut output, _, _) = crate::tick::run_tick(&mut state, &[]);
+    let published = std::sync::Arc::get_mut(&mut output.changes).unwrap();
+    published.entities_spawned.extend(changes.entities_spawned);
+    published.entities_removed.extend(changes.entities_removed);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let allowed: BTreeSet<_> = ids_before
+        .into_iter()
+        .chain([removed])
+        .map(|id| id.0)
+        .collect();
+    for entry in entries {
+        if let JournalEntry::Entity { id, .. } | JournalEntry::RemoveEntity { id, .. } = entry {
+            assert!(
+                allowed.contains(&id),
+                "failed setup leaked entity {id} into WAL"
+            );
+        }
+    }
+}

@@ -6,6 +6,7 @@ use super::morale::{Morale, Pressure, nerve};
 use super::{BattleState, Frame};
 use crate::boundary::EntityId;
 use crate::entities::EntitySlot;
+use mc_physics::mth;
 use rustc_hash::FxHashMap;
 
 pub(crate) const DECISION_TICKS: u64 = 10;
@@ -21,6 +22,7 @@ pub(crate) enum Order {
     Advance,
     Hold,
     Charge,
+    #[cfg(test)]
     Withdraw,
     Pursue,
 }
@@ -98,6 +100,7 @@ fn slot_target(r: &Regiment, file: usize, rank: u16) -> [f64; 3] {
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct CombatContext {
     pub regiment: u32,
+    #[cfg(test)]
     pub rank: u16,
     pub front_rank: bool,
     pub pulsing: bool,
@@ -191,6 +194,7 @@ pub(crate) struct FormationRuntime {
 }
 
 impl FormationRuntime {
+    #[cfg(test)]
     pub fn clear(&mut self) {
         *self = Self::default();
     }
@@ -222,10 +226,9 @@ impl FormationRuntime {
                 pos[2].clamp(min[1], max[1]) - pos[2],
             ];
             if back[0] != 0.0 || back[1] != 0.0 {
-                let distance = back[0].hypot(back[1]);
-                let speed = velocity[0]
-                    .hypot(velocity[2])
-                    .max(0.079 / mc_physics::TICK_SECONDS);
+                let distance = mth::length2(back[0], back[1]);
+                let speed =
+                    mth::length2(velocity[0], velocity[2]).max(0.079 / mc_physics::TICK_SECONDS);
                 let scale = speed.min(distance / mc_physics::TICK_SECONDS) / distance;
                 velocity[0] = back[0] * scale;
                 velocity[2] = back[1] * scale;
@@ -261,7 +264,7 @@ impl FormationRuntime {
         }
         if !spec.origin.iter().all(|x| x.is_finite())
             || !spec.facing.iter().all(|x| x.is_finite())
-            || (spec.facing[0].hypot(spec.facing[1]) - 1.0).abs() > 1e-6
+            || (mth::length2(spec.facing[0], spec.facing[1]) - 1.0).abs() > 1e-6
             || !spec.frontage.is_finite()
             || !(1.0..=2.0).contains(&spec.frontage)
         {
@@ -354,6 +357,7 @@ impl FormationRuntime {
         true
     }
 
+    #[cfg(test)]
     /// Polybius fighting interval: 1..2 blocks per man. Staging must leave the
     /// corresponding regiment intervals; this never changes rank spacing.
     pub fn set_fighting_interval(
@@ -376,6 +380,7 @@ impl FormationRuntime {
         Ok(())
     }
 
+    #[cfg(test)]
     pub fn context(&self, id: EntityId) -> Option<CombatContext> {
         Some(self.context_at(*self.index.get(&id)?))
     }
@@ -391,6 +396,7 @@ impl FormationRuntime {
             .is_some_and(|s| s.pulse_until > self.tick);
         CombatContext {
             regiment: r.spec.id,
+            #[cfg(test)]
             rank: m.rank,
             front_rank: m.rank == 0 && m.alive && !m.wounded,
             pulsing,
@@ -414,10 +420,12 @@ impl FormationRuntime {
         Some(self.members[roster[(roll % roster.len() as u64) as usize]].id)
     }
 
+    #[cfg(test)]
     pub fn can_engage(&self, id: EntityId) -> bool {
         self.context(id).is_none_or(|c| c.front_rank && !c.routing)
     }
 
+    #[cfg(test)]
     pub fn can_attack(&self, id: EntityId) -> bool {
         let Some(&index) = self.index.get(&id) else {
             return true;
@@ -580,7 +588,12 @@ impl FormationRuntime {
                 || r.stamina < 20.0
                 || r.morale.broken
                 || s * SECTION_SIZE >= usize::from(r.spec.files)
-                || matches!(r.spec.order, Order::Withdraw | Order::Pursue)
+                || match r.spec.order {
+                    #[cfg(test)]
+                    Order::Withdraw => true,
+                    Order::Pursue => true,
+                    _ => false,
+                }
             {
                 continue;
             }
@@ -662,6 +675,7 @@ impl FormationRuntime {
                         0.0
                     }
                 }
+                #[cfg(test)]
                 Order::Withdraw => -0.05,
                 Order::Pursue => {
                     if r.enemy.is_some() {
@@ -715,7 +729,8 @@ impl FormationRuntime {
                     r.spec.facing,
                 );
                 let dot = direction[0] * r.spec.facing[0] + direction[1] * r.spec.facing[1];
-                let distance = (enemy[0] - r.spec.origin[0]).hypot(enemy[2] - r.spec.origin[2]);
+                let distance =
+                    mth::length2(enemy[0] - r.spec.origin[0], enemy[2] - r.spec.origin[2]);
                 if distance <= 6.0 {
                     r.morale.pressure.flank |= dot.abs() < 0.5;
                     r.morale.pressure.rear |= dot < -0.5;
@@ -762,7 +777,7 @@ impl FormationRuntime {
                 let b = self.regiments[j].spec;
                 let radius = 16.0
                     + (f64::from(a.files) * a.frontage + f64::from(b.files) * b.frontage) * 0.5;
-                if (a.origin[0] - b.origin[0]).hypot(a.origin[2] - b.origin[2]) <= radius {
+                if mth::length2(a.origin[0] - b.origin[0], a.origin[2] - b.origin[2]) <= radius {
                     self.regiments[j].morale.pressure.adjacent_rout = true;
                 }
             }
@@ -791,10 +806,12 @@ impl FormationRuntime {
                 0.25,
             );
         }
-        if r.spec.order == Order::Pursue && r.enemy_routing && !m.wounded {
-            if let Some(enemy) = r.enemy {
-                return (enemy, 0.28);
-            }
+        if r.spec.order == Order::Pursue
+            && r.enemy_routing
+            && !m.wounded
+            && let Some(enemy) = r.enemy
+        {
+            return (enemy, 0.28);
         }
         let engaged = r.gap <= 6.0;
         let interval = if engaged { r.interval } else { r.spec.frontage };
