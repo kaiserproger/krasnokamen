@@ -2638,8 +2638,10 @@ area = "gameplay"
 repro = "manual"
 severity = "major"
 status = "open"
-source = "https://github.com/kaiserproger/solaris/issues/1"
-regression = []
+source = "https://github.com/kaiserproger/solaris/issues/1; bell interaction added in 18f715367c1a9591ec58604a815446741b394591; reverse docs/bugs/fix-patches/ISSUE-1-24.patch to remove anchor dialog dispatch while retaining bell ringing"
+regression = ["harness:settlement-map-qa:bell_opens_hub"]
+failing_first = "reported"
+fix_commit = "patch:27f3e55f33cb2c8bfd22946ad7b28e451e64867d6e56ceb40138d1ec624e0cc2"
 
 [[bug]]
 id = "ISSUE-1-25"
