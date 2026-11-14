@@ -2205,7 +2205,7 @@ fn push_entity_event(out: &mut Vec<PlannedPacket>, conn: ConnectionId, event: En
                             mc_protocol::packets::play::SwingAnimationType::Whack
                         }
                         mc_core::boundary::SwingKind::Stab => {
-                            mc_protocol::packets::play::SwingAnimationType::Whack
+                            mc_protocol::packets::play::SwingAnimationType::Stab
                         }
                     },
                     duration: duration_ticks,
