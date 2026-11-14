@@ -68,7 +68,7 @@ fn produced(
             "start".into(),
             "farm-output".into(),
             worker.to_string(),
-            format!("solaris-settlements:{recipe}"),
+            format!("krasnokamen-settlements:{recipe}"),
             "1".into(),
             building.0.to_string(),
             "3,201,3".into(),

@@ -65,7 +65,7 @@ async fn read_burst_ids(conn: &mut crate::connection::Connection) -> Vec<(i32, V
 #[tokio::test]
 async fn join_burst_carries_load_start_before_center() {
     let (mut client, mut server) = loopback_pair().await;
-    let data = mc_data::solaris_required_data();
+    let data = mc_data::krasnokamen_required_data();
     let out = empty_output();
     let recipes = crate::recipes::RecipePackets {
         update: mc_protocol::packets::play::ClientboundUpdateRecipes {
