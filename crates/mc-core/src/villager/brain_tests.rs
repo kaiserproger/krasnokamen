@@ -984,19 +984,38 @@ fn rest_sleeps_in_owned_bed_and_morning_wakes_metadata() {
 #[test]
 fn embedded_resident_recovers_to_nearest_free_standing_position() {
     let mut state = test_state();
-    let stair = block(&state, "minecraft:oak_stairs", &[("half", "bottom"), ("facing", "north")]);
+    let stair = block(
+        &state,
+        "minecraft:oak_stairs",
+        &[("half", "bottom"), ("facing", "north")],
+    );
     state.world.set_block(8, 201, 8, stair);
     state.world.fold_overlay();
     let slot = villager(&mut state, [8.5, 201.5, 8.25]);
     state.day_time = 2000;
     let body = state.entities.body(slot);
-    assert!(!allocator::clear_body(&state.world, &state.registry, state.entities.pos(slot), body.half_width, body.height));
+    assert!(!allocator::clear_body(
+        &state.world,
+        &state.registry,
+        state.entities.pos(slot),
+        body.half_width,
+        body.height
+    ));
     step(&mut state);
     let pos = state.entities.pos(slot);
     let body = state.entities.body(slot);
-    assert!(allocator::clear_body(&state.world, &state.registry, pos, body.half_width, body.height));
+    assert!(allocator::clear_body(
+        &state.world,
+        &state.registry,
+        pos,
+        body.half_width,
+        body.height
+    ));
     // Brain motion may advance by 0.15 blocks after the recovery in this tick.
-    assert!(distance(pos, [8.5, 201.5, 8.25]) <= 0.3351, "nearest supported point: {pos:?}");
+    assert!(
+        distance(pos, [8.5, 201.5, 8.25]) <= 0.3351,
+        "nearest supported point: {pos:?}"
+    );
 }
 
 #[test]

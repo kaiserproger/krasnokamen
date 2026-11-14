@@ -37,10 +37,12 @@ borrowed again until its remaining bill is funded. Lumber search for an active
 wood shortage follows the project's selected wood family. Partial loads return
 through the ordinary storage transaction when they can fund the remaining work.
 After footprint interference the native structure executor derives a bounded
-repair stage from completed build cells that no longer match the world. It
-persists that stage in the existing structure ledger; repairs use the same
-material custody and one-cell transaction as ordinary work, and completion
-reconciles the world before issuing a certificate.
+repair stage from completed build cells that a foreign edit emptied (air or a
+clearable plant where the blueprint has a block); a solid foreign block in a
+placed cell keeps its place. It persists that stage in the existing structure
+ledger; repairs use the same material custody and one-cell transaction as
+ordinary work, and completion reconciles the world before issuing a
+certificate.
 
 Breeding-ration provisioning retains its own transient storage destination once
 a resident finds a reachable spare bed. Arrival completes that food transfer
@@ -53,14 +55,9 @@ loot credited to physical settlement storage; retained player edits and
 persistent leaves are protected. Clearing waits if loot cannot be stored.
 Logs are not cleared by this maintenance. Villagers embedded in collision
 geometry recover to the nearest supported, clear position within two blocks;
-sleeping residents are excluded and no position is chosen in unloaded space.
-
-
-Breeding-ration provisioning retains its own transient storage destination once
-a resident finds a reachable spare bed. Arrival completes that food transfer
-even when the bed is outside storage's local POI scan; ordinary worker hauling
-does not become a ration trip. This intent is not persisted and grants neither
-a bed claim nor a birth: those still require the allocator and birth checks.
+sleeping residents are excluded, no position is chosen in unloaded space, and a
+resident whose eye cell is a suffocating block is not moved (vanilla
+suffocation applies there).
 
 ## Durability and plugin boundary
 

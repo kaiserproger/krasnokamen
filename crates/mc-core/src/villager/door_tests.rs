@@ -91,18 +91,48 @@ fn resident_clears_wild_leaf_at_house_door_but_not_placed_leaf() {
     state.world.set_block(8, 202, 9, wild);
     state.world.set_block(8, 203, 7, placed);
     state.world.fold_overlay();
-    let settlement = state.settlements.create(
-        &mut state.settlement_sequence, "town".into(), "owner".into(), [8, 201, 8], 32,
-    ).unwrap();
+    let settlement = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "town".into(),
+            "owner".into(),
+            [8, 201, 8],
+            32,
+        )
+        .unwrap();
     let slot = villager(&mut state, [8.5, 201.0, 10.5]);
-    state.entities.row_mut(slot).villager.as_mut().unwrap().settlement = Some(settlement);
+    state
+        .entities
+        .row_mut(slot)
+        .villager
+        .as_mut()
+        .unwrap()
+        .settlement = Some(settlement);
     let changes = step(&mut state);
-    assert_eq!(state.world.block_at(8, 202, 9), Some(state.registry.states.air));
+    assert_eq!(
+        state.world.block_at(8, 202, 9),
+        Some(state.registry.states.air)
+    );
     assert_eq!(state.world.block_at(8, 203, 7), Some(placed));
-    assert!(changes.blocks.iter().any(|change| change.position == BlockPos { x: 8, y: 202, z: 9 } && change.state == state.registry.states.air));
+    assert!(
+        changes
+            .blocks
+            .iter()
+            .any(|change| change.position == BlockPos { x: 8, y: 202, z: 9 }
+                && change.state == state.registry.states.air)
+    );
     let mut path = Vec::new();
     state.tick_budget.reset(state.tick);
-    assert!(find_path(&mut state, &mut PoiCache::default(), [8.5, 201.0, 10.5], BlockPos { x: 8, y: 201, z: 6 }, 0.3, 1.95, &mut path));
+    assert!(find_path(
+        &mut state,
+        &mut PoiCache::default(),
+        [8.5, 201.0, 10.5],
+        BlockPos { x: 8, y: 201, z: 6 },
+        0.3,
+        1.95,
+        &mut path
+    ));
 }
 
 #[test]
