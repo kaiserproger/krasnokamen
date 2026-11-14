@@ -460,9 +460,15 @@ fn run_with(
 }
 
 pub(crate) fn category_of(state: &TickState, slot: EntitySlot) -> MobCategory {
-    match state.entities.body(slot).kind {
-        EntityKind::Mob { type_id } => state
-            .registry
+    category_in(&state.registry, state.entities.body(slot))
+}
+
+fn category_in(
+    registry: &crate::registry::CoreRegistry,
+    body: &crate::entities::Body,
+) -> MobCategory {
+    match body.kind {
+        EntityKind::Mob { type_id } => registry
             .blueprint(type_id)
             .map_or(MobCategory::Misc, |blueprint| blueprint.category),
         _ => MobCategory::Misc,
@@ -496,6 +502,8 @@ fn chunk_of(position: [f64; 3]) -> (i32, i32) {
     )
 }
 
+/// The pre-visited-set hostile walk's observer test (reference in tests only).
+#[cfg(test)]
 fn near_chunks(first: (i32, i32), second: (i32, i32)) -> bool {
     (i64::from(first.0) - i64::from(second.0)).abs() <= 8
         && (i64::from(first.1) - i64::from(second.1)).abs() <= 8
@@ -523,15 +531,125 @@ fn observe_slot(state: &mut TickState, slot: EntitySlot) {
     }
 }
 
+/// Rows per census job on the pool.
+const CENSUS_JOB_ROWS: usize = 2048;
+
+/// One census job's alive rows, grouped by chunk cell (stable, so each cell's
+/// entities stay in ascending slot order).
+struct CensusRows {
+    cells: Vec<((i32, i32), EntityId, Option<u8>)>,
+    /// Categorized rows, ascending slots, for the serial dimension observer.
+    categorized: Vec<EntitySlot>,
+    max_half_width: f64,
+}
+
+/// Pure reads of one row range: the work [`observe_slot`] does per row before
+/// it touches the census. Rows are independent, so jobs may run on any thread.
+fn census_job(
+    entities: &crate::entities::EntityStore,
+    world: &crate::world::ChunkWorld,
+    registry: &crate::registry::CoreRegistry,
+    rows: std::ops::Range<usize>,
+) -> CensusRows {
+    let (bodies, positions) = (entities.bodies(), entities.positions());
+    let mut job = CensusRows {
+        cells: Vec::with_capacity(rows.len()),
+        categorized: Vec::new(),
+        max_half_width: 0.0,
+    };
+    for index in rows {
+        let body = &bodies[index];
+        if !body.alive {
+            continue;
+        }
+        let cell = chunk_of(positions[index]);
+        // Native rows outlive residency, unlike vanilla's loaded-entity census.
+        // Keep their bodies indexed for overlap checks, but not in loaded mob caps.
+        let category = (!persistent(entities.row(EntitySlot(index as u32)))
+            && world.has_chunk(cell.0, cell.1))
+        .then(|| category_in(registry, body))
+        .and_then(category_index);
+        job.cells.push((cell, body.id, category.map(|c| c as u8)));
+        if category.is_some() {
+            job.categorized.push(EntitySlot(index as u32));
+        }
+        job.max_half_width = job.max_half_width.max(body.half_width);
+    }
+    job.cells.sort_by_key(|(cell, _, _)| *cell);
+    job
+}
+
+/// Observe every row into the freshly begun census, in the same per-cell
+/// order and with the same totals as calling [`observe_slot`] for each slot.
+/// Row classification runs on the pool once `min_parallel` rows exist (the
+/// serial pass read 100,000 cold rows and hashed every one on the tick
+/// thread); only the per-cell merge is serial.
+fn census_rows(state: &mut TickState, min_parallel: usize, job_rows: usize) {
+    let rows = state.entities.len();
+    let jobs: Vec<CensusRows> = {
+        let (entities, world, registry) = (&state.entities, &state.world, &*state.registry);
+        if rows < min_parallel {
+            vec![census_job(entities, world, registry, 0..rows)]
+        } else {
+            use rayon::prelude::*;
+            (0..rows.div_ceil(job_rows))
+                .into_par_iter()
+                .map(|job| {
+                    let first = job * job_rows;
+                    census_job(entities, world, registry, first..rows.min(first + job_rows))
+                })
+                .collect()
+        }
+    };
+    let census = &mut state.spawn_census;
+    debug_assert!(census.local_observers.is_empty());
+    for job in &jobs {
+        census.max_half_width = census.max_half_width.max(job.max_half_width);
+        let mut start = 0;
+        while start < job.cells.len() {
+            let cell = job.cells[start].0;
+            let end = start + job.cells[start..].partition_point(|(other, _, _)| *other == cell);
+            let chunk = census.chunks.entry(cell).or_default();
+            chunk.active = true;
+            chunk
+                .entities
+                .extend(job.cells[start..end].iter().map(|(_, id, _)| *id));
+            for &(_, _, category) in &job.cells[start..end] {
+                if let Some(index) = category {
+                    chunk.counts[usize::from(index)] += 1;
+                    census.global[usize::from(index)] += 1;
+                }
+            }
+            start = end;
+        }
+    }
+    for job in &jobs {
+        for &slot in &job.categorized {
+            crate::dimensions::spawning::observe(state, slot);
+        }
+    }
+}
+
 /// Build the one population census and all observer-local category counters.
 /// Direct pack callers must rebuild after changes outside their spawn pass.
 pub(crate) fn census(state: &mut TickState, players: &[[f64; 3]]) -> [usize; 7] {
+    census_with(state, players, MIN_PARALLEL_ROWS, CENSUS_JOB_ROWS)
+}
+
+/// [`census`] with an explicit pool threshold and job size (tests force many
+/// small jobs).
+fn census_with(
+    state: &mut TickState,
+    players: &[[f64; 3]],
+    min_parallel: usize,
+    job_rows: usize,
+) -> [usize; 7] {
     state.spawn_census.begin();
     // Build chunk totals first; do not multiply the population scan by players.
-    for index in 0..state.entities.len() {
-        #[cfg(test)]
+    census_rows(state, min_parallel, job_rows);
+    #[cfg(test)]
+    for _ in 0..state.entities.len() {
         audit_s12_tests::visit(0);
-        observe_slot(state, EntitySlot(index as u32));
     }
     state.spawn_census.chunks.retain(|_, chunk| chunk.active);
     for player in players {
@@ -1234,83 +1352,117 @@ pub(crate) fn player_spawn(state: &TickState, salt: u64) -> [f64; 3] {
     state.world.world_spawn_position()
 }
 
+/// Ascending slots of the mob rows whose blueprint passes `accepts` and that
+/// satisfy `keep` (a pure read), found by one dense scan of the body column on
+/// the pool once the store reaches [`MIN_PARALLEL_ROWS`]. The periodic
+/// maintenance passes used the per-type member sets here: merging and sorting
+/// 40,000 slots on the tick thread cost more than the dense scan, which
+/// reads only the hot body column for rows that are not candidates. Both
+/// visit exactly the mob rows, in dense-slot order (the sets mirror
+/// `Body::kind`). `audit_pass` feeds the test visit counter.
+fn mob_slots_where(
+    entities: &crate::entities::EntityStore,
+    registry: &crate::registry::CoreRegistry,
+    audit_pass: usize,
+    accepts: impl Fn(&crate::blueprint::MobBlueprint) -> bool + Sync,
+    keep: impl Fn(EntitySlot) -> bool + Sync,
+) -> Vec<EntitySlot> {
+    let bodies = entities.bodies();
+    let member = |body: &crate::entities::Body| match body.kind {
+        EntityKind::Mob { type_id } => registry.blueprint(type_id).is_some_and(&accepts),
+        _ => false,
+    };
+    #[cfg(test)]
+    for _ in bodies.iter().filter(|body| member(body)) {
+        audit_s12_tests::visit(audit_pass);
+    }
+    #[cfg(not(test))]
+    let _ = audit_pass;
+    let pick = |(index, body): (usize, &crate::entities::Body)| {
+        (member(body) && keep(EntitySlot(index as u32))).then_some(EntitySlot(index as u32))
+    };
+    if bodies.len() < MIN_PARALLEL_ROWS {
+        bodies.iter().enumerate().filter_map(pick).collect()
+    } else {
+        use rayon::prelude::*;
+        bodies
+            .par_iter()
+            .enumerate()
+            .with_min_len(2048)
+            .filter_map(pick)
+            .collect()
+    }
+}
+
 /// Refresh daylight ignition; the shared fire owner deals damage and extinguishes.
 fn burn(state: &mut TickState, night: bool, changes: &mut ChangeSet) {
     if night || state.rain_level > 0.0 {
         return;
     }
-    // The census still needs every alive body. Periodic maintenance only
-    // needs capability members, in the same dense-slot order as the old scan.
-    let mut slots = std::mem::take(&mut state.serial_entity_slots);
-    state.entities.mob_slots_matching_into(
-        |type_id| {
-            state
-                .registry
-                .blueprint(type_id)
-                .is_some_and(|blueprint| blueprint.capabilities.burns_in_daylight)
+    // Daylight burn is live simulation: freeze resident-inactive. Whether a
+    // burner sits in an active chunk, alive, under open sky is a pure read of
+    // world and body state that nothing below writes (ignition and head wear
+    // touch only burn and appearance), so it runs on the pool over the dense
+    // rows; only the exposed rows reach the ordered serial body.
+    let exposed = mob_slots_where(
+        &state.entities,
+        &state.registry,
+        1,
+        |blueprint| blueprint.capabilities.burns_in_daylight,
+        |slot| {
+            let bpos = state.entities.pos(slot);
+            state.world.is_active(
+                (bpos[0].floor() as i32).div_euclid(16),
+                (bpos[2].floor() as i32).div_euclid(16),
+            ) && state.entities.body(slot).alive
+                && open_sky_in(
+                    &state.registry.materials,
+                    &state.world,
+                    bpos,
+                    state.entities.body(slot).height,
+                )
         },
-        &mut slots,
     );
-    for &slot in &slots {
-        #[cfg(test)]
-        audit_s12_tests::visit(1);
-        // Daylight burn is live simulation: freeze resident-inactive.
-        let bpos = state.entities.pos(slot);
-        if !state.world.is_active(
-            (bpos[0].floor() as i32).div_euclid(16),
-            (bpos[2].floor() as i32).div_euclid(16),
-        ) {
+    for &slot in &exposed {
+        let row = state.entities.row(slot);
+        let id = state.entities.body(slot).id;
+        // Mob.burnUndead protects with any nonempty head item, including
+        // nondamageable pumpkins. A damageable head item takes nextInt(2)
+        // wear; even its breaking pass is protected (javap-daylight.log).
+        if let Some(head) = row.appearance.equipment[5]
+            .as_ref()
+            .filter(|stack| !stack.is_empty())
+        {
+            let maximum = head.extended().max_damage.or_else(|| {
+                state
+                    .registry
+                    .item_facts
+                    .facts_for_stack(head, &state.registry.items)
+                    .and_then(|facts| facts.max_damage)
+            });
+            let wear = Rng((state.world.seed() as u64)
+                ^ state.tick.wrapping_mul(0xBF58_476D_1CE4_E5B9)
+                ^ id.0 as u64)
+            .below(2) as i32;
+            if let Some(maximum) = maximum.filter(|maximum| *maximum != 0)
+                && wear != 0
+            {
+                let head =
+                    &mut std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance)
+                        .equipment[5];
+                let stack = head.as_mut().expect("protected by nonempty head item");
+                let damage = stack.damage.unwrap_or(0).saturating_add(wear);
+                if u32::try_from(damage).is_ok_and(|damage| damage >= maximum) {
+                    *head = None;
+                } else {
+                    *stack = std::mem::take(stack).with_damage(damage);
+                }
+                changes.entities_appearance_changed.push(id);
+            }
             continue;
         }
-        let row = state.entities.row(slot);
-        if state.entities.body(slot).alive
-            && open_sky(
-                state,
-                state.entities.pos(slot),
-                state.entities.body(slot).height,
-            )
-        {
-            let id = state.entities.body(slot).id;
-            // Mob.burnUndead protects with any nonempty head item, including
-            // nondamageable pumpkins. A damageable head item takes nextInt(2)
-            // wear; even its breaking pass is protected (javap-daylight.log).
-            if let Some(head) = row.appearance.equipment[5]
-                .as_ref()
-                .filter(|stack| !stack.is_empty())
-            {
-                let maximum = head.extended().max_damage.or_else(|| {
-                    state
-                        .registry
-                        .item_facts
-                        .facts_for_stack(head, &state.registry.items)
-                        .and_then(|facts| facts.max_damage)
-                });
-                let wear = Rng((state.world.seed() as u64)
-                    ^ state.tick.wrapping_mul(0xBF58_476D_1CE4_E5B9)
-                    ^ id.0 as u64)
-                .below(2) as i32;
-                if let Some(maximum) = maximum.filter(|maximum| *maximum != 0)
-                    && wear != 0
-                {
-                    let head =
-                        &mut std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance)
-                            .equipment[5];
-                    let stack = head.as_mut().expect("protected by nonempty head item");
-                    let damage = stack.damage.unwrap_or(0).saturating_add(wear);
-                    if u32::try_from(damage).is_ok_and(|damage| damage >= maximum) {
-                        *head = None;
-                    } else {
-                        *stack = std::mem::take(stack).with_damage(damage);
-                    }
-                    changes.entities_appearance_changed.push(id);
-                }
-                continue;
-            }
-            crate::contact_hazards::ignite(state, id, 160);
-        }
+        crate::contact_hazards::ignite(state, id, 160);
     }
-    slots.clear();
-    state.serial_entity_slots = slots;
 }
 
 /// Sheared sheep graze (vanilla `EatBlockGoal`, about once per 1000 ticks):
@@ -1318,34 +1470,30 @@ fn burn(state: &mut TickState, night: bool, changes: &mut ChangeSet) {
 fn graze(state: &mut TickState, rng: &mut Rng, changes: &mut ChangeSet) {
     let mob_griefing =
         crate::command_rules::mob_griefing(state, crate::command_rules::MobGrief::SheepGrazing);
-    let mut slots = std::mem::take(&mut state.serial_entity_slots);
-    state.entities.mob_slots_matching_into(
-        |type_id| {
-            state
-                .registry
-                .blueprint(type_id)
-                .is_some_and(|blueprint| blueprint.wool)
+    // Which sheared sheep stand in an active chunk is a pure read, taken on the
+    // pool; the graze draw below consumes `rng` for exactly those rows, in slot
+    // order (the draw only ever followed this same filter), so eligible
+    // grazers' RNG consumption survives compaction or an entity type change.
+    let grazers = mob_slots_where(
+        &state.entities,
+        &state.registry,
+        2,
+        |blueprint| blueprint.wool,
+        |slot| {
+            // Graze/block-grief is live simulation: freeze resident-inactive.
+            let gpos = state.entities.pos(slot);
+            state.world.is_active(
+                (gpos[0].floor() as i32).div_euclid(16),
+                (gpos[2].floor() as i32).div_euclid(16),
+            ) && state.entities.body(slot).alive
+                && crate::tick::wool_of(&state.entities.row(slot).appearance) & 0x10 != 0
         },
-        &mut slots,
     );
-    // Sorting the type memberships by slot preserves eligible grazers' RNG
-    // consumption even after compaction or an entity type change.
-    for &slot in &slots {
-        #[cfg(test)]
-        audit_s12_tests::visit(2);
-        // Graze/block-grief is live simulation: freeze resident-inactive.
-        let gpos = state.entities.pos(slot);
-        if !state.world.is_active(
-            (gpos[0].floor() as i32).div_euclid(16),
-            (gpos[2].floor() as i32).div_euclid(16),
-        ) {
+    for &slot in &grazers {
+        if rng.below(1000 / CYCLE) != 0 {
             continue;
         }
-        let row = state.entities.row(slot);
-        let wool = crate::tick::wool_of(&row.appearance);
-        if !state.entities.body(slot).alive || wool & 0x10 == 0 || rng.below(1000 / CYCLE) != 0 {
-            continue;
-        }
+        let wool = crate::tick::wool_of(&state.entities.row(slot).appearance);
         let id = state.entities.body(slot).id;
         let pos = state.entities.pos(slot);
         let below = crate::boundary::BlockPos {
@@ -1370,28 +1518,33 @@ fn graze(state: &mut TickState, rng: &mut Rng, changes: &mut ChangeSet) {
         crate::tick::set_wool(std::sync::Arc::make_mut(&mut row.appearance), wool & 0x0F);
         state.appearance_changed.push(id);
     }
-    slots.clear();
-    state.serial_entity_slots = slots;
 }
 
 /// Sunlight at the head, with no water at the feet.
+#[cfg(test)]
 fn open_sky(state: &TickState, pos: [f64; 3], height: f64) -> bool {
-    let materials = &state.registry.materials;
+    open_sky_in(&state.registry.materials, &state.world, pos, height)
+}
+
+/// [`open_sky`] over the two fields it reads, so pool closures borrow only
+/// those and not the whole tick state.
+fn open_sky_in(
+    materials: &mc_physics::BlockMaterialIds,
+    world: &crate::world::ChunkWorld,
+    pos: [f64; 3],
+    height: f64,
+) -> bool {
     let x = pos[0].floor() as i32;
     let z = pos[2].floor() as i32;
     let feet = pos[1].floor() as i32;
-    if state
-        .world
+    if world
         .block_at(x, feet, z)
         .is_none_or(|block| materials.classify(block) == BlockMaterial::Water)
     {
         return false;
     }
     let head = (pos[1] + height).floor() as i32;
-    state
-        .world
-        .light_at(x, head, z)
-        .is_some_and(|(sky, _)| sky == 15)
+    world.light_at(x, head, z).is_some_and(|(sky, _)| sky == 15)
 }
 
 /// SplitMix64: deterministic per (world seed, tick).

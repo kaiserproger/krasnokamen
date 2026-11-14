@@ -228,6 +228,74 @@ fn radius_split_active_hysteresis_and_tickets_do_not_activate_the_view_square() 
     assert!(!state.world.is_active(forced.x, forced.z));
 }
 
+/// The exit band keeps previously active chunks one chunk beyond the radius.
+/// Reference: the full walk over the previous set, once per player (what
+/// `refresh_active_chunks` did before it probed only the outer ring).
+#[test]
+fn active_set_exit_band_matches_the_full_previous_set_walk_for_moving_players() {
+    use crate::boundary::ChunkPos;
+    use std::collections::HashSet;
+    let mut state = test_state();
+    let players: Vec<_> = (1..=6)
+        .map(|connection| join(&mut state, connection, &format!("walker{connection}")))
+        .collect();
+    state.config_view_distance = 6;
+    state.config_sim_distance = 3;
+    let radius = 3_i32;
+    let mut rng = 0x5EED_u64;
+    let mut next = move |bound: u64| {
+        rng = rng.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+        (rng >> 33) % bound
+    };
+    let mut previous: HashSet<ChunkPos> = HashSet::new();
+    for step in 0..60 {
+        for id in &players {
+            if step == 0 || next(3) == 0 {
+                let slot = state.entities.slot_of(*id).unwrap();
+                // Chunk jumps of 1-2 (inside the exit band) and rare long jumps.
+                let jump = if next(8) == 0 { 40 } else { 1 + next(2) as i32 };
+                let pos = state.entities.pos(slot);
+                let dx = (next(3) as i32 - 1) * jump * 16;
+                let dz = (next(3) as i32 - 1) * jump * 16;
+                state.entities.set_pos(
+                    slot,
+                    [pos[0] + f64::from(dx) + 3.0, 100.0, pos[2] + f64::from(dz)],
+                );
+            }
+        }
+        let centers: Vec<ChunkPos> = state
+            .players
+            .keys()
+            .map(|id| {
+                let pos = state.entities.pos(state.entities.slot_of(*id).unwrap());
+                ChunkPos {
+                    x: (pos[0].floor() as i32).div_euclid(16),
+                    z: (pos[2].floor() as i32).div_euclid(16),
+                }
+            })
+            .collect();
+        let mut expected = HashSet::new();
+        for center in &centers {
+            for z in center.z - radius..=center.z + radius {
+                for x in center.x - radius..=center.x + radius {
+                    expected.insert(ChunkPos { x, z });
+                }
+            }
+            for chunk in &previous {
+                if (chunk.x - center.x).abs() <= radius + 1
+                    && (chunk.z - center.z).abs() <= radius + 1
+                {
+                    expected.insert(*chunk);
+                }
+            }
+        }
+        state.refresh_active_chunks(state.tick + 1);
+        let actual: HashSet<ChunkPos> = state.world.active_positions().collect();
+        assert_eq!(actual, expected, "step {step}");
+        previous = expected;
+    }
+}
+
 #[test]
 fn radius_split_resident_inactive_mob_and_inhabited_time_freeze_until_activation() {
     use crate::boundary::ChunkPos;

@@ -1158,9 +1158,17 @@ fn native100_input_phase_micro() {
     let registry = std::sync::Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
     let world = crate::horde_bench::flat_world(&registry);
     let mut state = TickState::new(std::sync::Arc::clone(&registry), world, 2, 512);
-    state.gamerules.insert("spawn_mobs".into(), "false".into());
+    // `N100_SPAWN=1` keeps natural spawning on (`input.natural_spawn` laps).
+    if std::env::var_os("N100_SPAWN").is_none() {
+        state.gamerules.insert("spawn_mobs".into(), "false".into());
+    }
     // Night: no daylight burning in the micro's unlit-roof lighting.
-    state.day_time = 14_000;
+    // `N100_DAY=1`: daytime, so the 20-tick daylight burn maintenance runs.
+    state.day_time = if std::env::var_os("N100_DAY").is_some() {
+        1_000
+    } else {
+        14_000
+    };
     for x in 0..SIDE / 16 {
         for z in 0..SIDE / 16 {
             state.tickets.insert(
@@ -1236,7 +1244,23 @@ fn native100_input_phase_micro() {
             state.entities.row_mut(slot).persistent = true;
         }
     }
-    for _ in 0..80 {
+    // `N100_WALK=1`: five players step one chunk east each tick, so the
+    // active-chunk set refreshes after inputs as it does for walking bots.
+    let walk = std::env::var_os("N100_WALK").is_some();
+    for tick in 0..80_u64 {
+        if walk {
+            for k in 0..5_u64 {
+                let connection = 1 + (tick * 5 + k) % 100;
+                let id = state
+                    .connections
+                    .entity_of(ConnectionId(connection))
+                    .unwrap();
+                let slot = state.entities.slot_of(id).unwrap();
+                let mut pos = state.entities.pos(slot);
+                pos[0] = (pos[0] + 16.0).rem_euclid(f64::from(SIDE));
+                state.entities.set_pos(slot, pos);
+            }
+        }
         run_tick(&mut state, &[]);
     }
 }
