@@ -185,7 +185,7 @@ async fn continuous_edits_and_pending_requests_both_make_progress() {
     let server = Arc::new(
         EdgeServer::new(
             Arc::clone(&hub),
-            Arc::new(mc_data::solaris_required_data()),
+            Arc::new(mc_data::krasnokamen_required_data()),
             Arc::default(),
             cfg,
         )

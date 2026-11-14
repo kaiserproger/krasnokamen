@@ -169,11 +169,11 @@ def run(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
     steps.call("minecraft_connect", {"server_addr": address})
     play = steps.call("minecraft_wait_for_play", {"timeout_seconds": steps.remaining()})
     steps.check("second_restart_client_entered_play", play["in_play"] is True)
-    shutdown, _, restarted = _server_log(steps)[stopped_at:].partition("Solaris is listening")
+    shutdown, _, restarted = _server_log(steps)[stopped_at:].partition("Krasnokamen is listening")
     steps.check("shutdown_checkpoint_committed_beside_refused_chunks", _commits(shutdown) >= 1)
     steps.check("shutdown_checkpoint_was_not_declined", not _declined(shutdown))
     # No re-import happened: the restarted server meets the same stored records and refuses them again.
-    steps.wait(lambda _: all(chunk in _server_log(steps)[stopped_at:].partition("Solaris is listening")[2]
+    steps.wait(lambda _: all(chunk in _server_log(steps)[stopped_at:].partition("Krasnokamen is listening")[2]
                              for chunk in refused_chunks), "refused_chunks_stay_refused_after_restart")
     steps.report["limits"] = [
         "records corrupted in an exported Anvil copy and re-imported; crafter, shelf, shulker box and "

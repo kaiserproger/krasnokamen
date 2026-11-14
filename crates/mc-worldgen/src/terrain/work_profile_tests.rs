@@ -21,7 +21,7 @@ fn density_work() {
 #[test]
 #[ignore = "explicit release instruction-count workload"]
 fn lighting_work() {
-    let report = mc_data::blocks::solaris_required_blocks_report();
+    let report = mc_data::blocks::krasnokamen_required_blocks_report();
     let table = mc_data::block_light::BlockLightTable::conservative_from_blocks_report(&report);
     let mut workspace = mc_world::light::LightWorkspace::new();
     for seed in [712816, 5617830, 42] {
@@ -54,7 +54,7 @@ fn chunk_light_bytes() {
     use std::io::Write;
     let path = std::env::var_os("GENPERF_SNAPSHOT").expect("GENPERF_SNAPSHOT output path");
     let mut out = std::io::BufWriter::new(std::fs::File::create(path).unwrap());
-    let report = mc_data::blocks::solaris_required_blocks_report();
+    let report = mc_data::blocks::krasnokamen_required_blocks_report();
     let table = mc_data::block_light::BlockLightTable::conservative_from_blocks_report(&report);
     let mut workspace = mc_world::light::LightWorkspace::new();
     for seed in [712816_i64, 5617830, 42] {
