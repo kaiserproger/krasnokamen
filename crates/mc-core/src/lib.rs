@@ -12,6 +12,7 @@ pub mod allay;
 pub mod armadillo;
 mod armor_stand;
 mod axolotl;
+pub mod battle;
 mod beacon;
 #[cfg(test)]
 mod beacon_tests;
