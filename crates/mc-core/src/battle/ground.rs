@@ -106,9 +106,13 @@ fn surface(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32) -> Optio
     Some(Ok(f64::NEG_INFINITY))
 }
 
-fn footprint(pos: [f64; 3], half_width: f64) -> (std::ops::RangeInclusive<i32>, std::ops::RangeInclusive<i32>) {
+fn footprint(
+    pos: [f64; 3],
+    half_width: f64,
+) -> (std::ops::RangeInclusive<i32>, std::ops::RangeInclusive<i32>) {
     let span = |centre: f64| {
-        (centre - half_width + CONTACT).floor() as i32..=(centre + half_width - CONTACT).floor() as i32
+        (centre - half_width + CONTACT).floor() as i32
+            ..=(centre + half_width - CONTACT).floor() as i32
     };
     (span(pos[0]), span(pos[2]))
 }
@@ -122,8 +126,16 @@ fn clear(
     half_width: f64,
     height: f64,
 ) -> Option<bool> {
-    let min = [pos[0] - half_width + CONTACT, pos[1] + CONTACT, pos[2] - half_width + CONTACT];
-    let max = [pos[0] + half_width - CONTACT, pos[1] + height, pos[2] + half_width - CONTACT];
+    let min = [
+        pos[0] - half_width + CONTACT,
+        pos[1] + CONTACT,
+        pos[2] - half_width + CONTACT,
+    ];
+    let max = [
+        pos[0] + half_width - CONTACT,
+        pos[1] + height,
+        pos[2] + half_width - CONTACT,
+    ];
     let (xs, zs) = footprint(pos, half_width);
     for x in xs {
         for z in zs.clone() {
@@ -139,7 +151,9 @@ fn clear(
                 let cell = [f64::from(x), f64::from(y), f64::from(z)];
                 for b in boxes(registry, state) {
                     let b = b.as_blocks();
-                    if (0..3).all(|axis| cell[axis] + b[axis] < max[axis] && cell[axis] + b[axis + 3] > min[axis]) {
+                    if (0..3).all(|axis| {
+                        cell[axis] + b[axis] < max[axis] && cell[axis] + b[axis + 3] > min[axis]
+                    }) {
                         return Some(false);
                     }
                 }
@@ -150,7 +164,12 @@ fn clear(
 }
 
 /// Support under a footprint: the highest dry column surface it covers.
-fn support(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3], half_width: f64) -> Option<Result<f64, ()>> {
+fn support(
+    world: &ChunkWorld,
+    registry: &CoreRegistry,
+    pos: [f64; 3],
+    half_width: f64,
+) -> Option<Result<f64, ()>> {
     let (xs, zs) = footprint(pos, half_width);
     let mut top = f64::NEG_INFINITY;
     for x in xs {
@@ -182,7 +201,16 @@ fn pit(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3], half_width: f
     let (x, z) = (pos[0].floor() as i32, pos[2].floor() as i32);
     let mut ring = [0.0; 8];
     let mut known = 0;
-    for (dx, dz) in [(-8, -8), (0, -8), (8, -8), (-8, 0), (8, 0), (-8, 8), (0, 8), (8, 8)] {
+    for (dx, dz) in [
+        (-8, -8),
+        (0, -8),
+        (8, -8),
+        (-8, 0),
+        (8, 0),
+        (-8, 8),
+        (0, 8),
+        (8, 8),
+    ] {
         if let Some(Ok(top)) = surface(world, registry, x + dx, z + dz) {
             ring[known] = top;
             known += 1;
@@ -326,14 +354,22 @@ fn crossable(
         let Some(step) = footing(world, registry, x, z, feet, low) else {
             return false;
         };
-        if step && !*rise.get_or_insert_with(|| free_above(world, registry, pos, half_width, feet + 2)) {
+        if step
+            && !*rise.get_or_insert_with(|| free_above(world, registry, pos, half_width, feet + 2))
+        {
             return false;
         }
         let above = cover(world, registry, x, z, feet + 2);
         if above > 0
             && above
                 > *here.get_or_insert_with(|| {
-                    cover(world, registry, pos[0].floor() as i32, pos[2].floor() as i32, feet + 2)
+                    cover(
+                        world,
+                        registry,
+                        pos[0].floor() as i32,
+                        pos[2].floor() as i32,
+                        feet + 2,
+                    )
                 })
         {
             return false;
@@ -347,14 +383,22 @@ fn crossable(
 /// ground within [`MAX_DROP`] blocks below `low`, the ground the body stands
 /// on at its centre (water is no ground). `Some(step)` when it can. Unknown
 /// blocks are obstacles.
-fn footing(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32, feet: i32, low: i32) -> Option<bool> {
+fn footing(
+    world: &ChunkWorld,
+    registry: &CoreRegistry,
+    x: i32,
+    z: i32,
+    feet: i32,
+    low: i32,
+) -> Option<bool> {
     let solid = |y| solid(world, registry, x, y, z);
     let step = solid(feet);
     if solid(feet + 1) || (step && solid(feet + 2)) {
         return None;
     }
     // On level ground the cell under the feet is solid: one read.
-    if !solid(feet - 1) && (2..=feet - low + MAX_DROP as i32 + 1).all(|depth| !solid(feet - depth)) {
+    if !solid(feet - 1) && (2..=feet - low + MAX_DROP as i32 + 1).all(|depth| !solid(feet - depth))
+    {
         return None;
     }
     Some(step)
@@ -389,7 +433,8 @@ fn cover(world: &ChunkWorld, registry: &CoreRegistry, x: i32, z: i32, y: i32) ->
     (y..top)
         .filter(|&y| {
             chunk.get_block(lx, y, lz).is_some_and(|state| {
-                !tree(registry, state.0) && registry.materials.classify(state.0) == BlockMaterial::Solid
+                !tree(registry, state.0)
+                    && registry.materials.classify(state.0) == BlockMaterial::Solid
             })
         })
         .count()
@@ -424,7 +469,13 @@ fn exit(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3]) -> Option<[f
 
 /// Whether the cells at height `y` over a body's footprint hold no collision
 /// block. Unknown blocks are obstacles.
-fn free_above(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3], half_width: f64, y: i32) -> bool {
+fn free_above(
+    world: &ChunkWorld,
+    registry: &CoreRegistry,
+    pos: [f64; 3],
+    half_width: f64,
+    y: i32,
+) -> bool {
     let (xs, zs) = footprint(pos, half_width);
     xs.into_iter().all(|x| {
         zs.clone().all(|z| {
@@ -439,7 +490,13 @@ fn free_above(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3], half_w
 /// body's side at head height: physics refuses a step-up jump whose raised
 /// sweep is clipped on either axis, so a horse grazing a trunk never climbed
 /// the terrace ahead. A drive that touches nothing is returned exactly.
-fn slide(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3], half_width: f64, mut drive: [f64; 2]) -> [f64; 2] {
+fn slide(
+    world: &ChunkWorld,
+    registry: &CoreRegistry,
+    pos: [f64; 3],
+    half_width: f64,
+    mut drive: [f64; 2],
+) -> [f64; 2] {
     const TOUCH: f64 = 0.05;
     let feet = (pos[1] + CONTACT).floor() as i32;
     let (xs, zs) = footprint(pos, half_width);
@@ -448,9 +505,17 @@ fn slide(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3], half_width:
             continue;
         }
         let cell = (centre + drive[component].signum() * (half_width + TOUCH)).floor() as i32;
-        let across = if component == 0 { zs.clone() } else { xs.clone() };
+        let across = if component == 0 {
+            zs.clone()
+        } else {
+            xs.clone()
+        };
         let touching = across.into_iter().any(|other| {
-            let (x, z) = if component == 0 { (cell, other) } else { (other, cell) };
+            let (x, z) = if component == 0 {
+                (cell, other)
+            } else {
+                (other, cell)
+            };
             world
                 .physics_block_at(x, feet + 1, z)
                 .is_some_and(|state| registry.materials.classify(state) == BlockMaterial::Solid)
@@ -510,19 +575,23 @@ pub(crate) fn deflect(
         until: 0,
     });
     if let Some(leg) = state.leg {
-        if mc_physics::mth::length2(pos[0] - state.anchor[0], pos[2] - state.anchor[1]) > STALL_DISTANCE {
+        if mc_physics::mth::length2(pos[0] - state.anchor[0], pos[2] - state.anchor[1])
+            > STALL_DISTANCE
+        {
             state.anchor = [pos[0], pos[2]];
             state.since = tick;
         }
         // A path is given up at `until`, or when the rider stalls on it too.
         if tick < state.until && tick < state.since + STALL_TICKS && speed >= 1e-9 {
-            let next = if mc_physics::mth::length2(leg[0] - pos[0], leg[1] - pos[2]) > DETOUR_REACHED {
-                Some(leg)
-            } else if [leg[0].round() as i32, leg[1].round() as i32] == state.goal {
-                None
-            } else {
-                route(world, registry, pos, half_width, [0.0; 2], Some(state.goal)).map(|(leg, _)| leg)
-            };
+            let next =
+                if mc_physics::mth::length2(leg[0] - pos[0], leg[1] - pos[2]) > DETOUR_REACHED {
+                    Some(leg)
+                } else if [leg[0].round() as i32, leg[1].round() as i32] == state.goal {
+                    None
+                } else {
+                    route(world, registry, pos, half_width, [0.0; 2], Some(state.goal))
+                        .map(|(leg, _)| leg)
+                };
             if let Some(leg) = next {
                 state.leg = Some(leg);
                 return ride(world, registry, pos, half_width, leg, speed, side);
@@ -533,7 +602,8 @@ pub(crate) fn deflect(
         state.since = tick;
     }
     if speed < STALL_SPEED
-        || mc_physics::mth::length2(pos[0] - state.anchor[0], pos[2] - state.anchor[1]) > STALL_DISTANCE
+        || mc_physics::mth::length2(pos[0] - state.anchor[0], pos[2] - state.anchor[1])
+            > STALL_DISTANCE
     {
         state.anchor = [pos[0], pos[2]];
         state.since = tick;
@@ -607,7 +677,13 @@ pub(crate) struct Detour {
 /// Physics resolves the axes in turn, so an oblique drive slides along a wall
 /// on its open axis; an oblique [`crossable`] probe misses a column the
 /// footprint enters.
-fn moves(world: &ChunkWorld, registry: &CoreRegistry, pos: [f64; 3], half_width: f64, out: [f64; 2]) -> bool {
+fn moves(
+    world: &ChunkWorld,
+    registry: &CoreRegistry,
+    pos: [f64; 3],
+    half_width: f64,
+    out: [f64; 2],
+) -> bool {
     (out[0] != 0.0 && crossable(world, registry, pos, half_width, [out[0].signum(), 0.0]))
         || (out[1] != 0.0 && crossable(world, registry, pos, half_width, [0.0, out[1].signum()]))
 }
@@ -628,7 +704,16 @@ fn ride(
         return [0.0; 2];
     }
     let way = to.map(|v| v / length);
-    steer(world, registry, pos, half_width, way.map(|v| v * speed), way, side).unwrap_or_else(|boxed| boxed)
+    steer(
+        world,
+        registry,
+        pos,
+        half_width,
+        way.map(|v| v * speed),
+        way,
+        side,
+    )
+    .unwrap_or_else(|boxed| boxed)
 }
 
 /// Breadth-first local path for a body at `pos`, over nodes at block corners
@@ -653,10 +738,14 @@ fn route(
 ) -> Option<([f64; 2], [i32; 2])> {
     const N: usize = DETOUR_SPAN;
     const UNSEEN: u16 = u16::MAX;
-    let (ox, oz) = (pos[0].round() as i32 - AROUND, pos[2].round() as i32 - AROUND);
+    let (ox, oz) = (
+        pos[0].round() as i32 - AROUND,
+        pos[2].round() as i32 - AROUND,
+    );
     let index = |x: i32, z: i32| {
         let (i, k) = (x - ox, z - oz);
-        ((0..N as i32).contains(&i) && (0..N as i32).contains(&k)).then(|| k as usize * N + i as usize)
+        ((0..N as i32).contains(&i) && (0..N as i32).contains(&k))
+            .then(|| k as usize * N + i as usize)
     };
     let node = |n: usize| [ox + (n % N) as i32, oz + (n / N) as i32];
     let mut parent = [UNSEEN; N * N];
@@ -723,7 +812,13 @@ fn route(
                 continue;
             }
             let from = [f64::from(x), feet[n], f64::from(z)];
-            if let Some(y) = walk(world, registry, from, half_width, [f64::from(x + dx), f64::from(z + dz)]) {
+            if let Some(y) = walk(
+                world,
+                registry,
+                from,
+                half_width,
+                [f64::from(x + dx), f64::from(z + dz)],
+            ) {
                 parent[m] = n as u16;
                 feet[m] = y;
                 queue[tail] = m as u16;
@@ -748,7 +843,8 @@ fn route(
     let first = at(len - 1);
     let mut end = len - 1;
     if len >= 2
-        && mc_physics::mth::length2(f64::from(first[0]) - pos[0], f64::from(first[1]) - pos[2]) <= DETOUR_REACHED
+        && mc_physics::mth::length2(f64::from(first[0]) - pos[0], f64::from(first[1]) - pos[2])
+            <= DETOUR_REACHED
     {
         let step = |i: usize| [at(i - 1)[0] - at(i)[0], at(i - 1)[1] - at(i)[1]];
         let run = step(len - 1);
@@ -763,7 +859,13 @@ fn route(
 
 /// Feet height after a body moves from `from` straight along a grid axis to
 /// `to` (one coordinate unchanged), if [`crossable`] allows the move.
-fn walk(world: &ChunkWorld, registry: &CoreRegistry, from: [f64; 3], half_width: f64, to: [f64; 2]) -> Option<f64> {
+fn walk(
+    world: &ChunkWorld,
+    registry: &CoreRegistry,
+    from: [f64; 3],
+    half_width: f64,
+    to: [f64; 2],
+) -> Option<f64> {
     let delta = [to[0] - from[0], to[1] - from[2]];
     let dir = if delta[0] != 0.0 {
         [delta[0].signum(), 0.0]
@@ -837,7 +939,15 @@ pub(crate) fn deflect_mounted(
     if let Some(Escape { way, until }) = *escape {
         if tick < until
             && speed >= 1e-9
-            && let Ok(out) = steer(world, registry, pos, half_width, way.map(|v| v * speed), way, side)
+            && let Ok(out) = steer(
+                world,
+                registry,
+                pos,
+                half_width,
+                way.map(|v| v * speed),
+                way,
+                side,
+            )
         {
             return out;
         }
@@ -859,7 +969,13 @@ pub(crate) fn deflect_mounted(
     } else {
         [0.0, dir[1].signum()]
     };
-    for (cos, sin) in [(-std::f64::consts::FRAC_1_SQRT_2, std::f64::consts::FRAC_1_SQRT_2), (-1.0, 0.0)] {
+    for (cos, sin) in [
+        (
+            -std::f64::consts::FRAC_1_SQRT_2,
+            std::f64::consts::FRAC_1_SQRT_2,
+        ),
+        (-1.0, 0.0),
+    ] {
         for turn in [side, -side] {
             let s = sin * turn;
             let way = [axis[0] * cos - axis[1] * s, axis[0] * s + axis[1] * cos];
@@ -910,7 +1026,13 @@ fn steer(
             return Ok(slide(world, registry, pos, half_width, drive));
         }
         // Crowd pushes into an obstacle: go the clear way instead.
-        return Ok(slide(world, registry, pos, half_width, dir.map(|v| v * speed)));
+        return Ok(slide(
+            world,
+            registry,
+            pos,
+            half_width,
+            dir.map(|v| v * speed),
+        ));
     }
     // A positive turn rotates toward the left of the heading. Blocks are
     // axis-aligned, so the search and the turns run on the grid axis nearest
@@ -947,7 +1069,11 @@ fn steer(
             [side, -side].into_iter().enumerate().find_map(|(i, turn)| {
                 let lateral = [left[0] * turn, left[1] * turn];
                 let from = f64::from(offset - 1);
-                let at = [base[0] + lateral[0] * from, level[i], base[2] + lateral[1] * from];
+                let at = [
+                    base[0] + lateral[0] * from,
+                    level[i],
+                    base[2] + lateral[1] * from,
+                ];
                 open[i] = open[i] && crossable(world, registry, at, half_width, lateral);
                 let (x, z) = (at[0] + lateral[0], at[2] + lateral[1]);
                 if open[i] {
@@ -959,7 +1085,10 @@ fn steer(
         })
         .unwrap_or(side);
     for (cos, sin) in [
-        (std::f64::consts::FRAC_1_SQRT_2, std::f64::consts::FRAC_1_SQRT_2),
+        (
+            std::f64::consts::FRAC_1_SQRT_2,
+            std::f64::consts::FRAC_1_SQRT_2,
+        ),
         (0.0, 1.0),
     ] {
         for turn in [side, -side] {

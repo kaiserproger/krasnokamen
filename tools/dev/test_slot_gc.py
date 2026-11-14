@@ -454,7 +454,7 @@ class RotationTests(SlotFixture):
             (crate / "query-cache.bin").write_bytes(b"i" * 8192)
             (slot / "tmp").mkdir()
             (slot / "tmp" / "keep").write_bytes(b"t" * 4096)
-            (slot / ".solaris-tree").write_bytes(b"s" * 4096)
+            (slot / ".krasnokamen-tree").write_bytes(b"s" * 4096)
         self.locks.mkdir(exist_ok=True)
         self.used = {}
         self.baseline = self.total()
@@ -550,7 +550,7 @@ class RotationTests(SlotFixture):
         self.assertEqual(self.total(), before)
         self.assertEqual([(e.slot, e.stage) for e in planned], [("slot-a", "incremental"), ("slot-a", "slot")])
         self.assertEqual(planned[0].bytes, 8192)
-        self.assertEqual(planned[1].bytes, 8192)  # libx.rlib + the .solaris-tree marker; tmp/ stays
+        self.assertEqual(planned[1].bytes, 8192)  # libx.rlib + the .krasnokamen-tree marker; tmp/ stays
 
     def test_safe_classes_count_towards_the_threshold(self):
         self.stamp("a", 1000)

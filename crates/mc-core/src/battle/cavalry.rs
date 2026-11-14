@@ -341,7 +341,9 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             } else {
                 super::steering::Mover::Rider(&mut battle.columns.detour[horse_bi])
             };
-            let velocity = super::steering::around_obstacles(frame, formation, horse, velocity, heading, mover);
+            let velocity = super::steering::around_obstacles(
+                frame, formation, horse, velocity, heading, mover,
+            );
             battle.columns.drive[horse_bi] = velocity;
             battle.columns.drive[bi] = [0.0; 3];
             continue;

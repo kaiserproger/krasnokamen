@@ -147,7 +147,11 @@ fn placement_stands_on_steps_and_moves_off_trunks_and_water() {
     let (world, registry) = (&state.world, &state.registry);
     // A one-block step: the body stands on its own column, never inside the step.
     let (x, z) = (5, 3);
-    assert_eq!(height(x, z), height(x + 1, z) - 1, "fixture has a step here");
+    assert_eq!(
+        height(x, z),
+        height(x + 1, z) - 1,
+        "fixture has a step here"
+    );
     let at = [f64::from(x) + 0.5, 90.0, f64::from(z) + 0.5];
     assert_eq!(
         place(world, registry, at, 0.3, 1.95),
@@ -166,8 +170,14 @@ fn placement_stands_on_steps_and_moves_off_trunks_and_water() {
         panic!("no ground beside the trunk");
     };
     let shift = mth_dist(moved, trunk);
-    assert!(shift > 0.0 && shift <= std::f64::consts::SQRT_2 + 1e-12, "{moved:?}");
-    assert_eq!(moved[1], f64::from(height(moved[0].floor() as i32, moved[2].floor() as i32)));
+    assert!(
+        shift > 0.0 && shift <= std::f64::consts::SQRT_2 + 1e-12,
+        "{moved:?}"
+    );
+    assert_eq!(
+        moved[1],
+        f64::from(height(moved[0].floor() as i32, moved[2].floor() as i32))
+    );
     // Water is never ground.
     let wet = [1.5, 64.0, -29.5];
     assert!(pond(1, -30));
@@ -188,7 +198,10 @@ fn placement_stands_on_steps_and_moves_off_trunks_and_water() {
         };
         for x in [beside[0] - 1.3, beside[0], beside[0] + 1.3] {
             for z in [beside[2] - 1.3, beside[2], beside[2] + 1.3] {
-                assert!(hole(x.floor() as i32, z.floor() as i32).is_none(), "{beside:?}");
+                assert!(
+                    hole(x.floor() as i32, z.floor() as i32).is_none(),
+                    "{beside:?}"
+                );
             }
         }
     }
@@ -202,47 +215,151 @@ fn mth_dist(a: [f64; 3], b: [f64; 3]) -> f64 {
 fn deflection_keeps_open_ground_and_steps_but_turns_at_trunks_and_walls() {
     let state = relief_fixture();
     let (world, registry) = (&state.world, &state.registry);
-    let ground = |x: i32, z: i32| [f64::from(x) + 0.5, f64::from(height(x, z)), f64::from(z) + 0.5];
+    let ground = |x: i32, z: i32| {
+        [
+            f64::from(x) + 0.5,
+            f64::from(height(x, z)),
+            f64::from(z) + 0.5,
+        ]
+    };
     let east = [0.08, 0.0];
     let south = [0.0, 0.08];
     // Open ground and a one-block step ahead keep the exact drive (physics jumps it).
     let step = ground(5, 3);
-    assert_eq!(deflect(world, registry, step, 0.3, east, east, 1.0, &mut None, 0), east);
+    assert_eq!(
+        deflect(world, registry, step, 0.3, east, east, 1.0, &mut None, 0),
+        east
+    );
     // A trunk ahead turns the drive; both ends are one block away, so `side` decides.
     let before_trunk = ground(3, 5);
-    let turned = deflect(world, registry, before_trunk, 0.3, east, east, 1.0, &mut None, 0);
+    let turned = deflect(
+        world,
+        registry,
+        before_trunk,
+        0.3,
+        east,
+        east,
+        1.0,
+        &mut None,
+        0,
+    );
     assert_ne!(turned, east);
-    assert!(turned[1] > 0.0 && (mc_physics::mth::length2(turned[0], turned[1]) - 0.08).abs() < 1e-12);
-    let other = deflect(world, registry, before_trunk, 0.3, east, east, -1.0, &mut None, 0);
+    assert!(
+        turned[1] > 0.0 && (mc_physics::mth::length2(turned[0], turned[1]) - 0.08).abs() < 1e-12
+    );
+    let other = deflect(
+        world,
+        registry,
+        before_trunk,
+        0.3,
+        east,
+        east,
+        -1.0,
+        &mut None,
+        0,
+    );
     assert!(other[1] < 0.0);
     // A three-block wall (x -6..=2) turns bodies toward its nearer end, whatever
     // `side` says and however the crowd pushes the drive: the line splits.
-    let west_half = deflect(world, registry, ground(-5, -21), 0.3, south, south, -1.0, &mut None, 0);
+    let west_half = deflect(
+        world,
+        registry,
+        ground(-5, -21),
+        0.3,
+        south,
+        south,
+        -1.0,
+        &mut None,
+        0,
+    );
     assert!(west_half[0] < 0.0, "{west_half:?}");
     let pushed = [0.03, 0.074];
-    let east_half = deflect(world, registry, ground(1, -21), 0.3, pushed, south, 1.0, &mut None, 0);
+    let east_half = deflect(
+        world,
+        registry,
+        ground(1, -21),
+        0.3,
+        pushed,
+        south,
+        1.0,
+        &mut None,
+        0,
+    );
     // Lateral dressing toward a slot behind the wall does not pull a body back.
     let dressing = [0.08, 0.0];
-    let held = deflect(world, registry, ground(-5, -21), 0.3, dressing, south, 1.0, &mut None, 0);
+    let held = deflect(
+        world,
+        registry,
+        ground(-5, -21),
+        0.3,
+        dressing,
+        south,
+        1.0,
+        &mut None,
+        0,
+    );
     assert!(held[0] < 0.0, "{held:?}");
     assert!(east_half[0] > 0.0, "{east_half:?}");
     // A body 0.42 short of the wall with a slightly oblique heading (the pose
     // that jammed the movement test): the lateral probes drift along the
     // wall's normal, yet the nearer (west) end still wins.
-    let oblique = deflect(world, registry, [-3.1307, 65.0, -20.7232], 0.3, [0.0, 1.58], [0.21, 19.62], 1.0, &mut None, 0);
+    let oblique = deflect(
+        world,
+        registry,
+        [-3.1307, 65.0, -20.7232],
+        0.3,
+        [0.0, 1.58],
+        [0.21, 19.62],
+        1.0,
+        &mut None,
+        0,
+    );
     assert!(oblique[0] < 0.0, "{oblique:?}");
     // Horses from the stalled movement test. A horse against the trunk at
     // (31, -72) with the oak's canopy (y 68) over its back cannot jump the
     // terrace step to the west (y 67): it goes round the east side.
     let horse = 0.698_242_187_5;
-    let pocket = deflect(world, registry, [30.698, 66.0, -72.698], horse, [0.0, 4.6], [0.8, 23.4], 1.0, &mut None, 0);
+    let pocket = deflect(
+        world,
+        registry,
+        [30.698, 66.0, -72.698],
+        horse,
+        [0.0, 4.6],
+        [0.8, 23.4],
+        1.0,
+        &mut None,
+        0,
+    );
     assert!(pocket[0] > 0.0, "{pocket:?}");
     // A horse grazing the trunk at (40, -72) drops the drift into it, or
     // physics refuses the jump onto the terrace step ahead.
-    let graze = deflect(world, registry, [39.302, 64.0, -70.698], horse, [0.026, 4.6], [0.2, 21.4], 1.0, &mut None, 0);
+    let graze = deflect(
+        world,
+        registry,
+        [39.302, 64.0, -70.698],
+        horse,
+        [0.026, 4.6],
+        [0.2, 21.4],
+        1.0,
+        &mut None,
+        0,
+    );
     assert_eq!(graze, [0.0, 4.6]);
     // A six-deep cave opening ahead is steered around, not walked into.
-    assert_ne!(deflect(world, registry, ground(-20, 19), 0.3, south, south, 1.0, &mut None, 0), south);
+    assert_ne!(
+        deflect(
+            world,
+            registry,
+            ground(-20, 19),
+            0.3,
+            south,
+            south,
+            1.0,
+            &mut None,
+            0
+        ),
+        south
+    );
 }
 
 #[test]
@@ -282,7 +399,12 @@ fn armies_advance_over_relief_to_contact_without_stalls_or_teleports() {
             .formation
             .members
             .iter()
-            .map(|m| state.entities.slot_of(m.id).map(|slot| state.entities.pos(slot)))
+            .map(|m| {
+                state
+                    .entities
+                    .slot_of(m.id)
+                    .map(|slot| state.entities.pos(slot))
+            })
             .collect();
         // A cavalry charge's knockback throws a body up to ~1.4 blocks in a
         // tick; a staging relocation moves it farther.
@@ -321,7 +443,10 @@ fn armies_advance_over_relief_to_contact_without_stalls_or_teleports() {
         }
     }
     assert!(contact.is_some(), "no melee contact over relief");
-    assert!(censused >= 100, "stall census saw only {censused} advancing soldiers");
+    assert!(
+        censused >= 100,
+        "stall census saw only {censused} advancing soldiers"
+    );
 }
 
 /// A soldier who falls into a sinkhole anyway cannot climb out, but the
@@ -363,19 +488,40 @@ fn a_fighter_in_a_sinkhole_does_not_freeze_its_regiment() {
     for _ in 0..200 {
         run_tick(&mut state, &[]);
     }
-    let pit = state.entities.pos(state.entities.slot_of(fallen).expect("the fallen soldier lives"));
-    assert!(pit[1] <= floor + 1.0, "the fallen soldier climbed out: {pit:?}");
-    let leader = state.hostile.battle.formation.regiments[regiment].spec.origin;
+    let pit = state.entities.pos(
+        state
+            .entities
+            .slot_of(fallen)
+            .expect("the fallen soldier lives"),
+    );
+    assert!(
+        pit[1] <= floor + 1.0,
+        "the fallen soldier climbed out: {pit:?}"
+    );
+    let leader = state.hostile.battle.formation.regiments[regiment]
+        .spec
+        .origin;
     let advanced = mth_dist(leader, origin);
-    assert!(advanced >= 4.0, "the regiment waited for its fallen soldier: leader moved {advanced}");
+    assert!(
+        advanced >= 4.0,
+        "the regiment waited for its fallen soldier: leader moved {advanced}"
+    );
     let mut moved: Vec<f64> = others
         .iter()
         .zip(&start)
-        .map(|(&id, &before)| mth_dist(state.entities.pos(state.entities.slot_of(id).unwrap()), before))
+        .map(|(&id, &before)| {
+            mth_dist(
+                state.entities.pos(state.entities.slot_of(id).unwrap()),
+                before,
+            )
+        })
         .collect();
     moved.sort_by(f64::total_cmp);
     let median = moved[moved.len() / 2];
-    assert!(median >= 4.0, "the regiment froze: median soldier moved {median}");
+    assert!(
+        median >= 4.0,
+        "the regiment froze: median soldier moved {median}"
+    );
 }
 
 /// A broken regiment whose flight crosses a cave opening runs round it:
@@ -395,7 +541,10 @@ fn routers_run_round_a_cave_opening_in_their_flight() {
         })
         .expect("an advancing infantry regiment of the second side");
     let r = &formation.regiments[regiment];
-    let ids: Vec<_> = formation.members[r.start..r.start + r.len].iter().map(|m| m.id).collect();
+    let ids: Vec<_> = formation.members[r.start..r.start + r.len]
+        .iter()
+        .map(|m| m.id)
+        .collect();
     // The second side flees +z; put the regiment just south of the 3x3
     // opening (x -20..-18, z 20..22) so its flight runs straight over it.
     for (k, &id) in ids.iter().enumerate() {
@@ -413,11 +562,16 @@ fn routers_run_round_a_cave_opening_in_their_flight() {
     for m in &mut formation.members[r.start..r.start + r.len] {
         m.routing = true;
     }
-    let start: Vec<f64> = ids.iter().map(|&id| state.entities.pos(state.entities.slot_of(id).unwrap())[2]).collect();
+    let start: Vec<f64> = ids
+        .iter()
+        .map(|&id| state.entities.pos(state.entities.slot_of(id).unwrap())[2])
+        .collect();
     for tick in 0..200 {
         run_tick(&mut state, &[]);
         for &id in &ids {
-            let Some(slot) = state.entities.slot_of(id) else { continue };
+            let Some(slot) = state.entities.slot_of(id) else {
+                continue;
+            };
             let p = state.entities.pos(slot);
             let (x, z) = (p[0].floor() as i32, p[2].floor() as i32);
             assert!(
@@ -429,7 +583,12 @@ fn routers_run_round_a_cave_opening_in_their_flight() {
     let mut fled: Vec<f64> = ids
         .iter()
         .zip(&start)
-        .filter_map(|(&id, &z)| state.entities.slot_of(id).map(|slot| state.entities.pos(slot)[2] - z))
+        .filter_map(|(&id, &z)| {
+            state
+                .entities
+                .slot_of(id)
+                .map(|slot| state.entities.pos(slot)[2] - z)
+        })
         .collect();
     fled.sort_by(f64::total_cmp);
     let median = fled[fled.len() / 2];
@@ -450,11 +609,26 @@ fn bodies_never_walk_from_open_ground_under_a_terrain_roof() {
     }
     state.world.fold_overlay();
     let (world, registry) = (&state.world, &state.registry);
-    let ground = |x: i32, z: i32| [f64::from(x) + 0.5, f64::from(height(x, z)), f64::from(z) + 0.5];
+    let ground = |x: i32, z: i32| {
+        [
+            f64::from(x) + 0.5,
+            f64::from(height(x, z)),
+            f64::from(z) + 0.5,
+        ]
+    };
     let east = [1.0, 0.0];
-    assert!(!crossable(world, registry, ground(105, -99), 0.3, east), "walked under the roof");
-    assert!(crossable(world, registry, ground(105, -97), 0.3, east), "open ground beside it");
-    assert!(crossable(world, registry, ground(108, -99), 0.3, east), "a body under it walks out");
+    assert!(
+        !crossable(world, registry, ground(105, -99), 0.3, east),
+        "walked under the roof"
+    );
+    assert!(
+        crossable(world, registry, ground(105, -97), 0.3, east),
+        "open ground beside it"
+    );
+    assert!(
+        crossable(world, registry, ground(108, -99), 0.3, east),
+        "a body under it walks out"
+    );
 }
 
 /// A body under rock (pushed or knocked into a cave mouth) walks out toward
@@ -473,15 +647,61 @@ fn a_body_under_a_terrain_roof_walks_out_toward_open_sky() {
     // Two blocks in from the roof's west edge, five from its east edge.
     let inside = [107.5, f64::from(height(107, -99)), -98.5];
     let east = [0.079, 0.0];
-    let out = deflect(world, registry, inside, 0.3, east, [20.0, 0.0], 1.0, &mut None, 0);
+    let out = deflect(
+        world,
+        registry,
+        inside,
+        0.3,
+        east,
+        [20.0, 0.0],
+        1.0,
+        &mut None,
+        0,
+    );
     assert!(out[0] < 0.0, "went deeper under the roof: {out:?}");
     // A body holding its slot under the roof (no drive) walks out too.
-    let held = deflect(world, registry, inside, 0.3, [0.0, 0.0], [0.0, 0.0], 1.0, &mut None, 0);
+    let held = deflect(
+        world,
+        registry,
+        inside,
+        0.3,
+        [0.0, 0.0],
+        [0.0, 0.0],
+        1.0,
+        &mut None,
+        0,
+    );
     assert!(held[0] < -0.05, "stayed under the roof: {held:?}");
     // Under open sky the same drive, or no drive, is returned exactly.
     let open = [107.5, f64::from(height(107, -94)), -93.5];
-    assert_eq!(deflect(world, registry, open, 0.3, east, [20.0, 0.0], 1.0, &mut None, 0), east);
-    assert_eq!(deflect(world, registry, open, 0.3, [0.0, 0.0], [20.0, 0.0], 1.0, &mut None, 0), [0.0, 0.0]);
+    assert_eq!(
+        deflect(
+            world,
+            registry,
+            open,
+            0.3,
+            east,
+            [20.0, 0.0],
+            1.0,
+            &mut None,
+            0
+        ),
+        east
+    );
+    assert_eq!(
+        deflect(
+            world,
+            registry,
+            open,
+            0.3,
+            [0.0, 0.0],
+            [20.0, 0.0],
+            1.0,
+            &mut None,
+            0
+        ),
+        [0.0, 0.0]
+    );
 }
 
 /// The overhang where a fugitive stayed at the end of the d0cabbab and
@@ -491,13 +711,69 @@ fn a_body_under_a_terrain_roof_walks_out_toward_open_sky() {
 /// stood at (-182.6, 85, 22.8), under dirt at 88..=91. North of it, (-184,
 /// 23) and (-183, 23) drop past y 83; (-182, 23) is a one-block step up.
 const POCKET: [[&str; 7]; 7] = [
-    ["############.", "############.", ".###########.", "..##########.", "..##########.", ".###########.", "############."],
-    ["############.", "#.##########.", "..##########.", "...#########.", "....########.", "...#########.", "..##########."],
-    ["###########..", "##..#######..", "##..#######..", "#....######..", "......#####..", ".....######..", "....#######.."],
-    ["####.#####...", "####.####....", "###..####....", "##...####....", "##...####....", "#....####....", ".....####...."],
-    ["####.........", "##...........", ".............", ".............", "###..........", "##...........", "##..........."],
-    [".............", ".............", ".............", ".............", ".............", "#............", "##..........."],
-    [".............", ".............", ".............", ".............", "#............", "##...........", "###.........."],
+    [
+        "############.",
+        "############.",
+        ".###########.",
+        "..##########.",
+        "..##########.",
+        ".###########.",
+        "############.",
+    ],
+    [
+        "############.",
+        "#.##########.",
+        "..##########.",
+        "...#########.",
+        "....########.",
+        "...#########.",
+        "..##########.",
+    ],
+    [
+        "###########..",
+        "##..#######..",
+        "##..#######..",
+        "#....######..",
+        "......#####..",
+        ".....######..",
+        "....#######..",
+    ],
+    [
+        "####.#####...",
+        "####.####....",
+        "###..####....",
+        "##...####....",
+        "##...####....",
+        "#....####....",
+        ".....####....",
+    ],
+    [
+        "####.........",
+        "##...........",
+        ".............",
+        ".............",
+        "###..........",
+        "##...........",
+        "##...........",
+    ],
+    [
+        ".............",
+        ".............",
+        ".............",
+        ".............",
+        ".............",
+        "#............",
+        "##...........",
+    ],
+    [
+        ".............",
+        ".............",
+        ".............",
+        ".............",
+        "#............",
+        "##...........",
+        "###..........",
+    ],
 ];
 
 /// A body under an overhang whose nearest open columns are drops walks out
@@ -515,7 +791,9 @@ fn a_body_under_an_overhang_walks_out_by_the_step_not_the_drop() {
             for y in FEET - 7..=FEET + 12 {
                 let cell = column.as_bytes().get((y - FEET + 2).max(0) as usize);
                 let solid = y == FEET - 7 || cell == Some(&b'#');
-                state.world.set_block(x, y, z, if solid { stone } else { air });
+                state
+                    .world
+                    .set_block(x, y, z, if solid { stone } else { air });
             }
         }
     }
@@ -523,27 +801,54 @@ fn a_body_under_an_overhang_walks_out_by_the_step_not_the_drop() {
     let (world, registry) = (&state.world, &state.registry);
     let mut pos = [143.4, f64::from(FEET), -99.2];
     let out = exit(world, registry, pos).expect("under the overhang");
-    let target = ((pos[0] + out[0]).floor() as i32, (pos[2] + out[1]).floor() as i32);
-    assert_eq!(target, (144, -99), "the way out is the step, not the drop: {out:?}");
+    let target = (
+        (pos[0] + out[0]).floor() as i32,
+        (pos[2] + out[1]).floor() as i32,
+    );
+    assert_eq!(
+        target,
+        (144, -99),
+        "the way out is the step, not the drop: {out:?}"
+    );
     // Holding its slot (no drive), the body walks out and up the step.
     let solid = |p: [f64; 3]| {
         world
-            .physics_block_at(p[0].floor() as i32, p[1].floor() as i32, p[2].floor() as i32)
+            .physics_block_at(
+                p[0].floor() as i32,
+                p[1].floor() as i32,
+                p[2].floor() as i32,
+            )
             .is_none_or(|state| registry.materials.classify(state) == BlockMaterial::Solid)
     };
     for _ in 0..40 {
         if exit(world, registry, pos).is_none() {
             break;
         }
-        let drive = deflect(world, registry, pos, 0.3, [0.0, 0.0], [0.0, 0.0], 1.0, &mut None, 0);
+        let drive = deflect(
+            world,
+            registry,
+            pos,
+            0.3,
+            [0.0, 0.0],
+            [0.0, 0.0],
+            1.0,
+            &mut None,
+            0,
+        );
         pos[0] += drive[0] * mc_physics::TICK_SECONDS;
         pos[2] += drive[1] * mc_physics::TICK_SECONDS;
         if solid(pos) {
             pos[1] += 1.0;
         }
-        assert!(solid([pos[0], pos[1] - 1.0, pos[2]]), "walked over the drop at {pos:?}");
+        assert!(
+            solid([pos[0], pos[1] - 1.0, pos[2]]),
+            "walked over the drop at {pos:?}"
+        );
     }
-    assert!(exit(world, registry, pos).is_none(), "still under the overhang at {pos:?}");
+    assert!(
+        exit(world, registry, pos).is_none(),
+        "still under the overhang at {pos:?}"
+    );
     assert_eq!(pos[1], f64::from(FEET + 1), "out by the step: {pos:?}");
 }
 
@@ -560,14 +865,20 @@ fn dismounted_riders_run_round_a_cave_opening_in_their_flight() {
         .position(|r| r.spec.faction == 2 && r.spec.frontage > 1.0)
         .expect("a cavalry regiment of the second side");
     let r = &formation.regiments[regiment];
-    let ids: Vec<_> = formation.members[r.start..r.start + r.len].iter().map(|m| m.id).collect();
+    let ids: Vec<_> = formation.members[r.start..r.start + r.len]
+        .iter()
+        .map(|m| m.id)
+        .collect();
     assert!(ids.len() >= 3, "too few riders: {}", ids.len());
     // The second side flees +z; three of the riders' files run straight over
     // the 3x3 opening (x -20..-18, z 20..22).
     for (k, &id) in ids.iter().enumerate() {
         crate::mounts::dismount(&mut state, id);
         let slot = state.entities.slot_of(id).unwrap();
-        assert!(state.entities.row(slot).entity_life.mount.vehicle.is_none(), "still riding");
+        assert!(
+            state.entities.row(slot).entity_life.mount.vehicle.is_none(),
+            "still riding"
+        );
         let (x, z) = (-21.5 + k as f64, 12.5);
         let Some(Ok(y)) = support(&state.world, &state.registry, [x, 0.0, z], 0.3) else {
             panic!("no ground at {x} {z}");
@@ -580,11 +891,16 @@ fn dismounted_riders_run_round_a_cave_opening_in_their_flight() {
     for m in &mut formation.members[r.start..r.start + r.len] {
         m.routing = true;
     }
-    let start: Vec<f64> = ids.iter().map(|&id| state.entities.pos(state.entities.slot_of(id).unwrap())[2]).collect();
+    let start: Vec<f64> = ids
+        .iter()
+        .map(|&id| state.entities.pos(state.entities.slot_of(id).unwrap())[2])
+        .collect();
     for tick in 0..200 {
         run_tick(&mut state, &[]);
         for &id in &ids {
-            let Some(slot) = state.entities.slot_of(id) else { continue };
+            let Some(slot) = state.entities.slot_of(id) else {
+                continue;
+            };
             let p = state.entities.pos(slot);
             let (x, z) = (p[0].floor() as i32, p[2].floor() as i32);
             assert!(
@@ -596,7 +912,12 @@ fn dismounted_riders_run_round_a_cave_opening_in_their_flight() {
     let mut fled: Vec<f64> = ids
         .iter()
         .zip(&start)
-        .filter_map(|(&id, &z)| state.entities.slot_of(id).map(|slot| state.entities.pos(slot)[2] - z))
+        .filter_map(|(&id, &z)| {
+            state
+                .entities
+                .slot_of(id)
+                .map(|slot| state.entities.pos(slot)[2] - z)
+        })
         .collect();
     fled.sort_by(f64::total_cmp);
     let median = fled[fled.len() / 2];
@@ -639,10 +960,15 @@ fn gully(state: &mut TickState) {
     let (stone, air) = (state.registry.states.stone, state.registry.states.air);
     for (dz, row) in GULLY.iter().enumerate() {
         for (dx, &top) in row.iter().enumerate() {
-            let (x, z) = (8 + dx as i32 + GULLY_SHIFT[0], 233 + dz as i32 + GULLY_SHIFT[2]);
+            let (x, z) = (
+                8 + dx as i32 + GULLY_SHIFT[0],
+                233 + dz as i32 + GULLY_SHIFT[2],
+            );
             let top = top + GULLY_SHIFT[1];
             for y in 60..top + 10 {
-                state.world.set_block(x, y, z, if y < top { stone } else { air });
+                state
+                    .world
+                    .set_block(x, y, z, if y < top { stone } else { air });
             }
         }
     }
@@ -667,14 +993,19 @@ fn fleeing_riders_climb_out_of_a_gully_end() {
         .position(|r| r.spec.faction == 2 && r.spec.frontage > 1.0)
         .expect("a cavalry regiment of the second side");
     let r = &formation.regiments[regiment];
-    let ids: Vec<_> = formation.members[r.start..r.start + r.len].iter().map(|m| m.id).collect();
+    let ids: Vec<_> = formation.members[r.start..r.start + r.len]
+        .iter()
+        .map(|m| m.id)
+        .collect();
     let pocket = [8.0, 102.3];
     let mut horses = Vec::new();
     for (k, &id) in ids.iter().enumerate() {
         let horse = crate::mounts::vehicle(&state, id).expect("a mounted rider");
         let horse_id = state.entities.body(horse).id;
         // Where the r5 horses stood: pressed into the shelf's south-east corner.
-        state.entities.set_pos(horse, [pocket[0] + 0.1 * (k % 4) as f64, 70.0, pocket[1]]);
+        state
+            .entities
+            .set_pos(horse, [pocket[0] + 0.1 * (k % 4) as f64, 70.0, pocket[1]]);
         crate::mounts::sync_rider(&mut state, horse);
         horses.push(horse_id);
     }
@@ -689,10 +1020,20 @@ fn fleeing_riders_climb_out_of_a_gully_end() {
     }
     let inside: Vec<_> = horses
         .iter()
-        .filter_map(|&id| state.entities.slot_of(id).map(|slot| state.entities.pos(slot)))
-        .filter(|p| p[1] < 72.0 && mc_physics::mth::length2(p[0] - pocket[0], p[2] - pocket[1]) < 3.0)
+        .filter_map(|&id| {
+            state
+                .entities
+                .slot_of(id)
+                .map(|slot| state.entities.pos(slot))
+        })
+        .filter(|p| {
+            p[1] < 72.0 && mc_physics::mth::length2(p[0] - pocket[0], p[2] - pocket[1]) < 3.0
+        })
         .collect();
-    assert!(inside.is_empty(), "riders still boxed in the gully end: {inside:?}");
+    assert!(
+        inside.is_empty(),
+        "riders still boxed in the gully end: {inside:?}"
+    );
 }
 
 /// The G1 site's cave tunnel under an undercut cliff where 14 red foot
@@ -701,18 +1042,210 @@ fn fleeing_riders_climb_out_of_a_gully_end() {
 /// from `receipts/BvReliefBattle/cave-piles/probe.json`. The tunnel (feet 86-87,
 /// under 4-6 blocks of rock) opens east onto a valley floor at x -70..-68.
 const SITE_A: [[&str; 15]; 12] = [
-    ["###########...", "###########...", "###########...", "############..", "############..", "############..", "############..", "############..", "############..", "############..", "############..", "############..", "############..", "############..", "############.."],
-    ["###########...", "###########...", "###########...", "###########...", "###########...", "############..", "############..", "############..", "############..", "############..", "###########...", "###########...", "############..", "############..", "############.."],
-    ["###########...", "###########...", "###########...", "###########...", "###########...", "###########...", "############..", "###########...", "###########...", "###########...", "###########...", "###########...", "###########...", "###########...", "###########..."],
-    ["##########....", "###########...", "###########...", "###########...", "###########...", "###########...", "###########...", "#####.#####...", "##########....", "##########....", "##########....", "########......", "#########.....", "##########....", "##########...."],
-    ["#..#######....", "##.#######....", "##..######....", "##..#######...", "##..#######...", "###..######...", "###..######...", "###...####....", "###...####....", "###..####.....", "###...........", "###...........", "###...........", "###...........", "####.........."],
-    ["#...#####.....", "#...#####.....", "#...#####.....", "#...#####.....", "#....#####....", "##...#####....", "##....####....", "##...####.....", "##...####.....", "##............", "##............", "##............", "###...........", "###...........", "####.........."],
-    ["#...####......", "#...####......", "#...####......", "#...####......", "#...####......", "#...####......", "#....####.....", "#...####......", "##............", "##............", "##............", "###...........", "###...........", "####..........", "#####........."],
-    ["#.####........", "#..####.......", "#..####.......", "#..####.......", "#..####.......", "#..####.......", "##.####.......", "##.####.......", "##............", "##............", "###...........", "###...........", "###...........", "####..........", "######........"],
-    ["#####.........", "#.####........", "#.####........", "#.####........", "######........", "######........", "#####.........", "#####.........", "##............", "###...........", "###...........", "###...........", "####..........", "####..........", "####.........."],
-    ["#####.........", "#####.........", "#####.........", "#####.........", "#####.........", "#####.........", "#####.........", "#####.........", "##............", "###...........", "###...........", "####..........", "####..........", "####..........", "####.........."],
-    ["#####.........", "#####.........", "#####.........", "#####.........", "#####.........", "####..........", "####..........", "####..........", "###...........", "###...........", "###...........", "####..........", "####..........", "####..........", "####.........."],
-    ["####..........", "####..........", "####..........", "####..........", "####..........", "####..........", "####..........", "####..........", "####..........", "###...........", "####..........", "####..........", "###...........", "###...........", "###..........."],
+    [
+        "###########...",
+        "###########...",
+        "###########...",
+        "############..",
+        "############..",
+        "############..",
+        "############..",
+        "############..",
+        "############..",
+        "############..",
+        "############..",
+        "############..",
+        "############..",
+        "############..",
+        "############..",
+    ],
+    [
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+        "############..",
+        "############..",
+        "############..",
+        "############..",
+        "############..",
+        "###########...",
+        "###########...",
+        "############..",
+        "############..",
+        "############..",
+    ],
+    [
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+        "############..",
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+    ],
+    [
+        "##########....",
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+        "###########...",
+        "#####.#####...",
+        "##########....",
+        "##########....",
+        "##########....",
+        "########......",
+        "#########.....",
+        "##########....",
+        "##########....",
+    ],
+    [
+        "#..#######....",
+        "##.#######....",
+        "##..######....",
+        "##..#######...",
+        "##..#######...",
+        "###..######...",
+        "###..######...",
+        "###...####....",
+        "###...####....",
+        "###..####.....",
+        "###...........",
+        "###...........",
+        "###...........",
+        "###...........",
+        "####..........",
+    ],
+    [
+        "#...#####.....",
+        "#...#####.....",
+        "#...#####.....",
+        "#...#####.....",
+        "#....#####....",
+        "##...#####....",
+        "##....####....",
+        "##...####.....",
+        "##...####.....",
+        "##............",
+        "##............",
+        "##............",
+        "###...........",
+        "###...........",
+        "####..........",
+    ],
+    [
+        "#...####......",
+        "#...####......",
+        "#...####......",
+        "#...####......",
+        "#...####......",
+        "#...####......",
+        "#....####.....",
+        "#...####......",
+        "##............",
+        "##............",
+        "##............",
+        "###...........",
+        "###...........",
+        "####..........",
+        "#####.........",
+    ],
+    [
+        "#.####........",
+        "#..####.......",
+        "#..####.......",
+        "#..####.......",
+        "#..####.......",
+        "#..####.......",
+        "##.####.......",
+        "##.####.......",
+        "##............",
+        "##............",
+        "###...........",
+        "###...........",
+        "###...........",
+        "####..........",
+        "######........",
+    ],
+    [
+        "#####.........",
+        "#.####........",
+        "#.####........",
+        "#.####........",
+        "######........",
+        "######........",
+        "#####.........",
+        "#####.........",
+        "##............",
+        "###...........",
+        "###...........",
+        "###...........",
+        "####..........",
+        "####..........",
+        "####..........",
+    ],
+    [
+        "#####.........",
+        "#####.........",
+        "#####.........",
+        "#####.........",
+        "#####.........",
+        "#####.........",
+        "#####.........",
+        "#####.........",
+        "##............",
+        "###...........",
+        "###...........",
+        "####..........",
+        "####..........",
+        "####..........",
+        "####..........",
+    ],
+    [
+        "#####.........",
+        "#####.........",
+        "#####.........",
+        "#####.........",
+        "#####.........",
+        "####..........",
+        "####..........",
+        "####..........",
+        "###...........",
+        "###...........",
+        "###...........",
+        "####..........",
+        "####..........",
+        "####..........",
+        "####..........",
+    ],
+    [
+        "####..........",
+        "####..........",
+        "####..........",
+        "####..........",
+        "####..........",
+        "####..........",
+        "####..........",
+        "####..........",
+        "####..........",
+        "###...........",
+        "####..........",
+        "####..........",
+        "###...........",
+        "###...........",
+        "###...........",
+    ],
 ];
 
 /// Builds [`SITE_A`] into the relief fixture: real (x, y, z) + SITE_A_SHIFT.
@@ -722,11 +1255,16 @@ fn site_a(state: &mut TickState) {
     let (stone, air) = (state.registry.states.stone, state.registry.states.air);
     for (dz, row) in SITE_A.iter().enumerate() {
         for (dx, column) in row.iter().enumerate() {
-            let (x, z) = (-78 + dx as i32 + SITE_A_SHIFT[0], 256 + dz as i32 + SITE_A_SHIFT[2]);
+            let (x, z) = (
+                -78 + dx as i32 + SITE_A_SHIFT[0],
+                256 + dz as i32 + SITE_A_SHIFT[2],
+            );
             for y in 58..=90 {
                 let cell = (y - 84 - SITE_A_SHIFT[1]) as usize;
                 let solid = y < 84 + SITE_A_SHIFT[1] || column.as_bytes().get(cell) == Some(&b'#');
-                state.world.set_block(x, y, z, if solid { stone } else { air });
+                state
+                    .world
+                    .set_block(x, y, z, if solid { stone } else { air });
             }
         }
     }
@@ -742,10 +1280,21 @@ fn a_body_in_the_r7_tunnel_pile_walks_out() {
     let (world, registry) = (&state.world, &state.registry);
     let pile = [-72.7 + 178.0, 67.0, 260.3 - 156.0];
     let mouth = [-69.5 + 178.0 - pile[0], 262.5 - 156.0 - pile[2]];
-    for drive in [[-1.58, -1.58], [0.0, -2.0], [-2.0, 0.0], [1.58, 1.58], [0.0, 0.0], [-5.6, 0.0]] {
+    for drive in [
+        [-1.58, -1.58],
+        [0.0, -2.0],
+        [-2.0, 0.0],
+        [1.58, 1.58],
+        [0.0, 0.0],
+        [-5.6, 0.0],
+    ] {
         let out = deflect(world, registry, pile, 0.3, drive, drive, 1.0, &mut None, 0);
-        let along = (out[0] * mouth[0] + out[1] * mouth[1]) / mc_physics::mth::length2(mouth[0], mouth[1]);
-        assert!(along > 1.0, "drive {drive:?} -> {out:?}: not walking out (along {along})");
+        let along =
+            (out[0] * mouth[0] + out[1] * mouth[1]) / mc_physics::mth::length2(mouth[0], mouth[1]);
+        assert!(
+            along > 1.0,
+            "drive {drive:?} -> {out:?}: not walking out (along {along})"
+        );
     }
 }
 
@@ -762,13 +1311,24 @@ fn foot_in_the_r7_tunnel_pile_leave_it() {
         .position(|r| r.spec.faction == 1 && r.spec.frontage <= 1.0)
         .expect("a foot regiment of the first side");
     let r = &formation.regiments[regiment];
-    let ids: Vec<_> = formation.members[r.start..r.start + r.len].iter().map(|m| m.id).take(14).collect();
+    let ids: Vec<_> = formation.members[r.start..r.start + r.len]
+        .iter()
+        .map(|m| m.id)
+        .take(14)
+        .collect();
     let pile = [-72.7 + 178.0, 67.0, 260.3 - 156.0];
     // Packed as in r7: identical to 0.1 block, never exactly coincident.
     for (k, &id) in ids.iter().enumerate() {
         let slot = state.entities.slot_of(id).unwrap();
         let k = k as f64;
-        state.entities.set_pos(slot, [pile[0] + 0.004 * (k % 4.0), pile[1], pile[2] + 0.004 * (k / 4.0).floor()]);
+        state.entities.set_pos(
+            slot,
+            [
+                pile[0] + 0.004 * (k % 4.0),
+                pile[1],
+                pile[2] + 0.004 * (k / 4.0).floor(),
+            ],
+        );
     }
     for _ in 0..300 {
         run_tick(&mut state, &[]);
@@ -776,10 +1336,21 @@ fn foot_in_the_r7_tunnel_pile_leave_it() {
     let (world, registry) = (&state.world, &state.registry);
     let inside: Vec<_> = ids
         .iter()
-        .filter_map(|&id| state.entities.slot_of(id).map(|slot| state.entities.pos(slot)))
+        .filter_map(|&id| {
+            state
+                .entities
+                .slot_of(id)
+                .map(|slot| state.entities.pos(slot))
+        })
         .filter(|p| {
             let feet = (p[1] + 1e-3).floor() as i32;
-            cover(world, registry, p[0].floor() as i32, p[2].floor() as i32, feet + 2) > 0
+            cover(
+                world,
+                registry,
+                p[0].floor() as i32,
+                p[2].floor() as i32,
+                feet + 2,
+            ) > 0
         })
         .collect();
     assert!(inside.is_empty(), "foot still in the tunnel: {inside:?}");
@@ -798,7 +1369,9 @@ fn a_boxed_in_body_on_foot_stands_at_a_cave_mouth() {
                 let shaft = (x, z) == (122, -118) && y >= 66;
                 let tunnel = (x, z) == (122, -119) && (66..=67).contains(&y);
                 let solid = y <= 72 && !shaft && !tunnel;
-                state.world.set_block(x, y, z, if solid { stone } else { air });
+                state
+                    .world
+                    .set_block(x, y, z, if solid { stone } else { air });
             }
         }
     }
@@ -806,8 +1379,16 @@ fn a_boxed_in_body_on_foot_stands_at_a_cave_mouth() {
     let (world, registry) = (&state.world, &state.registry);
     let pos = [122.5, 66.0, -117.5];
     let north = [0.0, -1.58];
-    assert_eq!(deflect_foot(world, registry, pos, 0.3, north, north, 1.0), [0.0, 0.0], "walked into the mouth");
-    assert_eq!(deflect(world, registry, pos, 0.3, north, north, 1.0, &mut None, 0), north, "a rider keeps pressing");
+    assert_eq!(
+        deflect_foot(world, registry, pos, 0.3, north, north, 1.0),
+        [0.0, 0.0],
+        "walked into the mouth"
+    );
+    assert_eq!(
+        deflect(world, registry, pos, 0.3, north, north, 1.0, &mut None, 0),
+        north,
+        "a rider keeps pressing"
+    );
 }
 
 /// One horse riding at a fixed point under [`deflect`]: it stands on the
@@ -827,8 +1408,22 @@ fn ride_at(state: &TickState, start: [f64; 3], foe: [f64; 3], ticks: usize) -> [
             break;
         }
         let drive = to.map(|v| v / length * 4.6);
-        let out = deflect(world, registry, pos, horse, drive, drive, 1.0, &mut detour, tick as u64);
-        let axes = if out[0].abs() < out[1].abs() { [1, 0] } else { [0, 1] };
+        let out = deflect(
+            world,
+            registry,
+            pos,
+            horse,
+            drive,
+            drive,
+            1.0,
+            &mut detour,
+            tick as u64,
+        );
+        let axes = if out[0].abs() < out[1].abs() {
+            [1, 0]
+        } else {
+            [0, 1]
+        };
         for axis in axes {
             if out[axis] == 0.0 {
                 continue;
@@ -857,7 +1452,11 @@ fn a_horse_rides_down_the_notch_staircase_to_its_foe() {
     let mut state = relief_fixture();
     gully(&mut state);
     let foe = in_gully([21.27, 90.0, 237.26]);
-    for start in [[18.106, 95.0, 244.027], [17.698, 95.0, 244.302], [18.046, 95.0, 243.865]] {
+    for start in [
+        [18.106, 95.0, 244.027],
+        [17.698, 95.0, 244.302],
+        [18.046, 95.0, 243.865],
+    ] {
         let pos = ride_at(&state, in_gully(start), foe, 200);
         let near = mc_physics::mth::length2(foe[0] - pos[0], foe[2] - pos[2]);
         assert!(
@@ -875,31 +1474,106 @@ fn a_horse_rides_down_the_notch_staircase_to_its_foe() {
 /// two or three blocks high from x -182 to -169 and one block at x -168 and
 /// x -184/-183, where the hillside to the north is climbed.
 const EDGE: [[i32; 25]; 25] = [
-    [94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94],
-    [95, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94],
-    [95, 94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94],
-    [95, 95, 94, 94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94],
-    [95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 95, 95],
-    [96, 95, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95],
-    [96, 96, 96, 96, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95],
-    [98, 97, 97, 96, 96, 96, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 96, 96, 95],
-    [99, 99, 98, 97, 96, 96, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96],
-    [101, 100, 100, 100, 99, 97, 97, 96, 96, 96, 96, 96, 95, 95, 95, 95, 96, 96, 96, 96, 96, 97, 98, 97, 97],
-    [102, 102, 101, 100, 98, 98, 99, 98, 98, 97, 97, 96, 96, 96, 96, 96, 96, 96, 97, 98, 99, 99, 100, 99, 99],
-    [103, 102, 100, 98, 101, 101, 100, 100, 99, 99, 98, 98, 98, 97, 97, 97, 98, 98, 98, 99, 100, 101, 101, 101, 100],
-    [102, 100, 103, 103, 102, 102, 101, 101, 101, 100, 100, 99, 99, 99, 98, 99, 99, 99, 100, 100, 101, 101, 102, 102, 101],
-    [105, 105, 104, 104, 104, 103, 103, 103, 103, 102, 102, 102, 101, 101, 101, 101, 101, 101, 101, 102, 102, 102, 103, 102, 102],
-    [107, 107, 107, 106, 105, 105, 104, 104, 104, 104, 104, 103, 103, 102, 102, 102, 102, 102, 102, 103, 103, 103, 103, 103, 103],
-    [109, 108, 108, 108, 107, 107, 106, 106, 106, 105, 105, 104, 104, 103, 103, 103, 103, 103, 103, 103, 103, 104, 104, 103, 103],
-    [110, 109, 109, 109, 109, 108, 108, 107, 107, 107, 107, 106, 105, 104, 104, 104, 104, 104, 104, 104, 104, 104, 104, 104, 104],
-    [111, 111, 110, 110, 110, 109, 109, 109, 108, 108, 108, 108, 107, 106, 106, 106, 106, 106, 105, 106, 106, 106, 106, 105, 105],
-    [111, 111, 111, 111, 111, 110, 110, 110, 109, 109, 109, 109, 109, 108, 108, 108, 108, 108, 108, 108, 108, 108, 108, 107, 107],
-    [111, 111, 111, 111, 111, 111, 110, 110, 110, 110, 110, 110, 110, 110, 110, 109, 109, 109, 109, 109, 109, 109, 109, 109, 108],
-    [111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 110, 109],
-    [111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 110, 110, 110, 110, 110],
-    [111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 110],
-    [111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111],
-    [111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111],
+    [
+        94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94,
+        94, 94,
+    ],
+    [
+        95, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94,
+        94, 94,
+    ],
+    [
+        95, 94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94,
+        94, 94,
+    ],
+    [
+        95, 95, 94, 94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94,
+        94, 94,
+    ],
+    [
+        95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94,
+        95, 95,
+    ],
+    [
+        96, 95, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95,
+        95, 95,
+    ],
+    [
+        96, 96, 96, 96, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95,
+        95, 95,
+    ],
+    [
+        98, 97, 97, 96, 96, 96, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 96,
+        96, 95,
+    ],
+    [
+        99, 99, 98, 97, 96, 96, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96,
+        96, 96,
+    ],
+    [
+        101, 100, 100, 100, 99, 97, 97, 96, 96, 96, 96, 96, 95, 95, 95, 95, 96, 96, 96, 96, 96, 97,
+        98, 97, 97,
+    ],
+    [
+        102, 102, 101, 100, 98, 98, 99, 98, 98, 97, 97, 96, 96, 96, 96, 96, 96, 96, 97, 98, 99, 99,
+        100, 99, 99,
+    ],
+    [
+        103, 102, 100, 98, 101, 101, 100, 100, 99, 99, 98, 98, 98, 97, 97, 97, 98, 98, 98, 99, 100,
+        101, 101, 101, 100,
+    ],
+    [
+        102, 100, 103, 103, 102, 102, 101, 101, 101, 100, 100, 99, 99, 99, 98, 99, 99, 99, 100,
+        100, 101, 101, 102, 102, 101,
+    ],
+    [
+        105, 105, 104, 104, 104, 103, 103, 103, 103, 102, 102, 102, 101, 101, 101, 101, 101, 101,
+        101, 102, 102, 102, 103, 102, 102,
+    ],
+    [
+        107, 107, 107, 106, 105, 105, 104, 104, 104, 104, 104, 103, 103, 102, 102, 102, 102, 102,
+        102, 103, 103, 103, 103, 103, 103,
+    ],
+    [
+        109, 108, 108, 108, 107, 107, 106, 106, 106, 105, 105, 104, 104, 103, 103, 103, 103, 103,
+        103, 103, 103, 104, 104, 103, 103,
+    ],
+    [
+        110, 109, 109, 109, 109, 108, 108, 107, 107, 107, 107, 106, 105, 104, 104, 104, 104, 104,
+        104, 104, 104, 104, 104, 104, 104,
+    ],
+    [
+        111, 111, 110, 110, 110, 109, 109, 109, 108, 108, 108, 108, 107, 106, 106, 106, 106, 106,
+        105, 106, 106, 106, 106, 105, 105,
+    ],
+    [
+        111, 111, 111, 111, 111, 110, 110, 110, 109, 109, 109, 109, 109, 108, 108, 108, 108, 108,
+        108, 108, 108, 108, 108, 107, 107,
+    ],
+    [
+        111, 111, 111, 111, 111, 111, 110, 110, 110, 110, 110, 110, 110, 110, 110, 109, 109, 109,
+        109, 109, 109, 109, 109, 109, 108,
+    ],
+    [
+        111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 110, 110, 110, 110, 110, 110, 110, 110,
+        110, 110, 110, 110, 110, 110, 109,
+    ],
+    [
+        111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111,
+        111, 111, 110, 110, 110, 110, 110,
+    ],
+    [
+        111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111,
+        111, 111, 111, 111, 111, 111, 110,
+    ],
+    [
+        111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111,
+        111, 111, 111, 111, 111, 111, 111,
+    ],
+    [
+        111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111,
+        111, 111, 111, 111, 111, 111, 111,
+    ],
 ];
 
 /// Real (x, y, z) to fixture for [`EDGE`].
@@ -909,10 +1583,15 @@ fn edge(state: &mut TickState) {
     let (stone, air) = (state.registry.states.stone, state.registry.states.air);
     for (dz, row) in EDGE.iter().enumerate() {
         for (dx, &top) in row.iter().enumerate() {
-            let (x, z) = (-186 + dx as i32 + EDGE_SHIFT[0], 304 + dz as i32 + EDGE_SHIFT[2]);
+            let (x, z) = (
+                -186 + dx as i32 + EDGE_SHIFT[0],
+                304 + dz as i32 + EDGE_SHIFT[2],
+            );
             let top = top + EDGE_SHIFT[1];
             for y in 55..top + 12 {
-                state.world.set_block(x, y, z, if y < top { stone } else { air });
+                state
+                    .world
+                    .set_block(x, y, z, if y < top { stone } else { air });
             }
         }
     }
@@ -929,7 +1608,11 @@ fn a_body_walks_along_a_riser_to_its_open_end() {
     edge(&mut state);
     let (world, registry) = (&state.world, &state.registry);
     let at = |real: [f64; 3]| [0, 1, 2].map(|axis| real[axis] + f64::from(EDGE_SHIFT[axis]));
-    for start in [[-174.3, 99.0, 316.7], [-173.0, 99.0, 316.7], [-175.2, 99.0, 316.7]] {
+    for start in [
+        [-174.3, 99.0, 316.7],
+        [-173.0, 99.0, 316.7],
+        [-175.2, 99.0, 316.7],
+    ] {
         let mut pos = at(start);
         for _ in 0..300 {
             let drive = [0.0, 4.0];
@@ -947,7 +1630,10 @@ fn a_body_walks_along_a_riser_to_its_open_end() {
             }
         }
         let real = [0, 1, 2].map(|axis| pos[axis] - f64::from(EDGE_SHIFT[axis]));
-        assert!(real[2] > 317.5, "from {start:?} the body stayed below the riser at {real:?}");
+        assert!(
+            real[2] > 317.5,
+            "from {start:?} the body stayed below the riser at {real:?}"
+        );
     }
 }
 
@@ -959,49 +1645,204 @@ fn a_body_walks_along_a_riser_to_its_open_end() {
 /// z 313..=317, two blocks over ground 94; ground rises to 95 north of z 314
 /// from x 23 and east of x 24.
 const TREE: [[i32; 25]; 25] = [
-    [95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96],
-    [95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96],
-    [95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96],
-    [95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96],
-    [95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96],
-    [94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96],
-    [94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96],
-    [94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96],
-    [93, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96],
-    [93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96],
-    [93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96],
-    [93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95],
-    [92, 92, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95],
-    [92, 92, 92, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95],
-    [92, 92, 92, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95],
-    [92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95],
-    [92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95],
-    [92, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 95, 95, 95, 95],
-    [92, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 95, 95],
-    [92, 92, 92, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94],
-    [92, 92, 92, 92, 92, 92, 92, 92, 92, 93, 93, 92, 92, 92, 92, 92, 92, 92, 93, 93, 93, 94, 94, 94, 94],
-    [92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 93, 93, 94, 94, 94, 94],
-    [92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 91, 91, 92, 92, 93, 93, 93, 94, 94],
-    [93, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 91, 91, 91, 91, 91, 92, 92, 93, 93, 93, 93, 93],
-    [93, 93, 92, 92, 92, 92, 92, 92, 92, 92, 92, 91, 91, 91, 91, 91, 91, 91, 91, 92, 92, 93, 93, 93, 93],
+    [
+        95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96,
+        96, 96,
+    ],
+    [
+        95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96,
+        96, 96,
+    ],
+    [
+        95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96,
+        96, 96,
+    ],
+    [
+        95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96,
+        96, 96,
+    ],
+    [
+        95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96,
+        96, 96,
+    ],
+    [
+        94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96,
+        96, 96,
+    ],
+    [
+        94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96,
+        96, 96,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96,
+        96, 96,
+    ],
+    [
+        93, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96,
+        96, 96,
+    ],
+    [
+        93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96,
+        96, 96,
+    ],
+    [
+        93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95,
+        96, 96,
+    ],
+    [
+        93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95,
+        95, 95,
+    ],
+    [
+        92, 92, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95,
+        95, 95,
+    ],
+    [
+        92, 92, 92, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95,
+        95, 95,
+    ],
+    [
+        92, 92, 92, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95,
+        95, 95,
+    ],
+    [
+        92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95,
+        95, 95,
+    ],
+    [
+        92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95,
+        95, 95,
+    ],
+    [
+        92, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 95, 95,
+        95, 95,
+    ],
+    [
+        92, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94,
+        95, 95,
+    ],
+    [
+        92, 92, 92, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94,
+        94, 94,
+    ],
+    [
+        92, 92, 92, 92, 92, 92, 92, 92, 92, 93, 93, 92, 92, 92, 92, 92, 92, 92, 93, 93, 93, 94, 94,
+        94, 94,
+    ],
+    [
+        92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 93, 93, 94, 94,
+        94, 94,
+    ],
+    [
+        92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 91, 91, 92, 92, 93, 93, 93,
+        94, 94,
+    ],
+    [
+        93, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 91, 91, 91, 91, 91, 92, 92, 93, 93, 93,
+        93, 93,
+    ],
+    [
+        93, 93, 92, 92, 92, 92, 92, 92, 92, 92, 92, 91, 91, 91, 91, 91, 91, 91, 91, 92, 92, 93, 93,
+        93, 93,
+    ],
 ];
 const TREE_BLOCKS: [(i32, i32, i32, bool); 96] = [
-    (23, 99, 307, false), (23, 100, 307, false), (24, 100, 307, false), (25, 99, 307, false), (25, 100, 307, false), (22, 99, 308, false),
-    (22, 100, 308, false), (23, 99, 308, false), (23, 100, 308, false), (24, 99, 308, false), (24, 100, 308, false), (24, 101, 308, false),
-    (25, 99, 308, false), (25, 100, 308, false), (26, 99, 308, false), (22, 99, 309, false), (22, 100, 309, false), (23, 99, 309, false),
-    (23, 100, 309, false), (23, 101, 309, false), (24, 95, 309, true), (24, 96, 309, true), (24, 97, 309, true), (24, 98, 309, true),
-    (24, 99, 309, true), (24, 100, 309, true), (24, 101, 309, false), (25, 99, 309, false), (25, 100, 309, false), (25, 101, 309, false),
-    (26, 99, 309, false), (26, 100, 309, false), (22, 99, 310, false), (22, 100, 310, false), (23, 99, 310, false), (23, 100, 310, false),
-    (24, 99, 310, false), (24, 100, 310, false), (24, 101, 310, false), (25, 99, 310, false), (25, 100, 310, false), (25, 101, 310, false),
-    (26, 100, 310, false), (23, 99, 311, false), (24, 99, 311, false), (24, 100, 311, false), (25, 99, 311, false), (25, 100, 311, false),
-    (20, 96, 313, false), (20, 97, 313, false), (21, 96, 313, false), (21, 97, 313, false), (22, 97, 313, false), (19, 96, 314, false),
-    (19, 97, 314, false), (20, 96, 314, false), (20, 97, 314, false), (20, 98, 314, false), (21, 96, 314, false), (21, 97, 314, false),
-    (21, 98, 314, false), (22, 96, 314, false), (22, 97, 314, false), (23, 96, 314, false), (23, 97, 314, false), (19, 96, 315, false),
-    (19, 97, 315, false), (20, 96, 315, false), (20, 97, 315, false), (20, 98, 315, false), (21, 94, 315, true), (21, 95, 315, true),
-    (21, 96, 315, true), (21, 97, 315, true), (21, 98, 315, false), (22, 96, 315, false), (22, 97, 315, false), (22, 98, 315, false),
-    (23, 96, 315, false), (23, 97, 315, false), (19, 96, 316, false), (19, 97, 316, false), (20, 96, 316, false), (20, 97, 316, false),
-    (21, 96, 316, false), (21, 97, 316, false), (21, 98, 316, false), (22, 96, 316, false), (22, 97, 316, false), (23, 96, 316, false),
-    (20, 96, 317, false), (20, 97, 317, false), (21, 96, 317, false), (21, 97, 317, false), (22, 96, 317, false), (22, 97, 317, false),
+    (23, 99, 307, false),
+    (23, 100, 307, false),
+    (24, 100, 307, false),
+    (25, 99, 307, false),
+    (25, 100, 307, false),
+    (22, 99, 308, false),
+    (22, 100, 308, false),
+    (23, 99, 308, false),
+    (23, 100, 308, false),
+    (24, 99, 308, false),
+    (24, 100, 308, false),
+    (24, 101, 308, false),
+    (25, 99, 308, false),
+    (25, 100, 308, false),
+    (26, 99, 308, false),
+    (22, 99, 309, false),
+    (22, 100, 309, false),
+    (23, 99, 309, false),
+    (23, 100, 309, false),
+    (23, 101, 309, false),
+    (24, 95, 309, true),
+    (24, 96, 309, true),
+    (24, 97, 309, true),
+    (24, 98, 309, true),
+    (24, 99, 309, true),
+    (24, 100, 309, true),
+    (24, 101, 309, false),
+    (25, 99, 309, false),
+    (25, 100, 309, false),
+    (25, 101, 309, false),
+    (26, 99, 309, false),
+    (26, 100, 309, false),
+    (22, 99, 310, false),
+    (22, 100, 310, false),
+    (23, 99, 310, false),
+    (23, 100, 310, false),
+    (24, 99, 310, false),
+    (24, 100, 310, false),
+    (24, 101, 310, false),
+    (25, 99, 310, false),
+    (25, 100, 310, false),
+    (25, 101, 310, false),
+    (26, 100, 310, false),
+    (23, 99, 311, false),
+    (24, 99, 311, false),
+    (24, 100, 311, false),
+    (25, 99, 311, false),
+    (25, 100, 311, false),
+    (20, 96, 313, false),
+    (20, 97, 313, false),
+    (21, 96, 313, false),
+    (21, 97, 313, false),
+    (22, 97, 313, false),
+    (19, 96, 314, false),
+    (19, 97, 314, false),
+    (20, 96, 314, false),
+    (20, 97, 314, false),
+    (20, 98, 314, false),
+    (21, 96, 314, false),
+    (21, 97, 314, false),
+    (21, 98, 314, false),
+    (22, 96, 314, false),
+    (22, 97, 314, false),
+    (23, 96, 314, false),
+    (23, 97, 314, false),
+    (19, 96, 315, false),
+    (19, 97, 315, false),
+    (20, 96, 315, false),
+    (20, 97, 315, false),
+    (20, 98, 315, false),
+    (21, 94, 315, true),
+    (21, 95, 315, true),
+    (21, 96, 315, true),
+    (21, 97, 315, true),
+    (21, 98, 315, false),
+    (22, 96, 315, false),
+    (22, 97, 315, false),
+    (22, 98, 315, false),
+    (23, 96, 315, false),
+    (23, 97, 315, false),
+    (19, 96, 316, false),
+    (19, 97, 316, false),
+    (20, 96, 316, false),
+    (20, 97, 316, false),
+    (21, 96, 316, false),
+    (21, 97, 316, false),
+    (21, 98, 316, false),
+    (22, 96, 316, false),
+    (22, 97, 316, false),
+    (23, 96, 316, false),
+    (20, 96, 317, false),
+    (20, 97, 317, false),
+    (21, 96, 317, false),
+    (21, 97, 317, false),
+    (22, 96, 317, false),
+    (22, 97, 317, false),
 ];
 
 /// Real (x, y, z) to fixture for [`TREE`].
@@ -1009,19 +1850,29 @@ const TREE_SHIFT: [i32; 3] = [-80, -30, -220];
 
 fn tree_site(state: &mut TickState) {
     let (stone, air) = (state.registry.states.stone, state.registry.states.air);
-    let (log, leaves) = (state_id(state, "minecraft:oak_log"), state_id(state, "minecraft:oak_leaves"));
+    let (log, leaves) = (
+        state_id(state, "minecraft:oak_log"),
+        state_id(state, "minecraft:oak_leaves"),
+    );
     for (dz, row) in TREE.iter().enumerate() {
         for (dx, &top) in row.iter().enumerate() {
-            let (x, z) = (11 + dx as i32 + TREE_SHIFT[0], 303 + dz as i32 + TREE_SHIFT[2]);
+            let (x, z) = (
+                11 + dx as i32 + TREE_SHIFT[0],
+                303 + dz as i32 + TREE_SHIFT[2],
+            );
             let top = top + TREE_SHIFT[1];
             for y in 55..top + 12 {
-                state.world.set_block(x, y, z, if y < top { stone } else { air });
+                state
+                    .world
+                    .set_block(x, y, z, if y < top { stone } else { air });
             }
         }
     }
     for (x, y, z, trunk) in TREE_BLOCKS {
         let at = (x + TREE_SHIFT[0], y + TREE_SHIFT[1], z + TREE_SHIFT[2]);
-        state.world.set_block(at.0, at.1, at.2, if trunk { log } else { leaves });
+        state
+            .world
+            .set_block(at.0, at.1, at.2, if trunk { log } else { leaves });
     }
     state.world.fold_overlay();
 }
@@ -1052,8 +1903,13 @@ fn a_rallied_rider_rides_out_of_the_corner_under_a_canopy() {
         let real = [0, 1, 2].map(|axis| pos[axis] - f64::from(TREE_SHIFT[axis]));
         let from_corner = mc_physics::mth::length2(pos[0] - corner[0], pos[2] - corner[2]);
         if from_corner <= 6.0 {
-            stalled.push(format!("from {start:?} toward {foe:?} it stayed at {real:?}"));
+            stalled.push(format!(
+                "from {start:?} toward {foe:?} it stayed at {real:?}"
+            ));
         }
     }
-    assert!(stalled.is_empty(), "riders stayed by the corner: {stalled:#?}");
+    assert!(
+        stalled.is_empty(),
+        "riders stayed by the corner: {stalled:#?}"
+    );
 }

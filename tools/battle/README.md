@@ -82,7 +82,7 @@ headless recorder, and the pinned server must contain the recorder/telemetry
 slice. Both are required for an actual run. For example:
 
 ```sh
-tools/battle/run-battle.sh --pin /absolute/server-pin --client /absolute/solaris-client \
+tools/battle/run-battle.sh --pin /absolute/server-pin --client /absolute/krasnokamen-client \
   --client-data /absolute/client-data --cache /absolute/vanilla-cache \
   --world /absolute/stopped-flat-world --run-dir /absolute/new-run \
   --seed 42 --scenario field-10k --duration 180

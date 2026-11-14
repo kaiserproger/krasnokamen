@@ -45,7 +45,7 @@ TRACE_MEMBER = re.compile(r'(\d+) side(\d+) r(\d+) (\w+)((?: [\w-]+)*) at ([^,\s
 def arguments():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--pin', required=True, type=Path, help='server pin directory containing manifest.json')
-    p.add_argument('--client', required=True, type=Path, help='recorder-enabled solaris-client binary')
+    p.add_argument('--client', required=True, type=Path, help='recorder-enabled krasnokamen-client binary')
     p.add_argument('--client-data', required=True, type=Path)
     p.add_argument('--cache', required=True, type=Path, help='server content cache')
     p.add_argument('--run-dir', required=True, type=Path, help='new directory; never overwritten')
@@ -442,7 +442,7 @@ def stream_log(pipe, file, messages, trace=None):
             output.flush()
             if trace is not None and 'Battle trace:' in line:
                 trace.record(line)
-            if any(marker in line for marker in ('Solaris is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Saved the game', 'Failed to save the game', 'Command failed:', 'Battle error:')):
+            if any(marker in line for marker in ('Krasnokamen is listening (edge v2)', 'Battle staged:', 'Battle roster:', 'Battle started', 'Battle paused', 'Saved the game', 'Failed to save the game', 'Command failed:', 'Battle error:')):
                 messages.put(line)
     messages.put(None)
 
@@ -605,7 +605,7 @@ def run(a):
                 server.stdin.flush()
         log_thread = threading.Thread(target=stream_log, args=(server.stdout, root / 'server.log', messages, trace_log), daemon=True)
         log_thread.start()
-        expect(messages, 'Solaris is listening (edge v2)')
+        expect(messages, 'Krasnokamen is listening (edge v2)')
         ignored = ignored_config_keys((root / 'server.log').read_text(errors='replace'))
         if a.take and any(key.endswith('checkpoint_every_ticks') for key in ignored):
             raise RuntimeError('server pin ignores data.checkpoint_every_ticks (it predates the key, 95c4bc59): a take cannot control its checkpoint cadence; pin a newer server')

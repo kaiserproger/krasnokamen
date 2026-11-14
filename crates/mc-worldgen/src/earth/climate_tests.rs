@@ -47,7 +47,7 @@ fn mean_rain(plan: &ClimatePlan, grid: &Grid, from: usize, to: usize) -> f64 {
 /// Optional artifacts are numerical profiles plus a deterministic SVG map; no
 /// production file writes and no dependency on the current working directory.
 fn profile(name: &str, grid: &Grid, dem: &[f64], plan: &ClimatePlan) {
-    let Some(directory) = std::env::var_os("SOLARIS_W2_ARTIFACT_DIR") else {
+    let Some(directory) = std::env::var_os("KRASNOKAMEN_W2_ARTIFACT_DIR") else {
         return;
     };
     let directory = std::path::PathBuf::from(directory);
@@ -223,7 +223,7 @@ fn c03_same_latitude_physical_lapse_is_six_degrees_per_kilometre() {
     // C04 is API isolation evidence only: native metric runtime mapping remains
     // gated by §32. Compare reference renderings of this physical profile without
     // feeding either rendering into climate. Compact formula is §4.4.
-    if let Some(directory) = std::env::var_os("SOLARIS_W2_ARTIFACT_DIR") {
+    if let Some(directory) = std::env::var_os("KRASNOKAMEN_W2_ARTIFACT_DIR") {
         use std::fmt::Write as _;
         let mut csv =
             String::from("physical_height_m,compact_y,metric_reference_y,temperature_c\n");

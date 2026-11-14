@@ -69,7 +69,7 @@ nearest, longest-waiting entity updates go first. See
 [runtime](../architecture/runtime.md) and [persistence](../architecture/persistence.md).
 
 Input-ordered chat proves native input handling, not geometry delivery: reliable
-traffic can overtake the world queue. The operator-only `solaris:setup_world_fence`
+traffic can overtake the world queue. The operator-only `krasnokamen:setup_world_fence`
 request keeps one transient nonce per connection. A later publication must have
 the viewer's current dimension and complete geometry window, with no block or
 chunk-repair debt, before the edge appends the nonce response to that same world
@@ -111,7 +111,7 @@ lease and backup contract is in
 
 ## Plugin admission
 
-Independently deployed `solaris:plugin@0.8.0` components execute outside the
+Independently deployed `krasnokamen:plugin@0.9.0` components execute outside the
 tick. Guests receive owned values and opaque handles, not native pointers,
 locks, slots or world ownership. The native owner validates current identities,
 revisions, complete custody and capabilities when applying operations. Plugin

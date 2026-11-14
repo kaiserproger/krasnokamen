@@ -482,14 +482,19 @@ fn pursuers_stand_round_the_enemy_point_in_their_slots() {
     // separation.
     for _ in 0..600 {
         runtime.neighbours.rebuild(&runtime.members);
-        let drives: Vec<_> = (0..40).map(|i| steering::movement(&mut runtime, i)).collect();
+        let drives: Vec<_> = (0..40)
+            .map(|i| steering::movement(&mut runtime, i))
+            .collect();
         for (member, drive) in runtime.members.iter_mut().zip(drives) {
             for (position, velocity) in member.pos.iter_mut().zip(drive) {
                 *position += velocity * mc_physics::TICK_SECONDS;
             }
         }
     }
-    for (members, point) in [&runtime.members[..20], &runtime.members[20..40]].into_iter().zip(points) {
+    for (members, point) in [&runtime.members[..20], &runtime.members[20..40]]
+        .into_iter()
+        .zip(points)
+    {
         let arrived = members
             .iter()
             .all(|m| mc_physics::mth::length2(m.pos[0] - point[0], m.pos[2] - point[2]) < 10.0);
@@ -499,11 +504,16 @@ fn pursuers_stand_round_the_enemy_point_in_their_slots() {
             .map(|a| {
                 members
                     .iter()
-                    .filter(|b| mc_physics::mth::length2(a.pos[0] - b.pos[0], a.pos[2] - b.pos[2]) < 1.0)
+                    .filter(|b| {
+                        mc_physics::mth::length2(a.pos[0] - b.pos[0], a.pos[2] - b.pos[2]) < 1.0
+                    })
                     .count()
             })
             .max()
             .unwrap();
-        assert!(crowd <= 3, "{crowd} of 20 pursuers stand within a block of one at {point:?}");
+        assert!(
+            crowd <= 3,
+            "{crowd} of 20 pursuers stand within a block of one at {point:?}"
+        );
     }
 }
