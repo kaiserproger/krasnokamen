@@ -123,10 +123,11 @@ fn summon_faction_is_native() {
         assert!(image.opaque_entity_fields.is_empty());
         let json = serde_json::to_value(&image).unwrap();
         assert!(json.get("faction").is_none(), "zero adds no WAL bytes");
-        assert_eq!(
-            serde_json::from_value::<crate::journal::EntityStateImage>(json).unwrap(),
-            image
-        );
+        // Blueprint-derived loot fields (base armor) are serde(skip) and rebuilt at
+        // restore, so compare the WAL bytes, not the in-memory image.
+        let decoded = serde_json::from_value::<crate::journal::EntityStateImage>(json.clone()).unwrap();
+        assert_eq!(decoded.faction, 0);
+        assert_eq!(serde_json::to_value(&decoded).unwrap(), json);
         assert!(
             image
                 .to_fields(&state.registry.blocks)
