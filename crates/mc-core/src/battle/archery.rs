@@ -6,12 +6,17 @@
 use super::combat::{Action, CombatRuntime, Weapon};
 use super::{ArrowLaunch, BattleState, Frame, Output};
 use crate::boundary::{EntityEvent, Hand};
+use mc_physics::mth;
 use rustc_hash::FxHashMap;
 
 pub const SUSTAINED_TICKS: u64 = 220; // 5.45/minute
 const DRAW_TICKS: u64 = 30;
 const RIPPLE_TICKS: u64 = 5;
 const MAX_SPEED: f64 = 4.5;
+// Native flight deals ceil(speed * base_damage), not base_damage HP. At the
+// 4.5-block/tick release cap this is one non-critical HP before mitigation;
+// the old base 2.0 launched nine-HP hits and routed lines before sustained melee.
+const BATTLE_ARROW_BASE_DAMAGE: f32 = 0.2;
 
 #[derive(Debug, Default)]
 pub(super) struct Runtime {
@@ -71,7 +76,7 @@ impl Volley {
 /// this gives ~4.5 blocks/tick and ~24 degrees. Unreachable targets do not debit ammo.
 pub fn aimed_arc(from: [f64; 3], to: [f64; 3]) -> Option<([f64; 3], u32)> {
     let delta = std::array::from_fn::<_, 3, _>(|i| to[i] - from[i]);
-    let horizontal = delta[0].hypot(delta[2]);
+    let horizontal = mth::length2(delta[0], delta[2]);
     if !horizontal.is_finite() || !delta[1].is_finite() || horizontal < 1.0 {
         return None;
     }
@@ -191,7 +196,7 @@ pub(super) fn step(
             owner: body.id,
             from,
             velocity,
-            damage: 2.0,
+            damage: BATTLE_ARROW_BASE_DAMAGE,
         });
         battle.formation.report_pressure(
             target.id,

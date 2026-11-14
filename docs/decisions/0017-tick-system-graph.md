@@ -120,12 +120,22 @@ conflict. Floating-point sums cannot become unordered parallel reductions.
 
 Faction battle preparation is ordered owner work before EntityStep admission,
 not another independently scheduled graph node. Its frozen `Frame` feeds
-formation update, dense-column preparation, target pairing, steering, combat
-(including archery/cavalry), morale, then native-slot drive projection.
+dense-column/member snapshot, formation decisions, target pairing, steering,
+combat (including archery/cavalry), morale, then native-slot drive projection.
 The formation roster supplies the stable battle-index prefix; unregistered
 faction bodies and horses occupy a derived tail. Targets, classification and
 drive share this index. Slot caches are refreshed before consumers; native
 compaction/removal never gives a cached row authority over another identity.
+
+Production kernels consume indexed contexts and columns directly. Stable-ID
+query adapters, explicit withdrawal/interval controls and diagnostic rank
+fields used only by the regression fixtures are compiled only under `cfg(test)`;
+the production battle API does not retain unused compatibility entry points.
+Order transitions remain production-owned: the staged scenario's guarded
+advance/pursue policy uses the same transition side effects as explicit orders.
+An inactive battle clears the lengths of its native-slot projections without
+resizing or filling them against the world's population; missing entries mean
+zero drive/no look, preserving the ordinary world's sparse fast path.
 
 Workers read slot-indexed drive/look arrays, not ID hash maps. A battle row
 with zero thrust may use the existing rest proof only while grounded, motionless
@@ -139,15 +149,70 @@ work, validating allegiance and actual range before retaining it. Standalone
 native faction units, which have no regiment, use the local spatial oracle.
 Both policies stagger decisions by stable ID over ten ticks; retained targets
 are checked every tick. All output lanes retain their deterministic order.
-Sub-step timers are exposed only with `MC_CORE_PHASE_LOG`; concurrency is not
-enabled merely by introducing columns. A measured kernel exceeding 5 ms is the
-threshold for evaluating indexed parallel sub-steps on the existing worker pool.
+Sub-step timers are exposed only with `MC_CORE_PHASE_LOG`. After the integrated
+ladder identified the preparation cost, frozen steering and targeting kernels
+use indexed 256-row ranges through the current Rayon pool; small populations
+and one-thread pools run directly. Neighbour/grid rebuilds stay serial.
+Disjoint drive/target slices share immutable members, regiments, CSR cells and
+columns. Each join reduces only local integer work counters; it never changes
+floating-point order within a row. Combat, archery, cavalry, morale, projection,
+arrow spawning and ordered intent/event publication remain serial.
+No pool is created per tick. Rayon's
+[non-overlapping mutable chunks](https://docs.rs/rayon/latest/rayon/slice/trait.ParallelSliceMut.html#method.par_chunks_mut)
+give row ownership, not a promise of one worker per chunk. Native 2x1000 contact
+traces compare every one of 300 ticks on pools of one and sixteen threads,
+including drive/target bits, ordered output hashes and exact work counters.
 
-Population counters use the same sparse native faction membership owner.
-The hook samples pre-motion; publication refreshes the sample after merge before
-creating immutable `TickTimes.battle`. The extra observer pass is part of tick
-CPU cost, not WAL or checkpoint work. Faction remains native persisted state;
-all battle columns, targets, clocks and counters are restart-local.
+The member snapshot, derived columns and pre-motion faction counts share one
+ordered roster fold plus the existing unregistered native-faction tail. Member
+position sums keep their original battle-index order. Native ID/slot hints are
+validated against the hot body before use; repacking or identity changes force
+cold-fact refresh. Health, NoAI, mount occupancy, attack reach and equipment
+classification are derived cached facts, never a second authority. Equipment
+changes stay latched until an active fighter consumes classification.
+
+The read-only pending-wire feed conservatively invalidates these facts twice:
+at column preparation after input/pre-hints, before battle/merge, and after merge
+and late native writes immediately before `EntityStore::views()` drains it.
+The latter invalidates column scratch for the next frame and population health
+for imminent publication; its cost is charged to the views timer.
+The feed includes movement, so a moving row may refresh more often
+than a static-fact change requires. No custody, feed drain, WAL, view ordering
+or publication owner changes; full tick CPU, not just battle timings, measures
+the optimization.
+
+Native battle arrows exclude same-faction mobs from the shared swept collision
+snapshot, equivalent to disabling friendly fire for a battle team. Player
+targets, unaffiliated mobs and existing scoreboard checks are unchanged.
+This prevents rear-rank volleys from killing their own archers and triggering
+casualty/panic routs while ammunition remains.
+
+Film outcome odds use the deployed 46-file infantry frontage, not the historical
+600-file reference: `q = 80 / (46 * 0.35 * 43 * (1 - b))`. The native 20k,
+6000-tick wide-front reference measured 2316 parries in 3873 strikes
+(`b = 0.597986`), giving `q = 0.287445` and nominal frontline exposure of
+24.7 seconds. Two in five standing casualties are fatal; pursuit triples removal
+odds and raises the fatal share to two in three. Windup/recovery and volley
+cadence are unchanged. These are cinematic outcome targets, not historical claims.
+Arrow calibration is independent: native flight computes
+`ceil(speed * base_damage)`, so the old base 2.0 emitted nine-HP shots at the
+4.5-block/tick cap. Battle launches use base 0.2 for one pre-mitigation HP at
+that cap; ordinary native arrows retain their existing damage rules.
+The native three-minute contact regression records per-regiment ten-second
+casualty windows, the exact first-break tick and a censored frontline survival
+cohort. It is not a paced-server, recorder or checkpoint acceptance gate.
+
+Population counters use native faction membership. The running hook folds
+pre-motion counts into its snapshot. Paused hooks and publication fold current
+hot faction/alive flags from the native sparse set; cold health is memoized by
+validated slot/identity and refreshed only for invalidated rows. Snapshot fact
+refresh also seeds that memo. Publication never reuses the pre-motion count or
+delays a change to a later sample: post-merge writes invalidate health before
+the wire drain, and removed/repacked rows are discovered from current membership.
+A corpse contributes one native unit and zero alive until removal. Ordinary
+worlds with no faction rows allocate no population memo. Observer CPU remains
+part of tick cost, not WAL/checkpoint work. Faction is native persisted state;
+all battle columns, health memos, targets, clocks and counters are restart-local.
 
 
 ## One or two cores, and scaling up

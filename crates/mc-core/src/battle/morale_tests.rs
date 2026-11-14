@@ -105,8 +105,10 @@ fn pressure_levels_do_not_accumulate_and_shields_reduce_missile_effect() {
 
 #[test]
 fn kills_raise_morale_and_panic_and_recent_casualties_reduce_it() {
-    let mut morale = Morale::default();
-    morale.kills = 1;
+    let mut morale = Morale {
+        kills: 1,
+        ..Morale::default()
+    };
     morale.update(0, 100, 0, 100.0, false);
     assert_eq!(morale.value, 78.0);
     morale.pressure.panicking = 100;
@@ -127,8 +129,10 @@ fn kills_raise_morale_and_panic_and_recent_casualties_reduce_it() {
 #[test]
 fn missile_cause_survives_deferred_damage_and_is_not_counted_twice() {
     let mut melee = Morale::default();
-    let mut missile = Morale::default();
-    missile.missile_losses = 1;
+    let mut missile = Morale {
+        missile_losses: 1,
+        ..Morale::default()
+    };
     missile.update(0, 100, 1, 100.0, false);
     melee.update(0, 100, 1, 100.0, false);
     assert_eq!(missile.value - melee.value, 2.0);

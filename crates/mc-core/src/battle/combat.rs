@@ -7,6 +7,20 @@ use crate::boundary::{EntityEvent, EntityId, Hand};
 use crate::entities::EntitySlot;
 use crate::intent::{DamageSource, Footprint, IntentKind};
 
+// Cinematic calibration, ARCH-FABLE-2 §4: 80 removals per 46-file regiment
+// over 43 active fighting seconds at 0.35 strikes/s. The 322-file native
+// 20k/6000-tick reference measured b = 2316 parries / 3873 strikes.
+const FRONT_FILES: f32 = 46.0;
+const ACTIVE_FIGHT_SECONDS: f32 = 43.0;
+const STRIKES_PER_SECOND: f32 = 0.35;
+const TARGET_REMOVALS: f32 = 80.0;
+const PARRY_FRACTION: f32 = 2316.0 / 3873.0;
+const REMOVAL_ROLLS: f32 = 10_000.0 * TARGET_REMOVALS
+    / (FRONT_FILES * STRIKES_PER_SECOND * ACTIVE_FIGHT_SECONDS * (1.0 - PARRY_FRACTION));
+const FATAL_SHARE: f32 = 0.4;
+const PURSUIT_REMOVAL_ROLLS: f32 = 3.0 * REMOVAL_ROLLS;
+const PURSUIT_FATAL_SHARE: f32 = 2.0 / 3.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Weapon {
     Sword,
@@ -204,7 +218,10 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         let id = battle.columns.ids[bi];
         combat.work.visited += 1;
         let fighter = &mut combat.fighters[bi];
-        classify(frame, slot, fighter, battle.columns.ranged[bi]);
+        if battle.columns.equipment_dirty[bi] || fighter.equipment.is_none() {
+            classify(frame, slot, fighter, battle.columns.ranged[bi]);
+            battle.columns.equipment_dirty[bi] = false;
+        }
         if matches!(fighter.action, Action::Wounded) {
             continue;
         }
@@ -288,7 +305,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             continue;
         }
         // Three cautious soldiers in four; decisions once/20t, not per frame.
-        if (frame.tick + id.0 as u64) % 20 != 0 {
+        if !(frame.tick + id.0 as u64).is_multiple_of(20) {
             continue;
         }
         fighter.action = Action::Guard {
@@ -384,13 +401,16 @@ pub(super) enum Outcome {
     Kill,
 }
 
-/// 130 removals / 10,000 unblocked contact attacks; 117 wounded, 13 killed.
-/// Pursuit shifts the casualties to the broken side; never speeds up animations.
+/// Frontage/block-adjusted film outcomes; mean frontline exposure ~24.7 s.
+/// Pursuit shifts casualties to the broken side; action clocks are unchanged.
 pub(super) fn outcome(roll: u32, routing: bool, charge: f32) -> Outcome {
     let (removal, fatal) = if routing {
-        (1300.0, 900.0)
+        (
+            PURSUIT_REMOVAL_ROLLS,
+            PURSUIT_REMOVAL_ROLLS * PURSUIT_FATAL_SHARE,
+        )
     } else {
-        (130.0, 13.0)
+        (REMOVAL_ROLLS, REMOVAL_ROLLS * FATAL_SHARE)
     };
     let multiplier = 1.0 + charge;
     if (roll as f32) < fatal * multiplier {
