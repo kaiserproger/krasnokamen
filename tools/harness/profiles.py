@@ -854,6 +854,20 @@ def run_dh_gate(ctx: ProfileContext) -> dict[str, Any]:
     return dh_gate.run(ctx)
 
 
+def run_java_battle(ctx: ProfileContext) -> dict[str, Any]:
+    """Delegate Java battle observations to the sibling that owns Java scenarios."""
+    if ctx.client != "java" or ctx.platform not in ("fabric", "neoforge"):
+        raise ValueError("java-battle-functional requires --client java --platform fabric|neoforge")
+    driver = AGENT_ROOT / "tools" / "battle_scenario.py"
+    _run_command([sys.executable, str(driver), "--repo-root", str(REPO_ROOT),
+                  "--artifact-dir", str(ctx.artifact_dir), "--platform", ctx.platform,
+                  *ctx.extra_args], ctx, "java-battle-driver.log")
+    result = json.loads((ctx.artifact_dir / "java-battle.json").read_text())
+    if not result.get("functional_passed"):
+        raise RuntimeError(f"Java battle functional gate failed: {result.get('error', result)}")
+    return result
+
+
 Profile = Callable[[ProfileContext], dict[str, Any]]
 
 PROFILES: dict[str, dict[str, Any]] = {
@@ -1097,6 +1111,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Real Java DH baseline: MC 26.1.2 + DH 3.3.3 protocol 16, isolated Fabric/NeoForge client gate",
         "run": run_dh_gate,
     },
+    "java-battle-functional": {
+        "scope": "real-client",
+        "description": "MC 26.1.2 Fabric/NeoForge live battle functional checks; screenshots require separate visual review",
+        "run": run_java_battle,
+    },
     "regression": {
         "scope": "real-client",
         "description": "real-client regression backend (--run unless a mode is given)",
@@ -1216,6 +1235,7 @@ PROFILE_PREREQUISITES = {
     "graves": (("optional_server_binary", "plugins_dir"), (), (), ()),
     "loader-live": (("server_binary", "loader", "xvfb", "plugins_dir"), (), (), ()),
     "dh-gate": (("server_binary", "loader", "xvfb"), (), (), ()),
+    "java-battle-functional": (("server_binary", "loader", "xvfb"), (), (), ()),
     "regression": ((), (), ("regression_client",), ()),
     "playable": ((), (), ("regression_client",), ()),
     "replay": ((), (), ("regression_client",), ()),
