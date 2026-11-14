@@ -84,6 +84,21 @@ created pack descriptions preserve component style booleans.
 | Villagers: jobs, beds, POIs, schedules, breeding, gossip, golems | `partial` | [villager persistence tests](../crates/mc-core/src/villager/persistence_tests.rs); [stroll/swim tests](../crates/mc-core/src/villager/stroll_swim_tests.rs) | Gossip-triggered golem eligibility is implemented; farmer harvest about 2.4× vanilla in breeder oracle. Strolls stay within one section of the resident's meeting point, home or job site (vanilla VillageBoundRandomStroll, keyed to the resident's own POIs), and residents swim up out of deep water (Swim 0.8) and float across its surface to the bank (setCanFloat: water two or more blocks deep is a standable surface for a route; the resident leaves the water by jumpOutOfFluid). Villagers open and close every `#mob_interactable_doors` door (wooden and copper, not iron). A jobless adult walks to its claimed workstation in the Idle and Work periods (GoToPotentialJobSite). Settlement residency is an extension, not vanilla proof. |
 | Villager/wandering-trader trade UI, offers, restock and prices | `partial` | [villager/trades_tests.rs](../crates/mc-core/src/villager/trades_tests.rs); [merchant_tests.rs](../crates/mc-core/src/tick/merchant_tests.rs); [trader persistence](../crates/mc-core/src/level_metadata_trader_tests.rs) | Native trading/restock coverage; complete vanilla offer/demand/discount/UI and survival acquisition gate not established. |
 
+Mount logout deliberately differs from vanilla 26.3. Local `javap` of
+`ServerPlayer.saveParentVehicle` and `PlayerList.remove` shows that a root vehicle
+with exactly one player among its indirect passengers is saved in that player's
+`RootVehicle` (`Attach` UUID plus `Entity`) before logout, then unloaded with its
+remaining passenger tree using `UNLOADED_WITH_PLAYER`; login loads it and restores
+the attachment. With multiple players the vehicle stays in the world and the
+leaver unrides. Krasnokamen's processed Leave always dismounts and leaves the
+vehicle in the world; it does not carry a sole rider's vehicle in player data.
+A clean `Core::shutdown` without a processed Leave instead retains the vehicle's
+rider UUID, as does crash recovery. Reconnect (including plugin-login unlock)
+re-seats a pending claimant at any distance in the dimension until another player
+takes the vehicle; absent claims do not consume live seats or steering priority.
+The accepted re-seat policy is defined in ADR 0013. Carry-vehicle-with-player is
+not implemented.
+
 Frog magma-cube loot uses the retained frog `variant`, not a hard-coded temperate
 component: warm yields pearlescent, cold verdant, temperate (including an absent
 variant) ochre. The 26.3 jar's `loot_table/entities/magma_cube.json` owns this

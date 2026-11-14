@@ -49,23 +49,34 @@ freeze/step projection and how recovery restores that age; daylight time remains
 independent.
 
 Mount custody belongs to the vehicle's ordered, bounded rider UUID list. The
-first live rider alone controls motion; a passenger's reverse link and the
-published passenger entity IDs are derived, never separate authorities.
-Removing one passenger preserves the other seats. Native images retain the
-list; offline animal NBT uses `krasnokamen:Riders`, validated for duplicates and
-the vehicle type's seat capacity by the one image reader that checkpoint load,
-`/summon` and WAL replay share, so a state the live server accepts can always be
-replayed. Only the camel (3, `Camel.canAddPassenger`) and happy ghast (4) seat
-more than one rider. The earlier scalar `krasnokamen:Rider` NBT key and WAL `rider`
-field are refused outright, so an old image fails the load instead of silently
-unseating its rider. Deploy this build after a clean stop: an unclean WAL tail
-written by an older build still carries `rider` and is refused at startup.
+first rider with a live body controls motion; absent recovery claims are skipped.
+A passenger's reverse link and published passenger entity IDs are derived,
+never separate authorities. Removing one passenger preserves the other seats.
+Native images retain the list; offline animal NBT uses `krasnokamen:Riders`.
+The shared image reader validates duplicate UUIDs and the vehicle's seat capacity;
+replay also rejects one UUID claimed by multiple vehicles. Before adding a rider,
+live Ride removes that UUID from every other vehicle in the dimension and removes
+absent claims (and an existing claim for that actor) from its target.
+Only the camel (3, `Camel.canAddPassenger`) and happy ghast (4) seat more than one
+rider. The earlier scalar `krasnokamen:Rider` NBT key and WAL `rider` field are
+refused outright, so an old image fails the load instead of silently unseating
+its rider. Deploy this build after a clean stop: an unclean WAL tail written by
+an older build still carries `rider` and is refused at startup.
 
-A recovered rider UUID remains vehicle-owned while the player has no live body.
-An unrelated join or an idle tick must not erase that seat before its passenger
-reconnects; `mounts::join` rebuilds the reverse link. Explicit leave/dismount,
-death, or a known dead/invalid passenger clears the relation. The WAL recovery
-regression is `happy_ghast_admission_leave_and_reconnect_survive_wal_recovery`.
+A recovered absent UUID is a pending claim, not an occupied seat: it survives idle
+ticks until its passenger reconnects or another live Ride takes that vehicle.
+No rider-kind is persisted, so an absent mob UUID follows the same rule.
+Explicit leave/dismount, death, or a known dead/invalid passenger clears its
+relation. Plain Join and successful plugin-login unlock both call `mounts::join`;
+the active vehicle tick also rebuilds the reverse link and passenger projection.
+Re-seating has no distance or chunk-activity check within the dimension: bringing
+the returning player to the vehicle is accepted policy, not vanilla parity.
+Dimension travel ejects seats but retains the vehicle's chest and cargo;
+death ejects seats and drops that custody.
+The WAL recovery regression is
+`happy_ghast_admission_leave_and_reconnect_survive_wal_recovery`; native tests also
+cover reclaimed seats, first-live steering, plugin unlock, competing claims and a
+clean `Core::shutdown` with a still-seated player.
 
 ## Threads and backpressure
 

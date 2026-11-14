@@ -91,7 +91,7 @@ pub(crate) fn join(state: &mut TickState, actor: EntityId) {
         return;
     };
     let uuid = state.entities.row(actor_slot).uuid;
-    let vehicle = state.entities.slots().find(|slot| {
+    let vehicle = state.entities.rider_slots().find(|slot| {
         state
             .entities
             .row(*slot)
@@ -107,7 +107,12 @@ pub(crate) fn join(state: &mut TickState, actor: EntityId) {
 pub(crate) fn rider(state: &TickState, slot: EntitySlot) -> Option<EntitySlot> {
     state
         .entities
-        .slot_of_uuid(*state.entities.row(slot).entity_life.mount.riders.first()?)
+        .row(slot)
+        .entity_life
+        .mount
+        .riders
+        .iter()
+        .find_map(|uuid| state.entities.slot_of_uuid(*uuid))
 }
 pub(crate) fn vehicle_input(state: &TickState, slot: EntitySlot) -> u8 {
     rider(state, slot).map_or(0, |r| state.entities.row(r).entity_life.mount.input)
@@ -325,7 +330,14 @@ fn action(
         && !secondary
         && !food
         && (capabilities.riding != RidingProfile::None || crate::vehicles::rideable(state, target))
-        && row.entity_life.mount.riders.len() < passenger_limit(state, target)
+        && row
+            .entity_life
+            .mount
+            .riders
+            .iter()
+            .filter(|uuid| state.entities.slot_of_uuid(**uuid).is_some())
+            .count()
+            < passenger_limit(state, target)
         && vehicle(state, actor).is_none()
         && (!matches!(
             capabilities.riding,
@@ -518,8 +530,30 @@ pub(crate) fn apply(state: &mut TickState, actor: EntityId, plan: &Plan) {
             wear = true;
         }
         Action::Ride => {
+            // The vehicle's UUID list is authority; a missing reverse link
+            // must not let one live rider survive on two persisted vehicles.
+            let mut others = std::mem::take(&mut state.serial_entity_slots);
+            others.clear();
+            others.extend(state.entities.rider_slots().filter(|other| {
+                *other != slot
+                    && state
+                        .entities
+                        .row(*other)
+                        .entity_life
+                        .mount
+                        .riders
+                        .contains(&uuid)
+            }));
+            for &other in &others {
+                clear_rider(state, other, uuid);
+            }
+            others.clear();
+            state.serial_entity_slots = others;
             let mut riders =
                 std::mem::take(&mut state.entities.row_mut(slot).entity_life.mount.riders);
+            // A new live admission releases absent recovery claims. Until
+            // then they can still be restored by their passenger's reconnect.
+            riders.retain(|rider| *rider != uuid && state.entities.slot_of_uuid(*rider).is_some());
             riders.push(uuid);
             state.entities.set_riders(slot, riders);
             state.entities.row_mut(slot).entity_life.mounted = true;
@@ -582,7 +616,8 @@ pub(crate) fn apply(state: &mut TickState, actor: EntityId, plan: &Plan) {
         menus::sync(state, plan.target);
     }
 }
-pub(crate) fn death(state: &mut TickState, slot: EntitySlot) {
+/// Release seats without destroying the vehicle's chest or item custody.
+pub(crate) fn eject(state: &mut TickState, slot: EntitySlot) {
     while let Some(uuid) = state
         .entities
         .row(slot)
@@ -598,6 +633,10 @@ pub(crate) fn death(state: &mut TickState, slot: EntitySlot) {
             clear_rider(state, slot, uuid);
         }
     }
+}
+
+pub(crate) fn death(state: &mut TickState, slot: EntitySlot) {
+    eject(state, slot);
     let position = state.entities.pos(slot);
     let mount = &mut state.entities.row_mut(slot).entity_life.mount;
     let chested = std::mem::take(&mut mount.chested);
@@ -1116,8 +1155,7 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         if state.entities.row(slot).entity_life.mount.riders.is_empty() {
             continue;
         }
-        let uuid = state.entities.row(slot).entity_life.mount.riders[0];
-        let rider_slot = state.entities.slot_of_uuid(uuid);
+        let rider_slot = rider(state, slot);
         let equine = capabilities(state, slot).taming.equine()
             && rider_slot
                 .is_some_and(|r| matches!(state.entities.body(r).kind, EntityKind::Player { .. }));
@@ -1128,6 +1166,10 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             && !state.entities.row(slot).entity_life.tamed
             && crate::taming::roll(state.entities.row_mut(slot), 50) == 0
         {
+            let uuid = state
+                .entities
+                .row(rider_slot.expect("live equine rider"))
+                .uuid;
             let row = state.entities.row_mut(slot);
             let success = crate::taming::roll(row, 100) < u32::from(row.entity_life.taming.temper);
             if success {

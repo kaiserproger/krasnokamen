@@ -206,6 +206,65 @@ fn identity_count(state: &TickState, id: EntityId) -> usize {
 }
 
 #[test]
+fn donkey_portal_transfer_keeps_chest_and_exact_cargo_without_source_drops() {
+    let (mut state, _) = worlds();
+    let source = frame(&mut state, BlockPos { x: 4, y: 70, z: 4 }, 2, 3, true);
+    light(&mut state, source);
+    load(
+        state.other_dimensions.get_mut(&Dimension::Nether).unwrap(),
+        [0.5, 70.0, 0.5],
+        2,
+    );
+    let donkey = crate::mounts::tests::spawn(&mut state, "donkey", [4.5, 70.0, 4.5]);
+    let slot = state.entities.slot_of(donkey).unwrap();
+    let diamond = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+        .unwrap();
+    let token = mc_data::ItemStack::new(diamond, 7).with_custom_name("portal-cargo");
+    let mut cargo = vec![mc_data::ItemStack::EMPTY; 15];
+    cargo[14] = token;
+    let row = state.entities.row_mut(slot);
+    row.entity_life.tamed = true;
+    row.entity_life.mount.chested = true;
+    row.entity_life.mount.cargo = cargo.clone();
+    row.controls.no_ai = true;
+    portal_step(&mut state);
+    assert_eq!(
+        dimensions_travel::locate(&state, donkey).unwrap().0,
+        Dimension::Nether
+    );
+    assert_eq!(identity_count(&state, donkey), 1);
+    let nether = &state.other_dimensions[&Dimension::Nether];
+    let mount = &nether
+        .entities
+        .row(nether.entities.slot_of(donkey).unwrap())
+        .entity_life
+        .mount;
+    assert!(
+        mount.chested,
+        "travel is not death: keep the chest attached"
+    );
+    assert_eq!(
+        mount.cargo, cargo,
+        "every cargo slot travels with its owner"
+    );
+    for world in
+        std::iter::once(&state).chain(state.other_dimensions.values().map(|world| &**world))
+    {
+        assert!(
+            world.entities.item_slots().next().is_none(),
+            "portal transfer must not drop cargo or its chest"
+        );
+        assert!(
+            world.merge_life_drops.is_empty(),
+            "no deferred duplicate cargo"
+        );
+    }
+}
+
+#[test]
 fn frame_sizes_axes_optional_corners_and_damage_collapse() {
     let registry = Arc::new(crate::registry::CoreRegistry::load(None).unwrap());
     let mut state = local(Dimension::Overworld, registry);

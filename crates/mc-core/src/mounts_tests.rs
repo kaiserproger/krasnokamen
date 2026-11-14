@@ -92,6 +92,84 @@ pub(crate) fn use_entity(target: EntityId) -> PlayerInput {
 pub(crate) fn slot(state: &TickState, id: EntityId) -> EntitySlot {
     state.entities.slot_of(id).unwrap()
 }
+
+#[test]
+fn absent_single_seat_rider_can_be_replaced_and_the_vehicle_steered() {
+    let (mut state, actor, pos) = fixture();
+    let pig = spawn(&mut state, "pig", pos);
+    equip(&mut state, actor, pig, "saddle");
+    let pig_slot = slot(&state, pig);
+    let absent = Uuid::new_v4();
+    state.entities.set_riders(pig_slot, vec![absent]);
+    hold(&mut state, actor, "carrot_on_a_stick", 1);
+    run_tick(&mut state, &[]);
+    assert_eq!(
+        state.entities.row(pig_slot).entity_life.mount.riders,
+        [absent]
+    );
+    run_tick(&mut state, &[use_entity(pig)]);
+    let actor_uuid = state.entities.row(slot(&state, actor)).uuid;
+    assert_eq!(
+        state.entities.row(pig_slot).entity_life.mount.riders,
+        [actor_uuid],
+        "taking the seat releases its absent claimant, even if they never return"
+    );
+    let old = state.entities.pos(pig_slot);
+    let target = [old[0] + 0.25, old[1], old[2]];
+    move_vehicle(&mut state, ConnectionId(1), target, 0.0, 0.0, true);
+    assert!((state.entities.pos(pig_slot)[0] - target[0]).abs() < 0.001);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(2),
+            uuid: absent,
+            name: "late".into(),
+            permission_level: 0,
+        }],
+    );
+    let late = state.connections.entity_of(ConnectionId(2)).unwrap();
+    assert!(
+        vehicle(&state, late).is_none(),
+        "a reclaimed seat is not restored"
+    );
+    assert_eq!(vehicle(&state, actor), Some(pig_slot));
+}
+
+#[test]
+fn first_live_passenger_steers_past_an_absent_primary_claim() {
+    let (mut state, actor, pos) = fixture();
+    let ghast = spawn(&mut state, "happy_ghast", pos);
+    equip(&mut state, actor, ghast, "red_harness");
+    let ghast_slot = slot(&state, ghast);
+    let actor_uuid = state.entities.row(slot(&state, actor)).uuid;
+    state
+        .entities
+        .set_riders(ghast_slot, vec![Uuid::new_v4(), actor_uuid]);
+    sync_rider(&mut state, ghast_slot);
+    assert_eq!(rider(&state, ghast_slot), Some(slot(&state, actor)));
+    let old = state.entities.pos(ghast_slot);
+    let target = [old[0] + 0.25, old[1], old[2]];
+    move_vehicle(&mut state, ConnectionId(1), target, 0.0, 0.0, false);
+    assert!((state.entities.pos(ghast_slot)[0] - target[0]).abs() < 0.001);
+}
+
+#[test]
+fn live_ride_does_not_duplicate_its_own_retained_claim() {
+    let (mut state, actor, pos) = fixture();
+    let ghast = spawn(&mut state, "happy_ghast", pos);
+    equip(&mut state, actor, ghast, "red_harness");
+    let ghast_slot = slot(&state, ghast);
+    let uuid = state.entities.row(slot(&state, actor)).uuid;
+    // Only the durable claim is present; the derived reverse link is absent.
+    state.entities.set_riders(ghast_slot, vec![uuid]);
+    assert!(vehicle(&state, actor).is_none());
+    run_tick(&mut state, &[use_entity(ghast)]);
+    assert_eq!(
+        state.entities.row(ghast_slot).entity_life.mount.riders,
+        [uuid]
+    );
+    assert_eq!(vehicle(&state, actor), Some(ghast_slot));
+}
 #[test]
 fn steady_mob_rider_takes_no_row_custody_per_tick() {
     let (mut state, _, pos) = fixture();
