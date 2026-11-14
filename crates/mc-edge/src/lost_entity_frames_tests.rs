@@ -8,6 +8,7 @@
 //! while `capacity` still reports the free slots the plan spends.
 
 use super::*;
+use crate::server::{WORLD_QUEUE_BYTES, WorldReceiver, WorldSender, world_queue};
 use mc_core::boundary::{
     ChangeSet, EntityAppearance, EntityId, EntityView, SnapshotChunk, TickOutput, WorldSnapshot,
 };
@@ -109,7 +110,7 @@ fn scene(
 
 /// The entity frames queued, in order: `add 10`, `passengers 10 [11]`,
 /// `remove [10]`.
-fn entity_frames(world_rx: &mut mpsc::Receiver<bytes::Bytes>) -> Vec<String> {
+fn entity_frames(world_rx: &mut WorldReceiver) -> Vec<String> {
     let mut frames = Vec::new();
     while let Ok(data) = world_rx.try_recv() {
         let mut bytes = bytes::BytesMut::from(data.as_ref());
@@ -169,7 +170,7 @@ impl Pump {
         let server = Arc::new(server);
         let id = server.connections.joining_id();
         let (reliable_tx, reliable_rx) = mpsc::channel(512);
-        let (world_tx, _) = mpsc::channel(1);
+        let (world_tx, _) = world_queue(1, WORLD_QUEUE_BYTES);
         server
             .connections
             .register(
@@ -202,7 +203,7 @@ impl Pump {
     /// Publish `output` into a world queue that refuses every frame after the
     /// plan has spent its free slots.
     async fn publish_refused(&mut self, output: &TickOutput) {
-        let (world_tx, world_rx) = mpsc::channel(512);
+        let (world_tx, world_rx) = world_queue(512, WORLD_QUEUE_BYTES);
         drop(world_rx);
         self.publish(output, world_tx).await;
     }
@@ -214,12 +215,12 @@ impl Pump {
 
     /// As [`Self::publish_delivered`], into a world queue of `slots`: the plan's credit.
     async fn publish_delivered_into(&mut self, output: &TickOutput, slots: usize) -> Vec<String> {
-        let (world_tx, mut world_rx) = mpsc::channel(slots);
+        let (world_tx, mut world_rx) = world_queue(slots, WORLD_QUEUE_BYTES);
         self.publish(output, world_tx).await;
         entity_frames(&mut world_rx)
     }
 
-    async fn publish(&mut self, output: &TickOutput, world_tx: mpsc::Sender<bytes::Bytes>) {
+    async fn publish(&mut self, output: &TickOutput, world_tx: WorldSender) {
         self.connections.get_mut(&self.id).unwrap().world_tx = world_tx;
         publish_and_route(
             &self.server,

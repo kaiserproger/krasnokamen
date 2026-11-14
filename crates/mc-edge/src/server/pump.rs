@@ -810,7 +810,7 @@ mod roster_seed_tests {
         bound: usize,
     ) -> mpsc::Receiver<bytes::Bytes> {
         let (reliable_tx, reliable_rx) = mpsc::channel(bound);
-        let (world_tx, _world_rx) = mpsc::channel(bound);
+        let (world_tx, _world_rx) = world_queue(bound, WORLD_QUEUE_BYTES);
         server
             .connections
             .register(
@@ -835,7 +835,7 @@ mod roster_seed_tests {
         let root = tempfile::tempdir().unwrap();
         let server = test_server(root.path());
         let a = server.connections.joining_id();
-        let _a_rx = register(&server, a, crate::fanout::OUTBOUND_QUEUE_BOUND);
+        let _a_rx = register(&server, a, crate::fanout::RELIABLE_QUEUE_BOUND);
 
         let players: Arc<[RosterPlayer]> = (1..=600i32)
             .map(|i| RosterPlayer {
