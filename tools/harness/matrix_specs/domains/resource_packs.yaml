@@ -16,7 +16,7 @@ subjects:
 - subject: resource_packs.pack_accept
   matrix_ids:
   - pw:resource_packs.pack_accept/vanilla_java_26_1_2/creative/overworld/easy/N8/reconnect_mid_action/crash_kill9_wal_replay/op_4
-  - pw:resource_packs.pack_accept/forge_solaris_loader/survival/the_end/hard/2/slow_reader_backpressure/steady/op_4
+  - pw:resource_packs.pack_accept/forge_krasnokamen_loader/survival/the_end/hard/2/slow_reader_backpressure/steady/op_4
   preconditions:
     setup_callable: resource_packs.ADAPTERS['resource_packs.pack_accept'].setup
     fixture_calls: []
@@ -75,7 +75,7 @@ subjects:
   subject_oracle_text: 'reference: plays without pack'
 - subject: resource_packs.pack_decline_required
   matrix_ids:
-  - pw:resource_packs.pack_decline_required/neoforge_solaris_loader/spectator/the_end/hard/2/normal/hot_backup_during_action/non_op_0
+  - pw:resource_packs.pack_decline_required/neoforge_krasnokamen_loader/spectator/the_end/hard/2/normal/hot_backup_during_action/non_op_0
   - pw:resource_packs.pack_decline_required/native_linux/spectator/the_nether/normal/2/slow_reader_backpressure/pause_when_empty_resume/op_2
   preconditions:
     setup_callable: resource_packs.ADAPTERS['resource_packs.pack_decline_required'].setup
@@ -131,7 +131,7 @@ subjects:
   subject_oracle_text: 'reference: failed status; required -> disconnect'
 - subject: resource_packs.pack_prompt_text
   matrix_ids:
-  - pw:resource_packs.pack_prompt_text/fabric_solaris_loader/spectator/the_end/peaceful/N8/duplicate_login/pause_when_empty_resume/op_1
+  - pw:resource_packs.pack_prompt_text/fabric_krasnokamen_loader/spectator/the_end/peaceful/N8/duplicate_login/pause_when_empty_resume/op_1
   preconditions:
     setup_callable: resource_packs.ADAPTERS['resource_packs.pack_prompt_text'].setup
     fixture_calls: []

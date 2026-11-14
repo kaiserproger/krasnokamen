@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Real Solaris Loader compatibility gate for one client platform.
+"""Real Krasnokamen Loader compatibility gate for one client platform.
 
-The caller creates ``artifact_dir`` and supplies an immutable solaris-v2
+The caller creates ``artifact_dir`` and supplies an immutable krasnokamen
 candidate and plugin deployment. This module owns lifecycle and cleanup, never the
 canonical top-level ``result.json``.
 """
@@ -23,8 +23,8 @@ from .mcp import McpClient
 REPO_ROOT = runtime.REPO_ROOT
 SERVER_ADDRESS = "127.0.0.1:25567"
 CONFIRMATION_TITLES = (
-    f"Allow Solaris content from {SERVER_ADDRESS}?",
-    "Allow Solaris content from localhost:25567?",
+    f"Allow Krasnokamen content from {SERVER_ADDRESS}?",
+    "Allow Krasnokamen content from localhost:25567?",
 )
 PLATFORMS = ("fabric", "neoforge", "forge")
 USERNAMES = {"fabric": "GateFabric", "neoforge": "GateNeoForge", "forge": "GateForge"}
@@ -99,7 +99,7 @@ def run(
     # accessibility onboarding. Vanilla's 26.1.2 options datafix uses false for an
     # already-onboarded profile. Isolate Loader audio from vanilla background music.
     (game_dir / "options.txt").write_text(
-        "version:4790\nonboardAccessibility:false\nsoundDevice:SolarisLoaderGate\n"
+        "version:4790\nonboardAccessibility:false\nsoundDevice:KrasnokamenLoaderGate\n"
         "soundCategory_music:0.0\n"
     )
     with (game_dir / "options.txt").open("a") as options:
@@ -137,7 +137,7 @@ def run(
             for bundle in manifest.get("client", {}).get("bundles", [])
         )
     expected_bundle_cache_files.sort()
-    token = f"solaris-loader-{platform}-{time.time_ns()}"
+    token = f"krasnokamen-loader-{platform}-{time.time_ns()}"
     mcp_port = runtime.reserve_port()
 
     xvfb = server = client_process = None

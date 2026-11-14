@@ -1,4 +1,4 @@
-schema: solaris-domain-spec-1
+schema: krasnokamen-domain-spec-1
 domain: settlements
 minecraft_version: 26.1.2
 executable_interface: tools/harness/matrix_api.py; plain Python adapters; this YAML is specification only, not an
@@ -63,7 +63,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: tools/harness/matrix_domains/settlements.py
   status: adapter_requires_live_validation
   adapter_completeness: complete_subject_oracle
@@ -111,7 +111,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: tools/harness/matrix_domains/settlements.py
   status: adapter_requires_live_validation
   adapter_completeness: complete_subject_oracle
@@ -159,7 +159,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: tools/harness/matrix_domains/settlements.py
   status: adapter_requires_live_validation
   adapter_completeness: complete_subject_oracle
@@ -207,7 +207,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: tools/harness/matrix_domains/settlements.py
   status: adapter_requires_live_validation
   adapter_completeness: complete_subject_oracle
@@ -255,7 +255,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: tools/harness/matrix_domains/settlements.py
   status: adapter_requires_live_validation
   adapter_completeness: complete_subject_oracle
@@ -302,7 +302,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: tools/harness/matrix_domains/settlements.py
   status: adapter_requires_live_validation
   adapter_completeness: complete_subject_oracle
@@ -350,7 +350,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: tools/harness/matrix_domains/settlements.py
   status: adapter_requires_live_validation
   adapter_completeness: complete_subject_oracle
@@ -399,7 +399,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: tools/harness/matrix_domains/settlements.py
   status: adapter_requires_live_validation
   adapter_completeness: registered_stub
@@ -445,7 +445,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: tools/harness/matrix_domains/settlements.py
   status: adapter_requires_live_validation
   adapter_completeness: registered_stub
@@ -491,7 +491,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: tools/harness/matrix_domains/settlements.py
   status: adapter_requires_live_validation
   adapter_completeness: registered_stub
@@ -537,7 +537,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: tools/harness/matrix_domains/settlements.py
   status: adapter_requires_live_validation
   adapter_completeness: registered_stub
@@ -593,12 +593,12 @@ subjects:
     recipe: minecraft:oak_planks
     count: 1
   - console: setblock 4 200 0 crafting_table
-  - note: Native recipe solaris-settlements:oak_planks revision1 requires1 oak_log and wooden_axe with1 durability;
+  - note: Native recipe krasnokamen-settlements:oak_planks revision1 requires1 oak_log and wooden_axe with1 durability;
       output4 oak_planks; duration200 ticks. Supply resident carry/equipment through real item transfer, not invented
       production state.
     source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/startup_recipes.json:1-37
   actions:
-  - command: settlement production MatrixTown start 1 12345678-1234-1234-1234-123456789abc solaris-settlements:oak_planks
+  - command: settlement production MatrixTown start 1 12345678-1234-1234-1234-123456789abc krasnokamen-settlements:oak_planks
       1 workshop 4,80,0 3,80,0
   oracle:
   - name: state_transition
@@ -634,7 +634,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -687,10 +687,10 @@ subjects:
   - verb: stock_recipe_inputs
     recipe: minecraft:oak_planks
     count: 1
-  - console: settlement production MatrixTown start 1 12345678-1234-1234-1234-123456789abc solaris-settlements:oak_planks
+  - console: settlement production MatrixTown start 1 12345678-1234-1234-1234-123456789abc krasnokamen-settlements:oak_planks
       1 workshop 4,80,0 3,80,0
   - console: setblock 4 200 0 crafting_table
-  - note: Native recipe solaris-settlements:oak_planks revision1 requires1 oak_log and wooden_axe with1 durability;
+  - note: Native recipe krasnokamen-settlements:oak_planks revision1 requires1 oak_log and wooden_axe with1 durability;
       output4 oak_planks; duration200 ticks. Supply resident carry/equipment through real item transfer, not invented
       production state.
     source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/startup_recipes.json:1-37
@@ -730,7 +730,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -783,11 +783,11 @@ subjects:
   - verb: stock_recipe_inputs
     recipe: minecraft:oak_planks
     count: 1
-  - console: settlement production MatrixTown start 1 12345678-1234-1234-1234-123456789abc solaris-settlements:oak_planks
+  - console: settlement production MatrixTown start 1 12345678-1234-1234-1234-123456789abc krasnokamen-settlements:oak_planks
       1 workshop 4,80,0 3,80,0
   - console: settlement production MatrixTown pause 1
   - console: setblock 4 200 0 crafting_table
-  - note: Native recipe solaris-settlements:oak_planks revision1 requires1 oak_log and wooden_axe with1 durability;
+  - note: Native recipe krasnokamen-settlements:oak_planks revision1 requires1 oak_log and wooden_axe with1 durability;
       output4 oak_planks; duration200 ticks. Supply resident carry/equipment through real item transfer, not invented
       production state.
     source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/startup_recipes.json:1-37
@@ -827,7 +827,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -880,10 +880,10 @@ subjects:
   - verb: stock_recipe_inputs
     recipe: minecraft:oak_planks
     count: 1
-  - console: settlement production MatrixTown start 1 12345678-1234-1234-1234-123456789abc solaris-settlements:oak_planks
+  - console: settlement production MatrixTown start 1 12345678-1234-1234-1234-123456789abc krasnokamen-settlements:oak_planks
       1 workshop 4,80,0 3,80,0
   - console: setblock 4 200 0 crafting_table
-  - note: Native recipe solaris-settlements:oak_planks revision1 requires1 oak_log and wooden_axe with1 durability;
+  - note: Native recipe krasnokamen-settlements:oak_planks revision1 requires1 oak_log and wooden_axe with1 durability;
       output4 oak_planks; duration200 ticks. Supply resident carry/equipment through real item transfer, not invented
       production state.
     source: /run/media/kaiserroman/games/solaris-work/wt/deploy-final/crates/mc-core/src/settlements/startup_recipes.json:1-37
@@ -923,7 +923,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -999,7 +999,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -1076,7 +1076,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -1153,7 +1153,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -1229,7 +1229,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -1308,7 +1308,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -1385,7 +1385,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -1463,7 +1463,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -1544,7 +1544,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -1625,13 +1625,13 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
 - subject: settlements.caravan_open
   scenario_ids:
-  - pw:settlements.caravan_open/fabric_solaris_loader/creative/overworld/peaceful/2/normal/hot_backup_during_action/op_3
+  - pw:settlements.caravan_open/fabric_krasnokamen_loader/creative/overworld/peaceful/2/normal/hot_backup_during_action/op_3
   - tr.restart_x_inventory.clean_restart_mid_action:settlements.caravan_open/protocol_bot/survival/overworld/normal/1/normal/clean_restart_mid_action/non_op_0
   - tr.restart_x_inventory.crash_kill9_wal_replay:settlements.caravan_open/vanilla_java_26_1_2/survival/overworld/normal/1/normal/crash_kill9_wal_replay/non_op_0
   - tr.restart_x_inventory.hot_backup_during_action:settlements.caravan_open/native_linux/survival/overworld/normal/1/normal/hot_backup_during_action/non_op_0
@@ -1705,7 +1705,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -1783,7 +1783,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -1866,13 +1866,13 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
 - subject: settlements.caravan_cancel
   scenario_ids:
-  - pw:settlements.caravan_cancel/forge_solaris_loader/creative/the_nether/hard/N8/malformed_or_stale_packet/hot_backup_during_action/op_4
+  - pw:settlements.caravan_cancel/forge_krasnokamen_loader/creative/the_nether/hard/N8/malformed_or_stale_packet/hot_backup_during_action/op_4
   preconditions:
   - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
   - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
@@ -1944,13 +1944,13 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
 - subject: settlements.caravan_block
   scenario_ids:
-  - pw:settlements.caravan_block/neoforge_solaris_loader/adventure/the_end/easy/2/slow_reader_backpressure/hot_backup_during_action/non_op_0
+  - pw:settlements.caravan_block/neoforge_krasnokamen_loader/adventure/the_end/easy/2/slow_reader_backpressure/hot_backup_during_action/non_op_0
   preconditions:
   - console: execute in ${dimension} run fill -16 199 -16 16 199 16 stone
   - console: execute in ${dimension} run fill -16 200 -16 16 215 16 air
@@ -2022,7 +2022,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -2061,7 +2061,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -2106,7 +2106,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -2143,7 +2143,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -2194,7 +2194,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -2246,7 +2246,7 @@ subjects:
   - QUERY-BLOCK-DATA
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -2284,7 +2284,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -2318,7 +2318,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -2352,7 +2352,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only
@@ -2389,7 +2389,7 @@ subjects:
   server_gap: []
   vanilla_26_1_2:
     applicable: false
-    reason: /settlement is Solaris-specific, not a vanilla command; expected values come from cited Solaris modules.
+    reason: /settlement is Krasnokamen-specific, not a vanilla command; expected values come from cited Krasnokamen modules.
   adapter: null
   status: blocked_missing_observation_or_fixture_capability
   adapter_completeness: spec_only

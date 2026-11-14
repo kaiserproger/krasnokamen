@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install only FIRST HANDOFF from a saved Solaris Pro audit response."""
+"""Install only FIRST HANDOFF from a saved Krasnokamen Pro audit response."""
 
 from __future__ import annotations
 
