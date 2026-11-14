@@ -130,7 +130,7 @@ fn production_after_cancel(f: &mut Fixture) {
     let building = mc_script::ScriptSettlementBuildingRef::new(
         "building".into(),
         bid.0.to_string(),
-        format!("solaris:{}", kind.name()),
+        format!("krasnokamen:{}", kind.name()),
     );
     economy::execute(
         &mut f.state,
@@ -138,7 +138,7 @@ fn production_after_cancel(f: &mut Fixture) {
         economy::Request::Production(production::Request::Start {
             job: "after-blocked-cancel".into(),
             worker: f.carrier_uuid,
-            recipe: "solaris-settlements:bread".into(),
+            recipe: "krasnokamen-settlements:bread".into(),
             count: 1,
             station: [8, 201, 20],
             stand_at: [8, 201, 21],

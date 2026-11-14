@@ -46,7 +46,7 @@ class VanillaLauncherTest(unittest.TestCase):
         command = self.command()
         self.assertIn("net.minecraft.client.main.Main", command)
         self.assertIn(f"-javaagent:{self.agent}", command)
-        self.assertNotIn("-Dsolaris.client.vanillaEvents=true", command)
+        self.assertNotIn("-Dkrasnokamen.client.vanillaEvents=true", command)
         self.assertIn("-Xmx512M", command)
         self.assertFalse(any("KnotClient" in arg or "neoforge" in arg or "gradlew" in arg for arg in command))
         self.assertIn("26.1.2-30", command)
@@ -61,9 +61,9 @@ class VanillaLauncherTest(unittest.TestCase):
         self.metadata["id"] = "26.3"
         self.info.write_text(json.dumps(self.metadata))
         (self.assets / "indexes/26.3-30.json").write_bytes(b'{"objects":{}}')
-        with mock.patch.dict("os.environ", {"SOLARIS_JAVA_VERSION": "26.3"}):
+        with mock.patch.dict("os.environ", {"KRASNOKAMEN_JAVA_VERSION": "26.3"}):
             command = self.command()
-            self.assertIn("-Dsolaris.client.vanillaEvents=true", command)
+            self.assertIn("-Dkrasnokamen.client.vanillaEvents=true", command)
             self.assertEqual(command[command.index("--version") + 1], "26.3")
             self.metadata["id"] = "26.1.2"
             self.info.write_text(json.dumps(self.metadata))
@@ -71,7 +71,7 @@ class VanillaLauncherTest(unittest.TestCase):
                 self.command()
 
     def test_explicit_262_requires_matching_metadata(self):
-        with mock.patch.dict("os.environ", {"SOLARIS_JAVA_VERSION": "26.2"}):
+        with mock.patch.dict("os.environ", {"KRASNOKAMEN_JAVA_VERSION": "26.2"}):
             with self.assertRaisesRegex(MissingCapability, "26.2"):
                 self.command()
             self.metadata["id"] = "26.2"
@@ -101,7 +101,7 @@ class VanillaLauncherTest(unittest.TestCase):
         manifest = self.root / "fabric.json"
         manifest.write_text(json.dumps({
             "java": "/java", "main_class": "net.fabricmc.devlaunchinjector.Main",
-            "classpath": [str(self.agent)], "jvm_args": ["-Xmx4G", "-Dsolaris.loader.cacheDir=/prepared/game/cache"],
+            "classpath": [str(self.agent)], "jvm_args": ["-Xmx4G", "-Dkrasnokamen.loader.cacheDir=/prepared/game/cache"],
             "args": ["--username", "PreparedJava", "--gameDir", "/prepared/game"],
             "game_dir": "/prepared/game", "username": "PreparedJava"}))
         command = launcher.prepared_fabric_command(manifest, self.game, "JMatrix07")
@@ -109,7 +109,7 @@ class VanillaLauncherTest(unittest.TestCase):
         self.assertIn("-Xmx512M", command)
         self.assertIn("JMatrix07", command)
         self.assertIn(str(self.game), command)
-        self.assertIn("-Dsolaris.loader.cacheDir=" + str(self.game / "cache"), command)
+        self.assertIn("-Dkrasnokamen.loader.cacheDir=" + str(self.game / "cache"), command)
 
 class ModdedLauncherTest(unittest.TestCase):
     def test_exact_supported_version_and_platform(self):
@@ -120,7 +120,7 @@ class ModdedLauncherTest(unittest.TestCase):
             ("26.3", "neoforge", "26.3.0.83", "0.163.0+26.3"),
         ):
             with self.subTest(version=version, platform=platform), mock.patch.dict(
-                "os.environ", {"SOLARIS_JAVA_VERSION": version, "SOLARIS_JAVA_PLATFORM": platform},
+                "os.environ", {"KRASNOKAMEN_JAVA_VERSION": version, "KRASNOKAMEN_JAVA_PLATFORM": platform},
                 clear=True,
             ):
                 args = launcher.modded_gradle_arguments(":fabric-agent:runClientMcp")
@@ -138,7 +138,7 @@ class ModdedLauncherTest(unittest.TestCase):
             ("26.1.2", "fabric", ":loader-neoforge:runClientMcp"),
         ):
             with self.subTest(version=version, platform=platform), mock.patch.dict(
-                "os.environ", {"SOLARIS_JAVA_VERSION": version, "SOLARIS_JAVA_PLATFORM": platform},
+                "os.environ", {"KRASNOKAMEN_JAVA_VERSION": version, "KRASNOKAMEN_JAVA_PLATFORM": platform},
                 clear=True,
             ):
                 with self.assertRaises(MissingCapability):

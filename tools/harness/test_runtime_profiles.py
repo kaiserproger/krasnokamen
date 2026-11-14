@@ -110,7 +110,7 @@ class ProfileTaskTests(unittest.TestCase):
                     seen["env"] = env
                 finally:
                     handle.close()
-            self.assertEqual(seen["env"]["SOLARIS_CLIENT_MCP_USERNAME"], "SvcProfile")
+            self.assertEqual(seen["env"]["KRASNOKAMEN_CLIENT_MCP_USERNAME"], "SvcProfile")
 
     def test_exact_selectors_reach_spawned_gradle_command(self) -> None:
         endpoints = (("26.1.2", "fabric"), ("26.1.2", "neoforge"),
@@ -120,8 +120,8 @@ class ProfileTaskTests(unittest.TestCase):
             for version, platform in endpoints:
                 with self.subTest(version=version, platform=platform), \
                         mock.patch.dict(os.environ, {
-                            "SOLARIS_JAVA_VERSION": version, "SOLARIS_JAVA_PLATFORM": platform,
-                            "SOLARIS_CLIENT_JAR": str(root / "client.jar"),
+                            "KRASNOKAMEN_JAVA_VERSION": version, "KRASNOKAMEN_JAVA_PLATFORM": platform,
+                            "KRASNOKAMEN_CLIENT_JAR": str(root / "client.jar"),
                         }, clear=True), \
                         _gradlew_present(), \
                         mock.patch.object(runtime.os, "access", return_value=True), \
@@ -134,7 +134,7 @@ class ProfileTaskTests(unittest.TestCase):
                         argv = launch.call_args.args[0]
                         self.assertEqual(argv[-1], f":loader-{platform}:runClientMcp")
                         self.assertIn(f"-PminecraftVersion={version}", argv)
-                        self.assertIn(f"-Psolaris.clientJar={root / 'client.jar'}", argv)
+                        self.assertIn(f"-Pkrasnokamen.clientJar={root / 'client.jar'}", argv)
                     finally:
                         handle.close()
 
@@ -281,7 +281,7 @@ class ModProvisioningTests(unittest.TestCase):
                     self.assertEqual(staged_target.parent, game / "mods")
                     # Fail-closed verification runs before Gradle starts.
                     self.assertGreaterEqual(verify.call_count, 1)
-                    marker = json.loads((game / "solaris-profile.json").read_text())
+                    marker = json.loads((game / "krasnokamen-profile.json").read_text())
                     self.assertEqual(marker["client_profile"], "svc")
                     self.assertEqual(marker["platform"], "fabric")
                 finally:
