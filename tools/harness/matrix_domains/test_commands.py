@@ -115,6 +115,33 @@ class DomainContractTests(unittest.TestCase):
         ctx = context(reply='[Server] MatrixConsoleFence00001')
         self.assertFalse(commands.check_block(ctx, (1, 80, 1), 'stone').passed)
 
+    def test_console_acknowledgment_is_never_received_player_chat(self):
+        # Regression TEST-MATRIX-CONSOLE-FENCE-CHAT: the harness's own console
+        # fence (scoreboard players list MatrixConsoleFence<hash>) reached the
+        # observer's chat and was read back as player-visible command feedback
+        # (winqa-8796727.yaml:63-68, shots/218-face-platform.png). A fence line
+        # must neither satisfy the receipt wait nor enter the parsed reply.
+        ctx = context('op_1')
+        client = ctx.clients[0]
+
+        def fence_only(text):
+            client.sent.append(text)
+            client.data['events'].append('[Server] MatrixConsoleFence0000023')
+
+        client.command = fence_only
+        with self.assertRaisesRegex(AssertionError, 'received command feedback fence'):
+            commands.issue(ctx, 'time set day')
+        self.assertNotIn('command_reply', ctx.state)
+
+        def feedback_after_fence(text):
+            client.sent.append(text)
+            client.data['events'].extend(['[Server] MatrixConsoleFence0000024',
+                                          'Set the time to 1000'])
+
+        client.command = feedback_after_fence
+        commands.issue(ctx, 'time set day')
+        self.assertEqual(ctx.state['command_reply'], 'Set the time to 1000')
+
     def test_authoritative_positive_marker(self):
         ctx = context(reply='[Server] MatrixBlock1801')
         self.assertTrue(commands.check_block(ctx, (1, 80, 1), 'stone').passed)
