@@ -994,9 +994,11 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
     settings = scenario.get("client_settings", {})
     if not isinstance(settings, dict) or set(settings) - {"graphics_preset", "render_distance", "fov", "gui_scale", "language", "screen_size"}:
         raise ValueError("unsupported client settings")
+    if {"gui_scale", "screen_size"} & settings.keys() and ctx.client != "java":
+        raise ValueError("gui_scale and screen_size are Java-only scene settings")
     if {"gui_scale", "language", "screen_size"} & settings.keys():
-        if ctx.client != "java":
-            raise ValueError("gui_scale, language and screen_size are Java-only scene settings")
+        # The language reaches the native client as KRASNOKAMEN_CLIENT_LANGUAGE, the Java client
+        # through options.txt; both accept exactly the pinned locales.
         _validate_java_display(settings.get("gui_scale", NATIVE_GUI_SCALE), settings.get("language", "en_us"),
                                settings.get("screen_size", WINDOW))
     if "fov" in settings and (type(settings["fov"]) is not int or not 30 <= settings["fov"] <= 110):
@@ -1080,7 +1082,9 @@ def run(
         base_path = Path(os.environ.get("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "krasnokamen-client" / "client-settings.json"
         base = json.loads(base_path.read_text()) if base_path.is_file() else {}
     # The owner's personal fov must not leak into a reference comparison.
-    base.update({"fov": NATIVE_FOV, **settings})
+    # The native client takes its language from KRASNOKAMEN_CLIENT_LANGUAGE (below), not the file.
+    base.update({"fov": NATIVE_FOV, **{key: value for key, value in settings.items()
+                                       if not (key == "language" and ctx.client != "java")}})
     if ctx.client == "java" and "graphics_preset" in settings:
         raise ValueError("graphics_preset is a native-client setting; the Java client keeps its default")
     settings_path.write_text(json.dumps(base, indent=2) + "\n")
