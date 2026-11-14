@@ -54,11 +54,12 @@ async fn published_through(root: &Path, checkpoint: u64, target: u64) {
 #[ignore = "invoked only by the Linux crash-tail parent tests"]
 async fn crash_child() {
     let root = std::path::PathBuf::from(
-        std::env::var_os("SOLARIS_CAPTURE_CHILD_ROOT").expect("child root"),
+        std::env::var_os("KRASNOKAMEN_CAPTURE_CHILD_ROOT").expect("child root"),
     );
-    let domain: Domain =
-        serde_json::from_str(&std::env::var("SOLARIS_CAPTURE_CHILD_DOMAIN").expect("child domain"))
-            .unwrap();
+    let domain: Domain = serde_json::from_str(
+        &std::env::var("KRASNOKAMEN_CAPTURE_CHILD_DOMAIN").expect("child domain"),
+    )
+    .unwrap();
     let (_live, evidence) = scenario(&root, domain).await;
     published_through(&root, evidence.checkpoint_tick, evidence.through_tick).await;
     let mut marker =
@@ -83,9 +84,9 @@ async fn crash_roundtrip(domain: Domain) {
             "--nocapture",
             "--test-threads=1",
         ])
-        .env("SOLARIS_CAPTURE_CHILD_ROOT", &root)
+        .env("KRASNOKAMEN_CAPTURE_CHILD_ROOT", &root)
         .env(
-            "SOLARIS_CAPTURE_CHILD_DOMAIN",
+            "KRASNOKAMEN_CAPTURE_CHILD_DOMAIN",
             serde_json::to_string(&domain).unwrap(),
         )
         .stdin(Stdio::null())

@@ -1,4 +1,4 @@
-//! Protocol-independent gameplay value types shared across Solaris domains.
+//! Protocol-independent gameplay value types shared across Krasnokamen domains.
 //!
 //! This crate must not depend on transport, persistence, runtime, or generated
 //! vanilla-data loaders. Wire codecs adapt to these values at the boundary.

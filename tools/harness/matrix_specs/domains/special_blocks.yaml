@@ -1,4 +1,4 @@
-schema: solaris-domain-adapter-index/1
+schema: krasnokamen-domain-adapter-index/1
 domain: special_blocks
 subjects_specified: 8
 vanilla_provenance: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/version.json
@@ -15,14 +15,14 @@ subjects:
   - subject: special_blocks.beacon_pyramid_effects
     matrix_ids:
       - pw:special_blocks.beacon_pyramid_effects/fabric_svc/creative/the_end/peaceful/2/malformed_or_stale_packet/save_all_checkpoint/op_3
-      - pw:special_blocks.beacon_pyramid_effects/forge_solaris_loader/survival/the_nether/hard/1/disconnect_during_menu/clean_restart_mid_action/op_1
+      - pw:special_blocks.beacon_pyramid_effects/forge_krasnokamen_loader/survival/the_nether/hard/1/disconnect_during_menu/clean_restart_mid_action/op_1
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: range/effects by tier; secondary at tier 4
     vanilla_source:
       - https://minecraft.wiki/w/Beacon
-    solaris_sources:
+    krasnokamen_sources:
       - core:beacon.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
@@ -80,14 +80,14 @@ subjects:
       - effects(ctx)
   - subject: special_blocks.conduit
     matrix_ids:
-      - pw:special_blocks.conduit/fabric_solaris_loader/survival/overworld/easy/2/normal/pause_when_empty_resume/op_2
+      - pw:special_blocks.conduit/fabric_krasnokamen_loader/survival/overworld/easy/2/normal/pause_when_empty_resume/op_2
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: conduit power to players in water; attacks hostiles at full frame
     vanilla_source:
       - https://minecraft.wiki/w/Conduit
-    solaris_sources:
+    krasnokamen_sources:
       - core:conduit.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
@@ -139,7 +139,7 @@ subjects:
     expected: allay duplicates once with cooldown; delivers items to note block
     vanilla_source:
       - https://minecraft.wiki/w/Allay
-    solaris_sources:
+    krasnokamen_sources:
       - core:jukebox.rs
       - core:allay.rs
     adapter:
@@ -192,7 +192,7 @@ subjects:
     expected: villagers flee indoors; raiders glow
     vanilla_source:
       - https://minecraft.wiki/w/Bell
-    solaris_sources:
+    krasnokamen_sources:
       - core:villager/brain.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
@@ -237,7 +237,7 @@ subjects:
     expected: four stages; waxed stops
     vanilla_source:
       - https://minecraft.wiki/w/Block_of_Copper
-    solaris_sources:
+    krasnokamen_sources:
       - core:copper.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
@@ -274,7 +274,7 @@ subjects:
     expected: compost accepted; bone meal extracted
     vanilla_source:
       - https://minecraft.wiki/w/Composter
-    solaris_sources:
+    krasnokamen_sources:
       - core:composter.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
@@ -313,14 +313,14 @@ subjects:
       - survival
   - subject: special_blocks.monster_spawner_entity
     matrix_ids:
-      - pw:special_blocks.monster_spawner_entity/neoforge_solaris_loader/survival/the_nether/easy/1/duplicate_login/crash_kill9_wal_replay/op_2
+      - pw:special_blocks.monster_spawner_entity/neoforge_krasnokamen_loader/survival/the_nether/easy/1/duplicate_login/crash_kill9_wal_replay/op_2
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: spawns that type
     vanilla_source:
       - https://minecraft.wiki/w/Monster_Spawner
-    solaris_sources:
+    krasnokamen_sources:
       - core:monster_spawner.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py
@@ -361,7 +361,7 @@ subjects:
     expected: "vanilla: single-stack storage / 6 book slots with comparator"
     vanilla_source:
       - https://minecraft.wiki/w/Chiseled_Bookshelf
-    solaris_sources:
+    krasnokamen_sources:
       - core:tick/input/interact.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/special_blocks.py

@@ -100,8 +100,8 @@ pub(super) fn metadata_at_lsn(
 ) -> Result<Vec<u8>, NativeError> {
     let mut root = metadata_root(chunk, blocks, items)?;
     let fields = compound_mut(&mut root)?;
-    fields.retain(|(key, _)| key != "SolarisJournalLsn");
-    fields.push(("SolarisJournalLsn".into(), Tag::Long(lsn as i64)));
+    fields.retain(|(key, _)| key != "KrasnokamenJournalLsn");
+    fields.push(("KrasnokamenJournalLsn".into(), Tag::Long(lsn as i64)));
     super::pack::pack(encode(&root)?)
 }
 

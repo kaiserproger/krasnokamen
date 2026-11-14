@@ -14,7 +14,7 @@ use super::{
 /// Keys removed or rewritten per durable transaction.
 const BATCH: usize = 2048;
 const INHABITED: &str = "InhabitedTime";
-const JOURNAL_LSN: &str = "SolarisJournalLsn";
+const JOURNAL_LSN: &str = "KrasnokamenJournalLsn";
 
 /// Which untouched chunks of one dimension to forget. Chunks inside the
 /// inclusive `keep_min..=keep_max` rectangle are never pruned.
@@ -106,7 +106,7 @@ impl NativeStore {
         Ok(db(generated.get(key.as_slice()))?.is_some())
     }
 
-    /// Forget chunks outside the keep rectangle whose baseline the Solaris
+    /// Forget chunks outside the keep rectangle whose baseline the Krasnokamen
     /// generator created (listed in `GENERATED`) and that still equal it: no
     /// overlay sections, no persistent entity rows (including tombstones of
     /// consumed generated slots), no side-state difference from the baseline,
