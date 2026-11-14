@@ -281,22 +281,22 @@ def existing_pin(pin_dir: Path, kind: str, rust_target: str, incremental: bool,
             f"{pin_dir} pins tree {str(info.get('head'))[:12]}/diff {str(info.get('diff_sha256'))[:8]}, not this tree "
             f"{before['head'][:12]}/diff {before['diff_sha256'][:8]}: pins are immutable and another tree's binary is "
             "never reused or relabelled; the owner must remove that pin deliberately")
-    # Kinds without an input list (the client) record their build parameters separately; a pin
-    # from before that record cannot be proven to match this environment, so it fails closed.
-    # A client pin records its own input list too (CLIENT_INPUT_PATHS, which includes the codegen
-    # environment): a pin from before that record cannot be proven to match this build.
-    if kind == "client" and info.get("inputs_sha256") is None:
-        raise w.ToolError(f"{pin_dir} records no build inputs (inputs_sha256): it predates the client input record, so it "
-                          "is not reused — re-pin this tree, or the owner removes the pin deliberately")
-    # Same head and diff but other build inputs (toolchain, RUSTFLAGS, ...): not this tree's binary.
-    # Pins from before `inputs_sha256` existed carry no key and stay accepted.
-    if inputs and info.get("inputs_sha256") and info["inputs_sha256"] != inputs:
+    # Every kind records its build inputs and its build-script environment. A pin from before that
+    # record cannot be proven to match this build — an old server pin without the fields was
+    # returned for RUSTFLAGS opt-level=1 and opt-level=3 at once (advisor 2026-11-16) — so it fails
+    # closed instead of being trusted.
+    if info.get("inputs_sha256") is None:
+        raise w.ToolError(f"{pin_dir} records no build inputs (inputs_sha256): pins from before that record are never "
+                          "used — re-pin this tree, or the owner removes the pin deliberately")
+    if inputs is not None and info["inputs_sha256"] != inputs:
         raise w.ToolError(f"{pin_dir} was built with other build inputs (toolchain or build environment changed since); "
                           "pins are immutable, so it is not reused or rebuilt: the owner must remove it deliberately")
+    if info.get("env_deps") is None:
+        raise w.ToolError(f"{pin_dir} records no build-script environment (env_deps): pins from before that record are "
+                          "never used — re-pin this tree, or the owner removes the pin deliberately")
     # Same head, diff and inputs but another value of a variable cargo tracked for the build (a build script's
-    # own switch, e.g. ZSTD_SYS_USE_PKG_CONFIG). Pins from before `env_deps` existed carry no map and stay
-    # accepted under their own name; reuse_pin never copies them.
-    if inputs and info.get("env_deps") is not None and not env_deps_match(info["env_deps"], build_env(incremental)):
+    # own switch, e.g. ZSTD_SYS_USE_PKG_CONFIG).
+    if not env_deps_match(info["env_deps"], build_env(incremental)):
         raise w.ToolError(f"{pin_dir} was built with other values of environment variables its build tracks "
                           "(see env_deps in its manifest); pins are immutable, so it is not reused or rebuilt: "
                           "restore that environment or the owner must remove the pin deliberately")

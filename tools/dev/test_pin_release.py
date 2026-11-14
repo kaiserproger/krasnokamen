@@ -52,7 +52,7 @@ class PinReleaseTests(unittest.TestCase):
         directory.mkdir()
         binary = directory / "krasnokamen-client.exe"
         binary.write_bytes(b"test pin")
-        manifest = {"repo": "client", "kind": "client", "target": WINDOWS, "inputs_sha256": "C",
+        manifest = {"repo": "client", "kind": "client", "target": WINDOWS, "inputs_sha256": "C", "env_deps": {},
                     "binary": str(binary), "binary_sha256": pin.w.sha256_file(binary)}
         (directory / "manifest.json").write_text(json.dumps(manifest))
         self.assertEqual(pin.existing_pin(directory, "client", WINDOWS, False, "C"), binary)
@@ -78,7 +78,7 @@ class PinReleaseTests(unittest.TestCase):
         before = {"head": "9" * 40, "diff_sha256": "8" * 64, "dirty": False, "untracked_files": 0}
         manifest = {"repo": "core", "kind": "server", "target": LINUX, "incremental": True,
                     "head": "1" * 40, "diff_sha256": "2" * 64, "binary": str(binary),
-                    "binary_sha256": pin.w.sha256_file(binary), "inputs_sha256": "K"}
+                    "binary_sha256": pin.w.sha256_file(binary), "inputs_sha256": "K", "env_deps": {}}
         (directory / "manifest.json").write_text(json.dumps(manifest))
         # the pre-fix cross-tree reuse wrote exactly this: another HEAD under this tree's pin name
         with self.assertRaisesRegex(pin.w.ToolError, "another tree's binary is never reused"):
@@ -93,11 +93,15 @@ class PinReleaseTests(unittest.TestCase):
         binary = directory / "krasnokamen-client"
         binary.write_bytes(b"client")
         manifest = {"repo": "client", "kind": "client", "target": LINUX, "incremental": False,
-                    "binary": str(binary), "binary_sha256": pin.w.sha256_file(binary)}
+                    "binary": str(binary), "binary_sha256": pin.w.sha256_file(binary)}  # no inputs, no env_deps
         (directory / "manifest.json").write_text(json.dumps(manifest))
         with self.assertRaisesRegex(pin.w.ToolError, "records no build inputs"):
             pin.existing_pin(directory, "client", LINUX, False, "C")
         manifest["inputs_sha256"] = "C"
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        with self.assertRaisesRegex(pin.w.ToolError, "records no build-script environment"):
+            pin.existing_pin(directory, "client", LINUX, False, "C")
+        manifest["env_deps"] = {}
         (directory / "manifest.json").write_text(json.dumps(manifest))
         self.assertEqual(pin.existing_pin(directory, "client", LINUX, False, "C"), binary)
         # another codegen environment yields another input digest: never this binary
@@ -548,15 +552,16 @@ class ReuseTests(unittest.TestCase):
         self.assertEqual(cmd[cmd.index("-m") + 1], "12G")
         self.assertIn("--message-format=json-render-diagnostics", cmd)
 
-    def test_existing_pin_with_other_build_inputs_is_refused_not_returned(self):
+    def test_existing_pin_with_other_or_missing_build_inputs_is_refused_not_returned(self):
         directory, binary = self.source_pin(inputs_sha256="K")
         self.assertEqual(pin.existing_pin(directory, "server", LINUX, True, "K"), binary)
         self.assertEqual(pin.existing_pin(directory, "server", LINUX, True, None), binary)
         with self.assertRaisesRegex(pin.w.ToolError, "other build inputs"):
             pin.existing_pin(directory, "server", LINUX, True, "changed")
-        (directory / "manifest.json").write_text(json.dumps(
-            {**json.loads((directory / "manifest.json").read_text()), "inputs_sha256": None}))
-        self.assertEqual(pin.existing_pin(directory, "server", LINUX, True, "changed"), binary, "legacy pin")
+        recorded = json.loads((directory / "manifest.json").read_text())
+        (directory / "manifest.json").write_text(json.dumps({**recorded, "inputs_sha256": None}))
+        with self.assertRaisesRegex(pin.w.ToolError, "records no build inputs"):
+            pin.existing_pin(directory, "server", LINUX, True, "K")
 
     def test_cli_refuses_a_same_name_pin_after_rustflags_change_and_builds_nothing(self):
         top = self.root / "Tree"
@@ -724,7 +729,8 @@ class EnvDepTests(unittest.TestCase):
         manifest.pop("env_deps")
         (directory / "manifest.json").write_text(json.dumps(manifest))
         os.environ["ZSTD_SYS_USE_PKG_CONFIG"] = "1"
-        self.assertEqual(pin.existing_pin(directory, "server", LINUX, True, "K"), binary, "pin from before the map")
+        with self.assertRaisesRegex(pin.w.ToolError, "records no build-script environment"):
+            pin.existing_pin(directory, "server", LINUX, True, "K")
 
 
 LEDGER_PROBE = (
