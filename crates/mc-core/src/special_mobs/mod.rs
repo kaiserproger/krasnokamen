@@ -244,6 +244,9 @@ pub(crate) struct Attack {
 #[derive(Debug, Default)]
 pub(crate) struct Runtime {
     pub attacks: HashMap<EntityId, Attack>,
+    /// Raiders' held attack target (vanilla `Mob.getTarget` kept by
+    /// `TargetGoal`); transient chase memory, never persisted.
+    pub raider_targets: HashMap<EntityId, raiders::HeldTarget>,
 }
 
 pub(crate) fn goal(blueprint: &crate::blueprint::MobBlueprint) -> Option<GoalKind> {
@@ -454,7 +457,15 @@ pub(crate) fn beam(
 pub(crate) fn distance_sq(a: [f64; 3], b: [f64; 3]) -> f64 {
     (0..3).map(|i| (a[i] - b[i]).powi(2)).sum()
 }
+// Line-of-sight evaluations since the thread started (test probe for the
+// per-tick sight budget).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static SIGHT_CHECKS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
 pub(crate) fn visible(state: &TickState, slot: EntitySlot, target: [f64; 3]) -> bool {
+    #[cfg(test)]
+    SIGHT_CHECKS.with(|checks| checks.set(checks.get() + 1));
     let mut eye = state.entities.pos(slot);
     eye[1] += state.entities.body(slot).height * 0.85;
     crate::hostile::sight_clear(state, eye, [target[0], target[1] + 1.62, target[2]])

@@ -571,3 +571,172 @@ fn raid_trigger_only_counts_accepted_omens_before_first_wave() {
         2
     );
 }
+
+/// Spawn vindicators and golems facing each other inside one chunk and return
+/// the survival-immune (creative) fixture state.
+fn raider_field(vindicators: usize, golems: usize) -> (TickState, Vec<EntityId>) {
+    let (mut state, player, villager) = fixture(None);
+    state.players.get_mut(&player).unwrap().game_mode = crate::commands::GameMode::Creative;
+    let slot = state.entities.slot_of(villager).unwrap();
+    state.entities.set_pos(slot, [14.5, 201.0, 14.5]);
+    let mut raiders = Vec::new();
+    for n in 0..vindicators {
+        raiders.push(mob(
+            &mut state,
+            "vindicator",
+            [1.5 + n as f64 * 0.6, 201.0, 2.5],
+        ));
+    }
+    for n in 0..golems {
+        mob(
+            &mut state,
+            "iron_golem",
+            [1.5 + n as f64 * 0.6, 201.0, 12.5],
+        );
+    }
+    (state, raiders)
+}
+
+/// Vanilla `NearestAttackableTargetGoal` searches 1 tick in 10 and
+/// `TargetGoal` keeps the target while valid: the line-of-sight work of a
+/// battle of N raiders against M candidates is O(N) per tick, not O(N*M).
+#[test]
+fn raiders_hold_targets_and_do_not_scan_every_candidate_every_tick() {
+    let (mut state, raiders) = raider_field(20, 20);
+    let mut intents = Vec::new();
+    for _ in 0..40 {
+        crate::special_mobs::raiders::run(&mut state, &mut intents);
+        state.tick += 1;
+    }
+    crate::special_mobs::SIGHT_CHECKS.set(0);
+    for _ in 0..60 {
+        crate::special_mobs::raiders::run(&mut state, &mut intents);
+        state.tick += 1;
+    }
+    let per_tick = crate::special_mobs::SIGHT_CHECKS.get() / 60;
+    eprintln!(
+        "RAIDER_SIGHT_CHECKS per_tick={per_tick} raiders={}",
+        raiders.len()
+    );
+    assert!(
+        per_tick <= 3 * raiders.len() as u64,
+        "{per_tick} line-of-sight checks per tick for {} engaged raiders",
+        raiders.len()
+    );
+    assert!(
+        raiders
+            .iter()
+            .all(|id| state.hostile.native.raider_targets.contains_key(id)),
+        "every raider engaged a golem within follow range"
+    );
+}
+
+/// Vindicator FOLLOW_RANGE is 12 (javap `Vindicator.createAttributes`): a
+/// villager 18 blocks away is not engaged (the raider only wanders), and no
+/// target is ever held farther than the follow range.
+#[test]
+fn raider_ignores_candidates_beyond_its_follow_range() {
+    let (mut state, raiders) = raider_field(1, 0);
+    let raider = raiders[0];
+    let slot = state.entities.slot_of(raider).unwrap();
+    assert_eq!(state.entities.row(slot).sight_range, 12.0);
+    state.entities.set_pos(slot, [1.5, 201.0, 14.5]);
+    let villager = state
+        .entities
+        .slots()
+        .find(|&s| state.entities.row(s).villager.is_some())
+        .unwrap();
+    state.entities.set_pos(villager, [14.5, 201.0, 1.5]);
+    let mut intents = Vec::new();
+    for _ in 0..40 {
+        crate::special_mobs::raiders::run(&mut state, &mut intents);
+        state.tick += 1;
+        let apart = crate::special_mobs::distance_sq(
+            state.entities.pos(slot),
+            state.entities.pos(villager),
+        )
+        .sqrt();
+        if state.hostile.native.raider_targets.contains_key(&raider) {
+            assert!(apart <= 12.5, "held a target {apart} blocks away");
+        }
+    }
+    let apart =
+        crate::special_mobs::distance_sq(state.entities.pos(slot), state.entities.pos(villager))
+            .sqrt();
+    assert!(
+        apart > 12.0,
+        "an unengaged raider does not close on a candidate beyond its follow range ({apart})"
+    );
+}
+
+/// A held target is dropped when it dies and, for a target out of sight, after
+/// the 60-tick unseen memory (javap `TargetGoal.canContinueToUse`).
+#[test]
+fn raider_drops_a_dead_target_and_a_target_unseen_for_sixty_ticks() {
+    let (mut state, raiders) = raider_field(1, 0);
+    let raider = raiders[0];
+    let villager = state
+        .entities
+        .slots()
+        .find(|&s| state.entities.row(s).villager.is_some())
+        .unwrap();
+    let villager_id = state.entities.body(villager).id;
+    state.entities.set_pos(villager, [7.5, 201.0, 2.5]);
+    let slot = state.entities.slot_of(raider).unwrap();
+    state.entities.set_pos(slot, [3.5, 201.0, 2.5]);
+    let mut intents = Vec::new();
+    for _ in 0..400 {
+        if state.hostile.native.raider_targets.contains_key(&raider) {
+            break;
+        }
+        crate::special_mobs::raiders::run(&mut state, &mut intents);
+        state.tick += 1;
+    }
+    assert_eq!(
+        state.hostile.native.raider_targets[&raider].target,
+        villager_id
+    );
+    state.entities.set_pos(slot, [3.5, 201.0, 2.5]);
+    state.entities.set_vel(slot, [0.0; 3]);
+    // Seal the line of sight with a stone plane between them.
+    for y in 201..206 {
+        for z in 0..16 {
+            state.world.set_block(5, y, z, state.registry.states.stone);
+        }
+    }
+    state.world.fold_overlay();
+    for _ in 0..30 {
+        crate::special_mobs::raiders::run(&mut state, &mut intents);
+        state.tick += 1;
+    }
+    assert!(
+        state.hostile.native.raider_targets.contains_key(&raider),
+        "unseen memory keeps the target for a while"
+    );
+    for _ in 0..40 {
+        crate::special_mobs::raiders::run(&mut state, &mut intents);
+        state.tick += 1;
+    }
+    assert!(
+        !state.hostile.native.raider_targets.contains_key(&raider),
+        "dropped after more than 60 unseen ticks"
+    );
+    // Remove the wall: the raider finds the villager again, then it dies.
+    for y in 201..206 {
+        for z in 0..16 {
+            state.world.set_block(5, y, z, state.registry.states.air);
+        }
+    }
+    state.world.fold_overlay();
+    for _ in 0..400 {
+        if state.hostile.native.raider_targets.contains_key(&raider) {
+            break;
+        }
+        crate::special_mobs::raiders::run(&mut state, &mut intents);
+        state.tick += 1;
+    }
+    assert!(state.hostile.native.raider_targets.contains_key(&raider));
+    state.entities.row_mut(villager).health = 0.0;
+    crate::special_mobs::raiders::run(&mut state, &mut intents);
+    assert!(!state.hostile.native.raider_targets.contains_key(&raider));
+}
