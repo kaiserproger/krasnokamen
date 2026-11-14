@@ -36,6 +36,7 @@ fn entity_entry(id: i32, entity: mc_core::journal::ReplayEntity) -> mc_core::jou
 fn wandering_trader_checkpoint_and_wal_tail_survive_anvil_roundtrip() {
     use mc_core::journal::{JournalEntry, JournalWriter};
     use mc_core::villager::{VillagerState, VillagerTradeOffer};
+    use mc_data::ItemStack;
 
     let temporary = tempfile::tempdir().unwrap();
     let source = temporary.path().join("native-source");
