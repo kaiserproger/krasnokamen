@@ -62,7 +62,7 @@ def plugin_directory(ctx: ProfileContext) -> Path:
 
 
 def prepare_operator_fixture(ctx: ProfileContext, names: list[str]) -> None:
-    """Write vanilla access lists beside the solaris-v2 config."""
+    """Write vanilla access lists beside the krasnokamen config."""
     entries = [{
         "uuid": str(uuid.UUID(bytes=hashlib.md5(f"OfflinePlayer:{name}".encode(),
                                                usedforsecurity=False).digest(), version=3)),

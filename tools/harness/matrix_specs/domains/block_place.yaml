@@ -1,4 +1,4 @@
-schema: solaris-domain-adapter-index/1
+schema: krasnokamen-domain-adapter-index/1
 domain: block_place
 subjects_specified: 24
 vanilla_provenance: /run/media/kaiserroman/games/solaris-work/solaris/data/vanilla/version.json
@@ -23,7 +23,7 @@ subjects:
     expected: state placed; item debited (not in creative); neighbors updated
     vanilla_source:
       - https://minecraft.wiki/w/Block_placement
-    solaris_sources: &id001
+    krasnokamen_sources: &id001
       - core:placement.rs
       - core:placement_shapes.rs
       - core:build_precommit.rs
@@ -71,7 +71,7 @@ subjects:
     expected: type bottom/top then double; one item each
     vanilla_source:
       - https://minecraft.wiki/w/Slab
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: slab_double
@@ -111,7 +111,7 @@ subjects:
     expected: facing/half/shape (inner/outer) per neighbors
     vanilla_source:
       - https://minecraft.wiki/w/Stairs
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: stairs_shapes
@@ -148,7 +148,7 @@ subjects:
     expected: two halves, hinge by neighbors, facing player
     vanilla_source:
       - https://minecraft.wiki/w/Door
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: door
@@ -186,7 +186,7 @@ subjects:
     expected: half top/bottom; facing
     vanilla_source:
       - https://minecraft.wiki/w/Trapdoor
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: trapdoor
@@ -221,7 +221,7 @@ subjects:
     expected: connection properties update both sides; wall post rules
     vanilla_source:
       - https://minecraft.wiki/w/Fence
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: fence_wall_pane_connect
@@ -259,7 +259,7 @@ subjects:
     expected: in_wall lowered; facing
     vanilla_source:
       - https://minecraft.wiki/w/Fence_Gate
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: fence_gate
@@ -295,7 +295,7 @@ subjects:
     expected: head+foot; refused when foot space blocked
     vanilla_source:
       - https://minecraft.wiki/w/Bed
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: bed
@@ -339,7 +339,7 @@ subjects:
     expected: face property; refused on non-sturdy face
     vanilla_source:
       - https://minecraft.wiki/w/Button
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: attached_switches
@@ -377,7 +377,7 @@ subjects:
     expected: torch vs wall_torch selection; refused on non-sturdy
     vanilla_source:
       - https://minecraft.wiki/w/Torch
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: torch_variants
@@ -417,7 +417,7 @@ subjects:
     expected: rotation/facing per player; editor opens
     vanilla_source:
       - https://minecraft.wiki/w/Sign
-    solaris_sources:
+    krasnokamen_sources:
       - core:signs.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
@@ -453,14 +453,14 @@ subjects:
       - creative
   - subject: block_place.banner
     matrix_ids:
-      - pw:block_place.banner/forge_solaris_loader/adventure/the_end/easy/2/duplicate_login/pause_when_empty_resume/op_2
+      - pw:block_place.banner/forge_krasnokamen_loader/adventure/the_end/easy/2/duplicate_login/pause_when_empty_resume/op_2
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: rotation 0-15 / facing
     vanilla_source:
       - https://minecraft.wiki/w/Banner
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: banner
@@ -496,7 +496,7 @@ subjects:
     expected: shape property auto-connects
     vanilla_source:
       - https://minecraft.wiki/w/Rail
-    solaris_sources:
+    krasnokamen_sources:
       - core:redstone/rails.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
@@ -540,7 +540,7 @@ subjects:
     expected: refused or popped per canSurvive
     vanilla_source:
       - https://minecraft.wiki/w/Block_placement
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: support_required_blocks
@@ -569,14 +569,14 @@ subjects:
       - creative
   - subject: block_place.directional_blocks
     matrix_ids:
-      - pw:block_place.directional_blocks/neoforge_solaris_loader/adventure/the_nether/hard/N8/reconnect_mid_action/clean_restart_mid_action/op_3
+      - pw:block_place.directional_blocks/neoforge_krasnokamen_loader/adventure/the_nether/hard/N8/reconnect_mid_action/clean_restart_mid_action/op_3
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: facing derived from look/face per vanilla
     vanilla_source:
       - https://minecraft.wiki/w/Observer
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: directional_blocks
@@ -611,7 +611,7 @@ subjects:
     expected: waterlogged=true; water keeps flowing logic
     vanilla_source:
       - https://minecraft.wiki/w/Waterlogging
-    solaris_sources:
+    krasnokamen_sources:
       - core:fluids.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
@@ -649,7 +649,7 @@ subjects:
     expected: places block instead of opening menu
     vanilla_source:
       - https://minecraft.wiki/w/Sneaking
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: sneak_place_on_interactive
@@ -688,7 +688,7 @@ subjects:
     expected: refused; item kept; client resynced
     vanilla_source:
       - https://minecraft.wiki/w/Block_placement
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: place_into_entity_refused
@@ -725,7 +725,7 @@ subjects:
     expected: refused + BlockChangedAck + resync; no item loss
     vanilla_source:
       - https://minecraft.wiki/w/Player
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: out_of_reach_refused
@@ -769,7 +769,7 @@ subjects:
     expected: refused above/below limits with action-bar message
     vanilla_source:
       - https://minecraft.wiki/w/World_boundary
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: build_height_limits
@@ -806,7 +806,7 @@ subjects:
     expected: replaces replaceable block
     vanilla_source:
       - https://minecraft.wiki/w/Block_placement
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: replaceable_targets
@@ -841,7 +841,7 @@ subjects:
     expected: server answers block update + ack; client ghost removed; item restored
     vanilla_source:
       - https://minecraft.wiki/w/Block_placement
-    solaris_sources:
+    krasnokamen_sources:
       - core:build_precommit.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
@@ -867,14 +867,14 @@ subjects:
     implemented_modes: see cited adapter branch
   - subject: block_place.adventure_can_place_on
     matrix_ids:
-      - pw:block_place.adventure_can_place_on/fabric_solaris_loader/spectator/the_nether/normal/N8/reconnect_mid_action/save_all_checkpoint/op_1
+      - pw:block_place.adventure_can_place_on/fabric_krasnokamen_loader/spectator/the_nether/normal/N8/reconnect_mid_action/save_all_checkpoint/op_1
     status: adapter_written_unverified
     server_gap: []
     vanilla_version: 26.1.2
     expected: placement only on listed blocks
     vanilla_source:
       - https://minecraft.wiki/w/Adventure
-    solaris_sources:
+    krasnokamen_sources:
       - core:placement.rs
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
@@ -911,7 +911,7 @@ subjects:
     expected: "vanilla: refused for non-ops within radius"
     vanilla_source:
       - https://minecraft.wiki/w/Spawn_protection
-    solaris_sources: *id001
+    krasnokamen_sources: *id001
     adapter:
       path: /run/media/kaiserroman/games/solaris-work/wt/dom-blocks/tools/harness/matrix_domains/block_place_extra.py
       function: spawn_protection_radius

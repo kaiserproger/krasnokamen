@@ -31,8 +31,8 @@ def replay(ctx, row, directory):
             '--server-bin', str(ctx.server_bin), '--script', str(script), *args]
     if ctx.plugins_dir is not None:
         argv += ['--plugins-dir', str(ctx.plugins_dir)]
-    env = dict(os.environ, SOLARIS_VALIDATION_ROOT=str(directory / 'receipts'))
-    mem_run = env.pop('SOLARIS_RANDOM_REPLAY_MEM_RUN', None)
+    env = dict(os.environ, KRASNOKAMEN_VALIDATION_ROOT=str(directory / 'receipts'))
+    mem_run = env.pop('KRASNOKAMEN_RANDOM_REPLAY_MEM_RUN', None)
     timeout = ctx.timeout_seconds or 600
     if mem_run:
         argv = [mem_run, '-m', '6G', 'timeout', str(timeout),
@@ -100,7 +100,7 @@ def shrink(ctx, report):
 
 def run(ctx):
     try:
-        if os.environ.get('SOLARIS_RANDOM_REPLAY_MEM_RUN') and '--shrink' in ctx.extra_args:
+        if os.environ.get('KRASNOKAMEN_RANDOM_REPLAY_MEM_RUN') and '--shrink' in ctx.extra_args:
             script = Path(ctx.extra_args[ctx.extra_args.index('--script') + 1])
             row = json.loads(script.read_text())
             report, _, _ = replay(ctx, row, ctx.artifact_dir / 'initial')

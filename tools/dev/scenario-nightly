@@ -70,11 +70,11 @@ def install(args):
     # and percent is doubled to prevent a path from becoming a unit specifier.
     quoted = ' '.join(json.dumps(value.replace('%', '%%')) for value in command)
     (config / 'solaris-scenario.service').write_text(
-        '[Unit]\nDescription=Solaris seeded network invariant campaign\n'
+        '[Unit]\nDescription=Krasnokamen seeded network invariant campaign\n'
         '[Service]\nType=oneshot\nNice=19\nIOSchedulingClass=idle\n'
         f'WorkingDirectory={args.repo}\nExecStart={quoted}\nTimeoutStartSec=infinity\n')
     (config / 'solaris-scenario.timer').write_text(
-        '[Unit]\nDescription=Solaris randomized scenario nightly at 03:00 local\n'
+        '[Unit]\nDescription=Krasnokamen randomized scenario nightly at 03:00 local\n'
         '[Timer]\nOnCalendar=*-*-* 03:00:00\nPersistent=true\n'
         '[Install]\nWantedBy=timers.target\n')
     subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
@@ -126,7 +126,7 @@ def run_campaign(args):
             break
         directory = root / f'seed-{seed}'
         directory.mkdir()
-        env = dict(os.environ, SOLARIS_VALIDATION_ROOT=str(directory / 'receipts'))
+        env = dict(os.environ, KRASNOKAMEN_VALIDATION_ROOT=str(directory / 'receipts'))
         argv = common + ['--seed', str(seed), '--steps', str(args.steps), '--bots', str(args.bots)]
         record = {'seed': seed, 'steps': args.steps, 'bots': args.bots,
                   'command': shlex.join(argv), 'server_sha256': summary['server_sha256'],
@@ -164,8 +164,8 @@ def run_campaign(args):
                 elif script is not None and remaining > 0:
                     reduction = directory / 'reduction'
                     reduction.mkdir()
-                    reduce_env = dict(os.environ, SOLARIS_VALIDATION_ROOT=str(reduction / 'receipts'),
-                                      SOLARIS_RANDOM_REPLAY_MEM_RUN=str(MEM_RUN))
+                    reduce_env = dict(os.environ, KRASNOKAMEN_VALIDATION_ROOT=str(reduction / 'receipts'),
+                                      KRASNOKAMEN_RANDOM_REPLAY_MEM_RUN=str(MEM_RUN))
                     with (reduction / 'campaign.log').open('w') as log:
                         try:
                             subprocess.run(runner + ['--script', str(script), '--shrink'], cwd=args.repo,

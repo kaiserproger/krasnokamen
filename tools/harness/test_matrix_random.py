@@ -152,13 +152,13 @@ class RandomMatrixTests(unittest.TestCase):
                 self.assertEqual(argv[:11], ['/mem-run', '-m', '6G', 'timeout', '600',
                                               'nice', '-n', '19', 'ionice', '-c', '3'])
                 self.assertIsNone(timeout)
-                self.assertNotIn('SOLARIS_RANDOM_REPLAY_MEM_RUN', env)
-                receipt = Path(env['SOLARIS_VALIDATION_ROOT']) / 'run' / 'result.json'
+                self.assertNotIn('KRASNOKAMEN_RANDOM_REPLAY_MEM_RUN', env)
+                receipt = Path(env['KRASNOKAMEN_VALIDATION_ROOT']) / 'run' / 'result.json'
                 receipt.parent.mkdir(parents=True)
                 receipt.write_text(json.dumps({'details': {'protocol_matrix': report}}))
                 return SimpleNamespace(returncode=1)
 
-            with patch.dict('os.environ', {'SOLARIS_RANDOM_REPLAY_MEM_RUN': '/mem-run'}), \
+            with patch.dict('os.environ', {'KRASNOKAMEN_RANDOM_REPLAY_MEM_RUN': '/mem-run'}), \
                     patch.object(matrix_random.shutil, 'disk_usage',
                                  return_value=SimpleNamespace(free=100 * 1024**3)), \
                     patch.object(matrix_random.subprocess, 'run', side_effect=launch), \
@@ -181,7 +181,7 @@ class RandomMatrixTests(unittest.TestCase):
 
             def launch(argv, *, cwd, env, stdout, stderr, timeout):
                 self.assertEqual(timeout, 37)
-                receipt = Path(env['SOLARIS_VALIDATION_ROOT']) / 'run' / 'result.json'
+                receipt = Path(env['KRASNOKAMEN_VALIDATION_ROOT']) / 'run' / 'result.json'
                 receipt.parent.mkdir(parents=True)
                 receipt.write_text(json.dumps({'details': {'protocol_matrix': {'status': 'pass'}}}))
                 return SimpleNamespace(returncode=0)

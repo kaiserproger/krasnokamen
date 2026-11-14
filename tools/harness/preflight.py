@@ -12,7 +12,7 @@ from pathlib import Path
 from . import runtime
 
 _POOL = Path('/run/media/kaiserroman/games/solaris-work/targets')
-# Read-only client content under XDG_DATA_HOME/solaris-client. Runs link these and
+# Read-only client content under XDG_DATA_HOME/krasnokamen-client. Runs link these and
 # never copy anything else (settings, caches such as far-terrain, saved runs).
 CLIENT_CONTENT_DIRS = ('facts', 'assets', 'data', 'entities', 'resources', 'mojang')
 
@@ -113,24 +113,24 @@ def check(profile: str, ctx, spec: dict) -> frozenset[str]:
     elif profile in _ARGUMENT_VALIDATORS:
         module = import_module(f'.backends.{_ARGUMENT_VALIDATORS[profile]}', __package__)
         module.validate_args(ctx)
-    server = str(ctx.server_bin) if ctx.server_bin else os.environ.get('SOLARIS_SERVER_BINARY')
+    server = str(ctx.server_bin) if ctx.server_bin else os.environ.get('KRASNOKAMEN_SERVER_BINARY')
     if 'server_binary' in needs and not server:
-        raise ValueError('SOLARIS_SERVER_BINARY is required; provide a pinned executable outside the pooled targets')
+        raise ValueError('KRASNOKAMEN_SERVER_BINARY is required; provide a pinned executable outside the pooled targets')
     if server and needs.intersection({'server_binary', 'optional_server_binary'}):
-        _binary('SOLARIS_SERVER_BINARY', server, ctx.client_evidence, 'server_binary')
+        _binary('KRASNOKAMEN_SERVER_BINARY', server, ctx.client_evidence, 'server_binary')
     if 'client_binary' in needs:
-        client_binary = os.environ.get('SOLARIS_CLIENT_BINARY')
+        client_binary = os.environ.get('KRASNOKAMEN_CLIENT_BINARY')
         if not client_binary:
-            raise ValueError('SOLARIS_CLIENT_BINARY is required; provide a pinned executable outside the pooled targets')
+            raise ValueError('KRASNOKAMEN_CLIENT_BINARY is required; provide a pinned executable outside the pooled targets')
         client_path = Path(client_binary).expanduser()
         if not client_path.is_absolute():
-            client_path = Path(os.environ.get('SOLARIS_CLIENT_ROOT', runtime.REPO_ROOT.parent / 'solaris-client')) / client_path
-        _binary('SOLARIS_CLIENT_BINARY', str(client_path), ctx.client_evidence, 'binary')
+            client_path = Path(os.environ.get('KRASNOKAMEN_CLIENT_ROOT', runtime.REPO_ROOT.parent / 'solaris-client')) / client_path
+        _binary('KRASNOKAMEN_CLIENT_BINARY', str(client_path), ctx.client_evidence, 'binary')
     if needs.intersection({'client_data', 'windowed_assets'}):
-        root = Path(os.environ.get('SOLARIS_CLIENT_ROOT', runtime.REPO_ROOT.parent / 'solaris-client')).expanduser().resolve()
-        names = ['SOLARIS_CLIENT_DATA_DIR'] if 'client_data' in needs else []
+        root = Path(os.environ.get('KRASNOKAMEN_CLIENT_ROOT', runtime.REPO_ROOT.parent / 'solaris-client')).expanduser().resolve()
+        names = ['KRASNOKAMEN_CLIENT_DATA_DIR'] if 'client_data' in needs else []
         if 'windowed_assets' in needs:
-            names += ['SOLARIS_CLIENT_RESOURCE_ROOT', 'SOLARIS_CLIENT_ASSET_ROOT', 'SOLARIS_CLIENT_ASSET_INDEX']
+            names += ['KRASNOKAMEN_CLIENT_RESOURCE_ROOT', 'KRASNOKAMEN_CLIENT_ASSET_ROOT', 'KRASNOKAMEN_CLIENT_ASSET_INDEX']
         for name in names:
             value = os.environ.get(name)
             if not value:
@@ -142,14 +142,14 @@ def check(profile: str, ctx, spec: dict) -> frozenset[str]:
             if not valid:
                 raise ValueError(f'{name} is missing: {path}; provide a complete launcher data root (see docs/development/real-client-gates.md)')
             required = {
-                'SOLARIS_CLIENT_DATA_DIR': ('reports/blocks.json', 'reports/block_mining.json',
+                'KRASNOKAMEN_CLIENT_DATA_DIR': ('reports/blocks.json', 'reports/block_mining.json',
                                             'reports/block_light.json', 'reports/registries.json'),
-                'SOLARIS_CLIENT_RESOURCE_ROOT': ('assets',),
-                'SOLARIS_CLIENT_ASSET_ROOT': ('objects',),
+                'KRASNOKAMEN_CLIENT_RESOURCE_ROOT': ('assets',),
+                'KRASNOKAMEN_CLIENT_ASSET_ROOT': ('objects',),
             }.get(name, ())
             if any(not (path / entry).exists() for entry in required):
                 raise ValueError(f'{name} is incomplete: {path}; bootstrap a complete client data root')
-            if name == 'SOLARIS_CLIENT_ASSET_INDEX':
+            if name == 'KRASNOKAMEN_CLIENT_ASSET_INDEX':
                 try:
                     index = json.loads(path.read_text())
                     if not isinstance(index, dict) or not index.get('objects'):
@@ -157,14 +157,14 @@ def check(profile: str, ctx, spec: dict) -> frozenset[str]:
                 except (OSError, ValueError) as error:
                     raise ValueError(f'{name} is incomplete: {path}; bootstrap a complete asset index') from error
     if 'loader' in needs:
-        loader = Path(os.environ.get('SOLARIS_LOADER_ROOT', runtime.AGENT_ROOT)).expanduser().resolve()
+        loader = Path(os.environ.get('KRASNOKAMEN_LOADER_ROOT', runtime.AGENT_ROOT)).expanduser().resolve()
         if not (loader / 'gradlew').is_file() or not os.access(loader / 'gradlew', os.X_OK):
-            raise ValueError(f"Loader checkout missing executable {loader / 'gradlew'}; set SOLARIS_LOADER_ROOT")
+            raise ValueError(f"Loader checkout missing executable {loader / 'gradlew'}; set KRASNOKAMEN_LOADER_ROOT")
     if 'xvfb' in needs and not shutil.which('Xvfb'):
         raise ValueError('Xvfb is missing; install Xvfb for the isolated client')
     if 'plugins_root' in needs:
         from .profiles import DEFAULT_PLUGINS_ROOT
-        root = Path(os.environ.get('SOLARIS_DEFAULT_PLUGINS_ROOT', DEFAULT_PLUGINS_ROOT)).expanduser()
+        root = Path(os.environ.get('KRASNOKAMEN_DEFAULT_PLUGINS_ROOT', DEFAULT_PLUGINS_ROOT)).expanduser()
         if not (root / 'tools' / 'run_integration.py').is_file():
             raise ValueError(f'plugins integration runner is missing: {root}')
     if 'plugins_dir' in needs and (ctx.plugins_dir is None or not ctx.plugins_dir.is_dir()):
@@ -212,7 +212,7 @@ def client_data_root(ctx):
     template = client_template()
     previous = os.environ.get('XDG_DATA_HOME')
     with tempfile.TemporaryDirectory(prefix='xdg-', dir=ctx.artifact_dir) as temporary:
-        target = Path(temporary) / 'solaris-client'
+        target = Path(temporary) / 'krasnokamen-client'
         target.mkdir()
         for name in CLIENT_CONTENT_DIRS:
             source = template / name
@@ -229,9 +229,9 @@ def client_data_root(ctx):
 
 
 def client_template() -> Path:
-    """The client data root named by SOLARIS_CLIENT_DATA_DIR (<root>/data/vanilla)."""
-    client_root = Path(os.environ.get('SOLARIS_CLIENT_ROOT', runtime.REPO_ROOT.parent / 'solaris-client'))
-    data = Path(os.environ['SOLARIS_CLIENT_DATA_DIR']).expanduser()
+    """The client data root named by KRASNOKAMEN_CLIENT_DATA_DIR (<root>/data/vanilla)."""
+    client_root = Path(os.environ.get('KRASNOKAMEN_CLIENT_ROOT', runtime.REPO_ROOT.parent / 'solaris-client'))
+    data = Path(os.environ['KRASNOKAMEN_CLIENT_DATA_DIR']).expanduser()
     template = (data if data.is_absolute() else client_root / data).resolve().parent.parent
     if not (template / 'facts').is_dir() or not (template / 'resources' / 'assets').is_dir():
         raise ValueError(f'client template {template} lacks facts or resources/assets; bootstrap a complete client data root')

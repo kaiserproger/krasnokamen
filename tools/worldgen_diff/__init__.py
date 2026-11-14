@@ -1,1 +1,1 @@
-"""Block-level Solaris-versus-vanilla worldgen diff (see __main__)."""
+"""Block-level Krasnokamen-versus-vanilla worldgen diff (see __main__)."""

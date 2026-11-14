@@ -20,7 +20,7 @@ class ScenarioNightlyTests(unittest.TestCase):
     def test_campaign_records_both_pass_and_failure_fingerprints(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            binary = root / 'solaris-v2'
+            binary = root / 'krasnokamen'
             binary.write_bytes(b'server')
             (root / 'manifest.json').write_text(json.dumps({'head': 'server-head'}))
             args = SimpleNamespace(receipts=root / 'campaigns', server_bin=binary, repo=root,
@@ -31,7 +31,7 @@ class ScenarioNightlyTests(unittest.TestCase):
 
             def run(argv, *, cwd, env, stdout, stderr, timeout):
                 seed = int(argv[argv.index('--seed') + 1])
-                receipt_dir = Path(env['SOLARIS_VALIDATION_ROOT']) / 'run'
+                receipt_dir = Path(env['KRASNOKAMEN_VALIDATION_ROOT']) / 'run'
                 receipt_dir.mkdir(parents=True)
                 receipt = {'status': 'passed' if seed == 0 else 'failed', 'tree': fingerprint,
                            'details': {'protocol_matrix': {'status': 'pass' if seed == 0 else 'fail'}}}
@@ -67,7 +67,7 @@ class ScenarioNightlyTests(unittest.TestCase):
 
             def run(argv, *, cwd, env, stdout, stderr, timeout):
                 launches.append((argv, env))
-                receipt = Path(env['SOLARIS_VALIDATION_ROOT']) / 'run'
+                receipt = Path(env['KRASNOKAMEN_VALIDATION_ROOT']) / 'run'
                 receipt.mkdir(parents=True)
                 if '--shrink' in argv:
                     (receipt / 'shrink').mkdir()
@@ -88,14 +88,14 @@ class ScenarioNightlyTests(unittest.TestCase):
             self.assertEqual(seed[0][0], str(nightly.MEM_RUN))
             self.assertNotIn('RUSTC_WRAPPER=', seed[0])
             self.assertNotIn(str(nightly.MEM_RUN), reduction[0])
-            self.assertEqual(reduction[1]['SOLARIS_RANDOM_REPLAY_MEM_RUN'], str(nightly.MEM_RUN))
+            self.assertEqual(reduction[1]['KRASNOKAMEN_RANDOM_REPLAY_MEM_RUN'], str(nightly.MEM_RUN))
             result = json.loads(next(args.receipts.glob('campaign-*/result.json')).read_text())
             self.assertTrue(Path(result['reductions']['random:conservation']).is_file())
 
     def test_campaign_refuses_seed_below_disk_floor(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            binary = root / 'solaris-v2'
+            binary = root / 'krasnokamen'
             binary.write_bytes(b'server')
             (root / 'manifest.json').write_text(json.dumps({'head': 'server-head'}))
             receipts = root / 'campaigns'
