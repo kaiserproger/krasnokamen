@@ -714,6 +714,15 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
                     still_active = _order_echo_retry(
                         probe, sub, tag, bp, 1, f"settlement build {bp}",
                         False, ctx)
+                refusal = _order_refusal(sub, 1)
+                if refusal is not None:
+                    # A terminal server refusal (blueprint not registered: "Unknown
+                    # blueprint.") never admits on retry: an ordinary failed check,
+                    # never an unexpected exception. Record the verdict first — the
+                    # check raises before anything after it runs.
+                    _verdict(sub, "L1_built", "FAIL", f"server refused the order: {refusal}")
+                    probe.check(f"{tag}_L1_built", False)
+                    continue
                 if _admitted_or_caught(probe, sub, tag, bp, 1, still_active) is not None:
                     # Planner certified the target during our fund flow (1.5x covers
                     # L+1): the common wait below verifies that cert.
@@ -855,6 +864,19 @@ def _admitted_or_caught(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: st
     caught = None if admitted else _building_bounds(probe, bp, level)
     probe.check(f"{tag}_L{level}_project", admitted or caught is not None)
     return caught
+
+
+def _order_refusal(sub: dict[str, Any], level: int) -> str | None:
+    """The server's terminal refusal of the level's order attempts, if there is one.
+
+    "Unknown blueprint." (the blueprint is not registered on the server) never
+    admits on retry; report it as the failure reason instead of looping to the
+    deadline."""
+    for attempt in (3, 2, 1):
+        echo = str(sub.get(f"L{level}_order_attempt{attempt}", ""))
+        if "Unknown blueprint." in echo:
+            return echo
+    return None
 
 
 def _project_status(probe: ProbeSteps) -> tuple[str, int] | None:

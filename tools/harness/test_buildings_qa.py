@@ -246,7 +246,7 @@ class AdmissionTest(unittest.TestCase):
 class SequentialFlowTest(unittest.TestCase):
     """`_scenario_sequential` for one blueprint with every game-facing helper replaced."""
 
-    def run_flow(self, bp, top, order_admitted, cert_after_order):
+    def run_flow(self, bp, top, order_admitted, cert_after_order, order_echo=None):
         probe = FakeProbe()
         detail: dict = {}
         certs = {}
@@ -258,6 +258,8 @@ class SequentialFlowTest(unittest.TestCase):
         def order(_probe, sub, tag, _bp, level, cmd, use_dialog, ctx, dialog_fn=None,
                   upgrade_bid=None):
             events.append(("order", level, use_dialog))
+            if order_echo is not None:
+                sub[f"L{level}_order_attempt1"] = order_echo
             if cert_after_order:
                 certs[level] = (level, 70, level)
             return order_admitted
@@ -285,8 +287,14 @@ class SequentialFlowTest(unittest.TestCase):
             _wait_certified_origin_here=wait_cert,
             _verify_level=lambda *a, **k: None,
         )
-        with mock.patch.multiple(buildings_qa, **patches):
-            buildings_qa._scenario_sequential(probe, detail, ctx, None, (bp,), "", None, None)
+        self.last_probe, self.last_sub, self.last_events = probe, None, events
+        try:
+            with mock.patch.multiple(buildings_qa, **patches):
+                buildings_qa._scenario_sequential(probe, detail, ctx, None, (bp,), "", None, None)
+        except RuntimeError:
+            self.last_sub = detail["blueprints"][bp]
+            raise
+        self.last_sub = detail["blueprints"][bp]
         return probe, detail["blueprints"][bp], events
 
     def test_a_passing_run_records_every_level_verdict(self):
@@ -319,6 +327,18 @@ class SequentialFlowTest(unittest.TestCase):
     def test_an_order_nobody_admitted_still_fails(self):
         with self.assertRaisesRegex(RuntimeError, "buildings_gate_L1_project"):
             self.run_flow("gate", 3, order_admitted=False, cert_after_order=False)
+
+    def test_an_unknown_blueprint_refusal_fails_l1_built_as_an_ordinary_check(self):
+        # ISSUE-1-16 negative control: with the wall blueprint unregistered the server
+        # answers "Unknown blueprint."; the gate must record L1_built=FAIL and trip the
+        # buildings_wall_L1_built check, never die with an unexpected exception.
+        # Red without the fix: the run then aborts at buildings_wall_L1_project instead.
+        with self.assertRaisesRegex(RuntimeError, "buildings_wall_L1_built"):
+            self.run_flow("wall", 3, order_admitted=False, cert_after_order=False,
+                          order_echo="Unknown blueprint.")
+        self.assertEqual(self.last_sub["behaviour"].get("L1_built"), "FAIL")
+        self.assertIn("Unknown blueprint.", self.last_sub["evidence"].get("L1_built", ""))
+        self.assertFalse(self.last_probe.report["assertions"]["buildings_wall_L1_built"])
 
 
 if __name__ == "__main__":
