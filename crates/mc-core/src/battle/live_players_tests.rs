@@ -657,6 +657,85 @@ fn holder_hits_hurt_enemy_soldiers_and_spare_his_own_side() {
     }
 }
 
+/// G2L: PovRed's attacks never hurt anyone. With the kit spear in his main
+/// hand his client attacks with STAB, no target (krasnokamen-client
+/// `Player::attack` on `minecraft:piercing_weapon`, vanilla 26.3 likewise).
+/// The jab hurts the blue soldier inside the spear's 2..4.5 attack range as
+/// an ordinary blow of his (cause and direct). Below the spear's minimum
+/// charge a jab is refused even at a soldier no longer hurt-immune, without
+/// spending the charge; a soldier closer than the near bound is missed.
+#[test]
+fn a_holder_stab_with_the_kit_spear_hurts_the_enemy_soldier_in_its_range() {
+    let (mut state, player, blue, at) = facing_blue();
+    let spear = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:iron_spear".to_owned()).unwrap())
+        .unwrap();
+    let inventory = &state.players[&player].inventory;
+    assert_eq!(
+        inventory.slots[usize::from(inventory.selected)].item_id,
+        spear,
+        "the kit's main hand is the spear"
+    );
+    let stab = |state: &mut TickState, gap: f64| {
+        let body = state.entities.slot_of(blue).unwrap();
+        state.entities.set_pos(body, at);
+        let body = state.entities.slot_of(player).unwrap();
+        state.entities.set_pos(body, [at[0], at[1], at[2] - gap]);
+        // Facing the blue line (+z), level.
+        state.entities.set_rot(body, 0.0, 0.0);
+        hold(state, Action::Wounded, None);
+        let (output, ..) = run_tick(
+            state,
+            &[PlayerInput::Stab {
+                connection: ConnectionId(1),
+            }],
+        );
+        output.changes.entity_events.iter().any(|event| {
+            matches!(
+                event,
+                EntityEvent::Damage { entity, cause, direct, .. }
+                    if *entity == blue && *cause == Some(player) && *direct == Some(player)
+            )
+        })
+    };
+    let health = |state: &TickState| {
+        state
+            .entities
+            .row(state.entities.slot_of(blue).unwrap())
+            .health
+    };
+    let idle = |state: &mut TickState, ticks: u32| {
+        for _ in 0..ticks {
+            hold(state, Action::Wounded, None);
+            run_tick(state, &[]);
+        }
+    };
+    // The spear's charge (minimum 1.0, 19-tick delay) is back 14 ticks after
+    // a jab, or after the kit was put in his hand.
+    idle(&mut state, 20);
+    let before = health(&state);
+    assert!(
+        stab(&mut state, 3.0),
+        "the jab 3 blocks out never hurt the soldier"
+    );
+    let after = health(&state);
+    assert!(after < before, "{before} -> {after}");
+    // 11 ticks on: past the soldier's 10 hurt-immune ticks, charge 0.84.
+    idle(&mut state, 10);
+    let before = health(&state);
+    assert!(!stab(&mut state, 3.0), "a jab without charge landed");
+    assert_eq!(health(&state), before, "a jab without charge hurt him");
+    // 14 ticks on: charged, the refused jab spent nothing.
+    idle(&mut state, 2);
+    assert!(stab(&mut state, 3.0), "the jab 14 ticks on missed");
+    idle(&mut state, 20);
+    assert!(!stab(&mut state, 1.0), "a jab inside the near bound landed");
+    idle(&mut state, 20);
+    assert!(stab(&mut state, 3.0), "the recharged jab missed");
+}
+
 #[test]
 fn a_rejoin_after_start_only_rearms() {
     let (mut state, ids) = staged(&["PovRed"]);
