@@ -738,7 +738,7 @@ pub(crate) fn finish(
         let dimension = state.dimension;
         let mut local = changes.remove(&dimension).unwrap_or_default();
         state.command_context.changes = changes;
-        crate::datapacks::poll_worker(state, &mut local);
+        crate::datapacks::poll_worker(state);
         crate::command_context::resume(state, &mut local);
         changes = std::mem::take(&mut state.command_context.changes);
         append_changes(changes.entry(dimension).or_default(), local);

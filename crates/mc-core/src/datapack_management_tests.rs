@@ -516,7 +516,7 @@ fn completion_waits_for_shared_command_authority_before_store_and_resume() {
     assert!(state.command_context.waiting());
     assert!(!state.scoreboard.scores.contains_key("shared"));
     state.command_context.shared = true;
-    crate::datapacks::poll_worker(&mut state, &mut crate::boundary::ChangeSet::default());
+    crate::datapacks::poll_worker(&mut state);
     crate::command_context::resume(&mut state, &mut crate::boundary::ChangeSet::default());
     assert_eq!(score(&state, "shared"), 2);
     assert!(!state.command_context.waiting());
