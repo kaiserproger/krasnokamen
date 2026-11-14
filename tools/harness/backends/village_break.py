@@ -60,7 +60,7 @@ class Session:
         self.restarts = 0
         self.client_evidence = ctx.client_evidence
         self.env = os.environ.copy()
-        self.env["SOLARIS_HARNESS_LOG_STDOUT"] = "1"
+        self.env["KRASNOKAMEN_HARNESS_LOG_STDOUT"] = "1"
 
     def start_server(self, name: str) -> None:
         path = self.ctx.artifact_dir / name
@@ -134,7 +134,7 @@ def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = ctx.timeout_seconds if ctx.timeout_seconds is not None else 1200.0
     attack_set = os.environ.get("VILLAGE_BREAK_SET", "A")
     artifact = ctx.artifact_dir
-    binary = Path(os.environ["SOLARIS_SERVER_BINARY"]).expanduser().resolve()
+    binary = Path(os.environ["KRASNOKAMEN_SERVER_BINARY"]).expanduser().resolve()
     port = runtime.reserve_port()
     config = artifact / "village-break.toml"
     source = (runtime.REPO_ROOT / "playable.toml").read_text()

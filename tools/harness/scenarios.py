@@ -337,11 +337,11 @@ SCENARIOS: dict[str, Scenario] = {
         limits="offline-mode identity (same name, same UUID); no online-auth or plugin-login claimant",
     ),
     "native-v2-auth-budget": _entry(
-        id="native-v2-auth-budget", summary="solaris-auth /register and /login complete on a native client behind the native login gate",
+        id="native-v2-auth-budget", summary="krasnokamen-auth /register and /login complete on a native client behind the native login gate",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="native-v2-auth-budget",
         requires=("xvfb",),
         sources=("tools/harness/backends/native_auth_budget.py", "tools/harness/backends/client_probes.py"),
-        fixture="private world with the sibling checkout's shipping solaris-auth package and [auth] require_plugin_login = true",
+        fixture="private world with the sibling checkout's shipping krasnokamen-auth package and [auth] require_plugin_login = true",
         proves="the locked session accepts ordinary chat only after /register, and again after a reconnect and /login, i.e. the plugin survives its Argon2 host-import callbacks",
         limits="depends on host hashing time exceeding the retired 100 ms allowance; the negative control is a server whose epoch allowance is the legacy four ticks",
     ),
@@ -367,7 +367,7 @@ SCENARIOS: dict[str, Scenario] = {
                  "tools/harness/backends/client_probes.py"),
         fixture="private world; one jukebox in the player's own chunk, six blocks from the player, record corrupted through an Anvil export and imported again; the same player rejoins",
         proves="when green: the client reaches in_play with a refused chunk under or within about 12 blocks of the camera, as a vanilla client does with a hole in the world",
-        limits="red today (solaris-client play_world_presentation_ready needs the biome-neighbour chunks); a repro, not a regression gate",
+        limits="red today (krasnokamen-client play_world_presentation_ready needs the biome-neighbour chunks); a repro, not a regression gate",
     ),
     "native-command-feedback": _entry(
         id="native-command-feedback",
@@ -502,12 +502,12 @@ SCENARIOS: dict[str, Scenario] = {
     ),
     "loader-fabric-screen-admission": _entry(
         id="loader-fabric-screen-admission",
-        summary="Release server starts the solaris:screen service for a real Fabric Loader session",
+        summary="Release server starts the krasnokamen:screen service for a real Fabric Loader session",
         owner="core:harness", evidence="graphical", profile="loader-live",
         scenario_id="loader-fabric-screen-admission",
         requires=("sibling:solaris-loader", "client-token", "xvfb"),
         sources=("tools/harness/loader.py", "tools/harness/loader_screen_admission.py"),
-        fixture="explicit --server-bin and --plugins-dir; real Solaris Loader Fabric client joins; assertion reads the server log",
+        fixture="explicit --server-bin and --plugins-dir; real Krasnokamen Loader Fabric client joins; assertion reads the server log",
         proves="the server log records 'screen service started for admitted loader session' with platform=Fabric for the joined session",
         limits="admission of the screen service only; no H264 frame flow or viewer-side rendering is asserted",
     ),
@@ -968,11 +968,11 @@ def repo_revisions() -> dict[str, str]:
     turning a run into a failure.
     """
     repos = {
-        "solaris": REPO_ROOT,
-        "solaris-default-plugins": Path(
-            os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", REPO_ROOT.parent / "solaris-default-plugins")
+        "krasnokamen": REPO_ROOT,
+        "krasnokamen-default-plugins": Path(
+            os.environ.get("KRASNOKAMEN_DEFAULT_PLUGINS_ROOT", REPO_ROOT.parent / "solaris-default-plugins")
         ),
-        "solaris-loader": Path(os.environ.get("SOLARIS_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")),
+        "krasnokamen-loader": Path(os.environ.get("KRASNOKAMEN_LOADER_ROOT", REPO_ROOT.parent / "solaris-loader")),
     }
     revisions: dict[str, str] = {}
     for name, path in repos.items():

@@ -6,7 +6,7 @@ See [jobs](jobs.md), [menus](menus.md), [breeding](breeding.md), and the [settle
 
 ## Blueprint files
 
-Solaris owns the JSON templates in `crates/mc-core/assets/blueprints/`. The embedded catalog contains `house` levels 1–3; `storage`, `farm`, `mason`, `lumber_camp`, `mine`, `barracks`, `wall`, and `watch_tower` levels 1–2; and `shepherd` level 1. A geometric certificate can reach level 3 even when its blueprint has no corresponding upgrade.
+Krasnokamen owns the JSON templates in `crates/mc-core/assets/blueprints/`. The embedded catalog contains `house` levels 1–3; `storage`, `farm`, `mason`, `lumber_camp`, `mine`, `barracks`, `wall`, and `watch_tower` levels 1–2; and `shepherd` level 1. A geometric certificate can reach level 3 even when its blueprint has no corresponding upgrade.
 
 Each file has an `id`, a building `kind`, a character-to-block-state `palette`, and `levels`. Each level contains `cert`, the certification box dimensions `[x, y, z]`; `entrance`, an `[x, y, z]` offset; and bottom-up `layers`, each made of Z rows of X characters. A dot is air. Palette states can include properties, for example `loom[facing=north]`. Each level is a complete picture, not an upgrade patch: the loader derives placements, removals, materials and rotations from it. The maximum placed dimensions are 11 × 9 × 11 blocks.
 

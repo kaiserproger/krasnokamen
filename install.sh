@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repository="${SOLARIS_REPOSITORY:-kaiserproger/solaris}"
-version="${SOLARIS_VERSION:-latest}"
-binary_name="${SOLARIS_BINARY_NAME:-solaris}"
+repository="${KRASNOKAMEN_REPOSITORY:-kaiserproger/krasnokamen}"
+version="${KRASNOKAMEN_VERSION:-latest}"
+binary_name="${KRASNOKAMEN_BINARY_NAME:-krasnokamen}"
 
 fail() {
-  printf 'solaris installer: %s\n' "$*" >&2
+  printf 'krasnokamen installer: %s\n' "$*" >&2
   exit 1
 }
 
@@ -22,8 +22,8 @@ need uname
 os="$(uname -s)"
 arch="$(uname -m)"
 
-if [[ -n "${SOLARIS_TARGET:-}" ]]; then
-  target="$SOLARIS_TARGET"
+if [[ -n "${KRASNOKAMEN_TARGET:-}" ]]; then
+  target="$KRASNOKAMEN_TARGET"
 else
   case "$os" in
     Linux) ;;
@@ -37,11 +37,11 @@ else
   esac
 fi
 
-asset="solaris-${target}.tar.gz"
+asset="krasnokamen-${target}.tar.gz"
 checksum_asset="${asset}.sha256"
 
-if [[ -n "${SOLARIS_DOWNLOAD_BASE:-}" ]]; then
-  download_base="${SOLARIS_DOWNLOAD_BASE%/}"
+if [[ -n "${KRASNOKAMEN_DOWNLOAD_BASE:-}" ]]; then
+  download_base="${KRASNOKAMEN_DOWNLOAD_BASE%/}"
 elif [[ "$version" == "latest" ]]; then
   download_base="https://github.com/${repository}/releases/latest/download"
 else
@@ -49,16 +49,16 @@ else
   download_base="https://github.com/${repository}/releases/download/${version}"
 fi
 
-if [[ -n "${SOLARIS_INSTALL_DIR:-}" ]]; then
-  install_dir="$SOLARIS_INSTALL_DIR"
+if [[ -n "${KRASNOKAMEN_INSTALL_DIR:-}" ]]; then
+  install_dir="$KRASNOKAMEN_INSTALL_DIR"
 elif [[ "$(id -u)" -eq 0 ]]; then
   install_dir="/usr/local/bin"
 else
-  [[ -n "${HOME:-}" ]] || fail "HOME is not set; provide SOLARIS_INSTALL_DIR"
+  [[ -n "${HOME:-}" ]] || fail "HOME is not set; provide KRASNOKAMEN_INSTALL_DIR"
   install_dir="$HOME/.local/bin"
 fi
 
-tmp_dir="$(mktemp -d 2>/dev/null || mktemp -d -t solaris-install)"
+tmp_dir="$(mktemp -d 2>/dev/null || mktemp -d -t krasnokamen-install)"
 trap 'rm -rf "$tmp_dir"' EXIT
 archive="$tmp_dir/$asset"
 checksum_file="$tmp_dir/$checksum_asset"
@@ -94,23 +94,23 @@ declare -A seen_entries=()
 binary_entries=0
 while IFS= read -r entry; do
   case "$entry" in
-    solaris|README.md|CHANGELOG.md|example.toml|LICENSE-APACHE|LICENSE-MIT|VERSION) ;;
+    krasnokamen|README.md|CHANGELOG.md|example.toml|LICENSE-APACHE|LICENSE-MIT|VERSION) ;;
     /*|../*|*/../*|*/..) fail "unsafe path in release archive: $entry" ;;
     *) fail "unexpected path in release archive: $entry" ;;
   esac
   [[ -z "${seen_entries[$entry]+present}" ]] || fail "duplicate path in release archive: $entry"
   seen_entries[$entry]=1
-  [[ "$entry" == "solaris" ]] && binary_entries=$((binary_entries + 1))
+  [[ "$entry" == "krasnokamen" ]] && binary_entries=$((binary_entries + 1))
 done < <(tar -tzf "$archive")
-[[ "$binary_entries" -eq 1 ]] || fail "release archive must contain exactly one solaris binary"
+[[ "$binary_entries" -eq 1 ]] || fail "release archive must contain exactly one krasnokamen binary"
 
 tar -xzf "$archive" -C "$unpack_dir"
-[[ -f "$unpack_dir/solaris" ]] || fail "release archive did not extract a solaris file"
+[[ -f "$unpack_dir/krasnokamen" ]] || fail "release archive did not extract a krasnokamen file"
 
 mkdir -p "$install_dir"
-install -m 0755 "$unpack_dir/solaris" "$install_dir/$binary_name"
+install -m 0755 "$unpack_dir/krasnokamen" "$install_dir/$binary_name"
 
-printf 'Solaris installed: %s\n' "$install_dir/$binary_name"
+printf 'Krasnokamen installed: %s\n' "$install_dir/$binary_name"
 case ":${PATH:-}:" in
   *":$install_dir:"*) ;;
   *) printf 'Add %s to PATH to run it as `%s`.\n' "$install_dir" "$binary_name" ;;
