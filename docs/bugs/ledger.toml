@@ -3264,9 +3264,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/model-review-opus-20261102.md:129"
-regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::axolotl_gill_fans_and_tail_are_flat_vanilla_planes", "client:krasnokamen-client:entities::krasnokamen_models::tests::post_rc4_reauthored_rigs_keep_their_reference_silhouettes"]
-fix_commit = "client:92dcb25d"
-repro_check = "candidate: same real revert run (red); cod/salmon/pufferfish parts stay blocked on the shared animation contract; area=client, real-client check required; round 3 adds cod (client:92dcb25d) with its real revert control; salmon, tropical_fish and the adult pufferfish are deliberately unchanged - vanilla 26.1.2 samples outside the 32x32 atlas and adopting them needs the 26.3 dump and a decision on out-of-atlas UVs in the shared checker (receipts/XHarnessGates/fish-uv-evidence.md); area=client, candidate: real-client check required"
+regression = ["client:krasnokamen-client:entities::asset_model_regression_tests::axolotl_gill_fans_and_tail_are_flat_vanilla_planes", "client:krasnokamen-client:entities::krasnokamen_models::tests::post_rc4_reauthored_rigs_keep_their_reference_silhouettes", "client:krasnokamen-client:entities::asset_model_regression_tests::pufferfish_inflation_changes_body_volume_and_exposes_spines"]
+fix_commit = "client:35df28a0"
+repro_check = "candidate: cod and pufferfish_small/medium are exact against 26.3 with a real revert control (receipts/XHarnessGates/client-r5-revert-red.log fails the pufferfish ref at asset_model_regression_tests.rs:352; receipts/XHarnessGates/models263/audit-pufferfish.json). Decision (Main, round 5): salmon, tropical_fish and pufferfish_big keep the authored rigs because the vanilla samples fall outside the 32x32 texture and the shared checker stays unchanged - the earlier 'needs the 26.3 dump and a decision' clause is settled. area=client, candidate: real-client check required"
 [[bug]]
 id = "MODEL-OPUS-10"
 title = "Hoglin ears and tusks, baby bee limbs, guardian spikes and strider bristles or proportions are missing or malformed"
@@ -3601,8 +3601,9 @@ repro = "source"
 severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/scenarios/terra-armada-20261101/model-audit/opus-block-item-remainder-20261103.md:85"
-regression = ["harness:scene-shot:native-263-entity-rigs", "client:krasnokamen-client:entities::resources::tests::entity_render_263_poplar_boats_use_boat_hulls_and_poplar_textures", "client:krasnokamen-client:entities::resources::tests::regression_263_cushion_and_painting_metadata"]
-repro_check = "candidate: in-tree code and passing unit refs, no control; area=client, real-client check required"
+regression = ["harness:scene-shot:native-263-entity-rigs", "client:krasnokamen-client:entities::resources::tests::entity_render_263_poplar_boats_use_boat_hulls_and_poplar_textures", "client:krasnokamen-client:entities::resources::tests::regression_263_cushion_and_painting_metadata", "client:krasnokamen-client:entities::asset_model_regression_tests::boat_and_raft_hulls_match_the_vanilla_26_3_layers"]
+repro_check = "candidate: boats/rafts/chest boats and the water patch are 5/5 exact against 26.3 and pufferfish_small/medium are exact (receipts/XHarnessGates/models263/audit-boats-after.json, audit-pufferfish.json). Round 5 (client:35df28a0) carries a real revert control - receipts/XHarnessGates/client-r5-revert-red.log fails both the boat-layers ref and the pufferfish inflation ref (asset_model_regression_tests.rs:932 and :352). area=client, candidate: real-client check required"
+fix_commit = "client:35df28a0"
 [[bug]]
 id = "MODEL-ITEM-BARS"
 title = "No item bar (durability or bundle fullness) anywhere in the GUI"
