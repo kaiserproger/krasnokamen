@@ -143,6 +143,20 @@ Sub-step timers are exposed only with `MC_CORE_PHASE_LOG`; concurrency is not
 enabled merely by introducing columns. A measured kernel exceeding 5 ms is the
 threshold for evaluating indexed parallel sub-steps on the existing worker pool.
 
+Native battle arrows exclude same-faction mobs from the shared swept collision
+snapshot, equivalent to disabling friendly fire for a battle team. Player
+targets, unaffiliated mobs and existing scoreboard checks are unchanged.
+This prevents rear-rank volleys from killing their own archers and triggering
+casualty/panic routs while ammunition remains.
+
+Melee removal odds follow `research-combat-behavior.md` §4.7: the reference
+10,000-man army, 600 front files and 600-second contact phase is scaled to the
+deployed army size/front files and a 180-second film contact phase. The declared
+width is retained after losses, not turned into a last-survivor damage bonus.
+Shield reactions, human windup/recovery clocks and animation cadence are not
+accelerated. The native 20k diagnostic reports deaths and removals per simulated
+engaged minute; those rates are not wall-clock TPS or a recorded-video receipt.
+
 Population counters use the same sparse native faction membership owner.
 The hook samples pre-motion; publication refreshes the sample after merge before
 creating immutable `TickTimes.battle`. The extra observer pass is part of tick

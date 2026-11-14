@@ -7,6 +7,35 @@ use crate::boundary::{EntityEvent, EntityId, Hand};
 use crate::entities::EntitySlot;
 use crate::intent::{DamageSource, Footprint, IntentKind};
 
+// Research §4.7 calibrates 1.3% removals (one fatal in ten) for a 10,000-man
+// army with 600 front files and ten minutes of contact. The film has three
+// minutes and a narrower deployed front. Scale outcomes, never action clocks.
+const REFERENCE_ARMY_UNITS: f32 = 10_000.0;
+const REFERENCE_FRONT_FILES: f32 = 600.0;
+const REFERENCE_CONTACT_SECONDS: f32 = 600.0;
+const FILM_CONTACT_SECONDS: f32 = 180.0;
+const REMOVALS_PER_TEN_THOUSAND: f32 = 130.0;
+const FATAL_SHARE: f32 = 0.1;
+
+#[derive(Debug, Default)]
+struct FactionFront {
+    faction: u16,
+    units: usize,
+    files: usize,
+    scale: f32,
+}
+
+impl FactionFront {
+    fn scale(units: usize, files: usize) -> f32 {
+        if files == 0 {
+            return 1.0;
+        }
+        (units as f32 / REFERENCE_ARMY_UNITS)
+            * (REFERENCE_FRONT_FILES / files as f32)
+            * (REFERENCE_CONTACT_SECONDS / FILM_CONTACT_SECONDS)
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Weapon {
     Sword,
@@ -108,6 +137,7 @@ pub(crate) struct CombatRuntime {
     remap: FxHashMap<EntityId, Fighter>,
     pub(super) archery: super::archery::Runtime,
     strikes: Vec<(EntityId, EntityId, Weapon, u64)>,
+    fronts: Vec<FactionFront>,
     pub(crate) work: Work,
 }
 
@@ -124,6 +154,34 @@ impl CombatRuntime {
                 .map(|id| self.remap.remove(id).unwrap_or_default()),
         );
         self.remap.clear();
+    }
+
+    fn prepare_fronts(&mut self, battle: &BattleState) {
+        self.fronts.clear();
+        for regiment in &battle.formation.regiments {
+            let faction = regiment.spec.faction;
+            let i = self
+                .fronts
+                .iter()
+                .position(|front| front.faction == faction)
+                .unwrap_or_else(|| {
+                    self.fronts.push(FactionFront {
+                        faction,
+                        ..Default::default()
+                    });
+                    self.fronts.len() - 1
+                });
+            let front = &mut self.fronts[i];
+            front.units += regiment.len;
+            // Staging's regiments are homogeneous. Keep the deployed width
+            // after losses/routs, rather than buffing the surviving few files.
+            if !battle.columns.ranged[regiment.start] {
+                front.files += usize::from(regiment.spec.files);
+            }
+        }
+        for front in &mut self.fronts {
+            front.scale = FactionFront::scale(front.units, front.files);
+        }
     }
 }
 
@@ -195,6 +253,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
     combat.work = Work::default();
     combat.strikes.clear();
     combat.prepare(&battle.columns.ids);
+    combat.prepare_fronts(battle);
     // Ordered execution columns avoid per-fighter hash lookups.
     for bi in 0..battle.columns.ids.len() {
         if !battle.columns.active[bi] || battle.columns.carried[bi] {
@@ -384,15 +443,18 @@ pub(super) enum Outcome {
     Kill,
 }
 
-/// 130 removals / 10,000 unblocked contact attacks; 117 wounded, 13 killed.
+/// Research reference odds, scaled for deployed frontage and film duration.
 /// Pursuit shifts the casualties to the broken side; never speeds up animations.
-pub(super) fn outcome(roll: u32, routing: bool, charge: f32) -> Outcome {
+pub(super) fn outcome(roll: u32, routing: bool, charge: f32, scale: f32) -> Outcome {
     let (removal, fatal) = if routing {
         (1300.0, 900.0)
     } else {
-        (130.0, 13.0)
+        (
+            REMOVALS_PER_TEN_THOUSAND,
+            REMOVALS_PER_TEN_THOUSAND * FATAL_SHARE,
+        )
     };
-    let multiplier = 1.0 + charge;
+    let multiplier = (1.0 + charge) * scale;
     if (roll as f32) < fatal * multiplier {
         Outcome::Kill
     } else if (roll as f32) < removal * multiplier {
@@ -455,7 +517,13 @@ fn strike(
     }
     let routing = context(battle, target_bi).is_some_and(|c| c.routing);
     let charge = combat.fighters[actor_bi].charge.bonus(frame.tick);
-    let result = outcome(roll(actor, start, target.0 as u64), routing, charge);
+    let faction = battle.columns.factions[actor_bi];
+    let scale = combat
+        .fronts
+        .iter()
+        .find(|front| front.faction == faction)
+        .map_or(1.0, |front| front.scale);
+    let result = outcome(roll(actor, start, target.0 as u64), routing, charge, scale);
     if result == Outcome::Glance {
         return;
     }
