@@ -316,7 +316,7 @@ fn unversioned_v2_history_refuses_without_stamping_current_revision() {
         assert_eq!(
             error,
             format!(
-                "storage: {} has persisted history but no native checkpoint; use solaris-v2 world import-anvil --source ANVIL --destination NATIVE --receipt JSON",
+                "storage: {} has persisted history but no native checkpoint; use krasnokamen world import-anvil --source ANVIL --destination NATIVE --receipt JSON",
                 dir.display(),
             )
         );
@@ -332,7 +332,7 @@ fn canonical_startup_loads_modern_jigsaw_and_nether_bastions() {
     let directory = tempfile::tempdir().unwrap();
     let mut config = test_config(directory.path().to_path_buf(), 512);
     config.vanilla_data_dir = Some(
-        std::env::var_os("SOLARIS_CONTENT_CACHE")
+        std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
             .map(std::path::PathBuf::from)
             .unwrap_or_else(|| {
                 std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
@@ -482,8 +482,8 @@ fn bossbars_survive_core_checkpoint_and_reopen() {
     join_and_drain(&core, ConnectionId(72), 2);
     let mut rx = core.subscribe();
     for command in [
-        "bossbar add solaris:probe \"Probe\"",
-        "bossbar set solaris:probe value 42",
+        "bossbar add krasnokamen:probe \"Probe\"",
+        "bossbar set krasnokamen:probe value 42",
     ] {
         core.submit(PlayerInput::Command {
             connection: ConnectionId(72),
@@ -511,7 +511,7 @@ fn bossbars_survive_core_checkpoint_and_reopen() {
             .unwrap();
         let tag =
             crate::native_checkpoint::decode_tag(&image.globals["bossbars"], "bossbars").unwrap();
-        crate::bossbar::BossBars::from_nbt(&tag).unwrap().bars["solaris:probe"].value
+        crate::bossbar::BossBars::from_nbt(&tag).unwrap().bars["krasnokamen:probe"].value
     };
     assert_eq!(stored_value(), 42);
     let restored = Core::open(config.clone()).expect("recover bossbars");

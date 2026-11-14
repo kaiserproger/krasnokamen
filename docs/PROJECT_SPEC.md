@@ -1,12 +1,12 @@
-# Solaris product contract
+# Krasnokamen product contract
 
-This document states what Solaris must deliver, not what the current tree has
+This document states what Krasnokamen must deliver, not what the current tree has
 already proved. `.analysis/MEMORY.md` owns the live agent checkpoint cursor;
 [ARCHITECTURE.md](ARCHITECTURE.md) and ADR 0013/0014 own the sole native runtime.
 
 ## Product
 
-Solaris is an authoritative Minecraft Java 26.1.2-compatible Rust server with a
+Krasnokamen is an authoritative Minecraft Java 26.1.2-compatible Rust server with a
 sandboxed addon platform and a shared client Loader. Ordinary server-only play
 works with the vanilla client. Negotiated Loader capabilities provide custom
 content, input and presentation; unsupported client features are explicit, not
@@ -40,7 +40,7 @@ Priority order:
 - Beyond declared capacity, protect the kernel and healthy players through
   explicit admission refusal and local delay of expensive work. Do not lose
   items, partially commit transactions or silently drop accepted work.
-- Solaris internals have no released compatibility surface. Replacements move
+- Krasnokamen internals have no released compatibility surface. Replacements move
   every caller and remove the old authority, API or schema; no permanent shims.
 
 ## Extension contract
@@ -63,7 +63,7 @@ distinct lifecycle operations. Features requiring restart must say so. The
 Loader is not a channel for downloading arbitrary Java/native code.
 
 The executable API remains documented in [PLUGINS.md](PLUGINS.md); current client
-support and limitations are in [SOLARIS_LOADER.md](SOLARIS_LOADER.md). A target
+support and limitations are in [KRASNOKAMEN_LOADER.md](KRASNOKAMEN_LOADER.md). A target
 contract does not promote unimplemented API to supported behavior.
 
 ## Content acceptance workloads

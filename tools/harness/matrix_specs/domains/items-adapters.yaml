@@ -1,4 +1,4 @@
-schema: solaris-matrix-shared-adapter-manifest/1
+schema: krasnokamen-matrix-shared-adapter-manifest/1
 vanilla_version: 26.1.2
 interface: tools.harness.matrix_api.Adapter
 runner: python3 -m tools.harness run protocol-matrix
@@ -170,7 +170,7 @@ domains:
       matrix_rows: 1
       oracle_clauses:
         - "reference: one / whole stack thrown as item entity; debited once"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -181,7 +181,7 @@ domains:
         - "conservation: item totals over inventories/containers/item entities as expected
           (no dupe, no loss)"
       deferred_context_clauses:
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -244,7 +244,7 @@ domains:
       matrix_rows: 1
       oracle_clauses:
         - "reference: collects up to max stack from menu then inventory"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -254,7 +254,7 @@ domains:
         - "conservation: item totals over inventories/containers/item entities as expected
           (no dupe, no loss)"
       deferred_context_clauses:
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -511,7 +511,7 @@ domains:
       matrix_rows: 4
       oracle_clauses:
         - "reference: SetCreativeModeSlot accepted only in creative; survival refused"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -529,7 +529,7 @@ domains:
         - item ends up either dropped or in inventory, never both
         - persisted holder and player inventory agree; no copy
       deferred_context_clauses:
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -677,7 +677,7 @@ domains:
       matrix_rows: 3
       oracle_clauses:
         - "reference: hunger/saturation restored; effects per item; chorus teleports"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -696,7 +696,7 @@ domains:
           - snapshot:effects
           - client:tick_stamped_input_receipt
       deferred_context_clauses:
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -1233,7 +1233,7 @@ domains:
         - "reference: crafts until inputs or space run out; exact debits"
         - "NEGATIVE (spectator): action refused; world/inventory unchanged; spectator
           may only view container contents; client resynced"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -1247,7 +1247,7 @@ domains:
       deferred_context_clauses:
         - "NEGATIVE (spectator): action refused; world/inventory unchanged; spectator
           may only view container contents; client resynced"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -1303,7 +1303,7 @@ domains:
           may only view container contents; client resynced"
         - "NEGATIVE (permission op_1 < op 2): command not advertised in the command tree,
           execution answers 'Unknown or incomplete command', no state change"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -1315,7 +1315,7 @@ domains:
           may only view container contents; client resynced"
         - "NEGATIVE (permission op_1 < op 2): command not advertised in the command tree,
           execution answers 'Unknown or incomplete command', no state change"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -2765,7 +2765,7 @@ domains:
       oracle_clauses:
         - "reference: fog; no sprint/crit; icon/particles to observers; expires on time;
           cleared by milk"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -2790,7 +2790,7 @@ domains:
           - client:move_physics
           - data_get_entity
       deferred_context_clauses:
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -3701,7 +3701,7 @@ domains:
       matrix_rows: 1
       oracle_clauses:
         - "reference: campfire damage; death message + damage type id on wire"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -3721,7 +3721,7 @@ domains:
           - data_get_entity
           - client:tick_stamped_input_receipt
       deferred_context_clauses:
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -4033,7 +4033,7 @@ domains:
         - "reference: fireball type; fire + projectile tags; death message + damage type
           id on wire"
         - "creative: no damage/death except void and /kill"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -4053,7 +4053,7 @@ domains:
           - client:tick_stamped_input_receipt
       deferred_context_clauses:
         - "creative: no damage/death except void and /kill"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -4080,7 +4080,7 @@ domains:
         source: tools/harness/matrix_domains/_items.py:150
       matrix_rows: 1
       oracle_clauses:
-        - "reference: generic damage bypasses armor (vanilla; Solaris survival.rs agrees);
+        - "reference: generic damage bypasses armor (vanilla; Krasnokamen survival.rs agrees);
           death message + damage type id on wire"
         - "8 concurrent actors: results conserved, server MSPT stays below 50 ms, no correction
           storms or protocol errors"
@@ -4819,7 +4819,7 @@ domains:
         - "reference: arrow velocity by draw; ammo debited unless infinity; damage"
         - "NEGATIVE (spectator): action refused; world/inventory unchanged; spectator
           may only view container contents; client resynced"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -4841,7 +4841,7 @@ domains:
       deferred_context_clauses:
         - "NEGATIVE (spectator): action refused; world/inventory unchanged; spectator
           may only view container contents; client resynced"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -4924,7 +4924,7 @@ domains:
       matrix_rows: 1
       oracle_clauses:
         - "reference: damage by fall distance; fall reset; area knockback"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -4940,7 +4940,7 @@ domains:
           - client:move_physics
           - snapshot:position (authoritative)
       deferred_context_clauses:
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -5040,7 +5040,7 @@ domains:
         - after reconnect the client receives exactly the server-committed state; the
           interrupted action is either fully applied or not at all; item totals across
           player/containers/entities unchanged except by the committed part
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -5062,7 +5062,7 @@ domains:
         - after reconnect the client receives exactly the server-committed state; the
           interrupted action is either fully applied or not at all; item totals across
           player/containers/entities unchanged except by the committed part
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -5096,7 +5096,7 @@ domains:
           state
         - second client observes the same result (block/entity/menu/inventory updates)
           in the next publication; no desync between observers
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -5109,7 +5109,7 @@ domains:
           state
         - second client observes the same result (block/entity/menu/inventory updates)
           in the next publication; no desync between observers
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -5382,7 +5382,7 @@ domains:
       matrix_rows: 1
       oracle_clauses:
         - "reference: vanilla death message keys broadcast (showDeathMessages)"
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"
@@ -5398,7 +5398,7 @@ domains:
           - snapshot:chat
           - snapshot:death_message
       deferred_context_clauses:
-        - "Solaris policy (core:tick/input/session.rs join): the second connection is
+        - "Krasnokamen policy (core:tick/input/session.rs join): the second connection is
           refused with 'UUID is already joined' and the first session is untouched —
           vanilla 26.1.2 instead kicks the existing session ('You logged in from another
           location'); either way no second player entity, no inventory copy"

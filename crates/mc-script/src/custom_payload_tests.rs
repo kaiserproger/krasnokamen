@@ -226,7 +226,7 @@ fn unregister_releases_channels_and_roots_together() {
 fn raw_payload_manifest_cannot_claim_loader_control_channels() {
     let manifest =
         ScriptPluginManifest::new("owner", "owner", "0.1.0", COMPONENT_PLUGIN_API_VERSION)
-            .declare_custom_payload_channel("solaris:loader/ui")
+            .declare_custom_payload_channel("krasnokamen:loader/ui")
             .validate();
     assert!(matches!(
         manifest,
@@ -236,7 +236,7 @@ fn raw_payload_manifest_cannot_claim_loader_control_channels() {
 
 #[test]
 fn raw_payload_command_cannot_bypass_loader_ui_authorization() {
-    let channel = "solaris:loader/ui";
+    let channel = "krasnokamen:loader/ui";
     let capabilities = CommandCapabilities::default().allow_custom_payload_channel(channel);
     let mut batch = CommandBatch::new(nonzero(1));
     assert!(matches!(

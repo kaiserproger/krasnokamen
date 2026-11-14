@@ -16,8 +16,8 @@ use crate::boundary::{ClickMode, ConnectionId, EntityId, PlayerChange, PlayerInp
 use crate::tick::TickState;
 
 const ZONES: &str = "player-zones";
-const NATIVE_SETTLEMENTS_OWNER: &str = "solaris-settlements";
-const NATIVE_SETTLEMENTS_OVERVIEW: &str = "solaris-settlements:overview";
+const NATIVE_SETTLEMENTS_OWNER: &str = "krasnokamen-settlements";
+const NATIVE_SETTLEMENTS_OVERVIEW: &str = "krasnokamen-settlements:overview";
 
 #[derive(Default)]
 pub(crate) struct PlayerAuthority {
