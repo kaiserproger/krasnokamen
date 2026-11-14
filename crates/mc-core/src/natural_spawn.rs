@@ -475,11 +475,15 @@ fn category_in(
     }
 }
 
-pub(crate) fn persistent(row: &crate::entities::ColdRow) -> bool {
-    row.persistent
-        || row.appearance.custom_name.is_some()
-        || row.entity_life.tamed
-        || row.entity_life.mounted
+fn intrinsically_persistent(row: &crate::entities::ColdRow) -> bool {
+    row.persistent || row.appearance.custom_name.is_some() || row.entity_life.tamed
+}
+
+pub(crate) fn persistent(
+    entities: &crate::entities::EntityStore,
+    row: &crate::entities::ColdRow,
+) -> bool {
+    intrinsically_persistent(row) || crate::mounts::occupied(entities, &row.entity_life.mount)
 }
 
 fn category_index(category: MobCategory) -> Option<usize> {
@@ -520,9 +524,10 @@ fn observe_slot(state: &mut TickState, slot: EntitySlot) {
     // Native rows outlive residency, unlike vanilla's loaded-entity census.
     // Keep their bodies indexed for overlap checks, but not in loaded mob caps.
     let cell = chunk_of(position);
-    let category = (!persistent(state.entities.row(slot)) && state.world.has_chunk(cell.0, cell.1))
-        .then(|| category_of(state, slot))
-        .and_then(category_index);
+    let category = (!persistent(&state.entities, state.entities.row(slot))
+        && state.world.has_chunk(cell.0, cell.1))
+    .then(|| category_of(state, slot))
+    .and_then(category_index);
     state
         .spawn_census
         .observe(entity, position, width, category);
@@ -565,7 +570,7 @@ fn census_job(
         let cell = chunk_of(positions[index]);
         // Native rows outlive residency, unlike vanilla's loaded-entity census.
         // Keep their bodies indexed for overlap checks, but not in loaded mob caps.
-        let category = (!persistent(entities.row(EntitySlot(index as u32)))
+        let category = (!persistent(entities, entities.row(EntitySlot(index as u32)))
             && world.has_chunk(cell.0, cell.1))
         .then(|| category_in(registry, body))
         .and_then(category_index);
@@ -752,7 +757,9 @@ fn despawn(
         }
         let category = category_of(state, slot);
         let peaceful = category == MobCategory::Monster && peaceful_difficulty;
-        let retained = explicitly_retained(row) || category.is_persistent();
+        let retained = explicitly_retained(row)
+            || crate::mounts::occupied(&state.entities, &row.entity_life.mount)
+            || category.is_persistent();
         if !peaceful && (no_players || retained && row.no_action_time == 0) {
             continue;
         }
@@ -1577,7 +1584,7 @@ mod parity_tests;
 mod audit_s12_tests;
 
 fn explicitly_retained(row: &crate::entities::ColdRow) -> bool {
-    persistent(row)
+    intrinsically_persistent(row)
         || matches!(
             row.special_mob.as_deref(),
             Some(crate::special_mobs::Retained::Warden(_))
@@ -1585,6 +1592,8 @@ fn explicitly_retained(row: &crate::entities::ColdRow) -> bool {
 }
 
 /// Strict subset of despawn's "nothing to do" rows that needs no blueprint.
+/// Mounted-only retention is resolved by the final despawn decision: the fused
+/// clock sweep mutates rows and cannot consult the rest of the entity store.
 pub(crate) fn no_work_before_category(
     row: &crate::entities::ColdRow,
     peaceful_difficulty: bool,

@@ -50,6 +50,7 @@ independent.
 
 Mount custody belongs to the vehicle's ordered, bounded rider UUID list. The
 first rider with a live body controls motion; absent recovery claims are skipped.
+Absent claims do not reserve attachment positions for live passengers.
 A passenger's reverse link and published passenger entity IDs are derived,
 never separate authorities. Removing one passenger preserves the other seats.
 Native images retain the list; offline animal NBT uses `krasnokamen:Riders`.
@@ -66,13 +67,20 @@ an older build still carries `rider` and is refused at startup.
 A recovered absent UUID is a pending claim, not an occupied seat: it survives idle
 ticks until its passenger reconnects or another live Ride takes that vehicle.
 No rider-kind is persisted, so an absent mob UUID follows the same rule.
+`mounts::live_riders` resolves those UUIDs against live bodies and is the single
+gameplay occupancy source for control, AI, leash follow, breeding, despawn,
+portals and battle projections. There is no cached `EntityLifeState.mounted`
+boolean to go stale on image load or removal of a passenger body; the durable
+rider index intentionally continues to include absent claims.
 Explicit leave/dismount, death, or a known dead/invalid passenger clears its
 relation. Plain Join and successful plugin-login unlock both call `mounts::join`;
 the active vehicle tick also rebuilds the reverse link and passenger projection.
 Re-seating has no distance or chunk-activity check within the dimension: bringing
 the returning player to the vehicle is accepted policy, not vanilla parity.
-Dimension travel ejects seats but retains the vehicle's chest and cargo;
-death ejects seats and drops that custody.
+Dimension travel ejects seats and ends pending absent claims, but retains the
+vehicle's chest and cargo. A later claimant joins at their saved position rather
+than following a vehicle to another dimension. Death ejects seats and drops
+that custody.
 The WAL recovery regression is
 `happy_ghast_admission_leave_and_reconnect_survive_wal_recovery`; native tests also
 cover reclaimed seats, first-live steering, plugin unlock, competing claims and a

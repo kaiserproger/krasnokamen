@@ -761,7 +761,8 @@ pub(super) fn settle(state: &mut TickState) {
             continue;
         }
         let body = *state.entities.body(slot);
-        let horse = !state.entities.row(slot).entity_life.mount.riders.is_empty();
+        let horse =
+            crate::mounts::occupied(&state.entities, &state.entities.row(slot).entity_life.mount);
         let height = if horse {
             ground::MOUNTED_CLEARANCE
         } else {

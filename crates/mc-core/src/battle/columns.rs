@@ -150,7 +150,6 @@ impl Columns {
             facts.health = row.health;
             population.remember(slot, id, row.health);
             facts.no_ai = row.controls.no_ai;
-            facts.carried = !row.entity_life.mount.riders.is_empty();
             facts.targetable =
                 matches!(body.kind, EntityKind::Mob { .. }) && !crate::axolotl::playing_dead(row);
             let type_id = match body.kind {
@@ -177,6 +176,10 @@ impl Columns {
             facts.valid = true;
         }
         let facts = &mut self.facts[bi];
+        // Occupancy also changes when a passenger disappears, without an edit
+        // to this vehicle's cold row. Do not retain it in the dirty-row cache.
+        facts.carried =
+            crate::mounts::occupied(frame.entities, &frame.entities.row(slot).entity_life.mount);
         let member_visible = expected_faction.is_none_or(|expected| {
             facts.health > 0.0 && super::relation(body.faction, expected) == super::Relation::Same
         });

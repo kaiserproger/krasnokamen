@@ -84,7 +84,6 @@ pub(crate) fn from_fields(
         if unique.len() != result.mount.riders.len() {
             return Err(invalid("krasnokamen:Riders duplicate UUID"));
         }
-        result.mounted = !result.mount.riders.is_empty();
     }
     for key in ["Tame", "Sitting", "Trusting", "Temper", "CollarColor"] {
         if let Some(tag) = field(fields, key)? {

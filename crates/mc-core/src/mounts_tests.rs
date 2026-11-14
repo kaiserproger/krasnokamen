@@ -258,6 +258,28 @@ fn camel_and_happy_ghast_keep_their_existing_seats() {
     }
 }
 
+#[test]
+fn absent_claim_does_not_reserve_a_live_passenger_seat() {
+    for (kind, forward) in [("camel", 0.5), ("happy_ghast", 1.7)] {
+        let (mut state, actor, pos) = fixture();
+        let vehicle = spawn(&mut state, kind, pos);
+        let vehicle_slot = slot(&state, vehicle);
+        let actor_slot = slot(&state, actor);
+        let actor_uuid = state.entities.row(actor_slot).uuid;
+        state
+            .entities
+            .set_riders(vehicle_slot, vec![Uuid::new_v4(), actor_uuid]);
+        sync_rider(&mut state, vehicle_slot);
+        let height =
+            state.entities.body(vehicle_slot).height * if kind == "camel" { 0.75 } else { 1.0 };
+        assert_eq!(
+            state.entities.pos(actor_slot),
+            [pos[0], pos[1] + height, pos[2] + forward],
+            "{kind}: absent claims must not consume attachment positions"
+        );
+    }
+}
+
 fn equip(state: &mut TickState, actor: EntityId, target: EntityId, item: &str) {
     hold(state, actor, item, 1);
     run_tick(state, &[use_entity(target)]);
@@ -1314,4 +1336,57 @@ fn armadillo_scute_timer_tracks_game_ticks() {
         90,
         "ten game ticks must advance the scute timer by ten ticks"
     );
+}
+
+#[test]
+fn removed_mob_rider_claim_has_no_gameplay_occupancy() {
+    let (mut state, _, pos) = fixture();
+    let horse = spawn(&mut state, "horse", pos);
+    let husk = spawn(&mut state, "husk", pos);
+    let horse_slot = slot(&state, horse);
+    let husk_slot = slot(&state, husk);
+    let uuid = state.entities.row(husk_slot).uuid;
+    state.entities.set_riders(horse_slot, vec![uuid]);
+    sync_rider(&mut state, horse_slot);
+    assert!(crate::taming::suppress_ai(
+        &state.entities,
+        state.entities.row(horse_slot)
+    ));
+    state.entities.remove(husk_slot);
+    assert_eq!(
+        state.entities.row(horse_slot).entity_life.mount.riders,
+        [uuid]
+    );
+    assert!(!crate::taming::suppress_ai(
+        &state.entities,
+        state.entities.row(horse_slot)
+    ));
+    assert!(!crate::natural_spawn::persistent(
+        &state.entities,
+        state.entities.row(horse_slot)
+    ));
+    assert!(!occupied(
+        &state.entities,
+        &state.entities.row(horse_slot).entity_life.mount
+    ));
+    // An absent child claim must not prevent a new battle rider, or survive
+    // as a nested vehicle relation in the new rider's persisted image.
+    let rider = spawn(&mut state, "husk", pos);
+    let rider_slot = slot(&state, rider);
+    state.entities.set_faction(rider_slot, 1);
+    state.entities.set_riders(rider_slot, vec![Uuid::new_v4()]);
+    crate::battle::cavalry::mount(&mut state, rider, horse).unwrap();
+    assert!(
+        state
+            .entities
+            .row(rider_slot)
+            .entity_life
+            .mount
+            .riders
+            .is_empty()
+    );
+    assert!(occupied(
+        &state.entities,
+        &state.entities.row(horse_slot).entity_life.mount
+    ));
 }

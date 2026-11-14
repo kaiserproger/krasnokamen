@@ -242,7 +242,12 @@ fn untamed_or_sitting_pets_and_unhealthy_or_mounted_horses_cannot_breed() {
                 "sitting cat still feeds {species}"
             );
         } else {
-            state.entities.row_mut(slot).entity_life.mounted = true;
+            let passenger = spawn(&mut state, "husk", pos);
+            let uuid = state
+                .entities
+                .row(state.entities.slot_of(passenger).unwrap())
+                .uuid;
+            state.entities.set_riders(slot, vec![uuid]);
             assert!(
                 !entity_life::can_breed(&state, body(&state, id), row(&state, id)),
                 "unavailable {species}"

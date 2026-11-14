@@ -104,15 +104,24 @@ pub(crate) fn join(state: &mut TickState, actor: EntityId) {
         sync_rider(state, vehicle);
     }
 }
-pub(crate) fn rider(state: &TickState, slot: EntitySlot) -> Option<EntitySlot> {
-    state
-        .entities
-        .row(slot)
-        .entity_life
-        .mount
+/// The sole gameplay occupancy rule. Durable claims without a live body are
+/// recovery metadata, for players and mobs alike, never occupied seats.
+pub(crate) fn live_riders<'a>(
+    entities: &'a crate::entities::EntityStore,
+    mount: &'a MountState,
+) -> impl Iterator<Item = EntitySlot> + 'a {
+    mount
         .riders
         .iter()
-        .find_map(|uuid| state.entities.slot_of_uuid(*uuid))
+        .filter_map(|uuid| entities.slot_of_uuid(*uuid))
+}
+
+pub(crate) fn occupied(entities: &crate::entities::EntityStore, mount: &MountState) -> bool {
+    live_riders(entities, mount).next().is_some()
+}
+
+pub(crate) fn rider(state: &TickState, slot: EntitySlot) -> Option<EntitySlot> {
+    live_riders(&state.entities, &state.entities.row(slot).entity_life.mount).next()
 }
 pub(crate) fn vehicle_input(state: &TickState, slot: EntitySlot) -> u8 {
     rider(state, slot).map_or(0, |r| state.entities.row(r).entity_life.mount.input)
@@ -330,13 +339,7 @@ fn action(
         && !secondary
         && !food
         && (capabilities.riding != RidingProfile::None || crate::vehicles::rideable(state, target))
-        && row
-            .entity_life
-            .mount
-            .riders
-            .iter()
-            .filter(|uuid| state.entities.slot_of_uuid(**uuid).is_some())
-            .count()
+        && live_riders(&state.entities, &row.entity_life.mount).count()
             < passenger_limit(state, target)
         && vehicle(state, actor).is_none()
         && (!matches!(
@@ -556,7 +559,6 @@ pub(crate) fn apply(state: &mut TickState, actor: EntityId, plan: &Plan) {
             riders.retain(|rider| *rider != uuid && state.entities.slot_of_uuid(*rider).is_some());
             riders.push(uuid);
             state.entities.set_riders(slot, riders);
-            state.entities.row_mut(slot).entity_life.mounted = true;
             state.entities.set_vel(slot, [0.0; 3]);
             sync_rider(state, slot);
             crate::advancements::trigger(
@@ -676,9 +678,7 @@ fn clear_rider(state: &mut TickState, slot: EntitySlot, uuid: Uuid) {
     }
     let mut riders = std::mem::take(&mut state.entities.row_mut(slot).entity_life.mount.riders);
     riders.retain(|id| *id != uuid);
-    let occupied = !riders.is_empty();
     state.entities.set_riders(slot, riders);
-    state.entities.row_mut(slot).entity_life.mounted = occupied;
     sync_rider(state, slot);
 }
 
@@ -791,12 +791,13 @@ pub(crate) fn sync_rider(state: &mut TickState, slot: EntitySlot) {
             } else if kind == "minecraft:happy_ghast" {
                 // EntityTypes.HAPPY_GHAST passengerAttachments (local javap): (x, 4.0, z) with
                 // x lateral and z forward, so index 0 is 1.7 ahead and index 1 is x = -1.7.
-                let (forward, side) = [(1.7, 0.0), (0.0, -1.7), (-1.7, 0.0), (0.0, 1.7)][index];
+                let (forward, side) =
+                    [(1.7, 0.0), (0.0, -1.7), (-1.7, 0.0), (0.0, 1.7)][passenger_count];
                 (state.entities.body(slot).height, forward, side)
             } else if kind == "minecraft:camel" {
                 (
                     state.entities.body(slot).height * 0.75,
-                    if index == 0 { 0.5 } else { -0.7 },
+                    if passenger_count == 0 { 0.5 } else { -0.7 },
                     0.0,
                 )
             } else {
@@ -1159,9 +1160,6 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
         let equine = capabilities(state, slot).taming.equine()
             && rider_slot
                 .is_some_and(|r| matches!(state.entities.body(r).kind, EntityKind::Player { .. }));
-        if !state.entities.row(slot).entity_life.mounted {
-            state.entities.row_mut(slot).entity_life.mounted = true;
-        }
         if equine
             && !state.entities.row(slot).entity_life.tamed
             && crate::taming::roll(state.entities.row_mut(slot), 50) == 0

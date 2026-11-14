@@ -1918,6 +1918,8 @@ impl EntityStore {
         self.index_tick_members(slot);
     }
 
+    /// Vehicles with durable rider claims, including absent recovery claimants.
+    /// Gameplay occupancy is resolved by `mounts::occupied`, not this index.
     pub(crate) fn rider_slots(&self) -> impl Iterator<Item = EntitySlot> + '_ {
         self.rider_members.iter().copied()
     }
@@ -1927,9 +1929,9 @@ impl EntityStore {
     }
 
     pub(crate) fn set_riders(&mut self, slot: EntitySlot, riders: Vec<Uuid>) {
-        let occupied = !riders.is_empty();
+        let has_claims = !riders.is_empty();
         self.row_mut(slot).entity_life.mount.riders = riders;
-        if occupied {
+        if has_claims {
             self.rider_members.insert(slot);
         } else {
             self.rider_members.remove(&slot);
@@ -2009,15 +2011,7 @@ impl EntityStore {
             }
             self.dirty_flag[index] = false;
             let special = effective_special(registry, body, &self.cold[index]);
-            self.flags[index] = motion_flags_for(
-                registry,
-                body,
-                &self.cold[index],
-                self.impulse[index],
-                special,
-                chicken,
-                tadpole,
-            );
+            self.flags[index] = motion_flags_for(registry, self, slot, special, chicken, tadpole);
             self.hints[index] = MotionHint {
                 special,
                 swell_metadata_neutral: crate::hostile::swell_metadata_neutral(&self.cold[index]),
@@ -2073,6 +2067,7 @@ fn effective_special(
 
 fn motion_rest_base(
     registry: &crate::registry::CoreRegistry,
+    entities: &EntityStore,
     body: &Body,
     row: &ColdRow,
     impulse: [f64; 2],
@@ -2086,7 +2081,7 @@ fn motion_rest_base(
         || row.special_mob.is_some()
         || row.love != 0
         || body.burn_ticks != 0
-        || crate::taming::suppress_ai(row)
+        || crate::taming::suppress_ai(entities, row)
     {
         return false;
     }
@@ -2134,13 +2129,15 @@ fn motion_life(body: &Body, row: &ColdRow, tadpole: Option<u32>) -> bool {
 
 fn motion_flags_for(
     registry: &crate::registry::CoreRegistry,
-    body: &Body,
-    row: &ColdRow,
-    impulse: [f64; 2],
+    entities: &EntityStore,
+    slot: EntitySlot,
     special: Option<crate::hostile::Special>,
     chicken: Option<u32>,
     tadpole: Option<u32>,
 ) -> u16 {
+    let body = entities.body(slot);
+    let row = entities.row(slot);
+    let impulse = entities.impulse[slot.0 as usize];
     let phase = ((body.id.0 as u64 & 3) as u16) << MOTION_PHASE_SHIFT;
     let mut flags: u16 = phase;
     if motion_owned(body, row) {
@@ -2155,7 +2152,7 @@ fn motion_flags_for(
     if special.is_some() {
         flags |= MOTION_SPECIAL;
     }
-    if motion_rest_base(registry, body, row, impulse, special) {
+    if motion_rest_base(registry, entities, body, row, impulse, special) {
         flags |= MOTION_REST;
         // No alternate movement goal, standing override, breeding or panic.
         if let EntityKind::Mob { type_id } = body.kind

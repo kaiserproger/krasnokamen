@@ -521,3 +521,259 @@ fn mounts_clean_core_shutdown_and_reopen_keep_the_pending_rider() {
     assert_eq!(pig.state.entity_life.mount.riders, [uuid]);
     println!("clean Core::shutdown without Leave retains the rider UUID after reopen");
 }
+
+/// Produce the actual clean-stop case, then reopen without the passenger.
+/// Every probe below runs before anybody issues a new Ride.
+fn reopen_mount_without_passenger(
+    config: &CoreConfig,
+) -> (TickState, crate::boundary::EntityId, uuid::Uuid) {
+    use crate::boundary::{ConnectionId, PlayerInput};
+    let uuid = uuid::Uuid::from_u128(0x3333);
+    let (mut state, actor, pos) = native_mounts_fixture(config, uuid);
+    let horse = spawn(&mut state, "horse", pos);
+    let horse_slot = slot(&state, horse);
+    state.entities.row_mut(horse_slot).entity_life.tamed = true;
+    let horse_uuid = state.entities.row(horse_slot).uuid;
+    hold(&mut state, actor, "saddle", 1);
+    run_tick(&mut state, &[use_entity(horse)]);
+    hold(&mut state, actor, "saddle", 0);
+    run_tick(&mut state, &[use_entity(horse)]);
+    assert_eq!(crate::mounts::vehicle(&state, actor), Some(horse_slot));
+    save_mounts_checkpoint(config, &mut state);
+    drop(state);
+    let core = Core::open(config.clone()).unwrap();
+    let mut receiver = core.subscribe();
+    assert!(core.submit(PlayerInput::Join {
+        connection: ConnectionId(10),
+        uuid,
+        name: "rider".into(),
+        permission_level: 0,
+    }));
+    let mut seated = false;
+    for _ in 0..100 {
+        let output = receiver.blocking_recv().unwrap();
+        core.try_drain_outbox();
+        seated =
+            output.snapshot.entities.iter().any(|entity| {
+                entity.uuid == horse_uuid && !entity.appearance.passengers.is_empty()
+            });
+        if seated {
+            break;
+        }
+    }
+    core.shutdown();
+    drop(core);
+    assert!(seated, "the real Core was stopped with its player riding");
+    let reopened = Core::open(config.clone()).unwrap();
+    let mut receiver = reopened.subscribe();
+    receiver.blocking_recv().unwrap();
+    reopened.shutdown();
+    drop(reopened);
+    let mut state =
+        recover_dimension_state(config, crate::dimensions::Dimension::Overworld).unwrap();
+    for dimension in [
+        crate::dimensions::Dimension::Nether,
+        crate::dimensions::Dimension::End,
+    ] {
+        state.other_dimensions.insert(
+            dimension,
+            Box::new(recover_dimension_state(config, dimension).unwrap()),
+        );
+    }
+    let horse_slot = state.entities.slot_of_uuid(horse_uuid).unwrap();
+    let horse = state.entities.body(horse_slot).id;
+    assert_eq!(
+        state.entities.row(horse_slot).entity_life.mount.riders,
+        [uuid]
+    );
+    assert!(state.entities.slot_of_uuid(uuid).is_none());
+    state.world.ensure_blocking(
+        &[(crate::boundary::ChunkPos { x: 0, z: 0 }, 0)]
+            .into_iter()
+            .collect(),
+    );
+    (state, horse, uuid)
+}
+
+fn reconnect_pending_mount_rider(
+    state: &mut TickState,
+    horse: crate::boundary::EntityId,
+    uuid: uuid::Uuid,
+) {
+    let connection = crate::boundary::ConnectionId(20);
+    run_tick(
+        state,
+        &[crate::boundary::PlayerInput::Join {
+            connection,
+            uuid,
+            name: "rider".into(),
+            permission_level: 0,
+        }],
+    );
+    let actor = state.connections.entity_of(connection).unwrap();
+    assert_eq!(
+        crate::mounts::vehicle(state, actor),
+        Some(slot(state, horse))
+    );
+    assert!(crate::mounts::occupied(
+        &state.entities,
+        &state.entities.row(slot(state, horse)).entity_life.mount
+    ));
+}
+
+#[test]
+fn mounts_absent_claim_after_core_restart_does_not_suppress_ai_or_breeding() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    config.view_distance = 0;
+    config.simulation_distance = 0;
+    config.checkpoint_every_ticks = u64::MAX;
+    let (mut state, horse, uuid) = reopen_mount_without_passenger(&config);
+    let horse_slot = slot(&state, horse);
+    assert!(!crate::taming::suppress_ai(
+        &state.entities,
+        state.entities.row(horse_slot)
+    ));
+    assert!(crate::entity_life::can_breed(
+        &state,
+        state.entities.body(horse_slot),
+        state.entities.row(horse_slot)
+    ));
+    reconnect_pending_mount_rider(&mut state, horse, uuid);
+    assert!(crate::taming::suppress_ai(
+        &state.entities,
+        state.entities.row(horse_slot)
+    ));
+    assert!(!crate::entity_life::can_breed(
+        &state,
+        state.entities.body(horse_slot),
+        state.entities.row(horse_slot)
+    ));
+}
+
+#[test]
+fn mounts_absent_claim_after_core_restart_does_not_block_leash_follow() {
+    use crate::boundary::{ConnectionId, PlayerInput};
+    let directory = tempfile::tempdir().unwrap();
+    let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    config.view_distance = 0;
+    config.simulation_distance = 0;
+    config.checkpoint_every_ticks = u64::MAX;
+    let (mut state, horse, uuid) = reopen_mount_without_passenger(&config);
+    let horse_slot = slot(&state, horse);
+    let at = state.entities.pos(horse_slot);
+    let holder_uuid = uuid::Uuid::from_u128(0x4444);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(2),
+            uuid: holder_uuid,
+            name: "holder".into(),
+            permission_level: 0,
+        }],
+    );
+    let holder = state.connections.entity_of(ConnectionId(2)).unwrap();
+    state
+        .entities
+        .set_pos(slot(&state, holder), [at[0] + 4.0, at[1], at[2]]);
+    state
+        .entities
+        .set_leash(horse_slot, Some(crate::leash::Holder::Entity(holder_uuid)));
+    state.entities.set_vel(horse_slot, [0.0; 3]);
+    crate::leash::tick(&mut state, &mut crate::boundary::ChangeSet::default());
+    assert!(
+        state.entities.vel(horse_slot)[0] > 0.0,
+        "the leash owner must pull an absent-claim vehicle"
+    );
+    let before = state.entities.pos(horse_slot);
+    run_tick(&mut state, &[]);
+    assert!(
+        state.entities.pos(horse_slot)[0] > before[0],
+        "native movement must admit leash follow too"
+    );
+    reconnect_pending_mount_rider(&mut state, horse, uuid);
+    crate::leash::tick(&mut state, &mut crate::boundary::ChangeSet::default());
+    assert_eq!(
+        state.entities.vel(horse_slot)[0],
+        0.0,
+        "a live rider blocks leash following"
+    );
+}
+
+#[test]
+fn mounts_absent_claim_after_core_restart_does_not_block_portal_and_expires_on_travel() {
+    use crate::dimensions::Dimension;
+    let directory = tempfile::tempdir().unwrap();
+    let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    config.view_distance = 0;
+    config.simulation_distance = 0;
+    config.checkpoint_every_ticks = u64::MAX;
+    let (mut state, horse, _) = reopen_mount_without_passenger(&config);
+    let horse_slot = slot(&state, horse);
+    let at = state.entities.pos(horse_slot);
+    let cell = at.map(|coordinate| coordinate.floor() as i32);
+    let portal = state
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:end_portal").unwrap())
+        .unwrap()
+        .default
+        .0;
+    state.world.set_block(cell[0], cell[1], cell[2], portal);
+    state.world.fold_overlay();
+    state.entities.set_pos(
+        horse_slot,
+        [
+            f64::from(cell[0]) + 0.5,
+            f64::from(cell[1]) + 0.5,
+            f64::from(cell[2]) + 0.5,
+        ],
+    );
+    let want = crate::world::chunks_in_radius(crate::boundary::ChunkPos { x: 6, z: 0 }, 1)
+        .into_iter()
+        .map(|pos| (pos, 0))
+        .collect();
+    state
+        .other_dimensions
+        .get_mut(&Dimension::End)
+        .unwrap()
+        .world
+        .ensure_blocking(&want);
+    state.tick += 1;
+    for world in state.other_dimensions.values_mut() {
+        world.tick = state.tick;
+    }
+    let mut changes = std::collections::BTreeMap::new();
+    crate::portals::travel::finish(&mut state, &mut changes);
+    assert_eq!(
+        crate::dimensions::travel::locate(&state, horse).unwrap().0,
+        Dimension::End
+    );
+    let end = &state.other_dimensions[&Dimension::End];
+    let horse_uuid = end.entities.row(slot(end, horse)).uuid;
+    assert!(
+        end.entities
+            .row(slot(end, horse))
+            .entity_life
+            .mount
+            .riders
+            .is_empty(),
+        "dimension travel ends pending claims"
+    );
+    save_mounts_checkpoint(&config, &mut state);
+    drop(state);
+    let recovered = crate::native_checkpoint::recover_offline(&config).unwrap();
+    let mut owners = Vec::new();
+    for (dimension, replay) in &recovered.dimensions {
+        crate::mounts::persistence::validate_replay(replay).unwrap();
+        if let Some(horse) = replay
+            .entities
+            .values()
+            .find(|entity| entity.uuid == horse_uuid.to_string())
+        {
+            owners.push(*dimension);
+            assert!(horse.state.entity_life.mount.riders.is_empty());
+        }
+    }
+    assert_eq!(owners, [Dimension::End]);
+}

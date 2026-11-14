@@ -95,7 +95,10 @@ vehicle in the world; it does not carry a sole rider's vehicle in player data.
 A clean `Core::shutdown` without a processed Leave instead retains the vehicle's
 rider UUID, as does crash recovery. Reconnect (including plugin-login unlock)
 re-seats a pending claimant at any distance in the dimension until another player
-takes the vehicle; absent claims do not consume live seats or steering priority.
+takes the vehicle or it changes dimension. Absent claims do not affect AI, leash
+follow, breeding, despawn, portal admission, steering priority or passenger
+attachment positions; travel clears them rather than transporting the absent
+player between dimensions.
 The accepted re-seat policy is defined in ADR 0013. Carry-vehicle-with-player is
 not implemented.
 

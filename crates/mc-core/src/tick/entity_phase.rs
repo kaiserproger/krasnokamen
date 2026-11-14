@@ -1223,7 +1223,7 @@ pub(super) fn read_row(
         }),
         chaser,
         breed_ready: breeder
-            && crate::entity_life::can_breed_in(view.registry, body, row)
+            && crate::entity_life::can_breed_in(view.registry, view.entities, body, row)
             && row.entity_life.child_ticks == 0
             && row.breed_cooldown == 0
             && row.love > 0,
@@ -1256,13 +1256,13 @@ pub(super) fn read_row(
             || crate::axolotl::playing_dead(row)
             || observed
             || blueprint.is_some_and(|blueprint| blueprint.goals.is_empty())
-            || (!battle && crate::taming::suppress_ai(row))
+            || (!battle && crate::taming::suppress_ai(view.entities, row))
             || crate::warden::suppress_ai(row)
             || crate::piglin::admiring(row),
         leash_follow: row.entity_life.leash.is_some()
             && !row.controls.no_ai
             && !row.entity_life.sitting
-            && row.entity_life.mount.riders.is_empty(),
+            && !crate::mounts::occupied(view.entities, &row.entity_life.mount),
     };
     (read, needs_rare)
 }
