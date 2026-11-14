@@ -160,7 +160,7 @@ def run(timeout_seconds: float, seed: int = SEED, village_view: list[float] | No
         *, check: bool = False) -> dict[str, Any]:
 
     run_id = time.strftime("%Y%m%dT%H%M%S")
-    evidence_root = os.environ.get("SOLARIS_VALIDATION_RUN_DIR")
+    evidence_root = os.environ.get("KRASNOKAMEN_VALIDATION_RUN_DIR")
     run_dir = (
         Path(evidence_root) / "seed-review"
         if evidence_root
@@ -199,13 +199,13 @@ def run(timeout_seconds: float, seed: int = SEED, village_view: list[float] | No
     }
     current_phase = "server_start"
     try:
-        binary_override = os.environ.get("SOLARIS_SERVER_BINARY")
+        binary_override = os.environ.get("KRASNOKAMEN_SERVER_BINARY")
         if binary_override:
             binary = Path(binary_override).expanduser().resolve()
         else:
-            subprocess.run(["nice", "-n", "19", "cargo", "build", "-j", "4", "-p", "mc-edge", "--bin", "solaris-v2"], cwd=REPO_ROOT, check=True)
+            subprocess.run(["nice", "-n", "19", "cargo", "build", "-j", "4", "-p", "mc-edge", "--bin", "krasnokamen"], cwd=REPO_ROOT, check=True)
             target = Path(os.environ.get("CARGO_TARGET_DIR", str(REPO_ROOT / "target")))
-            binary = (target if target.is_absolute() else REPO_ROOT / target) / "debug" / "solaris-v2"
+            binary = (target if target.is_absolute() else REPO_ROOT / target) / "debug" / "krasnokamen"
         if not binary.is_file() or not os.access(binary, os.X_OK):
             raise RuntimeError(f"missing executable server binary: {binary}")
         result["server_binary"] = str(binary)

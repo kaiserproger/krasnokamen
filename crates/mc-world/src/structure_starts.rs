@@ -64,7 +64,7 @@ pub fn read(
         if bb.len() != 6 || bb[0] > bb[3] || bb[1] > bb[4] || bb[2] > bb[5] {
             return Err("invalid structure bounding box".into());
         }
-        let position = match lookup("SolarisLocatePos") {
+        let position = match lookup("KrasnokamenLocatePos") {
             None => BlockPos {
                 x: bb[0],
                 y: bb[1],
@@ -126,7 +126,7 @@ pub fn insert(chunk: &mut Chunk, site: &GeneratedStructureSite, min: BlockPos, m
             ("ChunkZ".into(), Tag::Int(site.start_chunk.1)),
             ("references".into(), Tag::Int(0)),
             (
-                "SolarisLocatePos".into(),
+                "KrasnokamenLocatePos".into(),
                 Tag::IntArray(vec![site.position.x, site.position.y, site.position.z]),
             ),
             (

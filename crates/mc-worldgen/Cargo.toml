@@ -1,6 +1,6 @@
 [package]
 name = "mc-worldgen"
-description = "generation pipeline, biomes, structures (Solaris)."
+description = "generation pipeline, biomes, structures (Krasnokamen)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

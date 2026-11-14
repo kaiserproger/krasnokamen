@@ -1,4 +1,4 @@
-"""Solaris extensions, NOT vanilla features. Source: docs/decisions/0018-in-game-computer.md.
+"""Krasnokamen extensions, NOT vanilla features. Source: docs/decisions/0018-in-game-computer.md.
 The matrix's screen-share-is-forbidden oracle predates ADR lines 82 onward.
 Only isolated synthetic Xvfb content is authorized; never capture the host desktop.
 """
@@ -56,7 +56,7 @@ def terminal_disabled_vanilla_iron(ctx):
     p.block_is(ctx, pos, 'minecraft:iron_block')
     p.check(ctx, 'no terminal', p.observe(ctx, 'screen.kind'), 'game')
     p.check(ctx, 'no computer replies', [r for r in p.observe(ctx, 'custom_payloads')[len(before):]
-                                       if r['channel'] == 'solaris:computer'], [])
+                                       if r['channel'] == 'krasnokamen:computer'], [])
 
 
 def desktop_capture_local(ctx):
@@ -135,7 +135,7 @@ def screen_share_non_native_clients(ctx):
     p.client(ctx).look_at(*monitor['center'])
     p.ticks(ctx, 2)
     p.check(ctx, 'non-native receives no screen channel',
-            [r for r in p.observe(ctx, 'custom_payloads') if r['channel'] == 'solaris:screen'], [])
+            [r for r in p.observe(ctx, 'custom_payloads') if r['channel'] == 'krasnokamen:screen'], [])
     p.check(ctx, 'non-native play unaffected', p.observe(ctx, 'connection.phase'), 'play')
     p.check(ctx, 'non-native sees carrier', p.rich_action(ctx, 'block_model', monitor['anchor']),
             'minecraft:black_glazed_terracotta')

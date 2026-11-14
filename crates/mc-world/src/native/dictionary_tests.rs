@@ -1,9 +1,9 @@
 use super::*;
-use mc_data::blocks::solaris_required_blocks_report;
+use mc_data::blocks::krasnokamen_required_blocks_report;
 use redb::{Database, ReadableDatabase};
 
 fn registry() -> BlockRegistry {
-    BlockRegistry::from_report(&solaris_required_blocks_report()).unwrap()
+    BlockRegistry::from_report(&krasnokamen_required_blocks_report()).unwrap()
 }
 
 fn state(blocks: &BlockRegistry, name: &str) -> BlockStateId {
@@ -46,7 +46,7 @@ fn dictionary_ids_are_world_wide_and_survive_runtime_id_reordering() {
     }
     transaction.commit().unwrap();
     drop(database);
-    let mut report = solaris_required_blocks_report();
+    let mut report = krasnokamen_required_blocks_report();
     let total: u32 = report.iter().map(|block| block.states.len() as u32).sum();
     for block in &mut report {
         for state in &mut block.states {
@@ -145,7 +145,7 @@ fn dictionary_refuses_removed_states_and_invalid_properties() {
         writer.intern(stone, &blocks).unwrap()
     };
     transaction.commit().unwrap();
-    let mut report = solaris_required_blocks_report();
+    let mut report = krasnokamen_required_blocks_report();
     report
         .iter_mut()
         .find(|block| block.id.as_str() == "minecraft:stone")

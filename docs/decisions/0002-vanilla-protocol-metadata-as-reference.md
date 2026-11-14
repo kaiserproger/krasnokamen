@@ -36,7 +36,7 @@ us cross-check every packet at once.
 ## Decision
 
 **Reading the metadata of the official, unobfuscated 26.1+ vanilla
-jar is permitted as a reference input for Solaris' protocol code.**
+jar is permitted as a reference input for Krasnokamen' protocol code.**
 
 Specifically, the following are now allowed:
 
@@ -92,7 +92,7 @@ Negative:
     in any third-party Java protocol library) crosses the line.
   - We never redistribute Mojang's class files; extraction stays
     local under `.analysis/` (per ADR 0001's pattern).
-  - The naming-independence rule means a casual reader of Solaris'
+  - The naming-independence rule means a casual reader of Krasnokamen'
     Rust source cannot tell whether a packet struct was derived from
     `javap`, from minecraft.wiki, or from a wire trace. The shape of
     the code is the same.
@@ -106,7 +106,7 @@ Negative:
   human-readable summary to `.analysis/protocol-dump.txt`. The
   dump is not committed.
 - That original PROJECT_SPEC section (current posture: ADR 0001) is amended to point at this ADR.
-- Solaris commits that change packet IDs/field orderings as a
+- Krasnokamen commits that change packet IDs/field orderings as a
   result of this reference should cite `javap` output (and the
   vanilla class name) in the commit message, so future maintainers
   can re-derive the same conclusion.
@@ -125,7 +125,7 @@ Negative:
   `world_clock` map. Local 26.1.2 metadata proves registry-holder keys are VarInt
   ids and each clock update is VarLong total ticks plus two floats. The exact
   oracle fingerprint and client ticking boundary were recorded in the
-  [historical clock evidence](https://github.com/kaiserproger/solaris/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/world-clock-26.1.2.md).
+  [historical clock evidence](https://github.com/kaiserproger/krasnokamen/blob/1ada2ceb93688adf35d0869111743d4d231e8b62/docs/evidence/world-clock-26.1.2.md).
 
 ## Notes
 
