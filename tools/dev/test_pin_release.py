@@ -53,13 +53,20 @@ class PinReleaseTests(unittest.TestCase):
         manifest = {"repo": "client", "kind": "client", "target": WINDOWS,
                     "binary": str(binary), "binary_sha256": pin.w.sha256_file(binary)}
         (directory / "manifest.json").write_text(json.dumps(manifest))
-        self.assertEqual(pin.existing_pin(directory, "client", WINDOWS), binary)
+        self.assertEqual(pin.existing_pin(directory, "client", WINDOWS, False), binary)
         with self.assertRaises(pin.w.ToolError):
-            pin.existing_pin(directory, "client", LINUX)
+            pin.existing_pin(directory, "client", LINUX, False)
+        with self.assertRaises(pin.w.ToolError):  # a pin without the field predates incremental builds
+            pin.existing_pin(directory, "client", WINDOWS, True)
         manifest.update(repo="core", kind="server")
         (directory / "manifest.json").write_text(json.dumps(manifest))
         with self.assertRaises(pin.w.ToolError):
-            pin.existing_pin(directory, "bots", WINDOWS)
+            pin.existing_pin(directory, "bots", WINDOWS, False)
+        manifest.update(repo="client", kind="client", incremental=True)
+        (directory / "manifest.json").write_text(json.dumps(manifest))
+        self.assertEqual(pin.existing_pin(directory, "client", WINDOWS, True), binary)
+        with self.assertRaises(pin.w.ToolError):
+            pin.existing_pin(directory, "client", WINDOWS, False)
 
     def test_target_is_explicit_and_inherited_target_is_removed(self):
         artifact = self.slot / WINDOWS / "release/solaris-client.exe"
@@ -76,7 +83,7 @@ class PinReleaseTests(unittest.TestCase):
 
         with patch.dict(os.environ, {"CARGO_BUILD_TARGET": "wrong-target", "CARGO_TARGET_DIR": "/wrong"}), \
              patch.object(pin.subprocess, "Popen", return_value=Process()) as launched:
-            command, found = pin.build(self.root, "client", WINDOWS, target=self.slot)
+            command, found = pin.build(self.root, "client", WINDOWS, True, target=self.slot)
         self.assertEqual(found, artifact)
         self.assertEqual(command[command.index("--target") + 1], WINDOWS)
         self.assertIn(f"CARGO_TARGET_DIR={self.slot}", command)
@@ -84,6 +91,11 @@ class PinReleaseTests(unittest.TestCase):
         self.assertNotIn("CARGO_TARGET_DIR", launched.call_args.kwargs["env"])
         self.assertIn("--locked", command)
         self.assertIn("--release", command)
+        self.assertIn("CARGO_INCREMENTAL=1", command)
+        self.assertIn("RUSTC_WRAPPER=", command)
+        with patch.object(pin.subprocess, "Popen", return_value=Process()):
+            command, _ = pin.build(self.root, "client", WINDOWS, False, target=self.slot)
+        self.assertIn("CARGO_INCREMENTAL=0", command)
 
     def test_host_selection_uses_rustc_not_cargo_build_target(self):
         with patch.dict(os.environ, {"CARGO_BUILD_TARGET": WINDOWS}), \
@@ -106,12 +118,15 @@ class PinReleaseTests(unittest.TestCase):
         provenance = {"id": "123456789abc-dirty123", "head": "1" * 40, "tree": "2" * 40,
                       "diff_sha256": "3" * 64, "dirty": True, "untracked_files": 0}
         paths = []
-        for kind, target in (("client", WINDOWS), ("client", LINUX), ("bots", LINUX), ("server", LINUX)):
+        cases = (("client", WINDOWS, True), ("client", LINUX, True), ("bots", LINUX, True),
+                 ("server", LINUX, True), ("server", LINUX, False))
+        for kind, target, incremental in cases:
             name = pin.KINDS[kind]["bin"] + (".exe" if target == WINDOWS else "")
             artifact = self.slot / target / "release" / name
             artifact.parent.mkdir(parents=True, exist_ok=True)
             artifact.write_bytes((kind + target).encode())
             flags = ["--client"] if kind == "client" else ["--bots"] if kind == "bots" else []
+            flags += [] if incremental else ["--no-incremental"]
             output = io.StringIO()
             with ExitStack() as stack:
                 stack.enter_context(patch.object(pin.w, "PINS", pins))
@@ -128,15 +143,16 @@ class PinReleaseTests(unittest.TestCase):
                     pin.main()
                     pin.main()
                 self.assertEqual(build.call_count, 2, "reuse must not rebuild; initial copy does a locked second build")
-                directory = pins / f"{provenance['id']}-{kind}-{target}"
+                self.assertEqual([call.args[3] for call in build.call_args_list], [incremental] * 2)
+                directory = pins / f"{provenance['id']}-{kind}-{target}{'-incr' if incremental else ''}"
                 final = directory / name
                 mark.assert_called_with(directory, tree.name, "pin")
             paths.append(final)
             self.assertEqual(output.getvalue().splitlines(), [f"{pin.KINDS[kind]['env']}={final}"] * 2)
             manifest = json.loads((directory / "manifest.json").read_text())
-            self.assertEqual((manifest["kind"], manifest["target"]), (kind, target))
+            self.assertEqual((manifest["kind"], manifest["target"], manifest["incremental"]), (kind, target, incremental))
             self.assertEqual(final.read_bytes(), artifact.read_bytes())
-        self.assertEqual(len(set(paths)), 4)
+        self.assertEqual(len(set(paths)), 5)
 
     def test_foreign_config_target_is_not_labeled_native(self):
         artifact = self.slot / WINDOWS / "release/solaris-client.exe"
@@ -155,7 +171,7 @@ class PinReleaseTests(unittest.TestCase):
              patch.object(pin, "host_target", return_value=LINUX), \
              patch.object(pin.subprocess, "Popen", return_value=Process()):
             with self.assertRaisesRegex(pin.w.ToolError, "not a native"):
-                pin.build(self.root, "client", None, target=self.slot)
+                pin.build(self.root, "client", None, True, target=self.slot)
 
 
 if __name__ == "__main__":

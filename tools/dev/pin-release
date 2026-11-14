@@ -58,7 +58,7 @@ def provenance(top: Path) -> dict:
     }
 
 
-def existing_pin(pin_dir: Path, kind: str, rust_target: str) -> Path | None:
+def existing_pin(pin_dir: Path, kind: str, rust_target: str, incremental: bool) -> Path | None:
     """The binary of a valid existing pin, or None; a damaged pin is an error (pins are never overwritten)."""
     manifest = pin_dir / "manifest.json"
     if not manifest.is_file():
@@ -69,16 +69,23 @@ def existing_pin(pin_dir: Path, kind: str, rust_target: str) -> Path | None:
         raise w.ToolError(f"{pin_dir} pins repo {info.get('repo')!r}, not {KINDS[kind]['repo']!r}")
     if info.get("kind") != kind or info.get("target") != rust_target:
         raise w.ToolError(f"{pin_dir} does not pin {kind} for {rust_target}; refusing a different binary")
+    # Pins from before the field existed were all built without incremental.
+    if bool(info.get("incremental", False)) != incremental:
+        raise w.ToolError(f"{pin_dir} records incremental={info.get('incremental', False)}, not {incremental}; refusing a different binary")
     if not binary.is_file() or w.sha256_file(binary) != info.get("binary_sha256"):
         raise w.ToolError(f"pin {pin_dir} is damaged (binary missing or sha256 differs); pins are immutable, "
                           "so it is not rebuilt: the owner must remove it deliberately")
     return binary
 
 
-def build(top: Path, kind: str, rust_target: str | None, target: Path | None = None) -> tuple[list[str], Path]:
-    """One runner build; None uses Cargo's native artifact layout, explicit targets keep their own layout."""
+def build(top: Path, kind: str, rust_target: str | None, incremental: bool,
+          target: Path | None = None) -> tuple[list[str], Path]:
+    """One runner build; None uses Cargo's native artifact layout, explicit targets keep their own layout.
+
+    CARGO_INCREMENTAL is set explicitly (the runner's own default would also be on in its normal
+    lane) so the manifest records exactly what was built."""
     spec = KINDS[kind]
-    cmd = [str(w.MEM_RUN), "-m", "6G", "env", "RUSTC_WRAPPER="]
+    cmd = [str(w.MEM_RUN), "-m", "6G", "env", "RUSTC_WRAPPER=", f"CARGO_INCREMENTAL={int(incremental)}"]
     if target is not None:
         cmd.append(f"CARGO_TARGET_DIR={target}")
     cmd += ["cargo", "build", "--release", "--locked"]
@@ -148,6 +155,8 @@ def main() -> None:
     kinds.add_argument("--client", action="store_true", help="pin the native client (default: the core server)")
     kinds.add_argument("--bots", action="store_true", help="pin release player-scale-bots")
     parser.add_argument("--target", type=target_triple, help="Rust target triple (default: rustc host, not CARGO_BUILD_TARGET)")
+    parser.add_argument("--no-incremental", action="store_true",
+                        help="full release build for perf windows (bench, coreperf refuse incremental pins)")
     args = parser.parse_args()
     w.check_host()
 
@@ -160,7 +169,8 @@ def main() -> None:
     rust_target = args.target or host_target(top)
     binary_name = spec["bin"] + (".exe" if "windows" in rust_target.split("-") else "")
     before = provenance(top)
-    pin_id = f"{before['id']}-{kind}-{rust_target}"
+    incremental = not args.no_incremental
+    pin_id = f"{before['id']}-{kind}-{rust_target}" + ("-incr" if incremental else "")
     pin_dir = w.PINS / pin_id
 
     def done(binary: Path, built: bool) -> None:
@@ -171,13 +181,13 @@ def main() -> None:
     w.PINS.mkdir(parents=True, exist_ok=True)
     with open(w.PINS / f".lock-{pin_id}", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)  # a concurrent build of the same tree is waited for, not repeated
-        binary = existing_pin(pin_dir, kind, rust_target)
+        binary = existing_pin(pin_dir, kind, rust_target, incremental)
         if binary:
             return done(binary, False)
         if pin_dir.exists():
             raise w.ToolError(f"{pin_dir} exists without a manifest; refusing to touch it")
 
-        cmd, artifact = build(top, kind, args.target)
+        cmd, artifact = build(top, kind, args.target, incremental)
         # The runner releases the slot when the build exits, and another tree may
         # then replace the artifact. Take the slot's pool lock ourselves, make sure
         # the slot holds this tree's build (rebuild under the lock: usually a no-op),
@@ -195,7 +205,7 @@ def main() -> None:
                     fcntl.flock(use_lock, fcntl.LOCK_EX)
                     subprocess.run("git ls-files -z | xargs -0 -r touch -c --", shell=True, cwd=top, check=True)
                     marker.write_text(f"{top}\n")
-            cmd, artifact = build(top, kind, args.target, target=slot)
+            cmd, artifact = build(top, kind, args.target, incremental, target=slot)
             after = provenance(top)
             if after["tree"] != before["tree"]:
                 raise w.ToolError("the tree changed during the build; the binary does not match any single provenance, nothing pinned")
@@ -212,7 +222,7 @@ def main() -> None:
             final_binary = pin_dir / binary_name
             manifest = {
                 "repo": spec["repo"], "head": before["head"], "diff_sha256": before["diff_sha256"],
-                "kind": kind, "target": rust_target,
+                "kind": kind, "target": rust_target, "incremental": incremental,
                 "dirty": before["dirty"], "untracked_files": before["untracked_files"], "source": str(top),
                 "binary": str(final_binary), "binary_sha256": binary_sha,
                 "built_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "command": shlex.join(cmd),

@@ -52,6 +52,7 @@ def pinned_binary(binary: Path, kind: str) -> dict[str, Any]:
             or not manifest.get("command") or not manifest.get("target")
             or manifest.get("binary_sha256") != load.scale.binary_sha256(binary)):
         raise ValueError(f"{kind} pin-release manifest does not match binary")
+    load.scale.refuse_incremental_pin(binary, kind)
     return manifest
 
 
