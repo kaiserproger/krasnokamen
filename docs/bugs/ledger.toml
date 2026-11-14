@@ -627,7 +627,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#BED-OBSTRUCTED-ENTRY"
 regression = ["cargo:mc-core:sleep::tests::sealed_bed_refuses_entry_as_obstructed"]
 failing_first = "not recorded"
-fix_commit = "c2647d08bd3ca0f6d651663eb9580b9dbcdbc4c9"
+repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/rows.md:66-80: vanilla accepts sleep when no exit is available and leaves the player in place on wake; the registered sealed-bed ref tests headroom, not this obsolete premise, and remains green under reversal. The actual entry change is 0a5cc9c1a, not c2647d08b."
 
 [[bug]]
 id = "BED-SLEEP-REACH"
@@ -920,6 +920,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#HS-3"
 regression = ["cargo:mc-core:falling::tests::restored_due_gravity_tick_starts_the_fall_without_nearby_writes"]
+fix_commit = "d3e8d4686"
+repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-hs3-daylight.log: reversing the falling and redstone gravity fix fails the saved-due-tick ref. Manual repro still needs its client gate."
 
 [[bug]]
 id = "GOLEM-GOSSIP"
@@ -1001,6 +1003,7 @@ status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#PLACE-001"
 regression = ["cargo:mc-core:interact_parity_tests::interact_parity_spawn_protection_with_operator", "harness:entities:native-v2-ledger-spawn-protection"]
 fix_commit = "35308579c93ab0313e0366d1d0975957a4ff9eb0"
+repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-interact-spawn-protection.log: test strengthened by 9915ae51b; old version stayed green under fix reversal, strengthened operator ref goes red."
 
 [[bug]]
 id = "FALL-001"
@@ -2091,6 +2094,8 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#REDSTONE-DAYLIGHT"
 regression = ["cargo:mc-core:redstone::tests::gap_tests::gap_daylight_detector_requires_local_sky_and_overworld"]
+fix_commit = "da5421f7b"
+repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-hs3-daylight.log: reversing the scheduling fix fails thunder-step power. Manual repro still needs a client gate."
 
 [[bug]]
 id = "GOLEM-SNOW-SHEAR"
@@ -3147,6 +3152,7 @@ severity = "major"
 status = "open"
 source = "/run/media/kaiserroman/games/solaris-work/BUGS.md#AUDIT-SCULK"
 regression = ["cargo:mc-core:sculk::tests::note_frequency_reaches_downward_latches_after_sensor_replacement", "harness:entities:native-v2-automation-storage"]
+repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/rows.md:27: test is green-first with no identified fix commit; real-client downward-latch proof remains required."
 
 [[bug]]
 id = "DOC-CHISEL"
@@ -4975,6 +4981,8 @@ regression = [
   "cargo:mc-core:fluids_tests::kelp_growing_in_still_water_drops_no_items",
 ]
 failing_first = "reported"
+fix_commit = "af58aeb92"
+repro_check = "Stage2X SLICES.md:119 and receipts/XCoreBlocks/nc-interact-kelp.log: reversing the real fluid fix fails both kelp refs; a real-client gate remains required for the original report."
 
 [[bug]]
 id = "PROJECTILE-BLOCK-BREAK-GAMERULE"
