@@ -243,6 +243,45 @@ class AdmissionTest(unittest.TestCase):
                 buildings_qa._admitted_or_caught(probe, {}, "buildings_gate", "gate", 3, False)
 
 
+class ForeignBlockTest(unittest.TestCase):
+    def test_the_project_origin_is_the_map_icon_lore(self):
+        class Probe(FakeProbe):
+            def call(self, name, arguments=None):
+                if name == "minecraft_read_item_components":
+                    return {"components": {"minecraft:lore": [{"text": "122 69 -5"}]}}
+                return super().call(name, arguments)
+
+        page = {"container": {"slots": [{"slot": buildings_qa.PROJECT_MAP_SLOT}]}}
+        with mock.patch.object(buildings_qa, "_project_page", return_value=page):
+            self.assertEqual(buildings_qa._project_origin(Probe()), (122, 69, -5))
+        with mock.patch.object(buildings_qa, "_project_page", return_value={"container": {"slots": []}}):
+            self.assertIsNone(buildings_qa._project_origin(Probe()))
+
+    def test_the_corner_posts_follow_the_rotation_of_the_placement_frame(self):
+        posts = buildings_qa._corner_posts((100, 69, 200))
+        self.assertIn(((100, 70, 200), 0), posts)
+        for turns in range(4):
+            cells = [pos for pos, t in posts if t == turns]
+            self.assertEqual(len(cells), 4, turns)
+            self.assertTrue(all(pos[1] == 70 for pos in cells))
+        # The 7 x 7 first level does not fill the 11 x 7 frame: another rotation moves its posts.
+        self.assertNotEqual({pos for pos, t in posts if t == 0}, {pos for pos, t in posts if t == 1})
+
+    def replaced(self, final):
+        probe, sub = FakeProbe(), {"broken_cell": {}}
+        with mock.patch.object(buildings_qa, "_read", return_value={"block": {"block_id": final}}):
+            buildings_qa._broken_replaced(probe, sub, "buildings_house", (122, 70, -5))
+        return sub
+
+    def test_the_authored_block_at_the_certificate_passes(self):
+        sub = self.replaced("minecraft:oak_log")
+        self.assertEqual(sub["behaviour"]["broken_cell_replaced"], "PASS")
+
+    def test_a_certificate_with_the_cell_still_broken_fails(self):
+        with self.assertRaisesRegex(RuntimeError, "buildings_house_broken_cell_replaced"):
+            self.replaced("minecraft:air")
+
+
 class SequentialFlowTest(unittest.TestCase):
     """`_scenario_sequential` for one blueprint with every game-facing helper replaced."""
 
@@ -251,6 +290,7 @@ class SequentialFlowTest(unittest.TestCase):
         detail: dict = {}
         certs = {}
         events = []
+        self.calls = []
 
         def building_bounds(_probe, _bp, level, exclude=None):
             return certs.get(level)
@@ -262,7 +302,16 @@ class SequentialFlowTest(unittest.TestCase):
                 certs[level] = (level, 70, level)
             return order_admitted
 
+        def break_corner(_probe, sub, tag, _bp):
+            self.calls.append("corner")
+            return (4, 71, 0)
+
+        def broken_replaced(_probe, sub, tag, corner):
+            self.calls.append(("replaced", corner))
+
         def wait_cert(_probe, sub, tag, _bp, level, ctx, artifact):
+            if level == 1:
+                self.calls.append("cert")
             certs[level] = (level, 70, level)
             sub[f"L{level}_origin"] = list(certs[level])
             return certs[level]
@@ -283,6 +332,8 @@ class SequentialFlowTest(unittest.TestCase):
             _building_seq=lambda *a, **k: 7,
             _adversarial_break=lambda *a, **k: False,
             _wait_certified_origin_here=wait_cert,
+            _break_corner=break_corner,
+            _broken_replaced=broken_replaced,
             _verify_level=lambda *a, **k: None,
         )
         with mock.patch.multiple(buildings_qa, **patches):
@@ -302,6 +353,14 @@ class SequentialFlowTest(unittest.TestCase):
         for bp, top in (("barracks", 3), ("house", 3)):
             _, _, events = self.run_flow(bp, top, order_admitted=True, cert_after_order=False)
             self.assertEqual({dialog for _, _, dialog in events}, {False})
+
+    def test_the_house_corner_is_broken_before_the_certificate_and_checked_after(self):
+        # SETTLEMENT-BUILDER-PROJECT-STALLS-AFTER-PLACED-BLOCK-BROKEN: the break lands while the
+        # project is open and the authored block is read only once the certificate is listed.
+        self.run_flow("house", 3, order_admitted=True, cert_after_order=False)
+        self.assertEqual(self.calls, ["corner", "cert", ("replaced", (4, 71, 0))])
+        self.run_flow("gate", 3, order_admitted=True, cert_after_order=False)
+        self.assertEqual(self.calls, ["cert"])
 
     def test_a_workshop_records_its_level_two_verdict(self):
         _, sub, _ = self.run_flow("armorer", 2, order_admitted=True, cert_after_order=False)

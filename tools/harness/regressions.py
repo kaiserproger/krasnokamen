@@ -170,6 +170,7 @@ def _profile_command(profile, verdict):
         blueprint, separator, behaviour = verdict.partition('.')
         valid = bool(separator) and blueprint in LEVELS and (
             behaviour in {'settlement_founded', 'L1_built'}
+            or (blueprint, behaviour) == ('house', 'broken_cell_replaced')
             or behaviour == 'L2_upgrade' and LEVELS[blueprint] >= 2
             or behaviour == 'L3_upgrade' and LEVELS[blueprint] >= 3
         )

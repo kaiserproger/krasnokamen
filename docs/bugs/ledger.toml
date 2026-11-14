@@ -2561,7 +2561,7 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Issue1Breaker (qa-breaker) on main fa637b84, receipts/Issue1Breaker/REPORT.md 'Actual player site interference' (1/1): on a copy of an active House L1 world at [122,69,-5], a survival-mode real native client broke the already-placed corner [122,70,-5] (oak_log[axis=y]) at 88/250; the block read air, work continued to 160/250 with the corner still air, and after a copied-world restart the project stayed active at 250/250 with the cell air across eight 200-tick observations (wt/Issue1Breaker/.analysis/validation/20261113T075452-scene-shot-o4m1dbb1, 20261113T075614-scene-shot-ca1o3e5m; retained under receipts/Issue1Breaker retained/player-site-break and retained/player-break-followup). docs/settlements/construction.md#builders-and-supplies says already placed cells are not re-planned after a foreign edit, so the project can never pass its geometric certificate and blocks further construction. A foreign SOLID block in a placed cell (operator diamond at the same corner) still certifies, which that rule documents and is not this defect. Expected: Builders re-place an authored cell that a foreign edit emptied, and the project finishes."
-regression = []
+regression = ["cargo:mc-core:settlements::construction::fencing_tests::a_placed_cell_broken_to_air_is_replaced_before_the_house_certifies", "cargo:mc-core:settlements::construction::fencing_tests::a_cell_broken_after_the_last_placement_is_replaced_instead_of_stalling_the_project", "cargo:mc-core:settlements::construction::fencing_tests::a_second_break_during_the_repair_requeues_the_repair_stage", "harness:buildings-qa:house.broken_cell_replaced"]
 failing_first = "reported"
 
 [[bug]]

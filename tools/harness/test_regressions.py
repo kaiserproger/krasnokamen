@@ -63,7 +63,10 @@ class RegressionLedgerTests(unittest.TestCase):
                         'weaponsmith.L1_built'):
             command = regressions._profile_command('buildings-qa', verdict)
             self.assertEqual(command[:2], ['env', f"BUILDINGS_QA_SELECT={verdict.split('.')[0]}"])
-        for verdict in ('armorer.L3_upgrade', 'house.L4_upgrade', 'storage.L3_upgrade'):
+        command = regressions._profile_command('buildings-qa', 'house.broken_cell_replaced')
+        self.assertEqual(command[:2], ['env', 'BUILDINGS_QA_SELECT=house'])
+        for verdict in ('armorer.L3_upgrade', 'house.L4_upgrade', 'storage.L3_upgrade',
+                        'wall.broken_cell_replaced'):
             with self.assertRaises(ValueError):
                 regressions._profile_command('buildings-qa', verdict)
 

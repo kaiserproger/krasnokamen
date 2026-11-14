@@ -214,7 +214,9 @@ pub(crate) fn status(
 /// A foreign edit inside a native site pauses the structure as
 /// `footprint_changed`. The next construction admission accepts the world as
 /// it now is: re-snapshot the footprint and resume. Remaining cells are placed
-/// over whatever stands there; cells already placed are never re-planned.
+/// over whatever stands there; a placed cell that the edit emptied is queued
+/// again at completion by [`reopen_emptied`], while a solid foreign block in a
+/// placed cell is left alone.
 /// Returns whether a paused structure was resumed.
 pub(crate) fn recover(
     state: &mut TickState,
@@ -235,6 +237,101 @@ pub(crate) fn recover(
     record.image = fingerprint(world(state, &record.snapshot.dimension)?, bounds, true)?;
     record.snapshot.state = ScriptStructureState::Running;
     record.snapshot.pause_reason = None;
+    ledger.revision = next(ledger.revision)?;
+    record.snapshot.revision = ledger.revision;
+    ledger.structures.insert(handle.to_owned(), record);
+    save(state, &ledger);
+    Ok(true)
+}
+
+/// Name of the final stage that re-places authored cells a foreign edit emptied.
+const REPAIR: &str = "repair";
+
+/// Completion check of a committed building structure: an authored
+/// (non-air) cell that a foreign edit emptied (air or a replaceable plant where
+/// the blueprint needs a block) is queued into the `repair` stage, which the
+/// ordinary placement loop then re-places, paying the cell's material again;
+/// the structure leaves `Committed` for `Running`. A solid foreign block in an
+/// authored cell is not emptied and is never replaced.
+/// One pass over the structure's cells at completion, never per tick. Returns
+/// whether cells were queued (the building must not be certified yet).
+pub(crate) fn reopen_emptied(
+    state: &mut TickState,
+    settlement: SettlementId,
+    handle: &str,
+) -> Result<bool, Failure> {
+    let ledger = ledger(state)?;
+    let record = structure(&ledger, &owner(settlement), handle)?;
+    if record.snapshot.state != ScriptStructureState::Committed {
+        return Ok(false);
+    }
+    let target = world(state, &record.snapshot.dimension)?;
+    let identity = |block: u32| {
+        target
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(block))
+            .map(|definition| definition.block.raw_id)
+    };
+    let mut seen = BTreeSet::new();
+    let mut stale = Vec::new();
+    for cell in record.cells.iter().flatten() {
+        if cell.state == target.registry.states.air || !seen.insert(cell.at) {
+            continue;
+        }
+        let now = target
+            .world
+            .block_at(cell.at[0], cell.at[1], cell.at[2])
+            .ok_or(Failure::Unloaded)?;
+        if identity(now) != identity(cell.state)
+            && crate::settlements::construction::clearable(target, now)
+        {
+            stale.push(cell.clone());
+        }
+    }
+    if stale.is_empty() {
+        return Ok(false);
+    }
+    drop(ledger);
+    let mut ledger = ledger_mut(state)?;
+    let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
+    let mut counts = BTreeMap::new();
+    for cell in &stale {
+        if let Some(resource) = &cell.resource {
+            *counts.entry(resource.clone()).or_insert(0) += u64::from(cell.quantity);
+        }
+    }
+    let plan = ScriptStructureStagePlan::new(
+        REPAIR.into(),
+        stale.len() as u32,
+        stale.len() as u64,
+        materials(&counts),
+    );
+    // The repair stage is always the last: a second pass replaces its cells.
+    let index = match record
+        .snapshot
+        .stages
+        .iter()
+        .position(|s| s.stage == REPAIR)
+    {
+        Some(index) => {
+            record.snapshot.stages[index] = plan;
+            record.cells[index] = stale;
+            index
+        }
+        None => {
+            record.snapshot.stages.push(plan);
+            record.cells.push(stale);
+            record.snapshot.stages.len() - 1
+        }
+    };
+    record.snapshot.current_stage_index = index as u32;
+    record.snapshot.completed_work_units = 0;
+    record.snapshot.state = ScriptStructureState::Running;
+    record.snapshot.remaining = remaining(&record);
+    record.snapshot.resource_plan_hash =
+        inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
+    record.blueprint_hash = inventories::hash(&record.cells);
     ledger.revision = next(ledger.revision)?;
     record.snapshot.revision = ledger.revision;
     ledger.structures.insert(handle.to_owned(), record);
