@@ -367,9 +367,13 @@ pub fn decode_play_frame(
                     out.push(PlayerInput::OpenMountInventory { connection: conn });
                 }
                 PlayerCommandAction::StartRidingJump => {
-                    out.push(PlayerInput::RidingJump { connection: conn, power: command.data });
+                    out.push(PlayerInput::RidingJump {
+                        connection: conn,
+                        power: command.data,
+                    });
                 }
-                action @ (PlayerCommandAction::StartSprinting | PlayerCommandAction::StopSprinting) => {
+                action @ (PlayerCommandAction::StartSprinting
+                | PlayerCommandAction::StopSprinting) => {
                     out.push(PlayerInput::Sprint {
                         connection: conn,
                         sprinting: action == PlayerCommandAction::StartSprinting,

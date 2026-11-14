@@ -23,7 +23,7 @@
 //!
 //! ## What this module does instead
 //!
-//! Solaris terrain is a 2D per-column surface (`TerrainGenerator::surface_height`
+//! Krasnokamen terrain is a 2D per-column surface (`TerrainGenerator::surface_height`
 //! is the router's `surface_y`) plus cave carving: there is no 3D density array
 //! for the term to enter. The analogue keeps **the same numbers** — the same 24³
 //! window, the same `e^(-d²/16)` kernel, the same 0.8/0.4 weights and the same

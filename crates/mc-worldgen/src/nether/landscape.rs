@@ -76,7 +76,7 @@ impl NetherGenerator {
         let t = value_noise_2d(x as f64 / 180.0, z as f64 / 180.0, self.seed ^ 0x54454d50);
         let h = value_noise_2d(x as f64 / 180.0, z as f64 / 180.0, self.seed ^ 0x48554d49);
         // Five climate centres, with wastes around the neutral centre. These are
-        // Solaris sampling scales, not a claim of bit-identical vanilla climate.
+        // Krasnokamen sampling scales, not a claim of bit-identical vanilla climate.
         let centres = [
             (0.0, 0.0),
             (0.65, 0.1),

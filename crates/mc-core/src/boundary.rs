@@ -206,7 +206,10 @@ pub enum PlayerInput {
     /// Full vanilla input bitset, retained by the rider for vehicle control.
     VehicleInput { connection: ConnectionId, flags: u8 },
     /// Charged riding jump from the vanilla player-command packet.
-    RidingJump { connection: ConnectionId, power: i32 },
+    RidingJump {
+        connection: ConnectionId,
+        power: i32,
+    },
     MoveVehicle {
         connection: ConnectionId,
         position: [f64; 3],

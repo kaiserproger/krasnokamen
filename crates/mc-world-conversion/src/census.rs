@@ -7,7 +7,7 @@
 //! Entities stream one record at a time through the native checkpoint reader
 //! and pass the same per-entity validation as recovery; settlements come from
 //! the persisted `settlement/<id>` rows, never inferred from beds or POIs.
-//! Villager membership is the persisted `solaris:VillagerRuntime` column.
+//! Villager membership is the persisted `krasnokamen:VillagerRuntime` column.
 use super::{fail, hashes, write_receipt};
 use mc_core::dimensions::Dimension;
 use mc_core::journal::{CheckpointManifest, Replay};
@@ -264,7 +264,7 @@ fn census(
                     census.villagers += 1;
                 }
                 if let Some(Tag::Compound(runtime)) =
-                    mc_data::item_nbt::field(fields, "solaris:VillagerRuntime")
+                    mc_data::item_nbt::field(fields, "krasnokamen:VillagerRuntime")
                     && let Some(Tag::Long(id)) = mc_data::item_nbt::field(runtime, "settlement")
                 {
                     members_total += 1;

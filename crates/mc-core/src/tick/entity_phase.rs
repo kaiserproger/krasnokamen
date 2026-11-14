@@ -149,7 +149,13 @@ pub(super) fn early_entity_rest(
             && crate::sniffer::drive(view.entities.row(slot)).is_some()
         || matches!(view.bodies[slot.0 as usize].kind, EntityKind::Mob { type_id }
             if view.registry.blueprint(type_id).is_some_and(|bp| bp.capabilities.avoids_armadillos))
-            && crate::armadillo::avoidance_target(view.entities, view.world, view.registry, view.positions[slot.0 as usize]).is_some()
+            && crate::armadillo::avoidance_target(
+                view.entities,
+                view.world,
+                view.registry,
+                view.positions[slot.0 as usize],
+            )
+            .is_some()
         || !special_idle
         || (motion_thinks(view.tick, flags, period)
             && flags & crate::entities::MOTION_WANDER_REST == 0
@@ -1424,14 +1430,16 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
             panic_source,
         );
     } else if row.avoids_armadillos
-        && let Some(threat) = crate::armadillo::avoidance_target(ctx.entities, ctx.world, ctx.registry, row.pos)
+        && let Some(threat) =
+            crate::armadillo::avoidance_target(ctx.entities, ctx.world, ctx.registry, row.pos)
     {
         let target = [
             row.pos[0] + row.pos[0] - threat[0],
             row.pos[1],
             row.pos[2] + row.pos[2] - threat[2],
         ];
-        vel = crate::entity_motion::steer(row.movement, row.pos, target, f64::from(row.speed) * 1.2);
+        vel =
+            crate::entity_motion::steer(row.movement, row.pos, target, f64::from(row.speed) * 1.2);
     } else if crate::goat::is_goat(row.type_id)
         && let Some((target, speed)) = crate::goat::drive(ctx.entities.row(row.slot))
     {

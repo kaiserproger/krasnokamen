@@ -126,8 +126,8 @@ class Remote:
                   "echo '###'; . /etc/os-release; echo $PRETTY_NAME; echo '###'; cat /proc/loadavg; echo '###'; "
                   "cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null; echo '###'; "
                   "ps -eo pcpu,comm --sort=-pcpu | head -6; echo '###'; "
-                  "systemctl is-active solaris 2>/dev/null; echo '###'; getconf GNU_LIBC_VERSION; echo '###'; hostname")
-        lscpu, mem, kernel, os_name, load, governor, busiest, solaris_unit, glibc, hostname = (
+                  "systemctl is-active krasnokamen 2>/dev/null; echo '###'; getconf GNU_LIBC_VERSION; echo '###'; hostname")
+        lscpu, mem, kernel, os_name, load, governor, busiest, krasnokamen_unit, glibc, hostname = (
             part.strip() for part in self.run(script).stdout.split("###"))
         fields = {k.strip(): v.strip() for k, _, v in (line.partition(":") for line in lscpu.splitlines())}
         kib = {m[1]: int(m[2]) for m in re.finditer(r"^(\w+):\s+(\d+) kB", mem, re.M)}
@@ -139,7 +139,7 @@ class Remote:
                 "swap_total_gib": round(kib.get("SwapTotal", 0) / 2**20, 2),
                 "kernel": kernel, "machine": fields.get("Architecture"), "os": os_name, "cpu_governor": governor or None,
                 "loadavg_at_start": load, "busiest_processes_at_start": busiest.splitlines(),
-                "solaris_unit_state_at_start": solaris_unit, "glibc": glibc, "hostname": hostname,
+                "krasnokamen_unit_state_at_start": krasnokamen_unit, "glibc": glibc, "hostname": hostname,
                 "cpu_pool_used_by_bench": None}
 
 

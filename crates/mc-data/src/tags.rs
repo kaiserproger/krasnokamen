@@ -55,7 +55,7 @@ const LAVA_RAW_ID: i32 = 4;
 /// `test_environment`, `test_instance`, `trade_set`,
 /// `villager_trade`, `worldgen/configured_feature`,
 /// `worldgen/flat_level_generator_preset`, `worldgen/structure`,
-/// `worldgen/world_preset`. Solaris does not currently advertise them
+/// `worldgen/world_preset`. Krasnokamen does not currently advertise them
 /// through `RegistryData`, and shipping tags for a registry the client
 /// never learned about trips the Configuration → Play transition.
 const TAG_ROOTS: &[(&str, &str)] = &[
@@ -1436,9 +1436,9 @@ mod lookup_tests {
     }
 }
 
-/// Repo-owned item tags required by [`crate::recipes::solaris_required_recipes`].
+/// Repo-owned item tags required by [`crate::recipes::krasnokamen_required_recipes`].
 #[must_use]
-pub fn solaris_required_item_tags(items: &ItemRegistry) -> TagsData {
+pub fn krasnokamen_required_item_tags(items: &ItemRegistry) -> TagsData {
     let tags: BTreeMap<String, Vec<String>> = serde_json::from_str(REQUIRED_ITEM_TAGS)
         .expect("embedded required item tags JSON is valid");
     let item_registry = Identifier::parse("minecraft:item").expect("static registry id");
@@ -1470,11 +1470,11 @@ pub fn solaris_required_item_tags(items: &ItemRegistry) -> TagsData {
 /// Configuration-only tags are bound even when empty. Supported mining tags
 /// contain block raw ids so the client can calculate tool speed and tier.
 #[must_use]
-pub fn solaris_required_client_tags(
+pub fn krasnokamen_required_client_tags(
     items: &ItemRegistry,
     blocks: &[crate::blocks::BlockReport],
 ) -> TagsData {
-    let mut tags = solaris_required_item_tags(items);
+    let mut tags = krasnokamen_required_item_tags(items);
     add_required_client_fallback_tags(&mut tags);
     add_required_fluid_tags(&mut tags);
     add_required_block_tags(&mut tags, blocks);
@@ -1499,17 +1499,23 @@ fn add_required_client_fallback_tags(tags: &mut TagsData) {
 
 fn add_required_entity_type_tags(tags: &mut TagsData) {
     // Vanilla 26.1.2 data/minecraft/tags/entity_type/frog_food.json.
-    const REQUIRED_ENTITY_TYPE_TAGS: &[(&str, &[&str])] = &[
-        ("minecraft:frog_food", &["minecraft:slime", "minecraft:magma_cube"]),
-    ];
-    let registry = tags.registries
+    const REQUIRED_ENTITY_TYPE_TAGS: &[(&str, &[&str])] = &[(
+        "minecraft:frog_food",
+        &["minecraft:slime", "minecraft:magma_cube"],
+    )];
+    let registry = tags
+        .registries
         .entry(Identifier::parse("minecraft:entity_type").expect("static registry id"))
         .or_default();
     for (tag, members) in REQUIRED_ENTITY_TYPE_TAGS {
-        let ids = members.iter().map(|name| {
-            crate::entity_types::entity_type_contract_26_1_2_by_name(name)
-                .expect("required entity type").protocol_id as i32
-        }).collect();
+        let ids = members
+            .iter()
+            .map(|name| {
+                crate::entity_types::entity_type_contract_26_1_2_by_name(name)
+                    .expect("required entity type")
+                    .protocol_id as i32
+            })
+            .collect();
         registry.insert(Identifier::parse(*tag).expect("static tag id"), ids);
     }
 }

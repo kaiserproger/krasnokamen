@@ -15,8 +15,8 @@ synchronization: received state / console response / dashboard tick counter; no 
 subjects:
 - subject: scoreboard_teams.criteria_auto
   matrix_ids:
-  - pw:scoreboard_teams.criteria_auto/fabric_solaris_loader/survival/the_nether/normal/1/reconnect_mid_action/pause_when_empty_resume/op_3
-  - pw:scoreboard_teams.criteria_auto/forge_solaris_loader/spectator/overworld/easy/1/duplicate_login/save_all_checkpoint/non_op_0
+  - pw:scoreboard_teams.criteria_auto/fabric_krasnokamen_loader/survival/the_nether/normal/1/reconnect_mid_action/pause_when_empty_resume/op_3
+  - pw:scoreboard_teams.criteria_auto/forge_krasnokamen_loader/spectator/overworld/easy/1/duplicate_login/save_all_checkpoint/non_op_0
   preconditions:
     setup_callable: scoreboard_teams.ADAPTERS['scoreboard_teams.criteria_auto'].setup
     fixture_calls:
@@ -212,7 +212,7 @@ subjects:
   subject_oracle_text: 'reference: each option enforced/presented'
 - subject: scoreboard_teams.teams_membership
   matrix_ids:
-  - pw:scoreboard_teams.teams_membership/neoforge_solaris_loader/adventure/overworld/normal/2/normal/save_all_checkpoint/op_2
+  - pw:scoreboard_teams.teams_membership/neoforge_krasnokamen_loader/adventure/overworld/normal/2/normal/save_all_checkpoint/op_2
   preconditions:
     setup_callable: scoreboard_teams.ADAPTERS['scoreboard_teams.teams_membership'].setup
     fixture_calls: []

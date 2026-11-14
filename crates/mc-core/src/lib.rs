@@ -35,10 +35,10 @@ pub mod boundary;
 mod brewing;
 pub mod build_precommit;
 mod campfire;
-mod cat;
 pub(crate) mod carrier_blocks;
 #[cfg(test)]
 mod carrier_blocks_tests;
+mod cat;
 mod cauldron_wash;
 #[cfg(test)]
 #[path = "cauldron_wash_tests.rs"]

@@ -1,6 +1,6 @@
 """Vanilla UI sources: minecraft.wiki/w/{Commands/bossbar,Commands/title,
 Commands/tellraw,Text_component_format,Player,Glowing,Invisibility,Dialog}.
-Solaris dialog extension evidence: mc-core/src/dialog.rs, mc-edge/src/boss_bars.rs.
+Krasnokamen dialog extension evidence: mc-core/src/dialog.rs, mc-edge/src/boss_bars.rs.
 """
 from tools.harness.matrix_api import Adapter
 from . import _platform as p
