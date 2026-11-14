@@ -1,6 +1,6 @@
 [package]
 name = "workspace-features"
-description = "Shared third-party feature closure for Solaris development and test builds."
+description = "Shared third-party feature closure for Krasnokamen development and test builds."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
