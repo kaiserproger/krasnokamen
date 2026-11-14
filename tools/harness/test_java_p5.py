@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 from . import scenarios
-from .backends import client_probes, java_p5, native_p5, native_v2
+from .backends import client_probes, java_p5, java_parrot, native_p5, native_v2
 
 
 class JavaP5Tests(unittest.TestCase):
@@ -17,6 +17,13 @@ class JavaP5Tests(unittest.TestCase):
             self.assertEqual(scenarios.SCENARIOS[name].evidence, "graphical")
             self.assertEqual(scenarios.SCENARIOS[name].profile, "entities")
             self.assertNotIn(name, native_v2.NATIVE_SCENARIO_IDS)
+
+    def test_parrot_gate_refuses_absent_or_unknown_observation(self) -> None:
+        for expected in (False, True):
+            self.assertFalse(java_parrot._dance_is(None, expected))
+            self.assertFalse(java_parrot._dance_is({}, expected))
+            self.assertTrue(java_parrot._dance_is({"parrot_dancing": expected}, expected))
+            self.assertFalse(java_parrot._dance_is({"parrot_dancing": not expected}, expected))
 
     def test_wrong_client_fails_before_server_resolution(self) -> None:
         ctx = mock.Mock(scenario_id="java-v2-p5-parity", client="native")

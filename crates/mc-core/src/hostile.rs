@@ -417,15 +417,23 @@ fn distance(a: [f64; 3], b: [f64; 3]) -> f64 {
 /// quarter block, the end cells excluded; unloaded space blocks). Shared
 /// with the explosion exposure rays.
 pub(crate) fn sight_clear(state: &TickState, from: [f64; 3], to: [f64; 3]) -> bool {
+    sight_clear_in(&state.world, &state.registry, from, to)
+}
+
+pub(crate) fn sight_clear_in(
+    world: &crate::world::ChunkWorld,
+    registry: &crate::registry::CoreRegistry,
+    from: [f64; 3],
+    to: [f64; 3],
+) -> bool {
     let length = distance(from, to);
     let steps = (length / 0.25).ceil().max(1.0) as u32;
     (1..steps).all(|i| {
         let t = f64::from(i) / f64::from(steps);
         let at = |axis: usize| (from[axis] + (to[axis] - from[axis]) * t).floor() as i32;
-        state
-            .world
+        world
             .block_at(at(0), at(1), at(2))
-            .is_some_and(|block| state.registry.materials.classify(block) != BlockMaterial::Solid)
+            .is_some_and(|block| registry.materials.classify(block) != BlockMaterial::Solid)
     })
 }
 

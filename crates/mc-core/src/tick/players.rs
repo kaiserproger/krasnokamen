@@ -369,6 +369,9 @@ pub(super) fn apply_inputs<'a>(
             PlayerInput::VehicleInput { connection, flags } => {
                 input::movement::vehicle_input(state, (connection, flags))
             }
+            PlayerInput::RidingJump { connection, power } => {
+                crate::mounts::riding_jump(state, *connection, *power)
+            }
             PlayerInput::MoveVehicle {
                 connection,
                 position,

@@ -102,6 +102,21 @@ pub(crate) fn loot_entity(state: &TickState, entity: EntityId) -> Option<EntityL
     result.flags.is_on_fire = row.appearance.shared_flags & 1 != 0;
     result.slime_size = row.loot.slime_size.map(i32::from);
     result.raider_is_captain = Some(row.loot.patrol_leader);
+    if name == "minecraft:frog" {
+        let variant = mc_nbt::read_named(&mut row.opaque_entity_fields.as_slice())
+            .ok()
+            .and_then(|(_, tag)| match tag {
+                mc_nbt::Tag::Compound(fields) => fields.into_iter().find_map(|(key, value)| {
+                    match (key.as_str(), value) {
+                        ("variant", mc_nbt::Tag::String(name)) => Some(name),
+                        _ => None,
+                    }
+                }),
+                _ => None,
+            })
+            .unwrap_or_else(|| "minecraft:temperate".into());
+        result.components.insert(id("minecraft:frog/variant"), variant);
+    }
     let held = state
         .players
         .get(&entity)

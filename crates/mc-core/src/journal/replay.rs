@@ -348,6 +348,9 @@ impl EntityStateImage {
         if record.id == "minecraft:armor_stand" {
             crate::armor_stand::validate_fields(&record.extra_fields)?;
         }
+        if record.id == "minecraft:sniffer" {
+            crate::sniffer::validate_fields(&record.extra_fields)?;
+        }
         let ageable = registry
             .entity_type_id(&record.id)
             .and_then(|id| registry.blueprint(id))
@@ -457,6 +460,12 @@ impl EntityStateImage {
                     || villager && crate::villager::persistence::owns_field(key)
                     || key == "IsBaby" && crate::entity_life::uses_is_baby(&record.id)
                     || record.id == "minecraft:frog" && key == "solaris:FrogPregnant"
+                    || record.id == "minecraft:sniffer"
+                        && matches!(key.as_str(),
+                            "solaris:SnifferCooldown" | "solaris:SnifferPhase"
+                            | "solaris:SnifferElapsed" | "solaris:SnifferTarget"
+                            | "solaris:SnifferExplored")
+                    || key == "solaris:Passengers"
                     || image.entity_life.vehicle.is_some() && key == "Items"
                     || crate::mounts::persistence::owns_cargo_field(&record.id, key)
                     || matches!(

@@ -63,6 +63,23 @@ pub(crate) fn from_fields(
             }
         }
     }
+    if let Some(tag) = field(fields, "solaris:Passengers")? {
+        let Tag::List(list) = tag else {
+            return Err(invalid("solaris:Passengers"));
+        };
+        if list.element_type != tag_type::INT_ARRAY || list.elements.len() > 3 || result.mount.rider.is_none() {
+            return Err(invalid("solaris:Passengers"));
+        }
+        let mut passengers = Vec::with_capacity(list.elements.len());
+        for tag in &list.elements {
+            let passenger = uuid(tag, "solaris:Passengers")?;
+            if result.mount.rider == Some(passenger) || passengers.contains(&passenger) {
+                return Err(invalid("solaris:Passengers"));
+            }
+            passengers.push(passenger);
+        }
+        result.mount.passengers = passengers;
+    }
     for key in ["Tame", "Sitting", "Trusting", "Temper", "CollarColor"] {
         if let Some(tag) = field(fields, key)? {
             let value = integer(tag, key)?;
@@ -231,6 +248,15 @@ pub(crate) fn to_fields(life: &EntityLifeState) -> Vec<(String, Tag)> {
             fields.push((key.into(), uuid_tag(uuid)));
         }
     }
+    if !life.mount.passengers.is_empty() {
+        fields.push((
+            "solaris:Passengers".into(),
+            Tag::List(ListTag {
+                element_type: tag_type::INT_ARRAY,
+                elements: life.mount.passengers.iter().copied().map(uuid_tag).collect(),
+            }),
+        ));
+    }
     if !pet.trusted.is_empty() {
         fields.push((
             "Trusted".into(),
@@ -258,7 +284,10 @@ pub(crate) fn validate_replay(replay: &crate::journal::Replay) -> Result<(), Cor
     if !replay
         .entities
         .values()
-        .any(|entity| entity.state.entity_life.mount.rider.is_some())
+        .any(|entity| {
+            let mount = &entity.state.entity_life.mount;
+            mount.rider.is_some() || !mount.passengers.is_empty()
+        })
     {
         return Ok(());
     }
@@ -269,18 +298,21 @@ pub(crate) fn validate_replay(replay: &crate::journal::Replay) -> Result<(), Cor
         .collect::<Result<std::collections::HashSet<_>, _>>()?;
     let mut riders = std::collections::BTreeMap::new();
     for (id, entity) in &replay.entities {
-        let Some(rider) = entity.state.entity_life.mount.rider else {
-            continue;
-        };
-        if let Some(previous) = riders.insert(rider, *id) {
-            return Err(CoreError::Storage(format!(
-                "invalid mounted passenger {rider}: vehicles {previous} and {id}"
-            )));
+        let mount = &entity.state.entity_life.mount;
+        if mount.passengers.len() > 3 || (!mount.passengers.is_empty() && mount.rider.is_none()) {
+            return Err(invalid("solaris:Passengers"));
         }
-        if entity_uuids.contains(&rider) {
-            return Err(CoreError::Storage(format!(
-                "invalid mounted passenger {rider}: expected player UUID"
-            )));
+        for rider in mount.rider.into_iter().chain(mount.passengers.iter().copied()) {
+            if let Some(previous) = riders.insert(rider, *id) {
+                return Err(CoreError::Storage(format!(
+                    "invalid mounted passenger {rider}: vehicles {previous} and {id}"
+                )));
+            }
+            if entity_uuids.contains(&rider) {
+                return Err(CoreError::Storage(format!(
+                    "invalid mounted passenger {rider}: expected player UUID"
+                )));
+            }
         }
     }
     Ok(())

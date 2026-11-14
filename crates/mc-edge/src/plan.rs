@@ -2188,6 +2188,9 @@ fn map_extra(index: u8, value: &mc_core::boundary::EntityDataValue) -> WireEntit
         mc_core::boundary::EntityDataValue::CopperGolemState(value) => {
             WireEntityDataValue::CopperGolemState { index, value }
         }
+        mc_core::boundary::EntityDataValue::SnifferState(value) => {
+            WireEntityDataValue::SnifferState { index, value }
+        }
         mc_core::boundary::EntityDataValue::VillagerData {
             kind,
             profession,
@@ -2259,6 +2262,9 @@ fn pose_of(pose: u8) -> EntityPose {
         5 => EntityPose::Crouching,
         6 => EntityPose::LongJumping,
         7 => EntityPose::Dying,
+        8 => EntityPose::Croaking,
+        9 => EntityPose::UsingTongue,
+        10 => EntityPose::Sitting,
         11 => EntityPose::Roaring,
         12 => EntityPose::Sniffing,
         13 => EntityPose::Emerging,

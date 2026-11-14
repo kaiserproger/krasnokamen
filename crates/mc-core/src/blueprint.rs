@@ -136,6 +136,8 @@ pub struct Capabilities {
     pub fall_damage_immune: bool,
     /// Climbs a horizontal obstacle at 0.2 blocks per tick (vanilla spiders).
     pub climbs_walls: bool,
+    /// Avoid nearby armadillos while they are not rolled up.
+    pub avoids_armadillos: bool,
     /// Instant health harms and instant damage heals (vanilla undead).
     pub inverted_healing: bool,
     /// Swimmer steering family.
@@ -1300,6 +1302,7 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
         hurt_by_water: name == "minecraft:enderman",
         fall_damage_immune: FALL_DAMAGE_IMMUNE.contains(&name),
         climbs_walls: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
+        avoids_armadillos: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
         inverted_healing: ZOMBIE_FAMILY.contains(&name)
             || matches!(
                 name,

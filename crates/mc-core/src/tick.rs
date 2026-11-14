@@ -36,7 +36,7 @@ pub(crate) use auth::unlock_session;
 mod container_access;
 mod damage;
 mod death_message;
-mod elytra;
+pub(crate) mod elytra;
 mod entity_lifecycle;
 mod entity_phase;
 mod hydration;
@@ -1411,8 +1411,11 @@ fn run_dimension_tick_inner<'a>(
         crate::entity_life::advance(state);
         crate::brushing::run(state);
         crate::axolotl::run(state);
+        crate::cat::run(state);
+        crate::sniffer::run(state);
+        crate::parrot::run(state);
         crate::turtle::run(state);
-        crate::frog::run(state);
+        crate::frog::run(state, &mut intents);
         crate::goat::run(state, &mut intents, &mut changes);
         crate::piglin::run(state, &mut changes);
         crate::llama::run(state);
@@ -1610,6 +1613,8 @@ fn run_dimension_tick_inner<'a>(
     } else if state.dimension.has_weather() {
         crate::weather::advance_cycle(state);
         crate::sleep::run(state);
+        // Sleep consumes the cat's gift state; spawn its item in the same journal batch.
+        crate::entity_life::commit_drops(state, &mut changes.entities_spawned);
         crate::weather::fade_and_publish(state, previous_weather);
     } else {
         state.weather = (crate::commands::Weather::Clear, 0);

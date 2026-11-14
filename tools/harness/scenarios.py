@@ -425,6 +425,15 @@ SCENARIOS: dict[str, Scenario] = {
         proves="live minecraft_observe.client_settings.render_distance is 8; all 289 view-square chunks client-readable via minecraft_read_block at unique per-chunk cells (unheld chunks raise, fail-closed); no ForgetLevelChunk for a square member on the wire",
         limits="stationary readability only, not gameplay activity at the square edge or visual fidelity of every distant chunk mesh",
     ),
+    "java-parrot-jukebox": _entry(
+        id="java-parrot-jukebox", summary="Vanilla Java parrot dances on actual jukebox events",
+        owner="core:harness", evidence="graphical", profile="entities", scenario_id="java-parrot-jukebox",
+        requires=("sibling:solaris-loader", "xvfb"),
+        sources=("tools/harness/backends/java_parrot.py", "tools/harness/backends/client_probes.py"),
+        fixture="one Java client, a no-AI parrot and a jukebox on a prepared pad",
+        proves="Java's local parrot dance state starts on a record, ends on stop and ends beyond the jukebox radius",
+        limits="one vanilla Java version; no hostile-sound imitation or native-client coverage",
+    ),
     "java-v2-p5-parity": _entry(
         id="java-v2-p5-parity", summary="Vanilla Java P4 surfaces, persistence and post-teleport walking on v2",
         owner="core:harness", evidence="graphical", profile="entities", scenario_id="java-v2-p5-parity",

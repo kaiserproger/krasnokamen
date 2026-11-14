@@ -13,7 +13,8 @@ from .native_v2 import _block, _click, _echo, _open, _point, _prepare, _set, _us
 from .probe_steps import ProbeSteps, container_slot, item_count
 
 SCENARIO_IDS = frozenset({"java-v2-p5-parity", "java-v2-p5-towns", "java-v2-p5-cursor",
-                          "java-v2-p5-craft-drag", "java-v2-p5-craft-drag-paced"})
+                          "java-v2-p5-craft-drag", "java-v2-p5-craft-drag-paced",
+                          "java-parrot-jukebox"})
 REQUIRED_TOOLS = frozenset({
     "minecraft_observe", "minecraft_wait_for_state_change", "minecraft_send_chat",
     "minecraft_read_block", "minecraft_wait_for_block_state", "minecraft_use_item_on",
@@ -22,6 +23,7 @@ REQUIRED_TOOLS = frozenset({
     "minecraft_click_container_slot", "minecraft_quick_move_container_slot",
     "minecraft_click_screen_button", "minecraft_read_recipe_book", "minecraft_screenshot",
     "minecraft_list_entities", "minecraft_break_block", "minecraft_wait_for_health_below",
+    "minecraft_wait_for_visible_entity",
     "minecraft_drop_selected_item", "minecraft_attack_entity_once",
 })
 

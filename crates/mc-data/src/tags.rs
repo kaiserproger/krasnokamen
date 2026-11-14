@@ -33,6 +33,7 @@ use crate::{
     visit_json_files,
 };
 
+// harnesses entry mirrors vanilla 26.1.2 data/minecraft/tags/item/harnesses.json.
 const REQUIRED_ITEM_TAGS: &str = include_str!("../data/required_item_tags.json");
 const FLOWING_WATER_RAW_ID: i32 = 1;
 const WATER_RAW_ID: i32 = 2;
@@ -256,6 +257,21 @@ const INCORRECT_FOR_STONE_OR_COPPER_TOOL: &[&str] = &[
 ];
 
 const REQUIRED_BLOCK_TAGS: &[(&str, &[&str])] = &[
+    // Vanilla 26.1.2: sniffer_diggable_block expands dirt, mud and moss_blocks tags.
+    (
+        "minecraft:sniffer_diggable_block",
+        &[
+            "minecraft:dirt",
+            "minecraft:coarse_dirt",
+            "minecraft:rooted_dirt",
+            "minecraft:mud",
+            "minecraft:muddy_mangrove_roots",
+            "minecraft:moss_block",
+            "minecraft:pale_moss_block",
+            "minecraft:grass_block",
+            "minecraft:podzol",
+        ],
+    ),
     (
         "minecraft:snaps_goat_horn",
         &[
@@ -1462,6 +1478,7 @@ pub fn solaris_required_client_tags(
     add_required_client_fallback_tags(&mut tags);
     add_required_fluid_tags(&mut tags);
     add_required_block_tags(&mut tags, blocks);
+    add_required_entity_type_tags(&mut tags);
     add_required_timeline_tags(&mut tags);
     enchantment_tags::add(&mut tags);
     banner_pattern_tags::add(&mut tags);
@@ -1477,6 +1494,23 @@ fn add_required_client_fallback_tags(tags: &mut TagsData) {
             let tag_id = Identifier::parse(*required_tag).expect("static tag id is valid");
             registry_tags.entry(tag_id).or_default();
         }
+    }
+}
+
+fn add_required_entity_type_tags(tags: &mut TagsData) {
+    // Vanilla 26.1.2 data/minecraft/tags/entity_type/frog_food.json.
+    const REQUIRED_ENTITY_TYPE_TAGS: &[(&str, &[&str])] = &[
+        ("minecraft:frog_food", &["minecraft:slime", "minecraft:magma_cube"]),
+    ];
+    let registry = tags.registries
+        .entry(Identifier::parse("minecraft:entity_type").expect("static registry id"))
+        .or_default();
+    for (tag, members) in REQUIRED_ENTITY_TYPE_TAGS {
+        let ids = members.iter().map(|name| {
+            crate::entity_types::entity_type_contract_26_1_2_by_name(name)
+                .expect("required entity type").protocol_id as i32
+        }).collect();
+        registry.insert(Identifier::parse(*tag).expect("static tag id"), ids);
     }
 }
 

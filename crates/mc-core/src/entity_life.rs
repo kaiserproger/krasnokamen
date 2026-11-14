@@ -43,9 +43,14 @@ pub struct EntityLifeState {
     pub dolphin: Option<crate::dolphin::DolphinState>,
     pub armadillo: Option<crate::armadillo::ArmadilloState>,
     pub turtle: Option<crate::turtle::TurtleState>,
+    pub(crate) sniffer: Option<Box<crate::sniffer::Sniffer>>,
     pub frog_pregnant: bool,
     #[serde(skip)]
     pub frog_spawn_target: Option<[i32; 3]>,
+    #[serde(skip)]
+    pub(crate) frog_hunt: Option<crate::frog::Hunt>,
+    #[serde(skip)]
+    pub(crate) cat_relax: Option<crate::cat::Relax>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -280,6 +285,22 @@ pub fn restore_appearance(body: &crate::entities::Body, row: &mut ColdRow) {
         contract.name,
         type_id & crate::blueprint::CUSTOM_TYPE_FLAG == 0 && contract.name == "minecraft:wolf",
     );
+    if contract.name == "minecraft:frog" {
+        let appearance = Arc::make_mut(&mut row.appearance);
+        if appearance.pose == 9 { appearance.pose = 0; }
+        appearance.extra.retain(|(index, _)| *index != 19);
+    }
+    if contract.name == "minecraft:cat" {
+        let appearance = Arc::make_mut(&mut row.appearance);
+        appearance.extra.retain(|(index, _)| *index != 21 && *index != 22);
+    }
+    if contract.name == "minecraft:sniffer" {
+        crate::sniffer::restore_appearance(row);
+    }
+    if contract.name == "minecraft:camel" {
+        let appearance = Arc::make_mut(&mut row.appearance);
+        appearance.extra.retain(|(index, _)| *index != 19);
+    }
     if contract.behavior.metadata_schema.as_str() == "MushroomCow" {
         let appearance = Arc::make_mut(&mut row.appearance);
         appearance.extra.retain(|(index, _)| *index != 18);
@@ -1022,6 +1043,9 @@ pub fn to_fields(life: &EntityLifeState, love: u32) -> Vec<(String, mc_nbt::Tag)
         fields.push(("home_pos".into(), Tag::IntArray(turtle.home.to_vec())));
         fields.push(("has_egg".into(), Tag::Byte(i8::from(turtle.has_egg))));
     }
+    if let Some(sniffer) = &life.sniffer {
+        fields.extend(crate::sniffer::fields(sniffer));
+    }
     if life.frog_pregnant {
         fields.push(("solaris:FrogPregnant".into(), Tag::Byte(1)));
     }
@@ -1136,6 +1160,9 @@ pub fn from_record(
     }
     if record.id == "minecraft:turtle" {
         life.turtle = Some(crate::turtle::TurtleState::new(record.pos));
+    }
+    if record.id == "minecraft:sniffer" {
+        life.sniffer = crate::sniffer::from_fields(&record.extra_fields);
     }
     let mut love = 0;
     for (key, tag) in &record.extra_fields {
