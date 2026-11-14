@@ -2346,7 +2346,12 @@ fn generated_spawn_window_debug_stage_profile() {
             biomes += started.elapsed();
 
             let started = std::time::Instant::now();
-            g.apply_decorations(&mut chunk, &columns, &mut heights);
+            g.apply_decorations(
+                &mut chunk,
+                &columns,
+                &mut heights,
+                g.village_plans_for_chunk(pos).as_ref(),
+            );
             decorations += started.elapsed();
         }
     }

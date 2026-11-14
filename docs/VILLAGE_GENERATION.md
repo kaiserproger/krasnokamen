@@ -207,6 +207,14 @@ template air cannot leave hillside dirt blocking the entrance. This is a
 bounded terrain cut at the rotated connector, not flattening the entire village
 to one height.
 
+The later terrain-tree pass keeps three blocks of headroom above those caps,
+across the connector and approach and one porch column on either side. Authored
+porches can offset their door from the connector centreline. Tree trunk/crown
+candidates crossing this space are refused and canopy leaves are clipped there;
+the terrain caps themselves do not change. The seed-24 production-content
+regression `seed24_village_entrance_keeps_headroom_after_decoration` checks the
+offset doorway while retaining its authored stair and adjacent tree.
+
 Regression `terrain::village_water_tests::owner_seed_village_floors_stay_above_water`
 uses the production content/router/tag wiring on seed `8674276330747006396`,
 checking starts `(16, 6)`, `(-18, 0)`, and `(18, 69)` for submerged rigid floors

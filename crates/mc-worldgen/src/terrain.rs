@@ -2199,6 +2199,7 @@ impl TerrainGenerator {
         chunk: &mut Chunk,
         columns: &[ColumnPlan; 256],
         heights: &mut HeightContext<'_>,
+        village: Option<&VillagePlanSet>,
     ) {
         let mut touched = [None; 256];
         let mut leaves = Vec::new();
@@ -2238,6 +2239,7 @@ impl TerrainGenerator {
                         self.tree_blocks_for_biome(biome),
                         &mut touched,
                         &mut leaves,
+                        village,
                     )
                 {
                     continue;
@@ -3101,7 +3103,7 @@ impl TerrainGenerator {
         #[cfg(test)]
         stage_clock.end(4);
         {
-            self.apply_decorations(&mut chunk, &columns, &mut heights);
+            self.apply_decorations(&mut chunk, &columns, &mut heights, village.as_ref());
         }
         #[cfg(test)]
         stage_clock.end(7);

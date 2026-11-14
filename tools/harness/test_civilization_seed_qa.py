@@ -131,17 +131,6 @@ class CivilizationEvidenceTests(unittest.TestCase):
         with patch.object(qa.village, "_blueprint_placements", return_value=[]):
             self.assertIsNone(qa.completed_project(building, set(), [project], blueprints))
 
-    def test_stage_capture_closes_menu_and_aims_at_target(self):
-        probe = Mock()
-        probe.observe.return_value = {"player": {"x": 0, "y": 64, "z": 0},
-                                      "target": {"type": "block", "x": 0, "y": 65, "z": 4}}
-        with patch.object(qa.native_client, "capture", return_value={"retained_path": "baby.png"}):
-            shot = qa.capture_target(probe, "artifact", "baby", (0, 65.62, 4))
-        self.assertEqual(shot["retained_path"], "baby.png")
-        self.assertEqual(probe.call.call_args_list[0].args[0], "minecraft_close_screen")
-        self.assertEqual(probe.call.call_args_list[2].args,
-                         ("minecraft_look", {"yaw_deg": 0, "pitch_deg": 0}))
-
     def test_building_capture_uses_supported_exterior_not_sealed_volume_midpoint(self):
         building = {"id": 4294967302, "kind": "builder",
                     "min": [148, 75, -262], "max": [152, 78, -256]}
@@ -207,9 +196,6 @@ class CivilizationEvidenceTests(unittest.TestCase):
         with patch.object(qa.native_client, "capture", return_value={"retained_path": "baby.png"}):
             result = qa.capture_target(probe, "artifact", "baby", (0, 65.62, 4), entity=baby)
         self.assertEqual(result["observed_target"]["entity_uuid"], "new")
-        probe.call.assert_any_call("minecraft_approach_entity", {"entity_id": 17, "timeout_seconds": 120.0})
-        probe.call.assert_any_call("minecraft_list_entities", {
-            "radius": 128, "limit": 16, "cursor": "", "entity_type": "minecraft:villager"})
         probe.observe.return_value["target"]["entity_uuid"] = "other"
         with patch.object(qa.native_client, "capture") as capture:
             with self.assertRaisesRegex(RuntimeError, "occluded or out of reach"):

@@ -458,6 +458,7 @@ pub(crate) fn journal_image(state: &VillagerState) -> VillagerState {
         harvest_at: 0,
         shepherd_at: 0,
         ration_at: 0,
+        ration_target: None,
         harvest_progress: super::harvest::Progress::default(),
         motion_geometry: super::brain::MotionGeometryCache::default(),
         navigation_repath_at: 0,

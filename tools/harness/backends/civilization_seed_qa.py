@@ -163,6 +163,40 @@ def entity_census(probe: ProbeSteps, entity_type: str | None = None) -> dict[str
         arguments["cursor"] = cursor
 
 
+def capture_house(probe: ProbeSteps, artifact: Path, label: str,
+                  target: tuple[float, float, float],
+                  blocks: list[dict[str, Any]]) -> dict[str, Any]:
+    """Open the received entrance, prove the exact bed, then return outside."""
+    door = next((block for block in blocks
+                 if str(block.get("block_id", "")).endswith("_door")
+                 and block.get("properties", {}).get("half") == "lower"), None)
+    if door is None:
+        raise RuntimeError("house capture has no received entrance door")
+    probe.call("minecraft_close_screen", {})
+    initial = probe.observe()["player"]
+    position = {axis: door[axis] for axis in ("x", "y", "z")}
+    probe.call("minecraft_navigate_to_block", {**position, "timeout_seconds": 120.0})
+    current = probe.call("minecraft_read_block", position)
+    if current.get("block_id") != door["block_id"]:
+        raise RuntimeError("house entrance changed before ordinary use")
+    if current.get("properties", {}).get("open") != "true":
+        face = {"north": "south", "south": "north",
+                "east": "west", "west": "east"}[current["properties"]["facing"]]
+        probe.call("minecraft_look_at_block", {**position, "face": face})
+        probe.call("minecraft_use_item_on", {**position, "face": face, "hand": "main_hand"})
+    for offset, half in ((0, "lower"), (1, "upper")):
+        probe.call("minecraft_wait_for_block_state", {
+            **position, "y": position["y"] + offset, "block_id": door["block_id"],
+            "properties": {"half": half, "open": "true"}, "timeout_seconds": 10.0,
+        })
+    shot = capture_target(probe, artifact, label, target)
+    probe.call("minecraft_navigate_to_block", {
+        "x": math.floor(initial["x"]), "y": math.floor(initial["y"]),
+        "z": math.floor(initial["z"]), "timeout_seconds": 120.0,
+    })
+    return shot
+
+
 def capture_target(probe: ProbeSteps, artifact: Path, label: str,
                    target: tuple[float, float, float], *,
                    entity: dict[str, Any] | None = None,
@@ -332,7 +366,7 @@ def building_blocks(probe: ProbeSteps, lines: list[str]) -> list[dict[str, Any]]
             "max_x": hi[0], "max_y": hi[1], "max_z": hi[2],
         })
         relevant = [block for block in scan.get("blocks", [])
-                    if str(block.get("block_id", "")).endswith(("_bed", ":furnace", ":blast_furnace"))]
+                    if str(block.get("block_id", "")).endswith(("_bed", "_door", ":furnace", ":blast_furnace"))]
         evidence.append({"building": building, "blocks": relevant, "truncated": scan.get("truncated", False)})
     return evidence
 
@@ -617,7 +651,9 @@ def scenario(probe: ProbeSteps, detail: dict[str, Any], artifact: Path, server: 
                     target = tuple(bed[axis] + 0.5 for axis in ("x", "y", "z"))
                     detail["milestones"]["new_house"] = {
                         "sprint_ticks": advanced, "building": building, "project": project, "bed": bed,
-                        "screenshot": capture_target(probe, artifact, f"civilization-house-{advanced:06d}", target),
+                        "screenshot": capture_house(
+                            probe, artifact, f"civilization-house-{advanced:06d}",
+                            target, evidence.get("blocks", [])),
                     }
             elif "second_building" not in detail["milestones"]:
                 target = tuple((building["min"][i] + building["max"][i] + 1) / 2 for i in range(3))

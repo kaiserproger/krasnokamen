@@ -628,6 +628,9 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
         ('directory = "plugins"', f"directory = {json.dumps(str(artifact / 'plugins'))}"),
         ("seed = 0", f"seed = {SEED}"),
     )
+    if civilization:
+        # The village's mine must tick beyond the four-chunk presentation window.
+        replacements += (("simulation_distance = 4", "simulation_distance = 6"),)
     for old_tok, new_tok in replacements:
         if source.count(old_tok) != 1:
             raise RuntimeError(f"expected one autonomy-qa config token: {old_tok}")

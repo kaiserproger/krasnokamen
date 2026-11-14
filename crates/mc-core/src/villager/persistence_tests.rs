@@ -429,11 +429,13 @@ fn journal_images_ignore_only_navigation_cache() {
         .push((crate::boundary::ChunkPos { x: 0, z: 0 }, 99));
     state.navigation_repath_at = 123;
     state.ration_at = 456;
+    state.ration_target = Some(BlockPos { x: 8, y: 9, z: 10 });
     let image = journal_image(&state);
     assert!(image.navigation_path.is_empty());
     assert!(image.navigation_target.is_none());
     assert!(image.navigation_chunks.is_empty());
     assert_eq!(image.ration_at, 0);
+    assert!(image.ration_target.is_none());
     assert!(journal_eq(&state, &image));
     let json = serde_json::to_vec(&state).unwrap();
     assert!(

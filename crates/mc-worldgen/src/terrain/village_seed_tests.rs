@@ -1,10 +1,10 @@
-//! Seed-100 production-content village regressions: the generated village must
+//! Production-content village regressions: the generated village must
 //! be playable (no spring above the streets, no house sealed by hillside soil).
 use super::*;
 use crate::vanilla_features::{BlockSemantics, CacheTags};
 use crate::village::{VillageDecor, load_village_closure};
 
-fn seed100_generator() -> Option<(TerrainGenerator, Arc<BlockRegistry>, Arc<CacheTags>)> {
+fn village_generator(seed: i64) -> Option<(TerrainGenerator, Arc<BlockRegistry>, Arc<CacheTags>)> {
     let root = std::env::var_os("SOLARIS_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
@@ -13,7 +13,6 @@ fn seed100_generator() -> Option<(TerrainGenerator, Arc<BlockRegistry>, Arc<Cach
     if !root.join("data/minecraft/worldgen").is_dir() {
         return None;
     }
-    let seed = 100;
     let blocks = Arc::new(
         BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
     );
@@ -103,7 +102,7 @@ impl VillageWorld {
 
 #[test]
 fn seed100_village_has_no_exposed_water_source() {
-    let Some((generator, blocks, tags)) = seed100_generator() else {
+    let Some((generator, blocks, tags)) = village_generator(100) else {
         println!("SKIP seed100_village_has_no_exposed_water_source: no content cache");
         return;
     };
@@ -152,7 +151,7 @@ fn seed100_village_has_no_exposed_water_source() {
 
 #[test]
 fn seed100_village_doors_open_onto_walkable_interiors() {
-    let Some((generator, blocks, tags)) = seed100_generator() else {
+    let Some((generator, blocks, tags)) = village_generator(100) else {
         println!("SKIP seed100_village_doors_open_onto_walkable_interiors: no content cache");
         return;
     };
@@ -212,5 +211,41 @@ fn seed100_village_doors_open_onto_walkable_interiors() {
     assert!(
         blocked.is_empty(),
         "a door with a solid block beside it traps whoever stands inside: {blocked:?}"
+    );
+}
+
+#[test]
+fn seed24_village_entrance_keeps_headroom_after_decoration() {
+    let Some((generator, blocks, _)) = village_generator(24) else {
+        println!("SKIP seed24_village_entrance_keeps_headroom_after_decoration: no content cache");
+        return;
+    };
+    let chunk = generator.generate(ChunkPos { x: 7, z: -18 });
+    let state = |x: i32, y, z: i32| {
+        chunk
+            .get_block(x.rem_euclid(16) as u8, y, z.rem_euclid(16) as u8)
+            .unwrap()
+    };
+    assert_eq!(
+        blocks.by_id(state(123, 72, -276)).unwrap().block.id.path(),
+        "oak_door",
+        "the generated fixture retains the original house doorway"
+    );
+    assert_eq!(
+        blocks.by_id(state(124, 71, -276)).unwrap().block.id.path(),
+        "oak_stairs",
+        "the generated fixture retains its authored entrance step"
+    );
+    for y in 72..=73 {
+        assert_eq!(
+            state(124, y, -276),
+            generator.air,
+            "decoration must not obstruct adult headroom outside the house at (124,{y},-276)"
+        );
+    }
+    assert_eq!(
+        blocks.by_id(state(125, 71, -275)).unwrap().block.id.path(),
+        "oak_log",
+        "the adjacent tree remains outside the entrance clearance"
     );
 }
