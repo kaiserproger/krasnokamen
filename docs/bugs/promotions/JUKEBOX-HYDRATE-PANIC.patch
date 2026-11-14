@@ -1,0 +1,50 @@
+diff --git a/crates/mc-core/src/tick/hydration.rs b/crates/mc-core/src/tick/hydration.rs
+index bd99574..d6daa04 100644
+--- a/crates/mc-core/src/tick/hydration.rs
++++ b/crates/mc-core/src/tick/hydration.rs
+@@ -51,7 +51,7 @@ fn decode(state: &TickState, chunk: &mc_world::Chunk) -> Result<Decoded, String>
+         hives: crate::bees::decode_chunk(&state.hives, registry, chunk)
+             .map_err(|e| e.to_string())?,
+         jukeboxes: crate::jukebox::decode_chunk(&state.jukeboxes, registry, chunk)
+-            .unwrap_or_else(|error| panic!("resident jukebox rejected: {error}")),
++            .map_err(|e| e.to_string())?,
+         campfires: crate::campfire::decode_chunk(&state.campfires, registry, chunk)?,
+         lecterns: crate::lectern::decode_chunk(&state.lecterns, registry, chunk)?,
+         brewing: crate::brewing::decode_chunk(&state.brewing, registry, chunk)?,
+diff --git a/crates/mc-core/src/jukebox.rs b/crates/mc-core/src/jukebox.rs
+index 04226f9..e82e396 100644
+--- a/crates/mc-core/src/jukebox.rs
++++ b/crates/mc-core/src/jukebox.rs
+@@ -2,7 +2,7 @@
+ //! Verified JukeboxBlockEntity/JukeboxSongPlayer 26.1.2: RecordItem, optional
+ //! ticks_since_song_started, level events 1010(song registry id)/1011(0).
+ use crate::bees::{block, centre, distance, fail, field, property};
+-use crate::boundary::{BlockPos, ChangeSet, ChunkPos, EntityId, Hand, PlayerChange};
++use crate::boundary::{BlockPos, ChangeSet, EntityId, Hand, PlayerChange};
+ use crate::config::CoreError;
+ use crate::tick::{BlockEntityState, TickState};
+ use mc_data::item_nbt::{stack_from_fields, stack_to_fields};
+@@ -156,20 +156,11 @@ pub(crate) fn apply_chunk(
+         boxes.insert(key, jukebox);
+     }
+ }
++/// Persisted jukeboxes enter only through chunk hydration; a missing entry
++/// here is a freshly placed block.
+ pub(crate) fn register(state: &mut TickState, pos: BlockPos) {
+     if !state.jukeboxes.contains_key(&key(pos)) {
+-        let jukebox = state
+-            .world
+-            .chunk(ChunkPos {
+-                x: pos.x.div_euclid(16),
+-                z: pos.z.div_euclid(16),
+-            })
+-            .and_then(|chunk| chunk.block_entities.get(&pos))
+-            .map(|bytes| {
+-                Jukebox::decode(bytes, &state.registry.items)
+-                    .unwrap_or_else(|e| panic!("resident jukebox rejected: {e}"))
+-            })
+-            .unwrap_or_default();
++        let jukebox = Jukebox::default();
+         state
+             .block_entities
+             .entry(key(pos))

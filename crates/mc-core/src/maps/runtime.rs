@@ -389,7 +389,9 @@ pub(crate) fn tick(state: &mut TickState) {
                     frame_pos[2].floor() as i32,
                     angle as i32,
                 );
-                if !map.frame_markers.contains(&retained) {
+                if map.frame_markers.len() < super::MAX_FRAME_MARKERS
+                    && !map.frame_markers.contains(&retained)
+                {
                     map.frame_markers.push(retained);
                     state.maps.dirty.insert(id);
                 }

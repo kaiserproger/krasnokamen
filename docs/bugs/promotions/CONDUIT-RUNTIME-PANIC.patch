@@ -1,0 +1,26 @@
+diff --git a/crates/mc-core/src/conduit.rs b/crates/mc-core/src/conduit.rs
+index 0bb8b36..0cac7f4 100644
+--- a/crates/mc-core/src/conduit.rs
++++ b/crates/mc-core/src/conduit.rs
+@@ -269,8 +269,20 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
+     // Keep the previous slot-order effect delivery without visiting non-players.
+     let players: Vec<_> = state.entities.player_slots().collect();
+     for pos in positions {
++        if !state
++            .world
++            .has_chunk(pos.x.div_euclid(16), pos.z.div_euclid(16))
++        {
++            continue;
++        }
++        let old = match image(state, pos) {
++            Ok(old) => old,
++            Err(error) => {
++                crate::tick::refuse_record(state, pos, error);
++                continue;
++            }
++        };
+         let size = frame_size(state, pos);
+-        let old = image(state, pos).unwrap_or_else(|err| panic!("{err}"));
+         if size >= 16 {
+             let radius = (size / 7 * 16) as f64;
+             for &slot in &players {

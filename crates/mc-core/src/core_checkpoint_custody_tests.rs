@@ -2087,7 +2087,8 @@ fn scheduled_ticks_of_a_refused_chunk_survive_checkpoint_and_restart() {
 /// unloadable. Recovery cannot replay the record into the chunk, so it refuses to open
 /// the world rather than drop it: nothing is checkpointed past the record and the WAL
 /// keeps it until the stored chunk is valid again, when the replay installs it and a
-/// checkpoint stores the item.
+/// checkpoint stores the item. A recovery that opens anyway is run on and checkpointed,
+/// so a record it dropped shows up as the campfire's item missing after the repair.
 #[test]
 fn opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal() {
     use mc_nbt::Tag;
@@ -2248,21 +2249,32 @@ fn opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal()
     let counts = store.record_counts().unwrap();
 
     // Recovery must make the chunk resident to replay the record and cannot, so it
-    // stops with the chunk's load error instead of dropping the record: the world never
-    // opens, no checkpoint runs, and the store and the WAL stay as they were.
+    // stops with the chunk's load error instead of dropping the record. A world that
+    // opens anyway runs a tick and a checkpoint here, as a server would.
+    let mut refusals = Vec::new();
     for _ in 0..2 {
-        let Err(error) = recover_dimension_state(&config, Dimension::Overworld) else {
-            panic!("recovery opened a world whose WAL writes into an unloadable chunk");
-        };
-        assert!(error.to_string().contains(&refusal), "{error}");
-        assert_eq!(read_manifest(&config).unwrap().tick, committed);
-        assert_eq!(store.record_counts().unwrap(), counts);
+        match recover_dimension_state(&config, Dimension::Overworld) {
+            Err(error) => refusals.push(error.to_string()),
+            Ok(opened) => {
+                drop(opened);
+                let mut opened = World::open(config.clone());
+                opened.tick(|_| {});
+                let (work_tx, work_rx) = journal_work_channel();
+                let (done_tx, done_rx) = std::sync::mpsc::channel();
+                let tick = opened.state.tick;
+                if start_checkpoint(&mut opened.state, &work_tx, &done_tx, tick) {
+                    let JournalWork::Checkpoint(job) = work_rx.recv().unwrap() else {
+                        panic!("expected checkpoint capture");
+                    };
+                    let ack = opened.commit(job, &done_rx);
+                    acknowledge_checkpoint(&mut opened.state, ack);
+                }
+            }
+        }
     }
-    assert_eq!(
-        wal(),
-        (Some(Some(bytes.clone())), true),
-        "the WAL still carries the campfire record and the scheduled tick"
-    );
+    let manifest_tick = read_manifest(&config).unwrap().tick;
+    let counts_after = store.record_counts().unwrap();
+    let wal_after = wal();
 
     // The stored chunk is valid again: the replay installs the record and a
     // checkpoint stores the campfire's item.
@@ -2277,39 +2289,70 @@ fn opaque_replay_into_a_chunk_refused_at_load_fails_recovery_and_keeps_the_wal()
         )
         .unwrap();
     let mut world = World::open(config.clone());
-    assert!(world.state.world.load_error(chunk).is_none());
-    assert_eq!(
-        world
-            .state
+    world.tick(|state| {
+        state.tickets.insert("custody".into(), (chunk, 0));
+        state.refresh_active_chunks(state.tick);
+        state
             .world
-            .chunk(chunk)
-            .expect("repaired chunk resident")
-            .block_entities
-            .get(&at),
-        Some(&bytes),
-        "the replay installed the campfire record"
-    );
+            .ensure_blocking(&[(chunk, 0)].into_iter().collect());
+    });
+    assert!(world.state.world.load_error(chunk).is_none());
+    let installed = world
+        .state
+        .world
+        .chunk(chunk)
+        .and_then(|resident| resident.block_entities.get(&at).cloned());
     world.tick(|_| {});
     world.tick(|_| {});
     world.checkpoint();
     let stored = source.load_native(chunk).unwrap().unwrap();
-    let Tag::Compound(fields) =
-        mc_nbt::read_network(&mut stored.block_entities[&at].as_slice()).unwrap()
-    else {
-        panic!("campfire record is a compound");
-    };
-    let Some(Tag::List(items)) = mc_data::item_nbt::field(&fields, "Items") else {
-        panic!("campfire Items");
-    };
-    let [Tag::Compound(item)] = &items.elements[..] else {
-        panic!("one campfire item");
-    };
+    let campfire_items = stored.block_entities.get(&at).map(|record| {
+        let Tag::Compound(fields) = mc_nbt::read_network(&mut record.as_slice()).unwrap() else {
+            panic!("campfire record is a compound");
+        };
+        let Some(Tag::List(items)) = mc_data::item_nbt::field(&fields, "Items") else {
+            return Vec::new();
+        };
+        items
+            .elements
+            .iter()
+            .map(|item| {
+                let Tag::Compound(item) = item else {
+                    panic!("campfire item is a compound");
+                };
+                mc_data::item_nbt::stack_from_fields(&registry.items, item)
+                    .unwrap()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>()
+    });
     assert_eq!(
-        mc_data::item_nbt::stack_from_fields(&registry.items, item)
-            .unwrap()
-            .unwrap(),
-        beef,
-        "the campfire's beef reached the store"
+        campfire_items,
+        Some(vec![beef]),
+        "custody lost: the campfire's beef did not reach the store"
+    );
+    assert_eq!(
+        installed,
+        Some(bytes.clone()),
+        "the replay installed the campfire record"
+    );
+
+    // Fail closed: both recoveries refused with the chunk's load error, and the store
+    // and the WAL stayed as they were until the repair.
+    assert_eq!(
+        refusals.len(),
+        2,
+        "recovery opened a world whose WAL writes into an unloadable chunk"
+    );
+    for error in &refusals {
+        assert!(error.contains(&refusal), "{error}");
+    }
+    assert_eq!(manifest_tick, committed);
+    assert_eq!(counts_after, counts);
+    assert_eq!(
+        wal_after,
+        (Some(Some(bytes.clone())), true),
+        "the WAL still carries the campfire record and the scheduled tick"
     );
 }
 

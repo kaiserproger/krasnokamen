@@ -4048,6 +4048,7 @@ status = "open"
 source = "CoreBlockers: capture.load_error from the failed-chunk map (world/capture.rs, core/journal.rs); server.log of native-v2-corrupt-block-entities showed no 'checkpoint committed' after the refusal."
 regression = ["cargo:mc-core:chunk_loader::tests::refused_chunk_never_blocks_other_chunks_and_stays_refused", "cargo:mc-core:chunk_loader::tests::refusing_a_resident_chunk_keeps_custody_of_its_unsaved_edits", "harness:entities:native-v2-corrupt-block-entities"]
 failing_first = "reported"
+fix_commit = "patch:ae9b3c453c1f32ffffa901dbfbc56d7670f8ae05051fbe61b94126972a0deb90"
 
 [[bug]]
 id = "NATIVE-INPLAY-BLOCKED-BY-MISSING-CHUNK"
@@ -4115,7 +4116,7 @@ regression = [
 ]
 repro_check = ["cargo:mc-core:core::checkpoint_custody_tests::chest::container_transfer_replay_holds_unloadable_chunk_and_wal", "cargo:mc-core:core::checkpoint_custody_tests::chest::container_transfer_replay_materializes_full_healthy_chunk"]
 failing_first = "reported"
-fix_commit = "aa3e10f6"
+fix_commit = "patch:449d7c4619a7acd234f38c056b01cae551efe32514d4728e9b03bf00481942f8"
 
 [[bug]]
 id = "COMMAND-SCULK-RECORD-UNVALIDATED"
@@ -4172,11 +4173,12 @@ title = "Books in a chiseled bookshelf disappear on interaction after restart"
 area = "gameplay"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "RC5 review of fe965d1c; contributing factors and failed defenses: docs/architecture/persistence.md#quarantined-chunks."
 regression = ["cargo:mc-core:core::checkpoint_custody_tests::chiseled_bookshelf_old_save_interaction_preserves_all_books"]
 failing_first = "not recorded"
 fix_commit = "fe965d1c"
+promotion = "docs/bugs/promotions/CHISELED-BOOKSHELF-RESTART-DATA-LOSS.json"
 
 [[bug]]
 id = "CIVILIZATION-NATURAL-FOREST-SITE-PREPARATION"

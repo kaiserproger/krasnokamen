@@ -17,6 +17,7 @@ mod runtime;
 pub(crate) mod trades;
 
 pub const PIXELS: usize = 128 * 128;
+const MAX_FRAME_MARKERS: usize = 256;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Decoration {
