@@ -182,22 +182,31 @@ nametag never, collision always, red/blue colours) that exist only on the
 client: no core team, no persistence, no gameplay effect. A team leaves when
 the snapshot holds no row and no player of its faction; respawns keep the
 teams and a dimension change syncs them again. Each connection keeps the
-entries it sent (mob UUIDs, player names) as its baseline. An entry the
-baseline lists leaves its team (method 4) once its faction ends: a mob row set
-to faction 0 or gone from the snapshot (a dead body keeps its faction until it
-is removed), a player whose hold ended (`battle reset` ends every hold and
-removes only staged rows, so summoned faction rows keep their team), an entry
-of a blocked faction. An entry moving to another faction is only added there
-(vanilla moves it). Holds end only by `battle reset` or a restart (`spectate`
-and going offline keep them). The edge removes only entries its baseline
-lists in that team, and releases a listed entry before a routed `/team` add
-names it. No `/team` command can name a team
+entries it sent (mob UUIDs, player names) as its baseline. Entries whose
+faction ends remain in that team until the whole team is removed; a change
+to another nonzero faction moves the entry by an add. Projection packets
+use only create (0), remove-team (1), and add (3), never remove-entry (4).
+A routed core `/team` add implicitly moves an entry and the edge forgets
+that projected membership without sending a removal. Holds end only by
+`battle reset` or a restart (`spectate` and going offline keep them).
+`battle reset` removes staged rows, but summoned faction rows keep their team.
+Nameplates are always hidden for projected teams, including with hidden HUD;
+options enable friendly fire but not see-friendly-invisibles.
+No `/team` command can name a team
 `sf <n>` (team names are one token); a core team of exactly that name
 (`WorldSnapshot::team_names`) blocks the faction. Because an add moves a
 client's entry and a removal from the wrong team disconnects a vanilla client,
 an entry gets a faction only while it is in no `/team` team
 (`scoreboard::require_no_team`: summon with `UUID`, battle mount, `battle
 live`), and `/team join` refuses battle-faction UUIDs and holders.
+
+Allegiance is defined once by `battle::faction::relation`: two nonzero equal
+factions are Same, two nonzero different factions are Enemy, and either zero
+is Neutral. Melee selection uses Enemy, friendly support uses Same, and
+arrows collide with everything except Same. Separately, `battle_row(faction)`
+marks native roster/AI ownership (currently nonzero). Ordinary AI suppression,
+battle columns, sparse roster indexing and battle arrow lifetime use this
+marker, not an enemy predicate. Neither changes the persisted faction format.
 
 
 ## Container checkpoint capture
