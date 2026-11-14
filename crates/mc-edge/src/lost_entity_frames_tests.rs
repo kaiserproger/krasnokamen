@@ -82,6 +82,7 @@ fn scene(
         pitch: 0.0,
         head_yaw: 0.0,
         on_ground: true,
+        faction: 0,
         appearance,
     };
     TickOutput {

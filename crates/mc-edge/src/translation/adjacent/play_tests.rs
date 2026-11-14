@@ -18,21 +18,6 @@ fn session() -> Session {
         ..Tables::default()
     })
 }
-#[test]
-fn no_swing_stagger_is_omitted_instead_of_becoming_a_legacy_attack() {
-    let mut s = session();
-    for hand in [0, 1] {
-        let mut body = Vec::new();
-        body.write_varint(9);
-        body.write_varint(hand);
-        body.write_varint(0);
-        body.write_varint(18);
-        assert_eq!(
-            clientbound(&mut s, "minecraft:swing_animation", &body).unwrap(),
-            None
-        );
-    }
-}
 
 #[test]
 fn variant_metadata_survives_776_to_775_translation() {

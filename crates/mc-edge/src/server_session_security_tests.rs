@@ -49,6 +49,7 @@ async fn writer_pair() -> (
     mpsc::Sender<i64>,
     mpsc::Sender<bytes::Bytes>,
     WorldSender,
+    Arc<ConnectionRegistry>,
 ) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let client = TcpStream::connect(listener.local_addr().unwrap())
@@ -59,6 +60,7 @@ async fn writer_pair() -> (
     let (reply_tx, reply_rx) = mpsc::channel(1);
     let (reliable_tx, reliable_rx) = mpsc::channel(1);
     let (world_tx, world_rx) = world_queue(1, WORLD_QUEUE_BYTES);
+    let registry = Arc::new(ConnectionRegistry::new());
     let task = tokio::spawn(play_writer(
         writer,
         Arc::new(NetCounters::new()),
@@ -110,8 +112,7 @@ async fn keepalive_reply_records_latency_for_the_batched_broadcast() {
 
 #[tokio::test]
 async fn keepalive_reply_does_not_fan_out_latency_per_reply() {
-    use mc_protocol::frame::{Compression, try_decode_frame};
-    use mc_protocol::packets::play::{ClientboundKeepAlive, PlayerInfoActions, PlayerInfoUpdate};
+    use mc_protocol::packets::play::ClientboundKeepAlive;
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let client = TcpStream::connect(listener.local_addr().unwrap())
         .await
@@ -126,13 +127,12 @@ async fn keepalive_reply_does_not_fan_out_latency_per_reply() {
             self_id,
             ConnectionHandles {
                 reliable_tx: self_tx,
-                world_tx: mpsc::channel(1).0,
+                world_tx: world_queue(1, WORLD_QUEUE_BYTES).0,
             },
         )
         .unwrap();
     let other = registry.joining_id();
     let (other_tx, mut other_rx) = mpsc::channel(4);
-    let filler_tx = other_tx.clone();
     registry
         .register(
             other,
@@ -186,7 +186,7 @@ fn measured_latency_broadcasts_batched_at_vanilla_cadence() {
             a,
             ConnectionHandles {
                 reliable_tx: a_tx,
-                world_tx: mpsc::channel(1).0,
+                world_tx: world_queue(1, WORLD_QUEUE_BYTES).0,
             },
         )
         .unwrap();
@@ -198,7 +198,7 @@ fn measured_latency_broadcasts_batched_at_vanilla_cadence() {
             b,
             ConnectionHandles {
                 reliable_tx: b_tx,
-                world_tx: mpsc::channel(1).0,
+                world_tx: world_queue(1, WORLD_QUEUE_BYTES).0,
             },
         )
         .unwrap();

@@ -39,7 +39,7 @@ fn server(root: &std::path::Path) -> Arc<EdgeServer> {
 fn connect(server: &EdgeServer) -> (ConnectionId, mpsc::Receiver<bytes::Bytes>) {
     let id = server.connections.joining_id();
     let (reliable_tx, reliable_rx) = mpsc::channel(512);
-    let (world_tx, _) = mpsc::channel(8);
+    let (world_tx, _) = crate::server::world_queue(8, crate::server::WORLD_QUEUE_BYTES);
     server
         .connections
         .register(

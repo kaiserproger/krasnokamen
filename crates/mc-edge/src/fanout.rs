@@ -161,8 +161,19 @@ pub fn publish_with_registries<'a>(
             )
         })
         .collect();
+    // A recorder's tick marker is the first world frame of the publish. Its
+    // slot and bytes are reserved before planning so the bounds hold;
+    // without a free slot nothing else is planned either, and that tick has
+    // no marker.
+    let marker = viewers
+        .iter()
+        .any(|viewer| viewer.recorder)
+        .then(|| crate::recorder::tick_marker_frame(output.tick, output.times.wall_start_unix_ns));
+    let marker_bytes = marker.as_ref().map_or(0, bytes::Bytes::len);
     let plan_start = probe.map(|_| std::time::Instant::now());
-    let mut planned: Vec<(ConnectionId, Vec<PlannedPacket>)> = viewers
+    let mut planned: Vec<(ConnectionId, Vec<PlannedPacket>)> = Vec::with_capacity(viewers.len());
+    let mut marked: Vec<ConnectionId> = Vec::new();
+    for (connection, packets, reserved) in viewers
         .par_iter_mut()
         .map(|viewer| {
             let reserved = viewer.recorder && viewer.world_credit > 0;
@@ -186,7 +197,13 @@ pub fn publish_with_registries<'a>(
                 });
             (viewer.connection, packets, reserved)
         })
-        .collect();
+        .collect::<Vec<_>>()
+    {
+        if reserved {
+            marked.push(connection);
+        }
+        planned.push((connection, packets));
+    }
     let fill_start = probe.map(|_| std::time::Instant::now());
     let failed = crate::plan::fill_chunk_packets(output, &mut planned, registries, chunk_cache);
     let fill_time = fill_start.map(|start| start.elapsed());

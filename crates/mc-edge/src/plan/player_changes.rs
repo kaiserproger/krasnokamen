@@ -135,9 +135,11 @@ fn plan_change(change: &PlayerChange, viewer: &mut ViewerState, out: &mut Vec<Pl
         ),
         PlayerChange::RecipesReloaded { reload } => {
             if let Some(packets) = crate::recipes::packets_for(&reload.registry) {
-                // The recipe book entries that follow come from these recipes.
+                // The recipe book entries that follow come from these recipes;
+                // the catalog is recorded so the book does not send it again.
                 viewer.advancements = std::sync::Arc::clone(&packets.advancements);
-                push_reliable(out, conn, &packets.update);
+                push_reliable(out, conn, &packets.catalog.update);
+                viewer.recipe_catalog = Some(std::sync::Arc::clone(&packets.catalog));
             }
         }
         PlayerChange::RecipesUnlocked {

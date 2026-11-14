@@ -397,6 +397,9 @@ pub(crate) struct TrackedEntity {
     /// the viewer): the next plan sends its whole state again, over the
     /// client's copy.
     resend: bool,
+    /// The viewer's entity round of the last delivery (spawn or update):
+    /// how long a pending update has waited, for priority under credit.
+    updated: u64,
 }
 
 impl TrackedEntity {
@@ -408,6 +411,7 @@ impl TrackedEntity {
             appearance: Arc::clone(&entity.appearance),
             seen,
             resend: false,
+            updated: round,
         }
     }
 
@@ -421,47 +425,8 @@ impl TrackedEntity {
             appearance: Arc::default(),
             seen: 0,
             resend: false,
+            updated: 0,
         }
-    }
-}
-
-/// Point the passengers of tracked `vehicle` at it, replacing the entries of
-/// its `old` passengers. Every change to a tracked appearance goes through
-/// here, so the map holds exactly the passengers of the vehicles a viewer
-/// tracks ([`ViewerState::vehicles`]).
-fn relink_passengers(
-    vehicles: &mut HashMap<EntityId, EntityId>,
-    vehicle: EntityId,
-    old: &[EntityId],
-    new: &[EntityId],
-) {
-    for passenger in old {
-        if vehicles.get(passenger) == Some(&vehicle) {
-            vehicles.remove(passenger);
-        }
-    }
-    for &passenger in new {
-        vehicles.insert(passenger, vehicle);
-    }
-}
-
-/// Point the passengers of tracked `vehicle` at it, replacing the entries of
-/// its `old` passengers. Every change to a tracked appearance goes through
-/// here, so the map holds exactly the passengers of the vehicles a viewer
-/// tracks ([`ViewerState::vehicles`]).
-fn relink_passengers(
-    vehicles: &mut HashMap<EntityId, EntityId>,
-    vehicle: EntityId,
-    old: &[EntityId],
-    new: &[EntityId],
-) {
-    for passenger in old {
-        if vehicles.get(passenger) == Some(&vehicle) {
-            vehicles.remove(passenger);
-        }
-    }
-    for &passenger in new {
-        vehicles.insert(passenger, vehicle);
     }
 }
 
@@ -540,6 +505,17 @@ pub struct ViewerState {
     /// Free outbound world-queue frame slots, refreshed by the pump before
     /// each publish: the plan emits at most this many best-effort frames.
     pub world_credit: usize,
+    /// Free outbound world-queue bytes, refreshed with `world_credit`
+    /// ([`WorldCredit`] explains the soft byte bound).
+    pub world_bytes: usize,
+    /// A recorder connection ([`crate::recorder`]): every entity type is
+    /// tracked to the full view distance and each publish is marked.
+    pub recorder: bool,
+    /// Entity removals, spawns and updates the last plan left without world
+    /// credit ([`crate::recorder::RecorderTick`]); reset before every publish.
+    pub deferred_updates: usize,
+    /// Entity plans so far: the clock of [`TrackedEntity::updated`].
+    entity_round: u64,
     /// Entities whose frames the last plan queued; the pump reports a frame
     /// of that plan that the world queue refused ([`Self::world_frame_unsent`]).
     world_entities: Vec<EntityId>,
@@ -601,6 +577,10 @@ impl ViewerState {
             radius_sent: None,
             skipped: false,
             world_credit: usize::MAX,
+            world_bytes: usize::MAX,
+            recorder: false,
+            deferred_updates: 0,
+            entity_round: 0,
             world_entities: Vec::new(),
             world_removed: Vec::new(),
             forget_all: false,
@@ -696,9 +676,10 @@ impl ViewerState {
 
     /// Record `entity` as delivered with its current appearance.
     fn track(&mut self, entity: &EntityView) {
-        let old = self
-            .tracked_entities
-            .insert(entity.id, TrackedEntity::new(entity, self.plan_stamp));
+        let old = self.tracked_entities.insert(
+            entity.id,
+            TrackedEntity::new(entity, self.plan_stamp, self.entity_round),
+        );
         relink_passengers(
             &mut self.vehicles,
             entity.id,
@@ -903,7 +884,10 @@ fn plan_viewer_inner(
     let snapshot = &output.snapshot;
     let changes = &output.changes;
     let conn = viewer.connection;
-    let mut credit = viewer.world_credit;
+    let mut credit = WorldCredit {
+        frames: viewer.world_credit,
+        bytes: viewer.world_bytes,
+    };
     viewer.world_entities.clear();
     viewer.world_removed.clear();
     // Resolve the authoritative anchor before range-checking one-shot effects.
@@ -1522,6 +1506,10 @@ struct EntityUpdate {
     id: EntityId,
     priority: f64,
     stale: bool,
+    /// [`TrackedEntity::resend`]: the whole state goes out again.
+    resend: bool,
+    /// An item entity, counted by [`item_probe`].
+    item: bool,
     due: bool,
     movement: Option<shared_moves::SharedMove>,
     head: Option<u8>,
@@ -1688,6 +1676,7 @@ fn plan_entities(
 ) {
     let conn = viewer.connection;
     let mut tally = item_probe::Tally::new();
+    let dimension = viewer.dimension;
     let previous_tick = viewer.entity_tick.replace(snapshot.tick);
     viewer.entity_round += 1;
     let round = viewer.entity_round;
@@ -1725,7 +1714,8 @@ fn plan_entities(
             .collect();
         scratch.removed.retain(|id| !repaired.contains(id));
     }
-    if !scratch.removed.is_empty() && *credit > 0 {
+    let mut removals_deferred = scratch.removed.len();
+    if !scratch.removed.is_empty() && !credit.spent() {
         let packet = RemoveEntities {
             entity_ids: std::mem::take(&mut scratch.removed),
         };
@@ -1891,31 +1881,58 @@ fn plan_entities(
         } else {
             None
         };
-        let packed_head = if due {
-            pack_degrees(entity.head_yaw)
-        } else {
-            0
-        };
-        let turned = due && tracked.head_yaw != packed_head;
+        let head = due
+            .then(|| pack_degrees(entity.head_yaw))
+            .filter(|&packed| tracked.head_yaw != packed);
         let resend = tracked.resend;
-        if !stale && !resend && movement.is_none() && !turned {
+        if !stale && !resend && movement.is_none() && head.is_none() {
             interest.completed(entity, tracked, snapshot.tick, due, false);
             continue;
         }
+        scratch.updates.push(EntityUpdate {
+            order: scratch.updates.len(),
+            id,
+            priority: update_priority(
+                round.saturating_sub(tracked.updated),
+                entity.position,
+                viewer.position,
+            ),
+            stale,
+            resend,
+            item,
+            due,
+            movement,
+            head,
+        });
+    }
+    scratch.updates.sort_unstable_by(|a, b| {
+        b.priority
+            .total_cmp(&a.priority)
+            .then(a.order.cmp(&b.order))
+    });
+    let pending_updates = scratch.updates.len();
+    let mut updates_sent = 0;
+    for update in scratch.updates.drain(..) {
+        let tracked = viewer
+            .tracked_entities
+            .get_mut(&update.id)
+            .expect("tracked update");
+        let entity = snapshot.entities.get(update.id).expect("visible entity");
         let update_start = out.len();
         // Against an appearance that differs in every field, a resend carries
         // the whole state, passengers included.
-        let resend_baseline = EntityAppearance {
-            passengers: vec![EntityId(i32::MIN)],
-            ..Default::default()
-        };
-        let baseline = if resend {
+        let resend_baseline;
+        let baseline = if update.resend {
+            resend_baseline = EntityAppearance {
+                passengers: vec![EntityId(i32::MIN)],
+                ..Default::default()
+            };
             &resend_baseline
         } else {
             tracked.appearance.as_ref()
         };
         let sent = try_push(out, credit, |out| {
-            if stale || resend {
+            if update.stale || update.resend {
                 push_appearance(out, conn, entity, Some(baseline));
             }
             if let Some(packet) = &update.movement {
@@ -1943,33 +1960,35 @@ fn plan_entities(
         if !sent {
             break;
         }
-        if item {
+        if update.item {
             tally.updated(
                 &out[update_start..],
-                movement.as_ref().map(|packet| packet.data.len()),
+                update.movement.as_ref().map(|packet| packet.data.len()),
             );
         }
         if out.len() > update_start {
-            viewer.world_entities.push(id);
+            viewer.world_entities.push(update.id);
         }
-        if stale || resend {
+        if update.stale || update.resend {
             relink_passengers(
                 &mut viewer.vehicles,
-                id,
+                update.id,
                 &tracked.appearance.passengers,
                 &entity.appearance.passengers,
             );
             tracked.appearance = Arc::clone(&entity.appearance);
             tracked.resend = false;
         }
-        let moved = movement.is_some() || turned;
-        if let Some(packet) = movement {
+        let moved = update.movement.is_some() || update.head.is_some();
+        if let Some(packet) = update.movement {
             tracked.baseline = packet.next;
         }
         if let Some(head) = update.head {
             tracked.head_yaw = head;
         }
-        interest.completed(entity, tracked, snapshot.tick, due, moved);
+        tracked.updated = round;
+        interest.completed(entity, tracked, snapshot.tick, update.due, moved);
+        updates_sent += 1;
     }
     viewer.deferred_updates =
         removals_deferred + (spawn_candidates - spawns_sent) + (pending_updates - updates_sent);
