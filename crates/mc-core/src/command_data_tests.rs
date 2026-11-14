@@ -3,6 +3,9 @@ use crate::boundary::ChangeSet;
 use crate::entities::EntityKind;
 use mc_data::{Identifier, ItemStack};
 
+#[path = "command_data_mutation_tests.rs"]
+mod mutation_tests;
+
 fn fixture() -> (TickState, EntityId, Context) {
     let (mut state, id, _) = crate::hostile_tests::setup(8.0);
     let slot = state.entities.slot_of(id).unwrap();
@@ -823,6 +826,24 @@ fn cow_uuid_and_pos(state: &TickState) -> (uuid::Uuid, [f64; 3]) {
         })
         .unwrap();
     (state.entities.row(slot).uuid, state.entities.pos(slot))
+}
+
+#[test]
+fn data_entity_edit_preserves_unrelated_runtime_state() {
+    let (mut state, _, context) = fixture();
+    run(&mut state, context, "summon minecraft:cow 4 60 4");
+    let (uuid, _) = cow_uuid_and_pos(&state);
+    let slot = state.entities.slot_of_uuid(uuid).unwrap();
+    state.entities.body_mut(slot).attack_cooldown = 17;
+    state.entities.row_mut(slot).breed_cooldown = 35;
+    state.entities.row_mut(slot).entity_life.taming.rolls = 123;
+    assert_eq!(
+        data(&mut state, context, "data merge entity @e[type=minecraft:cow,limit=1] {Health:7.5f,NoAI:1b}"),
+        1
+    );
+    assert_eq!(state.entities.body(slot).attack_cooldown, 17);
+    assert_eq!(state.entities.row(slot).breed_cooldown, 35);
+    assert_eq!(state.entities.row(slot).entity_life.taming.rolls, 123);
 }
 
 #[test]

@@ -32,6 +32,9 @@ is proof only of its asserted scope; no test was executed for this snapshot.
 | Command blocks: impulse, chain, repeating | `partial` | [regressions](../crates/mc-core/src/command_blocks_tests.rs) | Creative operator placement; disabled by default. Impulse, chain and repeating blocks execute native commands, with conditional checks against the block behind. Configure through `/data`, not the client editor. Comparator success output, command minecarts and editor packets remain absent. |
 | Books/quills: editing and signing | `partial` | [native edit/sign tests](../crates/mc-core/src/books_tests.rs); [book packet tests](../crates/mc-protocol/src/packets/play/book_packet_tests.rs); [component codecs](../crates/mc-protocol/src/packets/play/copied_components/book_tests.rs) | EditBook now enters native admission and persists pages/title/author; written books open through edge projection. Actual-client editing/signing and filtered/styled imported-book coverage remain unproven. |
 
+Entity `/data` edits preflight NPC equipment custody before committing any
+fields, and retain live-only mount and mob goal state across unrelated edits.
+
 ## Movement, physics and combat
 
 | Player-visible feature area | Status | Tracked test | Limitation |
