@@ -89,6 +89,25 @@ class SceneSlot(unittest.TestCase):
                              capture_output=True, text=True, timeout=60, check=True)
         self.assertEqual(len(out.stdout.strip()), 1, f"exactly one slot held, got {out.stdout!r}")
 
+    def test_refuses_to_take_a_slot_inside_an_exclusive_window(self) -> None:
+        # Gates hold slots while they wait for the window's lock: waiting inside it deadlocks the fleet.
+        out = subprocess.run([str(SCRIPT), "sh", "-c", "echo ran"],
+                             env={**self.env, "KRASNOKAMEN_EXCLUSIVE_WINDOW": "4242"},
+                             capture_output=True, text=True, timeout=60)
+        self.assertEqual(out.returncode, 75, out.stderr)
+        self.assertEqual(out.stdout, "")
+        self.assertIn("scene-slot.sh mem-run.sh -x", out.stderr)
+        self.assertFalse(any(self.held_by_other(slot) for slot in "abcdef"))
+
+    def test_window_inside_a_held_slot_reuses_it(self) -> None:
+        # scene-slot.sh mem-run.sh -x CMD: CMD's own scene-slot.sh runs at once in the inherited slot.
+        probe = Path(self.dir) / "probe.py"
+        probe.write_text(PROBE)
+        inner = f"KRASNOKAMEN_EXCLUSIVE_WINDOW=4242 exec {SCRIPT} {sys.executable} {probe} {self.dir}"
+        out = subprocess.run([str(SCRIPT), "sh", "-c", inner], env=self.env,
+                             capture_output=True, text=True, timeout=60, check=True)
+        self.assertEqual(len(out.stdout.strip()), 1, f"exactly one slot held, got {out.stdout!r}")
+
 
 if __name__ == "__main__":
     unittest.main()

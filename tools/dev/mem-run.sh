@@ -227,6 +227,11 @@ if [ "$exclusive" = 1 ]; then
   # One window at a time; while it holds this lock new commands wait at start.
   exec 3>"$dir/exclusive.lock"
   flock 3
+  # Lock order: a scene slot (scene-slot.sh) is taken before this lock, never inside the
+  # window. Gates hold scene slots while they wait for this lock (shared), so a window
+  # command waiting for a slot deadlocked the whole fleet for ~50 min (2026-11-14).
+  # Descendants see the marker; scene-slot.sh then only reuses an inherited slot.
+  export KRASNOKAMEN_EXCLUSIVE_WINDOW=$$
   # Opened before the watchdog is told, so its "quiet" line cannot be lost.
   [ -p "$dir/quiet" ] || { rm -f "$dir/quiet"; mkfifo "$dir/quiet"; }
   exec 4<>"$dir/quiet"

@@ -65,6 +65,14 @@ to keep that from happening again without idling the machine.
   waiters: `tools/dev/fleet-status`. Tests:
   `python3 tools/dev/test_build_tokens.py`.
 - **Killed jobs:** an independent guardian kills the job's scope and holds its locks (slot locks and the build token) until the scope is empty.
+- **Lock order: scene slot, then `-x`** (2026-11-14). Gates hold a scene slot while they wait for
+  the `-x` lock (shared), so a `-x` window that then waits for a scene slot deadlocks every
+  build and gate (a window did so for about 50 minutes). Take the slot outside the window:
+  `scene-slot.sh mem-run.sh -x <command>`. Inside a window the runner exports
+  `KRASNOKAMEN_EXCLUSIVE_WINDOW`; `scene-slot.sh` then runs a command at once when an ancestor
+  already holds a slot (`KRASNOKAMEN_SCENE_SLOT_PID`) and otherwise refuses with exit 75. Call
+  `scene-slot.sh`, never `slot-lock.py` with the scene lock names directly. Tests:
+  `python3 tools/dev/test_scene_slot.py`.
 - **Scope properties.** `MemoryMax=<cap>`, `MemorySwapMax=1G`,
   `CPUQuota=<physical cores x 100>%`, `CPUWeight=50`, `nice 19`. These are the
   harness's own scope properties, so harness runs keep their canonical CPU
