@@ -82,6 +82,7 @@ fn selector_empty_tag_command_path() {
     );
     let cow = state.spawn_mob(state.registry.cow_type_id, [2.0, 60.0, 2.0], 10.0);
     let slot = state.entities.slot_of(cow).unwrap();
+    crate::entity_controls::set_no_gravity(&mut state, slot, true);
     mc_nbt::write_named(
         &mut state.entities.row_mut(slot).opaque_entity_fields,
         "",
@@ -94,7 +95,6 @@ fn selector_empty_tag_command_path() {
                 }),
             ),
             ("Silent".into(), mc_nbt::Tag::Byte(1)),
-            ("NoGravity".into(), mc_nbt::Tag::Byte(1)),
         ]),
     )
     .unwrap();
@@ -109,6 +109,18 @@ fn selector_empty_tag_command_path() {
         "execute if entity @e[type=minecraft:cow,tag=] run time add 10",
     );
     assert_eq!(state.day_time, 3);
+    crate::entity_controls::set_no_gravity(&mut state, slot, false);
+    command(
+        &mut state,
+        entity,
+        "execute if entity @e[type=minecraft:cow,tag=probe,nbt={Silent:1b,NoGravity:1b}] run time add 100",
+    );
+    command(
+        &mut state,
+        entity,
+        "execute if entity @e[type=minecraft:cow,tag=probe,nbt={Silent:1b,NoGravity:0b}] run time add 4",
+    );
+    assert_eq!(state.day_time, 7);
 }
 
 #[test]
