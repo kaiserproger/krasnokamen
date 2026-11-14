@@ -306,7 +306,18 @@ fn json(tag: &Tag) -> serde_json::Value {
         Tag::Compound(fields) => Value::Object(
             fields
                 .iter()
-                .map(|(key, value)| (key.clone(), json(value)))
+                .map(|(key, value)| {
+                    let value = match (key.as_str(), value) {
+                        (
+                            "bold" | "italic" | "underlined" | "strikethrough" | "obfuscated",
+                            Tag::Byte(value),
+                        ) => {
+                            Value::Bool(*value != 0)
+                        }
+                        _ => json(value),
+                    };
+                    (key.clone(), value)
+                })
                 .collect(),
         ),
         Tag::List(list) => Value::Array(list.elements.iter().map(json).collect()),
@@ -358,16 +369,10 @@ fn move_enabled(selection: &mut Selection, id: &str, rest: &[&str]) -> Result<()
         .position(|entry| entry == id)
         .expect("pack was just enabled");
     let entry = selection.enabled.remove(position);
-    // `vanilla` stays first: ordering before it is unsupported.
-    let floor = usize::from(
-        selection
-            .enabled
-            .first()
-            .is_some_and(|first| first == "vanilla"),
-    );
+    // The explicit first/before placements may precede even the vanilla pack.
     let at = match rest {
         [] | ["last"] => selection.enabled.len(),
-        ["first"] => floor,
+        ["first"] => 0,
         [placement @ ("before" | "after"), other] => {
             let other = pack_name(other).ok_or_else(|| unknown(other))?;
             let at = selection
@@ -378,7 +383,7 @@ fn move_enabled(selection: &mut Selection, id: &str, rest: &[&str]) -> Result<()
             if *placement == "after" {
                 at + 1
             } else {
-                at.max(floor)
+                at
             }
         }
         _ => {

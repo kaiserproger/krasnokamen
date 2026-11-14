@@ -34,6 +34,8 @@ is proof only of its asserted scope; no test was executed for this snapshot.
 
 Entity `/data` edits preflight NPC equipment custody before committing any
 fields, and retain live-only mount and mob goal state across unrelated edits.
+Explicit `/datapack enable ... first|before` may place a pack before vanilla;
+created pack descriptions preserve component style booleans.
 
 ## Movement, physics and combat
 
