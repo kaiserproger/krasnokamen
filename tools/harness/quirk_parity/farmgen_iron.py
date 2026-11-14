@@ -66,7 +66,7 @@ Mechanics (vanilla 26.1.2 sources):
 - Villager brain schedule (data/minecraft/timeline/villager_schedule.json):
   REST 12000-24000. LAST_SLEPT set by SleepInBed.start on real bed sleep.
 
-Layout contract: identical command strings on vanilla and Solaris;
+Layout contract: identical command strings on vanilla and Krasnokamen;
 natural spawning off in prelude; summoned villagers/drowned only. The
 kill + clock commands are in-phase `commands` entries on both sides.
 """

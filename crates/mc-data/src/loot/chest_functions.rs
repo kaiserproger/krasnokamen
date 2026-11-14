@@ -207,7 +207,7 @@ fn compile_action(
         }
         "minecraft:set_damage" => {
             static FACTS: std::sync::LazyLock<crate::item_components::ItemFactsTable> =
-                std::sync::LazyLock::new(crate::item_components::solaris_required_item_facts);
+                std::sync::LazyLock::new(crate::item_components::krasnokamen_required_item_facts);
             let maximum = FACTS
                 .get(require_item()?)
                 .and_then(|f| f.max_damage)
@@ -381,7 +381,7 @@ fn compile_action(
 }
 fn validate_patch(fields: &[(String, Tag)], item: Option<&Identifier>) -> Result<(), String> {
     static ITEMS: std::sync::LazyLock<ItemRegistry> =
-        std::sync::LazyLock::new(crate::items::solaris_required_items);
+        std::sync::LazyLock::new(crate::items::krasnokamen_required_items);
     let fallback = Identifier::parse("minecraft:stone").expect("static id");
     crate::item_nbt::stack_from_component_patch(&ITEMS, item.unwrap_or(&fallback), fields)
         .map(|_| ())
