@@ -77,6 +77,7 @@ fn spawn_initializes_body_impulse_and_cold() {
     assert!(body.alive);
     assert_eq!((body.half_width, body.height), (0.3, 1.8));
     assert_eq!(body.movement, MovementClass::Walker);
+    assert_eq!(body.faction, 0);
     assert_eq!(body.air_supply, 300);
     assert_eq!(
         (body.burn_ticks, body.pickup_delay, body.attack_cooldown),

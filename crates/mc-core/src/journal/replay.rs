@@ -199,6 +199,9 @@ pub struct ReplayEntity {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct EntityStateImage {
+    /// Native allegiance; absent on disk for unaffiliated entities.
+    #[serde(skip_serializing_if = "unaffiliated")]
+    pub faction: u16,
     /// Original named NBT compound; typed checkpoint fields override these keys.
     pub opaque_entity_fields: Vec<u8>,
     /// Lifetime age at this image's journal tick; not an age-only dirty key.
@@ -227,6 +230,7 @@ pub struct EntityStateImage {
 impl Default for EntityStateImage {
     fn default() -> Self {
         Self {
+            faction: 0,
             age: 0,
             opaque_entity_fields: Vec::new(),
             protected_until: 0,
@@ -251,6 +255,7 @@ impl Default for EntityStateImage {
 impl EntityStateImage {
     pub(crate) fn from_row(body: &crate::entities::Body, row: &crate::entities::ColdRow) -> Self {
         Self {
+            faction: body.faction,
             age: row.age,
             opaque_entity_fields: row.opaque_entity_fields.clone(),
             protected_until: row.protected_until,
@@ -328,6 +333,7 @@ impl EntityStateImage {
         row: &crate::entities::ColdRow,
     ) -> bool {
         self.protected_until == row.protected_until
+            && self.faction == body.faction
             && self.persistent == row.persistent
             && self.air_supply == body.air_supply
             && self.burn_ticks == body.burn_ticks
@@ -413,6 +419,16 @@ impl EntityStateImage {
         )?;
         for (key, tag) in &record.extra_fields {
             match (key.as_str(), tag) {
+                ("krasnokamen:Faction", mc_nbt::Tag::Int(value)) => {
+                    image.faction = u16::try_from(*value).map_err(|_| {
+                        CoreError::Storage("krasnokamen:Faction: expected u16".into())
+                    })?;
+                }
+                ("krasnokamen:Faction", _) => {
+                    return Err(CoreError::Storage(
+                        "krasnokamen:Faction: expected int".into(),
+                    ));
+                }
                 ("CustomNameVisible", mc_nbt::Tag::Byte(_)) => {}
                 ("CustomNameVisible", _) => {
                     return Err(CoreError::Storage(
@@ -479,6 +495,7 @@ impl EntityStateImage {
                         key.as_str(),
                         "CustomName"
                             | "CustomNameVisible"
+                            | "krasnokamen:Faction"
                             | "equipment"
                             | "RaidId"
                             | "Wave"
@@ -521,6 +538,12 @@ impl EntityStateImage {
         if let Some(tnt) = &self.tnt {
             fields.extend(crate::tnt::to_fields(tnt, blocks));
         }
+        if self.faction != 0 {
+            fields.push((
+                "krasnokamen:Faction".into(),
+                mc_nbt::Tag::Int(i32::from(self.faction)),
+            ));
+        }
         fields.extend([
             (
                 "krasnokamen:LifetimeAge".into(),
@@ -549,6 +572,10 @@ impl EntityStateImage {
         ]);
         fields
     }
+}
+
+fn unaffiliated(faction: &u16) -> bool {
+    *faction == 0
 }
 
 /// Fold batches into a [`Replay`]. Later batches overwrite earlier ones

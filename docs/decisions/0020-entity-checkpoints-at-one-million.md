@@ -281,3 +281,15 @@ checkpoint for the old binary, whose next full write tombstones and rewrites as
 before, and the reverse also holds. Rollback is a revert and redeploy with no
 migration. Replay boxing is in-memory only.
 
+**Battle allegiance extension (2026-11-14).** Native `Body.faction: u16`
+uses existing padding: the body remains 72 bytes. The existing entity NBT
+payload carries nonzero allegiance as `krasnokamen:Faction` (`TAG_Int`,
+u16 range checked); `EntityStateImage.faction` carries full/compact WAL images.
+Zero is omitted from both formats, so unaffiliated entities add no disk bytes.
+Absent allegiance decodes as zero; malformed or out-of-range state fails closed.
+`set_faction` marks touched + changed custody through normal body mutation,
+including a reset to zero. Recovery and authored summon use that setter.
+The key stays hidden from `/data` and NBT selectors, with no wire metadata.
+No battle membership index, table, journal domain, checkpoint fence or alternate
+persistence owner is introduced here. Targets and battle timers remain transient.
+Regression: `battle_faction_survives_native_checkpoint_wal_and_restart`.

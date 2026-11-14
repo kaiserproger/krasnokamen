@@ -2446,3 +2446,62 @@ container_replay_cases!(
     (chiseled_bookshelf, "chiseled_bookshelf", 6, true),
     (lectern, "lectern", 1, true),
 );
+
+#[test]
+fn battle_faction_survives_native_checkpoint_wal_and_restart() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world.tick(|_| {});
+    let (command, mut done) = crate::command_console::ConsoleCommand::new(
+        "summon cow 0.5 80 0.5 {\"krasnokamen:Faction\":7}".into(),
+    );
+    world.run(&[crate::boundary::PlayerInput::ConsoleCommand(command)]);
+    assert!(done.try_recv().is_ok());
+    let mob = world.state.entities.bodies()[0].id;
+    let uuid = uuid_of(&mut world.state, mob);
+    assert_eq!(
+        world.state.entities.body(slot(&world.state, mob)).faction,
+        7
+    );
+    world.checkpoint();
+    let config = world.config.clone();
+    drop(world);
+    let mut world = World::open(config);
+    let restored = world
+        .state
+        .entities
+        .slot_of_uuid(uuid)
+        .expect("checkpoint mob");
+    assert_eq!(world.state.entities.body(restored).faction, 7);
+    let mob = world.state.entities.body(restored).id;
+    world.tick(|state| state.entities.set_faction(slot(state, mob), 60_000));
+    let mut world = world.crash();
+    let restored = world.state.entities.slot_of_uuid(uuid).unwrap();
+    assert_eq!(world.state.entities.body(restored).faction, 60_000);
+    // The WAL-only mutation must also enter the next incremental checkpoint.
+    world.checkpoint();
+    let config = world.config.clone();
+    drop(world);
+    let mut world = World::open(config);
+    let restored = world.state.entities.slot_of_uuid(uuid).unwrap();
+    assert_eq!(world.state.entities.body(restored).faction, 60_000);
+    let mob = world.state.entities.body(restored).id;
+    world.tick(|state| state.entities.set_faction(slot(state, mob), 0));
+    let mut world = world.crash();
+    let restored = world.state.entities.slot_of_uuid(uuid).unwrap();
+    assert_eq!(world.state.entities.body(restored).faction, 0);
+    world.checkpoint();
+    let (_, _, payload) = &stored_image(&world.config)[&uuid];
+    let mc_nbt::Tag::Compound(fields) = payload else {
+        panic!("expected entity compound");
+    };
+    assert!(
+        fields.iter().all(|(key, _)| key != "krasnokamen:Faction"),
+        "reset removes the native key rather than retaining stale opaque state"
+    );
+    let config = world.config.clone();
+    drop(world);
+    let world = World::open(config);
+    let restored = world.state.entities.slot_of_uuid(uuid).unwrap();
+    assert_eq!(world.state.entities.body(restored).faction, 0);
+}

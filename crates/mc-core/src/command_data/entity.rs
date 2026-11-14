@@ -101,6 +101,9 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
         }
     }
     for key in &touched {
+        if crate::command_data::private_field(key) {
+            return Err(format!("Editing {key} of {name} is not supported"));
+        }
         let authored = if item {
             ITEM_FIELDS.contains(&key.as_str())
         } else {

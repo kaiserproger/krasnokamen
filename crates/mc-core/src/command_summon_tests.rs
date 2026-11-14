@@ -22,6 +22,122 @@ fn summon(kind: &str, nbt: &str) -> (TickState, EntityId) {
 }
 
 #[test]
+fn summon_faction_is_native() {
+    let (mut state, id) = summon("zombie", "{\"krasnokamen:Faction\":65535}");
+    let slot = state.entities.slot_of(id).unwrap();
+    assert_eq!(state.entities.body(slot).faction, u16::MAX);
+    let uuid = state.entities.row(slot).uuid;
+    let Tag::Compound(public) = crate::command_data::entity(&state, id).unwrap() else {
+        panic!("expected public entity compound");
+    };
+    assert!(public.iter().all(|(key, _)| key != "krasnokamen:Faction"));
+    assert_eq!(
+        crate::command_data::command(
+            &mut state,
+            ConnectionId(1),
+            id,
+            &format!("data get entity {uuid} \"krasnokamen:Faction\""),
+        ),
+        crate::command_execution::CommandResult::Failed
+    );
+    assert_eq!(
+        crate::command_data::command(
+            &mut state,
+            ConnectionId(1),
+            id,
+            &format!("data merge entity {uuid} {{\"krasnokamen:Faction\":8}}"),
+        ),
+        crate::command_execution::CommandResult::Failed
+    );
+    assert_eq!(state.entities.body(slot).faction, u16::MAX);
+    let (_, chunks, _) = crate::core::checkpoint_data_for(&state, state.tick);
+    let native = chunks
+        .values()
+        .flat_map(|chunk| &chunk.entities)
+        .find(|entity| entity.uuid == state.entities.row(slot).uuid)
+        .unwrap();
+    let fields = mc_data::entity_nbt::entity_to_fields(&state.registry.items, native).unwrap();
+    assert_eq!(
+        mc_data::item_nbt::field(&fields, "krasnokamen:Faction"),
+        Some(&Tag::Int(65535))
+    );
+    let image = crate::journal::EntityStateImage::from_row(
+        state.entities.body(slot),
+        state.entities.row(slot),
+    );
+    let json = serde_json::to_value(&image).unwrap();
+    assert_eq!(json["faction"], 65535);
+    for invalid in [
+        serde_json::json!(-1),
+        serde_json::json!(65536),
+        serde_json::json!("7"),
+        serde_json::Value::Null,
+    ] {
+        let mut corrupt = json.clone();
+        corrupt["faction"] = invalid;
+        assert!(serde_json::from_value::<crate::journal::EntityStateImage>(corrupt).is_err());
+    }
+    for invalid in [
+        Tag::Int(-1),
+        Tag::Int(65536),
+        Tag::Short(7),
+        Tag::String("7".into()),
+    ] {
+        let mut corrupt = fields.clone();
+        *corrupt
+            .iter_mut()
+            .find(|(key, _)| key == "krasnokamen:Faction")
+            .unwrap() = ("krasnokamen:Faction".into(), invalid.clone());
+        let mut replay = crate::journal::Replay::default();
+        assert!(
+            crate::native_checkpoint::hydrate_entity(
+                &state.registry,
+                &mut replay,
+                &Tag::Compound(corrupt),
+                state.tick,
+            )
+            .is_err(),
+            "persisted {invalid:?} must fail closed"
+        );
+        assert!(replay.entities.is_empty());
+        let nbt = Tag::Compound(vec![("krasnokamen:Faction".into(), invalid)]);
+        assert!(
+            prepare(
+                &state,
+                state.registry.entity_type_id("minecraft:zombie").unwrap(),
+                "minecraft:zombie",
+                [0.0, 80.0, 0.0],
+                &nbt,
+            )
+            .is_err()
+        );
+    }
+    for nbt in ["{}", "{\"krasnokamen:Faction\":0}"] {
+        let (state, id) = summon("zombie", nbt);
+        let slot = state.entities.slot_of(id).unwrap();
+        let image = crate::journal::EntityStateImage::from_row(
+            state.entities.body(slot),
+            state.entities.row(slot),
+        );
+        assert_eq!(image.faction, 0);
+        assert!(image.opaque_entity_fields.is_empty());
+        let json = serde_json::to_value(&image).unwrap();
+        assert!(json.get("faction").is_none(), "zero adds no WAL bytes");
+        assert_eq!(
+            serde_json::from_value::<crate::journal::EntityStateImage>(json).unwrap(),
+            image
+        );
+        assert!(
+            image
+                .to_fields(&state.registry.blocks)
+                .iter()
+                .all(|(key, _)| key != "krasnokamen:Faction"),
+            "zero adds no checkpoint bytes"
+        );
+    }
+}
+
+#[test]
 fn experience_orb_summon_preserves_native_value_count_kind_and_checkpoint() {
     for (nbt, expected) in [
         ("{Value:5s,Count:4,Motion:[0d,0d,0d]}", (5, 4)),
