@@ -614,6 +614,11 @@ pub(super) fn make_list(mut elements: Vec<Tag>) -> Tag {
     })
 }
 pub(super) fn registry_id(registry: &str, name: &str) -> Result<i32, CodecError> {
+    if registry == "sound_event" {
+        return mc_data::builtin_sounds_26_3::id(name)
+            .map(|id| id as i32)
+            .ok_or_else(invalid);
+    }
     let name = Identifier::parse(name).map_err(|_| invalid())?;
     if registry == "sound_event" {
         return mc_data::builtin_sounds_26_3::id(name.as_str())
