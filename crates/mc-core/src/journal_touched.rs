@@ -35,6 +35,23 @@ struct MotionPose {
     position: [f64; 3],
     velocity: [f64; 3],
     rotation: [f32; 2],
+    ground: bool,
+}
+
+impl MotionPose {
+    fn item_entry(&self, id: EntityId, tick: u64, age: u32, pickup_delay: u32) -> JournalEntry {
+        JournalEntry::ItemMotion {
+            id: entity_id_int(id),
+            pos: self.position,
+            vel: self.velocity,
+            yaw: self.rotation[0],
+            pitch: self.rotation[1],
+            ground: self.ground,
+            age,
+            pickup_delay,
+            tick,
+        }
+    }
 }
 
 /// Journal-side entity caches that live next to the baseline images.
@@ -156,9 +173,9 @@ pub(crate) fn entity_images(
         } else {
             villager_image(state, slot, output.tick, &mut full);
         }
-        // Falling bodies, TNT and vehicles couple retained custody/fuses to
-        // motion. Every update travels with its authoritative position and
-        // velocity.
+        // Dropped items, falling bodies, TNT and vehicles couple retained
+        // custody/fuses to motion. Every update travels with its authoritative
+        // position and velocity, even when item clocks are infinite.
         let row = state.entities.row(slot);
         // Other bodies carry a full image only when crossing chunk-clock
         // authority; intra-chunk movement stays checkpoint-only. A chunk-crossing
@@ -171,7 +188,8 @@ pub(crate) fn entity_images(
         if crossed {
             full.push(*id);
         }
-        let tracks_motion = row.falling.is_some()
+        let tracks_motion = row.item.is_some()
+            || row.falling.is_some()
             || row.tnt.is_some()
             || row.entity_life.vehicle.is_some()
             || crate::end_fight::is_dragon(state, slot);
@@ -182,22 +200,34 @@ pub(crate) fn entity_images(
         }
     }
     let images_start = std::time::Instant::now();
-    full.extend(
-        state
-            .journal_scan
-            .motion
-            .iter()
-            .filter_map(|(&id, previous)| {
-                let slot = state.entities.slot_of_any(id)?;
-                let [yaw, pitch, _] = state.entities.rot(slot);
-                let pose = MotionPose {
-                    position: state.entities.pos(slot),
-                    velocity: state.entities.vel(slot),
-                    rotation: [yaw, pitch],
-                };
-                (previous.as_ref() != Some(&pose)).then_some(id)
-            }),
-    );
+    for (&id, previous) in &mut state.journal_scan.motion {
+        let Some(slot) = state.entities.slot_of_any(id) else {
+            continue;
+        };
+        let [yaw, pitch, _] = state.entities.rot(slot);
+        let pose = MotionPose {
+            position: state.entities.pos(slot),
+            velocity: state.entities.vel(slot),
+            rotation: [yaw, pitch],
+            ground: state.entities.ground(slot),
+        };
+        if previous.as_ref() == Some(&pose) {
+            continue;
+        }
+        let row = state.entities.row(slot);
+        if row.item.is_some() && previous.is_some() {
+            entries.push(pose.item_entry(
+                id,
+                output.tick,
+                row.age,
+                state.entities.body(slot).pickup_delay,
+            ));
+            *previous = Some(pose);
+        } else {
+            // A new item needs its stack/identity before its compact pose.
+            full.push(id);
+        }
+    }
     #[cfg(test)]
     let sort_start = crate::horde_bench::merge_cost_tests::start();
     full.sort_unstable();
@@ -288,11 +318,16 @@ pub(crate) fn entity_images(
         });
         if let Some(previous) = state.journal_scan.motion.get_mut(id) {
             let [yaw, pitch, _] = state.entities.rot(slot);
-            *previous = Some(MotionPose {
+            let pose = MotionPose {
                 position: state.entities.pos(slot),
                 velocity: state.entities.vel(slot),
                 rotation: [yaw, pitch],
-            });
+                ground: state.entities.ground(slot),
+            };
+            if row.item.is_some() && previous.is_none() {
+                entries.push(pose.item_entry(*id, output.tick, row.age, body.pickup_delay));
+            }
+            *previous = Some(pose);
         }
     }
     let compare_start = std::time::Instant::now();
