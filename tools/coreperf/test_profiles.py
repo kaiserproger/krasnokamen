@@ -121,6 +121,70 @@ class ProfilesTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     profiles.pinned_binary(binary, "server")
 
+    def test_incremental_pin_is_refused_but_pre_field_and_full_pins_pass(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = root / "absent-owner-host" / "pins"
+            pin = root / "remote-artifacts" / "pin"
+            pin.mkdir(parents=True)
+            binary = pin / "solaris-v2"
+            binary.write_bytes(b"server")
+            manifest = {"repo": "core", "kind": "server", "binary": str(binary),
+                        "head": "abc", "diff_sha256": "def", "command": "cargo build --release",
+                        "target": "test-target", "binary_sha256": profiles.load.scale.binary_sha256(binary)}
+            receipt = pin / "manifest.json"
+            with patch.object(profiles, "PIN_ROOT", store):
+                for recorded, accepted in ((None, True), (False, True), (True, False)):
+                    with self.subTest(incremental=recorded):
+                        receipt.write_text(json.dumps(manifest if recorded is None else dict(manifest, incremental=recorded)))
+                        if accepted:
+                            profiles.pinned_binary(binary, "server")
+                        else:
+                            with self.assertRaisesRegex(ValueError, "incremental"):
+                                profiles.pinned_binary(binary, "server")
+
+    def test_capacity_ladder_refuses_incremental_or_mismatched_pins_before_any_rung(self):
+        import asyncio
+        from tools.coreperf import capacity_ladder
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = root / "absent-owner-host" / "pins"
+            def pin(kind, name, *, head="abc", **extra):
+                folder = root / kind
+                folder.mkdir()
+                binary = folder / name
+                binary.write_bytes(kind.encode())
+                binary.chmod(0o755)
+                (folder / "manifest.json").write_text(json.dumps(
+                    {"repo": "core", "kind": kind, "binary": str(binary), "head": head, "diff_sha256": "def",
+                     "command": "cargo build --release", "target": "t",
+                     "binary_sha256": profiles.load.scale.binary_sha256(binary), **extra}))
+                return binary
+            server = pin("server", "solaris-v2")
+            bots = pin("bots", "player-scale-bots")
+            args = argparse.Namespace(out=root / "out", server_bin=server, bots_bin=bots)
+            with patch.object(profiles, "PIN_ROOT", store), patch.object(capacity_ladder, "rung") as rung:
+                (server.parent / "manifest.json").write_text(json.dumps(
+                    dict(json.loads((server.parent / "manifest.json").read_text()), incremental=True)))
+                args.out = root / "out1"
+                with self.assertRaisesRegex(SystemExit, "incremental"):
+                    asyncio.run(capacity_ladder.main_async(args))
+                (server.parent / "manifest.json").write_text(json.dumps(
+                    dict(json.loads((server.parent / "manifest.json").read_text()), incremental=False, head="other")))
+                args.out = root / "out2"
+                with self.assertRaisesRegex(SystemExit, "different source trees"):
+                    asyncio.run(capacity_ladder.main_async(args))
+                rung.assert_not_called()
+
+    def test_unpinned_binary_without_manifest_passes_the_soft_check(self):
+        with tempfile.TemporaryDirectory() as directory:
+            binary = Path(directory) / "solaris-v2"
+            binary.write_bytes(b"x")
+            profiles.load.scale.refuse_incremental_pin(binary, "server")
+            (Path(directory) / "manifest.json").write_text(json.dumps({"incremental": True}))
+            with self.assertRaisesRegex(ValueError, "incremental"):
+                profiles.load.scale.refuse_incremental_pin(binary, "server")
+
     def test_owner_host_requires_pin_store_and_exact_manifest_path(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

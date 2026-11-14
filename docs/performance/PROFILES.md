@@ -261,12 +261,13 @@ the canonical pin store and exact manifest paths. Build outside measurement:
 
 ```sh
 ROOT="$(pwd -P)"
-eval "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release "$ROOT")"
-eval "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release "$ROOT" --bots)"
+eval "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release "$ROOT" --no-incremental)"
+eval "$(/run/media/kaiserroman/games/solaris-work/solaris/tools/dev/pin-release "$ROOT" --bots --no-incremental)"
 ```
 
 `pin-release` builds through the owner-host memory runner and retains source and
-binary provenance. Do not compile during somebody else's measurement window.
+binary provenance. Pass `--no-incremental` (as above): the default incremental pin
+has more codegen units and the profile runner refuses it for measurements. Do not compile during somebody else's measurement window.
 
 The pinning commands above are owner-host tools. On another Linux host, copy
 each pin directory with its original `manifest.json` unchanged and pass the

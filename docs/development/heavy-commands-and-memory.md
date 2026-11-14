@@ -147,6 +147,13 @@ code, start the unit (agents' runner calls may restart it in between).
   every Cargo command is `env RUSTC_WRAPPER=`. An sccache daemon first started
   inside a scope keeps that scope populated forever; start it outside
   (`systemd-run --user --scope --slice=app.slice sccache --start-server`).
+- Incremental (`CARGO_INCREMENTAL`) is set by the runner from the argv: 1 for
+  debug/test builds and for `--release` builds in the normal lane, 0 in `-p`/`-x`
+  lanes and for any `--profile` build. An incremental release build re-pins about
+  39% cheaper (CPU, measured 2026-11-11) but needs about 2.4 GB more per slot and
+  uses more codegen units, so its binary can run slower: take performance
+  binaries from `pin-release --no-incremental` or
+  `env RUSTC_WRAPPER= CARGO_INCREMENTAL=0 cargo build --release`.
 - rust-analyzer (about 5 GB, agents auto-start it) and the agent host (about
   4 GB) sit outside the slice. Killing rust-analyzer, leaked Minecraft clients
   and idle Gradle daemons is safe.
