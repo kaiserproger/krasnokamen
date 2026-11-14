@@ -52,6 +52,11 @@ failing_first = "not recorded"
 - `failing_first` is optional and, when present, is `reported` or `not recorded`;
   report the actual pre-fix evidence, never infer it from a passing test.
 
+A ref is `cargo:<crate>:<test>`, `harness:<profile>:<scenario|verdict>` or,
+for a fix in the harness/tooling code itself, `python:<dotted module>:<TestClass.test_method>`
+(`ledger promote` runs it with `unittest` in the candidate tree; a module or test it cannot find is
+unrunnable, never green).
+
 `fix_commit` (optional until promotion) is the lowercase hex id of the commit
 that fixes the row; `promotion` is set only by `ledger promote`, see
 [the `fixed` rule](#the-fixed-rule-single-home).

@@ -772,6 +772,24 @@ class LedgerToolTests(unittest.TestCase):
                 {'sha256': 'abc', 'tree': {'head': tree['head'], 'sha256': tree['sha256']}}))
         return path
 
+    def test_a_python_test_ref_is_a_registered_check(self):
+        # A tools/** fix has no cargo check: its own unittest is the guard, and promote has to run it.
+        ref = 'python:tools.harness.test_plan:InnovationTests.test_new_workspace_dependency_is_innovation'
+        self.assertEqual(regressions._parse_ref(ref),
+                         ('python', 'tools.harness.test_plan', 'InnovationTests.test_new_workspace_dependency_is_innovation'))
+        with self.assertRaises(ValueError):
+            regressions._parse_ref('python:tools.harness.test_plan')          # no test named
+        with self.assertRaises(ValueError):
+            regressions._parse_ref('python:../etc:passwd.test')               # not a module
+
+    def test_a_failing_python_ref_goes_red_and_a_missing_one_is_unrunnable(self):
+        root = self.scratch(ref='python:tools.harness.test_plan:InnovationTests.test_new_workspace_dependency_is_innovation')
+        # The scratch repo has no tools/ tree, so the ref cannot run there: unrunnable, never green.
+        ctx = profiles.ProfileContext(self.artifacts)
+        out = ledger.run_refs(ctx, ['python:tools.harness.test_plan:InnovationTests.test_new_workspace_dependency_is_innovation'], root, False)
+        state = out['python:tools.harness.test_plan:InnovationTests.test_new_workspace_dependency_is_innovation']['state']
+        self.assertIn(state, (ledger.UNRUNNABLE, ledger.RED))
+
     def test_client_fix_commit_promotes_on_a_red_control_and_a_green_restore(self):
         self.client_repo()
         root = self.client_row(client_sha=self.client_fix[:12])

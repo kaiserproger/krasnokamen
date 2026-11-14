@@ -113,6 +113,26 @@ def _run_cargo(ctx, tests, tree):
     return results
 
 
+def _run_python(ctx, tests, tree):
+    """Run exact unittest targets {(module, dotted test)} in `tree` -> {(module, test): (state, detail)}.
+
+    A tools/** fix has no cargo check and no windowed profile; its own unittest is the guard. The
+    module is imported from `tree` so the run is about that candidate, not the invoking checkout."""
+    results = {}
+    for module, test in sorted(tests):
+        argv = [sys.executable, '-m', 'unittest', f'{module}.{test}']
+        ok, text = _exec(ctx, argv, f'python-{test.rsplit(".", 1)[-1][:24]}', tree, None)
+        if ok:
+            results[(module, test)] = (GREEN, '')
+            continue
+        detail = 'test failed' if re.search(r'(?m)^(FAIL|ERROR):', text) else 'test did not run (import error, unknown test?)'
+        if 'ModuleNotFoundError' in text or 'AttributeError' in text and 'has no attribute' in text:
+            results[(module, test)] = (UNRUNNABLE, 'module or test not found in this tree')
+        else:
+            results[(module, test)] = (RED, detail)
+    return results
+
+
 def _failing_verdict(receipt, profile, verdict):
     """A failed profile run is red for `verdict` when the receipt reports it unmet, or, for a
     verdict the profile cannot report on failure, when its own assertion failed:
@@ -286,7 +306,7 @@ def run_refs(ctx, refs, tree, client):
     A failed client run is red only when its receipt carries an explicitly failing verdict for the
     referenced profile check. A timeout, a client that never reached play or any other failure
     without a negative verdict is unrunnable: it is not evidence about the check."""
-    out, cargo, harness = {}, set(), []
+    out, cargo, harness, python = {}, set(), [], set()
     for ref in refs:
         try:
             kind, first, second = regressions._parse_ref(ref)
@@ -295,6 +315,8 @@ def run_refs(ctx, refs, tree, client):
             continue
         if kind == 'cargo':
             cargo.add((first, second))
+        elif kind == 'python':
+            python.add((first, second))
         elif client:
             harness.append(ref)
         else:
@@ -306,6 +328,9 @@ def run_refs(ctx, refs, tree, client):
         if harness:
             for ref, (state, detail, receipt) in _run_harness(ctx, harness, tree).items():
                 out[ref] = {'state': state, 'detail': detail, **({'receipt': receipt} if receipt else {})}
+        if python:
+            for (module, test), (state, detail) in _run_python(ctx, python, tree).items():
+                out[f'python:{module}:{test}'] = {'state': state, 'detail': detail}
     return out
 
 

@@ -468,6 +468,12 @@ def _parse_ref(ref):
     if len(parts) == 3 and parts[0] == 'harness':
         _check_command(parts[1], parts[2])
         return tuple(parts)
+    # A python fix in tools/** has no cargo check and no windowed profile: its own unittest is the
+    # regression guard. `python:<dotted module>:<dotted TestClass.test_method>`.
+    if (len(parts) == 3 and parts[0] == 'python'
+            and re.fullmatch(r'[A-Za-z0-9_.]+', parts[1])
+            and re.fullmatch(r'[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*', parts[2])):
+        return tuple(parts)
     raise ValueError(f'invalid check {ref!r}')
 
 
