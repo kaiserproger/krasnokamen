@@ -22,6 +22,7 @@ mod import;
 mod old_world_import_tests;
 #[cfg(test)]
 mod path_tests;
+mod pre_rename;
 #[cfg(test)]
 mod projectile_import_tests;
 #[cfg(test)]
@@ -69,6 +70,7 @@ struct ConversionStats {
     pub reminted_ids: u64,
     pub opaque_retention: Vec<String>,
     pub upgrades: Vec<RecordUpgradeReceipt>,
+    pub pre_rename: pre_rename::PreRename,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -395,6 +397,24 @@ fn convert(
             "Anvil {} uses DataVersion {} and recovered checkpoint time",
             operation, receipt.data_version
         ));
+        let renamed = &stats.pre_rename;
+        if renamed.keys > 0 {
+            receipt
+                .counts
+                .insert("pre_rename_keys".into(), renamed.keys);
+            receipt.normalizations.push(format!(
+                "{} pre-rename solaris/Solaris fields renamed to their krasnokamen/Krasnokamen names \
+                 (a solaris:Rider player rider became krasnokamen:Riders)",
+                renamed.keys
+            ));
+        }
+        if let Some(first) = &renamed.first_value {
+            receipt.known_gaps.push(format!(
+                "PRE-RENAME VALUES: {} string values in the old solaris: namespace kept verbatim \
+                 (first: {first}); this build reads only krasnokamen: identifiers",
+                renamed.values
+            ));
+        }
         receipt
             .opaque_retention
             .push("unknown NBT fields and safe auxiliary files retained except explicit empty-chunk regeneration and duplicate-UUID dispositions".into());
