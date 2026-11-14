@@ -45,7 +45,7 @@ class ScopeLifetimeTests(unittest.TestCase):
             (root / 'targets' / 'slot-b').mkdir()
             env = os.environ.copy()
             env.update(CARGO_TARGET_DIR=str(root / 'targets' / 'slot-a'),
-                       SOLARIS_SLOT_TARGETS=str(root / 'targets'), SOLARIS_SLOT_MIN_FREE_GB='0')
+                       KRASNOKAMEN_SLOT_TARGETS=str(root / 'targets'), KRASNOKAMEN_SLOT_MIN_FREE_GB='0')
             proc = subprocess.Popen([str(runner), '-m', '1G', 'python3', '-c', CHILD],
                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE, text=True, env=env)

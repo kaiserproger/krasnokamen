@@ -147,7 +147,7 @@ impl Raids {
                     ("status".into(), Tag::String(r.status.clone())),
                     ("center".into(), Tag::IntArray(r.center.to_vec())),
                     ("heroes_of_the_village".into(), uuid_list(&r.heroes)),
-                    ("solaris:members".into(), uuid_list(&r.members)),
+                    ("krasnokamen:members".into(), uuid_list(&r.members)),
                 ])
             })
             .collect();
@@ -167,12 +167,12 @@ impl Raids {
             ("next_id".into(), Tag::Int(self.next_id)),
             ("tick".into(), Tag::Int(self.tick)),
             (
-                "solaris:pending_omens".into(),
+                "krasnokamen:pending_omens".into(),
                 tags(tag_type::COMPOUND, pending),
             ),
         ];
         if let Some(tick) = self.clock_tick {
-            data.push(("solaris:clock_tick".into(), Tag::Long(tick as i64)));
+            data.push(("krasnokamen:clock_tick".into(), Tag::Long(tick as i64)));
         }
         Tag::Compound(vec![
             (
@@ -195,7 +195,7 @@ impl Raids {
             tick: int(data, "tick")?,
             ..Default::default()
         };
-        out.clock_tick = match field(data, "solaris:clock_tick")? {
+        out.clock_tick = match field(data, "krasnokamen:clock_tick")? {
             None => None,
             Some(Tag::Long(tick)) if *tick >= 0 => Some(*tick as u64),
             _ => return Err("invalid raids clock_tick".into()),
@@ -231,7 +231,7 @@ impl Raids {
                         group_count: int(f, "group_count")?,
                         status,
                         heroes: uuids(f, "heroes_of_the_village")?,
-                        members: uuids(f, "solaris:members")?,
+                        members: uuids(f, "krasnokamen:members")?,
                     },
                 ))
             };
@@ -240,7 +240,7 @@ impl Raids {
                 return Err(format!("raid-index {index}: duplicate raid id {id}"));
             }
         }
-        for tag in list(data, "solaris:pending_omens", tag_type::COMPOUND)? {
+        for tag in list(data, "krasnokamen:pending_omens", tag_type::COMPOUND)? {
             let f = compound(tag)?;
             let u = uuid(required(f, "UUID")?)?;
             let deadline = match required(f, "deadline")? {

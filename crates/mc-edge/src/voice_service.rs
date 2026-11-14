@@ -1,4 +1,4 @@
-//! Edge glue for the `solaris:voice` relay: connection lifetime, native pose
+//! Edge glue for the `krasnokamen:voice` relay: connection lifetime, native pose
 //! publication and best-effort delivery. Policy lives in `voice.rs`.
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
@@ -41,7 +41,7 @@ impl Service {
     }
 }
 
-/// The payload of a `solaris:voice` Play custom payload, if it is one.
+/// The payload of a `krasnokamen:voice` Play custom payload, if it is one.
 pub(crate) fn payload(body: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
     let mut body = body;
     let packet = ServerboundCustomPayload::decode(&mut body)?;
