@@ -580,6 +580,69 @@ fn tick_metrics_publish_staged_battle_counts_and_clear_them_after_reset() {
     assert!(times.battle.is_none());
 }
 
+#[test]
+fn native_battle_arrows_clear_allied_ranks_without_changing_unaffiliated_hits() {
+    for (owner_faction, near_faction, near_hit) in [(1, 1, false), (1, 2, true), (0, 0, true)] {
+        let mut state = fixture();
+        let chunks = (0..=8)
+            .map(|z| (crate::boundary::ChunkPos { x: 0, z }, 0))
+            .collect();
+        state.world.ensure_blocking(&chunks);
+        for z in 0..=8 {
+            state.tickets.insert(
+                format!("battle-arrow-regression-{z}"),
+                (crate::boundary::ChunkPos { x: 0, z }, 0),
+            );
+        }
+        state.refresh_active_chunks(state.tick);
+        let owner = spawn(
+            &mut state,
+            owner_faction,
+            "minecraft:husk",
+            [8.5, 64.0, 8.5],
+        );
+        let near = spawn(
+            &mut state,
+            near_faction,
+            "minecraft:husk",
+            [8.5, 64.0, 10.5],
+        );
+        let enemy = spawn(&mut state, 2, "minecraft:husk", [8.5, 64.0, 128.5]);
+        for id in [owner, near, enemy] {
+            let slot = state.entities.slot_of(id).unwrap();
+            let row = state.entities.row_mut(slot);
+            row.controls.no_ai = true;
+            row.persistent = true;
+        }
+        let owner_slot = state.entities.slot_of(owner).unwrap();
+        let mut from = state.entities.pos(owner_slot);
+        from[1] += state.entities.body(owner_slot).height * 0.85;
+        let (velocity, _) = archery::aimed_arc(from, [8.5, 64.8, 128.5]).unwrap();
+        crate::hostile::launch_arrow(&mut state, owner, from, velocity, 2.0).unwrap();
+        let mut near_damage = 0;
+        let mut enemy_damage = 0;
+        for _ in 0..90 {
+            let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+            for event in &output.changes.entity_events {
+                if let crate::boundary::EntityEvent::Damage { entity, .. } = event {
+                    near_damage += usize::from(*entity == near);
+                    enemy_damage += usize::from(*entity == enemy);
+                }
+            }
+        }
+        assert_eq!(
+            near_damage > 0,
+            near_hit,
+            "owner={owner_faction} near={near_faction}"
+        );
+        assert_eq!(
+            enemy_damage > 0,
+            !near_hit,
+            "owner={owner_faction} near={near_faction}"
+        );
+    }
+}
+
 /// In-process native tick diagnostic, not a paced/networked TPS or checkpoint
 /// gate. Build in the ordinary lane; run its frozen release test binary in -p
 /// with MC_CORE_PHASE_LOG=1 and retain host load alongside the receipt.
@@ -621,9 +684,55 @@ fn battle_phase_micro() {
             )
             .unwrap();
         }
-        let mut samples = Vec::with_capacity(ticks);
-        for _ in 0..ticks {
-            crate::tick::run_tick(&mut state, &[]);
+        let phase_ticks = if running { ticks } else { ticks.min(100) };
+        let mut samples = Vec::with_capacity(phase_ticks);
+        let mut swings = 0;
+        let mut strikes = 0;
+        let mut kills = 0;
+        let mut arrows = 0;
+        let mut parries = 0;
+        let mut wounds = 0;
+        let mut friendly_hits = 0;
+        let mut enemy_hits = 0;
+        for elapsed in 1..=phase_ticks {
+            let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
+            for event in &output.changes.entity_events {
+                let crate::boundary::EntityEvent::Damage {
+                    entity,
+                    cause: Some(cause),
+                    ..
+                } = event
+                else {
+                    continue;
+                };
+                let Some(victim) = state.entities.slot_of_any(*entity) else {
+                    continue;
+                };
+                let Some(attacker) = state.entities.slot_of_any(*cause) else {
+                    continue;
+                };
+                let a = state.entities.body(attacker).faction;
+                let b = state.entities.body(victim).faction;
+                if a != 0 && b != 0 {
+                    friendly_hits += u64::from(a == b);
+                    enemy_hits += u64::from(a != b);
+                }
+            }
+            let work = state.hostile.battle.combat.work;
+            swings += work.swings;
+            strikes += work.strikes;
+            kills += work.killed;
+            arrows += work.arrows;
+            parries += work.parries;
+            wounds += work.wounded;
+            if elapsed % 500 == 0 || elapsed == phase_ticks {
+                eprintln!(
+                    "BATTLE_ACTIVITY running={running} elapsed={elapsed} swings={swings} strikes={strikes} parries={parries} melee_kills={kills} wounds={wounds} arrows={arrows} friendly_hits={friendly_hits} enemy_hits={enemy_hits}"
+                );
+                if running {
+                    log_regiment_activity(&state, elapsed);
+                }
+            }
             samples.push(state.hostile.battle.timings);
         }
         let percentile = |pick: fn(Timings) -> u64, percentile: usize| {
@@ -632,7 +741,7 @@ fn battle_phase_micro() {
             values[((values.len() - 1) * percentile) / 100]
         };
         eprintln!(
-            "BATTLE_MICRO side={side} running={running} ticks={ticks} units={} total_us_p50={} total_us_p95={} total_us_p99={} counters_us_p95={} formation_us_p95={} columns_us_p95={} targets_us_p95={} steering_us_p95={} combat_us_p95={} morale_us_p95={} projection_us_p95={} emit_us_p95={}",
+            "BATTLE_MICRO side={side} running={running} ticks={phase_ticks} units={} total_us_p50={} total_us_p95={} total_us_p99={} counters_us_p95={} formation_us_p95={} columns_us_p95={} targets_us_p95={} steering_us_p95={} combat_us_p95={} morale_us_p95={} projection_us_p95={} emit_us_p95={}",
             unit_counters(&state.hostile).units,
             percentile(|t| t.total_us, 50),
             percentile(|t| t.total_us, 95),
@@ -646,6 +755,65 @@ fn battle_phase_micro() {
             percentile(|t| t.morale_us, 95),
             percentile(|t| t.projection_us, 95),
             percentile(|t| t.emit_us, 95),
+        );
+    }
+}
+
+fn log_regiment_activity(state: &crate::tick::TickState, elapsed: usize) {
+    let battle = &state.hostile.battle;
+    for regiment in &battle.formation.regiments {
+        let mut alive = 0;
+        let mut moving = 0;
+        let mut targets = 0;
+        let mut resting = 0;
+        let mut front = [0.0; 3];
+        let mut front_count = 0;
+        let mut ammunition = 0_u64;
+        let mut wounded = 0;
+        for bi in regiment.start..regiment.start + regiment.len {
+            let member = &battle.formation.members[bi];
+            let Some(slot) = state.entities.slot_of(member.id) else {
+                continue;
+            };
+            if state.entities.row(slot).health <= 0.0 {
+                continue;
+            }
+            alive += 1;
+            moving += usize::from(state.entities.vel(slot).iter().any(|v| *v != 0.0));
+            resting +=
+                usize::from(state.entities.motion_flags(slot) & crate::entities::MOTION_REST != 0);
+            targets += usize::from(battle.columns.targets.get(bi).is_some_and(Option::is_some));
+            wounded += usize::from(member.wounded);
+            ammunition += u64::from(battle.combat.fighters[bi].arrows);
+            if member.rank == 0 {
+                let pos = state.entities.pos(slot);
+                for axis in 0..3 {
+                    front[axis] += pos[axis];
+                }
+                front_count += 1;
+            }
+        }
+        if front_count != 0 {
+            front = front.map(|v| v / front_count as f64);
+        }
+        let pulsing = regiment
+            .sections
+            .iter()
+            .filter(|section| section.pulse_until > battle.elapsed_ticks)
+            .count();
+        eprintln!(
+            "BATTLE_REGIMENT elapsed={elapsed} id={} side={} order={:?} alive={alive} dead={} moving={moving} resting={resting} targets={targets} wounded={wounded} ammunition={ammunition} origin={:?} front={front:?} gap={} enemy={:?} speed={} stamina={} morale={} broken={} pulsing={pulsing}",
+            regiment.spec.id,
+            regiment.spec.faction,
+            regiment.spec.order,
+            regiment.len - alive,
+            regiment.spec.origin,
+            regiment.gap,
+            regiment.enemy_regiment,
+            regiment.speed,
+            regiment.stamina,
+            regiment.morale.value,
+            regiment.morale.broken
         );
     }
 }
