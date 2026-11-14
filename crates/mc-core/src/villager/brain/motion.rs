@@ -565,8 +565,10 @@ pub(super) fn resolve_body_motion(
     );
     let mut velocity = state.entities.vel(slot);
     let dt = mc_physics::TICK_SECONDS;
-    velocity[1] = (velocity[1] - mc_physics::GRAVITY_BLOCKS_PER_SECOND_SQUARED * dt)
-        .max(mc_physics::TERMINAL_VELOCITY_BLOCKS_PER_SECOND);
+    if !state.entities.row(slot).controls.no_gravity {
+        velocity[1] = (velocity[1] - mc_physics::GRAVITY_BLOCKS_PER_SECOND_SQUARED * dt)
+            .max(mc_physics::TERMINAL_VELOCITY_BLOCKS_PER_SECOND);
+    }
     let mut horizontal = [0.0; 2];
     if let Some(next) = next {
         let dx = next[0] - pos[0];

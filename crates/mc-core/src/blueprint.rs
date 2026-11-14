@@ -1297,7 +1297,7 @@ fn vanilla_capabilities(blueprint: &mut MobBlueprint) {
         dark_aggro_only: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
         aggressive_arms: ZOMBIE_FAMILY.contains(&name),
         resists_magic: name == "minecraft:witch",
-        hurt_by_water: name == "minecraft:enderman",
+        hurt_by_water: matches!(name, "minecraft:enderman" | "minecraft:strider"),
         fall_damage_immune: FALL_DAMAGE_IMMUNE.contains(&name),
         climbs_walls: matches!(name, "minecraft:spider" | "minecraft:cave_spider"),
         inverted_healing: ZOMBIE_FAMILY.contains(&name)

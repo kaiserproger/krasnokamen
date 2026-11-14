@@ -7,7 +7,11 @@ use mc_data::inventory_semantics_26_1_2::can_stack;
 use mc_physics::mth;
 use mc_physics::{BlockMaterial, BlockSampler, EntityBody, Vec3};
 
-pub(crate) fn step<S: BlockSampler>(mut body: EntityBody, sampler: &S) -> EntityBody {
+pub(crate) fn step<S: BlockSampler>(
+    mut body: EntityBody,
+    sampler: &S,
+    no_gravity: bool,
+) -> EntityBody {
     let material = sampler.material_at(
         body.position.x.floor() as i32,
         (body.position.y + 0.1).floor() as i32,
@@ -27,7 +31,8 @@ pub(crate) fn step<S: BlockSampler>(mut body: EntityBody, sampler: &S) -> Entity
                 body.velocity.y += 0.0005 * 20.0;
             }
         }
-        _ => body.velocity.y -= 0.04 * 20.0,
+        _ if !no_gravity => body.velocity.y -= 0.04 * 20.0,
+        _ => {}
     }
     let requested = Vec3::new(
         body.velocity.x * mc_physics::TICK_SECONDS,

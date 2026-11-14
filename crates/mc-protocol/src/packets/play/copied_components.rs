@@ -11,6 +11,7 @@ use std::sync::LazyLock;
 
 mod book;
 mod container;
+mod death;
 mod profile;
 mod templates;
 mod v263;
@@ -214,12 +215,7 @@ pub(super) fn encode_one<B: BufMut>(
         | ids::REPAIR_COST
         | ids::MAP_ID
         | ids::OMINOUS_BOTTLE_AMPLIFIER => buf.write_varint(integer(&value)?),
-        ids::DEATH_PROTECTION => {
-            mc_data::item_stack::validate_death_protection(&value)
-                .map_err(CodecError::NotSupported)?;
-            // DeathProtection.STREAM_CODEC is ConsumeEffect's list codec.
-            buf.write_varint(0);
-        }
+        ids::DEATH_PROTECTION => death::encode(buf, &value)?,
         ids::CUSTOM_NAME | ids::ITEM_NAME => write_text(buf, &value)?,
         ids::ITEM_MODEL | ids::NOTE_BLOCK_SOUND => {
             buf.write_identifier(&Identifier::parse(string(&value)?).map_err(|_| invalid())?)?
@@ -397,14 +393,7 @@ pub(super) fn decode<B: Buf>(
         }
         ids::ENCHANTMENT_GLINT_OVERRIDE => Tag::Byte(i8::from(buf.read_bool()?)),
         ids::USE_REMAINDER => templates::decode(buf, depth)?,
-        ids::DEATH_PROTECTION => {
-            if buf.read_varint()? != 0 {
-                return Err(CodecError::NotSupported(
-                    "nonempty custom death_protection death_effects are unsupported",
-                ));
-            }
-            Tag::Compound(vec![("death_effects".into(), make_list(Vec::new()))])
-        }
+        ids::DEATH_PROTECTION => death::decode(buf)?,
         ids::DYED_COLOR => Tag::Int(buf.read_i32()?),
         ids::MAP_ID => Tag::Int(buf.read_varint()?),
         ids::BUNDLE_CONTENTS => templates::decode_list(buf, depth)?,
@@ -622,6 +611,11 @@ pub(super) fn make_list(mut elements: Vec<Tag>) -> Tag {
     })
 }
 pub(super) fn registry_id(registry: &str, name: &str) -> Result<i32, CodecError> {
+    if registry == "sound_event" {
+        return mc_data::builtin_sounds_26_3::id(name)
+            .map(|id| id as i32)
+            .ok_or_else(invalid);
+    }
     let name = Identifier::parse(name).map_err(|_| invalid())?;
     let id = match registry {
         "data_component_type" => mc_data::data_component_types_26_1_2::id(&name),
@@ -642,6 +636,7 @@ pub(super) fn registry_name(registry: &str, id: i32) -> Result<String, CodecErro
         "entity_type" => mc_data::entity_types::entity_type_contract_26_1_2_by_protocol_id(id)
             .map(|entry| entry.name.to_owned()),
         "mob_effect" => mc_data::mob_effects_26_1_2::name_for_id(id).map(str::to_owned),
+        "sound_event" => mc_data::builtin_sounds_26_3::name(id).map(str::to_owned),
         _ => mc_data::required_registry_entry(registry, id).map(|name| name.as_str().to_owned()),
     };
     name.ok_or_else(invalid)

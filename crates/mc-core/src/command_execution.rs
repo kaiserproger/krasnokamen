@@ -924,6 +924,8 @@ pub(crate) fn execute(
                 };
                 let id = crate::tick::spawn_item_entity(state, at, item.stack);
                 if let Some(slot) = state.entities.slot_of(id) {
+                    crate::entity_controls::set_no_gravity(state, slot, item.no_gravity);
+                    state.entities.row_mut(slot).controls.invulnerable = item.invulnerable;
                     if let Some(delay) = item.pickup_delay {
                         state.entities.body_mut(slot).pickup_delay = delay;
                     }

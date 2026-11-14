@@ -63,6 +63,7 @@ pub(super) struct ReadRow {
     pub(super) enderman_target: Option<EntityId>,
     pub(super) levitation: f32,
     pub(super) slow_falling: bool,
+    pub(super) no_gravity: bool,
     pub(super) special: Option<crate::hostile::Special>,
     /// Target acquisition uses local light, except recent retaliation.
     pub(super) dark_aggro: bool,
@@ -242,6 +243,7 @@ pub(super) fn idle_wander_motion_unchanged(view: &PrepView, slot: EntitySlot) ->
             }),
             slow_falling: effects
                 .is_some_and(|effects| effects.has(crate::effects::EffectId::SlowFalling)),
+            no_gravity: row.controls.no_gravity,
             id: body.id.0,
             tick: view.tick,
         },
@@ -745,6 +747,7 @@ pub(super) fn read_row(
         speed,
         levitation,
         slow_falling,
+        no_gravity: row.controls.no_gravity,
         special,
         dark_aggro,
         standing: (special == Some(crate::hostile::Special::Swell)
@@ -1173,7 +1176,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         ) {
             crate::redstone::containers::item_moved(&mut state.redstone_containers, write.pos);
         }
-        let fall = crate::mob_fall::after_move(
+        let (fall, stalagmite) = crate::mob_fall::after_move(
             state,
             write.slot,
             old,
@@ -1189,7 +1192,11 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
                 kind: IntentKind::DamageEntity {
                     target: actor,
                     amount: fall,
-                    kind: crate::survival::DamageKind::Fall,
+                    kind: if stalagmite {
+                        crate::survival::DamageKind::Stalagmite
+                    } else {
+                        crate::survival::DamageKind::Fall
+                    },
                     source: None,
                 },
                 footprint: Footprint {
@@ -1331,6 +1338,7 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
                 on_ground: row.ground,
             },
             &sampler,
+            row.no_gravity,
         );
         return (
             MoveWrite {
@@ -1746,6 +1754,7 @@ pub(super) fn step_entity(row: ReadRow, ctx: &StepCtx) -> (MoveWrite, Vec<RawInt
             air_supply: row.air_supply,
             levitation: row.levitation,
             slow_falling: row.slow_falling,
+            no_gravity: row.no_gravity,
             id: row.id.0,
             tick,
         },

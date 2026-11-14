@@ -191,6 +191,7 @@ pub(crate) fn run(state: &mut TickState, intents: &mut Vec<Intent>) {
                 air_supply: state.entities.body(slot).air_supply,
                 levitation: 0.0,
                 slow_falling: false,
+                no_gravity: row.controls.no_gravity,
                 id: id.0,
                 tick: state.tick,
             },

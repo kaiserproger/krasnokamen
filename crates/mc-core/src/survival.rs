@@ -588,6 +588,16 @@ pub fn fall_damage(fall_distance: f64) -> f32 {
     (fall_distance - SAFE_FALL_DISTANCE).ceil() as f32
 }
 
+/// PointedDripstoneBlock.fallOn adds 2.5 blocks and doubles fall power.
+pub(crate) fn stalagmite_damage(fall_distance: f64) -> f32 {
+    if !fall_distance.is_finite() {
+        return 0.0;
+    }
+    ((fall_distance + 2.5 + 1.0e-6 - SAFE_FALL_DISTANCE) * 2.0)
+        .floor()
+        .max(0.0) as f32
+}
+
 /// Equipment slot names of the four armor slots, in `reduce_damage` order.
 const ARMOR_SLOTS: [&str; 4] = ["feet", "legs", "chest", "head"];
 
