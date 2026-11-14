@@ -1430,6 +1430,33 @@ fn drowned_rest_acquires_a_resident() {
 }
 
 #[test]
+fn burning_zombie_still_acquires_and_pursues_a_survival_player() {
+    // Vanilla (minecraft.wiki/w/Zombie): a zombie on fire that is pursuing a
+    // player does not flee; target acquisition is a target-selector concern,
+    // independent of the panic movement goal. The panic branch must not
+    // preempt acquisition and pursuit of a live player.
+    let (mut state, slot) = idle_zombie();
+    let id = state.entities.body(slot).id;
+    let start = state.entities.pos(slot);
+    let _player = join_zombie_target(&mut state, [16.5, 101.0, 8.5]);
+    state.entities.body_mut(slot).burn_ticks = 100;
+    let mut acquired = false;
+    for _ in 1..=MOB_FAR_PERIOD {
+        state.tick += 1;
+        let _ = run_entity_phase(&mut state, true);
+        if state.hostile.targets.contains_key(&id) {
+            acquired = true;
+            break;
+        }
+    }
+    let pos = state.entities.pos(slot);
+    assert!(
+        acquired && pos[0] > start[0],
+        "burning zombie must still acquire and chase the player: acquired={acquired} pos={pos:?} start={start:?}"
+    );
+}
+
+#[test]
 fn zombie_rest_rechecks_same_chunk_range_entry_and_remote_wall_opening() {
     let (mut state, slot) = idle_zombie();
     let pos = state.entities.pos(slot);

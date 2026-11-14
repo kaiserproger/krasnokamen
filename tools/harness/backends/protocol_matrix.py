@@ -23,6 +23,13 @@ CAPABILITIES = ('server_kill9_wal_replay', 'duplicate_login_same_account', 'serv
                 'slow_reader_backpressure', 'select_trade', 'container_button', 'click_advanced_modes')
 
 
+def dimension_min_y(vanilla_data: Path, dimension: str) -> int:
+    """`min_y` of `dimension` from the shipped vanilla data; missing data fails closed."""
+    name = dimension.removeprefix('minecraft:')
+    path = vanilla_data / 'data' / 'minecraft' / 'dimension_type' / (name + '.json')
+    return int(json.loads(path.read_text())['min_y'])
+
+
 def stone_count(client):
     return sum(stack['count'] for stack in client.snapshot().get('inventory', [])
                if stack['item_id'] == 'minecraft:stone')
@@ -237,10 +244,15 @@ def run(ctx, *, random_mode=False):
                 clients.append(ProtocolMatrixClient(name,('127.0.0.1',args.port),ctx.artifact_dir,
                       args.vanilla_data,server.command,account_uuid=offline_uuid(name),
                       require_auth=plugins is not None and (plugins/'krasnokamen-auth').is_dir()))
-        if random_mode:
-            if row['context']['dimension'] != 'overworld':
-                raise ValueError('seeded player scripts require the deterministic overworld fixture')
-            minimum = json.loads((args.vanilla_data/'data/minecraft/dimension_type/overworld.json').read_text())['min_y']
+        if random_mode and row['context']['dimension'] != 'overworld':
+            raise ValueError('seeded player scripts require the deterministic overworld fixture')
+        if clients:
+            # Subject and matrix rows alike read fixture blocks from received chunk
+            # data: wire.py drops observer.blocks entries when a chunk arrives, so
+            # read_block_state needs the dimension minimum to resolve positions no
+            # block-update packet ever carried.
+            dimension = row['context']['dimension'] if row else 'overworld'
+            minimum = dimension_min_y(args.vanilla_data, dimension)
             for client in clients:
                 client.chunk_min_y = minimum
                 client.observer.chunk_min_y = minimum

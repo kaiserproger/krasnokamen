@@ -233,4 +233,55 @@ class MatrixRuntimeTests(unittest.TestCase):
         self.assertTrue(run(0,0,players=2)[0]['passed'])  # Ordinary N2 is actor+observer.
 
 
+class SubjectProbeChunkTests(unittest.TestCase):
+    def test_subject_probe_resolves_fixture_blocks_from_received_chunks(self):
+        # wire.py drops observer.blocks entries when a LevelChunkWithLight arrives,
+        # so read_block_state can only resolve chunk-data blocks when the client knows
+        # its dimension minimum. Subject probes must get it too, not only random mode.
+        from .backends import protocol_matrix
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            dim_dir = root / 'vanilla' / 'data' / 'minecraft' / 'dimension_type'
+            dim_dir.mkdir(parents=True)
+            (dim_dir / 'overworld.json').write_text(json.dumps({'min_y': -64}))
+            server_bin = root / 'server-bin'
+            server_bin.write_bytes(b'fake-server')
+            artifact = root / 'artifact'
+            artifact.mkdir()
+            ctx = SimpleNamespace(server_bin=server_bin, artifact_dir=artifact,
+                                  plugins_dir=None,
+                                  extra_args=['--subject', 'combat.mob_targets_player',
+                                              '--vanilla-data', str(root / 'vanilla')],
+                                  client_evidence={}, commands=[], cwds=[], exits=[], logs=[])
+            server = Mock()
+            server.config_path = artifact / 'runproto.toml'
+            server.log_path = artifact / 'server.log'
+            server.running = False
+            client = Mock()
+            client.observer = SimpleNamespace()
+            client.snapshot.return_value = {}
+            with patch.object(protocol_matrix, 'ProtocolServer', return_value=server), \
+                 patch.object(protocol_matrix, 'ProtocolMatrixClient', return_value=client), \
+                 patch.object(protocol_matrix, 'prepare_access'), \
+                 patch.object(protocol_matrix, 'select_plugin_profile', return_value=([], None)), \
+                 patch.object(protocol_matrix, 'run_subject',
+                              return_value=[{'passed': True, 'name': 'x', 'detail': {}}]):
+                result = protocol_matrix.run(ctx)
+        self.assertEqual(result['protocol_matrix']['status'], 'pass')
+        self.assertEqual(client.chunk_min_y, -64)
+        self.assertEqual(client.observer.chunk_min_y, -64)
+
+    def test_dimension_min_y_reads_namespaced_and_plain_ids_and_fails_closed(self):
+        from .backends.protocol_matrix import dimension_min_y
+        with tempfile.TemporaryDirectory() as tmp:
+            vanilla = Path(tmp)
+            dim_dir = vanilla / 'data' / 'minecraft' / 'dimension_type'
+            dim_dir.mkdir(parents=True)
+            (dim_dir / 'the_nether.json').write_text(json.dumps({'min_y': 0}))
+            self.assertEqual(dimension_min_y(vanilla, 'the_nether'), 0)
+            self.assertEqual(dimension_min_y(vanilla, 'minecraft:the_nether'), 0)
+            with self.assertRaises((OSError, KeyError, ValueError)):
+                dimension_min_y(vanilla, 'overworld')
+
+
 if __name__=='__main__': unittest.main()
