@@ -1389,12 +1389,25 @@ fn data_edits_a_command_block_through_the_same_command_path() {
         data(&mut state, context, "data get block 4 60 4 Command"),
         6
     );
-    // Fields the command block owner does not author are refused whole.
+    // Vanilla BaseCommandBlock.load restores SuccessCount as well as Command.
     assert_eq!(
         data(
             &mut state,
             context,
-            "data merge block 4 60 4 {Command:'say no',SuccessCount:9}"
+            "data merge block 4 60 4 {SuccessCount:9}"
+        ),
+        1
+    );
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 SuccessCount"),
+        9
+    );
+    // Invalid native field types refuse the whole edit, including Command.
+    assert_eq!(
+        data(
+            &mut state,
+            context,
+            "data merge block 4 60 4 {Command:'say no',SuccessCount:'invalid'}"
         ),
         -1
     );
@@ -1402,6 +1415,10 @@ fn data_edits_a_command_block_through_the_same_command_path() {
     assert_eq!(
         data(&mut state, context, "data get block 4 60 4 Command"),
         6
+    );
+    assert_eq!(
+        data(&mut state, context, "data get block 4 60 4 SuccessCount"),
+        9
     );
     assert_eq!(
         data(&mut state, context, "data remove block 4 60 4 Command"),

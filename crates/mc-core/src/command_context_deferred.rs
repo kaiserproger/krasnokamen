@@ -135,47 +135,17 @@ fn source_is_current(state: &TickState, context: Context, source: Option<EntityI
 }
 
 pub(crate) fn execute_job(state: &mut TickState, job: &super::Job, changes: &mut ChangeSet) {
-    // A queued command executes in the world it was queued from: `/summon`,
-    // `/gamerule`, `/kill` and the other targetless commands have no
-    // cross-dimension target of their own, so running them on the root placed a
-    // Nether or End sender's command in the overworld — or dropped it, because
-    // the source lives in the child's connection table.
-    let dimension = job.context.dimension;
-    if dimension == state.dimension {
-        if source_is_current(state, job.context, job.source) {
-            run_job(state, job, changes);
-        }
-        return;
-    }
     let observed = state.plugin_players.permission(job.context.connection);
-    let Some(mut world) = state.other_dimensions.remove(&dimension) else {
+    let Some(world) = crate::dimensions::travel::world(state, job.context.dimension) else {
         return;
     };
-    if job_source_is_current(&world, observed, job) {
-        crate::dimensions::swap_globals(state, &mut world);
-        let mut local = ChangeSet::default();
-        run_job(&mut world, job, &mut local);
-        // The child's tick is over, so a command that staged damage, drops or
-        // block writes (`/kill`, `/summon`, `/setblock`) settles them here, as a
-        // cross-dimension target command does. Without this the staged damage
-        // waits for a child tick that already ran, and `/kill` never lands.
-        crate::dimensions::commands::commit(&mut world, &mut local);
-        crate::dimensions::swap_globals(state, &mut world);
-        // The caller's bucket belongs to the root; a job's own records belong to
-        // the world it ran in.
-        let bucket = state.command_context.changes.entry(dimension).or_default();
-        bucket.blocks.append(&mut local.blocks);
-        bucket.chunks_loaded.append(&mut local.chunks_loaded);
-        bucket.chunks_unloaded.append(&mut local.chunks_unloaded);
-        bucket.entities_spawned.append(&mut local.entities_spawned);
-        bucket
-            .entities_appearance_changed
-            .append(&mut local.entities_appearance_changed);
-        bucket.entities_removed.append(&mut local.entities_removed);
-        bucket.entity_events.append(&mut local.entity_events);
-        bucket.explosions.append(&mut local.explosions);
+    if job_source_is_current(world, observed, job) {
+        // Keep the shared runtime and every loaded world reachable. `native`
+        // selects the source dimension through `execute_context`, which moves
+        // the runtime with it; running on a detached child loses global targets,
+        // continuations and the shared-command authority.
+        run_job(state, job, changes);
     }
-    state.other_dimensions.insert(dimension, world);
 }
 
 fn run_job(state: &mut TickState, job: &super::Job, changes: &mut ChangeSet) {
