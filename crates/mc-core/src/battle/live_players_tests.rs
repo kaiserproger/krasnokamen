@@ -268,7 +268,7 @@ fn assert_in_rank_with_kit(state: &TickState, player: EntityId) {
     // A block ahead of the front soldier, not on his centre; one tick of the
     // soldier's walk since.
     let offset = [at[0] - front[0], at[2] - front[2]];
-    let distance = offset[0].hypot(offset[1]);
+    let distance = (offset[0] * offset[0] + offset[1] * offset[1]).sqrt();
     let ahead = offset[0] * r.spec.facing[0] + offset[1] * r.spec.facing[1];
     assert!(
         (0.5..1.6).contains(&distance) && ahead > 0.0,

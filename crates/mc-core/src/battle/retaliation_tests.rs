@@ -58,7 +58,7 @@ fn jab() -> PlayerInput {
 
 fn distance(state: &TickState, a: EntityId, b: EntityId) -> f64 {
     let [a, b] = [a, b].map(|id| state.entities.pos(state.entities.slot_of(id).unwrap()));
-    (a[0] - b[0]).hypot(a[2] - b[2])
+    ((a[0] - b[0]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
 }
 
 fn column_target(state: &TickState, soldier: EntityId) -> Option<EntityId> {
@@ -407,7 +407,10 @@ fn helpers_left_behind_give_the_crew_to_friends_near_his_new_place() {
                     state.entities.pos(state.entities.slot_of(m.id).unwrap()),
                 )
             })
-            .find(|(_, p)| (18.0..40.0).contains(&(p[0] - at[0]).hypot(p[2] - at[2])))
+            .find(|(_, p)| {
+                let squared = (p[0] - at[0]).powi(2) + (p[2] - at[2]).powi(2);
+                (18.0_f64.powi(2)..40.0_f64.powi(2)).contains(&squared)
+            })
             .expect("a blue front-rank soldier 18-40 blocks along the line")
     };
     stand_fast(&mut state, other);
