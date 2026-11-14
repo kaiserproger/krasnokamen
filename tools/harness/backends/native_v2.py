@@ -623,6 +623,31 @@ def _craft_drag(steps: ProbeSteps, _origin: tuple[int, int, int]) -> None:
     native_craft_drag.run(steps, steps.artifact_dir.parent, steps.client.p4_window)
 
 
+def _shift_double_click(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from . import native_shift_double_click, shift_matrix
+
+    if not getattr(steps.client, "p4_window", None):
+        raise RuntimeError("shift double-click requires the harness-owned Xvfb window")
+    native_shift_double_click.run(steps, steps.artifact_dir.parent, steps.client.p4_window)
+    shift_matrix.run(steps, origin, steps.artifact_dir.parent, steps.client.p4_window)
+
+
+def _shift_components(steps: ProbeSteps, _origin: tuple[int, int, int]) -> None:
+    from . import shift_matrix
+
+    if not getattr(steps.client, "p4_window", None):
+        raise RuntimeError("shift components requires the harness-owned Xvfb window")
+    shift_matrix.run_different(steps, steps.artifact_dir.parent, steps.client.p4_window)
+
+
+def _shift_chest_correction(steps: ProbeSteps, origin: tuple[int, int, int]) -> None:
+    from . import shift_matrix
+
+    if not getattr(steps.client, "p4_window", None):
+        raise RuntimeError("shift chest correction requires the harness-owned Xvfb window")
+    shift_matrix.run_chest(steps, origin, steps.artifact_dir.parent, steps.client.p4_window)
+
+
 def _craft_drag_paced(steps: ProbeSteps, _origin: tuple[int, int, int]) -> None:
     from . import native_craft_drag_paced
 
@@ -738,6 +763,9 @@ RUNNERS = {
     "native-v2-corrupt-chunk-near-camera": _corrupt_chunk_near_camera,
     "native-v2-craft-drag": _craft_drag,
     "native-v2-craft-drag-paced": _craft_drag_paced,
+    "native-v2-shift-double-click": _shift_double_click,
+    "native-v2-shift-components": _shift_components,
+    "native-v2-shift-chest-correction": _shift_chest_correction,
     "native-v2-chest-drag-disconnect": _chest_drag_disconnect,
     "native-v2-settlement-storage": _settlement_storage,
     "native-v2-redstone": _redstone, "native-v2-stations": _stations,

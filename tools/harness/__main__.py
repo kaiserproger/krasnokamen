@@ -502,8 +502,10 @@ def cmd_run(argv: list[str]) -> int:
         if (ctx.plugins_dir is not None and client != "native"
                 and ctx.scenario_id != "java-v2-p5-towns" and profile not in {"loader-live", "graves", "protocol-matrix", "java-matrix", "native-matrix", "matrix-random"}):
             raise ValueError("--plugins-dir requires native gameplay, java-v2-p5-towns, loader-live, graves or matrix profiles")
-        if ctx.windowed and client != "native" and not (client == "java" and profile in {"scene-shot", "settlement-map-qa"}):
-            raise ValueError("--windowed requires --client native (or --client java for scene-shot and settlement-map-qa)")
+        if (ctx.windowed and client != "native"
+                and not (client == "java" and (profile in {"scene-shot", "settlement-map-qa"}
+                                               or ctx.scenario_id == "java-v2-p5-shift-double-click"))):
+            raise ValueError("--windowed requires native, a supported Java graphical profile, or java-v2-p5-shift-double-click")
         if client == "native" and profile not in {"survival", "inventory", "entities", "core-client", "native-lifecycle", "logical-native", "native-scale", "native-matrix", "title-connect", "singleplayer-regressions", "weak-first-view", "dialogs", "admin-commands", "chisel", "anti-xray", "block-log", "composter-chance", "village-qa", "village-autonomy-qa", "civilization-seed-qa", "village-owner-order-qa", "scene-shot", "settlement-map-qa", "claim-only-qa", "buildings-qa", "army-qa", "autocraft-qa"}:
             raise RuntimeError(
                 f"profile {profile!r} is not enabled for native; "

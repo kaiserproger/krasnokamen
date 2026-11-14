@@ -280,6 +280,11 @@ def start(
             "--runtime-dir", str(runtime_dir),
             "--artifact-dir", str(artifact_dir),
         ]
+        if ctx.scenario_id in {"native-v2-shift-double-click", "native-v2-shift-components",
+                               "native-v2-shift-chest-correction"}:
+            # A 320x240 GUI remains legible at scale 1 while minimizing
+            # llvmpipe latency for the sub-250ms correction gesture.
+            argv.extend(["--width", "320", "--height", "240"])
         # Subscribe before Popen so even immediate descriptor publication cannot
         # race the watch. A pidfd is attached as soon as the child exists.
         selector, notify_fd, _ = runtime._require_event_fds(None, runtime_dir)
