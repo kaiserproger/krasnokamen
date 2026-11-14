@@ -114,6 +114,9 @@ pub(crate) fn appearance_from_vanilla_entity(
             crate::journal::EntityDataValueImage::Byte(wool as i8),
         ));
     }
+    if let Some((index, value)) = variant_from_vanilla_entity(record) {
+        image.extra.push((index, (&value).into()));
+    }
     for (key, tag) in &record.extra_fields {
         match (key.as_str(), tag) {
             ("CustomName", mc_nbt::Tag::String(name)) => image.custom_name = Some(name.clone()),
