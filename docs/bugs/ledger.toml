@@ -4197,7 +4197,8 @@ severity = "major"
 status = "open"
 source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T230450-civilization-seed-qa-o31rlnkb on server pin 107ddb91 (stand fix): after sprint 300 the read-only console read of furnace [134,78,-217] showed one iron ingot in its output slot (server.log line 33); the observer's furnace menu then opened (container 6, 111 transcript observations) with all three furnace slots empty for the whole 15 s wait, so the ingot had left the furnace in between (furnace output is collected by residents, docs/settlements/construction.md); the gate failed after 174 s on 'timed out waiting for furnace_iron_output_visible'. Iron was smelted; the failure is the harness observation race. tools/harness/backends/civilization_seed_qa.py capture_iron_menu now holds the simulation with tick freeze, re-reads the output, captures the menu, then unfreezes; output collected before the hold leaves the milestone to a later snapshot. Negative control: python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/iron-hold-fix-hunks.patch, sha256 db052414) test_furnace_output_collected_before_the_menu_does_not_abort_the_run fails with the gate's TimeoutError on furnace_iron_output_visible (receipts/CivSimSeed24/iron-hold-negative-control.log); fixed tree 79/79 with test_village_autonomy_qa (receipts/CivSimSeed24/iron-hold-tests.log)."
 failing_first = "reported"
-regression = []
+regression = ["harness:civilization-seed-qa:iron_smelted"]
+fix_commit = "d7f98cd44dc46f9fe23845240f776cf7e080b91d"
 
 [[bug]]
 id = "VILLAGER-BABY-WADES-INTO-HEAD-DEEP-WATER"
@@ -4219,7 +4220,8 @@ severity = "major"
 status = "open"
 source = "Seed-24 civilization-seed-qa .analysis/validation/20261111T233938-civilization-seed-qa-ufgbv77d (server pin 107ddb91, harness d7f98cd4): the active Road level 1 at [158,71,-257] showed 'Road · level 1 · 0/33' from sprint 45000 to the 96000 limit (51,000 ticks) and held the only project slot, but the oracle signature included the whole status dialog, whose waiting Farm line went 'Dirt 3/30' -> 'Dirt 16/30', so the run ended on the bounded limit instead of the stall. tools/harness/backends/civilization_seed_qa.py stall_signature now keeps only the active project's own dialog line (dialog/body/0) while a project holds the slot; without one the waiting lists still count as progress. Negative control: python3 -m unittest tools.harness.test_civilization_seed_qa: with only the backend hunks reverted (receipts/CivSimSeed24/stall-oracle-fix-hunks.patch, sha256 959a3fb2) test_waiting_project_materials_do_not_hide_a_stalled_active_project fails with 'bounded observation limit reached', the gate's symptom (receipts/CivSimSeed24/stall-oracle-negative-control.log); fixed tree 81/81 with test_village_autonomy_qa (receipts/CivSimSeed24/stall-oracle-tests.log)."
 failing_first = "reported"
-regression = []
+regression = ["harness:civilization-seed-qa:all"]
+fix_commit = "7ed4d504759de26d3c9126d8b40d62a5b25dd389"
 
 [[bug]]
 id = "CIV-SEED24-ROAD-CLEAR-STALL"
@@ -4365,7 +4367,8 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "The seed-24 fresh scenario built and received the new house and bed but its milestone capture navigated directly through a closed door, aborting the run. The wt/CivSim5 correction uses ordinary entrance approach/use, awaits both open halves, preserves the exact bed raycast and rendered capture, and returns to the observer. Three canonical saved-world closed/open flows passed, with the unprepared closed route and missing/stale entrance controls refusing capture; 72 affected contracts and doclinks passed. Source and commands are retained in receipts/CivSimStallFix/house-harness-capture.json. Full original fresh acceptance remains 0/3; integration and formal ledger promotion remain pending."
-regression = []
+regression = ["harness:civilization-seed-qa:new_house"]
+fix_commit = "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
 failing_first = "reported"
 
 [[bug]]
@@ -4376,7 +4379,8 @@ repro = "client"
 severity = "major"
 status = "open"
 source = "Seed-24 original-identity continuation: simulation distance 4 leaves Mine (60,66,-154) inactive, so 118 native staffing attempts make no route call. Changing only the isolated fixture to the core-default distance 6 activates the mine; original resident 12939df5 receives a fully active 269-node native route and the real assignment. View distance remains 4. No allocator policy change is justified; the original fresh civilization gate remains 0/3."
-regression = []
+regression = ["harness:civilization-seed-qa:all"]
+fix_commit = "4e6874ded41e723f4e86f6c05c77739c8e8d535c"
 failing_first = "reported"
 
 [[bug]]

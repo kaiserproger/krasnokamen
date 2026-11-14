@@ -594,6 +594,34 @@ def _birth_snapshot(ctx: ProfileContext, binary: Path, expected_hash: str, artif
     return data["mechanics"]
 
 
+def server_config_text(source: str, *, port: int, world_dir: str, plugins_dir: str,
+                       seed: int, civilization: bool) -> str:
+    """Derive the fixture server config from playable.toml.
+
+    The civilization fixture raises only the simulation distance: the village
+    mine must tick beyond the four-chunk presentation window, while the view
+    distance stays at 4.
+    """
+    replacements = (
+        # The peer needs teleport permission, but its op entry would enable
+        # vanilla spawn protection around seed 100's founding chest. Keep the
+        # primary a non-operator while allowing this isolated fixture's use.
+        ("[server]", "[server]\nspawn_protection = 0"),
+        ("port = 25565", f"port = {port}"),
+        ('world_dir = ".analysis/test-world-v12"', f'world_dir = "{world_dir}"'),
+        ('directory = "plugins"', f"directory = {json.dumps(plugins_dir)}"),
+        ("seed = 0", f"seed = {seed}"),
+    )
+    if civilization:
+        # The village's mine must tick beyond the four-chunk presentation window.
+        replacements += (("simulation_distance = 4", "simulation_distance = 6"),)
+    for old_tok, new_tok in replacements:
+        if source.count(old_tok) != 1:
+            raise RuntimeError(f"expected one autonomy-qa config token: {old_tok}")
+        source = source.replace(old_tok, new_tok, 1)
+    return source
+
+
 def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = False) -> dict[str, Any]:
     global SEED, VILLAGE_CENTER
     if civilization:
@@ -631,27 +659,14 @@ def run(ctx: ProfileContext, *, owner_order: bool = False, civilization: bool = 
     server_port = runtime.reserve_port()
     address = f"127.0.0.1:{server_port}"
     config = artifact / "village-autonomy-qa.toml"
-    source = (runtime.REPO_ROOT / "playable.toml").read_text()
-    replacements = (
-        # The peer needs teleport permission, but its op entry would enable
-        # vanilla spawn protection around seed 100's founding chest. Keep the
-        # primary a non-operator while allowing this isolated fixture's use.
-        ("[server]", "[server]\nspawn_protection = 0"),
-        ("port = 25565", f"port = {server_port}"),
-        (
-            'world_dir = ".analysis/test-world-v12"',
-            f'world_dir = "{(artifact / "world").relative_to(runtime.REPO_ROOT).as_posix()}"',
-        ),
-        ('directory = "plugins"', f"directory = {json.dumps(str(artifact / 'plugins'))}"),
-        ("seed = 0", f"seed = {SEED}"),
+    source = server_config_text(
+        (runtime.REPO_ROOT / "playable.toml").read_text(),
+        port=server_port,
+        world_dir=(artifact / "world").relative_to(runtime.REPO_ROOT).as_posix(),
+        plugins_dir=str(artifact / "plugins"),
+        seed=SEED,
+        civilization=civilization,
     )
-    if civilization:
-        # The village's mine must tick beyond the four-chunk presentation window.
-        replacements += (("simulation_distance = 4", "simulation_distance = 6"),)
-    for old_tok, new_tok in replacements:
-        if source.count(old_tok) != 1:
-            raise RuntimeError(f"expected one autonomy-qa config token: {old_tok}")
-        source = source.replace(old_tok, new_tok, 1)
     config.write_text(source)
     if resume_world:
         import shutil as _shutil

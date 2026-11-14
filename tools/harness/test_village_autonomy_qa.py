@@ -395,6 +395,19 @@ class VillageAutonomyQaTests(unittest.TestCase):
         })
         self.assertIn("checkpoint", ctx.client_evidence["verdict_limitations"]["births"])
 
+    def test_civilization_fixture_raises_only_the_simulation_distance(self) -> None:
+        source = (qa.runtime.REPO_ROOT / "playable.toml").read_text()
+        config = qa.server_config_text(source, port=25599, world_dir=".analysis/qa/world",
+                                       plugins_dir=".analysis/qa/plugins", seed=24, civilization=True)
+        self.assertIn("simulation_distance = 6", config)
+        self.assertNotIn("simulation_distance = 4", config)
+        self.assertIn("view_distance = 4", config)
+        self.assertIn("seed = 24", config)
+        plain = qa.server_config_text(source, port=25599, world_dir=".analysis/qa/world",
+                                      plugins_dir=".analysis/qa/plugins", seed=100, civilization=False)
+        self.assertIn("simulation_distance = 4", plain)
+        self.assertIn("view_distance = 4", plain)
+
     def test_civilization_requires_snapshot_before_server_launch(self) -> None:
         with TemporaryDirectory(prefix="civilization-preflight-", dir=qa.runtime.REPO_ROOT / ".analysis") as folder:
             binary = Path(folder) / "server"
