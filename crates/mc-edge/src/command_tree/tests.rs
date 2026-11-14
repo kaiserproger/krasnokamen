@@ -2,6 +2,38 @@ use super::*;
 use mc_protocol::Packet;
 
 #[test]
+fn swing_tree_matches_vanilla() {
+    let packet = tree(2, &[]);
+    assert!(!permitted("swing", 1, &[]));
+    assert!(permitted("swing", 2, &[]));
+    assert!(node(&packet, &["swing"]).executable);
+    assert!(node(&packet, &["swing", "targets"]).executable);
+    assert_eq!(parser(&packet, &["swing", "targets"]), entities(false));
+    for hand in ["mainhand", "offhand"] {
+        assert!(node(&packet, &["swing", "targets", hand]).executable);
+        assert!(node(&packet, &["swing", "targets", hand, "animation"]).executable);
+        assert_eq!(
+            parser(&packet, &["swing", "targets", hand, "animation"]),
+            Parser::SwingAnimation
+        );
+        assert_eq!(
+            parser(
+                &packet,
+                &["swing", "targets", hand, "animation", "duration"]
+            ),
+            Parser::Time { min: 1 }
+        );
+        assert!(
+            node(
+                &packet,
+                &["swing", "targets", hand, "animation", "duration"]
+            )
+            .executable
+        );
+    }
+}
+
+#[test]
 fn admin_inventory_trees_and_slot_suggestions() {
     let packet = tree(2, &[]);
     for root in ["item", "loot", "attribute"] {

@@ -30,6 +30,7 @@ pub(crate) fn supports_store_result(command: &Command) -> bool {
     match command {
         Command::Kill { .. }
         | Command::Summon { .. }
+        | Command::Swing(_)
         | Command::Attribute(_)
         | Command::Item(_)
         | Command::Loot(_)
@@ -1072,6 +1073,37 @@ pub(crate) fn execute(
                 return Failed;
             }
             return Success(1);
+        }
+        Command::Swing(command) => {
+            return match crate::command_swing::execute(state, executor, command, changes) {
+                Ok(count) => {
+                    let argument = if count == 1 {
+                        let Some(crate::boundary::EntityEvent::Swing { entity, .. }) =
+                            changes.entity_events.last()
+                        else {
+                            unreachable!("successful swing emits an event")
+                        };
+                        entity_name(state, *entity)
+                    } else {
+                        text(count)
+                    };
+                    success_feedback(
+                        state,
+                        connection,
+                        if count == 1 {
+                            "commands.swing.success.single"
+                        } else {
+                            "commands.swing.success.multiple"
+                        },
+                        vec![argument],
+                    );
+                    Success(count)
+                }
+                Err(failure) => {
+                    error(state, connection, failure.message());
+                    Failed
+                }
+            };
         }
         Command::World(command) => {
             return crate::command_world::execute(state, connection, executor, command, changes);

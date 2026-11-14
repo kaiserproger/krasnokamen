@@ -2057,11 +2057,31 @@ fn push_entity_event(out: &mut Vec<PlannedPacket>, conn: ConnectionId, event: En
                 },
             );
         }
-        EntityEvent::Swing { entity, hand } => {
+        EntityEvent::Swing {
+            entity,
+            hand,
+            animation,
+            duration_ticks,
+        } => {
             push_best_effort(
                 out,
                 conn,
-                &ClientboundSwingAnimation::default_swing(entity.0, matches!(hand, Hand::Off)),
+                &ClientboundSwingAnimation {
+                    entity_id: entity.0,
+                    off_hand: matches!(hand, Hand::Off),
+                    animation: match animation {
+                        mc_core::boundary::SwingKind::None => {
+                            mc_protocol::packets::play::SwingAnimationType::None
+                        }
+                        mc_core::boundary::SwingKind::Whack => {
+                            mc_protocol::packets::play::SwingAnimationType::Whack
+                        }
+                        mc_core::boundary::SwingKind::Stab => {
+                            mc_protocol::packets::play::SwingAnimationType::Whack
+                        }
+                    },
+                    duration: duration_ticks,
+                },
             );
         }
         EntityEvent::Damage {

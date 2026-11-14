@@ -1,7 +1,7 @@
 //! Barracks residents use ordinary villager pathfinding and native melee hits.
 //! Sensing is local (16 blocks, bounded candidate budget) and never loads chunks.
 use super::{Activity, VillagerState};
-use crate::boundary::{BlockPos, ChangeSet, EntityEvent, Hand};
+use crate::boundary::{BlockPos, ChangeSet, EntityEvent, Hand, SwingKind};
 use crate::entities::{EntityKind, EntitySlot};
 use crate::intent::{Footprint, Intent, IntentKind};
 use crate::settlements::army::Order;
@@ -259,6 +259,8 @@ fn attack(
     changes.entity_events.push(EntityEvent::Swing {
         entity: attacker,
         hand: Hand::Main,
+        animation: SwingKind::Whack,
+        duration_ticks: 6,
     });
 }
 

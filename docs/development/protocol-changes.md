@@ -67,6 +67,18 @@ packets actually observed; absence in a short capture does not establish an ID.
 A probe is not a graphical-client acceptance test. Scenario details and paired
 capture examples are in [physics oracles](../physics-oracles.md).
 
+## Timed battle swings
+
+Vanilla 26.3 `ClientboundSwingAnimationPacket` carries entity, hand,
+animation (`none`, `whack`, `stab`) and duration. The core emits these as
+transient swing events; 777 receives the full packet. On 776 and 775, the
+adjacent step drops `none` and maps the other kinds to legacy hand swings,
+which cannot represent kind or duration. The 26.3 `SwingCommand` and
+`ArgumentTypeInfos` registrations were inspected with `javap`; its
+`minecraft:swing_animation` argument is registry ID 60 and is translated to
+a Brigadier word for older clients that lack that parser. Real-client G2 is
+separate from these wire tests.
+
 ## Implement and test
 
 Packet types and IDs are under `crates/mc-protocol/src/packets/`; shared codecs
