@@ -16,8 +16,8 @@ execution_contract:
     Received packets, exact console predicates, and pushed dashboard tick events only. No sleeps.
     Feedback fence proves only ordering.
   references:
-    Vanilla mechanics reference minecraft.wiki; Solaris extensions/SLOs explicitly separate. No claim
-    that Solaris WAL/hot backup/anti-xray are vanilla features.
+    Vanilla mechanics reference minecraft.wiki; Krasnokamen extensions/SLOs explicitly separate. No claim
+    that Krasnokamen WAL/hot backup/anti-xray are vanilla features.
   temporal_snapshots:
     Freeze or record exact simulation tick; compare timers relative to ticks, not literal after
     arbitrary elapsed time.
@@ -357,9 +357,9 @@ subjects:
             protocol disconnect) without state change; a stale container state_id is applied once and followed by a
             full-state resync (vanilla handleContainerClick); never duplicated; server keeps running
           - "conservation: item totals over inventories/containers/item entities as expected (no dupe, no loss)"
-      - id: pw:persistence.block_entities_roundtrip/forge_solaris_loader/survival/the_nether/easy/N8/slow_reader_backpressure/steady/op_4
+      - id: pw:persistence.block_entities_roundtrip/forge_krasnokamen_loader/survival/the_nether/easy/N8/slow_reader_backpressure/steady/op_4
         context:
-          client_kind: forge_solaris_loader
+          client_kind: forge_krasnokamen_loader
           game_mode: survival
           dimension: the_nether
           difficulty: easy
@@ -542,7 +542,7 @@ subjects:
         operator: equals_capture
         expected: before
     reference:
-      scope: solaris_durability_contract_not_vanilla_WAL
+      scope: krasnokamen_durability_contract_not_vanilla_WAL
       source:
         - crates/mc-core/src/native_checkpoint_crash_tests.rs
         - crates/mc-core/src/journal.rs
@@ -555,9 +555,9 @@ subjects:
       - crates/mc-core/src/journal.rs
       - crates/mc-core/src/hot_backup.rs
     matrix_rows:
-      - id: pw:persistence.corrupt_store_fail_closed/neoforge_solaris_loader/spectator/the_end/hard/N8/normal/crash_kill9_wal_replay/op_1
+      - id: pw:persistence.corrupt_store_fail_closed/neoforge_krasnokamen_loader/spectator/the_end/hard/N8/normal/crash_kill9_wal_replay/op_1
         context:
-          client_kind: neoforge_solaris_loader
+          client_kind: neoforge_krasnokamen_loader
           game_mode: spectator
           dimension: the_end
           difficulty: hard
@@ -607,7 +607,7 @@ subjects:
         operator: greater_than_capture
         expected: before backup
     reference:
-      scope: solaris_hot_backup_contract
+      scope: krasnokamen_hot_backup_contract
       source:
         - crates/mc-core/src/hot_backup.rs:1-10
         - crates/mc-edge/src/backup.rs:1-3
@@ -636,15 +636,15 @@ subjects:
           - "vanilla 26.1.2 newcomer wins (owner requirement, BugTriage DUPLICATE-LOGIN): the existing session is disconnected
             ('You logged in from another location'), the new connection reaches Play with the same persisted player
             state; exactly one live player entity for the UUID, no inventory copy or loss, no join-wait timeout. Current
-            Solaris (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
+            Krasnokamen (core tick/input/session.rs:93-107) refuses the newcomer instead and live runs time out in join-wait
             — expected to fail until ServerFixes lands"
           - save-all completes without stalling the tick; post-save state equals pre-save state
           - second client observes the same result (block/entity/menu/inventory updates) in the next publication; no
             desync between observers
           - holds in the_nether (dimension-isolated world)
-      - id: pw:persistence.backup_restore/fabric_solaris_loader/spectator/overworld/easy/N8/normal/save_all_checkpoint/op_3
+      - id: pw:persistence.backup_restore/fabric_krasnokamen_loader/spectator/overworld/easy/N8/normal/save_all_checkpoint/op_3
         context:
-          client_kind: fabric_solaris_loader
+          client_kind: fabric_krasnokamen_loader
           game_mode: spectator
           dimension: overworld
           difficulty: easy

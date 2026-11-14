@@ -92,7 +92,7 @@ def native_voice_listen_and_state(ctx):
                     int(enabled and listening))
         for payload in (bytes([9, 0]), bytes([1, 255]), bytes([1, 1, 2]),
                         bytes([1, 0])+bytes(4), bytes([1, 0])+bytes(1005)):
-            p.rich_action(ctx, 'send_custom_payload', 'solaris:voice', payload)
+            p.rich_action(ctx, 'send_custom_payload', 'krasnokamen:voice', payload)
         p.ticks(ctx, 2)
         p.check(ctx, 'malformed voice never kicks', p.observe(ctx, 'connection.phase'), 'play')
 
@@ -103,7 +103,7 @@ def voice_non_native_invisible(ctx):
     p.method(ctx.server, 'fixture_action')('native_voice_speaker_send', sequence=1)
     p.ticks(ctx, 2)
     p.check(ctx, 'no native voice on nonnative',
-            [r for r in p.observe(ctx, 'custom_payloads') if r['channel'] == 'solaris:voice'], [])
+            [r for r in p.observe(ctx, 'custom_payloads') if r['channel'] == 'krasnokamen:voice'], [])
     p.check(ctx, 'nonnative play survives', p.observe(ctx, 'connection.phase'), 'play')
 
 
