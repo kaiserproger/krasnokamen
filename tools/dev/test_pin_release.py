@@ -493,6 +493,26 @@ class ReuseTests(unittest.TestCase):
         with self.assertRaisesRegex(pin.w.ToolError, "damaged"):
             pin.existing_pin(directory, "core-tests", LINUX, True)
 
+    def test_other_kinds_keep_the_six_gigabyte_cap(self):
+        commands = []
+
+        class Fake:
+            returncode = 0
+            def __init__(self, cmd, **_):
+                commands.append(cmd)
+                self.stdout = iter(())
+            def __enter__(self):
+                return self
+            def __exit__(self, *_):
+                return False
+
+        with patch.object(pin.subprocess, "Popen", Fake), \
+                patch.object(pin, "artifact_slot", return_value=self.root / "targets" / "slot-a"):
+            for kind in ("server", "client", "bots"):
+                with self.assertRaises(pin.w.ToolError):  # no artifact in this fake build
+                    pin.build(self.top, kind, None, False)
+        self.assertEqual([cmd[cmd.index("-m") + 1] for cmd in commands], ["6G", "6G", "6G"])
+
     def test_core_tests_build_runs_no_tests_and_takes_the_test_executable(self):
         slot = self.root / "targets" / "slot-a" / "release"
         artifact = slot / "mc_core-0123456789abcdef"
@@ -524,6 +544,8 @@ class ReuseTests(unittest.TestCase):
                          ["test", "--release", "--locked", "--no-run", "-p", "mc-core"])
         self.assertIn("--lib", cmd)
         self.assertNotIn("--bin", cmd)
+        # the mc-core lib test build OOM-killed a 6G pin (exit 143): core-tests gets 12G
+        self.assertEqual(cmd[cmd.index("-m") + 1], "12G")
         self.assertIn("--message-format=json-render-diagnostics", cmd)
 
     def test_existing_pin_with_other_build_inputs_is_refused_not_returned(self):
