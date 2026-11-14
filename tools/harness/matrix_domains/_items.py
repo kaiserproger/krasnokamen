@@ -107,9 +107,11 @@ def number(ctx, target, path):
         if path == 'foodLevel' and snapshot.get('food') is not None:
             return float(snapshot['food'])
     reply = query(ctx, f'data get entity {target} {path}')
-    # Vanilla feedback ends in one SNBT scalar; never extract a number from an
-    # error, player name, selector or arbitrary compound.
-    scalar = reply.rsplit(': ', 1)[-1].strip()
+    # Console query feedback is followed by an ordered fence.
+    marker = ' has the following entity data: '
+    feedback = [line.split(marker, 1)[1].strip()
+                for line in reply.splitlines() if marker in line]
+    scalar = feedback[0] if len(feedback) == 1 else reply.strip()
     if not re.fullmatch(r'[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?[bBsSlLfFdD]?', scalar):
         raise MissingCapability('data_get_entity:' + path + ':scalar_feedback')
     return float(scalar.rstrip('bBsSlLfFdD'))
@@ -173,14 +175,22 @@ def oracle(ctx):
 
 def setup(ctx):
     ctx.state['checks'] = []
-    require_verbs(ctx, 'close_container')
-    client(ctx).teleport_to(0.5, 180, 0.5)
+    require_verbs(ctx, 'close_container', 'read_block_state')
     ensure_loaded = getattr(ctx.server, 'ensure_loaded', None)
     if not callable(ensure_loaded):
         raise MissingCapability('server:ensure_loaded')
-    ensure_loaded(((-8, 179, -8), (16, 210, 16)))
+    command(ctx, 'forceload add -8 -8 16 16')
+    loaded = 'DomItemsFixtureLoaded'
+    ctx.wait_until(
+        lambda: loaded in query(ctx, 'execute if blocks -8 179 -8 16 179 16 '
+                                '-8 179 -8 all run say ' + loaded),
+        description='server fixture floor chunks loaded')
     command(ctx, 'fill -8 179 -8 16 179 16 stone')
     command(ctx, 'fill -8 180 -8 16 188 16 air')
+    client(ctx).teleport_to(0.5, 180, 0.5)
+    ensure_loaded(((-8, 179, -8), (16, 210, 16)))
+    from ._platform import wait_block
+    wait_block(ctx, (0, 179, 0), 'minecraft:stone')
     # A deployed market may open a menu on entering its zone. Setup starts from
     # the real player inventory, never from a plugin-owned shop window.
     verb(ctx, 'close_container')

@@ -23,12 +23,15 @@ class JavaMatrixClientTest(unittest.TestCase):
 
     def test_snapshot_normalizes_actual_menu_and_player(self):
         mcp = Mock()
-        mcp.call_tool.return_value = {
+        observed = {
             "in_play": True, "state_version": 3, "recent_chat": ["message"],
             "player": {"x": 1, "y": 2, "z": 3, "health": 18, "food": 19},
             "inventory": [{"slot": 0, "item_id": "minecraft:stone", "count": 2}],
             "container": {"container_id": 7, "slots": [], "carried": {"item_id": "minecraft:air", "count": 0}},
         }
+        native = {"source": "player", "slot": 0, "item_id": "minecraft:stone",
+                  "count": 2, "components": {"minecraft:custom_name": "actual"}}
+        mcp.call_tool.side_effect = lambda tool, args: native if tool == "minecraft_read_item_components" else observed
         result = self.client(mcp).snapshot()
         self.assertEqual(result["position"], [1, 2, 3])
         self.assertEqual(result["health"], 18)
@@ -37,6 +40,65 @@ class JavaMatrixClientTest(unittest.TestCase):
         self.assertEqual(result["raw"]["recent_chat"], ["message"])
         self.assertEqual(result["menu"]["id"], 7)
         self.assertIsNone(result["menu"]["state_id"])
+        self.assertEqual(result["inventory"][0]["components"], native["components"])
+
+    def test_native_components_reject_changed_identity(self):
+        mcp = Mock()
+        observed = {"in_play": True, "inventory": [
+            {"slot": 0, "item_id": "minecraft:diamond", "count": 1}]}
+        native = {"source": "player", "slot": 0, "item_id": "minecraft:stone",
+                  "count": 1, "components": {}}
+        mcp.call_tool.side_effect = lambda tool, args: native if tool == "minecraft_read_item_components" else observed
+        with self.assertRaisesRegex(MissingCapability, "stack:components"):
+            self.client(mcp).snapshot()
+
+    def test_experience_uses_received_fields(self):
+        self.assertEqual(JavaMatrixClient.normalize({"player": {"total_experience": 0,
+                         "experience_level": 3, "experience_progress": 0.25}})["xp"],
+                         {"total": 0, "level": 3, "progress": 0.25})
+
+    def test_swap_hands_uses_real_offhand_input(self):
+        mcp = Mock()
+        mcp.call_tool.return_value = {}
+        self.client(mcp).swap_hands()
+        mcp.call_tool.assert_called_once_with("minecraft_press_inputs",
+                                              {"keys": ["swap_offhand"], "ticks": 1})
+
+    def test_visible_container_components_use_received_container_identity(self):
+        mcp = Mock()
+        observed = {"in_play": True, "screen": {"open": True,
+                    "class": "net.minecraft.client.gui.screens.inventory.ContainerScreen"},
+                    "container": {"container_id": 7, "slots": [
+                        {"slot": 2, "item_id": "minecraft:diamond", "count": 1}]}}
+        native = {"source": "container", "slot": 2, "container_id": 7,
+                  "item_id": "minecraft:diamond", "count": 1, "components": {"x": 1}}
+        mcp.call_tool.side_effect = lambda tool, args: native if tool == "minecraft_read_item_components" else observed
+        self.assertEqual(self.client(mcp).snapshot()["menu"]["slots"][0]["components"], {"x": 1})
+        native["container_id"] = 8
+        with self.assertRaisesRegex(MissingCapability, "identity_changed"):
+            self.client(mcp).snapshot()
+
+    def test_events_use_applied_system_chat_not_gui_history(self):
+        messages = ["fence", "same", "same"]
+        result = JavaMatrixClient.normalize({"received_system_chat": messages,
+                                             "dropped_system_chat": 0,
+                                             "recent_chat": ["gui only"]})
+        self.assertEqual(result["events"], messages)
+        self.assertIsNone(JavaMatrixClient.normalize({"recent_chat": ["gui only"]})["events"])
+
+    def test_incomplete_system_chat_journal_fails_closed(self):
+        for messages, dropped in [(["old"], 1), ([], -1), (None, 0), ([], None), (["ok", 1], 0), ([], False)]:
+            with self.subTest(messages=messages, dropped=dropped):
+                with self.assertRaisesRegex(MissingCapability, "system_chat"):
+                    JavaMatrixClient.normalize({"received_system_chat": messages,
+                                                "dropped_system_chat": dropped})
+
+    def test_respawn_dispatches_real_mcp_action(self):
+        mcp = Mock()
+        mcp.call_tool.return_value = {"status": "respawned"}
+        client = self.client(mcp)
+        client.respawn()
+        mcp.call_tool.assert_called_once_with("minecraft_respawn", {"timeout_seconds": 30})
 
     def test_connection_health_uses_reported_transport_not_play_state(self):
         self.assertIs(JavaMatrixClient.normalize({"in_play": True, "connected": False})["connected"], False)
