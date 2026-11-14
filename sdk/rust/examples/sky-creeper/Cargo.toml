@@ -1,5 +1,5 @@
 [package]
-name = "solaris-sky-creeper-plugin"
+name = "krasnokamen-sky-creeper-plugin"
 description = "Example plugin composing a flying, water-sensitive native exploder"
 version.workspace = true
 edition.workspace = true
@@ -9,5 +9,5 @@ license.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-solaris-plugin-sdk.workspace = true
+krasnokamen-plugin-sdk.workspace = true
 wit-bindgen.workspace = true

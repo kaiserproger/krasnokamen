@@ -244,7 +244,10 @@ fn group_packets_match_release_layout_and_reject_invalid_inputs() {
     assert_eq!(group.kind, 2);
     let mut joined = group.id.as_bytes().to_vec();
     joined.extend(b"\x01\x06secret");
-    assert_eq!(parse_join_group(&joined), Some((group.id, Some("secret".into()))));
+    assert_eq!(
+        parse_join_group(&joined),
+        Some((group.id, Some("secret".into())))
+    );
     let mut expected = group.id.as_bytes().to_vec();
     expected.extend(b"\x04test\x01\x00\x00\x00\x02");
     assert_eq!(add_group(&group), expected);

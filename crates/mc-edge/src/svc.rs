@@ -338,12 +338,23 @@ pub(crate) fn parse_create_group(payload: &[u8]) -> Option<Group> {
     }
     let password = if reader.bool()? {
         let password = group_string(&mut reader, 24)?;
-        if password.is_empty() { return None; }
+        if password.is_empty() {
+            return None;
+        }
         Some(password)
-    } else { None };
+    } else {
+        None
+    };
     let kind = i16::from_be_bytes(reader.take(2)?.try_into().ok()?);
-    if !reader.is_empty() { return None; }
-    Some(Group { id: Uuid::new_v4(), name, password, kind: if (0..=2).contains(&kind) { kind } else { 0 } })
+    if !reader.is_empty() {
+        return None;
+    }
+    Some(Group {
+        id: Uuid::new_v4(),
+        name,
+        password,
+        kind: if (0..=2).contains(&kind) { kind } else { 0 },
+    })
 }
 
 pub(crate) fn parse_join_group(payload: &[u8]) -> Option<(Uuid, Option<String>)> {
@@ -351,7 +362,9 @@ pub(crate) fn parse_join_group(payload: &[u8]) -> Option<(Uuid, Option<String>)>
     let id = reader.uuid()?;
     let password = if reader.bool()? {
         Some(group_string(&mut reader, 512)?)
-    } else { None };
+    } else {
+        None
+    };
     reader.is_empty().then_some((id, password))
 }
 
@@ -366,7 +379,9 @@ pub(crate) fn add_group(group: &Group) -> Vec<u8> {
 
 pub(crate) fn joined_group(group: Option<Uuid>, wrong_password: bool) -> Vec<u8> {
     let mut out = vec![u8::from(group.is_some())];
-    if let Some(group) = group { out.extend(group.as_bytes()); }
+    if let Some(group) = group {
+        out.extend(group.as_bytes());
+    }
     out.push(u8::from(wrong_password));
     out
 }

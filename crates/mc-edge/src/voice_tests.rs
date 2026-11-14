@@ -180,7 +180,14 @@ fn default_config_parses_and_validates() {
     assert!(config.enabled);
     assert_eq!(config.range_blocks, 48);
     assert!(!config.svc);
-    assert!(VoiceConfig { enabled: false, ..VoiceConfig::default() }.validate().is_ok());
+    assert!(
+        VoiceConfig {
+            enabled: false,
+            ..VoiceConfig::default()
+        }
+        .validate()
+        .is_ok()
+    );
     assert_eq!(config.svc_port, 24454);
     let bad_range = VoiceConfig {
         range_blocks: 0,
@@ -334,9 +341,15 @@ fn svc_speaker_shares_the_rate_limit() {
 fn svc_groups_route_privately_and_reap_after_last_member() {
     let (mut relay, now) = with_svc([0.0, 1.0, 500.0]);
     let id = Uuid::new_v4();
-    assert!(relay.create_group(B, crate::svc::Group {
-        id, name: "private".into(), password: Some("secret".into()), kind: 0,
-    }));
+    assert!(relay.create_group(
+        B,
+        crate::svc::Group {
+            id,
+            name: "private".into(),
+            password: Some("secret".into()),
+            kind: 0,
+        }
+    ));
     assert_eq!(relay.join_group(C, id, Some("wrong")), Some(false));
     assert!(relay.audio(B, 1, &[1], false, now).is_none());
     assert_eq!(relay.join_group(C, id, Some("secret")), Some(true));
@@ -357,9 +370,15 @@ fn svc_groups_route_privately_and_reap_after_last_member() {
 fn svc_group_kinds_enforce_open_and_isolated_proximity() {
     let (mut relay, now) = with_svc([0.0, 1.0, 2.0]);
     let id = Uuid::new_v4();
-    assert!(relay.create_group(B, crate::svc::Group {
-        id, name: "open".into(), password: None, kind: 1,
-    }));
+    assert!(relay.create_group(
+        B,
+        crate::svc::Group {
+            id,
+            name: "open".into(),
+            password: None,
+            kind: 1,
+        }
+    ));
     let delivery = relay.audio(B, 1, &[1], false, now).unwrap();
     assert_eq!(delivery.native, vec![A]);
     assert_eq!(delivery.svc, vec![C]);

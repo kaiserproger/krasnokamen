@@ -1,4 +1,4 @@
-"""Screen sharing and voice chat through Solaris with real native and Fabric clients.
+"""Screen sharing and voice chat through Krasnokamen with real native and Fabric clients.
 
 Both legs run by default; SCREENS_VOICE_QA_LEG=screens|voice runs one while
 developing (the ledger forbids that override).
@@ -6,7 +6,7 @@ developing (the ledger forbids that override).
 screens  A native owner shares the Test pattern, carrying a 440 Hz tone, on a
          computer monitor. A native viewer asks to watch: the owner's consent
          dialog must name the app audio; Deny must start no audio capture;
-         Allow must stream picture and audio. A Fabric Solaris Loader viewer
+         Allow must stream picture and audio. A Fabric Krasnokamen Loader viewer
          asks too and, once allowed, its real OpenAL output must carry the
          tone (the Loader plays screen audio through Fabric's sound API). Last,
          the native viewer dies and respawns in the same dimension and must
@@ -74,23 +74,23 @@ def validate_args(ctx: ProfileContext) -> float:
     if not 0 < timeout <= 3600:
         raise ValueError("screens-voice-qa --timeout-seconds must be in (0, 3600]")
     if not (runtime.AGENT_ROOT / "gradlew").is_file():
-        raise ValueError(f"screens-voice-qa needs the Solaris Loader checkout (SOLARIS_LOADER_ROOT): {runtime.AGENT_ROOT}")
+        raise ValueError(f"screens-voice-qa needs the Krasnokamen Loader checkout (KRASNOKAMEN_LOADER_ROOT): {runtime.AGENT_ROOT}")
     return timeout
 
 
 def plugins_source(ctx: ProfileContext) -> Path:
     if ctx.plugins_dir is not None:
         return ctx.plugins_dir.resolve()
-    work = Path(os.environ.get("SOLARIS_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
+    work = Path(os.environ.get("KRASNOKAMEN_WORK_ROOT", "/run/media/kaiserroman/games/solaris-work"))
     return work / "scenarios" / "live-plugins"
 
 
 def run(ctx: ProfileContext) -> dict[str, Any]:
     timeout = validate_args(ctx)
-    if not os.environ.get("SOLARIS_PW_ROOT"):
+    if not os.environ.get("KRASNOKAMEN_PW_ROOT"):
         return _run_in_private_graph(ctx, timeout)
     legs = (os.environ[LEG_ENV],) if os.environ.get(LEG_ENV) else LEGS
-    binary = Path(os.environ["SOLARIS_SERVER_BINARY"]).expanduser().resolve()
+    binary = Path(os.environ["KRASNOKAMEN_SERVER_BINARY"]).expanduser().resolve()
     with binary.open("rb") as handle:
         ctx.client_evidence.update(server_binary_path=str(binary),
                                    server_binary_sha256=hashlib.file_digest(handle, "sha256").hexdigest())
@@ -117,7 +117,7 @@ def _run_in_private_graph(ctx: ProfileContext, timeout: float) -> dict[str, Any]
     inner = ctx.artifact_dir / "private-graph"
     inner.mkdir()
     env = os.environ.copy()
-    env["SOLARIS_AUDIO_RECEIPT_DIR"] = str(inner / "audio")
+    env["KRASNOKAMEN_AUDIO_RECEIPT_DIR"] = str(inner / "audio")
     (inner / "audio").mkdir()
     command = ["sh", str(runtime.REPO_ROOT / "tools/harness/screen_audio_graph.sh"), sys.executable, "-m",
                "tools.harness.backends.screens_voice_qa", str(inner), str(timeout),
@@ -207,7 +207,7 @@ class Microphone:
 
 
 class Recording:
-    """The native client's SOLARIS_VOICE_RECORD file: every decoded remote voice frame."""
+    """The native client's KRASNOKAMEN_VOICE_RECORD file: every decoded remote voice frame."""
 
     def __init__(self, path: Path):
         self.path = path
@@ -325,7 +325,7 @@ class Run:
         command = [str(self.binary), "--config", str(config), "--no-console"]
         index = self._track(command, log_path, runtime.REPO_ROOT)
         log = self.stack.enter_context(log_path.open("wb"))
-        env = {**os.environ, "SOLARIS_HARNESS_LOG_STDOUT": "1"}
+        env = {**os.environ, "KRASNOKAMEN_HARNESS_LOG_STDOUT": "1"}
         process = runtime.start_server(command, cwd=runtime.REPO_ROOT, stdout=log, stderr=subprocess.STDOUT,
                                        start_new_session=True, env=env)
         self.stack.callback(self._stop, process, index, interrupt=True)
@@ -344,7 +344,7 @@ class Run:
 
         sub = replace(self.ctx, artifact_dir=self.root / name, client_evidence={})
         display = self.display(name)
-        settings_path = sub.artifact_dir / "xdg" / "solaris-client" / "client-settings.json"
+        settings_path = sub.artifact_dir / "xdg" / "krasnokamen-client" / "client-settings.json"
         settings_path.parent.mkdir(parents=True)
         template = client_template()
         for entry in CLIENT_CONTENT_DIRS:
@@ -353,7 +353,7 @@ class Run:
                                                           target_is_directory=(template / entry).is_dir())
         settings_path.write_text(json.dumps({"fov": 70, **settings}, indent=2) + "\n")
         overrides = {"XDG_DATA_HOME": str(settings_path.parent.parent),
-                     "SOLARIS_CLIENT_SETTINGS": str(settings_path), **env}
+                     "KRASNOKAMEN_CLIENT_SETTINGS": str(settings_path), **env}
         saved = {key: os.environ.get(key) for key in overrides}
         os.environ.update(overrides)
         try:
@@ -413,7 +413,7 @@ class Run:
             tree = subprocess.run(["xwininfo", "-display", display, "-root", "-children"],
                                   capture_output=True, text=True)
             raise RuntimeError(f"{name} opened no window on its Xvfb {display}: {tree.stdout}{tree.stderr}; "
-                               f"its processes: {_processes_with(f'SOLARIS_CLIENT_MCP_TOKEN={token}')}")
+                               f"its processes: {_processes_with(f'KRASNOKAMEN_CLIENT_MCP_TOKEN={token}')}")
         mcp.p4_window = {"display": display, "window_id": window}
         resize_window(mcp.p4_window, WINDOW)
         self.evidence["clients"][name] = {"kind": f"fabric+{profile}", "display": display, "log": str(log_path),
@@ -488,9 +488,9 @@ def screens_leg(ctx: ProfileContext, binary: Path, timeout: float, verdicts: dic
         tone = write_tone(run.root / "screen-tone-440.wav", 440, 600)
         address, _ = run.server("server", "", [owner_name, viewer_name, fabric_name])
         settings = {"desktop_computer": True}
-        # solaris-auth kicks a player who has not registered within its login window: register on join.
-        owner = run.native(owner_name, address, settings, {"SOLARIS_SCREEN_TEST_SOURCE": "video:600",
-                                                           "SOLARIS_SCREEN_AUDIO_WAV": str(tone)})
+        # krasnokamen-auth kicks a player who has not registered within its login window: register on join.
+        owner = run.native(owner_name, address, settings, {"KRASNOKAMEN_SCREEN_TEST_SOURCE": "video:600",
+                                                           "KRASNOKAMEN_SCREEN_AUDIO_WAV": str(tone)})
         register(owner)
         viewer = run.native(viewer_name, address, settings, {})
         register(viewer)
@@ -637,8 +637,8 @@ def voice_leg(ctx: ProfileContext, binary: Path, timeout: float, verdicts: dict[
         a, b = clients[a_name], clients[b_name]
         record = Recording(run.root / "native-heard.wav")
         native = run.native(native_name, address, {"voice_chat": True},
-                            {"SOLARIS_VOICE_MIC_WAV": str(native_tone), "SOLARIS_VOICE_PTT_ALWAYS": "1",
-                             "SOLARIS_VOICE_RECORD": str(record.path)})
+                            {"KRASNOKAMEN_VOICE_MIC_WAV": str(native_tone), "KRASNOKAMEN_VOICE_PTT_ALWAYS": "1",
+                             "KRASNOKAMEN_VOICE_RECORD": str(record.path)})
         register(native)
         wait_svc_connected(server_log, 2, min(timeout, 120.0))
         arena(native, native_name, (1000, 1000))
@@ -684,7 +684,7 @@ def voice_leg(ctx: ProfileContext, binary: Path, timeout: float, verdicts: dict[
         scale = 3
         left, top = (WINDOW[0] // scale - 195) // 2, (WINDOW[1] // scale - 124) // 2
         click(a.client.p4_window, (left + 7 + 90) * scale, (top + 30 + 7) * scale)
-        type_text(a.client.p4_window["display"], "solarisqa")
+        type_text(a.client.p4_window["display"], "krasnokamenqa")
         leg["create_group_screenshot"] = java_shot(a, "a-create-group")
         # CreateGroupScreen's confirm button is "Create" (message.voicechat.create); the list's is "Create Group".
         a.call("minecraft_click_screen_button", {"expected_screen_class": creating["class"],

@@ -1,4 +1,4 @@
-//! `solaris:voice` proximity relay (ADR 0019). Pure: no I/O and no clock;
+//! `krasnokamen:voice` proximity relay (ADR 0019). Pure: no I/O and no clock;
 //! callers pass `Instant`s and deliver the returned payloads. The server never
 //! decodes Opus: it bounds, rate-limits and forwards each packet to listeners in
 //! the same dimension within range of the speaker's published pose.
@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::screen::Pose;
 
-pub(crate) const CHANNEL: &str = "solaris:voice";
+pub(crate) const CHANNEL: &str = "krasnokamen:voice";
 const VERSION: u8 = 1;
 pub(crate) const MAX_OPUS_BYTES: usize = 1000;
 
@@ -135,7 +135,7 @@ pub(crate) struct Delivery {
     pub whispering: bool,
     /// Hearing range used, blocks.
     pub range: f32,
-    /// Native `solaris:voice` listeners.
+    /// Native `krasnokamen:voice` listeners.
     pub native: Vec<ConnectionId>,
     /// Simple Voice Chat listeners (ADR 0019 "Simple Voice Chat bridge").
     pub svc: Vec<ConnectionId>,
@@ -148,7 +148,7 @@ pub(crate) struct Delivery {
 const SPEECH_GAP: Duration = Duration::from_millis(200);
 
 enum Kind {
-    /// `solaris:voice`; hears only after `LISTEN(1)`.
+    /// `krasnokamen:voice`; hears only after `LISTEN(1)`.
     Native { listening: bool },
     /// Simple Voice Chat client; hears once its UDP connection is validated and
     /// it has not disabled voice chat.
@@ -342,7 +342,9 @@ impl Relay {
     }
 
     pub(crate) fn create_group(&mut self, player: ConnectionId, group: crate::svc::Group) -> bool {
-        if !self.is_svc(player) { return false; }
+        if !self.is_svc(player) {
+            return false;
+        }
         let id = group.id;
         self.groups.insert(id, group);
         self.players.get_mut(&player).expect("SVC player").group = Some(id);
@@ -350,10 +352,21 @@ impl Relay {
     }
 
     /// None means unknown player/group; false means wrong password.
-    pub(crate) fn join_group(&mut self, player: ConnectionId, group: Uuid, password: Option<&str>) -> Option<bool> {
-        if !self.is_svc(player) { return None; }
+    pub(crate) fn join_group(
+        &mut self,
+        player: ConnectionId,
+        group: Uuid,
+        password: Option<&str>,
+    ) -> Option<bool> {
+        if !self.is_svc(player) {
+            return None;
+        }
         let wanted = self.groups.get(&group)?;
-        if wanted.password.as_deref().is_some_and(|expected| Some(expected) != password) {
+        if wanted
+            .password
+            .as_deref()
+            .is_some_and(|expected| Some(expected) != password)
+        {
             return Some(false);
         }
         self.players.get_mut(&player)?.group = Some(group);
@@ -361,15 +374,25 @@ impl Relay {
     }
 
     pub(crate) fn leave_group(&mut self, player: ConnectionId) -> bool {
-        if !self.is_svc(player) { return false; }
+        if !self.is_svc(player) {
+            return false;
+        }
         self.players.get_mut(&player).expect("SVC player").group = None;
         true
     }
 
     pub(crate) fn reap_groups(&mut self) -> Vec<Uuid> {
-        let used: std::collections::HashSet<Uuid> = self.players.values().filter_map(|p| p.group).collect();
-        let removed: Vec<Uuid> = self.groups.keys().filter(|id| !used.contains(id)).copied().collect();
-        for id in &removed { self.groups.remove(id); }
+        let used: std::collections::HashSet<Uuid> =
+            self.players.values().filter_map(|p| p.group).collect();
+        let removed: Vec<Uuid> = self
+            .groups
+            .keys()
+            .filter(|id| !used.contains(id))
+            .copied()
+            .collect();
+        for id in &removed {
+            self.groups.remove(id);
+        }
         removed
     }
 
@@ -486,25 +509,41 @@ impl Relay {
         to_native: bool,
     ) -> Option<Delivery> {
         let speaker_group = self.players.get(&from)?.group;
-        let speaker_kind = speaker_group.and_then(|id| self.groups.get(&id)).map(|group| group.kind);
+        let speaker_kind = speaker_group
+            .and_then(|id| self.groups.get(&id))
+            .map(|group| group.kind);
         let pose = self.poses.get(&from);
         let range_squared = range * range;
         let (mut native, mut svc, mut group_svc) = (Vec::new(), Vec::new(), Vec::new());
         for (id, player) in &self.players {
-            if *id == from || !player.kind.hears() { continue; }
+            if *id == from || !player.kind.hears() {
+                continue;
+            }
             if speaker_group.is_some() && player.group == speaker_group {
-                if matches!(player.kind, Kind::Svc { .. }) { group_svc.push(*id); }
+                if matches!(player.kind, Kind::Svc { .. }) {
+                    group_svc.push(*id);
+                }
                 continue;
             }
-            if speaker_kind.is_some_and(|kind| kind != 1) { continue; }
-            if player.group.and_then(|group| self.groups.get(&group)).is_some_and(|group| group.kind == 2) {
+            if speaker_kind.is_some_and(|kind| kind != 1) {
                 continue;
             }
-            let (Some(pose), Some(heard)) = (pose, self.poses.get(id)) else { continue; };
+            if player
+                .group
+                .and_then(|group| self.groups.get(&group))
+                .is_some_and(|group| group.kind == 2)
+            {
+                continue;
+            }
+            let (Some(pose), Some(heard)) = (pose, self.poses.get(id)) else {
+                continue;
+            };
             let distance_squared: f64 = (0..3)
                 .map(|axis| (heard.eye[axis] - pose.eye[axis]).powi(2))
                 .sum();
-            if heard.dimension != pose.dimension || distance_squared > range_squared { continue; }
+            if heard.dimension != pose.dimension || distance_squared > range_squared {
+                continue;
+            }
             match player.kind {
                 Kind::Native { .. } if to_native => native.push(*id),
                 Kind::Native { .. } => {}

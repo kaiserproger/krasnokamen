@@ -40,13 +40,16 @@ fn connect(server: &EdgeServer) -> (ConnectionId, mpsc::Receiver<bytes::Bytes>) 
     let id = server.connections.joining_id();
     let (reliable_tx, reliable_rx) = mpsc::channel(512);
     let (world_tx, _) = mpsc::channel(8);
-    server.connections.register(
-        id,
-        ConnectionHandles {
-            reliable_tx,
-            world_tx,
-        },
-    ).expect("test connection admitted");
+    server
+        .connections
+        .register(
+            id,
+            ConnectionHandles {
+                reliable_tx,
+                world_tx,
+            },
+        )
+        .expect("test connection admitted");
     (id, reliable_rx)
 }
 
@@ -199,7 +202,7 @@ async fn svc_players_and_native_players_hear_each_other_through_the_bridge() {
         "Carol".into(),
     );
     let (channel, state) = next_payload(&mut carol_rx).await;
-    assert_eq!(channel, "solaris:voice");
+    assert_eq!(channel, "krasnokamen:voice");
     assert_eq!(state, vec![1, 1, 1, 0, 48]);
     carol_handle.receive(&[1, 1, 1]);
 
@@ -216,11 +219,11 @@ async fn svc_players_and_native_players_hear_each_other_through_the_bridge() {
     assert_eq!(f32::from_be_bytes(sound[45..49].try_into().unwrap()), 48.0);
     let (channel, audio) = loop {
         let (channel, payload) = next_payload(&mut carol_rx).await;
-        if channel == "solaris:voice" {
+        if channel == "krasnokamen:voice" {
             break (channel, payload);
         }
     };
-    assert_eq!(channel, "solaris:voice");
+    assert_eq!(channel, "krasnokamen:voice");
     assert_eq!(&audio[..2], &[1, 0]);
     assert_eq!(&audio[2..18], alice.uuid.as_bytes());
     assert_eq!(u32::from_be_bytes(audio[30..34].try_into().unwrap()), 41);
@@ -284,15 +287,27 @@ async fn svc_group_audio_stays_inside_the_password_protected_group() {
     let bob = svc_client(&server, "Bob", 2).await;
     let (carol, mut carol_rx) = connect(&server);
     let carol_handle = crate::voice_service::Connection::start(
-        Arc::clone(&server), carol, EntityId(3),
-        crate::crypto::offline_uuid("Carol"), "Carol".into(),
+        Arc::clone(&server),
+        carol,
+        EntityId(3),
+        crate::crypto::offline_uuid("Carol"),
+        "Carol".into(),
     );
     next_payload(&mut carol_rx).await;
     carol_handle.receive(&[1, 1, 1]);
     place(&server, &[(alice.id, 0.0), (bob.id, 500.0), (carol, 1.0)]);
 
-    alice.handle.receive(channel::CREATE_GROUP, b"\x04test\x01\x06secret\x00\x00");
-    let group = server.voice.relay.lock().state(alice.id).unwrap().group.unwrap();
+    alice
+        .handle
+        .receive(channel::CREATE_GROUP, b"\x04test\x01\x06secret\x00\x00");
+    let group = server
+        .voice
+        .relay
+        .lock()
+        .state(alice.id)
+        .unwrap()
+        .group
+        .unwrap();
     let mut join = group.as_bytes().to_vec();
     join.extend(b"\x01\x05wrong");
     bob.handle.receive(channel::SET_GROUP, &join);
@@ -300,18 +315,29 @@ async fn svc_group_audio_stays_inside_the_password_protected_group() {
     join.truncate(16);
     join.extend(b"\x01\x06secret");
     bob.handle.receive(channel::SET_GROUP, &join);
-    assert_eq!(server.voice.relay.lock().state(bob.id).unwrap().group, Some(group));
+    assert_eq!(
+        server.voice.relay.lock().state(bob.id).unwrap().group,
+        Some(group)
+    );
     for (speaker, listener) in [(&alice, &bob), (&bob, &alice)] {
         speaker.send(&Client::mic(&[9, 8, 7], 41)).await;
         let sound = tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 let sound = listener.recv().await;
-                if sound[0] == 3 { break sound; }
+                if sound[0] == 3 {
+                    break sound;
+                }
             }
-        }).await.expect("group audio within 10 s");
+        })
+        .await
+        .expect("group audio within 10 s");
         assert_eq!(&sound[17..33], speaker.uuid.as_bytes());
         assert_eq!(&sound[33..37], &[3, 9, 8, 7]);
     }
-    assert!(tokio::time::timeout(Duration::from_millis(300), carol_rx.recv()).await.is_err(),
-        "nearby non-group native listener must not receive private audio");
+    assert!(
+        tokio::time::timeout(Duration::from_millis(300), carol_rx.recv())
+            .await
+            .is_err(),
+        "nearby non-group native listener must not receive private audio"
+    );
 }

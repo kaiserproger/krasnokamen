@@ -110,13 +110,13 @@ class ProfileTaskTests(unittest.TestCase):
                     seen["env"] = env
                 finally:
                     handle.close()
-            self.assertEqual(seen["env"]["SOLARIS_CLIENT_MCP_USERNAME"], "SvcProfile")
+            self.assertEqual(seen["env"]["KRASNOKAMEN_CLIENT_MCP_USERNAME"], "SvcProfile")
 
     def test_client_stays_on_the_harness_display_and_plays_into_its_own_sink(self) -> None:
         # Loom reruns a CI client under its own xvfb-run; an audible client opens its sink by name.
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for sink, device, master in ((None, "SolarisAgentsNull", "0.0"),
+            for sink, device, master in ((None, "KrasnokamenAgentsNull", "0.0"),
                                          ("viewer_out", "viewer_out", "1.0")):
                 with self.subTest(sink=sink), _gradlew_present(), \
                         mock.patch.dict(runtime.os.environ, {"CI": "true"}), \
@@ -279,7 +279,7 @@ class ModProvisioningTests(unittest.TestCase):
                     self.assertEqual(staged_target.parent, game / "mods")
                     # Fail-closed verification runs before Gradle starts.
                     self.assertGreaterEqual(verify.call_count, 1)
-                    marker = json.loads((game / "solaris-profile.json").read_text())
+                    marker = json.loads((game / "krasnokamen-profile.json").read_text())
                     self.assertEqual(marker["client_profile"], "svc")
                     self.assertEqual(marker["platform"], "fabric")
                 finally:

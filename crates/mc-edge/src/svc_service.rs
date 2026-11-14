@@ -97,18 +97,28 @@ impl Svc {
     /// Relayed audio for SVC listeners; each listener has its own key.
     pub(crate) fn send_sound(&self, delivery: &Delivery, opus: &[u8]) {
         for (ids, group) in [(&delivery.svc, false), (&delivery.group_svc, true)] {
-            if ids.is_empty() { continue; }
+            if ids.is_empty() {
+                continue;
+            }
             let message = if group {
                 svc::group_sound(delivery.speaker, opus, delivery.sequence)
             } else {
-                svc::player_sound(delivery.speaker, opus, delivery.sequence, delivery.whispering, delivery.range)
+                svc::player_sound(
+                    delivery.speaker,
+                    opus,
+                    delivery.sequence,
+                    delivery.whispering,
+                    delivery.range,
+                )
             };
             let targets: Vec<(SocketAddr, Secret)> = {
                 let state = self.state.lock();
-                ids.iter().filter_map(|id| {
-                    let peer = state.peers.get(id)?;
-                    (peer.validated).then(|| Some((peer.addr?, peer.secret.clone())))?
-                }).collect()
+                ids.iter()
+                    .filter_map(|id| {
+                        let peer = state.peers.get(id)?;
+                        (peer.validated).then(|| Some((peer.addr?, peer.secret.clone())))?
+                    })
+                    .collect()
             };
             for (addr, secret) in targets {
                 self.send_sealed(&secret, addr, &message);
@@ -169,12 +179,16 @@ pub(crate) fn player_left(server: &EdgeServer, uuid: Uuid) {
 
 fn broadcast_plugin(server: &EdgeServer, channel: &str, body: &[u8]) {
     let listeners = server.voice.relay.lock().svc_connections();
-    for to in listeners { send_plugin(server, to, channel, body); }
+    for to in listeners {
+        send_plugin(server, to, channel, body);
+    }
 }
 
 fn reap_groups(server: &EdgeServer) {
     let removed = server.voice.relay.lock().reap_groups();
-    for id in removed { broadcast_plugin(server, channel::REMOVE_GROUP, id.as_bytes()); }
+    for id in removed {
+        broadcast_plugin(server, channel::REMOVE_GROUP, id.as_bytes());
+    }
 }
 
 /// Per-connection handle for any client: dropping it ends its voice chat peer.
@@ -258,25 +272,50 @@ impl Connection {
                 player_changed(server, self.id);
             }
             channel::CREATE_GROUP => {
-                let Some(group) = svc::parse_create_group(payload) else { return; };
+                let Some(group) = svc::parse_create_group(payload) else {
+                    return;
+                };
                 let id = group.id;
                 let body = svc::add_group(&group);
-                if !server.voice.relay.lock().create_group(self.id, group) { return; }
+                if !server.voice.relay.lock().create_group(self.id, group) {
+                    return;
+                }
                 broadcast_plugin(server, channel::ADD_GROUP, &body);
                 player_changed(server, self.id);
-                send_plugin(server, self.id, channel::JOINED_GROUP, &svc::joined_group(Some(id), false));
+                send_plugin(
+                    server,
+                    self.id,
+                    channel::JOINED_GROUP,
+                    &svc::joined_group(Some(id), false),
+                );
                 reap_groups(server);
             }
             channel::SET_GROUP => {
-                let Some((id, password)) = svc::parse_join_group(payload) else { return; };
-                let result = server.voice.relay.lock().join_group(self.id, id, password.as_deref());
+                let Some((id, password)) = svc::parse_join_group(payload) else {
+                    return;
+                };
+                let result = server
+                    .voice
+                    .relay
+                    .lock()
+                    .join_group(self.id, id, password.as_deref());
                 match result {
                     Some(true) => {
                         player_changed(server, self.id);
-                        send_plugin(server, self.id, channel::JOINED_GROUP, &svc::joined_group(Some(id), false));
+                        send_plugin(
+                            server,
+                            self.id,
+                            channel::JOINED_GROUP,
+                            &svc::joined_group(Some(id), false),
+                        );
                         reap_groups(server);
                     }
-                    Some(false) => send_plugin(server, self.id, channel::JOINED_GROUP, &svc::joined_group(None, true)),
+                    Some(false) => send_plugin(
+                        server,
+                        self.id,
+                        channel::JOINED_GROUP,
+                        &svc::joined_group(None, true),
+                    ),
                     None => {}
                 }
             }
@@ -284,7 +323,12 @@ impl Connection {
                 let left = server.voice.relay.lock().leave_group(self.id);
                 if left {
                     player_changed(server, self.id);
-                    send_plugin(server, self.id, channel::JOINED_GROUP, &svc::joined_group(None, false));
+                    send_plugin(
+                        server,
+                        self.id,
+                        channel::JOINED_GROUP,
+                        &svc::joined_group(None, false),
+                    );
                     reap_groups(server);
                 }
             }
@@ -336,10 +380,15 @@ fn issue_secret(
         if !relay.is_svc(id) {
             relay.register_svc(id, entity, uuid, name.to_owned(), Instant::now());
         }
-        (relay.states(), relay.groups().map(svc::add_group).collect::<Vec<_>>())
+        (
+            relay.states(),
+            relay.groups().map(svc::add_group).collect::<Vec<_>>(),
+        )
     };
     send_plugin(server, id, channel::STATES, &svc::states_packet(&states));
-    for group in groups { send_plugin(server, id, channel::ADD_GROUP, &group); }
+    for group in groups {
+        send_plugin(server, id, channel::ADD_GROUP, &group);
+    }
     player_changed(server, id);
     send_plugin(
         server,

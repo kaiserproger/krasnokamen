@@ -256,7 +256,7 @@ mod tests {
 
     fn managed() -> ScriptCommandPermissions {
         let permissions = ScriptCommandPermissions::default();
-        permissions.set_provider(Some("solaris-permissions"));
+        permissions.set_provider(Some("krasnokamen-permissions"));
         permissions
     }
 
@@ -264,9 +264,9 @@ mod tests {
     fn unmanaged_deployments_do_not_gate_declared_nodes() {
         let permissions = ScriptCommandPermissions::default();
         assert!(!permissions.provider_deployed());
-        assert!(permissions.allows(ALEX, "solaris.essentials.home"));
+        assert!(permissions.allows(ALEX, "krasnokamen.essentials.home"));
         assert_eq!(
-            permissions.publish(&[format!("{ALEX} solaris.essentials.home")]),
+            permissions.publish(&[format!("{ALEX} krasnokamen.essentials.home")]),
             Err(ScriptCommandPermissionError::NoProvider)
         );
     }
@@ -275,19 +275,19 @@ mod tests {
     fn publication_replaces_the_table_and_refusals_keep_the_previous_one() {
         let permissions = managed();
         permissions
-            .publish(&[format!("{ALEX} solaris.essentials.home")])
+            .publish(&[format!("{ALEX} krasnokamen.essentials.home")])
             .unwrap();
-        assert!(permissions.allows(ALEX, "solaris.essentials.home"));
-        assert!(!permissions.allows(ALEX, "solaris.towns.claim"));
+        assert!(permissions.allows(ALEX, "krasnokamen.essentials.home"));
+        assert!(!permissions.allows(ALEX, "krasnokamen.towns.claim"));
         assert_eq!(
-            permissions.publish(&["Alex solaris.towns.claim".to_owned()]),
+            permissions.publish(&["Alex krasnokamen.towns.claim".to_owned()]),
             Err(ScriptCommandPermissionError::InvalidEntry {
-                entry: "Alex solaris.towns.claim".to_owned()
+                entry: "Alex krasnokamen.towns.claim".to_owned()
             })
         );
-        assert!(permissions.allows(ALEX, "solaris.essentials.home"));
+        assert!(permissions.allows(ALEX, "krasnokamen.essentials.home"));
         permissions.publish(&[]).unwrap();
-        assert!(!permissions.allows(ALEX, "solaris.essentials.home"));
+        assert!(!permissions.allows(ALEX, "krasnokamen.essentials.home"));
     }
 
     #[test]
@@ -295,15 +295,15 @@ mod tests {
         let permissions = managed();
         permissions
             .publish(&[
-                "* solaris.essentials.use".to_owned(),
-                format!("{ALEX} solaris.towns.claim"),
+                "* krasnokamen.essentials.use".to_owned(),
+                format!("{ALEX} krasnokamen.towns.claim"),
             ])
             .unwrap();
-        assert!(!permissions.allows(ALEX, "solaris.essentials.use"));
-        assert!(permissions.allows(ALEX, "solaris.towns.claim"));
+        assert!(!permissions.allows(ALEX, "krasnokamen.essentials.use"));
+        assert!(permissions.allows(ALEX, "krasnokamen.towns.claim"));
         let stranger = "00000000-0000-0000-0000-000000000001";
-        assert!(permissions.allows(stranger, "solaris.essentials.use"));
-        assert!(!permissions.allows(stranger, "solaris.towns.claim"));
+        assert!(permissions.allows(stranger, "krasnokamen.essentials.use"));
+        assert!(!permissions.allows(stranger, "krasnokamen.towns.claim"));
     }
 
     #[test]
@@ -311,26 +311,26 @@ mod tests {
         let permissions = managed();
         let stranger = "00000000-0000-0000-0000-000000000001";
         permissions.publish(&["* *".into(), ALEX.into()]).unwrap();
-        assert!(!permissions.allows(ALEX, "solaris.essentials.use"));
-        assert!(permissions.allows(stranger, "solaris.essentials.use"));
+        assert!(!permissions.allows(ALEX, "krasnokamen.essentials.use"));
+        assert!(permissions.allows(stranger, "krasnokamen.essentials.use"));
         assert!(
             permissions
                 .publish(&["* *".into(), "not-a-uuid".into()])
                 .is_err()
         );
-        assert!(!permissions.allows(ALEX, "solaris.essentials.use"));
-        assert!(permissions.allows(stranger, "solaris.essentials.use"));
+        assert!(!permissions.allows(ALEX, "krasnokamen.essentials.use"));
+        assert!(permissions.allows(stranger, "krasnokamen.essentials.use"));
         permissions
             .publish(&[
                 "* *".into(),
                 ALEX.into(),
-                format!("{ALEX} solaris.towns.claim"),
+                format!("{ALEX} krasnokamen.towns.claim"),
             ])
             .unwrap();
-        assert!(permissions.allows(ALEX, "solaris.towns.claim"));
-        assert!(!permissions.allows(ALEX, "solaris.essentials.use"));
+        assert!(permissions.allows(ALEX, "krasnokamen.towns.claim"));
+        assert!(!permissions.allows(ALEX, "krasnokamen.essentials.use"));
         permissions.set_provider(None);
-        assert!(!permissions.allows(stranger, "solaris.essentials.use"));
+        assert!(!permissions.allows(stranger, "krasnokamen.essentials.use"));
     }
 
     #[test]
@@ -339,17 +339,17 @@ mod tests {
         // A provider (and the permissions plugin's storage) publishes compact
         // hex while the native context asks with the dashed UUID.
         permissions
-            .publish(&["069a79f444e94726a5befca90e38aaf5 solaris.essentials.use".to_owned()])
+            .publish(&["069a79f444e94726a5befca90e38aaf5 krasnokamen.essentials.use".to_owned()])
             .unwrap();
-        assert!(permissions.allows(ALEX, "solaris.essentials.use"));
-        assert!(!permissions.allows(ALEX, "solaris.essentials.manage"));
+        assert!(permissions.allows(ALEX, "krasnokamen.essentials.use"));
+        assert!(!permissions.allows(ALEX, "krasnokamen.essentials.manage"));
         // ...and a dashed publication answers the compact query too.
         permissions
-            .publish(&[format!("{ALEX} solaris.essentials.manage")])
+            .publish(&[format!("{ALEX} krasnokamen.essentials.manage")])
             .unwrap();
         assert!(permissions.allows(
             "069a79f444e94726a5befca90e38aaf5",
-            "solaris.essentials.manage"
+            "krasnokamen.essentials.manage"
         ));
     }
 
@@ -366,12 +366,12 @@ mod tests {
     fn provider_removal_forgets_grants() {
         let permissions = managed();
         permissions
-            .publish(&[format!("{ALEX} solaris.essentials.home")])
+            .publish(&[format!("{ALEX} krasnokamen.essentials.home")])
             .unwrap();
         permissions.set_provider(None);
         assert!(!permissions.provider_deployed());
-        assert!(!permissions.allows(ALEX, "solaris.essentials.home"));
-        permissions.set_provider(Some("solaris-permissions"));
-        assert!(!permissions.allows(ALEX, "solaris.essentials.home"));
+        assert!(!permissions.allows(ALEX, "krasnokamen.essentials.home"));
+        permissions.set_provider(Some("krasnokamen-permissions"));
+        assert!(!permissions.allows(ALEX, "krasnokamen.essentials.home"));
     }
 }

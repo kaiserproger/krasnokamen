@@ -4,9 +4,9 @@ Status: accepted design; draft implementation (native relay + Simple Voice Chat 
 
 ## Decision
 
-Native Solaris clients capture the microphone (push-to-talk), encode 20 ms mono
+Native Krasnokamen clients capture the microphone (push-to-talk), encode 20 ms mono
 48 kHz Opus packets (~24 kbps) and send them to the server on the Play custom
-payload channel `solaris:voice`. `mc-edge` (`voice.rs` pure relay, `voice_service.rs`
+payload channel `krasnokamen:voice`. `mc-edge` (`voice.rs` pure relay, `voice_service.rs`
 delivery) forwards each packet to the *listening* native clients that are in the
 same dimension and within `range_blocks` (default 48, eye to eye) of the
 speaker, excluding the speaker, attaching the speaker's uuid and position.
@@ -87,7 +87,7 @@ Opus is forwarded byte for byte; there is no transcoding (both are 48 kHz mono
   `AuthenticateAck`; `ConnectionCheck` -> ack; `KeepAlive` both ways each
   second (peer dropped after 10 s). `MicPacket` (Opus bytes, whispering) enters
   the relay as the speaker's AUDIO; an empty mic packet ends the burst.
-- Bridging: SVC mic -> relay -> native listeners as `solaris:voice` AUDIO
+- Bridging: SVC mic -> relay -> native listeners as `krasnokamen:voice` AUDIO
   (sequence from the SVC mic counter) and SVC listeners as `PlayerSoundPacket`
   (channel id = sender uuid, the client plays it at that entity). Native AUDIO ->
   SVC listeners as `PlayerSoundPacket` with the native `seq`; a native burst

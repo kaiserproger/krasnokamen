@@ -3,7 +3,7 @@ use mc_data::loot::chest_26_1_2::ChestLootCatalog;
 
 #[test]
 fn brewing_reload_preserves_slots_components_progress_and_fuel() {
-    let items = mc_data::items::solaris_required_items();
+    let items = mc_data::items::krasnokamen_required_items();
     let blocks = BlockRegistry::from_report(&[mc_data::blocks::BlockReport {
         id: Identifier::parse("minecraft:air").unwrap(),
         properties: Default::default(),

@@ -1,5 +1,5 @@
 //! Edge glue for the voice relay: connection lifetime, native pose publication
-//! and best-effort delivery to native `solaris:voice` clients and, through
+//! and best-effort delivery to native `krasnokamen:voice` clients and, through
 //! `svc_service`, to Simple Voice Chat clients. Policy lives in `voice.rs`.
 use std::{collections::HashMap, sync::Arc, time::Instant};
 
@@ -51,7 +51,7 @@ impl Service {
     }
 }
 
-/// The payload of a `solaris:voice` Play custom payload, if it is one.
+/// The payload of a `krasnokamen:voice` Play custom payload, if it is one.
 pub(crate) fn payload(body: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
     let mut body = body;
     let packet = ServerboundCustomPayload::decode(&mut body)?;

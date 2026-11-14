@@ -423,8 +423,8 @@ async fn run_connection(
     } else {
         None
     };
-    // Solaris Loader clients (native, or the Fabric mod that admitted the monitor
-    // bundle's `solaris:screen` channel) take part in screen sharing.
+    // Krasnokamen Loader clients (native, or the Fabric mod that admitted the monitor
+    // bundle's `krasnokamen:screen` channel) take part in screen sharing.
     let screen_client = supports_screen_sharing(
         config_outcome
             .loader_session
@@ -442,10 +442,20 @@ async fn run_connection(
     });
 
     let voice = native_client.then(|| {
-        crate::voice_service::Connection::start(Arc::clone(&server), id, entity, outcome.uuid, outcome.name.clone())
+        crate::voice_service::Connection::start(
+            Arc::clone(&server),
+            id,
+            entity,
+            outcome.uuid,
+            outcome.name.clone(),
+        )
     });
     let svc = crate::svc_service::Connection::start(
-        Arc::clone(&server), id, entity, outcome.uuid, outcome.name.clone(),
+        Arc::clone(&server),
+        id,
+        entity,
+        outcome.uuid,
+        outcome.name.clone(),
     );
 
     // --- Play: reads and writes progress independently. A writer task owns
