@@ -78,10 +78,23 @@ def run(client: Any, artifact: Any, timeout: float, address: str, server_pid: in
         _unlocked(steps, "register_unlocks_the_session")
         steps.call("minecraft_disconnect")
         steps.check("client_left_play", steps.call("minecraft_observe")["in_play"] is False)
+        if os.environ.get("BREAK_AUTH_ATTACK") == "restart":
+            # Breaker glue (not for merge): the registration must survive a server restart.
+            server_pid = client.break_restart(steps.remaining())
+            steps.report["restarted_server_pid"] = server_pid
         steps.call("minecraft_connect", {"server_addr": address})
         steps.check("relogin_entered_play", steps.call("minecraft_wait_for_play", {
             "timeout_seconds": steps.remaining()})["in_play"] is True)
         steps.report["fixture_commands"].append("login <password>")
+        if os.environ.get("BREAK_AUTH_ATTACK") == "hostile":
+            # Breaker glue (not for merge): a wrong unicode password under contention is refused,
+            # and the correct one afterwards still unlocks within the hang guard.
+            with contended_plugin_worker(server_pid):
+                newest = (steps.observe()["recent_chat"] or [None])[0]
+                steps.call("minecraft_send_chat", {"message": "login wrong-пароль-💥", "command": True})
+                reply = steps.wait(lambda state: bool(state["recent_chat"]) and state["recent_chat"][0] != newest,
+                                   "wrong_login_reply")
+                steps.report["wrong_login_chat"] = reply["recent_chat"][:3]
         with contended_plugin_worker(server_pid):
             steps.call("minecraft_send_chat", {"message": f"login {PASSWORD}", "command": True})
             steps.wait(lambda state: any("Successfully logged in" in line for line in state["recent_chat"]),

@@ -132,7 +132,9 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         required = required | {"minecraft_wait_for_container_slot"}
     artifact = ctx.artifact_dir
     plugin_dir = plugin_directory(ctx)
-    if auth_scenario:
+    # BREAK_DL_AUTH breaker glue (not for merge): duplicate login behind the auth plugin.
+    auth_plugin = auth_scenario or (ctx.scenario_id == "native-v2-duplicate-login" and bool(os.environ.get("BREAK_DL_AUTH")))
+    if auth_plugin:
         # The shipping solaris-auth package behind the native login gate; the harness copies
         # the sibling checkout's package into the private plugin directory.
         root = Path(os.environ.get("SOLARIS_DEFAULT_PLUGINS_ROOT", runtime.REPO_ROOT.parent / "solaris-default-plugins"))
@@ -159,7 +161,7 @@ def run(ctx: ProfileContext, kind: str) -> dict[str, Any]:
         view_distance, simulation_distance = 8, 4
     # The towns gate tests plugin protection with non-operators, not spawn protection.
     town_spawn_setting = "spawn_protection = 0\n" if ctx.scenario_id == "java-v2-p5-towns" else ""
-    auth_setting = "require_plugin_login = true\n" if auth_scenario else ""
+    auth_setting = "require_plugin_login = true\n" if auth_plugin else ""
     config.write_text(f'''[server]
 name = "shared-{kind}-probe"
 motd = "Shared Python MCP gameplay probe"
@@ -346,30 +348,37 @@ seed = 81
             if ctx.scenario_id == "native-v2-destroyed-chest-race":
                 # Shared (multi-world) command execution only exists while another dimension
                 # is populated: a second, headless client waits in the Nether for the scenario.
+                # BREAK_HS1_ATTACK=feedback glue (not for merge): headless clients report no chat,
+                # so the observing operator runs windowed on the same Xvfb.
+                peer_windowed = os.environ.get("BREAK_HS1_ATTACK") == "feedback"
                 peer_ctx = replace(ctx, artifact_dir=artifact / "nether-peer",
-                                   client_evidence=peer_evidence, windowed=False)
+                                   client_evidence=peer_evidence, windowed=peer_windowed)
                 evidence["nether_peer_client"] = peer_evidence
                 peer_process, peer_log, peer_mcp = native_client.start(
                     peer_ctx, native_client.resolve_binary(peer_ctx), address, "NetherPeer",
-                    startup_timeout)
+                    startup_timeout, **({"display": display} if peer_windowed else {}))
                 peer_mcp.request_timeout_seconds = 130.0
                 peer_mcp.call_tool("minecraft_wait_for_play", {"timeout_seconds": startup_timeout})
                 mcp.nether_peer = peer_mcp
             if ctx.scenario_id == "native-v2-duplicate-login":
-                def start_second_login() -> Any:
+                def start_second_login(suffix: str = "second-login", via: str | None = None) -> Any:
                     # Same username, hence the same offline identity, on a second client.
                     nonlocal peer_process, peer_log, peer_mcp
-                    peer_ctx = replace(ctx, artifact_dir=artifact / "second-login",
+                    if peer_process is not None:
+                        # BREAK_DL_ATTACK glue: keep earlier same-account clients under cleanup.
+                        ghast_peers.append((peer_process, peer_log, peer_mcp, dict(peer_evidence)))
+                    peer_ctx = replace(ctx, artifact_dir=artifact / suffix,
                                        client_evidence=peer_evidence, windowed=False)
                     evidence["second_login_client"] = peer_evidence
                     peer_process, peer_log, peer_mcp = native_client.start(
-                        peer_ctx, native_client.resolve_binary(peer_ctx), client_address, username,
+                        peer_ctx, native_client.resolve_binary(peer_ctx), via or client_address, username,
                         startup_timeout)
                     peer_mcp.request_timeout_seconds = 130.0
                     return peer_mcp
 
                 mcp.start_second_login = start_second_login
                 mcp.server_address = client_address
+                mcp.break_client_pid = client_process.pid  # BREAK_DL_ATTACK=config glue (not for merge)
             if ctx.scenario_id == "native-v2-settlement-storage":
                 # Deliberately not an operator: the settlement's view-only visitor. Server
                 # dialog buttons need presentation (minecraft_click_screen_button), so the
@@ -505,6 +514,19 @@ seed = 81
                 })
             result = compatibility.run_inventory_probe(mcp, artifact, timeout)
         elif auth_scenario:
+            def restart_auth_server(remaining: float) -> int:
+                # BREAK_AUTH_ATTACK=restart glue (not for merge): clean stop, same world and config.
+                nonlocal server, server_log
+                runtime.stop_process(server)
+                evidence.setdefault("break_restarts", []).append({"old_returncode": server.returncode})
+                server_log.close()
+                server_log = server_log_path.open("ab")
+                server = subprocess.Popen(command, cwd=runtime.REPO_ROOT, stdout=server_log,
+                                          stderr=subprocess.STDOUT, start_new_session=True)
+                runtime.wait_port(port, remaining, server, log_path=server_log_path)
+                return server.pid
+
+            mcp.break_restart = restart_auth_server
             result = native_auth_budget.run(mcp, artifact, timeout, address, server.pid)
         elif v2_scenario:
             from . import native_p4
@@ -517,7 +539,10 @@ seed = 81
                                            "native-v2-console-shutdown",
                                            "native-v2-custody-mount-export",
                                            "native-v2-corrupt-block-entities",
-                                           "native-v2-corrupt-chunk-near-camera")):
+                                           "native-v2-corrupt-chunk-near-camera")
+                    # BREAK_DL_ATTACK=hold* glue (not for merge): restart to read the store after the race.
+                    or (ctx.scenario_id == "native-v2-duplicate-login"
+                        and os.environ.get("BREAK_DL_ATTACK", "").startswith("hold"))):
                 def restart_server(remaining: float) -> str:
                     nonlocal server, server_log
                     old_pid = server.pid

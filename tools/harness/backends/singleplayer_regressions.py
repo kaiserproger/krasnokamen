@@ -24,6 +24,7 @@ FIRST = "native-world-first-start-interrupted"
 LEASE = "native-sp-relaunch-lease-race"
 SLOW = "native-sp-slow-machine"
 WEAK = "native-sp-weak-hardware"
+DISCONNECTED = "net.minecraft.client.gui.screens.DisconnectedScreen"
 
 
 def _click(probe, state, label):
@@ -224,17 +225,59 @@ def run(ctx: ProfileContext) -> dict:
             elif ctx.scenario_id == FIRST:
                 database = world / "world" / "native" / "state.redb"
                 marker = world / "world" / ".solaris-first-start"
-                def interrupt():
-                    _wait_path(database, min(timeout, 180))
-                    pid = _server_child(client, server)
-                    if not marker.is_file():
-                        raise RuntimeError("first-start marker absent when database appeared")
-                    os.kill(pid, signal.SIGKILL)
-                    return {"pid": pid, "database": str(database), "marker_present": True}
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(interrupt)
-                    _click(probe, state, "Play Selected World")
-                    probe.report["interruption"] = future.result(timeout=min(timeout, 180) + 5)
+                # BREAK_FS_ATTACK breaker glue (not for merge): interruption point and signal.
+                attack = os.environ.get("BREAK_FS_ATTACK", "")
+                points = {"new": world / "world" / "native" / "state.redb.new",
+                          "marker": marker, "journal": world / "world" / "journal",
+                          "listening": world / "logs" / "server.log"}
+                plan = [("journal", signal.SIGKILL)] if attack == "journal" else \
+                    [("new", signal.SIGKILL)] if attack == "new" else \
+                    [("marker", signal.SIGKILL)] if attack == "marker" else \
+                    [("db", signal.SIGTERM)] if attack == "term" else \
+                    [("listening", signal.SIGKILL)] if attack == "listening" else \
+                    [("db", signal.SIGKILL), ("journal", signal.SIGKILL)] if attack == "twice" else \
+                    [] if attack == "control" else [("db", signal.SIGKILL)]
+                probe.report["attack"] = {"variant": attack, "plan": [(p, int(s)) for p, s in plan],
+                                          "interruptions": []}
+                for index, (point, sig) in enumerate(plan):
+                    target = points.get(point, database)
+                    def interrupt(target=target, sig=sig, point=point):
+                        if point == "listening":
+                            runtime.wait_for_path_condition(target, min(timeout, 180), lambda: (
+                                target.exists() and "Solaris is listening" in target.read_text(errors="replace"), None))
+                        else:
+                            _wait_path(target, min(timeout, 180))
+                        pid = _server_child(client, server)
+                        present = marker.is_file()
+                        os.kill(pid, sig)
+                        return {"pid": pid, "point": str(target), "signal": int(sig), "marker_present": present,
+                                "db_present": database.exists()}
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        future = executor.submit(interrupt)
+                        if index:
+                            if state["screen"]["class"] == TITLE_CLASS:
+                                _click(probe, state, "Singleplayer")
+                                state = probe.wait(lambda s: s["screen"].get("class") == SELECT, "reopen_world_list")
+                            _select_world(probe, state)
+                        _click(probe, state, "Play Selected World")
+                        result = future.result(timeout=min(timeout, 180) + 5)
+                    probe.report["attack"]["interruptions"].append(result)
+                    probe.report["interruption"] = result
+                    for retry in range(4):
+                        try:
+                            state = probe.wait(lambda s: s["screen"].get("class") in (SELECT, TITLE_CLASS, DISCONNECTED),
+                                               "interrupted_menu")
+                            break
+                        except RuntimeError as error:
+                            if "stale_connection_epoch" not in str(error) or retry == 3:
+                                raise
+                            probe.report["attack"].setdefault("stale_epoch_retries", 0)
+                            probe.report["attack"]["stale_epoch_retries"] += 1
+                    probe.report["attack"]["interruptions"][-1]["menu"] = state["screen"]
+                    if state["screen"]["class"] == DISCONNECTED:
+                        probe.report["attack"]["interruptions"][-1]["disconnect_reason"] = state.get("disconnect_reason", "")[:200]
+                        _click(probe, state, "Back to Title Screen")
+                        state = probe.wait(lambda s: s["screen"].get("class") in (SELECT, TITLE_CLASS), "back_to_title")
                 recovery = os.environ.get("SOLARIS_FIRST_START_RECOVERY_BINARY")
                 if recovery:
                     replacement = Path(recovery).resolve()
@@ -245,12 +288,57 @@ def run(ctx: ProfileContext) -> dict:
                     probe.report["recovery_server"] = str(replacement)
                     with replacement.open("rb") as executable:
                         probe.report["recovery_server_sha256"] = hashlib.file_digest(executable, "sha256").hexdigest()
-                state = probe.wait(lambda s: s["screen"].get("class") in (SELECT, TITLE_CLASS), "interrupted_menu")
                 if state["screen"]["class"] == TITLE_CLASS:
                     _click(probe, state, "Singleplayer")
                     state = probe.wait(lambda s: s["screen"].get("class") == SELECT, "reopen_world_list")
                 _select_world(probe, state)
-                _play(probe, state)
+                if attack in ("term", "listening"):
+                    # A clean stop leaves a stale disconnect reason that ends minecraft_wait_for_play
+                    # at once; wait for the start screen, then for Play or a failure screen.
+                    _click(probe, state, "Play Selected World")
+                    def epoch_wait(predicate, label):
+                        for retry in range(6):
+                            try:
+                                return probe.wait(predicate, label)
+                            except RuntimeError as error:
+                                if "stale_connection_epoch" not in str(error) or retry == 5:
+                                    raise
+                    epoch_wait(lambda s: s.get("in_play") is True
+                               or s["screen"].get("class") == "net.minecraft.client.gui.screens.GenericMessageScreen",
+                               "recovery_starting")
+                    final = epoch_wait(lambda s: s.get("in_play") is True
+                                       or s["screen"].get("class") in (SELECT, TITLE_CLASS, DISCONNECTED),
+                                       "recovery_outcome")
+                    probe.report["attack"]["recovery_outcome"] = {"in_play": final.get("in_play"),
+                                                                  "screen": final["screen"],
+                                                                  "disconnect_reason": final.get("disconnect_reason", "")[:300]}
+                    probe.check("entered_world", final.get("in_play") is True)
+                else:
+                    _play(probe, state)
+                if attack:
+                    # Then play: a persisted change survives a clean quit and reopen of the recovered world.
+                    probe.call("minecraft_look", {"yaw_deg": 77, "pitch_deg": 13})
+                    probe.wait(lambda s: abs(s["player"]["yaw"] - 77) < 0.5, "recovered_world_look")
+                    start_pos = probe.call("minecraft_observe")["player"]
+                    probe.call("minecraft_press_inputs", {"keys": ["forward"], "ticks": 20})
+                    probe.call("minecraft_wait_ticks", {"ticks": 40})
+                    turned = probe.call("minecraft_observe")
+                    probe.report["attack"]["start_pos"] = {k: start_pos[k] for k in ("x", "y", "z")}
+                    probe.report["attack"]["before_quit"] = {k: turned["player"][k] for k in ("x", "y", "z", "yaw", "pitch")}
+                    probe.call("minecraft_disconnect", {})
+                    state = probe.wait(lambda s: s["screen"].get("class") in (SELECT, TITLE_CLASS), "quit_menu")
+                    probe.report["attack"]["marker_after_quit"] = marker.exists()
+                    if state["screen"]["class"] == TITLE_CLASS:
+                        _click(probe, state, "Singleplayer")
+                        state = probe.wait(lambda s: s["screen"].get("class") == SELECT, "reopen_after_quit")
+                    _select_world(probe, state)
+                    _play(probe, state)
+                    again = probe.call("minecraft_observe")["player"]
+                    probe.report["attack"]["after_reopen"] = {k: again[k] for k in ("x", "y", "z", "yaw", "pitch")}
+                    probe.check("recovered_world_marker_cleared", not probe.report["attack"]["marker_after_quit"])
+                    probe.check("recovered_world_keeps_player_state",
+                                abs((again["yaw"] - 77 + 180) % 360 - 180) < 1 and math.dist(
+                                    [again[k] for k in "xyz"], [turned["player"][k] for k in "xyz"]) < 1.5)
             else:
                 _play(probe, state)
                 native_client.capture(mcp, artifact, "singleplayer-before-relaunch")

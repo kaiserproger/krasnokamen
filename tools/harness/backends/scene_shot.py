@@ -845,7 +845,9 @@ def run(
     port = runtime.reserve_port()
     config = artifact / "scene-shot.toml"
     source = (runtime.REPO_ROOT / "playable.toml").read_text()
-    replacements = (("[server]", f"[server]\nspawn_protection = {spawn_protection}"),
+    # BREAK_CMD_BLOCK breaker glue (not for merge): vanilla enable-command-block for command-block feedback.
+    command_block = "\nenable_command_block = true" if os.environ.get("BREAK_CMD_BLOCK") else ""
+    replacements = (("[server]", f"[server]\nspawn_protection = {spawn_protection}{command_block}"),
                     ("view_distance = 4", f"view_distance = {server_view}"),
                     ("port = 25565", f"port = {port}"),
                     ('world_dir = ".analysis/test-world-v12"', f'world_dir = {json.dumps(str(artifact / "world"))}'),
