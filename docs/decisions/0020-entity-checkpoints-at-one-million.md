@@ -142,6 +142,17 @@ Chunk eviction (`world.rs` 624–667) removes chunks, not entities, so it never
 creates an entity tombstone. Checkpoint marks are independent of WAL and wire
 marks.
 
+**Battle allegiance extension (2026-11-09).** Native `Body.faction: u16`
+is captured in the existing entity NBT payload as `solaris:Faction`
+(`TAG_Int`, u16 range checked) and in `EntityStateImage.faction` for WAL.
+`set_faction` marks touched + changed custody through the normal body mutation
+path and maintains a sparse stable-ID membership index (no battle scan for
+ordinary worlds). Recovery and authored summon apply it through that setter;
+transfer moves the index membership, removal deletes it. Targets and battle
+timers are transient and do not dirty checkpoints. No new table, journal
+domain, checkpoint fence or alternate persistence owner is introduced.
+
+
 **Reopen seeding.** The WAL fold drops a row, and its UUID, on `RemoveEntity`
 and on `Entity`/`EntityVitals` with `alive = false` (`journal/replay.rs`
 881–883, 935–947). So the fold must record `(uuid, tick)` before dropping. An

@@ -559,6 +559,19 @@ pub struct TickTimes {
     pub total_us: u64,
     /// Optional opt-in workload counters paired with this exact source tick.
     pub coreperf: Option<Arc<CorePerfTick>>,
+    /// Post-merge battle counts of this tick; `None` without battle rows.
+    pub battle: Option<Arc<BattleCounts>>,
+}
+
+/// Battle population of one tick (`battle` module), counted after merge;
+/// present while battle rows exist (staged, paused or running).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct BattleCounts {
+    /// Battle rows (nonzero faction) in the entity store this tick.
+    pub units: u32,
+    /// Alive battle rows per faction, ascending faction; a faction with
+    /// battle rows but none alive keeps a zero entry.
+    pub alive: Vec<(u16, u32)>,
 }
 
 /// Immutable world state after a tick. Shared read-only; never mutated after
@@ -719,6 +732,14 @@ pub struct ChangeSet {
     pub explosions: Vec<ExplosionEvent>,
 }
 
+/// Native attack-presentation categories; edge maps to the verified 26.3 ids.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SwingKind {
+    None,
+    Whack,
+    Stab,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EntityEvent {
     /// Verified vanilla entity status event (guardian beam, sonic, fangs).
@@ -729,6 +750,9 @@ pub enum EntityEvent {
     Swing {
         entity: EntityId,
         hand: Hand,
+        animation: SwingKind,
+        /// Full animation span; battle damage lands at its authored contact tick.
+        duration_ticks: u16,
     },
     Hurt {
         entity: EntityId,

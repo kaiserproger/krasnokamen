@@ -1256,6 +1256,7 @@ mod tests {
             owner_pre_us: 25,
             owner_post_us: 26,
             coreperf: None,
+            battle: None,
         };
         state.record_load_tick(41, times.clone());
         state.record_load_skipped(2);

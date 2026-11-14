@@ -525,6 +525,22 @@ fn hidden_player_inventory_packet_translates_slot_and_stack() {
 }
 
 #[test]
+fn no_swing_stagger_is_omitted_instead_of_becoming_a_legacy_attack() {
+    let mut s = session();
+    for hand in [0, 1] {
+        let mut body = Vec::new();
+        body.write_varint(9);
+        body.write_varint(hand);
+        body.write_varint(0); // NONE
+        body.write_varint(18);
+        assert_eq!(
+            clientbound(&mut s, "minecraft:swing_animation", &body).unwrap(),
+            None
+        );
+    }
+}
+
+#[test]
 fn animations_and_team_parameters_follow_the_old_layout() {
     let mut s = session();
     let mut body = Vec::new();

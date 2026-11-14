@@ -9,6 +9,7 @@ and [mutations.md](mutations.md) for routes.
 | --- | --- | --- | --- |
 | Player inventory, cursor, held item, survival and experience | `mc-core` native input/merge and gameplay modules | immutable player results; edge menu and wire caches | same tick WAL and native checkpoint as related effects |
 | Player pose, combat and entity lifecycle | native core entity state and intent merge | edge tracking and per-viewer movement; never an alternate entity store | entity/player native post-images in tick WAL/checkpoint |
+| Mob/player mount relation | vehicle row owns rider UUID; `mounts` rebuilds rider reverse link and passenger projection | rider/vehicle motion and edge passenger packet | `solaris:Rider` in checkpoint and native WAL image; duplicate riders, self-riding and nested vehicles refuse recovery |
 | Blocks, block entities and physical containers | native core block/input/merge phases | immutable chunk views, client block/menu projections, admitted plugin observations | native chunk/block-entity post-images and checkpoint fences |
 | Scheduled block/fluid work | native core scheduled queues | gameplay reads and offline interchange | absolute native deadlines in WAL/checkpoint; Anvil export translates interchange delays |
 | World clock, weather, rules and dimensions | native tick owner | edge time/weather packets, console/admin reads | native domain images in the same tick stream |
@@ -28,6 +29,64 @@ advances it once. Edge `SET_TIME` uses that simulated age, not the WAL frame.
 `day_time` and its client rate remain independent daylight-clock projections.
 The held offset is currently runtime-only: recovery restores the WAL frame but
 not that offset (`TICK-FROZEN-GAME-AGE-RESTART` in the bug ledger).
+
+### Staged battle actions
+
+`battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
+regiment volley clocks, and `cavalry.rs` owns charge/refusal timers. Fighters
+and charge state share the formation-aligned dense execution index; a cold
+identity remap preserves actions and ammunition when roster layout changes.
+These are runtime battle state: pause holds their clock; restart restores
+bodies and mount custody, not an in-progress battle. The native projectile
+owner alone moves arrows and resolves hits.
+
+Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
+Unblocked contact attempts remove 1.3% on the authored deterministic roll,
+nine wounded per death; shield parries reduce actual removals. Wounded soldiers
+withdraw via formation membership rather than being killed. Pursuit increases
+fatality; film pacing changes lulls, never swing speed. These are simulation
+choices based on [Sabin](https://gwern.net/doc/history/2000-sabin.pdf), not
+measured historical per-swing probabilities. Volleys use 220 ticks sustained
+and 60 arrows per archer.
+Each regiment has an absolute staggered phase, including after wavering/rejoin;
+the soldiers within that regiment still draw and release together. The staged
+battle uses sustained cadence; there is no unused opening-burst control.
+Horses refuse steady frontal ranks and run out to a flank; accepted charge
+bonus decays over 260 ticks. The work counters bound visits, target checks,
+reaction checks, strikes, arc iterations and charge decisions; they are not a
+20-TPS performance measurement.
+
+Large projectile batches (at least 16 shots) derive a reusable, counting-sorted
+two-block XZ grid from the frozen native body snapshot. Conservative half-extent
+expansion covers wide bodies, Y bounds reject other heights, and canonical
+candidate sorting preserves hit order. Dragon/deployed geometry remains an
+explicit exceptional superset. Sparse world spans fall back to the existing
+native chunk query before allocating empty-world cells (maximum 1,048,576).
+Differential flight tests exercise both paths against exhaustive collision.
+
+Battle arrow/spectral-arrow ground lifetime is captured at launch as 100 admitted
+ticks, independent of later owner death. Ordinary arrows retain their previous
+1,201-tick expiry. Settled arrows anchor to native entity lifetime age; idle
+projectile ticks neither take `row_mut` nor publish appearance merely to age.
+Pickup, expiry and physical-profile custody changes still use native owners.
+`grounded_at_age` and `ground_lifetime` persist in projectile state, paired with
+native `solaris:LifetimeAge`; vanilla `life` projects the effective ground age.
+Hydration refuses an anchored projectile without a native lifetime-age long;
+retained lifetimes accept only 1,201, or 100 for Arrow/SpectralArrow.
+Active-clock WAL replay, frozen chunks and wrapping entity age retain elapsed
+time without one arrow image per tick. Loyalty tridents keep their dynamic
+return path and are not treated as idle arrows.
+
+Mob riders use the same horse-owned UUID relation as player riders. Staging
+uses `battle::cavalry::mount`, requires a nonzero rider faction and copies it to
+the horse so native battle motion is not suppressed as ordinary tamed AI.
+Recovery allows a live mob passenger rather than requiring a player UUID,
+rejects item/boat/dead/nested passengers, and rebuilds reverse links/appearance.
+Native regressions include checkpoint/WAL mount custody, real mounted movement,
+100-tick grounded expiry, idle no-touch pickup, native lazy-clock replay, and
+matching uninterrupted/restarted expiry through actual checkpoint and WAL producers.
+Protocol and persistence changes require Main's independent review.
+
 
 ## Rules
 

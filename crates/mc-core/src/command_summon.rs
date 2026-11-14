@@ -633,6 +633,7 @@ pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     state
         .entities
         .set_entity_life(slot, image.state.entity_life);
+    state.entities.set_faction(slot, image.state.faction);
     let (body, row) = state.entities.parts_mut(slot);
     row.health = native.health;
     row.age = image.state.age;

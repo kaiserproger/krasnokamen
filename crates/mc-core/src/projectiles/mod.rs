@@ -137,12 +137,25 @@ pub enum ProjectileData {
     },
 }
 
+// Preserve ordinary arrows' existing removal after age 1200.
+pub(crate) const ARROW_GROUND_LIFETIME: u32 = ARROW_STUCK_TICKS + 1;
+pub(crate) const BATTLE_ARROW_GROUND_LIFETIME: u32 = 100;
+
+fn ordinary_ground_lifetime() -> u32 {
+    ARROW_GROUND_LIFETIME
+}
+
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct ProjectileState {
     pub owner: Option<Uuid>,
     pub kind: ProjectileKind,
     pub age: u32,
     pub stuck: bool,
+    /// Lazy ground clock anchored to the native admitted-entity age, not wall time.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grounded_at_age: Option<u32>,
+    #[serde(default = "ordinary_ground_lifetime")]
+    pub ground_lifetime: u32,
     pub pickup: bool,
     pub stack: ItemStack,
     pub damage: f32,
@@ -183,6 +196,8 @@ impl ProjectileState {
             kind,
             age: 0,
             stuck: false,
+            grounded_at_age: None,
+            ground_lifetime: ARROW_GROUND_LIFETIME,
             pickup: false,
             stack,
             damage: if kind == ProjectileKind::Trident {
@@ -215,6 +230,13 @@ impl ProjectileState {
             },
         }
     }
+
+    pub(crate) fn ground_age(&self, entity_age: u32) -> u32 {
+        self.age.saturating_add(
+            self.grounded_at_age
+                .map_or(0, |anchor| entity_age.wrapping_sub(anchor)),
+        )
+    }
 }
 
 #[derive(Debug, Default)]
@@ -231,6 +253,7 @@ pub struct ProjectileRuntime {
     /// Removed projectiles retain launch evidence until same-tick damage admission.
     pub(crate) retired_crossbows: HashMap<EntityId, ProjectileState>,
     bodies: Vec<flight::Hittable>,
+    grid: flight::FineGrid,
 }
 
 pub(crate) fn item_name<'a>(state: &'a TickState, stack: &ItemStack) -> Option<&'a str> {
@@ -250,7 +273,7 @@ pub(crate) fn owner_id(state: &TickState, projectile: &ProjectileState) -> Optio
 
 pub(crate) fn launch(
     state: &mut TickState,
-    record: ProjectileState,
+    mut record: ProjectileState,
     origin: [f64; 3],
     velocity: [f64; 3],
 ) -> Option<EntityId> {
@@ -267,6 +290,17 @@ pub(crate) fn launch(
         .iter()
         .find(|(_, blueprint)| blueprint.name == record.kind.name())
         .map(|(id, _)| *id)?;
+    if matches!(
+        record.kind,
+        ProjectileKind::Arrow | ProjectileKind::SpectralArrow
+    ) && record
+        .owner
+        .and_then(|uuid| state.entities.slot_of_uuid(uuid))
+        .is_some_and(|owner| state.entities.body(owner).faction != 0)
+    {
+        // Capture at launch: owner death/unload must not extend ground lifetime.
+        record.ground_lifetime = BATTLE_ARROW_GROUND_LIFETIME;
+    }
     let id = state.spawn_mob(type_id, origin, 1.0);
     let slot = state.entities.slot_of(id)?;
     initialize_appearance(state, slot, &record);

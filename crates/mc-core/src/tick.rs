@@ -1818,6 +1818,9 @@ fn run_dimension_tick_inner<'a>(
         );
         log.logging = log_start.elapsed();
     }
+    let battle_counts_start = std::time::Instant::now();
+    let battle = crate::battle::publication_counts(state);
+    let battle_counts_time = battle_counts_start.elapsed();
     let times = TickTimes {
         input_us: input_time.as_micros() as u64,
         chunks_us: chunk_time.as_micros() as u64,
@@ -1827,8 +1830,9 @@ fn run_dimension_tick_inner<'a>(
         commit_us: commit_time.as_micros() as u64,
         snapshot_us: snapshot_time.as_micros() as u64,
         views_us: views_time.as_micros() as u64,
-        publish_us: publish_tail_time.as_micros() as u64,
+        publish_us: (publish_tail_time + battle_counts_time).as_micros() as u64,
         coreperf,
+        battle,
         total_us: 0,
         ..Default::default()
     };
