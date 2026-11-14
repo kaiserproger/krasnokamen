@@ -6,7 +6,7 @@
 //! plugin's grants and the configured budgets, and only then does the caller
 //! hand it to the server's own admission boundary. Nothing in this crate touches
 //! a world, a session or a storage backend - it converts between the
-//! `solaris:plugin` component contract and the runtime-independent script types,
+//! `krasnokamen:plugin` component contract and the runtime-independent script types,
 //! and it enforces the execution budget the plan requires before any guest code
 //! can run (fuel, epoch deadline, memory, tables, instances and stack are all set
 //! on the `Store`/`Engine` *before* instantiation, because a component's
@@ -183,7 +183,7 @@ impl Drop for EpochTicker {
     }
 }
 
-pub use bindings::solaris::plugin::types::LogLevel;
+pub use bindings::krasnokamen::plugin::types::LogLevel;
 
 /// The host-side implementation of the contract's imports.
 ///
@@ -327,7 +327,7 @@ pub struct CompiledPlugin {
 }
 
 impl CompiledPlugin {
-    /// Compile `bytes` as a component of the `solaris:plugin` contract.
+    /// Compile `bytes` as a component of the `krasnokamen:plugin` contract.
     ///
     /// The artifact size bound is checked before compilation, because compiling
     /// a component is host work that a guest's fuel budget does not pay for.
@@ -442,7 +442,7 @@ pub fn linker<T: HostServices + 'static>(
     Ok(linker)
 }
 
-/// The generated host side of the `solaris:plugin` contract.
+/// The generated host side of the `krasnokamen:plugin` contract.
 ///
 /// Every public item here comes from the WIT in `crates/mc-script/wit`; nothing
 /// in this crate declares a second copy of the contract's types.
@@ -451,7 +451,7 @@ pub mod bindings {
         path: "../mc-script/wit",
         world: "plugin",
         imports: {
-            "solaris:plugin/host/password-hash": trappable,
+            "krasnokamen:plugin/host/password-hash": trappable,
         },
     });
 }

@@ -8,13 +8,30 @@ fn layout(seed: u64) -> Vec<([u64; 3], u16, String)> {
     let mut state = fixture();
     let mut changes = ChangeSet::default();
     setup(&mut state, &mut changes, [0.0, 80.0, 0.0], seed, 100).unwrap();
-    state.hostile.battle.formation.members.iter().map(|member| {
-        let slot = state.entities.slot_of(member.id).unwrap();
-        let row = state.entities.row(slot);
-        let weapon = row.appearance.equipment[0].as_ref().unwrap();
-        let name = state.registry.items.name_of(weapon.item_id).unwrap().as_str().to_owned();
-        (state.entities.pos(slot).map(f64::to_bits), state.entities.body(slot).faction, name)
-    }).collect()
+    state
+        .hostile
+        .battle
+        .formation
+        .members
+        .iter()
+        .map(|member| {
+            let slot = state.entities.slot_of(member.id).unwrap();
+            let row = state.entities.row(slot);
+            let weapon = row.appearance.equipment[0].as_ref().unwrap();
+            let name = state
+                .registry
+                .items
+                .name_of(weapon.item_id)
+                .unwrap()
+                .as_str()
+                .to_owned();
+            (
+                state.entities.pos(slot).map(f64::to_bits),
+                state.entities.body(slot).faction,
+                name,
+            )
+        })
+        .collect()
 }
 
 #[test]
@@ -28,15 +45,29 @@ fn seed_reproduces_layout_and_army_mix() {
 #[test]
 fn preset_has_exact_homogeneous_mix_and_spaced_horse_flanks() {
     let planned = plan(42, 10_000, [0.0, 80.0, 0.0], 1);
-    for (kind, expected) in [(Kind::Infantry, 5_000), (Kind::Spear, 2_000),
-                             (Kind::Archer, 2_000), (Kind::Cavalry, 1_000)] {
-        assert_eq!(planned.iter().filter(|(_, k, _)| *k == kind).map(|(_, _, n)| *n).sum::<usize>(), expected);
+    for (kind, expected) in [
+        (Kind::Infantry, 5_000),
+        (Kind::Spear, 2_000),
+        (Kind::Archer, 2_000),
+        (Kind::Cavalry, 1_000),
+    ] {
+        assert_eq!(
+            planned
+                .iter()
+                .filter(|(_, k, _)| *k == kind)
+                .map(|(_, _, n)| *n)
+                .sum::<usize>(),
+            expected
+        );
     }
     for (spec, kind, count) in &planned {
         assert!(*count <= 1000);
         if *kind == Kind::Cavalry {
             assert!(spec.origin[0].abs() > 100.0);
-            assert_eq!((slot_position(spec, 1)[0] - slot_position(spec, 0)[0]).abs(), 2.0);
+            assert_eq!(
+                (slot_position(spec, 1)[0] - slot_position(spec, 0)[0]).abs(),
+                2.0
+            );
         }
         if *kind == Kind::Archer {
             assert_eq!(spec.origin[2], -125.0);
@@ -48,7 +79,11 @@ fn preset_has_exact_homogeneous_mix_and_spaced_horse_flanks() {
 #[test]
 fn reset_removes_battle_units_and_ticket_not_other_mobs() {
     let mut state = fixture();
-    let unrelated = state.entities.slots().map(|slot| state.entities.body(slot).id).collect::<Vec<_>>();
+    let unrelated = state
+        .entities
+        .slots()
+        .map(|slot| state.entities.body(slot).id)
+        .collect::<Vec<_>>();
     let mut changes = ChangeSet::default();
     setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 9, 100).unwrap();
     let spawned = changes.entities_spawned.clone();
@@ -59,9 +94,14 @@ fn reset_removes_battle_units_and_ticket_not_other_mobs() {
     for name in ["mob_drops", "mob_griefing", "spawn_mobs"] {
         assert_eq!(state.gamerules.get(name).map(String::as_str), Some("false"));
     }
-    let husk = state.registry.entity_types.id_of(&mc_data::Identifier::parse("minecraft:husk").unwrap()).unwrap();
+    let husk = state
+        .registry
+        .entity_types
+        .id_of(&mc_data::Identifier::parse("minecraft:husk").unwrap())
+        .unwrap();
     for regiment in &state.hostile.battle.formation.regiments {
-        let members = &state.hostile.battle.formation.members[regiment.start..regiment.start + regiment.len];
+        let members =
+            &state.hostile.battle.formation.members[regiment.start..regiment.start + regiment.len];
         let first_slot = state.entities.slot_of(members[0].id).unwrap();
         let first = state.entities.row(first_slot);
         let weapon = first.appearance.equipment[0].as_ref().unwrap().item_id;
@@ -69,8 +109,13 @@ fn reset_removes_battle_units_and_ticket_not_other_mobs() {
         for member in members {
             let slot = state.entities.slot_of(member.id).unwrap();
             let row = state.entities.row(slot);
-            assert!(matches!(state.entities.body(slot).kind, crate::entities::EntityKind::Mob { type_id } if type_id == husk));
-            assert_eq!(row.appearance.equipment[0].as_ref().unwrap().item_id, weapon);
+            assert!(
+                matches!(state.entities.body(slot).kind, crate::entities::EntityKind::Mob { type_id } if type_id == husk)
+            );
+            assert_eq!(
+                row.appearance.equipment[0].as_ref().unwrap().item_id,
+                weapon
+            );
             assert_eq!(row.entity_life.mount.vehicle.is_some(), mounted);
         }
     }
@@ -79,20 +124,39 @@ fn reset_removes_battle_units_and_ticket_not_other_mobs() {
     assert!(!state.hostile.battle.running);
     let status = execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Status).unwrap();
     assert!(status.contains("side1=100 side2=100"), "{status}");
-    assert!(status.contains(&format!("horses={} ", spawned.len() - 200)), "{status}");
+    assert!(
+        status.contains(&format!("horses={} ", spawned.len() - 200)),
+        "{status}"
+    );
     let roster = execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Roster).unwrap();
-    let listed: std::collections::HashSet<_> = roster.strip_prefix("Battle roster: ").unwrap().split(',').collect();
+    let listed: std::collections::HashSet<_> = roster
+        .strip_prefix("Battle roster: ")
+        .unwrap()
+        .split(',')
+        .collect();
     assert_eq!(listed.len(), spawned.len());
     for id in &spawned {
         let slot = state.entities.slot_of(*id).unwrap();
-        assert!(state.entities.row(slot).persistent, "battle entity can naturally despawn");
+        assert!(
+            state.entities.row(slot).persistent,
+            "battle entity can naturally despawn"
+        );
         assert!(listed.contains(state.entities.row(slot).uuid.to_string().as_str()));
     }
-    let want: rustc_hash::FxHashMap<_, _> = spawned.iter().map(|id| {
-        let slot = state.entities.slot_of(*id).unwrap();
-        let pos = state.entities.pos(slot);
-        (ChunkPos { x: (pos[0].floor() as i32).div_euclid(16), z: (pos[2].floor() as i32).div_euclid(16) }, 0)
-    }).collect();
+    let want: rustc_hash::FxHashMap<_, _> = spawned
+        .iter()
+        .map(|id| {
+            let slot = state.entities.slot_of(*id).unwrap();
+            let pos = state.entities.pos(slot);
+            (
+                ChunkPos {
+                    x: (pos[0].floor() as i32).div_euclid(16),
+                    z: (pos[2].floor() as i32).div_euclid(16),
+                },
+                0,
+            )
+        })
+        .collect();
     state.world.ensure_blocking(&want);
     state.refresh_active_chunks(state.tick);
     execute(&mut state, &mut changes, [0.0; 3], &BattleCommand::Start).unwrap();
@@ -101,8 +165,16 @@ fn reset_removes_battle_units_and_ticket_not_other_mobs() {
     assert!(!state.hostile.battle.running);
     assert!(state.tickets.contains_key(OWNER));
     assert_eq!(reset(&mut state, &mut changes), spawned.len());
-    assert!(spawned.iter().all(|id| state.entities.slot_of_any(*id).is_none()));
-    assert!(unrelated.iter().all(|id| state.entities.slot_of_any(*id).is_some()));
+    assert!(
+        spawned
+            .iter()
+            .all(|id| state.entities.slot_of_any(*id).is_none())
+    );
+    assert!(
+        unrelated
+            .iter()
+            .all(|id| state.entities.slot_of_any(*id).is_some())
+    );
     assert!(!state.tickets.contains_key(OWNER));
     assert!(state.hostile.battle.formation.regiments.is_empty());
 }
@@ -132,7 +204,14 @@ fn peaceful_world_rejects_setup_without_partial_changes() {
 
 #[test]
 fn commands_require_operator_and_enforce_count_bounds() {
-    for text in ["battle setup 1 field-100", "battle start", "battle pause", "battle reset", "battle status", "battle roster"] {
+    for text in [
+        "battle setup 1 field-100",
+        "battle start",
+        "battle pause",
+        "battle reset",
+        "battle status",
+        "battle roster",
+    ] {
         assert!(crate::commands::parse(text, false).is_err(), "{text}");
         assert!(crate::commands::parse(text, true).is_ok(), "{text}");
     }
@@ -144,7 +223,13 @@ fn commands_require_operator_and_enforce_count_bounds() {
     let mut state = fixture();
     let mut changes = ChangeSet::default();
     assert_eq!(
-        crate::command_execution::execute(&mut state, crate::boundary::ConnectionId(1), EntityId(1), &roster, &mut changes),
+        crate::command_execution::execute(
+            &mut state,
+            crate::boundary::ConnectionId(1),
+            EntityId(1),
+            &roster,
+            &mut changes
+        ),
         crate::command_execution::CommandResult::Failed
     );
 }

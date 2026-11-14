@@ -7,7 +7,7 @@ use mc_world::BlockPos;
 
 #[test]
 fn owner_seed_village_floors_stay_above_water() {
-    let root = std::env::var_os("SOLARIS_CONTENT_CACHE")
+    let root = std::env::var_os("KRASNOKAMEN_CONTENT_CACHE")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| {
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data/vanilla")
@@ -21,7 +21,7 @@ fn owner_seed_village_floors_stay_above_water() {
     }
     let seed = 8674276330747006396;
     let blocks = Arc::new(
-        BlockRegistry::from_report(&mc_data::blocks::solaris_required_blocks_report()).unwrap(),
+        BlockRegistry::from_report(&mc_data::blocks::krasnokamen_required_blocks_report()).unwrap(),
     );
     let vanilla = mc_data::load(&root).unwrap();
     let tags = mc_data::tags::load(&root, &vanilla).unwrap();
