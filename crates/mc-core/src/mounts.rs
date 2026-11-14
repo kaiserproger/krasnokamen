@@ -1035,20 +1035,38 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             continue;
         }
         // The cooldown is persisted: write only while it is running.
-        let cooldown = match state.entities.row(slot).entity_life.mount.dash_cooldown {
-            0 => 0,
-            running => {
-                let cooldown = running - 1;
-                state.entities.row_mut(slot).entity_life.mount.dash_cooldown = cooldown;
-                cooldown
-            }
+        let cooldown = state.entities.row(slot).entity_life.mount.dash_cooldown;
+        if cooldown > 0 {
+            state.entities.row_mut(slot).entity_life.mount.dash_cooldown = cooldown - 1;
+        }
+        let dashing = state.entities.row(slot).appearance.extra.contains(&(
+            CAMEL_DASH_INDEX,
+            crate::boundary::EntityDataValue::Boolean(true),
+        ));
+        let liquid = if dashing && cooldown < 50 && !state.entities.ground(slot) {
+            let body = state.entities.body(slot);
+            let x = (pos[0] - body.half_width).floor() as i32
+                ..=(pos[0] + body.half_width).floor() as i32;
+            let y = pos[1].floor() as i32..=(pos[1] + body.height).floor() as i32;
+            let z = (pos[2] - body.half_width).floor() as i32
+                ..=(pos[2] + body.half_width).floor() as i32;
+            x.into_iter().any(|x| {
+                z.clone().any(|z| {
+                    y.clone().any(|y| {
+                        state.world.block_at(x, y, z)
+                            .and_then(|block| crate::fluids::contained(state, block))
+                            .is_some()
+                    })
+                })
+            })
+        } else {
+            false
         };
         if cooldown < 50
-            && state.entities.ground(slot)
-            && state.entities.row(slot).appearance.extra.contains(&(
-                CAMEL_DASH_INDEX,
-                crate::boundary::EntityDataValue::Boolean(true),
-            ))
+            && (state.entities.ground(slot)
+                || liquid
+                || vehicle(state, state.entities.body(slot).id).is_some())
+            && dashing
         {
             crate::special_mobs::metadata(
                 state,
