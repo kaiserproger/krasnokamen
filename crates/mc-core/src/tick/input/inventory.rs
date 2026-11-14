@@ -576,12 +576,18 @@ pub(in crate::tick) fn container_close(
     connection: &ConnectionId,
     changes: &mut ChangeSet,
 ) {
-    let Some(entity) = state.connections.by_connection.get(connection).copied() else {
-        return;
-    };
-    if state.entities.slot_of(entity).is_none() {
-        return;
+    if let Some((entity, effects)) = close_container(state, *connection) {
+        apply_player_effects(state, *connection, entity, effects, changes);
     }
+}
+
+/// Native close custody shared by client input and a server-initiated close.
+pub(in crate::tick) fn close_container(
+    state: &mut TickState,
+    connection: ConnectionId,
+) -> Option<(EntityId, crate::player::PlayerEffects)> {
+    let entity = state.connections.entity_of(connection)?;
+    state.entities.slot_of(entity)?;
     let rules = state.registry.item_rules();
     let effects = state
         .players
@@ -589,7 +595,7 @@ pub(in crate::tick) fn container_close(
         .map(|player| player.close(&rules))
         .unwrap_or_default();
     state.open_containers.remove(&entity);
-    apply_player_effects(state, *connection, entity, effects, changes);
+    Some((entity, effects))
 }
 
 pub(in crate::tick) fn place_recipe(
