@@ -372,6 +372,32 @@ fn native_falling_checkpoint_restores_block_state_and_stationary_control() {
     assert!(image.persistent);
 }
 
+#[test]
+fn native_no_gravity_restore_rehydrates_wire_metadata_and_motion() {
+    let mut state = fixture();
+    let native = mc_data::entity_nbt::VanillaEntity {
+        id: "minecraft:cow".into(),
+        wire_id: 42,
+        pos: [8.5, 75.0, 8.5],
+        health: 20.0,
+        extra_fields: vec![
+            ("NoGravity".into(), mc_nbt::Tag::Byte(1)),
+            ("NoAI".into(), mc_nbt::Tag::Byte(1)),
+        ],
+        ..Default::default()
+    };
+    let record = replay_record(&state, &native);
+    restore_entity(&mut state, 42, &record).unwrap();
+    let slot = state.entities.slot_of(EntityId(42)).unwrap();
+    let row = state.entities.row(slot);
+    assert!(row.controls.no_gravity);
+    assert!(row.appearance.extra.contains(&(5, crate::boundary::EntityDataValue::Boolean(true))));
+    for _ in 0..5 {
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    assert_eq!(state.entities.pos(slot)[1], 75.0);
+}
+
 fn age_base(age: u32, tick: u64) -> Replay {
     let mut state = fixture();
     let id = state.spawn_mob(state.registry.cow_type_id, [8.5, 65.0, 8.5], 20.0);

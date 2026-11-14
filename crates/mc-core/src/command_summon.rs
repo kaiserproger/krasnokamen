@@ -107,20 +107,25 @@ pub(crate) struct ItemSummon {
     pub(crate) pickup_delay: Option<u32>,
     pub(crate) age: Option<u32>,
     pub(crate) motion: Option<[f64; 3]>,
+    pub(crate) no_gravity: bool,
+    pub(crate) invulnerable: bool,
 }
-/// Validate item-entity summon NBT (`Item`, `PickupDelay`, `Age`, `Motion`) before any spawn.
+/// Validate item stack and supported item-entity summon fields before any spawn.
 pub(crate) fn prepare_item(state: &TickState, nbt: &Tag) -> Result<ItemSummon, CommandError> {
     let Tag::Compound(authored) = nbt else {
         return Err(error("Summon NBT must be a compound"));
     };
     let mut stack = None;
     let (mut pickup_delay, mut age, mut motion) = (None, None, None);
+    let (mut no_gravity, mut invulnerable) = (false, false);
     for (index, (key, value)) in authored.iter().enumerate() {
         if authored[..index].iter().any(|(seen, _)| seen == key) {
             return Err(error(format!("Duplicate summon NBT field {key}")));
         }
         match key.as_str() {
             "id" | "Pos" => {}
+            "NoGravity" => no_gravity = number(value, key)? != 0.0,
+            "Invulnerable" => invulnerable = number(value, key)? != 0.0,
             "Item" => {
                 let Tag::Compound(fields) = value else {
                     return Err(error("Invalid Item: expected compound"));
@@ -163,6 +168,8 @@ pub(crate) fn prepare_item(state: &TickState, nbt: &Tag) -> Result<ItemSummon, C
         pickup_delay,
         age,
         motion,
+        no_gravity,
+        invulnerable,
     })
 }
 pub(crate) fn prepare(
@@ -227,8 +234,8 @@ pub(crate) fn prepare(
             | "Pose" => name == "minecraft:armor_stand",
             "Size" => matches!(name, "minecraft:slime" | "minecraft:magma_cube"),
             "facing" | "variant" => name == "minecraft:painting",
-            "CustomName" | "CustomNameVisible" | "Invulnerable" | "Motion" | "Rotation"
-            | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
+            "CustomName" | "CustomNameVisible" | "Invulnerable" | "NoGravity" | "Motion"
+            | "Rotation" | "OnGround" | "Fire" | "FallDistance" | "UUID" | "id" | "Pos" => true,
             _ => {
                 return Err(error(format!(
                     "Unknown or unsupported summon NBT field {key}"
@@ -247,6 +254,7 @@ pub(crate) fn prepare(
             | "CanPickUpLoot"
             | "IsBaby"
             | "Invulnerable"
+            | "NoGravity"
             | "CustomNameVisible"
             | "OnGround"
             | "Tame"
@@ -647,6 +655,7 @@ pub(crate) fn apply(state: &mut TickState, id: EntityId, mut image: Image) {
     }
     appearance.health = native.health;
     appearance.baby = baby;
+    crate::entity_controls::sync_no_gravity(appearance, row.controls.no_gravity);
     if body.burn_ticks > 0 {
         appearance.shared_flags |= 1;
     }

@@ -251,7 +251,9 @@ pub(crate) fn run(state: &mut TickState, changes: &mut ChangeSet, events: &mut V
             continue;
         }
         let mut velocity = state.entities.vel(slot).map(|component| component / 20.0);
-        velocity[1] -= 0.03;
+        if !state.entities.row(slot).controls.no_gravity {
+            velocity[1] -= 0.03;
+        }
         let nearest = players
             .iter()
             .filter(|(_, at)| distance_sq(*at, pos) <= 64.0)

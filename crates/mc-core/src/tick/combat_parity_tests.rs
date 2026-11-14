@@ -20,6 +20,52 @@ fn hit(state: &mut TickState, target: EntityId, kind: DamageKind, source: Option
     ));
 }
 
+#[test]
+fn damage_observer_counts_real_admitted_victims_and_thorns_reaction() {
+    use crate::tick::damage::DamageObservation;
+    use mc_data::{Identifier, ItemEnchantment, ItemStack};
+
+    let (mut state, actor, pos) = flat_player_fixture();
+    state.tick = 20;
+    let actor_slot = state.entities.slot_of(actor).unwrap();
+    state.entities.row_mut(actor_slot).protected_until = 0;
+    let target = state.spawn_mob(
+        state.registry.zombie_type_id,
+        [pos[0] + 1.0, pos[1], pos[2]],
+        100.0,
+    );
+    let target_slot = state.entities.slot_of(target).unwrap();
+    let item = state.registry.items.id_of(&Identifier::parse("minecraft:diamond_chestplate").unwrap()).unwrap();
+    let mut armor = ItemStack::new(item, 1);
+    armor.enchantments.push(ItemEnchantment {
+        id: Identifier::parse("minecraft:thorns").unwrap(),
+        level: 10,
+    });
+    std::sync::Arc::make_mut(&mut state.entities.row_mut(target_slot).appearance).equipment[4] = Some(armor);
+    let blocked = state.spawn_mob(
+        state.registry.zombie_type_id,
+        [pos[0] + 2.0, pos[1], pos[2]],
+        100.0,
+    );
+    let blocked_slot = state.entities.slot_of(blocked).unwrap();
+    state.entities.row_mut(blocked_slot).controls.invulnerable = true;
+    let source = DamageSource::Melee {
+        attacker: actor, position: pos, yaw: 0.0, bonus_knockback: 0.0,
+        sweep: false, fire_ticks: 0, bane_ticks: 0,
+    };
+    hit(&mut state, target, DamageKind::Melee, Some(source));
+    hit(&mut state, blocked, DamageKind::Melee, Some(source));
+    let mut observed = Vec::new();
+    state.commit_damage(Some(&mut |_, slot, fact| observed.push((slot, fact))));
+    assert_eq!(observed.iter().filter(|(_, fact)| *fact == DamageObservation::AcceptedReactive).count(), 1);
+    assert!(observed.contains(&(actor_slot, DamageObservation::AcceptedReactive)));
+    assert_eq!(observed.iter().filter(|(_, fact)| *fact == DamageObservation::AcceptedVictim).count(), 2);
+    assert!(observed.contains(&(actor_slot, DamageObservation::AcceptedVictim)));
+    assert!(observed.contains(&(target_slot, DamageObservation::AcceptedVictim)));
+    assert!(!observed.iter().any(|(slot, _)| *slot == blocked_slot));
+    assert!(state.players[&actor].vitals.health < 20.0);
+}
+
 fn shield(state: &mut TickState, player: EntityId) {
     let item = state
         .registry
@@ -392,6 +438,82 @@ fn death_protection_component_rescues_any_held_item_without_default_totem_effect
             assert!(!actor.active_effects.has(EffectId::FireResistance));
         }
     }
+}
+
+#[test]
+fn custom_death_protection_applies_actions_in_order_and_broadcasts_sound() {
+    use crate::command_items::ItemArgument;
+    use crate::effects::{ActiveEffect, EffectId};
+    let (mut state, player, _) = flat_player_fixture();
+    let stack = ItemArgument::parse(
+        "stick[death_protection={death_effects:[\
+         {type:'minecraft:apply_effects',effects:[{id:'minecraft:speed',duration:200}]},\
+         {type:'minecraft:remove_effects',effects:['minecraft:speed']},\
+         {type:'minecraft:clear_all_effects'},\
+         {type:'minecraft:apply_effects',effects:[{id:'minecraft:regeneration',duration:120,amplifier:1}]},\
+         {type:'minecraft:apply_effects',probability:0.0f,effects:[{id:'minecraft:poison',duration:120}]},\
+         {type:'minecraft:play_sound',sound:{sound_id:'minecraft:block.bell.use',range:32.0f}}]}]",
+    ).unwrap().stack(&state.registry.items).unwrap();
+    let actor = state.players.get_mut(&player).unwrap();
+    actor.inventory.slots[0] = stack;
+    actor.give_effect(ActiveEffect::new(EffectId::Poison, 400, 0));
+    hit(&mut state, player, DamageKind::Fall, None);
+    assert!(state.commit_merge_effects().0.is_empty());
+    let actor = &state.players[&player];
+    assert_eq!(actor.vitals.health, 1.0);
+    assert!(!actor.active_effects.has(EffectId::Poison));
+    assert!(!actor.active_effects.has(EffectId::Speed));
+    let regen = actor.active_effects.get(EffectId::Regeneration).unwrap();
+    assert_eq!((regen.duration, regen.amplifier), (120, 1));
+    assert!(state.outbox[&ConnectionId(1)].iter().any(|change| matches!(
+        change, PlayerChange::CommandSound { sound, fixed_range: Some(range), .. }
+            if sound.as_str() == "minecraft:block.bell.use" && *range == 32.0
+    )));
+}
+
+#[test]
+fn custom_death_protection_removes_only_effects_in_named_tag() {
+    use crate::command_items::ItemArgument;
+    use crate::effects::{ActiveEffect, EffectId};
+    let (mut state, player, _) = flat_player_fixture();
+    let registry = std::sync::Arc::make_mut(&mut state.registry);
+    std::sync::Arc::make_mut(&mut registry.tags).registries
+        .entry(mc_data::Identifier::parse("minecraft:mob_effect").unwrap())
+        .or_default()
+        .insert(mc_data::Identifier::parse("example:cleansed").unwrap(), vec![EffectId::Poison as i32]);
+    let stack = ItemArgument::parse(
+        "stick[death_protection={death_effects:[{type:'minecraft:remove_effects',effects:'#example:cleansed'}]}]",
+    ).unwrap().stack(&state.registry.items).unwrap();
+    let actor = state.players.get_mut(&player).unwrap();
+    actor.inventory.slots[0] = stack;
+    actor.give_effect(ActiveEffect::new(EffectId::Poison, 400, 0));
+    actor.give_effect(ActiveEffect::new(EffectId::Speed, 400, 0));
+    hit(&mut state, player, DamageKind::Fall, None);
+    assert!(state.commit_merge_effects().0.is_empty());
+    assert!(!state.players[&player].active_effects.has(EffectId::Poison));
+    assert!(state.players[&player].active_effects.has(EffectId::Speed));
+}
+
+#[test]
+fn custom_death_protection_teleport_clears_fall_and_impulse_context() {
+    use crate::command_items::ItemArgument;
+    let (mut state, player, origin) = flat_player_fixture();
+    let stack = ItemArgument::parse(
+        "stick[death_protection={death_effects:[{type:'minecraft:teleport_randomly',diameter:16.0f}]}]",
+    ).unwrap().stack(&state.registry.items).unwrap();
+    let actor = state.players.get_mut(&player).unwrap();
+    actor.inventory.slots[0] = stack;
+    actor.fall_distance = 8.0;
+    actor.current_impulse_impact_pos = Some(origin);
+    hit(&mut state, player, DamageKind::Fall, None);
+    assert!(state.commit_merge_effects().0.is_empty());
+    let actor = &state.players[&player];
+    assert_eq!(actor.fall_distance, 0.0);
+    assert_eq!(actor.current_impulse_impact_pos, None);
+    let destination = state.entities.pos(state.entities.slot_of(player).unwrap());
+    assert_ne!(destination, origin);
+    assert!((destination[0] - origin[0]).abs() <= 8.0);
+    assert!((destination[2] - origin[2]).abs() <= 8.0);
 }
 
 #[test]

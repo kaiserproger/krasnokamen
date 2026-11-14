@@ -8,8 +8,18 @@ use rustc_hash::{FxHashMap as HashMap, FxHashSet as HashSet};
 #[path = "totem.rs"]
 mod totem;
 
+/// Admission facts emitted from the source tick, before any profiler-specific attribution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DamageObservation {
+    AcceptedVictim,
+    AcceptedReactive,
+}
+
 impl TickState {
-    pub(super) fn commit_damage(&mut self) -> (Vec<EntityId>, Vec<EntityEvent>, Vec<EntityId>) {
+    pub(crate) fn commit_damage(
+        &mut self,
+        mut observer: Option<&mut dyn FnMut(&TickState, EntitySlot, DamageObservation)>,
+    ) -> (Vec<EntityId>, Vec<EntityEvent>, Vec<EntityId>) {
         let mut deaths = Vec::new();
         let mut events = Vec::new();
         let mut spawned = Vec::new();
@@ -126,6 +136,9 @@ impl TickState {
             if !accepted {
                 continue;
             }
+            if let Some(observe) = observer.as_deref_mut() {
+                observe(self, slot, DamageObservation::AcceptedReactive);
+            }
             if let Some((_, pieces)) = damaged.iter_mut().find(|(target, _)| *target == slot) {
                 pieces.push((piece, (raw, 0.0)));
             } else {
@@ -140,6 +153,9 @@ impl TickState {
             if total <= 0.0 {
                 continue;
             }
+            if let Some(observe) = observer.as_deref_mut() {
+                observe(self, slot, DamageObservation::AcceptedVictim);
+            }
             let id = self.entities.body(slot).id;
             let is_player = matches!(self.entities.body(slot).kind, EntityKind::Player { .. });
             if is_player {
@@ -147,14 +163,14 @@ impl TickState {
                     .iter()
                     .rev()
                     .find_map(|(piece, _)| crate::statistics::kill_credit(self, piece.source));
-                let rules = self.registry.item_rules();
+                let registry = std::sync::Arc::clone(&self.registry);
+                let rules = registry.item_rules();
                 let mut died = false;
                 let mut health_changed = false;
                 let mut armor_changed = false;
                 let mut absorption_changed = false;
                 let victim_uuid = self.entities.row(slot).uuid;
                 let mut combat_hits = Vec::new();
-                let mut totems = Vec::new();
                 for (piece, amounts) in &mut pieces {
                     let DamagePiece {
                         amount,
@@ -164,6 +180,7 @@ impl TickState {
                         custom_armor,
                     } = *piece;
                     let mut credit = None;
+                    let mut rescue = None;
                     if let Some(player) = self.players.get_mut(&id) {
                         let before = player.vitals.health;
                         let absorption_before = player.active_effects.absorption;
@@ -293,9 +310,8 @@ impl TickState {
                         credit =
                             Some(((before - player.vitals.health).max(0.0), absorbed, resisted));
                         if lethal {
-                            if let Some(rescue) = totem::rescue(player, &self.registry, kind) {
-                                totems.push(rescue);
-                            } else {
+                            rescue = totem::rescue(player, &self.registry, kind);
+                            if rescue.is_none() {
                                 died = true;
                             }
                         }
@@ -308,9 +324,27 @@ impl TickState {
                             combat_hits.push((
                                 attacker,
                                 damage,
-                                before_hit > 0.0 && player.vitals.is_dead(),
+                                before_hit > 0.0 && rescue.is_none() && player.vitals.is_dead(),
                             ));
                         }
+                    }
+                    if let Some(mut rescue) = rescue {
+                        let evidence = crate::advancements::item_snapshot(self, &rescue.used);
+                        crate::advancements::trigger(
+                            self,
+                            id,
+                            "minecraft:used_totem",
+                            serde_json::json!({"item": evidence}),
+                        );
+                        crate::vibration::emit(
+                            self,
+                            self.entities.pos(slot),
+                            crate::vibration::GameEvent::ItemInteractFinish,
+                            Some(id),
+                        );
+                        totem::apply(self, id, &mut rescue);
+                        events.push(EntityEvent::Status { entity: id, event: 35 });
+                        crate::effects::sync_appearance(self, id);
                     }
                     if let Some((dealt, absorbed, resisted)) = credit {
                         crate::statistics::damage_dealt(
@@ -321,32 +355,6 @@ impl TickState {
                             resisted,
                         );
                     }
-                }
-                for (used, changes) in totems {
-                    if let Some(connection) = self.connections.entity_connection(id) {
-                        for change in changes {
-                            self.push_player(connection, change);
-                        }
-                    }
-                    let evidence = crate::advancements::item_snapshot(self, &used);
-                    crate::advancements::trigger(
-                        self,
-                        id,
-                        "minecraft:used_totem",
-                        serde_json::json!({"item": evidence}),
-                    );
-                    crate::vibration::emit(
-                        self,
-                        self.entities.pos(slot),
-                        crate::vibration::GameEvent::ItemInteractFinish,
-                        Some(id),
-                    );
-                    // LivingEntity.checkTotemDeathProtection, pinned 26.1.2.
-                    events.push(EntityEvent::Status {
-                        entity: id,
-                        event: 35,
-                    });
-                    crate::effects::sync_appearance(self, id);
                 }
                 for (attacker, damage, killed) in combat_hits {
                     crate::plugin_npcs::record_combat(self, attacker, victim_uuid, damage, killed);

@@ -78,6 +78,86 @@ fn advance(s: &mut TickState, n: u64) -> Vec<(BlockPos, u32)> {
 fn prop(s: &TickState, pos: BlockPos, key: &str) -> String {
     property(block(s, pos).unwrap(), key).unwrap().to_owned()
 }
+
+fn command(state: &mut TickState, actor: crate::boundary::EntityId, text: &str) {
+    let mut words = text.split_whitespace();
+    let root = words.next().unwrap();
+    let parsed = crate::command_world::parse(root, &words.collect::<Vec<_>>()).unwrap();
+    crate::command_world::execute(
+        state,
+        crate::boundary::ConnectionId(1),
+        actor,
+        &parsed,
+        &mut Default::default(),
+    );
+}
+
+#[test]
+fn setblock_rejects_malformed_sculk_records_without_world_mutation() {
+    let (mut state, actor) = crate::crafter::tests::fixture(None);
+    let pos = BlockPos { x: 8, y: 201, z: 8 };
+    let before = state.world.block_at(pos.x, pos.y, pos.z);
+    for (name, nbt) in [
+        ("sculk_shrieker", "{warning_level:5}"),
+        ("sculk_sensor", "{last_vibration_frequency:16}"),
+        ("calibrated_sculk_sensor", "{last_vibration_frequency:16}"),
+        ("sculk_catalyst", "{cursors:1}"),
+    ] {
+        command(&mut state, actor, &format!("setblock 8 201 8 {name}{nbt}"));
+        assert!(
+            state.merge_block_writes.is_empty(),
+            "{name} accepted malformed record"
+        );
+        assert_eq!(state.world.block_at(pos.x, pos.y, pos.z), before);
+        assert!(
+            state
+                .world
+                .chunk(ChunkPos { x: 0, z: 0 })
+                .unwrap()
+                .block_entities
+                .get(&pos)
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn setblock_valid_sculk_records_hydrate_after_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut state, actor) = crate::crafter::tests::fixture(Some(dir.path().to_owned()));
+    for (x, name, nbt) in [
+        (6, "sculk_shrieker", "{warning_level:2}"),
+        (7, "sculk_sensor", "{last_vibration_frequency:7}"),
+        (8, "calibrated_sculk_sensor", "{last_vibration_frequency:3}"),
+        (9, "sculk_catalyst", "{cursors:[]}"),
+    ] {
+        command(
+            &mut state,
+            actor,
+            &format!("setblock {x} 201 8 {name}{nbt}"),
+        );
+        assert_eq!(state.merge_block_writes.len(), 1, "{name}");
+        crate::tick::run_tick(&mut state, &[]);
+    }
+    state.world.flush_dirty(&BTreeMap::new()).unwrap();
+    drop(state);
+    let mut restored = self::state(Some(dir.path().to_owned()));
+    crate::shrieker::validate_loaded(&restored).unwrap();
+    validate(&restored).unwrap();
+    hydrate(&mut restored);
+    for x in 6..=9 {
+        let pos = BlockPos { x, y: 201, z: 8 };
+        assert!(
+            restored
+                .world
+                .chunk(ChunkPos { x: 0, z: 0 })
+                .unwrap()
+                .block_entities
+                .contains_key(&pos)
+        );
+    }
+}
+
 #[test]
 fn sensor_placed_through_dimension_command_commit_receives_vibrations() {
     let mut s = state(None);

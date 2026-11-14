@@ -24,6 +24,7 @@ pub(crate) struct MotionInput {
     pub air_supply: i32,
     pub levitation: f32,
     pub slow_falling: bool,
+    pub no_gravity: bool,
     pub id: i32,
     pub tick: u64,
 }
@@ -374,6 +375,9 @@ pub(crate) fn step<S: BlockSampler>(
         && !water
     {
         config.gravity = 4.0;
+    }
+    if input.no_gravity {
+        config.gravity = 0.0;
     }
     let requested = body.velocity;
     let mut resolved = mc_physics::step_entity(body, sampler, config);

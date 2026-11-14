@@ -498,8 +498,13 @@ fn move_to(state: &mut TickState, slot: EntitySlot, target: Option<[f64; 3]>) {
     let dt = mc_physics::TICK_SECONDS;
     let velocity = [
         horizontal[0],
-        (state.entities.vel(slot)[1] - mc_physics::GRAVITY_BLOCKS_PER_SECOND_SQUARED * dt)
-            .max(mc_physics::TERMINAL_VELOCITY_BLOCKS_PER_SECOND),
+        (state.entities.vel(slot)[1]
+            - if state.entities.row(slot).controls.no_gravity {
+                0.0
+            } else {
+                mc_physics::GRAVITY_BLOCKS_PER_SECOND_SQUARED * dt
+            })
+        .max(mc_physics::TERMINAL_VELOCITY_BLOCKS_PER_SECOND),
         horizontal[2],
     ];
     let sampler = crate::tick::TickSampler {

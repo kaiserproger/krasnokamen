@@ -68,6 +68,7 @@ const TAG_ROOTS: &[(&str, &str)] = &[
     ("game_event", "minecraft:game_event"),
     ("instrument", "minecraft:instrument"),
     ("item", "minecraft:item"),
+    ("mob_effect", "minecraft:mob_effect"),
     ("painting_variant", "minecraft:painting_variant"),
     ("point_of_interest_type", "minecraft:point_of_interest_type"),
     ("potion", "minecraft:potion"),

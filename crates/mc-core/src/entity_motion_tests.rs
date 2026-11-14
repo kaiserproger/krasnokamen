@@ -32,6 +32,7 @@ fn input(movement: MovementClass, position: Vec3) -> MotionInput {
         air_supply: 300,
         levitation: 0.0,
         slow_falling: false,
+        no_gravity: false,
         id: 1,
         tick: 0,
     }
