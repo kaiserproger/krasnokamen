@@ -138,7 +138,7 @@ pub fn builtin() -> &'static FoodTable {
             BUILTIN_SURVIVAL_FOOD,
             Path::new("crates/mc-data/data/survival_food.json"),
         )
-        .expect("built-in Solaris survival food JSON is valid")
+        .expect("built-in Krasnokamen survival food JSON is valid")
     })
 }
 

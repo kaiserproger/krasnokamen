@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 /// The bytes of the one client artifact these cases deploy.
-const BUNDLE_BYTES: &[u8] = b"solaris-client-fixture";
+const BUNDLE_BYTES: &[u8] = b"krasnokamen-client-fixture";
 
 /// Its size and SHA-256, which the manifest has to declare exactly: they are the
 /// bytes really written, so the package parser verifies the artifact the way it

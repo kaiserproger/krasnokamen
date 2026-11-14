@@ -8,7 +8,7 @@ import traceback
 
 
 driver_path = sys.argv[1]
-spec = importlib.util.spec_from_file_location("solaris_real_client_agent_driver", driver_path)
+spec = importlib.util.spec_from_file_location("krasnokamen_real_client_agent_driver", driver_path)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
