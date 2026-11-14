@@ -6,11 +6,12 @@ import json
 import os
 from pathlib import Path
 import shlex
+import shutil
 import subprocess
 import sys
 
 from .. import runtime
-from ..quirk_parity.fuzz import failure_identity, shrink_player_scenario
+from ..quirk_parity.seeded import failure_identity, shrink_player_scenario
 from .protocol_matrix import run as run_protocol_matrix
 
 
@@ -36,9 +37,12 @@ def replay(ctx, row, directory):
     ctx.cwds.append(str(runtime.REPO_ROOT))
     ctx.logs.append(str(log))
     ctx.exits.append(None)
+    work = Path('/run/media/kaiserroman/games/solaris-work')
+    if runtime.REPO_ROOT.is_relative_to(work) and shutil.disk_usage(work).free < 100 * 1024**3:
+        raise RuntimeError('scenario reduction refused: games disk has less than 100 GiB free')
     with log.open('w') as output:
         result = subprocess.run(argv, cwd=runtime.REPO_ROOT, env=env, stdout=output,
-                                stderr=subprocess.STDOUT, timeout=ctx.timeout_seconds or 600)
+                                stderr=subprocess.STDOUT, timeout=None if mem_run else timeout)
     ctx.exits[-1] = result.returncode
     receipts = list((directory / 'receipts').glob('*/result.json'))
     if len(receipts) != 1:
@@ -91,6 +95,14 @@ def shrink(ctx, report):
 
 def run(ctx):
     try:
+        if os.environ.get('KRASNOKAMEN_RANDOM_REPLAY_MEM_RUN') and '--shrink' in ctx.extra_args:
+            script = Path(ctx.extra_args[ctx.extra_args.index('--script') + 1])
+            row = json.loads(script.read_text())
+            report, _, _ = replay(ctx, row, ctx.artifact_dir / 'initial')
+            ctx.client_evidence['protocol_matrix'] = report
+            if report.get('status') != 'pass':
+                raise RuntimeError(report.get('note', 'random scenario replay failed'))
+            return {'protocol_matrix': report}
         result = run_protocol_matrix(ctx, random_mode=True)
         if '--differential' in ctx.extra_args:
             from ..quirk_parity.player import run_player_script, compare_player_states

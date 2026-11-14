@@ -25,6 +25,10 @@ def setup(ctx: MatrixContext) -> None:
     fixture = ctx.server.query('execute if block 7 81 8 stone run say MatrixPlacementFixtureReady')
     if 'MatrixPlacementFixtureReady' not in fixture:
         raise RuntimeError('placement fixture was not committed: ' + fixture)
+    # Loading and constructing the raised fixture can take long enough for a
+    # real client to fall away from it. Put every player back on the floor.
+    for client in ctx.clients:
+        client.teleport_to(4.5,80,8.5)
     ctx.server.command(f'clear {actor.name}')
     ctx.server.command(f'give {actor.name} stone 16')
     ctx.wait_until(lambda: _stone_count(actor)==16,description='received finite 16-stone fixture')

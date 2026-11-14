@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run canonical matrix-random seeds; retain only failing receipts and reductions."""
+"""Run seeded network scenarios; retain failure artifacts and compact seed records."""
 from __future__ import annotations
 
 import argparse
@@ -17,6 +17,7 @@ import time
 
 WORK = Path('/run/media/kaiserroman/games/solaris-work')
 MEM_RUN = WORK / 'solaris/tools/dev/mem-run.sh'
+MIN_FREE_BYTES = 100 * 1024**3
 
 
 def size(directory):
@@ -31,16 +32,26 @@ def passed_receipt(record, path, receipt):
 
 
 def prune(root, current, maximum):
-    """Evict oldest completed campaigns, never an in-flight campaign."""
+    """Evict old heavy artifacts while preserving each completed campaign summary."""
     campaigns = sorted(path for path in root.glob('campaign-*') if path.is_dir())
     total = sum(size(path) for path in campaigns)
     for path in campaigns:
         if total <= maximum:
             break
-        if path == current:
+        if path == current or not (path / 'result.json').is_file():
             continue
-        total -= size(path)
-        shutil.rmtree(path)
+        before = size(path)
+        for child in path.iterdir():
+            if child.name == 'result.json':
+                continue
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+        summary = json.loads((path / 'result.json').read_text())
+        summary['artifacts_retained'] = False
+        (path / 'result.json').write_text(json.dumps(summary, indent=2) + '\n')
+        total -= before - size(path)
     return total
 
 
@@ -76,7 +87,7 @@ def campaign(args):
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise SystemExit('another fuzz campaign owns the receipt directory')
+            raise SystemExit('another scenario campaign owns the receipt directory')
         return run_campaign(args)
 
 
@@ -101,18 +112,26 @@ def run_campaign(args):
               'ionice', '-c', '3', sys.executable, '-m', 'tools.harness', 'run', 'matrix-random',
               '--server-bin', str(args.server_bin), '--vanilla-data', str(args.vanilla_data),
               '--port', str(args.port), '--dashboard-port', str(args.port + 1)]
-    from tools.harness.quirk_parity.fuzz import failure_identity
+    common = [str(MEM_RUN), '-m', '6G', *runner]
+    from tools.harness.quirk_parity.seeded import failure_identity
+    from tools.harness.ledger import tree_fingerprint
     for seed in range(args.start_seed, args.start_seed + args.seeds):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             summary['stop_reason'] = 'time_budget'
+            break
+        free_bytes = shutil.disk_usage(WORK).free
+        if free_bytes < MIN_FREE_BYTES:
+            summary.update(stop_reason='disk_floor', disk_free_bytes=free_bytes)
             break
         directory = root / f'seed-{seed}'
         directory.mkdir()
         env = dict(os.environ, KRASNOKAMEN_VALIDATION_ROOT=str(directory / 'receipts'))
         argv = common + ['--seed', str(seed), '--steps', str(args.steps), '--bots', str(args.bots)]
         record = {'seed': seed, 'steps': args.steps, 'bots': args.bots,
-                  'command': shlex.join(argv), 'server_sha256': summary['server_sha256']}
+                  'command': shlex.join(argv), 'server_sha256': summary['server_sha256'],
+                  'server_head': summary['server_pin']['head'],
+                  'harness_tree': tree_fingerprint(args.repo)}
         with (directory / 'campaign.log').open('w') as log:
             try:
                 process = subprocess.run(argv, cwd=args.repo, env=env, stdout=log,
@@ -132,19 +151,23 @@ def run_campaign(args):
         else:
             summary['failed'] += 1
             identity = failure_identity(report)
-            record.update(identity=identity, receipt=str(receipts[0]) if receipts else None)
+            record.update(status='failed', identity=identity, receipt=str(receipts[0]) if receipts else None,
+                          harness_tree=receipt.get('tree', record['harness_tree']))
             summary['failures'].append(record)
             # Reduce a distinct oracle failure once, not every duplicate seed.
             if identity is not None and identity not in summary['reductions']:
                 script = next((directory / 'receipts').glob('*/random-script.json'), None)
                 remaining = deadline - time.monotonic()
-                if script is not None and remaining > 0:
+                free_bytes = shutil.disk_usage(WORK).free
+                if script is not None and remaining > 0 and free_bytes < MIN_FREE_BYTES:
+                    summary.update(stop_reason='disk_floor', disk_free_bytes=free_bytes)
+                elif script is not None and remaining > 0:
                     reduction = directory / 'reduction'
                     reduction.mkdir()
                     reduce_env = dict(os.environ, KRASNOKAMEN_VALIDATION_ROOT=str(reduction / 'receipts'))
                     with (reduction / 'campaign.log').open('w') as log:
                         try:
-                            subprocess.run(common + ['--script', str(script), '--shrink'], cwd=args.repo,
+                            subprocess.run(runner + ['--script', str(script), '--shrink'], cwd=args.repo,
                                            env=reduce_env, stdout=log, stderr=subprocess.STDOUT,
                                            timeout=remaining)
                         except subprocess.TimeoutExpired:
@@ -153,6 +176,8 @@ def run_campaign(args):
                     summary['reductions'][identity] = str(reduced[0]) if reduced else None
             (directory / 'campaign-result.json').write_text(json.dumps(record, indent=2) + '\n')
         (root / 'result.json').write_text(json.dumps(summary, indent=2) + '\n')
+        if summary['stop_reason'] == 'disk_floor':
+            break
         if prune(args.receipts, root, args.max_bytes) > args.max_bytes:
             summary['stop_reason'] = 'disk_budget'
             break

@@ -125,6 +125,10 @@ its generated actions include conflicting quick-move clicks on the same chest
 slot. The isolated server's opt-in input log records each consumed input and
 tick; a missing or gapped log fails closed. Network scheduling is not
 deterministic merely because the action seed is fixed.
+Before actions, the isolated fixture removes pre-existing dropped items and
+waits until the observer sees no ground stock. Conservation counts every item
+type within the fixture's ground volume (x/z 24–44, y 79–90), excluding
+unrelated natural terrain drops elsewhere in loaded chunks.
 
 Inventory comparisons use each owning client's received inventory, not an
 independent observer of other players' private inventories. Do not infer replay
@@ -148,12 +152,17 @@ The user timer runs at 03:00 local time. Disable it with
 the owner-host memory runner at low priority, enforces a campaign time budget,
 and retains failure artifacts under the configured receipts directory (default
 `<work>/receipts/scenarios`). Campaign `result.json` records the pinned binary
-manifest, requested and attempted seeds, and any reductions. Each passing seed
-retains its command, step and bot counts, server SHA and harness tree fingerprint
-even after its full receipt is pruned.
+manifest, requested and attempted seeds, and any reductions. Every attempted
+seed retains its command, step and bot counts, server commit and binary SHA,
+harness tree fingerprint and result; full receipts are pruned for passes only.
+When the disk budget requires pruning older campaigns, their compact
+`result.json` seed records remain; older failure artifacts may be removed.
 The configured disk budget is checked between seeds, not enforced as a hard
 filesystem quota during a running seed; a single seed or reduction may exceed
 it before the campaign stops.
+On the owner host, each seed and reduction trial checks that the games disk has
+at least 100 GiB free before starting a world run; a campaign stops with
+`disk_floor` rather than starting another seed below that threshold.
 
 
 ## Profiles and scenarios

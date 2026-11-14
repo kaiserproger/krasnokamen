@@ -16,15 +16,15 @@ def found_duper_cells():
     Each came out of `--fuzz-style bud` (192..1024 cells); vanilla ended with more TNT than it was
     built with. Construction order is kept exactly (it is part of the case).
     """
-    from . import fuzz
+    from . import seeded
     found = {(11, 61): "bud-seed11-cell61", (12, 90): "bud-seed12-cell90", (12, 224): "bud-seed12-cell224"}
     cells = []
     for (seed, index), name in found.items():
-        scenario = fuzz.bud_scenario(seed, 1024, "line")
+        scenario = seeded.bud_scenario(seed, 1024, "line")
         meta = scenario["fuzz"]["cells"][index]
         ox, oz = meta["origin"]
         blocks = [((x - ox, y, z - oz), b) for (x, y, z), b in meta["blocks"]]
-        fire_pos = (4, fuzz.BASE_Y, 5)
+        fire_pos = (4, seeded.BASE_Y, 5)
         cells.append((name, blocks, fire_pos))
     return cells
 

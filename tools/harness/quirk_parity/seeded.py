@@ -1,6 +1,6 @@
-"""Seeded differential fuzz cells for piston/TNT/rail/carpet/coral contraptions.
+"""Seeded differential scenario cells for piston/TNT/rail/carpet/coral contraptions.
 
-Each fuzz scenario packs many independent 16x16 cells (48 blocks apart, so
+Each seeded scenario packs many independent 16x16 cells (48 blocks apart, so
 blasts never meet) that all run on the same tick timeline. Vanilla is the
 oracle: cells where vanilla ends with more TNT (blocks + primed entities) than
 it started with are classified as duplication cells and reported separately,
@@ -169,7 +169,7 @@ def fuzz_scenario(seed: int, cells: int = 64, style: str = "mixed") -> dict:
     return {
         "id": f"fuzz-{style}-{seed}",
         "family": "fuzz-dupers",
-        "description": f"Seeded differential fuzz: {cells} cells of piston/TNT/rail/carpet/coral contraptions",
+        "description": f"Seeded differential scenario: {cells} cells of piston/TNT/rail/carpet/coral contraptions",
         "boxes": boxes,
         "setup": setup,
         "phases": [
@@ -348,7 +348,7 @@ def tnt_total(snapshot: dict) -> int:
 
 
 def timing_scenario(seed: int, cells: int = 128, ticks: int = 8) -> dict:
-    """Redstone-timing differential fuzz: piston/sticky piston/observer driven by random on/off waveforms.
+    """Redstone-timing differential scenario: piston/sticky piston/observer driven by random on/off waveforms.
 
     Every tick (phase) randomly applies power toggles, QC-point toggles, neighbour-update nudges and
     zero-tick pairs (on+off or off+on inside ONE tick). The block state of every cell is compared
@@ -412,7 +412,7 @@ def timing_scenario(seed: int, cells: int = 128, ticks: int = 8) -> dict:
                      "blocks": [[list(pos), block] for pos, block in placed], "wave": wave})
     return {
         "id": f"fuzz-timing-{seed}", "family": "zero-tick",
-        "description": f"Redstone waveform differential fuzz, {cells} cells x {ticks} ticks (seed {seed})",
+        "description": f"Redstone waveform differential scenario, {cells} cells x {ticks} ticks (seed {seed})",
         "boxes": boxes, "setup": setup,
         "phases": [{"name": f"t{t + 1}", "commands": phase_cmds[t], "ticks": 1} for t in range(ticks)],
         "compare": {"blocks": "exact", "entities": "counts",
