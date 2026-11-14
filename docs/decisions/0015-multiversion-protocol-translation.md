@@ -69,6 +69,15 @@ advancement coordinates, tag HolderSets, pot decorations and light BitSets.
 The session UUID and `onlineMode` already exist in 776 and must be retained by
 this step. The shared `sulfur_cube_content` component remains an item template
 in both releases, with its nested ids translated rather than an empty payload.
+`equippable` has the same eleven-field stream layout in all three releases,
+including sound holders and the optional entity-type holder set. Adjacent item
+translation remaps registered sound and entity ids while retaining named tags.
+The equipment slot stream uses the `EquipmentSlot` id field, not enum ordinal:
+mainhand 0, feet 1, legs 2, chest 3, head 4, offhand 5, body 6, saddle 7.
+Metadata: `Equippable`, `EquipmentSlot`, `SoundEvent` and
+`ByteBufCodecs` holder-set javap captures for each jar under
+`receipts/BvArmorAssets/`; jar SHA-1s match the table above. Graphical
+equipment presentation requires a separate native-client gate.
 The full measured 775 -> 777 delta was originally retained under
 `.analysis/vanilla-26.3/`; it is historical evidence, not a direct runtime step.
 

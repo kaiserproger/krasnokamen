@@ -12,6 +12,7 @@ use std::sync::LazyLock;
 mod book;
 mod container;
 mod death;
+mod equippable;
 mod profile;
 mod templates;
 mod v263;
@@ -216,6 +217,7 @@ pub(super) fn encode_one<B: BufMut>(
         | ids::MAP_ID
         | ids::OMINOUS_BOTTLE_AMPLIFIER => buf.write_varint(integer(&value)?),
         ids::DEATH_PROTECTION => death::encode(buf, &value)?,
+        ids::EQUIPPABLE => equippable::encode(buf, &value)?,
         ids::CUSTOM_NAME | ids::ITEM_NAME => write_text(buf, &value)?,
         ids::ITEM_MODEL | ids::NOTE_BLOCK_SOUND => {
             buf.write_identifier(&Identifier::parse(string(&value)?).map_err(|_| invalid())?)?
@@ -392,6 +394,7 @@ pub(super) fn decode<B: Buf>(
             Tag::Compound(fields)
         }
         ids::ENCHANTMENT_GLINT_OVERRIDE => Tag::Byte(i8::from(buf.read_bool()?)),
+        ids::EQUIPPABLE => equippable::decode(buf)?,
         ids::USE_REMAINDER => templates::decode(buf, depth)?,
         ids::DEATH_PROTECTION => death::decode(buf)?,
         ids::DYED_COLOR => Tag::Int(buf.read_i32()?),
@@ -611,12 +614,12 @@ pub(super) fn make_list(mut elements: Vec<Tag>) -> Tag {
     })
 }
 pub(super) fn registry_id(registry: &str, name: &str) -> Result<i32, CodecError> {
+    let name = Identifier::parse(name).map_err(|_| invalid())?;
     if registry == "sound_event" {
-        return mc_data::builtin_sounds_26_3::id(name)
+        return mc_data::builtin_sounds_26_3::id(name.as_str())
             .map(|id| id as i32)
             .ok_or_else(invalid);
     }
-    let name = Identifier::parse(name).map_err(|_| invalid())?;
     let id = match registry {
         "data_component_type" => mc_data::data_component_types_26_1_2::id(&name),
         "item" => items().id_of(&name),
