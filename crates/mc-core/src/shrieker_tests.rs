@@ -62,7 +62,12 @@ fn wardens(state: &TickState) -> usize {
 #[test]
 fn data_view_uses_live_shrieker_warning_level() {
     let (mut state, _, pos) = fixture(false);
-    state.shriekers.entries.get_mut(&key(pos)).unwrap().warning_level = 3;
+    state
+        .shriekers
+        .entries
+        .get_mut(&key(pos))
+        .unwrap()
+        .warning_level = 3;
     let mc_nbt::Tag::Compound(fields) = crate::command_data::block(&state, pos).unwrap() else {
         panic!("expected shrieker compound");
     };

@@ -268,7 +268,10 @@ fn a_panicking_shelf_test_leaves_no_temp_dir() {
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let wire = Wire::new();
         created = Some(wire.dir.path().to_path_buf());
-        assert!(wire.dir.path().is_dir(), "the wire's world exists during the test");
+        assert!(
+            wire.dir.path().is_dir(),
+            "the wire's world exists during the test"
+        );
         panic!("simulated assertion failure before finish()");
     }));
     std::panic::set_hook(previous);

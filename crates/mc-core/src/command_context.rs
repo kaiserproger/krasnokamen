@@ -8,9 +8,9 @@ use std::collections::BTreeMap;
 
 #[path = "command_context_deferred.rs"]
 mod deferred;
-pub(crate) use deferred::{
-    CompletionId, complete, completion_context, execute_job, resume, suspend,
-};
+#[cfg(test)]
+pub(crate) use deferred::suspend;
+pub(crate) use deferred::{CompletionId, complete, completion_context, execute_job, resume};
 
 pub(crate) const LIMIT: usize = 65_536;
 /// Local simulation increments the published tick before shared command commit.

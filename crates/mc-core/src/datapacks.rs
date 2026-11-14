@@ -1171,7 +1171,9 @@ fn prepare_packs(
     base: Option<&crate::registry::CoreRegistry>,
 ) -> Result<Completed, Failure> {
     let registry = if packs.changes_registry(current) {
-        let mut registry = base.ok_or("No base registry for the reload")?.prepare_content();
+        let mut registry = base
+            .ok_or("No base registry for the reload")?
+            .prepare_content();
         packs.install_content(&mut registry)?;
         Some(Arc::new(registry))
     } else {

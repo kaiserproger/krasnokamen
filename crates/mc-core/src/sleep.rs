@@ -276,7 +276,6 @@ pub(crate) fn wake(state: &mut TickState, entity: EntityId) {
     }
 }
 
-
 /// Once per tick: count sleep time, wake those whose bed is gone, whose
 /// night is over or who were hurt, and skip the night when the gamerule's
 /// percentage of active non-spectator players sleeps soundly.

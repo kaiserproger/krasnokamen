@@ -486,7 +486,11 @@ fn camel_dash_requires_rider_saddle_ground_and_cooldown() {
     );
     tick(&mut state, &mut changes);
     assert!(
-        state.entities.row(camel_slot).appearance.extra
+        state
+            .entities
+            .row(camel_slot)
+            .appearance
+            .extra
             .contains(&(19, crate::boundary::EntityDataValue::Boolean(true))),
         "cooldown 50 is checked before decrement"
     );

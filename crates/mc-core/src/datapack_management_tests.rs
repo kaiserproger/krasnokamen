@@ -99,9 +99,7 @@ fn enabling_an_enabled_pack_with_an_order_is_an_error() {
         .datapacks
         .install(packs, _root.path().to_owned(), state.registry.clone());
     run(&mut state, "datapack enable file/custom first");
-    assert!(
-        format!("{:?}", state.outbox).contains("commands.datapack.enable.failed")
-    );
+    assert!(format!("{:?}", state.outbox).contains("commands.datapack.enable.failed"));
     assert!(state.datapacks.reload.is_none());
     assert_eq!(
         state.datapacks.selection().enabled,
@@ -217,7 +215,15 @@ fn create_writes_description_and_does_not_enable_or_overwrite_pack() {
     run(&mut state, r#"datapack create "new_pack" "overwrite""#);
     finish_worker(&mut state);
     assert_eq!(std::fs::read(path).unwrap(), bytes);
-    for invalid in ["New pack", "../escape", "CON", "con", "trailing.", "a/b", "LPT1"] {
+    for invalid in [
+        "New pack",
+        "../escape",
+        "CON",
+        "con",
+        "trailing.",
+        "a/b",
+        "LPT1",
+    ] {
         run(
             &mut state,
             &format!("datapack create \"{invalid}\" \"bad\""),
@@ -538,7 +544,10 @@ fn create_preserves_boolean_component_style_and_ignores_an_unrelated_bad_pack() 
     finish_worker(&mut state);
     assert_eq!(score(&state, "failed"), 1);
     assert!(root.path().join("refused/pack.mcmeta").exists());
-    assert_eq!(std::fs::read_to_string(root.path().join("custom/pack.mcmeta")).unwrap(), "not JSON");
+    assert_eq!(
+        std::fs::read_to_string(root.path().join("custom/pack.mcmeta")).unwrap(),
+        "not JSON"
+    );
 }
 
 #[test]

@@ -97,8 +97,7 @@ fn data_mutation_preparation_does_not_commit_partial_nbt_edits() {
         "nested.keep set from storage test:missing value",
     ] {
         assert!(
-            prepare(&state, context, &original, "modify", arguments,)
-                .is_err(),
+            prepare(&state, context, &original, "modify", arguments,).is_err(),
             "{arguments}"
         );
         assert_eq!(*get(&original, "nested.keep").unwrap(), Tag::Int(3));
@@ -188,11 +187,13 @@ fn data_mutation_block_commits_live_inventory_without_resetting_furnace() {
     let pos = BlockPos { x: 4, y: 60, z: 4 };
     run(&mut state, context, "setblock 4 60 4 minecraft:furnace");
     let stack = item(&state, "minecraft:iron_ingot", 3);
-    let mut furnace = crate::inventory::furnace::FurnaceState::default();
-    furnace.lit_remaining = 87;
-    furnace.lit_total = 1600;
-    furnace.cook_progress = 31;
-    furnace.cook_total = 200;
+    let furnace = crate::inventory::furnace::FurnaceState {
+        lit_remaining: 87,
+        lit_total: 1600,
+        cook_progress: 31,
+        cook_total: 200,
+        ..Default::default()
+    };
     state.block_entities.insert(
         (4, 60, 4),
         crate::tick::BlockEntityState {

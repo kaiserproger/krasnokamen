@@ -834,13 +834,31 @@ fn data_tags_and_armor_stand_fields_commit_together() {
     run(&mut state, context, "summon minecraft:armor_stand 4 60 4");
     let target = "@e[type=minecraft:armor_stand,limit=1]";
     assert_eq!(
-        data(&mut state, context, &format!(
-            "data merge entity {target} {{Small:1b,Tags:['guard']}}"
-        )),
+        data(
+            &mut state,
+            context,
+            &format!("data merge entity {target} {{Small:1b,Tags:['guard']}}")
+        ),
         1
     );
-    assert_eq!(query(&mut state, context, &format!("data get entity {target} Small")).unwrap(), 1);
-    assert_eq!(query(&mut state, context, &format!("data get entity {target} Tags[0]")).unwrap(), 5);
+    assert_eq!(
+        query(
+            &mut state,
+            context,
+            &format!("data get entity {target} Small")
+        )
+        .unwrap(),
+        1
+    );
+    assert_eq!(
+        query(
+            &mut state,
+            context,
+            &format!("data get entity {target} Tags[0]")
+        )
+        .unwrap(),
+        5
+    );
 }
 
 #[test]
@@ -853,7 +871,11 @@ fn data_entity_edit_preserves_unrelated_runtime_state() {
     state.entities.row_mut(slot).breed_cooldown = 35;
     state.entities.row_mut(slot).entity_life.taming.rolls = 123;
     assert_eq!(
-        data(&mut state, context, "data merge entity @e[type=minecraft:cow,limit=1] {Health:7.5f,NoAI:1b}"),
+        data(
+            &mut state,
+            context,
+            "data merge entity @e[type=minecraft:cow,limit=1] {Health:7.5f,NoAI:1b}"
+        ),
         1
     );
     assert_eq!(state.entities.body(slot).attack_cooldown, 17);
@@ -1244,7 +1266,10 @@ fn data_block_reads_live_campfire_progress_before_metadata_edit() {
     place(&mut state, context, "campfire");
     let fields = vec![
         ("CookingTimes".into(), Tag::IntArray(vec![17, 0, 0, 0])),
-        ("CookingTotalTimes".into(), Tag::IntArray(vec![200, 0, 0, 0])),
+        (
+            "CookingTotalTimes".into(),
+            Tag::IntArray(vec![200, 0, 0, 0]),
+        ),
     ];
     let campfire =
         crate::campfire::CampfireState::from_fields(&fields, &state.registry.items).unwrap();
@@ -1254,7 +1279,11 @@ fn data_block_reads_live_campfire_progress_before_metadata_edit() {
         17
     );
     assert_eq!(
-        data(&mut state, context, "data merge block 4 60 4 {CustomName:'test'}"),
+        data(
+            &mut state,
+            context,
+            "data merge block 4 60 4 {CustomName:'test'}"
+        ),
         1
     );
     assert_eq!(
@@ -1273,7 +1302,11 @@ fn data_block_metadata_edit_preserves_live_brewing_owner() {
     state.brewing.insert((4, 60, 4), brewing.clone());
 
     assert_eq!(
-        data(&mut state, context, "data merge block 4 60 4 {CustomName:'test'}"),
+        data(
+            &mut state,
+            context,
+            "data merge block 4 60 4 {CustomName:'test'}"
+        ),
         1,
         "{}",
         said(&mut state)

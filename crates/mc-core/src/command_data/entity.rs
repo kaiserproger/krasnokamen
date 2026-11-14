@@ -91,7 +91,10 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
                 return Err("Tags must be a string list".into());
             };
             if list.elements.len() > 1024
-                || list.elements.iter().any(|tag| !matches!(tag, Tag::String(_)))
+                || list
+                    .elements
+                    .iter()
+                    .any(|tag| !matches!(tag, Tag::String(_)))
             {
                 return Err("Tags must contain at most 1024 strings".into());
             }
@@ -175,7 +178,9 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
             world,
             slot,
             image,
-            new.iter().find(|(key, _)| key == "Tags").map(|(_, value)| value),
+            new.iter()
+                .find(|(key, _)| key == "Tags")
+                .map(|(_, value)| value),
         )?)
     } else {
         None

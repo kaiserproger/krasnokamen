@@ -362,8 +362,12 @@ pub(crate) fn write_slots(
                         crate::projectiles::weapons::sync(state, entity);
                     }
                     Write::Equipment => {
-                        let EquipmentWrite { entity, slot, equipment, custody } =
-                            equipment_writes.next().expect("admitted equipment");
+                        let EquipmentWrite {
+                            entity,
+                            slot,
+                            equipment,
+                            custody,
+                        } = equipment_writes.next().expect("admitted equipment");
                         std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance)
                             .equipment = equipment;
                         crate::entity_loot::restore(state, slot);

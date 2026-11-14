@@ -28,12 +28,6 @@ pub(crate) fn fixture_in_temp_dir() -> (EdgeServer, tempfile::TempDir) {
 /// the directory already removed, never leaked.
 pub(crate) struct AdminWorld(tempfile::TempDir);
 
-impl AdminWorld {
-    pub(crate) fn path(&self) -> &std::path::Path {
-        self.0.path()
-    }
-}
-
 impl std::ops::Deref for AdminWorld {
     type Target = std::path::Path;
 
@@ -63,7 +57,7 @@ fn server_at(dir: &std::path::Path) -> EdgeServer {
     let report = mc_data::blocks::krasnokamen_required_blocks_report();
     let data = Arc::new(mc_data::krasnokamen_required_data());
     let cfg = EdgeConfig::default();
-    let server = EdgeServer {
+    EdgeServer {
         loader_manifest: None,
         protocols: crate::translation::Catalog::default(),
         wire: WireRegistries {
@@ -99,8 +93,7 @@ fn server_at(dir: &std::path::Path) -> EdgeServer {
         operator_updates: tokio::sync::Mutex::new(()),
         screens: Default::default(),
         voice: Default::default(),
-    };
-    server
+    }
 }
 
 pub(crate) fn register(
@@ -967,7 +960,10 @@ fn a_failing_admin_test_leaves_no_temp_dir_and_removes_no_other() {
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let (_server, dir) = fixture_in_temp_dir();
         created = Some(dir.path().to_path_buf());
-        assert!(dir.path().is_dir(), "the fixture directory exists during the test");
+        assert!(
+            dir.path().is_dir(),
+            "the fixture directory exists during the test"
+        );
         panic!("simulated assertion failure inside an admin test");
     }));
     std::panic::set_hook(previous);
@@ -996,8 +992,15 @@ fn a_passing_admin_test_leaves_no_temp_dir() {
         server.hub.shutdown();
         path
     };
-    assert!(!path.exists(), "a passing admin test left {} behind", path.display());
-    assert!(sentinel.path().is_dir(), "the fixture removed a directory it did not create");
+    assert!(
+        !path.exists(),
+        "a passing admin test left {} behind",
+        path.display()
+    );
+    assert!(
+        sentinel.path().is_dir(),
+        "the fixture removed a directory it did not create"
+    );
 }
 
 #[path = "clock_queue_tests.rs"]

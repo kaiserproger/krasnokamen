@@ -543,7 +543,8 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             // its column index, four rings 1.2..3.6 blocks out. Riding at the
             // target itself piled every rider that chose the same foe onto
             // one block (76 riders on two foot in the G1 rehearsal).
-            let (sin, cos) = (bi as f64 * ATTACK_ANGLE).sin_cos();
+            let angle = bi as f64 * ATTACK_ANGLE;
+            let (sin, cos) = (f64::from(mth::sin(angle)), f64::from(mth::cos(angle)));
             let ring = 1.2 + 0.8 * (bi % 4) as f64;
             let place = [
                 target.pos[0] + cos * ring - position[0],

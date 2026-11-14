@@ -153,7 +153,7 @@ async fn computer_worker_reopen_and_close_reopen_at_capacity() {
         BlockStateId,
         chunk::{Chunk, ChunkPos},
     };
-    let (mut server, dir) = crate::server::admin_tests::fixture_in_temp_dir();
+    let (mut server, _dir) = crate::server::admin_tests::fixture_in_temp_dir();
     server.cfg.computer.enabled = true;
     server.cfg.computer.command = vec!["/bin/cat".into()];
     server.cfg.computer.working_directory = "/tmp".into();

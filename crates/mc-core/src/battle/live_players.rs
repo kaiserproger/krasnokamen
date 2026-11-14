@@ -972,7 +972,10 @@ fn place_behind(state: &mut TickState, name: &str, target: &str) -> Result<Strin
         );
     let radians = f64::from(yaw).to_radians();
     // Vanilla look vector of a yaw: (-sin, cos).
-    let forward = [-radians.sin(), radians.cos()];
+    let forward = [
+        -f64::from(mc_physics::mth::sin(radians)),
+        f64::from(mc_physics::mth::cos(radians)),
+    ];
     let at = [
         pos[0] - forward[0] * SPECTATOR_BACK,
         pos[1] + SPECTATOR_UP,

@@ -34,8 +34,12 @@ pub(crate) fn drive(row: &ColdRow) -> Option<([f64; 3], f64)> {
 fn metadata(state: &mut TickState, slot: EntitySlot, lying: bool, relaxing: bool) {
     let extra = &state.entities.row(slot).appearance.extra;
     if [(21, lying), (22, relaxing)].iter().all(|(index, value)| {
-        extra.iter().find(|(i, _)| i == index).map(|(_, v)| v)
-            .unwrap_or(&EntityDataValue::Boolean(false)) == &EntityDataValue::Boolean(*value)
+        extra
+            .iter()
+            .find(|(i, _)| i == index)
+            .map(|(_, v)| v)
+            .unwrap_or(&EntityDataValue::Boolean(false))
+            == &EntityDataValue::Boolean(*value)
     }) {
         return;
     }

@@ -161,7 +161,15 @@ fn command_custody_removing_equipment_clears_the_live_image_and_advances_fence()
         ),
         crate::command_execution::CommandResult::Success(_)
     ));
-    assert!(state.entities.row(slot).appearance.equipment.iter().all(Option::is_none));
+    assert!(
+        state
+            .entities
+            .row(slot)
+            .appearance
+            .equipment
+            .iter()
+            .all(Option::is_none)
+    );
     assert!(native_npc_inventory_revision(&state, "owner", &handle).unwrap() > before);
 }
 

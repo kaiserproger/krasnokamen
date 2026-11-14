@@ -270,7 +270,10 @@ fn the_counter_sees_module_entries_and_not_the_workers_async_writes() {
     let module = Path::new(
         "wasmtime/modules/wasmtime--1794681568745/5P-Dzair9udw094-2sFFLB1geexthDk2VBZvP4Soskg",
     );
-    assert!(is_module_entry(module), "a module entry is what the oracle counts");
+    assert!(
+        is_module_entry(module),
+        "a module entry is what the oracle counts"
+    );
     for not_an_entry in [
         "wasmtime/modules/wasmtime--1794681568745/5P-Dzair9udw094-2sFFLB1geexthDk2VBZvP4Soskg.wip-atomic-write-stats",
         "wasmtime/modules/wasmtime--1794681568745/5P-Dzair9udw094-2sFFLB1geexthDk2VBZvP4Soskg.stats",
@@ -319,8 +322,8 @@ fn the_production_engine_reuses_its_cache_across_restarts() {
             "a production engine child compiles",
         );
         // `NamedTempFile` unlinks on drop, so read before it goes out of scope.
-        let report = std::fs::read_to_string(out.path())
-            .expect("the child reports its new entries");
+        let report =
+            std::fs::read_to_string(out.path()).expect("the child reports its new entries");
         let mut lines = report.lines();
         let count = lines
             .next()

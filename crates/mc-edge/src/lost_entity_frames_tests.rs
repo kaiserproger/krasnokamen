@@ -252,7 +252,10 @@ fn a_panicking_pump_leaves_no_temp_dir() {
     let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let pump = Pump::new();
         created = Some(pump.dir.path().to_path_buf());
-        assert!(pump.dir.path().is_dir(), "the pump's world exists during the test");
+        assert!(
+            pump.dir.path().is_dir(),
+            "the pump's world exists during the test"
+        );
         panic!("simulated assertion failure before finish()");
     }));
     std::panic::set_hook(previous);

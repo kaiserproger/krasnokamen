@@ -956,7 +956,7 @@ fn ruined_portal_support_columns_never_copy_template_material() {
         .retain(|family| family.id.path() == "ruined_portal");
     assert_eq!(structures.families.len(), 1, "one overworld ruined portal");
     let portal_6 = clean_template(
-        StructureTemplate::from_nbt_file(&directory.join("portal_6.nbt"), &registry).unwrap(),
+        StructureTemplate::from_nbt_file(directory.join("portal_6.nbt"), &registry).unwrap(),
         "ruined_portal",
         &registry,
     )

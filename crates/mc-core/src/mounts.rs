@@ -1050,7 +1050,9 @@ pub(crate) fn tick(state: &mut TickState, changes: &mut ChangeSet) {
             x.into_iter().any(|x| {
                 z.clone().any(|z| {
                     y.clone().any(|y| {
-                        state.world.block_at(x, y, z)
+                        state
+                            .world
+                            .block_at(x, y, z)
                             .and_then(|block| crate::fluids::contained(state, block))
                             .is_some()
                     })

@@ -311,9 +311,7 @@ fn json(tag: &Tag) -> serde_json::Value {
                         (
                             "bold" | "italic" | "underlined" | "strikethrough" | "obfuscated",
                             Tag::Byte(value),
-                        ) => {
-                            Value::Bool(*value != 0)
-                        }
+                        ) => Value::Bool(*value != 0),
                         _ => json(value),
                     };
                     (key.clone(), value)
@@ -380,11 +378,7 @@ fn move_enabled(selection: &mut Selection, id: &str, rest: &[&str]) -> Result<()
                 .iter()
                 .position(|entry| entry == &other)
                 .ok_or_else(|| unknown(&other))?;
-            if *placement == "after" {
-                at + 1
-            } else {
-                at
-            }
+            if *placement == "after" { at + 1 } else { at }
         }
         _ => {
             return Err(Failure::Text(
