@@ -66,8 +66,27 @@ fn execute(
     );
     crate::command_context::begin_sequence(state);
     state.command_context.current = Some(context);
-    crate::command_context::native(state, line, context, &mut ChangeSet::default(), false)
-        .unwrap_or(Failed)
+    match crate::command_context::native(state, line, context, &mut ChangeSet::default(), false) {
+        Ok(result) => result,
+        Err(error) => {
+            crate::command_execution::error(state, context.connection, error);
+            Failed
+        }
+    }
+}
+
+fn execute_deferred(state: &mut TickState, line: &str, context: crate::command_context::Context) {
+    crate::command_context::run(state, line, context, &mut ChangeSet::default());
+    assert!(state.command_context.waiting(), "trace must await worker completion");
+}
+
+fn console_context(state: &TickState) -> crate::command_context::Context {
+    crate::command_context::Context::source(
+        state,
+        crate::command_console::CONNECTION,
+        crate::command_console::EXECUTOR,
+        3,
+    )
 }
 
 fn text_of(tag: &Tag) -> String {
@@ -142,10 +161,8 @@ fn function_trace_records_commands_results_messages_errors_and_nested_calls() {
     state.day_time = 0;
     state.wall_clock = || 1_767_225_600 + 86_461;
 
-    assert_eq!(
-        execute(&mut state, "debug function test:outer", 3),
-        Success(4)
-    );
+    let context = console_context(&state);
+    execute_deferred(&mut state, "debug function test:outer", context);
     // The function really ran: 10 + 3 (nested) + 1.
     assert_eq!(state.day_time, 14);
     settle(&mut state);
@@ -196,10 +213,8 @@ fn function_trace_records_commands_results_messages_errors_and_nested_calls() {
 fn function_tag_trace_counts_every_function_and_reports_the_multiple_key() {
     let world = tempfile::tempdir().unwrap();
     let mut state = fixture(world.path());
-    assert_eq!(
-        execute(&mut state, "debug function #test:both", 3),
-        Success(5)
-    );
+    let context = console_context(&state);
+    execute_deferred(&mut state, "debug function #test:both", context);
     settle(&mut state);
     let (name, trace) = trace_file(world.path());
     assert_eq!(
@@ -256,10 +271,8 @@ fn function_trace_write_failure_is_reported_not_hidden() {
         std::path::PathBuf::new(),
         std::sync::Arc::clone(&state.registry),
     );
-    assert_eq!(
-        execute(&mut state, "debug function test:inner", 3),
-        Success(1)
-    );
+    let context = console_context(&state);
+    execute_deferred(&mut state, "debug function test:inner", context);
     said(&mut state);
     settle(&mut state);
     assert_eq!(said(&mut state), ["commands.debug.function.traceFailed"]);
@@ -272,18 +285,8 @@ fn function_trace_records_only_what_the_source_is_sent() {
     let player = crate::boundary::ConnectionId(1);
     let entity = state.connections.entity_of(player).expect("joined");
     state.outbox.clear();
-    state.command_context.current = None;
     let context = crate::command_context::Context::source(&state, player, entity, 3);
-    crate::command_context::begin_sequence(&mut state);
-    state.command_context.current = Some(context);
-    let result = crate::command_context::native(
-        &mut state,
-        "debug function test:chatty",
-        context,
-        &mut ChangeSet::default(),
-        false,
-    );
-    assert_eq!(result, Ok(Success(4)));
+    execute_deferred(&mut state, "debug function test:chatty", context);
     settle(&mut state);
     let (_, trace) = trace_file(world.path());
     // The player still gets what the commands deliver to them as a target...
