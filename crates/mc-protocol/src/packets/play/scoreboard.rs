@@ -16,7 +16,7 @@ pub struct TeamParameters {
     pub suffix: Tag,
 }
 
-/// `ChatFormatting.RESET`, the "no team color" value on the Solaris side.
+/// `ChatFormatting.RESET`, the "no team color" value on the Krasnokamen side.
 const TEAM_COLOR_NONE: i32 = 21;
 
 impl TeamParameters {

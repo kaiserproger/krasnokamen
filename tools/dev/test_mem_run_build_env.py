@@ -34,7 +34,7 @@ class BuildEnvTests(unittest.TestCase):
                 shutil.copy(HERE / name, self.root)
         (self.root / 'targets' / 'slot-a').mkdir(parents=True)
         self.env = os.environ | {'CARGO_TARGET_DIR': str(self.root / 'targets' / 'slot-a'),
-                                 'SOLARIS_SLOT_TARGETS': str(self.root / 'targets'), 'SOLARIS_SLOT_MIN_FREE_GB': '0'}
+                                 'KRASNOKAMEN_SLOT_TARGETS': str(self.root / 'targets'), 'KRASNOKAMEN_SLOT_MIN_FREE_GB': '0'}
 
     def effective(self, *runner_args, tail=()):
         runner = self.root / 'mem-run-copy.sh'

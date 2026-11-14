@@ -346,7 +346,7 @@ async fn scenario_attribute_swap(
 ) -> Result<serde_json::Value> {
     // Wait for the victim to appear (orchestrator summoned it already; watch
     // for a fresh AddEntity) and for hotbar content showing the issued items.
-    // Vanilla sends a full ContainerSetContent image; Solaris sends per-slot
+    // Vanilla sends a full ContainerSetContent image; Krasnokamen sends per-slot
     // MenuSlot deltas (ClientboundContainerSetSlot) — accumulate both into
     // one 46-slot image so either server form is observed. Event-driven: no
     // sleeps, just frame waits.
@@ -399,7 +399,7 @@ async fn scenario_attribute_swap(
                 entities_seen.push((id, ty, pos));
             }
             // Latch the first ZOMBIE (registry id 150) spawned AT the arena spot:
-            // Solaris runs on real worldgen, so unrelated zombies stream in
+            // Krasnokamen runs on real worldgen, so unrelated zombies stream in
             // before the summoned victim reaches the teleported player. The
             // retry loop still re-syncs to whichever candidate's health moves.
             let at_arena = add_entity_pos(&frame).is_some_and(|p| {
@@ -412,9 +412,9 @@ async fn scenario_attribute_swap(
         seen.push(frame);
     }
     // Phase 2: inventory image (ContainerSetContent full image on vanilla,
-    // per-slot MenuSlot deltas on Solaris) — same keepalive/teleport
+    // per-slot MenuSlot deltas on Krasnokamen) — same keepalive/teleport
     // handling, separate deadline so a latched victim never starves it.
-    // Frames consumed while waiting for the victim (Solaris streams the gives
+    // Frames consumed while waiting for the victim (Krasnokamen streams the gives
     // before the teleported player sees the arena zombie) may already carry
     // the hotbar: replay them into the image before waiting for more.
     for frame in seen.iter() {
@@ -510,7 +510,7 @@ async fn scenario_attribute_swap(
     // victim id for cases B/C/D.
     let mut victim = victim;
     let mut dmg_a: Option<f32> = None;
-    // Solaris spawns in a NORMAL world: summon coordinates land in unloaded
+    // Krasnokamen spawns in a NORMAL world: summon coordinates land in unloaded
     // terrain, so the victim may be FAR from the arena. Before attacking,
     // walk to the victim's spawn position — vanilla reach (~3 blocks) then
     // applies on BOTH servers. Vanilla arena victims sit at ARENA already,
@@ -548,7 +548,7 @@ async fn scenario_attribute_swap(
     }
     for candidate in candidates {
         // Walk to THIS candidate's spawn (minus 1.7 blocks Z) before each
-        // attack: on Solaris the summon lands in unloaded terrain far from
+        // attack: on Krasnokamen the summon lands in unloaded terrain far from
         // the player, and attacks beyond reach never land. Vanilla arena
         // victims sit at ARENA so this is a no-op there.
         if let Some((_, _, pos)) = entities_seen.iter().find(|(id, _, _)| *id == candidate) {

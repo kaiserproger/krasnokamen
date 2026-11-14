@@ -150,7 +150,7 @@ class PlatformContractTests(unittest.TestCase):
 
     def test_plugin_fixture_rewrites_only_isolated_config(self):
         from tools.harness.matrix_domains import plugins
-        original = Path('/run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/solaris-permissions/config.toml')
+        original = Path('/run/media/kaiserroman/games/solaris-work/scenarios/live-plugins/krasnokamen-permissions/config.toml')
         before = original.read_text()
         configured = []
         ctx = self.context(server=SimpleNamespace(
@@ -162,13 +162,13 @@ class PlatformContractTests(unittest.TestCase):
         ctx.clients[0].reconnect = lambda: None
         with tempfile.TemporaryDirectory(prefix='.platform-fixture-', dir=Path(__file__).resolve().parents[2]) as directory:
             ctx.artifact_dir = Path(directory)
-            target = plugins.deploy(ctx, 'solaris-permissions',
-                                    groups={'guest': [], 'member': ['solaris.essentials.use']},
+            target = plugins.deploy(ctx, 'krasnokamen-permissions',
+                                    groups={'guest': [], 'member': ['krasnokamen.essentials.use']},
                                     default_group='guest')
-            data = tomllib.loads((target/'solaris-permissions/config.toml').read_text())
+            data = tomllib.loads((target/'krasnokamen-permissions/config.toml').read_text())
             self.assertEqual(data['default_group'], 'guest')
             self.assertEqual(data['groups'], [{'name':'guest','nodes':[]},
-                                             {'name':'member','nodes':['solaris.essentials.use']}])
+                                             {'name':'member','nodes':['krasnokamen.essentials.use']}])
             self.assertEqual(configured, [({}, {'plugins_dir': target})])
             self.assertEqual(sorted(p.name for p in target.iterdir()),
                              sorted(p.name for p in original.parent.parent.iterdir()))
@@ -288,7 +288,7 @@ class PlatformContractTests(unittest.TestCase):
         ctx.clients[0].reconnect = lambda: calls.append(('reconnect',))
         with tempfile.TemporaryDirectory(prefix='.platform-auth-', dir=Path(__file__).resolve().parents[2]) as directory:
             ctx.artifact_dir = Path(directory)
-            plugins.deploy(ctx, 'solaris-auth', require_plugin_login=True)
+            plugins.deploy(ctx, 'krasnokamen-auth', require_plugin_login=True)
         self.assertEqual(calls, [('disconnect',), ('config', {'auth': {'require_plugin_login': True}}),
                                  ('automation', False), ('reconnect',)])
 

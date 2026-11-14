@@ -47,7 +47,7 @@ pub(crate) fn from_fields(
     fields: &[(String, Tag)],
 ) -> Result<(), CoreError> {
     let mut result = life.clone();
-    for key in ["Owner", "LoveCause", "solaris:Rider"] {
+    for key in ["Owner", "LoveCause", "krasnokamen:Rider"] {
         if let Some(tag) = field(fields, key)? {
             let value = uuid(tag, key)?;
             match key {
@@ -115,9 +115,9 @@ pub(crate) fn from_fields(
             _ => return Err(invalid("leash")),
         });
     }
-    if let Some(tag) = field(fields, "solaris:TameRolls")? {
+    if let Some(tag) = field(fields, "krasnokamen:TameRolls")? {
         let Tag::Long(rolls) = tag else {
-            return Err(invalid("solaris:TameRolls"));
+            return Err(invalid("krasnokamen:TameRolls"));
         };
         result.taming.rolls = *rolls as u64;
     }
@@ -220,12 +220,12 @@ pub(crate) fn to_fields(life: &EntityLifeState) -> Vec<(String, Tag)> {
         fields.push(("Trusting".into(), Tag::Byte(1)));
     }
     if pet.rolls != 0 {
-        fields.push(("solaris:TameRolls".into(), Tag::Long(pet.rolls as i64)));
+        fields.push(("krasnokamen:TameRolls".into(), Tag::Long(pet.rolls as i64)));
     }
     for (key, uuid) in [
         ("Owner", pet.owner),
         ("LoveCause", pet.love_cause),
-        ("solaris:Rider", life.mount.rider),
+        ("krasnokamen:Rider", life.mount.rider),
     ] {
         if let Some(uuid) = uuid {
             fields.push((key.into(), uuid_tag(uuid)));
