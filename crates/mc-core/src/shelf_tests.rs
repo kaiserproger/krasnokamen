@@ -102,7 +102,7 @@ fn powered_chain_swaps_nine_hotbar_slots_and_disconnects_when_unpowered() {
 }
 #[test]
 fn shelf_checkpoint_native_chunk_restart_preserves_stacks_and_alignment() {
-    let dir = std::env::temp_dir().join(format!("solaris-shelf-{}", uuid::Uuid::new_v4()));
+    let dir = std::env::temp_dir().join(format!("krasnokamen-shelf-{}", uuid::Uuid::new_v4()));
     let (mut state, actor) = fixture(Some(dir.clone()));
     let id = block(&state, "pale_oak_shelf", &[("facing", "south")]);
     state.world.set_block(8, 201, 8, id);
@@ -156,7 +156,7 @@ fn shelf_checkpoint_native_chunk_restart_preserves_stacks_and_alignment() {
     let records = mc_world::wire::client_block_entities(projected, &state.registry.blocks);
     let shelf = records.iter().find(|record| record.pos == POS).unwrap();
     assert_eq!(shelf.type_name.as_str(), "minecraft:shelf");
-    let registry = mc_data::block_entity_types::solaris_required_block_entity_types();
+    let registry = mc_data::block_entity_types::krasnokamen_required_block_entity_types();
     assert_eq!(registry.id_of(&shelf.type_name), Some(39));
     let Tag::Compound(fields) = &shelf.nbt else {
         panic!("shelf update is not a compound")
