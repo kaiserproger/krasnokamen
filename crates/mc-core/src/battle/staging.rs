@@ -36,7 +36,7 @@ pub enum BattleCommand {
 pub fn parse(args: &[&str]) -> Result<BattleCommand, CommandError> {
     let usage = || {
         CommandError::Usage(
-            "battle setup <seed> <field-100|field-1k|field-10k> [count] | battle start|pause|reset|status|roster",
+            "battle setup <seed> <field-100|field-1k|field-10k> [count] | battle start|pause|reset|status|roster | battle watch <player>... | battle live <player> <red|blue> | battle spectate <player> <target>",
         )
     };
     match args {
@@ -154,13 +154,18 @@ fn plan(seed: u64, count: usize, origin: [f64; 3], side: u16) -> Vec<(RegimentSp
         };
         result.push((spec, kind, size));
     };
-    // Fit 322 front files inside the existing ticket even at a chunk edge;
-    // mounted files remain on the flanks, just behind the shallower foot.
-    let flank = front.len().saturating_sub(1) as f64 * 23.0 + 4.0;
-    add(Kind::Cavalry, cavalry / 2, -flank, 84.0, 20);
+    // Seven 36-file foot regiments (28 ranks) one fighting width apart: at the
+    // mesh interval the line is one uniform 252-file lattice (353 blocks,
+    // inside the existing ticket even at a chunk edge). The second side stands
+    // half an interval to the side, so the two lines mesh file between file.
+    // Mounted files remain on the flanks, behind the deeper foot.
+    let width = 36.0 * MESH_INTERVAL;
+    let flank = front.len().saturating_sub(1) as f64 * width / 2.0 + 4.0;
+    let mesh = if side == 2 { MESH_INTERVAL / 2.0 } else { 0.0 };
+    add(Kind::Cavalry, cavalry / 2, -flank, 96.0, 20);
     for (index, &(kind, size)) in front.iter().enumerate() {
-        let x = (index as f64 - (front.len() - 1) as f64 / 2.0) * 46.0;
-        add(kind, size, x, 36.0, 46);
+        let x = (index as f64 - (front.len() - 1) as f64 / 2.0) * width + mesh;
+        add(kind, size, x, 36.0, 36);
     }
     let archer_regiments = archers.div_ceil(1000);
     for index in 0..archer_regiments {
@@ -168,7 +173,7 @@ fn plan(seed: u64, count: usize, origin: [f64; 3], side: u16) -> Vec<(RegimentSp
         let x = (index as f64 - (archer_regiments - 1) as f64 / 2.0) * 52.0;
         add(Kind::Archer, size, x, 120.0, 50);
     }
-    add(Kind::Cavalry, cavalry - cavalry / 2, flank, 84.0, 20);
+    add(Kind::Cavalry, cavalry - cavalry / 2, flank, 96.0, 20);
     result
 }
 
@@ -317,6 +322,11 @@ fn setup(
                     let slot = state.entities.slot_of(id).expect("battle unit");
                     state.entities.set_faction(slot, side);
                     state.entities.set_rot(slot, yaw, 0.0);
+                    // Staged ranks already stand guard: shields go up with the
+                    // spawn, so `battle start` publishes no mass pose change.
+                    if unit.shield.is_some() {
+                        super::show_shield(state, id, true);
+                    }
                     // A horse carries its rider: settle the pair through the horse.
                     let mut grounded = id;
                     if kind == Kind::Cavalry {
@@ -327,12 +337,16 @@ fn setup(
                     state.hostile.battle.ground_pending.push(grounded);
                     members.push(id);
                 }
-                state
-                    .hostile
-                    .battle
-                    .formation
+                let foot = matches!(kind, Kind::Infantry | Kind::Spear);
+                let formation = &mut state.hostile.battle.formation;
+                formation
                     .add_regiment(spec, &members)
                     .map_err(str::to_owned)?;
+                if foot {
+                    formation
+                        .set_fighting_interval(spec.id, MESH_INTERVAL)
+                        .map_err(str::to_owned)?;
+                }
             }
         }
         state
@@ -531,6 +545,11 @@ pub(crate) fn execute(
                 state.hostile.battle.formation.regiments.len(),
                 dead
             ))
+        }
+        BattleCommand::Watch { names } => Ok(live_players::watch(state, names)),
+        BattleCommand::Live { name, side } => live_players::live(state, name, *side),
+        BattleCommand::Spectate { name, target } => {
+            live_players::spectate(state, changes, name, target)
         }
     }
 }

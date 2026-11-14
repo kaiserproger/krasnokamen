@@ -143,6 +143,13 @@ pub(crate) fn publication_counts(
     if counts.units == 0 {
         return None;
     }
+    let engaged = |count: u64| {
+        if battle.running {
+            u32::try_from(count).expect("battle fighters exceed native slot capacity")
+        } else {
+            0
+        }
+    };
     Some(std::sync::Arc::new(crate::boundary::BattleCounts {
         units: u32::try_from(counts.units).expect("battle population exceeds native slot capacity"),
         alive: counts
@@ -156,6 +163,11 @@ pub(crate) fn publication_counts(
                 )
             })
             .collect(),
+        in_weapon_reach: engaged(battle.combat.work.in_weapon_reach),
+        fighting: engaged(battle.combat.work.fighting),
+        acting: engaged(battle.combat.work.acting),
+        shields_raised: engaged(battle.combat.work.shields_raised),
+        shield_blocks: engaged(battle.combat.work.shield_blocks),
     }))
 }
 
@@ -164,6 +176,8 @@ pub(crate) struct Output {
     pub intents: Vec<BattleIntent>,
     pub events: Vec<EntityEvent>,
     pub arrows: Vec<ArrowLaunch>,
+    /// Shield pose transitions: (bearer, raised), applied after the frozen pass.
+    pub shields: Vec<(EntityId, bool)>,
     pub counters: UnitCounters,
 }
 
@@ -211,6 +225,9 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     timings.projection_us = phase_us(&mut mark);
     battle.elapsed_ticks += 1;
     state.hostile.events.append(&mut output.events);
+    for (id, raised) in output.shields.drain(..) {
+        show_shield(state, id, raised);
+    }
     for arrow in output.arrows.drain(..) {
         crate::hostile::launch_arrow(state, arrow.owner, arrow.from, arrow.velocity, arrow.damage);
     }
@@ -230,6 +247,41 @@ pub(crate) fn step(state: &mut TickState) -> Vec<Intent> {
     battle.output = output;
     state.hostile.battle = battle;
     intents
+}
+
+/// Vanilla `LivingEntity.DATA_LIVING_ENTITY_FLAGS` (javap 26.3): index 8, a
+/// byte where 1 is `isUsingItem` and 2 selects the off hand. A raised battle
+/// shield is the off-hand use a blocking mob or player shows; native
+/// appearance custody journals and publishes it like any metadata change.
+const LIVING_FLAGS: u8 = 8;
+const USING_OFF_HAND: i8 = 0b11;
+
+fn show_shield(state: &mut TickState, id: EntityId, raised: bool) {
+    let Some(slot) = state.entities.slot_of(id) else {
+        return;
+    };
+    let flags = if raised { USING_OFF_HAND } else { 0 };
+    let shown = state
+        .entities
+        .row(slot)
+        .appearance
+        .extra
+        .iter()
+        .find_map(|(index, value)| match (*index, value) {
+            (LIVING_FLAGS, crate::boundary::EntityDataValue::Byte(flags)) => Some(*flags),
+            _ => None,
+        })
+        .unwrap_or(0);
+    if shown == flags {
+        return;
+    }
+    let extra = &mut std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).extra;
+    let value = crate::boundary::EntityDataValue::Byte(flags);
+    match extra.iter_mut().find(|(index, _)| *index == LIVING_FLAGS) {
+        Some((_, current)) => *current = value,
+        None => extra.push((LIVING_FLAGS, value)),
+    }
+    state.appearance_changed.push(id);
 }
 
 #[cfg(test)]

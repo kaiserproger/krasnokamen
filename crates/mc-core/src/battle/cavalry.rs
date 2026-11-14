@@ -121,13 +121,32 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             let mut velocity = battle.columns.drive[bi];
             let speed = velocity[0].hypot(velocity[2]);
             if speed > 0.001 {
-                let mounted_speed = if wounded {
+                let mut mounted_speed: f64 = if wounded {
                     0.8
                 } else if routing {
                     5.4
                 } else {
                     4.6
                 };
+                let formation = &battle.formation;
+                // A rider dressing his place keeps its pace: the leader's speed plus a
+                // catch-up that grows with the distance, never the full trot for a
+                // hand's breadth (which overshot the place every tick and left the
+                // block ragged). A sweeping rider heads for a plan point instead.
+                if let Some(member) = formation.members.get(bi)
+                    && !wounded
+                    && !routing
+                    && !combat
+                        .sweeps
+                        .get(member.regiment)
+                        .is_some_and(Option::is_some)
+                {
+                    let slot = formation.heading_target(bi);
+                    let away = mth::length2(slot[0] - position[0], slot[2] - position[2]);
+                    let leader =
+                        formation.regiments[member.regiment].speed.abs() / mc_physics::TICK_SECONDS;
+                    mounted_speed = mounted_speed.min((leader + away * SLOT_CATCH_UP).max(speed));
+                }
                 velocity[0] *= mounted_speed / speed;
                 velocity[2] *= mounted_speed / speed;
             }
@@ -195,6 +214,8 @@ pub(super) fn step(frame: &Frame<'_>, battle: &mut BattleState, combat: &mut Com
             let speed = if distance <= 46.0 { 6.4 } else { 4.6 };
             [toward[0] * speed, 0.0, toward[1] * speed]
         };
+        let push = horse_push(&battle.formation, bi);
+        let velocity = [velocity[0] + push[0], velocity[1], velocity[2] + push[1]];
         let velocity = battle.formation.constrain_velocity(position, velocity);
         battle.columns.drive[horse_bi] = velocity;
         battle.columns.drive[bi] = [0.0; 3];

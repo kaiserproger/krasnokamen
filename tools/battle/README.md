@@ -32,6 +32,16 @@ ten-second stall census: `advancing=` live steady soldiers of regiments whose
 leader advanced at least four blocks and are not within six blocks of their
 enemy front, `stalled=` those of them that moved less than one block;
 `engaged=` counts melee regiments within six blocks of their enemy front.
+Ranks and files hold until contact: a staged soldier takes only a fifth of the vanilla
+knockback of a hit (`SOLDIER_KNOCKBACK_RESISTANCE`, 0.8), so arrow fire does not scatter a
+marching regiment, and a rider dressing his place keeps the leader's pace plus a catch-up that
+grows with his distance from it instead of trotting at full speed for a hand's breadth. Pursuers
+close on a routed enemy as a block, each keeping his file and his place in the depth (ranks a
+block apart), and horses push apart below 1.5 blocks while they close on a foe or ride a plan.
+`cargo test -p mc-core --lib battle::ranks_tests::rank_and_heap_table -- --ignored --nocapture`
+prints per-100-tick slot error, line wobble and heap shares (`BATTLE_UNITS_PER_SIDE`,
+`BATTLE_RANKS_TICKS`; `BATTLE_RANKS_DUMP=<dir>` writes positions at ticks 400/560/800/1400 for a
+top-down render).
 Battle setup rejects Peaceful: its hostile-mob policy removes even persistent
 husks. Switching to Peaceful during a battle therefore ends its armies; ordinary
 distance-based natural despawn is disabled. Successful setup sets world rules

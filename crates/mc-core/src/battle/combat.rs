@@ -27,12 +27,7 @@ impl Weapon {
     pub const fn cycle(self) -> u16 {
         2 * self.windup() + 1
     }
-    pub const fn reach(self) -> f64 {
-        match self {
-            Self::Spear => 3.5,
-            _ => 2.5,
-        }
-    }
+    /// Mace and axe blows stagger a parrying shield less than a sword or a spear.
     const fn stagger(self) -> u64 {
         if matches!(self, Self::Mace) { 12 } else { 18 }
     }
@@ -61,8 +56,14 @@ pub(super) enum Action {
 pub(super) struct Fighter {
     pub(super) action: Action,
     pub(super) weapon: Weapon,
+    /// Melee reach of the held item (its vanilla `minecraft:attack_range`
+    /// for a mob, or the mob default without it), classified with the weapon
+    /// when the held item changes.
+    pub(super) range: MeleeReach,
     equipment: Option<(Option<u32>, Option<u32>, u32)>,
     shield: bool,
+    /// Last shield pose handed to presentation; `None` until first decided.
+    raised: Option<bool>,
     block: Option<(EntityId, u64)>,
     reaction_checked: bool,
     pub(super) arrows: u16,
@@ -74,8 +75,10 @@ impl Default for Fighter {
         Self {
             action: Action::Guard { until: 0 },
             weapon: Weapon::Sword,
+            range: MeleeReach::mob(None),
             equipment: None,
             shield: false,
+            raised: None,
             block: None,
             reaction_checked: false,
             arrows: 60,
@@ -98,6 +101,18 @@ pub struct Work {
     pub arc_solves: u64,
     pub arc_iterations: u64,
     pub charge_checks: u64,
+    /// Melee fighters (no bows) with an enemy within their melee range.
+    pub in_weapon_reach: u64,
+    /// Of those, the ones in the fight loop: the decision pass may let them
+    /// strike and they stand guard, wind up or recover from a blow.
+    pub fighting: u64,
+    /// Of those, the ones in action rather than standing guard: winding up,
+    /// recovering from a blow, staggered by a parry or blocking one.
+    pub acting: u64,
+    /// Shield bearers holding the shield up after this tick's actions.
+    pub shields_raised: u64,
+    /// Shield blocks (`ShieldBlock` events) this tick.
+    pub shield_blocks: u64,
 }
 
 #[derive(Debug, Default)]
@@ -172,9 +187,12 @@ fn classify(frame: &Frame<'_>, slot: EntitySlot, fighter: &mut Fighter, ranged: 
         return;
     }
     fighter.equipment = Some(key);
-    let name = item
-        .and_then(|id| frame.registry.items.name_of(id))
-        .map_or("", |id| id.as_str());
+    let held = item.and_then(|id| frame.registry.items.name_of(id));
+    let name = held.map_or("", |id| id.as_str());
+    fighter.range = melee_reach(
+        held.and_then(|name| frame.registry.item_facts.get(name))
+            .and_then(|facts| facts.attack_range),
+    );
     fighter.weapon = if ranged {
         Weapon::Bow
     } else if name.ends_with("spear") || name.ends_with("trident") {
@@ -194,6 +212,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
     let mut combat = std::mem::take(&mut battle.combat);
     combat.work = Work::default();
     combat.strikes.clear();
+    let events_before = out.events.len();
     combat.prepare(&battle.columns.ids);
     // Ordered execution columns avoid per-fighter hash lookups.
     for bi in 0..battle.columns.ids.len() {
@@ -243,6 +262,20 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
     // Take reusable strike scratch so resolution can mutate both opponents.
     let mut strikes = std::mem::take(&mut combat.strikes);
     for &(actor, target, weapon, start) in &strikes {
+        if super::live_players::is_holder(battle, target) {
+            // As for a soldier target: wounded or parried since the windup, no blow.
+            let range = frame
+                .entities
+                .slot_of(actor)
+                .and_then(|slot| battle.columns.index(slot))
+                .map(|bi| &combat.fighters[bi])
+                .filter(|f| !matches!(f.action, Action::Wounded | Action::Stagger { .. }))
+                .map(|f| f.range);
+            if let Some(range) = range {
+                super::live_players::blow(frame, battle, out, actor, target, range);
+            }
+            continue;
+        }
         strike(
             frame,
             battle,
@@ -279,13 +312,9 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         {
             continue;
         }
-        let Some(target) = battle.columns.targets[bi].as_ref() else {
-            continue;
-        };
-        combat.work.target_checks += 1;
-        if super::retained_enemy(frame.entities, slot, target.id, fighter.weapon.reach()).is_none()
-        {
-            continue;
+        let soldier = battle.columns.targets[bi].as_ref().map(|target| target.id);
+        if soldier.is_some() {
+            combat.work.target_checks += 1;
         }
         // Three cautious soldiers in four; decisions once/20t, not per frame.
         if (frame.tick + id.0 as u64) % 20 != 0 {
@@ -317,7 +346,136 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         });
         combat.work.swings += 1;
     }
+    count_fighting(frame, battle, &mut combat);
+    raise_shields(battle, &mut combat, out);
+    combat.work.shield_blocks = out.events[events_before..]
+        .iter()
+        .filter(|event| matches!(event, EntityEvent::ShieldBlock { .. }))
+        .count() as u64;
     battle.combat = combat;
+}
+
+/// A fighter counts as fighting while his fight loop (guard, windup, blow,
+/// recovery) ran within this many ticks: one 21..25-tick action cycle, so a
+/// stagger after a parried blow stays inside the window.
+const FIGHT_WINDOW_TICKS: u64 = 25;
+const COUNT_CHUNK: usize = 256;
+
+/// Telemetry of who is fighting this tick. In weapon reach: any enemy within
+/// the fighter's weapon reach, from his retained target or else one query of
+/// this tick's frozen target grid at weapon reach (no bows). Fighting: of
+/// those, everyone not in flight (a wavering man standing guard with his
+/// shield up counts) whose guard/windup/recovery ran within the window; a
+/// fugitive's placeholder guard is not a fight. Parallel over fighter chunks;
+/// no allocation.
+pub(super) fn count_fighting(frame: &Frame<'_>, battle: &BattleState, combat: &mut CombatRuntime) {
+    use rayon::prelude::*;
+    let tick = frame.tick;
+    let (columns, formation, grid) = (&battle.columns, &battle.formation, &battle.grid);
+    let entities = frame.entities;
+    let count = |(chunk, fighters): (usize, &mut [Fighter])| {
+        let mut counts = (0_u64, 0_u64, 0_u64);
+        for (offset, fighter) in fighters.iter_mut().enumerate() {
+            let bi = chunk * COUNT_CHUNK + offset;
+            if !columns.active[bi] || columns.carried[bi] {
+                continue;
+            }
+            // A fugitive (unless at bay) is held in guard only as a placeholder.
+            let fleeing = bi < formation.members.len()
+                && formation.context_at(bi).routing
+                && !formation.cornered_at(bi);
+            if !fleeing
+                && matches!(
+                    fighter.action,
+                    Action::Guard { .. } | Action::Windup { .. } | Action::Recover { .. }
+                )
+            {
+                fighter.in_fight = Some(tick);
+            }
+            if fighter.weapon == Weapon::Bow {
+                continue;
+            }
+            let range = fighter.range;
+            let actor = columns.slots[bi].expect("active column");
+            let reaches = |enemy: EntityId| {
+                entities
+                    .slot_of(enemy)
+                    .is_some_and(|enemy| in_melee_range(entities, actor, enemy, range))
+            };
+            let in_reach = columns.targets[bi].is_some_and(|t| reaches(t.id))
+                || grid
+                    .any_enemy(
+                        super::Unit {
+                            id: columns.ids[bi],
+                            faction: columns.factions[bi],
+                            pos: columns.positions[bi],
+                        },
+                        reach_bound(range),
+                        |u| reaches(u.id),
+                    )
+                    .is_some();
+            if !in_reach {
+                continue;
+            }
+            counts.0 += 1;
+            let recent = !fleeing
+                && !matches!(fighter.action, Action::Wounded)
+                && fighter
+                    .in_fight
+                    .is_some_and(|at| tick.saturating_sub(at) <= FIGHT_WINDOW_TICKS);
+            counts.1 += u64::from(recent);
+            // In action rather than standing guard: winding up, recovering
+            // from his blow, staggered by a parry or blocking an incoming one.
+            let acting = recent
+                && (matches!(
+                    fighter.action,
+                    Action::Windup { .. } | Action::Recover { .. } | Action::Stagger { .. }
+                ) || fighter.block.is_some_and(|(_, impact)| tick <= impact));
+            counts.2 += u64::from(acting);
+        }
+        counts
+    };
+    let add = |a: (u64, u64, u64), b: (u64, u64, u64)| (a.0 + b.0, a.1 + b.1, a.2 + b.2);
+    let fighters = &mut combat.fighters[..battle.columns.ids.len()];
+    let (in_reach, fighting, acting) =
+        if fighters.len() >= COUNT_CHUNK * 2 && rayon::current_num_threads() > 1 {
+            fighters
+                .par_chunks_mut(COUNT_CHUNK)
+                .enumerate()
+                .map(count)
+                .reduce(|| (0, 0, 0), add)
+        } else {
+            fighters
+                .chunks_mut(COUNT_CHUNK)
+                .enumerate()
+                .map(count)
+                .fold((0, 0, 0), add)
+        };
+    combat.work.in_weapon_reach = in_reach;
+    combat.work.fighting = fighting;
+    combat.work.acting = acting;
+}
+
+/// A shield bearer standing guard in order holds the shield up; a swing, a
+/// parried stagger, a wound or a rout lowers it. Only transitions leave here;
+/// the raised count is telemetry.
+fn raise_shields(battle: &BattleState, combat: &mut CombatRuntime, out: &mut Output) {
+    let mut shields_raised = 0;
+    for bi in 0..battle.columns.ids.len() {
+        if !battle.columns.active[bi] || battle.columns.carried[bi] {
+            continue;
+        }
+        let fighter = &mut combat.fighters[bi];
+        let raised = fighter.shield
+            && matches!(fighter.action, Action::Guard { .. })
+            && !context(battle, bi).is_some_and(|c| c.routing);
+        shields_raised += u64::from(raised);
+        if fighter.raised != Some(raised) {
+            fighter.raised = Some(raised);
+            out.shields.push((battle.columns.ids[bi], raised));
+        }
+    }
+    combat.work.shields_raised = shields_raised;
 }
 
 fn react_blocks(
@@ -426,7 +584,9 @@ fn strike(
         return;
     };
     combat.work.target_checks += 1;
-    if super::retained_enemy(frame.entities, slot, target, weapon.reach()).is_none()
+    let range = combat.fighters[actor_bi].range;
+    if super::retained_enemy(frame.entities, slot, target, reach_bound(range)).is_none()
+        || !in_melee_range(frame.entities, slot, victim, range)
         || matches!(
             combat.fighters[actor_bi].action,
             Action::Wounded | Action::Stagger { .. }

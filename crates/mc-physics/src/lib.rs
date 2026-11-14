@@ -1591,12 +1591,25 @@ fn resolve_horizontal_axes(body: WorldAabb, desired: Vec3, collision_boxes: &[Wo
     }
 }
 
+/// Vanilla 26.3 collision tolerance: `1.0E-7d` in `VoxelShape.collideX` (and
+/// the `Shapes.collide` loop that calls it per shape).
+const COLLISION_EPSILON: f64 = 1.0e-7;
+
+/// Whether a moving box and an obstacle overlap on an axis across the move,
+/// as vanilla 26.3 `VoxelShape.collideX(AxisCycle, AABB, double)` selects the
+/// obstacle cells (local `javap -c` of server-26.3.jar, offsets 102-208): from
+/// `findIndex(min + 1.0E-7)` through `findIndex(max - 1.0E-7)`, `findIndex`
+/// being the cell whose `[lo, hi)` holds the coordinate. A side lying under
+/// 1e-7 past a block boundary (rounding: a body centred at x 32.3 with a
+/// 0.3 half-width ends at 31.999999999999996) does not touch that block.
+fn overlaps_across(body_min: f64, body_max: f64, obstacle_min: f64, obstacle_max: f64) -> bool {
+    body_min + COLLISION_EPSILON < obstacle_max && body_max - COLLISION_EPSILON >= obstacle_min
+}
+
 fn clip_x(body: WorldAabb, mut dx: f64, collision_boxes: &[WorldAabb]) -> f64 {
     for obstacle in collision_boxes {
-        if body.min_y < obstacle.max_y
-            && body.max_y > obstacle.min_y
-            && body.min_z < obstacle.max_z
-            && body.max_z > obstacle.min_z
+        if overlaps_across(body.min_y, body.max_y, obstacle.min_y, obstacle.max_y)
+            && overlaps_across(body.min_z, body.max_z, obstacle.min_z, obstacle.max_z)
         {
             if dx > 0.0 && body.max_x <= obstacle.min_x {
                 dx = dx.min(obstacle.min_x - body.max_x);
@@ -1610,10 +1623,8 @@ fn clip_x(body: WorldAabb, mut dx: f64, collision_boxes: &[WorldAabb]) -> f64 {
 
 fn clip_z(body: WorldAabb, mut dz: f64, collision_boxes: &[WorldAabb]) -> f64 {
     for obstacle in collision_boxes {
-        if body.min_x < obstacle.max_x
-            && body.max_x > obstacle.min_x
-            && body.min_y < obstacle.max_y
-            && body.max_y > obstacle.min_y
+        if overlaps_across(body.min_x, body.max_x, obstacle.min_x, obstacle.max_x)
+            && overlaps_across(body.min_y, body.max_y, obstacle.min_y, obstacle.max_y)
         {
             if dz > 0.0 && body.max_z <= obstacle.min_z {
                 dz = dz.min(obstacle.min_z - body.max_z);
@@ -1748,7 +1759,7 @@ fn sweep_axis_interval(
             (obstacle_max - body_min) / movement,
             (obstacle_min - body_max) / movement,
         ))
-    } else if body_min < obstacle_max && body_max > obstacle_min {
+    } else if overlaps_across(body_min, body_max, obstacle_min, obstacle_max) {
         Some((f64::NEG_INFINITY, f64::INFINITY))
     } else {
         None
@@ -1757,10 +1768,8 @@ fn sweep_axis_interval(
 
 fn clip_y(body: WorldAabb, mut dy: f64, collision_boxes: &[WorldAabb]) -> f64 {
     for obstacle in collision_boxes {
-        if body.min_x < obstacle.max_x
-            && body.max_x > obstacle.min_x
-            && body.min_z < obstacle.max_z
-            && body.max_z > obstacle.min_z
+        if overlaps_across(body.min_x, body.max_x, obstacle.min_x, obstacle.max_x)
+            && overlaps_across(body.min_z, body.max_z, obstacle.min_z, obstacle.max_z)
         {
             if dy > 0.0 && body.max_y <= obstacle.min_y {
                 dy = dy.min(obstacle.min_y - body.max_y);

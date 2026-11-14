@@ -48,13 +48,51 @@ pub(crate) fn slot_position(spec: &RegimentSpec, slot: usize) -> [f64; 3] {
     )
 }
 
-fn position(spec: &RegimentSpec, file: usize, rank: u16, interval: f64) -> [f64; 3] {
+pub(crate) fn position(spec: &RegimentSpec, file: usize, rank: u16, interval: f64) -> [f64; 3] {
     let lateral = (file as f64 - f64::from(spec.files - 1) * 0.5) * interval;
     [
         spec.origin[0] + spec.facing[1] * lateral - spec.facing[0] * f64::from(rank) * 2.0,
         spec.origin[1],
         spec.origin[2] - spec.facing[0] * lateral - spec.facing[1] * f64::from(rank) * 2.0,
     ]
+}
+
+/// Foot that advances into contact presses: closed ranks, whole-file surges.
+fn presses(r: &Regiment) -> bool {
+    r.gap <= 6.0
+        && r.enemy.is_some()
+        && r.spec.frontage <= 1.0
+        && matches!(r.spec.order, Order::Advance | Order::Charge)
+        && !r.morale.broken
+}
+
+/// File interval a regiment's slots use right now: the fighting interval in
+/// contact, and always for a line staged to mesh, which opens its files on the
+/// approach rather than in contact; the staged frontage otherwise.
+pub(crate) fn file_interval(r: &Regiment) -> f64 {
+    if r.gap <= 6.0 || r.interval >= MESH_INTERVAL {
+        r.interval
+    } else {
+        r.spec.frontage
+    }
+}
+
+/// Formation slot of (file, rank) at the regiment's current file interval
+/// ([`file_interval`]) and rank depth: the pressed depth while the regiment
+/// presses.
+fn slot_target(r: &Regiment, file: usize, rank: u16) -> [f64; 3] {
+    let mut target = position(&r.spec, file, 0, file_interval(r));
+    let spacing = if !presses(r) {
+        2.0
+    } else if r.meshing {
+        MESH_RANK_SPACING
+    } else {
+        PRESS_RANK_SPACING
+    };
+    let depth = f64::from(rank) * spacing;
+    target[0] -= r.spec.facing[0] * depth;
+    target[2] -= r.spec.facing[1] * depth;
+    target
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -502,7 +540,7 @@ impl FormationRuntime {
         r.evacuating.fill(false);
         self.work.rotated += r.len as u64;
         for file in 0..files {
-            let mut next_rank = 0;
+            let mut next_rank = u16::from(self.held.contains(&(i, file)));
             for index in (file..members.len()).step_by(files) {
                 let m = &mut members[index];
                 if m.alive && !m.wounded {
@@ -580,8 +618,25 @@ impl FormationRuntime {
         }
     }
 
+    /// Foot advancing head-on against enemy foot staged at the mesh interval
+    /// meshes with it file between file.
+    fn meshes(&self, i: usize) -> bool {
+        let r = &self.regiments[i];
+        let Some(e) = r.enemy_regiment.map(|e| &self.regiments[e]) else {
+            return false;
+        };
+        [r, e].iter().all(|x| {
+            x.spec.frontage <= 1.0
+                && x.interval >= MESH_INTERVAL
+                && matches!(x.spec.order, Order::Advance | Order::Charge)
+                && !x.morale.broken
+        }) && r.spec.facing[0] * e.spec.facing[0] + r.spec.facing[1] * e.spec.facing[1] < -0.5
+    }
+
     fn move_leader(&mut self, i: usize) {
+        let meshing = self.meshes(i);
         let r = &mut self.regiments[i];
+        r.meshing = meshing;
         // A virtual leader moves along its assigned facing: lateral convergence
         // on one enemy centroid must never collapse a line into a blob.
         r.gap = r.enemy.map_or(f64::INFINITY, |p| {
@@ -616,11 +671,16 @@ impl FormationRuntime {
                     }
                 }
                 Order::Advance | Order::Charge => {
+                    let (standoff, give) = if r.meshing {
+                        (-MESH_DEPTH, -MESH_DEPTH - 0.6)
+                    } else {
+                        (STANDOFF, GIVE_GROUND)
+                    };
                     if r.enemy.is_none() {
                         0.0
-                    } else if r.gap > STANDOFF {
-                        (r.gap - STANDOFF).min(0.066)
-                    } else if r.gap < 3.0 {
+                    } else if r.gap > standoff {
+                        (r.gap - standoff).min(0.066)
+                    } else if r.gap < give {
                         -0.04
                     } else {
                         0.0
@@ -645,7 +705,11 @@ impl FormationRuntime {
                 .charge_started
                 .is_some_and(|start| tick.saturating_sub(start) < 200)
                 && r.spec.order == Order::Charge;
-            if let Some(enemy) = r.enemy {
+            // A meshed enemy front lies behind our own front by design: it is
+            // neither a flank nor a rear attack.
+            if !r.meshing
+                && let Some(enemy) = r.enemy
+            {
                 let direction = super::steering::unit(
                     [enemy[0] - r.spec.origin[0], enemy[2] - r.spec.origin[2]],
                     r.spec.facing,
@@ -714,7 +778,7 @@ impl FormationRuntime {
                 m.pos[1],
                 m.pos[2] + r.spec.facing[1],
             ]);
-            let away = super::steering::unit(
+            let mut away = super::steering::unit(
                 [m.pos[0] - source[0], m.pos[2] - source[2]],
                 [-r.spec.facing[0], -r.spec.facing[1]],
             );
@@ -745,14 +809,27 @@ impl FormationRuntime {
             target = passing_lane(m, &r.spec, target, -0.35);
         }
         let context = self.context_at(index);
-        if context.front_rank && context.pulsing && !context.wavering {
+        // A pressing file surges as one: the men behind follow their front
+        // man's pulse at the pressed depth instead of waiting in place.
+        let file_surging = presses(r)
+            && r.sections
+                .get(m.file / SECTION_SIZE)
+                .is_some_and(|s| s.pulse_until > self.tick);
+        if !context.wavering && ((context.front_rank && context.pulsing) || file_surging) {
             target[0] += r.spec.facing[0] * 2.25;
             target[2] += r.spec.facing[1] * 2.25;
         } else if m.wavering {
             target[0] -= r.spec.facing[0];
             target[2] -= r.spec.facing[1];
         }
-        (target, if context.pulsing { 0.10 } else { 0.079 })
+        (
+            target,
+            if context.pulsing || file_surging {
+                0.10
+            } else {
+                0.079
+            },
+        )
     }
 }
 

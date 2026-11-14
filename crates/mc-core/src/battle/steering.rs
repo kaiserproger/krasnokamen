@@ -102,7 +102,11 @@ impl SeparationGrid {
         }
     }
 
-    fn nearest(&self, index: usize, members: &[Member]) -> ([(f64, usize); NEIGHBOURS], u64) {
+    pub(super) fn nearest(
+        &self,
+        index: usize,
+        members: &[Member],
+    ) -> ([(f64, usize); NEIGHBOURS], u64) {
         let actor = &members[index];
         let mut best = [(f64::INFINITY, usize::MAX); NEIGHBOURS];
         let mut examined = 0;

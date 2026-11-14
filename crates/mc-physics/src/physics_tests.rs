@@ -2114,6 +2114,83 @@ fn representative_movement_boundary_matrix_uses_step_entity_authority() {
     }
 }
 
+/// Vanilla 26.3 `VoxelShape.collideX` (javap) picks the obstacle cells across
+/// a move from the moving box shrunk by `1.0E-7` on each cross axis: a body
+/// whose side lies a rounding error (3e-15) past a block boundary moves past
+/// that block on every axis, in the axis resolver and in the sweep mobs use;
+/// a side 2e-7 past the boundary is stopped. G2 relief take: a front-rank man
+/// at x 32.3 (box from 31.999999999999996) stood for good against the trunk
+/// at x 31 he never touched.
+#[test]
+fn cross_axis_overlap_under_the_vanilla_epsilon_does_not_collide() {
+    let block = |min: [f64; 3]| WorldAabb {
+        min_x: min[0],
+        min_y: min[1],
+        min_z: min[2],
+        max_x: min[0] + 1.0,
+        max_y: min[1] + 1.0,
+        max_z: min[2] + 1.0,
+    };
+    for (overlap, blocked) in [(3.0e-15, false), (2.0e-7, true)] {
+        // Walking -z 0.079 past a trunk at x 31, z 38, starting 0.01 from its
+        // z face, the body's west side `overlap` into the trunk's column.
+        let trunk = block([31.0, 0.0, 38.0]);
+        let body = WorldAabb {
+            min_x: 32.0 - overlap,
+            min_y: 0.0,
+            min_z: 39.01,
+            max_x: 32.6 - overlap,
+            max_y: 1.95,
+            max_z: 39.61,
+        };
+        let expected = if blocked { 39.0 - 39.01 } else { -0.079 };
+        let dz = clip_z(body, -0.079, &[trunk]);
+        assert!(
+            (dz - expected).abs() < 1e-12,
+            "clip_z overlap {overlap}: {dz}"
+        );
+        let swept = resolve_horizontal_sweep(body, Vec3::new(0.0, 0.0, -0.079), &[trunk]);
+        assert!(
+            (swept.z - expected).abs() < 1e-12,
+            "sweep overlap {overlap}: {swept:?}"
+        );
+        // Walking +x 0.5 toward a block at x 10, z 5 from 0.4 short of it, the
+        // body's north side `overlap` into the block's row.
+        let post = block([10.0, 0.0, 5.0]);
+        let body = WorldAabb {
+            min_x: 9.0,
+            min_y: 0.0,
+            min_z: 4.4 + overlap,
+            max_x: 9.6,
+            max_y: 1.95,
+            max_z: 5.0 + overlap,
+        };
+        let expected = if blocked { 10.0 - 9.6 } else { 0.5 };
+        let dx = clip_x(body, 0.5, &[post]);
+        assert!(
+            (dx - expected).abs() < 1e-12,
+            "clip_x overlap {overlap}: {dx}"
+        );
+        // Falling 0.5 past a block whose column the body's west side overlaps,
+        // starting 0.2 above its top.
+        let ground = block([0.0, 63.0, 0.0]);
+        let body = WorldAabb {
+            min_x: 1.0 - overlap,
+            min_y: 64.2,
+            min_z: 0.2,
+            max_x: 1.6 - overlap,
+            max_y: 66.15,
+            max_z: 0.8,
+        };
+        let expected = if blocked { 64.0 - 64.2 } else { -0.5 };
+        let dy = clip_y(body, -0.5, &[ground]);
+        assert!(
+            (dy - expected).abs() < 1e-12,
+            "clip_y overlap {overlap}: {dy}"
+        );
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct GridPos {
     x: i32,

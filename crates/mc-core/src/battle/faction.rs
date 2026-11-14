@@ -1,6 +1,8 @@
 use crate::boundary::EntityId;
 use crate::entities::{EntityKind, EntitySlot, EntityStore};
 
+use mc_melee_range::{Aabb, MeleeReach, attack_box};
+
 use super::{EnemyTarget, Unit};
 
 /// Zero is unaffiliated, not an enemy army.
@@ -42,6 +44,51 @@ pub fn retained_enemy(
         pos: enemy.pos,
         distance,
     })
+}
+
+/// Melee reach of a fighter holding an item with `range` (its vanilla
+/// `minecraft:attack_range`), as vanilla 26.3 sets a mob's: see
+/// [`mc_melee_range::MeleeReach::mob`].
+pub fn melee_reach(range: Option<mc_data::item_components::AttackRangeFacts>) -> MeleeReach {
+    MeleeReach::mob(range.map(|range| (range.min_reach, range.max_reach, range.mob_factor)))
+}
+
+/// Feet-to-feet distance beyond which no two battle boxes (horse-wide at
+/// most, a rider above his horse) can touch within `reach`: the prefilter for
+/// distance lookups before the box test.
+pub fn reach_bound(reach: MeleeReach) -> f64 {
+    (reach.max + 2.0 * MAX_BOX_HALF_WIDTH) * std::f64::consts::SQRT_2 + 2.5
+}
+
+/// Widest battle body (a horse) for [`reach_bound`].
+const MAX_BOX_HALF_WIDTH: f64 = 0.75;
+
+fn body_box(entities: &EntityStore, slot: EntitySlot) -> Aabb {
+    let body = entities.body(slot);
+    Aabb::at(entities.pos(slot), 2.0 * body.half_width, body.height)
+}
+
+/// Whether `target` is within the melee range of `actor`: vanilla
+/// `Mob.isWithinMeleeAttackRange` ([`mc_melee_range::in_melee_range`]) on
+/// his box joined with his mount's and the target's own box.
+pub fn in_melee_range(
+    entities: &EntityStore,
+    actor: EntitySlot,
+    target: EntitySlot,
+    reach: MeleeReach,
+) -> bool {
+    let mount = entities
+        .row(actor)
+        .entity_life
+        .mount
+        .vehicle
+        .and_then(|mount| entities.slot_of(mount))
+        .map(|mount| body_box(entities, mount));
+    mc_melee_range::in_melee_range(
+        attack_box(body_box(entities, actor), mount),
+        body_box(entities, target),
+        reach,
+    )
 }
 
 /// Battle actions own their own timers and output. No vanilla species-specific
