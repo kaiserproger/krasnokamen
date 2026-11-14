@@ -1054,8 +1054,8 @@ pub(crate) fn execute(
                 return Success(1);
             }
             if facts.category == mc_data::entity_types::EntityCategory::Experience {
-                let value = match crate::command_summon::experience_orb_value(nbt) {
-                    Ok(value) => value,
+                let (value, count, motion) = match crate::command_summon::experience_orb(nbt) {
+                    Ok(orb) => orb,
                     Err(failure) => {
                         error(state, connection, failure.message());
                         return Failed;
@@ -1065,8 +1065,8 @@ pub(crate) fn execute(
                     state,
                     type_id,
                     at,
-                    (i32::from(value), 1),
-                    [0.0; 3],
+                    (i32::from(value), count),
+                    motion,
                     0.0,
                 );
                 changes.entities_spawned.push(id);
