@@ -411,6 +411,8 @@ impl ChunkWorld {
             load_error: None,
             refused: Vec::new(),
             generated_bases: true,
+            #[cfg(all(test, debug_assertions))]
+            container_work: ContainerCaptureWork::default(),
         })
     }
 

@@ -50,7 +50,7 @@ mod input;
 pub(crate) mod merchant;
 pub(crate) mod mining;
 mod passive_follow;
-mod phase_laps;
+pub(crate) mod phase_laps;
 mod stations;
 mod system_graph;
 use entity_phase::*;
@@ -1476,7 +1476,7 @@ fn run_dimension_tick_inner<'a>(
     let stage_effects = std::time::Instant::now();
     crate::effects::run(state, &mut intents);
     input_laps.lap("effects");
-    crate::contact_hazards::run(state, &mut intents);
+    let contact_times = crate::contact_hazards::run(state, &mut intents);
     input_laps.lap("contact_hazards");
     crate::dimensions::rules::void_intents(state, &mut intents);
     input_laps.lap("void_intents");
@@ -2031,27 +2031,39 @@ fn run_dimension_tick_inner<'a>(
         entity_laps.print("entity systems");
         block_laps.print("block");
         commit_laps.print("commit");
-        eprintln!(
-            "phase ms: tick={} input={:.2} chunks={:.2} entity={:.2} merge={:.2} block={:.2} commit={:.2} snapshot={:.2} views={:.2} intents={} dimension={:?} entity_tail={:.2} block_prepare={:.2} publish_tail={:.2} boundary_gaps={:.2} before_return={:.2} allocator={:.2} entity_life={:.2} entity_species={:.2}",
-            state.tick,
-            input_time.as_secs_f64() * 1000.0,
-            chunk_time.as_secs_f64() * 1000.0,
-            entity_time.as_secs_f64() * 1000.0,
-            merge_time.as_secs_f64() * 1000.0,
-            block_time.as_secs_f64() * 1000.0,
-            commit_time.as_secs_f64() * 1000.0,
-            snapshot_time.as_secs_f64() * 1000.0,
-            views_time.as_secs_f64() * 1000.0,
-            intents.len(),
-            state.dimension,
-            entity_tail_time.as_secs_f64() * 1000.0,
-            block_prepare_time.as_secs_f64() * 1000.0,
-            publish_tail_time.as_secs_f64() * 1000.0,
-            log.before_return.saturating_sub(measured).as_secs_f64() * 1000.0,
-            log.before_return.as_secs_f64() * 1000.0,
-            log.allocator_us as f64 / 1000.0,
-            entity_life_time.as_secs_f64() * 1000.0,
-            entity_species_time.as_secs_f64() * 1000.0,
+        let mut contact_laps = Laps::new(true, log.start);
+        contact_laps.record("classify", contact_times.classify);
+        contact_laps.record("serial", contact_times.serial);
+        contact_laps.record("cauldron", contact_times.cauldron);
+        contact_laps.print("contact hazards");
+        let mut summary = Laps::new(true, log.start);
+        summary.record("input", input_time);
+        summary.record("chunks", chunk_time);
+        summary.record("entity", entity_time);
+        summary.record("merge", merge_time);
+        summary.record("block", block_time);
+        summary.record("commit", commit_time);
+        summary.record("snapshot", snapshot_time);
+        summary.record("views", views_time);
+        summary.record("entity_tail", entity_tail_time);
+        summary.record("block_prepare", block_prepare_time);
+        summary.record("publish_tail", publish_tail_time);
+        summary.record("boundary_gaps", log.before_return.saturating_sub(measured));
+        summary.record("before_return", log.before_return);
+        summary.record(
+            "allocator",
+            std::time::Duration::from_micros(log.allocator_us),
+        );
+        summary.record("entity_life", entity_life_time);
+        summary.record("entity_species", entity_species_time);
+        summary.print_summary(
+            "phase",
+            format_args!(
+                "tick={} intents={} dimension={:?}",
+                state.tick,
+                intents.len(),
+                state.dimension,
+            ),
         );
         log.logging = log_start.elapsed();
     }

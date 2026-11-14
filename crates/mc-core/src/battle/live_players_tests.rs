@@ -434,6 +434,156 @@ fn two_respawns_in_a_row_give_no_duplicates() {
     assert_exactly_the_kit(&state, player);
 }
 
+#[test]
+fn rearm_closes_a_full_crafting_table_without_spawning_items() {
+    use crate::boundary::{BlockPos, PlayerChange};
+    use mc_data::Identifier;
+
+    let (mut state, ids) = staged(&["PovRed"]);
+    let player = ids[0];
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    let at = state.entities.pos(state.entities.slot_of(player).unwrap());
+    let table = BlockPos {
+        x: at[0].floor() as i32 + 1,
+        y: at[1].floor() as i32,
+        z: at[2].floor() as i32,
+    };
+    let table_state = state
+        .registry
+        .blocks
+        .block(&Identifier::parse("minecraft:crafting_table").unwrap())
+        .unwrap()
+        .default;
+    state
+        .world
+        .set_block(table.x, table.y, table.z, table_state.0);
+    state.world.fold_overlay();
+    run_tick(
+        &mut state,
+        &[PlayerInput::UseItemOn {
+            connection: ConnectionId(1),
+            hand: Hand::Main,
+            position: table,
+            face: 1,
+            cursor: [0.5, 1.0, 0.5],
+            sequence: 1,
+        }],
+    );
+    let item = |name: &str, count| {
+        ItemStack::new(
+            state
+                .registry
+                .items
+                .id_of(&Identifier::parse(name).unwrap())
+                .unwrap(),
+            count,
+        )
+    };
+    let (dirt, stick, arrow) = (
+        item("minecraft:dirt", 64),
+        item("minecraft:stick", 2),
+        item("minecraft:arrow", 3),
+    );
+    let player_state = state.players.get_mut(&player).unwrap();
+    player_state.inventory.slots.fill(dirt);
+    let menu = player_state
+        .open
+        .as_mut()
+        .expect("table opened through input");
+    assert_eq!(menu.kind, crate::inventory::MenuKind::CraftingTable);
+    menu.grid[0] = stick;
+    menu.carried = arrow;
+    let window = menu.window;
+    assert!(state.open_containers.contains_key(&player));
+    let items_before = state.entities.item_slots().count();
+
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    assert!(state.players[&player].open.is_none());
+    assert!(!state.open_containers.contains_key(&player));
+    assert_exactly_the_kit(&state, player);
+    assert!(state.merge_life_drops.is_empty());
+    assert!(changes.entities_spawned.is_empty());
+    let (_, drains, _) = run_tick(&mut state, &[]);
+    assert_eq!(state.entities.item_slots().count(), items_before);
+    assert!(drains.iter().flat_map(|(_, changes)| changes).any(
+        |change| matches!(change, PlayerChange::MenuClosed { window: closed } if *closed == window)
+    ));
+    assert_exactly_the_kit(&state, player);
+}
+
+#[test]
+fn rearm_retires_plugin_reservations_before_replacing_the_kit() {
+    use mc_script::*;
+
+    let (mut state, ids) = staged(&["PovRed"]);
+    let player = ids[0];
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    let emerald = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:emerald").unwrap())
+        .unwrap();
+    state.players.get_mut(&player).unwrap().inventory.slots[9] = ItemStack::new(emerald, 20);
+    let endpoint = ScriptInventoryEndpoint::PlayerInventory { player_id: 1 };
+    let query = ScriptOperationRequest::try_new(
+        "live-custody-query",
+        ScriptOperation::Inventory {
+            operation: ScriptOwnedInventoryOperation::Query {
+                endpoint: endpoint.clone(),
+                expected_revision: None,
+            },
+        },
+    )
+    .unwrap();
+    let outcome = crate::plugin_inventories::execute(&mut state, "live-custody", &query);
+    assert_eq!(outcome.failure(), None);
+    let image = crate::plugin_inventories::load(&state, "live-custody", &endpoint).unwrap();
+    let reserve = ScriptOperationRequest::try_new(
+        "live-custody-reserve",
+        ScriptOperation::Inventory {
+            operation: ScriptOwnedInventoryOperation::Reserve {
+                operation_id: "live-custody-reserve".into(),
+                endpoint,
+                resource_plan: ScriptInventoryResourcePlan::new(vec![
+                    ScriptInventoryWorkPortion::new(
+                        1,
+                        vec![ScriptInventoryMaterial::new("minecraft:emerald".into(), 10)],
+                    ),
+                ]),
+                expected_revision: image.fence,
+            },
+        },
+    )
+    .unwrap();
+    let outcome = crate::plugin_inventories::execute(&mut state, "live-custody", &reserve);
+    let ScriptOperationPayload::OwnedInventory { result } = outcome.payload() else {
+        panic!("{outcome:?}");
+    };
+    let ScriptOwnedInventoryResult::Reservation { reservation } = result.as_ref() else {
+        panic!("{result:?}");
+    };
+    let reference = reservation.reservation_ref.clone();
+    assert!(crate::plugin_inventories::has_reservations_for_player(
+        &state, player
+    ));
+    let items_before = state.entities.item_slots().count();
+
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    let retired =
+        crate::plugin_inventories::reservation(&state, "live-custody", &reference).unwrap();
+    assert!(retired.snapshot.released);
+    assert_eq!(retired.snapshot.quantities[0].returned, 10);
+    assert_eq!(retired.snapshot.quantities[0].remaining, 0);
+    assert!(!crate::plugin_inventories::has_reservations_for_player(
+        &state, player
+    ));
+    assert_exactly_the_kit(&state, player);
+    assert!(state.merge_life_drops.is_empty());
+    assert_eq!(state.entities.item_slots().count(), items_before);
+}
+
 /// A started battle with PovRed stood a pace in front of a blue front-rank
 /// foot soldier (blue faces -z); returns PovRed, that soldier and his place.
 pub(in crate::battle) fn facing_blue() -> (TickState, EntityId, EntityId, [f64; 3]) {

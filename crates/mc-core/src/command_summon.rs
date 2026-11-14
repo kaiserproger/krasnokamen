@@ -24,6 +24,21 @@ pub(crate) struct Image {
     /// Validated once during preflight, then moved into the new appearance.
     variant: Option<(u8, EntityDataValue)>,
 }
+
+impl Image {
+    /// Installs a registry-resolved kit before the normal attribute and
+    /// appearance restoration. Like authored equipment, this replaces all slots.
+    pub(crate) fn with_equipment(
+        mut self,
+        equipment: [Option<mc_data::ItemStack>; 6],
+        body_armor: Option<mc_data::ItemStack>,
+    ) -> Self {
+        self.equipment = Some(equipment);
+        self.state.loot.body_armor = body_armor.map(Box::new);
+        self.state.loot.saddle = None;
+        self
+    }
+}
 fn error(text: impl Into<String>) -> CommandError {
     CommandError::Message(text.into())
 }

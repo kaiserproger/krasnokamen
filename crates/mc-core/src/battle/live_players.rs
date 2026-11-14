@@ -13,11 +13,11 @@
 //! whenever he respawns or is re-armed.
 //!
 //! Battle-mode custody: a holder's inventory IS his kit (`equip`). Placement,
-//! re-arming and every respawn set his whole inventory to exactly the kit:
-//! his menus are closed first (cursor and crafting grid fold back, overflow is
-//! discarded, never dropped), then every inventory slot is set, the kit in its
-//! fixed slots and every other slot empty. Whatever he moved, picked up or
-//! kept, after a respawn he holds the kit once and nothing else.
+//! re-arming and every respawn replace his whole inventory. Plugin holds retire
+//! first; the previous inventory is discarded so the normal menu close can fold
+//! its cursor and crafting grid without overflowing onto the field. The folded
+//! contents are then replaced by exactly the kit, once, in its fixed slots.
+//! Reconnecting alone does not re-arm a holder: run console `battle live` again.
 //! `keep_inventory` keeps the kit from littering the field when he dies.
 //!
 //! A living holder of the other side in weapon reach is one more candidate
@@ -339,9 +339,7 @@ fn eligible(state: &TickState, regiment: &Regiment, side: u16, tier: u8) -> bool
         return true;
     }
     let formation = &state.hostile.battle.formation;
-    let trident = mc_data::Identifier::parse("minecraft:trident".to_owned())
-        .ok()
-        .and_then(|id| state.registry.items.id_of(&id));
+    let trident = state.registry.battle_ids.item(super::ids::KitItem::Trident);
     let first = formation.members[regiment.start].id;
     let kind = (regiment.start..regiment.start + regiment.len)
         .find_map(|i| state.entities.slot_of(formation.members[i].id))
@@ -351,7 +349,7 @@ fn eligible(state: &TickState, regiment: &Regiment, side: u16, tier: u8) -> bool
         row.entity_life.mount.vehicle.is_none()
             && row.appearance.equipment[0]
                 .as_ref()
-                .is_some_and(|stack| Some(stack.item_id) != trident)
+                .is_some_and(|stack| stack.item_id != trident)
     })
 }
 
@@ -632,33 +630,39 @@ fn player_index(equipment: usize, selected: usize) -> usize {
     [selected, 40, 36, 37, 38, 39][equipment]
 }
 
-/// Battle-mode custody (module doc): his whole inventory becomes exactly the
-/// kit. Menus close first so cursor and crafting grid fold into the inventory;
-/// what does not fit is discarded with the rest, never dropped on the field.
-/// Then every slot is set: the kit in its fixed slots, all others empty.
+/// Replace-all battle custody: retire reservations, empty the old inventory
+/// before the full menu close so its cursor/grid fit without drops, then replace
+/// the folded contents with the kit. Every emptied or refilled slot is synced.
 fn equip(state: &mut TickState, id: EntityId, kit: &[Option<ItemStack>; 6]) -> usize {
-    let rules = state.registry.item_rules();
+    crate::plugin_inventories::invalidate_player(state, id);
     let player = state.players.get_mut(&id).expect("online player");
-    let mut changes = player.close(&rules).changes;
-    let selected = usize::from(player.inventory.selected.min(8));
-    let mut image = vec![ItemStack::EMPTY; player.inventory.slots.len()];
-    for (equipment, stack) in kit.iter().enumerate() {
-        if let Some(stack) = stack {
-            image[player_index(equipment, selected)] = stack.clone();
-        }
-    }
+    let connection = player.connection;
     let mut changed = 0_u64;
-    for (index, stack) in image.into_iter().enumerate() {
-        if player.inventory.slots[index] != stack {
-            player.inventory.slots[index] = stack;
+    for (index, stack) in player.inventory.slots.iter_mut().enumerate() {
+        if !stack.is_empty() {
+            *stack = ItemStack::EMPTY;
             changed |= 1 << index;
         }
     }
-    changes.extend(player.pickup_changes(changed));
-    if let Some(connection) = state.connections.entity_connection(id) {
-        for change in changes {
-            state.push_player(connection, change);
+    crate::tick::close_player_menu(state, connection);
+    let player = state.players.get_mut(&id).expect("online player");
+    let selected = usize::from(player.inventory.selected.min(8));
+    for (index, stack) in player.inventory.slots.iter_mut().enumerate() {
+        if !stack.is_empty() {
+            *stack = ItemStack::EMPTY;
+            changed |= 1 << index;
         }
+    }
+    for (equipment, stack) in kit.iter().enumerate() {
+        if let Some(stack) = stack {
+            let index = player_index(equipment, selected);
+            player.inventory.slots[index] = stack.clone();
+            changed |= 1 << index;
+        }
+    }
+    let changes = player.pickup_changes(changed);
+    for change in changes {
+        state.push_player(connection, change);
     }
     crate::projectiles::weapons::sync(state, id);
     kit.iter().filter(|stack| stack.is_some()).count()

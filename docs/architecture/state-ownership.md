@@ -72,6 +72,11 @@ identity remap preserves actions and ammunition when roster layout changes.
 These are runtime battle state: pause holds their clock; restart restores
 bodies and mount custody, not an in-progress battle. The native projectile
 owner alone moves arrows and resolves hits.
+The shield's raised/lowered pose is different: it is native `appearance.extra`
+metadata, persisted in WAL post-images and checkpoints. The combat runtime
+owns decisions, while the shared changed-only metadata setter owns presentation
+mutation; unchanged guard never copies or republishes appearance. Staging
+pre-raises equipped shields so the first running tick makes no mass pose write.
 The sole kernel tree is `mc-core/src/battle`, restored from the F battle
 line; `hostile` retains its runtime state, not another implementation.
 
@@ -119,6 +124,14 @@ The ten-second stall census runs after target validation. A soldier holding a
 live enemy within six blocks is in contact, not advancing, even when its virtual
 leader is farther ahead. An invalid retained target cannot hide a blocked soldier;
 the census is derived telemetry and never changes motion.
+
+`battle live` replaces the holder's entire inventory with exactly his kit.
+It retires plugin reservations before changing stock, clears the old inventory,
+and routes the close through the ordinary native/plugin/settlement menu owners.
+The cursor and crafting grid fit in that emptied inventory, then are discarded
+with all non-kit contents; no overflow item entities are minted. Menu ownership
+and the client's open window close together. A held player's respawn re-arms him;
+reconnecting alone does not: the console must run `battle live` again.
 
 Large projectile batches (at least 16 shots) derive a reusable, counting-sorted
 two-block XZ grid from the frozen native body snapshot. Conservative half-extent
@@ -246,173 +259,56 @@ an entry gets a faction only while it is in no `/team` team
 live`), and `/team join` refuses battle-faction UUIDs and holders.
 
 
-### Staged battle actions
+## Container checkpoint capture
 
-`battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
-regiment volley clocks, and `cavalry.rs` owns charge/refusal timers. Fighters
-and charge state share the formation-aligned dense execution index; a cold
-identity remap preserves actions and ammunition when roster layout changes.
-These are runtime battle state: pause holds their clock; restart restores
-bodies and mount custody, not an in-progress battle. The native projectile
-owner alone moves arrows and resolves hits.
+The native checkpoint preflight materializes and hydrates container custody
+before freezing live slots. Each dimension's chunk capture then builds one
+borrowed chunk index from **all** frozen live owners, including clean neighbours
+in a dirty chunk. Euclidean division on both horizontal coordinates preserves
+negative chunk boundaries. Buckets retain the ordered input's record order;
+they neither clone inventories nor become another authoritative owner.
 
-Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
-Unblocked contact attempts remove 1.3% on the authored deterministic roll,
-nine wounded per death; shield parries reduce actual removals. Wounded soldiers
-withdraw via formation membership rather than being killed. Pursuit increases
-fatality; film pacing changes lulls, never swing speed. These are simulation
-choices based on [Sabin](https://gwern.net/doc/history/2000-sabin.pdf), not
-measured historical per-swing probabilities. Volleys use 220 ticks sustained
-and 60 arrows per archer.
-Each regiment has an absolute staggered phase, including after wavering/rejoin;
-the soldiers within that regiment still draw and release together. The staged
-battle uses sustained cadence; there is no unused opening-burst control.
-Horses refuse steady frontal ranks and run out to a flank; accepted charge
-bonus decays over 260 ticks. The work counters bound visits, target checks,
-reaction checks, strikes, arc iterations and charge decisions; they are not a
-20-TPS performance measurement.
+Healthy resident selection/projection visits the live keys once, looks up each
+dirty resident chunk once, and projects only matching owners: `O(B + D + M)`,
+not one full live-map walk per dirty chunk. Empty buckets still remove stale
+typed chest/furnace images; unopened loot without a live owner is retained.
+Opaque native owners keep their bytes and are never retyped by slot count.
+The conservative quarantined-chunk refusal path is unchanged.
 
-Large projectile batches (at least 16 shots) derive a reusable, counting-sorted
-two-block XZ grid from the frozen native body snapshot. Conservative half-extent
-expansion covers wide bodies, Y bounds reject other heights, and canonical
-candidate sorting preserves hit order. Dragon/deployed geometry remains an
-explicit exceptional superset. Sparse world spans fall back to the existing
-native chunk query before allocating empty-world cells (maximum 1,048,576).
-Differential flight tests exercise both paths against exhaustive collision.
+Capture still uses native copy-on-write chunks and the existing revision ACK.
+Only the writer's WAL-gated commit may advance the manifest and prune covered
+frames; stale ACKs cannot erase newer inventory custody. Player and container
+post-images retain that same durable fence in Overworld, Nether and End.
 
-Battle arrow/spectral-arrow ground lifetime is captured at launch as 100 admitted
-ticks, independent of later owner death. Ordinary arrows retain their previous
-1,201-tick expiry. Settled arrows anchor to native entity lifetime age; idle
-projectile ticks neither take `row_mut` nor publish appearance merely to age.
-Pickup, expiry and physical-profile custody changes still use native owners.
-`grounded_at_age` and `ground_lifetime` persist in projectile state, paired with
-native `krasnokamen:LifetimeAge`; vanilla `life` projects the effective ground age.
-Active-clock WAL replay, frozen chunks and wrapping entity age retain elapsed
-time without one arrow image per tick. Loyalty tridents keep their dynamic
-return path and are not treated as idle arrows.
+### CAF-04 capture ladder
 
-Mob riders use the same horse-owned UUID relation as player riders. Staging
-uses `battle::cavalry::mount`, requires a nonzero rider faction and copies it to
-the horse so native battle motion is not suppressed as ordinary tamed AI.
-Recovery allows a live mob passenger rather than requiring a player UUID,
-rejects item/boat/dead/nested passengers, and rebuilds reverse links/appearance.
-Native regressions include checkpoint/WAL mount custody, real mounted movement,
-100-tick grounded expiry, idle no-touch pickup and native lazy-clock replay.
-Protocol and persistence changes require Main's independent review.
+One BASE run followed by one AFTER run in the same Main-authorized exclusive
+window, release-test pins `53e3a2cae5f7-d3518158` and
+`53e3a2cae5f7-3ecc759c`, with phase logging disabled. The unchanged audit fixture
+loads 2,000 empty native chunks and places live owners outside the dirty chunks.
+Cells below are medians of three capture samples, in milliseconds.
 
+| Dirty chunks | Disjoint live owners | BASE | Grouped |
+| ---: | ---: | ---: | ---: |
+| 100 | 0 | 0.003 | 0.002 |
+| 100 | 100 | 0.013 | 0.003 |
+| 100 | 1,000 | 0.114 | 0.012 |
+| 100 | 10,000 | 1.089 | 0.107 |
+| 500 | 0 | 0.008 | 0.008 |
+| 500 | 100 | 0.059 | 0.009 |
+| 500 | 1,000 | 0.556 | 0.018 |
+| 500 | 10,000 | 5.497 | 0.109 |
+| 2,000 | 0 | 0.034 | 0.042 |
+| 2,000 | 100 | 0.247 | 0.037 |
+| 2,000 | 1,000 | 2.205 | 0.042 |
+| 2,000 | 10,000 | 21.759 | 0.130 |
 
-### Staged battle actions
-
-`battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
-regiment volley clocks, and `cavalry.rs` owns charge/refusal timers. Fighters
-and charge state share the formation-aligned dense execution index; a cold
-identity remap preserves actions and ammunition when roster layout changes.
-These are runtime battle state: pause holds their clock; restart restores
-bodies and mount custody, not an in-progress battle. The native projectile
-owner alone moves arrows and resolves hits.
-
-Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
-Unblocked contact attempts remove 1.3% on the authored deterministic roll,
-nine wounded per death; shield parries reduce actual removals. Wounded soldiers
-withdraw via formation membership rather than being killed. Pursuit increases
-fatality; film pacing changes lulls, never swing speed. These are simulation
-choices based on [Sabin](https://gwern.net/doc/history/2000-sabin.pdf), not
-measured historical per-swing probabilities. Volleys use 220 ticks sustained
-and 60 arrows per archer.
-Each regiment has an absolute staggered phase, including after wavering/rejoin;
-the soldiers within that regiment still draw and release together. The staged
-battle uses sustained cadence; there is no unused opening-burst control.
-Horses refuse steady frontal ranks and run out to a flank; accepted charge
-bonus decays over 260 ticks. The work counters bound visits, target checks,
-reaction checks, strikes, arc iterations and charge decisions; they are not a
-20-TPS performance measurement.
-
-Large projectile batches (at least 16 shots) derive a reusable, counting-sorted
-two-block XZ grid from the frozen native body snapshot. Conservative half-extent
-expansion covers wide bodies, Y bounds reject other heights, and canonical
-candidate sorting preserves hit order. Dragon/deployed geometry remains an
-explicit exceptional superset. Sparse world spans fall back to the existing
-native chunk query before allocating empty-world cells (maximum 1,048,576).
-Differential flight tests exercise both paths against exhaustive collision.
-
-Battle arrow/spectral-arrow ground lifetime is captured at launch as 100 admitted
-ticks, independent of later owner death. Ordinary arrows retain their previous
-1,201-tick expiry. Settled arrows anchor to native entity lifetime age; idle
-projectile ticks neither take `row_mut` nor publish appearance merely to age.
-Pickup, expiry and physical-profile custody changes still use native owners.
-`grounded_at_age` and `ground_lifetime` persist in projectile state, paired with
-native `krasnokamen:LifetimeAge`; vanilla `life` projects the effective ground age.
-Active-clock WAL replay, frozen chunks and wrapping entity age retain elapsed
-time without one arrow image per tick. Loyalty tridents keep their dynamic
-return path and are not treated as idle arrows.
-
-Mob riders use the same horse-owned UUID relation as player riders. Staging
-uses `battle::cavalry::mount`, requires a nonzero rider faction and copies it to
-the horse so native battle motion is not suppressed as ordinary tamed AI.
-Recovery allows a live mob passenger rather than requiring a player UUID,
-rejects item/boat/dead/nested passengers, and rebuilds reverse links/appearance.
-Native regressions include checkpoint/WAL mount custody, real mounted movement,
-100-tick grounded expiry, idle no-touch pickup and native lazy-clock replay.
-Protocol and persistence changes require Main's independent review.
-
-
-### Staged battle actions
-
-`battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
-regiment volley clocks, and `cavalry.rs` owns charge/refusal timers. These are
-runtime battle state: pause holds their clock; restart restores bodies and
-mount custody, not an in-progress battle. The native projectile owner alone
-moves arrows and resolves hits through its chunk index.
-
-Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
-Unblocked contact attempts remove 1.3% on the authored deterministic roll,
-nine wounded per death; shield parries reduce actual removals. Wounded soldiers
-withdraw via formation membership rather than being killed. Pursuit increases
-fatality; film pacing changes lulls, never swing speed. These are simulation
-choices based on [Sabin](https://gwern.net/doc/history/2000-sabin.pdf), not
-measured historical per-swing probabilities. Volleys use 220 ticks sustained,
-110 in an opening burst capped at 1,200 ticks, and 60 arrows per archer.
-Horses refuse steady frontal ranks and run out to a flank; accepted charge
-bonus decays over 260 ticks. The work counters bound visits, target checks,
-reaction checks, strikes, arc iterations and charge decisions; they are not a
-20-TPS performance measurement.
-
-Mob riders use the same horse-owned UUID relation as player riders. Staging
-uses `battle::cavalry::mount`; recovery allows a live mob passenger rather than
-requiring a player UUID, and the mount tick rebuilds reverse links/appearance.
-Native checkpoint/WAL regression:
-`mob_rider_survives_native_checkpoint_restart_and_rejects_duplicate_or_nested_links`.
-Protocol and persistence changes require Main's independent review.
-
-
-### Staged battle actions
-
-`battle/combat.rs` owns action timers and finite ammunition, `archery.rs` owns
-regiment volley clocks, and `cavalry.rs` owns charge/refusal timers. These are
-runtime battle state: pause holds their clock; restart restores bodies and
-mount custody, not an in-progress battle. The native projectile owner alone
-moves arrows and resolves hits through its chunk index.
-
-Sword/spear/mace cycles last 21/23/25 ticks, with contact at 10/11/12.
-Unblocked contact attempts remove 1.3% on the authored deterministic roll,
-nine wounded per death; shield parries reduce actual removals. Wounded soldiers
-withdraw via formation membership rather than being killed. Pursuit increases
-fatality; film pacing changes lulls, never swing speed. These are simulation
-choices based on [Sabin](https://gwern.net/doc/history/2000-sabin.pdf), not
-measured historical per-swing probabilities. Volleys use 220 ticks sustained,
-110 in an opening burst capped at 1,200 ticks, and 60 arrows per archer.
-Horses refuse steady frontal ranks and run out to a flank; accepted charge
-bonus decays over 260 ticks. The work counters bound visits, target checks,
-reaction checks, strikes, arc iterations and charge decisions; they are not a
-20-TPS performance measurement.
-
-Mob riders use the same horse-owned UUID relation as player riders. Staging
-uses `battle::cavalry::mount`; recovery allows a live mob passenger rather than
-requiring a player UUID, and the mount tick rebuilds reverse links/appearance.
-Native checkpoint/WAL regression:
-`mob_rider_survives_native_checkpoint_restart_and_rejects_duplicate_or_nested_links`.
-Protocol and persistence changes require Main's independent review.
-
+The largest cell is 167.38 times faster in this pair. The empty-owner
+2,000-chunk cell is 0.008 ms slower; this single pair does not establish
+statistical significance. These numbers isolate chunk capture, not the writer,
+fsync, end-to-end checkpoint latency or battle TPS. CAF-05/06/08 are unchanged.
+Raw command, pin provenance and logs are retained in the executor's
+`.analysis/codex-logs/stage2core/caf04-result.json` receipt.
 
 ## Rules
 
@@ -469,6 +365,25 @@ Its first-minimum equivalence fence, test and linear fallback are documented in
 the source. Historical release horde measurements with 10k zombies, 5k
 villagers and 100 players reported entity-phase p50 74.1 to 13.5 ms; host load
 varied, and this is not a whole-server throughput guarantee.
+
+Ordinary melee hostile target memory belongs to `hostile.targets`, not the
+battle roster. The zombie/shared melee blueprint does not schedule fire panic:
+vanilla `Zombie.registerGoals`/`addBehaviourGoals` has no `PanicGoal`. Daylight
+burning must leave normal survival-player acquisition and pursuit eligible;
+animal panic and explicitly authored fire-fleeing goals remain independent.
+
+`MC_CORE_PHASE_LOG` diagnostics use the tick's `Laps` collector for both
+per-callee laps and already measured phase/journal/contact spans. Recording a
+known span does not advance a lap boundary. Disabled collectors allocate
+nothing; the `phase ms:`, `tick outer ms:` and `journal build ms:` summary
+prefixes and field units remain compatible with the coreperf log reader.
+These opt-in log records do not replace authoritative `TickTimes` telemetry.
+
+Battle staging resolves its vanilla item carriers and husk/horse type IDs once
+in the stable registry tables. Loadout component variants still use the canonical
+item codec; resolved equipment enters the summon image before normal attribute
+and wire-appearance restoration. No per-fighter item-name NBT round trip or
+entity-name registry lookup is needed, and no combinatorial loadout cache is kept.
 
 ## Recurring allocator and farming projections
 

@@ -1,6 +1,7 @@
 //! Operator-owned deterministic battle staging. No scenario file is read on the tick.
 use crate::battle::formation::{MESH_INTERVAL, Order, RegimentSpec, slot_position};
 use crate::battle::ground::{self, Placement};
+use crate::battle::ids::{EntityType, KitItem};
 use crate::battle::live_players;
 use crate::battle::weapons::Pair;
 use crate::boundary::{ChangeSet, ChunkPos, EntityId};
@@ -106,46 +107,38 @@ enum Kind {
 // spear: its `attack_range` near bound is where the sword comes out, and the
 // 26.x spear is the mounted charge weapon (`kinetic_weapon`), so riders couch
 // a lance and draw the sword in the melee.
-fn equipment(kind: Kind) -> &'static [(&'static str, &'static str)] {
+fn equipment(kind: Kind) -> &'static [(&'static str, KitItem)] {
     match kind {
-        Kind::Infantry => &[
-            ("mainhand", "minecraft:iron_spear"),
-            ("offhand", "minecraft:shield"),
-            ("head", "minecraft:iron_helmet"),
-            ("chest", "minecraft:iron_chestplate"),
+        Kind::Infantry | Kind::Cavalry => &[
+            ("mainhand", KitItem::Spear),
+            ("offhand", KitItem::Shield),
+            ("head", KitItem::Helmet),
+            ("chest", KitItem::Plate),
         ],
         Kind::Spear => &[
-            ("mainhand", "minecraft:iron_spear"),
-            ("offhand", "minecraft:shield"),
-            ("head", "minecraft:iron_helmet"),
-            ("chest", "minecraft:chainmail_chestplate"),
+            ("mainhand", KitItem::Spear),
+            ("offhand", KitItem::Shield),
+            ("head", KitItem::Helmet),
+            ("chest", KitItem::Chain),
         ],
         Kind::Archer => &[
-            ("mainhand", "minecraft:bow"),
-            ("head", "minecraft:iron_helmet"),
-            ("chest", "minecraft:leather_chestplate"),
-        ],
-        Kind::Cavalry => &[
-            ("mainhand", "minecraft:iron_spear"),
-            ("offhand", "minecraft:shield"),
-            ("head", "minecraft:iron_helmet"),
-            ("chest", "minecraft:iron_chestplate"),
+            ("mainhand", KitItem::Bow),
+            ("head", KitItem::Helmet),
+            ("chest", KitItem::LeatherChest),
         ],
     }
 }
 
 /// Every kind's second main weapon is a sword, stowed in battle state: mobs
 /// have no inventory.
-fn second_weapon(kind: Kind) -> (&'static str, Pair) {
-    match kind {
-        Kind::Archer => ("minecraft:iron_sword", Pair::BowSword),
-        Kind::Infantry | Kind::Spear | Kind::Cavalry => ("minecraft:iron_sword", Pair::SpearSword),
-    }
+fn second_weapon(kind: Kind) -> (KitItem, Pair) {
+    let pair = match kind {
+        Kind::Archer => Pair::BowSword,
+        Kind::Infantry | Kind::Spear | Kind::Cavalry => Pair::SpearSword,
+    };
+    (KitItem::Sword, pair)
 }
 
-/// Worn leggings are cosmetic: `minecraft:leather` has no armour modifier, so
-/// adding legs never changes the damage a fighter takes.
-const LEGS_CARRIER: &str = "minecraft:leather";
 /// Dyed leather shades of each side colour (`minecraft:dyed_color` RGB).
 const RED_SHADES: [i32; 4] = [0x00B0_2E26, 0x008E_1B1B, 0x00C8_452E, 0x006E_1414];
 const BLUE_SHADES: [i32; 4] = [0x003C_44AA, 0x0024_397F, 0x004F_6BC4, 0x001E_2A66];
@@ -453,14 +446,17 @@ fn item_model(model: &str) -> (String, Tag) {
 }
 
 /// `None` is a horse's caparison; otherwise one fighter's loadout.
-fn summon_tag(unit: Option<&Loadout>, side: u16) -> Tag {
+fn equipment_slots(
+    unit: Option<&Loadout>,
+    side: u16,
+) -> Vec<(&'static str, KitItem, Vec<(String, Tag)>)> {
     let red = side == 1;
     let coloured = |r: &'static str, b: &'static str| if red { r } else { b };
-    let mut slots: Vec<(&str, &str, Vec<(String, Tag)>)> = Vec::new();
+    let mut slots = Vec::new();
     match unit {
         None => slots.push((
             "body",
-            "minecraft:iron_horse_armor",
+            KitItem::HorseArmor,
             vec![worn(
                 "body",
                 coloured(
@@ -511,33 +507,55 @@ fn summon_tag(unit: Option<&Loadout>, side: u16) -> Tag {
                 Legs::Bare => {}
                 Legs::Leather => slots.push((
                     "legs",
-                    LEGS_CARRIER,
+                    KitItem::Legs,
                     vec![worn("legs", "minecraft:leather"), dyed],
                 )),
                 Legs::Holy => slots.push((
                     "legs",
-                    LEGS_CARRIER,
+                    KitItem::Legs,
                     vec![worn("legs", "krasnokamen_battle:holy")],
                 )),
             }
         }
     }
-    let slots = slots
-        .into_iter()
-        .map(|(slot, item, components)| {
-            (
-                slot.into(),
-                Tag::Compound(vec![
-                    ("id".into(), Tag::String(item.into())),
-                    ("components".into(), Tag::Compound(components)),
-                ]),
-            )
-        })
-        .collect();
-    Tag::Compound(vec![
-        ("PersistenceRequired".into(), Tag::Byte(1)),
-        ("equipment".into(), Tag::Compound(slots)),
-    ])
+    slots
+}
+
+#[derive(Clone)]
+struct Equipment {
+    slots: [Option<mc_data::ItemStack>; 6],
+    body: Option<mc_data::ItemStack>,
+}
+
+fn prepare_equipment(
+    registry: &crate::registry::CoreRegistry,
+    unit: Option<&Loadout>,
+    side: u16,
+) -> Result<Equipment, String> {
+    let mut equipment = Equipment {
+        slots: Default::default(),
+        body: None,
+    };
+    for (slot, item, components) in equipment_slots(unit, side) {
+        let stack = mc_data::item_nbt::stack_from_resolved_component_patch(
+            &registry.items,
+            registry.battle_ids.item(item),
+            components,
+        )
+        .map_err(|error| format!("battle equipment {}: {error}", item.name()))?;
+        let target = match slot {
+            "mainhand" => &mut equipment.slots[0],
+            "offhand" => &mut equipment.slots[1],
+            "feet" => &mut equipment.slots[2],
+            "legs" => &mut equipment.slots[3],
+            "chest" => &mut equipment.slots[4],
+            "head" => &mut equipment.slots[5],
+            "body" => &mut equipment.body,
+            _ => unreachable!("battle equipment table contains an unknown slot"),
+        };
+        *target = Some(stack);
+    }
+    Ok(equipment)
 }
 
 fn coloured_shade(red: bool, shade: usize) -> i32 {
@@ -551,21 +569,22 @@ fn coloured_shade(red: bool, shade: usize) -> i32 {
 fn spawn(
     state: &mut TickState,
     changes: &mut ChangeSet,
-    name: &str,
+    entity: EntityType,
     position: [f64; 3],
     unit: Option<Kind>,
-    loadout: &Tag,
+    equipment: Equipment,
     tag: &[u8],
 ) -> Result<EntityId, String> {
-    let identifier = mc_data::Identifier::parse(name.to_owned()).map_err(|e| e.to_string())?;
-    let facts = state
-        .registry
-        .entity_types
-        .facts_of(&identifier)
-        .ok_or_else(|| format!("unknown battle entity {name}"))?;
-    let type_id = facts.protocol_id;
-    let image = crate::command_summon::prepare(state, type_id, name, position, loadout)
-        .map_err(|e| e.message())?;
+    let type_id = entity.id;
+    let image = crate::command_summon::prepare(
+        state,
+        type_id,
+        entity.name,
+        position,
+        &Tag::Compound(Vec::new()),
+    )
+    .map_err(|e| e.message())?
+    .with_equipment(equipment.slots, equipment.body);
     let health = state
         .registry
         .blueprint(type_id)
@@ -574,6 +593,7 @@ fn spawn(
     crate::command_summon::apply(state, id, image);
     let slot = state.entities.slot_of(id).expect("spawned battle entity");
     let row = state.entities.row_mut(slot);
+    row.persistent = true;
     row.opaque_entity_fields = tag.to_vec();
     if unit == Some(Kind::Archer) {
         row.attack_reach = 220.0;
@@ -611,22 +631,16 @@ fn setup(
     state.tickets.insert(OWNER.into(), (centre, TICKET_RADIUS));
     let result = (|| {
         for side in 1..=2_u16 {
-            let horse_loadout = summon_tag(None, side);
+            let horse_loadout = prepare_equipment(&state.registry, None, side)?;
             for (spec, kind, size) in plan(seed, count, origin, side) {
                 let yaw = facing_yaw(spec.facing);
                 let mut members = Vec::with_capacity(size);
                 for index in 0..size {
                     let unit = loadout(seed, side, spec.id, index, kind);
                     let pos = slot_position(&spec, index);
-                    let id = spawn(
-                        state,
-                        changes,
-                        "minecraft:husk",
-                        pos,
-                        Some(kind),
-                        &summon_tag(Some(&unit), side),
-                        &tag,
-                    )?;
+                    let equipment = prepare_equipment(&state.registry, Some(&unit), side)?;
+                    let husk = state.registry.battle_ids.husk;
+                    let id = spawn(state, changes, husk, pos, Some(kind), equipment, &tag)?;
                     let slot = state.entities.slot_of(id).expect("battle unit");
                     state.entities.set_faction(slot, side);
                     state.entities.set_rot(slot, yaw, 0.0);
@@ -637,23 +651,24 @@ fn setup(
                     }
                     // The second main weapon, with the kit's item model.
                     let (item, pair) = second_weapon(kind);
-                    let sidearm = mc_data::item_nbt::stack_from_component_patch(
+                    let sidearm = mc_data::item_nbt::stack_from_resolved_component_patch(
                         &state.registry.items,
-                        &mc_data::Identifier::parse(item.to_owned()).map_err(|e| e.to_string())?,
-                        &[item_model(unit.sidearm)],
+                        state.registry.battle_ids.item(item),
+                        vec![item_model(unit.sidearm)],
                     )
-                    .map_err(|e| format!("battle second weapon {item}: {e}"))?;
+                    .map_err(|e| format!("battle second weapon {}: {e}", item.name()))?;
                     state.hostile.battle.combat.arsenal.stow(id, sidearm, pair);
                     // A horse carries its rider: settle the pair through the horse.
                     let mut grounded = id;
                     if kind == Kind::Cavalry {
+                        let horse_type = state.registry.battle_ids.horse;
                         let horse = spawn(
                             state,
                             changes,
-                            "minecraft:horse",
+                            horse_type,
                             pos,
                             None,
-                            &horse_loadout,
+                            horse_loadout.clone(),
                             &tag,
                         )?;
                         crate::battle::cavalry::mount(state, id, horse)

@@ -1,7 +1,6 @@
-//! Per-callee lap timers inside one tick phase, printed only under
-//! `MC_CORE_PHASE_LOG`. Disabled laps hold no clock and no allocation: `lap`
-//! is one `Option` test. Each lap covers the code since the previous lap, so a
-//! phase's laps sum to its total (statements between calls land in the next lap).
+//! Opt-in tick diagnostics. Disabled collectors hold no clock or allocation.
+//! `lap` partitions elapsed work; `record` accepts an already measured span
+//! without moving that boundary (for summaries and nested breakdowns).
 
 use std::time::{Duration, Instant};
 
@@ -28,15 +27,39 @@ impl Laps {
         }
     }
 
+    /// Records a known span without changing the next lap's starting point.
+    pub(crate) fn record(&mut self, name: &'static str, time: Duration) {
+        if self.last.is_some() {
+            self.rows.push((name, time));
+        }
+    }
+
     /// `  <label> detail ms: a=0.12 b=3.40 ...`; nothing when disabled.
     pub(crate) fn print(&self, label: &str) {
-        if self.last.is_none() {
-            return;
-        }
-        let mut line = format!("  {label} detail ms:");
+        self.print_line(format_args!("  {label} detail ms:"));
+    }
+
+    /// Retains the summary prefixes consumed by the coreperf log reader.
+    pub(crate) fn print_summary(&self, label: &str, context: std::fmt::Arguments<'_>) {
+        self.print_line(format_args!("{label} ms: {context}"));
+    }
+
+    fn line(&self, prefix: std::fmt::Arguments<'_>) -> Option<String> {
+        self.last?;
+        let mut line = prefix.to_string();
         for (name, time) in &self.rows {
             line.push_str(&format!(" {name}={:.2}", time.as_secs_f64() * 1000.0));
         }
-        eprintln!("{line}");
+        Some(line)
+    }
+
+    fn print_line(&self, prefix: std::fmt::Arguments<'_>) {
+        if let Some(line) = self.line(prefix) {
+            eprintln!("{line}");
+        }
     }
 }
+
+#[cfg(test)]
+#[path = "phase_laps_tests.rs"]
+mod tests;

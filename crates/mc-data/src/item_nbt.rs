@@ -102,6 +102,14 @@ pub fn stack_from_fields(
     let item_id = items
         .id_of(&parsed)
         .ok_or_else(|| ItemNbtError::UnknownItem(item_name.to_owned()))?;
+    stack_from_resolved_fields(items, item_id, fields).map(Some)
+}
+
+fn stack_from_resolved_fields(
+    items: &ItemRegistry,
+    item_id: u32,
+    fields: &[(String, Tag)],
+) -> Result<ItemStack, ItemNbtError> {
     let mut stack = ItemStack {
         count: int_field(fields, "count").unwrap_or(1).max(0),
         item_id,
@@ -113,7 +121,7 @@ pub fn stack_from_fields(
         components: stack_components_load(fields, items)?,
     };
     preserve_components(items, fields, &mut stack)?;
-    Ok(Some(stack))
+    Ok(stack)
 }
 
 /// Admit a command's component patch through the same native codecs used by
@@ -135,6 +143,26 @@ pub fn stack_from_component_patch(
         ],
     )?
     .ok_or_else(|| ItemNbtError::UnknownItem(item.as_str().to_owned()))
+}
+
+/// Admit an owned component patch for an item resolved by the startup registry.
+/// Uses the same component validation and decoding as name-based admission,
+/// without rebuilding or parsing the item's textual identity.
+pub fn stack_from_resolved_component_patch(
+    items: &ItemRegistry,
+    item_id: u32,
+    components: Vec<(String, Tag)>,
+) -> Result<ItemStack, ItemNbtError> {
+    crate::item_component_values::validate(items, &components, 0)
+        .map_err(ItemNbtError::InvalidComponent)?;
+    if items.name_of(item_id).is_none() {
+        return Err(ItemNbtError::UnknownItem(item_id.to_string()));
+    }
+    stack_from_resolved_fields(
+        items,
+        item_id,
+        &[("components".into(), Tag::Compound(components))],
+    )
 }
 
 /// Encode one vanilla item compound (no `Slot` key — the container adds it).

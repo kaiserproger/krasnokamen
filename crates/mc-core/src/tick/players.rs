@@ -146,6 +146,45 @@ pub(super) fn within_entity_reach(state: &TickState, entity: EntityId, target: E
     distance_squared < range * range
 }
 
+/// Server-initiated `ContainerClose`, including plugin and settlement owners.
+/// Native overflow joins the ordinary life-drop merge queue.
+pub(crate) fn close_player_menu(state: &mut TickState, connection: ConnectionId) {
+    let Some(entity) = state.connections.entity_of(connection) else {
+        return;
+    };
+    let window = state
+        .players
+        .get(&entity)
+        .and_then(|player| player.open.as_ref())
+        .map(|menu| menu.window);
+    let close = PlayerInput::ContainerClose {
+        connection,
+        window: window.unwrap_or(0),
+    };
+    if crate::plugin_player::menu_input(state, &close).0 {
+        return;
+    }
+    if let Some(window) = window {
+        state.push_player(connection, PlayerChange::MenuClosed { window });
+    }
+    if crate::settlements::ui::menus::input(state, &close) {
+        return;
+    }
+    if let Some((entity, effects)) = input::inventory::close_container(state, connection) {
+        for change in effects.changes {
+            state.push_player(connection, change);
+        }
+        if !effects.dropped.is_empty() {
+            let position = state
+                .entities
+                .pos(state.entities.slot_of(entity).expect("native menu owner"));
+            state
+                .merge_life_drops
+                .extend(effects.dropped.into_iter().map(|stack| (position, stack)));
+        }
+    }
+}
+
 /// Dig/place/attack/breed emit intents; the rest apply directly.
 pub(super) fn apply_inputs<'a>(
     state: &mut TickState,

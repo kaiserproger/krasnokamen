@@ -4,6 +4,135 @@ fn fixture() -> TickState {
     crate::hostile_tests::setup(8.0).0
 }
 
+/// Unoptimized command-NBT reference; production staging uses resolved stacks.
+fn summon_tag(unit: Option<&Loadout>, side: u16) -> Tag {
+    let slots = equipment_slots(unit, side)
+        .into_iter()
+        .map(|(slot, item, components)| {
+            (
+                slot.into(),
+                Tag::Compound(vec![
+                    ("id".into(), Tag::String(item.name().into())),
+                    ("components".into(), Tag::Compound(components)),
+                ]),
+            )
+        })
+        .collect();
+    Tag::Compound(vec![
+        ("PersistenceRequired".into(), Tag::Byte(1)),
+        ("equipment".into(), Tag::Compound(slots)),
+    ])
+}
+
+#[test]
+fn resolved_kits_preserve_command_spawn_state_attributes_and_wire_appearance() {
+    let mut resolved = fixture();
+    let mut reference = fixture();
+    let mut changes = ChangeSet::default();
+    let tag = tag_bytes();
+    for side in [1, 2] {
+        for kind in [Kind::Infantry, Kind::Spear, Kind::Archer, Kind::Cavalry] {
+            for index in 0..128 {
+                let unit = loadout(42, side, 1, index, kind);
+                let entity = resolved.registry.battle_ids.husk;
+                let equipment = prepare_equipment(&resolved.registry, Some(&unit), side).unwrap();
+                let id = spawn(
+                    &mut resolved,
+                    &mut changes,
+                    entity,
+                    [0.0, 80.0, 0.0],
+                    Some(kind),
+                    equipment,
+                    &tag,
+                )
+                .unwrap();
+                let image = crate::command_summon::prepare(
+                    &reference,
+                    entity.id,
+                    entity.name,
+                    [0.0, 80.0, 0.0],
+                    &summon_tag(Some(&unit), side),
+                )
+                .unwrap();
+                let health = reference
+                    .registry
+                    .blueprint(entity.id)
+                    .unwrap()
+                    .params
+                    .max_health;
+                let expected = reference.spawn_mob(entity.id, [0.0, 80.0, 0.0], health);
+                crate::command_summon::apply(&mut reference, expected, image);
+                let expected_slot = reference.entities.slot_of(expected).unwrap();
+                let expected_row = reference.entities.row_mut(expected_slot);
+                expected_row.opaque_entity_fields = tag.clone();
+                if kind == Kind::Archer {
+                    expected_row.attack_reach = 220.0;
+                }
+                assert_same_spawn(&resolved, id, &reference, expected);
+            }
+        }
+        let entity = resolved.registry.battle_ids.horse;
+        let equipment = prepare_equipment(&resolved.registry, None, side).unwrap();
+        let id = spawn(
+            &mut resolved,
+            &mut changes,
+            entity,
+            [0.0, 80.0, 0.0],
+            None,
+            equipment,
+            &tag,
+        )
+        .unwrap();
+        let image = crate::command_summon::prepare(
+            &reference,
+            entity.id,
+            entity.name,
+            [0.0, 80.0, 0.0],
+            &summon_tag(None, side),
+        )
+        .unwrap();
+        let health = reference
+            .registry
+            .blueprint(entity.id)
+            .unwrap()
+            .params
+            .max_health;
+        let expected = reference.spawn_mob(entity.id, [0.0, 80.0, 0.0], health);
+        crate::command_summon::apply(&mut reference, expected, image);
+        let expected_slot = reference.entities.slot_of(expected).unwrap();
+        reference
+            .entities
+            .row_mut(expected_slot)
+            .opaque_entity_fields = tag.clone();
+        assert_same_spawn(&resolved, id, &reference, expected);
+    }
+}
+
+fn assert_same_spawn(
+    actual: &TickState,
+    id: EntityId,
+    expected: &TickState,
+    expected_id: EntityId,
+) {
+    let slot = actual.entities.slot_of(id).unwrap();
+    let expected_slot = expected.entities.slot_of(expected_id).unwrap();
+    let row = actual.entities.row(slot);
+    let expected_row = expected.entities.row(expected_slot);
+    assert_eq!(row.appearance, expected_row.appearance);
+    assert_eq!(row.health, expected_row.health);
+    assert_eq!(row.speed, expected_row.speed);
+    assert_eq!(row.attack_damage, expected_row.attack_damage);
+    assert_eq!(row.attack_reach, expected_row.attack_reach);
+    assert_eq!(row.sight_range, expected_row.sight_range);
+    assert_eq!(
+        crate::journal::EntityStateImage::from_row(actual.entities.body(slot), row),
+        crate::journal::EntityStateImage::from_row(
+            expected.entities.body(expected_slot),
+            expected_row
+        ),
+    );
+}
+
 fn layout(seed: u64) -> Vec<([u64; 3], u16, String)> {
     let mut state = fixture();
     let mut changes = ChangeSet::default();
@@ -32,6 +161,55 @@ fn layout(seed: u64) -> Vec<([u64; 3], u16, String)> {
             )
         })
         .collect()
+}
+
+#[test]
+fn first_battle_tick_after_setup_reuses_staged_shield_appearances() {
+    let mut state = fixture();
+    let mut changes = ChangeSet::default();
+    setup(&mut state, &mut changes, [0.0, 80.0, 0.0], 42, 100).unwrap();
+    let want = changes
+        .entities_spawned
+        .iter()
+        .map(|id| {
+            let pos = state.entities.pos(state.entities.slot_of(*id).unwrap());
+            (
+                ChunkPos {
+                    x: (pos[0].floor() as i32).div_euclid(16),
+                    z: (pos[2].floor() as i32).div_euclid(16),
+                },
+                0,
+            )
+        })
+        .collect();
+    state.world.ensure_blocking(&want);
+    state.refresh_active_chunks(state.tick);
+    let appearances: Vec<_> = changes
+        .entities_spawned
+        .iter()
+        .map(|id| {
+            let slot = state.entities.slot_of(*id).unwrap();
+            (
+                *id,
+                std::sync::Arc::clone(&state.entities.row(slot).appearance),
+            )
+        })
+        .collect();
+    state.appearance_changed.clear();
+    state.hostile.battle.running = true;
+    crate::battle::step(&mut state);
+    assert!(
+        state.appearance_changed.is_empty(),
+        "starting staged guard must not publish a mass shield transition: {:?}",
+        state.appearance_changed
+    );
+    for (id, appearance) in appearances {
+        let slot = state.entities.slot_of(id).unwrap();
+        assert!(
+            std::sync::Arc::ptr_eq(&appearance, &state.entities.row(slot).appearance),
+            "first tick copied appearance for {id:?}"
+        );
+    }
 }
 
 #[test]
@@ -328,7 +506,11 @@ fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighte
             .arsenal
             .get(id)
             .expect("every fighter carries a second weapon");
-        assert_eq!(second_weapon(kind), (name(&state, sidearm).as_str(), *pair));
+        let (item, expected_pair) = second_weapon(kind);
+        assert_eq!(
+            (item.name(), expected_pair),
+            (name(&state, sidearm).as_str(), *pair)
+        );
         seen.insert((
             "sidearm",
             sidearm.item_model.as_deref().unwrap().as_str().to_owned(),
@@ -340,7 +522,7 @@ fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighte
                 "head" => row.appearance.equipment[5].as_ref().unwrap(),
                 _ => row.appearance.equipment[4].as_ref().unwrap(),
             };
-            assert_eq!(name(&state, stack), *item, "{kind:?} slot {index}");
+            assert_eq!(name(&state, stack), item.name(), "{kind:?} slot {index}");
         }
         if kind == Kind::Archer {
             assert!(row.appearance.equipment[1].is_none());
@@ -383,7 +565,7 @@ fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighte
                 seen.insert(("legs", "bare".into()));
             }
             Some(legs) => {
-                assert_eq!(name(&state, legs), LEGS_CARRIER);
+                assert_eq!(name(&state, legs), KitItem::Legs.name());
                 let legs_components = components(&state, legs);
                 let (legs_slot, asset) = worn_asset(&legs_components).unwrap();
                 assert_eq!(legs_slot, "legs");
@@ -436,7 +618,7 @@ fn staged_equipment_varies_appearance_only_and_shows_side_colour_on_every_fighte
     let carrier = state
         .registry
         .items
-        .id_of(&mc_data::Identifier::parse(LEGS_CARRIER).unwrap())
+        .id_of(&mc_data::Identifier::parse(KitItem::Legs.name()).unwrap())
         .unwrap();
     let facts = rules
         .facts

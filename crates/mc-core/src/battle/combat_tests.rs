@@ -280,6 +280,72 @@ fn shield_bearer_raises_on_guard_and_lowers_to_swing_or_when_wounded() {
 }
 
 #[test]
+fn shield_guard_lowers_for_stagger_and_raises_after_recovery() {
+    let (mut state, mut battle, actor, _) = pair();
+    let shield = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:shield").unwrap())
+        .unwrap();
+    let slot = slot(&state, actor);
+    std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).equipment[1] =
+        Some(mc_data::ItemStack::new(shield, 1));
+    let bi = index(&state, &battle, actor);
+    battle.columns.targets[bi] = None;
+    assert!(
+        step_at(&state, &mut battle, 0)
+            .shields
+            .contains(&(actor, true))
+    );
+    battle.combat.fighters[bi].action = Action::Stagger { until: 100 };
+    assert_eq!(step_at(&state, &mut battle, 1).shields, [(actor, false)]);
+    assert!(step_at(&state, &mut battle, 2).shields.is_empty());
+    assert_eq!(step_at(&state, &mut battle, 100).shields, [(actor, true)]);
+}
+
+#[test]
+fn shield_guard_lowers_for_rout_and_raises_after_rally() {
+    use super::super::formation::{Order, RegimentSpec};
+    let (mut state, mut battle, actor, _) = pair();
+    let shield = state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:shield").unwrap())
+        .unwrap();
+    let slot = slot(&state, actor);
+    std::sync::Arc::make_mut(&mut state.entities.row_mut(slot).appearance).equipment[1] =
+        Some(mc_data::ItemStack::new(shield, 1));
+    battle
+        .formation
+        .add_regiment(
+            RegimentSpec {
+                id: 0,
+                faction: 1,
+                origin: state.entities.pos(slot),
+                facing: [1.0, 0.0],
+                files: 1,
+                frontage: 1.0,
+                order: Order::Hold,
+            },
+            &[actor],
+        )
+        .unwrap();
+    prepare(&state, &mut battle, 0);
+    let bi = index(&state, &battle, actor);
+    battle.columns.targets[bi] = None;
+    assert!(
+        step_at(&state, &mut battle, 0)
+            .shields
+            .contains(&(actor, true))
+    );
+    battle.formation.members[bi].routing = true;
+    assert_eq!(step_at(&state, &mut battle, 1).shields, [(actor, false)]);
+    assert!(step_at(&state, &mut battle, 2).shields.is_empty());
+    battle.formation.members[bi].routing = false;
+    assert_eq!(step_at(&state, &mut battle, 3).shields, [(actor, true)]);
+}
+
+#[test]
 fn calibration_spreads_wide_front_removals_over_the_press_and_seven_fatal_in_ten() {
     let mut counts = [0; 3];
     for sample in 0..10_000 {
