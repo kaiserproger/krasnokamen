@@ -38,17 +38,24 @@ pub(super) struct Hittable {
 }
 
 #[cfg(test)]
-fn hittables(state: &TickState, bodies: &mut Vec<Hittable>) {
-    hittables_from_slots(state, bodies, state.entities.slots());
+fn hittables(
+    state: &TickState,
+    include_items: bool,
+    cover: Option<&Cover>,
+    bodies: &mut Vec<Hittable>,
+) {
+    hittables_from_slots(state, include_items, cover, bodies, state.entities.slots());
 }
 
 fn hittables_from_slots(
     state: &TickState,
+    include_items: bool,
+    cover: Option<&Cover>,
     bodies: &mut Vec<Hittable>,
     slots: impl Iterator<Item = EntitySlot>,
 ) {
     bodies.clear();
-    let include_items = crate::projectiles::active_hook_present(state);
+    let mut stand_types: Vec<(u32, bool)> = Vec::new();
     bodies.extend(slots.filter_map(|slot| {
         let body = state.entities.body(slot);
         if crate::end_fight::is_dragon(state, slot) {
@@ -97,6 +104,11 @@ fn hittables_from_slots(
             id: body.id,
             uuid: state.entities.row(slot).uuid,
             item: matches!(body.kind, EntityKind::Item { .. }),
+            battle_faction: if matches!(body.kind, EntityKind::Mob { .. }) {
+                body.faction
+            } else {
+                0
+            },
             deployed_candidate,
             min,
             max,
@@ -421,21 +433,20 @@ pub(crate) fn swept_slots(
     slots.dedup();
 }
 
-/// Collect conservative membership for one projectile at the post-move version.
-fn shot_slots(
-    state: &TickState,
-    id: EntityId,
-    slots: &mut Vec<EntitySlot>,
-) -> bool {
-    slots.clear();
-    let Some(slot) = state.entities.slot_of(id) else {
-        return false;
-    };
-    let Some(record) = state.entities.row(slot).projectile.as_deref() else {
-        return false;
-    };
+/// One frozen broad-phase query, before any shot payload can mutate the world.
+#[derive(Debug, Clone, Copy)]
+struct ShotQuery {
+    start: [f64; 3],
+    end: [f64; 3],
+    radius: f64,
+    hook: bool,
+}
+
+fn shot_query(state: &TickState, id: EntityId) -> Option<ShotQuery> {
+    let slot = state.entities.slot_of(id)?;
+    let record = state.entities.row(slot).projectile.as_deref()?;
     if record.stuck || record.kind == ProjectileKind::EyeOfEnder {
-        return false;
+        return None;
     }
     let pos = state.entities.pos(slot);
     let velocity = state.entities.vel(slot).map(|v| v / 20.0);
@@ -443,42 +454,59 @@ fn shot_slots(
         .map_or(0.3, |profile| profile.collision_radius);
     if pos.iter().any(|v| !v.is_finite()) || !radius.is_finite() || !(0.0..=128.0).contains(&radius)
     {
-        return false;
+        return None;
     }
     let (start, end) = if matches!(record.data, super::ProjectileData::Homing { .. }) {
-        // Homing may observe a target teleported by an earlier payload. Every
-        // segment accepted by first_solid is inside this conservative envelope.
         (pos.map(|v| v - 128.0), pos.map(|v| v + 128.0))
     } else {
         if velocity.iter().any(|v| !v.is_finite() || v.abs() > 128.0) {
-            return false;
+            return None;
         }
         (pos, std::array::from_fn(|axis| pos[axis] + velocity[axis]))
     };
-    swept_slots(state, start, end, radius, slots);
-    true
+    Some(ShotQuery {
+        start,
+        end,
+        radius,
+        hook: record.kind == ProjectileKind::FishingHook,
+    })
+}
+
+fn query_candidates(
+    state: &TickState,
+    query: &ShotQuery,
+    bodies: &[Hittable],
+    exceptional: &[usize],
+    grid: Option<&FineGrid>,
+    slots: &mut Vec<EntitySlot>,
+    candidates: &mut Vec<usize>,
+) {
+    if let Some(grid) = grid {
+        grid.query(bodies, query.start, query.end, query.radius, candidates);
+    } else {
+        swept_slots(state, query.start, query.end, query.radius, slots);
+        candidates.extend(slots.iter().filter_map(|slot| {
+            bodies
+                .binary_search_by_key(&slot.0, |body| body.slot.map_or(u32::MAX, |slot| slot.0))
+                .ok()
+        }));
+    }
+    candidates.extend_from_slice(exceptional);
 }
 
 #[cfg(test)]
-/// Freeze membership before any projectile payload can mutate the world.
 fn shot_candidates(
     state: &TickState,
     id: EntityId,
     bodies: &[Hittable],
     exceptional: &[usize],
+    grid: Option<&FineGrid>,
     slots: &mut Vec<EntitySlot>,
     candidates: &mut Vec<usize>,
 ) {
-    if !shot_slots(state, id, slots) {
-        return;
+    if let Some(query) = shot_query(state, id) {
+        query_candidates(state, &query, bodies, exceptional, grid, slots, candidates);
     }
-    candidates.extend(slots.iter().filter_map(|slot| {
-        bodies
-            .binary_search_by_key(&slot.0, |body| body.slot.map_or(u32::MAX, |slot| slot.0))
-            .ok()
-    }));
-    // Dragon parts and deployed planes need not fit the ordinary body bounds.
-    candidates.extend_from_slice(exceptional);
 }
 
 pub(crate) fn segment_enters(
@@ -889,28 +917,52 @@ pub(super) fn run(
         .collect();
     let mut bodies = std::mem::take(&mut state.projectiles.bodies);
     bodies.clear();
+    let dense = ids.len() >= FineGrid::MIN_SHOTS;
+    let include_items = queries.iter().flatten().any(|query| query.hook);
+    let mut cover = std::mem::take(&mut state.projectiles.cover);
+    let covered = !boxes.is_empty() && cover.build(&boxes);
+    let reach = if covered { cover.fine_cells() } else { 0 };
     let mut slots = Vec::new();
-    // Capture each broad phase before payloads can move/remove rows. Keep the
-    // per-shot slots so constructing the union does not repeat spatial queries.
     let mut shot_members = Vec::new();
-    let mut shot_ranges = Vec::with_capacity(ids.len());
-    for &id in &ids {
-        let start = shot_members.len();
-        let valid = shot_slots(state, id, &mut slots);
-        shot_members.extend_from_slice(&slots);
-        shot_ranges.push(valid.then_some(start..shot_members.len()));
+    let mut shot_ranges = Vec::with_capacity(if dense { 0 } else { ids.len() });
+    if dense {
+        hittables_from_slots(
+            state,
+            include_items,
+            covered.then_some(&cover),
+            &mut bodies,
+            state.entities.slots(),
+        );
+    } else {
+        for query in &queries {
+            let start = shot_members.len();
+            slots.clear();
+            if let Some(query) = query {
+                swept_slots(state, query.start, query.end, query.radius, &mut slots);
+            }
+            shot_members.extend_from_slice(&slots);
+            shot_ranges.push(start..shot_members.len());
+        }
+        if queries.iter().any(Option::is_some) {
+            let mut selected = state.entities.mob_slots_matching(|type_id| {
+                state
+                    .registry
+                    .blueprint(type_id)
+                    .is_some_and(|blueprint| blueprint.name == "minecraft:armor_stand")
+            });
+            selected.extend_from_slice(&shot_members);
+            selected.sort_unstable();
+            selected.dedup();
+            hittables_from_slots(
+                state,
+                include_items,
+                None,
+                &mut bodies,
+                selected.into_iter(),
+            );
+        }
     }
-    if shot_ranges.iter().any(Option::is_some) {
-        // Deployed planes can extend outside an armor stand's body bounds.
-        let mut selected = state.entities.mob_slots_matching(|type_id| {
-            state.registry.blueprint(type_id)
-                .is_some_and(|blueprint| blueprint.name == "minecraft:armor_stand")
-        });
-        selected.extend_from_slice(&shot_members);
-        selected.sort_unstable();
-        selected.dedup();
-        hittables_from_slots(state, &mut bodies, selected.into_iter());
-    }
+    state.projectiles.cover = cover;
     let hittables_us = lap();
     let mut grid = std::mem::take(&mut state.projectiles.grid);
     let use_grid = ids.len() >= FineGrid::MIN_SHOTS && grid.build(&bodies, reach);
@@ -923,15 +975,33 @@ pub(super) fn run(
         .collect();
     let mut candidates = Vec::new();
     let mut ranges = Vec::with_capacity(ids.len());
-    for query in shot_ranges {
+    for (index, query) in queries.iter().enumerate() {
         let start = candidates.len();
         if let Some(query) = query {
-            candidates.extend(shot_members[query].iter().filter_map(|slot| {
-                bodies.binary_search_by_key(&slot.0, |body| {
-                    body.slot.map_or(u32::MAX, |slot| slot.0)
-                }).ok()
-            }));
-            candidates.extend_from_slice(&exceptional);
+            if dense {
+                if !bodies.is_empty() {
+                    query_candidates(
+                        state,
+                        query,
+                        &bodies,
+                        &exceptional,
+                        use_grid.then_some(&grid),
+                        &mut slots,
+                        &mut candidates,
+                    );
+                }
+            } else {
+                candidates.extend(shot_members[shot_ranges[index].clone()].iter().filter_map(
+                    |slot| {
+                        bodies
+                            .binary_search_by_key(&slot.0, |body| {
+                                body.slot.map_or(u32::MAX, |slot| slot.0)
+                            })
+                            .ok()
+                    },
+                ));
+                candidates.extend_from_slice(&exceptional);
+            }
         }
         candidates[start..].sort_unstable();
         // Each query has unique slots, but exceptional stands may also be local.
@@ -1229,7 +1299,7 @@ fn step(
             set_in_ground(state, slot, false);
             return false;
         }
-        if record.age > ARROW_STUCK_TICKS {
+        if record.age >= record.ground_lifetime {
             return true;
         }
         return pickup(state, record, pos, slots);

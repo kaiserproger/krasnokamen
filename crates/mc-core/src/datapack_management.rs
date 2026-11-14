@@ -272,8 +272,9 @@ fn cached_listing(state: &TickState) -> Listing {
     let describe = |id: &String| {
         (
             id.clone(),
-            packs
-                .descriptions
+            state
+                .datapacks
+                .catalog()
                 .get(id)
                 .cloned()
                 .unwrap_or_else(|| Tag::String(String::new())),
@@ -285,7 +286,7 @@ fn cached_listing(state: &TickState) -> Listing {
     }
 }
 
-fn counted(listing: &Listing, scope: ListScope) -> i32 {
+pub(super) fn counted(listing: &Listing, scope: ListScope) -> i32 {
     let count = match scope {
         ListScope::Enabled => listing.enabled.len(),
         ListScope::Available => listing.available.len(),
@@ -294,26 +295,20 @@ fn counted(listing: &Listing, scope: ListScope) -> i32 {
     count as i32
 }
 
-/// Vanilla reloads the pack repository before listing, so a pack added to or
-/// removed from the folder is listed at once. The scan runs on the worker and
-/// the listing is shown when it finishes; the numeric result is the cached
-/// snapshot's count because the command's result is fixed when it returns.
-/// While another worker job runs the cached snapshot is listed instead.
+/// Reload the pack repository on the worker before reporting its fresh count.
 fn list(
     state: &mut TickState,
     connection: ConnectionId,
     scope: ListScope,
 ) -> Result<CommandResult, Failure> {
-    let cached = cached_listing(state);
-    let result = counted(&cached, scope);
-    if state
+    let completion = state
+        .command_context
+        .completion_id()
+        .map_err(Failure::Text)?;
+    state
         .datapacks
-        .request_job(Job::List(scope), connection)
-        .is_err()
-    {
-        present(state, connection, scope, &cached);
-    }
-    Ok(CommandResult::Success(result))
+        .request_job(Job::List(scope), connection, completion)?;
+    Ok(CommandResult::Deferred(completion))
 }
 
 /// A tag's JSON text, for the `pack.mcmeta` description of a created pack.
@@ -360,14 +355,19 @@ fn create(
     }
     let description = crate::command_text::parse_component(description)
         .map_err(|error| Failure::Text(error.message()))?;
+    let completion = state
+        .command_context
+        .completion_id()
+        .map_err(Failure::Text)?;
     state.datapacks.request_job(
         Job::Create {
             id,
             description: json(&description).to_string(),
         },
         connection,
+        completion,
     )?;
-    Ok(CommandResult::Completed)
+    Ok(CommandResult::Deferred(completion))
 }
 
 fn move_enabled(selection: &mut Selection, id: &str, rest: &[&str]) -> Result<(), Failure> {
@@ -480,11 +480,14 @@ fn activate(
     id: String,
 ) -> Result<CommandResult, Failure> {
     selection.validate().map_err(Failure::Text)?;
-    let count = selection.enabled.len() as i32;
+    let completion = state
+        .command_context
+        .completion_id()
+        .map_err(Failure::Text)?;
     state
         .datapacks
-        .request_activation(connection, selection, action, id)?;
-    Ok(CommandResult::Success(count))
+        .request_activation(connection, selection, action, id, completion)?;
+    Ok(CommandResult::Deferred(completion))
 }
 
 /// Show a fresh listing from the worker's scan.

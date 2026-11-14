@@ -18,8 +18,13 @@ pub(in crate::battle) fn prepare(state: &TickState, battle: &mut BattleState, ti
         world: &state.world,
         tick,
     };
-    super::super::formation::update(&frame, battle);
-    battle.columns.prepare(&frame, &battle.formation);
+    battle.columns.prepare(
+        &frame,
+        &mut battle.formation,
+        &mut battle.output.counters,
+        &mut battle.population,
+    );
+    battle.formation.finish_preparation();
     battle.combat.prepare(&battle.columns.ids);
 }
 
@@ -93,7 +98,7 @@ fn weapon_cycles_emit_full_duration_and_only_strike_on_contact_tick() {
             } else {
                 crate::boundary::SwingKind::Whack
             },
-            duration_ticks: weapon.cycle()
+            duration_ticks: i32::from(weapon.cycle())
         }));
         assert_eq!(weapon.cycle(), 2 * weapon.windup() + 1);
         let impact = start + u64::from(weapon.windup());
@@ -275,7 +280,7 @@ fn shield_bearer_raises_on_guard_and_lowers_to_swing_or_when_wounded() {
 }
 
 #[test]
-fn calibration_has_thirteen_per_thousand_removals_nine_wounded_per_death() {
+fn calibration_spreads_wide_front_removals_over_the_press_and_seven_fatal_in_ten() {
     let mut counts = [0; 3];
     for sample in 0..10_000 {
         counts[match outcome(sample, false, 0.0) {
@@ -284,13 +289,43 @@ fn calibration_has_thirteen_per_thousand_removals_nine_wounded_per_death() {
             Outcome::Kill => 2,
         }] += 1;
     }
-    assert_eq!(counts, [9870, 117, 13]);
+    // A 21..25-tick cycle skips the next 20-tick attack decision.
+    for weapon in [Weapon::Sword, Weapon::Spear, Weapon::Mace] {
+        assert!((21..=40).contains(&weapon.cycle()));
+    }
+    let rate = 0.25 * (0.8 / 1.8) + 0.75 * (0.2 / 1.2);
+    assert_eq!(counts, [9920, 24, 56]);
+    let removal_probability = (counts[1] + counts[2]) as f64 / 10_000.0;
+    // 80 removals per regiment in 120 s of contact, over fifty times the
+    // 46-file front within reach.
+    let expected = 46.0 * 50.0 * rate * 46.0 * (1.0 - 2316.0 / 3873.0) * removal_probability;
+    // Within one roll in 10 000 of the ~80 removal rolls.
+    assert!((expected - 80.0).abs() < 80.0 / 79.0, "{expected}");
+    let fatal_share = counts[2] as f64 / f64::from(counts[1] + counts[2]);
+    assert!((0.69..=0.71).contains(&fatal_share), "{fatal_share}");
+    let lifetime = 1.0 / (rate * (1.0 - 2316.0 / 3873.0) * removal_probability);
+    assert!(lifetime >= 8.0, "{lifetime}");
     assert_eq!(
         (0..10_000)
             .filter(|r| outcome(*r, true, 0.0) == Outcome::Kill)
             .count(),
-        900
+        216
     );
+}
+
+#[test]
+fn saturated_pursuit_kills_nine_casualties_in_ten() {
+    // A charge bonus far past any real one (impact_bonus <= 2) saturates the
+    // pursuit odds at the 0.8 % press lethality.
+    let mut counts = [0; 3];
+    for sample in 0..10_000 {
+        counts[match outcome(sample, true, 50.0) {
+            Outcome::Glance => 0,
+            Outcome::Wound => 1,
+            Outcome::Kill => 2,
+        }] += 1;
+    }
+    assert_eq!(counts, [0, 1000, 9000]);
 }
 
 #[test]
@@ -310,6 +345,76 @@ fn stale_target_faction_change_cancels_damage_at_impact() {
     let out = step_at(&state, &mut battle, 10);
     assert!(out.intents.is_empty());
     assert_eq!(battle.combat.work.strikes, 0);
+}
+
+fn kill_intents(out: &Output, victim: EntityId) -> usize {
+    out.intents
+        .iter()
+        .filter(|intent| {
+            matches!(intent.kind, IntentKind::DamageEntity {
+                target,
+                kind: crate::survival::DamageKind::GenericKill,
+                ..
+            } if target == victim)
+        })
+        .count()
+}
+
+#[test]
+fn landed_blow_finishes_a_withdrawing_wounded_man() {
+    let (state, mut battle, actor, victim) = pair();
+    // A swing whose own roll is only a wound: the wounded target still dies.
+    let start = (0..10_000)
+        .find(|&s| outcome(roll(actor, s, victim.0 as u64), false, 0.0) == Outcome::Wound)
+        .unwrap();
+    let a = index(&state, &battle, actor);
+    let b = index(&state, &battle, victim);
+    battle.combat.fighters[a].action = Action::Windup {
+        target: victim,
+        start,
+        weapon: Weapon::Sword,
+    };
+    battle.combat.fighters[b].action = Action::Wounded;
+    let out = step_at(
+        &state,
+        &mut battle,
+        start + u64::from(Weapon::Sword.windup()),
+    );
+    assert_eq!(battle.combat.work.strikes, 1);
+    assert_eq!(kill_intents(&out, victim), 1, "wounded man stayed immune");
+    assert_eq!(battle.combat.work.killed, 1);
+}
+
+#[test]
+fn second_attacker_in_one_pass_cannot_kill_the_reserved_casualty() {
+    let (mut state, mut battle, actor, victim) = pair();
+    let pos = state.entities.pos(slot(&state, victim));
+    let second = spawn(&mut state, "husk", [pos[0], pos[1], pos[2] + 2.0]);
+    let second_slot = slot(&state, second);
+    state.entities.set_faction(second_slot, 1);
+    prepare(&state, &mut battle, 0);
+    let start = (0..1_000_000)
+        .find(|&s| {
+            [actor, second]
+                .iter()
+                .all(|id| outcome(roll(*id, s, victim.0 as u64), false, 0.0) == Outcome::Kill)
+        })
+        .unwrap();
+    for id in [actor, second] {
+        let bi = index(&state, &battle, id);
+        battle.combat.fighters[bi].action = Action::Windup {
+            target: victim,
+            start,
+            weapon: Weapon::Sword,
+        };
+    }
+    let out = step_at(
+        &state,
+        &mut battle,
+        start + u64::from(Weapon::Sword.windup()),
+    );
+    assert_eq!(kill_intents(&out, victim), 1);
+    assert_eq!(battle.combat.work.killed, 1);
 }
 
 #[test]
@@ -366,4 +471,97 @@ fn dense_fighter_layout_changes_preserve_action_and_ammunition_by_identity() {
         combat.remap.is_empty(),
         "removed identity cannot retain combat custody"
     );
+}
+
+#[test]
+fn front_rank_outside_a_pulse_still_strikes_an_enemy_in_reach() {
+    use super::super::formation::{Order, RegimentSpec};
+    let (state, mut battle, actor, victim) = pair();
+    let origin = state.entities.pos(slot(&state, actor));
+    battle
+        .formation
+        .add_regiment(
+            RegimentSpec {
+                id: 0,
+                faction: 1,
+                origin,
+                facing: [1.0, 0.0],
+                files: 1,
+                frontage: 1.0,
+                order: Order::Hold,
+            },
+            &[actor],
+        )
+        .unwrap();
+    prepare(&state, &mut battle, 0);
+    let a = index(&state, &battle, actor);
+    assert!(
+        !battle.formation.can_attack_at(a),
+        "no regiment in contact, so no pulse"
+    );
+    let target = super::super::EnemyTarget {
+        id: victim,
+        pos: state.entities.pos(slot(&state, victim)),
+        distance: 2.0,
+    };
+    let swings = (0..1000)
+        .filter(|&tick| {
+            battle.columns.targets[a] = Some(target);
+            let out = step_at(&state, &mut battle, tick);
+            out.events.iter().any(|event| {
+                matches!(event, EntityEvent::Swing { entity, hand: Hand::Main, .. } if *entity == actor)
+            })
+        })
+        .count();
+    // Fifty cautious decisions: about one in six swings, never an aggressive surge.
+    assert!((1..=20).contains(&swings), "swings={swings}");
+}
+
+#[test]
+fn a_broken_fugitive_at_bay_still_strikes_an_enemy_in_reach() {
+    use super::super::formation::{Order, RegimentSpec};
+    let (state, mut battle, actor, victim) = pair();
+    let origin = state.entities.pos(slot(&state, actor));
+    battle
+        .formation
+        .add_regiment(
+            RegimentSpec {
+                id: 0,
+                faction: 1,
+                origin,
+                facing: [1.0, 0.0],
+                files: 1,
+                frontage: 1.0,
+                order: Order::Hold,
+            },
+            &[actor],
+        )
+        .unwrap();
+    // The bound sits one block behind the fugitive: he can run no further.
+    battle
+        .formation
+        .set_bounds(
+            [origin[0] - 1.0, origin[2] - 50.0],
+            [origin[0] + 50.0, origin[2] + 50.0],
+        )
+        .unwrap();
+    prepare(&state, &mut battle, 0);
+    let a = index(&state, &battle, actor);
+    battle.formation.members[a].routing = true;
+    battle.formation.members[a].wavering = true;
+    let target = super::super::EnemyTarget {
+        id: victim,
+        pos: state.entities.pos(slot(&state, victim)),
+        distance: 2.0,
+    };
+    let swings = (0..1000)
+        .filter(|&tick| {
+            battle.columns.targets[a] = Some(target);
+            let out = step_at(&state, &mut battle, tick);
+            out.events.iter().any(|event| {
+                matches!(event, EntityEvent::Swing { entity, hand: Hand::Main, .. } if *entity == actor)
+            })
+        })
+        .count();
+    assert!(swings > 0, "a cornered fugitive never turned at bay");
 }

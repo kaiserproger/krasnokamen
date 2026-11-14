@@ -1,16 +1,16 @@
 //! Operator-owned deterministic battle staging. No scenario file is read on the tick.
-use crate::battle::formation::{Order, RegimentSpec, slot_position};
+use crate::battle::formation::{MESH_INTERVAL, Order, RegimentSpec, slot_position};
+use crate::battle::ground::{self, Placement};
+use crate::battle::live_players;
+use crate::battle::weapons::Pair;
 use crate::boundary::{ChangeSet, ChunkPos, EntityId};
 use crate::commands::CommandError;
 use crate::tick::TickState;
 use mc_nbt::{ListTag, Tag, tag_type};
 
-const OWNER: &str = "krasnokamen:battle";
+pub(super) const OWNER: &str = "krasnokamen:battle";
 const TICKET_RADIUS: i32 = 12;
 const MAX_SIDE: usize = 10_000;
-/// `battle trace` bounds: radius in blocks and listed members per call.
-const TRACE_RADIUS: f64 = 32.0;
-const TRACE_MEMBERS: usize = 400;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum BattleCommand {
@@ -23,13 +23,17 @@ pub enum BattleCommand {
     Reset,
     Status,
     Roster,
-    /// Per-member movement state round (x, z), for the console: why bodies
-    /// stand where they stand (r11: a pile at the foot of a riser whose
-    /// heading source the take records could not show).
-    Trace {
-        x: f64,
-        z: f64,
-        radius: f64,
+    /// Live network players (live_players.rs).
+    Watch {
+        names: Vec<String>,
+    },
+    Live {
+        name: String,
+        side: u16,
+    },
+    Spectate {
+        name: String,
+        target: String,
     },
 }
 
@@ -62,14 +66,26 @@ pub fn parse(args: &[&str]) -> Result<BattleCommand, CommandError> {
         ["reset"] => Ok(BattleCommand::Reset),
         ["status"] => Ok(BattleCommand::Status),
         ["roster"] => Ok(BattleCommand::Roster),
-        ["trace", x, z, radius] => {
-            let number = |s: &str| s.parse::<f64>().ok().filter(|v| v.is_finite());
-            match (number(x), number(z), number(radius)) {
-                (Some(x), Some(z), Some(radius)) if radius > 0.0 && radius <= TRACE_RADIUS => {
-                    Ok(BattleCommand::Trace { x, z, radius })
-                }
-                _ => Err(usage()),
+        ["watch", names @ ..] => {
+            let names: Vec<String> = names.iter().map(|n| (*n).to_owned()).collect();
+            if !live_players::watch_count_ok(&names)
+                || !names.iter().all(|n| live_players::valid_name(n))
+            {
+                return Err(usage());
             }
+            Ok(BattleCommand::Watch { names })
+        }
+        ["live", name, side] if live_players::valid_name(name) => Ok(BattleCommand::Live {
+            name: (*name).to_owned(),
+            side: live_players::parse_side(side).ok_or_else(usage)?,
+        }),
+        ["spectate", name, target]
+            if live_players::valid_name(name) && live_players::valid_name(target) =>
+        {
+            Ok(BattleCommand::Spectate {
+                name: (*name).to_owned(),
+                target: (*target).to_owned(),
+            })
         }
         _ => Err(usage()),
     }
@@ -115,6 +131,179 @@ fn equipment(kind: Kind) -> &'static [(&'static str, &'static str)] {
             ("head", "minecraft:iron_helmet"),
             ("chest", "minecraft:iron_chestplate"),
         ],
+    }
+}
+
+/// Every kind's second main weapon is a sword, stowed in battle state: mobs
+/// have no inventory.
+fn second_weapon(kind: Kind) -> (&'static str, Pair) {
+    match kind {
+        Kind::Archer => ("minecraft:iron_sword", Pair::BowSword),
+        Kind::Infantry | Kind::Spear | Kind::Cavalry => ("minecraft:iron_sword", Pair::SpearSword),
+    }
+}
+
+/// Worn leggings are cosmetic: `minecraft:leather` has no armour modifier, so
+/// adding legs never changes the damage a fighter takes.
+const LEGS_CARRIER: &str = "minecraft:leather";
+/// Dyed leather shades of each side colour (`minecraft:dyed_color` RGB).
+const RED_SHADES: [i32; 4] = [0x00B0_2E26, 0x008E_1B1B, 0x00C8_452E, 0x006E_1414];
+const BLUE_SHADES: [i32; 4] = [0x003C_44AA, 0x0024_397F, 0x004F_6BC4, 0x001E_2A66];
+/// Helmet plume tint: the pack's crested_helm and iron_plate carry their crest or
+/// plume as a dyeable layer (undyed red), so side 2 must dye it blue.
+const RED_PLUME: i32 = 0x00B9_2529;
+const BLUE_PLUME: i32 = 0x0029_4DB7;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Shield {
+    /// Side-coloured red or blue heater.
+    Heater,
+    Kite,
+    Tower,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Torso {
+    Surcoat,
+    /// Vanilla leather dyed in a shade of the side colour.
+    Leather,
+    /// Neutral; only worn behind a side-coloured heater shield.
+    Holy,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Legs {
+    Bare,
+    Leather,
+    Holy,
+}
+
+/// One fighter's appearance. Side colour stays readable on a wide shot: the
+/// torso is a side surcoat or side-dyed leather, or the off hand carries the
+/// side heater shield (holy torso only behind a heater).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Loadout {
+    kind: Kind,
+    /// Item model of the main-hand weapon carried into the approach.
+    weapon: &'static str,
+    /// Item model of the second weapon (`second_weapon`).
+    sidearm: &'static str,
+    shield: Option<Shield>,
+    helmet: &'static str,
+    torso: Torso,
+    legs: Legs,
+    shade: usize,
+}
+
+/// SplitMix64 finaliser: a fixed, platform-independent mix so retakes repeat.
+fn mix(mut z: u64) -> u64 {
+    z = z.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^ (z >> 31)
+}
+
+/// Pick the variant whose cumulative percentage band contains the next draw.
+fn band<T: Copy>(roll: &mut u64, table: &[(u64, T)]) -> T {
+    let draw = *roll % 100;
+    *roll /= 100;
+    let mut upper = 0;
+    for &(share, value) in table {
+        upper += share;
+        if draw < upper {
+            return value;
+        }
+    }
+    unreachable!("loadout table shares must sum to 100")
+}
+
+/// Deterministic per-fighter loadout from (seed, side, regiment, index).
+fn loadout(seed: u64, side: u16, regiment: u32, index: usize, kind: Kind) -> Loadout {
+    let mut roll =
+        mix(mix(seed) ^ (u64::from(side) << 56) ^ (u64::from(regiment) << 24) ^ index as u64);
+    // One band per kind as before, so the remaining draws are unchanged.
+    let (weapon, sidearm) = match kind {
+        Kind::Infantry => (
+            "krasnokamen_battle:iron_spear",
+            band(
+                &mut roll,
+                &[
+                    (60, "krasnokamen_battle:iron_longsword"),
+                    (40, "krasnokamen_battle:iron_flanged_mace"),
+                ],
+            ),
+        ),
+        Kind::Spear => (
+            band(
+                &mut roll,
+                &[
+                    (60, "krasnokamen_battle:iron_spear"),
+                    (40, "krasnokamen_battle:iron_halberd"),
+                ],
+            ),
+            "krasnokamen_battle:iron_longsword",
+        ),
+        Kind::Archer => (
+            band(
+                &mut roll,
+                &[
+                    (60, "krasnokamen_battle:iron_longbow_standby"),
+                    (40, "krasnokamen_battle:iron_heavy_crossbow_standby"),
+                ],
+            ),
+            "krasnokamen_battle:iron_longsword",
+        ),
+        Kind::Cavalry => (
+            "krasnokamen_battle:iron_lance",
+            "krasnokamen_battle:iron_longsword",
+        ),
+    };
+    let shield = match kind {
+        Kind::Archer => None,
+        // A tower shield does not fit a rider.
+        Kind::Cavalry => Some(band(&mut roll, &[(60, Shield::Heater), (40, Shield::Kite)])),
+        Kind::Infantry | Kind::Spear => Some(band(
+            &mut roll,
+            &[
+                (50, Shield::Heater),
+                (30, Shield::Kite),
+                (20, Shield::Tower),
+            ],
+        )),
+    };
+    let helmet = band(
+        &mut roll,
+        &[
+            (45, "krasnokamen_battle:iron_plate"),
+            (30, "krasnokamen_battle:crested_helm"),
+            (25, "krasnokamen_battle:holy"),
+        ],
+    );
+    let torso = if shield == Some(Shield::Heater) {
+        band(
+            &mut roll,
+            &[
+                (45, Torso::Surcoat),
+                (35, Torso::Leather),
+                (20, Torso::Holy),
+            ],
+        )
+    } else {
+        band(&mut roll, &[(55, Torso::Surcoat), (45, Torso::Leather)])
+    };
+    let legs = band(
+        &mut roll,
+        &[(35, Legs::Bare), (35, Legs::Leather), (30, Legs::Holy)],
+    );
+    Loadout {
+        kind,
+        weapon,
+        sidearm,
+        shield,
+        helmet,
+        torso,
+        legs,
+        shade: (roll % 4) as usize,
     }
 }
 
@@ -182,6 +371,26 @@ fn plan(seed: u64, count: usize, origin: [f64; 3], side: u16) -> Vec<(RegimentSp
     result
 }
 
+/// Pursue routed opponents without disabling the pulse-based fight beforehand.
+pub(super) fn update_orders(formation: &mut crate::battle::formation::FormationRuntime) {
+    for index in 0..formation.regiments.len() {
+        let regiment = &formation.regiments[index];
+        let order = match (
+            regiment.spec.order,
+            regiment.enemy_routing,
+            regiment.morale.broken,
+        ) {
+            (Order::Advance, true, false) => Some(Order::Pursue),
+            (Order::Pursue, false, _) | (Order::Pursue, _, true) => Some(Order::Advance),
+            _ => None,
+        };
+        if let Some(order) = order {
+            let id = regiment.spec.id;
+            formation.set_order(id, order);
+        }
+    }
+}
+
 fn tag_bytes() -> Vec<u8> {
     let mut bytes = Vec::new();
     let tag = Tag::Compound(vec![(
@@ -229,21 +438,114 @@ fn reset(state: &mut TickState, changes: &mut ChangeSet) -> usize {
     ids.len()
 }
 
-fn summon_tag(kind: Option<Kind>, side: u16) -> Tag {
-    let mut fields = vec![("PersistenceRequired".into(), Tag::Byte(1))];
-    if let Some(kind) = kind {
-        let slots = equipment(kind)
-            .iter()
-            .map(|(slot, item)| {
-                (
-                    (*slot).into(),
-                    Tag::Compound(vec![("id".into(), Tag::String((*item).into()))]),
-                )
-            })
-            .collect();
-        fields.push(("equipment".into(), Tag::Compound(slots)));
+fn worn(slot: &str, asset: &str) -> (String, Tag) {
+    (
+        "minecraft:equippable".into(),
+        Tag::Compound(vec![
+            ("slot".into(), Tag::String(slot.into())),
+            ("asset_id".into(), Tag::String(asset.into())),
+        ]),
+    )
+}
+
+fn item_model(model: &str) -> (String, Tag) {
+    ("minecraft:item_model".into(), Tag::String(model.into()))
+}
+
+/// `None` is a horse's caparison; otherwise one fighter's loadout.
+fn summon_tag(unit: Option<&Loadout>, side: u16) -> Tag {
+    let red = side == 1;
+    let coloured = |r: &'static str, b: &'static str| if red { r } else { b };
+    let mut slots: Vec<(&str, &str, Vec<(String, Tag)>)> = Vec::new();
+    match unit {
+        None => slots.push((
+            "body",
+            "minecraft:iron_horse_armor",
+            vec![worn(
+                "body",
+                coloured(
+                    "krasnokamen_battle:red_caparison",
+                    "krasnokamen_battle:blue_caparison",
+                ),
+            )],
+        )),
+        Some(unit) => {
+            let dyed = (
+                "minecraft:dyed_color".to_owned(),
+                Tag::Int(coloured_shade(red, unit.shade)),
+            );
+            for &(slot, item) in equipment(unit.kind) {
+                let components = match slot {
+                    "mainhand" => vec![item_model(unit.weapon)],
+                    "offhand" => vec![item_model(match unit.shield {
+                        Some(Shield::Heater) | None => coloured(
+                            "krasnokamen_battle:red_heater_shield",
+                            "krasnokamen_battle:blue_heater_shield",
+                        ),
+                        Some(Shield::Kite) => "krasnokamen_battle:iron_kite_shield",
+                        Some(Shield::Tower) => "krasnokamen_battle:iron_tower_shield",
+                    })],
+                    "head" => vec![
+                        worn("head", unit.helmet),
+                        (
+                            "minecraft:dyed_color".to_owned(),
+                            Tag::Int(if red { RED_PLUME } else { BLUE_PLUME }),
+                        ),
+                    ],
+                    "chest" => match unit.torso {
+                        Torso::Surcoat => vec![worn(
+                            "chest",
+                            coloured(
+                                "krasnokamen_battle:red_surcoat",
+                                "krasnokamen_battle:blue_surcoat",
+                            ),
+                        )],
+                        Torso::Leather => vec![worn("chest", "minecraft:leather"), dyed.clone()],
+                        Torso::Holy => vec![worn("chest", "krasnokamen_battle:holy")],
+                    },
+                    _ => unreachable!("battle equipment table contains an unknown slot"),
+                };
+                slots.push((slot, item, components));
+            }
+            match unit.legs {
+                Legs::Bare => {}
+                Legs::Leather => slots.push((
+                    "legs",
+                    LEGS_CARRIER,
+                    vec![worn("legs", "minecraft:leather"), dyed],
+                )),
+                Legs::Holy => slots.push((
+                    "legs",
+                    LEGS_CARRIER,
+                    vec![worn("legs", "krasnokamen_battle:holy")],
+                )),
+            }
+        }
     }
-    Tag::Compound(fields)
+    let slots = slots
+        .into_iter()
+        .map(|(slot, item, components)| {
+            (
+                slot.into(),
+                Tag::Compound(vec![
+                    ("id".into(), Tag::String(item.into())),
+                    ("components".into(), Tag::Compound(components)),
+                ]),
+            )
+        })
+        .collect();
+    Tag::Compound(vec![
+        ("PersistenceRequired".into(), Tag::Byte(1)),
+        ("equipment".into(), Tag::Compound(slots)),
+    ])
+}
+
+fn coloured_shade(red: bool, shade: usize) -> i32 {
+    if red {
+        RED_SHADES[shade]
+    } else {
+        BLUE_SHADES[shade]
+    }
 }
 
 fn spawn(
@@ -252,6 +554,7 @@ fn spawn(
     name: &str,
     position: [f64; 3],
     unit: Option<Kind>,
+    loadout: &Tag,
     tag: &[u8],
 ) -> Result<EntityId, String> {
     let identifier = mc_data::Identifier::parse(name.to_owned()).map_err(|e| e.to_string())?;
@@ -261,7 +564,7 @@ fn spawn(
         .facts_of(&identifier)
         .ok_or_else(|| format!("unknown battle entity {name}"))?;
     let type_id = facts.protocol_id;
-    let image = crate::command_summon::prepare(state, type_id, name, position, &summon_tag(unit))
+    let image = crate::command_summon::prepare(state, type_id, name, position, loadout)
         .map_err(|e| e.message())?;
     let health = state
         .registry
@@ -321,7 +624,7 @@ fn setup(
                         "minecraft:husk",
                         pos,
                         Some(kind),
-                        &loadout,
+                        &summon_tag(Some(&unit), side),
                         &tag,
                     )?;
                     let slot = state.entities.slot_of(id).expect("battle unit");
@@ -344,9 +647,20 @@ fn setup(
                     // A horse carries its rider: settle the pair through the horse.
                     let mut grounded = id;
                     if kind == Kind::Cavalry {
-                        let horse = spawn(state, changes, "minecraft:horse", pos, None, &tag)?;
+                        let horse = spawn(
+                            state,
+                            changes,
+                            "minecraft:horse",
+                            pos,
+                            None,
+                            &horse_loadout,
+                            &tag,
+                        )?;
                         crate::battle::cavalry::mount(state, id, horse)
                             .map_err(|e| format!("battle mount: {e}"))?;
+                        let horse_slot = state.entities.slot_of(horse).expect("battle horse");
+                        state.entities.set_rot(horse_slot, yaw, 0.0);
+                        grounded = horse;
                     }
                     state.hostile.battle.ground_pending.push(grounded);
                     members.push(id);
@@ -378,6 +692,7 @@ fn setup(
                 ],
             )
             .map_err(str::to_owned)?;
+        settle(state);
         Ok(())
     })();
     if result.is_err() {
@@ -394,6 +709,85 @@ fn setup(
         }
     }
     result
+}
+
+/// Vanilla yaw of a horizontal facing (0 = +z, 90 = -x), as mob look uses.
+fn facing_yaw(facing: [f64; 2]) -> f32 {
+    -(mc_physics::mth::atan2(facing[0], facing[1]) as f32) * mc_physics::mth::RAD_TO_DEG
+}
+
+/// Stand pending staged bodies on the ground of their footprint, normally
+/// once every chunk their search ring can read is resident, so placement
+/// depends on terrain, not chunk arrival order. A body whose own chunk is
+/// already simulated is placed at once from the resident columns: physics
+/// (and suffocation) must never see its provisional height.
+pub(super) fn settle(state: &mut TickState) {
+    let pending = std::mem::take(&mut state.hostile.battle.ground_pending);
+    let mut waiting = Vec::new();
+    for id in pending {
+        let Some(slot) = state.entities.slot_of(id) else {
+            continue;
+        };
+        let pos = state.entities.pos(slot);
+        let reach = f64::from(ground::SEARCH_RADIUS) + 2.0;
+        let resident = [-reach, reach].iter().all(|dx| {
+            [-reach, reach].iter().all(|dz| {
+                state.world.has_chunk(
+                    ((pos[0] + dx).floor() as i32).div_euclid(16),
+                    ((pos[2] + dz).floor() as i32).div_euclid(16),
+                )
+            })
+        });
+        let own = (
+            (pos[0].floor() as i32).div_euclid(16),
+            (pos[2].floor() as i32).div_euclid(16),
+        );
+        if !resident && !state.world.is_active_position(own.0, own.1) {
+            waiting.push(id);
+            continue;
+        }
+        let body = *state.entities.body(slot);
+        let horse = !state.entities.row(slot).entity_life.mount.riders.is_empty();
+        let height = if horse {
+            ground::MOUNTED_CLEARANCE
+        } else {
+            body.height
+        };
+        match ground::place(&state.world, &state.registry, pos, body.half_width, height) {
+            Placement::At(at) => {
+                state.entities.set_pos(slot, at);
+                if horse {
+                    crate::mounts::sync_rider(state, slot);
+                }
+            }
+            Placement::Wait => waiting.push(id),
+            Placement::Nowhere => state.hostile.battle.ground_refused.push(id),
+        }
+    }
+    state.hostile.battle.ground_pending = waiting;
+}
+
+/// Standing staged bodies (riders sit on horses) against their terrain.
+fn ground_census(state: &TickState) -> ground::Census {
+    let mut census = ground::Census::default();
+    for id in tagged_ids(state) {
+        let Some(slot) = state.entities.slot_of(id) else {
+            continue;
+        };
+        let body = state.entities.body(slot);
+        if !body.alive || state.entities.row(slot).entity_life.mount.vehicle.is_some() {
+            continue;
+        }
+        ground::audit(
+            &state.world,
+            &state.registry,
+            state.entities.pos(slot),
+            body.half_width,
+            body.height,
+            &mut census,
+        );
+    }
+    census
 }
 
 pub(crate) fn execute(
@@ -428,10 +822,25 @@ pub(crate) fn execute(
                     "battle not ready: {waiting} entities outside loaded simulation"
                 ));
             }
+            settle(state);
+            let battle = &state.hostile.battle;
+            if !battle.ground_pending.is_empty() || !battle.ground_refused.is_empty() {
+                return Err(format!(
+                    "battle not ready: {} staged bodies await ground, {} have no dry clear ground within {} blocks of their slot; stage on drier ground",
+                    battle.ground_pending.len(),
+                    battle.ground_refused.len(),
+                    ground::SEARCH_RADIUS
+                ));
+            }
+            let census = ground_census(state);
             state.hostile.battle.running = true;
             Ok(format!(
-                "Battle started tick={}",
-                crate::command_context::execution_tick(state).saturating_add(1)
+                "Battle started tick={} ground: bodies={} inside={} floating={} wet={}",
+                crate::command_context::execution_tick(state).saturating_add(1),
+                census.bodies,
+                census.inside,
+                census.floating,
+                census.wet
             ))
         }
         BattleCommand::Pause => {
@@ -459,54 +868,6 @@ pub(crate) fn execute(
                 }
                 let slot = state.entities.slot_of_any(*id).expect("tagged entity");
                 write!(&mut result, "{}", state.entities.row(slot).uuid).expect("write to string");
-            }
-            Ok(result)
-        }
-        BattleCommand::Trace { x, z, radius } => {
-            use std::fmt::Write;
-            let formation = &state.hostile.battle.formation;
-            if formation.regiments.is_empty() {
-                return Err("no staged formation; setup required".into());
-            }
-            let mut result = String::from("Battle trace:");
-            let mut listed = 0;
-            for (index, m) in formation.members.iter().enumerate() {
-                let (dx, dz) = (m.pos[0] - x, m.pos[2] - z);
-                if !m.alive || (dx * dx + dz * dz).sqrt() > *radius {
-                    continue;
-                }
-                if listed == TRACE_MEMBERS {
-                    result.push_str(" (more)");
-                    break;
-                }
-                listed += 1;
-                let r = &formation.regiments[m.regiment];
-                let to = formation.heading_target(index);
-                let flags = [
-                    (m.routing, " routing"),
-                    (m.wavering, " wavering"),
-                    (m.rallied, " rallied"),
-                    (m.wounded, " wounded"),
-                    (r.morale.broken, " broken"),
-                    (r.enemy_routing, " enemy-routing"),
-                ];
-                write!(
-                    &mut result,
-                    " {} side{} r{} {:?}",
-                    m.id.0, r.spec.faction, r.spec.id, r.spec.order
-                )
-                .expect("write to string");
-                for (set, name) in flags {
-                    if set {
-                        result.push_str(name);
-                    }
-                }
-                write!(
-                    &mut result,
-                    " at {:.1},{:.1},{:.1} to {:.1},{:.1};",
-                    m.pos[0], m.pos[1], m.pos[2], to[0], to[2]
-                )
-                .expect("write to string");
             }
             Ok(result)
         }
@@ -542,13 +903,22 @@ pub(crate) fn execute(
                 moving += usize::from(state.entities.vel(slot).iter().any(|v| *v != 0.0));
             }
             let sample_tick = crate::command_context::execution_tick(state).saturating_add(1);
+            let battle = &state.hostile.battle;
+            // Melee fronts within contact range of their enemy front.
+            let engaged = battle
+                .formation
+                .regiments
+                .iter()
+                .filter(|r| {
+                    r.spec.order != Order::Hold
+                        && r.enemy.is_some()
+                        && r.gap <= 6.0
+                        && r.live_count > 0
+                })
+                .count();
             Ok(format!(
-                "Battle {} tick={} side1={} side2={} resident={} active={} nonzero_velocity={} horses={} regiments={} dead={}",
-                if state.hostile.battle.running {
-                    "running"
-                } else {
-                    "paused"
-                },
+                "Battle {} tick={} side1={} side2={} resident={} active={} nonzero_velocity={} horses={} regiments={} dead={} grounding={} stalled={} advancing={} engaged={}",
+                if battle.running { "running" } else { "paused" },
                 sample_tick,
                 sides[0],
                 sides[1],
@@ -556,8 +926,12 @@ pub(crate) fn execute(
                 active,
                 moving,
                 horses,
-                state.hostile.battle.formation.regiments.len(),
-                dead
+                battle.formation.regiments.len(),
+                dead,
+                battle.ground_pending.len() + battle.ground_refused.len(),
+                battle.formation.stalled,
+                battle.formation.advancing,
+                engaged
             ))
         }
         BattleCommand::Watch { names } => Ok(live_players::watch(state, names)),

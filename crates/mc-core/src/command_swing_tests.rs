@@ -26,13 +26,37 @@ fn swing_command_parses_hand_type_and_duration_and_is_operator_only() {
         }
         other => panic!("{other:?}"),
     }
+    for (text, hand, animation, ticks) in [
+        ("swing", Hand::Main, SwingKind::Whack, 6),
+        ("swing @s", Hand::Main, SwingKind::Whack, 6),
+        ("swing @s offhand", Hand::Off, SwingKind::Whack, 6),
+        ("swing @s mainhand stab", Hand::Main, SwingKind::Stab, 6),
+        ("swing @s offhand none 1.5s", Hand::Off, SwingKind::None, 30),
+        (
+            "swing @s mainhand whack 1d",
+            Hand::Main,
+            SwingKind::Whack,
+            24000,
+        ),
+        (
+            "swing @s mainhand stab 1201t",
+            Hand::Main,
+            SwingKind::Stab,
+            1201,
+        ),
+    ] {
+        let Command::Swing(command) = crate::commands::parse(text, true).unwrap() else {
+            panic!("{text}")
+        };
+        assert_eq!(
+            (command.hand, command.animation, command.duration_ticks),
+            (hand, animation, ticks)
+        );
+    }
     for text in [
-        "swing @s",
-        "swing @s mainhand whack",
         "swing @s leg whack 6",
         "swing @s mainhand slash 6",
         "swing @s mainhand whack 0",
-        "swing @s mainhand whack 1201",
         "swing @s mainhand whack -3",
         "swing @s mainhand whack 6 extra",
     ] {
@@ -84,4 +108,15 @@ fn swing_command_emits_one_swing_event_per_living_target() {
         changes.entity_events.is_empty(),
         "nothing to swing changes nothing"
     );
+}
+
+#[test]
+fn bare_swing_targets_the_executing_player() {
+    let (mut state, actor, _) = crate::hostile_tests::setup(0.0);
+    let (result, changes) = run(&mut state, actor, "swing");
+    assert_eq!(result, crate::command_execution::CommandResult::Success(1));
+    assert!(matches!(
+        changes.entity_events.as_slice(),
+        [EntityEvent::Swing { entity, hand: Hand::Main, animation: SwingKind::Whack, duration_ticks: 6 }] if *entity == actor
+    ));
 }

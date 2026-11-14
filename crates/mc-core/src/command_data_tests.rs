@@ -150,13 +150,17 @@ fn data_mob_faction_is_public_only_while_affiliated() {
     );
     assert_eq!(query(&mut state, context, &path).unwrap(), 7);
     assert_eq!(
-        crate::command_execution::resolve_target(&state, id, &selector),
+        crate::command_execution::resolve_target(&state, id, &selector).unwrap(),
         vec![id]
     );
     state.entities.set_faction(slot, 0);
     assert!(get(&entity(&state, id).unwrap(), "\"krasnokamen:Faction\"").is_err());
     assert!(query(&mut state, context, &path).is_err());
-    assert!(crate::command_execution::resolve_target(&state, id, &selector).is_empty());
+    assert!(
+        crate::command_execution::resolve_target(&state, id, &selector)
+            .unwrap()
+            .is_empty()
+    );
 }
 #[test]
 fn data_block_accepts_every_registered_block_entity_kind() {

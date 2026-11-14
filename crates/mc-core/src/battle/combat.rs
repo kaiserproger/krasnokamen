@@ -2,10 +2,73 @@
 //! Calibration: BattleVideo/research-combat-behavior.md §§4.4–4.7 (Sabin/Ilerda).
 use rustc_hash::FxHashMap;
 
+use mc_melee_range::MeleeReach;
+
+use super::faction::{in_melee_range, melee_reach, reach_bound};
+use super::formation::{DECISION_TICKS, EXHAUSTED_STAMINA, STANDING_RECOVERY, SURGE_FATIGUE};
 use super::{BattleIntent, BattleState, Frame, Output};
 use crate::boundary::{EntityEvent, EntityId, Hand};
 use crate::entities::EntitySlot;
 use crate::intent::{DamageSource, Footprint, IntentKind};
+
+// The 21..25-tick action cycle skips one 20-tick decision after each attack.
+// Count that recovery before deriving odds; do not shorten the action clocks.
+const ATTACK_DECISION_TICKS: u64 = 20;
+/// Human reaction: a man who first finds an enemy within his melee range
+/// stands guard 4..=8 ticks (seeded per man) before his first decision.
+const REACTION_TICKS_MIN: u64 = 4;
+const REACTION_TICKS_SPAN: u64 = 5;
+const AGGRESSIVE_FIGHTERS: u32 = 2500;
+const AGGRESSIVE_ATTEMPTS: u32 = 8000;
+const CAUTIOUS_ATTEMPTS: u32 = 2000;
+const STRIKES_PER_SECOND: f32 = {
+    let share = AGGRESSIVE_FIGHTERS as f32 / 10_000.0;
+    let aggressive = AGGRESSIVE_ATTEMPTS as f32 / 10_000.0;
+    let cautious = CAUTIOUS_ATTEMPTS as f32 / 10_000.0;
+    (share * aggressive / (1.0 + aggressive) + (1.0 - share) * cautious / (1.0 + cautious))
+        * (20.0 / ATTACK_DECISION_TICKS as f32)
+};
+// Cinematic calibration: 80 removals per 46-file regiment in 120 s of contact.
+// Fatigue permits 65 fighting seconds, but the native three-minute run's
+// busiest infantry front only accumulated 46.03 target-bearing pulse seconds.
+// Bound the budget by that measured exposure, not just the stamina ceiling.
+// The native 20k/6000-tick reference measured 2316 parries / 3873 strikes.
+const FRONT_FILES: f32 = 46.0;
+const OBSERVED_FRONT_FIGHT_SECONDS: f32 = 46.0;
+const ACTIVE_FIGHT_SECONDS: f32 = {
+    let decision_seconds = DECISION_TICKS as f32 / 20.0;
+    let fatigue_ceiling = (100.0 - EXHAUSTED_STAMINA
+        + 120.0 * STANDING_RECOVERY / decision_seconds)
+        / ((SURGE_FATIGUE + STANDING_RECOVERY) / decision_seconds);
+    if fatigue_ceiling < OBSERVED_FRONT_FIGHT_SECONDS {
+        fatigue_ceiling
+    } else {
+        OBSERVED_FRONT_FIGHT_SECONDS
+    }
+};
+const TARGET_REMOVALS: f32 = 80.0;
+const PARRY_FRACTION: f32 = 2316.0 / 3873.0;
+// The meshed press keeps several times the calibration's 46 files within reach
+// of each other per regiment front, so a landed blow removes a man that many
+// times less often. At ten (G2 take: peak 2 212 a minute, a side's quarter
+// lost after 194 s) a 1 500-a-side battle kept 1 000 men fighting for only
+// 61 s: a regiment losing its exchange reaches its ~12 % break within two
+// minutes. The owner wants the contact longer (2026-11-14: >= 1 000 fighting
+// for >= 4 min at 1 500 a side, losses a minute no higher than G2's). At fifty
+// a blow removes 0.8 % of the time, under the 1.3 % research-combat-behavior.md
+// §4.7 derives for a ten-minute contact; the action clocks are unchanged.
+const PRESS_EXPOSURE: f32 = 50.0;
+const REMOVAL_ROLLS: f32 = 10_000.0 * TARGET_REMOVALS
+    / (FRONT_FILES
+        * PRESS_EXPOSURE
+        * STRIKES_PER_SECOND
+        * ACTIVE_FIGHT_SECONDS
+        * (1.0 - PARRY_FRACTION));
+// Film lethality: most removals fall on the spot; the wounded share withdraws
+// through the ranks. Pursuit cuts down nearly everyone it reaches.
+const FATAL_SHARE: f32 = 0.7;
+const PURSUIT_REMOVAL_ROLLS: f32 = 3.0 * REMOVAL_ROLLS;
+const PURSUIT_FATAL_SHARE: f32 = 0.9;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Weapon {
@@ -67,9 +130,18 @@ pub(super) struct Fighter {
     block: Option<(EntityId, u64)>,
     reaction_checked: bool,
     pub(super) arrows: u16,
-    /// Target of the last decision: a different one is answered off the grid.
-    aimed: Option<EntityId>,
     pub(super) charge: super::cavalry::Charge,
+    /// Frozen-pass tick of a reserved kill: a second attacker must not credit
+    /// the same casualty before native intent merge removes the body.
+    slain: Option<u64>,
+    /// Last battle tick he stood guard, wound up or recovered from a blow:
+    /// the fight window of the `fighting` telemetry.
+    in_fight: Option<u64>,
+    /// Tick he first found an enemy within his melee range in this
+    /// engagement; cleared when a decision finds none.
+    engaged_from: Option<u64>,
+    /// Two main weapons (weapons.rs): the one not in hand and the swap clock.
+    pub(super) arms: super::weapons::Arms,
 }
 
 impl Default for Fighter {
@@ -84,8 +156,11 @@ impl Default for Fighter {
             block: None,
             reaction_checked: false,
             arrows: 60,
-            aimed: None,
             charge: Default::default(),
+            slain: None,
+            in_fight: None,
+            engaged_from: None,
+            arms: Default::default(),
         }
     }
 }
@@ -132,6 +207,10 @@ pub(crate) struct CombatRuntime {
     remap: FxHashMap<EntityId, Fighter>,
     pub(super) archery: super::archery::Runtime,
     strikes: Vec<(EntityId, EntityId, Weapon, u64)>,
+    /// Reusable per-regiment cavalry sweep plans, rebuilt every tick.
+    pub(super) sweeps: Vec<Option<super::cavalry::Sweep>>,
+    /// Staged second weapons not yet claimed by a fighter (weapons.rs).
+    pub(super) arsenal: super::weapons::Arsenal,
     pub(crate) work: Work,
 }
 
@@ -232,11 +311,14 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         let id = battle.columns.ids[bi];
         combat.work.visited += 1;
         let fighter = &mut combat.fighters[bi];
-        classify(frame, slot, fighter, battle.columns.ranged[bi]);
+        if battle.columns.equipment_dirty[bi] || fighter.equipment.is_none() {
+            classify(frame, slot, fighter, battle.columns.ranged[bi]);
+            battle.columns.equipment_dirty[bi] = false;
+        }
         if matches!(fighter.action, Action::Wounded) {
             continue;
         }
-        if context(battle, bi).is_some_and(|c| c.routing) {
+        if context(battle, bi).is_some_and(|c| c.routing) && !battle.formation.cornered_at(bi) {
             fighter.action = Action::Guard {
                 until: frame.tick + 20,
             };
@@ -251,21 +333,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             } => {
                 let impact = start + u64::from(weapon.windup());
                 if frame.tick == impact {
-                    // The man may have stepped out of reach during the windup: the blow
-                    // falls on the enemy now in reach, at his present position, unless
-                    // another blow already lands on him this tick (one man is never
-                    // struck twice in a tick because the attackers' targets converged).
-                    let aim = if super::retained_enemy(frame.entities, slot, target, weapon.reach())
-                        .is_some()
-                    {
-                        target
-                    } else {
-                        battle.columns.targets[bi]
-                            .map(|t| t.id)
-                            .filter(|new| !combat.strikes.iter().any(|strike| strike.1 == *new))
-                            .unwrap_or(target)
-                    };
-                    combat.strikes.push((id, aim, weapon, start));
+                    combat.strikes.push((id, target, weapon, start));
                     fighter.action = Action::Recover {
                         until: start + u64::from(weapon.cycle()),
                     };
@@ -321,7 +389,15 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         }
         let slot = battle.columns.slots[bi].expect("active column");
         let id = battle.columns.ids[bi];
-        if bi < battle.formation.members.len() && !battle.formation.can_attack_at(bi) {
+        // Outside a pulse a steady front-rank man still trades blows with an
+        // enemy already in weapon reach, at the cautious rate, as does a
+        // fugitive at bay (broken, so also wavering): pulses add the surge,
+        // they are not the only contact.
+        let in_order = bi >= battle.formation.members.len() || battle.formation.can_attack_at(bi);
+        if !in_order
+            && !context(battle, bi)
+                .is_some_and(|c| (!c.routing && !c.wavering) || battle.formation.cornered_at(bi))
+        {
             continue;
         }
         let fighter = &mut combat.fighters[bi];
@@ -345,16 +421,86 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
         if targeted.is_some() {
             combat.work.target_checks += 1;
         }
-        // Three cautious soldiers in four; decisions once/20t, not per frame.
-        if !(frame.tick + id.0 as u64).is_multiple_of(20) {
+        let range = fighter.range;
+        // A live player he answers (retaliation.rs) is his target: struck
+        // whenever he is in reach, before any nearer enemy.
+        let answered = targeted
+            .filter(|&target| super::live_players::is_holder(battle, target))
+            .and_then(|target| {
+                super::live_players::in_reach(battle, frame.entities, slot, range, Some(target))
+            });
+        let reaches = |enemy: EntityId| {
+            frame
+                .entities
+                .slot_of(enemy)
+                .is_some_and(|enemy| in_melee_range(frame.entities, slot, enemy, range))
+        };
+        let decision_tick = (frame.tick + id.0 as u64).is_multiple_of(ATTACK_DECISION_TICKS);
+        let soldier = targeted
+            .and_then(|target| {
+                super::retained_enemy(frame.entities, slot, target, reach_bound(range))
+            })
+            .filter(|target| reaches(target.id))
+            .or_else(|| {
+                // Any other enemy in range will do; searched only when a
+                // decision is due, never every tick.
+                if !decision_tick || answered.is_some() {
+                    return None;
+                }
+                let unit = super::Unit {
+                    id,
+                    faction: battle.columns.factions[bi],
+                    pos: battle.columns.positions[bi],
+                };
+                let found = battle
+                    .grid
+                    .any_enemy(unit, reach_bound(range), |u| reaches(u.id))?;
+                super::retained_enemy(frame.entities, slot, found.id, reach_bound(range))
+            });
+        // A living network player of the other side in reach is one more
+        // candidate for this same swing; the nearer of the two is struck.
+        let holder = super::live_players::in_reach(battle, frame.entities, slot, range, None);
+        let target = match (answered, soldier, holder) {
+            (Some(answered), ..) => answered,
+            (None, Some(soldier), Some(holder)) if holder.distance < soldier.distance => holder,
+            (None, Some(soldier), _) => soldier,
+            (None, None, Some(holder)) => holder,
+            (None, None, None) => {
+                // Out of reach at a decision: the next enemy in reach is a new
+                // engagement with its own reaction.
+                if decision_tick {
+                    fighter.engaged_from = None;
+                }
+                continue;
+            }
+        };
+        // A man who just found an enemy in reach stands guard through a human
+        // reaction (4..=8 ticks, seeded per man) before his first decision.
+        let engaged_from = *fighter.engaged_from.get_or_insert(frame.tick);
+        let reaction = REACTION_TICKS_MIN + u64::from(roll(id, 0, 3)) % REACTION_TICKS_SPAN;
+        if !decision_tick || frame.tick < engaged_from + reaction {
             continue;
         }
-        fighter.aimed = current;
         fighter.action = Action::Guard {
-            until: frame.tick + 20,
+            until: frame.tick + ATTACK_DECISION_TICKS,
         };
-        let probability = if roll(id, 0, 1) < 2500 { 8000 } else { 2000 };
-        if roll(id, frame.tick / 20, 2) >= probability {
+        // Anyone may cut at a fleeing back or at a player who hurt him; the
+        // cautious majority only parries and probes a steady front.
+        let fleeing = frame
+            .entities
+            .slot_of(target.id)
+            .and_then(|slot| battle.columns.index(slot))
+            .and_then(|target_bi| context(battle, target_bi))
+            .is_some_and(|c| c.routing);
+        let probability = if fleeing
+            || answered.is_some()
+            || (in_order && roll(id, 0, 1) < AGGRESSIVE_FIGHTERS)
+        {
+            AGGRESSIVE_ATTEMPTS
+        } else {
+            CAUTIOUS_ATTEMPTS
+        };
+        if roll(id, frame.tick / ATTACK_DECISION_TICKS, 2) >= probability {
             continue;
         }
         fighter.action = Action::Windup {
@@ -372,7 +518,7 @@ pub(crate) fn step(frame: &Frame<'_>, battle: &mut BattleState, out: &mut Output
             } else {
                 crate::boundary::SwingKind::Whack
             },
-            duration_ticks: fighter.weapon.cycle(),
+            duration_ticks: i32::from(fighter.weapon.cycle()),
         });
         if answered.is_some() || holder.is_some_and(|holder| holder.id == target.id) {
             // Rare (a live player in reach): the server's record of whom a
@@ -583,18 +729,19 @@ pub(super) enum Outcome {
     Kill,
 }
 
-/// 130 removals / 10,000 unblocked contact attacks; 117 wounded, 13 killed.
-/// Pursuit shifts the casualties to the broken side; never speeds up animations.
+/// Frontage/block-adjusted film outcomes; nominal pulse exposure ~26 s.
+/// Pursuit shifts casualties to the broken side; action clocks are unchanged.
 pub(super) fn outcome(roll: u32, routing: bool, charge: f32) -> Outcome {
-    let (removal, fatal) = if routing {
-        (1300.0, 900.0)
+    let (removal, fatal_share) = if routing {
+        (PURSUIT_REMOVAL_ROLLS, PURSUIT_FATAL_SHARE)
     } else {
-        (130.0, 13.0)
+        (REMOVAL_ROLLS, FATAL_SHARE)
     };
-    let multiplier = 1.0 + charge;
-    if (roll as f32) < fatal * multiplier {
+    // Saturate total odds first; overflow must not turn the wounded share fatal.
+    let removal = (removal * (1.0 + charge)).min(10_000.0);
+    if (roll as f32) < removal * fatal_share {
         Outcome::Kill
-    } else if (roll as f32) < removal * multiplier {
+    } else if (roll as f32) < removal {
         Outcome::Wound
     } else {
         Outcome::Glance
@@ -632,7 +779,7 @@ fn strike(
             combat.fighters[actor_bi].action,
             Action::Wounded | Action::Stagger { .. }
         )
-        || matches!(combat.fighters[target_bi].action, Action::Wounded)
+        || combat.fighters[target_bi].slain == Some(frame.tick)
     {
         return;
     }
@@ -649,7 +796,7 @@ fn strike(
             entity: actor,
             hand: Hand::Main,
             animation: crate::boundary::SwingKind::None,
-            duration_ticks: weapon.stagger() as u16,
+            duration_ticks: weapon.stagger() as i32,
         });
         combat.work.parries += 1;
         return;
@@ -660,9 +807,17 @@ fn strike(
     if result == Outcome::Glance {
         return;
     }
-    // Reserve this removal once within the frozen pass; later paired attackers
-    // must not credit the same casualty again before native intent merge.
+    // A withdrawing wounded man is not immune: any landed blow finishes him.
+    // Otherwise he stays the nearest target forever and freezes the front.
+    let result = if matches!(combat.fighters[target_bi].action, Action::Wounded) {
+        Outcome::Kill
+    } else {
+        result
+    };
     combat.fighters[target_bi].action = Action::Wounded;
+    if result == Outcome::Kill {
+        combat.fighters[target_bi].slain = Some(frame.tick);
+    }
     let amount = if result == Outcome::Kill {
         combat.work.killed += 1;
         // Bypass armour through the native generic kill damage kind below.

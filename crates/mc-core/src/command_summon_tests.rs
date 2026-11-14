@@ -384,7 +384,11 @@ fn summon_no_gravity_and_invulnerable_are_effective_and_persistent() {
     assert!(state.entities.row(slot).controls.no_gravity);
     assert!(state.entities.row(slot).opaque_entity_fields.is_empty());
     let target = crate::commands::target_of("@e[type=minecraft:cow,nbt={NoGravity:1b}]").unwrap();
-    assert!(crate::command_execution::resolve_target(&state, id, &target).contains(&id));
+    assert!(
+        crate::command_execution::resolve_target(&state, id, &target)
+            .unwrap()
+            .contains(&id)
+    );
     let metadata = |state: &TickState| {
         state
             .entities
@@ -1406,11 +1410,7 @@ fn summon_falling_block_accepts_block_state_and_time_and_defaults_to_sand() {
         .0;
     for (nbt, block_state, age) in [
         ("{BlockState:{Name:\"minecraft:sand\"}}", sand, 0),
-        (
-            "{BlockState:{Name:\"minecraft:gravel\"},Time:9}",
-            gravel,
-            9,
-        ),
+        ("{BlockState:{Name:\"minecraft:gravel\"},Time:9}", gravel, 9),
         ("{}", sand, 0),
     ] {
         let (mut state, id) = summon("falling_block", nbt);
@@ -1443,7 +1443,12 @@ fn summon_rejects_tnt_and_falling_block_fields_on_wrong_entities_and_bad_values(
     // BlockState belongs to falling blocks only.
     rejected_tag_in_state(&mut state, "tnt", "BlockState", "{Name:\"minecraft:sand\"}");
     // A non-gravity block is not a valid falling block state.
-    rejected_tag_in_state(&mut state, "falling_block", "BlockState", "{Name:\"minecraft:stone\"}");
+    rejected_tag_in_state(
+        &mut state,
+        "falling_block",
+        "BlockState",
+        "{Name:\"minecraft:stone\"}",
+    );
     rejected_tag_in_state(
         &mut state,
         "falling_block",

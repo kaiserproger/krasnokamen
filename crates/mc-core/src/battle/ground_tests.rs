@@ -226,78 +226,25 @@ fn deflection_keeps_open_ground_and_steps_but_turns_at_trunks_and_walls() {
     let south = [0.0, 0.08];
     // Open ground and a one-block step ahead keep the exact drive (physics jumps it).
     let step = ground(5, 3);
-    assert_eq!(
-        deflect(world, registry, step, 0.3, east, east, 1.0, &mut None, 0),
-        east
-    );
+    assert_eq!(deflect(world, registry, step, 0.3, east, east, 1.0), east);
     // A trunk ahead turns the drive; both ends are one block away, so `side` decides.
     let before_trunk = ground(3, 5);
-    let turned = deflect(
-        world,
-        registry,
-        before_trunk,
-        0.3,
-        east,
-        east,
-        1.0,
-        &mut None,
-        0,
-    );
+    let turned = deflect(world, registry, before_trunk, 0.3, east, east, 1.0);
     assert_ne!(turned, east);
     assert!(
         turned[1] > 0.0 && (mc_physics::mth::length2(turned[0], turned[1]) - 0.08).abs() < 1e-12
     );
-    let other = deflect(
-        world,
-        registry,
-        before_trunk,
-        0.3,
-        east,
-        east,
-        -1.0,
-        &mut None,
-        0,
-    );
+    let other = deflect(world, registry, before_trunk, 0.3, east, east, -1.0);
     assert!(other[1] < 0.0);
     // A three-block wall (x -6..=2) turns bodies toward its nearer end, whatever
     // `side` says and however the crowd pushes the drive: the line splits.
-    let west_half = deflect(
-        world,
-        registry,
-        ground(-5, -21),
-        0.3,
-        south,
-        south,
-        -1.0,
-        &mut None,
-        0,
-    );
+    let west_half = deflect(world, registry, ground(-5, -21), 0.3, south, south, -1.0);
     assert!(west_half[0] < 0.0, "{west_half:?}");
     let pushed = [0.03, 0.074];
-    let east_half = deflect(
-        world,
-        registry,
-        ground(1, -21),
-        0.3,
-        pushed,
-        south,
-        1.0,
-        &mut None,
-        0,
-    );
+    let east_half = deflect(world, registry, ground(1, -21), 0.3, pushed, south, 1.0);
     // Lateral dressing toward a slot behind the wall does not pull a body back.
     let dressing = [0.08, 0.0];
-    let held = deflect(
-        world,
-        registry,
-        ground(-5, -21),
-        0.3,
-        dressing,
-        south,
-        1.0,
-        &mut None,
-        0,
-    );
+    let held = deflect(world, registry, ground(-5, -21), 0.3, dressing, south, 1.0);
     assert!(held[0] < 0.0, "{held:?}");
     assert!(east_half[0] > 0.0, "{east_half:?}");
     // A body 0.42 short of the wall with a slightly oblique heading (the pose
@@ -311,8 +258,6 @@ fn deflection_keeps_open_ground_and_steps_but_turns_at_trunks_and_walls() {
         [0.0, 1.58],
         [0.21, 19.62],
         1.0,
-        &mut None,
-        0,
     );
     assert!(oblique[0] < 0.0, "{oblique:?}");
     // Horses from the stalled movement test. A horse against the trunk at
@@ -327,8 +272,6 @@ fn deflection_keeps_open_ground_and_steps_but_turns_at_trunks_and_walls() {
         [0.0, 4.6],
         [0.8, 23.4],
         1.0,
-        &mut None,
-        0,
     );
     assert!(pocket[0] > 0.0, "{pocket:?}");
     // A horse grazing the trunk at (40, -72) drops the drift into it, or
@@ -341,23 +284,11 @@ fn deflection_keeps_open_ground_and_steps_but_turns_at_trunks_and_walls() {
         [0.026, 4.6],
         [0.2, 21.4],
         1.0,
-        &mut None,
-        0,
     );
     assert_eq!(graze, [0.0, 4.6]);
     // A six-deep cave opening ahead is steered around, not walked into.
     assert_ne!(
-        deflect(
-            world,
-            registry,
-            ground(-20, 19),
-            0.3,
-            south,
-            south,
-            1.0,
-            &mut None,
-            0
-        ),
+        deflect(world, registry, ground(-20, 19), 0.3, south, south, 1.0),
         south
     );
 }
@@ -647,59 +578,19 @@ fn a_body_under_a_terrain_roof_walks_out_toward_open_sky() {
     // Two blocks in from the roof's west edge, five from its east edge.
     let inside = [107.5, f64::from(height(107, -99)), -98.5];
     let east = [0.079, 0.0];
-    let out = deflect(
-        world,
-        registry,
-        inside,
-        0.3,
-        east,
-        [20.0, 0.0],
-        1.0,
-        &mut None,
-        0,
-    );
+    let out = deflect(world, registry, inside, 0.3, east, [20.0, 0.0], 1.0);
     assert!(out[0] < 0.0, "went deeper under the roof: {out:?}");
     // A body holding its slot under the roof (no drive) walks out too.
-    let held = deflect(
-        world,
-        registry,
-        inside,
-        0.3,
-        [0.0, 0.0],
-        [0.0, 0.0],
-        1.0,
-        &mut None,
-        0,
-    );
+    let held = deflect(world, registry, inside, 0.3, [0.0, 0.0], [0.0, 0.0], 1.0);
     assert!(held[0] < -0.05, "stayed under the roof: {held:?}");
     // Under open sky the same drive, or no drive, is returned exactly.
     let open = [107.5, f64::from(height(107, -94)), -93.5];
     assert_eq!(
-        deflect(
-            world,
-            registry,
-            open,
-            0.3,
-            east,
-            [20.0, 0.0],
-            1.0,
-            &mut None,
-            0
-        ),
+        deflect(world, registry, open, 0.3, east, [20.0, 0.0], 1.0),
         east
     );
     assert_eq!(
-        deflect(
-            world,
-            registry,
-            open,
-            0.3,
-            [0.0, 0.0],
-            [20.0, 0.0],
-            1.0,
-            &mut None,
-            0
-        ),
+        deflect(world, registry, open, 0.3, [0.0, 0.0], [20.0, 0.0], 1.0),
         [0.0, 0.0]
     );
 }
@@ -824,17 +715,7 @@ fn a_body_under_an_overhang_walks_out_by_the_step_not_the_drop() {
         if exit(world, registry, pos).is_none() {
             break;
         }
-        let drive = deflect(
-            world,
-            registry,
-            pos,
-            0.3,
-            [0.0, 0.0],
-            [0.0, 0.0],
-            1.0,
-            &mut None,
-            0,
-        );
+        let drive = deflect(world, registry, pos, 0.3, [0.0, 0.0], [0.0, 0.0], 1.0);
         pos[0] += drive[0] * mc_physics::TICK_SECONDS;
         pos[2] += drive[1] * mc_physics::TICK_SECONDS;
         if solid(pos) {
@@ -952,19 +833,19 @@ const GULLY: [[i32; 14]; 18] = [
     [103, 102, 101, 99, 99, 98, 98, 98, 98, 97, 97, 97, 97, 98],
 ];
 
-/// Real (x, y, z) to fixture for [`GULLY`]: the shelf (19, 93, 245) lands at
-/// (7, 70, 102), straight behind the second side, which flees +z.
-const GULLY_SHIFT: [i32; 3] = [-12, -23, -143];
-
-fn gully(state: &mut TickState) {
+/// Fleeing riders that ran up a gully into its dead end climb back out
+/// instead of standing pressed into it for the rest of the battle.
+#[test]
+fn fleeing_riders_climb_out_of_a_gully_end() {
+    // Real (x, y, z) to fixture: the shelf (19, 93, 245) lands at (7, 70,
+    // 102), straight behind the second side, which flees +z.
+    const SHIFT: [i32; 3] = [-12, -23, -143];
+    let mut state = relief_fixture();
     let (stone, air) = (state.registry.states.stone, state.registry.states.air);
     for (dz, row) in GULLY.iter().enumerate() {
         for (dx, &top) in row.iter().enumerate() {
-            let (x, z) = (
-                8 + dx as i32 + GULLY_SHIFT[0],
-                233 + dz as i32 + GULLY_SHIFT[2],
-            );
-            let top = top + GULLY_SHIFT[1];
+            let (x, z) = (8 + dx as i32 + SHIFT[0], 233 + dz as i32 + SHIFT[2]);
+            let top = top + SHIFT[1];
             for y in 60..top + 10 {
                 state
                     .world
@@ -973,18 +854,6 @@ fn gully(state: &mut TickState) {
         }
     }
     state.world.fold_overlay();
-}
-
-fn in_gully(real: [f64; 3]) -> [f64; 3] {
-    [0, 1, 2].map(|axis| real[axis] + f64::from(GULLY_SHIFT[axis]))
-}
-
-/// Fleeing riders that ran up a gully into its dead end climb back out
-/// instead of standing pressed into it for the rest of the battle.
-#[test]
-fn fleeing_riders_climb_out_of_a_gully_end() {
-    let mut state = relief_fixture();
-    gully(&mut state);
     stage(&mut state, 100);
     let formation = &state.hostile.battle.formation;
     let regiment = formation
@@ -1288,7 +1157,7 @@ fn a_body_in_the_r7_tunnel_pile_walks_out() {
         [0.0, 0.0],
         [-5.6, 0.0],
     ] {
-        let out = deflect(world, registry, pile, 0.3, drive, drive, 1.0, &mut None, 0);
+        let out = deflect(world, registry, pile, 0.3, drive, drive, 1.0);
         let along =
             (out[0] * mouth[0] + out[1] * mouth[1]) / mc_physics::mth::length2(mouth[0], mouth[1]);
         assert!(
@@ -1385,531 +1254,456 @@ fn a_boxed_in_body_on_foot_stands_at_a_cave_mouth() {
         "walked into the mouth"
     );
     assert_eq!(
-        deflect(world, registry, pos, 0.3, north, north, 1.0, &mut None, 0),
+        deflect(world, registry, pos, 0.3, north, north, 1.0),
         north,
         "a rider keeps pressing"
     );
 }
 
-/// One horse riding at a fixed point under [`deflect`]: it stands on the
-/// support under its footprint, jumps one-block steps and is stopped by walls,
-/// moving along each axis in turn, the larger component first, as physics
-/// resolves them (`mc_physics` `resolve_horizontal_axes`). Where it is after
-/// `ticks`, or once within 2 blocks.
-fn ride_at(state: &TickState, start: [f64; 3], foe: [f64; 3], ticks: usize) -> [f64; 3] {
-    let (world, registry) = (&state.world, &state.registry);
-    let horse = 0.698_242_187_5;
-    let mut pos = start;
-    let mut detour = None;
-    for tick in 0..ticks {
-        let to = [foe[0] - pos[0], foe[2] - pos[2]];
-        let length = mc_physics::mth::length2(to[0], to[1]);
-        if length < 2.0 {
-            break;
+/// First air above the ground round the G2 take's cliff notch, where 87
+/// fleeing blue foot stood within 0.22 blocks of (-113.3, 94, 257.3) from
+/// t 232 to the end of the take (receipts/BvHorseStack): columns x
+/// -126..=-98 (left to right), rows z 244..=268 (top to bottom), from the
+/// `battle_site_scan detail` columns of site 935 (no overhangs; the trees
+/// below the cliff are left out). The upper field (94-95) ends in a cliff
+/// four to six blocks high; at x -114 a one-block notch (94) juts out one
+/// row further than the cliff to its west.
+const G2_LEDGE: [[i32; 29]; 25] = [
+    [
+        94, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 95, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 95, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        95, 95, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 94,
+        95, 95, 95, 95, 95, 95,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95,
+        95, 95, 95, 95, 95, 95,
+    ],
+    [
+        87, 87, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95,
+        95, 95, 95, 95, 95, 95,
+    ],
+    [
+        91, 89, 88, 89, 89, 89, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95,
+        95, 95, 95, 95, 95, 95,
+    ],
+    [
+        94, 93, 91, 89, 90, 90, 90, 90, 90, 90, 90, 89, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94,
+        94, 94, 94, 94, 94, 94,
+    ],
+    [
+        95, 95, 95, 95, 94, 92, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 89, 89, 89, 93, 93,
+        93, 93, 93, 93, 93, 92,
+    ],
+    [
+        95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 93, 92, 91, 91, 91, 91, 91, 91, 90, 90, 90, 89, 89,
+        88, 92, 92, 92, 91, 91,
+    ],
+    [
+        95, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 93, 93, 92, 92, 92, 92, 92, 92, 91, 90, 90,
+        89, 89, 88, 88, 88, 87,
+    ],
+    [
+        94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 92, 91, 91, 91, 91, 91, 91, 91, 90, 90,
+        90, 90, 89, 88, 88, 88,
+    ],
+    [
+        94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 92, 92, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90,
+        90, 90, 90, 89, 88, 88,
+    ],
+    [
+        94, 93, 93, 93, 92, 92, 92, 92, 92, 92, 92, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 89, 89,
+        89, 89, 89, 90, 89, 88,
+    ],
+    [
+        93, 93, 92, 92, 91, 91, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 89, 89, 89, 89, 89,
+        89, 89, 89, 89, 89, 89,
+    ],
+    [
+        93, 93, 92, 92, 92, 91, 91, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 89, 89, 89, 89,
+        89, 89, 89, 89, 89, 89,
+    ],
+    [
+        93, 93, 92, 92, 92, 92, 91, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 90, 89, 89, 89,
+        89, 89, 89, 89, 89, 89,
+    ],
+    [
+        93, 93, 92, 92, 92, 92, 92, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 90, 90, 89, 89,
+        89, 89, 89, 89, 89, 89,
+    ],
+    [
+        94, 93, 92, 92, 92, 92, 92, 92, 91, 91, 91, 91, 91, 91, 90, 90, 90, 90, 90, 90, 90, 89, 89,
+        89, 89, 89, 89, 89, 89,
+    ],
+];
+
+/// Real (x, y, z) to fixture: the notch (-113.3, 94, 257.3) lands at
+/// (6.7, 66, 100.3), behind the second side, which flees +z.
+const G2_LEDGE_SHIFT: [i32; 3] = [120, -28, -157];
+
+const G2R_CORNER: [[i32; 21]; 21] = [
+    [
+        96, 96, 96, 96, 96, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 97, 98, 99, 99,
+    ],
+    [
+        96, 96, 96, 96, 96, 96, 95, 95, 95, 95, 96, 96, 96, 96, 96, 97, 97, 98, 99, 100, 100,
+    ],
+    [
+        97, 97, 96, 96, 96, 96, 95, 96, 96, 96, 96, 96, 96, 96, 97, 97, 98, 99, 100, 100, 101,
+    ],
+    [
+        99, 99, 98, 98, 97, 97, 96, 96, 96, 96, 96, 97, 97, 98, 98, 99, 99, 100, 100, 101, 101,
+    ],
+    [
+        100, 100, 100, 99, 99, 98, 98, 98, 98, 98, 98, 98, 99, 99, 99, 99, 100, 100, 100, 101, 102,
+    ],
+    [
+        101, 101, 101, 100, 100, 100, 99, 99, 99, 99, 99, 99, 100, 100, 100, 100, 100, 101, 101,
+        101, 102,
+    ],
+    [
+        102, 102, 101, 101, 101, 101, 100, 100, 100, 100, 100, 100, 100, 101, 101, 101, 101, 101,
+        101, 102, 102,
+    ],
+    [
+        102, 102, 102, 102, 102, 102, 102, 101, 101, 101, 101, 101, 101, 102, 102, 102, 102, 102,
+        102, 102, 103,
+    ],
+    [
+        103, 103, 103, 103, 103, 103, 102, 102, 102, 102, 102, 102, 102, 102, 102, 102, 102, 103,
+        103, 103, 103,
+    ],
+    [
+        103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103,
+        103, 103, 103,
+    ],
+    [
+        104, 104, 104, 104, 104, 104, 104, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103, 103,
+        104, 104, 104,
+    ],
+    [
+        104, 104, 104, 104, 104, 104, 104, 104, 104, 104, 103, 103, 104, 104, 104, 104, 104, 104,
+        104, 104, 104,
+    ],
+    [
+        105, 105, 105, 106, 106, 106, 106, 106, 105, 104, 104, 104, 104, 104, 104, 104, 104, 104,
+        104, 104, 104,
+    ],
+    [
+        106, 106, 106, 107, 107, 108, 108, 107, 106, 104, 104, 104, 104, 104, 104, 104, 104, 104,
+        104, 105, 105,
+    ],
+    [
+        107, 107, 107, 108, 108, 109, 109, 108, 108, 106, 104, 104, 104, 104, 104, 104, 104, 105,
+        105, 106, 106,
+    ],
+    [
+        108, 108, 109, 109, 110, 110, 110, 110, 109, 109, 107, 107, 107, 107, 106, 107, 107, 107,
+        108, 108, 108,
+    ],
+    [
+        109, 109, 110, 110, 110, 111, 111, 111, 110, 110, 109, 109, 109, 108, 108, 108, 109, 109,
+        109, 109, 109,
+    ],
+    [
+        110, 110, 110, 111, 111, 111, 112, 111, 111, 111, 110, 110, 110, 109, 109, 109, 110, 110,
+        110, 110, 110,
+    ],
+    [
+        110, 111, 111, 111, 111, 112, 112, 112, 112, 111, 111, 111, 111, 110, 110, 110, 111, 111,
+        111, 111, 111,
+    ],
+    [
+        111, 111, 111, 112, 112, 112, 112, 112, 112, 112, 112, 112, 112, 111, 111, 111, 111, 112,
+        112, 112, 112,
+    ],
+    [
+        111, 111, 112, 112, 112, 113, 114, 114, 113, 113, 112, 112, 112, 112, 112, 112, 112, 112,
+        112, 112, 112,
+    ],
+];
+
+/// First air above the ground round the corner of two terrace faces at
+/// (-99.6, 104, 316.6) where 111 fleeing blue foot stood within one block
+/// in rehearsal-06198df4 (receipts/BvHorseStack): columns x -110..=-90,
+/// rows z 302..=322, from the site-935 scan. Real (x, y, z) + this shift.
+const G2R_CORNER_SHIFT: [i32; 3] = [120, -28, -157];
+
+/// Stone up to each column's first air of `rows` (real columns from
+/// `real`: x of the first column, z of the first row), air above.
+fn patch<const W: usize>(
+    state: &mut TickState,
+    rows: &[[i32; W]],
+    real: [i32; 2],
+    shift: [i32; 3],
+) {
+    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
+    for (dz, row) in rows.iter().enumerate() {
+        for (dx, &top) in row.iter().enumerate() {
+            let (x, z) = (
+                real[0] + dx as i32 + shift[0],
+                real[1] + dz as i32 + shift[2],
+            );
+            let top = top + shift[1];
+            for y in 55..top + 10 {
+                state
+                    .world
+                    .set_block(x, y, z, if y < top { stone } else { air });
+            }
         }
-        let drive = to.map(|v| v / length * 4.6);
-        let out = deflect(
-            world,
-            registry,
-            pos,
-            horse,
-            drive,
-            drive,
-            1.0,
-            &mut detour,
-            tick as u64,
-        );
-        let axes = if out[0].abs() < out[1].abs() {
-            [1, 0]
-        } else {
-            [0, 1]
+    }
+    state.world.fold_overlay();
+}
+
+/// Most bodies within 0.5 blocks (horizontal, same level) of one of them.
+fn densest(points: &[[f64; 3]]) -> usize {
+    points
+        .iter()
+        .map(|a| {
+            points
+                .iter()
+                .filter(|b| {
+                    (a[1] - b[1]).abs() < 1.5
+                        && mc_physics::mth::length2(a[0] - b[0], a[2] - b[2]) < 0.5
+                })
+                .count()
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+/// 48 foot of the second side, placed in rows of `wide` from real (x, z)
+/// `from` (shifted by `shift`), break and flee for `ticks` real ticks.
+/// Returns the most bodies within 0.5 blocks of one (and its tick), the
+/// median distance fled toward +z and the end positions.
+fn rout_from(
+    state: &mut TickState,
+    from: [f64; 2],
+    wide: usize,
+    shift: [i32; 3],
+    ticks: u64,
+) -> ((usize, u64), f64, Vec<[f64; 3]>) {
+    let formation = &state.hostile.battle.formation;
+    let regiments: Vec<usize> = formation
+        .regiments
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| r.spec.faction == 2 && r.spec.frontage <= 1.0)
+        .map(|(i, _)| i)
+        .collect();
+    let ids: Vec<_> = regiments
+        .iter()
+        .flat_map(|&i| {
+            let r = &formation.regiments[i];
+            formation.members[r.start..r.start + r.len]
+                .iter()
+                .map(|m| m.id)
+        })
+        .take(48)
+        .collect();
+    assert!(ids.len() >= 40, "too few foot: {}", ids.len());
+    for (k, &id) in ids.iter().enumerate() {
+        let x = from[0] + f64::from(shift[0]) + (k % wide) as f64;
+        let z = from[1] + f64::from(shift[2]) + (k / wide) as f64;
+        let Some(Ok(y)) = support(&state.world, &state.registry, [x, 0.0, z], 0.3) else {
+            panic!("no ground at {x} {z}");
         };
-        for axis in axes {
-            if out[axis] == 0.0 {
-                continue;
-            }
-            let mut next = pos;
-            next[axis * 2] += out[axis] * mc_physics::TICK_SECONDS;
-            if let Some(Ok(y)) = support(world, registry, next, horse)
-                && y <= pos[1] + 1.0
-                && clear(world, registry, [next[0], y, next[2]], horse, 1.6) == Some(true)
-            {
-                pos = [next[0], y, next[2]];
-            }
+        let slot = state.entities.slot_of(id).unwrap();
+        state.entities.set_pos(slot, [x, y, z]);
+    }
+    let formation = &mut state.hostile.battle.formation;
+    for &i in &regiments {
+        formation.regiments[i].morale.broken = true;
+        let r = &formation.regiments[i];
+        for m in &mut formation.members[r.start..r.start + r.len] {
+            m.routing = true;
         }
     }
-    pos
-}
-
-/// The r8/r9 notch: 15-17 blue horses stood pressed on the terrace at
-/// (17.7-18.1, 95, 243.9-244.3) above the gully floor where their foe stood,
-/// at (21.3, 90, 237.3). The gully descends in steps two blocks high and one
-/// wide; a horse straddling two columns stands on the higher one, and from
-/// there the next column read three deep. Measured from its centre column a
-/// step is two, and a horse riding at the foe goes down to the floor.
-#[test]
-fn a_horse_rides_down_the_notch_staircase_to_its_foe() {
-    let mut state = relief_fixture();
-    gully(&mut state);
-    let foe = in_gully([21.27, 90.0, 237.26]);
-    for start in [
-        [18.106, 95.0, 244.027],
-        [17.698, 95.0, 244.302],
-        [18.046, 95.0, 243.865],
-    ] {
-        let pos = ride_at(&state, in_gully(start), foe, 200);
-        let near = mc_physics::mth::length2(foe[0] - pos[0], foe[2] - pos[2]);
-        assert!(
-            near < 2.5 && pos[1] <= foe[1] + 1.0,
-            "from {start:?} the horse stopped at {pos:?}, {near:.1} from its foe"
-        );
-    }
-}
-
-/// Ground heights (first air above the ground) round the r11 north-edge
-/// pile, where 143 blue foot and 22 blue horses ended at the foot of a riser
-/// at (-174, 99, 316): columns x -186..=-162 (left to right), rows z
-/// 304..=328 (top to bottom), from `receipts/BvReliefBattle/early-stack/probe.json`
-/// (no overhangs or trees in this patch). The riser between z 316 and 317 is
-/// two or three blocks high from x -182 to -169 and one block at x -168 and
-/// x -184/-183, where the hillside to the north is climbed.
-const EDGE: [[i32; 25]; 25] = [
-    [
-        94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94,
-        94, 94,
-    ],
-    [
-        95, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94,
-        94, 94,
-    ],
-    [
-        95, 94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94,
-        94, 94,
-    ],
-    [
-        95, 95, 94, 94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94,
-        94, 94,
-    ],
-    [
-        95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94,
-        95, 95,
-    ],
-    [
-        96, 95, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95,
-        95, 95,
-    ],
-    [
-        96, 96, 96, 96, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95,
-        95, 95,
-    ],
-    [
-        98, 97, 97, 96, 96, 96, 95, 95, 95, 95, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 96,
-        96, 95,
-    ],
-    [
-        99, 99, 98, 97, 96, 96, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96,
-        96, 96,
-    ],
-    [
-        101, 100, 100, 100, 99, 97, 97, 96, 96, 96, 96, 96, 95, 95, 95, 95, 96, 96, 96, 96, 96, 97,
-        98, 97, 97,
-    ],
-    [
-        102, 102, 101, 100, 98, 98, 99, 98, 98, 97, 97, 96, 96, 96, 96, 96, 96, 96, 97, 98, 99, 99,
-        100, 99, 99,
-    ],
-    [
-        103, 102, 100, 98, 101, 101, 100, 100, 99, 99, 98, 98, 98, 97, 97, 97, 98, 98, 98, 99, 100,
-        101, 101, 101, 100,
-    ],
-    [
-        102, 100, 103, 103, 102, 102, 101, 101, 101, 100, 100, 99, 99, 99, 98, 99, 99, 99, 100,
-        100, 101, 101, 102, 102, 101,
-    ],
-    [
-        105, 105, 104, 104, 104, 103, 103, 103, 103, 102, 102, 102, 101, 101, 101, 101, 101, 101,
-        101, 102, 102, 102, 103, 102, 102,
-    ],
-    [
-        107, 107, 107, 106, 105, 105, 104, 104, 104, 104, 104, 103, 103, 102, 102, 102, 102, 102,
-        102, 103, 103, 103, 103, 103, 103,
-    ],
-    [
-        109, 108, 108, 108, 107, 107, 106, 106, 106, 105, 105, 104, 104, 103, 103, 103, 103, 103,
-        103, 103, 103, 104, 104, 103, 103,
-    ],
-    [
-        110, 109, 109, 109, 109, 108, 108, 107, 107, 107, 107, 106, 105, 104, 104, 104, 104, 104,
-        104, 104, 104, 104, 104, 104, 104,
-    ],
-    [
-        111, 111, 110, 110, 110, 109, 109, 109, 108, 108, 108, 108, 107, 106, 106, 106, 106, 106,
-        105, 106, 106, 106, 106, 105, 105,
-    ],
-    [
-        111, 111, 111, 111, 111, 110, 110, 110, 109, 109, 109, 109, 109, 108, 108, 108, 108, 108,
-        108, 108, 108, 108, 108, 107, 107,
-    ],
-    [
-        111, 111, 111, 111, 111, 111, 110, 110, 110, 110, 110, 110, 110, 110, 110, 109, 109, 109,
-        109, 109, 109, 109, 109, 109, 108,
-    ],
-    [
-        111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 110, 110, 110, 110, 110, 110, 110, 110,
-        110, 110, 110, 110, 110, 110, 109,
-    ],
-    [
-        111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111,
-        111, 111, 110, 110, 110, 110, 110,
-    ],
-    [
-        111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111,
-        111, 111, 111, 111, 111, 111, 110,
-    ],
-    [
-        111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111,
-        111, 111, 111, 111, 111, 111, 111,
-    ],
-    [
-        111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111, 111,
-        111, 111, 111, 111, 111, 111, 111,
-    ],
-];
-
-/// Real (x, y, z) to fixture for [`EDGE`].
-const EDGE_SHIFT: [i32; 3] = [180, -30, -220];
-
-fn edge(state: &mut TickState) {
-    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
-    for (dz, row) in EDGE.iter().enumerate() {
-        for (dx, &top) in row.iter().enumerate() {
-            let (x, z) = (
-                -186 + dx as i32 + EDGE_SHIFT[0],
-                304 + dz as i32 + EDGE_SHIFT[2],
-            );
-            let top = top + EDGE_SHIFT[1];
-            for y in 55..top + 12 {
+    let positions = |state: &TickState| -> Vec<[f64; 3]> {
+        ids.iter()
+            .filter_map(|&id| {
                 state
-                    .world
-                    .set_block(x, y, z, if y < top { stone } else { air });
-            }
+                    .entities
+                    .slot_of(id)
+                    .map(|slot| state.entities.pos(slot))
+            })
+            .collect()
+    };
+    let start: Vec<f64> = positions(state).iter().map(|p| p[2]).collect();
+    let mut worst = (0, 0);
+    for tick in 1..=ticks {
+        run_tick(state, &[]);
+        if tick % 50 == 0 {
+            worst = worst.max((densest(&positions(state)), tick));
         }
     }
-    state.world.fold_overlay();
+    let end = positions(state);
+    let mut fled: Vec<f64> = end.iter().zip(&start).map(|(p, z)| p[2] - z).collect();
+    fled.sort_by(f64::total_cmp);
+    (worst, fled[fled.len() / 2], end)
 }
 
-/// A body on foot heading north into the r11 riser walks along it to an open
-/// end (one block high, one wide: x -181 to the west, x -168 to the east) and
-/// climbs it, instead of rocking in place at its foot as its feet step up and
-/// down and its offset in the column changes.
+/// Fugitives on foot that run into the G2 cliff and along it into the notch
+/// keep apart there: in the G2 take 87 stood on one point for the last
+/// 25 s, one body for the camera that was meant to film them.
 #[test]
-fn a_body_walks_along_a_riser_to_its_open_end() {
+fn fugitives_pressed_into_a_cliff_notch_do_not_heap_on_one_point() {
     let mut state = relief_fixture();
-    edge(&mut state);
-    let (world, registry) = (&state.world, &state.registry);
-    let at = |real: [f64; 3]| [0, 1, 2].map(|axis| real[axis] + f64::from(EDGE_SHIFT[axis]));
-    for start in [
-        [-174.3, 99.0, 316.7],
-        [-173.0, 99.0, 316.7],
-        [-175.2, 99.0, 316.7],
-    ] {
-        let mut pos = at(start);
-        for _ in 0..300 {
-            let drive = [0.0, 4.0];
-            let out = deflect_foot(world, registry, pos, 0.3, drive, [0.0, 20.0], 1.0);
-            let next = [
-                pos[0] + out[0] * mc_physics::TICK_SECONDS,
-                pos[1],
-                pos[2] + out[1] * mc_physics::TICK_SECONDS,
-            ];
-            if let Some(Ok(y)) = support(world, registry, next, 0.3)
-                && y <= pos[1] + 1.0
-                && clear(world, registry, [next[0], y, next[2]], 0.3, 1.95) == Some(true)
-            {
-                pos = [next[0], y, next[2]];
-            }
-        }
-        let real = [0, 1, 2].map(|axis| pos[axis] - f64::from(EDGE_SHIFT[axis]));
-        assert!(
-            real[2] > 317.5,
-            "from {start:?} the body stayed below the riser at {real:?}"
-        );
-    }
-}
-
-/// Ground heights (first air above the highest non-tree solid) round the
-/// site935 tree whose trunk stands at (21, 94, 315): columns x 11..=35 (left
-/// to right), rows z 303..=327 (top to bottom), then every log (`true`) and
-/// leaf block of the patch, from `receipts/BvReliefBattle/tree-stack/probe.json`
-/// (no overhangs). Its canopy is two leaf layers at y 96-97 over x 19..=23,
-/// z 313..=317, two blocks over ground 94; ground rises to 95 north of z 314
-/// from x 23 and east of x 24.
-const TREE: [[i32; 25]; 25] = [
-    [
-        95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96,
-        96, 96,
-    ],
-    [
-        95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96,
-        96, 96,
-    ],
-    [
-        95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96,
-        96, 96,
-    ],
-    [
-        95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96,
-        96, 96,
-    ],
-    [
-        95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96, 96,
-        96, 96,
-    ],
-    [
-        94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96, 96, 96, 96,
-        96, 96,
-    ],
-    [
-        94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96, 96, 96,
-        96, 96,
-    ],
-    [
-        94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96, 96,
-        96, 96,
-    ],
-    [
-        93, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96, 96,
-        96, 96,
-    ],
-    [
-        93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 96, 96,
-        96, 96,
-    ],
-    [
-        93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95, 95,
-        96, 96,
-    ],
-    [
-        93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95, 95, 95, 95, 95,
-        95, 95,
-    ],
-    [
-        92, 92, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95,
-        95, 95,
-    ],
-    [
-        92, 92, 92, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95, 95,
-        95, 95,
-    ],
-    [
-        92, 92, 92, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95, 95,
-        95, 95,
-    ],
-    [
-        92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95, 95,
-        95, 95,
-    ],
-    [
-        92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94, 94, 94, 94, 94, 95, 95,
-        95, 95,
-    ],
-    [
-        92, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 95, 95,
-        95, 95,
-    ],
-    [
-        92, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94, 94,
-        95, 95,
-    ],
-    [
-        92, 92, 92, 92, 92, 92, 92, 92, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 93, 94, 94, 94,
-        94, 94,
-    ],
-    [
-        92, 92, 92, 92, 92, 92, 92, 92, 92, 93, 93, 92, 92, 92, 92, 92, 92, 92, 93, 93, 93, 94, 94,
-        94, 94,
-    ],
-    [
-        92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 93, 93, 94, 94,
-        94, 94,
-    ],
-    [
-        92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 91, 91, 92, 92, 93, 93, 93,
-        94, 94,
-    ],
-    [
-        93, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 92, 91, 91, 91, 91, 91, 92, 92, 93, 93, 93,
-        93, 93,
-    ],
-    [
-        93, 93, 92, 92, 92, 92, 92, 92, 92, 92, 92, 91, 91, 91, 91, 91, 91, 91, 91, 92, 92, 93, 93,
-        93, 93,
-    ],
-];
-const TREE_BLOCKS: [(i32, i32, i32, bool); 96] = [
-    (23, 99, 307, false),
-    (23, 100, 307, false),
-    (24, 100, 307, false),
-    (25, 99, 307, false),
-    (25, 100, 307, false),
-    (22, 99, 308, false),
-    (22, 100, 308, false),
-    (23, 99, 308, false),
-    (23, 100, 308, false),
-    (24, 99, 308, false),
-    (24, 100, 308, false),
-    (24, 101, 308, false),
-    (25, 99, 308, false),
-    (25, 100, 308, false),
-    (26, 99, 308, false),
-    (22, 99, 309, false),
-    (22, 100, 309, false),
-    (23, 99, 309, false),
-    (23, 100, 309, false),
-    (23, 101, 309, false),
-    (24, 95, 309, true),
-    (24, 96, 309, true),
-    (24, 97, 309, true),
-    (24, 98, 309, true),
-    (24, 99, 309, true),
-    (24, 100, 309, true),
-    (24, 101, 309, false),
-    (25, 99, 309, false),
-    (25, 100, 309, false),
-    (25, 101, 309, false),
-    (26, 99, 309, false),
-    (26, 100, 309, false),
-    (22, 99, 310, false),
-    (22, 100, 310, false),
-    (23, 99, 310, false),
-    (23, 100, 310, false),
-    (24, 99, 310, false),
-    (24, 100, 310, false),
-    (24, 101, 310, false),
-    (25, 99, 310, false),
-    (25, 100, 310, false),
-    (25, 101, 310, false),
-    (26, 100, 310, false),
-    (23, 99, 311, false),
-    (24, 99, 311, false),
-    (24, 100, 311, false),
-    (25, 99, 311, false),
-    (25, 100, 311, false),
-    (20, 96, 313, false),
-    (20, 97, 313, false),
-    (21, 96, 313, false),
-    (21, 97, 313, false),
-    (22, 97, 313, false),
-    (19, 96, 314, false),
-    (19, 97, 314, false),
-    (20, 96, 314, false),
-    (20, 97, 314, false),
-    (20, 98, 314, false),
-    (21, 96, 314, false),
-    (21, 97, 314, false),
-    (21, 98, 314, false),
-    (22, 96, 314, false),
-    (22, 97, 314, false),
-    (23, 96, 314, false),
-    (23, 97, 314, false),
-    (19, 96, 315, false),
-    (19, 97, 315, false),
-    (20, 96, 315, false),
-    (20, 97, 315, false),
-    (20, 98, 315, false),
-    (21, 94, 315, true),
-    (21, 95, 315, true),
-    (21, 96, 315, true),
-    (21, 97, 315, true),
-    (21, 98, 315, false),
-    (22, 96, 315, false),
-    (22, 97, 315, false),
-    (22, 98, 315, false),
-    (23, 96, 315, false),
-    (23, 97, 315, false),
-    (19, 96, 316, false),
-    (19, 97, 316, false),
-    (20, 96, 316, false),
-    (20, 97, 316, false),
-    (21, 96, 316, false),
-    (21, 97, 316, false),
-    (21, 98, 316, false),
-    (22, 96, 316, false),
-    (22, 97, 316, false),
-    (23, 96, 316, false),
-    (20, 96, 317, false),
-    (20, 97, 317, false),
-    (21, 96, 317, false),
-    (21, 97, 317, false),
-    (22, 96, 317, false),
-    (22, 97, 317, false),
-];
-
-/// Real (x, y, z) to fixture for [`TREE`].
-const TREE_SHIFT: [i32; 3] = [-80, -30, -220];
-
-fn tree_site(state: &mut TickState) {
-    let (stone, air) = (state.registry.states.stone, state.registry.states.air);
-    let (log, leaves) = (
-        state_id(state, "minecraft:oak_log"),
-        state_id(state, "minecraft:oak_leaves"),
-    );
-    for (dz, row) in TREE.iter().enumerate() {
-        for (dx, &top) in row.iter().enumerate() {
-            let (x, z) = (
-                11 + dx as i32 + TREE_SHIFT[0],
-                303 + dz as i32 + TREE_SHIFT[2],
-            );
-            let top = top + TREE_SHIFT[1];
-            for y in 55..top + 12 {
-                state
-                    .world
-                    .set_block(x, y, z, if y < top { stone } else { air });
-            }
-        }
-    }
-    for (x, y, z, trunk) in TREE_BLOCKS {
-        let at = (x + TREE_SHIFT[0], y + TREE_SHIFT[1], z + TREE_SHIFT[2]);
-        state
-            .world
-            .set_block(at.0, at.1, at.2, if trunk { log } else { leaves });
-    }
-    state.world.fold_overlay();
-}
-
-/// The b31c2540 post-G1 rehearsal traced `battle trace 23 315 6`: blue riders
-/// who had fled past the tree rallied at z 318-320 and rode back north-west
-/// toward the fight, and 17-24 of them stood from t 117 to the end of the take
-/// at (22.7, 94, 314.7). That is the corner between the trunk at (21, 315) to
-/// the west and the one-block step at z 313 to the north, under the canopy.
-/// A rallied rider (steered by [`deflect`]) rides out of that corner toward
-/// its target, from the corner and from where the traced riders rallied.
-#[test]
-fn a_rallied_rider_rides_out_of_the_corner_under_a_canopy() {
-    let mut state = relief_fixture();
-    tree_site(&mut state);
-    let at = |real: [f64; 3]| [0, 1, 2].map(|axis| real[axis] + f64::from(TREE_SHIFT[axis]));
-    let corner = at([22.7, 94.0, 314.7]);
-    let mut stalled = Vec::new();
-    for (start, foe) in [
-        ([22.7, 94.0, 314.7], [10.6, 94.0, 298.2]),
-        ([22.7, 94.0, 314.7], [-24.9, 94.0, 280.8]),
-        ([22.7, 94.0, 314.7], [-22.8, 94.0, 222.0]),
-        ([24.1, 94.0, 318.4], [11.3, 94.0, 297.9]),
-        ([25.7, 94.0, 319.1], [-22.7, 94.0, 279.9]),
-        ([24.0, 94.0, 316.1], [10.1, 94.0, 299.4]),
-    ] {
-        let pos = ride_at(&state, at(start), at(foe), 300);
-        let real = [0, 1, 2].map(|axis| pos[axis] - f64::from(TREE_SHIFT[axis]));
-        let from_corner = mc_physics::mth::length2(pos[0] - corner[0], pos[2] - corner[2]);
-        if from_corner <= 6.0 {
-            stalled.push(format!(
-                "from {start:?} toward {foe:?} it stayed at {real:?}"
-            ));
-        }
-    }
+    patch(&mut state, &G2_LEDGE, [-126, 244], G2_LEDGE_SHIFT);
+    stage(&mut state, 100);
+    // South-west of the notch, as the G2 fugitives came: real x -123..-112,
+    // z 246..250.
+    let (worst, fled, end) = rout_from(&mut state, [-123.5, 246.5], 12, G2_LEDGE_SHIFT, 800);
     assert!(
-        stalled.is_empty(),
-        "riders stayed by the corner: {stalled:#?}"
+        fled >= 5.0,
+        "the fugitives did not run to the cliff: {end:?}"
+    );
+    assert!(
+        worst.0 <= 4,
+        "fugitives heaped: {} bodies within 0.5 blocks of one at tick {}: {end:?}",
+        worst.0,
+        worst.1
+    );
+}
+
+/// Fugitives that climb a slope and step off a two-block ledge into the
+/// corner of two terrace faces keep apart there: unseen from the ledge, the
+/// bodies below were landed on (rehearsal-06198df4: 111 within one block of
+/// (-99.6, 104, 316.6)).
+#[test]
+fn fugitives_in_a_terrace_corner_do_not_heap_on_one_point() {
+    let mut state = relief_fixture();
+    patch(&mut state, &G2R_CORNER, [-110, 302], G2R_CORNER_SHIFT);
+    stage(&mut state, 100);
+    // South-east of the corner, as the rehearsal's fugitives came.
+    let (worst, fled, end) = rout_from(&mut state, [-101.5, 303.5], 12, G2R_CORNER_SHIFT, 800);
+    assert!(
+        fled >= 5.0,
+        "the fugitives did not run to the terraces: {end:?}"
+    );
+    assert!(
+        worst.0 <= 4,
+        "fugitives heaped: {} bodies within 0.5 blocks of one at tick {}: {end:?}",
+        worst.0,
+        worst.1
+    );
+}
+
+/// First air above the ground round the end of a one-block gully at
+/// (20.2, 91, 244.9) where 48-62 fleeing blue foot stood within half a
+/// block in the rehearsals of 07222297 (receipts/BvHorseStack): columns
+/// x 12..=28, rows z 234..=250, from the site-935 scan. The gully (x 20, 89-91)
+/// ends at z 245 below a 97 wall to the east and the 92-93 slope to the west.
+const G2R_GULLY: [[i32; 17]; 17] = [
+    [
+        96, 95, 94, 93, 92, 92, 91, 90, 89, 97, 98, 99, 100, 100, 101, 101, 101,
+    ],
+    [
+        96, 95, 94, 93, 92, 92, 91, 90, 89, 97, 98, 99, 100, 100, 101, 101, 101,
+    ],
+    [
+        96, 95, 94, 93, 93, 92, 91, 90, 89, 88, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        96, 95, 94, 94, 93, 92, 91, 90, 89, 90, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        96, 96, 95, 94, 93, 92, 91, 90, 89, 92, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        97, 96, 95, 94, 93, 92, 91, 90, 89, 93, 98, 99, 99, 100, 100, 101, 101,
+    ],
+    [
+        97, 96, 95, 94, 93, 93, 92, 91, 89, 93, 98, 99, 99, 100, 100, 101, 101,
+    ],
+    [
+        97, 97, 96, 95, 94, 93, 92, 91, 90, 97, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        97, 97, 97, 96, 95, 94, 92, 91, 90, 97, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        97, 97, 97, 96, 95, 94, 93, 92, 90, 97, 98, 99, 99, 100, 101, 101, 101,
+    ],
+    [
+        97, 97, 97, 97, 96, 95, 94, 92, 90, 97, 98, 99, 100, 100, 101, 101, 101,
+    ],
+    [
+        97, 97, 97, 97, 97, 97, 95, 93, 91, 97, 98, 99, 100, 100, 101, 101, 102,
+    ],
+    [
+        97, 97, 97, 97, 97, 97, 97, 96, 93, 97, 98, 99, 100, 100, 101, 102, 102,
+    ],
+    [
+        97, 97, 97, 97, 97, 97, 97, 97, 97, 97, 98, 99, 100, 100, 101, 102, 103,
+    ],
+    [
+        98, 97, 97, 97, 97, 97, 97, 97, 97, 98, 98, 99, 100, 100, 101, 102, 103,
+    ],
+    [
+        98, 98, 98, 98, 97, 97, 97, 97, 97, 98, 99, 100, 100, 101, 102, 103, 104,
+    ],
+    [
+        99, 98, 98, 98, 98, 97, 97, 97, 97, 98, 99, 100, 102, 103, 104, 105, 105,
+    ],
+];
+
+/// Real (x, y, z) + this shift.
+const G2R_GULLY_SHIFT: [i32; 3] = [100, -28, -100];
+
+/// Fugitives that come down the slope into the end of a one-block gully keep
+/// apart there: from the top of a step-up (feet at 92.02-92.17) the bodies two
+/// blocks below were out of sight, and each one stepping off landed on the
+/// last (rehearsals of 07222297: up to 62 within half a block).
+#[test]
+fn fugitives_stepping_into_a_gully_end_do_not_heap_on_one_point() {
+    let mut state = relief_fixture();
+    patch(&mut state, &G2R_GULLY, [12, 234], G2R_GULLY_SHIFT);
+    stage(&mut state, 100);
+    // North-west of the gully end, on the slope and in the gully.
+    let (worst, fled, end) = rout_from(&mut state, [13.5, 235.5], 8, G2R_GULLY_SHIFT, 1200);
+    assert!(
+        fled >= 3.0,
+        "the fugitives did not run to the gully end: {end:?}"
+    );
+    assert!(
+        worst.0 <= 4,
+        "fugitives heaped: {} bodies within 0.5 blocks of one at tick {}: {end:?}",
+        worst.0,
+        worst.1
     );
 }

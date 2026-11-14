@@ -13,6 +13,25 @@ pub const SUSTAINED_TICKS: u64 = 220; // 5.45/minute
 const DRAW_TICKS: u64 = 30;
 const RIPPLE_TICKS: u64 = 5;
 const MAX_SPEED: f64 = 4.5;
+// Native flight deals ceil(speed * base_damage), not base_damage HP. At the
+// 4.5-block/tick release cap this is one non-critical HP before mitigation;
+// the old base 2.0 launched nine-HP hits and routed lines before sustained melee.
+const BATTLE_ARROW_BASE_DAMAGE: f32 = 0.2;
+// About one arrow in seventy finds a gap in the armour. Base 25 lands above
+// twenty HP through iron armour on Easy scaling down to a 1.8-block/tick
+// impact (a 90-tick flight), so such an arrow kills where it strikes a body.
+// One in seventeen emptied whole regiments before the lines met.
+pub(super) const LETHAL_ARROW_ROLLS: u32 = 150;
+pub(super) const LETHAL_ARROW_BASE_DAMAGE: f32 = 25.0;
+
+/// Stateless per-shot choice: stable across worker count and hash order.
+pub(super) fn arrow_damage(owner: crate::boundary::EntityId, tick: u64) -> f32 {
+    if super::combat::roll(owner, tick, 0x4b49_4c4c) < LETHAL_ARROW_ROLLS {
+        LETHAL_ARROW_BASE_DAMAGE
+    } else {
+        BATTLE_ARROW_BASE_DAMAGE
+    }
+}
 
 #[derive(Debug, Default)]
 pub(super) struct Runtime {
@@ -196,7 +215,7 @@ pub(super) fn step(
             owner: body.id,
             from,
             velocity,
-            damage: 2.0,
+            damage: arrow_damage(body.id, frame.tick),
         });
         battle.formation.report_pressure(
             target.id,

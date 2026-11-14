@@ -1,6 +1,9 @@
 use super::tests::{fixture, fund, open_plan};
 use super::*;
 
+// The acceptance window is part of the seed-24 regression, not its implementation.
+const BUILDER_STALL_SHIFT_TICKS: u64 = 3_000;
+
 /// A storage lot of the street plan and its index in the frontage list the
 /// planner's cursor walks.
 #[derive(Debug, Clone, Copy)]

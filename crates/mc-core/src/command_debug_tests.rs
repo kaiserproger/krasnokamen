@@ -44,7 +44,11 @@ fn fixture(world: &Path) -> TickState {
         ],
     );
     let (mut state, _, _) = crate::hostile_tests::setup(8.0);
-    state.datapacks = Runtime::new(PackSet::load(&root, Selection::default()).unwrap(), root);
+    state.datapacks = Runtime::new(
+        PackSet::load(&root, Selection::default()).unwrap(),
+        root,
+        std::sync::Arc::clone(&state.registry),
+    );
     state
 }
 
@@ -250,6 +254,7 @@ fn function_trace_write_failure_is_reported_not_hidden() {
         )
         .unwrap(),
         std::path::PathBuf::new(),
+        std::sync::Arc::clone(&state.registry),
     );
     assert_eq!(
         execute(&mut state, "debug function test:inner", 3),

@@ -561,9 +561,7 @@ fn authored_fields(
                 value.clone()
             }
             "fuse" => Tag::Short(number(value, key)?.clamp(0.0, f64::from(i16::MAX)) as i16),
-            "explosion_power" => {
-                Tag::Float(number(value, key)?.clamp(0.0, 128.0) as f32)
-            }
+            "explosion_power" => Tag::Float(number(value, key)?.clamp(0.0, 128.0) as f32),
             "Time" => {
                 let v = number(value, key)?;
                 if v.fract() != 0.0 || !(0.0..=f64::from(i32::MAX)).contains(&v) {
@@ -610,8 +608,16 @@ pub(crate) fn prepare(
     }
     if name == "minecraft:falling_block" && !fields.iter().any(|(key, _)| key == "BlockState") {
         // Vanilla FallingBlock defaults to sand when BlockState is absent.
-        let sand = state.registry.blocks.by_id(mc_world::BlockStateId(state.registry.states.sand));
-        let name = sand.expect("sand state registered").block.id.as_str().to_owned();
+        let sand = state
+            .registry
+            .blocks
+            .by_id(mc_world::BlockStateId(state.registry.states.sand));
+        let name = sand
+            .expect("sand state registered")
+            .block
+            .id
+            .as_str()
+            .to_owned();
         fields.push((
             "BlockState".into(),
             Tag::Compound(vec![("Name".into(), Tag::String(name))]),

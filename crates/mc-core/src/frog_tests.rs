@@ -1,4 +1,5 @@
 use super::*;
+use crate::boundary::EntityDataValue;
 use crate::mounts::tests::{fixture, slot, spawn};
 use crate::tick::run_tick;
 
@@ -24,12 +25,11 @@ fn frog_shoots_tongue_at_small_slime_and_clears_target() {
     state.entities.row_mut(slime_slot).loot.slime_size = Some(1);
     state.entities.row_mut(slime_slot).health = 5.0;
     state.tick = (20 - (frog.0 as u64 % 20)) % 20;
-    let mut intents = Vec::new();
-    hunt(&mut state, frog_slot, &mut intents);
+    hunt(&mut state, frog_slot);
     let appearance = &state.entities.row(frog_slot).appearance;
-    assert_eq!(appearance.pose, USING_TONGUE_POSE);
+    assert_eq!(appearance.pose, 9);
     assert!(appearance.extra.contains(&(
-        TONGUE_TARGET_INDEX,
+        TONGUE_INDEX,
         EntityDataValue::OptionalUnsignedInt(Some(slime.0 as u32))
     )));
     for _ in 0..20 {
@@ -42,7 +42,7 @@ fn frog_shoots_tongue_at_small_slime_and_clears_target() {
             .is_none_or(|slot| !state.entities.body(slot).alive),
         "frog attack_damage={} hunt={:?} prey_health={:?}",
         state.entities.row(frog_slot).attack_damage,
-        state.entities.row(frog_slot).entity_life.frog_hunt,
+        state.entities.row(frog_slot).frog_prey,
         state
             .entities
             .slot_of(slime)
@@ -50,10 +50,11 @@ fn frog_shoots_tongue_at_small_slime_and_clears_target() {
     );
     let appearance = &state.entities.row(frog_slot).appearance;
     assert_eq!(appearance.pose, 0);
-    assert!(appearance.extra.contains(&(
-        TONGUE_TARGET_INDEX,
-        EntityDataValue::OptionalUnsignedInt(None)
-    )));
+    assert!(
+        appearance
+            .extra
+            .contains(&(TONGUE_INDEX, EntityDataValue::OptionalUnsignedInt(None)))
+    );
 }
 
 #[test]
@@ -65,15 +66,8 @@ fn frog_does_not_target_large_slimes() {
     let slime_slot = slot(&state, slime);
     state.entities.row_mut(slime_slot).loot.slime_size = Some(2);
     state.tick = (20 - (frog.0 as u64 % 20)) % 20;
-    hunt(&mut state, frog_slot, &mut Vec::new());
-    assert!(
-        state
-            .entities
-            .row(frog_slot)
-            .entity_life
-            .frog_hunt
-            .is_none()
-    );
+    hunt(&mut state, frog_slot);
+    assert!(state.entities.row(frog_slot).frog_prey.is_none());
 }
 
 #[test]
@@ -105,7 +99,7 @@ fn frog_variants_eat_magma_cube_and_drop_exact_froglight() {
         state.entities.row_mut(cube_slot).loot.slime_size = Some(1);
         state.entities.row_mut(cube_slot).health = 1.0;
         state.tick = (20 - (frog.0 as u64 % 20)) % 20;
-        hunt(&mut state, frog_slot, &mut Vec::new());
+        hunt(&mut state, frog_slot);
         for _ in 0..20 {
             run_tick(&mut state, &[]);
         }

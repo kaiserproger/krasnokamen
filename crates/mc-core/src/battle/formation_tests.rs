@@ -170,11 +170,11 @@ fn wounded_front_man_crawls_back_and_next_rank_takes_his_slot() {
 }
 
 #[test]
-fn seeded_surge_gate_matches_configured_two_percent_rate() {
+fn seeded_surge_gate_matches_configured_film_rate() {
     let starts = (0..100_000)
         .filter(|&decision| roll(41, 0, decision * 10) < SURGE_PROBABILITY)
         .count();
-    assert!((1850..2150).contains(&starts), "starts={starts}");
+    assert!((9500..10500).contains(&starts), "starts={starts}");
     let mut runtime = FormationRuntime::default();
     add(&mut runtime, spec(0, 1, 0.0, 20, Order::Hold), 1, 20);
     add(&mut runtime, spec(1, 2, 4.0, 20, Order::Hold), 21, 20);
@@ -200,10 +200,38 @@ fn seeded_surge_gate_matches_configured_two_percent_rate() {
         starts += runtime.regiments[0].sections[0].starts - before;
     }
     let rate = starts as f64 / f64::from(decisions);
-    assert!(
-        (0.015..0.025).contains(&rate),
-        "{starts}/{decisions}={rate}"
-    );
+    assert!((0.09..0.11).contains(&rate), "{starts}/{decisions}={rate}");
+}
+
+#[test]
+fn film_fatigue_leaves_contact_time_between_human_speed_bursts() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 20, Order::Hold), 1, 20);
+    {
+        let regiment = &mut runtime.regiments[0];
+        regiment.gap = 4.0;
+        regiment.enemy = Some([0.0, 64.0, 4.0]);
+        regiment.sections[0].pulse_until = 200;
+    }
+    runtime.update_sections(0);
+    assert_eq!(runtime.regiments[0].stamina, 99.25);
+    {
+        let regiment = &mut runtime.regiments[0];
+        regiment.sections[0].pulse_until = 0;
+        regiment.sections[0].cooldown_until = 1000;
+    }
+    runtime.tick = 10;
+    runtime.update_sections(0);
+    assert_eq!(runtime.regiments[0].stamina, 99.5);
+    {
+        let regiment = &mut runtime.regiments[0];
+        regiment.stamina = 29.75;
+        regiment.sections[0].pulse_until = 200;
+        regiment.sections[0].cooldown_until = 0;
+    }
+    runtime.tick = 20;
+    runtime.update_sections(0);
+    assert_eq!(runtime.regiments[0].sections[0].pulse_until, 20);
 }
 
 /// In a charge pulse only the front rank may strike; the line in contact
@@ -373,4 +401,119 @@ fn native_slot_cache_refreshes_and_archers_choose_current_nearest_live_roster() 
             runtime.can_attack(runtime.members[bi].id)
         );
     }
+}
+
+#[test]
+fn long_contact_keeps_rotating_pulses_instead_of_an_exhausted_standstill() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 60, Order::Hold), 1, 240);
+    add(&mut runtime, spec(1, 2, 4.0, 60, Order::Hold), 241, 240);
+    let mut exposure = 0;
+    for tick in 0..3600 {
+        simulate(&mut runtime, tick);
+        if tick >= 2400 {
+            let r = &runtime.regiments[0];
+            exposure += r.sections[..3]
+                .iter()
+                .filter(|s| s.pulse_until > tick)
+                .count();
+        }
+    }
+    let r = &runtime.regiments[0];
+    assert!(r.gap <= 6.0, "fronts lost contact: gap={}", r.gap);
+    // Three front sections over the last minute of a three-minute contact.
+    let share = exposure as f64 / (3.0 * 1200.0);
+    assert!(
+        share >= 0.15,
+        "front fighting share {share}, stamina {}",
+        r.stamina
+    );
+    assert!(
+        r.stamina >= EXHAUSTED_STAMINA - 1.0,
+        "stamina {}",
+        r.stamina
+    );
+}
+
+#[test]
+fn riders_and_pursuers_fight_from_any_rank_but_routers_never_do() {
+    let mut runtime = FormationRuntime::default();
+    let mut horse = spec(0, 1, 0.0, 5, Order::Advance);
+    horse.frontage = 2.0;
+    add(&mut runtime, horse, 1, 15);
+    add(&mut runtime, spec(1, 1, -40.0, 5, Order::Advance), 101, 15);
+    simulate(&mut runtime, 0);
+    let rear_rider = runtime.index[&EntityId(11)];
+    let rear_foot = runtime.index[&EntityId(111)];
+    assert!(runtime.can_attack_at(rear_rider));
+    assert!(!runtime.can_attack_at(rear_foot));
+    runtime.regiments[1].spec.order = Order::Pursue;
+    runtime.regiments[1].enemy_routing = true;
+    assert!(runtime.can_attack_at(rear_foot));
+    runtime.members[rear_rider].routing = true;
+    assert!(!runtime.can_attack_at(rear_rider));
+}
+
+#[test]
+fn fugitives_pinned_at_the_bounds_turn_at_bay() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 5, Order::Advance), 1, 10);
+    runtime.set_bounds([-10.0, -10.0], [10.0, 10.0]).unwrap();
+    simulate(&mut runtime, 0);
+    runtime.members[0].routing = true;
+    runtime.members[0].pos = [9.5, 64.0, 0.0];
+    runtime.members[1].routing = true;
+    runtime.members[1].pos = [0.0, 64.0, 0.0];
+    runtime.members[2].pos = [9.5, 64.0, 1.0];
+    assert!(runtime.cornered_at(0));
+    assert!(
+        !runtime.cornered_at(1),
+        "a fugitive with room to run keeps running"
+    );
+    assert!(!runtime.cornered_at(2), "steady men are not fugitives");
+    runtime.members[0].wounded = true;
+    assert!(!runtime.cornered_at(0), "the wounded only withdraw");
+}
+
+/// A fugitive that reaches an edge of the battle stays where it met it. It no
+/// longer runs on along the edge, which herded routed regiments into the
+/// corners (heaps of up to 50 riders on the bounds in the G1 rehearsals).
+#[test]
+fn fugitives_at_an_edge_stop_where_they_met_it() {
+    let mut runtime = FormationRuntime::default();
+    add(&mut runtime, spec(0, 1, 0.0, 5, Order::Advance), 1, 10);
+    runtime.set_bounds([-10.0, -10.0], [10.0, 10.0]).unwrap();
+    simulate(&mut runtime, 0);
+    // The enemy stands diagonally ahead: flight runs toward the -x/-z corner.
+    runtime.regiments[0].enemy = Some([5.0, 64.0, 5.0]);
+    for (i, pos) in [
+        [-9.5, 64.0, 3.0],
+        [2.0, 64.0, -9.5],
+        [-9.5, 64.0, -9.5],
+        [0.0, 64.0, 0.0],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        runtime.members[i].routing = true;
+        runtime.members[i].pos = pos;
+    }
+    let (x_edge, speed) = runtime.destination(0);
+    assert_eq!(speed, 0.2);
+    assert!(
+        x_edge[2] == 3.0 && x_edge[0] < -9.5,
+        "ran on along the -x edge: {x_edge:?}"
+    );
+    let (z_edge, _) = runtime.destination(1);
+    assert!(
+        z_edge[0] == 2.0 && z_edge[2] < -9.5,
+        "ran on along the -z edge: {z_edge:?}"
+    );
+    let (corner, _) = runtime.destination(2);
+    assert_eq!([corner[0], corner[2]], [-9.5, -9.5]);
+    let (free, _) = runtime.destination(3);
+    assert!(
+        free[0] < -5.0 && free[2] < -5.0,
+        "a fugitive with room runs on: {free:?}"
+    );
 }

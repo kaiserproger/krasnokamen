@@ -1024,9 +1024,7 @@ pub(super) fn admit_slot(
     let mut special_idle = true;
     if flags & MOTION_SPECIAL != 0 {
         let hint = view.entities.motion_hint(slot);
-        if let Some(special) =
-            crate::hostile::battle::special(view.bodies[index].faction, hint.special)
-        {
+        if let Some(special) = crate::battle::special(view.bodies[index].faction, hint.special) {
             let id = view.bodies[slot.0 as usize].id;
             special_idle = targets_empty
                 && !view.hostile.targets.contains_key(&id)
@@ -1150,8 +1148,7 @@ pub(super) fn read_row(
             || crate::entity_life::adult(row))
         && (battle || !is_enderman || rare.enderman_target.is_some());
     let breeder = !battle && breeder && !row.controls.no_ai;
-    let special =
-        crate::hostile::battle::special(body.faction, special).filter(|_| !row.controls.no_ai);
+    let special = crate::battle::special(body.faction, special).filter(|_| !row.controls.no_ai);
     let panic_multiplier = if !battle
         && (body.burn_ticks > 0
             || body
@@ -1396,6 +1393,12 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         crate::contact_hazards::hurt_by_water(state);
         crate::enderman::tick(state);
     }
+    let battle_intents = if sim {
+        crate::battle::step(state)
+    } else {
+        Vec::new()
+    };
+    laps.lap("battle");
     laps.lap("pre");
     let prep_start = std::time::Instant::now();
     let pre_time = prep_start.duration_since(pre_start);
@@ -1966,6 +1969,7 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
     state.projectiles.post = crate::projectiles::PostTimes::default();
     // Pickup intents: players collect mature item entities in reach.
     // Exact kind lanes, authoritative maturity and post-move positions.
+    let pickup_start = std::time::Instant::now();
     if sim {
         collect_pickup_intents(state, &mut intents);
     }
@@ -1978,116 +1982,11 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
         crate::projectiles::run(state, &mut intents, &specials);
         laps.lap("projectiles");
     }
-    state.projectiles.post.pickup_us = pickup_us;
+    state.projectiles.post.pickup_us = pickup_start.elapsed().as_micros() as u64;
     let post_time = post_start.elapsed();
     state.projectiles.post.total_us = post_time.as_micros() as u64;
     if std::env::var("MC_CORE_PHASE_LOG").is_ok() {
         laps.print("entity phase");
-        eprintln!(
-            "  entity detail ms: scope={:.1} n={} prep={:.1} commit={:.1} post={:.1} rest={} pre={:.1} item_merge={:.1} items={}",
-            scope_time.as_secs_f64() * 1000.0,
-            rows.len(),
-            prep_time.as_secs_f64() * 1000.0,
-            commit_time.as_secs_f64() * 1000.0,
-            post_time.as_secs_f64() * 1000.0,
-            resting_count,
-            pre_time.as_secs_f64() * 1000.0,
-            item_merge_time.as_secs_f64() * 1000.0,
-            merge_items,
-        );
-        let post = state.projectiles.post;
-        eprintln!(
-            "  post detail us: pickup={} hostile={} weapons={} hittables={} candidates={} shots={} projectiles={} grounded={}",
-            post.pickup_us,
-            post.hostile_us,
-            post.weapons_us,
-            post.hittables_us,
-            post.candidates_us,
-            post.shots_us,
-            post.shots,
-            post.grounded,
-        );
-        let post = state.projectiles.post;
-        eprintln!(
-            "  post detail us: pickup={} hostile={} weapons={} hittables={} candidates={} shots={} projectiles={} grounded={}",
-            post.pickup_us,
-            post.hostile_us,
-            post.weapons_us,
-            post.hittables_us,
-            post.candidates_us,
-            post.shots_us,
-            post.shots,
-            post.grounded,
-        );
-        let battle = state.hostile.battle.timings;
-        let retaliation = state.hostile.battle.retaliation.work;
-        eprintln!(
-            "  battle detail us: total={} counters={} formation={} columns={} targets={} steering={} combat={} morale={} projection={} emit={} retaliation={} blows={} remembered={} answering={} handoffs={} friends_examined={}",
-            battle.total_us,
-            battle.counters_us,
-            battle.formation_us,
-            battle.columns_us,
-            battle.targeting_us,
-            battle.steering_us,
-            battle.combat_us,
-            battle.morale_us,
-            battle.projection_us,
-            battle.emit_us,
-            battle.retaliation_us,
-            retaliation.blows,
-            retaliation.remembered,
-            retaliation.answering,
-            retaliation.handoffs,
-            retaliation.friends_examined,
-        );
-        let battle = state.hostile.battle.timings;
-        eprintln!(
-            "  battle detail us: total={} counters={} formation={} columns={} targets={} steering={} combat={} morale={} projection={} emit={}",
-            battle.total_us,
-            battle.counters_us,
-            battle.formation_us,
-            battle.columns_us,
-            battle.targeting_us,
-            battle.steering_us,
-            battle.combat_us,
-            battle.morale_us,
-            battle.projection_us,
-            battle.emit_us,
-        );
-        let battle = state.hostile.battle.timings;
-        eprintln!(
-            "  battle detail us: total={} counters={} formation={} columns={} targets={} steering={} combat={} morale={} projection={} emit={}",
-            battle.total_us,
-            battle.counters_us,
-            battle.formation_us,
-            battle.columns_us,
-            battle.targeting_us,
-            battle.steering_us,
-            battle.combat_us,
-            battle.morale_us,
-            battle.projection_us,
-            battle.emit_us,
-        );
-        let battle = state.hostile.battle.timings;
-        let retaliation = state.hostile.battle.retaliation.work;
-        eprintln!(
-            "  battle detail us: total={} counters={} formation={} columns={} targets={} steering={} combat={} morale={} projection={} emit={} retaliation={} remembered={} answering={} handoffs={} friends_examined={}",
-            battle.total_us,
-            battle.counters_us,
-            battle.formation_us,
-            battle.columns_us,
-            battle.targeting_us,
-            battle.steering_us,
-            battle.combat_us,
-            battle.morale_us,
-            battle.projection_us,
-            battle.emit_us,
-            battle.retaliation_us,
-            retaliation.remembered,
-            retaliation.answering,
-            retaliation.handoffs,
-            retaliation.friends_examined,
-        );
     }
     rows.clear();
     specials.clear();
@@ -2126,7 +2025,7 @@ pub(super) struct StepCtx<'a> {
     pub(super) rows: &'a [ReadRow],
     /// Immutable through the indexed worker join; writes/compaction follow it.
     pub(super) entities: &'a crate::entities::EntityStore,
-    pub(super) battle: &'a crate::hostile::battle::BattleState,
+    pub(super) battle: &'a crate::battle::BattleState,
     pub(super) retained_targets:
         &'a rustc_hash::FxHashMap<EntityId, (crate::target_grid::Target, f64)>,
     pub(super) players: crate::target_grid::TargetGrid<'a>,
