@@ -2016,8 +2016,9 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             post.grounded,
         );
         let battle = state.hostile.battle.timings;
+        let retaliation = state.hostile.battle.retaliation.work;
         eprintln!(
-            "  battle detail us: total={} counters={} formation={} columns={} targets={} steering={} combat={} morale={} projection={} emit={}",
+            "  battle detail us: total={} counters={} formation={} columns={} targets={} steering={} combat={} morale={} projection={} emit={} retaliation={} blows={} remembered={} answering={} handoffs={} friends_examined={}",
             battle.total_us,
             battle.counters_us,
             battle.formation_us,
@@ -2028,6 +2029,12 @@ pub(super) fn run_entity_phase(state: &mut TickState, sim: bool) -> Vec<Intent> 
             battle.morale_us,
             battle.projection_us,
             battle.emit_us,
+            battle.retaliation_us,
+            retaliation.blows,
+            retaliation.remembered,
+            retaliation.answering,
+            retaliation.handoffs,
+            retaliation.friends_examined,
         );
         let battle = state.hostile.battle.timings;
         eprintln!(

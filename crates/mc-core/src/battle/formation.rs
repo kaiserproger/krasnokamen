@@ -811,6 +811,11 @@ impl FormationRuntime {
         {
             return ([at[0], m.pos[1], at[2]], CLOSE_STEP);
         }
+        if let Some(at) = m.close_on
+            && !m.wounded
+        {
+            return ([at[0], m.pos[1], at[2]], CLOSE_STEP);
+        }
         if r.spec.order == Order::Pursue
             && r.enemy_routing
             && !m.wounded

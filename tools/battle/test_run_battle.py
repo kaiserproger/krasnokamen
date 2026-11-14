@@ -193,6 +193,22 @@ class BattleRunnerTests(unittest.TestCase):
             self.assertLess(result.stdout.index('battle roster'), result.stdout.index('battle start'))
             self.assertFalse(run.exists())
 
+    def test_resource_pack_offer_is_written_to_effective_server_config(self):
+        import tomllib
+        runner = load_runner()
+        argv = ['run-battle.py', '--dry-run', '--pin', '/pin', '--client', '/client',
+                '--client-data', '/data', '--cache', '/cache', '--run-dir', '/run',
+                '--resource-pack-url', 'http://127.0.0.1:8088/battle.zip',
+                '--resource-pack-sha1', 'a' * 40]
+        with unittest.mock.patch('sys.argv', argv):
+            args = runner.arguments()
+        config = tomllib.loads(runner.server_config_text(args, 'battle', '/world', '/cache'))
+        self.assertEqual(config['resource_pack'], {
+            'url': 'http://127.0.0.1:8088/battle.zip', 'sha1': 'a' * 40, 'required': False})
+        args.resource_pack_url = ''
+        self.assertNotIn('resource_pack', tomllib.loads(
+            runner.server_config_text(args, 'battle', '/world', '/cache')))
+
     def test_invalid_count_fails_without_starting(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
