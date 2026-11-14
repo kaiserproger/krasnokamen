@@ -52,7 +52,7 @@ fn physical_root_cohort_has_complete_traces_and_stable_roundtrip() {
                 cell = next;
             }
         }
-        if let Ok(path) = std::env::var("SOLARIS_W2_ARTIFACT_DIR") {
+        if let Ok(path) = std::env::var("KRASNOKAMEN_W2_ARTIFACT_DIR") {
             std::fs::create_dir_all(&path).unwrap();
             let mut csv = String::from(
                 "cell,x_m,z_m,area_m2,elevation_m,ocean,downstream,annual_discharge_m3,annual_precip_mm\n",

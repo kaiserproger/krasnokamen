@@ -373,7 +373,7 @@ fn prepare_observed(
         if ![
             STAGING,
             ARTIFACTS,
-            ".solaris-world.lock",
+            ".krasnokamen-world.lock",
             "world.manifest.toml.tmp",
         ]
         .iter()

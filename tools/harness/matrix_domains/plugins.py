@@ -1,5 +1,5 @@
-"""Solaris plugin contracts, not vanilla 26.1.2 features.
-Sources: solaris-default-plugins/<package>/README.md and sources/<package>/src/lib.rs;
+"""Krasnokamen plugin contracts, not vanilla 26.1.2 features.
+Sources: krasnokamen-default-plugins/<package>/README.md and sources/<package>/src/lib.rs;
 mc-core/src/plugin.rs:580-595; mc-edge/src/plugin_loader.rs:82-83.
 Each deployment is an isolated copy of scenarios/live-plugins, never the shared directory.
 """
@@ -41,8 +41,8 @@ def deploy(ctx,*packages,**config):
                 continue
             used.add(key)
             if key == 'groups':
-                if package != 'solaris-permissions':
-                    raise ValueError('groups override belongs to solaris-permissions')
+                if package != 'krasnokamen-permissions':
+                    raise ValueError('groups override belongs to krasnokamen-permissions')
                 text = text.split('[[groups]]', 1)[0].rstrip() + '\n'
                 for group, nodes in value.items():
                     text += '\n[[groups]]\nname = '+json.dumps(group)+'\nnodes = '+json.dumps(nodes)+'\n'
@@ -66,30 +66,30 @@ def deploy(ctx,*packages,**config):
 
 
 def perm_groups_user_set(ctx):
-    deploy(ctx,'solaris-permissions',groups={'guest':[], 'member':['solaris.essentials.use']},default_group='guest')
+    deploy(ctx,'krasnokamen-permissions',groups={'guest':[], 'member':['krasnokamen.essentials.use']},default_group='guest')
     p.response(ctx,'perm groups',r'Groups:.*guest.*member')
     p.response(ctx,'perm user me set member',r'Group set to member\.')
     p.response(ctx,'perm user me list',r'is member\.')
     p.restart(ctx)
     p.response(ctx,'perm user me list',r'is member\.')
-    p.response(ctx,'perm check solaris.essentials.use',r'Permission granted\.')
+    p.response(ctx,'perm check krasnokamen.essentials.use',r'Permission granted\.')
 
 
 def perm_check_node(ctx):
-    deploy(ctx,'solaris-permissions','solaris-essentials',groups={'guest':[], 'member':['solaris.essentials.use','matrix.build@plot']},default_group='guest')
-    p.response(ctx,'perm check solaris.essentials.use',r'Permission denied\.')
+    deploy(ctx,'krasnokamen-permissions','krasnokamen-essentials',groups={'guest':[], 'member':['krasnokamen.essentials.use','matrix.build@plot']},default_group='guest')
+    p.response(ctx,'perm check krasnokamen.essentials.use',r'Permission denied\.')
     before=p.position(ctx)
     p.response(ctx,'sethome matrix',r'(?i)permission|unknown')
     p.check(ctx,'denial leaves pose',p.position(ctx),before)
     p.rich_action(ctx,'operator_plugin_command',f'perm user {p.observe(ctx,"uuid")} set member')
-    p.response(ctx,'perm check solaris.essentials.use',r'Permission granted\.')
+    p.response(ctx,'perm check krasnokamen.essentials.use',r'Permission granted\.')
     p.response(ctx,'perm check matrix.build plot',r'Permission granted\.')
     p.response(ctx,'perm check matrix.build other',r'Permission denied\.')
     p.response(ctx,'sethome matrix',r'matrix saved\.')
 
 
 def essentials_homes(ctx):
-    deploy(ctx,'solaris-essentials')
+    deploy(ctx,'krasnokamen-essentials')
     home=p.position(ctx)
     p.response(ctx,'sethome matrix',r'matrix saved\.')
     other = p.client(ctx, 1)
@@ -108,8 +108,8 @@ def essentials_homes(ctx):
 
 
 def essentials_spawn_warps(ctx):
-    deploy(ctx,'solaris-essentials','solaris-permissions',
-           groups={'guest':[], 'member':['solaris.essentials.use','solaris.essentials.manage']},
+    deploy(ctx,'krasnokamen-essentials','krasnokamen-permissions',
+           groups={'guest':[], 'member':['krasnokamen.essentials.use','krasnokamen.essentials.manage']},
            default_group='member')
     home=p.position(ctx)
     p.response(ctx,'setspawn',r'saved\.')
@@ -125,7 +125,7 @@ def essentials_spawn_warps(ctx):
 
 
 def essentials_back(ctx):
-    deploy(ctx,'solaris-essentials')
+    deploy(ctx,'krasnokamen-essentials')
     home=p.position(ctx)
     p.response(ctx,'sethome matrix',r'matrix saved\.')
     away=[home[0]+5,home[1],home[2]]
@@ -141,7 +141,7 @@ def essentials_back(ctx):
 
 
 def essentials_tpa(ctx):
-    deploy(ctx,'solaris-essentials')
+    deploy(ctx,'krasnokamen-essentials')
     other=p.client(ctx,1)
     start=p.position(ctx)
     other.teleport_to(start[0]+8,start[1],start[2])
@@ -154,7 +154,7 @@ def essentials_tpa(ctx):
 
 
 def essentials_msg_reply(ctx):
-    deploy(ctx,'solaris-essentials')
+    deploy(ctx,'krasnokamen-essentials')
     other=p.client(ctx,1)
     before=len(p.observe(ctx,'events',1))
     p.client(ctx).command('msg '+other.name+' matrix-private-26520')
@@ -167,7 +167,7 @@ def essentials_msg_reply(ctx):
 
 
 def economy_money_pay(ctx):
-    deploy(ctx,'solaris-economy',starting_balance=100)
+    deploy(ctx,'krasnokamen-economy',starting_balance=100)
     target=p.observe(ctx,'uuid',1)
     p.response(ctx,'money',r'Balance: 100 ')
     p.response(ctx,f'pay {target} 7 matrix26520',r'Paid 7 ')
@@ -183,7 +183,7 @@ def economy_money_pay(ctx):
 
 
 def economy_admin(ctx):
-    deploy(ctx,'solaris-economy',starting_balance=0)
+    deploy(ctx,'krasnokamen-economy',starting_balance=0)
     uuid=p.observe(ctx,'uuid')
     p.client(ctx).command(f'econadmin set {uuid} 40')
     p.response(ctx,'money',r'Balance: 40 ')
@@ -194,7 +194,7 @@ def economy_admin(ctx):
 
 
 def towns_create_info(ctx):
-    deploy(ctx,'solaris-towns')
+    deploy(ctx,'krasnokamen-towns')
     p.response(ctx,'town create matrix',r'Town matrix created\.')
     p.response(ctx, 'town info',
                r'matrix: 1 members, 0 claims\. 0 trusted guests, doors members-only\.')
@@ -205,7 +205,7 @@ def towns_create_info(ctx):
 
 
 def towns_protection(ctx):
-    deploy(ctx,'solaris-towns')
+    deploy(ctx,'krasnokamen-towns')
     x,y,z=p.arena(ctx)
     p.response(ctx,'town create matrix',r'Town matrix created\.')
     other=p.client(ctx,1)
@@ -243,7 +243,7 @@ def towns_protection(ctx):
 
 
 def audit_queries(ctx):
-    deploy(ctx,'solaris-audit')
+    deploy(ctx,'krasnokamen-audit')
     x,y,z=p.arena(ctx)
     p.admin(ctx,f'setblock {x+2} {y} {z} minecraft:stone')
     p.rich_action(ctx,'break_block',(x+2,y,z))
@@ -295,7 +295,7 @@ def basic_economy_shop(ctx):
 
 
 def auth_register_login(ctx):
-    deploy(ctx,'solaris-auth',require_plugin_login=True)
+    deploy(ctx,'krasnokamen-auth',require_plugin_login=True)
     password='Matrix26520Secret'
     p.client(ctx).disconnect()
     p.client(ctx).reconnect()
@@ -324,7 +324,7 @@ def auth_register_login(ctx):
 
 
 def auth_session_timeout(ctx):
-    deploy(ctx,'solaris-auth',require_plugin_login=True)
+    deploy(ctx,'krasnokamen-auth',require_plugin_login=True)
     p.client(ctx).disconnect()
     p.client(ctx).reconnect()
     p.check(ctx,'initial lock',p.observe(ctx,'auth.locked'),True)
@@ -434,7 +434,7 @@ def plugin_trap_isolation(ctx):
 
 
 def plugin_storage_persistence(ctx):
-    deploy(ctx,'solaris-essentials','solaris-economy',starting_balance=100)
+    deploy(ctx,'krasnokamen-essentials','krasnokamen-economy',starting_balance=100)
     home=p.position(ctx)
     p.response(ctx,'sethome matrix',r'matrix saved\.')
     target=p.observe(ctx,'uuid',1)
@@ -448,7 +448,7 @@ def plugin_storage_persistence(ctx):
 
 
 def plugin_command_tree(ctx):
-    deploy(ctx,'solaris-essentials','solaris-permissions')
+    deploy(ctx,'krasnokamen-essentials','krasnokamen-permissions')
     for level in (0,4):
         tree=p.rich_action(ctx,'command_tree_for_permission',level)
         roots=tree['roots']

@@ -2,14 +2,14 @@
 //! the pure frame -> `PlayerInput` mapping every Play frame passes through.
 //!
 //! First input byte selects a serverbound packet id from
-//! `solaris_fuzz::PLAY_IDS`; the rest is the body. Property: a malformed body
+//! `krasnokamen_fuzz::PLAY_IDS`; the rest is the body. Property: a malformed body
 //! is `Err`, never a panic or unbounded allocation.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
 use mc_core::boundary::ConnectionId;
 use mc_edge::decode::{DecodeState, decode_play_frame};
-use solaris_fuzz::PLAY_IDS;
+use krasnokamen_fuzz::PLAY_IDS;
 
 fuzz_target!(|data: &[u8]| {
     let Some((&selector, body)) = data.split_first() else {
