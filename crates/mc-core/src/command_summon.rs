@@ -27,6 +27,29 @@ pub(crate) struct Image {
 fn error(text: impl Into<String>) -> CommandError {
     CommandError::Message(text.into())
 }
+
+/// Vanilla loads Value as a signed short, defaulting to zero.
+pub(crate) fn experience_orb_value(nbt: &Tag) -> Result<i16, CommandError> {
+    let Tag::Compound(fields) = nbt else {
+        return Err(error("Summon NBT must be a compound"));
+    };
+    let mut value = None;
+    for (key, tag) in fields {
+        if key != "Value" || value.is_some() {
+            return Err(error(format!(
+                "Unsupported or duplicate orb summon NBT field {key}"
+            )));
+        }
+        value = Some(match tag {
+            Tag::Byte(n) => i16::from(*n),
+            Tag::Short(n) => *n,
+            Tag::Int(n) => *n as i16,
+            Tag::Long(n) => *n as i16,
+            _ => return Err(error("Invalid orb Value: expected integer")),
+        });
+    }
+    Ok(value.unwrap_or(0))
+}
 fn number(tag: &Tag, key: &str) -> Result<f64, CommandError> {
     let value = match tag {
         Tag::Byte(v) => f64::from(*v),

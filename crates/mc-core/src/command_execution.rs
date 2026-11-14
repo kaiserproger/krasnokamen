@@ -1056,6 +1056,24 @@ pub(crate) fn execute(
                 );
                 return Success(1);
             }
+            if facts.category == mc_data::entity_types::EntityCategory::Experience {
+                let value = match crate::command_summon::experience_orb_value(nbt) {
+                    Ok(value) => value,
+                    Err(failure) => {
+                        error(state, connection, failure.message());
+                        return Failed;
+                    }
+                };
+                let id = crate::experience_orbs::summon(state, type_id, at, value);
+                changes.entities_spawned.push(id);
+                success_feedback(
+                    state,
+                    connection,
+                    "commands.summon.success",
+                    vec![entity_name(state, id)],
+                );
+                return Success(1);
+            }
             let image =
                 match crate::command_summon::prepare(state, type_id, entity.as_str(), at, nbt) {
                     Ok(image) => image,
