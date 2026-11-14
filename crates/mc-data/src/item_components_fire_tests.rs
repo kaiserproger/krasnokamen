@@ -5,7 +5,7 @@ fn fire_resistance_embedded_defaults_match_all_sixteen_vanilla_reports() {
     let reports = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../data/vanilla/reports/minecraft/components/item");
     let full = load_item_facts(reports).unwrap();
-    let embedded = solaris_required_item_facts();
+    let embedded = krasnokamen_required_item_facts();
     let mut fire_defaults = 0;
     for (item, facts) in &full.items {
         let fallback = embedded.get(item).is_some_and(|facts| facts.fire_resistant);

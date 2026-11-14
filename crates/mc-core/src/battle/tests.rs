@@ -320,7 +320,7 @@ fn faction_fields_reject_invalid_native_and_json_values() {
     ] {
         let record = mc_data::entity_nbt::VanillaEntity {
             id: "minecraft:zombie".into(),
-            extra_fields: vec![("solaris:Faction".into(), tag)],
+            extra_fields: vec![("krasnokamen:Faction".into(), tag)],
             ..Default::default()
         };
         assert!(crate::journal::EntityStateImage::from_record(&state.registry, &record).is_err());
@@ -595,8 +595,18 @@ fn native_battle_arrows_clear_allied_ranks_without_changing_unaffiliated_hits() 
             );
         }
         state.refresh_active_chunks(state.tick);
-        let owner = spawn(&mut state, owner_faction, "minecraft:husk", [8.5, 64.0, 8.5]);
-        let near = spawn(&mut state, near_faction, "minecraft:husk", [8.5, 64.0, 10.5]);
+        let owner = spawn(
+            &mut state,
+            owner_faction,
+            "minecraft:husk",
+            [8.5, 64.0, 8.5],
+        );
+        let near = spawn(
+            &mut state,
+            near_faction,
+            "minecraft:husk",
+            [8.5, 64.0, 10.5],
+        );
         let enemy = spawn(&mut state, 2, "minecraft:husk", [8.5, 64.0, 128.5]);
         for id in [owner, near, enemy] {
             let slot = state.entities.slot_of(id).unwrap();
@@ -620,8 +630,16 @@ fn native_battle_arrows_clear_allied_ranks_without_changing_unaffiliated_hits() 
                 }
             }
         }
-        assert_eq!(near_damage > 0, near_hit, "owner={owner_faction} near={near_faction}");
-        assert_eq!(enemy_damage > 0, !near_hit, "owner={owner_faction} near={near_faction}");
+        assert_eq!(
+            near_damage > 0,
+            near_hit,
+            "owner={owner_faction} near={near_faction}"
+        );
+        assert_eq!(
+            enemy_damage > 0,
+            !near_hit,
+            "owner={owner_faction} near={near_faction}"
+        );
     }
 }
 
@@ -679,9 +697,20 @@ fn battle_phase_micro() {
         for elapsed in 1..=phase_ticks {
             let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
             for event in &output.changes.entity_events {
-                let crate::boundary::EntityEvent::Damage { entity, cause: Some(cause), .. } = event else { continue };
-                let Some(victim) = state.entities.slot_of_any(*entity) else { continue };
-                let Some(attacker) = state.entities.slot_of_any(*cause) else { continue };
+                let crate::boundary::EntityEvent::Damage {
+                    entity,
+                    cause: Some(cause),
+                    ..
+                } = event
+                else {
+                    continue;
+                };
+                let Some(victim) = state.entities.slot_of_any(*entity) else {
+                    continue;
+                };
+                let Some(attacker) = state.entities.slot_of_any(*cause) else {
+                    continue;
+                };
                 let a = state.entities.body(attacker).faction;
                 let b = state.entities.body(victim).faction;
                 if a != 0 && b != 0 {
@@ -697,8 +726,12 @@ fn battle_phase_micro() {
             parries += work.parries;
             wounds += work.wounded;
             if elapsed % 500 == 0 || elapsed == phase_ticks {
-                eprintln!("BATTLE_ACTIVITY running={running} elapsed={elapsed} swings={swings} strikes={strikes} parries={parries} melee_kills={kills} wounds={wounds} arrows={arrows} friendly_hits={friendly_hits} enemy_hits={enemy_hits}");
-                if running { log_regiment_activity(&state, elapsed); }
+                eprintln!(
+                    "BATTLE_ACTIVITY running={running} elapsed={elapsed} swings={swings} strikes={strikes} parries={parries} melee_kills={kills} wounds={wounds} arrows={arrows} friendly_hits={friendly_hits} enemy_hits={enemy_hits}"
+                );
+                if running {
+                    log_regiment_activity(&state, elapsed);
+                }
             }
             samples.push(state.hostile.battle.timings);
         }
@@ -739,22 +772,48 @@ fn log_regiment_activity(state: &crate::tick::TickState, elapsed: usize) {
         let mut wounded = 0;
         for bi in regiment.start..regiment.start + regiment.len {
             let member = &battle.formation.members[bi];
-            let Some(slot) = state.entities.slot_of(member.id) else { continue };
-            if state.entities.row(slot).health <= 0.0 { continue; }
+            let Some(slot) = state.entities.slot_of(member.id) else {
+                continue;
+            };
+            if state.entities.row(slot).health <= 0.0 {
+                continue;
+            }
             alive += 1;
             moving += usize::from(state.entities.vel(slot).iter().any(|v| *v != 0.0));
-            resting += usize::from(state.entities.motion_flags(slot) & crate::entities::MOTION_REST != 0);
+            resting +=
+                usize::from(state.entities.motion_flags(slot) & crate::entities::MOTION_REST != 0);
             targets += usize::from(battle.columns.targets.get(bi).is_some_and(Option::is_some));
             wounded += usize::from(member.wounded);
             ammunition += u64::from(battle.combat.fighters[bi].arrows);
             if member.rank == 0 {
                 let pos = state.entities.pos(slot);
-                for axis in 0..3 { front[axis] += pos[axis]; }
+                for axis in 0..3 {
+                    front[axis] += pos[axis];
+                }
                 front_count += 1;
             }
         }
-        if front_count != 0 { front = front.map(|v| v / front_count as f64); }
-        let pulsing = regiment.sections.iter().filter(|section| section.pulse_until > battle.elapsed_ticks).count();
-        eprintln!("BATTLE_REGIMENT elapsed={elapsed} id={} side={} order={:?} alive={alive} dead={} moving={moving} resting={resting} targets={targets} wounded={wounded} ammunition={ammunition} origin={:?} front={front:?} gap={} enemy={:?} speed={} stamina={} morale={} broken={} pulsing={pulsing}", regiment.spec.id, regiment.spec.faction, regiment.spec.order, regiment.len - alive, regiment.spec.origin, regiment.gap, regiment.enemy_regiment, regiment.speed, regiment.stamina, regiment.morale.value, regiment.morale.broken);
+        if front_count != 0 {
+            front = front.map(|v| v / front_count as f64);
+        }
+        let pulsing = regiment
+            .sections
+            .iter()
+            .filter(|section| section.pulse_until > battle.elapsed_ticks)
+            .count();
+        eprintln!(
+            "BATTLE_REGIMENT elapsed={elapsed} id={} side={} order={:?} alive={alive} dead={} moving={moving} resting={resting} targets={targets} wounded={wounded} ammunition={ammunition} origin={:?} front={front:?} gap={} enemy={:?} speed={} stamina={} morale={} broken={} pulsing={pulsing}",
+            regiment.spec.id,
+            regiment.spec.faction,
+            regiment.spec.order,
+            regiment.len - alive,
+            regiment.spec.origin,
+            regiment.gap,
+            regiment.enemy_regiment,
+            regiment.speed,
+            regiment.stamina,
+            regiment.morale.value,
+            regiment.morale.broken
+        );
     }
 }

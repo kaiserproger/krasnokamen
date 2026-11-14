@@ -104,7 +104,7 @@ pub use resource_path::{OpenedResource, ResourcePath, ResourcePathError};
 /// Crate version, exposed so other crates and the binary can report it.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// All vanilla registries Solaris needs to surface in the Configuration
+/// All vanilla registries Krasnokamen needs to surface in the Configuration
 /// state. Keep in sync with `tools/extract-vanilla-data.sh`.
 ///
 /// `(registry_id_path, fs_subpath_under_data_minecraft)` — the two are
@@ -377,10 +377,10 @@ pub mod testing {
 }
 
 /// Repo-owned registry index used when the local vanilla sidecar is absent.
-/// Entries are the minimal identifiers Solaris needs to complete the
+/// Entries are the minimal identifiers Krasnokamen needs to complete the
 /// Configuration state and keep worldgen/survival baselines running.
 #[must_use]
-pub fn solaris_required_data() -> VanillaData {
+pub fn krasnokamen_required_data() -> VanillaData {
     let index = required_registry_entries();
 
     let registries = KNOWN_REGISTRIES
@@ -397,7 +397,7 @@ pub fn solaris_required_data() -> VanillaData {
             }
         })
         .collect();
-    VanillaData::from_registries("<solaris-built-in>", registries)
+    VanillaData::from_registries("<krasnokamen-built-in>", registries)
 }
 
 #[must_use]
