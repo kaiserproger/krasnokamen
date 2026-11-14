@@ -1,7 +1,7 @@
 //! `/datapack` list, enable, disable and create, ZIP packs and the selector
 //! `predicate=` option, through the real command path and the datapack worker.
 use super::*;
-use crate::command_execution::CommandResult::{self, Completed, Failed, Success};
+use crate::command_execution::CommandResult::{self, Failed};
 use std::io::Write;
 
 fn pack(root: &Path, name: &str, description: &str, resources: &[(&str, &str)]) {
@@ -290,13 +290,24 @@ fn enable_and_disable_follow_vanilla_ordering_errors_and_results() {
     );
 
     // Disable: the result is the number of packs left loaded; the functions
-    // of the pack disappear once the worker's recompile is live.
-    assert_eq!(run(&mut state, "datapack disable file/b"), Success(3));
+    // of the pack disappear once the worker's recompile is live. Vanilla returns
+    // that count, and the worker answers it on the completion, so it is observed
+    // through `execute store result` rather than the suspending call.
+    run(&mut state, "scoreboard objectives add packs dummy");
+    messages(&mut state);
+    pipeline(
+        &mut state,
+        "execute store result score packs packs run datapack disable file/b",
+    );
     assert!(
         state.datapacks.packs().functions.contains_key("test:b"),
         "old packs stay authoritative until the worker answers"
     );
     settle(&mut state);
+    assert_eq!(
+        state.scoreboard.scores["packs"]["packs"].value, 3,
+        "packs left loaded"
+    );
     assert!(!state.datapacks.packs().functions.contains_key("test:b"));
     let shown = messages(&mut state);
     assert_eq!(key(&shown[0]), "commands.datapack.modify.disable");
@@ -342,8 +353,15 @@ fn enable_and_disable_follow_vanilla_ordering_errors_and_results() {
     );
 
     // Enabling places the pack: `first` stays behind the built-in pack.
-    assert_eq!(run(&mut state, "datapack enable file/b first"), Success(4));
+    pipeline(
+        &mut state,
+        "execute store result score packs packs run datapack enable file/b first",
+    );
     settle(&mut state);
+    assert_eq!(
+        state.scoreboard.scores["packs"]["packs"].value, 4,
+        "packs enabled"
+    );
     assert_eq!(
         state.datapacks.selection().enabled,
         ["vanilla", "file/b", "file/a", "file/c"]
@@ -378,9 +396,13 @@ fn enable_and_disable_follow_vanilla_ordering_errors_and_results() {
     );
 
     // A pack the folder does not hold is refused by the worker; nothing changes.
+    // Vanilla reports the refusal, not a count, and the completion carries it.
     messages(&mut state);
     let before = state.datapacks.selection().clone();
-    assert_eq!(run(&mut state, "datapack enable file/ghost"), Success(5));
+    assert!(matches!(
+        run(&mut state, "datapack enable file/ghost"),
+        CommandResult::Deferred(_)
+    ));
     settle(&mut state);
     let shown = messages(&mut state);
     assert_eq!(key(&shown[0]), "commands.datapack.unknown");
@@ -396,10 +418,10 @@ fn enable_and_disable_follow_vanilla_ordering_errors_and_results() {
     );
     settle(&mut state);
     messages(&mut state);
-    assert_eq!(
+    assert!(matches!(
         run(&mut state, "datapack enable \"file/odd name\""),
-        Success(5)
-    );
+        CommandResult::Deferred(_)
+    ));
     settle(&mut state);
     assert!(
         state
@@ -424,10 +446,11 @@ fn create_writes_an_empty_directory_pack_with_a_description() {
     assert!(!root.join("made").exists());
     messages(&mut state);
 
-    assert_eq!(
+    // The create job answers on a later tick; the tick itself writes nothing.
+    assert!(matches!(
         run(&mut state, "datapack create made \"Made here\""),
-        Completed
-    );
+        CommandResult::Deferred(_)
+    ));
     assert!(
         !root.join("made").exists(),
         "the worker writes, not the tick"
@@ -447,13 +470,13 @@ fn create_writes_an_empty_directory_pack_with_a_description() {
     assert_eq!(meta["pack"]["min_format"], DATA_PACK_FORMAT);
 
     // Created, not enabled: available, and a component description is kept.
-    assert_eq!(
+    assert!(matches!(
         run(
             &mut state,
             r##"datapack create fancy {"text":"Fancy","color":"red"}"##
         ),
-        Completed
-    );
+        CommandResult::Deferred(_)
+    ));
     settle(&mut state);
     messages(&mut state);
     let meta: serde_json::Value =
@@ -509,15 +532,13 @@ fn create_writes_an_empty_directory_pack_with_a_description() {
         let result = run(&mut state, line);
         settle(&mut state);
         let shown = messages(&mut state);
-        assert_eq!(
-            result.clone(),
-            if expected.contains("already") {
-                Completed
-            } else {
-                Failed
-            },
-            "{line}"
-        );
+        // A name that already exists is a worker refusal, so the call suspends
+        // and the worker answers `commands.datapack.create.already_exists`.
+        if expected.contains("already") {
+            assert!(matches!(result, CommandResult::Deferred(_)), "{line}");
+        } else {
+            assert_eq!(result, Failed, "{line}");
+        }
         assert_eq!(key(&shown[0]), expected, "{line}");
     }
     assert!(!root.join("con").exists());
@@ -682,7 +703,7 @@ fn selector_predicate_selects_and_negates_datapack_predicates() {
     summon(&mut state, "cow");
 
     // How many mobs a selector picks, without touching them.
-    let count = |state: &mut TickState, selector: &str| {
+    let try_count = |state: &mut TickState, selector: &str| -> Result<usize, String> {
         state.command_context.current = None;
         let context = crate::command_context::Context::source(
             state,
@@ -693,11 +714,11 @@ fn selector_predicate_selects_and_negates_datapack_predicates() {
         let target = crate::commands::target_of(&format!(
             "@e[type=!minecraft:player,type=!minecraft:item,type=!minecraft:experience_orb,{selector}]"
         ))
-        .unwrap();
+        .map_err(|error| error.message())?;
         crate::dimensions::travel::context_targets(state, context, &target)
-            .unwrap()
-            .len()
+            .map(|targets| targets.len())
     };
+    let count = |state: &mut TickState, selector: &str| try_count(state, selector).unwrap();
     assert_eq!(count(&mut state, "predicate=test:zombie"), 2);
     assert_eq!(
         count(&mut state, "predicate=!test:zombie"),
@@ -722,8 +743,13 @@ fn selector_predicate_selects_and_negates_datapack_predicates() {
         0,
         "all must match"
     );
-    // A predicate no datapack defines matches nothing.
-    assert_eq!(count(&mut state, "predicate=test:nosuch"), 0);
+    // Vanilla reports a predicate no datapack defines as an error
+    // (`predicate.unknown`, "Unknown predicate: %s"), never as a silent
+    // non-match: data/vanilla/assets/minecraft/lang/en_us.json.
+    assert_eq!(
+        try_count(&mut state, "predicate=test:nosuch").unwrap_err(),
+        "Unknown predicate test:nosuch"
+    );
 
     // entity_scores reads the candidate's own scoreboard value.
     run(&mut state, "scoreboard objectives add hits dummy");
