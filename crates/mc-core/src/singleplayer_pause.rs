@@ -54,8 +54,8 @@ impl SingleplayerPause {
                 return true;
             };
             let requested = match command.as_str() {
-                "solaris_pause on" => true,
-                "solaris_pause off" => false,
+                "krasnokamen_pause on" => true,
+                "krasnokamen_pause off" => false,
                 _ => return true,
             };
             let owner_online = std::iter::once(state)

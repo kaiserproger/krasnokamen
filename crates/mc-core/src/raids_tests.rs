@@ -367,7 +367,7 @@ fn raids_native_codec_path_wal_roundtrip_and_corrupt_records_fail_closed() {
     assert_eq!(
         raid.iter()
             .map(|(k, _)| k.as_str())
-            .filter(|k| !k.starts_with("solaris:"))
+            .filter(|k| !k.starts_with("krasnokamen:"))
             .collect::<BTreeSet<_>>(),
         [
             "id",

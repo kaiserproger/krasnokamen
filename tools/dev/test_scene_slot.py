@@ -32,7 +32,7 @@ class SceneSlot(unittest.TestCase):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         self.dir = tmp.name
-        self.env = {**os.environ, "SOLARIS_SCENE_SLOT_DIR": self.dir}
+        self.env = {**os.environ, "KRASNOKAMEN_SCENE_SLOT_DIR": self.dir}
 
     def lock_path(self, slot: str) -> str:
         return f"{self.dir}/solaris-scene-slot-{slot}.lock"
@@ -58,7 +58,7 @@ class SceneSlot(unittest.TestCase):
         try:
             waiter = subprocess.Popen(
                 [str(SCRIPT), "sh", "-c", "echo run; read _"],
-                env={**self.env, "SOLARIS_SCENE_SLOT_READY_FD": str(ready_w)}, pass_fds=(ready_w,),
+                env={**self.env, "KRASNOKAMEN_SCENE_SLOT_READY_FD": str(ready_w)}, pass_fds=(ready_w,),
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
             )
             self.addCleanup(waiter.kill)

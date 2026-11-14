@@ -47,15 +47,15 @@
     "fabric_loader": "0.19.3",
     "fabric_api": "0.155.2+26.1.2",
     "neoforge": "26.1.2.76",
-    "source": "solaris-loader gradle.properties at 3016bd89e50f690c8b412ecce4dd680424859292",
+    "source": "krasnokamen-loader gradle.properties at 3016bd89e50f690c8b412ecce4dd680424859292",
     "runtime_verified": false
   },
   "client_requirements": [
     "Licensed graphical Minecraft Java client for each exact matrix release, pinned client/asset/library manifest and hashes",
     "Pinned loader/dependency artifact hashes for each Fabric and NeoForge cell",
     "Java 25 and fresh Xvfb display, client bridge/MCP credentials",
-    "DH scenario driver in sibling solaris-loader with control/landmark/packet/render evidence",
+    "DH scenario driver in sibling krasnokamen-loader with control/landmark/packet/render evidence",
     "Clean, independently isolated DH caches for server-enabled and disabled control runs",
-    "Worktree-built solaris-v2 candidate, exact config/world/epoch and binary SHA-256"
+    "Worktree-built krasnokamen candidate, exact config/world/epoch and binary SHA-256"
   ]
 }

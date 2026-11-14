@@ -10,8 +10,8 @@
 //! operation envelope; the server's own DTOs validate and the native
 //! settlement owner decides.
 
-use solaris_plugin_sdk::events::{CommandInvoked, Event};
-use solaris_plugin_sdk::{
+use krasnokamen_plugin_sdk::events::{CommandInvoked, Event};
+use krasnokamen_plugin_sdk::{
     Command, Config, Failure, LogLevel, bind_settlement, form_settlement_household, log,
     plan_settlement_district, query_settlements, relocate_settlement_household, rename_settlement,
     unbind_settlement,
@@ -121,7 +121,7 @@ impl Fixture {
                         if columns.next().is_some() {
                             return None;
                         }
-                        Some(solaris_plugin_sdk::settlements::DistrictBuildingRef {
+                        Some(krasnokamen_plugin_sdk::settlements::DistrictBuildingRef {
                             kind: kind.to_owned(),
                             id: id.to_owned(),
                             purpose: purpose.to_owned(),
@@ -139,20 +139,20 @@ impl Fixture {
                 ))
             }
             "economy-quote" if args.len() == 11 => {
-                Some(solaris_plugin_sdk::request_settlement_economy(
+                Some(krasnokamen_plugin_sdk::request_settlement_economy(
                     argument(1)?,
                     argument(2)?,
                     argument(3)?.parse().ok()?,
                     argument(4)?.parse().ok()?,
-                    solaris_plugin_sdk::settlements::EconomyAction::Quote(
-                        solaris_plugin_sdk::settlements::Quote {
+                    krasnokamen_plugin_sdk::settlements::EconomyAction::Quote(
+                        krasnokamen_plugin_sdk::settlements::Quote {
                             id: argument(5)?.to_owned(),
                             seller:
-                                solaris_plugin_sdk::settlements::EconomicInventoryEndpoint::Carry(
+                                krasnokamen_plugin_sdk::settlements::EconomicInventoryEndpoint::Carry(
                                     argument(6)?.to_owned(),
                                 ),
                             buyer:
-                                solaris_plugin_sdk::settlements::EconomicInventoryEndpoint::Carry(
+                                krasnokamen_plugin_sdk::settlements::EconomicInventoryEndpoint::Carry(
                                     argument(7)?.to_owned(),
                                 ),
                             source_slot: argument(8)?.parse().ok()?,
@@ -163,12 +163,12 @@ impl Fixture {
                 ))
             }
             "economy-accept" if args.len() == 6 => {
-                Some(solaris_plugin_sdk::request_settlement_economy(
+                Some(krasnokamen_plugin_sdk::request_settlement_economy(
                     argument(1)?,
                     argument(2)?,
                     argument(3)?.parse().ok()?,
                     argument(4)?.parse().ok()?,
-                    solaris_plugin_sdk::settlements::EconomyAction::AcceptQuote(
+                    krasnokamen_plugin_sdk::settlements::EconomyAction::AcceptQuote(
                         argument(5)?.to_owned(),
                     ),
                 ))

@@ -1,6 +1,6 @@
-# Install Solaris Loader on a client
+# Install Krasnokamen Loader on a client
 
-Solaris Loader is an optional **client-side** mod for Solaris plugins that ship
+Krasnokamen Loader is an optional **client-side** mod for Krasnokamen plugins that ship
 verified UI (screens/HUD), assets, sounds, items, blocks, or UI/keyboard
 interactions. It is not needed when every selected server plugin is
 `server_only`.
@@ -12,9 +12,9 @@ interactions. It is not needed when every selected server plugin is
 | Loader version | `0.1.0` (jars are named `loader-<platform>-0.1.0.jar`) |
 | Minecraft | Java Edition **26.1.2**, exactly; Java **25** |
 | Loader wire protocol | **3**, with client artifact index **schema 2** |
-| Server plugin API | WASM component API `solaris:plugin@0.8.0` only |
+| Server plugin API | WASM component API `krasnokamen:plugin@0.9.0` only |
 
-These values are read from the `solaris-loader` repository (`gradle.properties`,
+These values are read from the `krasnokamen-loader` repository (`gradle.properties`,
 its README). Its Git history and release version are independent of core: a
 server tag is not a Loader revision, and the alpha protocol and bundle contracts
 can change between revisions (there is no protocol-1/2 compatibility path;
@@ -33,7 +33,7 @@ Minecraft version.
 
 The repository builds and tests against:
 
-| Client platform | Baseline for 26.1.2 | Solaris jar |
+| Client platform | Baseline for 26.1.2 | Krasnokamen jar |
 | --- | --- | --- |
 | Fabric | Fabric Loader `0.19.3`, Fabric API `0.155.2+26.1.2` | `loader-fabric-0.1.0.jar` |
 | NeoForge | NeoForge `26.1.2.76` | `loader-neoforge-0.1.0.jar` |
@@ -47,10 +47,10 @@ versions above are the field-tested matrix; other builds are not a release claim
 ## Download or build the client jars
 
 Download the matching platform JAR and `SHA256SUMS` from
-[Solaris Loader releases](https://github.com/kaiserproger/solaris-loader/releases)
+[Krasnokamen Loader releases](https://github.com/kaiserproger/krasnokamen-loader/releases)
 (not GitHub's source ZIP) and verify the JAR's SHA-256 before installing. The
 server's curl installer does not install client mods. To build instead, from a
-`solaris-loader` checkout:
+`krasnokamen-loader` checkout:
 
 ```sh
 ./gradlew --no-configuration-cache :loader-fabric:jar :loader-neoforge:jar :loader-forge:jar
@@ -66,8 +66,8 @@ mods, not server plugins: never put them in the server's `[plugins].directory`.
    platform (Fabric, NeoForge or Forge) using Java 25; use the baselines above to
    reproduce a field test. Fabric also needs the Fabric API mod.
 2. Open **that instance's game directory** and its `mods/` folder (create it if
-   needed) and copy the one matching Solaris Loader jar there. Remove any older
-   Solaris Loader jar from the same instance so exactly one remains. Do not
+   needed) and copy the one matching Krasnokamen Loader jar there. Remove any older
+   Krasnokamen Loader jar from the same instance so exactly one remains. Do not
    unzip it, and do not use the Fabric jar in a NeoForge or Forge profile (or
    NeoForge's in Forge's: their networking adapters differ although both use TOML
    metadata).
@@ -101,8 +101,8 @@ address and requested permission set, Loader opens a confirmation screen:
 
 A previous decision is reused only for that address and exact permission set; a
 different address or changed permissions prompt again. The default cache is
-`~/.solaris/loader-cache/` (`permissions.properties` plus content-addressed
-bundle data); `-Dsolaris.loader.cacheDir=/absolute/path` overrides it for an
+`~/.krasnokamen/loader-cache/` (`permissions.properties` plus content-addressed
+bundle data); `-Dkrasnokamen.loader.cacheDir=/absolute/path` overrides it for an
 isolated profile. Do not copy a permission file between untrusted server
 addresses; cached bytes are still checked against the server manifest before
 activation. The server allows up to two minutes for this confirmation and
@@ -130,7 +130,7 @@ client. If any selected plugin declares `[client].bundles`, the deployment is
 platform/version, denied permission, missing acknowledgement, invalid bundle,
 size/hash mismatch or activation failure stops login during Configuration; the
 disconnect reason names the supported platforms and required bundle identities
-where available. Solaris never silently substitutes vanilla content.
+where available. Krasnokamen never silently substitutes vanilla content.
 
 Negotiation timing: the server probes every client (required content too). A client
 that sends no Loader hello, request or ack within 10 s of the manifest, such as a
@@ -151,7 +151,7 @@ deployment, and `content verify` covers only the vanilla cache. See
 - **"Loader is required":** confirm the jar is in the `mods/` of the instance
   actually launched, that it reports Minecraft 26.1.2, that the platform matches,
   and (Fabric) that Fabric API is installed; check the client log for
-  `solaris_loader` loading.
+  `krasnokamen_loader` loading.
 - **No permission prompt:** a stored decision may already match, or the plugin
   declares no client bundles. Close Minecraft and remove only the entry for that
   server from `permissions.properties` to prompt again.

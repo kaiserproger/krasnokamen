@@ -899,7 +899,7 @@ pub(crate) fn to_fields(state: &EntityLootState) -> Vec<(String, mc_nbt::Tag)> {
             }),
         ),
         (
-            "solaris:entity_loot".into(),
+            "krasnokamen:entity_loot".into(),
             Tag::String(serde_json::to_string(state).expect("finite native loot state")),
         ),
         (
@@ -938,7 +938,7 @@ pub(crate) fn from_fields(
             .find(|(key, _)| key == name)
             .map(|(_, tag)| tag)
     };
-    let mut state = if let Some(Tag::String(json)) = find("solaris:entity_loot") {
+    let mut state = if let Some(Tag::String(json)) = find("krasnokamen:entity_loot") {
         serde_json::from_str(json)
             .map_err(|error| crate::config::CoreError::Storage(format!("entity loot: {error}")))?
     } else {
