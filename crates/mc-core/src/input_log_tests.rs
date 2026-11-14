@@ -485,18 +485,18 @@ fn codec_round_trips_and_marks_unserializable_ticks() {
         },
         PlayerInput::DialogClick {
             connection: c,
-            id: "solaris:test".to_owned(),
+            id: "krasnokamen:test".to_owned(),
             payload: Some(Tag::Compound(vec![("k".to_owned(), Tag::Int(7))])),
         },
         PlayerInput::DialogClick {
             connection: c,
-            id: "solaris:none".to_owned(),
+            id: "krasnokamen:none".to_owned(),
             payload: None,
         },
         PlayerInput::LoaderViewRequest {
             connection: c,
             owner: "plugin".to_owned(),
-            request_kind: mc_script::ScriptClientViewKey::try_new("solaris:view").unwrap(),
+            request_kind: mc_script::ScriptClientViewKey::try_new("krasnokamen:view").unwrap(),
         },
         PlayerInput::CreativeSlot {
             connection: c,
@@ -590,7 +590,7 @@ fn locked_session_text_is_withheld() {
             },
             PlayerInput::DialogClick {
                 connection: locked,
-                id: "solaris:login".to_owned(),
+                id: "krasnokamen:login".to_owned(),
                 payload: Some(mc_nbt::Tag::String(PASSWORD.to_owned())),
             },
             cmd(locked, &format!("msg x {PASSWORD}")),

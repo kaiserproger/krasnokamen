@@ -1,7 +1,7 @@
 """`python3 -m tools.bench {weak-hw|scaling|worldgen|vps}`: one command per published number.
 
 A thin matrix runner over tools.coreperf.profiles (server/bot/fixture lifecycle, TPS/MSPT/RSS
-definitions: docs/performance/PROFILES.md) and `solaris-v2 world pregenerate`. It builds nothing:
+definitions: docs/performance/PROFILES.md) and `krasnokamen world pregenerate`. It builds nothing:
 it measures supplied release binaries with fixed seeds and writes `result.json` + `result.md`
 (hardware and exact cpusets included). Exit code is non-zero if any run failed.
 See docs/performance/BENCHMARKS.md.
@@ -38,12 +38,12 @@ def csv_modes(text: str) -> list[str]:
 
 
 def add_common(parser: argparse.ArgumentParser, *, bots: bool) -> None:
-    parser.add_argument("--server-bin", type=Path, help="pin-release solaris-v2 (default: $SOLARIS_SERVER_BINARY)")
+    parser.add_argument("--server-bin", type=Path, help="pin-release krasnokamen (default: $KRASNOKAMEN_SERVER_BINARY)")
     if bots:
-        parser.add_argument("--bots-bin", type=Path, help="pin-release player-scale-bots (default: $SOLARIS_BOTS_BINARY)")
+        parser.add_argument("--bots-bin", type=Path, help="pin-release player-scale-bots (default: $KRASNOKAMEN_BOTS_BINARY)")
     parser.add_argument("--out", type=Path, help="new result directory (default .analysis/bench/<UTC>-<command>-<pid>)")
     parser.add_argument("--vanilla-data-dir", type=Path,
-                        help="imported content cache (default $SOLARIS_VANILLA_DATA_DIR, ./data/vanilla, ~/.local/share/solaris/content/26.1.2)")
+                        help="imported content cache (default $KRASNOKAMEN_VANILLA_DATA_DIR, ./data/vanilla, ~/.local/share/krasnokamen/content/26.1.2)")
     parser.add_argument("--seed", type=int, default=42, help="world seed for worldgen runs (profiles always use 42)")
     parser.add_argument("--cpu-pool", help="local CPU ids the run may use, e.g. 0-11 (default: this process's affinity)")
     parser.add_argument("--slice", dest="slice_name", help="systemd slice for the limited scopes (shared hosts: solaris-heavy.slice)")
@@ -102,7 +102,7 @@ def parser() -> argparse.ArgumentParser:
     gen.add_argument("--radius", type=int, help="block radius of the square, 256 = 33x33 chunks (default 256; 64 under --smoke)")
     gen.add_argument("--center", default="0,0", help="block center x,z (default 0,0)")
     gen.add_argument("--repeat", type=int, default=1, help="fresh-world repeats per CPU count; the median is reported")
-    gen.add_argument("--vanilla-jar", type=Path, help="Mojang bundler server.jar for the head-to-head (default $SOLARIS_VANILLA_JAR, ./.analysis/server.jar); skipped when absent")
+    gen.add_argument("--vanilla-jar", type=Path, help="Mojang bundler server.jar for the head-to-head (default $KRASNOKAMEN_VANILLA_JAR, ./.analysis/server.jar); skipped when absent")
     gen.add_argument("--java", default="java")
     gen.add_argument("--vanilla-timeout", type=float, default=3600)
     gen.add_argument("--keep-worlds", action="store_true")
@@ -114,7 +114,7 @@ def parser() -> argparse.ArgumentParser:
 def find_binary(explicit: Path | None, name: str) -> Path:
     candidates = [explicit] if explicit else []
     if not explicit:
-        pin_env = "SOLARIS_SERVER_BINARY" if name == "solaris-v2" else "SOLARIS_BOTS_BINARY"
+        pin_env = "KRASNOKAMEN_SERVER_BINARY" if name == "krasnokamen" else "KRASNOKAMEN_BOTS_BINARY"
         if pinned := os.environ.get(pin_env):
             candidates.append(Path(pinned))
     for candidate in candidates:
@@ -126,12 +126,12 @@ def find_binary(explicit: Path | None, name: str) -> Path:
 
 def find_data_dir(explicit: Path | None) -> Path:
     candidates = [explicit] if explicit else [
-        Path(os.environ["SOLARIS_VANILLA_DATA_DIR"]) if "SOLARIS_VANILLA_DATA_DIR" in os.environ else None,
-        common.ROOT / "data/vanilla", Path.home() / ".local/share/solaris/content/26.1.2"]
+        Path(os.environ["KRASNOKAMEN_VANILLA_DATA_DIR"]) if "KRASNOKAMEN_VANILLA_DATA_DIR" in os.environ else None,
+        common.ROOT / "data/vanilla", Path.home() / ".local/share/krasnokamen/content/26.1.2"]
     for candidate in candidates:
         if candidate and (candidate / "version.json").is_file():
             return candidate.resolve()
-    raise BenchError("imported vanilla content not found; run `solaris-v2 content import --version 26.1.2 --download` "
+    raise BenchError("imported vanilla content not found; run `krasnokamen content import --version 26.1.2 --download` "
                      "and pass --vanilla-data-dir <content cache>/26.1.2 (the dir holding version.json)")
 
 
@@ -159,7 +159,7 @@ def setup(args: argparse.Namespace, *, bots: bool) -> tuple[Path, list[int], dic
     pool = common.available_pool(args.cpu_pool)
     out = (args.out or common.ROOT / ".analysis/bench" / f"{common.utc_stamp()}-{args.command}-{os.getpid()}").resolve()
     out.mkdir(parents=True)
-    server = find_binary(args.server_bin, "solaris-v2")
+    server = find_binary(args.server_bin, "krasnokamen")
     bots_bin = find_binary(args.bots_bin, "player-scale-bots") if bots else None
     source = common.source_record(server, bots_bin, args.commit)
     if bots_bin:
@@ -324,7 +324,7 @@ def cmd_weak_hw(args: argparse.Namespace) -> int:
             run.setdefault("cores", cores)
             run.setdefault("cpu_mode", args.cpu_mode)
         first_view = None
-        if not vps and memory and os.environ.get("SOLARIS_CLIENT_BINARY"):
+        if not vps and memory and os.environ.get("KRASNOKAMEN_CLIENT_BINARY"):
             first_view = guard(profile_runs.run_first_view, ctx, split, memory)
         worldgen = None
         if radius:
@@ -363,16 +363,16 @@ def cmd_weak_hw(args: argparse.Namespace) -> int:
 def run_worldgen_once(args, out: Path, ctx, remote: Remote | None, pool: list[int], cores: int, memory: str | None,
                       radius: int, vps: bool) -> dict[str, Any]:
     if not vps:
-        return guard(worldgen_runs.solaris_pregenerate, host=LocalHost(pool), out=out / "worldgen", workdir=str(out / "worldgen-work"),
+        return guard(worldgen_runs.krasnokamen_pregenerate, host=LocalHost(pool), out=out / "worldgen", workdir=str(out / "worldgen-work"),
                      server_bin=str(ctx.server_bin), vanilla_data_dir=str(ctx.vanilla_data_dir), seed=args.seed, count=cores,
                      mode=args.cpu_mode, pool=pool, memory=memory, slice_name=args.slice_name, radius=radius, center="0,0",
                      keep_world=False)
     rdir = f"{args.remote_dir.rstrip('/')}/solaris-bench-wg-{os.getpid()}"
     try:
         remote.mkdir(rdir)
-        remote.rsync(ctx.server_bin, f"{rdir}/solaris-v2")
-        return guard(worldgen_runs.solaris_pregenerate, host=remote, out=out / "worldgen", workdir=f"{rdir}/work",
-                     server_bin=f"{rdir}/solaris-v2", vanilla_data_dir=args.remote_data_dir, seed=args.seed, count=cores,
+        remote.rsync(ctx.server_bin, f"{rdir}/krasnokamen")
+        return guard(worldgen_runs.krasnokamen_pregenerate, host=remote, out=out / "worldgen", workdir=f"{rdir}/work",
+                     server_bin=f"{rdir}/krasnokamen", vanilla_data_dir=args.remote_data_dir, seed=args.seed, count=cores,
                      mode=args.cpu_mode, pool=pool, memory=memory, slice_name=None, radius=radius, center="0,0", keep_world=False)
     finally:
         remote.rmtree(rdir)
@@ -443,7 +443,7 @@ def cmd_scaling(args: argparse.Namespace) -> int:
 def find_vanilla_jar(explicit: Path | None) -> Path | None:
     if explicit and not explicit.is_file():
         raise BenchError(f"--vanilla-jar {explicit} does not exist")
-    candidates = [explicit] if explicit else [Path(os.environ["SOLARIS_VANILLA_JAR"]) if "SOLARIS_VANILLA_JAR" in os.environ else None,
+    candidates = [explicit] if explicit else [Path(os.environ["KRASNOKAMEN_VANILLA_JAR"]) if "KRASNOKAMEN_VANILLA_JAR" in os.environ else None,
                                               common.ROOT / ".analysis/server.jar"]
     return next((c.resolve() for c in candidates if c and c.is_file()), None)
 
@@ -466,39 +466,39 @@ def cmd_worldgen(args: argparse.Namespace) -> int:
             row: dict[str, Any] = {"cores": count, "cpu_mode": mode}
             rows.append(row)
             if count > limit:
-                row.update(solaris=None, solaris_runs=[{"status": "skipped", "error": f"only {limit} {mode} CPUs available"}], skipped=True)
+                row.update(krasnokamen=None, krasnokamen_runs=[{"status": "skipped", "error": f"only {limit} {mode} CPUs available"}], skipped=True)
                 continue
             tag = f"{count}{mode[0]}"
-            runs = [guard(worldgen_runs.solaris_pregenerate, host=host, out=out / "runs" / f"solaris-{tag}-{i}", workdir=str(out / "work" / f"solaris-{tag}-{i}"),
+            runs = [guard(worldgen_runs.krasnokamen_pregenerate, host=host, out=out / "runs" / f"krasnokamen-{tag}-{i}", workdir=str(out / "work" / f"krasnokamen-{tag}-{i}"),
                           server_bin=source["server_bin"], vanilla_data_dir=str(data_dir), seed=args.seed, count=count, mode=mode, pool=pool,
                           memory=memory, slice_name=args.slice_name, radius=radius, center=args.center, keep_world=args.keep_worlds)
                     for i in range(args.repeat)]
             for r in runs:
                 r.setdefault("cores", count)
-            row["solaris_runs"], row["solaris"] = runs, worldgen_runs.median_by_engine(runs)
-            if jar and row["solaris"]:
+            row["krasnokamen_runs"], row["krasnokamen"] = runs, worldgen_runs.median_by_engine(runs)
+            if jar and row["krasnokamen"]:
                 vanilla = [guard(worldgen_runs.vanilla_generate, out=out / "runs" / f"vanilla-{tag}-{i}", jar=jar, java=args.java, seed=args.seed,
                                  cores=count, mode=mode, pool=pool, memory=memory, slice_name=args.slice_name,
-                                 chunk_min=row["solaris"]["chunk_min"], chunk_max=row["solaris"]["chunk_max"],
+                                 chunk_min=row["krasnokamen"]["chunk_min"], chunk_max=row["krasnokamen"]["chunk_max"],
                                  timeout=args.vanilla_timeout, keep_world=args.keep_worlds) for i in range(args.repeat)]
                 row["vanilla_runs"], row["vanilla"] = vanilla, worldgen_runs.median_by_engine(vanilla)
     for mode in args.cpu_mode:
         mode_rows = [r for r in rows if r["cpu_mode"] == mode]
-        base = next((r["solaris"] for r in mode_rows if r["solaris"]), None)
+        base = next((r["krasnokamen"] for r in mode_rows if r["krasnokamen"]), None)
         for row in mode_rows:
-            if row["solaris"] and base:
-                row["solaris"]["speedup_vs_base"] = row["solaris"]["chunks_per_s"] / base["chunks_per_s"]
+            if row["krasnokamen"] and base:
+                row["krasnokamen"]["speedup_vs_base"] = row["krasnokamen"]["chunks_per_s"] / base["chunks_per_s"]
     live = [r for r in rows if not r.get("skipped")]
-    ok = all(r["solaris"] and (not jar or r.get("vanilla")) for r in live)
+    ok = all(r["krasnokamen"] and (not jar or r.get("vanilla")) for r in live)
     doc = document(args, hw, source, started, ok=ok, workload={
         "seed": args.seed, "radius_blocks": radius, "center_block": args.center, "repeat": args.repeat, "memory_max": memory,
         "vanilla_jar": str(jar) if jar else None, "counts": args.cores, "cpu_modes": args.cpu_mode,
-        "solaris_metric": "generated chunks / seconds from the first generation progress line to completion (world open excluded)",
+        "krasnokamen_metric": "generated chunks / seconds from the first generation progress line to completion (world open excluded)",
         "vanilla_metric": "requested chunks / seconds from first forceload command to `save-all flush` done (JVM startup excluded)"},
         results=rows)
     md_rows = []
     for row in rows:
-        s, v = row["solaris"], row.get("vanilla")
+        s, v = row["krasnokamen"], row.get("vanilla")
         if row.get("skipped"):
             md_rows.append([f"{row['cores']} {row['cpu_mode']}", "skipped", "", "", ""] + (["", "", ""] if jar else []))
             continue
@@ -508,19 +508,19 @@ def cmd_worldgen(args: argparse.Namespace) -> int:
                         fmt(s and s.get("peak_rss_mib"), 0)] +
                        ([fmt(v and v["chunks_per_s"]), f"{s['chunks_per_s'] / v['chunks_per_s']:.1f}x" if s and v else "",
                          fmt(v and v.get("peak_rss_mib"), 0)] if jar else []))
-    heads = ["CPUs", "cpuset (physical cores)", "Solaris chunks/s", "speedup", "CPU-ms/chunk", "peak RSS (MiB)"] + (
-        ["vanilla chunks/s", "Solaris / vanilla", "vanilla peak RSS (MiB)"] if jar else [])
+    heads = ["CPUs", "cpuset (physical cores)", "Krasnokamen chunks/s", "speedup", "CPU-ms/chunk", "peak RSS (MiB)"] + (
+        ["vanilla chunks/s", "Krasnokamen / vanilla", "vanilla peak RSS (MiB)"] if jar else [])
     md = header(args, hw, source, f"worldgen: {radius}-block radius around {args.center}")
-    first = next((r["solaris"] for r in rows if r["solaris"]), None)
+    first = next((r["krasnokamen"] for r in rows if r["krasnokamen"]), None)
     md += [f"Seed {args.seed}, fresh world per run, {args.repeat} repeat(s) (median), memory cap `{memory or 'none'}`."
            + (f" Square: chunks {first['chunk_min']}..{first['chunk_max']} ({first['chunks']} chunks)." if first else ""), "",
            table(heads, md_rows), ""]
     for row in rows:
-        for run in row["solaris_runs"] + row.get("vanilla_runs", []):
+        for run in row["krasnokamen_runs"] + row.get("vanilla_runs", []):
             if run["status"] == "failed":
-                md.append(f"- FAILED {run.get('engine', 'solaris')} @ {row['cores']} {row['cpu_mode']}: {run.get('error')}")
+                md.append(f"- FAILED {run.get('engine', 'krasnokamen')} @ {row['cores']} {row['cpu_mode']}: {run.get('error')}")
     if not jar:
-        md.append("Vanilla head-to-head skipped: no vanilla server jar (pass --vanilla-jar or set SOLARIS_VANILLA_JAR).")
+        md.append("Vanilla head-to-head skipped: no vanilla server jar (pass --vanilla-jar or set KRASNOKAMEN_VANILLA_JAR).")
     else:
         md.append("Vanilla forceloads the same chunk square and also generates a halo of neighbours it needs, "
                   "so its per-requested-chunk rate is conservative.")

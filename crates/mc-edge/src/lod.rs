@@ -1,7 +1,7 @@
-//! Far-terrain LOD for the native Solaris client (`[lod]`).
+//! Far-terrain LOD for the native Krasnokamen client (`[lod]`).
 //!
 //! Only a connection whose Loader session was negotiated as the native
-//! platform gets `solaris:lod/hello` and may ask for tiles. Requests are
+//! platform gets `krasnokamen:lod/hello` and may ask for tiles. Requests are
 //! bounded per connection (`max_inflight_tiles`), by distance from the
 //! player's last committed position (`max_distance`) and globally by
 //! `workers` blocking threads. A tile that does not fit the connection's
@@ -38,16 +38,16 @@ pub(crate) const PROTOCOL: u8 = 1;
 const MAX_TILES_PER_REQUEST: usize = 16;
 
 pub(crate) fn hello_channel() -> Identifier {
-    Identifier::parse("solaris:lod/hello").expect("static lod channel")
+    Identifier::parse("krasnokamen:lod/hello").expect("static lod channel")
 }
 pub(crate) fn request_channel() -> Identifier {
-    Identifier::parse("solaris:lod/request").expect("static lod channel")
+    Identifier::parse("krasnokamen:lod/request").expect("static lod channel")
 }
 pub(crate) fn tile_channel() -> Identifier {
-    Identifier::parse("solaris:lod/tile").expect("static lod channel")
+    Identifier::parse("krasnokamen:lod/tile").expect("static lod channel")
 }
 pub(crate) fn program_channel() -> Identifier {
-    Identifier::parse("solaris:lod/program").expect("static lod channel")
+    Identifier::parse("krasnokamen:lod/program").expect("static lod channel")
 }
 
 /// Vanilla's limit on a clientbound custom payload.
@@ -185,7 +185,7 @@ fn varint(out: &mut Vec<u8>, mut value: u32) {
     }
 }
 
-/// The payload of a `solaris:lod/request` custom payload frame, else `None`.
+/// The payload of a `krasnokamen:lod/request` custom payload frame, else `None`.
 pub(crate) fn request_payload(body: &[u8]) -> Option<Vec<u8>> {
     let mut body = body;
     match ServerboundCustomPayload::decode(&mut body).ok()?.payload {
