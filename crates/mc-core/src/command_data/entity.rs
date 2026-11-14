@@ -128,20 +128,12 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
             return Err(format!("Editing {key} of {name} is not supported"));
         }
     }
-    let retained_tags = if touched.iter().any(|key| key == "Tags") {
-        Some(crate::command_summon::data::prepare_tags(
-            world,
-            slot,
-            new.iter().find(|(key, _)| key == "Tags").map(|(_, value)| value),
-        )?)
-    } else {
-        None
-    };
     let prepared = if item {
         // A removed field loads as its default, like a compound without it does.
         let fields = new
-            .into_iter()
+            .iter()
             .filter(|(key, _)| ITEM_FIELDS.contains(&key.as_str()))
+            .cloned()
             .collect();
         let mut payload = crate::command_summon::prepare_item(world, &Tag::Compound(fields))
             .map_err(|error| error.message())?;
@@ -173,6 +165,20 @@ fn run(state: &mut TickState, context: Context, mut input: &str) -> Result<Tag, 
             touched.iter().any(|key| key == "equipment"),
         )?;
         Prepared::Mob(image, custody)
+    };
+    let retained_tags = if touched.iter().any(|key| key == "Tags") {
+        let image = match &prepared {
+            Prepared::Mob(image, _) => Some(image.as_ref()),
+            Prepared::Item(_) => None,
+        };
+        Some(crate::command_summon::data::prepare_tags(
+            world,
+            slot,
+            image,
+            new.iter().find(|(key, _)| key == "Tags").map(|(_, value)| value),
+        )?)
+    } else {
+        None
     };
     let world = if dimension == state.dimension {
         state

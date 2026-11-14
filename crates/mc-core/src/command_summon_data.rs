@@ -29,9 +29,14 @@ pub(crate) fn prepare_edit(
 pub(crate) fn prepare_tags(
     state: &TickState,
     slot: EntitySlot,
+    image: Option<&Image>,
     tags: Option<&mc_nbt::Tag>,
 ) -> Result<Vec<u8>, String> {
-    let bytes = &state.entities.row(slot).opaque_entity_fields;
+    let bytes = image
+        .filter(|image| image.native.id == "minecraft:armor_stand")
+        .map_or(&state.entities.row(slot).opaque_entity_fields, |image| {
+            &image.state.opaque_entity_fields
+        });
     let mut fields = if bytes.is_empty() {
         Vec::new()
     } else {

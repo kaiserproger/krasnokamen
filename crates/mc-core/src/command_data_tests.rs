@@ -829,6 +829,21 @@ fn cow_uuid_and_pos(state: &TickState) -> (uuid::Uuid, [f64; 3]) {
 }
 
 #[test]
+fn data_tags_and_armor_stand_fields_commit_together() {
+    let (mut state, _, context) = fixture();
+    run(&mut state, context, "summon minecraft:armor_stand 4 60 4");
+    let target = "@e[type=minecraft:armor_stand,limit=1]";
+    assert_eq!(
+        data(&mut state, context, &format!(
+            "data merge entity {target} {{Small:1b,Tags:['guard']}}"
+        )),
+        1
+    );
+    assert_eq!(query(&mut state, context, &format!("data get entity {target} Small")).unwrap(), 1);
+    assert_eq!(query(&mut state, context, &format!("data get entity {target} Tags[0]")).unwrap(), 5);
+}
+
+#[test]
 fn data_entity_edit_preserves_unrelated_runtime_state() {
     let (mut state, _, context) = fixture();
     run(&mut state, context, "summon minecraft:cow 4 60 4");
