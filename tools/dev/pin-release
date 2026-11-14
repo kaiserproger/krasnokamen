@@ -28,6 +28,10 @@ KINDS = {
     "server": {"repo": "core", "package": "mc-edge", "bin": "krasnokamen", "env": "KRASNOKAMEN_SERVER_BINARY"},
     "client": {"repo": "client", "package": "krasnokamen-client", "bin": "krasnokamen-client", "env": "KRASNOKAMEN_CLIENT_BINARY"},
     "bots": {"repo": "core", "package": "mc-test-harness", "bin": "player-scale-bots", "env": "KRASNOKAMEN_BOTS_BINARY"},
+    # The release mc-core lib test executable (`cargo test --release --no-run`), for a frozen
+    # workload such as core::checkpoint_cost_bench::checkpoint_cost_ladder under `mem-run -x`:
+    # cargo names it `mc_core-<hash>`, so the artifact comes from cargo's JSON report.
+    "core-tests": {"repo": "core", "package": "mc-core", "bin": "", "env": "KRASNOKAMEN_CORE_TESTS_BINARY", "test": True},
 }
 # Everything a server or bots release build reads: Cargo workspace files, every crate, the guest SDK
 # and the Java sources mc-edge embeds with include_str! (crates/mc-edge/src/content_import.rs, the
@@ -58,6 +62,8 @@ def say(message: str) -> None:
 def check_tree(top: Path, kind: str) -> None:
     if kind in ("server", "bots") and not (top / "crates/mc-edge/Cargo.toml").is_file():
         raise w.ToolError(f"{top} is not a core Krasnokamen tree (no crates/mc-edge); use --client for the client")
+    if kind == "core-tests" and not (top / "crates/mc-core/Cargo.toml").is_file():
+        raise w.ToolError(f"{top} is not a core Krasnokamen tree (no crates/mc-core)")
     if kind == "client":
         manifest = top / "Cargo.toml"
         if not manifest.is_file() or 'name = "krasnokamen-client"' not in manifest.read_text():
@@ -155,10 +161,11 @@ def reuse_pin(pin_dir: Path, top: Path, kind: str, rust_target: str, incremental
               before: dict) -> Path | None:
     """Create `pin_dir` from an existing pin with the same build inputs, without building, or return None.
 
-    Candidates are valid pins only (same repo/kind/target/incremental, binary present with its recorded
-    sha256); a damaged one is skipped, never repaired. The binary is hard-linked (copied if linking
-    fails) and the manifest records this tree's provenance, the shared inputs and `reused_from`. A bots pin
-    is reused only by the tree that built it (see below). A candidate is also valid only if it recorded
+    Candidates are valid pins only (the same HEAD and uncommitted state, the same repo/kind/target/
+    incremental/inputs, and a binary present with its recorded sha256); a damaged one is skipped, never
+    repaired, and another tree's pin is never relabelled as this tree's. The binary is hard-linked
+    (copied if linking fails) and the manifest records this tree's provenance, the shared inputs and
+    `reused_from`. A bots or core-tests pin is reused only by the tree that built it (see below). A candidate is also valid only if it recorded
     `env_deps` (the environment variables cargo tracked for its build, see build_env_names) and this process's
     build environment holds the same value or absence for each; a manifest without the map is never reused."""
     spec = KINDS[kind]
@@ -169,7 +176,11 @@ def reuse_pin(pin_dir: Path, top: Path, kind: str, rust_target: str, incremental
         except (OSError, ValueError):
             continue
         source_dir = candidate.parent
-        if (info.get("inputs_sha256") != inputs or info.get("repo") != spec["repo"] or info.get("kind") != kind
+        # The same tree means the same working state, not only the same build inputs: a pin of
+        # another HEAD or of other uncommitted changes is another tree (owner, 2026-11-15). Its
+        # provenance is never stamped onto this tree.
+        if (info.get("head") != before["head"] or info.get("diff_sha256") != before["diff_sha256"]
+                or info.get("inputs_sha256") != inputs or info.get("repo") != spec["repo"] or info.get("kind") != kind
                 or info.get("target") != rust_target or bool(info.get("incremental", False)) != incremental):
             continue
         if not env_deps_match(info.get("env_deps"), env):
@@ -177,9 +188,10 @@ def reuse_pin(pin_dir: Path, top: Path, kind: str, rust_target: str, incremental
         binary = Path(info.get("binary", ""))
         if binary.parent != source_dir or not binary.is_file() or w.sha256_file(binary) != info.get("binary_sha256"):
             continue
-        if kind == "bots" and info.get("build_tree") != str(top):
-            # player-scale-bots reads <build tree>/data/vanilla/reports at every run (CARGO_MANIFEST_DIR is baked
-            # in): a copy built in another tree stops working when that tree is removed. Reuse only your own.
+        if kind in ("bots", "core-tests") and info.get("build_tree") != str(top):
+            # player-scale-bots reads <build tree>/data/vanilla/reports at every run and mc-core's
+            # tests bake their CARGO_MANIFEST_DIR (world, data) paths the same way: a copy built in
+            # another tree stops working when that tree is removed. Reuse only your own.
             continue
         stage = w.PINS / f".tmp-{pin_dir.name}-{os.getpid()}"
         try:
@@ -250,10 +262,17 @@ def build(top: Path, kind: str, rust_target: str | None, incremental: bool,
     cmd = [str(w.MEM_RUN), "-m", "6G", "env", f"CARGO_INCREMENTAL={int(incremental)}"]
     if target is not None:
         cmd.append(f"CARGO_TARGET_DIR={target}")
-    cmd += ["cargo", "build", "--release", "--locked"]
+    if spec.get("test"):
+        # `--no-run` builds the lib test executable and runs nothing; its path comes from
+        # cargo's JSON report (`profile.test` plus `executable`), named `mc_core-<hash>`.
+        cmd += ["cargo", "test", "--release", "--locked", "--no-run", "-p", spec["package"], "--lib"]
+    else:
+        cmd += ["cargo", "build", "--release", "--locked"]
     if rust_target is not None:
         cmd += ["--target", rust_target]
-    cmd += ["-p", spec["package"], "--bin", spec["bin"], "--message-format=json-render-diagnostics"]
+    if not spec.get("test"):
+        cmd += ["-p", spec["package"], "--bin", spec["bin"]]
+    cmd += ["--message-format=json-render-diagnostics"]
     env = build_env(incremental)
     # mem-run refuses a release build outside this tool (owner 2026-11-15): the pin is
     # the one place a release binary is built, and its manifest is the provenance.
@@ -268,14 +287,19 @@ def build(top: Path, kind: str, rust_target: str | None, incremental: bool,
                 print(line, end="", file=sys.stderr)
                 continue
             target_info = message.get("target") or {}
-            if (message.get("reason") == "compiler-artifact" and target_info.get("name") == spec["bin"]
-                    and "bin" in target_info.get("kind", []) and message.get("executable")):
-                artifact = Path(message["executable"])
+            if message.get("reason") == "compiler-artifact" and message.get("executable"):
+                if spec.get("test"):
+                    # The lib test executable: `profile.test` marks it, and cargo names it
+                    # `mc_core-<hash>` in release/deps.
+                    if (message.get("profile") or {}).get("test") and target_info.get("name") == spec["package"].replace("-", "_"):
+                        artifact = Path(message["executable"])
+                elif target_info.get("name") == spec["bin"] and "bin" in target_info.get("kind", []):
+                    artifact = Path(message["executable"])
     if proc.returncode != 0:
         raise w.ToolError(f"build failed (exit {proc.returncode}); nothing pinned")
     if artifact is None or not artifact.is_file():
-        raise w.ToolError(f"cargo reported no {spec['bin']} executable; nothing pinned")
-    if rust_target is None:
+        raise w.ToolError(f"cargo reported no {spec['bin'] or spec['package']} executable; nothing pinned")
+    if rust_target is None and not spec.get("test"):
         host = host_target(top)
         name = spec["bin"] + (".exe" if "windows" in host.split("-") else "")
         relative = artifact.resolve().relative_to(artifact_slot(artifact).resolve())
@@ -311,33 +335,80 @@ def artifact_slot(artifact: Path) -> Path:
     return w.TARGETS / relative.parts[0]
 
 
+def ledger_fingerprint(top: Path) -> dict:
+    """tools/harness/ledger.py's own tree_fingerprint() of `top`, imported from that tree.
+
+    The bug ledger identifies a candidate by HEAD plus a hash of its uncommitted and untracked
+    state (docs/bugs and .analysis aside) and accepts a release binary only when that binary was
+    registered for exactly that fingerprint. The hash is never reimplemented here."""
+    module = top / "tools/harness/ledger.py"
+    if not module.is_file():
+        raise w.ToolError(f"{top} has no tools/harness/ledger.py; cannot register the pin for the bug ledger")
+    probe = ("import json, sys\n"
+             "from tools.harness.ledger import tree_fingerprint\n"
+             "print(json.dumps(tree_fingerprint(sys.argv[1])))\n")
+    done = subprocess.run([sys.executable, "-c", probe, str(top)], cwd=top, capture_output=True, text=True)
+    if done.returncode != 0:
+        raise w.ToolError(f"{top}: ledger tree_fingerprint failed: {done.stderr.strip()[-500:]}")
+    return json.loads(done.stdout.strip().splitlines()[-1])
+
+
+def ledger_register(top: Path, binary: Path) -> None:
+    """Register a server or core-tests pin where tools/harness/ledger.py looks for it.
+
+    ledger.py writes `<candidate>/.analysis/ledger-builds/<binary sha256>.json` as
+    `{"sha256": ..., "tree": {"head": ..., "sha256": ...}}` (tools/harness/ledger.py:585-589,
+    `_register_server`) and `_server_built_from` reads the same directory of its `root` argument
+    (tools/harness/ledger.py:592-611), with `promote`'s default `root=REPO_ROOT`
+    (tools/harness/ledger.py:936). So the candidate tree is the registry root and the entry
+    describes the tree the binary was built from. KRASNOKAMEN_LEDGER_ROOT names the candidate when
+    the pin is built in another tree (a control); it defaults to the pinned tree."""
+    if not (top / "tools/harness/ledger.py").is_file():
+        # A minimal fixture tree (or a client tree) has no bug ledger: nothing can cite this binary.
+        say(f"{top} has no tools/harness/ledger.py; not registering the pin for the bug ledger")
+        return
+    root = Path(os.environ.get("KRASNOKAMEN_LEDGER_ROOT") or top)
+    tree = ledger_fingerprint(top)
+    registry = root / ".analysis/ledger-builds"
+    registry.mkdir(parents=True, exist_ok=True)
+    sha = w.sha256_file(binary)
+    (registry / f"{sha}.json").write_text(json.dumps({"sha256": sha, "tree": {"head": tree["head"], "sha256": tree["sha256"]}}) + "\n")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build once, pin immutably, print the binary path env line.")
     parser.add_argument("tree", help="a worktree or repository root")
     kinds = parser.add_mutually_exclusive_group()
     kinds.add_argument("--client", action="store_true", help="pin the native client (default: the core server)")
     kinds.add_argument("--bots", action="store_true", help="pin release player-scale-bots")
+    kinds.add_argument("--core-tests", action="store_true",
+                       help="pin the release mc-core lib test executable (`cargo test --release --no-run -p mc-core --lib`)")
     parser.add_argument("--target", type=target_triple, help="Rust target triple (default: rustc host, not CARGO_BUILD_TARGET)")
     parser.add_argument("--no-incremental", action="store_true",
                         help="full release build for perf windows (bench, coreperf refuse incremental pins)")
     args = parser.parse_args()
     w.check_host()
 
-    kind = "client" if args.client else "bots" if args.bots else "server"
+    kind = "client" if args.client else "bots" if args.bots else "core-tests" if args.core_tests else "server"
     spec = KINDS[kind]
     if not Path(args.tree).is_dir():
         raise w.ToolError(f"{args.tree} is not a directory")
     top = Path(str(w.git(args.tree, "rev-parse", "--show-toplevel")))
     check_tree(top, kind)
     rust_target = args.target or host_target(top)
-    binary_name = spec["bin"] + (".exe" if "windows" in rust_target.split("-") else "")
+    # A test executable's file name is cargo's (`mc_core-<hash>`), known only after the build.
+    binary_name = "" if spec.get("test") else spec["bin"] + (".exe" if "windows" in rust_target.split("-") else "")
     before = provenance(top)
     incremental = not args.no_incremental
     pin_id = f"{before['id']}-{kind}-{rust_target}" + ("-incr" if incremental else "")
     pin_dir = w.PINS / pin_id
-    inputs = inputs_sha256(top, before["tree"], kind, rust_target, incremental) if kind in ("server", "bots") else None
+    inputs = (inputs_sha256(top, before["tree"], kind, rust_target, incremental)
+              if kind in ("server", "bots", "core-tests") else None)
 
     def done(binary: Path, how: str) -> None:
+        if kind in ("server", "core-tests"):
+            # A row may cite this binary: ledger.py accepts it only for its own tree fingerprint.
+            ledger_register(top, binary)
         w.in_use_add(pin_dir, top.name, "pin")  # owner: the tree that asked for the pin
         say(f"{how}: {pin_dir.name}")
         print(f"{spec['env']}={binary}")
@@ -383,13 +454,23 @@ def main() -> None:
                 raise w.ToolError("the tree changed during the build; the binary does not match any single provenance, nothing pinned")
             try:
                 stage.mkdir()
-                staged = stage / binary_name
-                shutil.copyfile(artifact, staged)
+                staged = stage / (artifact.name if spec.get("test") else binary_name)
+                binary_name = staged.name
+                if spec.get("test"):
+                    # A test executable is hundreds of MB: a hard link pins this inode at no
+                    # disk cost (cargo replaces outputs with new files, never in place).
+                    try:
+                        os.link(artifact, staged)
+                    except OSError:
+                        shutil.copyfile(artifact, staged)
+                else:
+                    shutil.copyfile(artifact, staged)
             except BaseException:
                 shutil.rmtree(stage, ignore_errors=True)
                 raise
         try:
-            staged.chmod(0o555)
+            if not spec.get("test"):
+                staged.chmod(0o555)  # a shared inode: never make the slot's artifact read-only
             binary_sha = w.sha256_file(staged)
             final_binary = pin_dir / binary_name
             manifest = {
