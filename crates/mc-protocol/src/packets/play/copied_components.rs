@@ -20,7 +20,7 @@ pub(super) const MAX_ITEM_COMPONENT_DEPTH: usize = 8;
 
 pub(super) fn items() -> &'static mc_data::items::ItemRegistry {
     static ITEMS: LazyLock<mc_data::items::ItemRegistry> =
-        LazyLock::new(mc_data::items::solaris_required_items);
+        LazyLock::new(mc_data::items::krasnokamen_required_items);
     &ITEMS
 }
 
