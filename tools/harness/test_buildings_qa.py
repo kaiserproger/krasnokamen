@@ -331,6 +331,8 @@ class SequentialFlowTest(unittest.TestCase):
             _building_bounds=building_bounds,
             _building_seq=lambda *a, **k: 7,
             _adversarial_break=lambda *a, **k: False,
+            _break_placed_house_cell=lambda *a, **k: None,
+            _check_house_repair=lambda *a, **k: None,
             _wait_certified_origin_here=wait_cert,
             _break_corner=break_corner,
             _broken_replaced=broken_replaced,

@@ -225,17 +225,75 @@ pub(crate) fn recover(
 ) -> Result<bool, Failure> {
     let ledger = ledger(state)?;
     let record = structure(&ledger, &owner(settlement), handle)?;
-    if record.snapshot.state != ScriptStructureState::Paused
-        || record.snapshot.pause_reason.as_deref() != Some("footprint_changed")
-    {
+    let paused = record.snapshot.state == ScriptStructureState::Paused
+        && record.snapshot.pause_reason.as_deref() == Some("footprint_changed");
+    let committed = record.snapshot.state == ScriptStructureState::Committed;
+    if !paused && !committed {
         return Ok(false);
     }
+    let target = world(state, &record.snapshot.dimension)?;
+    let build = record.snapshot.stages.iter().position(|stage| stage.stage == "build");
+    let mut repair = Vec::new();
+    if let Some(index) = build {
+        let current = record.snapshot.current_stage_index as usize;
+        let completed = if current > index {
+            record.cells[index].len()
+        } else if current == index {
+            record.snapshot.completed_work_units as usize
+        } else {
+            0
+        };
+        for cell in record.cells[index].iter().take(completed) {
+            let actual = target.world.block_at(cell.at[0], cell.at[1], cell.at[2])
+                .ok_or(Failure::Unloaded)?;
+            let actual = target.registry.blocks.by_id(mc_world::BlockStateId(actual))
+                .ok_or(Failure::InvalidRequest)?;
+            let expected = target.registry.blocks.by_id(mc_world::BlockStateId(cell.state))
+                .ok_or(Failure::InvalidRequest)?;
+            if actual.block.raw_id != expected.block.raw_id {
+                repair.push(cell.clone());
+            }
+        }
+    }
+    if committed && repair.is_empty() {
+        return Ok(false);
+    }
+    let bounds = bounds_of_structure(record)?;
+    let image = fingerprint(target, bounds, true)?;
     drop(ledger);
     let mut ledger = ledger_mut(state)?;
     let mut record = take_structure(&mut ledger, &owner(settlement), handle)?;
-    let bounds = bounds_of_structure(&record)?;
-    record.image = fingerprint(world(state, &record.snapshot.dimension)?, bounds, true)?;
-    record.snapshot.state = ScriptStructureState::Running;
+    // The repair stage is derived afresh, so repeated interference cannot
+    // accumulate stages or charge again for cells already repaired.
+    if let Some(index) = record.snapshot.stages.iter().position(|stage| stage.stage == "repair") {
+        record.snapshot.stages.truncate(index);
+        record.cells.truncate(index);
+        if record.snapshot.current_stage_index as usize >= index {
+            record.snapshot.current_stage_index = index as u32;
+            record.snapshot.completed_work_units = 0;
+        }
+    }
+    if !repair.is_empty() {
+        let mut counts = BTreeMap::new();
+        for cell in &repair {
+            if let Some(resource) = &cell.resource {
+                *counts.entry(resource.clone()).or_insert(0) += u64::from(cell.quantity);
+            }
+        }
+        record.snapshot.stages.push(ScriptStructureStagePlan::new(
+            "repair".into(), repair.len() as u32, repair.len() as u64, materials(&counts),
+        ));
+        record.cells.push(repair);
+    }
+    record.snapshot.resource_plan_hash =
+        inventories::resource_plan_hash(&resource_plan(&record.snapshot.stages));
+    record.snapshot.remaining = remaining(&record);
+    record.image = image;
+    record.snapshot.state = if record.snapshot.current_stage_index as usize == record.cells.len() {
+        ScriptStructureState::Committed
+    } else {
+        ScriptStructureState::Running
+    };
     record.snapshot.pause_reason = None;
     ledger.revision = next(ledger.revision)?;
     record.snapshot.revision = ledger.revision;

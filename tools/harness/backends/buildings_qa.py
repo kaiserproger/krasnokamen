@@ -732,6 +732,8 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
             corner = _break_corner(probe, sub, tag, bp) if bp == "house" else None
             origin = _wait_certified_origin_here(probe, sub, tag, bp, 1, ctx, artifact)
             if origin is None:
+                if bp == "house":
+                    probe.check(f"{tag}_L1_broken_cell_repaired", False)
                 probe.check(f"{tag}_L1_built", False)
                 _verdict(sub, "L1_built", "FAIL", "L1 cert never appeared while on site")
                 continue
@@ -805,6 +807,62 @@ def _scenario_sequential(probe: ProbeSteps, detail: dict[str, Any], ctx: Profile
                           sname, tuple(sub["storage_chest"]))
             _verdict(sub, f"L{level}_upgrade", "PASS",
                      f"L{level} cert at {list(origin_up)}; block-matched, entrance and light checked")
+
+def _check_house_repair(probe: ProbeSteps, sub: dict[str, Any], tag: str) -> None:
+    from . import village_autonomy_qa as village
+    point = sub["L1_broken_cell"]
+    restored = _block_id(_read(probe, tuple(point))) == "minecraft:oak_log"
+    progress = village._project_progress(village._project_status(probe))
+    freed = (not progress or progress["blueprint"] != "house"
+             or progress["origin"] != sub["L1_broken_origin"] or progress["level"] != 1)
+    probe.check(f"{tag}_L1_broken_cell_repaired", restored and freed)
+    _verdict(sub, "L1_broken_cell_repaired", "PASS" if restored and freed else "FAIL",
+             f"cell {point} restored={restored}, original project ended={freed}")
+
+
+def _break_placed_house_cell(probe: ProbeSteps, sub: dict[str, Any], tag: str) -> None:
+    """Break an observed, previously placed log while the same House L1 is active."""
+    from . import village_autonomy_qa as village
+    probe.fixture("give @s minecraft:diamond_axe 1")
+    point = None
+    origin = None
+    for _ in range(80):
+        progress = village._project_progress(village._project_status(probe))
+        if progress and progress["blueprint"] == "house" and progress["level"] == 1:
+            origin = tuple(progress["origin"])
+            candidates = set()
+            for turns in range(4):
+                candidates.update(pos for pos, block in cells_true("house", 1, origin, turns).items()
+                                  if _state_base(block) == "minecraft:oak_log" and pos[1] > origin[1])
+            if candidates:
+                lo = tuple(min(p[i] for p in candidates) for i in range(3))
+                hi = tuple(max(p[i] for p in candidates) for i in range(3))
+                world = _scan_box(probe, lo, hi)
+                point = next((pos for pos in sorted(candidates)
+                              if world.get(pos) == "minecraft:oak_log"
+                              and world.get((pos[0] - 1, pos[1], pos[2]), "minecraft:air") == "minecraft:air"), None)
+                if point:
+                    break
+        probe.call("minecraft_wait_ticks", {"ticks": 20})
+    probe.check(f"{tag}_L1_placed_cell_found", point is not None)
+    x, y, z = point
+    probe.fixture(f"tp @s {x - 1.5} {y} {z + 0.5}")
+    probe.fixture("gamemode survival @s")
+    probe.call("minecraft_select_hotbar_item", {"item_id": "minecraft:diamond_axe", "count": 1,
+                                                "timeout_seconds": probe.remaining()})
+    active = village._project_progress(village._project_status(probe))
+    probe.check(f"{tag}_L1_break_during_project", bool(active) and active["origin"] == list(origin)
+                and active["blueprint"] == "house" and active["level"] == 1)
+    probe.call("minecraft_look_at_block", {"x": x, "y": y, "z": z, "face": "west"})
+    broken = probe.call("minecraft_break_block", {"x": x, "y": y, "z": z, "face": "west",
+                        "expected_drop_item_id": "minecraft:oak_log", "expected_drop_count": 0,
+                        "timeout_seconds": probe.remaining()})
+    probe.check(f"{tag}_L1_player_broke_cell", broken.get("became_air") is True
+                and _block_id(_read(probe, point)) == "minecraft:air")
+    sub["L1_broken_cell"] = list(point)
+    sub["L1_broken_origin"] = list(origin)
+    probe.fixture("gamemode creative @s")
+
 
 def _order_echo_retry(probe: ProbeSteps, sub: dict[str, Any], tag: str, bp: str, level: int,
                       order_cmd: str, use_dialog: bool, ctx: ProfileContext,
