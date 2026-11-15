@@ -247,18 +247,6 @@ pub(crate) fn update(state: &mut TickState) {
         }
         let name = hold.name.clone();
         let side = hold.side;
-        state
-            .hostile
-            .battle
-            .live
-            .rearmed
-            .retain(|(n, _)| n != &name);
-        state
-            .hostile
-            .battle
-            .live
-            .rearmed
-            .push((name.clone(), player));
         match live(state, &name, side) {
             Ok(line) => tracing::info!("{line}"),
             Err(error) => tracing::warn!("Battle live reconnect refused: {name}: {error}"),
@@ -320,11 +308,6 @@ pub(crate) fn update(state: &mut TickState) {
 /// to that same named holder instead of growing a session-long tombstone list.
 fn remember_player(battle: &mut BattleState, hold: usize, player: EntityId) {
     let name = &battle.live.holds[hold].name;
-    if let Some((_, id)) = battle.live.rearmed.iter_mut().find(|(n, _)| n == name) {
-        *id = player;
-    } else {
-        battle.live.rearmed.push((name.clone(), player));
-    }
     if let Some(index) = battle.live.historical.iter().position(|(_, n)| n == name) {
         let old = battle.live.historical[index].0;
         if old != player {
@@ -803,6 +786,16 @@ fn equip(state: &mut TickState, id: EntityId, kit: &[Option<ItemStack>; 6]) -> u
         state.push_player(connection, change);
     }
     crate::projectiles::weapons::sync(state, id);
+    // Only a completed kit replacement satisfies reconnect/respawn re-arm.
+    // Merely remembering an online identity must not suppress a later retry.
+    if let Some(name) = state.connections.name_of(id) {
+        let rearmed = &mut state.hostile.battle.live.rearmed;
+        if let Some((_, armed)) = rearmed.iter_mut().find(|(n, _)| n == name) {
+            *armed = id;
+        } else {
+            rearmed.push((name.to_owned(), id));
+        }
+    }
     kit.iter().filter(|stack| stack.is_some()).count()
 }
 
@@ -899,13 +892,6 @@ pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<Strin
             spec.id, at[0], at[1], at[2]
         )
     };
-    state.hostile.battle.live.rearmed.retain(|(n, _)| n != name);
-    state
-        .hostile
-        .battle
-        .live
-        .rearmed
-        .push((name.to_owned(), player));
     let index = existing.unwrap_or(state.hostile.battle.live.holds.len() - 1);
     remember_player(&mut state.hostile.battle, index, player);
     follow(state, name);
@@ -1090,13 +1076,13 @@ pub(crate) fn stop_camera(state: &mut TickState, viewer: EntityId) {
     }
 }
 
-/// Resolve names only while a battle binding exists. Dead viewers/targets and
-/// offline targets keep intent, never a stale camera id; viewer leave/mode exit ends it.
+/// Resolve retained names through the native camera authority. Absent restored
+/// viewers and dead bodies keep intent; explicit viewer leave/mode exit ends it.
 pub(crate) fn follow_cameras(state: &mut TickState) {
     let mut bindings = std::mem::take(&mut state.hostile.battle.live.spectators);
     bindings.retain(|(name, target)| {
         let Some(viewer) = player_named(state, name) else {
-            return false;
+            return true;
         };
         if !state.players[&viewer].spectator() {
             return false;

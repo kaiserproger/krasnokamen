@@ -57,6 +57,11 @@ intent retries a returning target or a respawned viewer on the same connection.
 Explicit stop, sneak, viewer disconnect or leaving spectator mode clears that
 intent. Entity-ID camera bindings are transient; battle history persists only
 named follow intent and resolves it through this same camera authority.
+Restored names remain pending while their viewers are offline; a real Leave
+input cancels intent before removing the connection. Re-arm completion is
+recorded only after equipment replacement, not when an identity is observed or
+a placement is attempted. Refused re-arm retries on the same connection;
+successful respawn equipment prevents an extra reconnect re-arm.
 The edge binds only a paired target, with camera release, removal, pairing and
 rebind ordered on the entity world FIFO; credit loss retains delivery debt.
 Shared command resolution finds named/UUID targets across worlds and transfers

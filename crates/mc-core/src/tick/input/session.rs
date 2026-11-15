@@ -413,6 +413,7 @@ pub(in crate::tick) fn leave(
     // Disconnect closes transient menus before freezing custody.
     // Return only real inputs/cursor; result slots are projections.
     if let Some(entity) = state.connections.entity_of(*connection) {
+        crate::tick::spectator::stop(state, entity);
         if let Some(player) = state.players.get_mut(&entity) {
             player.statistics.increment_custom(CustomStat::LeaveGame, 1);
             player.statistics.advance_tick(state.tick);

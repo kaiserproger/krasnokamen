@@ -1436,3 +1436,92 @@ fn battle_resume_restored_roles_rearm_once_and_rebind_after_rejoin() {
         "a dead holder reconnecting and respawning must not get a second re-arm"
     );
 }
+
+#[test]
+fn battle_resume_failed_rearm_retries_same_identity_only_after_equipment_succeeds() {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let player = ids[0];
+    command(&mut state, &mut ChangeSet::default(), live_cmd("PovRed")).unwrap();
+    let history = crate::battle::persistence::encode(&state).unwrap();
+    state.hostile.battle = crate::battle::persistence::decode(&history).unwrap();
+    crate::battle::persistence::restore(&mut state).unwrap();
+    state.players.get_mut(&player).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    // Exercise an actual live() refusal without changing the player identity.
+    team(&mut state, player, &["add", "blocked"]).unwrap();
+    state
+        .scoreboard
+        .teams
+        .get_mut("blocked")
+        .unwrap()
+        .members
+        .insert("PovRed".into());
+    run_tick(&mut state, &[]);
+    assert!(state.players[&player].inventory.slots[0].is_empty());
+    assert!(state.hostile.battle.live.rearmed.is_empty());
+    assert_eq!(
+        state.hostile.battle.live.historical,
+        vec![(player, "PovRed".into())]
+    );
+    state
+        .scoreboard
+        .teams
+        .get_mut("blocked")
+        .unwrap()
+        .members
+        .clear();
+    run_tick(&mut state, &[]);
+    assert!(!state.players[&player].inventory.slots[0].is_empty());
+    assert_eq!(
+        state.hostile.battle.live.rearmed,
+        vec![("PovRed".into(), player)]
+    );
+    state.players.get_mut(&player).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    run_tick(&mut state, &[]);
+    assert!(state.players[&player].inventory.slots[0].is_empty());
+}
+
+#[test]
+fn battle_resume_named_camera_survives_offline_restore_until_join_but_not_explicit_leave() {
+    let (mut state, ids) = staged(&["PovRed", "CamSpec"]);
+    command(&mut state, &mut ChangeSet::default(), live_cmd("PovRed")).unwrap();
+    spectate(&mut state, &mut ChangeSet::default(), "CamSpec", "PovRed").unwrap();
+    let viewer_uuid = state
+        .entities
+        .row(state.entities.slot_of(ids[1]).unwrap())
+        .uuid;
+    let history = crate::battle::persistence::encode(&state).unwrap();
+    run_tick(
+        &mut state,
+        &[PlayerInput::Leave {
+            connection: ConnectionId(2),
+        }],
+    );
+    assert!(state.hostile.battle.live.spectators.is_empty());
+    state.hostile.battle = crate::battle::persistence::decode(&history).unwrap();
+    crate::battle::persistence::restore(&mut state).unwrap();
+    run_tick(&mut state, &[]);
+    assert_eq!(state.hostile.battle.live.spectators.len(), 1);
+    assert!(state.cameras.is_empty());
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(7),
+            uuid: viewer_uuid,
+            name: "CamSpec".into(),
+            permission_level: 0,
+        }],
+    );
+    state.world.ensure_blocking(&state.desired_chunks());
+    run_tick(&mut state, &[]);
+    let viewer = player_named(&state, "CamSpec").unwrap();
+    assert_ne!(viewer, ids[1]);
+    assert_eq!(state.cameras.get(&viewer), Some(&ids[0]));
+    run_tick(
+        &mut state,
+        &[PlayerInput::Leave {
+            connection: ConnectionId(7),
+        }],
+    );
+    assert!(state.hostile.battle.live.spectators.is_empty());
+    assert!(state.cameras.is_empty());
+}
