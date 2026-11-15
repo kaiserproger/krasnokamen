@@ -6027,7 +6027,7 @@ area = "harness"
 severity = "major"
 status = "open"
 source = "Stage3 S3Issue1 F2: default Steve has no contrasting hat, and the gate has no hat pixel assertion"
-repro = "source"
+repro = "client"
 regression = [
   "python:tools.harness.test_scene_shot:PlayerHeadTests.test_placed_head_roi_covers_fixture_and_requires_hat_pixels",
   "python:tools.harness.test_scene_shot:PlayerHeadTests.test_authored_skin_has_opaque_contrasting_hat_and_base_window",
