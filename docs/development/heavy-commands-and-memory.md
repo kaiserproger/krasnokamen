@@ -91,11 +91,15 @@ to keep that from happening again without idling the machine.
 - **`-x` runs only inside a scheduled measurement window** (owner, 2026-11-15). A `-x`
   window freezes build-only commands and waits for every running test and server, so it
   is a measurement, not a convenience flag. The schedule is
-  `tools/dev/measurement-windows` (local `HH:MM-HH:MM` lines; the shipped default is
-  `01:00-02:30`, which ends before the nightly network fuzz at 03:00 —
-  `tools/dev/scenario-nightly` installs `OnCalendar=*-*-* 03:00:00`). Outside every
-  window the runner refuses with exit 75 and names the next window; Main may override
-  one run with `KRASNOKAMEN_WINDOW_OVERRIDE=1`. The check runs before the scene-slot
+  `tools/dev/measurement-windows`: local recurring `HH:MM-HH:MM` and one-off
+  `YYYY-MM-DDTHH:MM/YYYY-MM-DDTHH:MM` intervals. One-offs may cross midnight
+  and expire; they do not open the same hours on other dates. The recurring
+  baseline is `01:00-02:30`, before the normally03:00 nightly fuzz (parked
+  during Stage3); dated allocations follow the existing announcement plan.
+  Outside every window the runner refuses with exit75 and names the next
+  dated start; an exhausted one-off schedule refuses too. Main may override
+  an explicitly authorized run with `KRASNOKAMEN_WINDOW_OVERRIDE=1`, never
+  silently to bypass a changed allocation. The check precedes scene-slot
   and `-x` locks, so a refusal never holds anything. Tests:
   `python3 tools/dev/test_measurement_window.py`.
 - **Scope properties.** `MemoryMax=<cap>`, `MemorySwapMax=1G`,

@@ -1,14 +1,34 @@
-# Quiet measurement windows for `mem-run -x` (owner 2026-11-15).
-#
-# `-x` pauses build-only commands, waits for every running test and server to
-# finish and holds new commands at start: it is a measurement window, not a
-# convenience flag, so it runs only inside a scheduled window below. Times are
-# local, one `HH:MM-HH:MM` per line, `#` starts a comment; a window must start
-# before it ends (no overnight window, so "the next window" is always a simple
-# same-day or tomorrow answer). Main may override one run with
-# KRASNOKAMEN_WINDOW_OVERRIDE=1; agents never do.
-#
-# The nightly network fuzz is a systemd timer at 03:00
-# (tools/dev/scenario-nightly `OnCalendar=*-*-* 03:00:00`); a campaign holds
-# builds for its whole duration, so the default window ends before it starts.
+# Quiet measurement admission for mem-run -x, local host time.
+# Daily HH:MM-HH:MM plus one-off START/END in YYYY-MM-DDTHH:MM.
+# Dated intervals may cross midnight; their grants expire, not repeat daily.
+# Exact owners/cells: receipts/Stage3/ANNOUNCE-PLAN.md and its single PLAN queue.
+# No quiet grant Sun15Nov21:00-Mon16Nov01:00: MainA1Night NORMAL lane.
+# Existing cells finish/cleanup normally; never stop one to change allocation.
+# Recurring baseline ends before the nightly03:00 fuzz; its timer stays parked
+# during Stage3. Dated owner-approved extensions below supersede this baseline.
 01:00-02:30
+# W2: existing laptop owner, unchanged; no duplicate benchmark.
+2026-11-15T19:00/2026-11-15T21:00
+# W4: Mon01:00-02:30 uses the daily baseline, PerfRoam (valid candidate only).
+# W3 scaling r1 moved to old W5; W6 explore retained.
+2026-11-16T02:30/2026-11-16T05:30
+2026-11-16T05:30/2026-11-16T08:30
+# W7 fight; W8 Tue01:00-02:30 uses the daily baseline.
+2026-11-16T22:00/2026-11-17T01:00
+# W8b reference roam and W8c candidate A/B.
+2026-11-17T02:30/2026-11-17T06:30
+2026-11-17T06:30/2026-11-17T08:00
+# W10 trial take, W9 laptop remote matrix.
+2026-11-17T14:00/2026-11-17T16:00
+2026-11-17T19:00/2026-11-17T21:00
+# W5 scaling r2 moved here; no overlap with W9 or W11.
+2026-11-17T22:00/2026-11-18T01:00
+# W11 candidate A/B and W11b remaining reference curve.
+2026-11-18T01:00/2026-11-18T04:00
+2026-11-18T04:00/2026-11-18T06:30
+# W10 Wednesday trial, W12 independent repeats, W13 laptop freeze take.
+2026-11-18T14:00/2026-11-18T16:00
+2026-11-19T01:00/2026-11-19T04:00
+2026-11-19T20:00/2026-11-19T22:00
+# W14 requires every freeze-pin matrix cell; unrun cells remain blocked.
+2026-11-20T01:00/2026-11-20T05:00

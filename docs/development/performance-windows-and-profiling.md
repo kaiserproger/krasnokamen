@@ -20,9 +20,12 @@ commands are in [PROFILES.md](../performance/PROFILES.md) and
    time. No GO or announcement is needed. A rustc on the bot CPUs once
    contaminated a MIX replay; that is why measurements never run outside `-x`.
    `-x` itself opens only inside a scheduled window (owner, 2026-11-15:
-   `tools/dev/measurement-windows`, default `01:00-02:30`, which ends before the
-   nightly fuzz); outside one the runner refuses and names the next window, and
-   only Main may override a run with `KRASNOKAMEN_WINDOW_OVERRIDE=1`.
+   `tools/dev/measurement-windows`, recurring `01:00-02:30` plus explicit
+   dated START/END allocations). The existing announcement plan owns
+   cell/owner assignment; expired grants do not repeat on other nights.
+   Outside a grant the runner refuses and names the next dated window.
+   Only Main may explicitly authorize an override; schedule reassignments
+   update the existing allowlist/plan before the next cell, never mid-cell.
 3. Run the canonical scene **unshortened**.
 4. Report gate status, p50/p95/p99, stage breakdown, CPU time per tick and the
    profile path in the result.
