@@ -221,6 +221,13 @@ A native death image immediately tombstones the body. Its remaining 20-tick
 presentation corpse can move, but no longer emits compact persisted poses;
 replay still rejects every pose referencing an absent authoritative body.
 
+Both WAL and checkpoint capture reconcile staging decisions with proven native
+tombstones: dead pending/refused bodies no longer await ground. An absent ID is
+not proof of death and remains a recovery error. Pending retaliation drops only
+a native player with a known account name and no named live hold: the ordinary
+next battle pass cannot accept that attacker. Held players, native attackers
+and unknown identities remain unchanged; replay's identity checks stay strict.
+
 An image-encoding failure propagates through journal capture as a typed error.
 The tick owner halts before queuing the WAL or publishing that tick, reliably
 disconnects live players, and does not checkpoint its unjournaled state.
@@ -242,6 +249,10 @@ Production-tick regressions:
 `battle_resume_abrupt_checkpoint_commit_recovers_whole_history`,
 `battle_resume_encoding_failure_halts_before_wal_or_publication` and
 `battle_resume_sigkill_during_dying_body_keeps_tombstone_authority`.
+Capture-boundary SIGKILL regressions cover an ordinary unheld player's actual
+blow and staged-body death before settlement, after real terrain refusal, and
+after waiting settlement. Each compares recovered history/native poses and a
+subsequent checkpoint/restart; running battles also land further native damage.
 
 ## Quarantined chunks
 

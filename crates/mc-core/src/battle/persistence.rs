@@ -43,6 +43,24 @@ pub(crate) fn row_key(dimension: Dimension) -> String {
     )
 }
 
+/// The battle pass precedes native damage merge. Reconcile only decisions the
+/// next ordinary pass discards, using actual native identity/death evidence.
+/// An absent body is not proof of death: unknown IDs must still fail replay.
+fn reconcile_native_capture(state: &mut TickState) {
+    let entities = &state.entities;
+    let battle = &mut state.hostile.battle;
+    let survives = |id: &EntityId| {
+        entities
+            .slot_of_any(*id)
+            .is_none_or(|slot| entities.body(slot).alive)
+    };
+    battle.ground_pending.retain(survives);
+    battle.ground_refused.retain(survives);
+    battle
+        .retaliation
+        .reconcile_capture(entities, &battle.live, &state.connections);
+}
+
 pub(crate) fn encode(state: &TickState) -> Result<String, CoreError> {
     #[cfg(test)]
     {
@@ -309,10 +327,14 @@ pub(crate) fn restore(state: &mut TickState) -> Result<(), CoreError> {
 }
 
 pub(crate) fn checkpoint_rows(
-    state: &TickState,
+    state: &mut TickState,
     tick: u64,
 ) -> Result<BTreeMap<String, NativeDomainRecord>, CoreError> {
-    std::iter::once(state)
+    reconcile_native_capture(state);
+    for child in state.other_dimensions.values_mut() {
+        reconcile_native_capture(child);
+    }
+    std::iter::once(&*state)
         .chain(state.other_dimensions.values().map(|state| &**state))
         .map(|state| {
             Ok((
@@ -355,6 +377,7 @@ pub(crate) fn journal_entries(
     {
         return Ok(());
     }
+    reconcile_native_capture(state);
     let image = encode(state)?;
     if state
         .hostile
