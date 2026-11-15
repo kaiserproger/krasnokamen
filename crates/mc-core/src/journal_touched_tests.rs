@@ -1378,3 +1378,6 @@ fn landing_reset_of_a_journaled_fall_distance_reaches_the_journal() {
         0.0
     );
 }
+
+#[path = "journal_item_motion_tests.rs"]
+mod item_motion_tests;

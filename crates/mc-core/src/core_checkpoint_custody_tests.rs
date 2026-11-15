@@ -63,7 +63,7 @@ fn stored_image(config: &CoreConfig) -> Image {
 /// Durable non-player identities in every dimension's `EntityStore`, read from
 /// the identity column rather than through checkpoint capture. A corpse (a row
 /// on the dying clock) is excluded: its death is its durable removal. Other
-/// dead rows stay durable.
+/// dead non-player rows must not survive the tick into capture.
 fn store_uuids(state: &TickState) -> BTreeSet<uuid::Uuid> {
     worlds(state)
         .flat_map(|world| {
@@ -126,6 +126,98 @@ fn rename(state: &mut TickState, id: EntityId, uuid: uuid::Uuid) {
     let (world, slot) = world_mut(state, id);
     world.entities.set_uuid(slot, uuid);
     world.appearance_changed.push(id);
+}
+
+#[test]
+fn capture_custody_ticks_remove_picked_up_merged_and_retracted_rows() {
+    use crate::boundary::{ConnectionId, PlayerInput};
+    use mc_data::ItemStack;
+    let directory = tempfile::tempdir().unwrap();
+    let mut world = World::new(directory.path());
+    world
+        .state
+        .gamerules
+        .insert("spawn_mobs".into(), "false".into());
+    world.run(&[PlayerInput::Join {
+        connection: ConnectionId(77),
+        uuid: uuid::Uuid::from_u128(77),
+        name: "Collector".into(),
+        permission_level: 0,
+    }]);
+    let player = world.state.connections.entity_of(ConnectionId(77)).unwrap();
+    let stone = world
+        .state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:stone").unwrap())
+        .unwrap();
+    let inventory_count = |state: &TickState| {
+        state.players[&player]
+            .inventory
+            .slots
+            .iter()
+            .filter(|stack| stack.item_id == stone)
+            .map(|stack| stack.count)
+            .sum::<i32>()
+    };
+    let before = inventory_count(&world.state);
+    let mut created = None;
+    world.tick(|state| {
+        state.world.ensure_blocking(&state.desired_chunks());
+        for x in 0..16 {
+            for z in 0..16 {
+                state
+                    .world
+                    .set_block(x, 199, z, state.registry.states.stone);
+            }
+        }
+        state.world.fold_overlay();
+        let player_slot = slot(state, player);
+        state.entities.set_pos(player_slot, [8.5, 200.0, 8.5]);
+        state.entities.set_vel(player_slot, [0.0; 3]);
+        state.entities.set_ground(player_slot, true);
+        let pickup =
+            crate::tick::spawn_item_entity(state, [8.5, 200.0, 8.5], ItemStack::new(stone, 3));
+        let first =
+            crate::tick::spawn_item_entity(state, [12.5, 200.0, 8.5], ItemStack::new(stone, 20));
+        let second =
+            crate::tick::spawn_item_entity(state, [12.7, 200.0, 8.5], ItemStack::new(stone, 22));
+        for (id, delay) in [(pickup, 0), (first, 100), (second, 100)] {
+            let item_slot = slot(state, id);
+            state.entities.body_mut(item_slot).pickup_delay = delay;
+            state.entities.set_vel(item_slot, [0.0; 3]);
+        }
+        created = Some((pickup, first, second));
+    });
+    let (pickup, first, second) = created.unwrap();
+    assert!(world.state.entities.slot_of_any(pickup).is_none());
+    assert_eq!(inventory_count(&world.state), before + 3);
+    for _ in 0..20 {
+        if [first, second]
+            .iter()
+            .filter(|&&id| world.state.entities.slot_of_any(id).is_some())
+            .count()
+            == 1
+        {
+            break;
+        }
+        world.tick(|_| {});
+    }
+    let counts: Vec<_> = [first, second]
+        .into_iter()
+        .filter_map(|id| world.state.entities.slot_of_any(id))
+        .map(|slot| world.state.entities.row(slot).item.as_ref().unwrap().count)
+        .collect();
+    assert_eq!(
+        counts,
+        [42],
+        "merging must consume one row, not leave it dead"
+    );
+    world.checkpoint();
+    let (stand, revision, handle) = deploy_pavise(&mut world);
+    retract_pavise(&mut world, stand, revision, handle);
+    world.checkpoint();
+    assert_eq!(pavises(&world.state), 1);
 }
 
 struct World {
@@ -192,6 +284,18 @@ impl World {
 
     fn run(&mut self, inputs: &[crate::boundary::PlayerInput]) {
         let (output, _, _) = crate::tick::run_tick(&mut self.state, inputs);
+        for world in worlds(&self.state) {
+            for slot in world.entities.slots() {
+                let body = world.entities.body(slot);
+                assert!(
+                    body.alive
+                        || matches!(body.kind, crate::entities::EntityKind::Player { .. })
+                        || world.entities.is_dying(body.id),
+                    "dead non-corpse row {:?} survived a custody tick",
+                    body.id
+                );
+            }
+        }
         let entries = journal_entries_for_tick(&mut self.state, &output);
         self.writer
             .append(output.tick, output.tick, &entries)

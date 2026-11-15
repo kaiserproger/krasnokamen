@@ -1,5 +1,4 @@
 //! Replay reducer: batch images, chunk clocks and entity state images.
-//! Moved verbatim from `journal.rs`.
 
 use super::*;
 
@@ -393,8 +392,8 @@ impl EntityStateImage {
             ..Default::default()
         };
         crate::mounts::persistence::from_fields(&mut image.entity_life, &record.extra_fields)?;
-        // The live image and WAL replay share one capacity bound, so a state
-        // accepted here (checkpoint load, /summon) can always be replayed.
+        // Live image loading and replay share this capacity bound. Replay
+        // separately checks rider identity uniqueness and passenger eligibility.
         let capacity = registry
             .entity_type_id(&record.id)
             .map_or(1, crate::mounts::seat_capacity);

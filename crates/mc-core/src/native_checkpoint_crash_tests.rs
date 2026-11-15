@@ -278,6 +278,7 @@ async fn queued_save_requests_keep_one_capture_in_flight_and_both_receive_durabl
                 moderation_selector_rx,
                 outbox: outbox_tx,
                 tick_broadcast,
+                knockback_publication: Arc::new(parking_lot::RwLock::new(Arc::default())),
                 timing_broadcast,
                 pause_state: tokio::sync::watch::channel(None).0,
                 work_tx,

@@ -36,13 +36,9 @@ async fn core_halt_routes_terminal_disconnect_reason() {
     let (world_tx, _world_rx) = world_queue(256, WORLD_QUEUE_BYTES);
     server
         .connections
-        .register(
-            id,
-            ConnectionHandles {
-                reliable_tx,
-                world_tx,
-            },
-        )
+        .register(id, ConnectionHandles::new(reliable_tx, world_tx), || {
+            server.hub.published_knockback_count(id)
+        })
         .unwrap();
     assert!(core.submit(mc_core::boundary::PlayerInput::Join {
         connection: id,
