@@ -113,23 +113,58 @@ def _run_cargo(ctx, tests, tree):
     return results
 
 
+def _client_test_target(packages, crate):
+    """One unambiguous Cargo unit-test target for a registered client package."""
+    matches = [package for package in packages if package.get('name') == crate]
+    if len(matches) != 1:
+        raise ValueError(f'client package {crate}: unknown or ambiguous package in cargo metadata')
+    targets = [target for target in matches[0]['targets'] if target.get('test', True)]
+    libraries = [target for target in targets if set(target['kind']) & {
+        'lib', 'rlib', 'dylib', 'cdylib', 'staticlib', 'proc-macro'}]
+    if len(libraries) == 1:
+        return ['--lib']
+    binaries = [target for target in targets if target['kind'] == ['bin']]
+    if not libraries and len(binaries) == 1:
+        return ['--bin', binaries[0]['name']]
+    raise ValueError(f'client package {crate}: no unambiguous lib or bin unit-test target in cargo metadata')
+
+
 def _run_client(ctx, tests, root):
     """Run exact client-crate tests {(crate, name)} in the client checkout -> {(crate, name): (state, detail)}.
 
     A `client:<crate>:<test>` ref is a fix in the client repository: it never builds here, so the
     checkout is `runtime.sibling_root('client')` (KRASNOKAMEN_CLIENT_ROOT or the sibling repo)."""
-    from . import runtime
-
+    # Cargo metadata is one JSON line; mem-run can prepend its scope diagnostic.
     repo = client_repo(root)
     if not repo.is_dir():
         return {test: (UNRUNNABLE, f'no client checkout at {repo} (set KRASNOKAMEN_CLIENT_ROOT)') for test in tests}
+    argv, env = regressions.tree_build_command(
+        repo, ['cargo', 'metadata', '--no-deps', '--format-version', '1'])
+    ok, text = _exec(ctx, argv, 'client-metadata', repo, env)
+    try:
+        metadata = next(json.loads(line) for line in text.splitlines() if line.startswith('{'))
+        if not ok or not isinstance(metadata.get('packages'), list):
+            raise ValueError('cargo metadata failed or omitted packages')
+        targets = {}
+        errors = {}
+        for crate in sorted({crate for crate, _ in tests}):
+            try:
+                targets[crate] = _client_test_target(metadata['packages'], crate)
+            except ValueError as error:
+                errors[crate] = str(error)
+    except (ValueError, StopIteration, KeyError, TypeError, AttributeError):
+        return {test: (UNRUNNABLE, f'client package {test[0]}: cargo metadata failed or was invalid; see log')
+                for test in tests}
     results = {}
     for crate, name in sorted(tests):
+        if crate in errors:
+            results[(crate, name)] = (UNRUNNABLE, errors[crate])
+            continue
         # A ref may name one test or a whole module (`ui::toasts::tests`): cargo's filter selects it
         # either way, and `--exact` would find nothing for the module form. Green needs at least one
         # selected test and no failure, so a ref can never pass by selecting nothing.
         argv, env = regressions.tree_build_command(
-            repo, ['cargo', 'test', '-p', crate, '--lib', '--', name])
+            repo, ['cargo', 'test', '-p', crate, *targets[crate], '--', name])
         ok, text = _exec(ctx, argv, f'client-{name.rsplit("::", 1)[-1][:24]}', repo, env)
         summary = re.search(r'test result: (\w+)\. (\d+) passed; (\d+) failed', text)
         if summary is None:
