@@ -64,6 +64,12 @@ def resident_census(probe: ProbeSteps) -> dict:
         cursor = following
 
 
+def hud_visible(observed: dict) -> bool:
+    # F1 is a session toggle, not a managed client_settings key.
+    return any(node.get("id", "").startswith(("hud/", "chat/"))
+               for node in observed["ui_nodes"])
+
+
 def record_census(probe: ProbeSteps, console, run: dict, server_log: Path) -> dict:
     console(f'gamemode creative {USERNAME}')
     listing = village._recent_chat(village._send(probe, "settlement list"), 20)
@@ -280,14 +286,14 @@ def main() -> None:
                 probe.wait(lambda observed: abs(observed['player']['y'] - anchor[1] - 35) < 1, 'camera_position')
                 probe.call('minecraft_close_screen', {})
                 probe.call('minecraft_look', {'yaw_deg': 145, 'pitch_deg': 40})
-                hud_hidden = probe.observe()['client_settings']['hide_hud']
-                if not hud_hidden:
+                hud_was_visible = hud_visible(probe.observe())
+                if hud_was_visible:
                     probe.call('minecraft_press_inputs', {'keys': ['key.keyboard.f1'], 'ticks': 1})
-                probe.wait(lambda observed: observed['client_settings']['hide_hud'] is True, 'film_hud_hidden')
+                probe.wait(lambda observed: not hud_visible(observed), 'film_hud_hidden')
                 shot = native_client.capture(mcp, out, f'frame-{frame:03d}')
-                if not hud_hidden:
+                if hud_was_visible:
                     probe.call('minecraft_press_inputs', {'keys': ['key.keyboard.f1'], 'ticks': 1})
-                    probe.wait(lambda observed: observed['client_settings']['hide_hud'] is False, 'film_hud_restored')
+                    probe.wait(hud_visible, 'film_hud_restored')
                 run['frames'].append({'game_time': snapshot['game_time'], 'settlement': focus['id'], 'capture': shot})
                 dump(out / 'run.json', run)
             final = run['snapshots'][-1]

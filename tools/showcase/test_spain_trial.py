@@ -2,7 +2,17 @@
 import unittest
 from unittest.mock import Mock
 
-from tools.showcase.spain_trial import resident_census
+from tools.showcase.spain_trial import hud_visible, resident_census
+
+
+class HudObservationTests(unittest.TestCase):
+    def test_visible_hud_is_detected_without_a_managed_setting(self):
+        self.assertTrue(hud_visible({"client_settings": {}, "ui_nodes": [{"id": "hud/hotbar"}]}))
+        self.assertTrue(hud_visible({"ui_nodes": [{"id": "chat/line/1"}]}))
+
+    def test_hidden_hud_requires_no_hud_or_chat_nodes(self):
+        self.assertFalse(hud_visible({"ui_nodes": []}))
+        self.assertFalse(hud_visible({"ui_nodes": [{"id": "world/label"}]}))
 
 
 class ResidentCensusTests(unittest.TestCase):
