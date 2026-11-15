@@ -79,7 +79,7 @@
       "wait_ticks": 120
     },
     {
-      "shot": "ctx-day"
+      "dropped_clock_capture": "ctx-day"
     },
     {
       "cmd": "time set 18000"
@@ -88,7 +88,7 @@
       "wait_ticks": 120
     },
     {
-      "shot": "ctx-night"
+      "dropped_clock_capture": "ctx-night"
     },
     {
       "cmd": "time set 6000"
