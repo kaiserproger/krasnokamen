@@ -11,10 +11,11 @@ not compile their source. Vanilla clients can use server-only plugins.
 
 ## Plugin developers
 
-- [Your first plugin in 10 minutes](plugins/QUICKSTART.md).
+- [Your first plugin](plugins/QUICKSTART.md): a minimal `/hello` template, build and deployment.
 - [SDK reference and limitations](plugins/SDK.md), [Rust SDK](../sdk/rust/krasnokamen-plugin-sdk/README.md) and the
   [manifest and lifecycle contract](plugins/CONTRACT.md).
-- Rust examples: [hello](../sdk/rust/examples/hello) and
+- Rust examples: [first-plugin](../sdk/rust/examples/first-plugin) (one command),
+  [hello](../sdk/rust/examples/hello) (host test fixture) and
   [sky-creeper](../sdk/rust/examples/sky-creeper).
 - Real packages: [krasnokamen-default-plugins](https://github.com/kaiserproger/krasnokamen-default-plugins).
 - [Experimental offline Bukkit/Forge converter](plugins/CONVERTER.md): a small,

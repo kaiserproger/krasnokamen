@@ -1,125 +1,67 @@
-# Your first plugin in 10 minutes
+# Your first plugin
 
-Build a server-only Rust component that logs when enabled, greets joining players
-and answers `/hello`. Allow extra time for the first Rust dependency download and
-server content installation. Use a Krasnokamen checkout matching the server: SDK and
-WIT are generated together and 0.9.0 components must match that server's WIT.
+Build a server-only Rust component that answers `/hello`. Start from the small
+[first-plugin template](../../sdk/rust/examples/first-plugin), not the much larger
+`hello` host-test fixture. No API change or code generator is needed.
 
 ## Prerequisites
 
-Install Rust and Cargo with rustup, Git, and a built `krasnokamen` server with its
-vanilla content cache ([server setup](../OPERATING.md)). No `cargo-component` or
-`wasm-tools` is needed: the repository's `plugin_component` example encodes the
-component. The first encoder build compiles host dependencies; it is not the
-server. Commands below use a POSIX shell. Set `KRASNOKAMEN` to the **absolute path**
-of your matching checkout and `SERVER` to your built server binary; keep both
-available throughout. Use an isolated test server and world, not production.
+Install Rust and Cargo with rustup, Git, and a prebuilt `krasnokamen` server with
+its content cache ([server setup](../OPERATING.md#startup-and-content)). Use a
+complete checkout matching the server: SDK and WIT are generated together;
+`krasnokamen:plugin@0.9.0` alone does not guarantee binary compatibility. Published
+rc.5 artifacts predate the rename; do not mix their SDK/plugins with current main.
+
+No `cargo-component` or `wasm-tools` is needed. The repository's `plugin_component`
+example encodes the component; its first build compiles host dependencies, **not
+the server**. Allow time for dependency downloads and compilation; this guide
+makes no ten-minute first-build guarantee.
+
+Commands use a POSIX shell. From your matching checkout, set `KRASNOKAMEN`, then
+set `SERVER` to your matching prebuilt binary and `CONTENT` to an installed
+canonical cache. Keep this shell open:
 
 ```sh
 export KRASNOKAMEN="$(pwd)"
-export SERVER="$KRASNOKAMEN/target/release/krasnokamen"
+export SERVER=/absolute/path/to/krasnokamen
+export CONTENT=/absolute/path/to/content/26.3
 rustup target add wasm32-unknown-unknown
-export TUTORIAL="$(mktemp -d /tmp/solaris-plugin-tutorial.XXXXXX)"
-cd "$TUTORIAL"
-cargo new --lib hello
+export TUTORIAL="$(mktemp -d "${TMPDIR:-/tmp}/krasnokamen-plugin-tutorial.XXXXXX")"
+export CARGO_TARGET_DIR="$TUTORIAL/target"
+mkdir -p "$TUTORIAL/plugins/hello"
+cp "$KRASNOKAMEN/sdk/rust/examples/first-plugin/plugin.toml" "$TUTORIAL/plugins/hello/"
 ```
 
-Run the first two exports from the Krasnokamen checkout; if your server is elsewhere,
-set `SERVER` to its absolute path instead. `TUTORIAL` is a fresh directory each
-run, so the guide can be repeated. Keep this shell open: later steps use these
-variables. Replace `hello/Cargo.toml` with:
+## Build and deploy
+
+The template has three files: `Cargo.toml`, `src/lib.rs` and `plugin.toml`.
+Read `src/lib.rs`: it returns a message for the session that invoked `/hello`,
+not for a UUID that may belong to a new session after reconnect. Edit the reply
+there to make your first change. `plugin.toml` owns the `hello` command root;
+no subscription or capability is needed for this message.
 
 ```sh
-cat > hello/Cargo.toml <<EOF
-[package]
-name = "hello"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-crate-type = ["cdylib"]
-
-[dependencies]
-krasnokamen-plugin-sdk = { path = "$KRASNOKAMEN/sdk/rust/krasnokamen-plugin-sdk" }
-wit-bindgen = "0.62"
-EOF
+cargo build --manifest-path "$KRASNOKAMEN/sdk/rust/Cargo.toml" \
+  -p first-plugin --target wasm32-unknown-unknown
+cargo run --manifest-path "$KRASNOKAMEN/crates/mc-plugin-host/Cargo.toml" \
+  --example plugin_component -- \
+  "$CARGO_TARGET_DIR/wasm32-unknown-unknown/debug/first_plugin.wasm" \
+  "$TUTORIAL/plugins/hello/plugin.wasm"
 ```
 
-Write `hello/src/lib.rs`:
+This uses debug Wasm for iteration, not a release server build. Setting the output
+directory explicitly makes the encoder's input unambiguous, even if your shell
+already had `CARGO_TARGET_DIR` set. Deploy the **encoded component**, not the
+unencoded module. Never copy Cargo source files into a deployed package directory.
+
+## Run and observe
+
+Create an isolated loopback/offline server, with a new world. Set another free
+port if 25565 is in use. All data and plugin paths below are absolute: relative
+paths are resolved against the process working directory, not the config file.
 
 ```sh
-cat > hello/src/lib.rs <<'EOF'
-use krasnokamen_plugin_sdk::{
-    export_plugin, log, message_session, Command, Config, Event, EventContext,
-    Failure, InitContext, LogLevel, Plugin,
-};
-
-#[derive(Default)]
-struct Hello;
-
-impl Plugin for Hello {
-    fn init(&mut self, _config: &Config, _context: &InitContext) -> Result<Vec<Command>, Failure> {
-        log(LogLevel::Info, "hello plugin ready");
-        Ok(Vec::new())
-    }
-
-    fn on_events(&mut self, _context: &EventContext, events: &[Event]) -> Result<Vec<Command>, Failure> {
-        let mut commands = Vec::new();
-        for event in events {
-            match event {
-                // Reply to the session that sent the event, not the player's UUID:
-                // after a reconnect the UUID may belong to a newer session.
-                Event::PlayerJoined(joined) => commands.push(message_session(
-                    joined.session, format!("Welcome! {}", joined.name),
-                )),
-                Event::CommandInvoked(invoked) if invoked.name == "hello" => commands.push(
-                    message_session(invoked.session, "Hello from a WASM plugin."),
-                ),
-                _ => {}
-            }
-        }
-        Ok(commands)
-    }
-}
-
-export_plugin!(Hello);
-EOF
-```
-
-Create the deployment manifest. `player.joined` is a subscription; command
-invocations are routed because the manifest owns `hello`. No capability is
-needed for these messages. A console does not dispatch player plugin commands.
-
-```sh
-mkdir -p plugins/hello
-cat > plugins/hello/plugin.toml <<'EOF'
-id = "hello"
-name = "Hello"
-version = "0.1.0"
-api = "0.9.0"
-events = ["player.joined"]
-player_commands = ["hello"]
-EOF
-```
-
-Build the core module and encode it as a component (the server cannot load the
-unencoded module):
-
-```sh
-cargo build --manifest-path hello/Cargo.toml --target wasm32-unknown-unknown --release
-cargo run --manifest-path "$KRASNOKAMEN/crates/mc-plugin-host/Cargo.toml" --example plugin_component -- \
-  "$PWD/hello/target/wasm32-unknown-unknown/release/hello.wasm" "$PWD/plugins/hello/plugin.wasm"
-```
-
-Caches and compilation can take longer than ten minutes on the first run.
-
-For a local test, create this isolated configuration. It uses the checkout's
-licensed content cache, a new world, loopback and offline authentication. If
-your cache is elsewhere, change `vanilla_data_dir` to its absolute path; see
-[content setup](../OPERATING.md#vanilla-content-cache).
-
-```sh
-cat > server.toml <<EOF
+cat > "$TUTORIAL/server.toml" <<EOF
 [network]
 bind_address = "127.0.0.1"
 port = 25565
@@ -129,29 +71,30 @@ online_mode = false
 directory = "$TUTORIAL/plugins"
 [data]
 world_dir = "$TUTORIAL/world"
-vanilla_data_dir = "$KRASNOKAMEN/data/vanilla"
+vanilla_data_dir = "$CONTENT"
 EOF
-```
-
-Start it:
-
-```sh
 "$SERVER" --config "$TUTORIAL/server.toml"
 ```
 
-Look for `hello plugin ready`. Join with a compatible player client: chat shows
-`Welcome! <name>`. Send `/hello` as that player and see `Hello from a WASM plugin.`
-Use offline mode only on a private test server; it does not authenticate players.
+Join with a compatible player client and send `/hello`. The expected chat reply
+is `Hello from a WASM plugin.` (or your edited text). A listening socket or a
+successful build alone does not prove the command works. The console does not
+dispatch player plugin commands. Use `stop` in the console to shut down cleanly.
+After editing the plugin, stop, rebuild, encode and restart before checking again.
+Offline mode does not authenticate players; keep this test on loopback.
 
 ## If it does not work
 
 - `can't find crate for std`: install the target with the rustup command above.
-- SDK path or WIT missing: use the complete matching checkout, not a copied SDK
-  directory; the SDK generates bindings from `crates/mc-script/wit`.
-- Invalid component or wrong world: encode the core module, and rebuild SDK,
-  component and server from matching WIT versions.
-- Duplicate id or command, unknown manifest field, capability or event: remove
-  the conflict or fix `plugin.toml`; startup fails closed, it does not skip it.
-- `/hello` in console is not a player command; use a connected player. If it
-  still fails, inspect server logs for a trapped or retired component and restart
-  after fixing it. See [deployment diagnostics](OPERATIONS.md#diagnosing-a-deployment).
+- SDK path or WIT missing: use the complete matching checkout; the SDK generates
+  bindings from `crates/mc-script/wit`.
+- Invalid component or wrong world: encode the core module and use matching SDK,
+  WIT and server revisions.
+- Duplicate id/command, unknown manifest field, capability or event: fix the
+  manifest conflict; startup fails closed rather than skipping the package.
+- `/hello` fails: use a connected player, not the console. If an authentication
+  plugin is deployed, log in first. Inspect logs for trapped or retired components
+  and restart after fixing them. See [deployment diagnostics](OPERATIONS.md#diagnosing-a-deployment).
+
+For joins, timers and durable operations, continue with the [SDK reference](SDK.md)
+and the existing examples. This template deliberately implements only one command.

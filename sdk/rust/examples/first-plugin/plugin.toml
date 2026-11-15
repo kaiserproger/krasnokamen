@@ -1,0 +1,6 @@
+id = "hello"
+name = "Hello"
+version = "0.1.0"
+api = "0.9.0"
+entry = "plugin.wasm"
+player_commands = ["hello"]

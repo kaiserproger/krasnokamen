@@ -2,6 +2,7 @@
 resolver = "2"
 members = [
     "krasnokamen-plugin-sdk",
+    "examples/first-plugin",
     "examples/hello",
     "examples/sky-creeper",
 ]
