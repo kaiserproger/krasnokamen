@@ -1,6 +1,102 @@
 # Historical reports require current-tree revalidation before promotion.
 
 [[bug]]
+id = "PLUGIN-WORLD-BLOCK-CONTAINER-CUSTODY"
+title = "SetWorldBlock removes container contents even when installing the same block identity."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Source audit: crates/mc-core/src/plugin/builds.rs, apply_world_block_set"
+regression = ["cargo:mc-core:plugin_tests::plugin_set_world_block_preserves_same_block_container_contents"]
+failing_first = "reported"
+fix_commit = "5a9664cad5a832e524b14b8088ea5e187a3fb578"
+
+[[bug]]
+id = "PLUGIN-WORLD-BLOCK-ZONE-ADMISSION"
+title = "SetWorldBlock bypasses another plugin's protected zone, including remote-dimension writes and protection changed during a precommit hook wait."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Source audit: crates/mc-core/src/plugin/builds.rs, prepare_world_block_set"
+regression = ["cargo:mc-core:plugin_tests::world_block_tests::plugin_block_sets_refuse_foreign_protected_zones_but_keep_owned_and_event_zones", "cargo:mc-core:plugin_tests::world_block_tests::plugin_block_sets_recheck_zone_protection_after_hook_wait", "cargo:mc-core:plugin_tests::world_block_tests::remote_plugin_block_sets_use_root_zone_authority", "cargo:mc-core:plugin_tests::world_block_tests::remote_plugin_block_sets_recheck_root_zones_after_hook_wait"]
+failing_first = "reported"
+fix_commit = "5a9664cad5a832e524b14b8088ea5e187a3fb578"
+
+[[bug]]
+id = "SPECTATOR-ORDINARY-MELEE"
+title = "An ordinary player Attack input from spectator mode damages a mob and records an attack swing."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Source audit: crates/mc-core/src/tick/input/combat.rs, attack"
+regression = ["cargo:mc-core:tick_tests::combat_parity_tests::spectator_cannot_damage_a_mob_with_an_ordinary_attack_input"]
+failing_first = "reported"
+fix_commit = "5a9664cad5a832e524b14b8088ea5e187a3fb578"
+
+[[bug]]
+id = "PLAYER-ARROW-OWNER-LIFETIME-PVP"
+title = "Retained player arrows bypass pvp=false after their owner dies or disconnects, including travel followed by logout in another dimension."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Source audit: crates/mc-core/src/projectiles/flight.rs and crates/mc-core/src/tick/damage.rs"
+regression = ["cargo:mc-core:projectiles::flight_tests::owner_tests::dead_player_arrow_owner_respects_pvp_rule", "cargo:mc-core:projectiles::flight_tests::owner_tests::disconnected_player_arrow_owner_respects_pvp_rule", "cargo:mc-core:projectiles::flight_tests::owner_tests::player_arrow_respects_pvp_after_owner_travels_and_disconnects"]
+failing_first = "reported"
+fix_commit = "5a9664cad5a832e524b14b8088ea5e187a3fb578"
+
+[[bug]]
+id = "SPAWNPOINT-HORIZONTAL-BOUNDARY"
+title = "A spawnpoint admitted at positive horizontal coordinate 30000000 becomes an invalid centered cross-dimension respawn and panics during transfer."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Source audit: crates/mc-core/src/command_world.rs, position; crates/mc-core/src/dimensions_travel.rs, finish_respawns"
+regression = ["cargo:mc-core:dimensions::tests::spawnpoint_rejects_horizontal_boundary_before_cross_dimension_respawn"]
+failing_first = "reported"
+fix_commit = "5a9664cad5a832e524b14b8088ea5e187a3fb578"
+
+[[bug]]
+id = "COMMAND-CAMPFIRE-IMAGE-ADMISSION"
+title = "Malformed campfire CookingTimes or CookingTotalTimes arrays are admitted by block commands and later quarantine the affected chunk during hydration."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Source audit: crates/mc-core/src/command_block_entity.rs, prepare; crates/mc-core/src/tick/hydration.rs"
+regression = ["cargo:mc-core:command_world::tests::malformed_campfire_commands_refuse_before_mutating_or_quarantining_the_chunk"]
+failing_first = "reported"
+fix_commit = "5a9664cad5a832e524b14b8088ea5e187a3fb578"
+
+[[bug]]
+id = "COMMAND-NONNUMERIC-COMPLETION"
+title = "Successful seed, msg and teammsg commands report an unavailable outcome, so conditional command-block chains do not run."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Source audit: crates/mc-core/src/command_execution.rs, execute"
+regression = ["cargo:mc-core:command_characterization_tests::seed_reports_success_without_enabling_numeric_store", "cargo:mc-core:command_characterization_tests::private_message_reports_success_without_enabling_numeric_store", "cargo:mc-core:command_characterization_tests::team_message_reports_success_without_enabling_numeric_store", "cargo:mc-core:command_blocks::tests::successful_seed_allows_the_following_conditional_chain"]
+failing_first = "reported"
+fix_commit = "5a9664cad5a832e524b14b8088ea5e187a3fb578"
+
+[[bug]]
+id = "LOCKED-DIMENSION-TRANSFER-OUTCOME"
+title = "A cross-dimension teleport refused for an authentication-locked target still publishes a destination spawn and successful command outcome."
+area = "gameplay"
+repro = "source"
+severity = "minor"
+status = "open"
+source = "Source audit: crates/mc-core/src/dimensions_travel.rs, move_between and change_dimension"
+regression = ["cargo:mc-core:dimensions::tests::locked_cross_dimension_teleport_refuses_without_publishing_spawn_or_success"]
+failing_first = "reported"
+fix_commit = "5a9664cad5a832e524b14b8088ea5e187a3fb578"
+
+[[bug]]
 id = "POTION-CUSTOM-PAYLOAD"
 title = "Lingering potions ignore custom effects and potion impact color ignores its override."
 area = "gameplay"
