@@ -172,6 +172,19 @@ Source evidence and original consumer failures are recorded in
 `receipts/HzCompatA4/REPORT.md`. Permission packet tests are not real-client
 completion acceptance; Main must pin the integrated revision for independent QA.
 
+## Nested command completion
+
+The advertised `execute run` literal redirects to the existing permission-filtered
+command root. Clients can traverse the same native and plugin argument schemas,
+including registry-backed item and block arguments, without a copied subtree.
+Execution parsing and server-side permission checks do not change. Other
+`execute` forms retain their existing greedy argument description.
+
+This does not add nested server-side `ask_server` dispatch, such as sound
+suggestions inside `execute run playsound`. Graph codec and reachability tests
+are not client acceptance: the original Horizon completion scenario must pass
+on the exact candidate pin.
+
 ## Implement and test
 
 Packet types and IDs are under `crates/mc-protocol/src/packets/`; shared codecs

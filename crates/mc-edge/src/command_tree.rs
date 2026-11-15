@@ -860,6 +860,8 @@ pub(crate) fn tree(op_level: u8, plugins: &[(String, u8)]) -> ClientboundCommand
         t.alias("tp", root);
     }
     if let Some(root) = t.root("execute", false) {
+        let run = t.literal(root, "run", false);
+        t.nodes[run as usize].redirect = Some(0);
         t.argument(
             root,
             "arguments",
