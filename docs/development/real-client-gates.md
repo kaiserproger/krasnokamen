@@ -194,7 +194,7 @@ The negative-control tree needs its own pin.
   host and the gate's scope outranks tests and builds for CPU:
   `<work>/solaris/tools/dev/scene-slot.sh <work>/solaris/tools/dev/mem-run.sh -m 6G
   python3 -m tools.harness run <profile> --client native --windowed`.
-  Two is the measured budget (owner, 2026-11-15: start new gates only below load
+  Use two slots for now (owner, 2026-11-15: start new gates only below load
   ~32 on the 16-thread host): six slots plus builds reached load 134 (CPU PSI
   75%) and four still reached load 70 (PSI 54%). A CPU-rendered native client
   under Xvfb takes 140-170% CPU, and screen, voice and Java battle scenes run two
