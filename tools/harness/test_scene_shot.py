@@ -1186,6 +1186,24 @@ class PlayerHeadTests(unittest.TestCase):
             scene_shot.check_player_head(probe, root)
             self.assertEqual(probe.report["worn_head_back_changed_pixels"], 400)
 
+    def test_worn_head_ignores_idle_torso_motion_without_extra_hat_pixels(self):
+        from PIL import Image, ImageDraw
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.store_frames(root)
+            path = root / "screenshots/head-worn.png"
+            with Image.open(path) as frame:
+                image = frame.convert("RGB")
+            # Pose changes are not attachments: even a large clothing change
+            # must not be confused with the fixture's contrasting skull hat.
+            ImageDraw.Draw(image).rectangle((600, 400, 679, 509), fill=(150, 90, 40))
+            image.save(path)
+            probe = self.Probe()
+            scene_shot.check_player_head(probe, root)
+            self.assertEqual(probe.report["worn_head_back_changed_pixels"], 8800)
+            self.assertEqual(probe.report["worn_head_added_back_hat_pixels"], 0)
+
     def test_worn_head_rejects_back_attachment_despite_unrelated_head_roi_changes(self):
         from PIL import Image, ImageDraw
 

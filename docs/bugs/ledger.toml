@@ -6512,7 +6512,7 @@ repro = "source"
 regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_extra_back_patch_even_with_correct_head", "python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_allows_small_pose_raster_changes_on_back"]
 fix_commit = "071d9c593"
 failing_first = "reported"
-repro_check = "HarnessFix3/head-frame-green.json: three real candidate frame pairs pass (back changed pixels 37,388,35; tolerance 440), HeadBreaker counterexample fails absence with head presence true, old-attachment control fails both. head-frame-control.log: retaining the frame tests and restoring only the old check_player_head makes the two absence assertions fail. No graphical rerun used."
+repro_check = "HarnessFix3/head-frame-control.log: retaining frame tests and restoring the pre-absence check_player_head makes the two extra-back assertions fail. Follow-up f3229f1a7 replaces pose-sensitive raw frame comparison with extra authored magenta-hat pixels (bare reference accounts for the held edge). head-pose-green.json: all five retained real candidate frames pass, including HeadBreaker 022004 and 022113; counterexample remains red with head presence true (5032 additional back-hat pixels), old attachment remains red on both checks (6682 additional back-hat pixels). No graphical run used for the oracle correction."
 
 [[bug]]
 id = "LEDGER-LAUNCHER-NO-LIB"
@@ -6554,3 +6554,16 @@ repro = "source"
 regression = []
 failing_first = "reported"
 repro_check = "receipts/ScreensVoiceStart/runs/20261115T014627-screens-voice-qa-qu_cps0p/result.json and both child results record interrupted/SIGTERM after 173 seconds. User journal krasnokamen-mem-run-VLi55VNC.scope at 2026-11-15T01:49:21Z records kernel OOM and 12G memory peak. This is an infrastructure failure, not eleven false product verdicts."
+
+[[bug]]
+id = "HARNESS-HEAD-ORACLE-IDLE-POSE-FALSE-POSITIVE"
+title = "Player-head back absence check mistakes idle body motion for an extra attachment"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "HeadBreaker native-player-head 20261115T022004-native-player-head-gim5wtl7: correct head with no back skull failed raw torso pixel difference at 571 above 440; idle body and arm motion dominates"
+repro = "source"
+regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_ignores_idle_torso_motion_without_extra_hat_pixels", "python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_extra_back_patch_even_with_correct_head"]
+fix_commit = "f3229f1a7"
+failing_first = "reported"
+repro_check = "HarnessFix3/head-pose-green.json: five real candidate frame pairs pass including HeadBreaker 022004 and 022113, with zero added magenta hat pixels on the back; magenta counterexample and old-attachment control remain red. head-pose-control.log restores only check_player_head from 4a90fa799, retaining the real-frame unittest: exactly the 022004 pose regression fails worn_head_back_unchanged. Raw changed-pixel values remain diagnostic, not the attachment oracle."

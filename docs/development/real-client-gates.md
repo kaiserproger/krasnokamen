@@ -376,11 +376,12 @@ it is not a listed player and does not fetch unsigned/online profile textures.
 This proves hat geometry, not profile resolution. `worn_head_renders` also
 requires magenta at the actual avatar head, x600–680/y280–375: adjacent,
 torso/back attachments or unrelated avatar/sky changes cannot satisfy it.
-`worn_head_back_unchanged` separately compares x600–680/y400–510 against `head-none`:
-at most 5% of that torso/back region may change by more than 25 in any RGB channel.
-This tolerates small pose/raster differences but rejects an additional back attachment
-even when the head itself is correct. Both ROI counts and the absence tolerance are
-retained in the report. Inspect candidate and control frames before promotion.
+`worn_head_back_unchanged` separately counts the authored skull's magenta hat pixels
+at x600–680/y400–510 against `head-none`, allowing at most 100 additional pixels.
+The reference accounts for the held item's edge. Brown torso/arm movement from idle
+animation is not an attachment and must not fail this colour-specific oracle.
+Raw changed-pixel counts remain diagnostic; both hat counts and their difference
+are retained. Inspect candidate and control frames before promotion.
 
 `walk_capture` retains a distinct `-attempt-N` image and frame sidecar per
 resample. Its walk evidence lists all attempts; a phase miss still fails within
