@@ -187,7 +187,7 @@ fn mace_impulse_round_trips_player_wal_and_native_checkpoint_and_clears_after_la
     let impact = state.players[&player].current_impulse_impact_pos;
     let record = crate::core::player_record_for(&state, player, state.tick).unwrap();
     let (output, _, _) = run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let uuid = state
         .entities
         .row(state.entities.slot_of(player).unwrap())

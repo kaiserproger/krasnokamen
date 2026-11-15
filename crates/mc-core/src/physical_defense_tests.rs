@@ -588,7 +588,7 @@ fn absolute_manual_activation_costs_disable_and_equipment_are_disk_wal_replay_sa
         .unwrap()
         .entities_spawned
         .push(npc);
-    let baseline = crate::core::journal_entries_for_tick(&mut state, &output);
+    let baseline = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     writer.append(output.tick, output.tick, &baseline).unwrap();
     let checkpoint = replay_batches(Replay::default(), &[(output.tick, output.tick, baseline)]);
     Arc::get_mut(&mut output.changes)
@@ -623,7 +623,7 @@ fn absolute_manual_activation_costs_disable_and_equipment_are_disk_wal_replay_sa
         .unwrap()
         .entities_appearance_changed
         .append(&mut state.appearance_changed);
-    let after = crate::core::journal_entries_for_tick(&mut state, &output);
+    let after = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(
         after
             .iter()

@@ -47,7 +47,7 @@ fn mob_rider_survives_native_checkpoint_restart_and_rejects_duplicate_or_nested_
         .unwrap()
         .entities_spawned
         .extend([horse, rider]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let root = tempfile::tempdir().unwrap();
     let mut writer = JournalWriter::open(root.path(), 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();

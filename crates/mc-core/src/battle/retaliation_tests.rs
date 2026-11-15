@@ -637,3 +637,41 @@ fn blows_that_can_lead_nowhere_are_not_remembered() {
         "the horse's blow was remembered"
     );
 }
+
+#[test]
+fn battle_resume_capture_keeps_role_native_and_unknown_attackers() {
+    let (mut state, holder, blue, at) = facing_blue();
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(78),
+            uuid: uuid::Uuid::new_v4(),
+            name: "Visitor".into(),
+            permission_level: 0,
+        }],
+    );
+    let visitor = state.connections.entity_of(ConnectionId(78)).unwrap();
+    assert!(opponent(&state.entities, &state.hostile.battle.live, 2, at, visitor).is_none());
+    let native = state.hostile.battle.formation.members[0].id;
+    let unknown = EntityId(i32::MAX - 1);
+    let pending = [(blue, holder), (blue, native), (blue, unknown)];
+    state.hostile.battle.retaliation.pending = pending.to_vec();
+    state
+        .hostile
+        .battle
+        .retaliation
+        .pending
+        .push((blue, visitor));
+    let battle = &mut state.hostile.battle;
+    battle
+        .retaliation
+        .reconcile_capture(&state.entities, &battle.live, &state.connections);
+    assert_eq!(battle.retaliation.pending, pending);
+    assert!(
+        battle
+            .retaliation
+            .validate_references(&|id| id != unknown)
+            .is_err(),
+        "unknown attacker identity must still refuse replay"
+    );
+}

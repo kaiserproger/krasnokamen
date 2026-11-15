@@ -689,6 +689,11 @@ pub struct WorldSnapshot {
     /// own `faction` stays 0; the edge projects these names into faction
     /// teams. The same `Arc` while the holds are unchanged.
     pub player_factions: Arc<Vec<(String, u16)>>,
+    /// Transient camera bindings, reconciled by edge only after target tracking.
+    pub cameras: Arc<rustc_hash::FxHashMap<EntityId, EntityId>>,
+    /// The shared authoritative online roster, including current player modes.
+    /// Reuses the global roster allocation; entity tracking stays dimension-local.
+    pub player_roster: Arc<[crate::dimensions::RosterPlayer]>,
     /// Names of the scoreboard's `/team` teams, ascending; the same `Arc`
     /// while they are unchanged. The edge never projects a faction team over
     /// one of these names.
@@ -1019,6 +1024,10 @@ pub enum PlayerChange {
         position: [f64; 3],
         yaw: f32,
         pitch: f32,
+    },
+    /// Effective permission of this connection's player, after native admission.
+    PermissionLevel {
+        level: u8,
     },
     /// Retained projectile one-shot animation (for example firework status 17).
     ProjectileStatus {

@@ -1693,7 +1693,7 @@ fn built_base_cooling_hopper_wal_has_no_per_tick_timer_images() {
         set_slot(&mut state, a, 1, dirt);
     }
     let (out, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let _ = crate::core::journal_entries_for_tick(&mut state, &out);
+    let _ = crate::core::journal_entries_for_tick(&mut state, &out).unwrap();
     let revisions: Vec<_> = state
         .world
         .snapshot()
@@ -1706,7 +1706,7 @@ fn built_base_cooling_hopper_wal_has_no_per_tick_timer_images() {
     let mut bytes_per_tick = Vec::new();
     for _ in 0..7 {
         let (out, _, _) = crate::tick::run_tick(&mut state, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &out);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &out).unwrap();
         opaque_per_tick.push(
             entries
                 .iter()

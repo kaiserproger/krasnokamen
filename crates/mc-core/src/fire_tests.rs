@@ -563,7 +563,7 @@ fn successful_ignition_and_debit_share_wal_queue_survives_replay() {
         None,
     );
     let (output, _, _) = run_tick(&mut original, &[input(Hand::Main, FLOOR)]);
-    let entries = crate::core::journal_entries_for_tick(&mut original, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     assert!(
         entries
             .iter()

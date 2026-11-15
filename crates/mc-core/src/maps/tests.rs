@@ -556,7 +556,7 @@ fn saved_maps_two_first_opens_one_map_and_wal_restart_never_regenerates() {
     let root = tempfile::tempdir().unwrap();
     let checkpoint_tick = state.tick;
     let (output, _, _) = run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let mut writer = JournalWriter::open(root.path(), 1).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
@@ -718,7 +718,7 @@ fn saved_maps_cartographer_offer_and_map_share_replayed_wal_commit() {
     let root = tempfile::tempdir().unwrap();
     let mut writer = JournalWriter::open(root.path(), 1).unwrap();
     let (birth, _, _) = run_tick(&mut state, &[]);
-    let birth_entries = crate::core::journal_entries_for_tick(&mut state, &birth);
+    let birth_entries = crate::core::journal_entries_for_tick(&mut state, &birth).unwrap();
     writer
         .append(birth.tick, birth.tick, &birth_entries)
         .unwrap();
@@ -747,7 +747,7 @@ fn saved_maps_cartographer_offer_and_map_share_replayed_wal_commit() {
     }
     assert!(state.appearance_changed.contains(&merchant));
     let (output, _, _) = run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);

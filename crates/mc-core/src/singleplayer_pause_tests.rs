@@ -197,7 +197,7 @@ fn singleplayer_pause_holds_scheduled_block_deadline_and_entity() {
     ));
     let full = state.world.block_at(POS.x, POS.y, POS.z).unwrap();
     let (output, _, _) = run_tick(&mut state, &[]);
-    let mut entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let mut entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     entries.push(JournalEntry::Block {
         pos: [POS.x, POS.y, POS.z],
         state: full,

@@ -57,7 +57,7 @@ fn spawn_idle_cow(state: &mut TickState, x: f64) -> EntityId {
 
 fn step(state: &mut TickState) -> Vec<JournalEntry> {
     let (output, _, _) = crate::tick::run_tick(state, &[]);
-    let entries = journal_entries_for_tick(state, &output);
+    let entries = journal_entries_for_tick(state, &output).unwrap();
     assert_baselines_complete(state, output.tick);
     entries
 }
@@ -524,14 +524,14 @@ fn removed_rows_drop_their_baselines() {
     let villager = spawn_idle_villager(&mut state, 8.5);
     let cow = spawn_idle_cow(&mut state, 9.5);
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    journal_entries_for_tick(&mut state, &output);
+    journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(state.journaled_villagers.contains_key(&villager));
     assert!(state.journaled_entity_state.contains_key(&cow));
     for id in [villager, cow] {
         let slot = state.entities.slot_of(id).unwrap();
         state.entities.remove(slot);
     }
-    journal_entries_for_tick(&mut state, &output);
+    journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(state.journaled_villagers.is_empty());
     assert!(state.journaled_entity_state.is_empty());
 }
@@ -597,7 +597,7 @@ fn only_dead_clock_sensitive_images_are_rechecked_every_batch() {
     state.entities.row_mut(slot).breed_cooldown = 100;
     state.entities.body_mut(slot).alive = false;
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    journal_entries_for_tick(&mut state, &output);
+    journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(state.journal_scan.clock_recheck.contains(&cooling));
     assert!(!state.journal_scan.clock_recheck.contains(&idle));
     assert_eq!(
@@ -629,18 +629,27 @@ fn block_entity_images_follow_container_custody_marks() {
             .filter(|entry| matches!(entry, JournalEntry::BlockEntity { pos, .. } if *pos == [8, 65, 8]))
             .count()
     };
-    assert_eq!(count(&journal_entries_for_tick(&mut state, &output)), 1);
-    assert_eq!(count(&journal_entries_for_tick(&mut state, &output)), 0);
+    assert_eq!(
+        count(&journal_entries_for_tick(&mut state, &output).unwrap()),
+        1
+    );
+    assert_eq!(
+        count(&journal_entries_for_tick(&mut state, &output).unwrap()),
+        0
+    );
     let _ = state.block_entities.get_mut(&cell);
     assert_eq!(
-        count(&journal_entries_for_tick(&mut state, &output)),
+        count(&journal_entries_for_tick(&mut state, &output).unwrap()),
         0,
         "a borrow without change stays equal"
     );
     state.block_entities.get_mut(&cell).unwrap().slots[3] = mc_data::ItemStack::new(1, 2);
-    assert_eq!(count(&journal_entries_for_tick(&mut state, &output)), 1);
+    assert_eq!(
+        count(&journal_entries_for_tick(&mut state, &output).unwrap()),
+        1
+    );
     state.block_entities.remove(&cell);
-    journal_entries_for_tick(&mut state, &output);
+    journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(!state.journaled_block_entities.contains_key(&cell));
 }
 
@@ -733,7 +742,7 @@ fn kill_nine_reopen_reproduces_touched_only_images() {
             state.world.mark_flushed(&written);
             state.world.evict_outside(&Default::default());
         }
-        let entries = journal_entries_for_tick(&mut state, &output);
+        let entries = journal_entries_for_tick(&mut state, &output).unwrap();
         assert_baselines_complete(&state, output.tick);
         writer.append(output.tick, output.tick, &entries).unwrap();
     }
@@ -845,17 +854,17 @@ fn movement_writeback_marks_only_retained_air_changes() {
     let cow = spawn_idle_cow(&mut state, 8.5);
     let slot = state.entities.slot_of(cow).unwrap();
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    journal_entries_for_tick(&mut state, &output);
+    journal_entries_for_tick(&mut state, &output).unwrap();
     state.entities.set_motion_state(slot, [1.0, 0.0], 300, 4, 2);
     assert!(
         state.entities.touched_ids().is_empty(),
         "impulse, pickup and attack timers are not retained state-image keys"
     );
-    assert!(image_ids(&journal_entries_for_tick(&mut state, &output)).is_empty());
+    assert!(image_ids(&journal_entries_for_tick(&mut state, &output).unwrap()).is_empty());
     state.entities.set_motion_state(slot, [0.5, 0.0], 299, 3, 1);
     assert_eq!(state.entities.touched_ids(), &[cow]);
     assert_eq!(
-        image_ids(&journal_entries_for_tick(&mut state, &output)),
+        image_ids(&journal_entries_for_tick(&mut state, &output).unwrap()),
         vec![cow.0]
     );
     assert_baselines_complete(&state, output.tick);
@@ -880,7 +889,7 @@ fn queued_wal_images_share_baselines_but_clock_projection_cannot_mutate_them() {
         .unwrap()
         .entities_spawned
         .push(cow);
-    let queued = journal_entries_for_tick(&mut state, &output);
+    let queued = journal_entries_for_tick(&mut state, &output).unwrap();
     let full = queued
         .iter()
         .find_map(|entry| match entry {
@@ -1030,7 +1039,7 @@ fn mixed_rows_journal_attribution() {
                 state.journal_scan.clock_recheck.len()
             );
         }
-        let entries = journal_entries_for_tick(&mut state, &output);
+        let entries = journal_entries_for_tick(&mut state, &output).unwrap();
         assert_baselines_complete(&state, output.tick);
         if iteration == 7 {
             let compared = state
@@ -1183,7 +1192,7 @@ fn chunk_clock_boundaries_rebase_only_their_own_entities() {
             Some((anchor, output.tick)),
             "consuming debt must not reset a continuously active lazy projection",
         );
-        let entries = journal_entries_for_tick(&mut state, &output);
+        let entries = journal_entries_for_tick(&mut state, &output).unwrap();
         assert!(image_ids(&entries).is_empty());
         assert_baselines_complete(&state, output.tick);
         assert_eq!(state.journaled_entity_state[&cow].0, anchor);
@@ -1257,12 +1266,12 @@ fn quarantined_chunk_notifies_only_its_resident_journal_anchors() {
     state.refresh_active_chunks(0);
     let cow = spawn_idle_cow(&mut state, 8.5);
     let (mut output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    journal_entries_for_tick(&mut state, &output);
+    journal_entries_for_tick(&mut state, &output).unwrap();
     output.tick += 1;
     state
         .world
         .reject_resident(chunk, "invalid retained metadata".into());
-    assert!(image_ids(&journal_entries_for_tick(&mut state, &output)).is_empty());
+    assert!(image_ids(&journal_entries_for_tick(&mut state, &output).unwrap()).is_empty());
     assert_eq!(state.journaled_entity_state[&cow].0, output.tick);
     assert_baselines_complete(&state, output.tick);
 }
@@ -1277,7 +1286,7 @@ fn restored_villagers_equal_to_their_baseline_are_not_reimaged_on_the_first_tick
         .map(|index| spawn_idle_villager(&mut source, 8.5 + f64::from(index)))
         .collect();
     let (output, _, _) = crate::tick::run_tick(&mut source, &[]);
-    let entries = journal_entries_for_tick(&mut source, &output);
+    let entries = journal_entries_for_tick(&mut source, &output).unwrap();
     assert_eq!(image_ids(&entries).len(), ids.len(), "source images them");
     let replay = replay_batches(
         Replay {

@@ -317,6 +317,54 @@ fn native_checkpoint_settlement_rows_are_canonical_or_rejected() {
 }
 
 #[test]
+fn native_checkpoint_battle_rows_are_canonical_or_rejected() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = NativeStore::create(&directory.path().join("state.redb"), [1; 32]).unwrap();
+    let row = |tick| NativeDomainRecord {
+        version: 1,
+        captured_tick: tick,
+        payload: br#"{"version":1}"#.to_vec(),
+    };
+    let mut canonical = globals(1);
+    for dimension in 0..=2 {
+        canonical.insert(format!("battle/{dimension}"), row(1));
+    }
+    commit(&store, 1, 0, &canonical, &[], &[]).unwrap();
+    assert_eq!(store.read_checkpoint().unwrap().globals, canonical);
+    for key in [
+        "battle/",
+        "battle/3",
+        "battle/00",
+        "battle/-1",
+        "battle/0/extra",
+    ] {
+        let mut bad = globals(2);
+        bad.insert(key.into(), row(2));
+        assert!(commit(&store, 2, 1, &bad, &[], &[]).is_err(), "{key}");
+    }
+    for record in [
+        row(1),
+        NativeDomainRecord {
+            version: 2,
+            ..row(2)
+        },
+        NativeDomainRecord {
+            payload: b"{".to_vec(),
+            ..row(2)
+        },
+        NativeDomainRecord {
+            payload: vec![0; 16 * 1024 * 1024 + 1],
+            ..row(2)
+        },
+    ] {
+        let mut bad = globals(2);
+        bad.insert("battle/0".into(), record);
+        assert!(commit(&store, 2, 1, &bad, &[], &[]).is_err());
+    }
+    assert_eq!(store.read_checkpoint().unwrap().tick, 1);
+}
+
+#[test]
 fn native_checkpoint_settlement_record_plus_sequence_roundtrip() {
     let directory = tempfile::tempdir().unwrap();
     let store = NativeStore::create(&directory.path().join("state.redb"), [1; 32]).unwrap();

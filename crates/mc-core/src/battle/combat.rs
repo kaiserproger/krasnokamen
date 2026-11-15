@@ -70,7 +70,7 @@ const FATAL_SHARE: f32 = 0.7;
 const PURSUIT_REMOVAL_ROLLS: f32 = 3.0 * REMOVAL_ROLLS;
 const PURSUIT_FATAL_SHARE: f32 = 0.9;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Weapon {
     Sword,
     Spear,
@@ -96,7 +96,7 @@ impl Weapon {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) enum Action {
     Guard {
         until: u64,
@@ -115,17 +115,21 @@ pub(super) enum Action {
     Wounded,
 }
 
-#[derive(Debug)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Fighter {
     pub(super) action: Action,
     pub(super) weapon: Weapon,
     /// Melee reach of the held item (its vanilla `minecraft:attack_range`
     /// for a mob, or the mob default without it), classified with the weapon
     /// when the held item changes.
+    #[serde(with = "super::persistence::reach")]
     pub(super) range: MeleeReach,
+    #[serde(skip)]
     equipment: Option<(Option<u32>, Option<u32>, u32)>,
     shield: bool,
     /// Last shield pose handed to presentation; `None` until first decided.
+    #[serde(skip)]
     raised: Option<bool>,
     block: Option<(EntityId, u64)>,
     reaction_checked: bool,
@@ -199,22 +203,82 @@ pub struct Work {
     pub holding_bow: u64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct CombatRuntime {
     pub(super) fighters: Vec<Fighter>,
     ids: Vec<EntityId>,
+    #[serde(skip)]
     // Used only on roster layout changes, never in per-fighter action passes.
     remap: FxHashMap<EntityId, Fighter>,
     pub(super) archery: super::archery::Runtime,
+    #[serde(skip)]
     strikes: Vec<(EntityId, EntityId, Weapon, u64)>,
     /// Reusable per-regiment cavalry sweep plans, rebuilt every tick.
+    #[serde(skip)]
     pub(super) sweeps: Vec<Option<super::cavalry::Sweep>>,
     /// Staged second weapons not yet claimed by a fighter (weapons.rs).
     pub(super) arsenal: super::weapons::Arsenal,
+    #[serde(skip)]
     pub(crate) work: Work,
 }
 
 impl CombatRuntime {
+    pub(super) fn rebind_player(&mut self, old: EntityId, new: EntityId) {
+        for fighter in &mut self.fighters {
+            if let Action::Windup { target, .. } = &mut fighter.action
+                && *target == old
+            {
+                *target = new;
+            }
+            if let Some((attacker, _)) = &mut fighter.block
+                && *attacker == old
+            {
+                *attacker = new;
+            }
+        }
+    }
+
+    pub(super) fn validate_history(
+        &self,
+        columns: &[(
+            EntityId,
+            Option<super::EnemyTarget>,
+            Option<super::ground::Escape>,
+        )],
+    ) -> Result<(), crate::CoreError> {
+        if self.ids.len() != self.fighters.len()
+            || self.ids.iter().ne(columns.iter().map(|column| &column.0))
+        {
+            return Err(super::persistence::error(
+                "fighter identities do not match execution columns",
+            ));
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_references(
+        &self,
+        known: &impl Fn(EntityId) -> bool,
+        registry: &crate::registry::CoreRegistry,
+    ) -> Result<(), crate::CoreError> {
+        for fighter in &self.fighters {
+            if let Action::Windup { target, .. } = fighter.action
+                && !known(target)
+            {
+                return Err(super::persistence::error(format!(
+                    "unknown windup target {}",
+                    target.0
+                )));
+            }
+            if fighter.block.is_some_and(|(id, _)| !known(id)) {
+                return Err(super::persistence::error("unknown shield-block attacker"));
+            }
+            fighter.arms.validate_items(registry)?;
+        }
+        self.arsenal.validate_items(registry)
+    }
+
     pub(super) fn prepare(&mut self, ids: &[EntityId]) {
         if self.ids == ids {
             return;

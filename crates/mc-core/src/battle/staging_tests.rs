@@ -1146,7 +1146,7 @@ fn failed_setup_rolls_back_owned_rows_changes_ticket_rules_and_journal() {
     let published = std::sync::Arc::get_mut(&mut output.changes).unwrap();
     published.entities_spawned.extend(changes.entities_spawned);
     published.entities_removed.extend(changes.entities_removed);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let allowed: BTreeSet<_> = ids_before
         .into_iter()
         .chain([removed])

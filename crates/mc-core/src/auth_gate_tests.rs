@@ -46,6 +46,64 @@ fn apply(state: &mut TickState, inputs: &[PlayerInput]) -> (Vec<Intent>, ChangeS
     apply_inputs(state, inputs, &mut intents, &mut changes);
     (intents, changes)
 }
+
+#[test]
+fn permission_projection_follows_join_updates_and_authenticated_unlock() {
+    for locked in [false, true] {
+        let (mut state, _) = fixture(locked);
+        let connection = ConnectionId(37);
+        apply(
+            &mut state,
+            &[PlayerInput::PermissionLevel {
+                connection,
+                level: 4,
+            }],
+        );
+        assert!(!state.outbox.contains_key(&connection));
+        apply(
+            &mut state,
+            &[PlayerInput::Join {
+                connection,
+                uuid: uuid::Uuid::from_u128(37),
+                name: "permission-target".into(),
+                permission_level: 2,
+            }],
+        );
+        let changes = &state.outbox[&connection];
+        let joined = changes
+            .iter()
+            .position(|change| matches!(change, PlayerChange::Joined { .. }))
+            .unwrap();
+        assert_eq!(
+            changes[joined + 1],
+            PlayerChange::PermissionLevel {
+                level: if locked { 0 } else { 2 },
+            }
+        );
+        for level in [4, 0, 1, 3, 2] {
+            state.outbox.get_mut(&connection).unwrap().clear();
+            apply(
+                &mut state,
+                &[PlayerInput::PermissionLevel { connection, level }],
+            );
+            assert_eq!(state.plugin_players.permission(connection), Some(level));
+            assert_eq!(
+                state.outbox[&connection],
+                vec![PlayerChange::PermissionLevel {
+                    level: if locked { 0 } else { level },
+                }]
+            );
+        }
+        if locked {
+            state.outbox.get_mut(&connection).unwrap().clear();
+            unlock_session(&mut state, connection);
+            assert!(!state.session_locked(connection));
+            assert!(
+                state.outbox[&connection].contains(&PlayerChange::PermissionLevel { level: 2 })
+            );
+        }
+    }
+}
 #[test]
 fn bundle_selection_input_uses_current_menu_slot_and_right_click_custody() {
     let (mut state, entity) = fixture(false);

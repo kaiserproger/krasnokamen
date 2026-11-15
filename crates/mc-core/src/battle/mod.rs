@@ -12,6 +12,7 @@ mod ground;
 pub(crate) mod ids;
 pub(crate) mod live_players;
 pub(crate) mod morale;
+pub(crate) mod persistence;
 pub(crate) mod retaliation;
 pub mod staging;
 pub(crate) mod steering;
@@ -42,17 +43,24 @@ pub(crate) struct Frame<'a> {
     pub tick: u64,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct BattleState {
     pub running: bool,
     pub elapsed_ticks: u64,
     pub formation: formation::FormationRuntime,
     pub combat: combat::CombatRuntime,
+    #[serde(skip)]
     pub columns: Columns,
+    #[serde(skip)]
     grid: TargetGrid,
+    #[serde(skip)]
     pub work: Work,
+    #[serde(skip)]
     pub timings: Timings,
+    #[serde(skip)]
     output: Output,
+    #[serde(skip)]
     population: PopulationCache,
     /// Staged bodies (foot soldiers and horses) not yet stood on their ground.
     pub ground_pending: Vec<EntityId>,
@@ -62,7 +70,10 @@ pub(crate) struct BattleState {
     pub live: live_players::LiveState,
     /// Soldiers answering an enemy who hurt them or a friend (retaliation.rs).
     pub retaliation: retaliation::Retaliation,
+    #[serde(skip)]
+    pub(crate) journaled: Option<std::sync::Arc<String>>,
     #[cfg(test)]
+    #[serde(skip)]
     trace: Option<trace_tests::FrameTrace>,
 }
 

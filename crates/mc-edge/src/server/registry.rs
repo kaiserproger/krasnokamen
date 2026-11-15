@@ -48,6 +48,7 @@ pub struct ConnectionHandles {
     /// World queue sender (pre-framed chunk/entity packets), bounded in
     /// frames and bytes.
     pub world_tx: WorldSender,
+    pub(crate) chunk_batches: Arc<parking_lot::Mutex<crate::plan::chunk_batch::ChunkBatchState>>,
     /// Sealed under the registry lock from the latest native publication.
     pub(super) knockback_baseline: u64,
 }
@@ -57,6 +58,7 @@ impl ConnectionHandles {
         Self {
             reliable_tx,
             world_tx,
+            chunk_batches: Arc::default(),
             knockback_baseline: 0,
         }
     }

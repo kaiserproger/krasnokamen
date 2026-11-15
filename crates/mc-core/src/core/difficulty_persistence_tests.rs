@@ -30,7 +30,7 @@ fn difficulty_checkpoint_is_frozen_and_wal_restart_preserves_join_and_query() {
     }
     state.difficulty = Difficulty::Hard;
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let entries = journal_entries_for_tick(&mut state, &output);
+    let entries = journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(
         entry,
         JournalEntry::Difficulty {
@@ -90,7 +90,7 @@ fn difficulty_checkpoint_is_frozen_and_wal_restart_preserves_join_and_query() {
             )))
     );
     assert_eq!(restored.difficulty, Difficulty::Normal);
-    let entries = journal_entries_for_tick(&mut restored, &output);
+    let entries = journal_entries_for_tick(&mut restored, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(
         entry,
         JournalEntry::Difficulty {
@@ -188,7 +188,7 @@ fn worldborder_command_mid_lerp_checkpoint_restores_and_finishes() {
     assert!(state.border.size > 50.0 && state.border.size < 100.0);
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
     let mid = state.border;
-    let entries = journal_entries_for_tick(&mut state, &output);
+    let entries = journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(
         entries
             .iter()

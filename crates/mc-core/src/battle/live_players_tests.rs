@@ -968,7 +968,7 @@ fn a_respawn_goes_to_his_files_men_when_the_leader_walked_far_ahead() {
 }
 
 #[test]
-fn spectator_goes_behind_the_holder_in_spectator_mode() {
+fn spectator_binds_the_holder_in_spectator_mode() {
     let (mut state, ids) = staged(&["PovRed", "CamSpec"]);
     let mut changes = ChangeSet::default();
     command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
@@ -986,12 +986,8 @@ fn spectator_goes_behind_the_holder_in_spectator_mode() {
         "{reply}"
     );
     assert_eq!(state.players[&ids[1]].game_mode, GameMode::Spectator);
-    let hold = &state.hostile.battle.live.holds[0];
-    let at = state.entities.pos(state.entities.slot_of(ids[1]).unwrap());
-    // Red faces +z: behind is -z, above his head.
-    assert!((at[0] - hold.at[0]).abs() < 1e-6);
-    assert!((at[2] - (hold.at[2] - SPECTATOR_BACK)).abs() < 1e-6);
-    assert!((at[1] - (hold.at[1] + SPECTATOR_UP)).abs() < 1e-6);
+    assert_camera(&state, ids[1], ids[0]);
+    assert!(reply.contains(&format!("camera={}", ids[0].0)));
     assert!(
         command(
             &mut state,
@@ -1209,31 +1205,17 @@ fn a_respawn_after_his_regiment_is_gone_takes_the_sides_contact_nearest_where_he
     assert_in_rank_with_kit(&state, player);
 }
 
-fn assert_behind(state: &TickState, viewer: EntityId, player: EntityId) {
+fn assert_camera(state: &TickState, viewer: EntityId, player: EntityId) {
     assert_eq!(state.players[&viewer].game_mode, GameMode::Spectator);
-    let hold = &state.hostile.battle.live.holds[0];
-    let facing = state.hostile.battle.formation.regiments[hold.regiment]
-        .spec
-        .facing;
+    assert_eq!(state.cameras.get(&viewer), Some(&player));
     let pos = state.entities.pos(state.entities.slot_of(player).unwrap());
     let at = state.entities.pos(state.entities.slot_of(viewer).unwrap());
-    let behind = [
-        pos[0] - facing[0] * SPECTATOR_BACK,
-        pos[1] + SPECTATOR_UP,
-        pos[2] - facing[1] * SPECTATOR_BACK,
-    ];
-    assert!(
-        (0..3).all(|axis| (at[axis] - behind[axis]).abs() < 1e-3),
-        "spectator at {at:?}, not behind the holder at {pos:?}"
-    );
+    assert_eq!(at, pos);
 }
 
-/// Trial-7: after PovRed's death and respawn CamSpec stayed in the cave where
-/// he died, 230 blocks away, and saw nothing for four minutes. The spectator
-/// bound by `battle spectate` goes behind him again on each respawn and
-/// re-arm.
+/// Named camera binding survives the holder's death, respawn and re-arm.
 #[test]
-fn the_bound_spectator_goes_behind_the_holder_again_after_a_respawn_and_a_rearm() {
+fn the_bound_spectator_follows_the_holder_after_a_respawn_and_a_rearm() {
     let (mut state, ids) = staged(&["PovRed", "CamSpec"]);
     let (player, viewer) = (ids[0], ids[1]);
     let mut changes = ChangeSet::default();
@@ -1261,11 +1243,11 @@ fn the_bound_spectator_goes_behind_the_holder_again_after_a_respawn_and_a_rearm(
     run_tick(&mut state, &[]);
     respawn(&mut state, 1);
     assert!(!state.hostile.battle.live.holds[0].dead);
-    assert_behind(&state, viewer, player);
+    assert_camera(&state, viewer, player);
     away(&mut state);
     let reply = command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
     assert!(reply.starts_with("Battle live rearmed: PovRed "), "{reply}");
-    assert_behind(&state, viewer, player);
+    assert_camera(&state, viewer, player);
 }
 
 fn team(state: &mut TickState, executor: EntityId, args: &[&str]) -> Result<String, String> {
@@ -1302,4 +1284,325 @@ fn team_join_refuses_a_holder_and_a_faction_entity() {
     assert!(state.scoreboard.teams["allies"].members.is_empty());
     team(&mut state, ids[0], &["join", "allies", "Other"]).unwrap();
     assert!(state.scoreboard.teams["allies"].members.contains("Other"));
+}
+
+#[test]
+fn spectator_pending_named_intent_retries_dead_target_and_same_id_viewer_respawn() {
+    let (mut state, ids) = staged(&["PovRed", "CamSpec"]);
+    let [target, viewer] = [ids[0], ids[1]];
+    let input = |connection, text: &str| PlayerInput::Command {
+        connection: ConnectionId(connection),
+        command: text.into(),
+        permission_level: 2,
+    };
+    run_tick(
+        &mut state,
+        &[input(2, "gamemode spectator"), input(1, "kill")],
+    );
+    // Restored named intent has not successfully bound in this process.
+    state
+        .hostile
+        .battle
+        .live
+        .spectators
+        .push(("CamSpec".into(), "PovRed".into()));
+    run_tick(&mut state, &[]);
+    assert!(state.cameras.is_empty());
+    assert_eq!(state.hostile.battle.live.spectators.len(), 1);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(1),
+        }],
+    );
+    state.world.ensure_blocking(&state.desired_chunks());
+    run_tick(&mut state, &[]);
+    assert!(!is_dead(&state, target));
+    assert_eq!(state.cameras.get(&viewer), Some(&target));
+    run_tick(&mut state, &[input(2, "kill")]);
+    assert!(state.cameras.is_empty());
+    assert_eq!(state.hostile.battle.live.spectators.len(), 1);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(2),
+        }],
+    );
+    state.world.ensure_blocking(&state.desired_chunks());
+    run_tick(&mut state, &[]);
+    assert!(!is_dead(&state, viewer));
+    assert_eq!(state.connections.entity_of(ConnectionId(2)), Some(viewer));
+    assert_eq!(state.cameras.get(&viewer), Some(&target));
+}
+
+#[test]
+fn battle_resume_restored_roles_rearm_once_and_rebind_after_rejoin() {
+    let (mut state, ids) = staged(&["PovRed", "CamSpec"]);
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(
+        &mut state,
+        &mut changes,
+        BattleCommand::Spectate {
+            name: "CamSpec".into(),
+            target: "PovRed".into(),
+        },
+    )
+    .unwrap();
+    let player_uuid = state
+        .entities
+        .row(state.entities.slot_of(ids[0]).unwrap())
+        .uuid;
+    let held = state.hostile.battle.formation.held.clone();
+    let history = crate::battle::persistence::encode(&state).unwrap();
+    state.hostile.battle = crate::battle::persistence::decode(&history).unwrap();
+    crate::battle::persistence::restore(&mut state).unwrap();
+    state.players.get_mut(&ids[0]).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    let viewer = state.entities.slot_of(ids[1]).unwrap();
+    state.entities.set_pos(viewer, [0.0, 90.0, 0.0]);
+    run_tick(&mut state, &[]);
+    assert!(
+        !state.players[&ids[0]].inventory.slots[0].is_empty(),
+        "restore re-arms the existing holder"
+    );
+    assert_ne!(
+        state.entities.pos(viewer),
+        [0.0, 90.0, 0.0],
+        "restored binding moves spectator to holder camera"
+    );
+    assert_eq!(state.hostile.battle.formation.held, held);
+    state.players.get_mut(&ids[0]).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    run_tick(&mut state, &[]);
+    assert!(
+        state.players[&ids[0]].inventory.slots[0].is_empty(),
+        "a continuing connection is not re-armed every tick"
+    );
+    run_tick(
+        &mut state,
+        &[PlayerInput::Leave {
+            connection: ConnectionId(1),
+        }],
+    );
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(7),
+            uuid: player_uuid,
+            name: "PovRed".into(),
+            permission_level: 0,
+        }],
+    );
+    let rejoined = player_named(&state, "PovRed").unwrap();
+    assert_ne!(rejoined, ids[0]);
+    assert!(!state.players[&rejoined].inventory.slots[0].is_empty());
+    assert_eq!(
+        state.hostile.battle.formation.held, held,
+        "reconnect never takes a second held slot"
+    );
+    assert_eq!(
+        state.hostile.battle.live.historical,
+        vec![(rejoined, "PovRed".into())],
+        "historical identities remain bounded by roles"
+    );
+    kill(&mut state, 7);
+    run_tick(&mut state, &[]);
+    run_tick(
+        &mut state,
+        &[PlayerInput::Leave {
+            connection: ConnectionId(7),
+        }],
+    );
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(8),
+            uuid: player_uuid,
+            name: "PovRed".into(),
+            permission_level: 0,
+        }],
+    );
+    run_tick(
+        &mut state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(8),
+        }],
+    );
+    let respawned = player_named(&state, "PovRed").unwrap();
+    assert!(!state.players[&respawned].inventory.slots[0].is_empty());
+    state.players.get_mut(&respawned).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    run_tick(&mut state, &[]);
+    assert!(
+        state.players[&respawned].inventory.slots[0].is_empty(),
+        "a dead holder reconnecting and respawning must not get a second re-arm"
+    );
+}
+
+#[test]
+fn battle_resume_locked_roles_wait_for_private_state_hydration() {
+    let (mut state, ids) = staged(&["PovRed", "CamSpec"]);
+    let mut changes = ChangeSet::default();
+    command(&mut state, &mut changes, live_cmd("PovRed")).unwrap();
+    command(
+        &mut state,
+        &mut changes,
+        BattleCommand::Spectate {
+            name: "CamSpec".into(),
+            target: "PovRed".into(),
+        },
+    )
+    .unwrap();
+    let uuids =
+        [ids[0], ids[1]].map(|id| state.entities.row(state.entities.slot_of(id).unwrap()).uuid);
+    state.players.get_mut(&ids[0]).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    let history = crate::battle::persistence::encode(&state).unwrap();
+    run_tick(
+        &mut state,
+        &[
+            PlayerInput::Leave {
+                connection: ConnectionId(1),
+            },
+            PlayerInput::Leave {
+                connection: ConnectionId(2),
+            },
+        ],
+    );
+    state.hostile.battle = crate::battle::persistence::decode(&history).unwrap();
+    crate::battle::persistence::restore(&mut state).unwrap();
+    state.require_plugin_login = true;
+    run_tick(
+        &mut state,
+        &[
+            PlayerInput::Join {
+                connection: ConnectionId(7),
+                uuid: uuids[0],
+                name: "PovRed".into(),
+                permission_level: 0,
+            },
+            PlayerInput::Join {
+                connection: ConnectionId(8),
+                uuid: uuids[1],
+                name: "CamSpec".into(),
+                permission_level: 0,
+            },
+        ],
+    );
+    assert!(state.session_locked(ConnectionId(7)));
+    assert!(state.session_locked(ConnectionId(8)));
+    let holder = state.connections.entity_of(ConnectionId(7)).unwrap();
+    let viewer = state.connections.entity_of(ConnectionId(8)).unwrap();
+    assert!(
+        state.players[&holder]
+            .inventory
+            .slots
+            .iter()
+            .all(ItemStack::is_empty),
+        "a locked presentation must not receive the restored battle kit"
+    );
+    assert_eq!(
+        state.hostile.battle.live.spectators,
+        vec![("CamSpec".into(), "PovRed".into())],
+        "the temporary survival presentation must not erase the saved camera"
+    );
+
+    crate::tick::unlock_session(&mut state, ConnectionId(7));
+    crate::tick::unlock_session(&mut state, ConnectionId(8));
+    run_tick(&mut state, &[]);
+    assert_exactly_the_kit(&state, holder);
+    assert_camera(&state, viewer, holder);
+    state.players.get_mut(&holder).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    run_tick(&mut state, &[]);
+    assert!(
+        state.players[&holder].inventory.slots[0].is_empty(),
+        "the authenticated holder must be re-armed only once"
+    );
+    assert_camera(&state, viewer, holder);
+}
+
+#[test]
+fn battle_resume_failed_rearm_retries_same_identity_only_after_equipment_succeeds() {
+    let (mut state, ids) = staged(&["PovRed"]);
+    let player = ids[0];
+    command(&mut state, &mut ChangeSet::default(), live_cmd("PovRed")).unwrap();
+    let history = crate::battle::persistence::encode(&state).unwrap();
+    state.hostile.battle = crate::battle::persistence::decode(&history).unwrap();
+    crate::battle::persistence::restore(&mut state).unwrap();
+    state.players.get_mut(&player).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    // Exercise an actual live() refusal without changing the player identity.
+    team(&mut state, player, &["add", "blocked"]).unwrap();
+    state
+        .scoreboard
+        .teams
+        .get_mut("blocked")
+        .unwrap()
+        .members
+        .insert("PovRed".into());
+    run_tick(&mut state, &[]);
+    assert!(state.players[&player].inventory.slots[0].is_empty());
+    assert!(state.hostile.battle.live.rearmed.is_empty());
+    assert_eq!(
+        state.hostile.battle.live.historical,
+        vec![(player, "PovRed".into())]
+    );
+    state
+        .scoreboard
+        .teams
+        .get_mut("blocked")
+        .unwrap()
+        .members
+        .clear();
+    run_tick(&mut state, &[]);
+    assert!(!state.players[&player].inventory.slots[0].is_empty());
+    assert_eq!(
+        state.hostile.battle.live.rearmed,
+        vec![("PovRed".into(), player)]
+    );
+    state.players.get_mut(&player).unwrap().inventory.slots[0] = ItemStack::EMPTY;
+    run_tick(&mut state, &[]);
+    assert!(state.players[&player].inventory.slots[0].is_empty());
+}
+
+#[test]
+fn battle_resume_named_camera_survives_offline_restore_until_join_but_not_explicit_leave() {
+    let (mut state, ids) = staged(&["PovRed", "CamSpec"]);
+    command(&mut state, &mut ChangeSet::default(), live_cmd("PovRed")).unwrap();
+    spectate(&mut state, &mut ChangeSet::default(), "CamSpec", "PovRed").unwrap();
+    let viewer_uuid = state
+        .entities
+        .row(state.entities.slot_of(ids[1]).unwrap())
+        .uuid;
+    let history = crate::battle::persistence::encode(&state).unwrap();
+    run_tick(
+        &mut state,
+        &[PlayerInput::Leave {
+            connection: ConnectionId(2),
+        }],
+    );
+    assert!(state.hostile.battle.live.spectators.is_empty());
+    state.hostile.battle = crate::battle::persistence::decode(&history).unwrap();
+    crate::battle::persistence::restore(&mut state).unwrap();
+    run_tick(&mut state, &[]);
+    assert_eq!(state.hostile.battle.live.spectators.len(), 1);
+    assert!(state.cameras.is_empty());
+    run_tick(
+        &mut state,
+        &[PlayerInput::Join {
+            connection: ConnectionId(7),
+            uuid: viewer_uuid,
+            name: "CamSpec".into(),
+            permission_level: 0,
+        }],
+    );
+    state.world.ensure_blocking(&state.desired_chunks());
+    run_tick(&mut state, &[]);
+    let viewer = player_named(&state, "CamSpec").unwrap();
+    assert_ne!(viewer, ids[1]);
+    assert_eq!(state.cameras.get(&viewer), Some(&ids[0]));
+    run_tick(
+        &mut state,
+        &[PlayerInput::Leave {
+            connection: ConnectionId(7),
+        }],
+    );
+    assert!(state.hostile.battle.live.spectators.is_empty());
+    assert!(state.cameras.is_empty());
 }

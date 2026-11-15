@@ -133,7 +133,7 @@ fn merge_cost_profile() {
         let (output, _drains, times) = run_tick(&mut scene.state, &[]);
         let tick_us = start.elapsed().as_micros() as u64;
         let start = Instant::now();
-        let entries = crate::core::journal_entries_for_tick(&mut scene.state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut scene.state, &output).unwrap();
         let journal_us = start.elapsed().as_micros() as u64;
         let probe = PROBE
             .with(|probe| probe.borrow_mut().take())

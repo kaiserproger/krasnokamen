@@ -338,13 +338,13 @@ fn wal_hive_entry_tombstones_source_and_replays_one_full_bee() {
         .expect("tick output uniquely owns its changes")
         .entities_spawned
         .push(id);
-    let birth = crate::core::journal_entries_for_tick(&mut original, &output);
+    let birth = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     let bee = original.entities.row_mut(slot).bee.as_mut().unwrap();
     bee.nectar = true;
     bee.hive = Some(POS);
     let (output, _, _) = crate::tick::run_tick(&mut original, &[]);
     assert!(original.entities.slot_of_any(id).is_none());
-    let entry = crate::core::journal_entries_for_tick(&mut original, &output);
+    let entry = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     let mut writer = JournalWriter::open(&dir, 1).unwrap();
     writer.append(1, 1, &birth).unwrap();
     writer.append(2, 2, &entry).unwrap();
@@ -448,7 +448,7 @@ fn idle_occupied_hive_skips_wal_and_checkpoint_restores_elapsed_ticks() {
     );
     for _ in 0..100 {
         let (output, _, _) = crate::tick::run_tick(&mut original, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut original, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
         assert!(!entries.iter().any(|entry| matches!(
             entry,
             crate::journal::JournalEntry::OpaqueBlockEntity { pos, .. }
@@ -580,7 +580,7 @@ fn silk_touch_break_pickup_place_disk_wal_and_checkpoint_have_one_bee_owner() {
     original.players.get_mut(&actor).unwrap().inventory.slots[0] = tool;
     crate::tick::mining_tests::ready_to_finish(&mut original, ConnectionId(1), POS);
     let (seed_output, _, _) = crate::tick::run_tick(&mut original, &[]);
-    let seed_entries = crate::core::journal_entries_for_tick(&mut original, &seed_output);
+    let seed_entries = crate::core::journal_entries_for_tick(&mut original, &seed_output).unwrap();
     let mut writer = JournalWriter::open(&dir, 1).unwrap();
     writer.append(1, seed_output.tick, &seed_entries).unwrap();
     let (output, _, _) = crate::tick::run_tick(
@@ -592,7 +592,7 @@ fn silk_touch_break_pickup_place_disk_wal_and_checkpoint_have_one_bee_owner() {
             sequence: 2,
         }],
     );
-    let entries = crate::core::journal_entries_for_tick(&mut original, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     assert!(!original.hives.contains_key(&key(POS)));
     assert!(
@@ -647,7 +647,7 @@ fn silk_touch_break_pickup_place_disk_wal_and_checkpoint_have_one_bee_owner() {
         .pos(original.entities.slot_of(actor).unwrap());
     original.entities.set_pos(slot, actor_pos);
     let (output, _, _) = crate::tick::run_tick(&mut original, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut original, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     assert!(original.entities.slot_of_any(hive_item).is_none());
     let selected = original.players[&actor]
@@ -659,7 +659,7 @@ fn silk_touch_break_pickup_place_disk_wal_and_checkpoint_have_one_bee_owner() {
     assert!(selected < 9);
     original.players.get_mut(&actor).unwrap().inventory.selected = selected as u8;
     let (output, _, _) = crate::tick::run_tick(&mut original, &[hive_place_input(3)]);
-    let entries = crate::core::journal_entries_for_tick(&mut original, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
@@ -1205,7 +1205,7 @@ fn tnt_break_releases_occupied_hive_once_without_bee_bearing_loot() {
             .as_ref()
             .is_none_or(|stack| item_component(stack, "minecraft:bees").unwrap().is_none())
     }));
-    let first = crate::core::journal_entries_for_tick(&mut original, &output);
+    let first = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     let (next, _, _) = crate::tick::run_tick(&mut original, &[]);
     assert!(next.changes.explosions.is_empty());
     assert!(!next.changes.entities_spawned.contains(&bee));
@@ -1217,7 +1217,7 @@ fn tnt_break_releases_occupied_hive_once_without_bee_bearing_loot() {
             .count(),
         1
     );
-    let second = crate::core::journal_entries_for_tick(&mut original, &next);
+    let second = crate::core::journal_entries_for_tick(&mut original, &next).unwrap();
     let batches = vec![
         (output.tick, output.tick, first),
         (next.tick, next.tick, second),

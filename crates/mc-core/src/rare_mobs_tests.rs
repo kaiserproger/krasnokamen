@@ -145,7 +145,7 @@ fn illusioner_casts_invisibility_and_blindness_and_shoots_durable_bow_arrows() {
     let output = (0..crate::special_mobs::raiders::SEARCH_INTERVAL)
         .find_map(|_| {
             let (output, _, _) = run_tick(&mut state, &[]);
-            let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+            let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
             writer.append(output.tick, output.tick, &entries).unwrap();
             state
                 .hostile
@@ -191,7 +191,7 @@ fn illusioner_casts_invisibility_and_blindness_and_shoots_durable_bow_arrows() {
     );
     assert!(state.appearance_changed.contains(&id));
     let (output, _, _) = run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);

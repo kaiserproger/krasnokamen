@@ -41,6 +41,9 @@ pub enum Priority {
     Reliable,
     /// World queue; snapshot state is repaired on refusal, visuals may drop.
     BestEffort,
+    /// Batch start followed by exactly `count` chunks and one finished frame.
+    /// The pump queues the entire group atomically, charging every frame slot.
+    ChunkBatch(usize),
 }
 
 /// One framed, addressed packet ready for the per-connection queues.
@@ -214,6 +217,35 @@ pub fn publish_with_registries<'a>(
             viewer.chunk_unsent(pos);
         }
     }
+    // Cache misses had no encoded bytes during planning. Apply the actual
+    // sizes now, admitting one oversize world frame (or chunk plus markers)
+    // for progress, but no later world dependency after the first deferral.
+    for ((connection, packets), viewer) in planned.iter_mut().zip(viewers.iter_mut()) {
+        debug_assert_eq!(*connection, viewer.connection);
+        let mut bytes = viewer.world_bytes;
+        let mut first_chunk = true;
+        let mut deferred = false;
+        packets.retain(|packet| {
+            if packet.reliable {
+                return true;
+            }
+            if bytes == 0 {
+                deferred = true;
+                return false;
+            }
+            let framing = if packet.chunk.is_some() && first_chunk {
+                first_chunk = false;
+                7
+            } else {
+                0
+            };
+            bytes = bytes.saturating_sub(packet.data.len() + framing);
+            true
+        });
+        if deferred {
+            viewer.world_frame_unsent();
+        }
+    }
     if let (Some(start), Some(index_start), Some(plan_start), Some(fill_start), Some(fill_time)) =
         (probe, index_start, plan_start, fill_start, fill_time)
     {
@@ -256,7 +288,28 @@ pub fn publish_with_registries<'a>(
                 priority: Priority::BestEffort,
             });
         }
+        let count = packets
+            .iter()
+            .filter(|packet| packet.chunk.is_some())
+            .count();
+        let mut chunks_left = count;
+        let mut started = false;
         for packet in packets {
+            if packet.chunk.is_some() && !started {
+                use mc_protocol::packets::{Packet, play::ClientboundChunkBatchStart};
+                addressed.push(AddressedPacket {
+                    connection,
+                    data: mc_protocol::frame::encode_frame(
+                        ClientboundChunkBatchStart::ID,
+                        &[],
+                        mc_protocol::frame::Compression::Threshold(256),
+                    )
+                    .expect("empty batch start frames"),
+                    priority: Priority::ChunkBatch(count),
+                });
+                started = true;
+            }
+            let chunk = packet.chunk.is_some();
             addressed.push(AddressedPacket {
                 connection,
                 data: packet.data,
@@ -266,6 +319,28 @@ pub fn publish_with_registries<'a>(
                     Priority::BestEffort
                 },
             });
+            if chunk {
+                chunks_left -= 1;
+                if chunks_left == 0 {
+                    use mc_protocol::packets::{Packet, play::ClientboundChunkBatchFinished};
+                    let mut body = Vec::new();
+                    ClientboundChunkBatchFinished {
+                        batch_size: count as i32,
+                    }
+                    .encode(&mut body)
+                    .expect("bounded batch count encodes");
+                    addressed.push(AddressedPacket {
+                        connection,
+                        data: mc_protocol::frame::encode_frame(
+                            ClientboundChunkBatchFinished::ID,
+                            &body,
+                            mc_protocol::frame::Compression::Threshold(256),
+                        )
+                        .expect("batch finished frames"),
+                        priority: Priority::BestEffort,
+                    });
+                }
+            }
         }
     }
     addressed
@@ -296,3 +371,7 @@ pub fn reliable_overflow(packets: &[AddressedPacket]) -> Vec<ConnectionId> {
 #[cfg(test)]
 #[path = "fanout_tests.rs"]
 mod fanout_tests;
+
+#[cfg(test)]
+#[path = "chunk_batch_tests.rs"]
+mod chunk_batch_tests;

@@ -735,6 +735,11 @@ pub fn recover_with_reader(
             datapack_selection: image.datapack_selection.clone(),
             generated_entity_claims: image.generated_entity_claims.clone(),
             tickets: image.tickets.clone(),
+            battle: crate::battle::persistence::checkpoint_image(
+                &checkpoint.globals,
+                dimension,
+                manifest.tick,
+            )?,
             block_ticks: image.block_ticks.clone(),
             fluid_ticks: image.fluid_ticks.clone(),
             inhabited_time: image
@@ -877,6 +882,7 @@ pub fn recover_with_reader(
             ))
         })?;
         crate::mounts::persistence::validate_replay(replay)?;
+        crate::battle::persistence::validate_replay(replay, &registry)?;
     }
     let root = &dimensions[&Dimension::Overworld];
     let mut players = root.players.clone();
@@ -1129,6 +1135,12 @@ pub fn encode_checkpoint(world: &RecoveredWorld) -> Result<NativeCheckpointImage
         crate::settlements::persistence::checkpoint_sequence(&globals, world.manifest.tick)
             .unwrap_or(0);
     for (&dimension, replay) in &world.dimensions {
+        if let Some(image) = &replay.battle {
+            globals.insert(
+                crate::battle::persistence::row_key(dimension),
+                record(tick, image.as_bytes().to_vec()),
+            );
+        }
         sequence = sequence.max(replay.settlement_high_water);
         for (&id, settlement) in &replay.settlements {
             sequence = sequence.max(id).max(settlement.id.0);

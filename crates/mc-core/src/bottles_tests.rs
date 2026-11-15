@@ -277,7 +277,7 @@ fn bottle_water_potion_result_survives_player_wal_and_native_checkpoint() {
     let (mut state, actor, _) = fixture(Some(0), 16);
     let (out, _, _) = run_tick(&mut state, &[use_item(Hand::Main, 90.0)]);
     let record = crate::core::player_record_for(&state, actor, state.tick).unwrap();
-    let entries = crate::core::journal_entries_for_tick(&mut state, &out);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &out).unwrap();
     let uuid = state
         .entities
         .row(state.entities.slot_of(actor).unwrap())

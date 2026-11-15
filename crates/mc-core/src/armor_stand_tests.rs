@@ -429,7 +429,7 @@ fn armor_stand_equipment_and_stored_pose_survive_disk_wal_native_checkpoint_rest
         .unwrap()
         .entities_spawned
         .push(stand);
-    let birth = crate::core::journal_entries_for_tick(&mut state, &output);
+    let birth = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let root = std::env::temp_dir().join(format!("krasnokamen-stand-{}", uuid::Uuid::new_v4()));
     let mut writer = JournalWriter::open(&root, 1).unwrap();
     writer.append(1, output.tick, &birth).unwrap();
@@ -438,7 +438,7 @@ fn armor_stand_equipment_and_stored_pose_survive_disk_wal_native_checkpoint_rest
     helmet.custom_name = Some("retained helmet".into());
     state.players.get_mut(&actor).unwrap().inventory.slots[0] = helmet.clone();
     let output = click(&mut state, stand, 1.8);
-    let equip = crate::core::journal_entries_for_tick(&mut state, &output);
+    let equip = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     writer.append(output.tick, output.tick, &equip).unwrap();
     writer.flush().unwrap();
     drop(writer);

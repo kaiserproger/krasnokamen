@@ -300,6 +300,12 @@ pub(crate) fn finish(
     }
     roster(state);
     let snapshot = Arc::get_mut(&mut output.snapshot).expect("unpublished root snapshot");
+    snapshot.player_roster = Arc::clone(&state.dimension_globals.roster);
+    for child in snapshot.dimensions.values_mut() {
+        Arc::get_mut(&mut child.snapshot)
+            .expect("unpublished child snapshot")
+            .player_roster = Arc::clone(&state.dimension_globals.roster);
+    }
     snapshot.raining = state.weather.0 != Weather::Clear;
     snapshot.rain_level = state.rain_level;
     snapshot.thunder_level = state.thunder_level;

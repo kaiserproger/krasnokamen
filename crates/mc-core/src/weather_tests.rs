@@ -371,7 +371,7 @@ fn frozen_game_age_survives_checkpoint_and_held_wal_tail() {
         }
         let journal_tick = |state: &mut TickState| {
             let (output, _, _) = run_tick(state, &[]);
-            let entries = crate::core::journal_entries_for_tick(state, &output);
+            let entries = crate::core::journal_entries_for_tick(state, &output).unwrap();
             (output, entries)
         };
         for _ in 0..3 {
@@ -527,7 +527,7 @@ fn frozen_saturated_climate_does_not_rejournal_unchanged_images() {
         .gamerules
         .insert("advance_weather".into(), "false".into());
     let (output, _, _) = run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert_eq!(
         entries
             .iter()
@@ -536,7 +536,7 @@ fn frozen_saturated_climate_does_not_rejournal_unchanged_images() {
         1
     );
     let (output, _, _) = run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(
         !entries
             .iter()

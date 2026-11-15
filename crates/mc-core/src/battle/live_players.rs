@@ -1,5 +1,5 @@
 //! Live network players in a staged battle: a player who takes a front-rank
-//! slot with that rank's kit, and spectators kept behind a player.
+//! slot with that rank's kit, and spectators whose camera follows a player.
 //! Console only (`battle watch|live|spectate`).
 //!
 //! Invariant: a held slot is rank 0 of one file of a foot regiment. The file's
@@ -9,15 +9,15 @@
 //! `battle live` before start, and each respawn, which puts him back into the
 //! fight with the kit again: near where he fell, in his own regiment while it
 //! stands, else in a standing line of his side in contact (`respawn_slot`).
-//! A spectator bound to him (`battle spectate`) is placed behind him again
-//! whenever he respawns or is re-armed.
+//! A spectator bound to him (`battle spectate`) follows his live camera, with
+//! the named intent retained across target death, respawn and reconnect.
 //!
 //! Battle-mode custody: a holder's inventory IS his kit (`equip`). Placement,
 //! re-arming and every respawn replace his whole inventory. Plugin holds retire
 //! first; the previous inventory is discarded so the normal menu close can fold
 //! its cursor and crafting grid without overflowing onto the field. The folded
 //! contents are then replaced by exactly the kit, once, in its fixed slots.
-//! Reconnecting alone does not re-arm a holder: run console `battle live` again.
+//! Reconnecting re-arms an existing holder once; it never takes a second slot.
 //! `keep_inventory` keeps the kit from littering the field when he dies.
 //!
 //! A living holder of the other side in weapon reach is one more candidate
@@ -41,10 +41,6 @@ use crate::tick::TickState;
 use mc_data::ItemStack;
 
 const MAX_WATCHED: usize = 8;
-/// Spectator offset behind the holder (blocks back, blocks up) and pitch.
-const SPECTATOR_BACK: f64 = 4.0;
-const SPECTATOR_UP: f64 = 2.5;
-const SPECTATOR_PITCH: f32 = 20.0;
 /// Player body for grounding a placement.
 const PLAYER_HALF_WIDTH: f64 = 0.3;
 const PLAYER_HEIGHT: f64 = 1.8;
@@ -52,7 +48,8 @@ const PLAYER_HEIGHT: f64 = 1.8;
 /// reduced by his armour and blocked by his raised shield like any player's.
 const SOLDIER_HIT: f32 = 5.0;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Hold {
     pub name: String,
     pub side: u16,
@@ -72,19 +69,92 @@ pub(crate) struct Hold {
     pub alive_at: [f64; 3],
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct LiveState {
     watched: Vec<String>,
     /// Entity last announced online for each watched name.
+    #[serde(skip)]
     announced: Vec<Option<EntityId>>,
     pub holds: Vec<Hold>,
-    /// (spectator, holder) of each `battle spectate`: the spectator goes
-    /// behind the holder again on each respawn and re-arm (`follow`).
+    /// Named camera intent retained across target death, respawn and reconnect.
     spectators: Vec<(String, String)>,
+    #[serde(skip)]
     /// Living holders this tick (entity, side): candidates for enemy
     /// soldiers' swings (`in_reach`).
     targets: Vec<(EntityId, u16)>,
+    #[serde(skip)]
     factions: std::sync::Arc<Vec<(String, u16)>>,
+    /// Connection identities are transient; reconnect invokes the existing re-arm rule.
+    #[serde(skip)]
+    rearmed: Vec<(String, EntityId)>,
+    /// Last role identities let recovery validate historical target references.
+    historical: Vec<(EntityId, String)>,
+}
+
+impl LiveState {
+    pub(super) fn validate_items(
+        &self,
+        registry: &crate::registry::CoreRegistry,
+    ) -> Result<(), crate::CoreError> {
+        for stack in self.holds.iter().flat_map(|hold| hold.kit.iter().flatten()) {
+            if registry.items.name_of(stack.item_id).is_none() || stack.count <= 0 {
+                return Err(super::persistence::error("invalid live-role kit item"));
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn is_empty(&self) -> bool {
+        self.watched.is_empty() && self.holds.is_empty() && self.spectators.is_empty()
+    }
+
+    pub(super) fn historical_players(&self) -> impl Iterator<Item = EntityId> + '_ {
+        self.historical.iter().map(|&(id, _)| id)
+    }
+
+    pub(super) fn restore_connections(&mut self) {
+        self.announced.resize(self.watched.len(), None);
+    }
+
+    pub(super) fn validate_history(
+        &self,
+        formation: &FormationRuntime,
+    ) -> Result<(), crate::CoreError> {
+        let mut names = rustc_hash::FxHashSet::default();
+        let mut places = rustc_hash::FxHashSet::default();
+        if self.watched.len() > MAX_WATCHED
+            || self.historical.len() > self.holds.len()
+            || self.watched.iter().any(|name| !valid_name(name))
+        {
+            return Err(super::persistence::error("invalid live-role capacity/name"));
+        }
+        for hold in &self.holds {
+            if !valid_name(&hold.name)
+                || !names.insert(&hold.name)
+                || !places.insert((hold.regiment, hold.file))
+                || formation.regiments.get(hold.regiment).is_none_or(|r| {
+                    r.spec.faction != hold.side || hold.file >= usize::from(r.spec.files)
+                })
+            {
+                return Err(super::persistence::error("invalid live hold"));
+            }
+        }
+        if formation.held.len() != places.len()
+            || formation.held.iter().any(|slot| !places.contains(slot))
+            || self
+                .spectators
+                .iter()
+                .any(|(name, target)| !valid_name(name) || !valid_name(target) || name == target)
+            || self
+                .historical
+                .iter()
+                .any(|(id, name)| id.0 <= 0 || !self.holds.iter().any(|h| &h.name == name))
+        {
+            return Err(super::persistence::error("inconsistent live-role binding"));
+        }
+        Ok(())
+    }
 }
 
 /// Rebuild the published player sides only when the held slots change.
@@ -135,13 +205,12 @@ pub(crate) fn watch_count_ok(names: &[String]) -> bool {
     (1..=MAX_WATCHED).contains(&names.len())
 }
 
-/// The connected player with this account name, alive or dead.
+/// The authenticated connected player with this account name, alive or dead.
 fn player_named(state: &TickState, name: &str) -> Option<EntityId> {
-    state
-        .players
-        .keys()
-        .copied()
-        .find(|id| state.connections.name_of(*id) == Some(name))
+    state.players.iter().find_map(|(&id, player)| {
+        (state.connections.name_of(id) == Some(name) && !state.session_locked(player.connection))
+            .then_some(id)
+    })
 }
 
 /// Dead: no live body (a dead player's body leaves the live slots) or no health.
@@ -157,6 +226,31 @@ fn is_dead(state: &TickState, id: EntityId) -> bool {
 /// leave once (the runner's barrier waits on these exact lines), and put each
 /// holder who respawned back into the rank.
 pub(crate) fn update(state: &mut TickState) {
+    state.hostile.battle.live.restore_connections();
+    for index in 0..state.hostile.battle.live.holds.len() {
+        let hold = &state.hostile.battle.live.holds[index];
+        let Some(player) = player_named(state, &hold.name) else {
+            continue;
+        };
+        if is_dead(state, player)
+            || hold.dead
+            || state
+                .hostile
+                .battle
+                .live
+                .rearmed
+                .iter()
+                .any(|(name, id)| name == &hold.name && *id == player)
+        {
+            continue;
+        }
+        let name = hold.name.clone();
+        let side = hold.side;
+        match live(state, &name, side) {
+            Ok(line) => tracing::info!("{line}"),
+            Err(error) => tracing::warn!("Battle live reconnect refused: {name}: {error}"),
+        }
+    }
     for index in 0..state.hostile.battle.live.watched.len() {
         let name = &state.hostile.battle.live.watched[index];
         let online = player_named(state, name);
@@ -203,8 +297,30 @@ pub(crate) fn update(state: &mut TickState) {
             let hold = &mut state.hostile.battle.live.holds[index];
             hold.alive_at = at;
             let side = hold.side;
+            remember_player(&mut state.hostile.battle, index, player);
             state.hostile.battle.live.targets.push((player, side));
         }
+    }
+}
+
+/// A role has one current wire identity. Reconnect transfers retained decisions
+/// to that same named holder instead of growing a session-long tombstone list.
+fn remember_player(battle: &mut BattleState, hold: usize, player: EntityId) {
+    let name = &battle.live.holds[hold].name;
+    if let Some(index) = battle.live.historical.iter().position(|(_, n)| n == name) {
+        let old = battle.live.historical[index].0;
+        if old != player {
+            for target in battle.columns.targets.iter_mut().flatten() {
+                if target.id == old {
+                    target.id = player;
+                }
+            }
+            battle.combat.rebind_player(old, player);
+            battle.retaliation.rebind_player(old, player);
+            battle.live.historical[index].0 = player;
+        }
+    } else {
+        battle.live.historical.push((player, name.clone()));
     }
 }
 
@@ -669,6 +785,16 @@ fn equip(state: &mut TickState, id: EntityId, kit: &[Option<ItemStack>; 6]) -> u
         state.push_player(connection, change);
     }
     crate::projectiles::weapons::sync(state, id);
+    // Only a completed kit replacement satisfies reconnect/respawn re-arm.
+    // Merely remembering an online identity must not suppress a later retry.
+    if let Some(name) = state.connections.name_of(id) {
+        let rearmed = &mut state.hostile.battle.live.rearmed;
+        if let Some((_, armed)) = rearmed.iter_mut().find(|(n, _)| n == name) {
+            *armed = id;
+        } else {
+            rearmed.push((name.to_owned(), id));
+        }
+    }
     kit.iter().filter(|stack| stack.is_some()).count()
 }
 
@@ -687,7 +813,7 @@ fn keep_inventory(state: &mut TickState) {
 /// give the player that file's kit and stand him in rank 0 facing the enemy;
 /// the file's soldiers move one rank back. After start a held name is only
 /// re-armed (a rejoin): the battle moves him only on respawn. Either way a
-/// spectator bound to him goes behind him again.
+/// spectator bound to him resumes the same native camera authority.
 pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<String, String> {
     if state.hostile.battle.formation.regiments.is_empty() {
         return Err("no staged formation; setup required".into());
@@ -765,6 +891,8 @@ pub(crate) fn live(state: &mut TickState, name: &str, side: u16) -> Result<Strin
             spec.id, at[0], at[1], at[2]
         )
     };
+    let index = existing.unwrap_or(state.hostile.battle.live.holds.len() - 1);
+    remember_player(&mut state.hostile.battle, index, player);
     follow(state, name);
     Ok(reply)
 }
@@ -884,9 +1012,8 @@ fn reenter(state: &mut TickState, index: usize, player: EntityId) -> Result<Stri
     ))
 }
 
-/// `battle spectate <name> <target>`: spectator mode, standing behind the
-/// target (`place_behind`). The binding stays: he goes behind the target
-/// again whenever the target respawns or is re-armed (`follow`).
+/// `battle spectate <name> <target>`: spectator mode and the native camera
+/// authority, with named intent retained across target entity replacement.
 pub(crate) fn spectate(
     state: &mut TickState,
     changes: &mut ChangeSet,
@@ -918,13 +1045,10 @@ pub(crate) fn spectate(
         Some(binding) => binding.1 = target.to_owned(),
         None => spectators.push((name.to_owned(), target.to_owned())),
     }
-    place_behind(state, name, target)
+    bind_camera(state, name, target)
 }
 
-/// Each spectator bound to `target` goes behind him again, wherever his
-/// respawn or re-arm put him, so the spectator's client gets the chunks and
-/// entities around him (trial-7: CamSpec stayed in the cave where PovRed
-/// died, 230 blocks from his respawn, for four minutes).
+/// Re-arm/respawn uses the same camera authority as the continuous follow.
 fn follow(state: &mut TickState, target: &str) {
     for index in 0..state.hostile.battle.live.spectators.len() {
         let (name, bound) = &state.hostile.battle.live.spectators[index];
@@ -932,59 +1056,63 @@ fn follow(state: &mut TickState, target: &str) {
             continue;
         }
         let name = name.clone();
-        match place_behind(state, &name, target) {
+        match bind_camera(state, &name, target) {
             Ok(line) => tracing::info!("{line}"),
             Err(error) => tracing::warn!("Battle spectator not placed: {error}"),
         }
     }
 }
 
-/// Stand spectator `name` behind `target`, looking his way: his line's
-/// facing when he holds a slot. The core has no Set Camera packet, so the
-/// camera is the spectator's own. A spectator who left spectator mode is not
-/// moved.
-fn place_behind(state: &mut TickState, name: &str, target: &str) -> Result<String, String> {
+/// Explicit vanilla stop also cancels the battle's named intent.
+pub(crate) fn stop_camera(state: &mut TickState, viewer: EntityId) {
+    if let Some(name) = state.connections.name_of(viewer) {
+        state
+            .hostile
+            .battle
+            .live
+            .spectators
+            .retain(|(bound, _)| bound != name);
+    }
+}
+
+/// Resolve retained names through the native camera authority. Absent restored
+/// viewers and dead bodies keep intent; explicit viewer leave/mode exit ends it.
+pub(crate) fn follow_cameras(state: &mut TickState) {
+    let mut bindings = std::mem::take(&mut state.hostile.battle.live.spectators);
+    bindings.retain(|(name, target)| {
+        let Some(viewer) = player_named(state, name) else {
+            return true;
+        };
+        if !state.players[&viewer].spectator() {
+            return false;
+        }
+        if is_dead(state, viewer) {
+            return true;
+        }
+        if let Some(subject) = player_named(state, target)
+            && !is_dead(state, subject)
+            && state.cameras.get(&viewer) != Some(&subject)
+        {
+            match crate::tick::spectator::bind(state, viewer, Some(subject)) {
+                Ok(()) => tracing::info!(
+                    "Battle spectator placed: {name} target={target} camera={} gamemode=spectator",
+                    subject.0
+                ),
+                Err(error) => tracing::warn!("Battle spectator not bound: {name}: {error}"),
+            }
+        }
+        true
+    });
+    state.hostile.battle.live.spectators = bindings;
+}
+
+fn bind_camera(state: &mut TickState, name: &str, target: &str) -> Result<String, String> {
     let viewer = player_named(state, name).ok_or_else(|| format!("{name} is not online"))?;
     let subject = player_named(state, target).ok_or_else(|| format!("{target} is not online"))?;
-    if is_dead(state, viewer) || is_dead(state, subject) {
-        return Err(format!("{name} or {target} is dead; respawn first"));
-    }
-    if !state.players[&viewer].spectator() {
-        return Err(format!("{name} left spectator mode"));
-    }
-    let subject_slot = state.entities.slot_of(subject).expect("live player");
-    let pos = state.entities.pos(subject_slot);
-    let battle = &state.hostile.battle;
-    let yaw = battle
-        .live
-        .holds
-        .iter()
-        .find(|hold| hold.name == target)
-        .map_or_else(
-            || state.entities.rot(subject_slot)[0],
-            |hold| {
-                battle
-                    .formation
-                    .regiments
-                    .get(hold.regiment)
-                    .map_or(hold.yaw, |r| yaw_of(r.spec.facing))
-            },
-        );
-    let radians = f64::from(yaw).to_radians();
-    // Vanilla look vector of a yaw: (-sin, cos).
-    let forward = [
-        -f64::from(mc_physics::mth::sin(radians)),
-        f64::from(mc_physics::mth::cos(radians)),
-    ];
-    let at = [
-        pos[0] - forward[0] * SPECTATOR_BACK,
-        pos[1] + SPECTATOR_UP,
-        pos[2] - forward[1] * SPECTATOR_BACK,
-    ];
-    teleport(state, viewer, at, yaw, SPECTATOR_PITCH);
+    crate::tick::spectator::bind(state, viewer, Some(subject)).map_err(str::to_owned)?;
     Ok(format!(
-        "Battle spectator placed: {name} target={target} at={:.2},{:.2},{:.2} yaw={yaw:.1} gamemode=spectator camera=own",
-        at[0], at[1], at[2]
+        "Battle spectator placed: {name} target={target} camera={} gamemode=spectator",
+        subject.0
     ))
 }
 

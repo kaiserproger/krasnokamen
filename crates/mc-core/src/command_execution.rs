@@ -34,6 +34,7 @@ pub(crate) fn supports_store_result(command: &Command) -> bool {
         Command::Kill { .. }
         | Command::Summon { .. }
         | Command::Swing(_)
+        | Command::Spectate { .. }
         | Command::Attribute(_)
         | Command::Item(_)
         | Command::Loot(_)
@@ -356,6 +357,15 @@ pub(crate) fn execute(
     changes: &mut ChangeSet,
 ) -> CommandResult {
     match command {
+        Command::Spectate { target, player } => {
+            return crate::tick::spectator::execute(
+                state,
+                connection,
+                executor,
+                target.as_ref(),
+                player,
+            );
+        }
         Command::Battle(command) => {
             if matches!(command, crate::battle::staging::BattleCommand::Roster)
                 && connection != crate::command_console::CONNECTION
@@ -802,6 +812,7 @@ pub(crate) fn execute(
                         ]
                     })
                     .unwrap_or([current_rotation[0], current_rotation[1]]);
+                crate::tick::spectator::stop(state, target);
                 let wrap = |angle: f32| (angle + 180.0).rem_euclid(360.0) - 180.0;
                 state
                     .entities

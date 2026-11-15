@@ -769,6 +769,8 @@ impl TickState {
                 .get_mut(&id)
                 .map(|player| player.die(&rules, keep_inventory, keep_experience))
                 .unwrap_or_default();
+            // Death closes the menu without waiting for a client close packet.
+            self.open_containers.remove(&id);
             let pos = self.entities.pos(slot);
             crate::experience_orbs::award(self, pos, death_xp, spawned);
             let mut dropped = effects.dropped;

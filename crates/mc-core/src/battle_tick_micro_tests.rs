@@ -184,7 +184,7 @@ fn battle_tick_phase_micro() {
     let rows = state.entities.slots().count();
     for _ in 0..20 {
         let (output, _, _) = run_tick(&mut state, &[]);
-        crate::core::journal_entries_for_tick(&mut state, &output);
+        crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     }
     eprintln!("BATTLE_TICK setup side={side} rows={rows}");
     let mut moving_start = Vec::new();
@@ -210,7 +210,7 @@ fn battle_tick_phase_micro() {
             let start = std::time::Instant::now();
             let (output, _drains, times) = run_tick(&mut state, &[]);
             let run_time = start.elapsed();
-            let built = crate::core::journal_entries_for_tick(&mut state, &output);
+            let built = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
             let total = start.elapsed();
             touched.push(
                 crate::journal_touched::LAST_TOUCHED.load(std::sync::atomic::Ordering::Relaxed),

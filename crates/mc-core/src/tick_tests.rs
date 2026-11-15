@@ -357,7 +357,7 @@ fn radius_split_stationary_simulation_six_two_six_wal_restart_matches_live_age()
                     .entities_spawned
                     .push(mob);
             }
-            let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+            let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
             writer.append(output.tick, output.tick, &entries).unwrap();
             checkpoint_age = state.entities.row(slot).age;
             assert_eq!(state.entities.pos(slot), [104.0, 64.0, 8.0]);
@@ -2843,7 +2843,7 @@ fn snow_golem_shearing_is_once_and_survives_checkpoint_and_disk_wal() {
         crate::entity_life::snow_golem_pumpkin_flags(&state.entities.row(slot).appearance) & 0x10,
         0
     );
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
@@ -3768,6 +3768,7 @@ fn partial_pickup_journals_the_ground_remainder() {
         times: Default::default(),
     };
     let remainder = crate::core::journal_entries_for_tick(&mut state, &output)
+        .unwrap()
         .into_iter()
         .find_map(|entry| match entry {
             crate::journal::JournalEntry::Entity { id, item, .. }
@@ -6419,7 +6420,7 @@ fn sign_placement_opens_owned_editor_and_text_is_journaled() {
             .flat_map(|(_, changes)| changes)
             .any(|c| matches!(c, PlayerChange::BlockEntityData { position, block_entity_type: 7, .. } if *position == target))
     );
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|e| matches!(
         e,
         crate::journal::JournalEntry::OpaqueBlockEntity { nbt: Some(_), .. }
@@ -8060,7 +8061,7 @@ fn use_equippable_publishes_inventory_equipment_and_durable_player_image() {
         .unwrap();
     assert_eq!(view.appearance.equipment[5], Some(held.clone()));
     assert_eq!(view.appearance.equipment[0], Some(old.clone()));
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(entry,
         crate::journal::JournalEntry::Player { inventory, .. }
             if inventory[0] == old && inventory[39] == held)));

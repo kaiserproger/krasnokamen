@@ -716,7 +716,7 @@ fn death_protection_rescue_wal_replays_health_effects_and_inventory_custody_toge
     assert_eq!(expected.inventory[0].count, 1);
     assert_eq!(expected.carried.count, 3);
     assert_eq!(expected.grid[0].count, 4);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();

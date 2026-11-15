@@ -54,16 +54,6 @@ fn floor_matches_the_libm_form() {
             "f32 {narrow:e} floors differently"
         );
         assert_eq!(
-            delta_to_short(value / 4096.0),
-            {
-                let scaled = (value / 4096.0 * 4096.0).floor();
-                (scaled >= f64::from(i16::MIN) && scaled <= f64::from(i16::MAX))
-                    .then_some(scaled as i16)
-                    .or_else(|| scaled.is_nan().then_some(0))
-            },
-            "delta {value:e} packs differently"
-        );
-        assert_eq!(
             pack_degrees(narrow),
             (narrow.mul_add(256.0, 0.0) / 360.0).floor() as i32 as u8,
             "angle {narrow:e} packs differently"

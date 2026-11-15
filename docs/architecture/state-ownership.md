@@ -284,8 +284,10 @@ Raw command, pin provenance and logs are retained in the executor's
 4. Publication is not the commit point. A lost packet does not undo an effect;
    reconnect/reconciliation uses current authority, not client speculation.
    `ViewerState::player_profiles` owns the connection's delivered profile baseline.
-   Replacing a tracked player's profile removes its old wire body and retains
-   spawn debt while visible, even when the core snapshot revision is unchanged.
+   Replacing a tracked player's profile retains removal and spawn debt while
+   visible, even when the core snapshot revision is unchanged. Camera release,
+   body removal, pairing and camera rebind share the world FIFO in that order;
+   reliable roster delivery must not overtake camera release with a removal.
    Queue credit may defer that replacement, but must not discard it.
 5. Append completion is not fsync durability. A crash may lose an unflushed tail,
    but does not recover different tick boundaries for player and plugin/world data.

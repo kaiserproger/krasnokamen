@@ -51,6 +51,7 @@ pub(crate) mod merchant;
 pub(crate) mod mining;
 mod passive_follow;
 pub(crate) mod phase_laps;
+pub(crate) mod spectator;
 mod stations;
 mod system_graph;
 use entity_phase::*;
@@ -393,6 +394,9 @@ pub struct TickState {
     pub(crate) mob_griefing: crate::config::MobGriefingRules,
     /// Player state per player entity (inventory, menus, vitals, mode).
     pub players: HashMap<EntityId, crate::player::PlayerState>,
+    /// Session-only camera authority; absence means the viewer's own entity.
+    pub(crate) cameras: Arc<HashMap<EntityId, EntityId>>,
+    pub(crate) camera_releases: Vec<EntityId>,
     /// Recovered offline records by uuid: consumed by Join to restore full
     /// player state (inventory, vitals, xp, mode, position).
     pub offline_players: HashMap<uuid::Uuid, crate::journal::ReplayPlayer>,
@@ -696,6 +700,8 @@ impl TickState {
             command_blocks_due: Vec::new(),
             mob_griefing: crate::config::MobGriefingRules::default(),
             players: HashMap::default(),
+            cameras: Arc::default(),
+            camera_releases: Vec::new(),
             offline_players: HashMap::default(),
             default_game_mode: crate::commands::GameMode::Survival,
             advancement_events: Vec::new(),
@@ -1937,6 +1943,7 @@ fn run_dimension_tick_inner<'a>(
         runtime.pending_events.extend(plugin_events);
     }
     commit_laps.lap("plugin_player");
+    spectator::tick(state);
     let commit_time = commit_start.elapsed();
     // 6. Publish: chunk list + entity wire views + per-connection outbox
     // drain. Readers hold the snapshot `Arc`; unchanged chunks share theirs.
@@ -1988,6 +1995,8 @@ fn run_dimension_tick_inner<'a>(
         raid_bars: crate::raids::bars(state),
         settlement_labels: crate::settlements::presentation::snapshot(state),
         player_factions: crate::battle::live_players::player_factions(state),
+        cameras: Arc::clone(&state.cameras),
+        player_roster: Arc::clone(&state.dimension_globals.roster),
         team_names: crate::scoreboard::snapshot_team_names(state),
     });
     let output = TickOutput {
@@ -2095,6 +2104,7 @@ pub(crate) fn apply_player_effects(
     changes: &mut ChangeSet,
 ) {
     for change in effects.changes {
+        spectator::player_change(state, entity, &change);
         state.push_player(connection, change);
     }
     for (recipe, ingredients) in effects.crafted_recipes {

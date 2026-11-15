@@ -58,6 +58,38 @@ The projection is
 runtime-only and rebuilt from existing durable UUID references; no storage schema
 or player custody authority changes.
 
+Spectator cameras are transient native bindings, published with the immutable
+world snapshot. `/spectate` and battle named-follow use that same authority;
+the native tick follows the target position for residency and ignores viewer
+movement while bound. Binding changes synchronize the viewer once, not on every
+follow tick. Death/disconnect releases the current camera; only battle's named
+intent retries a returning target or a respawned viewer on the same connection.
+Explicit stop, sneak, viewer disconnect or leaving spectator mode clears that
+intent. Entity-ID camera bindings are transient; battle history persists only
+named follow intent and resolves it through this same camera authority.
+Restored names remain pending while their viewers are offline; a real Leave
+input cancels intent before removing the connection. Re-arm completion is
+recorded only after equipment replacement, not when an identity is observed or
+a placement is attempted. Refused re-arm retries on the same connection;
+successful respawn equipment prevents an extra reconnect re-arm.
+The edge binds only a paired target, with camera release, removal, pairing and
+rebind ordered on the entity world FIFO; credit loss retains delivery debt.
+Shared command resolution finds named/UUID targets across worlds and transfers
+the viewer through existing dimension custody before publishing a binding.
+When a bound target changes dimensions, its admitted viewers move with it and then
+release, rather than retaining a dimension-local entity reference. Authentication-
+locked viewers release in their source world without failing the target's move.
+Explicit player teleport also releases the player's camera; refused teleports
+do not.
+The effects appearance owner projects spectator invisibility and suppresses
+effect particles without deleting the player's potion state.
+The snapshot shares the existing global roster allocation for current player
+modes. Entity interest uses that roster and camera ownership for vanilla player
+tracking eligibility, not a second mode store: ordinary viewers never receive
+spectator bodies; spectator viewers receive only self-camera player bodies.
+Retained interest revisits player rows when either immutable input changes,
+including already paired and previously hidden players, without scanning mobs.
+
 Mount custody belongs to the vehicle's ordered, bounded rider UUID list. The
 first rider with a live body controls motion; absent recovery claims are skipped.
 Absent claims do not reserve attachment positions for live passengers.
@@ -203,6 +235,22 @@ complete framing, first-start,
 lease and backup contract is in
 [persistence](../architecture/persistence.md).
 
+Staged battles are native dimension-local gameplay owners, not disposable AI
+caches: phase and battle-local clock, regiment/member identity and rank history,
+orders/targets, morale/rout/action/weapon timers, live holds and spectator
+bindings share their entities' checkpoint transaction and tick-WAL frame.
+Changed battle-body poses are WAL-durable even within a chunk, without changing
+the existing age/chunk-clock anchor. Recovery rebuilds only derived execution
+columns and connection state. Running battles resume automatically; downtime
+does not advance combat. Removed roster/execution IDs remain historical
+tombstones, while a missing live member or an inconsistent/unsupported image
+refuses startup, including offline recovery. Tags/tickets alone never recreate
+lost formations. Reset publishes an empty owner image in the same frame as unit
+and ticket removal. See the [battle contract](../architecture/persistence.md#battle-decision-history).
+Native death tombstones take authority immediately: the short-lived presentation
+corpse never contributes compact persisted poses after its live body is gone.
+
+
 Retained player and entity NBT is validated and tag-set-normalized at the shared
 recovery boundary before dimension copies, live hydration or offline
 export. A valid root followed by trailing bytes and repeated `Tags` keys refuse
@@ -238,6 +286,19 @@ could bypass the native NBT codec's existing duplicate-name refusal and lose a
 second cursor/crafting-grid payload on export or checkpoint. Native checkpoint
 encoding and raw checkpoint recovery retain their existing recursive NBT
 duplicate-name guard; no repair or weakened native admission is introduced.
+
+WAL player opaque NBT may not contain any root field in `player_owned_field`,
+even once or with an empty payload: these fields belong to the typed player
+post-image and serialization removes them from opaque data. Admission refuses
+the whole recovery before applying the batch, naming player UUID and field,
+rather than accept a second item authority that export would silently discard.
+Current capture strips projected fields on decode; its retained mutations write
+only attributes, EnderItems, Tags and unowned extension data, which remain valid.
+The same refusal applies to `recipeBook.recipes`, whose authority is the typed
+unlocked-recipe set and whose export projection replaces that nested list.
+Other recipeBook fields remain opaque and are preserved; neither empty nor
+nonempty accepted recipe lists are repaired or silently replaced.
+Regression: `mc-world-conversion::wal_owned_player_fields_tests`.
 
 Backups retain database custody throughout the copy. The native redb backend
 and hot-backup reader share the exact lease-holding file handle (not a reopened

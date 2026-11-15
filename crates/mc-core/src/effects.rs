@@ -640,12 +640,12 @@ pub(crate) fn sync_appearance(
     if let Some(event) = event {
         crate::advancements::trigger(state, entity, "minecraft:effects_changed", event);
     }
-    let effects = state
-        .players
-        .get(&entity)
+    let player = state.players.get(&entity);
+    let spectator = player.is_some_and(|player| player.spectator());
+    let effects = player
         .map(|player| &player.active_effects)
         .unwrap_or(&state.entities.row(slot).active_effects);
-    let flags = (if effects.has(EffectId::Invisibility) {
+    let flags = (if spectator || effects.has(EffectId::Invisibility) {
         0x20
     } else {
         0
@@ -664,7 +664,7 @@ pub(crate) fn sync_appearance(
     let particles = effects
         .entries
         .iter()
-        .filter(|effect| effect.show_particles)
+        .filter(|effect| !spectator && effect.show_particles)
         .map(|effect| match effect.id {
             EffectId::TrialOmen => EffectParticle::TrialOmen,
             EffectId::RaidOmen => EffectParticle::RaidOmen,
@@ -829,7 +829,11 @@ pub(crate) fn run(state: &mut crate::tick::TickState, intents: &mut Vec<crate::i
         } else {
             &row.active_effects
         };
-        let active = !effects.entries.is_empty()
+        let active = state
+            .players
+            .get(&body.id)
+            .is_some_and(|player| player.spectator())
+            || !effects.entries.is_empty()
             || !row.appearance.effect_particles.is_empty()
             || row.appearance.absorption > 0.0
             || row.appearance.shared_flags & 0x60 != 0;

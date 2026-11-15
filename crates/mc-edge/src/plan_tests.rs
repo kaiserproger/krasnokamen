@@ -14,6 +14,12 @@ use std::sync::Arc;
 #[path = "plan/chunk_delta_tests.rs"]
 mod chunk_delta_tests;
 
+#[path = "plan/camera_tests.rs"]
+mod camera_tests;
+
+#[path = "plan/player_visibility_tests.rs"]
+mod player_visibility_tests;
+
 #[path = "plan/section_blocks_tests.rs"]
 mod section_blocks_tests;
 
@@ -76,14 +82,15 @@ fn authenticated_roster_replaces_a_provisional_player_object_once() {
         removed: Arc::from([]),
     };
     let packets = plan_player_changes(std::slice::from_ref(&roster), &mut viewer);
-    assert!(packets.iter().any(|packet| packet.id == RemoveEntities::ID));
-    assert!(!viewer.tracked_entities.contains_key(&entity));
+    assert!(!packets.iter().any(|packet| packet.id == RemoveEntities::ID));
+    assert!(is_undelivered(&viewer, entity));
     viewer
         .tracked_entities
         .insert(entity, TrackedEntity::default());
     let packets = plan_player_changes(&[roster], &mut viewer);
     assert!(!packets.iter().any(|packet| packet.id == RemoveEntities::ID));
     assert!(viewer.tracked_entities.contains_key(&entity));
+    assert!(!is_undelivered(&viewer, entity));
 }
 
 #[test]
@@ -107,6 +114,46 @@ fn player_air_supply_is_reliable_own_metadata_without_world_credit() {
             }]
         );
     }
+    assert_eq!(viewer.world_credit, 0);
+}
+
+#[test]
+fn permission_updates_target_joined_self_reliably_in_order() {
+    let mut viewer = viewer_at(91, [8.0, 64.0, 8.0]);
+    viewer.world_credit = 0;
+    let entity = EntityId(3174);
+    let changes = [
+        PlayerChange::Joined {
+            entity,
+            dimension: mc_core::dimensions::Dimension::Nether,
+            position: [8.0, 64.0, 8.0],
+            yaw: 0.0,
+            pitch: 0.0,
+            game_mode: 0,
+        },
+        PlayerChange::PermissionLevel { level: 2 },
+        PlayerChange::PermissionLevel { level: 4 },
+        PlayerChange::PermissionLevel { level: 0 },
+        PlayerChange::PermissionLevel { level: 1 },
+        PlayerChange::PermissionLevel { level: 3 },
+    ];
+    let packets = plan_player_changes(&changes, &mut viewer);
+    let events: Vec<_> = packets
+        .iter()
+        .filter(|packet| packet.id == WireEntityEvent::ID)
+        .map(|packet| {
+            assert!(packet.reliable);
+            assert_eq!(packet.connection, viewer.connection);
+            WireEntityEvent::decode(&mut &body_of(packet)[..]).unwrap()
+        })
+        .collect();
+    assert_eq!(
+        events,
+        [26, 28, 24, 25, 27].map(|event_id| WireEntityEvent {
+            entity_id: entity.0,
+            event_id,
+        })
+    );
     assert_eq!(viewer.world_credit, 0);
 }
 
@@ -695,7 +742,11 @@ fn chunk_at(x: i32, z: i32) -> (ChunkPos, Arc<mc_world::chunk::Chunk>) {
 }
 
 fn viewer_at(conn: u64, pos: [f64; 3]) -> ViewerState {
-    ViewerState::new(ConnectionId(conn), EntityId(conn as i32), pos)
+    let viewer = ViewerState::new(ConnectionId(conn), EntityId(conn as i32), pos);
+    // Pure planner fixtures model an already-ACKing fast client. Fresh-session
+    // pacing and actual queue admission have dedicated chunk_batch tests.
+    viewer.chunk_batches.lock().acknowledge(64.0);
+    viewer
 }
 
 fn entity(id: i32, pos: [f64; 3]) -> EntityView {
@@ -1041,7 +1092,7 @@ fn village_motion_frames_reach_tracked_viewer_while_streaming_chunks() {
         assert!(
             packets
                 .iter()
-                .filter(|packet| packet.priority == crate::fanout::Priority::BestEffort)
+                .filter(|packet| packet.priority != crate::fanout::Priority::Reliable)
                 .count()
                 <= viewer.world_credit
         );

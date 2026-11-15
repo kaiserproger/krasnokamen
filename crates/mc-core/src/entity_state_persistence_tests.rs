@@ -270,7 +270,7 @@ fn compact_timer_postimages_replay_without_appearance_or_birth_motion_changes() 
         .expect("unique tick change set")
         .entities_spawned
         .push(id);
-    let birth = journal_entries_for_tick(&mut state, &output);
+    let birth = journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(
         birth.iter().any(
             |entry| matches!(entry, JournalEntry::Entity { id: entity, .. } if *entity == id.0)
@@ -283,7 +283,7 @@ fn compact_timer_postimages_replay_without_appearance_or_birth_motion_changes() 
     row.love = 99;
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
     let expected = EntityStateImage::from_row(state.entities.body(slot), state.entities.row(slot));
-    let tail = journal_entries_for_tick(&mut state, &output);
+    let tail = journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(tail.iter().any(
         |entry| matches!(entry, JournalEntry::EntityState { id: entity, .. } if *entity == id.0)
     ));
@@ -345,7 +345,7 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
         .unwrap()
         .entities_spawned
         .push(id);
-    let birth = journal_entries_for_tick(&mut state, &birth_output);
+    let birth = journal_entries_for_tick(&mut state, &birth_output).unwrap();
     assert!(birth.iter().any(|entry| matches!(entry,
         JournalEntry::Entity { id: entity, .. } if *entity == id.0)));
     let checkpoint_tick = birth_output.tick;
@@ -384,7 +384,7 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     .unwrap();
     state.entities.row_mut(slot).controls.invulnerable = true;
     let (invulnerable_output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let invulnerable_tail = journal_entries_for_tick(&mut state, &invulnerable_output);
+    let invulnerable_tail = journal_entries_for_tick(&mut state, &invulnerable_output).unwrap();
     assert!(invulnerable_tail.iter().any(|entry| matches!(entry,
         JournalEntry::EntityState { id: entity, state: image, .. }
             if *entity == id.0 && image.controls.invulnerable && !image.controls.no_gravity)));
@@ -413,7 +413,7 @@ fn checkpoint_then_wal_replays_no_gravity_and_invulnerable_transition() {
     crate::entity_controls::set_no_gravity(&mut state, slot, true);
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
     let expected = EntityStateImage::from_row(state.entities.body(slot), state.entities.row(slot));
-    let tail = journal_entries_for_tick(&mut state, &output);
+    let tail = journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(tail.iter().any(|entry| matches!(entry,
         JournalEntry::Entity { id: entity, state: image, .. }
             if *entity == id.0 && image.controls.no_gravity && image.controls.invulnerable)));
@@ -711,7 +711,7 @@ fn lifetime_age_only_changes_match_and_do_not_emit_timer_journal_entries() {
     let slot = state.entities.slot_of(id).unwrap();
     state.entities.row_mut(slot).persistent = true;
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    journal_entries_for_tick(&mut state, &output);
+    journal_entries_for_tick(&mut state, &output).unwrap();
     let image = EntityStateImage::from_row(state.entities.body(slot), state.entities.row(slot));
     state.entities.row_mut(slot).age = state.entities.row(slot).age.wrapping_add(42);
     assert!(
@@ -719,7 +719,7 @@ fn lifetime_age_only_changes_match_and_do_not_emit_timer_journal_entries() {
         "age is not a dirty key"
     );
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let entries = journal_entries_for_tick(&mut state, &output);
+    let entries = journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(!entries.iter().any(|entry| matches!(
         entry, JournalEntry::EntityState { id: changed, .. }
             | JournalEntry::Entity { id: changed, .. } if *changed == id.0
@@ -729,7 +729,7 @@ fn lifetime_age_only_changes_match_and_do_not_emit_timer_journal_entries() {
         !image.matches(state.entities.body(slot), state.entities.row(slot)),
         "protection is durable state"
     );
-    let entries = journal_entries_for_tick(&mut state, &output);
+    let entries = journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(
         entry, JournalEntry::EntityState { id: changed, state: image, .. }
             if *changed == id.0 && image.protected_until == state.tick + 60
@@ -752,11 +752,11 @@ fn chicken_countdown_uses_batch_clock_and_reset_journals_the_egg_birth() {
         .unwrap()
         .entities_spawned
         .push(id);
-    let birth = journal_entries_for_tick(&mut state, &output);
+    let birth = journal_entries_for_tick(&mut state, &output).unwrap();
     let mut replay = replay_batches(Replay::default(), &[(output.tick, output.tick, birth)]);
     for expected in [3, 2, 1] {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        let entries = journal_entries_for_tick(&mut state, &output);
+        let entries = journal_entries_for_tick(&mut state, &output).unwrap();
         assert!(
             !entries.iter().any(|entry| matches!(
                 entry, JournalEntry::EntityState { id: changed, .. }
@@ -775,7 +775,7 @@ fn chicken_countdown_uses_batch_clock_and_reset_journals_the_egg_birth() {
         assert_eq!(replay.entities[&id.0].state, unchanged);
     }
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let entries = journal_entries_for_tick(&mut state, &output);
+    let entries = journal_entries_for_tick(&mut state, &output).unwrap();
     let reset = state.entities.row(slot).entity_life.harvest_ticks;
     assert!((6000..=12000).contains(&reset));
     assert!(entries.iter().any(|entry| matches!(
@@ -866,10 +866,10 @@ fn idle_villager_and_mob_clocks_do_not_emit_images_over_sixty_four_ticks() {
     row.breed_cooldown = 200;
     row.entity_life.child_ticks = 200;
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    journal_entries_for_tick(&mut state, &output);
+    journal_entries_for_tick(&mut state, &output).unwrap();
     for _ in 0..64 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        let entries = journal_entries_for_tick(&mut state, &output);
+        let entries = journal_entries_for_tick(&mut state, &output).unwrap();
         assert!(
             !entries.iter().any(|entry| matches!(
                 entry, JournalEntry::Entity { id, .. } | JournalEntry::EntityState { id, .. }
@@ -906,10 +906,10 @@ fn dead_curing_villager_freezes_without_timer_only_images() {
         ..Default::default()
     }));
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    journal_entries_for_tick(&mut state, &output);
+    journal_entries_for_tick(&mut state, &output).unwrap();
     for _ in 0..8 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        let entries = journal_entries_for_tick(&mut state, &output);
+        let entries = journal_entries_for_tick(&mut state, &output).unwrap();
         assert!(!entries.iter().any(|entry| matches!(
             entry, JournalEntry::Entity { id: image, .. }
                 | JournalEntry::EntityState { id: image, .. } if *image == id.0
@@ -946,7 +946,7 @@ fn assert_live_villager_clock_intervals(evict: bool) {
         transition: bool,
     ) {
         let (output, _, _) = crate::tick::run_tick(state, &[]);
-        let entries = journal_entries_for_tick(state, &output);
+        let entries = journal_entries_for_tick(state, &output).unwrap();
         if !transition {
             assert!(
                 !entries.iter().any(|entry| matches!(
@@ -1455,11 +1455,11 @@ fn chunk_crossing_emits_existing_full_image_but_intra_chunk_motion_does_not() {
         .unwrap()
         .entities_spawned
         .push(id);
-    let birth = journal_entries_for_tick(&mut state, &output);
+    let birth = journal_entries_for_tick(&mut state, &output).unwrap();
     let mut replay = replay_batches(Replay::default(), &[(output.tick, output.tick, birth)]);
     state.entities.set_pos(slot, [9.5, 65.0, 8.5]);
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let within = journal_entries_for_tick(&mut state, &output);
+    let within = journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(
         !within.iter().any(|entry| matches!(entry,
             JournalEntry::Entity { id: image, .. } if *image == id.0
@@ -1469,7 +1469,7 @@ fn chunk_crossing_emits_existing_full_image_but_intra_chunk_motion_does_not() {
     replay = replay_batches(replay, &[(output.tick, output.tick, within)]);
     state.entities.set_pos(slot, [24.5, 65.0, 8.5]);
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let crossing = journal_entries_for_tick(&mut state, &output);
+    let crossing = journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(
         crossing.iter().any(|entry| matches!(entry,
             JournalEntry::Entity { id: image, pos, .. } if *image == id.0 && pos[0] == 24.5
@@ -1514,7 +1514,7 @@ fn assert_restored_chunk_crossing(remove_first: bool) {
     let slot = state.entities.slot_of(EntityId(id)).unwrap();
     state.entities.set_pos(slot, [24.5, 65.0, 8.5]);
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let entries = journal_entries_for_tick(&mut state, &output);
+    let entries = journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(
         entries.iter().any(|entry| matches!(entry,
             JournalEntry::Entity { id: image, pos, .. } if *image == id && pos[0] == 24.5

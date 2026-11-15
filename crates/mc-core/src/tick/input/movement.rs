@@ -173,6 +173,9 @@ pub(in crate::tick) fn move_input(
     let Some(entity) = state.connections.by_connection.get(connection).copied() else {
         return;
     };
+    if state.cameras.contains_key(&entity) {
+        return;
+    }
     let Some(slot) = state.entities.slot_of(entity) else {
         return;
     };
@@ -444,6 +447,7 @@ pub(in crate::tick) fn sneak(
         return;
     };
     if *sneaking {
+        super::super::spectator::stop(state, entity);
         crate::mounts::dismount(state, entity);
     }
     update_player_crouching(state, entity, slot, *sneaking);

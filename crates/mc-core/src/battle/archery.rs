@@ -33,13 +33,16 @@ pub(super) fn arrow_damage(owner: crate::boundary::EntityId, tick: u64) -> f32 {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Runtime {
+    #[serde(with = "super::persistence::volley_map")]
     volleys: FxHashMap<(u16, u32), Volley>,
 }
 
-#[derive(Debug)]
-struct Volley {
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Volley {
     next: u64,
     loose: bool,
     ripple: Option<u64>,
@@ -381,7 +384,7 @@ mod ripple_tests {
         state.refresh_active_chunks(state.tick);
         for _ in 0..208 {
             let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-            crate::core::journal_entries_for_tick(&mut state, &output);
+            crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         }
         execute(&mut state, &mut changes, origin, &BattleCommand::Start).unwrap();
         let mut samples = Vec::new();
@@ -390,7 +393,7 @@ mod ripple_tests {
             let cpu_before = cpu_ticks();
             let (output, _, times) = crate::tick::run_tick(&mut state, &[]);
             let start = std::time::Instant::now();
-            let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+            let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
             let journal_us = start.elapsed().as_micros() as u64;
             let cpu_used = cpu_ticks() - cpu_before;
             let arrows = state.hostile.battle.combat.work.arrows;

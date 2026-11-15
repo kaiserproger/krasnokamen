@@ -1728,7 +1728,7 @@ fn player_opaque_fields_and_advancements_follow_join_checkpoint_and_wal_replay()
             .unlocked_recipes
             .contains("minecraft:oak_planks")
     );
-    let initial = crate::core::journal_entries_for_tick(&mut state, &output);
+    let initial = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(initial.iter().any(|entry| matches!(
         entry,
         JournalEntry::Player {
@@ -1786,7 +1786,7 @@ fn player_opaque_fields_and_advancements_follow_join_checkpoint_and_wal_replay()
             &snapshot.unlocked_recipes,
             &captured.unlocked_recipes
         ));
-        let movement = crate::core::journal_entries_for_tick(&mut state, &output);
+        let movement = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         let entry = movement
             .iter()
             .find(|entry| matches!(entry, JournalEntry::Player { .. }))
@@ -1834,7 +1834,7 @@ fn player_opaque_fields_and_advancements_follow_join_checkpoint_and_wal_replay()
     let player = state.players.get_mut(&entity).unwrap();
     Arc::make_mut(&mut player.advancement_progress)["minecraft:story/root"]["done"] = false.into();
     output.tick += 1;
-    let advancement_only = crate::core::journal_entries_for_tick(&mut state, &output);
+    let advancement_only = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(advancement_only.iter().any(|entry| matches!(
         entry,
         JournalEntry::Player {
@@ -1864,7 +1864,7 @@ fn player_opaque_fields_and_advancements_follow_join_checkpoint_and_wal_replay()
     Arc::make_mut(&mut state.players.get_mut(&entity).unwrap().unlocked_recipes)
         .insert("minecraft:stick".into());
     output.tick += 1;
-    let recipe_only = crate::core::journal_entries_for_tick(&mut state, &output);
+    let recipe_only = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(recipe_only.iter().any(|entry| matches!(
         entry,
         JournalEntry::Player {
@@ -1893,7 +1893,7 @@ fn player_opaque_fields_and_advancements_follow_join_checkpoint_and_wal_replay()
     assert_eq!(captured.opaque_player_fields, expected);
     assert_eq!(captured.advancement_progress, updated);
     assert_eq!(captured.unlocked_recipes.len(), 2);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let dir = tempfile::tempdir().unwrap();
     let mut writer = JournalWriter::open(dir.path(), 1).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();

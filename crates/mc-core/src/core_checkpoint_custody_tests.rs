@@ -296,7 +296,7 @@ impl World {
                 );
             }
         }
-        let entries = journal_entries_for_tick(&mut self.state, &output);
+        let entries = journal_entries_for_tick(&mut self.state, &output).unwrap();
         self.writer
             .append(output.tick, output.tick, &entries)
             .unwrap();
@@ -1160,14 +1160,24 @@ fn battle_restart_reset_removes_checkpoint_roster_and_ticket_durably() {
     );
     assert!(world.state.tickets.contains_key(OWNER));
     let mut changes = ChangeSet::default();
-    let error = execute(
+    execute(
         &mut world.state,
         &mut changes,
         [0.0; 3],
-        &BattleCommand::Start,
+        &BattleCommand::Setup {
+            seed: 42,
+            count: 100,
+        },
     )
-    .unwrap_err();
-    assert!(error.contains("setup required"), "{error}");
+    .unwrap();
+    assert!(
+        changes.entities_spawned.is_empty(),
+        "repeating setup after recovery must reuse the saved battle"
+    );
+    assert!(
+        changes.entities_removed.is_empty(),
+        "repeating setup after recovery must not replace its roster"
+    );
     assert!(!world.state.hostile.battle.running);
     execute(
         &mut world.state,
@@ -1189,7 +1199,7 @@ fn battle_restart_reset_removes_checkpoint_roster_and_ticket_durably() {
         .unwrap()
         .entities_removed
         .extend(changes.entities_removed);
-    let entries = journal_entries_for_tick(&mut world.state, &output);
+    let entries = journal_entries_for_tick(&mut world.state, &output).unwrap();
     world
         .writer
         .append(output.tick, output.tick, &entries)

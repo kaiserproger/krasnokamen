@@ -184,7 +184,7 @@ fn mid_fight_native_checkpoint_and_wal_restart_keep_phase_target_and_position() 
     let mut restored = full_restore(&s);
     assert_eq!(restored.end_fight, s.end_fight);
     let (out, _, _) = run_tick(&mut s, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut s, &out);
+    let entries = crate::core::journal_entries_for_tick(&mut s, &out).unwrap();
     let wal = directory.path().join("journal");
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
     writer.append(1, out.tick, &entries).unwrap();
@@ -532,7 +532,7 @@ fn interrupted_wal_death_award_reopens_native_checkpoint_without_duplicate_xp() 
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
     for _ in 0..6 {
         let (out, _, _) = run_tick(&mut s, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut s, &out);
+        let entries = crate::core::journal_entries_for_tick(&mut s, &out).unwrap();
         writer
             .append(
                 out.tick,

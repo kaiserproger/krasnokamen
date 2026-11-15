@@ -1,6 +1,17 @@
 # Historical reports require current-tree revalidation before promotion.
 
 [[bug]]
+id = "COMMAND-LOCKED-CAMERA-FOLLOWER-TRANSFER"
+title = "A locked spectator follower makes teleport report failure after its target has already changed dimensions."
+area = "gameplay"
+repro = "source"
+severity = "major"
+status = "open"
+source = "Independent integration review: operator-selected authentication-locked camera viewer and an authenticated target's cross-dimension teleport."
+regression = ["cargo:mc-core:dimensions::tests::spectator::locked_spectator_follower_releases_without_failing_target_dimension_transfer"]
+failing_first = "reported"
+
+[[bug]]
 id = "PLUGIN-WORLD-BLOCK-CONTAINER-CUSTODY"
 title = "SetWorldBlock removes container contents even when installing the same block identity."
 area = "gameplay"
@@ -5969,8 +5980,8 @@ area = "gameplay"
 repro = "client"
 severity = "major"
 status = "open"
-source = "G2R calibration trial-7: CamSpec ('battle spectate CamSpec PovRed') stayed underground at PovRed's death spot after PovRed respawned about 230 blocks away; the camera recording was a dark cave for four minutes. crates/mc-core/src/battle/live_players.rs spectate placed the spectator once and kept no binding. Now the binding is kept and the spectator is placed behind the player again on each respawn and re-arm."
-regression = ["cargo:mc-core:battle::live_players::tests::the_bound_spectator_goes_behind_the_holder_again_after_a_respawn_and_a_rearm"]
+source = "G2R calibration trial-7: CamSpec ('battle spectate CamSpec PovRed') stayed underground at PovRed's death spot after PovRed respawned about 230 blocks away; the camera recording was a dark cave for four minutes. Initial placement and later behind-player repositioning did not provide continuous entity-camera following. Native /spectate and battle named intent now share real Set Camera binding, with death/disconnect release and battle respawn/reconnect rebind. Acceptance and ledger promotion remain pending."
+regression = ["cargo:mc-core:battle::live_players::tests::the_bound_spectator_follows_the_holder_after_a_respawn_and_a_rearm", "cargo:mc-core:tick::spectator::tests::spectator_tick_follows_target_and_publishes_tracking_anchor_without_teleport_spam", "cargo:mc-edge:plan::plan_tests::camera_tests::camera_binding_follows_pairing_and_release_precedes_target_removal"]
 failing_first = "reported"
 fix_commit = "c6fa94da3eb7d41830992e6e2a00818e2813e9f4"
 
@@ -7118,3 +7129,68 @@ source = "Stage3 Horizon client 1:1 comparison (HzClient1v1 crowd diagnostic, la
 repro = "client"
 regression = []
 failing_first = "reported"
+
+[[bug]]
+id = "ENTITY-RELATIVE-MOVEMENT-DRIFT"
+title = "Relative entity movement can accumulate negative viewer drift on closed trajectories"
+area = "client"
+severity = "major"
+status = "open"
+source = "SOURCE-INFERRED from mc-edge plan::entity_movement: flooring raw displacement sends +40 then -41 for y=69 -> 69.01 -> 69, while retaining raw endpoints. Throwaway arithmetic accumulates -0.25 blocks after 1024 cycles. Local official 26.1.2/26.2/26.3 VecDeltaCodec metadata instead rounds endpoints (ties +infinity) before subtraction. Neither a production-byte reproduction nor Spain's native underground/population cause is established."
+repro = "source"
+regression = []
+failing_first = "not recorded"
+fix_commit = "patch:536ca16ddbccab572a1a380c315921494d42fcd641060747f7bfd60a4a8b8477"
+repro_check = "Prepared, NOT RUN during W2: cargo:mc-edge:plan::plan_tests::shared_moves_tests::relative_movement_cycles_return_the_decoded_consumer_to_origin; companion relative_movement_* tests cover signed endpoint boundaries, position/rotation-only baselines, threshold accumulation and absolute sync. Production shared-frame consumer assertions, fix-only negative control, restored proof and L1 require post-W2 clearance. Metadata/arithmetic receipts: wt/EntityMoveDelta/.analysis/codex-logs/entity-move-delta/ under the work root. Graphical/native acceptance remains separate; no promotion."
+
+[[bug]]
+id = "COMMAND-SELECTOR-PERMISSION-SYNC"
+title = "Operator selector completion is rejected because the client never receives its permission level"
+area = "client"
+severity = "minor"
+status = "open"
+source = "HzClientQA suggestions-1/2 and passive suggestions-4: give @s diamond_sw + Tab fails with Selector not allowed; named-player control completes. Core join and permission updates omitted own-entity permission status."
+repro = "client"
+regression = ["cargo:mc-core:tick::auth_gate_tests::permission_projection_follows_join_updates_and_authenticated_unlock", "cargo:mc-edge:plan::plan_tests::permission_updates_target_joined_self_reliably_in_order", "cargo:mc-edge:server::admin_tests::operator_changes_reach_own_entity_permission_consumer"]
+fix_commit = "patch:7adadc3037ed4a73979a2662492fda1bdaeee93445275b08ce243d912002d45d"
+failing_first = "reported"
+repro_check = "Work-root receipts/HzClientQA/REPORT.md and suggestions-4-diagnostic.log; original selector assertion must pass unchanged on Main's integrated pin."
+
+[[bug]]
+id = "COPPER-CHEST-OPEN-WEATHERING"
+title = "Copper chest oxidizes while its container menu remains open"
+area = "gameplay"
+severity = "minor"
+status = "open"
+source = "HzClientQA copper-chest-1 and copper-chest-3-diagnostic.log: open chest becomes exposed while client remains in its container. Distinct from COPPER-WEATHERING family coverage: missing authoritative opener transition guard."
+repro = "client"
+regression = ["cargo:mc-core:copper::tests::copper_weathering_waits_for_last_menu_close_in_its_dimension", "cargo:mc-core:copper::tests::copper_weathering_resumes_after_last_opener_dies_and_respawns"]
+fix_commit = "patch:223a238996cb19e3da9ae0605726f3fae3b06c261356a6e32ecb290facd4d9b3"
+failing_first = "reported"
+repro_check = "Work-root receipts/HzClientQA/REPORT.md: original copper-chest assertion, including unopened oxidation control, must pass on Main's integrated pin. ReviewHzCompatA4 additionally requires real death/respawn to release the last opener; see receipts/HzCompatA4/REPORT.md."
+
+[[bug]]
+id = "COMMAND-FILL-SUCCESS-FEEDBACK"
+title = "Successful fill replies with generic Changed feedback instead of vanilla fill success"
+area = "client"
+severity = "minor"
+status = "open"
+source = "HzClientQA consume-1/2 fail the unchanged filled assertion; consume-2.log captures Changed 1230 block(s). Local vanilla 26.3 commands.fill.success is Successfully filled %s block(s)."
+repro = "client"
+regression = []
+fix_commit = "patch:2a7ddc99d90fa10e8ab04b3ed9f04ff5cf42ccc26deba1d9bd02ce8f1057ca21"
+failing_first = "reported"
+repro_check = "Work-root receipts/HzClientQA/consume-2.log: original consume scenario must pass unchanged on Main's integrated pin; no permanent English-wording test."
+
+[[bug]]
+id = "WAL-OPAQUE-OWNED-ITEM-FIELD-DROPPED"
+title = "Recovery accepts a player WAL opaque field carrying item custody that the next export silently strips"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "ImportSlotFix follow-up on fb19cab5e and integration base 5ede4fa70: a real 41-slot player WAL post-image with a single opaque Inventory containing repeated or missing Slot, or a single nonempty opaque krasnokamen:Carried alongside an empty typed cursor, recovers successfully and exports PASS with those opaque items removed. Native checkpoint NBT duplicate-name validation cannot see this second authority because serialization removes owned opaque fields before native encoding. Exact real-WAL/export reproduction: owner-host receipts/ImportSlotFix/round4-investigation-test.patch and round4-investigation.log."
+repro = "cargo"
+regression = ["cargo:mc-world-conversion:wal_owned_player_fields_tests::repeated_inventory_slot_in_single_opaque_field_refuses_wal_recovery_and_export", "cargo:mc-world-conversion:wal_owned_player_fields_tests::missing_inventory_slot_in_single_opaque_field_refuses_wal_recovery_and_export", "cargo:mc-world-conversion:wal_owned_player_fields_tests::single_nonempty_opaque_carried_refuses_wal_recovery_and_export", "cargo:mc-world-conversion:wal_owned_player_fields_tests::single_nested_recipe_list_refuses_wal_recovery_and_export", "cargo:mc-world-conversion:wal_owned_player_fields_tests::other_owned_fields_refuse_even_with_valid_or_empty_payloads", "cargo:mc-world-conversion:wal_owned_player_fields_tests::clean_wal_keeps_typed_items_and_supported_opaque_fields_through_export"]
+fix_commit = "patch:81e40fc89c6a483fc964c376b54afc072fcd1aabf99f1d19a3273c06da141e21"
+failing_first = "reported"
+repro_check = "Root-only fix control 0f7c003bdc172f2638b7c455678eacff7f55ffe9342a0a41ad0547fc4dbc4a40: four refusal assertions fail; clean synthetic WAL/export passes. Independent ReviewBattleGap additionally found one nested recipeBook.recipes is replaced by export from the typed unlocked set. Recipe-only reversal d3ba4cdce0a0e5d1413d7cc4ba590bd2c6f882b011e32c9b048ab2d3f8b6d57e admits that list; restored module 6/6 and L1 fmt/code-health passed. Other recipeBook fields remain retained. Full multi-commit production patch: docs/bugs/fix-patches/WAL-OPAQUE-OWNED-ITEM-FIELD-DROPPED.patch. Report/control receipts: owner-host receipts/ImportSlotFix/REPORT.md. Actual server-produced clean WAL receipt must be collected with Main's candidate pin before merge; row stays open for independent custody re-review and promotion."

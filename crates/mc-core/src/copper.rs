@@ -127,6 +127,21 @@ pub(crate) fn random_tick(
     if waxed || age == 3 || gate_roll % (1 << 24) >= 954438 {
         return None;
     }
+    if chest(block.block.id.path()) {
+        let partner = crate::chests::storage_partner(&state.registry.blocks, pos, &|p| {
+            state.world.block_at(p.x, p.y, p.z)
+        })
+        .map(|(_, p)| (p.x, p.y, p.z));
+        // Menus belong to this dimension's TickState. Query the existing
+        // custody map, including an opener on either half, without allocating.
+        if state
+            .open_containers
+            .values()
+            .any(|cell| *cell == (pos.x, pos.y, pos.z) || Some(*cell) == partner)
+        {
+            return None;
+        }
+    }
     if !oxidation_scan_passes(state, pos, scan_roll) {
         return None;
     }

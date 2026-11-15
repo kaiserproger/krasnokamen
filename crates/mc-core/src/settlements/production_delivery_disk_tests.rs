@@ -137,7 +137,7 @@ fn checkpoint(f: &mut Disk, config: &CoreConfig) {
 
 fn step(f: &mut Disk, writer: &mut JournalWriter) {
     let (output, _, _) = crate::tick::run_tick(&mut f.world, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut f.world, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut f.world, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
 }
 
@@ -299,7 +299,7 @@ fn reopen(f: Disk, config: &CoreConfig, mut writer: JournalWriter) -> (Disk, Jou
     for (name, due) in saved {
         set_deadline_through_owner(&mut f, &name, due);
     }
-    let entries = crate::core::journal_entries_for_tick(&mut f.world, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut f.world, &output).unwrap();
     assert_policy_postimage(&entries, &f);
     writer.append(output.tick, output.tick, &entries).unwrap();
     (f, writer)
@@ -453,7 +453,8 @@ fn obligation_and_both_inventories_recover_through_actual_wal_and_checkpoint() {
             assert_eq!(image(&mut f), expected, "second reopen must be idempotent");
             if matches!(phase, Phase::Delivered) {
                 let (frozen, _, _) = crate::tick::run_tick(&mut f.world, &[]);
-                let _entries = crate::core::journal_entries_for_tick(&mut f.world, &frozen);
+                let _entries =
+                    crate::core::journal_entries_for_tick(&mut f.world, &frozen).unwrap();
                 assert_eq!(
                     image(&mut f),
                     expected,
@@ -484,12 +485,12 @@ fn unpublished_store_rolls_back_but_published_store_replays_exactly_once() {
         let next_tick = f.world.tick.saturating_add(1);
         set_deadline_through_owner(&mut f, "durable", next_tick);
         let (output, _, _) = crate::tick::run_tick(&mut f.world, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut f.world, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut f.world, &output).unwrap();
         assert_policy_postimage(&entries, &f);
         writer.append(output.tick, output.tick, &entries).unwrap();
         let expected = image(&mut f);
         let (output, _, _) = crate::tick::run_tick(&mut f.world, &[]);
-        let _unpublished = crate::core::journal_entries_for_tick(&mut f.world, &output);
+        let _unpublished = crate::core::journal_entries_for_tick(&mut f.world, &output).unwrap();
         assert_eq!(
             f.world
                 .settlements
@@ -557,7 +558,7 @@ fn unpublished_production_does_not_leave_an_obligation_without_its_items() {
         }
         let expected = image(&mut f);
         let (output, _, _) = crate::tick::run_tick(&mut f.world, &[]);
-        let _unpublished = crate::core::journal_entries_for_tick(&mut f.world, &output);
+        let _unpublished = crate::core::journal_entries_for_tick(&mut f.world, &output).unwrap();
         assert_eq!(
             f.world
                 .settlements
@@ -755,7 +756,7 @@ fn persist_legacy(f: &mut Disk) {
 
 fn publish_exact(f: &mut Disk, writer: &mut JournalWriter) {
     let (output, _, _) = crate::tick::run_tick(&mut f.world, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut f.world, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut f.world, &output).unwrap();
     assert_policy_postimage(&entries, f);
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();

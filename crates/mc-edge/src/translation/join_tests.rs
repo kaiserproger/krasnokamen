@@ -55,6 +55,8 @@ struct Client {
     buf: BytesMut,
     compression: Compression,
     profile: Arc<Profile>,
+    batch_chunks: Option<i32>,
+    completed_batches: usize,
 }
 
 impl Client {
@@ -112,6 +114,8 @@ impl Client {
             buf: BytesMut::new(),
             compression: Compression::Disabled,
             profile,
+            batch_chunks: None,
+            completed_batches: 0,
         };
         let mut hello = Vec::new();
         hello.write_varint(client.profile.version.protocol);
@@ -226,6 +230,8 @@ impl Client {
             buf: BytesMut::new(),
             compression: Compression::Disabled,
             profile,
+            batch_chunks: None,
+            completed_batches: 0,
         };
         let mut handshake = Vec::new();
         handshake.write_varint(client.profile.version.protocol);
@@ -252,6 +258,15 @@ impl Client {
     async fn play_until<T>(&mut self, mut stop: impl FnMut(&Self, &RawFrame) -> Option<T>) -> T {
         loop {
             let frame = self.recv().await;
+            if frame.id == self.id("play", true, "minecraft:chunk_batch_start") {
+                assert!(frame.body.is_empty() && self.batch_chunks.is_none());
+                self.batch_chunks = Some(0);
+            } else if frame.id == self.id("play", true, "minecraft:level_chunk_with_light") {
+                *self
+                    .batch_chunks
+                    .as_mut()
+                    .expect("chunk must be inside a batch") += 1;
+            }
             if frame.id == self.id("play", true, "minecraft:update_advancements") {
                 if self.profile.version.protocol < 777 {
                     validate_legacy_advancement_icons(&self.profile.tables, &frame.body);
@@ -284,6 +299,10 @@ impl Client {
                 )
                 .await;
             } else if frame.id == self.id("play", true, "minecraft:chunk_batch_finished") {
+                let mut body = frame.body.as_ref();
+                let count = body.read_varint().unwrap();
+                assert_eq!(self.batch_chunks.take(), Some(count));
+                assert!(count > 0 && count <= 16 && body.is_empty());
                 let mut rate = Vec::new();
                 rate.write_f32(25.0);
                 self.send(
@@ -291,6 +310,7 @@ impl Client {
                     &rate,
                 )
                 .await;
+                self.completed_batches += 1;
             } else if frame.id == self.id("play", true, "minecraft:keep_alive") {
                 self.send(self.id("play", false, "minecraft:keep_alive"), &frame.body)
                     .await;
@@ -580,6 +600,15 @@ async fn join_version(protocol: i32) {
             .await;
         assert_eq!(updated, granite, "block update carries the polyfill");
         interactions::run(&mut first, &hub, pos).await;
+        if first.completed_batches < 2 {
+            first
+                .play_until(|client, _| (client.completed_batches >= 2).then_some(()))
+                .await;
+        }
+        assert!(
+            first.completed_batches >= 2,
+            "first connection ACKed and resumed"
+        );
         drop(first);
 
         let mut second = Client::join(address, "Chain2", Arc::clone(&profile), false).await;
@@ -594,6 +623,12 @@ async fn join_version(protocol: i32) {
             seen, granite,
             "the chunk carries the polyfill, not the 26.3 id"
         );
+        if second.completed_batches < 2 {
+            second
+                .play_until(|client, _| (client.completed_batches >= 2).then_some(()))
+                .await;
+        }
+        assert!(second.completed_batches >= 2, "reconnect ACKed and resumed");
     })
     .await
     .expect("legacy join and chunk within the deadline");

@@ -71,7 +71,7 @@ fn variant_disk_checkpoint_and_wal_round_trip() {
             .unwrap()
             .entities_spawned
             .push(id);
-        let birth = crate::core::journal_entries_for_tick(&mut state, &output);
+        let birth = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         let mut writer = JournalWriter::open(&root, 1).unwrap();
         writer.append(1, output.tick, &birth).unwrap();
         writer.flush().unwrap();

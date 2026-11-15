@@ -231,7 +231,7 @@ fn assert_no_build_journal(state: &mut TickState, output: &TickOutput) {
         output.changes.blocks.is_empty(),
         "repair is not a global block mutation"
     );
-    let entries = crate::core::journal_entries_for_tick(state, output);
+    let entries = crate::core::journal_entries_for_tick(state, output).unwrap();
     assert!(
         !has_block_journal(&entries),
         "the real Core tick journal must not persist prediction repair"
@@ -261,7 +261,7 @@ fn assert_committed(state: &mut TickState, output: &TickOutput, edits: &[BuildEd
             "the frozen native edit is committed once"
         );
     }
-    let entries = crate::core::journal_entries_for_tick(state, output);
+    let entries = crate::core::journal_entries_for_tick(state, output).unwrap();
     let blocks: Vec<_> = entries
         .iter()
         .filter_map(|entry| match entry {

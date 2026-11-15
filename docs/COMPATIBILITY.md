@@ -44,6 +44,14 @@ answer “No player was found”, never create literal `@...` profiles, and whit
 removal uses UUID identity even if a stored name has changed. Operator batches
 reauthorize after awaited selection/admission, before any permission mutation.
 
+Permission presentation follows the native join, admitted op/deop input and
+authenticated unlock: a reliable own-entity status accompanies the existing
+command-tree presentation. Locked sessions project level zero. This corrects
+the missing selector permission signal, not selector authorization policy.
+Successful `/fill` uses `commands.fill.success` with the actual changed count;
+other world-edit feedback is unchanged. The original Horizon suggestions and
+consume cases still require independent QA on Main's integrated release pin.
+
 Entity `CustomName` uses 26.x literal strings: `CustomName:"NamedCow"` and
 `CustomName:{text:"NamedCow"}` match `@e[name=NamedCow]`; JSON-looking strings
 remain literal, including their quote characters. Styled compound names are
@@ -149,6 +157,14 @@ through native damage/death and item drops, not a real-client gate.
 | Lecterns | `partial` | [book custody and comparator tests](../crates/mc-core/src/books_tests.rs) | Book insertion, page navigation, Take Book and comparator output have native coverage; a focused test is not complete client parity. |
 | Signs/hanging signs, beds and campfire block entities | `partial` | [signs_tests.rs](../crates/mc-core/src/signs_tests.rs); [sleep_tests.rs](../crates/mc-core/src/sleep_tests.rs) | Broad hanging/waxed/styled text, restart and client visuals unproven; bed fractional-shape exits remain approximate (see survival rows). |
 | Fishing, buckets/bottles, beacons, conduits, jukeboxes, trial spawners and vaults | `partial` | [fishing tests](../crates/mc-core/src/projectiles/fishing_tests.rs); [beacon](../crates/mc-core/src/beacon_tests.rs); [conduit](../crates/mc-core/src/conduit_tests.rs); [trial spawner](../crates/mc-core/src/trial_spawner_tests.rs); [vault](../crates/mc-core/src/vault_tests.rs) | Focused native mechanics do not prove all item use or complete survival encounters; waterlogged interaction gaps remain. |
+
+Copper chest random weathering checks the current dimension's authoritative
+open-container custody, including either half of a pair. It resumes after the
+last menu closes or its viewer disconnects or dies, including after respawn;
+unrelated chests keep weathering. Death releases the existing custody entry
+alongside closing the menu, without waiting for a client close packet.
+There is no second opener count or cache. Native transition regressions do not
+replace the original real-client open-chest scenario, which remains pending.
 
 ## Blocks, redstone, fluids, light and farming
 

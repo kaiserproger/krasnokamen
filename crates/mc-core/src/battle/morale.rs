@@ -26,7 +26,8 @@ const WORN_EROSION: f32 = 1.0;
 // tips into one rout and one pursuit instead of two simultaneous collapses.
 const VICTORY_RECOVERY: f32 = 1.0;
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Pressure {
     pub missiles: bool,
     pub shield_wall: bool,
@@ -41,7 +42,8 @@ pub(crate) struct Pressure {
     pub panicking: u16,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Morale {
     pub value: f32,
     cohesion: f32,

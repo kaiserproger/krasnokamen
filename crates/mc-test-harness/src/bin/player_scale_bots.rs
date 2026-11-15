@@ -110,9 +110,6 @@ const MIN_Y: i32 = -64;
 const HEIGHT: usize = 384;
 const ACTION_CAP: usize = 64;
 const ACTION_TIMEOUT: Duration = Duration::from_secs(10);
-// The bundled 26.1.2 packets report assigns CLIENTBOUND_CHUNK_BATCH_FINISHED 0x0b.
-// mc-protocol exposes its serverbound response, but not this clientbound packet.
-const CHUNK_BATCH_FINISHED: i32 = 0x0b;
 
 #[derive(Debug, Clone, Parser)]
 #[command(about = "Bounded-memory offline 26.1.2 load players (JSON stdout)")]
@@ -2029,17 +2026,13 @@ impl Bot {
                     .await?;
                 self.metrics.keepalives_replied += 1;
             }
-            CHUNK_BATCH_FINISHED => {
+            ClientboundChunkBatchFinished::ID => {
                 let count = body.read_varint()?;
                 ensure!(
                     count >= 0 && body.is_empty(),
                     "malformed chunk batch completion"
                 );
-                client
-                    .write_packet(&ServerboundChunkBatchReceived {
-                        desired_chunks_per_tick: 8.0,
-                    })
-                    .await?;
+                // The shared wire client ACKs exactly once at network receipt.
                 self.metrics.chunk_batches_acked += 1;
             }
             SynchronizePlayerPosition::ID => {

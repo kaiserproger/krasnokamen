@@ -251,7 +251,7 @@ fn shelf_swap_wal_replays_absolute_custody_exactly_once() {
     state.players.get_mut(&actor).unwrap().inventory.slots[0] = item.clone();
     assert!(use_on(&mut state, actor, Hand::Main, POS, 3, [0.5; 3]));
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let batches = vec![(state.tick, state.tick, entries)];
     let once = crate::journal::replay_batches(crate::journal::Replay::default(), &batches);
     let twice = crate::journal::replay_batches(

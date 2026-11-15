@@ -292,7 +292,7 @@ fn brown_mooshroom_flower_stew_then_shearing_are_atomic_and_durable() {
         .push(id);
     assert_eq!(state.players[&actor].inventory.slots[0].count, 1);
     assert_eq!(row(&state, id).entity_life.stew_effects.len(), 1);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(entry,crate::journal::JournalEntry::Entity { id:record,state,.. } if *record==id.0 && state.entity_life.stew_effects.len()==1)));
     let actor_uuid = state
         .connections
@@ -379,7 +379,7 @@ fn chicken_egg_countdown_lays_once_is_journaled_and_pauses_while_child() {
         .collect();
     assert_eq!(eggs.len(), 1);
     assert!((6000..=12000).contains(&row(&state, id).entity_life.harvest_ticks));
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry|matches!(entry,crate::journal::JournalEntry::Entity { id:record,item:Some(stack),.. } if *record==eggs[0].0&&stack.item_id==egg)));
     let timer = row(&state, id).entity_life.harvest_ticks;
     entity_life::make_child(&mut state, id);
@@ -446,13 +446,13 @@ fn journal_file_replay_restores_child_cooldown_love_and_harvest_exactly() {
         .unwrap()
         .entities_spawned
         .extend([id, parent]);
-    let first = crate::core::journal_entries_for_tick(&mut state, &output);
+    let first = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let dir = std::env::temp_dir().join(format!("krasnokamen-life-{}", uuid::Uuid::new_v4()));
     let mut writer = crate::journal::JournalWriter::open(&dir, 1).unwrap();
     writer.append(1, output.tick, &first).unwrap();
     let (second_output, _, _) = run_tick(&mut state, &[]);
     let expected = row(&state, id).entity_life.clone();
-    let second = crate::core::journal_entries_for_tick(&mut state, &second_output);
+    let second = crate::core::journal_entries_for_tick(&mut state, &second_output).unwrap();
     assert!(!second.iter().any(|entry| matches!(entry, crate::journal::JournalEntry::EntityState { id: record, .. } if *record == parent.0)), "ordinary love and cooldown decrements are derived from the batch clock");
     writer
         .append(second_output.tick, second_output.tick, &second)

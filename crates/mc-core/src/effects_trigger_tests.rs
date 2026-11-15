@@ -77,7 +77,7 @@ fn effect_trigger_oozing_births_two_medium_slimes_once_and_survives_wal_and_chec
     }
     // The cow's body lies dead for `deathTime`; its death is the removal.
     assert!(state.entities.slot_of(victim).is_none());
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let replay = crate::journal::replay_batches(
         crate::journal::Replay::default(),
         &[(0, output.tick, entries.clone()), (0, output.tick, entries)],
@@ -191,7 +191,7 @@ fn effect_trigger_weaving_places_supported_cobwebs_journals_them_and_honors_mob_
                     Some(web)
                 );
             }
-            let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+            let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
             let replay = crate::journal::replay_batches(
                 crate::journal::Replay::default(),
                 &[(0, output.tick, entries)],

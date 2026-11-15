@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "dimensions_spectator_tests.rs"]
+mod spectator;
+
 #[test]
 fn locked_cross_dimension_teleport_refuses_without_publishing_spawn_or_success() {
     for (target, target_connection, executor, destination) in [
@@ -140,7 +143,7 @@ fn execute_in_commits_native_block_change_and_wal_in_destination_only() {
             .merge_block_writes
             .is_empty()
     );
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(entry, crate::journal::JournalEntry::Dimension { dimension: Dimension::Nether, entries }
         if entries.iter().any(|entry| matches!(entry, crate::journal::JournalEntry::Block { pos: [8,150,8], .. })))));
 }
@@ -174,7 +177,7 @@ fn integrity_same_tick_dimension_round_trip_survives_wal_recovery() {
     );
     assert!(output.changes.entities_removed.contains(&item));
     assert!(output.changes.entities_spawned.contains(&item));
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let mut writer = crate::journal::JournalWriter::open(&directory.0, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();
@@ -1032,7 +1035,7 @@ fn cross_dimension_wal_then_checkpoint_restart_preserves_player_and_world_custod
         .unwrap()
         .default
         .0;
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let config = import_config(&directory.0);
     let initial = crate::journal::CheckpointManifest {
         world_spawn: Some([8, 150, 8]),
@@ -2881,7 +2884,7 @@ fn data_edit_of_a_villager_keeps_trades_gossip_inventory_and_replays_from_the_wa
     assert_eq!(leveled.inventory, before.inventory);
 
     // What the WAL stores for the edited tick replays to the same villager.
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let replay = crate::journal::replay_batches(Default::default(), &[(1, output.tick, entries)]);
     let replayed = replay
         .entities

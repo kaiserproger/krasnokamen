@@ -16,13 +16,16 @@ fn unchanged_villager_has_no_duplicate_journal_record() {
     let mut state = state();
     let id = state.spawn_mob(type_id(&state, "minecraft:villager"), [0., 80., 0.], 20.);
     let (output, _, _) = run_tick(&mut state, &[]);
-    let first = journal_entries_for_tick(&mut state, &output);
+    let first = journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(first.iter().any(|e|matches!(e,crate::journal::JournalEntry::Entity{id:entity,villager:Some(_),..} if *entity==id.0)));
     let (output, _, _) = run_tick(&mut state, &[]);
     assert!(
-        !journal_entries_for_tick(&mut state, &output).iter().any(
-            |e| matches!(e,crate::journal::JournalEntry::Entity{id:entity,..} if *entity==id.0)
-        )
+        !journal_entries_for_tick(&mut state, &output)
+            .unwrap()
+            .iter()
+            .any(
+                |e| matches!(e,crate::journal::JournalEntry::Entity{id:entity,..} if *entity==id.0)
+            )
     );
     let slot = state.entities.slot_of(id).unwrap();
     state
@@ -32,7 +35,7 @@ fn unchanged_villager_has_no_duplicate_journal_record() {
         .as_mut()
         .unwrap()
         .food_level = 12;
-    assert!(journal_entries_for_tick(&mut state,&output).iter().any(|e|matches!(e,crate::journal::JournalEntry::Entity{id:entity,villager:Some(v),..} if *entity==id.0 && v.food_level==12)));
+    assert!(journal_entries_for_tick(&mut state,&output).unwrap().iter().any(|e|matches!(e,crate::journal::JournalEntry::Entity{id:entity,villager:Some(v),..} if *entity==id.0 && v.food_level==12)));
 }
 #[test]
 fn iron_golem_avoids_creepers_and_friendly_players_but_defends_villagers() {
