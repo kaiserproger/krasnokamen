@@ -1284,19 +1284,23 @@ def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
     hat = _count(shots["head-block"][1], head_box, magenta)
     probe.report["placed_head_hat_layer_pixels"] = hat
     probe.report["placed_head_roi"] = list(head_box)
-    # Below the neck, above chat/hotbar: an equipped head must not add a
-    # second attachment to the torso/back. Allow small arm/pose raster changes,
-    # not the 71x71 extra skull that a positive head-region check alone accepts.
+    # The authored skull's magenta hat is distinct from the avatar's brown
+    # torso. Raw frame differences also count idle body/arm motion, so compare
+    # hat pixels instead; the bare frame accounts for the held item's edge.
     back_box = (600, 400, 680, 510)
     back_changed = _changed(shots["head-worn"][1], shots["head-none"][1], back_box)
-    back_tolerance = (back_box[2] - back_box[0]) * (back_box[3] - back_box[1]) // 20
+    back_hat = _count(shots["head-worn"][1], back_box, magenta)
+    bare_back_hat = _count(shots["head-none"][1], back_box, magenta)
+    added_back_hat = max(0, back_hat - bare_back_hat)
     probe.report["worn_head_back_roi"] = list(back_box)
     probe.report["worn_head_back_changed_pixels"] = back_changed
-    probe.report["worn_head_back_tolerance_pixels"] = back_tolerance
+    probe.report["worn_head_back_hat_pixels"] = back_hat
+    probe.report["bare_head_back_hat_pixels"] = bare_back_hat
+    probe.report["worn_head_added_back_hat_pixels"] = added_back_hat
     probe.check("placed_head_renders", placed > 100)
     probe.check("placed_head_hat_layer_pixels", hat > 100)
     probe.check("worn_head_renders", worn > 500 and worn_hat > 100)
-    probe.check("worn_head_back_unchanged", back_changed <= back_tolerance)
+    probe.check("worn_head_back_unchanged", added_back_hat <= 100)
 
 def check_clock_face(probe: ProbeSteps, day: Any, night: Any, name: str, box: tuple[int, ...]) -> None:
     """Align the gold-enclosed face; compare its blue pattern, never HUD or rim motion."""
