@@ -1,0 +1,12 @@
+--- a/tools/harness/runtime.py
++++ b/tools/harness/runtime.py
+@@ -1028,6 +1028,9 @@
+             from .java_launcher import gradle_project_cache, modded_gradle_arguments, write_gradle_init
+ 
+             loader_root = sibling_root("loader")
++            # Resolve the build cache before the private HOME/user.home reaches
++            # Gradle; otherwise each client recompiles Minecraft in game/.home.
++            env["GRADLE_USER_HOME"] = str(ensure_loader_gradle_home(loader_root).resolve())
+             gradlew = loader_root / "gradlew"
+             if not (gradlew.is_file() and os.access(gradlew, os.X_OK)):
+                 raise RuntimeError(f"missing executable Gradle wrapper: {gradlew}")

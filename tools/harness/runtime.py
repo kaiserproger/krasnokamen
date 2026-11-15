@@ -955,7 +955,10 @@ def start_client(
     game_dir = REPO_ROOT / game_dir if not game_dir.is_absolute() else game_dir
     game_dir.mkdir(parents=True, exist_ok=True)
     options = game_dir / "options.txt"
-    audio_options = {"soundCategory_master": "0.0", "soundCategory_music": "0.0"}
+    audio_options = {"soundCategory_master": "1.0" if sound_sink is not None else "0.0",
+                     "soundCategory_music": "0.0"}
+    if sound_sink is not None:
+        audio_options["soundDevice"] = sound_sink
     lines = options.read_text().splitlines() if options.exists() else ["version:4790", "onboardAccessibility:false"]
     lines = [line for line in lines if line.partition(":")[0] not in (*audio_options, "soundDevice")]
     options.write_text("\n".join(lines + [f"{key}:{value}" for key, value in audio_options.items()]) + "\n")
@@ -994,9 +997,12 @@ def start_client(
             "KRASNOKAMEN_CLIENT_MCP_USERNAME": username,
         }
     )
-    from .audio import force_java_audio_isolation, require_java_audio_isolation
-    force_java_audio_isolation(env, game_dir)
-    require_java_audio_isolation(env, game_dir)
+    from .audio import force_java_audio_isolation, require_java_audio_isolation, require_java_private_audio
+    if sound_sink is None:
+        force_java_audio_isolation(env, game_dir)
+        require_java_audio_isolation(env, game_dir)
+    else:
+        require_java_private_audio(env, game_dir, sound_sink)
     log_path.parent.mkdir(parents=True, exist_ok=True)
     log_handle = log_path.open("wb")
     try:
@@ -1019,29 +1025,23 @@ def start_client(
                 start_new_session=True,
             )
         else:
-            from .java_launcher import modded_gradle_arguments
+            from .java_launcher import gradle_project_cache, modded_gradle_arguments, write_gradle_init
 
             loader_root = sibling_root("loader")
+            # Resolve the build cache before the private HOME/user.home reaches
+            # Gradle; otherwise each client recompiles Minecraft in game/.home.
+            env["GRADLE_USER_HOME"] = str(ensure_loader_gradle_home(loader_root).resolve())
             gradlew = loader_root / "gradlew"
             if not (gradlew.is_file() and os.access(gradlew, os.X_OK)):
                 raise RuntimeError(f"missing executable Gradle wrapper: {gradlew}")
-            # A global JDK_JAVA_OPTIONS heap cap also limits NeoForm's cold
-            # recompile JVM. Configure only the resolved game JavaExec task.
-            init = game_dir / "client-heap.gradle"
-            init.write_text(
-                "gradle.projectsEvaluated {\n"
-                "  gradle.rootProject.allprojects { project ->\n"
-                "    project.tasks.withType(JavaExec).configureEach {\n"
-                f"      if (path == {json.dumps(task)}) {{ maxHeapSize = '512m' }}\n"
-                "    }\n"
-                "  }\n"
-                "}\n")
+            init = write_gradle_init(game_dir, task, cap_heap="JDK_JAVA_OPTIONS" not in env)
             process = subprocess.Popen(
                 [
                     str(gradlew),
                     "--no-daemon",
                     "--no-configuration-cache",
-                    *([] if "JDK_JAVA_OPTIONS" in env else ["--init-script", str(init)]),
+                    "--init-script", str(init),
+                    "--project-cache-dir", str(gradle_project_cache(loader_root, task)),
                     "-p",
                     str(loader_root),
                     f"-Pkrasnokamen.clientMcp.gameDir={game_dir}",

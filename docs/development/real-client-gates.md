@@ -120,6 +120,26 @@ Loader profile/platform. Combining them with the legacy no-Loader agent task or
 a different Loader platform fails before spawning Gradle. Prepared Fabric
 JavaExec launches use the same exact endpoint properties.
 
+`screens-voice-qa --client native --windowed --parts 2` selects endpoints per
+leg: screens uses 26.3/Fabric; voice derives its version from the checked SVC
+artifact's baseline (26.1.2/Fabric, the owner's PrismLauncher case). An explicit
+conflicting Java selector is rejected, not silently replaced. The SVC jar must
+be provisioned at the harness's pinned artifact path (or `KRASNOKAMEN_SVC_JAR`);
+the publisher size and both hashes are checked before staging it.
+
+Java launches keep private game homes but reuse `GRADLE_USER_HOME`, defaulting
+to the existing sibling `loader-gradle-home` on the owner host. The 180-second
+MCP readiness deadline includes Gradle startup; do not accidentally discard a
+warmed build cache by letting Gradle resolve its home under a fresh game home.
+An explicitly selected Gradle home is preserved.
+Gradle init scripts separate build outputs by checkout path, Minecraft version
+and launch platform. The matching `--project-cache-dir` also isolates task
+history and Loom launch metadata: separate output paths alone do not prevent
+Gradle from deleting the previous endpoint's live classes as stale outputs.
+On the owner host both live under `<work>/targets/loader-builds`; elsewhere they
+use the checkout's ignored `.analysis/harness-builds`. Existing outputs are
+neither deleted nor moved.
+
 *Owner host:* builds land in a pooled target dir (`targets/slot-<l>`) that
 other trees reuse, so the harness refuses `KRASNOKAMEN_SERVER_BINARY` or
 `KRASNOKAMEN_CLIENT_BINARY` inside a slot. Pin instead:
@@ -229,6 +249,18 @@ proofs need a physical XTest click (pattern: `_scroll` in
   only output, not capture. Harness audio gates record a virtual null-sink
   monitor, never the microphone; the desktop mic indicator during such runs is
   expected.
+  The private graph waits for PipeWire's socket event and readable registry
+  before starting WirePlumber, then requires its `sm-settings` metadata before
+  starting any client. Socket, registry and session-manager readiness failures
+  abort preflight; daemon logs are retained in the audio receipt directory.
+  Java defaults remain OpenAL null. An explicitly requested `sound_sink` is
+  audible only after the same hardware-free preflight verifies the private
+  Pulse socket, ALSA config, silent input and the named output sink; it cannot
+  select a host device. This exception is required for real screen/voice audio
+  measurement and records the graph and playback sink in the client receipt.
+  Native audible runs also need the ALSA Pulse plugin (`libasound2-plugins` on
+  Ubuntu). A user-local extraction can be selected with `ALSA_PLUGIN_DIR`;
+  missing `libasound_module_pcm_pulse.so` is not evidence of silent playback.
 - Private ports, data roots and worlds per run; kill only processes you started,
   by PID.
 

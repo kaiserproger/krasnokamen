@@ -127,6 +127,12 @@ class PreparedFabricLauncherTest(unittest.TestCase):
             self.assertIn("-PfabricLoaderVersion=0.19.3", argv)
             self.assertIn("-PfabricApiVersion=0.155.2+26.1.2", argv)
             self.assertEqual(argv[-1], ":loader-fabric:runClientMcp")
+            script = Path(argv[argv.index("--init-script") + 1]).read_text()
+            self.assertIn("project.layout.buildDirectory.set", script)
+            cache = Path(argv[argv.index("--project-cache-dir") + 1])
+            self.assertEqual(cache.parent.name, "loader-fabric")
+            self.assertEqual(cache.parent.parent.name, "26.1.2")
+            self.assertIn("gradle.startParameter.projectCacheDir.parentFile", script)
 
     def test_selectors_never_switch_a_resolved_task(self):
         for task in (":fabric-agent:runClientMcp", ":loader-neoforge:runClientMcp"):
@@ -135,6 +141,23 @@ class PreparedFabricLauncherTest(unittest.TestCase):
                                    "KRASNOKAMEN_JAVA_PLATFORM": "fabric"}):
                 with self.assertRaisesRegex(MissingCapability, "conflicts with task"):
                     launcher.modded_gradle_arguments(task)
+
+    def test_build_root_uses_owner_targets_or_portable_local_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            loader = work / "loader"
+            with mock.patch.dict("os.environ", {"KRASNOKAMEN_WORK_ROOT": str(work),
+                                               "KRASNOKAMEN_JAVA_VERSION": "26.1.2"}):
+                local = launcher.gradle_project_cache(loader, ":loader-fabric:runClientMcp")
+                self.assertTrue(local.is_relative_to(loader / ".analysis/harness-builds"))
+                (work / "targets").mkdir()
+                owner = launcher.gradle_project_cache(loader, ":loader-fabric:runClientMcp")
+                self.assertTrue(owner.is_relative_to(work / "targets/loader-builds"))
+                self.assertEqual(owner.parts[-3:], ("26.1.2", "loader-fabric", "project-cache"))
+                self.assertNotEqual(owner, launcher.gradle_project_cache(work / "other", ":loader-fabric:runClientMcp"))
+                self.assertNotEqual(owner, launcher.gradle_project_cache(loader, ":loader-neoforge:runClientMcp"))
+                with mock.patch.dict("os.environ", {"KRASNOKAMEN_JAVA_VERSION": "26.3"}):
+                    self.assertNotEqual(owner, launcher.gradle_project_cache(loader, ":loader-fabric:runClientMcp"))
 
 
 
