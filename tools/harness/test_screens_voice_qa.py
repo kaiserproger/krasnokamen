@@ -133,6 +133,37 @@ class ScreensVoiceHelperTests(unittest.TestCase):
                 self.assertEqual(qa.voice_reconnect(native, "quiet:25565", evidence), expected)
                 self.assertEqual(evidence["native_on_non_voice_server"]["voice"], after)
 
+    def test_screen_manifest_records_missing_monitor_after_loader_acknowledgement(self):
+        for blocks in ([], ["computer:monitor"]):
+            with self.subTest(blocks=blocks), tempfile.TemporaryDirectory() as directory, \
+                 mock.patch.object(qa, "Run") as run_type, \
+                 mock.patch.object(qa, "write_tone"), mock.patch.object(qa, "SoundCapture"), \
+                 mock.patch.object(qa, "register"), \
+                 mock.patch.object(qa, "arena", side_effect=RuntimeError("past manifest")):
+                state = {"loader": {"acknowledged": True, "transfer_pending": False,
+                                    "registered_blocks": blocks}}
+                def ready(predicate, label):
+                    if not predicate(state):
+                        raise RuntimeError("awaiting impossible post-ack content")
+                    return state
+                def check(label, condition):
+                    if not condition:
+                        raise RuntimeError(label)
+                run = run_type.return_value
+                run.__enter__.return_value = run
+                run.__exit__.return_value = False
+                run.root = Path(directory)
+                run.evidence = {}
+                run.server.return_value = ("fixture:25565", None)
+                probe = run.native.return_value
+                probe.wait.side_effect = ready
+                probe.check.side_effect = check
+                probe.report = {"id": "native"}
+                verdicts = {}
+                with self.assertRaises(RuntimeError):
+                    qa.screens_leg(mock.Mock(), Path("/unused"), 60, verdicts, {})
+                self.assertIs(verdicts.get("native_loads_computer_monitor"), bool(blocks))
+
 
 if __name__ == "__main__":
     unittest.main()

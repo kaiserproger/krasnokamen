@@ -577,10 +577,12 @@ def screens_leg(ctx: ProfileContext, binary: Path, timeout: float, verdicts: dic
         # Manifest gate: the native client admits the computer bundle (loaders lists "native").
         for probe in (owner, viewer):
             state = probe.wait(lambda s: (s.get("loader") or {}).get("acknowledged") is True
-                               and "computer:monitor" in (s.get("loader") or {}).get("registered_blocks", []),
-                               "native_loader_registered_computer_monitor")
+                               and (s.get("loader") or {}).get("transfer_pending") is False,
+                               "native_loader_acknowledged")
             leg.setdefault("loader", {})[probe.report["id"]] = state.get("loader")
-        verdicts["native_loads_computer_monitor"] = True
+            admitted = "computer:monitor" in state["loader"].get("registered_blocks", [])
+            verdicts["native_loads_computer_monitor"] = admitted
+            probe.check("native_loader_registered_computer_monitor", admitted)
         arena(owner, owner_name, (1000, 1000))
         owner.fixture("setblock {} {} {} minecraft:gray_glazed_terracotta[facing=north]".format(*MONITOR))
         owner.fixture("setworldspawn 1001 160 1001")

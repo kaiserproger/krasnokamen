@@ -136,6 +136,9 @@ The native reconnect check records cleared voice registration, server support,
 listening and microphone HUD immediately after disconnect. On the next non-voice
 server it requires support/listening/HUD to remain off; a fresh client capability
 advertisement (`registered=true`) in Play is not stale server voice state.
+The screen manifest check waits for completed Loader acknowledgement, then records
+whether `computer:monitor` was admitted. Missing content after that terminal
+handshake is a false verdict, not a wait for an impossible later registration.
 
 Java launches keep private game homes but reuse `GRADLE_USER_HOME`, defaulting
 to the existing sibling `loader-gradle-home` on the owner host. The 180-second
