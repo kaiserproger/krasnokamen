@@ -34,6 +34,7 @@ newest rule and says what it replaced.
 | ask for review, attack a change, run a committee vote, or write a worker prompt | [Advisor, reviewer, breaker and committee](review-committee-and-breaker.md) |
 | split a giant module or audit the architecture | [Module extraction and architecture audits](refactoring-and-audits.md) |
 | learn from past mistakes | [Lessons](lessons.md) |
+| run a coding agent from your own fork, without the owner host | [Outside-agent guide](outside-agents.md) |
 
 ## Conventions on these pages
 

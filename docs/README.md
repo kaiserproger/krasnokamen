@@ -35,7 +35,7 @@ priorities, the work queue and known gaps before 1.0.
 
 ## Development and validation
 
-- [Contributing](../CONTRIBUTING.md) and [agent working rules](../AGENTS.md) (task routing table).
+- [Contributing](../CONTRIBUTING.md), [outside-agent guide](development/outside-agents.md) and [agent working rules](../AGENTS.md) (task routing table).
 - [Agent tooling and harness](AGENT_TOOLING.md): commands, profiles and prerequisites.
 - [Development playbooks and lessons](development/README.md): adding a feature, protocol changes, heavy-command runner, worktrees, gates, releases, test server, client QA.
 - [Agent Constitution](AGENT_CONSTITUTION.md) (binding for every agent), [definition of done](DEFINITION_OF_DONE.md), [bug ledger](bugs/README.md) and [break-it QA protocol](QA_AGENT_PROTOCOL.md): breaker role, attack matrix, gate hygiene.

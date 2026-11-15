@@ -297,7 +297,8 @@ machine from the official server download.
 ## Contributing
 
 Bug reports with a reproduction, focused fixes and documentation improvements are
-welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. One command runs the full
+welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first. Coding agents working from a fork
+should also read [the outside-agent guide](docs/development/outside-agents.md). One command runs the full
 check (format, lint, architecture rules, regressions and the whole test suite):
 
 ```sh
