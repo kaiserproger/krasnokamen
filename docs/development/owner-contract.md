@@ -44,6 +44,12 @@ read-only release reviewers
 Main therefore commits small slices and pushes `main` often; a not-yet-green
 commit on `main` is acceptable. Tags, releases and publication keep their rules.
 
+Owner decision (2026-11-15): Main pushes the `main` branches of the sibling
+repositories (`../solaris-loader`, `../solaris-client`,
+`../solaris-default-plugins`) after each merged slice without separate
+authorization; a broken push is fixed by a follow-up commit and push. Tags,
+releases and publication keep their rules.
+
 > "не забывайте ревью через Fable 5.2 важных критичных участков прогонять" (2026-11-14)
 
 The independent read-only reviewer for critical areas is the `architect-fable`

@@ -268,7 +268,9 @@ python3 -m tools.harness list
 
 - Main commits often and pushes `main` (owner, 2026-11-07): small Conventional
   Commits per integrated slice, not one giant commit every two days; a commit
-  that is not yet green may land on `main`. Workers commit only on their own
+  that is not yet green may land on `main`. Main also pushes the sibling
+  repositories' `main` after each merged slice (owner, 2026-11-15); a broken
+  push gets a follow-up fix. Workers commit only on their own
   worktree branch, never on `main` and never pushed; Main merges or applies
   their work. Tags, releases and publication still need the
   owner's explicit authorization, and every release tag first gets two read-only
