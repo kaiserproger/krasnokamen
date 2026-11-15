@@ -372,20 +372,22 @@ impl OverworldStructures {
 
     fn visit(
         &self,
-        min: (i32, i32),
-        max: (i32, i32),
+        bounds: ((i32, i32), (i32, i32)),
+        selected: impl Fn(&Identifier) -> bool,
         surface: &impl Fn(i32, i32) -> i32,
         ocean_floor: &impl Fn(i32, i32) -> i32,
         biome: &impl Fn(i32, i32, i32) -> Identifier,
         mut emit: impl FnMut(&Identifier, (i32, i32), BlockPos, &StructureTemplate),
     ) {
-        for &(x, z) in &self.strongholds {
+        let (min, max) = bounds;
+        let stronghold = id("minecraft:stronghold");
+        for &(x, z) in self.strongholds.iter().filter(|_| selected(&stronghold)) {
             if x < min.0 || z < min.1 || x > max.0 || z > max.1 {
                 continue;
             }
             let y = (surface(x * 16 + 8, z * 16 + 8) - 32).clamp(-48, 24);
             emit(
-                &id("minecraft:stronghold"),
+                &stronghold,
                 (x, z),
                 BlockPos {
                     x: x * 16,
@@ -395,7 +397,7 @@ impl OverworldStructures {
                 &self.stronghold,
             );
         }
-        for family in &self.families {
+        for family in self.families.iter().filter(|family| selected(&family.id)) {
             let step = family.placement.spacing;
             for gx in min.0.div_euclid(step)..=max.0.div_euclid(step) {
                 for gz in min.1.div_euclid(step)..=max.1.div_euclid(step) {
@@ -456,8 +458,8 @@ impl OverworldStructures {
     ) -> Vec<GeneratedStructureSite> {
         let mut sites = Vec::new();
         self.visit(
-            min,
-            max,
+            (min, max),
+            |_| true,
             &surface,
             &ocean_floor,
             &biome,
@@ -467,6 +469,65 @@ impl OverworldStructures {
                     position,
                     start_chunk,
                 })
+            },
+        );
+        sites
+    }
+
+    pub(crate) fn structure_candidates_in_ring(
+        &self,
+        targets: &[Identifier],
+        centre_chunk: (i32, i32),
+        ring: u32,
+    ) -> Vec<mc_world::ChunkPos> {
+        let mut candidates = Vec::new();
+        if ring == 0
+            && targets
+                .iter()
+                .any(|target| target.as_str() == "minecraft:stronghold")
+        {
+            candidates.extend(
+                self.strongholds
+                    .iter()
+                    .map(|&(x, z)| mc_world::ChunkPos { x, z }),
+            );
+        }
+        for family in self
+            .families
+            .iter()
+            .filter(|family| targets.contains(&family.id))
+        {
+            candidates.extend(family.placement.candidate_chunks_in_ring(
+                self.seed,
+                centre_chunk,
+                ring,
+            ));
+        }
+        candidates
+    }
+
+    pub(crate) fn structure_sites_at(
+        &self,
+        targets: &[Identifier],
+        start_chunk: mc_world::ChunkPos,
+        surface: impl Fn(i32, i32) -> i32,
+        ocean_floor: impl Fn(i32, i32) -> i32,
+        biome: impl Fn(i32, i32, i32) -> Identifier,
+    ) -> Vec<GeneratedStructureSite> {
+        let pos = (start_chunk.x, start_chunk.z);
+        let mut sites = Vec::new();
+        self.visit(
+            (pos, pos),
+            |id| targets.contains(id),
+            &surface,
+            &ocean_floor,
+            &biome,
+            |structure, start_chunk, position, _| {
+                sites.push(GeneratedStructureSite {
+                    structure: structure.clone(),
+                    start_chunk,
+                    position,
+                });
             },
         );
         sites
@@ -483,8 +544,11 @@ impl OverworldStructures {
         let mut touched = features::paste(&self.features, self.seed, chunk, &surface, &biome);
         // Only starts whose cached horizontal bounds can intersect this chunk.
         self.visit(
-            (pos.x - self.reach_before[0], pos.z - self.reach_before[1]),
-            (pos.x + self.reach_after[0], pos.z + self.reach_after[1]),
+            (
+                (pos.x - self.reach_before[0], pos.z - self.reach_before[1]),
+                (pos.x + self.reach_after[0], pos.z + self.reach_after[1]),
+            ),
+            |_| true,
             &surface,
             &ocean_floor,
             &biome,

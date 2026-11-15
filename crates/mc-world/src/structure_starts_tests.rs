@@ -98,12 +98,22 @@ fn structure_starts_native_query_keeps_imported_empty_coverage_and_metadata_over
     let mut empty = chunk();
     empty.pos = ChunkPos { x: 8, z: 8 };
     store.import_chunk(0, &empty, &blocks, &items).unwrap();
-    let rows = store
-        .checkpoint_reader()
-        .unwrap()
-        .structure_starts_in_region(0, (7, 8), (8, 8), false)
-        .unwrap();
-    assert_eq!(rows, vec![(base.pos, vec![site]), (empty.pos, vec![])]);
+    let reader = store.checkpoint_reader().unwrap();
+    assert_eq!(
+        reader.structure_starts_at(0, base.pos, false).unwrap(),
+        Some(vec![site])
+    );
+    assert_eq!(
+        reader.structure_starts_at(0, empty.pos, false).unwrap(),
+        Some(vec![])
+    );
+    assert_eq!(
+        reader
+            .structure_starts_at(0, ChunkPos { x: 9, z: 8 }, false)
+            .unwrap(),
+        None
+    );
+    drop(reader);
     let mut changed = base.clone();
     changed.extras.clear();
     changed.set_world_journal_lsn(1);
@@ -121,12 +131,15 @@ fn structure_starts_native_query_keeps_imported_empty_coverage_and_metadata_over
         .unwrap();
     drop(store);
     let reopened = NativeStore::open(&path, [9; 32]).unwrap();
-    let rows = reopened
-        .checkpoint_reader()
-        .unwrap()
-        .structure_starts_in_region(0, (7, 8), (8, 8), false)
-        .unwrap();
-    assert_eq!(rows, vec![(base.pos, vec![]), (empty.pos, vec![])]);
+    let reader = reopened.checkpoint_reader().unwrap();
+    assert_eq!(
+        reader.structure_starts_at(0, base.pos, false).unwrap(),
+        Some(vec![])
+    );
+    assert_eq!(
+        reader.structure_starts_at(0, empty.pos, false).unwrap(),
+        Some(vec![])
+    );
 }
 
 #[test]
@@ -163,12 +176,14 @@ fn structure_starts_procedural_baseline_metadata_is_not_discarded() {
             &items,
         )
         .unwrap();
-    let rows = store
-        .checkpoint_reader()
-        .unwrap()
-        .structure_starts_in_region(0, (7, 8), (7, 8), false)
-        .unwrap();
-    assert_eq!(rows, vec![(base.pos, vec![site])]);
+    assert_eq!(
+        store
+            .checkpoint_reader()
+            .unwrap()
+            .structure_starts_at(0, base.pos, false)
+            .unwrap(),
+        Some(vec![site])
+    );
 }
 
 #[test]

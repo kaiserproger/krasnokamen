@@ -2859,6 +2859,49 @@ impl ChunkGenerator for TerrainGenerator {
         sites
     }
 
+    fn structure_candidates_in_ring(
+        &self,
+        targets: &[Identifier],
+        centre_chunk: (i32, i32),
+        ring: u32,
+    ) -> Vec<ChunkPos> {
+        let mut candidates = self
+            .overworld_structures
+            .as_ref()
+            .map_or_else(Vec::new, |structures| {
+                structures.structure_candidates_in_ring(targets, centre_chunk, ring)
+            });
+        for source in self.village_plans.iter().chain(self.jigsaw_sources.iter()) {
+            candidates.extend(source.structure_candidates_in_ring(targets, centre_chunk, ring));
+        }
+        candidates
+    }
+
+    fn structure_sites_at(
+        &self,
+        targets: &[Identifier],
+        start_chunk: ChunkPos,
+    ) -> Vec<mc_world::chunk::GeneratedStructureSite> {
+        let mut sites = self
+            .overworld_structures
+            .as_ref()
+            .map_or_else(Vec::new, |structures| {
+                structures.structure_sites_at(
+                    targets,
+                    start_chunk,
+                    |x, z| self.world_surface_y(self.surface_height(x, z)),
+                    |x, z| self.surface_height(x, z),
+                    |x, y, z| self.noise_biome(x, y, z),
+                )
+            });
+        let surface = JigsawHeightQuery(self);
+        let biome = |x, y, z| self.noise_biome(x, y, z);
+        for source in self.village_plans.iter().chain(self.jigsaw_sources.iter()) {
+            sites.extend(source.structure_sites_at(targets, start_chunk, &surface, &biome));
+        }
+        sites
+    }
+
     fn noise_biome(&self, world_x: i32, y: i32, world_z: i32) -> Option<Identifier> {
         Some(TerrainGenerator::noise_biome(self, world_x, y, world_z))
     }

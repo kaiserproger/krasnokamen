@@ -26,7 +26,7 @@ use mc_nbt::{ListTag, Tag};
 use mc_world::{BlockRegistry, BlockStateId, ChunkGenerator};
 use mc_worldgen::vanilla_features::BiomeTagIndex;
 
-const MAX_STRUCTURE_SEARCH_RADIUS_CHUNKS: i32 = 100;
+const STRUCTURE_SEARCH_RADIUS_RINGS: u32 = 100;
 const MAX_BIOME_SEARCH_RADIUS: i32 = 6400;
 const BIOME_SAMPLE_STEP: i32 = 32;
 const BIOME_SAMPLE_STEP_Y: i32 = 64;
@@ -370,101 +370,72 @@ fn search_structure(
     targets: &[Identifier],
     saved: &SavedStarts,
     options: &StructureSearchOptions,
-) -> Option<LocateHit> {
+    native: Option<(&mc_world::native::NativeCheckpointReader, u32)>,
+) -> Result<Option<LocateHit>, String> {
     let centre = (origin.0.div_euclid(16), origin.2.div_euclid(16));
-    let min = (
-        centre.0.saturating_sub(options.radius),
-        centre.1.saturating_sub(options.radius),
-    );
-    let max = (
-        centre.0.saturating_add(options.radius),
-        centre.1.saturating_add(options.radius),
-    );
-    let vanilla_village =
-        |id: &Identifier| id.namespace() == "minecraft" && id.path().starts_with("village_");
-    let mut sites = if targets.iter().any(|id| !vanilla_village(id)) {
-        generator.structure_sites_in_region(min, max)
-    } else {
-        Vec::new()
-    };
-    if targets.iter().any(vanilla_village) {
-        let radius = MAX_STRUCTURE_SEARCH_RADIUS_CHUNKS.min(options.radius);
-        for site in generator.village_sites_in_region(
-            (
-                centre.0.saturating_sub(radius),
-                centre.1.saturating_sub(radius),
-            ),
-            (
-                centre.0.saturating_add(radius),
-                centre.1.saturating_add(radius),
-            ),
-        ) {
-            let x = site.start_chunk.0 * 16 + 8;
-            let z = site.start_chunk.1 * 16 + 8;
-            sites.push(mc_world::chunk::GeneratedStructureSite {
-                structure: site.structure,
-                start_chunk: site.start_chunk,
-                position: mc_world::BlockPos {
-                    x,
-                    y: generator.surface_height(x, z).unwrap_or(64),
-                    z,
-                },
-            });
+    for ring in 0..=options.radius_rings {
+        let mut candidates = generator.structure_candidates_in_ring(targets, centre, ring);
+        candidates.sort_unstable_by_key(|pos| (pos.x, pos.z));
+        candidates.dedup();
+        let mut nearest = None;
+        for pos in candidates {
+            let stored = if saved.contains_key(&pos) {
+                None
+            } else if let Some((reader, dimension)) = native {
+                reader
+                    .structure_starts_at(dimension, pos, options.skip_referenced)
+                    .map_err(|error| format!("structure starts at {pos:?}: {error}"))?
+            } else {
+                None
+            };
+            let planned;
+            let sites = if let Some(sites) = saved.get(&pos).or(stored.as_ref()) {
+                sites
+            } else {
+                planned = generator.structure_sites_at(targets, pos);
+                &planned
+            };
+            for site in sites {
+                if !targets.contains(&site.structure)
+                    || (options.skip_referenced && options.referenced.contains(&site.position))
+                {
+                    continue;
+                }
+                let p = site.position;
+                let dx = i64::from(p.x) - i64::from(origin.0);
+                let dz = i64::from(p.z) - i64::from(origin.2);
+                let key = (dx * dx + dz * dz, (p.x, p.y, p.z), &site.structure);
+                if nearest
+                    .as_ref()
+                    .is_none_or(|(distance, position, id)| key < (*distance, *position, id))
+                {
+                    nearest = Some((key.0, key.1, site.structure.clone()));
+                }
+            }
+        }
+        if let Some((distance, pos, found_id)) = nearest {
+            return Ok(Some(LocateHit {
+                pos,
+                found_id,
+                distance: distance.isqrt() as i32,
+            }));
         }
     }
-    sites.retain(|site| {
-        !saved.contains_key(&mc_world::ChunkPos {
-            x: site.start_chunk.0,
-            z: site.start_chunk.1,
-        })
-    });
-    sites.extend(saved.values().flatten().cloned());
-    sites
-        .into_iter()
-        .filter(|site| targets.contains(&site.structure))
-        .filter(|site| !options.skip_referenced || !options.referenced.contains(&site.position))
-        .filter(|site| {
-            site.start_chunk.0 >= min.0
-                && site.start_chunk.0 <= max.0
-                && site.start_chunk.1 >= min.1
-                && site.start_chunk.1 <= max.1
-        })
-        .map(|site| {
-            let p = site.position;
-            let dx = i64::from(p.x) - i64::from(origin.0);
-            let dz = i64::from(p.z) - i64::from(origin.2);
-            (dx * dx + dz * dz, (p.x, p.y, p.z), site.structure)
-        })
-        .min_by(|a, b| (a.0, a.1, &a.2).cmp(&(b.0, b.1, &b.2)))
-        .map(|(distance, pos, found_id)| LocateHit {
-            pos,
-            found_id,
-            distance: distance.isqrt() as i32,
-        })
+    Ok(None)
 }
 
 struct StructureSnapshot {
     source: Arc<crate::chunk_loader::ChunkSource>,
     resident: Result<SavedStarts, String>,
-    radius: i32,
-    skip_referenced: bool,
 }
 
 impl StructureSnapshot {
-    fn capture(
-        state: &TickState,
-        origin: (i32, i32, i32),
-        options: &StructureSearchOptions,
-    ) -> Self {
-        let centre = (origin.0.div_euclid(16), origin.2.div_euclid(16));
+    fn capture(state: &TickState, options: &StructureSearchOptions) -> Self {
+        // Resident coverage must be captured on tick. Its spatial extent is not
+        // a chunk-radius bound: selected placements can have different spacing.
         let resident = state
             .world
             .chunks()
-            .filter(|chunk| {
-                (i64::from(chunk.pos.x) - i64::from(centre.0)).abs() <= i64::from(options.radius)
-                    && (i64::from(chunk.pos.z) - i64::from(centre.1)).abs()
-                        <= i64::from(options.radius)
-            })
             .map(|chunk| {
                 mc_world::structure_starts::read(&chunk.extras, chunk.pos, options.skip_referenced)
                     .map(|sites| (chunk.pos, sites))
@@ -473,39 +444,35 @@ impl StructureSnapshot {
         Self {
             source: state.world.chunk_source(),
             resident,
-            radius: options.radius,
-            skip_referenced: options.skip_referenced,
         }
     }
 
-    /// Called only by the locator worker; never opens native storage on tick.
-    fn load(self, origin: (i32, i32, i32)) -> Result<SavedStarts, String> {
-        let centre = (origin.0.div_euclid(16), origin.2.div_euclid(16));
-        let mut saved: SavedStarts = if let Some(native) = &self.source.native {
-            native
-                .checkpoint_reader()
-                .and_then(|reader| {
-                    reader.structure_starts_in_region(
-                        self.source.dimension,
-                        (
-                            centre.0.saturating_sub(self.radius),
-                            centre.1.saturating_sub(self.radius),
-                        ),
-                        (
-                            centre.0.saturating_add(self.radius),
-                            centre.1.saturating_add(self.radius),
-                        ),
-                        self.skip_referenced,
-                    )
-                })
-                .map_err(|error| error.to_string())?
-                .into_iter()
-                .collect()
-        } else {
-            HashMap::new()
-        };
-        saved.extend(self.resident?);
-        Ok(saved)
+    /// Open one pinned storage snapshot on the worker and query only candidates
+    /// actually visited. Resident coverage wins over the checkpoint.
+    fn search(
+        self,
+        generator: &dyn ChunkGenerator,
+        origin: (i32, i32, i32),
+        targets: &[Identifier],
+        options: &StructureSearchOptions,
+    ) -> Result<Option<LocateHit>, String> {
+        let reader = self
+            .source
+            .native
+            .as_ref()
+            .map(|native| native.checkpoint_reader())
+            .transpose()
+            .map_err(|error| error.to_string())?;
+        search_structure(
+            generator,
+            origin,
+            targets,
+            &self.resident?,
+            options,
+            reader
+                .as_ref()
+                .map(|reader| (reader, self.source.dimension)),
+        )
     }
 }
 
@@ -739,14 +706,13 @@ fn locate_worker(jobs: Receiver<LocateJob>, done: Sender<LocateDone>) {
         let start = std::time::Instant::now();
         let hit = match job.kind {
             LocateKind::Structure => {
-                match job.snapshot.expect("structure snapshot").load(job.origin) {
-                    Ok(saved) => search_structure(
-                        job.generator.as_ref(),
-                        job.origin,
-                        &job.targets,
-                        &saved,
-                        &job.options,
-                    ),
+                match job.snapshot.expect("structure snapshot").search(
+                    job.generator.as_ref(),
+                    job.origin,
+                    &job.targets,
+                    &job.options,
+                ) {
+                    Ok(hit) => hit,
                     Err(error) => {
                         tracing::error!(%error, "Cannot read authoritative structure starts");
                         None
@@ -1080,7 +1046,7 @@ pub(crate) struct StructureLookupRequest {
     pub connection: ConnectionId,
     pub origin: (i32, i32, i32),
     pub destination: Identifier,
-    pub search_radius: u32,
+    pub search_radius_rings: u32,
     pub skip_existing_chunks: bool,
     pub referenced: Vec<mc_world::BlockPos>,
     pub reply: StructureLookupReply,
@@ -1093,7 +1059,7 @@ enum LocateCompletion {
 }
 
 struct StructureSearchOptions {
-    radius: i32,
+    radius_rings: u32,
     skip_referenced: bool,
     referenced: HashSet<mc_world::BlockPos>,
 }
@@ -1101,7 +1067,7 @@ struct StructureSearchOptions {
 impl Default for StructureSearchOptions {
     fn default() -> Self {
         Self {
-            radius: 256,
+            radius_rings: STRUCTURE_SEARCH_RADIUS_RINGS,
             skip_referenced: false,
             referenced: HashSet::new(),
         }
@@ -1112,7 +1078,7 @@ pub(crate) fn submit_structure_lookup(
     state: &mut TickState,
     request: StructureLookupRequest,
 ) -> bool {
-    if request.search_radius > 256 {
+    if request.search_radius_rings > 256 {
         return false;
     }
     let Some(targets) = resolve_structure_tag(&request.destination) else {
@@ -1126,7 +1092,7 @@ pub(crate) fn submit_structure_lookup(
         targets,
         LocateCompletion::Callback(request.reply),
         StructureSearchOptions {
-            radius: request.search_radius as i32,
+            radius_rings: request.search_radius_rings,
             skip_referenced: request.skip_existing_chunks,
             referenced: request.referenced.into_iter().collect(),
         },
@@ -1182,7 +1148,7 @@ fn submit(
         generator: state.world.generator(),
         targets,
         snapshot: (kind == LocateKind::Structure)
-            .then(|| StructureSnapshot::capture(state, origin, &options)),
+            .then(|| StructureSnapshot::capture(state, &options)),
         completion,
         options,
         min_y: geometry.min_y(),

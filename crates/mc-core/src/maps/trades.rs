@@ -194,7 +194,7 @@ fn submit(state: &mut TickState, merchant: EntityId) -> bool {
             origin: (pos[0], pos[1], pos[2]),
             destination: Identifier::parse(format!("minecraft:{}", spec.tag))
                 .expect("vanilla destination"),
-            search_radius: 100,
+            search_radius_rings: 100,
             skip_existing_chunks: true,
             referenced,
             reply: Box::new(move |state, hit| complete(state, merchant, hit)),

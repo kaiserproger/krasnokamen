@@ -29,6 +29,39 @@ pub struct RandomSpreadPlacement {
 }
 
 impl RandomSpreadPlacement {
+    /// Vanilla locate advances by placement cells around the origin's cell.
+    /// Visit only the perimeter, in X/Z order, including the origin at ring 0.
+    #[must_use]
+    pub fn candidate_chunks_in_ring(
+        &self,
+        seed: i64,
+        centre_chunk: (i32, i32),
+        ring: u32,
+    ) -> Vec<mc_world::ChunkPos> {
+        let ring = i64::from(ring);
+        let mut candidates = Vec::new();
+        let mut emit = |dx: i64, dz: i64| {
+            let x = i64::from(centre_chunk.0) + dx * i64::from(self.spacing);
+            let z = i64::from(centre_chunk.1) + dz * i64::from(self.spacing);
+            let (Ok(x), Ok(z)) = (i32::try_from(x), i32::try_from(z)) else {
+                return;
+            };
+            let (x, z) = self.potential_chunk(seed, x, z);
+            candidates.push(mc_world::ChunkPos { x, z });
+        };
+        for dx in -ring..=ring {
+            if dx.abs() == ring {
+                for dz in -ring..=ring {
+                    emit(dx, dz);
+                }
+            } else {
+                emit(dx, -ring);
+                emit(dx, ring);
+            }
+        }
+        candidates
+    }
+
     /// `StructurePlacement.getPotentialStructureChunk`.
     #[must_use]
     pub fn potential_chunk(&self, seed: i64, source_x: i32, source_z: i32) -> (i32, i32) {
@@ -122,6 +155,37 @@ pub fn start_origin(chunk_x: i32, chunk_z: i32, start_height: i32, free_height: 
 #[cfg(test)]
 mod tests {
     use super::RandomSpreadPlacement;
+
+    #[test]
+    fn locate_ring_scales_by_spacing_from_negative_origin_cell() {
+        let placement = RandomSpreadPlacement {
+            spacing: 34,
+            separation: 8,
+            salt: 10_387_312,
+            triangular: false,
+        };
+        for centre in [(0, 0), (-16, -16), (-34, 35)] {
+            for ring in 0_i32..=3 {
+                let mut expected = Vec::new();
+                for dx in -ring..=ring {
+                    for dz in -ring..=ring {
+                        if dx.abs().max(dz.abs()) != ring {
+                            continue;
+                        }
+                        let (x, z) = placement.potential_chunk(
+                            20261115,
+                            centre.0 + dx * placement.spacing,
+                            centre.1 + dz * placement.spacing,
+                        );
+                        expected.push(mc_world::ChunkPos { x, z });
+                    }
+                }
+                let actual = placement.candidate_chunks_in_ring(20261115, centre, ring as u32);
+                assert_eq!(actual, expected);
+                assert_eq!(actual.len(), if ring == 0 { 1 } else { 8 * ring as usize });
+            }
+        }
+    }
 
     #[test]
     fn moog_origin_distance_uses_chunk_corners_and_inclusive_boundary() {

@@ -137,7 +137,7 @@ fn submit(state: &mut TickState, key: Key) -> bool {
             connection: pending.openers[0].0,
             origin: (key.1[0], key.1[1], key.1[2]),
             destination: spec.destination.clone(),
-            search_radius: spec.search_radius,
+            search_radius_rings: spec.search_radius_rings,
             skip_existing_chunks: spec.skip_existing_chunks,
             referenced,
             reply: Box::new(move |state, hit| completed(state, key, hit)),

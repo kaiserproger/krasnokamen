@@ -550,10 +550,14 @@ authenticated reverse proxy; `allow_remote` is required for non-loopback binds.
   the age it was frozen at.
 - `/locate structure|biome|poi` (level 2) runs on a worker thread and never
   blocks the tick; a request is refused while two are pending or eight queued.
-  Structure searches read saved native or imported start metadata and plan
-  uncovered chunks without generating them (villages within 100 chunks, other
-  structures within 256); biomes are searched out to 6400 blocks and POIs within
-  256 blocks of loaded chunks. Corrupt or unsupported start metadata fails closed.
+  Structure searches walk up to 100 placement-grid rings, scaling each grid by
+  its own spacing rather than treating rings as chunks. Fixed stronghold
+  candidates are searched independently of that radius. At each candidate,
+  saved native or imported start metadata overrides generation, including
+  covered empty chunks; uncovered candidates are planned without generating
+  chunks. Exploration-map `search_radius` also counts placement rings.
+  Biomes are searched out to 6400 blocks and POIs within 256 blocks of loaded
+  chunks. Corrupt or unsupported start metadata fails closed.
 
 ### Datapacks and command blocks
 

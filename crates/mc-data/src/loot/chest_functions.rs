@@ -11,7 +11,8 @@ pub struct ExplorationMap {
     pub destination: Identifier,
     pub decoration: Identifier,
     pub zoom: u8,
-    pub search_radius: u32,
+    /// Vanilla `search_radius`, measured in structure placement rings.
+    pub search_radius_rings: u32,
     pub skip_existing_chunks: bool,
 }
 
@@ -342,16 +343,17 @@ fn compile_action(
                 .map_or(Some(2), Value::as_u64)
                 .filter(|v| *v <= 4)
                 .ok_or("zoom must be 0..=4")? as u8;
-            let search_radius = value
+            let search_radius_rings = value
                 .get("search_radius")
                 .map_or(Some(50), Value::as_u64)
                 .filter(|v| *v <= 1024)
-                .ok_or("search_radius must be 0..=1024")? as u32;
+                .ok_or("search_radius must be 0..=1024")?
+                as u32;
             Ok(Action::Map(ExplorationMap {
                 destination,
                 decoration,
                 zoom,
-                search_radius,
+                search_radius_rings,
                 skip_existing_chunks: boolean(value, "skip_existing_chunks", true)?,
             }))
         }
