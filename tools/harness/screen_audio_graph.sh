@@ -13,6 +13,11 @@
 set -eu
 root=$(mktemp -d "${SA_SCRATCH:-/tmp}/solaris-pw.XXXXXX")
 trap 'rm -rf "$root"' EXIT
+# Leave room for PipeWire and Pulse socket names within Linux's 108-byte sun_path.
+if [ "$(printf %s "$root" | wc -c)" -gt 80 ]; then
+  echo "ABORT: private audio runtime path is too long; set SA_SCRATCH to a shorter directory (for example /tmp)" >&2
+  exit 3
+fi
 mkdir -p "$root/config/wireplumber/wireplumber.conf.d" "$root/state" "$root/data" "$root/home"
 cat >"$root/config/wireplumber/wireplumber.conf.d/90-no-hardware.conf" <<'CONF'
 wireplumber.profiles = {

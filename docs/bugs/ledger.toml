@@ -6517,3 +6517,31 @@ regression = ["python:tools.harness.test_regressions:ClientRefTests.test_client_
 fix_commit = "a24ff7f93"
 failing_first = "reported"
 repro_check = "HarnessFix3/added-negative-controls.log: retaining the new test and restoring only _run_client fails at the expected --bin krasnokamen-launcher versus --lib assertion. launcher-results.json and launcher-ref-1..9.log: all nine real registered launcher refs select one test and pass at client 12e076e9c761, using cargo metadata's binary target through mem-run -m 6G."
+
+[[bug]]
+id = "HARNESS-PRIVATE-AUDIO-SOCKET-PATH-LENGTH"
+title = "Long temporary paths exceed private audio Unix socket limits"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "Main reported test_screen_audio_graph failing with a long TMPDIR under targets because AF_UNIX socket paths exceed 108 bytes. Socket fixtures now use short /tmp roots; explicit long SA_SCRATCH fails before daemon startup with a clear diagnostic."
+repro = "source"
+regression = [
+  "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_long_explicit_scratch_is_rejected_before_daemons",
+  "python:tools.harness.test_screen_audio_graph:PrivateGraphCleanupTests.test_long_tmpdir_keeps_socket_fixture_short",
+]
+fix_commit = "e1ae29d5c"
+failing_first = "reported"
+repro_check = "receipts/ScreensVoiceStart/long-runtime-red.log records the retained long-path assertion failing before the production guard was added (0 != 3). long-runtime-green.log passes all eight private graph tests after the guard, including long TMPDIR and cleanup on refusal."
+
+[[bug]]
+id = "HARNESS-SCREENS-VOICE-PARTS-OOM"
+title = "Concurrent screen and voice legs exceed a single 12 GiB harness scope"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "Main classified P3: --parts 2 starts both full screen/voice legs concurrently inside one mem-run 12G scope, with no concurrency control. Run 20261115T014627-screens-voice-qa-qu_cps0p on server 8b6fc28e58bb and client ace7a8049bc1 was OOM-killed before verdicts. Main authorized sequential legs at 12G instead; no concurrency fix requested."
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "receipts/ScreensVoiceStart/runs/20261115T014627-screens-voice-qa-qu_cps0p/result.json and both child results record interrupted/SIGTERM after 173 seconds. User journal krasnokamen-mem-run-VLi55VNC.scope at 2026-11-15T01:49:21Z records kernel OOM and 12G memory peak. This is an infrastructure failure, not eleven false product verdicts."
