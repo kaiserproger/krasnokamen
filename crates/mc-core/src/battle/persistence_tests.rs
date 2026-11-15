@@ -130,3 +130,53 @@ fn battle_resume_refuses_missing_live_entities_and_bad_checkpoint_metadata() {
             .contains("unsupported checkpoint row")
     );
 }
+
+#[test]
+fn battle_resume_capture_prunes_only_proven_ground_tombstones() {
+    let mut state = crate::battle::tests::staged_flat_fixture(100);
+    let dead = state.hostile.battle.formation.members[0].id;
+    let alive = state.hostile.battle.formation.members[1].id;
+    let unknown = EntityId(i32::MAX - 1);
+    let slot = state.entities.slot_of(dead).unwrap();
+    state.merge_damage.push((
+        slot,
+        crate::tick::DamagePiece {
+            amount: 1000.0,
+            kind: crate::survival::DamageKind::GenericKill,
+            source: None,
+            physical: None,
+            custom_armor: false,
+        },
+    ));
+    state.commit_merge_effects();
+    assert!(!state.entities.body(slot).alive);
+    state.hostile.battle.ground_pending = vec![dead, alive, unknown];
+    state.hostile.battle.ground_refused = vec![dead, alive, unknown];
+    let mut entries = Vec::new();
+    journal_entries(&mut state, &mut entries).unwrap();
+    assert_eq!(state.hostile.battle.ground_pending, [alive, unknown]);
+    assert_eq!(state.hostile.battle.ground_refused, [alive, unknown]);
+
+    // Checkpoint uses the same boundary and must not "repair" an unproven ID.
+    for pending in [true, false] {
+        state.hostile.battle = BattleState::default();
+        if pending {
+            state.hostile.battle.ground_pending.push(unknown);
+        } else {
+            state.hostile.battle.ground_refused.push(unknown);
+        }
+        let tick = state.tick;
+        let rows = checkpoint_rows(&mut state, tick).unwrap();
+        let replay = Replay {
+            battle: checkpoint_image(&rows, state.dimension, tick).unwrap(),
+            ..Replay::default()
+        };
+        assert!(
+            validate_replay(&replay, &state.registry)
+                .unwrap_err()
+                .to_string()
+                .contains("missing grounded body"),
+            "unknown IDs remain fail-closed at both staging boundaries"
+        );
+    }
+}

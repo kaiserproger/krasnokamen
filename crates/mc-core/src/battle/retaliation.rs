@@ -143,6 +143,32 @@ impl Retaliation {
         Ok(())
     }
 
+    /// `opponent` cannot accept an ordinary player: players are not native
+    /// battle units and only a named hold can populate `holder_side`.
+    /// Keep held players, native attackers and unproven identities unchanged.
+    pub(super) fn reconcile_capture(
+        &mut self,
+        entities: &EntityStore,
+        live: &super::live_players::LiveState,
+        connections: &crate::tick::Connections,
+    ) {
+        self.pending.retain(|&(_, attacker)| {
+            let Some(slot) = entities.slot_of_any(attacker) else {
+                return true;
+            };
+            if !matches!(
+                entities.body(slot).kind,
+                crate::entities::EntityKind::Player { .. }
+            ) {
+                return true;
+            }
+            let Some(name) = connections.name_of(attacker) else {
+                return true;
+            };
+            live.holds.iter().any(|hold| hold.name == name)
+        });
+    }
+
     pub(super) fn validate_references(
         &self,
         known: &impl Fn(EntityId) -> bool,

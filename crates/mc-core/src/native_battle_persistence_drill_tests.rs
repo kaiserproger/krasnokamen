@@ -491,3 +491,251 @@ fn battle_resume_sigkill_during_dying_body_keeps_tombstone_authority() {
     );
     continues(&mut recovered);
 }
+
+/// Kill the real tick/WAL owner at the disputed capture boundary, before any
+/// following battle pass can drain transient observations or staging decisions.
+fn capture_boundary_sigkill(test: &str, scenario: fn(&mut Drill)) {
+    use std::io::{BufRead, BufReader};
+    use std::os::unix::process::ExitStatusExt;
+    const CHILD: &str = "KRASNOKAMEN_BATTLE_CAPTURE_DRILL_PATH";
+    const READY: &str = "BATTLE_CAPTURE_WAL_DURABLE ";
+    if let Some(path) = std::env::var_os(CHILD) {
+        let path = std::path::PathBuf::from(path);
+        let mut drill = prepared(&path);
+        scenario(&mut drill);
+        let expected = serde_json::json!({
+            "image": image(&drill.state),
+            "pose": pose(&drill.state),
+        });
+        let mut file = std::fs::File::create(path.join("capture-expected.json")).unwrap();
+        file.write_all(&serde_json::to_vec(&expected).unwrap())
+            .unwrap();
+        file.sync_all().unwrap();
+        let receipt = serde_json::json!({"case": test, "tick": drill.state.tick});
+        println!("{READY}{receipt}");
+        std::io::stdout().flush().unwrap();
+        let mut release = String::new();
+        std::io::stdin().read_line(&mut release).unwrap();
+        panic!("parent must SIGKILL before another tick or graceful checkpoint");
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let exact =
+        format!("core::native_checkpoint_crash_tests::persistence_drills::battle_resume::{test}");
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", &exact, "--nocapture"])
+        .env(CHILD, directory.path())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let observer = std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            let line = line.unwrap();
+            if let Some(receipt) = line.strip_prefix(READY) {
+                let _ = ready_tx.send(serde_json::from_str::<serde_json::Value>(receipt).unwrap());
+                return;
+            }
+            eprintln!("capture child: {line}");
+        }
+    });
+    let receipt = ready_rx.recv_timeout(std::time::Duration::from_secs(60));
+    let _ = child.kill();
+    let stopped = child.wait().unwrap();
+    observer.join().unwrap();
+    let receipt = receipt.expect("child reached disputed durable capture before SIGKILL");
+    assert_eq!(
+        stopped.signal(),
+        Some(9),
+        "actual SIGKILL, not graceful exit"
+    );
+    eprintln!("capture-boundary SIGKILL: {receipt}");
+    let expected: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(directory.path().join("capture-expected.json")).unwrap(),
+    )
+    .unwrap();
+    let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    config.view_distance = 0;
+    config.simulation_distance = 0;
+    let mut recovered = Drill::open(config);
+    assert_eq!(recovered.state.tick, receipt["tick"].as_u64().unwrap());
+    assert_eq!(image(&recovered.state), expected["image"]);
+    assert_eq!(
+        serde_json::to_value(pose(&recovered.state)).unwrap(),
+        expected["pose"]
+    );
+    if recovered.state.hostile.battle.running {
+        continues(&mut recovered);
+    }
+    recovered.checkpoint();
+    let expected = image(&recovered.state);
+    recovered = recovered.crash();
+    assert_eq!(
+        image(&recovered.state),
+        expected,
+        "subsequent checkpoint/restart"
+    );
+}
+
+fn queue_ground_death(drill: &mut Drill, victim: EntityId) {
+    let slot = drill.state.entities.slot_of(victim).unwrap();
+    drill.state.merge_damage.push((
+        slot,
+        crate::tick::DamagePiece {
+            amount: 1000.0,
+            kind: crate::survival::DamageKind::GenericKill,
+            source: None,
+            physical: None,
+            custom_armor: false,
+        },
+    ));
+}
+
+/// Inspect the post-merge/pre-capture owner, then use the production capture.
+fn append_capture_tick(drill: &mut Drill, output: &crate::boundary::TickOutput) {
+    let batch = Batch {
+        tick: output.tick,
+        entries: journal_entries_for_tick(&mut drill.state, output).unwrap(),
+    };
+    drill.append(&batch).unwrap();
+}
+
+#[test]
+fn battle_resume_capture_boundary_discards_unheld_player_blow() {
+    capture_boundary_sigkill(
+        "battle_resume_capture_boundary_discards_unheld_player_blow",
+        |drill| {
+            let connection = ConnectionId(77);
+            drill
+                .run(&[PlayerInput::Join {
+                    connection,
+                    uuid: uuid::Uuid::new_v4(),
+                    name: "Visitor".into(),
+                    permission_level: 0,
+                }])
+                .unwrap();
+            let player = drill.state.connections.entity_of(connection).unwrap();
+            let slot = drill.state.entities.slot_of(player).unwrap();
+            let victim = drill.state.hostile.battle.formation.members[0].id;
+            let target = drill.state.entities.slot_of(victim).unwrap();
+            let at = drill.state.entities.pos(target);
+            drill
+                .state
+                .entities
+                .set_pos(slot, [at[0], at[1], at[2] - 1.5]);
+            drill.state.entities.set_ground(slot, true);
+            let health = drill.state.entities.row(target).health;
+            let (output, _, _) = crate::tick::run_tick(
+                &mut drill.state,
+                &[PlayerInput::Attack {
+                    connection,
+                    target: victim,
+                }],
+            );
+            assert!(
+                drill.state.entities.row(target).health < health,
+                "actual player blow"
+            );
+            let pending = image(&drill.state)["battle"]["retaliation"]["pending"].clone();
+            assert!(
+                pending
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|pair| pair[1] == player.0),
+                "ordinary post-merge owner contains the unheld player's observation"
+            );
+            append_capture_tick(drill, &output);
+        },
+    );
+}
+
+#[test]
+fn battle_resume_capture_boundary_death_before_settle() {
+    capture_boundary_sigkill(
+        "battle_resume_capture_boundary_death_before_settle",
+        |drill| {
+            drill.state.hostile.battle.running = false;
+            let victim = drill.state.hostile.battle.formation.members[0].id;
+            drill.state.hostile.battle.ground_pending.push(victim);
+            queue_ground_death(drill, victim);
+            drill.state.commit_merge_effects();
+            let (output, _, _) = crate::tick::run_tick(&mut drill.state, &[]);
+            assert!(!drill.state.hostile.battle.ground_pending.contains(&victim));
+            append_capture_tick(drill, &output);
+        },
+    );
+}
+
+#[test]
+fn battle_resume_capture_boundary_death_after_refusal() {
+    capture_boundary_sigkill(
+        "battle_resume_capture_boundary_death_after_refusal",
+        |drill| {
+            drill.state.hostile.battle.running = false;
+            let victim = drill.state.hostile.battle.formation.members[0].id;
+            let slot = drill.state.entities.slot_of(victim).unwrap();
+            drill.state.entities.set_pos(slot, [8.5, 200.0, 8.5]);
+            let water = crate::crafter::tests::block(&drill.state, "water", &[("level", "0")]);
+            for x in -2_i32..=18 {
+                for z in -2_i32..=18 {
+                    let chunk = drill
+                        .state
+                        .world
+                        .chunk(mc_world::ChunkPos {
+                            x: x.div_euclid(16),
+                            z: z.div_euclid(16),
+                        })
+                        .unwrap();
+                    let geometry = chunk.geometry();
+                    // Native heightmaps retain generated terrain heights; cover
+                    // the actual scan band, not the fixture's high stone slab.
+                    let top = geometry.min_y()
+                        + chunk.heightmaps["MOTION_BLOCKING"]
+                            .get(x.rem_euclid(16) as u8, z.rem_euclid(16) as u8)
+                            as i32
+                        + 16;
+                    let wet_y = top.min(geometry.max_y()) - 1;
+                    drill.state.world.set_block(x, wet_y, z, water);
+                }
+            }
+            // Ground's column scan reads the resident chunk, not the write overlay.
+            drill.run(&[]).unwrap();
+            drill.state.hostile.battle.ground_pending.push(victim);
+            drill.run(&[]).unwrap();
+            assert!(
+                drill.state.hostile.battle.ground_refused.contains(&victim),
+                "real wet terrain must produce Placement::Nowhere"
+            );
+            drill.checkpoint();
+            queue_ground_death(drill, victim);
+            let (output, _, _) = crate::tick::run_tick(&mut drill.state, &[]);
+            assert!(!drill.state.entities.body(slot).alive);
+            assert!(drill.state.hostile.battle.ground_refused.contains(&victim));
+            append_capture_tick(drill, &output);
+        },
+    );
+}
+
+#[test]
+fn battle_resume_capture_boundary_death_after_waiting_settle() {
+    capture_boundary_sigkill(
+        "battle_resume_capture_boundary_death_after_waiting_settle",
+        |drill| {
+            drill.state.hostile.battle.running = false;
+            let victim = drill.state.hostile.battle.formation.members[0].id;
+            let slot = drill.state.entities.slot_of(victim).unwrap();
+            drill.state.entities.set_pos(slot, [800.0, 200.0, 800.0]);
+            drill.state.hostile.battle.ground_pending.push(victim);
+            queue_ground_death(drill, victim);
+            let (output, _, _) = crate::tick::run_tick(&mut drill.state, &[]);
+            assert!(!drill.state.entities.body(slot).alive);
+            assert!(
+                drill.state.hostile.battle.ground_pending.contains(&victim),
+                "settle waited on the unavailable chunk before this tick's death merge"
+            );
+            append_capture_tick(drill, &output);
+        },
+    );
+}
