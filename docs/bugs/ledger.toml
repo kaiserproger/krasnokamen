@@ -6272,9 +6272,9 @@ id = "HARNESS-LOADER-SHARED-BUILD-DIR-RACE"
 title = "Concurrent Java endpoints share mutable Loader classes and can lose live class files"
 area = "harness"
 severity = "major"
-status = "fixed"
+status = "open"
 source = "ScreensVoiceStart real gates 20261115T011032 and 20261115T011838 lose live Loader classes while another endpoint builds. Independent fix patch covers the runtime and prepared launch wiring from 3aca2c4ec and 495367bce, restoring the old heap-only script and shared project cache; new helpers remain only for retained API tests. endpoint-startup/result.json proves both real endpoints remain live after the second build with private project caches."
-repro = "source"
+repro = "client"
 regression = [
   "python:tools.harness.test_runtime_profiles:ProfileTaskTests.test_every_gradle_launch_isolates_endpoint_builds_even_with_explicit_heap",
   "python:tools.harness.test_java_launcher:ModdedLauncherTest.test_build_root_uses_owner_targets_or_portable_local_directory",
@@ -6282,7 +6282,6 @@ regression = [
 repro_check = "ScreensVoiceStart/build-red.log fails without build-dir isolation. Real run 20261115T011838 still lost 26.3 classes with distinct outputs but shared Gradle executionHistory and Loom launch.cfg. project-cache-red.log fails before adding --project-cache-dir; project-cache-green.log covers endpoint-private history and outputs, plus owner targets and portable fallback. Existing outputs are not removed."
 fix_commit = "patch:94ce251608e4cb8d332ed8543764c21edc0614d9106b7574db7ff2d6e2cefab2"
 failing_first = "reported"
-promotion = "docs/bugs/promotions/HARNESS-LOADER-SHARED-BUILD-DIR-RACE.json"
 
 [[bug]]
 id = "HARNESS-PREPARED-FABRIC-LAUNCH-NO-MANIFEST"
