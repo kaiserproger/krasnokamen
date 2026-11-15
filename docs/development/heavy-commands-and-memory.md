@@ -112,7 +112,8 @@ to keep that from happening again without idling the machine.
   shortage (slice PSI trigger or the slice hitting `MemoryMax`) it freezes the
   youngest *preemptible* command with the cgroup v2 freezer (paused, not
   killed). Preemptible is decided once from argv: plain `cargo
-  build/check/clippy/doc/fetch` and `cargo test/bench --no-run`. Tests, harness
+  build/check/clippy/doc/fetch` and `cargo test/bench --no-run`, also behind a
+  leading `env NAME=value …` (pin-release, per-tree `CARGO_TARGET_DIR`). Tests, harness
   runs, servers and clients are never frozen, so their timeouts stay honest;
   the oldest running command is never frozen. Room is the smaller of
   `MemAvailable` and the slice cap minus its unreclaimable memory (tmpfs, dirty
