@@ -125,6 +125,21 @@ fn float_list<const N: usize>(tag: &Tag) -> Option<[f32; N]> {
     Some(out)
 }
 
+/// Decode an item at the player custody boundary. Only an empty compound is
+/// an empty slot; nonempty payload without a string id must not be discarded.
+pub fn stack_from_player_fields(
+    items: &ItemRegistry,
+    fields: &[(String, Tag)],
+) -> Result<Option<ItemStack>, ItemNbtError> {
+    let stack = stack_from_fields(items, fields)?;
+    if stack.is_none() && !fields.is_empty() {
+        return Err(ItemNbtError::InvalidComponent(
+            "nonempty player item: missing or non-string id".into(),
+        ));
+    }
+    Ok(stack)
+}
+
 // Custody fields must be unique before projecting them into indexed storage.
 fn custody_field<'a>(
     fields: &'a [(String, Tag)],
@@ -215,7 +230,9 @@ pub fn player_from_fields(
                 return Err(invalid(&format!("duplicate {slot}")));
             }
             occupied |= 1_u64 << slot;
-            if let Some(stack) = stack_from_fields(items, item_fields)? {
+            if let Some(stack) = stack_from_player_fields(items, item_fields)
+                .map_err(|error| invalid(&format!("{slot}: {error}")))?
+            {
                 inventory.push((slot, stack));
             }
         }
@@ -257,7 +274,9 @@ pub fn player_from_fields(
                     "equipment slot {name}: expected item compound"
                 )));
             };
-            if let Some(stack) = stack_from_fields(items, item_fields)? {
+            if let Some(stack) = stack_from_player_fields(items, item_fields).map_err(|error| {
+                ItemNbtError::InvalidComponent(format!("equipment slot {name}: {error}"))
+            })? {
                 equipment.push((name.clone(), stack));
             }
         }

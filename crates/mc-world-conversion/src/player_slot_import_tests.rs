@@ -305,3 +305,51 @@ fn ordinary_player_inventory_survives_import_load_save_reopen() {
     assert_eq!(saved.opaque_player_fields, expected.opaque_player_fields);
     assert_eq!(hashes(&source).unwrap(), before);
 }
+
+fn malformed_item_id_refuses_import(id: Option<Tag>) {
+    for location in [
+        "Inventory",
+        "equipment",
+        "krasnokamen:Carried",
+        "krasnokamen:CraftingGrid",
+    ] {
+        refused(
+            |player| {
+                let mut fields = vec![
+                    ("count".into(), Tag::Int(7)),
+                    (
+                        "components".into(),
+                        Tag::Compound(vec![(
+                            "plugin:payload".into(),
+                            Tag::String("must not disappear".into()),
+                        )]),
+                    ),
+                ];
+                if let Some(id) = id.clone() {
+                    fields.push(("id".into(), id));
+                }
+                let value = match location {
+                    "Inventory" => {
+                        fields.push(("Slot".into(), Tag::Byte(0)));
+                        list(vec![Tag::Compound(fields)])
+                    }
+                    "equipment" => Tag::Compound(vec![("head".into(), Tag::Compound(fields))]),
+                    "krasnokamen:Carried" => Tag::Compound(fields),
+                    _ => list(vec![Tag::Compound(fields)]),
+                };
+                replace(player, location, value);
+            },
+            "missing or non-string id",
+        );
+    }
+}
+
+#[test]
+fn missing_item_id_with_payload_refuses_import_before_load_save() {
+    malformed_item_id_refuses_import(None);
+}
+
+#[test]
+fn wrong_type_item_id_with_payload_refuses_import_before_load_save() {
+    malformed_item_id_refuses_import(Some(Tag::Int(7)));
+}

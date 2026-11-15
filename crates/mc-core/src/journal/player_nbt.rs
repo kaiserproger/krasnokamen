@@ -378,9 +378,11 @@ pub fn player_from_tag(
         Some(_) => return Err(failure("unlocked recipes", "expected string list".into())),
     });
     let carried = match find("krasnokamen:Carried") {
-        Some(mc_nbt::Tag::Compound(fields)) => mc_data::item_nbt::stack_from_fields(items, fields)
-            .map_err(|err| failure("krasnokamen:Carried slot 0", err.to_string()))?
-            .unwrap_or(mc_data::ItemStack::EMPTY),
+        Some(mc_nbt::Tag::Compound(fields)) => {
+            mc_data::player_nbt::stack_from_player_fields(items, fields)
+                .map_err(|err| failure("krasnokamen:Carried slot 0", err.to_string()))?
+                .unwrap_or(mc_data::ItemStack::EMPTY)
+        }
         Some(_) => {
             return Err(failure(
                 "krasnokamen:Carried slot 0",
@@ -399,12 +401,14 @@ pub fn player_from_tag(
                         "expected item compound".into(),
                     ));
                 };
-                let stack = mc_data::item_nbt::stack_from_fields(items, fields).map_err(|err| {
-                    failure(
-                        &format!("krasnokamen:CraftingGrid slot {slot}"),
-                        err.to_string(),
-                    )
-                })?;
+                let stack = mc_data::player_nbt::stack_from_player_fields(items, fields).map_err(
+                    |err| {
+                        failure(
+                            &format!("krasnokamen:CraftingGrid slot {slot}"),
+                            err.to_string(),
+                        )
+                    },
+                )?;
                 grid.push(stack.unwrap_or(mc_data::ItemStack::EMPTY));
             }
             grid

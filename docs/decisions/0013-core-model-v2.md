@@ -195,6 +195,17 @@ Inventory.load, PlayerEnderChestContainer.fromSlots). Valid inventory, equipment
 and EnderItems survive import, native hydration, checkpoint and reopen; coverage
 is `mc-world-conversion::player_slot_import_tests`.
 
+Native WAL admission additionally requires exactly 41 player inventory slots
+before applying a player post-image; a short or long vector refuses the whole
+recovered world rather than reaching the join path's empty default. Nonempty
+player item compounds without a string `id` refuse import and checkpoint
+recovery, including equipment, cursor and crafting-grid custody. An empty
+equipment/cursor/grid compound remains a legitimate empty slot.
+Vanilla's 26.1.2, 26.2 and 26.3 inventory and ender-chest writers encode a Slot
+for every saved entry, including slot 0; the 26.2/26.3 codec's optional read
+default does not omit the field on write. Recovery coverage is
+`mc-core::native_checkpoint::tests::player_custody`.
+
 Backups retain database custody throughout the copy. The native redb backend
 and hot-backup reader share the exact lease-holding file handle (not a reopened
 path or duplicated Windows handle). Positioned reads have independent cursors;

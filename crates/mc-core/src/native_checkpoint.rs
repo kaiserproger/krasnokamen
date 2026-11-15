@@ -697,7 +697,13 @@ pub fn recover_with_reader(
         let decoded = crate::journal::player_from_tag(
             &decode_tag(&player.record, "player")?,
             &registry.items,
-        )?;
+        )
+        .map_err(|error| {
+            CoreError::Storage(format!(
+                "native player {}: {error}",
+                uuid::Uuid::from_bytes(player.uuid)
+            ))
+        })?;
         players.insert(uuid::Uuid::from_bytes(player.uuid).to_string(), decoded);
     }
     for dimension in [Dimension::Overworld, Dimension::Nether, Dimension::End] {
@@ -814,6 +820,17 @@ pub fn recover_with_reader(
                 }
                 for (lo, hi, entries) in &routed {
                     for entry in entries {
+                        if let crate::journal::JournalEntry::Player {
+                            uuid, inventory, ..
+                        } = entry
+                            && inventory.len() != crate::inventory::PLAYER_SLOTS
+                        {
+                            return Err(CoreError::Storage(format!(
+                                "native WAL recovery batch {lo}..{hi}: player {uuid} inventory slots: expected {}, found {}",
+                                crate::inventory::PLAYER_SLOTS,
+                                inventory.len()
+                            )));
+                        }
                         if let crate::journal::JournalEntry::InhabitedTime { image } = entry
                             && (image.value < 0 || image.tick < *lo || image.tick > *hi)
                         {
