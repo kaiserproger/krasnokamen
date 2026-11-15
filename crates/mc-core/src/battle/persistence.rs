@@ -13,6 +13,16 @@ use std::{collections::BTreeMap, sync::Arc};
 
 type Column = (EntityId, Option<EnemyTarget>, Option<Escape>);
 
+#[cfg(test)]
+pub(crate) struct EncodingFault {
+    pub store: std::sync::Weak<mc_world::native::NativeStore>,
+    pub observed: std::sync::mpsc::Sender<u64>,
+}
+
+#[cfg(test)]
+pub(crate) static ENCODING_FAULT: parking_lot::Mutex<Option<EncodingFault>> =
+    parking_lot::const_mutex(None);
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Image<B, C, D> {
@@ -34,6 +44,30 @@ pub(crate) fn row_key(dimension: Dimension) -> String {
 }
 
 pub(crate) fn encode(state: &TickState) -> Result<String, CoreError> {
+    #[cfg(test)]
+    {
+        let fault = {
+            let mut armed = ENCODING_FAULT.lock();
+            if armed.as_ref().is_some_and(|fault| {
+                fault.store.upgrade().is_some_and(|store| {
+                    state
+                        .world
+                        .chunk_source()
+                        .native
+                        .as_ref()
+                        .is_some_and(|actual| Arc::ptr_eq(actual, &store))
+                })
+            }) {
+                armed.take()
+            } else {
+                None
+            }
+        };
+        if let Some(fault) = fault {
+            let _ = fault.observed.send(state.tick);
+            return Err(error("injected battle image encoding failure"));
+        }
+    }
     let battle = &state.hostile.battle;
     let columns: Vec<Column> = battle
         .columns
@@ -311,17 +345,17 @@ pub(crate) fn checkpoint_image(
     Ok(Some(Arc::new(image)))
 }
 
-pub(crate) fn journal_entries(state: &mut TickState, entries: &mut Vec<JournalEntry>) {
+pub(crate) fn journal_entries(
+    state: &mut TickState,
+    entries: &mut Vec<JournalEntry>,
+) -> Result<(), CoreError> {
     if state.hostile.battle.formation.members.is_empty()
         && state.hostile.battle.live.is_empty()
         && state.hostile.battle.journaled.is_none()
     {
-        return;
+        return Ok(());
     }
-    let image = match encode(state) {
-        Ok(image) => image,
-        Err(error) => panic!("cannot commit battle history: {error}"),
-    };
+    let image = encode(state)?;
     if state
         .hostile
         .battle
@@ -329,13 +363,14 @@ pub(crate) fn journal_entries(state: &mut TickState, entries: &mut Vec<JournalEn
         .as_ref()
         .is_some_and(|old| **old == image)
     {
-        return;
+        return Ok(());
     }
     let image = Arc::new(image);
     entries.push(JournalEntry::Battle {
         value: Arc::clone(&image),
     });
     state.hostile.battle.journaled = Some(image);
+    Ok(())
 }
 
 pub(super) mod reach {

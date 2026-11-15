@@ -188,12 +188,15 @@ pub(crate) fn entity_images(
         if crossed {
             full.push(*id);
         }
+        // The native death image already tombstones this identity. Its short
+        // presentation corpse can still move, but has no retained native pose.
         let tracks_motion = row.item.is_some()
             || row.falling.is_some()
             || row.tnt.is_some()
             || row.entity_life.vehicle.is_some()
             || crate::end_fight::is_dragon(state, slot)
-            || crate::battle::battle_row(state.entities.body(slot).faction);
+            || (crate::battle::battle_row(state.entities.body(slot).faction)
+                && state.entities.body(slot).alive);
         if tracks_motion {
             state.journal_scan.motion.entry(*id).or_default();
         } else {

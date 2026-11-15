@@ -372,7 +372,7 @@ pub(super) fn player_journal_entry(
 pub(crate) fn journal_entries_for_tick(
     state: &mut TickState,
     output: &TickOutput,
-) -> Vec<JournalEntry> {
+) -> Result<Vec<JournalEntry>, CoreError> {
     let start = std::time::Instant::now();
     // Classify item births/crossings before entity_images advances the
     // existing WAL baselines (restored items already have a baseline).
@@ -384,7 +384,7 @@ pub(crate) fn journal_entries_for_tick(
     // child wrap below supplies their envelope.
     let mut settlement_entries = Vec::new();
     crate::settlements::persistence::journal_entries(state, output.tick, &mut settlement_entries);
-    crate::battle::persistence::journal_entries(state, &mut settlement_entries);
+    crate::battle::persistence::journal_entries(state, &mut settlement_entries)?;
     if state.dimension == crate::dimensions::Dimension::Overworld {
         if !settlement_entries.is_empty() {
             entries.push(JournalEntry::Dimension {
@@ -630,13 +630,13 @@ pub(crate) fn journal_entries_for_tick(
             .expect("every resident dimension publishes in the same tick");
         entries.push(JournalEntry::Dimension {
             dimension: *dimension,
-            entries: journal_entries_for_tick(world, child_output),
+            entries: journal_entries_for_tick(world, child_output)?,
         });
     }
     state.world.journal_debt(&mut entries);
     state.journal_scan.times.before_entities = entities_start - start;
     state.journal_scan.times.after_entities = entities_end.elapsed();
-    entries
+    Ok(entries)
 }
 
 /// Work for the native writer thread, the single redb writer. FIFO, so saves

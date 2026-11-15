@@ -224,6 +224,8 @@ tombstones, while a missing live member or an inconsistent/unsupported image
 refuses startup, including offline recovery. Tags/tickets alone never recreate
 lost formations. Reset publishes an empty owner image in the same frame as unit
 and ticket removal. See the [battle contract](../architecture/persistence.md#battle-decision-history).
+Native death tombstones take authority immediately: the short-lived presentation
+corpse never contributes compact persisted poses after its live body is gone.
 
 
 Retained player and entity NBT is validated and tag-set-normalized at the shared

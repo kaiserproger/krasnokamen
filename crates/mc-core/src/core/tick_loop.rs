@@ -257,7 +257,17 @@ pub(super) fn tick_loop(mut state: TickState, mut channels: TickChannels) {
         // HALT — stop committing and publishing. Disconnect everyone so
         // the edge drops the world instead of playing on undurable state,
         // refuse new inputs, publish nothing further.
-        let entries = journal_entries_for_tick(&mut state, &output);
+        let entries = match journal_entries_for_tick(&mut state, &output) {
+            Ok(entries) => entries,
+            Err(error) => {
+                halt_authority(
+                    &mut state,
+                    &channels,
+                    &format!("journal capture failed: {error}"),
+                );
+                break;
+            }
+        };
         let journal_time = tick_start.elapsed();
         let journal_queue_start = std::time::Instant::now();
         let tick = output.tick;

@@ -1096,8 +1096,18 @@ pub(crate) fn apply_batch_images(
                 JournalEntry::Battle { value } => {
                     replay.battle = Some(Arc::clone(value));
                 }
-                JournalEntry::EntityMotion { id, pos, vel, yaw, pitch, ground } => {
-                    if !pos.iter().chain(vel).all(|value| value.is_finite()) || !yaw.is_finite() || !pitch.is_finite() {
+                JournalEntry::EntityMotion {
+                    id,
+                    pos,
+                    vel,
+                    yaw,
+                    pitch,
+                    ground,
+                } => {
+                    if !pos.iter().chain(vel).all(|value| value.is_finite())
+                        || !yaw.is_finite()
+                        || !pitch.is_finite()
+                    {
                         replay.battle_fault = Some(format!("non-finite native pose for {id}"));
                     } else if let Some(record) = replay.entities.get_mut(id) {
                         record.pos = *pos;

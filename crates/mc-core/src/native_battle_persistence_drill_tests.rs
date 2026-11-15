@@ -285,3 +285,209 @@ fn battle_resume_abrupt_checkpoint_commit_recovers_whole_history() {
         continues(&mut recovered);
     }
 }
+
+#[test]
+fn battle_resume_encoding_failure_halts_before_wal_or_publication() {
+    use crate::battle::persistence::{ENCODING_FAULT, EncodingFault};
+    use std::time::Duration;
+    struct Disarm;
+    impl Drop for Disarm {
+        fn drop(&mut self) {
+            *ENCODING_FAULT.lock() = None;
+        }
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let drill = prepared(directory.path());
+    let mut config = drill.config.clone();
+    config.checkpoint_every_ticks = 100_000;
+    let checkpoint_tick = drill.manifest.tick;
+    drop(drill);
+    let core = crate::core::Core::open(config.clone()).unwrap();
+    let store = fixture_store(&config).unwrap();
+    let mut ticks = core.subscribe();
+    assert!(core.submit(PlayerInput::Join {
+        connection: ConnectionId(9100),
+        uuid: uuid::Uuid::new_v4(),
+        name: "EncodeFault".into(),
+        permission_level: 0,
+    }));
+    for _ in 0..5 {
+        ticks.blocking_recv().unwrap();
+    }
+    let (closed_tx, closed_rx) = mpsc::channel();
+    let listener = std::thread::spawn(move || {
+        let mut published = Vec::new();
+        loop {
+            match ticks.blocking_recv() {
+                Ok(output) => published.push(output.tick),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+        let _ = closed_tx.send(published);
+    });
+    let (observed, failure) = mpsc::channel();
+    let _disarm = Disarm;
+    *ENCODING_FAULT.lock() = Some(EncodingFault {
+        store: Arc::downgrade(&store),
+        observed,
+    });
+    let failed_tick = failure.recv_timeout(Duration::from_secs(60));
+    let published = closed_rx.recv_timeout(Duration::from_secs(60));
+    let disconnected = core
+        .try_drain_outbox()
+        .into_iter()
+        .any(|(connection, changes)| {
+            connection == ConnectionId(9100)
+                && changes.iter().any(|change| {
+                    matches!(
+                        change,
+                        crate::boundary::PlayerChange::Disconnect { reason }
+                            if reason.contains("journal capture failed")
+                    )
+                })
+        });
+    core.shutdown();
+    listener.join().unwrap();
+    let failed_tick = failed_tick.expect("the selected world's image encoding failed");
+    let published = published.expect("encoding failure closes tick publication");
+    assert!(
+        published.iter().all(|&tick| tick < failed_tick),
+        "failed tick {failed_tick} reached publication: {published:?}"
+    );
+    assert!(
+        disconnected,
+        "authority halt reliably disconnects the live player"
+    );
+    assert!(
+        read_complete_batches_after(&config.world_dir.join("journal"), failed_tick - 1)
+            .unwrap()
+            .is_empty(),
+        "failed image tick cannot reach the durable WAL"
+    );
+    assert_eq!(
+        read_manifest(&config).unwrap().tick,
+        checkpoint_tick,
+        "halt must not checkpoint the unjournaled state"
+    );
+}
+
+#[test]
+fn battle_resume_sigkill_during_dying_body_keeps_tombstone_authority() {
+    use std::io::{BufRead, BufReader};
+    use std::os::unix::process::ExitStatusExt;
+    const CHILD: &str = "KRASNOKAMEN_BATTLE_DYING_DRILL_PATH";
+    const TEST: &str = "core::native_checkpoint_crash_tests::persistence_drills::battle_resume::battle_resume_sigkill_during_dying_body_keeps_tombstone_authority";
+    const READY: &str = "BATTLE_DYING_WAL_DURABLE ";
+    if let Some(path) = std::env::var_os(CHILD) {
+        let path = std::path::PathBuf::from(path);
+        let mut drill = prepared(&path);
+        let victim = drill.state.hostile.battle.formation.members[0].id;
+        let slot = drill.state.entities.slot_of(victim).unwrap();
+        drill.state.entities.set_vel(slot, [2.0, 0.2, 0.0]);
+        drill.state.merge_damage.push((
+            slot,
+            crate::tick::DamagePiece {
+                amount: 1000.0,
+                kind: crate::survival::DamageKind::GenericKill,
+                source: None,
+                physical: None,
+                custom_armor: false,
+            },
+        ));
+        drill.state.commit_merge_effects();
+        drill.run(&[]).unwrap();
+        let death_position = drill.state.entities.pos(slot);
+        assert!(!drill.state.entities.body(slot).alive);
+        assert!(drill.state.entities.slot_of_any(victim).is_some());
+        // A corpse can still receive its final native pose write after its
+        // durable death image. Exercise that same-chunk write explicitly.
+        drill.state.entities.set_pos(
+            slot,
+            [
+                death_position[0] + 0.125,
+                death_position[1],
+                death_position[2],
+            ],
+        );
+        let corpse_tick = drill.capture_tick(&[]);
+        assert!(
+            drill.state.entities.slot_of_any(victim).is_some(),
+            "the physical corpse remains during its normal 20-tick animation"
+        );
+        assert_ne!(
+            drill.state.entities.pos(slot),
+            death_position,
+            "ordinary corpse motion must exercise the post-tombstone pose window"
+        );
+        drill.append(&corpse_tick).unwrap();
+        let mut expected = std::fs::File::create(path.join("dying-expected.json")).unwrap();
+        expected
+            .write_all(
+                serde_json::to_string(&image(&drill.state))
+                    .unwrap()
+                    .as_bytes(),
+            )
+            .unwrap();
+        expected.sync_all().unwrap();
+        let receipt = serde_json::json!({"tick": drill.state.tick, "victim": victim.0});
+        println!("{READY}{receipt}");
+        std::io::stdout().flush().unwrap();
+        let mut release = String::new();
+        std::io::stdin().read_line(&mut release).unwrap();
+        panic!("parent must SIGKILL the process before shutdown/checkpoint");
+    }
+    let directory = tempfile::tempdir().unwrap();
+    let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", TEST, "--nocapture"])
+        .env(CHILD, directory.path())
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let observer = std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            let line = line.unwrap();
+            if let Some(receipt) = line.strip_prefix(READY) {
+                let _ = ready_tx.send(serde_json::from_str::<serde_json::Value>(receipt).unwrap());
+                return;
+            }
+        }
+    });
+    let receipt = ready_rx.recv_timeout(std::time::Duration::from_secs(60));
+    let _ = child.kill();
+    let stopped = child.wait().unwrap();
+    observer.join().unwrap();
+    let receipt = receipt.expect("child reached durable death/corpse tick before SIGKILL");
+    assert_eq!(
+        stopped.signal(),
+        Some(9),
+        "actual SIGKILL, not graceful exit"
+    );
+    eprintln!("death-window SIGKILL: {receipt}");
+    let expected: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(directory.path().join("dying-expected.json")).unwrap(),
+    )
+    .unwrap();
+    let mut config = CoreConfig::new(directory.path().to_path_buf(), 42);
+    config.view_distance = 0;
+    config.simulation_distance = 0;
+    let mut recovered = Drill::open(config);
+    assert_eq!(recovered.state.tick, receipt["tick"].as_u64().unwrap());
+    assert_eq!(image(&recovered.state), expected);
+    let victim = EntityId(receipt["victim"].as_i64().unwrap() as i32);
+    assert!(recovered.state.entities.slot_of_any(victim).is_none());
+    assert!(
+        recovered
+            .state
+            .hostile
+            .battle
+            .formation
+            .members
+            .iter()
+            .any(|member| { member.id == victim && !member.alive })
+    );
+    continues(&mut recovered);
+}
