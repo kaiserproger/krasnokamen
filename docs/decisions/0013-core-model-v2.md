@@ -119,9 +119,14 @@ affected connections close (`skipped-explosion-knockback`); this observation
 does not alter gameplay authority or persistence.
 Entity ids remain stable through dimension travel: the observer resolves the
 recipient across current worlds after travel commits. If the ordered dimension
-reset moves a viewer away from that tick's explosion projection, the edge closes
-only that recipient (`dimension-switch-explosion-knockback`) instead of silently
-losing the impulse. It does not send an old-world explosion into the new world.
+reset moves a viewer away from that tick's explosion projection, only that
+recipient's stale old-world impulse is discarded. The connection stays open;
+other recipients and new-world impulses are unchanged. An old-world explosion
+must never be projected into the new world. This is accepted delivery policy,
+not a claim that vanilla resets motion: 26.3 `ServerPlayer.teleport` sends
+respawn keep-data flags 3, and `ClientPacketListener.handleRespawn` copies old
+delta movement when bit 2 is set. Skipped publications still close only their
+affected recipients as above.
 World snapshot deltas may reconcile to a newer snapshot; fanout plans within
 each world queue's free frame slots and bytes, so a slow viewer's backlog is
 bounded in bytes and its nearest, longest-waiting entity updates go first. See

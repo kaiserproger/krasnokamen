@@ -321,7 +321,7 @@ async fn broadcast_lag_closes_only_recipients_of_skipped_knockback() {
 }
 
 #[tokio::test]
-async fn same_tick_dimension_switch_explicitly_closes_unprojected_knockback() {
+async fn same_tick_dimension_switch_discards_only_old_world_knockback() {
     use mc_core::boundary::PlayerChange;
     use mc_core::dimensions::Dimension;
     let (server, dir) = fixture();
@@ -329,16 +329,21 @@ async fn same_tick_dimension_switch_explicitly_closes_unprojected_knockback() {
     let (id, mut reliable_rx) = register(&server, "Traveler", false);
     let (close, mut closed) = tokio::sync::oneshot::channel();
     server.connections.inner.lock().closers.insert(id, close);
+    let (other, mut other_rx) = register(&server, "Witness", false);
     let (mut connections, _) = server.connections.routing_snapshot();
     let mut viewers = HashMap::from([(
         id,
         crate::plan::ViewerState::new(id, EntityId(81), [8.0, 64.0, 8.0]),
     )]);
+    viewers.insert(
+        other,
+        crate::plan::ViewerState::new(other, EntityId(82), [8.0, 64.0, 8.0]),
+    );
     let output = TickOutput {
         tick: 2,
         snapshot: Arc::new(WorldSnapshot {
             tick: 2,
-            player_knockback_ticks: Arc::new([(id, (1, 2))].into()),
+            player_knockback_ticks: Arc::new([(id, (1, 2)), (other, (1, 2))].into()),
             dimensions: [(
                 Dimension::Nether,
                 TickOutput {
@@ -360,7 +365,10 @@ async fn same_tick_dimension_switch_explicitly_closes_unprojected_knockback() {
                 center: [8.0, 64.0, 8.0],
                 radius: 4.0,
                 blocks: 1,
-                knockback: vec![(EntityId(81), [0.1, 0.2, 0.3])],
+                knockback: vec![
+                    (EntityId(81), [0.1, 0.2, 0.3]),
+                    (EntityId(82), [0.3, 0.2, 0.1]),
+                ],
             }],
             ..Default::default()
         }),
@@ -393,13 +401,66 @@ async fn same_tick_dimension_switch_explicitly_closes_unprojected_knockback() {
         &mut viewers,
         &mut connections,
     );
-    assert_eq!(
-        closed.try_recv().unwrap(),
-        "dimension-switch-explosion-knockback"
+    assert!(matches!(
+        closed.try_recv(),
+        Err(tokio::sync::oneshot::error::TryRecvError::Empty)
+    ));
+    assert!(viewers.contains_key(&id));
+    assert!(connections.contains_key(&id));
+    assert!(server.connections.get(id).is_some());
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(1)
+        .build()
+        .unwrap();
+    publish_and_route(
+        &server,
+        &pool,
+        &mut viewers,
+        &output,
+        &mut crate::plan::ChunkPacketCache::new(),
+        &mut connections,
+    )
+    .await;
+    assert!(
+        received_impulses(&mut reliable_rx).await.is_empty(),
+        "old-world explosion crossed the dimension reset"
     );
-    assert!(!viewers.contains_key(&id));
-    assert!(!connections.contains_key(&id));
-    assert!(server.connections.get(id).is_none());
+    assert_eq!(
+        received_impulses(&mut other_rx).await,
+        vec![Some([0.3, 0.2, 0.1])]
+    );
+    // A later impulse in the new world still reaches the traveler.
+    let next = TickOutput {
+        tick: 3,
+        snapshot: Arc::new(WorldSnapshot {
+            tick: 3,
+            dimension: Dimension::Nether,
+            ..Default::default()
+        }),
+        changes: Arc::new(ChangeSet {
+            explosions: vec![ExplosionEvent {
+                center: [8.0, 64.0, 8.0],
+                radius: 4.0,
+                blocks: 1,
+                knockback: vec![(EntityId(81), [0.4, 0.5, 0.6])],
+            }],
+            ..Default::default()
+        }),
+        times: Default::default(),
+    };
+    publish_and_route(
+        &server,
+        &pool,
+        &mut viewers,
+        &next,
+        &mut crate::plan::ChunkPacketCache::new(),
+        &mut connections,
+    )
+    .await;
+    assert_eq!(
+        received_impulses(&mut reliable_rx).await,
+        vec![Some([0.4, 0.5, 0.6])]
+    );
     reliable_rx.close();
     server.hub.shutdown();
     std::fs::remove_dir_all(dir).unwrap();
