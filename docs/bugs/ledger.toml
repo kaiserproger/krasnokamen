@@ -6141,7 +6141,7 @@ regression = [
 ]
 repro_check = "ScreensVoiceStart/audio-red.log: original wrapper fails all three retained assertions; audio-endpoint-green.log passes after socket/registry ordering and fail-closed waits."
 failing_first = "reported"
-fix_commit = "patch:9658694306dc854d1b8284122c4745006a1c6e12440f68c160aeba3e23adde1b"
+fix_commit = "patch:5d744b47d4ed61e6b67f2f5692b2c5980017551b9c6cbcee180fc56d1c5981f5"
 
 [[bug]]
 id = "HARNESS-JAVA-PRIVATE-HOME-COLD-CACHE"
@@ -6154,7 +6154,7 @@ repro = "source"
 regression = ["python:tools.harness.test_loader_v2:LoaderV2Tests.test_client_launch_reuses_gradle_cache_despite_private_home"]
 repro_check = "ScreensVoiceStart/cache-red.log: original runtime has no GRADLE_USER_HOME in the child; unit-green.log passes after resolving the shared cache before launch, without changing the deadline or private HOME."
 failing_first = "reported"
-fix_commit = "patch:3dbbcf100f025ce386988349e2ffac065faa0fc2b718185597546e4897d3d63a"
+fix_commit = "patch:4f7f11a4626e69443db89cb3f05e9c09af82a2d1eacd397b2cda4742dc496445"
 
 [[bug]]
 id = "HARNESS-VOICE-PIN-ENDPOINT"
@@ -6170,7 +6170,7 @@ regression = [
 ]
 repro_check = "ScreensVoiceStart/endpoint-red.log fails with the old unscoped launcher; endpoint-green.log passes pinned screen/voice selection and conflicting-selector rejection."
 failing_first = "reported"
-fix_commit = "patch:77d413d418a6b5e268adc8dc53e7dc68590cda6bc99fadcb421c2fd6dfbcc3bc"
+fix_commit = "patch:c22e452d0ae4fa2c378a304e109d085df5845da59b9f738e36d62f2b1d4a67b5"
 
 [[bug]]
 id = "HARNESS-AUDIBLE-SINK-IGNORED"
@@ -6187,7 +6187,7 @@ regression = [
 ]
 repro_check = "ScreensVoiceStart/audible-red.log restores only unconditional null audio and muted options: null != pulse. audible-build-final-green.log passes with default-null isolation unchanged and verified private-graph-only audible mode."
 failing_first = "reported"
-fix_commit = "patch:2de35e50f2f5b7abf8bf82a0fb7dbf2dc10845cdc5aa8bcc3042ebbb666f0733"
+fix_commit = "patch:7c7db0298e641977e1e031b306582697fcaa361cc5661be902a4627f37e1df4b"
 
 [[bug]]
 id = "HARNESS-LOADER-SHARED-BUILD-DIR-RACE"
@@ -6202,7 +6202,7 @@ regression = [
   "python:tools.harness.test_java_launcher:ModdedLauncherTest.test_build_root_uses_owner_targets_or_portable_local_directory",
 ]
 repro_check = "ScreensVoiceStart/build-red.log fails without build-dir isolation. Real run 20261115T011838 still lost 26.3 classes with distinct outputs but shared Gradle executionHistory and Loom launch.cfg. project-cache-red.log fails before adding --project-cache-dir; project-cache-green.log covers endpoint-private history and outputs, plus owner targets and portable fallback. Existing outputs are not removed."
-fix_commit = "patch:ae29d7a30d5dcdf843a6b14b99a606cffddf9ead95ec269ed4730d16205eceed"
+fix_commit = "patch:94ce251608e4cb8d332ed8543764c21edc0614d9106b7574db7ff2d6e2cefab2"
 failing_first = "reported"
 
 [[bug]]

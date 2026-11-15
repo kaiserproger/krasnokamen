@@ -1,3 +1,4 @@
+diff --git a/tools/harness/runtime.py b/tools/harness/runtime.py
 --- a/tools/harness/runtime.py
 +++ b/tools/harness/runtime.py
 @@ -1025,7 +1025,7 @@
@@ -36,20 +37,3 @@
                      "-p",
                      str(loader_root),
                      f"-Pkrasnokamen.clientMcp.gameDir={game_dir}",
---- a/tools/harness/java_launcher.py
-+++ b/tools/harness/java_launcher.py
-@@ -194,11 +194,13 @@
-     game = artifact_dir / "prepared-game"
-     env = os.environ.copy()
-     env["GRADLE_USER_HOME"] = str(runtime.ensure_loader_gradle_home(agent_root).resolve())
-+    init = write_gradle_init(game, ":loader-fabric:runClientMcp", cap_heap=False)
-     env.update(KRASNOKAMEN_CLIENT_LAUNCH_MANIFEST=str(manifest),
-                KRASNOKAMEN_CLIENT_MCP_TOKEN="prepared-command-not-a-listening-token",
-                KRASNOKAMEN_CLIENT_MCP_PORT="26299")
-     command = [str(agent_root / "gradlew"), "--no-daemon", "--no-configuration-cache",
--               "--max-workers=2", "-p", str(agent_root),
-+               "--max-workers=2", "--init-script", str(init), "-p", str(agent_root),
-+               "--project-cache-dir", str(gradle_project_cache(agent_root, ":loader-fabric:runClientMcp")),
-                f"-Pkrasnokamen.clientMcp.gameDir={game}",
-                "-Pkrasnokamen.clientMcp.username=PreparedJava",
-                *modded_gradle_arguments(":loader-fabric:runClientMcp")]

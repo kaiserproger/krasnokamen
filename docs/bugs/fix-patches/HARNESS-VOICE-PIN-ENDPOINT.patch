@@ -1,3 +1,4 @@
+diff --git a/tools/harness/backends/screens_voice_qa.py b/tools/harness/backends/screens_voice_qa.py
 --- a/tools/harness/backends/screens_voice_qa.py
 +++ b/tools/harness/backends/screens_voice_qa.py
 @@ -176,7 +176,8 @@

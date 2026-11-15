@@ -1,3 +1,4 @@
+diff --git a/tools/harness/screen_audio_graph.sh b/tools/harness/screen_audio_graph.sh
 --- a/tools/harness/screen_audio_graph.sh
 +++ b/tools/harness/screen_audio_graph.sh
 @@ -31,31 +31,54 @@
