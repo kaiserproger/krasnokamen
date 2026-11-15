@@ -6680,3 +6680,15 @@ regression = ["cargo:mc-core:battle::steering::tests::boundary_clip_cannot_turn_
 fix_commit = "eccb06974"
 failing_first = "reported"
 repro_check = "IgnoredRepair/battle-boundary-negative.log fails at spacing 0.65 with boundary-clipped step [0,-0.03]. The API-only dc83d55b8 keeps that fault reproducible so reversing eccb06974's production hunk retains a compiling regression. battle-boundary-green-suite.log passes the foot/horse spacing cases, outside-knockback recovery and the ordinary battle suite; battle-boundary-green-native.log retains the original 3% foot/15% horse and >300 deaths limits through actual pursuit."
+
+[[bug]]
+id = "IMPORT-INVENTORY-SLOT-AMBIGUOUS"
+title = "Anvil import keeps a player whose inventory has a missing or repeated Slot, and the next save drops the extra items"
+area = "gameplay"
+severity = "major"
+status = "open"
+source = "Stage3 ReviewBattleGap (read-only review of the DFU import commit): crates/mc-data/src/player_nbt.rs:174-193 silently skips a stack without a valid Slot; crates/mc-core/src/journal/player_nbt.rs:316-325 writes stacks into the slot array in order, so two valid stacks with the same Slot keep only the last; crates/mc-world import.rs:723-777 accepts the player after that decode; the next serialization rebuilds Inventory from the array (journal/player_nbt.rs:47-59), losing the skipped or overwritten item"
+repro = "source"
+regression = []
+failing_first = "reported"
+repro_check = "Pre-existing custody gap, not introduced by 14f6f10a0. Intended behaviour: refuse ambiguous or unsupported inventory slots before any step that can collapse entries, with no partial import published; regressions import→load→save for a missing and a repeated Slot."
