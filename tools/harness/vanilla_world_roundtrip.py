@@ -126,11 +126,12 @@ def main():
         home.mkdir()
         shutil.copyfile(args.eula_file, home / "eula.txt")
         world = home / "world"
-        # The owner host's canonical runner; elsewhere Cargo runs directly.
-        runner = [str(MEM_RUN), "-m", "8G"] if MEM_RUN.exists() else []
+        # The owner host's canonical runner; elsewhere commands run directly.
+        def limited(memory):
+            return [str(MEM_RUN), "-m", memory] if MEM_RUN.exists() else []
 
         def v2(phase, native, anvil):
-            command = [*runner, "env", "CARGO_BUILD_JOBS=6",
+            command = [*limited("8G"), "env", "CARGO_BUILD_JOBS=6",
                        "CARGO_PROFILE_DEV_DEBUG=0", "CARGO_PROFILE_TEST_DEBUG=0",
                        f"KRASNOKAMEN_VANILLA_ROUNDTRIP_WORLD={native}", f"KRASNOKAMEN_VANILLA_ROUNDTRIP_PHASE={phase}",
                        f"KRASNOKAMEN_VANILLA_ROUNDTRIP_ANVIL={anvil}",
@@ -160,7 +161,7 @@ def main():
             "generate-structures=false\nspawn-protection=0\nenable-rcon=false\nenable-query=false\n")
         bootstrap_log = output / "java-bootstrap.log"
         receipt["logs"]["java_bootstrap"] = str(bootstrap_log)
-        server = subprocess.Popen([str(runner), "-m", "4G", args.java, "-Xms512M", "-Xmx2G", "-jar",
+        server = subprocess.Popen([*limited("4G"), args.java, "-Xms512M", "-Xmx2G", "-jar",
                                    str(args.jar.resolve()), "nogui"], cwd=bootstrap, stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
         bootstrap_lines = queue.Queue()
@@ -205,7 +206,7 @@ def main():
         vanilla_log = output / "vanilla.log"
         receipt["logs"]["vanilla"] = str(vanilla_log)
         lines = queue.Queue()
-        server = subprocess.Popen([str(runner), "-m", "4G", args.java, "-Xms512M", "-Xmx2G", "-jar",
+        server = subprocess.Popen([*limited("4G"), args.java, "-Xms512M", "-Xmx2G", "-jar",
                                    str(args.jar.resolve()), "nogui"], cwd=home, stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
