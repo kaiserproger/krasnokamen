@@ -1518,24 +1518,30 @@ class ReleasePinTests(unittest.TestCase):
         self.addCleanup(patch.stopall)
         patch.object(regressions, 'REPO_ROOT', self.root).start()
         patch.object(regressions, 'PINS', self.pins).start()
+        patch.object(regressions, '_host_target', return_value='x86_64-unknown-linux-gnu').start()
         patch.dict(os.environ, {'KRASNOKAMEN_SERVER_BINARY': '', 'KRASNOKAMEN_LEDGER_ROOT': ''}).start()
         self.build = patch.object(profiles, '_run_command',
                                   side_effect=AssertionError('must never build a release server')).start()
 
-    def pin(self, *, register=True):
-        directory = self.pins / 'candidate-server'
+    def pin(self, *, register=True, name='candidate-server', binary_name='krasnokamen',
+            target='x86_64-unknown-linux-gnu', drop=()):
+        directory = self.pins / name
         directory.mkdir()
-        binary = directory / 'krasnokamen'
-        binary.write_bytes(b'candidate')
+        binary = directory / binary_name
+        binary.write_bytes(f'candidate {target}'.encode())
         binary.chmod(0o555)
         digest = hashlib.sha256(binary.read_bytes()).hexdigest()
-        (directory / 'manifest.json').write_text(json.dumps({
-            'repo': 'core', 'kind': 'server', 'head': self.fingerprint['head'],
+        manifest = {
+            'repo': 'core', 'kind': 'server', 'head': self.fingerprint['head'], 'target': target,
+            'diff_sha256': 'e' * 64, 'inputs_sha256': 'i' * 64, 'env_deps': {},
             'binary': str(binary), 'binary_sha256': digest,
-        }))
+        }
+        for key in drop:
+            del manifest[key]
+        (directory / 'manifest.json').write_text(json.dumps(manifest))
         if register:
             registry = self.root / '.analysis/ledger-builds'
-            registry.mkdir(parents=True)
+            registry.mkdir(parents=True, exist_ok=True)
             (registry / f'{digest}.json').write_text(json.dumps({
                 'sha256': digest,
                 'tree': {key: self.fingerprint[key] for key in ('head', 'sha256')},
@@ -1547,13 +1553,35 @@ class ReleasePinTests(unittest.TestCase):
         self.assertEqual(regressions._release_server(self.ctx, profiles), binary)
         self.build.assert_not_called()
         evidence = self.ctx.client_evidence['regressions_server']
-        self.assertEqual(evidence['sha256'], hashlib.sha256(b'candidate').hexdigest())
+        self.assertEqual(evidence['sha256'], hashlib.sha256(b'candidate x86_64-unknown-linux-gnu').hexdigest())
         self.assertEqual(evidence['tree'], self.fingerprint)
 
     def test_explicit_pin_is_accepted_for_its_registered_tree(self):
         binary = self.pin()
         with patch.dict(os.environ, {'KRASNOKAMEN_SERVER_BINARY': str(binary)}):
             self.assertEqual(regressions._release_server(self.ctx, profiles), binary)
+        self.build.assert_not_called()
+
+    def test_pin_for_another_target_of_the_same_tree_is_never_selected(self):
+        # Sorted discovery meets the Windows pin of the same tree first ('pc' < 'unknown').
+        self.pin(name='a-server-x86_64-pc-windows-gnu', binary_name='krasnokamen.exe', target='x86_64-pc-windows-gnu')
+        linux = self.pin(name='b-server-x86_64-unknown-linux-gnu')
+        self.assertEqual(regressions._release_server(self.ctx, profiles), linux)
+
+    def test_explicit_pin_for_another_target_is_refused(self):
+        windows = self.pin(binary_name='krasnokamen.exe', target='x86_64-pc-windows-gnu')
+        with patch.dict(os.environ, {'KRASNOKAMEN_SERVER_BINARY': str(windows)}):
+            with self.assertRaisesRegex(RuntimeError, "target 'x86_64-pc-windows-gnu', not this host"):
+                regressions._release_server(self.ctx, profiles)
+        self.build.assert_not_called()
+
+    def test_pin_without_build_provenance_is_refused(self):
+        for key in ('diff_sha256', 'inputs_sha256', 'env_deps'):
+            with self.subTest(missing=key):
+                binary = self.pin(name=f'pin-without-{key}', drop=(key,))
+                with patch.dict(os.environ, {'KRASNOKAMEN_SERVER_BINARY': str(binary)}):
+                    with self.assertRaisesRegex(RuntimeError, f'records no build provenance \\({key}\\)'):
+                        regressions._release_server(self.ctx, profiles)
         self.build.assert_not_called()
 
     def test_pin_of_another_tree_is_refused(self):

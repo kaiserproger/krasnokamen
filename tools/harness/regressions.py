@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import shutil
 import shlex
+import subprocess
 import sys
 import tomllib
 
@@ -293,6 +294,15 @@ def tree_build_command(tree, argv):
     return [str(MEM_RUN), '-m', '12G', *argv], env
 
 
+def _host_target():
+    """The rustc host triple, the target pin-release builds by default."""
+    version = subprocess.run(['rustc', '-vV'], check=True, capture_output=True, text=True).stdout
+    for line in version.splitlines():
+        if line.startswith('host: '):
+            return line.removeprefix('host: ').strip()
+    raise RuntimeError('rustc did not report its host target')
+
+
 def _release_server(ctx, profiles, tree=None):
     """Select a registered pin of the exact tree; never build or relabel a server."""
     from . import ledger
@@ -302,6 +312,7 @@ def _release_server(ctx, profiles, tree=None):
     registry = Path(os.environ.get('KRASNOKAMEN_LEDGER_ROOT') or built) / '.analysis/ledger-builds'
     command = shlex.join([str(MEM_RUN.with_name('pin-release')), str(built)])
     explicit = os.environ.get('KRASNOKAMEN_SERVER_BINARY')
+    host = _host_target()
     manifests = ([Path(explicit).expanduser().resolve().parent / 'manifest.json'] if explicit
                  else sorted(PINS.glob('*/manifest.json')))
     reason = 'no registered pin-release server for this tree'
@@ -314,6 +325,12 @@ def _release_server(ctx, profiles, tree=None):
                     or binary.parent != manifest.parent.resolve()
                     or (explicit and binary != Path(explicit).expanduser().resolve())):
                 raise ValueError(f'{manifest} does not pin the requested server')
+            if info.get('target') != host:
+                raise ValueError(f'{manifest} pins target {info.get("target")!r}, not this host {host!r}')
+            # The same provenance fence pin-release applies before reusing a pin.
+            missing = [key for key in ('head', 'diff_sha256', 'inputs_sha256', 'env_deps') if info.get(key) is None]
+            if missing:
+                raise ValueError(f'{manifest} records no build provenance ({", ".join(missing)})')
             registration = json.loads((registry / f'{digest}.json').read_text())
             if (info.get('head') != fingerprint['head'] or registration.get('sha256') != digest
                     or registration.get('tree') != {key: fingerprint[key] for key in ('head', 'sha256')}):
