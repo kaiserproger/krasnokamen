@@ -337,6 +337,12 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                              and all(isinstance(item, str) and bool(item) for item in value[key])
                              for key in ("contains", "excludes"))
                      and bool(value["contains"]))
+        elif kind == "assert_player_sleeping":
+            valid = (client == "native" and isinstance(value, dict)
+                     and set(value) == {"name", "sleeping"}
+                     and isinstance(value["name"], str)
+                     and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
+                     and type(value["sleeping"]) is bool)
         elif kind == "cmd":
             valid = isinstance(value, str) and bool(value) and not value.startswith("/")
         elif kind == "upgrade_certified":
@@ -440,7 +446,7 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
         elif kind == "assert_entities":
             valid = (client == "native" and isinstance(value, dict)
                      and set(value) <= {"name", "args", "entity_type", "box", "min", "max",
-                                        "max_height", "profession", "baby"}
+                                        "max_height", "profession", "baby", "sleeping"}
                      and {"name", "args", "entity_type", "min"} <= set(value)
                      and isinstance(value["name"], str)
                      and re.fullmatch(r"[A-Za-z0-9_-]+", value["name"])
@@ -452,6 +458,7 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
                      and type(value.get("max_height", 0)) in (int, float)
                      and value.get("profession", "farmer") in PROFESSIONS
                      and type(value.get("baby", True)) is bool
+                     and type(value.get("sleeping", True)) is bool
                      and ("box" not in value
                           or (isinstance(value["box"], list) and len(value["box"]) == 6
                               and all(type(n) in (int, float) and math.isfinite(n)
@@ -494,6 +501,15 @@ def validate_steps(steps: list[dict[str, Any]], client: str) -> None:
 PROFESSIONS = ("none", "armorer", "butcher", "cartographer", "cleric", "farmer", "fisherman",
                "fletcher", "leatherworker", "librarian", "mason", "nitwit", "shepherd",
                "toolsmith", "weaponsmith")
+
+
+def received_sleeping(metadata: dict[str, Any]) -> bool:
+    """Read the wire pose, never a locally predicted pose or a missing default."""
+    pose = metadata.get("6")
+    if (not isinstance(pose, dict) or pose.get("kind") != "pose"
+            or type(pose.get("value")) is not int):
+        raise RuntimeError("received metadata omitted entity pose")
+    return pose["value"] == 2
 
 
 PIXEL_FRAME = (1280, 720)
@@ -561,6 +577,8 @@ def matching_entities(entities: list[dict[str, Any]], spec: dict[str, Any]) -> l
             if float(bounds.get("max_y", 0)) - float(bounds.get("min_y", 0)) > spec["max_height"]:
                 continue
         if "baby" in spec and row.get("received_baby") is not spec["baby"]:
+            continue
+        if "sleeping" in spec and received_sleeping(row.get("received_metadata") or {}) is not spec["sleeping"]:
             continue
         if "profession" in spec:
             data = ((row.get("received_metadata") or {}).get("19") or {}).get("value")
@@ -643,6 +661,14 @@ def execute(probe: ProbeSteps, artifact: Path, steps: list[dict[str, Any]], clie
                 probe.check(f"{value['name']}_contains_{index}", any(text in line for line in lines))
             for index, text in enumerate(value["excludes"]):
                 probe.check(f"{value['name']}_excludes_{index}", not any(text in line for line in lines))
+        elif kind == "assert_player_sleeping":
+            state = probe.observe()
+            metadata = (state.get("player") or {}).get("received_metadata")
+            if not isinstance(metadata, dict):
+                raise RuntimeError("client observation omitted received player metadata")
+            sleeping = received_sleeping(metadata)
+            (artifact / f"{value['name']}.json").write_text(json.dumps(state, indent=2) + "\n")
+            probe.check(value["name"], sleeping is value["sleeping"])
         elif kind == "use_phases":
             name = value["name"]
             before = probe.observe()
@@ -1404,6 +1430,9 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-village-mob-doors": "village_mob_doors_scene.json",
         "native-village-after-hours-job": "village_after_hours_job_scene.json",
         "native-village-breeding": "village_breeding_scene.json",
+        "native-village-moved-workstation": "village_moved_workstation_scene.json",
+        "native-village-occupied-bed": "village_occupied_bed_scene.json",
+        "native-village-open-air-home": "village_open_air_home_scene.json",
         "native-settlement-radius-growth": "settlement_radius_scene.json",
         "native-settlement-buildings-upgrade": "settlement_buildings_scene.json",
         "issue1-01-villager-leg": "issue1_01_villager_leg_scene.json",

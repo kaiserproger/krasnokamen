@@ -1,0 +1,195 @@
+{
+  "seed": 100,
+  "server_view_distance": 6,
+  "steps": [
+    {
+      "wait_play": true
+    },
+    {
+      "cmd": "gamemode creative"
+    },
+    {
+      "tp": [
+        1000.5,
+        205,
+        1000.5,
+        0,
+        30
+      ]
+    },
+    {
+      "wait_ticks": 100
+    },
+    {
+      "cmd": "gamerule advance_time false"
+    },
+    {
+      "cmd": "gamerule spawn_mobs false"
+    },
+    {
+      "cmd": "gamerule random_tick_speed 0"
+    },
+    {
+      "cmd": "time set 18000"
+    },
+    {
+      "cmd": "fill 976 198 976 1040 199 1040 minecraft:stone"
+    },
+    {
+      "cmd": "fill 976 200 976 1040 206 1040 minecraft:air"
+    },
+    {
+      "cmd": "fill 1000 199 1000 1004 203 1004 minecraft:glass"
+    },
+    {
+      "cmd": "fill 1001 200 1001 1003 202 1003 minecraft:air"
+    },
+    {
+      "cmd": "setblock 1004 200 1002 minecraft:oak_door[facing=west,half=lower,hinge=left,open=false]"
+    },
+    {
+      "cmd": "setblock 1004 201 1002 minecraft:oak_door[facing=west,half=upper,hinge=left,open=false]"
+    },
+    {
+      "cmd": "setblock 1001 200 1001 minecraft:red_bed[facing=east,part=foot,occupied=false]"
+    },
+    {
+      "cmd": "setblock 1002 200 1001 minecraft:red_bed[facing=east,part=head,occupied=false]"
+    },
+    {
+      "cmd": "gamerule players_sleeping_percentage 101"
+    },
+    {
+      "tp": [
+        1001.5,
+        200,
+        1003.5,
+        180,
+        35
+      ]
+    },
+    {
+      "wait_ticks": 10
+    },
+    {
+      "key": {
+        "keys": [
+          "use"
+        ],
+        "ticks": 1
+      }
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "assert_player_sleeping": {
+        "name": "vacant_bed_sleeps_player",
+        "sleeping": true
+      }
+    },
+    {
+      "cmd": "time set 3000"
+    },
+    {
+      "wait_ticks": 20
+    },
+    {
+      "assert_player_sleeping": {
+        "name": "day_wakes_player",
+        "sleeping": false
+      }
+    },
+    {
+      "cmd": "summon minecraft:villager 1003.5 200 1001.5"
+    },
+    {
+      "cmd": "time set 18000"
+    },
+    {
+      "tp": [
+        1001.5,
+        200,
+        1003.5,
+        180,
+        35
+      ]
+    },
+    {
+      "wait_ticks": 800
+    },
+    {
+      "assert_entities": {
+        "name": "villager_occupies_bed",
+        "args": {
+          "radius": 64,
+          "limit": 128
+        },
+        "entity_type": "minecraft:villager",
+        "min": 1,
+        "max": 1,
+        "sleeping": true,
+        "box": [
+          1001,
+          199,
+          1000,
+          1003,
+          201,
+          1002
+        ]
+      }
+    },
+    {
+      "shot": "occupied-before"
+    },
+    {
+      "key": {
+        "keys": [
+          "use"
+        ],
+        "ticks": 1
+      }
+    },
+    {
+      "wait_ticks": 5
+    },
+    {
+      "assert_player_sleeping": {
+        "name": "occupied_bed_does_not_sleep_player",
+        "sleeping": false
+      }
+    },
+    {
+      "assert_entities": {
+        "name": "occupied_bed_wakes_villager",
+        "args": {
+          "radius": 64,
+          "limit": 128
+        },
+        "entity_type": "minecraft:villager",
+        "min": 1,
+        "max": 1,
+        "sleeping": false
+      }
+    },
+    {
+      "shot": "occupied-after"
+    },
+    {
+      "wait_ticks": 120
+    },
+    {
+      "assert_entities": {
+        "name": "villager_returns_after_cooldown",
+        "args": {
+          "radius": 64,
+          "limit": 128
+        },
+        "entity_type": "minecraft:villager",
+        "min": 1,
+        "max": 1,
+        "sleeping": true
+      }
+    }
+  ]
+}

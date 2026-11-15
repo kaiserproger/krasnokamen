@@ -484,6 +484,27 @@ house whose roof sits one block over its three beds, raise a baby villager the c
 within 3000 game ticks; the fix patch of `ISSUE-1-13` is the headroom-free spare-bed scan).
 Each runs on a sky platform with spawning and time frozen; none covers terrain routes.
 
+Three additional claim gates cover the BreakIssue1x11 findings:
+`native-village-moved-workstation` removes a certified composter, observes the
+novice lose its profession, replaces it two blocks over and requires the received
+farmer profession again. `native-village-open-air-home` queries the existing
+read-only `/data get entity ... Brain.memories."minecraft:home"` path through
+`execute store success`: the bound resident initially has no outdoor claim,
+the later unbound villager claims and sleeps in that bed, then the resident
+claims and sleeps in a newly roofed bed. No second brain authority is added.
+`native-village-occupied-bed` presses `use` for one tick on the same bed/ray
+first vacant (positive sleeping control), then occupied: only the villager wakes,
+and it later returns after its wake cooldown. This matches the
+[Bed sleeping reference](https://minecraft.wiki/w/Bed#Sleeping): the villager
+is kicked out before the player can enter on a subsequent use.
+
+`assert_player_sleeping` takes `{"name": "<assertion>", "sleeping": true|false}`.
+It reads `player.received_metadata` from the native client, never the predicted
+`player.pose`: wire pose index 6 must be present with `kind=pose`, and sleeping
+is pose 2. Missing metadata is an error, not an awake default.
+`assert_entities` also accepts `sleeping` with the same received-pose rule,
+so the occupied-bed gate proves both the wake and the player's non-sleep.
+
 `upgrade_certified` (native only) takes `{"kind": "<building kind>", "level": 2|3}`:
 it waits for the newest `Certified <kind> #<id>` reply in `recent_chat`, sends
 `settlement building upgrade <id>` (a building id is a settlement and sequence
