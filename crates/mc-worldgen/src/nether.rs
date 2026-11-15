@@ -4,7 +4,9 @@
 use mc_data::Identifier;
 use mc_world::{BlockRegistry, BlockStateId, Chunk, ChunkGenerator, ChunkGeometry, ChunkPos};
 
+mod jigsaw;
 mod landscape;
+mod moog_jigsaw;
 mod ores;
 mod structures;
 use std::sync::Arc;
@@ -36,6 +38,7 @@ pub struct NetherGenerator {
     palette: landscape::Palette,
     ores: Vec<ores::OrePass>,
     structures: Option<structures::NetherStructures>,
+    jigsaw_sources: Vec<Arc<crate::village::plan_source::VillagePlanSource>>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -72,6 +75,7 @@ impl NetherGenerator {
             registry,
             ores: Vec::new(),
             structures: None,
+            jigsaw_sources: Vec::new(),
         })
     }
 
@@ -138,14 +142,61 @@ impl ChunkGenerator for NetherGenerator {
         Some(self.biomes[self.biome_index(world_x, world_z)].clone())
     }
 
+    fn structure_candidates_in_ring(
+        &self,
+        targets: &[Identifier],
+        centre_chunk: (i32, i32),
+        ring: u32,
+    ) -> Vec<ChunkPos> {
+        let mut candidates = self
+            .structures
+            .as_ref()
+            .map_or_else(Vec::new, |structures| {
+                structures.candidates_in_ring(self, targets, centre_chunk, ring)
+            });
+        for source in &self.jigsaw_sources {
+            candidates.extend(source.structure_candidates_in_ring(targets, centre_chunk, ring));
+        }
+        candidates.sort_unstable_by_key(|pos| (pos.x, pos.z));
+        candidates.dedup();
+        candidates
+    }
+
+    fn structure_sites_at(
+        &self,
+        targets: &[Identifier],
+        start_chunk: ChunkPos,
+    ) -> Vec<mc_world::chunk::GeneratedStructureSite> {
+        let point = (start_chunk.x, start_chunk.z);
+        let mut sites = self
+            .structures
+            .as_ref()
+            .map_or_else(Vec::new, |structures| {
+                structures.sites(self, point, point, Some(targets))
+            });
+        let query = moog_jigsaw::NetherMoogQuery { generator: self };
+        let biome = |x, y, z| query.biome_at(x, y, z);
+        for source in &self.jigsaw_sources {
+            sites.extend(source.structure_sites_at(targets, start_chunk, &query, &biome));
+        }
+        sites.sort_by(|a, b| a.structure.cmp(&b.structure));
+        sites
+    }
+
     fn structure_sites_in_region(
         &self,
         min: (i32, i32),
         max: (i32, i32),
     ) -> Vec<mc_world::chunk::GeneratedStructureSite> {
-        self.structures
+        let mut sites = self
+            .structures
             .as_ref()
-            .map_or_else(Vec::new, |structures| structures.sites(self, min, max))
+            .map_or_else(Vec::new, |structures| {
+                structures.sites(self, min, max, None)
+            });
+        sites.extend(self.jigsaw_sites(min, max));
+        sites.sort_by(|a, b| (a.start_chunk, &a.structure).cmp(&(b.start_chunk, &b.structure)));
+        sites
     }
 
     fn generate(&self, pos: ChunkPos) -> Chunk {
@@ -157,6 +208,7 @@ impl ChunkGenerator for NetherGenerator {
         if let Some(structures) = &self.structures {
             structures.write(self, &mut chunk);
         }
+        self.write_jigsaws(&mut chunk);
         chunk.status = "minecraft:full".into();
         chunk.mark_dirty();
         chunk

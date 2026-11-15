@@ -16,6 +16,12 @@ pub trait HeightQuery {
     fn sea_level(&self) -> Option<i32> {
         None
     }
+
+    /// Occupied ground in `[min_y, max_y)`, excluding the Nether roof/sea.
+    /// Unavailable or absent land rejects the start, rather than inventing a floor.
+    fn highest_land(&self, _x: i32, _z: i32, _min_y: i32, _max_y: i32) -> Option<i32> {
+        None
+    }
 }
 
 impl<F: Fn(i32, i32) -> i32> HeightQuery for F {

@@ -455,6 +455,20 @@ fn overworld_terrain_from(
             )
             .map_err(|error| CoreError::Worldgen(error.to_string()))?,
         );
+        if let Some(inputs) = inputs {
+            for structure in &closure.structures {
+                if inputs
+                    .biome_tags
+                    .structure_dimension(&structure.spec)
+                    .map_err(CoreError::Worldgen)?
+                    != crate::dimensions::Dimension::Overworld
+                {
+                    return Err(CoreError::Worldgen(
+                        "overworld village set contains Nether biomes".into(),
+                    ));
+                }
+            }
+        }
         let decor = Arc::new(
             mc_worldgen::village::VillageDecor::compile(
                 vanilla_data_dir,
@@ -481,7 +495,12 @@ fn overworld_terrain_from(
             .map(|set| mc_data::Identifier::parse(format!("minecraft:{set}")).expect("static set"))
             .collect();
         if let Some(inputs) = inputs {
-            for set in &inputs.structure_sets {
+            for set in inputs
+                .structure_sets
+                .get(&crate::dimensions::Dimension::Overworld)
+                .into_iter()
+                .flatten()
+            {
                 if set.as_str() != "minecraft:villages" && !sets.contains(set) {
                     sets.push(set.clone());
                 }
@@ -498,10 +517,16 @@ fn overworld_terrain_from(
             );
             if let Some(inputs) = inputs {
                 for structure in &closure.structures {
-                    inputs
+                    if inputs
                         .biome_tags
-                        .validate_overworld(&structure.spec.biomes)
-                        .map_err(CoreError::Worldgen)?;
+                        .structure_dimension(&structure.spec)
+                        .map_err(CoreError::Worldgen)?
+                        != crate::dimensions::Dimension::Overworld
+                    {
+                        return Err(CoreError::Worldgen(
+                            "overworld structure set contains Nether biomes".into(),
+                        ));
+                    }
                 }
             }
             let decor = Arc::new(
@@ -543,6 +568,7 @@ fn overworld_terrain_from(
 pub(crate) fn nether_terrain(
     config: &CoreConfig,
     registry: &CoreRegistry,
+    inputs: Option<&crate::datapacks::worldgen::Inputs>,
 ) -> Result<mc_worldgen::NetherGenerator, CoreError> {
     let mut terrain =
         mc_worldgen::NetherGenerator::try_new(config.seed, Arc::clone(&registry.blocks))
@@ -559,6 +585,48 @@ pub(crate) fn nether_terrain(
                 ),
             )
             .map_err(CoreError::Worldgen)?;
+    }
+    if let Some(inputs) = inputs
+        && let Some(root) = inputs.root()
+        && let Some(sets) = inputs
+            .structure_sets
+            .get(&crate::dimensions::Dimension::Nether)
+    {
+        let tags = registry
+            .worldgen_tags
+            .as_ref()
+            .expect("full vanilla registry has worldgen tags");
+        for set in sets {
+            let mut closure =
+                mc_worldgen::village::load_village_closure(root, set, &registry.blocks)
+                    .map_err(|e| CoreError::Worldgen(e.to_string()))?;
+            closure.dimension_bounds = (
+                mc_worldgen::nether::NETHER_MIN_Y,
+                mc_worldgen::nether::NETHER_CEILING_Y + 1,
+            );
+            let closure = Arc::new(closure);
+            let decor = Arc::new(
+                mc_worldgen::village::VillageDecor::compile(
+                    root,
+                    &closure,
+                    &mc_worldgen::vanilla_features::BlockSemantics::new(
+                        &registry.blocks,
+                        tags.as_ref(),
+                    ),
+                )
+                .map_err(|e| CoreError::Worldgen(e.to_string()))?,
+            );
+            let source = mc_worldgen::village::plan_source::VillagePlanSource::new(
+                closure,
+                decor,
+                config.seed,
+                Arc::clone(&registry.blocks),
+                tags.clone(),
+                inputs.biome_tags.clone(),
+            )
+            .map_err(|e| CoreError::Worldgen(e.to_string()))?;
+            terrain = terrain.with_jigsaw_source(Arc::new(source));
+        }
     }
     Ok(terrain)
 }

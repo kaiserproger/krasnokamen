@@ -397,6 +397,8 @@ fn assemble_structure(
     gate: &BiomeGate<'_>,
     free_height: &dyn HeightQuery,
 ) -> Option<VillageAssembly> {
+    let is_nether =
+        mc_data::worldgen_structure_types::is_moog_nether(&structure.spec.structure_type);
     if let Some(checks) = structure.spec.moog_start_checks {
         let heightmap = structure
             .spec
@@ -407,7 +409,11 @@ fn assemble_structure(
             chunk_z,
             checks.cannot_spawn_in_liquid,
             checks.terrain_check,
-            (checks.min_y, checks.max_y),
+            if is_nether {
+                (None, None)
+            } else {
+                (checks.min_y, checks.max_y)
+            },
             &|x, z| projected_height(free_height, heightmap, x, z),
             &|x, z| free_height.top_is_liquid(x, z),
         ) {
@@ -421,7 +427,7 @@ fn assemble_structure(
                 closure.dimension_bounds.1,
                 &mut random,
             );
-            if structure.spec.project_start_to_heightmap.is_some() {
+            if !is_nether && structure.spec.project_start_to_heightmap.is_some() {
                 let x = chunk_x.checked_mul(16)?.checked_add(7)?;
                 let z = chunk_z.checked_mul(16)?.checked_add(7)?;
                 y = y.checked_add(projected_height(free_height, heightmap, x, z)? - 1)?;
@@ -463,7 +469,16 @@ fn assemble_structure(
     );
     if let Some(checks) = structure.spec.moog_start_checks {
         center_moog_layout(&mut assembly, chunk_x, chunk_z);
-        if checks.average_land {
+        if is_nether {
+            super::moog_nether::place_on_land(
+                &mut assembly,
+                &structure.spec,
+                checks,
+                start_height,
+                closure.dimension_bounds,
+                free_height,
+            )?;
+        } else if checks.average_land {
             bury_moog_average(
                 &mut assembly,
                 &structure.spec,
@@ -583,6 +598,7 @@ fn plan_start(
     aliases: &BTreeMap<Identifier, Identifier>,
 ) -> Option<(VillageAssembly, LegacyRandom, i32)> {
     let spec = &structure.spec;
+    let is_nether = mc_data::worldgen_structure_types::is_moog_nether(&spec.structure_type);
     let mut random = LegacyRandom::new(set_large_feature_seed(seed, chunk_x, chunk_z));
     let height = sample_start_height(
         spec.start_height,
@@ -596,7 +612,8 @@ fn plan_start(
     if matches!(center_element, PlacedElement::Empty) {
         return None;
     }
-    let origin = start_origin(chunk_x, chunk_z, height, 0);
+    // Nether samples occupied land only after the complete layout is grown.
+    let origin = start_origin(chunk_x, chunk_z, if is_nether { 0 } else { height }, 0);
     let anchored = anchor_origin(
         closure,
         &center_element,
@@ -611,14 +628,17 @@ fn plan_start(
     // `StructurePoolElement.getGroundLevelDelta` is 1 for every element kind the
     // village closure reaches.
     let ground_level_delta = 1;
-    let bottom_y = if let Some(heightmap) = spec.project_start_to_heightmap {
+    let bottom_y = if is_nether {
+        anchored.y.checked_add(ground_level_delta)?
+    } else if let Some(heightmap) = spec.project_start_to_heightmap {
         let center_x = (center_max.x + center_min.x) / 2;
         let center_z = (center_max.z + center_min.z) / 2;
         origin.y + projected_height(free_height, heightmap, center_x, center_z)?
     } else {
         anchored.y
     };
-    if spec.project_start_to_heightmap.is_some()
+    if !is_nether
+        && spec.project_start_to_heightmap.is_some()
         && let Some(checks) = spec.moog_start_checks
         && (checks.min_y.is_some_and(|min| bottom_y < min)
             || checks.max_y.is_some_and(|max| bottom_y > max))

@@ -1020,7 +1020,7 @@ pub fn generator(
             }
             Arc::new(terrain)
         }
-        Dimension::Nether => Arc::new(crate::core::nether_terrain(config, registry)?),
+        Dimension::Nether => Arc::new(crate::core::nether_terrain(config, registry, None)?),
         Dimension::End => Arc::new(crate::core::end_terrain(config, registry)?),
     })
 }

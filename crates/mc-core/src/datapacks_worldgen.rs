@@ -3,6 +3,9 @@ use super::{BTreeMap, BTreeSet, Filter, PackSet, Path, PathBuf, Selection};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
+#[path = "datapacks_worldgen_dimensions.rs"]
+mod dimensions;
+
 const MAX_CACHE_FILES: usize = 131_072;
 const MAX_CACHE_BYTES: usize = 256 * 1024 * 1024;
 const STAGE: &str = ".krasnokamen-worldgen";
@@ -439,7 +442,8 @@ impl PackSet {
             identity,
             sources,
             biome_tags,
-            structure_sets,
+            unrouted_structure_sets: structure_sets,
+            structure_sets: BTreeMap::new(),
             validation,
             catalog,
             structure_owners,
@@ -468,7 +472,8 @@ pub(crate) struct Inputs {
     base_root: Option<PathBuf>,
     pub(crate) identity: String,
     pub(crate) biome_tags: Arc<BiomeTags>,
-    pub(crate) structure_sets: Vec<mc_data::Identifier>,
+    unrouted_structure_sets: Vec<mc_data::Identifier>,
+    pub(crate) structure_sets: BTreeMap<crate::dimensions::Dimension, Vec<mc_data::Identifier>>,
     sources: BTreeMap<String, String>,
     validation: Vec<String>,
     catalog: BTreeSet<mc_data::Identifier>,
@@ -482,15 +487,20 @@ impl Inputs {
             .or(self.base_root.as_deref())
     }
 
-    pub(crate) fn validate(&self, registry: &crate::registry::CoreRegistry) -> Result<(), String> {
+    pub(crate) fn validate(
+        &mut self,
+        registry: &crate::registry::CoreRegistry,
+    ) -> Result<(), String> {
+        let selected_sets = std::mem::take(&mut self.unrouted_structure_sets);
         let Some(root) = self.root() else {
             return Ok(());
         };
         let loader =
             mc_data::village_data::VillageDataLoader::new(root.join("data/minecraft/worldgen"));
+        let mut structure_dimensions = BTreeMap::new();
         for path in &self.validation {
             let (namespace, tail) = path.split_once('/').ok_or("Missing resource namespace")?;
-            let validate = || -> Result<(), String> {
+            let mut validate = || -> Result<(), String> {
                 if tail.starts_with("structure/") {
                     mc_worldgen::structures::StructureTemplate::from_nbt_file(
                         root.join("data").join(path),
@@ -513,7 +523,8 @@ impl Inputs {
                         "structure" => {
                             let structure =
                                 loader.load_structure(&id).map_err(|e| e.to_string())?;
-                            self.biome_tags.validate_overworld(&structure.biomes)?;
+                            structure_dimensions
+                                .insert(id, self.biome_tags.structure_dimension(&structure)?);
                         }
                         "template_pool" => {
                             loader.load_template_pool(&id).map_err(|e| e.to_string())?;
@@ -527,6 +538,14 @@ impl Inputs {
                 Ok(())
             };
             validate().map_err(|e| format!("Selected datapack resource {path}: {e}"))?;
+        }
+        if !selected_sets.is_empty() {
+            self.structure_sets = dimensions::route_sets(
+                root,
+                &self.biome_tags,
+                selected_sets,
+                structure_dimensions,
+            )?;
         }
         Ok(())
     }
@@ -751,44 +770,6 @@ impl BiomeTags {
         }
         Ok(Self(result))
     }
-
-    pub(crate) fn validate_overworld(
-        &self,
-        biomes: &mc_data::village_data::BiomeSet,
-    ) -> Result<(), String> {
-        use mc_data::village_data::BiomeSet;
-        let values: Vec<_> = match biomes {
-            BiomeSet::Tag(id) => self
-                .0
-                .get(id)
-                .ok_or_else(|| format!("Missing structure biome tag {id}"))?
-                .iter()
-                .collect(),
-            BiomeSet::Biomes(values) => values.iter().collect(),
-        };
-        for biome in values {
-            if biome.namespace() == "minecraft"
-                && matches!(
-                    biome.path(),
-                    "nether_wastes"
-                        | "warped_forest"
-                        | "crimson_forest"
-                        | "soul_sand_valley"
-                        | "basalt_deltas"
-                        | "the_end"
-                        | "end_highlands"
-                        | "end_midlands"
-                        | "small_end_islands"
-                        | "end_barrens"
-                )
-            {
-                return Err(format!(
-                    "Datapack jigsaw biome {biome} requires a Nether/End jigsaw consumer"
-                ));
-            }
-        }
-        Ok(())
-    }
 }
 impl mc_worldgen::vanilla_features::BiomeTagIndex for BiomeTags {
     fn biome_in_tag(&self, tag: &mc_data::Identifier, biome: &mc_data::Identifier) -> bool {
@@ -811,3 +792,7 @@ pub(crate) fn selection(
 #[cfg(test)]
 #[path = "datapacks_worldgen_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "datapacks_worldgen_nether_tests.rs"]
+mod nether_tests;

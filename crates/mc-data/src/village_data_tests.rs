@@ -63,6 +63,67 @@ fn moog_start_rules_parse_and_layout_is_admitted() {
 }
 
 #[test]
+fn moog_nether_admits_only_implemented_land_search() {
+    let mut value = serde_json::json!({
+        "type": "moogs_structures:moogs_structures_generic_nether_jigsaw_structure",
+        "start_pool": "mvs:well/start", "size": 1,
+        "land_search_direction": "HIGHEST_LAND",
+        "project_start_to_heightmap": "WORLD_SURFACE_WG",
+        "biomes": "#c:is_nether", "step": "surface_structures",
+        "terrain_adaptation": "beard_thin", "start_height": {"absolute":0},
+        "spawn_overrides": {}
+    });
+    let id = identifier("mvs:nether_well");
+    assert!(parse_structure(&id, &value).is_ok());
+    for direction in ["LOWEST_LAND", "FIXED_HEIGHT", "unknown"] {
+        value["land_search_direction"] = serde_json::json!(direction);
+        assert_eq!(
+            parse_structure(&id, &value).unwrap_err().to_string(),
+            "structure mvs:nether_well has invalid value for land_search_direction: only HIGHEST_LAND is supported"
+        );
+    }
+    value
+        .as_object_mut()
+        .unwrap()
+        .remove("land_search_direction");
+    assert!(parse_structure(&id, &value).is_err());
+}
+
+#[test]
+fn nether_set_discovery_does_not_parse_unrelated_placement_codecs() {
+    let root = tempfile::tempdir().unwrap();
+    for (path, value) in [
+        (
+            "data/minecraft/worldgen/structure_set/strongholds.json",
+            serde_json::json!({"structures":[{"structure":"minecraft:stronghold","weight":1}],
+                "placement":{"type":"minecraft:concentric_rings"}}),
+        ),
+        (
+            "data/minecraft/worldgen/structure/stronghold.json",
+            serde_json::json!({"type":"minecraft:stronghold"}),
+        ),
+        (
+            "data/mvs/worldgen/structure_set/well.json",
+            serde_json::json!({"structures":[{"structure":"mvs:well","weight":1}],
+                "placement":{"type":"minecraft:random_spread","spacing":10,"separation":5,"salt":3}}),
+        ),
+        (
+            "data/mvs/worldgen/structure/well.json",
+            serde_json::json!({"type":"moogs_structures:moogs_structures_generic_nether_jigsaw_structure"}),
+        ),
+    ] {
+        write(root.path(), path, &value.to_string());
+    }
+    let sets = loader(root.path())
+        .structure_sets_of_type(&identifier(
+            "moogs_structures:moogs_structures_generic_nether_jigsaw_structure",
+        ))
+        .unwrap();
+    assert_eq!(sets.len(), 1);
+    assert_eq!(sets[0].id, identifier("mvs:well"));
+}
+
+#[test]
 fn moog_ocean_rules_include_biome_radius_and_burial() {
     let mut value = serde_json::json!({
         "valid_biome_radius_check": 4,

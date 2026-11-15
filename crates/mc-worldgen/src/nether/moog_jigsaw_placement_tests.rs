@@ -6,7 +6,7 @@ use super::*;
 use crate::vanilla_features::{BiomeTagIndex, BlockTagIndex, CacheTags};
 use crate::village::VillageDecor;
 use crate::village::closure::load_jigsaw_closure;
-use crate::village::plan_source::VillagePlanSource;
+use crate::village::plan_source::{VillagePlan, VillagePlanSource};
 use mc_data::village_data::VillageDataLoader;
 use mc_nbt::{ListTag, Tag, tag_type};
 use mc_world::native::{NativeDomainRecord, NativeStore};
@@ -217,6 +217,20 @@ fn fixture_cache_tags(blocks: Arc<mc_world::BlockRegistry>) -> Arc<CacheTags> {
     Arc::new(CacheTags::new(blocks, data, Arc::new(tags)))
 }
 
+fn find_plan(source: &VillagePlanSource, query: &NetherMoogQuery<'_>) -> Option<VillagePlan> {
+    let placement = source.closure().placement;
+    (-8..=8)
+        .flat_map(|z| (-8..=8).map(move |x| (x, z)))
+        .find_map(|(x, z)| {
+            let (cx, cz) = placement.potential_chunk(
+                query.generator.seed,
+                x * placement.spacing,
+                z * placement.spacing,
+            );
+            source.plan_for_start_chunk(cx, cz, query, &|x, y, z| query.biome_at(x, y, z))
+        })
+}
+
 fn assert_placement_and_reload(root: &Path, fixture: &Fixture, marker: &str) {
     let directory = tempfile::tempdir().unwrap();
     let blocks =
@@ -234,18 +248,8 @@ fn assert_placement_and_reload(root: &Path, fixture: &Fixture, marker: &str) {
         generator: &generator,
     };
     let biome = |x, y, z| query.biome_at(x, y, z);
-    let placement = source.closure().placement;
-    let plan = (-8..=8)
-        .flat_map(|z| (-8..=8).map(move |x| (x, z)))
-        .find_map(|(x, z)| {
-            let (cx, cz) = placement.potential_chunk(
-                generator.seed,
-                x * placement.spacing,
-                z * placement.spacing,
-            );
-            source.plan_for_start_chunk(cx, cz, &query, &biome)
-        })
-        .expect("fixed-seed Nether fixture must find an admitted start");
+    let plan =
+        find_plan(&source, &query).expect("fixed-seed Nether fixture must find an admitted start");
     assert_eq!(
         plan.assembly().structure,
         id(&format!("mvs:{}", fixture.name))
@@ -263,6 +267,8 @@ fn assert_placement_and_reload(root: &Path, fixture: &Fixture, marker: &str) {
         "Moog moves the base onto occupied HIGHEST_LAND"
     );
     assert!(piece.bounds_min.y >= 0 && piece.bounds_max.y < 128);
+    assert_eq!(plan.assembly().origin.x, center.x);
+    assert_eq!(plan.assembly().origin.z, center.z);
     let rebuilt = build_source(root, fixture, &generator);
     assert_eq!(
         rebuilt.plan_for_start_chunk(plan.start_chunk().0, plan.start_chunk().1, &query, &biome),
@@ -274,6 +280,31 @@ fn assert_placement_and_reload(root: &Path, fixture: &Fixture, marker: &str) {
         .find(|site| site.structure == plan.assembly().structure)
         .expect("the attached Nether source must expose the same exact-ID start");
     assert_eq!(site.position, plan.assembly().origin);
+    let target = std::slice::from_ref(&plan.assembly().structure);
+    let start = ChunkPos {
+        x: plan.start_chunk().0,
+        z: plan.start_chunk().1,
+    };
+    assert_eq!(
+        generator.structure_candidates_in_ring(target, plan.start_chunk(), 0),
+        vec![start],
+        "ring zero must expose the placement candidate before admission"
+    );
+    let point_sites = generator.structure_sites_at(target, start);
+    assert_eq!(point_sites.len(), 1);
+    assert_eq!(point_sites[0].structure, site.structure);
+    assert_eq!(point_sites[0].position, site.position);
+    let absent = id("example:missing");
+    assert!(
+        generator
+            .structure_candidates_in_ring(std::slice::from_ref(&absent), plan.start_chunk(), 0,)
+            .is_empty()
+    );
+    assert!(
+        generator
+            .structure_sites_at(std::slice::from_ref(&absent), start)
+            .is_empty()
+    );
     let mut chunks = Vec::new();
     let marker_state = generator.registry.block(&id(marker)).unwrap().default;
     let mut marker_count = 0;
@@ -421,7 +452,11 @@ fn missing_land_refuses_the_start_instead_of_using_sea_level() {
             )
             .unwrap(),
         );
-    let generator = NetherGenerator::new(1234, blocks);
+    let tags = fixture_cache_tags(blocks.clone());
+    let mut generator = NetherGenerator::new(1234, blocks);
+    generator
+        .load_jigsaw_worldgen(directory.path(), tags)
+        .unwrap();
     let source = build_source(directory.path(), fixture, &generator);
     let query = NetherMoogQuery {
         generator: &generator,
@@ -437,6 +472,21 @@ fn missing_land_refuses_the_start_instead_of_using_sea_level() {
             .plan_for_start_chunk(missing.0, missing.1, &query, &|x, y, z| query
                 .biome_at(x, y, z))
             .is_none()
+    );
+    let target = id("mvs:nether_well");
+    let start = ChunkPos {
+        x: missing.0,
+        z: missing.1,
+    };
+    assert_eq!(
+        generator.structure_candidates_in_ring(std::slice::from_ref(&target), missing, 0),
+        vec![start],
+        "placement candidates must not pre-run land/biome admission"
+    );
+    assert!(
+        generator
+            .structure_sites_at(std::slice::from_ref(&target), start)
+            .is_empty()
     );
 }
 
@@ -513,4 +563,45 @@ fn unsupported_spawner_features_keep_exact_refusal_messages() {
             expected
         );
     }
+}
+
+#[test]
+fn nether_offset_and_allowance_adjust_the_completed_layout_not_the_roof() {
+    let directory = tempfile::tempdir().unwrap();
+    let fixture = &FIXTURES[0];
+    write_fixture(directory.path(), fixture);
+    let mut value = structure(fixture);
+    value["start_height"] = json!({"absolute": 2});
+    value["y_allowance"] = json!({"min_y_allowed": 70, "max_y_allowed": 80});
+    let path = format!("data/mvs/worldgen/structure/{}.json", fixture.name);
+    write_json(directory.path(), &path, &value);
+    let blocks =
+        Arc::new(
+            mc_world::BlockRegistry::from_report(
+                &mc_data::blocks::krasnokamen_required_blocks_report(),
+            )
+            .unwrap(),
+        );
+    let generator = NetherGenerator::new(1234, blocks);
+    let query = NetherMoogQuery {
+        generator: &generator,
+    };
+    let source = build_source(directory.path(), fixture, &generator);
+    let plan =
+        find_plan(&source, &query).expect("valid allowance must not be tested against roof Y=128");
+    let piece = &plan.assembly().pieces[0];
+    let center_x = piece.bounds_min.x + (piece.bounds_max.x - piece.bounds_min.x + 1) / 2;
+    let center_z = piece.bounds_min.z + (piece.bounds_max.z - piece.bounds_min.z + 1) / 2;
+    let ground = highest_land(&generator, center_x, center_z, 0, 128).unwrap();
+    assert_eq!(piece.bounds_min.y, (ground + 2).clamp(70, 74));
+    assert_eq!(piece.bounds_max.y, piece.bounds_min.y + fixture.size[1] - 1);
+    assert_eq!(plan.assembly().origin.y, piece.bounds_min.y + 1);
+
+    value["y_allowance"] = json!({"min_y_allowed": 70, "max_y_allowed": 72});
+    write_json(directory.path(), &path, &value);
+    let impossible = build_source(directory.path(), fixture, &generator);
+    assert!(
+        find_plan(&impossible, &query).is_none(),
+        "a seven-block piece cannot fit three allowed layers"
+    );
 }

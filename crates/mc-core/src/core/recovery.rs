@@ -55,7 +55,7 @@ pub(super) fn load_dimension_state(
     let generator: Arc<dyn ChunkGenerator> = match dimension {
         crate::dimensions::Dimension::Overworld => Arc::new(terrain.expect("overworld terrain")),
         crate::dimensions::Dimension::Nether => {
-            Arc::new(nether_terrain(&generator_config, &registry)?)
+            Arc::new(nether_terrain(&generator_config, &registry, inputs)?)
         }
         crate::dimensions::Dimension::End => Arc::new(end_terrain(&generator_config, &registry)?),
     };
@@ -432,7 +432,7 @@ pub(crate) fn recover_tick_state(
     let selected = crate::datapacks::worldgen::selection(&replays)?;
     let mut packs =
         crate::datapacks::PackSet::open(&root, selected, registry).map_err(CoreError::Registry)?;
-    let inputs = packs
+    let mut inputs = packs
         .prepare_worldgen(&config.world_dir, config.vanilla_data_dir.as_deref())
         .map_err(CoreError::Worldgen)?;
     let adoption = inputs.stage_identity(&mut globals)?;

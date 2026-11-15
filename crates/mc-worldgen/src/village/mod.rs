@@ -35,6 +35,7 @@ pub mod beard;
 pub mod closure;
 pub mod decor;
 pub mod height_query;
+mod moog_nether;
 mod moog_start_checks;
 pub mod piece;
 pub mod placement;

@@ -25,14 +25,26 @@ does not enable datapack worldgen in the running server; see the current
 [datapack limits](OPERATING.md#datapacks-and-command-blocks).
 
 The shared loader and solver admit the supported subset of Moog's generic
-overworld jigsaw type, including advanced random-spread placement, start
-liquid/terrain/biome checks, versioned pools, piece-limited weighted growth,
-centering and average-land burial. Moog spawner processors with weighted entity
-IDs and timing fields write the selected mob and spawner NBT. Custom piece-count
-resources, ignored-boundary pools, other burial modes, custom mob NBT, replacement
-blocks, capped spawner processors and Moog Nether structures are refused.
-Moog layout parity is unproven; this is not a claim that a modpack loads,
-generates or plays correctly.
+overworld and Nether jigsaw types, including advanced random-spread placement,
+start liquid/terrain/biome checks, versioned pools, piece-limited weighted growth,
+centering and overworld average-land burial. Nether `HIGHEST_LAND` uses the
+generator's unmodified noise column, below the bedrock roof and above the lava
+sea. It returns occupied ground, not a heightmap's first-free Y; no suitable land
+rejects the start instead of substituting sea level. The complete layout moves
+onto that land after growth and recentering, within the generated Y 0..127 band.
+Selected structure sets route to the Overworld or Nether from their effective
+biomes; mixed-dimension sets, End consumers and codec/dimension mismatches fail
+closed. Nether sources share plan lookup, template placement and native start
+metadata with the overworld, rather than maintaining a second persistence path.
+
+Moog spawner processors with weighted entity IDs and timing fields write the
+selected mob and spawner NBT. Custom piece-count resources, ignored-boundary
+pools, unsupported burial modes, custom mob NBT, replacement blocks, capped
+spawner processors and other Nether land-search directions are refused.
+Moog layout parity and a complete Nether density beardifier are unproven;
+template-authored air is retained. Library generation/native-reload coverage is
+not a claim that a modpack loads, generates or plays correctly, nor live footage
+or inventory acceptance for the ATM caption.
 
 
 Missing template resources follow vanilla's `StructureTemplateManager.getOrCreate`:

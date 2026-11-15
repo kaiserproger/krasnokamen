@@ -349,7 +349,7 @@ pub struct DimensionPadding {
     pub top: i32,
 }
 
-/// Extra overworld start rules from Moog's Structure Lib.
+/// Extra start rules shared by Moog overworld and Nether layouts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MoogStartChecks {
     pub cannot_spawn_in_liquid: bool,
@@ -601,15 +601,7 @@ impl VillageDataLoader {
     ) -> Result<StructureSetSpec, VillageDataError> {
         let value = self.read_entry(STRUCTURE_SET, "structure_set", id, id)?;
         let placement = parse_placement(id, field_of(&value, "placement", STRUCTURE_SET, id)?)?;
-        let entries = field_array(&value, "structures", STRUCTURE_SET, id)?;
-        let mut structures = Vec::with_capacity(entries.len());
-        for entry in entries {
-            structures.push(StructureSetEntry {
-                structure: parse_id(id, field_str(entry, "structure", STRUCTURE_SET, id)?)?,
-                // `ExtraCodecs.POSITIVE_INT`
-                weight: ranged_i32_field(entry, "weight", STRUCTURE_SET, id, 1, i32::MAX)?,
-            });
-        }
+        let structures = parse_structure_set_entries(id, &value)?;
         Ok(StructureSetSpec {
             id: id.clone(),
             placement,
@@ -695,6 +687,39 @@ impl VillageDataLoader {
     /// path is not a valid identifier.
     pub fn structure_sets(&self) -> Result<Vec<Identifier>, VillageDataError> {
         self.registry_entries("structure_set")
+    }
+
+    /// Discover sets containing a codec without parsing unrelated placement codecs.
+    /// The returned sets remain intact, so mixed unsupported entries fail closure loading.
+    pub fn structure_sets_of_type(
+        &self,
+        structure_type: &Identifier,
+    ) -> Result<Vec<StructureSetSpec>, VillageDataError> {
+        let mut sets = Vec::new();
+        for id in self.structure_sets()? {
+            let value = self.read_entry(STRUCTURE_SET, "structure_set", &id, &id)?;
+            let structures = parse_structure_set_entries(&id, &value)?;
+            let mut matches = false;
+            for entry in &structures {
+                let spec = self.read_entry(STRUCTURE, "structure", &entry.structure, &id)?;
+                if field_str(&spec, "type", STRUCTURE, &entry.structure)? == structure_type.as_str()
+                {
+                    matches = true;
+                    break;
+                }
+            }
+            if matches {
+                sets.push(StructureSetSpec {
+                    placement: parse_placement(
+                        &id,
+                        field_of(&value, "placement", STRUCTURE_SET, &id)?,
+                    )?,
+                    id,
+                    structures,
+                });
+            }
+        }
+        Ok(sets)
     }
 
     fn registry_entries(&self, registry: &str) -> Result<Vec<Identifier>, VillageDataError> {
@@ -786,6 +811,21 @@ impl VillageDataLoader {
             }),
         }
     }
+}
+
+fn parse_structure_set_entries(
+    id: &Identifier,
+    value: &Value,
+) -> Result<Vec<StructureSetEntry>, VillageDataError> {
+    field_array(value, "structures", STRUCTURE_SET, id)?
+        .iter()
+        .map(|entry| {
+            Ok(StructureSetEntry {
+                structure: parse_id(id, field_str(entry, "structure", STRUCTURE_SET, id)?)?,
+                weight: ranged_i32_field(entry, "weight", STRUCTURE_SET, id, 1, i32::MAX)?,
+            })
+        })
+        .collect()
 }
 
 /// Collect `<namespace>:<relative path>` ids of every `*.json` under a
@@ -1082,8 +1122,9 @@ fn parse_moog_start_checks(
 
 fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, VillageDataError> {
     let structure_type = parse_id(id, field_str(value, "type", STRUCTURE, id)?)?;
-    let is_moog =
-        structure_type.as_str() == "moogs_structures:moogs_structures_generic_jigsaw_structure";
+    let is_nether = crate::worldgen_structure_types::is_moog_nether(&structure_type);
+    let is_moog = is_nether
+        || structure_type.as_str() == "moogs_structures:moogs_structures_generic_jigsaw_structure";
     if !crate::worldgen_structure_types::supports_structure_type(&structure_type) {
         return Err(VillageDataError::UnsupportedType {
             kind: STRUCTURE,
@@ -1114,7 +1155,8 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
         ];
         if let Some(object) = value.as_object() {
             for key in object.keys() {
-                if !FIELDS.contains(&key.as_str()) {
+                if !FIELDS.contains(&key.as_str()) && !(is_nether && key == "land_search_direction")
+                {
                     return Err(VillageDataError::InvalidField {
                         kind: STRUCTURE,
                         entry: id.clone(),
@@ -1123,6 +1165,15 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
                     });
                 }
             }
+        }
+        if is_nether && field_str(value, "land_search_direction", STRUCTURE, id)? != "HIGHEST_LAND"
+        {
+            return Err(VillageDataError::InvalidField {
+                kind: STRUCTURE,
+                entry: id.clone(),
+                field: "land_search_direction",
+                value: "only HIGHEST_LAND is supported".to_owned(),
+            });
         }
         Some(parse_moog_start_checks(id, value)?)
     } else {

@@ -8,8 +8,16 @@ use crate::Identifier;
 pub fn supports_structure_type(id: &Identifier) -> bool {
     matches!(
         id.as_str(),
-        "minecraft:jigsaw" | "moogs_structures:moogs_structures_generic_jigsaw_structure"
+        "minecraft:jigsaw"
+            | "moogs_structures:moogs_structures_generic_jigsaw_structure"
+            | "moogs_structures:moogs_structures_generic_nether_jigsaw_structure"
     )
+}
+
+/// The supported Moog Nether codec always requires occupied HIGHEST_LAND.
+#[must_use]
+pub fn is_moog_nether(id: &Identifier) -> bool {
+    id.as_str() == "moogs_structures:moogs_structures_generic_nether_jigsaw_structure"
 }
 
 #[cfg(test)]
@@ -28,7 +36,7 @@ mod tests {
             &Identifier::parse("moogs_structures:moogs_structures_generic_jigsaw_structure")
                 .unwrap()
         ));
-        assert!(!supports_structure_type(
+        assert!(supports_structure_type(
             &Identifier::parse("moogs_structures:moogs_structures_generic_nether_jigsaw_structure")
                 .unwrap()
         ));
