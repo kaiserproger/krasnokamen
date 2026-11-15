@@ -1065,17 +1065,24 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
         });
     }
     let moog_start_checks = if is_moog {
-        for field in [
-            "land_search_direction",
-            "pools_that_ignore_boundaries",
-        ] {
-            if let Some(unsupported) = value.get(field) {
-                return Err(VillageDataError::InvalidField {
-                    kind: STRUCTURE,
-                    entry: id.clone(),
-                    field,
-                    value: format!("unsupported Moog rule: {unsupported}"),
-                });
+        const FIELDS: &[&str] = &[
+            "type", "start_pool", "size", "project_start_to_heightmap",
+            "cannot_spawn_in_liquid", "terrain_height_radius_check",
+            "allowed_terrain_height_range", "valid_biome_radius_check",
+            "y_allowance", "burying_type", "biomes", "step", "terrain_adaptation",
+            "start_height", "use_bounding_box_hack", "spawn_overrides",
+            "max_distance_from_center", "liquid_settings",
+        ];
+        if let Some(object) = value.as_object() {
+            for key in object.keys() {
+                if !FIELDS.contains(&key.as_str()) {
+                    return Err(VillageDataError::InvalidField {
+                        kind: STRUCTURE,
+                        entry: id.clone(),
+                        field: "type",
+                        value: format!("unsupported Moog field {key}"),
+                    });
+                }
             }
         }
         Some(parse_moog_start_checks(id, value)?)
@@ -1090,6 +1097,19 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
         TERRAIN_ADAPTATIONS,
         TerrainAdaptation::None,
     )?;
+    if is_moog && !matches!(terrain_adaptation, TerrainAdaptation::None | TerrainAdaptation::BeardThin) {
+        return Err(VillageDataError::InvalidField {
+            kind: STRUCTURE, entry: id.clone(), field: "terrain_adaptation",
+            value: "unsupported Moog terrain adaptation".to_owned(),
+        });
+    }
+    let start_height = parse_height_provider(id, field_of(value, "start_height", STRUCTURE, id)?)?;
+    if is_moog && !matches!(start_height, HeightProviderSpec::Constant(_)) {
+        return Err(VillageDataError::InvalidField {
+            kind: STRUCTURE, entry: id.clone(), field: "start_height",
+            value: "Moog layout currently requires a constant start height".to_owned(),
+        });
+    }
     let max_distance_from_center = match value.get("max_distance_from_center") {
         None if is_moog => MaxDistance { horizontal: 80, vertical: 80 },
         _ => parse_max_distance(
@@ -1148,7 +1168,7 @@ fn parse_structure(id: &Identifier, value: &Value) -> Result<StructureSpec, Vill
         start_jigsaw_name: parse_optional_id(value, "start_jigsaw_name", STRUCTURE, id)?,
         // `Codec.intRange(0, 20)`
         size: ranged_i32_field(value, "size", STRUCTURE, id, 0, if is_moog { 30 } else { 20 })?,
-        start_height: parse_height_provider(id, field_of(value, "start_height", STRUCTURE, id)?)?,
+        start_height,
         use_expansion_hack: if is_moog {
             value
                 .get("use_bounding_box_hack")

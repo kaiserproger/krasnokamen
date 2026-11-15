@@ -24,15 +24,15 @@ namespaces present in the supplied resource root. This library capability alone
 does not enable datapack worldgen in the running server; see the current
 [datapack limits](OPERATING.md#datapacks-and-command-blocks).
 
-The library has parsers and start checks for Moog's generic overworld jigsaw
-type and advanced random-spread placement, including its minimum origin
-distance, liquid and terrain-radius checks, and versioned single-pool elements.
-Moog spawner processors with weighted entity IDs and timing fields write the
-selected mob and spawner NBT. Custom per-mob NBT, replacement blocks and capped
-spawner processors are refused. The Moog structure types themselves remain
-refused until their piece-limited layout is implemented; vanilla jigsaw
-assembly is not a faithful substitute. These library paths are not evidence
-that a modpack loads, generates or plays correctly.
+The shared loader and solver admit the supported subset of Moog's generic
+overworld jigsaw type, including advanced random-spread placement, start
+liquid/terrain/biome checks, versioned pools, piece-limited weighted growth,
+centering and average-land burial. Moog spawner processors with weighted entity
+IDs and timing fields write the selected mob and spawner NBT. Custom piece-count
+resources, ignored-boundary pools, other burial modes, custom mob NBT, replacement
+blocks, capped spawner processors and Moog Nether structures are refused.
+Moog layout parity is unproven; this is not a claim that a modpack loads,
+generates or plays correctly.
 
 
 Missing template resources follow vanilla's `StructureTemplateManager.getOrCreate`:
@@ -592,8 +592,8 @@ they are deliberate:
   POI acquisition, breeding, trading, raids and patrols are outside this page
   entirely.
 - **Non-jigsaw structure algorithms.** The shared implementation supports
-  vanilla jigsaws; other structure algorithms belong to their own generation
-  paths. Moog jigsaws are also refused pending their piece-limited layout.
+  vanilla jigsaws and the Moog overworld subset above; other structure
+  algorithms belong to their own generation paths.
 - **Other terrain adaptations.** Only `beard_thin` has a version of the
   analogue. `none` needs no behaviour, and `bury`, `beard_box` and
   `encapsulate` have no engine-side analogue; no structure in the villages set

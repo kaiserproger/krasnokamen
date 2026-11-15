@@ -28,7 +28,7 @@ fn moog_versioned_pool_element_resolves_selected_template() {
 }
 
 #[test]
-fn moog_start_rules_parse_but_layout_is_refused() {
+fn moog_start_rules_parse_and_layout_is_admitted() {
     let value = serde_json::json!({
         "type": "moogs_structures:moogs_structures_generic_jigsaw_structure",
         "start_pool": "mvs:crystal/temp",
@@ -56,7 +56,7 @@ fn moog_start_rules_parse_but_layout_is_refused() {
             average_land: false,
         })
     );
-    assert!(parse_structure(&id, &value).is_err(), "piece-limited layout is not yet implemented");
+    assert!(parse_structure(&id, &value).is_ok(), "supported piece-limited layout is admitted");
 }
 
 #[test]
