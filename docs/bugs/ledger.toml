@@ -5956,6 +5956,7 @@ regression = [
   "python:tools.harness.test_loader_v2:LoaderV2Tests.test_loader_start_waits_for_mcp_with_the_profile_cold_build_allowance",
   "python:tools.harness.test_loader_v2:LoaderV2Tests.test_cold_build_wait_has_no_clock_deadline_and_requires_owned_listener",
   "python:tools.harness.test_loader_v2:LoaderV2Tests.test_cold_build_wait_fails_on_process_exit",
+  "python:tools.harness.test_loader_v2:LoaderV2Tests.test_cancelling_cold_start_stops_unreturned_client_process",
 ]
 fix_commit = "1081c210e"
 repro_check = "HarnessFix3/negative-controls.log: restoring only the finite profile allowance makes the retained event-only readiness assertion fail (1800.0 is not None). a39164dc9 removed 180s but still imposed 1800s; the current fix waits on MCP listener ownership or process exit. No cold NeoForge graphical pass is claimed."
@@ -6320,3 +6321,29 @@ regression = [
 fix_commit = "client:2cf3cfd0307556d0ec413f292a19df2d7cf7ee11"
 repro_check = "CustomHeadLayer now resolves the canonical SkullBlock family/profile independently of inventory-graph normalization, then attaches its raw geometry to the head bone at 1.1875 scale in CPU and crowd paths. Only old attachment restored: receipts/HarnessFix2/client-head/red-worn-head-old-attachment.log is red. Only inventory-graph bypass disabled with the real resolver test retained: red-worn-head-inventory-graph.log is red at head-local centroid (0.59375,0.296875,0.59375), not (0,-0.296875,0). Restore: green-real-resolver-animation.log (54 pass), green-real-resolver-crowd.log (10 pass, one unrelated timing benchmark ignored), green-real-resolver-item-models.log (16 pass, one unrelated runtime-resource test ignored). On clean harness 5447c5d0d and server 8b6fc28e58bb, windowed candidate 2cf3cfd0 passes native-player-head 3/3: .analysis/validation/20261115T014909-native-player-head-hhn8klcw, 20261115T014959-native-player-head-v5tt385e, 20261115T015030-native-player-head-70lg1lsk. Control 0a0ed7e4 restores all four production files to 98e4b5bb with tests retained; 20261115T015102-native-player-head-7yjylsdr fails worn_head_renders with zero head-region hat pixels while placed hat remains 9822. Every candidate/control head-worn.png and head-block.png was visually reviewed: candidate skull covers the head, control skull remains on the back. Rejected intermediate 9f641fdf is not acceptance evidence. Full receipts and commands: receipts/HarnessFix2/result.json. No promotion performed."
 failing_first = "reported"
+
+[[bug]]
+id = "HARNESS-HEAD-ORACLE-NO-BACK-CHECK"
+title = "Player-head oracle accepts an extra visible torso attachment while the head is correct"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "HeadBreaker: a magenta 71x71 patch at x605..675/y430..500 leaves the correct head ROI intact and passes the old native-player-head oracle"
+repro = "source"
+regression = ["python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_rejects_extra_back_patch_even_with_correct_head", "python:tools.harness.test_scene_shot:PlayerHeadTests.test_worn_head_allows_small_pose_raster_changes_on_back"]
+fix_commit = "071d9c593"
+failing_first = "reported"
+repro_check = "HarnessFix3/head-frame-green.json: three real candidate frame pairs pass (back changed pixels 37,388,35; tolerance 440), HeadBreaker counterexample fails absence with head presence true, old-attachment control fails both. head-frame-control.log: retaining the frame tests and restoring only the old check_player_head makes the two absence assertions fail. No graphical rerun used."
+
+[[bug]]
+id = "LEDGER-LAUNCHER-NO-LIB"
+title = "Client regression runner assumes a library target for the bin-only launcher package"
+area = "harness"
+severity = "minor"
+status = "open"
+source = "S3ClientRegress: nine client:krasnokamen-launcher refs under CLIENT-LAUNCHER-STALE-RESOURCE-PACK and HC-5 fail before selecting tests because cargo test --lib has no library target"
+repro = "source"
+regression = ["python:tools.harness.test_regressions:ClientRefTests.test_client_lib_package_uses_library_target", "python:tools.harness.test_regressions:ClientRefTests.test_client_bin_only_package_uses_named_binary_target", "python:tools.harness.test_regressions:ClientRefTests.test_client_unknown_or_ambiguous_target_fails_closed", "python:tools.harness.test_regressions:ClientRefTests.test_client_bin_ref_cannot_pass_by_selecting_no_test"]
+fix_commit = "a24ff7f93"
+failing_first = "reported"
+repro_check = "HarnessFix3/added-negative-controls.log: retaining the new test and restoring only _run_client fails at the expected --bin krasnokamen-launcher versus --lib assertion. launcher-results.json and launcher-ref-1..9.log: all nine real registered launcher refs select one test and pass at client 12e076e9c761, using cargo metadata's binary target through mem-run -m 6G."
