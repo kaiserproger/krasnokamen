@@ -396,8 +396,15 @@ attempt and selects the first face with at least 100 interior pixels and all
 64 grid cells sampled. Selection uses rim coverage only, never a day/night
 colour difference. The selected PNG and same-frame JSON become `ctx-day` or
 `ctx-night` unchanged; `<phase>-clock-capture.json` names the original attempt.
-Missing/edge-on-only frames fail closed. The unchanged day/night comparison
-still requires at least 48 shared cells and four changed cells.
+Missing/edge-on-only frames fail closed. The day/night comparison retains the
+48 shared-cell and four changed-cell requirements, and also requires a change
+of at least 0.35 in blue / (blue + neutral-dark) face pixels, with at least 20
+such pixels per phase. This material proportion excludes the gold bezel and sun:
+item projection scales both sky colours, whereas noon/midnight change their
+relative areas. Bobbing or a clipped lower bezel can shift normalized grid cells
+without changing the texture, so cell changes alone are not animation proof.
+Both colour counts and fractions are retained for review; same-time frames at
+different poses must fail `face_changed`. Capture selection remains coverage-only.
 A static clock or changing HUD without that face fails. Retained old frames
 exercise the rejection test with `KRASNOKAMEN_CLOCK_TEST_FRAMES` naming their
 screenshot directory; actual graphical receipts remain required.

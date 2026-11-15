@@ -1408,6 +1408,23 @@ class DroppedClockTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "dropped_clock_face_changed"):
                 scene_shot.check_dynamic_context(probe, root)
 
+    def test_static_clock_bob_and_clipped_bezel_do_not_count_as_animation(self):
+        from PIL import Image, ImageDraw
+
+        frames = []
+        for offset in (0, 50):
+            image = Image.new("RGB", scene_shot.WINDOW, (130, 130, 130))
+            draw = ImageDraw.Draw(image)
+            draw.rectangle((340, 280 + offset, 420, 410 + offset), fill=(180, 150, 20))
+            draw.rectangle((350, 290 + offset, 410, 330 + offset), fill=(10, 10, 200))
+            draw.rectangle((350, 331 + offset, 410, 340 + offset), fill=(45, 45, 45))
+            frames.append(image)
+        probe = self.Probe()
+        with self.assertRaisesRegex(AssertionError, "dropped_clock_face_changed"):
+            scene_shot.check_clock_face(probe, *frames, "dropped_clock", (300, 260, 460, 420))
+        self.assertGreaterEqual(probe.report["dropped_clock_face_changed_cells"], 4)
+        self.assertAlmostEqual(*probe.report["dropped_clock_face_blue_fractions"])
+
     def test_clock_capture_contract_and_tick_subscription(self):
         step = {"dropped_clock_capture": "ctx-day"}
         scene_shot.validate_steps([step], "native")
