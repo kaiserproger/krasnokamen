@@ -8,6 +8,9 @@ use mc_script::{
 use crate::plugin::{PluginState, operation};
 use crate::tick::TickState;
 
+#[path = "plugin_world_block_tests.rs"]
+mod world_block_tests;
+
 struct Empty(u32);
 impl mc_world::ChunkGenerator for Empty {
     fn generate(&self, position: mc_world::ChunkPos) -> mc_world::Chunk {
@@ -938,6 +941,7 @@ impl WorldBlockFixture {
             mc_script::COMPONENT_PLUGIN_API_VERSION,
         )
         .declare_world_blocks()
+        .declare_zones()
         .validate()
         .unwrap();
         host.register_plugin_routes(&manifest).unwrap();
@@ -1152,6 +1156,59 @@ fn hook_free_plugin_block_sets_keep_the_immediate_native_path() {
     assert_eq!(fixture.results(), vec![(true, None)]);
     assert_eq!(fixture.boundary.event_queue_depth(), 0);
     assert_eq!(fixture.state.plugin_block_writes.len(), 1);
+}
+
+#[test]
+fn plugin_set_world_block_preserves_same_block_container_contents() {
+    let mut fixture = WorldBlockFixture::new(false);
+    let chest = fixture
+        .state
+        .registry
+        .blocks
+        .block(&mc_data::Identifier::parse("minecraft:chest").unwrap())
+        .unwrap()
+        .default
+        .0;
+    let item = fixture
+        .state
+        .registry
+        .items
+        .id_of(&mc_data::Identifier::parse("minecraft:diamond").unwrap())
+        .unwrap();
+    let mut contents = vec![mc_data::ItemStack::EMPTY; 27];
+    contents[0] = mc_data::ItemStack::new(item, 7);
+    fixture.state.world.set_block(1, 64, 1, chest);
+    fixture.state.block_entities.insert(
+        (1, 64, 1),
+        crate::tick::BlockEntityState {
+            slots: contents.clone(),
+            furnace: None,
+        },
+    );
+    fixture.request = mc_script::ScriptWorldBlockSetRequest::try_new(
+        "same-chest",
+        "minecraft:overworld",
+        "minecraft:chest",
+        1,
+        64,
+        1,
+    )
+    .unwrap();
+    assert_eq!(fixture.state.world.block_at(1, 64, 1), Some(chest));
+    assert_eq!(fixture.state.block_entities[&(1, 64, 1)].slots, contents);
+    fixture.submit();
+    crate::plugin::pump(&mut fixture.state);
+    assert_eq!(fixture.results(), vec![(true, None)]);
+    crate::tick::run_tick(&mut fixture.state, &[]);
+    assert_eq!(
+        fixture
+            .state
+            .block_entities
+            .get(&(1, 64, 1))
+            .map(|record| &record.slots),
+        Some(&contents),
+        "setting the same block must preserve its container custody"
+    );
 }
 
 fn receipt_status(

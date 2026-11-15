@@ -21,6 +21,32 @@ fn hit(state: &mut TickState, target: EntityId, kind: DamageKind, source: Option
 }
 
 #[test]
+fn spectator_cannot_damage_a_mob_with_an_ordinary_attack_input() {
+    let (mut state, actor, pos) = flat_player_fixture();
+    state.day_time = 18000;
+    state.players.get_mut(&actor).unwrap().game_mode = GameMode::Spectator;
+    let target = state.spawn_mob(
+        state.registry.zombie_type_id,
+        [pos[0] + 1.0, pos[1], pos[2]],
+        100.0,
+    );
+    let slot = state.entities.slot_of(target).unwrap();
+    state.entities.row_mut(slot).protected_until = 0;
+    state.entities.row_mut(slot).controls.no_ai = true;
+    let health = state.entities.row(slot).health;
+    assert!(state.players[&actor].spectator());
+    run_tick(
+        &mut state,
+        &[PlayerInput::Attack {
+            connection: ConnectionId(1),
+            target,
+        }],
+    );
+    assert_eq!(state.entities.row(slot).health, health);
+    assert!(!state.last_swing.contains_key(&actor));
+}
+
+#[test]
 fn damage_observer_counts_real_admitted_victims_and_thorns_reaction() {
     use crate::tick::damage::DamageObservation;
     use mc_data::{Identifier, ItemEnchantment, ItemStack};

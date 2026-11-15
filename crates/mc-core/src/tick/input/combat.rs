@@ -18,6 +18,13 @@ pub(in crate::tick) fn attack(
     let Some(actor_slot) = state.entities.slot_of(entity) else {
         return;
     };
+    if !state
+        .players
+        .get(&entity)
+        .is_some_and(|player| !player.spectator() && !player.vitals.is_dead())
+    {
+        return;
+    }
     if !crate::plugin_player::allows_damage(state, entity, *target) {
         return;
     }

@@ -7,6 +7,9 @@ use crate::boundary::{ConnectionId, EntityId, PlayerInput};
 use crate::registry::CoreRegistry;
 use crate::tick::{TickState, run_tick};
 
+#[path = "flight_owner_tests.rs"]
+mod owner_tests;
+
 pub(super) fn setup() -> (TickState, EntityId, [f64; 3]) {
     let registry = Arc::new(CoreRegistry::load(None).unwrap());
     let world = crate::horde_bench::flat_world(&registry);

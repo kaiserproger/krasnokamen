@@ -48,6 +48,16 @@ Client game age follows simulated ticks, not journal frame identifiers.
 freeze/step projection and how recovery restores that age; daylight time remains
 independent.
 
+Before detaching dimension-local state, the multi-world coordinator derives an
+immutable shared set of player identities referenced as owners by resident arrows.
+It uses indexed projectile membership, the published online identities and offline
+player custody across all worlds; work is bounded by indexed projectiles and their
+owners, not offline history. Flight combines this projection with local owner facts
+for new launches, so travel followed by logout cannot discard PvP classification.
+The projection is
+runtime-only and rebuilt from existing durable UUID references; no storage schema
+or player custody authority changes.
+
 Mount custody belongs to the vehicle's ordered, bounded rider UUID list. The
 first rider with a live body controls motion; absent recovery claims are skipped.
 Absent claims do not reserve attachment positions for live passengers.

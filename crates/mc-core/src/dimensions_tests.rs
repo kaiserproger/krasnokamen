@@ -1,6 +1,69 @@
 use super::*;
 
 #[test]
+fn locked_cross_dimension_teleport_refuses_without_publishing_spawn_or_success() {
+    for (target, target_connection, executor, destination) in [
+        ("Alice", 1, 2, Dimension::Nether),
+        ("Bob", 2, 1, Dimension::Overworld),
+        ("Bob", 2, 1, Dimension::End),
+    ] {
+        let (mut state, alice, bob) = worlds();
+        state.require_plugin_login = true;
+        for world in state.other_dimensions.values_mut() {
+            world.require_plugin_login = true;
+        }
+        let entity = if target == "Alice" { alice } else { bob };
+        let (source, slot) = travel::locate(&state, entity).unwrap();
+        let before = travel::world(&state, source).unwrap().entities.pos(slot);
+        let origin = if source == state.dimension {
+            &mut state
+        } else {
+            state.other_dimensions.get_mut(&source).unwrap()
+        };
+        origin
+            .locked_sessions
+            .insert(ConnectionId(target_connection));
+        assert!(origin.entity_session_locked(entity));
+        let teleport = format!("execute in {} run tp {target} 8 150 8", destination.name());
+        let (output, drains) = command(&mut state, executor, &teleport);
+        assert_eq!(travel::locate(&state, entity).unwrap().0, source);
+        assert_eq!(
+            travel::world(&state, source).unwrap().entities.pos(slot),
+            before
+        );
+        let changes = if destination == state.dimension {
+            &output.changes
+        } else {
+            &output.snapshot.dimensions[&destination].changes
+        };
+        assert!(
+            !changes.entities_spawned.contains(&entity),
+            "refused transfer published a spawn"
+        );
+        assert!(
+            !drains
+                .iter()
+                .flat_map(|(_, changes)| changes)
+                .any(|change| translation(change, "commands.teleport.success.location.single"))
+        );
+        assert!(drains.iter().flat_map(|(_, changes)| changes).any(|change| {
+            translation(change, "commands.teleport.invalidPosition")
+                || matches!(change, PlayerChange::Chat { message } if message == "commands.teleport.invalidPosition")
+        }));
+        let origin = if source == state.dimension {
+            &mut state
+        } else {
+            state.other_dimensions.get_mut(&source).unwrap()
+        };
+        origin
+            .locked_sessions
+            .remove(&ConnectionId(target_connection));
+        command(&mut state, executor, &teleport);
+        assert_eq!(travel::locate(&state, entity).unwrap().0, destination);
+    }
+}
+
+#[test]
 fn explosion_epoch_survives_same_tick_dimension_transfer() {
     let (mut state, alice, _) = worlds();
     command(&mut state, 1, "gamemode survival Alice");
@@ -689,6 +752,45 @@ fn roster_spans_dimensions_without_changing_on_travel() {
                 |change| matches!(change, PlayerChange::Roster { removed, .. }
             if removed.as_ref() == [uuid::Uuid::from_u128(2)])
             )
+    );
+}
+
+#[test]
+fn spawnpoint_rejects_horizontal_boundary_before_cross_dimension_respawn() {
+    let (mut state, _, bob) = worlds();
+    state.gamerules.insert("spawn_radius".into(), "0".into());
+    let wanted = crate::world::chunks_in_radius(mc_world::ChunkPos { x: 0, z: 0 }, 1)
+        .into_iter()
+        .map(|position| (position, 0))
+        .collect();
+    state.world.ensure_blocking(&wanted);
+    let before = state.other_dimensions[&Dimension::Nether].players[&bob].respawn_point;
+    for point in ["30000000 150 0", "0 150 30000000"] {
+        command(&mut state, 1, &format!("spawnpoint Bob {point}"));
+        assert_eq!(
+            state.other_dimensions[&Dimension::Nether].players[&bob].respawn_point,
+            before,
+            "an out-of-range centered respawn must not be admitted"
+        );
+    }
+    command(&mut state, 1, "kill Bob");
+    crate::tick::run_tick(
+        &mut state,
+        &[PlayerInput::Respawn {
+            connection: ConnectionId(2),
+        }],
+    );
+    assert_eq!(travel::locate(&state, bob).unwrap().0, Dimension::Overworld);
+    assert!(
+        state
+            .entities
+            .body(travel::locate(&state, bob).unwrap().1)
+            .alive
+    );
+    command(&mut state, 1, "spawnpoint Bob 29999999 150 -30000000");
+    assert_eq!(
+        state.players[&bob].respawn_point,
+        Some([29999999, 150, -30000000])
     );
 }
 

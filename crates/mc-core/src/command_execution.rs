@@ -1358,6 +1358,7 @@ pub(crate) fn execute(
                     },
                 );
             }
+            return CommandResult::Completed;
         }
         Command::Message {
             target,
@@ -1421,6 +1422,7 @@ pub(crate) fn execute(
                     );
                 }
             }
+            return CommandResult::Completed;
         }
         Command::TellRaw { target, message } => {
             return crate::command_text::execute_tellraw(
@@ -1433,12 +1435,15 @@ pub(crate) fn execute(
         Command::Settlement(command) => {
             settlement(state, connection, executor, command);
         }
-        Command::Seed => success_feedback(
-            state,
-            connection,
-            "commands.seed.success",
-            vec![text(state.world.seed())],
-        ),
+        Command::Seed => {
+            success_feedback(
+                state,
+                connection,
+                "commands.seed.success",
+                vec![text(state.world.seed())],
+            );
+            return CommandResult::Completed;
+        }
         Command::Tick(tick) => crate::command_tick::execute(state, connection, tick),
         Command::Locate(locate) => {
             crate::command_locate::execute(state, connection, executor, locate)

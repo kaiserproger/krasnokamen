@@ -364,6 +364,8 @@ fn position(
     if values
         .iter()
         .any(|value| !value.is_finite() || value.abs() > 30_000_000.0)
+        || values[0] >= 30_000_000.0
+        || values[2] >= 30_000_000.0
         || !(f64::from(geometry.min_y())..f64::from(geometry.max_y())).contains(&values[1])
     {
         return Err(message("Position is outside the world"));
@@ -1107,6 +1109,30 @@ mod tests {
                 "{command} must flow into the cell below"
             );
         }
+    }
+
+    #[test]
+    fn malformed_campfire_commands_refuse_before_mutating_or_quarantining_the_chunk() {
+        let (mut state, actor) = fixture();
+        let before = state.world.block_at(1, 200, 1).unwrap();
+        for command in [
+            "setblock 1 200 1 campfire{CookingTimes:[I;1]}",
+            "fill 1 200 1 1 200 1 campfire{CookingTotalTimes:[I;1]}",
+        ] {
+            assert!(apply(&mut state, actor, command).is_err(), "{command}");
+            assert_eq!(state.world.block_at(1, 200, 1), Some(before));
+            run_tick(&mut state, &[]);
+            assert_eq!(state.world.block_at(1, 200, 1), Some(before));
+        }
+        apply(
+            &mut state,
+            actor,
+            "setblock 1 200 1 campfire{CookingTimes:[I;0,0,0,0]}",
+        )
+        .unwrap();
+        run_tick(&mut state, &[]);
+        assert!(state.campfires.contains_key(&(1, 200, 1)));
+        assert!(state.world.block_at(1, 200, 1).is_some());
     }
 
     #[test]

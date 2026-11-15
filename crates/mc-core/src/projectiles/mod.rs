@@ -267,6 +267,8 @@ pub(crate) struct PostTimes {
 
 #[derive(Debug, Default)]
 pub struct ProjectileRuntime {
+    /// Frame-local player classification for resident arrow owners in every world.
+    pub(crate) player_owners: std::sync::Arc<rustc_hash::FxHashSet<Uuid>>,
     pub(crate) using: HashMap<EntityId, weapons::WeaponUse>,
     pub(crate) after_hit: HashMap<(EntityId, EntityId), Vec<crate::effects::ActiveEffect>>,
     pub(crate) channeling_hits: HashMap<(EntityId, EntityId), ([f64; 3], Option<Uuid>)>,
@@ -297,6 +299,39 @@ pub(crate) fn owner_id(state: &TickState, projectile: &ProjectileState) -> Optio
         .entities
         .slot_of_uuid(projectile.owner?)
         .map(|slot| state.entities.body(slot).id)
+}
+
+/// Derive ownership facts before the coordinator detaches dimension-local state.
+/// Indexed membership bounds the work by projectiles, not all offline players.
+pub(crate) fn publish_player_owners(root: &mut TickState) {
+    let mut owners = rustc_hash::FxHashSet::default();
+    for world in std::iter::once(&*root).chain(root.other_dimensions.values().map(|world| &**world))
+    {
+        owners.extend(
+            world
+                .entities
+                .mob_slots_matching(|type_id| {
+                    world.registry.blueprint(type_id).is_some_and(|blueprint| {
+                        matches!(blueprint.movement, MovementClass::Projectile)
+                    })
+                })
+                .into_iter()
+                .filter_map(|slot| world.entities.row(slot).projectile.as_deref())
+                .filter(|record| record.kind.arrow())
+                .filter_map(|record| record.owner),
+        );
+    }
+    owners.retain(|owner| {
+        crate::chunk_tickets::owner_online(root, *owner)
+            || std::iter::once(&*root)
+                .chain(root.other_dimensions.values().map(|world| &**world))
+                .any(|world| world.offline_players.contains_key(owner))
+    });
+    let owners = std::sync::Arc::new(owners);
+    root.projectiles.player_owners = std::sync::Arc::clone(&owners);
+    for world in root.other_dimensions.values_mut() {
+        world.projectiles.player_owners = std::sync::Arc::clone(&owners);
+    }
 }
 
 pub(crate) fn launch(
