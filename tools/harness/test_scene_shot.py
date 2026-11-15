@@ -1153,6 +1153,39 @@ class PlayerHeadTests(unittest.TestCase):
             with self.assertRaisesRegex(AssertionError, "placed_head_renders"):
                 scene_shot.check_player_head(self.Probe(), root)
 
+    def test_worn_head_rejects_extra_back_patch_even_with_correct_head(self):
+        from PIL import Image, ImageDraw
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.store_frames(root)
+            path = root / "screenshots/head-worn.png"
+            with Image.open(path) as frame:
+                image = frame.convert("RGB")
+            # HeadBreaker's exact counterexample, leaving the valid head intact.
+            ImageDraw.Draw(image).rectangle((605, 430, 675, 500), fill=(240, 0, 240))
+            image.save(path)
+            probe = self.Probe()
+            with self.assertRaisesRegex(AssertionError, "worn_head_back_unchanged"):
+                scene_shot.check_player_head(probe, root)
+            self.assertEqual(probe.report["worn_head_back_changed_pixels"], 71 * 71)
+            self.assertGreater(probe.report["worn_head_hat_layer_pixels"], 100)
+
+    def test_worn_head_allows_small_pose_raster_changes_on_back(self):
+        from PIL import Image, ImageDraw
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.store_frames(root)
+            path = root / "screenshots/head-worn.png"
+            with Image.open(path) as frame:
+                image = frame.convert("RGB")
+            ImageDraw.Draw(image).rectangle((605, 430, 624, 449), fill=(110, 100, 90))
+            image.save(path)
+            probe = self.Probe()
+            scene_shot.check_player_head(probe, root)
+            self.assertEqual(probe.report["worn_head_back_changed_pixels"], 400)
+
     def test_worn_head_rejects_back_attachment_despite_unrelated_head_roi_changes(self):
         from PIL import Image, ImageDraw
 

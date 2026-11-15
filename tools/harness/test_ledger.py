@@ -52,7 +52,9 @@ regression = []
     def test_client_zero_pass_one_failure_is_red(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.object(ledger, 'client_repo', return_value=Path(directory)), \
-                 patch.object(ledger, '_exec', return_value=(False, 'test result: FAILED. 0 passed; 1 failed; 0 ignored')):
+                 patch.object(ledger, '_exec', side_effect=[
+                     (True, '{"packages": [{"name": "c", "targets": [{"name": "c", "kind": ["lib"]}]}]}'),
+                     (False, 'test result: FAILED. 0 passed; 1 failed; 0 ignored')]):
                 result = ledger._run_client(None, {('c', 'test')}, Path(directory))
                 self.assertEqual(result[('c', 'test')][0], ledger.RED)
 

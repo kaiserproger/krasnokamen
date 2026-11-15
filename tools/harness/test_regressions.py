@@ -597,6 +597,55 @@ class ClientRefTests(unittest.TestCase):
             self.assertEqual(out[ref]['state'], ledger.UNRUNNABLE)
             self.assertIn('no client checkout', out[ref]['detail'])
 
+    def run_client_packages(self, packages, refs, summary='test result: ok. 1 passed; 0 failed'):
+        calls = []
+        def execute(ctx, argv, tag, repo, env):
+            calls.append(argv)
+            if argv[1] == 'metadata':
+                return True, 'mem-run: scope\n' + json.dumps({'packages': packages}) + '\n'
+            return True, summary
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(ledger, 'client_repo', return_value=Path(directory)), \
+                patch.object(regressions, 'tree_build_command', side_effect=lambda repo, argv: (argv, None)), \
+                patch.object(ledger, '_exec', side_effect=execute):
+            result = ledger._run_client(None, set(refs), Path(directory))
+        return result, calls
+
+    def test_client_lib_package_uses_library_target(self):
+        package = {'name': 'client', 'targets': [
+            {'name': 'client', 'kind': ['lib']}, {'name': 'ui', 'kind': ['bin']}]}
+        result, calls = self.run_client_packages([package], [('client', 'unit::test')])
+        self.assertEqual(result[('client', 'unit::test')], (ledger.GREEN, ''))
+        self.assertEqual(calls[-1], ['cargo', 'test', '-p', 'client', '--lib', '--', 'unit::test'])
+
+    def test_client_bin_only_package_uses_named_binary_target(self):
+        package = {'name': 'krasnokamen-launcher', 'targets': [
+            {'name': 'krasnokamen-launcher', 'kind': ['bin']}]}
+        result, calls = self.run_client_packages([package], [('krasnokamen-launcher', 'bootstrap::tests')])
+        self.assertEqual(result[('krasnokamen-launcher', 'bootstrap::tests')], (ledger.GREEN, ''))
+        self.assertEqual(calls[-1], ['cargo', 'test', '-p', 'krasnokamen-launcher',
+                                     '--bin', 'krasnokamen-launcher', '--', 'bootstrap::tests'])
+        self.assertEqual(sum(argv[1] == 'metadata' for argv in calls), 1)
+
+    def test_client_unknown_or_ambiguous_target_fails_closed(self):
+        for packages in ([], [{'name': 'launcher', 'targets': []}],
+                         [{'name': 'launcher', 'targets': [
+                             {'name': 'one', 'kind': ['bin']}, {'name': 'two', 'kind': ['bin']}]}],
+                         [{'name': 'launcher', 'targets': [
+                             {'name': 'disabled', 'kind': ['bin'], 'test': False}]}]):
+            with self.subTest(packages=packages):
+                result, calls = self.run_client_packages(packages, [('launcher', 'test')])
+                state, detail = result[('launcher', 'test')]
+                self.assertEqual(state, ledger.UNRUNNABLE)
+                self.assertIn('launcher', detail)
+                self.assertEqual(len(calls), 1)  # metadata only, never guessed cargo test
+
+    def test_client_bin_ref_cannot_pass_by_selecting_no_test(self):
+        package = {'name': 'launcher', 'targets': [{'name': 'launcher', 'kind': ['bin']}]}
+        result, _ = self.run_client_packages([package], [('launcher', 'missing')],
+                                             summary='test result: ok. 0 passed; 0 failed')
+        self.assertEqual(result[('launcher', 'missing')], (ledger.UNRUNNABLE, 'ran no matching test'))
+
 
 class LedgerRefContractTests(unittest.TestCase):
     """Every ref in the real ledger resolves: a ref nobody can run is not a regression guard."""

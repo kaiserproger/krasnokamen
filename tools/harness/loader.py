@@ -90,7 +90,7 @@ def run(
     *,
     server_bin: Path,
     plugins_dir: Path,
-    client_ready_timeout_seconds: float,
+    client_ready_timeout_seconds: float | None,
 ) -> dict[str, Any]:
     """Run a named scenario against an immutable server and plugin deployment.
 

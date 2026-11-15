@@ -1292,8 +1292,8 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Loader gate via loader.run; requires --platform fabric|neoforge|forge",
         "run": run_loader_live,
         # Gradle runClient stays alive with the game; MCP readiness, not its exit, is completion.
-        # A cold NeoForge createMinecraftArtifacts compiles ~7300 sources before MCP can start.
-        "client_ready_timeout_seconds": 1800.0,
+        # Cold artifact compilation has no wall-clock deadline; process exit still fails closed.
+        "client_ready_timeout_seconds": None,
     },
     "dh-gate": {
         "scope": "real-client",

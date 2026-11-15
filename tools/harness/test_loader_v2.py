@@ -173,7 +173,7 @@ class LoaderV2Tests(unittest.TestCase):
             artifact = root / "artifact"
             artifact.mkdir()
             allowance = profiles.PROFILES["loader-live"]["client_ready_timeout_seconds"]
-            self.assertGreaterEqual(allowance, 1800)
+            self.assertIsNone(allowance)
             with mock.patch.object(runtime, "start_xvfb", return_value=(mock.Mock(), ":99", None)), \
                  mock.patch.object(runtime, "sibling_root", return_value=root / "loader"), \
                  mock.patch.object(runtime, "ensure_loader_gradle_home"), \
@@ -193,6 +193,56 @@ class LoaderV2Tests(unittest.TestCase):
             self.assertEqual(client_wait.kwargs["phase_name"], "client_start")
             record = json.loads((artifact / "scenario.json").read_text())
             self.assertEqual(record["client_ready_timeout_seconds"], allowance)
+
+    def test_cold_build_wait_has_no_clock_deadline_and_requires_owned_listener(self) -> None:
+        process = mock.Mock()
+        process.poll.return_value = None
+        selector = mock.Mock()
+        selector.select.return_value = [(mock.Mock(fd=7), 1)]
+        with tempfile.TemporaryDirectory() as temporary, \
+             mock.patch.object(runtime, "_require_event_fds", return_value=(selector, 7, 8)), \
+             mock.patch.object(runtime, "_probe_port", return_value=True) as probe, \
+             mock.patch.object(runtime, "_owns_listener", side_effect=[False, True]), \
+             mock.patch.object(runtime, "_drain") as drain, \
+             mock.patch.object(runtime.os, "close"), \
+             mock.patch.object(runtime.time, "monotonic", side_effect=AssertionError("build clock deadline")):
+            runtime.wait_port(12345, None, process, log_path=Path(temporary) / "client.log")
+        selector.select.assert_called_once_with(None)
+        self.assertEqual(probe.call_count, 2)
+        probe.assert_called_with(12345, None)
+        drain.assert_called_once_with(7)
+        selector.close.assert_called_once()
+
+    def test_cold_build_wait_fails_on_process_exit(self) -> None:
+        process = mock.Mock(returncode=3)
+        process.poll.return_value = 3
+        selector = mock.Mock()
+        with tempfile.TemporaryDirectory() as temporary, \
+             mock.patch.object(runtime, "_require_event_fds", return_value=(selector, 7, 8)), \
+             mock.patch.object(runtime.os, "close"):
+            log = Path(temporary) / "client.log"
+            log.write_text("createMinecraftArtifacts failed")
+            with self.assertRaisesRegex(runtime.ChildExited, "createMinecraftArtifacts failed"):
+                runtime.wait_port(12345, None, process, log_path=log)
+        selector.select.assert_not_called()
+
+    def test_cancelling_cold_start_stops_unreturned_client_process(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with mock.patch.object(runtime, "sibling_root", return_value=root), \
+                 mock.patch.object(runtime, "ensure_loader_gradle_home", return_value=root), \
+                 mock.patch.object(Path, "is_file", return_value=True), \
+                 mock.patch.object(runtime.os, "access", return_value=True), \
+                 mock.patch.object(runtime, "port_open", return_value=False), \
+                 mock.patch.object(runtime.subprocess, "Popen") as launch, \
+                 mock.patch.object(runtime, "wait_port", side_effect=KeyboardInterrupt("SIGTERM")), \
+                 mock.patch.object(runtime, "stop_process") as stop:
+                with self.assertRaises(KeyboardInterrupt):
+                    runtime.start_client(game_dir=root / "game", log_path=root / "client.log",
+                                         token="unit", mcp_port=12345, username="Test",
+                                         display=":99", platform="neoforge", ready_timeout_seconds=None)
+                stop.assert_called_once_with(launch.return_value)
+                self.assertTrue(launch.call_args.kwargs["stdout"].closed)
 
     def test_loader_gradle_home_defaults_to_the_shared_work_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

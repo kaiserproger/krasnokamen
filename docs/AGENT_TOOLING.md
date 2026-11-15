@@ -73,15 +73,15 @@ source of truth is `tools/harness/__main__.py`):
   overrides the scenario default where the backend honors it
   (`core-client`/`inventory` 600 s, `loader-live` 600 s,
   `playable` 1500 s, `replay` 180 s). Stage commands have no default deadline.
-  `loader-live` separately supplies a 1800 s client-start allowance in
-  `profiles.PROFILES["loader-live"]["client_ready_timeout_seconds"]`: a cold
-  NeoForge `createMinecraftArtifacts` compiles roughly 7300 sources before
-  Minecraft can expose MCP. Gradle's launch task remains alive with the game,
-  so process completion is not a usable build/launch boundary. The existing
-  log/process-event-driven MCP readiness wait returns as soon as ready and fails
-  immediately on process exit; the 30-minute value is only its upper bound.
-  It does not enlarge scenario waits; other Java client callers retain 180 s.
-  The loader receipt records the selected client-start allowance.
+  `loader-live` sets `profiles.PROFILES["loader-live"]["client_ready_timeout_seconds"]`
+  to `None`: a cold NeoForge `createMinecraftArtifacts` compiles roughly 7300 sources
+  before Minecraft can expose MCP. Gradle's launch task remains alive with the game,
+  so process completion is not a usable successful build/launch boundary. The
+  log/process-event-driven MCP readiness wait has no wall-clock build deadline;
+  it returns on the owned MCP listener and fails immediately on process exit.
+  Cancellation still tears down the client process group. Scenario waits are
+  unchanged; other Java client callers retain 180 s. The loader receipt records
+  the selected client-start allowance (`null` for event-only readiness).
   `screens-voice-qa --client native --windowed` is admitted by the CLI and
   dispatches its native/Fabric screen and voice legs (it is not Java-only).
 

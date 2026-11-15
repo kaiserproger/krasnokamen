@@ -351,7 +351,7 @@ def port_open(port: int) -> bool:
         return True
 
 
-def _probe_port(port: int, timeout_seconds: float) -> bool:
+def _probe_port(port: int, timeout_seconds: float | None) -> bool:
     """Non-blocking connect; True only when the port accepts.
 
     The wait for writability is the readiness event itself, not a sleep.
@@ -362,7 +362,7 @@ def _probe_port(port: int, timeout_seconds: float) -> bool:
         error = sock.connect_ex(("127.0.0.1", port))
         if error not in (0, errno.EINPROGRESS, errno.EALREADY):
             return False
-        _, writable, _ = select.select([], [sock], [], max(0.0, timeout_seconds))
+        _, writable, _ = select.select([], [sock], [], None if timeout_seconds is None else max(0.0, timeout_seconds))
         if not writable:
             return False
         return sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR) == 0
@@ -539,14 +539,14 @@ class ChildExited(RuntimeError):
 
 def wait_port(
     port: int,
-    timeout_seconds: float,
+    timeout_seconds: float | None,
     process: subprocess.Popen[Any],
     *,
     log_path: Path,
     phase_name: str = "server_start",
 ) -> None:
     """Return once `process` itself listens on the port; raise if the process
-    exits or time runs out.
+    exits or time runs out. `None` waits for readiness or exit without a build deadline.
 
     A bare accept on the port is not readiness: on the shared host another
     run's server may hold it. `phase_name` is the lifecycle phase a failure
@@ -557,16 +557,16 @@ def wait_port(
         _wait_port(port, timeout_seconds, process, log_path)
 
 
-def _wait_port(port: int, timeout_seconds: float, process: subprocess.Popen[Any], log_path: Path) -> None:
+def _wait_port(port: int, timeout_seconds: float | None, process: subprocess.Popen[Any], log_path: Path) -> None:
     """Re-probes happen only after real events: socket writability, log growth
     (inotify), or process exit (pidfd). There is no polling quantum.
 
     A probe that succeeds against a foreign listener is not readiness: the
     port counts as ready only once `process` owns the LISTEN socket itself.
     """
-    if timeout_seconds <= 0:
+    if timeout_seconds is not None and timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be positive")
-    deadline = time.monotonic() + timeout_seconds
+    deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
     parent = log_path.parent
     parent.mkdir(parents=True, exist_ok=True)
     selector, notify_fd, pid_fd = _require_event_fds(process, parent)
@@ -579,8 +579,8 @@ def _wait_port(port: int, timeout_seconds: float, process: subprocess.Popen[Any]
                     f"{port} became ready; log {log_path}: {tail[-2000:]}",
                     process.returncode, log_path,
                 )
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
                 tail = _tail_log(log_path)
                 raise RuntimeError(
                     f"port {port} did not become ready within "
@@ -589,7 +589,7 @@ def _wait_port(port: int, timeout_seconds: float, process: subprocess.Popen[Any]
             if _probe_port(port, remaining) and _owns_listener(process, port):
                 return
             # Only log growth or process exit wakes us to probe again.
-            for key, _ in selector.select(max(0.0, deadline - time.monotonic())):
+            for key, _ in selector.select(None if deadline is None else max(0.0, deadline - time.monotonic())):
                 _drain(key.fd)
     finally:
         selector.close()
@@ -906,7 +906,7 @@ def start_client(
     client_profile: str | None = None,
     window_size: tuple[int, int] | None = None,
     sound_sink: str | None = None,
-    ready_timeout_seconds: float = _CLIENT_READY_TIMEOUT_SECONDS,
+    ready_timeout_seconds: float | None = _CLIENT_READY_TIMEOUT_SECONDS,
 ) -> tuple[subprocess.Popen[Any], Any]:
     """Launch a real client and return (process, log_handle) once MCP is ready.
 
@@ -932,8 +932,9 @@ def start_client(
     (``soundDevice``; OpenAL Soft ignores ``PULSE_SINK`` for its default)
     and game sound is at full volume. Without it the client plays muted
     into ``agents-null``.
-    ``ready_timeout_seconds`` bounds the event-driven MCP readiness wait,
-    including any Gradle build before launch; Loader profiles supply a cold-build allowance.
+    ``ready_timeout_seconds`` bounds the event-driven MCP readiness wait.
+    Loader live gates pass None: cold Gradle builds finish on MCP readiness or process exit,
+    not an arbitrary compilation deadline. Cancellation still tears down the process group.
     """
     if not token:
         raise ValueError("token must not be empty")
@@ -1068,7 +1069,7 @@ def start_client(
                 text = log_path.read_text(errors="replace")
                 return "Setting user:" in text, text
             wait_for_path_condition(log_path, _CLIENT_READY_TIMEOUT_SECONDS, initialized)
-    except Exception:
+    except BaseException:
         stop_process(process)
         log_handle.close()
         raise

@@ -341,10 +341,29 @@ class JavaMatrixClient:
                   {"timeout_seconds": min(self.timeout_seconds, 120)})
 
     def ensure_loaded(self, area: tuple[tuple[int, int, int], tuple[int, int, int]]) -> None:
+        # Forceload makes chunks resident on the server, not visible from the client's
+        # distant spawn. Visit each chunk as a spectator before observing it, then
+        # restore the actor before the domain fixture/action starts.
+        if self.fixture_command is None:
+            raise MissingCapability("ensure_loaded:server_command_authority")
+        home = self.call("minecraft_observe")["player"]
+        mode = home["game_mode"]
         low, high = area
-        for chunk_x in range(low[0] // 16, high[0] // 16 + 1):
-            for chunk_z in range(low[2] // 16, high[2] // 16 + 1):
-                self.wait_for_chunk((chunk_x * 16, low[1], chunk_z * 16))
+        self.fixture_command(f"gamemode spectator {self.name}")
+        try:
+            for chunk_x in range(low[0] // 16, high[0] // 16 + 1):
+                for chunk_z in range(low[2] // 16, high[2] // 16 + 1):
+                    self.teleport_to(chunk_x * 16 + .5, low[1] + .5, chunk_z * 16 + .5)
+        finally:
+            try:
+                self.fixture_command(
+                    f"teleport {self.name} {home['x']} {home['y']} {home['z']} {home['yaw']} {home['pitch']}")
+                self.wait_until(
+                    lambda: (position := self.snapshot()["position"]) is not None
+                    and math.dist(position, [home["x"], home["y"], home["z"]]) < .25,
+                    description="restored fixture observer position")
+            finally:
+                self.fixture_command(f"gamemode {mode} {self.name}")
 
     def read_block_state(self, position: tuple[int, int, int]) -> dict[str, Any]:
         try:
