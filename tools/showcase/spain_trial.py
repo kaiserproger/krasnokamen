@@ -44,7 +44,28 @@ def dump(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, indent=2) + "\n")
 
 
+def resident_census(probe: ProbeSteps) -> dict:
+    """Page only received villagers while the world and observer are stationary."""
+    rows, cursors = [], set()
+    cursor = ""
+    while True:
+        page = probe.call("minecraft_list_entities", {
+            "radius": 128, "limit": 8, "entity_type": "minecraft:villager", "cursor": cursor,
+        })
+        rows.extend(page["entities"])
+        following = page.get("next_cursor")
+        if following is None:
+            if page.get("truncated"):
+                raise RuntimeError("resident census truncated without a continuation cursor")
+            return {"resident_census": rows, "resident_visible_count": page["visible_count"]}
+        if not isinstance(following, str) or following == cursor or following in cursors:
+            raise RuntimeError("resident census cursor did not advance")
+        cursors.add(following)
+        cursor = following
+
+
 def record_census(probe: ProbeSteps, console, run: dict, server_log: Path) -> dict:
+    console(f'gamemode creative {USERNAME}')
     listing = village._recent_chat(village._send(probe, "settlement list"), 20)
     line = next((line for line in listing if line.startswith("Settlements:")), None)
     names = line.split(":", 1)[1].strip().rstrip(".").split(", ") if line else []
@@ -72,11 +93,12 @@ def record_census(probe: ProbeSteps, console, run: dict, server_log: Path) -> di
             # Proven native construction only, never a generated certificate.
             completed = re.findall(rf"settlement_building_completed[^\n]*settlement={sid}\b[^\n]*building={building['id']}\b[^\n]*blueprint=(\S+)", audit)
             building['blueprint'] = completed[-1] if completed else None
-        residents = {}
-        village._resident_census(probe, residents)
+        residents = resident_census(probe)
+        project_ui = village._project_status(probe)
         towns.append({'id': sid, 'name': name, 'owner': None if owner == 'autonomous' else owner,
                       'anchor': anchor, 'radius': int(radius), 'population': int(population), 'buildings': buildings,
-                      'info': info, 'building_lines': lines, **residents})
+                      'info': info, 'building_lines': lines, 'project': village._pending_dialog(project_ui),
+                      **residents})
     # Console's time query gives an exact server tick; client clocks interpolate.
     before = server_log.read_text(errors='replace').count('The time is ')
     console('time query gametime')
@@ -138,6 +160,13 @@ def main() -> None:
     run = {'seed': args.seed, 'days_requested': args.days, 'server': {'path': str(binary), 'sha256': sha},
            'snapshots': [], 'frames': [], 'fixture_commands': [], 'status': 'running',
            'fixture_disclosure': 'Bounded gifted supplies in real storage; no structure paste, no population grant, no time add.'}
+    driver = Path(__file__).resolve()
+    run['driver'] = {'path': str(driver), 'sha256': hashlib.sha256(driver.read_bytes()).hexdigest()}
+    run['material_fixture_plan'] = {
+        'initial': 'Four parent houses through L3, three outpost houses L1, church, fortress, outpost plaza; bread256, dirt128, seeds64, logs128, cobble128.',
+        'at_population_16_once': 'Four further parent houses through L3 and bread512, from observed empty slots only.',
+        'at_daughter_once': 'One house L2+L3 upgrade bill; bread64, dirt64, seeds32, logs64, cobble64.',
+    }
     port, dashboard = runtime.reserve_port(), runtime.reserve_port()
     run['dashboard'] = f'http://127.0.0.1:{dashboard}'
     config = out / 'server.toml'
@@ -185,6 +214,7 @@ def main() -> None:
             run['snapshots'].append(record_census(probe, console, run, log_path))
             telemetry_tick = -1
             funded = False
+            expansion_funded = False
             supplied_children = set()
             queue = ['spanish_house', 'spanish_church', 'spanish_fortress']
             ordered = 'spanish_plaza'
@@ -206,12 +236,25 @@ def main() -> None:
                     plaza = next(building for building in parent['buildings'] if building.get('blueprint') == 'spanish_plaza')
                     positions = [(plaza['min'][0] + x, plaza['min'][1] + 1, plaza['min'][2] + z) for x, z in [(1, 1), (5, 1), (1, 5), (5, 5)]]
                     stock = Counter()
-                    for name in ['spanish_house'] * 4 + ['spanish_church', 'spanish_fortress', 'spanish_plaza']:
+                    for name in ['spanish_house'] * 7 + ['spanish_church', 'spanish_fortress', 'spanish_plaza']:
                         stock.update(bill(name))
+                    for level in (2, 3):
+                        stock.update({item: 4 * count for item, count in bill('spanish_house', level).items()})
                     stock.update({'bread': 256, 'dirt': 128, 'wheat_seeds': 64, 'oak_log': 128, 'cobblestone': 128})
                     console(f'gamemode creative {USERNAME}')
-                    supply(probe, console, positions, stock, run)
+                    supply(probe, console, positions + [chest], stock, run)
                     funded = True
+                if funded and not expansion_funded and parent['population'] >= 16:
+                    plaza = next(building for building in parent['buildings'] if building.get('blueprint') == 'spanish_plaza')
+                    positions = [(plaza['min'][0] + x, plaza['min'][1] + 1, plaza['min'][2] + z)
+                                 for x, z in [(1, 1), (5, 1), (1, 5), (5, 5)]]
+                    stock = Counter()
+                    for level in (1, 2, 3):
+                        stock.update({item: 4 * count for item, count in bill('spanish_house', level).items()})
+                    stock['bread'] += 512
+                    console(f'gamemode creative {USERNAME}')
+                    supply(probe, console, positions + [chest], stock, run)
+                    expansion_funded = True
                 children = [town for town in snapshot['settlements'] if town['name'].startswith('colony_')]
                 for child in children:
                     if child['id'] in supplied_children:
@@ -237,7 +280,14 @@ def main() -> None:
                 probe.wait(lambda observed: abs(observed['player']['y'] - anchor[1] - 35) < 1, 'camera_position')
                 probe.call('minecraft_close_screen', {})
                 probe.call('minecraft_look', {'yaw_deg': 145, 'pitch_deg': 40})
+                hud_hidden = probe.observe()['client_settings']['hide_hud']
+                if not hud_hidden:
+                    probe.call('minecraft_press_inputs', {'keys': ['key.keyboard.f1'], 'ticks': 1})
+                probe.wait(lambda observed: observed['client_settings']['hide_hud'] is True, 'film_hud_hidden')
                 shot = native_client.capture(mcp, out, f'frame-{frame:03d}')
+                if not hud_hidden:
+                    probe.call('minecraft_press_inputs', {'keys': ['key.keyboard.f1'], 'ticks': 1})
+                    probe.wait(lambda observed: observed['client_settings']['hide_hud'] is False, 'film_hud_restored')
                 run['frames'].append({'game_time': snapshot['game_time'], 'settlement': focus['id'], 'capture': shot})
                 dump(out / 'run.json', run)
             final = run['snapshots'][-1]
