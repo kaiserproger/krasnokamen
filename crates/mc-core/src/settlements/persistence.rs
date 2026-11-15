@@ -320,6 +320,8 @@ pub(crate) fn finish_recovery(state: &mut TickState) -> Result<(), CoreError> {
     for world in
         std::iter::once(&*state).chain(state.other_dimensions.values().map(|world| &**world))
     {
+        super::construction::founding::validate_claims(world)
+            .map_err(|error| CoreError::Storage(format!("native settlement: {error}")))?;
         let mut names = std::collections::BTreeSet::new();
         for record in world.settlements.records() {
             validate_record(record)

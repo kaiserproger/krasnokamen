@@ -946,6 +946,9 @@ fn execute_operation(
             {
                 return Err(Failure::Capacity);
             }
+            if settlement_builds::expedition_reserved(target, bounds, None) {
+                return Err(Failure::Blocked);
+            }
             if ledger.structures.values().any(|s| {
                 s.snapshot.dimension == *dimension
                     && s.snapshot.state != ScriptStructureState::Cancelled

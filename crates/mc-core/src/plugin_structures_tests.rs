@@ -1985,3 +1985,84 @@ fn active_structure_recovery_is_a_cached_read_not_a_ledger_mutation() {
         "read-only recovery adds no WAL post-image"
     );
 }
+
+#[test]
+fn persisted_expedition_claim_refuses_plugin_prepare_without_reserving_or_charging() {
+    use crate::settlements::construction::FoundingExpedition;
+    use crate::settlements::households::{Household, HouseholdOrigin};
+    let mut state = state();
+    let at = anchor(&state);
+    let parent = state
+        .settlements
+        .create(
+            &mut state.settlement_sequence,
+            "parent".into(),
+            "owner".into(),
+            [at[0] - 100, at[1] + 1, at[2]],
+            48,
+        )
+        .unwrap();
+    let family = format!("{}-1", parent.0);
+    let record = state.settlements.get_mut(parent).unwrap();
+    record.household_sequence = 1;
+    record.households.insert(
+        family.clone(),
+        Household {
+            id: family.clone(),
+            revision: 1,
+            origin: HouseholdOrigin::Migration,
+            home: None,
+            needs: None,
+            policy: None,
+        },
+    );
+    record.founding = Some(FoundingExpedition {
+        destination: at,
+        household: family,
+    });
+    // Decode the actual serialized native record, not an ephemeral test flag.
+    let encoded = serde_json::to_vec(record).unwrap();
+    let restored: crate::settlements::SettlementRecord = serde_json::from_slice(&encoded).unwrap();
+    crate::settlements::validate_record(&restored).unwrap();
+    *state.settlements.get_mut(parent).unwrap() = restored;
+    let (boundary, _host) = script_boundary_pair(
+        std::num::NonZeroUsize::new(16).unwrap(),
+        std::num::NonZeroUsize::new(16).unwrap(),
+    );
+    let mut runtime = crate::plugin::PluginRuntime::with_test_boundary(boundary);
+    runtime.set_test_catalogs(BTreeMap::from([(
+        "demo".into(),
+        BlueprintCatalog::from_files(
+            &state.registry.blocks,
+            "authored",
+            &[("house.toml".into(), authored("authored:house"))],
+        )
+        .unwrap(),
+    )]));
+    state.plugin_runtime = Some(runtime);
+    let bounds = ScriptWorldBounds::new(at, [at[0] + 1, at[1] + 1, at[2] + 2]).unwrap();
+    let (_, result) = survey(&mut state, "demo", "minecraft:overworld", bounds).unwrap();
+    let ScriptWorldStructureResult::Survey { survey } = result else {
+        panic!("survey")
+    };
+    let before = serde_json::to_value(&state.plugins).unwrap();
+    let operation = ScriptWorldStructureOperation::PrepareStructure {
+        operation_id: "outpost-interference".into(),
+        dimension: "minecraft:overworld".into(),
+        blueprint_id: "authored:house".into(),
+        anchor: at,
+        rotation: 0,
+        survey_token: survey.survey_token,
+        expected_world_revision: survey.world_revision,
+        expected_blueprint_hash: None,
+    };
+    assert_eq!(
+        execute_operation(&mut state, "demo", &operation).err(),
+        Some(Failure::Blocked)
+    );
+    assert_eq!(serde_json::to_value(&state.plugins).unwrap(), before);
+    assert!(ledger(&state).unwrap().structures.is_empty());
+    // Removing only the durable claim restores the exact same admitted path.
+    state.settlements.get_mut(parent).unwrap().founding = None;
+    assert!(execute_operation(&mut state, "demo", &operation).is_ok());
+}

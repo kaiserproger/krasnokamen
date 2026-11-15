@@ -18,7 +18,20 @@ pub(crate) use availability::gatherer_for_item;
 #[path = "construction_furnace.rs"]
 pub(crate) mod furnace;
 
+#[path = "construction_founding.rs"]
+pub(super) mod founding;
+
 pub(crate) const PLAN_CADENCE: u64 = 20;
+
+/// A same-dimension native outpost. Construction stage and culture are derived
+/// from committed structures; lineage belongs to the run's audit, not this row.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct FoundingExpedition {
+    /// Ground-level min corner of the authored outpost plan.
+    pub destination: [i32; 3],
+    pub household: String,
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -976,6 +989,19 @@ pub(super) fn site_free(
     origin: [i32; 3],
     size: [u8; 3],
 ) -> bool {
+    site_free_claim(state, record, origin, size, record.founding.as_ref())
+}
+
+fn site_free_claim(
+    state: &TickState,
+    record: &SettlementRecord,
+    origin: [i32; 3],
+    size: [u8; 3],
+    expedition: Option<&FoundingExpedition>,
+) -> bool {
+    if founding::site_reserved(state, record.id, origin, size) {
+        return false;
+    }
     let max: [i32; 3] = std::array::from_fn(|axis| origin[axis] + i32::from(size[axis]) - 1);
     let mut minimum = origin[1];
     let mut maximum = origin[1];
@@ -995,10 +1021,16 @@ pub(super) fn site_free(
                 .map(|(value, anchor)| (i64::from(value) - i64::from(anchor)).pow(2))
                 .sum::<i64>()
                 > i64::from(record.radius).pow(2)
+                && !expedition.is_some_and(|site| site.contains([x, max[1], z]))
             {
                 return false;
             }
-            let Some(height) = surface_y(state, record.anchor[1], x, z) else {
+            let anchor_y = if expedition.is_some_and(|site| site.contains(origin)) {
+                origin[1]
+            } else {
+                record.anchor[1]
+            };
+            let Some(height) = surface_y(state, anchor_y, x, z) else {
                 return false;
             };
             minimum = minimum.min(height);
@@ -1547,6 +1579,9 @@ fn plan(state: &mut TickState, id: SettlementId) {
         return;
     }
     if plan_order(state, id) {
+        return;
+    }
+    if founding::plan(state, id) {
         return;
     }
     let Some(record) = state.settlements.get(id) else {
@@ -2307,6 +2342,26 @@ pub(crate) fn finish_project(state: &mut TickState, id: SettlementId) -> bool {
     let bounds = level
         .rotated(Rotation::from_quarter_turns(project.rotation))
         .bounds(project.origin);
+    if state
+        .settlements
+        .get(id)
+        .is_some_and(|record| founding::owns_project(record, &project))
+    {
+        if buildings::inspect(state, blueprint.kind, 1, bounds).is_err() {
+            return false;
+        }
+        // Outpost POIs stay outside the parent's civil allocator until the
+        // whole household can receive all certificates in the daughter.
+        release_builder(state, id, project.borrowed_builder);
+        let record = state.settlements.get_mut(id).expect("finished outpost");
+        record.project = None;
+        record.revision = record.revision.saturating_add(1);
+        tracing::info!(target: "settlement_audit", settlement = id.0,
+            blueprint = %project.blueprint, origin = ?project.origin,
+            tick = state.tick, game_time = state.tick_control.game_ticks(state.tick),
+            "settlement_outpost_completed");
+        return true;
+    }
     let Ok(building) = buildings::certify(state, id, blueprint.kind, bounds) else {
         return false;
     };
@@ -2431,6 +2486,11 @@ fn gatherer_demand(
     };
     if let Some(order) = &record.pending_order {
         return demand(order.blueprint.as_str(), order.level);
+    }
+    if let Some(name) = founding::next_blueprint(state, record)
+        && let Some(profession) = demand(name, 1)
+    {
+        return Some(profession);
     }
     let catalog = catalog(state, record);
     candidate_kinds(state, record, images).find_map(|kind| {

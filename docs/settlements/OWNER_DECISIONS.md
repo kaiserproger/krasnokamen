@@ -47,3 +47,33 @@ The supply recipes from the same decision (saddle, hay block) are implemented; s
 - A block must match this world's deterministic generator and have no retained player placement record. Imported/unknown generator identities and persisted lumberjack sapling roots are protected after restart.
 - Water, lava, steep terrain and other existing terrain refusals remain refusals.
 - An identical player replacement at a former natural coordinate after history expiry may be felled with its drops conserved; see [the construction policy](construction.md#planning-and-streets).
+
+## Provisional daughter founding — 2026-11-15
+
+Status: Main authorized a separate implementation commit and independent review
+of the committee's minimal schema; final owner schema approval remains required.
+This is not an approved war/faction model and must not be described as one.
+
+- The existing owner UUID groups teaser settlements. Only completed native
+  Spanish blueprint provenance establishes that owner's style.
+- The proposed durable addition is a serde-defaulted optional `founding` on a
+  settlement, containing only `destination: [i32; 3]` and an existing `household`
+  key. Stage, payment, materials, construction and culture are derived from
+  existing native state; there is no persisted lineage or culture flag.
+- At 24 residents, a whole eligible household of two or three members can
+  commission an outside-radius outpost: three paid Spanish houses and a plaza.
+  There must be at least two adults; the three-bed plan cannot receive a larger
+  household. Missing or relocated members cancel the expedition.
+- Site rights, overlap admission and recovery validation are explicit. Civil
+  certificates are withheld until physical completion. Generic plugin structure
+  preparation cannot reserve an expedition's site.
+- One native WAL tick must publish all civil records, same-body membership,
+  correctly reissued building IDs, unchanged inventories and transferred
+  committed ledger provenance, or none of them. Admission creates no blocks,
+  residents, inventory or duplicate receipts.
+- Existing checkpoint/WAL rows decode absent `founding` as `None`. Downgrade
+  after writing the new schema requires restoring the matching pre-upgrade
+  backup, not opening the new world with a binary that rejects the field.
+
+Implementation and gate evidence belong to the SpainCulture report. Public
+claims require the actual pinned-server run, not this design decision.

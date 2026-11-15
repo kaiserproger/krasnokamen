@@ -119,3 +119,36 @@ Lineage requires a native `settlement_daughter_founded` audit event with parent,
 daughter, tick and simulation age, plus same-owner native records. A second
 same-owner town alone is never a daughter event. Audit logs must be retained
 alongside the world and telemetry; the chronicle does not invent lost history.
+
+### Native daughter founding
+
+The provisional founding schema is recorded separately in
+[owner decisions](../settlements/OWNER_DECISIONS.md#provisional-daughter-founding--2026-11-15);
+Main authorized implementation and review, not an owner-approved schema release.
+A styled owned town with at least 24 residents considers one complete, fed
+household at a time. The initial outpost has three house beds, so admission
+requires two or three members, including at least two adults, with no military,
+conversion or economic reservation. No resident is spawned for expansion.
+
+The parent persists only an optional `founding` object containing a ground-level
+`destination` and the existing `household` key. It reserves a loaded, buildable
+site outside the parent's radius against other towns, expeditions and structure
+claims. Four ordinary paid projects build three Spanish houses and a Spanish
+plaza. Construction progress, receipts and stage remain in the existing structure
+ledger. An outpost is not yet a civil settlement, and its beds are not available
+to the parent allocator.
+
+After all four physical structures and payment receipts validate, one native
+tick prepares and publishes the parent, daughter, reissued daughter building
+IDs, transferred structure-ledger ownership, unchanged resident bodies and
+inventories, household membership, and cleared expedition. The daughter shares
+the original owner and therefore inherits committed culture. Its anchor is the
+actual outpost plaza bell. No teleport, inventory copy or free block paste is
+part of handover. The native daughter audit supplies chronicle lineage.
+
+Recovery rejects invalid or overlapping persisted claims. Losing the selected
+household or moving it elsewhere cancels its active expedition; an interrupted
+handover must recover either the entire old image or the entire new image.
+Old checkpoint and WAL rows decode missing `founding` as `None`. Once a world
+contains this new field, downgrade to a binary whose row schema denies it is
+unsupported; restore the matching pre-upgrade world backup instead.

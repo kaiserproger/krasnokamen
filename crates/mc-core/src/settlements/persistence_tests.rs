@@ -289,6 +289,7 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
                     furnace_workstation: None,
                     pending_order: None,
                     construction_cursor: 0,
+                    founding: None,
                 },
             })
             .unwrap(),
@@ -325,6 +326,7 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
                 furnace_workstation: None,
                 pending_order: None,
                 construction_cursor: 0,
+                founding: None,
             }),
         });
     }
@@ -358,6 +360,7 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
             furnace_workstation: None,
             pending_order: None,
             construction_cursor: 0,
+            founding: None,
         }),
     });
     let mut child = self::state();
@@ -385,6 +388,7 @@ fn hydrate_validates_rows_and_keeps_sequence_monotonic() {
             furnace_workstation: None,
             pending_order: None,
             construction_cursor: 0,
+            founding: None,
         }),
     });
     multi

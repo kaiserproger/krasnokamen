@@ -330,6 +330,17 @@ fn reconcile(world: &mut TickState, owner: SettlementId, household: &str, size: 
         .is_some_and(|record| record.households.contains_key(household))
     {
         if size == 0 || world.settlements.household_size(household) != size {
+            if size == 0
+                && world.settlements.get(owner).is_some_and(|record| {
+                    record
+                        .founding
+                        .as_ref()
+                        .is_some_and(|founding| founding.household == household)
+                })
+            {
+                // Last-member retirement and claim cancellation share this tick.
+                super::construction::founding::cancel(world, owner);
+            }
             let record = world.settlements.get_mut(owner).unwrap();
             record.revision = record.revision.saturating_add(1);
             if size > 0 {
@@ -400,6 +411,13 @@ pub(crate) fn relocate(
         })
     {
         return Err("Dismiss soldiers before relocating their household");
+    }
+    if from
+        .founding
+        .as_ref()
+        .is_some_and(|founding| founding.household == household)
+    {
+        super::construction::founding::cancel(state, source);
     }
     let mut family = state
         .settlements

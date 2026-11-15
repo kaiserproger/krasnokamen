@@ -60,6 +60,8 @@ pub struct SettlementRecord {
     pub pending_order: Option<super::construction::OwnerOrder>,
     #[serde(default)]
     pub construction_cursor: u32,
+    #[serde(default)]
+    pub founding: Option<super::construction::FoundingExpedition>,
 }
 
 /// One absolute post-image or tombstone, not an aggregate registry blob.
@@ -276,6 +278,10 @@ impl SettlementRecord {
                 .pending_order
                 .as_ref()
                 .map_or(0, |order| order.blueprint.capacity())
+            + self
+                .founding
+                .as_ref()
+                .map_or(0, |founding| founding.household.capacity())
             + roots
             + households
             + district
@@ -325,6 +331,7 @@ pub fn validate_record(record: &SettlementRecord) -> Result<(), &'static str> {
         return Err("planted sapling origin outside settlement radius");
     }
     super::construction::validate_record(record)?;
+    super::construction::founding::validate_record(record)?;
     super::households::validate_record(record)?;
     super::buildings::validate_record_buildings(record)?;
     if let Some(district) = &record.district {
@@ -477,6 +484,7 @@ impl Registry {
             furnace_workstation: None,
             pending_order: None,
             construction_cursor: 0,
+            founding: None,
         };
         validate_record(&record)?;
         self.records.insert(id, record);
@@ -523,6 +531,7 @@ impl Registry {
             furnace_workstation: None,
             pending_order: None,
             construction_cursor: 0,
+            founding: None,
         };
         validate_record(&record)?;
         self.records.insert(id, record);

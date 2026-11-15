@@ -34,6 +34,9 @@ pub(crate) fn prepare(
             [site.min[0], site.max[1] - height + 1, site.min[2]]
         })
         .unwrap_or(site.min);
+    if expedition_reserved(state, bounds, Some((settlement, &blueprint, origin))) {
+        return Err(Failure::Blocked);
+    }
     let ledger = ledger(state)?;
     if ledger.structures.values().any(|record| {
         record.snapshot.dimension == state.dimension.name()
@@ -1225,4 +1228,136 @@ pub(crate) fn pickup_point(
         })
         .min_by(|(_, a), (_, b)| a.total_cmp(b))
         .map(|(point, _)| point)
+}
+
+/// A durable outpost reserves its full future site before its first structure.
+pub(crate) fn expedition_reserved(
+    state: &TickState,
+    bounds: ScriptWorldBounds,
+    admission: Option<(SettlementId, &str, [i32; 3])>,
+) -> bool {
+    state.settlements.records().any(|town| {
+        town.founding.as_ref().is_some_and(|site| {
+            overlaps(site.bounds(), bounds)
+                && !admission.is_some_and(|(id, name, origin)| {
+                    town.id == id && site.sites().contains(&(name, origin))
+                })
+        })
+    })
+}
+
+pub(crate) fn founding_claim_clear(
+    state: &TickState,
+    source: SettlementId,
+    bounds: ScriptWorldBounds,
+    sites: &[(&str, [i32; 3])],
+) -> bool {
+    let source_owner = owner(source);
+    ledger(state).is_ok_and(|ledger| {
+        ledger.structures.values().all(|record| {
+            record.snapshot.dimension != state.dimension.name()
+                || record.snapshot.state == ScriptStructureState::Cancelled
+                || spent_free_work(record)
+                || reserved_bounds(record).is_ok_and(|existing| !overlaps(existing, bounds))
+                || (record.settlement == Some(source)
+                    && record.owner == source_owner
+                    && sites.iter().any(|(name, origin)| {
+                        record
+                            .snapshot
+                            .blueprint_id
+                            .strip_prefix("krasnokamen-settlements:")
+                            == Some(*name)
+                            && same_site(state, record, *origin)
+                    }))
+        })
+    })
+}
+
+/// An unpublished ledger post-image, prepared before any civil record changes.
+pub(crate) struct PreparedFoundingTransfer(LedgerView);
+
+pub(crate) fn prepare_founding_transfer(
+    state: &TickState,
+    source: SettlementId,
+    destination: SettlementId,
+    sites: &[(&str, [i32; 3])],
+) -> Result<PreparedFoundingTransfer, Failure> {
+    if source == destination
+        || state.settlements.get(destination).is_some()
+        || sites.len() != 4
+        || state.settlements.get(source).is_none()
+    {
+        return Err(Failure::InvalidRequest);
+    }
+    let mut ledger = ledger(state)?;
+    let source_owner = owner(source);
+    let matches = |record: &Structure| {
+        record.settlement == Some(source)
+            && record.owner == source_owner
+            && sites.iter().any(|(name, origin)| {
+                record
+                    .snapshot
+                    .blueprint_id
+                    .strip_prefix("krasnokamen-settlements:")
+                    == Some(*name)
+                    && same_site(state, record, *origin)
+            })
+    };
+    for (name, origin) in sites {
+        if !ledger.structures.values().any(|record| {
+            matches(record)
+                && record.snapshot.state == ScriptStructureState::Committed
+                && record
+                    .snapshot
+                    .blueprint_id
+                    .strip_prefix("krasnokamen-settlements:")
+                    == Some(*name)
+                && same_site(state, record, *origin)
+        }) {
+            return Err(Failure::Blocked);
+        }
+    }
+    for record in ledger.structures.values().filter(|record| matches(record)) {
+        if record.snapshot.state != ScriptStructureState::Committed
+            || record.snapshot.dimension != state.dimension.name()
+            || record.cells.iter().flatten().any(|cell| {
+                cell.state != state.registry.states.air
+                    && state
+                        .world
+                        .physics_block_at(cell.at[0], cell.at[1], cell.at[2])
+                        .is_none_or(|actual| {
+                            state
+                                .registry
+                                .blocks
+                                .by_id(mc_world::BlockStateId(actual))
+                                .map(|definition| &definition.block.id)
+                                != state
+                                    .registry
+                                    .blocks
+                                    .by_id(mc_world::BlockStateId(cell.state))
+                                    .map(|definition| &definition.block.id)
+                        })
+            })
+        {
+            return Err(Failure::Blocked);
+        }
+    }
+    let revision = next(ledger.revision)?;
+    for record in ledger
+        .structures
+        .values_mut()
+        .filter(|record| matches(record))
+    {
+        // Stable opaque structure IDs and original payment receipts remain the
+        // construction history; only the one live owner/provenance changes.
+        record.owner = owner(destination);
+        record.settlement = Some(destination);
+        record.snapshot.revision = revision;
+    }
+    ledger.revision = revision;
+    Ok(PreparedFoundingTransfer(ledger))
+}
+
+pub(crate) fn commit_founding_transfer(state: &mut TickState, prepared: PreparedFoundingTransfer) {
+    save(state, &prepared.0);
 }
