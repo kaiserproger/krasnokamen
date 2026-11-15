@@ -41,6 +41,7 @@ pub mod processors;
 pub mod shapes;
 pub mod solver;
 
+pub use mc_data::worldgen_structure_types::supports_structure_type;
 pub use beard::{BeardColumn, BeardContribution};
 pub use closure::{
     ClosureElement, ClosureError, ClosurePool, ClosureStructure, VillageClosure,

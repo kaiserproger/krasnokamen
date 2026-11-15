@@ -96,6 +96,7 @@ pub mod villager_trades_26_1_2;
 pub mod worldgen_features;
 pub mod worldgen_inventory;
 pub mod worldgen_ores;
+pub mod worldgen_structure_types;
 pub mod worldgen_structures;
 
 pub use identifier::{Identifier, IdentifierError};
