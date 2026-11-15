@@ -493,48 +493,48 @@ ledger_contract:
     death_respawn.keep_inventory_false:
       changed_by:
       - graves
-      vanilla: 64cb3b6b80f2bfdebda44efebcec68e2d6eb924f59619211f1aeaaa94e782c1c
-      live: 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff
+      vanilla: fa28aad7ca25bdc8be02ec2bb9b279105388133d965a18734a3098ad7ab876c5
+      live: 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21
     death_respawn.death_while_menu_open:
       changed_by:
       - graves
-      vanilla: 64cb3b6b80f2bfdebda44efebcec68e2d6eb924f59619211f1aeaaa94e782c1c
-      live: 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff
+      vanilla: fa28aad7ca25bdc8be02ec2bb9b279105388133d965a18734a3098ad7ab876c5
+      live: 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21
     death_respawn.death_while_riding:
       changed_by:
       - graves
-      vanilla: 64cb3b6b80f2bfdebda44efebcec68e2d6eb924f59619211f1aeaaa94e782c1c
-      live: 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff
+      vanilla: fa28aad7ca25bdc8be02ec2bb9b279105388133d965a18734a3098ad7ab876c5
+      live: 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21
     death_respawn.void_death:
       changed_by:
       - graves
-      vanilla: 64cb3b6b80f2bfdebda44efebcec68e2d6eb924f59619211f1aeaaa94e782c1c
-      live: 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff
+      vanilla: fa28aad7ca25bdc8be02ec2bb9b279105388133d965a18734a3098ad7ab876c5
+      live: 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21
     commands.msg:
       changed_by:
       - krasnokamen-essentials
-      vanilla: 1638061e6df0eefbb0990ea923635e2038cbbe0215a2098f0c5898125afa7084
-      live: 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff
+      vanilla: d5c403b3753922683a81dc5fcd84bdd14e3491aab4f1d1666d7193174f0d96d3
+      live: 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21
     chat.private_message:
       changed_by:
       - krasnokamen-essentials
-      vanilla: 1638061e6df0eefbb0990ea923635e2038cbbe0215a2098f0c5898125afa7084
-      live: 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff
+      vanilla: d5c403b3753922683a81dc5fcd84bdd14e3491aab4f1d1666d7193174f0d96d3
+      live: 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21
     selectors.nonop_selector_msg:
       changed_by:
       - krasnokamen-essentials
-      vanilla: 1638061e6df0eefbb0990ea923635e2038cbbe0215a2098f0c5898125afa7084
-      live: 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff
+      vanilla: d5c403b3753922683a81dc5fcd84bdd14e3491aab4f1d1666d7193174f0d96d3
+      live: 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21
     session.mute_warn:
       changed_by:
       - krasnokamen-essentials
-      vanilla: 1638061e6df0eefbb0990ea923635e2038cbbe0215a2098f0c5898125afa7084
-      live: 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff
+      vanilla: d5c403b3753922683a81dc5fcd84bdd14e3491aab4f1d1666d7193174f0d96d3
+      live: 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21
     session.join_fresh_spawn:
       changed_by:
       - krasnokamen-auth
-      vanilla: aa21fa752e3a6fc13ccc93221acec1833b2750b761dc04ebdf791ea9519e6462
-      live: 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff
+      vanilla: a4fc09c833681ce18c8568def2e90f80c5690fa2f0ab60953d25c331560f94cc
+      live: 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21
   writers: harness receipts -> `python3 gen_matrix.py --record ...` or `--record-file batch.jsonl` (validates, flock(LOCK_EX) on ledger.jsonl, one O_APPEND write, fsync, unlock); direct writers must do
     the same and never hold the lock across a scenario run
   executed: pass or fail; blocked/skipped stay remaining; a full-set cell counts as executed when any id carrying that CELL (wave-1 or F:) has pass/fail
@@ -33395,7 +33395,7 @@ scenarios:
   subject: death_respawn.death_while_menu_open
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 64cb3b6b80f2bfdebda44efebcec68e2d6eb924f59619211f1aeaaa94e782c1c); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint fa28aad7ca25bdc8be02ec2bb9b279105388133d965a18734a3098ad7ab876c5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with a container open and cursor stack'
   - 'Network (disconnect_during_menu): actor disconnects (TCP close) while a container/merchant/station menu is open, optionally carrying a cursor stack'
   oracle:
@@ -33441,7 +33441,7 @@ scenarios:
   subject: death_respawn.death_while_menu_open
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with a container open and cursor stack'
   - 'Network (disconnect_during_menu): actor disconnects (TCP close) while a container/merchant/station menu is open, optionally carrying a cursor stack'
   oracle:
@@ -40566,7 +40566,7 @@ scenarios:
   subject: session.join_fresh_spawn
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint aa21fa752e3a6fc13ccc93221acec1833b2750b761dc04ebdf791ea9519e6462); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint a4fc09c833681ce18c8568def2e90f80c5690fa2f0ab60953d25c331560f94cc); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: fresh account joins a fresh world'
   - 'Network (duplicate_login): a second connection with the same account/UUID logs in during the action'
   - Second client observes the actor's target
@@ -40617,7 +40617,7 @@ scenarios:
   subject: session.join_fresh_spawn
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: fresh account joins a fresh world'
   - 'Network (duplicate_login): a second connection with the same account/UUID logs in during the action'
   - Second client observes the actor's target
@@ -46396,7 +46396,7 @@ scenarios:
   subject: death_respawn.death_while_riding
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 64cb3b6b80f2bfdebda44efebcec68e2d6eb924f59619211f1aeaaa94e782c1c); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint fa28aad7ca25bdc8be02ec2bb9b279105388133d965a18734a3098ad7ab876c5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die while riding horse/boat'
   - 'Network (slow_reader_backpressure): actor reads its socket at a throttled rate (MIX-08 reader_rate_limit) during the action'
   - 'Lifecycle (hot_backup_during_action): operator hot backup taken during the action; backup later restored and inspected'
@@ -46444,7 +46444,7 @@ scenarios:
   subject: death_respawn.death_while_riding
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die while riding horse/boat'
   - 'Network (slow_reader_backpressure): actor reads its socket at a throttled rate (MIX-08 reader_rate_limit) during the action'
   - 'Lifecycle (hot_backup_during_action): operator hot backup taken during the action; backup later restored and inspected'
@@ -48247,7 +48247,7 @@ scenarios:
   subject: selectors.nonop_selector_msg
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 1638061e6df0eefbb0990ea923635e2038cbbe0215a2098f0c5898125afa7084); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint d5c403b3753922683a81dc5fcd84bdd14e3491aab4f1d1666d7193174f0d96d3); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /tp or /effect with non-op /msg @a hi against several players/entities'
   - 'Network (malformed_or_stale_packet): actor injects a stale state_id / out-of-reach / malformed packet during the action'
   - 'Lifecycle (pause_when_empty_resume): all players leave (pause-when-empty-seconds>0), world pauses, players rejoin'
@@ -48293,7 +48293,7 @@ scenarios:
   subject: selectors.nonop_selector_msg
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /tp or /effect with non-op /msg @a hi against several players/entities'
   - 'Network (malformed_or_stale_packet): actor injects a stale state_id / out-of-reach / malformed packet during the action'
   - 'Lifecycle (pause_when_empty_resume): all players leave (pause-when-empty-seconds>0), world pauses, players rejoin'
@@ -49465,7 +49465,7 @@ scenarios:
   subject: chat.private_message
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 1638061e6df0eefbb0990ea923635e2038cbbe0215a2098f0c5898125afa7084); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint d5c403b3753922683a81dc5fcd84bdd14e3491aab4f1d1666d7193174f0d96d3); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /msg /tell /w to player; non-op with selector'
   - 'Network (malformed_or_stale_packet): actor injects a stale state_id / out-of-reach / malformed packet during the action'
   - All 8 clients repeat the action concurrently on own targets and on one shared target
@@ -49511,7 +49511,7 @@ scenarios:
   subject: chat.private_message
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /msg /tell /w to player; non-op with selector'
   - 'Network (malformed_or_stale_packet): actor injects a stale state_id / out-of-reach / malformed packet during the action'
   - All 8 clients repeat the action concurrently on own targets and on one shared target
@@ -49645,7 +49645,7 @@ scenarios:
   subject: session.mute_warn
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 1638061e6df0eefbb0990ea923635e2038cbbe0215a2098f0c5898125afa7084); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint d5c403b3753922683a81dc5fcd84bdd14e3491aab4f1d1666d7193174f0d96d3); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /mute target; target chats; /unmute; /warn target'
   - 'Network (malformed_or_stale_packet): actor injects a stale state_id / out-of-reach / malformed packet during the action'
   - 'Lifecycle (clean_restart_mid_action): /stop between action steps, restart same world, rejoin and continue'
@@ -49694,7 +49694,7 @@ scenarios:
   subject: session.mute_warn
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /mute target; target chats; /unmute; /warn target'
   - 'Network (malformed_or_stale_packet): actor injects a stale state_id / out-of-reach / malformed packet during the action'
   - 'Lifecycle (clean_restart_mid_action): /stop between action steps, restart same world, rejoin and continue'
@@ -51519,7 +51519,7 @@ scenarios:
   subject: death_respawn.death_while_menu_open
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 64cb3b6b80f2bfdebda44efebcec68e2d6eb924f59619211f1aeaaa94e782c1c); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint fa28aad7ca25bdc8be02ec2bb9b279105388133d965a18734a3098ad7ab876c5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with a container open and cursor stack'
   - 'Network (disconnect_during_menu): actor disconnects (TCP close) while a container/merchant/station menu is open, optionally carrying a cursor stack'
   - All 8 clients repeat the action concurrently on own targets and on one shared target
@@ -51567,7 +51567,7 @@ scenarios:
   subject: death_respawn.death_while_menu_open
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with a container open and cursor stack'
   - 'Network (disconnect_during_menu): actor disconnects (TCP close) while a container/merchant/station menu is open, optionally carrying a cursor stack'
   - All 8 clients repeat the action concurrently on own targets and on one shared target
@@ -56081,7 +56081,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 64cb3b6b80f2bfdebda44efebcec68e2d6eb924f59619211f1aeaaa94e782c1c); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint fa28aad7ca25bdc8be02ec2bb9b279105388133d965a18734a3098ad7ab876c5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   oracle:
   - 'reference: items drop at death spot; XP orbs 7*level capped 100; inventory empty on respawn'
@@ -56120,7 +56120,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   oracle:
   - 'reference: items drop at death spot; XP orbs 7*level capped 100; inventory empty on respawn'
@@ -56220,7 +56220,7 @@ scenarios:
   subject: death_respawn.void_death
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 64cb3b6b80f2bfdebda44efebcec68e2d6eb924f59619211f1aeaaa94e782c1c); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint fa28aad7ca25bdc8be02ec2bb9b279105388133d965a18734a3098ad7ab876c5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: fall below world bottom'
   oracle:
   - 'reference: void damage until death; drops lost in void'
@@ -56254,7 +56254,7 @@ scenarios:
   subject: death_respawn.void_death
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: fall below world bottom'
   oracle:
   - 'reference: void damage until death; drops lost in void'
@@ -59272,7 +59272,7 @@ scenarios:
   subject: commands.msg
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 1638061e6df0eefbb0990ea923635e2038cbbe0215a2098f0c5898125afa7084); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint d5c403b3753922683a81dc5fcd84bdd14e3491aab4f1d1666d7193174f0d96d3); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /msg <player> hi (requires op 0; probe also at op 0)'
   - Second client observes the actor's target
   oracle:
@@ -59311,7 +59311,7 @@ scenarios:
   subject: commands.msg
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: /msg <player> hi (requires op 0; probe also at op 0)'
   - Second client observes the actor's target
   oracle:
@@ -74810,7 +74810,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 64cb3b6b80f2bfdebda44efebcec68e2d6eb924f59619211f1aeaaa94e782c1c); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint fa28aad7ca25bdc8be02ec2bb9b279105388133d965a18734a3098ad7ab876c5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   - Two players take/use the same custody object (item frame, armor stand, shelf, jukebox, item entity, grave, cauldron, campfire, bucket source) in the same tick
   oracle:
@@ -74852,7 +74852,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   - Two players take/use the same custody object (item frame, armor stand, shelf, jukebox, item entity, grave, cauldron, campfire, bucket source) in the same tick
   oracle:
@@ -74894,7 +74894,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 64cb3b6b80f2bfdebda44efebcec68e2d6eb924f59619211f1aeaaa94e782c1c); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint fa28aad7ca25bdc8be02ec2bb9b279105388133d965a18734a3098ad7ab876c5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   - Destroy the holder (break block / kill entity / explosion) in the same tick as the take/insert
   oracle:
@@ -74935,7 +74935,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   - Destroy the holder (break block / kill entity / explosion) in the same tick as the take/insert
   oracle:
@@ -74976,7 +74976,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile vanilla: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 64cb3b6b80f2bfdebda44efebcec68e2d6eb924f59619211f1aeaaa94e782c1c); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint fa28aad7ca25bdc8be02ec2bb9b279105388133d965a18734a3098ad7ab876c5); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   - Complete the custody step (take/insert/break-and-pick-up), then /stop and restart before any further input
   oracle:
@@ -75017,7 +75017,7 @@ scenarios:
   subject: death_respawn.keep_inventory_false
   steps:
   - 'Plugin profile live: [plugins].directory = copy of live-plugins/ with basic-economy, chisel, computer, graves, krasnokamen-audit, krasnokamen-auth, krasnokamen-economy, krasnokamen-essentials, krasnokamen-permissions,
-    krasnokamen-towns (fingerprint 546876292e04acf0bd78f7341afedcde17695319b5de4def18d936b3b9dbe7ff); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
+    krasnokamen-towns (fingerprint 841ff9326498956ab20db9f050d5cf2cdb6a0c8a879806b0f0ddd9214ea2ad21); ledger plugin_set = gen_matrix.py --plugin-fingerprint <that dir>'
   - 'Action: die with items and XP (keepInventory=false)'
   - Complete the custody step (take/insert/break-and-pick-up), then /stop and restart before any further input
   oracle:

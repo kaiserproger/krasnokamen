@@ -6568,6 +6568,7 @@ status = "open"
 source = "screens-voice-qa checks registered=false after reconnect, but the native client advertises its voice capability on every Play connection independently of server support. Run 20261115T031638-screens-voice-qa-j5rvvqct had server_enabled=false, listening=false and no microphone HUD, yet failed that verdict. The corrected gate also checks all voice flags and HUD are cleared immediately after disconnect."
 repro = "client"
 regression = ["python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_voice_reset_allows_fresh_capability_registration_only_after_reconnect"]
+fix_commit = "0857a48c5"
 failing_first = "reported"
 repro_check = "receipts/ScreensVoiceStart/voice-reset-red.log fails False != True with the original reconnect predicate; voice-reset-green.log passes eight tests, including rejection of stale disconnect registration, support, listening and HUD."
 
@@ -6580,5 +6581,18 @@ status = "open"
 source = "screens-voice-qa waits for computer:monitor and only publishes true, even after the native Loader acknowledged its final bundle list without that block. Loader acknowledgement is terminal; absent content must produce a false verdict before screen actions."
 repro = "source"
 regression = ["python:tools.harness.test_screens_voice_qa:ScreensVoiceHelperTests.test_screen_manifest_records_missing_monitor_after_loader_acknowledgement"]
+fix_commit = "b7d3c0148"
 failing_first = "reported"
 repro_check = "receipts/ScreensVoiceStart/monitor-verdict-red.log fails None is not False with the original compound wait; the retained unit scenario exercises screens_leg with an acknowledged Loader both with and without the monitor."
+
+[[bug]]
+id = "CLIENT-COMPUTER-NATIVE-BUNDLE-EXCLUDED"
+title = "Native clients cannot load monitor content because the computer bundle excludes their platform"
+area = "client"
+severity = "major"
+status = "open"
+source = "computer/plugin.toml in the plugins repository omitted native from loaders despite current native support for its schema-2 block/item/asset bundle and gray glazed terracotta carrier. Plugins fix 03a38c7 adds only native to that list; the shared live pack and frozen matrix fingerprints follow."
+repro = "client"
+regression = ["harness:screens-voice-qa:native_loads_computer_monitor"]
+failing_first = "reported"
+repro_check = "receipts/ScreensVoiceStart/runs/20261115T032837-screens-voice-qa-mx2sf4ne/private-graph/verdicts.json records native_loads_computer_monitor=false after completed native Loader acknowledgement. With only the deployed manifest changed, 20261115T033229-screens-voice-qa-ua4o96t_/private-graph/verdicts.json records all six screen verdicts true; both natives register computer:monitor and activate the six verified assets. Same server/client pins and harness b7d3c0148."
