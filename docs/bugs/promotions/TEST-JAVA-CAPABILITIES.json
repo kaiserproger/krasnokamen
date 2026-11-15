@@ -1,0 +1,49 @@
+{
+  "id": "TEST-JAVA-CAPABILITIES",
+  "verdict": "promoted",
+  "fix_commit": "e99902e71",
+  "fix_commit_full": "e99902e718e0fd710f325169025d67e168ebd901",
+  "promoted_at": "2026-11-15T02:10:56+00:00",
+  "tree_head": "d18656b6732cf995847ac172ef5325c7d4014914",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/harness/java_matrix_client.py",
+    "tools/harness/matrix_domains/_items.py"
+  ],
+  "kept_test_files": [
+    "tools/harness/test_java_matrix_client.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_events_use_applied_system_chat_not_gui_history": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_incomplete_system_chat_journal_fails_closed": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_cumulative_system_chat_requires_lossless_ordered_receipts": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_events_use_applied_system_chat_not_gui_history": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_java_matrix_client:JavaMatrixClientTest.test_incomplete_system_chat_journal_fails_closed": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteHarness/.analysis/validation/20261115T021046-ledger-promote-htnbvoia"
+}

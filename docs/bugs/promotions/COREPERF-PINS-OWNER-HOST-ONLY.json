@@ -1,0 +1,49 @@
+{
+  "id": "COREPERF-PINS-OWNER-HOST-ONLY",
+  "verdict": "promoted",
+  "fix_commit": "80191f115bc889838a5620b554b2a84cb7d84cb0",
+  "fix_commit_full": "80191f115bc889838a5620b554b2a84cb7d84cb0",
+  "promoted_at": "2026-11-15T02:12:36+00:00",
+  "tree_head": "d18656b6732cf995847ac172ef5325c7d4014914",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "head",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/coreperf/profiles.py"
+  ],
+  "kept_test_files": [
+    "tools/bench/test_bench.py",
+    "tools/coreperf/test_profiles.py"
+  ],
+  "negative_control": {
+    "python:tools.coreperf.test_profiles:ProfilesTests.test_capacity_ladder_refuses_incremental_or_mismatched_pins_before_any_rung": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.coreperf.test_profiles:ProfilesTests.test_incremental_pin_is_refused_but_pre_field_and_full_pins_pass": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    },
+    "python:tools.coreperf.test_profiles:ProfilesTests.test_remote_host_accepts_relocated_pin_and_checks_manifest_and_hash": {
+      "state": "unrunnable",
+      "detail": "no executed test or unittest error; see log"
+    }
+  },
+  "restored": {
+    "python:tools.coreperf.test_profiles:ProfilesTests.test_capacity_ladder_refuses_incremental_or_mismatched_pins_before_any_rung": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:ProfilesTests.test_incremental_pin_is_refused_but_pre_field_and_full_pins_pass": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.coreperf.test_profiles:ProfilesTests.test_remote_host_accepts_relocated_pin_and_checks_manifest_and_hash": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteHarness/.analysis/validation/20261115T021226-ledger-promote-02or0zhu"
+}

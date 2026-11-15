@@ -1,0 +1,52 @@
+{
+  "id": "HARNESS-DROPPED-CLOCK-HUD-ORACLE",
+  "verdict": "promoted",
+  "fix_commit": "f645ca39a",
+  "fix_commit_full": "f645ca39ad243e17008dcc5d2b3661e6d2d473f7",
+  "promoted_at": "2026-11-15T02:15:38+00:00",
+  "tree_head": "d18656b6732cf995847ac172ef5325c7d4014914",
+  "tree_dirty": false,
+  "tree_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "control_tree": "fix_commit",
+  "fix_patch_sha256": null,
+  "reversed_files": [
+    "tools/harness/audio.py",
+    "tools/harness/backends/scene_shot.py",
+    "tools/harness/dynamic_context_scene.json",
+    "tools/harness/java_clients.py",
+    "tools/harness/java_launcher.py",
+    "tools/harness/player_head_scene.json",
+    "tools/harness/runtime.py",
+    "tools/harness/vanilla_world_roundtrip.py"
+  ],
+  "kept_test_files": [
+    "tools/harness/test_java_clients.py",
+    "tools/harness/test_java_launcher.py",
+    "tools/harness/test_private_audio.py",
+    "tools/harness/test_runtime_profiles.py",
+    "tools/harness/test_scene_shot.py",
+    "tools/harness/test_vanilla_world_roundtrip.py"
+  ],
+  "negative_control": {
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_fixture_lifts_and_lights_dropped_clock_away_from_hud": {
+      "state": "red",
+      "detail": "test assertion failed"
+    },
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_only_clock_face_change_passes_not_hud_or_static_clock": {
+      "state": "red",
+      "detail": "test assertion failed"
+    }
+  },
+  "restored": {
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_fixture_lifts_and_lights_dropped_clock_away_from_hud": {
+      "state": "green",
+      "detail": ""
+    },
+    "python:tools.harness.test_scene_shot:DroppedClockTests.test_only_clock_face_change_passes_not_hud_or_static_clock": {
+      "state": "green",
+      "detail": ""
+    }
+  },
+  "client_receipt": null,
+  "artifact_dir": "/run/media/kaiserroman/games/solaris-work/wt/PromoteHarness/.analysis/validation/20261115T021526-ledger-promote-akv_ptwl"
+}
