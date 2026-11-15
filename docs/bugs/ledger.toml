@@ -6775,3 +6775,15 @@ repro = "client"
 regression = ["harness:screens-voice-qa:native_loads_computer_monitor"]
 failing_first = "reported"
 repro_check = "receipts/ScreensVoiceStart/runs/20261115T032837-screens-voice-qa-mx2sf4ne/private-graph/verdicts.json records native_loads_computer_monitor=false after completed native Loader acknowledgement. With only the deployed manifest changed, 20261115T033229-screens-voice-qa-ua4o96t_/private-graph/verdicts.json records all six screen verdicts true; both natives register computer:monitor and activate the six verified assets. Same server/client pins and harness b7d3c0148."
+
+[[bug]]
+id = "PLAYER-HEAD-FAILED-PROFILE-REGISTRY-EXHAUSTION"
+title = "After 256 distinct malformed player-head profiles, valid profile heads render as default Steve until restart"
+area = "client"
+severity = "major"
+status = "open"
+source = "Stage3 HeadBreaker on native client 78fb611f with server e5512b2a56f8 (receipts/HeadBreaker/REPORT-skull.md): rotating 261 distinct malformed profile properties through the visible hotbar, then equipping a valid Notch head, leaves it Steve on worn and hotbar surfaces after 120 ticks, 3/3 (wt/HeadBreakerSkull/.analysis/validation/20261115T034937-scene-shot-in31y6xp, 20261115T035100-scene-shot-mjgoz4ew, 20261115T035216-scene-shot-55j62yja); the client stays in Play"
+repro = "client"
+regression = []
+failing_first = "reported"
+repro_check = "Controls: 198 distinct malformed heads then Notch renders correctly (20261115T035346-scene-shot-ypdmkehc); Notch resolved before the 261-head flood stays correct (20261115T035553-scene-shot-emwoaeir). Suspected cause, internal occupancy not observed: src/profile_textures/heads.rs MAX_HEADS=256 entries are never evicted after a failed resolve, so the registry fills and new valid profiles get no slot. Vanilla's skull profile cache evicts by access; a server or player can place many malformed heads to blank every later head."
