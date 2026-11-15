@@ -102,6 +102,31 @@ class SceneShotTests(unittest.TestCase):
                 return
         self.fail("gait fixture has no spider capture")
 
+    def test_gait_spider_oracle_rejects_death_tinted_occlusion(self):
+        from PIL import Image, ImageDraw
+        class Probe:
+            def __init__(self):
+                self.report = {}
+            def check(self, name, value):
+                if not value:
+                    raise AssertionError(name)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            image = root / "spider.png"
+            (root / "spider-phase-walk.json").write_text(json.dumps({"attempts": [{"image": str(image)}]}))
+            frame = Image.new("RGB", scene_shot.WINDOW, (50, 90, 50))
+            draw = ImageDraw.Draw(frame)
+            draw.rectangle((580, 420, 700, 465), fill=(30, 25, 25))
+            frame.save(image)
+            scene_shot.check_gait_spider(Probe(), root)
+            draw.rectangle((650, 410, 750, 475), fill=(130, 40, 80))
+            frame.save(image)
+            with self.assertRaisesRegex(AssertionError, "spider_unobstructed"):
+                scene_shot.check_gait_spider(Probe(), root)
+            Image.new("RGB", scene_shot.WINDOW, (50, 90, 50)).save(image)
+            with self.assertRaisesRegex(AssertionError, "spider_body_visible"):
+                scene_shot.check_gait_spider(Probe(), root)
+
     def test_java_chat_hidden_is_opt_in(self):
         self.assertIn("chatVisibility:0\n", scene_shot.java_options(8, 70))
         self.assertIn("chatVisibility:2\n", scene_shot.java_options(8, 70, hide_chat=True))

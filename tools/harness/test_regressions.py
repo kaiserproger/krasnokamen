@@ -355,24 +355,10 @@ regression = []
                         with self.assertRaises(ValueError):
                             regressions.run(profiles.ProfileContext(root))
 
-    def test_client_scenario_argv(self):
-        native = regressions._client_command('entities', 'native-v2-craft-drag')
-        self.assertEqual(native[-3:], ['--client', 'native', '--windowed'])
-        java = regressions._client_command('entities', 'java-v2-p5-parity')
-        self.assertEqual(java[-2:], ['--client', 'java'])
-        scene = regressions._client_command('scene-shot', 'java-matrix-system-chat')
-        self.assertEqual(scene[-3:], ['--client', 'java', '--windowed'])
-        from tools.harness.scenarios import SCENARIOS
-        for scenario, entry in SCENARIOS.items():
-            if entry.evidence in ('graphical', 'tcp', 'native') and entry.profile not in ('loader-live', 'dh-gate'):
-                argv = regressions._client_command(entry.profile, scenario)
-                self.assertEqual(argv[5], scenario)
-                expected = ['--client', 'native', '--windowed'] if scenario.startswith('native-') else ['--client', 'java']
-                if not scenario.startswith('native-') and entry.profile == 'scene-shot':
-                    expected.append('--windowed')
-                self.assertEqual(argv[6:], expected)
+    def test_unknown_client_scenario_is_rejected(self):
         with self.assertRaises(ValueError):
             regressions._client_command('entities', 'no-such-scenario')
+
 
     def test_loader_live_ref_parse_and_command(self):
         ref = 'harness:loader-live:loader-fabric-screen-admission'

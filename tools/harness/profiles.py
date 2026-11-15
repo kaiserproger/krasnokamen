@@ -731,6 +731,12 @@ def run_loader_live(ctx: ProfileContext) -> dict[str, Any]:
     prepare_operator_fixture(ctx, [loader.USERNAMES[platform]])
     details: dict[str, Any] = {}
     timeout = ctx.timeout_seconds or LOADER_LIVE_TIMEOUT_SECONDS
+    if ctx.scenario_id == "loader-fabric-mixed-version-build":
+        from .loader_mixed_version import run_candidate
+
+        if platform != "fabric":
+            raise ValueError("mixed-version build gate requires Fabric")
+        return run_candidate(ctx, timeout)
     scenario = None
     if ctx.scenario_id == "loader-v2-settlements-smoke":
         from .loader_settlements import run
@@ -1020,12 +1026,30 @@ def run_java_battle(ctx: ProfileContext) -> dict[str, Any]:
     if ctx.client != "java" or ctx.platform not in ("fabric", "neoforge"):
         raise ValueError("java-battle-functional requires --client java --platform fabric|neoforge")
     driver = sibling_root("loader") / "tools" / "battle_scenario.py"
+    extra = ctx.extra_args
+    if ctx.scenario_id == "java-battle-end-camera":
+        import hashlib
+
+        if ctx.platform != "neoforge" or extra:
+            raise ValueError("java-battle-end-camera requires NeoForge and its registered inputs")
+        binary = Path(os.environ["KRASNOKAMEN_SERVER_BINARY"]).resolve(strict=True)
+        with binary.open("rb") as source:
+            ctx.client_evidence.update(server_binary_path=str(binary),
+                                       server_binary_sha256=hashlib.file_digest(source, "sha256").hexdigest())
+        extra = ["--pin", str(binary.parent), "--recorder", os.environ["KRASNOKAMEN_CLIENT_BINARY"],
+                 "--recorder-data", os.environ["KRASNOKAMEN_BATTLE_RECORDER_DATA"],
+                 "--world", os.environ["KRASNOKAMEN_BATTLE_WORLD"],
+                 "--pack-root", os.environ["KRASNOKAMEN_BATTLE_PACK_ROOT"],
+                 "--hit-counter", os.environ["KRASNOKAMEN_BATTLE_HIT_COUNTER"],
+                 "--seed", "46", "--duration", "150", "--late-capture"]
     _run_command([sys.executable, str(driver), "--repo-root", str(REPO_ROOT),
                   "--artifact-dir", str(ctx.artifact_dir), "--platform", ctx.platform,
-                  *ctx.extra_args], ctx, "java-battle-driver.log")
+                  *extra], ctx, "java-battle-driver.log")
     result = json.loads((ctx.artifact_dir / "java-battle.json").read_text())
     if not result.get("functional_passed"):
         raise RuntimeError(f"Java battle functional gate failed: {result.get('error', result)}")
+    if ctx.scenario_id == "java-battle-end-camera" and result.get("checks", {}).get("late_camera_capture") is not True:
+        raise AssertionError("java-battle-end-camera assertion failed: late_camera_capture")
     return result
 
 

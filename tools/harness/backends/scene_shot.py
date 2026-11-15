@@ -1265,6 +1265,28 @@ def player_head_skin_pack(artifact: Path) -> Path:
     return pack
 
 
+def check_gait_spider(probe: ProbeSteps, artifact: Path) -> None:
+    """The fixed gait camera must show the spider, not the dying zombie's body."""
+    from PIL import Image
+
+    sample = json.loads((artifact / "spider-phase-walk.json").read_text())
+    image = sample["attempts"][-1]["image"]
+    with Image.open(image) as source:
+        frame = source.convert("RGB")
+    if frame.size != WINDOW:
+        raise ValueError("gait spider oracle requires a 1280x720 frame")
+    # Matched gait fixture: below the horizon, above chat/HUD, excluding the hand.
+    # The zombie's death-tinted skin/trousers are red/purple; the spider is dark
+    # with small red eyes. The original obstructed frame contains 5513 such pixels,
+    # versus 0..75 across the three retained unobstructed runs.
+    pixels = list(frame.crop((540, 390, 800, 500)).getdata())
+    obstruction = sum(r > 50 and r > g * 1.4 for r, g, b in pixels)
+    spider = sum(max(p) < 65 and max(p) - min(p) < 30 for p in pixels)
+    probe.report["spider_capture_pixels"] = {"body": spider, "zombie": obstruction, "image": image}
+    probe.check("spider_body_visible", spider > 1000)
+    probe.check("spider_unobstructed", obstruction <= 100)
+
+
 def check_player_head(probe: ProbeSteps, artifact: Path) -> None:
     """Placed/worn offline heads and the contrasting authored hat layer."""
     shots = _load_shots(probe, artifact, ("head-empty", "head-block", "head-worn", "head-none"))
@@ -1506,6 +1528,7 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "native-shade-override": "shade_override_scene.json",
         "native-player-head": "player_head_scene.json",
         "native-dynamic-context": "dynamic_context_scene.json",
+        "native-gait-spider": "gait_phase_scene.json",
         "native-death-tilt": "death_tilt_scene.json",
         "native-command-feedback": "command_feedback_scene.json",
         "native-low-roof-house": "low_roof_house_scene.json",
@@ -1529,6 +1552,11 @@ def validate_scenario(ctx: ProfileContext, scenario: dict[str, Any] | None = Non
         "issue1-18-sheep-goat": "issue1_18_sheep_goat_scene.json",
         "issue1-19-hostile-motion": "issue1_19_hostile_motion_scene.json",
     }
+    if ctx.scenario_id == "java-gait-sidecar":
+        if ctx.client != "java" or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
+            raise ValueError("java-gait-sidecar requires its registered Java fixture without overrides")
+        scenario = json.loads((runtime.REPO_ROOT / "tools/harness/gait_phase_scene.json").read_text())
+        scenario["java_plain"] = True
     if ctx.scenario_id in named_fixtures:
         client = "java" if ctx.scenario_id.startswith("java-") else "native"
         if ctx.client != client or scenario is not None or ctx.extra_args or os.environ.get("SCENE_SHOT_SCENARIO"):
@@ -1734,7 +1762,8 @@ def run(
         mcp.scene_window_size = tuple(settings.get("screen_size", WINDOW))
         mcp.scene_proxy = proxy
         (artifact / "lifecycle-progress.json").write_text(json.dumps({"phase": "scenario", "timeout_seconds": timeout, "started_unix": time.time()}) + "\n")
-        probe_id = "native-unloaded-eye" if ctx.scenario_id == "native-unloaded-eye" else "scene-shot"
+        probe_id = ctx.scenario_id if ctx.scenario_id in (
+            "native-unloaded-eye", "native-gait-spider", "java-gait-sidecar") else "scene-shot"
         with ProbeSteps(mcp, artifact / "scene-shot", timeout, probe_id) as probe:
             wait_play(probe)
             if ctx.client == "java":
@@ -1769,6 +1798,8 @@ def run(
                 check_player_head(probe, artifact)
             elif ctx.scenario_id == "native-dynamic-context":
                 check_dynamic_context(probe, artifact)
+            elif ctx.scenario_id == "native-gait-spider":
+                check_gait_spider(probe, artifact)
         result = {"screenshots": shots, "scenario": probe.report, "seed": seed, "settings": settings, "client_latency_ms": client_latency_ms}
     except Exception as error:
         # Keep the scenario's own report for the failure receipt: `assertions` says whether an

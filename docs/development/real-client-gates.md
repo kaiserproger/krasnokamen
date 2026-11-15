@@ -31,6 +31,25 @@ water medium after terrain arrives. Teardown releases the held stream even
 when an assertion fails. Pins, tree identity and control/restore receipts are
 still required for ledger promotion.
 
+## Registered gait and late battle capture regressions
+
+`native-gait-spider` and `java-gait-sidecar` run the canonical
+`gait_phase_scene.json`, using respectively `--client native --windowed` and
+`--client java --windowed`. Java uses the plain 26.3 endpoint. Both require
+same-frame zombie/spider walk phases; the native gate additionally rejects
+death-tinted zombie pixels in the spider's fixed camera ROI while requiring
+visible spider-body pixels. This is a fixture-specific obstruction check.
+
+`java-battle-end-camera` runs `java-battle-functional --client java --platform
+neoforge` with seed 46 and a 150-second take. Set `KRASNOKAMEN_SERVER_BINARY`
+to the candidate's non-incremental release pin, `KRASNOKAMEN_CLIENT_BINARY`
+to the pinned recorder, and `KRASNOKAMEN_BATTLE_RECORDER_DATA`,
+`KRASNOKAMEN_BATTLE_WORLD`, `KRASNOKAMEN_BATTLE_PACK_ROOT` and
+`KRASNOKAMEN_BATTLE_HIT_COUNTER` to the existing battle inputs. Loader's
+`--late-capture` waits for `completion.ready`, captures the real camera while
+the server remains live, then releases `completion.done`. A regular battle
+pass without this assertion is not proof of the late-capture regression.
+
 ## Prerequisites
 
 Everything below is reproducible from public sources, except where a line says
@@ -879,6 +898,25 @@ Proves join, auth, one action and persistence; not a graphical gate.
 6. Clients older than the server's Loader channel version fail in configuration
    with `unsupported Loader channel or phase`; that is version skew, not a server
    bug.
+
+## Mixed-version Loader build overlap
+
+`loader-fabric-mixed-version-build` uses `loader-live` with Fabric 26.3
+(`KRASNOKAMEN_JAVA_VERSION=26.3`, `--platform fabric`, an exact release
+`--server-bin` and empty `--plugins-dir`). After that client enters Play,
+it builds and starts Fabric/SVC 26.1.2 while the first client remains live.
+The first client must still report Play and retain every path and SHA-256
+in its nonempty Loader class tree; an unchanged accessor alone is insufficient
+because some classes are byte-identical across versions. The second must
+reach its title screen with its classes present.
+Both windows are captured after the second build. Provision the pinned SVC
+artifact as for `screens-voice-qa`; no audio-flow claim is made here.
+
+This is the registered regression for
+`HARNESS-LOADER-SHARED-BUILD-DIR-RACE`. A same-version Fabric voice pair is
+not a substitute. The fix-only control reverses the runtime build/history
+isolation patch; the observer follows that launch's shared output rather than
+reading stale isolated files from an earlier green run.
 
 ## Manual local playable launch (owner-visible play, not a gate)
 
