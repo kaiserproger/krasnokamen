@@ -1064,6 +1064,17 @@ SCENARIOS: dict[str, Scenario] = {
         proves="after the viewer's F8 the server delivers no permission answer and no frame for the cancelled request (ledger P4); an answered request delivers decoded frames; F8 stops them",
         limits="the owner's consent dialog is not withdrawn by the server (the owner still answers it); requests and answers use the automation verb, not X input",
     ),
+    "native-atm-structures": _entry(
+        id="native-atm-structures",
+        summary="Generate selected local ATM structure data and photograph it with a real client",
+        owner="core:harness", evidence="graphical", profile="atm-structures",
+        requires=("xvfb",),
+        sources=("tools/harness/backends/atm_structures.py", "tools/harness/atm_evidence.py"),
+        seed="20261115",
+        fixture="fresh native world; hash-pinned local converted packs from KRASNOKAMEN_ATM_MANIFEST",
+        proves="persisted exact-ID generated starts and template-palette block samples match the real client's received blocks; actual-window screenshots retain coordinates",
+        limits="not full-mod or NeoForge compatibility; screenshots need visual inspection; requires integrated worldgen support, immutable binaries and a separate pack-absent negative run",
+    ),
     "native-datapack-reload": _entry(
         id="native-datapack-reload",
         summary="Live /datapack enable and disable change the recipe a native player crafts, with no restart",

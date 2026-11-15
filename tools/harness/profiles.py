@@ -562,6 +562,12 @@ def run_datapack_reload(ctx: ProfileContext) -> dict[str, Any]:
     return datapack_reload.run(ctx)
 
 
+def run_atm_structures(ctx: ProfileContext) -> dict[str, Any]:
+    from .backends import atm_structures
+
+    return atm_structures.run(ctx)
+
+
 def run_block_log(ctx: ProfileContext) -> dict[str, Any]:
     """Block-log gate: grief, /co rollback, restart and /co restore on the native client."""
     from .backends import block_log
@@ -1236,6 +1242,11 @@ PROFILES: dict[str, dict[str, Any]] = {
         "description": "Native player crafts before, during and after a live /datapack enable and disable; the output slot follows the reloaded recipe without a restart",
         "run": run_datapack_reload,
     },
+    "atm-structures": {
+        "scope": "real-client",
+        "description": "Local ATM data: fresh-world exact-ID generated starts, exported template blocks and real-client screenshots",
+        "run": run_atm_structures,
+    },
     "block-log": {
         "scope": "real-client",
         "description": "Block-log gate: grief (break/place/steal/break chest), /co lookup + rollback restores blocks and chest contents exactly, restart keeps history, /co restore re-applies (native --client, windowed for screenshots)",
@@ -1441,6 +1452,7 @@ PROFILE_PREREQUISITES = {
     "chat-visibility": _NATIVE,
     "screen-share": _NATIVE,
     "datapack-reload": _NATIVE,
+    "atm-structures": _NATIVE,
     "block-log": _NATIVE,
     "chisel": _SHARED,
     "core-client": _SHARED_BUILD,
