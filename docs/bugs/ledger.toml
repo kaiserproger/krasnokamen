@@ -4357,12 +4357,13 @@ title = "Differential seed 19 completes the Solaris crafting action but times ou
 area = "harness"
 repro = "source"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "/run/media/kaiserroman/games/solaris-work/receipts/FuzzE2E/analysis/.analysis/validation/20261107T172634-matrix-random-u9k17kiz/result.json"
 regression = ["python:tools.harness.test_matrix_random:RandomMatrixTests.test_seed19_adapter_consumes_received_packet_transitions", "python:tools.harness.test_matrix_random:RandomMatrixTests.test_vanilla_craft_cursor_correction_uses_transmitted_prediction"]
 repro_check = "The new socket peer decodes actual ProtocolMatrixClient -> PlayObserver -> click_body output and sends cursor corrections only for mismatching transmitted predictions. Real run_player_script enables sync. Keeping click_slot/send/encoder intact, independently reversing the player flag or wire behavior reproduces the stale craft cursor; craft-player-flag.red.log and craft-wire.red.log under receipts/HarnessFix4Proof. Corresponding green logs pass after restoration. The retained earlier test separately proves the early-result/input/cursor fence. Full patch craft.red.log/green.log covers both. This is protocol-fixture evidence, not another live vanilla differential run."
 failing_first = "reported"
 fix_commit = "patch:a370a7e5baf6296aae0cbd080f572550611f1d8b25aeaed64b33185aa1f00c52"
+promotion = "docs/bugs/promotions/SCENARIO-VANILLA-CRAFT-ACK.json"
 
 [[bug]]
 id = "CHISELED-BOOKSHELF-RESTART-DATA-LOSS"
@@ -6240,7 +6241,7 @@ id = "HARNESS-VOICE-PIN-ENDPOINT"
 title = "Voice gate launches the Loader default instead of the Minecraft version covered by its SVC pin"
 area = "harness"
 severity = "major"
-status = "open"
+status = "fixed"
 source = "ScreensVoiceStart: SVC artifact baseline covers 26.1.2 while Loader defaults to 26.3. Owner case is PrismLauncher 26.1.2; screens remains on 26.3. The independent fix patch restores the unscoped run loop; java_endpoint stays available for retained API tests but is unused by the reversed live path."
 repro = "source"
 regression = [
@@ -6251,6 +6252,7 @@ regression = [
 repro_check = "Voice-only proving ref executes the actual run leg scope and captures launcher argv, independently of screens assertions. receipts/HarnessFix4Proof/voice.red.log fails at test_screens_voice_qa.py:103 because the voice child lacks -PminecraftVersion=26.1.2; voice.green.log passes after restoring the retained patch. Existing combined-leg and conflicting-selector refs remain registered."
 failing_first = "reported"
 fix_commit = "patch:c22e452d0ae4fa2c378a304e109d085df5845da59b9f738e36d62f2b1d4a67b5"
+promotion = "docs/bugs/promotions/HARNESS-VOICE-PIN-ENDPOINT.json"
 
 [[bug]]
 id = "HARNESS-AUDIBLE-SINK-IGNORED"
