@@ -370,8 +370,12 @@ The unresolved `HarnessHat` profile deliberately uses those offline resources;
 it is not a listed player and does not fetch unsigned/online profile textures.
 This proves hat geometry, not profile resolution. `worn_head_renders` also
 requires magenta at the actual avatar head, x600–680/y280–375: adjacent,
-torso/back attachments or unrelated avatar/sky changes cannot satisfy it. Retain and
-inspect candidate and hat-only-control frames before promoting the model row.
+torso/back attachments or unrelated avatar/sky changes cannot satisfy it.
+`worn_head_back_unchanged` separately compares x600–680/y400–510 against `head-none`:
+at most 5% of that torso/back region may change by more than 25 in any RGB channel.
+This tolerates small pose/raster differences but rejects an additional back attachment
+even when the head itself is correct. Both ROI counts and the absence tolerance are
+retained in the report. Inspect candidate and control frames before promotion.
 
 `walk_capture` retains a distinct `-attempt-N` image and frame sidecar per
 resample. Its walk evidence lists all attempts; a phase miss still fails within
