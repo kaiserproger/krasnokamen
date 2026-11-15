@@ -33,6 +33,23 @@ tick, not discard or reorder accepted work. A failed writer halts the core.
 Append acknowledgement is not a promise that the directory has been fsynced;
 a crash can consistently roll back an unflushed tail, even after a reply.
 
+### Recovery evidence and clocks
+
+Network acknowledgement, native tick, game time and durable WAL coverage are
+different observations. A held/frozen game clock need not advance with journal
+frames; unloaded or unadmitted entities need not age for every elapsed game tick.
+Establish the checkpoint/envelope and replay-clock mapping before comparing a
+multi-tick census. An asynchronously published dashboard/pump tick is not an
+upper bound on the census interval. See the clock images in
+[`journal.rs`](../../crates/mc-core/src/journal.rs) and their
+[`replay`](../../crates/mc-core/src/journal/replay.rs).
+
+A process SIGKILL exercises process recovery, not arbitrary power-loss or storage
+hardware durability. The [drills below](#hazards-and-defense-layers) state their
+fault model; [crash-census evidence](../QA_AGENT_PROTOCOL.md#crash-census-evidence)
+keeps lifecycle uncertainty separate from proved loss or conservation.
+
+
 ## Checkpoints
 
 The default capture interval is 1,200 ticks (`CoreConfig.checkpoint_every_ticks`).

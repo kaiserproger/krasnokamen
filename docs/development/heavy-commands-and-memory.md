@@ -17,23 +17,25 @@ and `winqa/` ([Windows QA](windows-and-macos-client-qa.md)).
 
 ## The machine
 
-One owner laptop: 6 physical / 12 logical cores, about 30 GB RAM, root disk
-plus the games disk `<work>` (see [README](README.md)). The agent host process
-holds every subagent; with about 20 agents and parallel cargo builds it once
-reached 15 GB RSS and was OOM-killed, which killed every agent at once
-(2026-10-02). Worktrees survived; agent state did not. Everything below exists
-to keep that from happening again without idling the machine.
+The owner host is a shared build machine, not necessarily the owner's terminal
+or laptop ([AGENTS.md](../../AGENTS.md)). Derive current CPU topology, host
+memory and parent/slice limits from the runner and cgroups, not an old hardware
+snapshot. The agent host contains its subagents outside the heavy-job slice.
+Historical laptop incident, 2026-10-02: about 20 agents plus builds drove that
+process to 15 GiB RSS; an OOM killed all agents, while worktrees survived.
 
 ## How `tools/dev/mem-run.sh` works (current, since 2026-10-28)
 
 `tools/dev/mem-run.sh [-x] [-p] [-m SIZE] <command...>` (flags in this order):
 
-- **No memory slots, no admission queue** (owner, 2026-10-28). Every command
-  starts at once in its own transient systemd user scope inside
-  `solaris-heavy.slice` (slice `MemoryMax=25G`, `MemorySwapMax=2G`,
-  no `MemoryHigh`, no `CPUQuota`). Default cap is `-m 8G`; above 12G without
-  `-x` the request is lowered to 12G. The one exception is a compile command,
-  which first waits for a build token (next item).
+- **No memory slots.** Commands enter their own transient systemd user scope;
+  compiles first wait for a build token, and measurement/scene locks can delay
+  execution. [`mem-run.sh`](../../tools/dev/mem-run.sh) derives the heavy slice's
+  `MemoryMax` from host RAM minus 16 GiB and, when set, the parent `MemoryHigh`
+  minus 8 GiB, taking the lower bound. It clears slice `MemoryHigh` and any CPU
+  quota not explicitly pinned by the owner. Default command cap is `-m 8G`;
+  requests above 12 GiB without `-x` are lowered to 12 GiB. These are runner defaults,
+  not a promise about every machine's effective parent budget.
 - **Build tokens** (owner, 2026-11-11): at most three compile commands run
   host-wide; the fleet's "3 concurrent builders" is enforced here, not by
   convention. Compile is decided once from argv, after leading
@@ -152,8 +154,9 @@ to keep that from happening again without idling the machine.
   runs the other tree's binary when that binary is newer than this tree's
   sources (a false test result, 2026-11-14). Run one runner command per tree, or
   give each tree its own target directory under `<work>/targets/`.
-- **Incremental** compilation is forced on for debug/test builds and off for
-  `--release`/`--profile`. Measured once: cold `mc-core --tests` 26m48s to 19m07s.
+- **Incremental:** use the single [argv/build-policy description below](#oom-and-killed-commands);
+  normal-lane release pins are not automatically nonincremental. The historical
+  cold `mc-core --tests` comparison was 26m48s→19m07s, not a general speed guarantee.
 - **Lanes.** `-p` is the perf lane: one at a time (perf lock), pinned to the
   last four CPUs with `CPUWeight=10000`, nice 0, never frozen; for A/B benches and
   profiles, never for builds. Compare `-p` numbers only with `-p` numbers.
@@ -163,11 +166,11 @@ to keep that from happening again without idling the machine.
   an already running scope (a ledger promote's server build and gates) is not
   held and never frozen: the window waits for its ancestor, so holding it would
   deadlock both.
-- **Exit 75** now means one of: the slice has no cgroup, `-x` without a running
-  watchdog, or no usable target dir (all existing ones busy and too little disk
-  for a new one). The only other legitimate waits at start are a compile
-  command waiting for a build token and a `-p` command queued on the
-  serialized perf lane (`flock $dir/perf`); anything else is a regression.
+- **Exit75** is a refusal, not an executed gate: read the named cause (for example
+  no cgroup/watchdog, no scheduled `-x` grant or no usable target directory).
+  Build-token, scene-slot, exclusive-window and perf-lane admission have distinct
+  owners; waiting for one is not evidence of a dead process. Consume its
+  completion event; do not poll or bypass it with another lane.
 - The runner prints one `mem-run: scope ...` line (props, lane, target, expected
   peak, signature). Copy it into receipts.
 - **One Cargo environment per tree.** Run Cargo only through the runner and keep
@@ -197,8 +200,8 @@ Answer with counts from one pass over `/proc` and the cgroup tree; never poll.
    `/tmp/solaris-mem-slots/cpu-quota` (one line such as `600%`; the runner
    applies it on every call and clears any other slice quota). Check
    `nr_throttled` vs `nr_periods` in `cpu.stat`. Runtime drop-ins live under
-   `/run/user/<uid>/systemd/user.control/solaris-heavy.slice.d/`; remove the
-   owner cap by deleting that file and running any `mem-run` command.
+   `/run/user/<uid>/systemd/user.control/solaris-heavy.slice.d/`. An owner-pinned
+   cap is not permission to remove it; change it only under owner authorization.
    Host `/proc/pressure/cpu` near 80% while `vmstat` shows >40% idle means a cap
    or pinning, not load.
 4. **Pinning.** `Cpus_allowed_list` of cargo/rustc; widen live with
@@ -219,10 +222,11 @@ code, start the unit (agents' runner calls may restart it in between).
 
 ## OOM and killed commands
 
-- "SIGTERM, no compiler error" or exit 143 is usually an OOM inside the scope:
-  `journalctl --user --since -30min | grep -E 'run-.*scope|oom'`. Lower
-  `--jobs` before raising the cap; a build whose `memory.peak` equals its cap
-  will fail next time.
+- A signal or exit143/137 alone identifies neither OOM nor owner cancellation.
+  Correlate the exact child/scope with `memory.events`/`memory.peak` and the user
+  journal; kernel OOM records identify host-level victims. Keep unobserved causes
+  unknown and retain the failing receipt. Lower compile concurrency before raising
+  a proven-insufficient cap; rerun only the affected gate after that correction.
 - Host-level: `journalctl -k --since -3h | grep -E 'Killed process|oom-kill:'`
   names the victim (`omp` = agent host; `rustc`/test binary = a scope).
 - Prove a cap really applies with a `RUSTC_WRAPPER` script that appends
@@ -255,11 +259,12 @@ code, start the unit (agents' runner calls may restart it in between).
   less CPU with incremental, but host load was not recorded for the full-build
   runs, so only the direction is plausible, not the size. It needs about 2.4 GB
   more per slot and uses more codegen units, so its binary can run slower: take
-  performance binaries from `pin-release --no-incremental` or
-  `env CARGO_INCREMENTAL=0 cargo build --release`.
-- rust-analyzer (about 5 GB, agents auto-start it) and the agent host (about
-  4 GB) sit outside the slice. Killing rust-analyzer, leaked Minecraft clients
-  and idle Gradle daemons is safe.
+  performance binaries from `pin-release --no-incremental`, never an ad-hoc
+  release build. Its manifest records the effective build environment.
+- Agent hosts and language servers may sit outside the heavy slice: include
+  parent/host accounting. Do not blanket-kill shared analysis servers, Gradle or
+  clients to reclaim RAM; stop only verified owned/authorized processes under the
+  [fleet recovery rules](agent-fleet.md#liveness-and-recovery).
 - Agent tool calls default to a 300 s deadline: run long commands with
   `async: true` plus `timeout: 0`/`3600`, never by changing harness timeouts.
 
@@ -296,7 +301,7 @@ cwd to the agent.
   target dirs in `<work>/targets/`, sccache on the games disk. `/tmp` is on the
   root disk. `git worktree move` fails across devices; use rsync.
 - `/dev/shm` has a per-user quota: `df` free space is not usable headroom.
-- **Keep at least 250 GB free on the games disk** (owner, 2026-11-13; raised
+- **Keep at least 250 GiB free on the games disk** (owner, 2026-11-13; raised
   from 80-100 GB set 2026-11-07; it is a DRAM-less Samsung 980 whose fast write
   cache shrinks as it fills: at 92% full writes took over a second each). Below
   the floor, `slot-gc` evicts idle slots in least-recently-used order (below);

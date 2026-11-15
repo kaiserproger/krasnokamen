@@ -65,9 +65,10 @@ as-is: this spending brake is not a restart or a claimed dollar-budget cap.
   spawn (`spawns:`), but a worker spawns only when its brief allows it. The
   spawner gives disjoint write sets and reviews every returned diff itself (see
   [review committee and breaker](review-committee-and-breaker.md)).
-- **Models** are the owner's choice; repo docs name roles, not vendors or
-  models. When the owner says a provider's limits are reserved, do not spawn
-  workers on it.
+- **Models** are the owner's choice. Briefs link the standing reviewer
+  requirements in AGENTS.md rather than restating them; a specifically named
+  reviewer cannot be replaced or an older review relabelled without owner
+  authorization and actual source coverage. Reserved provider limits remain binding.
 - Deploys to the test server are batched until the owner says deploy.
 - **New process rules replace or become checks.** A rule written after an
   incident must replace an existing rule or become a tool check (main-guard,
@@ -241,11 +242,16 @@ Before accepting a returned slice (procedure:
 5. The touched area's open-transition row: the change moved it forward or left
    it alone; a transition opened or finished updates STATUS in the same change
    ([rule](adding-a-feature.md#open-transitions)).
-6. The doc that owns each changed behaviour is updated; code beats docs.
-   Every `gaps` entry is queued with its blocker, never closed by rewording.
-   Put task-specific decisions, evidence and next actions in the existing
-   handoff cursor so context loss cannot turn a review finding into a forgotten
-   report; link the owning rule rather than copying it into another policy.
+6. At slice close, update the existing page that owns each changed behaviour or
+   material verified lesson; do this before context loss if the lesson is critical,
+   not after every command. Keep one owner per fact: a short rule/invariant,
+   source or reproducible check, and its limits; link existing coverage instead
+   of another summary layer. Distinguish current runtime, design/hypothesis and
+   branch-only work. Replace stale normative text and repair incoming links;
+   preserve valid historical evidence and verbatim owner decisions as history.
+   Every `gaps` entry stays queued with its blocker. Temporary pins/jobs/queue
+   state belongs in the ignored handoff cursor, not reusable public instructions;
+   never commit secrets, account identities or raw diagnostic/transcript archives.
 
 ## Doc coherence check
 
@@ -307,8 +313,9 @@ A handoff, written at phase close or before a reboot (not per call), goes into
 elsewhere. It lists for each slice in flight: worktree path, base commit and
 branch tip, state (committed, complete but unverified, or partial), receipt
 paths, and one next action. Without commit permission add the tree, the diff
-SHA-256 and the changed files. Facts that outlive the slice move into the
-owning doc page.
+SHA-256 and the changed files. Durable lessons follow the
+[slice-close owning-doc rule](#mains-integration-checklist), not a second
+tracked knowledge dump.
 Older night runs wrote a tracked `docs/NIGHT_RUN_<date>.md`; that is
 superseded.
 

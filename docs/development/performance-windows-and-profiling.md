@@ -42,7 +42,9 @@ comparable only with other `-p` numbers from the same session.
 - A profiled run carries extra load and is diagnostic only; compare clean runs
   and state how many clean repeats exist. If the A-vs-A spread is comparable to
   the A-B gap, the verdict is undetermined, not a regression.
-- With load above about 4, absolute numbers are diagnostic; ratios count.
+- Shared-host load alone cannot certify comparability. Record contention,
+  throttling and A-vs-A spread; a contaminated run is diagnostic only, including
+  its ratios. Use the scheduled quiet lane for capacity claims.
 - Compare against the previous round's exact frozen binary, never a
   reconstruction.
 - Claim gains only from the real workload, never from a micro-bench: they
@@ -51,6 +53,26 @@ comparable only with other `-p` numbers from the same session.
   counter before scaling a micro result.
 - Changing the workload (tracking range, view distance) is not a speedup.
   Compare frontier points only with equal useful activity.
+- Keep simulation/AI/physics and activation settings, actual actor routes,
+  server mode, CPU quota, physical-core/SMT placement and client placement equal.
+  Log every load client's successful login and movement of active cohorts;
+  intentionally idle actors need not move. Label remote/internet clients
+  separately from local clients. These are workload conditions, not extra
+  interchangeable points on a capacity curve
+  ([benchmark contract](../performance/BENCHMARKS.md)).
+- Report resident, active, actually admitted/ticked and rendered populations
+  separately, with the sampling interval/frequency. Received entities are not
+  submitted crowd bodies; zero submitted crowd bodies cannot accept crowd FPS.
+  A missing required scene/group makes its aggregate undefined, not reweighted.
+  Preserve failed primary scenes when adding diagnostic closer/repacked fixtures;
+  [client evidence classes](real-client-gates.md#evidence-classes) still apply.
+- Name an algorithm only from the owning implementation, not a missing spelling
+  or an architectural intention. For example,
+  [`villager/brain/motion.rs`](../../crates/mc-core/src/villager/brain/motion.rs)
+  reuses a valid progressing `navigation_path` and calls `allocator::find_path_ctx`
+  when replanning: evidence of cached A* routing there, not a flow-field result
+  or proof about every other path. Likewise a serial merge owner is not by
+  itself a measured bottleneck or evidence of a parallel scaling win.
 - An optimisation with no measurable change in the stage it targets is
   reverted.
 - Report CPU time per tick (per-thread `/proc/self/task/*/stat`), not only wall

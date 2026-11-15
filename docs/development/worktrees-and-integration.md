@@ -18,6 +18,14 @@ everything not in the base as one verified patch, copies `.analysis` evidence
 (`result.json`, logs, reports, screenshots) into the receipts and refuses while
 other ignored files remain, all before it removes anything; `wt-gc` lists stale
 worktrees. Details: [tools/dev](../../tools/dev/README.md).
+
+Before removal, the [existing archive procedure](../../tools/dev/README.md#worktree-and-release-pin-tools-owner-host)
+needs an inventory of retained untracked content, file modes and symlink targets,
+plus a verified restoration. `git apply --check` proves applicability, not that
+those bytes/metadata can be restored. Missing inventory after deletion is not a
+recoverability claim. Archive payloads and ignored Mojang material stay outside
+Git objects, including temporary indexes/commits that are never pushed; use the
+allowlisted evidence archive, not `git add -A` as an archival mechanism.
 Release binaries for gates come from `tools/dev/pin-release`, never from a
 pooled target dir.
 
@@ -48,15 +56,14 @@ pooled target dir.
 Older runs worked on an uncommitted main tree. The patterns still apply to any
 no-commit slice:
 
-- **Seed from a dirty tree:** `git worktree add --detach <wt> HEAD`, copy the
-  tracked and untracked non-ignored files
-  (`git ls-files -co --exclude-standard -z | rsync -a --from0 --files-from=-`),
-  propagate deletions (`git ls-files -d`), remove empty crate directories left
-  by deleted crates (the `crates/*` glob breaks cargo), copy `data/vanilla`,
-  then `git add -A` so the baseline is staged and the agent's work is the
-  unstaged `git diff` plus untracked files. Exclude alternate target dirs and
-  `.analysis/`; nested `sdk/rust/target` and `.analysis` copies filled the disk
-  twice.
+- **Seed from a dirty tree:** create the isolated worktree with `wt-new`, then
+  copy only the audited source-file allowlist and propagate its deletions.
+  Record the dirty baseline and diff before handing it off. Stage explicit
+  source paths if a staged baseline is needed; never sweep archives, ignored
+  content or tool state into an ordinary or temporary Git index.
+  `wt-new` handles the ignored vanilla cache separately. Exclude alternate
+  target dirs and `.analysis/`; nested `sdk/rust/target` and `.analysis`
+  copies filled the disk twice.
 - **Deliver patches with `git diff` only**, never hand-concatenated. A file
   without a trailing newline glues the next `diff --git` header onto its last
   line. Before applying: `grep -c '^diff --git' P` equals the claimed file count,
@@ -79,13 +86,14 @@ no-commit slice:
 
 ## Keeping the shared tree compilable
 
-- Every harness gate builds the server from the tree it runs in. Agents editing
-  a shared tree keep unfinished modules unwired (no `mod x;` for a missing
-  file) and wire only compiling code. One owner runs the combined
-  `cargo check -p mc-edge` and announces "compiles"; others don't repeat it.
-- When the shared tree is red, run gates against a frozen server with
-  `KRASNOKAMEN_SERVER_BINARY=<frozen>` plus the client environment file of the last
-  green gate.
+- Build/check profiles use the tree they run in; real-client profiles consume the
+  pinned server selected by their declaration, not an implicit shared-tree build
+  ([harness entrypoint](../AGENT_TOOLING.md#harness-entrypoint)). Keep a worker's
+  unfinished edits isolated and hand off a compiling immutable checkpoint or an
+  explicitly unverified patch; no placeholders or claimed compile success.
+- When the shared tree is red, use `KRASNOKAMEN_SERVER_BINARY=<frozen>` and its
+  matching client environment only for that recorded pin's scope; an old green
+  binary does not prove the moving source compiles.
 - Group a broken build's errors by file and map files to owners via mtimes and
   agent transcripts. Restore a clobbered uncommitted file only from a copy
   whose checksum matched before the incident in at least two untouched
@@ -105,23 +113,26 @@ no-commit slice:
    fixtures after vanilla-correctness work: reach distances, sign faces,
    border lerp targets, plugin API version constants, advancement condition
    shapes, raid chunk tickets.
-4. Use `cargo test --workspace --all-targets --no-fail-fast` once to get the
-   whole failure list instead of one failure per L2 run. Typical post-merge
-   breakage: unfulfilled `#[expect(clippy::...)]`, collapsible `if let` chains,
-   stale code-health ownership anchors after renames, inline `#[cfg(test)]`
-   modules in rule-guarded files (move to sibling `*_tests.rs`).
-5. Run L2 under the runner (see AGENTS.md); read `result.json` exits (stage
-   order fmt, clippy, code-health, test). After a failure rerun only the
-   affected tests, then the full gate once. When the gate runs as a supervised
-   service, keep the inner exit code (`...; rc=$?; ...; exit $rc`).
-6. One read-only reviewer on the fix commits.
+4. Use the canonical harness's complete failure list, not an extra ad-hoc workspace
+   suite. Typical post-merge breakage includes unfulfilled `#[expect(clippy::...)]`,
+   stale code-health anchors and inline tests in owner-guarded files.
+5. Main owns the integrated L2 under the runner; read `result.json` commands,
+   exits, counts and logs ([gate contract](../AGENT_TOOLING.md#evidence-boundaries)).
+   After a relevant fix rerun the failed scope, then the required combined gate;
+   do not repeat unchanged greens. Supervised jobs preserve the inner exit code
+   (`...; rc=$?; ...; exit $rc`).
+6. Obtain the review required by AGENTS.md before Main's critical code commit.
+   Check reviewer identity and exact base/candidate/diff coverage, including
+   integration deltas; old, limited or peer-tree reviews keep their original scope.
+   Missing required coverage blocks commit approval, not reachable tests or
+   clearly labelled uncommitted validation pins.
 7. Fast-forward `main` without touching the owner's dirty tree: back up
    `git diff` and untracked files under `<work>/backups/`, find the overlap
    between dirty files and the branch's changed files, set aside only the
    overlapping files, `git merge --ff-only <branch>`, restore them, check for
    conflict markers. Main's standing commit/push authorization comes from
-   `AGENTS.md`; workers do not commit or push. Tags and releases still need
-   explicit owner authorization.
+   `AGENTS.md`; workers may commit on their own branch, never Main or a push.
+   Tags and releases still need explicit owner authorization.
 
 ## Freezing one acceptance identity
 

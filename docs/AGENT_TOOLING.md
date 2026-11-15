@@ -102,22 +102,6 @@ JSON step contracts are checked before startup. Failed receipts include
 `details.failure` with available binary hashes, logs and child exit or signal;
 `phase: unknown` means the failing backend has not identified its phase.
 
-Real-client and functional-native runs check prerequisites before their
-profile launches: set `KRASNOKAMEN_SERVER_BINARY` to a pinned executable and, for
-native clients, `KRASNOKAMEN_CLIENT_BINARY` and the client data paths described in
-the real-client guide. Pooled `targets/slot-*` binary paths are refused. Scene
-JSON step contracts are checked before startup. Failed receipts include
-`details.failure` with available binary hashes, logs and child exit or signal;
-`phase: unknown` means the failing backend has not identified its phase.
-
-Real-client and functional-native runs check prerequisites before their
-profile launches: set `KRASNOKAMEN_SERVER_BINARY` to a pinned executable and, for
-native clients, `KRASNOKAMEN_CLIENT_BINARY` and the client data paths described in
-the real-client guide. Pooled `targets/slot-*` binary paths are refused. Scene
-JSON step contracts are checked before startup. Failed receipts include
-`details.failure` with available binary hashes, logs and child exit or signal;
-`phase: unknown` means the failing backend has not identified its phase.
-
 The shared Java client launcher sets both `HOME` and JVM `user.home` to `.home`
 inside that client's game directory. Forge's home-derived Minecraft assets
 therefore use that private directory; provision assets there when needed.
@@ -218,6 +202,12 @@ required test paths, bound `scenario_id`/manifest/seed/fixture, prerequisites,
 assertion sources, proves/limits, participating repository revisions,
 per-command cwds, engine counts (`selected`/`executed`/`passed`/`failed`/
 `ignored`/`filtered_out`) and any missing tests.
+
+Discovery and execution are separate: listing a selector is not a passed test;
+registered Cargo refs require full exact non-ignored function names, not module
+literals ([registration contract](bugs/README.md)). An explicitly ignored local-input
+case needs its declared input and opt-in execution, and remains outside a normal
+suite pass when it did not run.
 
 ### Evidence boundaries
 
@@ -518,6 +508,11 @@ exit must not be confused with the failure that preceded it. Coverage is
 currently limited to instrumented shared helpers and probe sections: an
 unclassified failure remains `unknown`.
 
+Do not infer OOM or owner cancellation from a terminating signal alone. Preserve
+the observed phase/status and match child, scope and cgroup evidence under
+[OOM diagnosis](development/heavy-commands-and-memory.md#oom-and-killed-commands);
+unknown cause is not an interrupted-by-owner claim.
+
 Preflight selects prerequisites from the profile's declaration in
 `tools/harness/profiles.py`, not from its scope label. Native profiles that
 launch a client read its schemas with `krasnokamen-client mcp-schema`; the command
@@ -660,6 +655,32 @@ Do not route provider traffic through proxies or enable MCPs the owner did not
 ask for. The CodeGraph MCP server is disabled on the owner host; the CLI remains
 installed for occasional questions. Build its ignored `.codegraph/` index with
 `codegraph init` when needed.
+
+### Agent runtime routing and diagnostics
+
+- Account routing and model choice are separate. Use supported policy for
+  owner-designated work accounts rather than copying credentials or restarting
+  Main. Priority/reserve/reclaim and explicit pins have different semantics;
+  follow the running version's
+  [upstream account-policy release notes](https://github.com/can1357/oh-my-pi/blob/main/packages/ai/CHANGELOG.md).
+  [Live settings reload](https://github.com/can1357/oh-my-pi/blob/main/docs/settings.md#live-file-changes)
+  applies account policy to subsequent credential selection, not a restart or
+  proof that a healthy session's model/account changed. Effective readback,
+  fresh-selection inspection and one authorized bounded live request prove
+  different things; none proves gameplay. Do not log out accounts, consume saved
+  resets or copy rotating OAuth refresh tokens between machines to force routing.
+- Record the **running** agent build/runtime, process/cgroup scope and timing of
+  memory observations, separately from an updated installed binary. RSS minus
+  JS heap is not evidence of live native allocations: accounting scopes,
+  allocator-retained pages and report-generation peaks differ
+  ([memory API limits](https://nodejs.org/api/process.html#processmemoryusage)).
+  Empty allocator-verbose output proves nothing unless that running runtime is
+  known to emit it; allocator/root-cause explanations remain hypotheses otherwise.
+- Diagnostic bundles can contain credentials and transcripts. Keep raw archives
+  private; share only explicitly authorized, inspected/redacted evidence.
+  Public lessons describe the measurement and its limits, never account identity,
+  balances, auth/config backups or session dumps.
+
 
 ## Other tools in the repository
 
