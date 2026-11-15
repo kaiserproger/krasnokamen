@@ -2329,7 +2329,7 @@ fn gamerule_wal_images_preserve_canonical_aliases_and_absent_subsystem_overrides
         "gamerule allowEnteringNetherUsingPortals false",
     );
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let values = entries
         .iter()
         .find_map(|entry| match entry {
@@ -2370,6 +2370,7 @@ fn gamerule_wal_images_preserve_canonical_aliases_and_absent_subsystem_overrides
     let (unchanged, _, _) = crate::tick::run_tick(&mut state, &[]);
     assert!(
         !crate::core::journal_entries_for_tick(&mut state, &unchanged)
+            .unwrap()
             .iter()
             .any(|entry| matches!(entry, JournalEntry::GameRules { .. })),
         "queries and unchanged writes do not copy the rule map each tick"
@@ -2660,7 +2661,7 @@ fn command_component_inventory_survives_real_wal_replay_and_native_player_checkp
             .iter()
             .any(|entry| entry.id.as_str() == "minecraft:sharpness" && entry.level == 5)
     }));
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let directory = tempfile::tempdir().unwrap();
     {
         let mut writer = JournalWriter::open(directory.path(), 1).unwrap();

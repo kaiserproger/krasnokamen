@@ -253,7 +253,7 @@ fn native_miner_changes_publish_the_same_tick_chunk_afterimage() {
             state.world.villager_route_revision(0, 0) > route_revision,
             "folding the pending route edits must retain route invalidation"
         );
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         let directory = tempfile::tempdir().unwrap();
         {
             let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();

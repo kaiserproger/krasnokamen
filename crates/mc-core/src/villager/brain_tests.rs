@@ -1403,7 +1403,7 @@ fn village_control_claim_and_profession_survive_native_checkpoint_and_wal() {
     let uuid = state.entities.row(slot).uuid;
     // Checkpoint before acquisition; seed the journal's unchanged-state cache.
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    crate::core::journal_entries_for_tick(&mut state, &output);
+    crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(
         state
             .entities
@@ -1420,7 +1420,7 @@ fn village_control_claim_and_profession_survive_native_checkpoint_and_wal() {
     state.day_time = 2000;
     for _ in 0..100 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         writer.append(output.tick, output.tick, &entries).unwrap();
     }
     writer.flush().unwrap();
@@ -2066,7 +2066,7 @@ fn villager_full_tick_scale_benchmark() {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
         let tick = begin.elapsed().as_micros();
         let begin = std::time::Instant::now();
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         std::hint::black_box(&entries);
         let journal = begin.elapsed().as_micros();
         if iteration == 999 {

@@ -699,7 +699,7 @@ fn torn_gateway_pair_wal_replays_both_links_atomically() {
         .unwrap()
         .blocks
         .extend(initial_changes.blocks);
-    let initial = crate::core::journal_entries_for_tick(&mut state, &baseline);
+    let initial = crate::core::journal_entries_for_tick(&mut state, &baseline).unwrap();
     let mut pair_changes = ChangeSet::default();
     let initial_image = crate::end_portals::gateway(&state, inner).unwrap();
     let mut image =
@@ -712,7 +712,7 @@ fn torn_gateway_pair_wal_replays_both_links_atomically() {
         .unwrap()
         .blocks
         .extend(pair_changes.blocks);
-    let pair = crate::core::journal_entries_for_tick(&mut state, &output);
+    let pair = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let directory = std::env::temp_dir().join(format!(
         "krasnokamen-gateway-crash-{}",
         uuid::Uuid::new_v4()
@@ -976,7 +976,7 @@ fn torn_portal_transfer_wal_recovers_exactly_one_entity_owner() {
         .unwrap()
         .entities_spawned
         .extend([player, mob]);
-    let initial = crate::core::journal_entries_for_tick(&mut state, &baseline);
+    let initial = crate::core::journal_entries_for_tick(&mut state, &baseline).unwrap();
     let source = frame(&mut state, BlockPos { x: 4, y: 70, z: 4 }, 2, 3, true);
     light(&mut state, source);
     for y in -1..=3 {
@@ -1008,7 +1008,7 @@ fn torn_portal_transfer_wal_recovers_exactly_one_entity_owner() {
         dimensions_travel::locate(&state, player).unwrap().0,
         Dimension::Nether
     );
-    let transfer = crate::core::journal_entries_for_tick(&mut state, &output);
+    let transfer = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(!transfer.iter().any(|entry| matches!(entry,crate::journal::JournalEntry::Ticket { owner,.. } if owner.starts_with("krasnokamen:portal:"))));
     let directory =
         std::env::temp_dir().join(format!("krasnokamen-portal-crash-{}", uuid::Uuid::new_v4()));
@@ -1206,7 +1206,7 @@ fn construction_drops_container_contents_and_replays_final_storage() {
                 position: pos,
                 state: state.world.block_at(pos.x, pos.y, pos.z).unwrap(),
             });
-        let initial = crate::core::journal_entries_for_tick(&mut state, &baseline);
+        let initial = crate::core::journal_entries_for_tick(&mut state, &baseline).unwrap();
         let mut changes = ChangeSet::default();
         match construction {
             0 => {
@@ -1247,7 +1247,7 @@ fn construction_drops_container_contents_and_replays_final_storage() {
         output_changes
             .entities_spawned
             .extend(changes.entities_spawned);
-        let replacement = crate::core::journal_entries_for_tick(&mut state, &output);
+        let replacement = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         let removal = replacement
             .iter()
             .position(|entry| {
@@ -1335,7 +1335,7 @@ fn container_placed_then_broken_in_one_tick_has_no_replayed_storage() {
     output_changes
         .entities_spawned
         .extend(changes.entities_spawned);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let replay = crate::journal::replay_batches(Default::default(), &[(1, output.tick, entries)]);
     assert!(!replay.block_entities.contains_key(&(pos.x, pos.y, pos.z)));
     assert!(

@@ -341,7 +341,7 @@ fn resident_opens_both_door_halves_and_closes_after_entering_bed_at_night() {
                 ..door
             };
             assert!(changes.blocks.iter().any(|change| change.position == upper));
-            let journal = crate::core::journal_entries_for_tick(&mut state, &output);
+            let journal = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
             for position in [door, upper] {
                 assert!(journal.iter().any(|entry| matches!(entry,
                     crate::journal::JournalEntry::Block { pos, state: id }

@@ -151,7 +151,7 @@ impl Drill {
         let (output, _, _) = crate::tick::run_tick(&mut self.state, inputs);
         Batch {
             tick: output.tick,
-            entries: journal_entries_for_tick(&mut self.state, &output),
+            entries: journal_entries_for_tick(&mut self.state, &output).unwrap(),
         }
     }
     fn append(&mut self, batch: &Batch) -> Result<(), CoreError> {

@@ -109,7 +109,7 @@ fn install(state: &mut TickState, slots: Vec<ItemStack>) {
 
 fn step(state: &mut TickState) -> Vec<JournalEntry> {
     let (output, _, _) = run_tick(state, &[]);
-    crate::core::journal_entries_for_tick(state, &output)
+    crate::core::journal_entries_for_tick(state, &output).unwrap()
 }
 
 fn hydrate(state: &mut TickState) {
@@ -412,7 +412,7 @@ fn latest_pending_owner_timer_image_wins_over_unchanged_chunk_cache() {
             .block_entities[&POS],
         cached,
     );
-    let entries = crate::core::journal_entries_for_tick(&mut original, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     assert_eq!(
         entries
             .iter()
@@ -621,7 +621,7 @@ fn breaking_active_stand_closes_view_and_drops_each_slot_once_with_replay_tombst
             }
         );
     }
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(
         entry,
         JournalEntry::RemoveBlockEntity {

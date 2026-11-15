@@ -55,7 +55,7 @@ fn default_game_mode_survives_wal_restart_and_checkpoint_and_joins_new_players()
         ],
     );
     assert_eq!(state.default_game_mode, GameMode::Creative);
-    let entries = journal_entries_for_tick(&mut state, &output);
+    let entries = journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(entries.iter().any(|entry| matches!(
         entry,
         JournalEntry::DefaultGameMode {
@@ -116,6 +116,7 @@ fn default_game_mode_survives_wal_restart_and_checkpoint_and_joins_new_players()
     let (output, _, _) = crate::tick::run_tick(&mut recovered, &[]);
     assert!(
         !journal_entries_for_tick(&mut recovered, &output)
+            .unwrap()
             .iter()
             .any(|entry| matches!(entry, JournalEntry::DefaultGameMode { .. })),
         "recovery must not re-journal the recovered value"
@@ -134,9 +135,9 @@ fn default_game_mode_survives_wal_restart_and_checkpoint_and_joins_new_players()
             },
         ],
     );
-    entries.extend(journal_entries_for_tick(&mut recovered, &output));
+    entries.extend(journal_entries_for_tick(&mut recovered, &output).unwrap());
     let (output, _, _) = crate::tick::run_tick(&mut recovered, &[]);
-    entries.extend(journal_entries_for_tick(&mut recovered, &output));
+    entries.extend(journal_entries_for_tick(&mut recovered, &output).unwrap());
     let written: Vec<_> = entries
         .iter()
         .filter_map(|entry| match entry {

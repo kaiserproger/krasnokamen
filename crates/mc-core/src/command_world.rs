@@ -1567,7 +1567,7 @@ mod tests {
         let (mut state, actor) = fixture();
         apply(&mut state, actor, "fill 0 200 0 1 200 1 stone").unwrap();
         let (output, _, _) = run_tick(&mut state, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         for x in 0..=1 {
             for z in 0..=1 {
                 assert_eq!(
@@ -1579,7 +1579,7 @@ mod tests {
         }
         apply(&mut state, actor, "setblock 0 200 0 dirt").unwrap();
         let (output, _, _) = run_tick(&mut state, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         assert!(entries.iter().any(|entry| matches!(entry, crate::journal::JournalEntry::Block { pos, state: block } if *pos == [0, 200, 0] && *block == state.registry.states.dirt)));
     }
 
@@ -1639,7 +1639,7 @@ mod tests {
             if mode == "destroy" {
                 assert!(!output.changes.entities_spawned.is_empty());
             }
-            let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+            let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
             assert!(entries.iter().any(|entry| matches!(entry, crate::journal::JournalEntry::RemoveBlockEntity { pos, .. } if *pos == [0, 200, 0])));
         }
     }
@@ -1649,7 +1649,7 @@ mod tests {
         let (mut state, actor) = fixture();
         apply(&mut state, actor, "spawnpoint @s 4 200 4 450 -30").unwrap();
         let (output, _, _) = run_tick(&mut state, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         let replay = crate::journal::replay_batches(
             Default::default(),
             &[(output.tick, output.tick, entries)],

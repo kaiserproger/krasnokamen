@@ -400,7 +400,7 @@ fn patterned_banner_item_use_preserves_layers_in_world_wire_and_journal() {
                     && mc_data::item_nbt::field(fields, "patterns") == Some(&expected)
                     && mc_data::item_nbt::field(fields, "CustomName") == Some(&name))),
         "the viewer must receive the banner block before its matching data");
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let batches = vec![(state.tick, state.tick, entries)];
     let replay = crate::journal::replay_batches(crate::journal::Replay::default(), &batches);
     let bytes = replay.opaque_block_entities[&(8, 201, 8)].as_ref().unwrap();

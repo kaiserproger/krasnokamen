@@ -182,7 +182,7 @@ fn data_unopened_loot_metadata_preserves_single_and_double_chests_through_checkp
             }
             if restart == "wal" {
                 let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-                let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+                let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
                 let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();
                 writer.append(output.tick, output.tick, &entries).unwrap();
                 writer.flush().unwrap();

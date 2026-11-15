@@ -133,11 +133,11 @@ fn playing_clock_skips_idle_wal_and_checkpoint_resumes_elapsed_time() {
         &mut ChangeSet::default(),
     );
     let (output, _, _) = crate::tick::run_tick(&mut original, &[]);
-    let _ = crate::core::journal_entries_for_tick(&mut original, &output);
+    let _ = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
     let started = original.jukeboxes[&key(POS)].elapsed.unwrap();
     for _ in 0..100 {
         let (output, _, _) = crate::tick::run_tick(&mut original, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut original, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut original, &output).unwrap();
         assert!(!entries.iter().any(|entry| matches!(
             entry,
             crate::journal::JournalEntry::OpaqueBlockEntity { pos, .. }

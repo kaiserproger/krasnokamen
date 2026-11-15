@@ -717,11 +717,11 @@ fn rain_wait_is_journaled_after_native_checkpoint_and_survives_anvil_export() {
         .unwrap();
     drop(store);
     // Clear the birth image; subsequent entries must be caused by flight ticks.
-    crate::core::journal_entries_for_tick(&mut state, &output);
+    crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
     for _ in 0..20 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         assert!(entries.iter().any(|entry| matches!(entry, crate::journal::JournalEntry::Entity { id: journal_id, .. } if *journal_id == id.0)));
         writer.append(state.tick, state.tick, &entries).unwrap();
     }

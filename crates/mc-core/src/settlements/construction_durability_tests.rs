@@ -66,7 +66,7 @@ fn one_builder_advance_seals_block_debit_and_cursor_before_closed_writer_replay(
         state.plugin_block_writes.is_empty(),
         "late canonical writes seal in this tick"
     );
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let directory = tempfile::tempdir().unwrap();
     {
         let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();

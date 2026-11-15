@@ -855,7 +855,7 @@ fn summon_common_state_survives_real_wal_replay_and_native_region_restart() {
         "krasnokamen-summon-common-{}",
         uuid::Uuid::new_v4()
     ));
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let mut writer = crate::journal::JournalWriter::open(&root, 1).unwrap();
     writer.append(1, output.tick, &entries).unwrap();
     writer.flush().unwrap();

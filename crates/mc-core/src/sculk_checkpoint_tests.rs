@@ -228,7 +228,7 @@ fn replayed_replacement_has_no_removal_queued_for_the_first_quiet_live_tick() {
     );
     restored.tickets.insert("replay-test".into(), (chunk, 0));
     let (output, _, _) = crate::tick::run_tick(&mut restored, &[]);
-    let entries = journal_entries_for_tick(&mut restored, &output);
+    let entries = journal_entries_for_tick(&mut restored, &output).unwrap();
     assert!(!entries.iter().any(|entry| matches!(entry, JournalEntry::RemoveBlockEntity { pos: cell, .. } if *cell == [pos.x, pos.y, pos.z])));
     assert!(!entries.iter().any(|entry| matches!(entry, JournalEntry::OpaqueBlockEntity { pos: cell, .. } if *cell == [pos.x, pos.y, pos.z])));
     assert_eq!(

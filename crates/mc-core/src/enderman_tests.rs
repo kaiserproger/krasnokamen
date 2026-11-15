@@ -254,7 +254,7 @@ fn enderman_anger_and_teleport_survive_wal_native_restart_and_anvil_export() {
     let expected = state.entities.row(slot).special_mob.as_deref().cloned();
     assert!(matches!(expected, Some(Retained::Enderman { .. })));
     let mut writer = crate::journal::JournalWriter::open(directory.path(), 1).unwrap();
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     let old = state.entities.pos(slot);
     state.merge_damage.push((
@@ -272,7 +272,7 @@ fn enderman_anger_and_teleport_survive_wal_native_restart_and_anvil_export() {
     assert_ne!(new, old);
     assert_eq!(state.entities.row(slot).health, 40.0);
     assert!(output.changes.entities_appearance_changed.contains(&mob));
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);
@@ -353,7 +353,7 @@ fn slime_split_children_are_journaled_and_export_size_name_and_persistence() {
                 continue;
             }
             assert!((2..=4).contains(&children.len()));
-            let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+            let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
             let replay = crate::journal::replay_batches(
                 crate::journal::Replay::default(),
                 &[(0, output.tick, entries)],

@@ -274,7 +274,7 @@ fn warning_and_inflight_shriek_survive_wal_checkpoint_restart_without_duplicate_
         .uuid
         .to_string();
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let root = std::env::temp_dir().join(format!("krasnokamen-shrieker-{}", uuid::Uuid::new_v4()));
     std::fs::create_dir_all(&root).unwrap();
     let mut writer = JournalWriter::open(&root, 1).unwrap();
@@ -503,11 +503,11 @@ fn disconnected_warning_anchor_is_journaled_and_rejoin_does_not_count_offline_ti
     let actor = state.connections.entity_of(connection).unwrap();
     state.players.get_mut(&actor).unwrap().warden_warning = Warning::warned(3, output.tick);
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     for _ in 0..5 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         assert!(!entries.iter().any(|entry| matches!(
             entry,
             JournalEntry::Player { .. } | JournalEntry::Statistics { .. }
@@ -515,7 +515,7 @@ fn disconnected_warning_anchor_is_journaled_and_rejoin_does_not_count_offline_ti
         writer.append(output.tick, output.tick, &entries).unwrap();
     }
     let (output, _, _) = crate::tick::run_tick(&mut state, &[PlayerInput::Leave { connection }]);
-    let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert_eq!(
         entries
             .iter()
@@ -555,7 +555,7 @@ fn disconnected_warning_anchor_is_journaled_and_rejoin_does_not_count_offline_ti
         ),
         (6, 3, 194)
     );
-    let entries = crate::core::journal_entries_for_tick(&mut recovered, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut recovered, &output).unwrap();
     let replay = replay_batches(
         Replay::default(),
         &[

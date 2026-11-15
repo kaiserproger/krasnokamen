@@ -340,7 +340,7 @@ fn station_disconnect_overflow_drops_real_custody_once_and_journals_it() {
                 .iter()
                 .all(|(_, stack)| stack.extended().banner_patterns.is_empty())
         );
-        let journal = crate::core::journal_entries_for_tick(&mut state, &output);
+        let journal = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         for (id, stack) in &drops {
             assert!(journal.iter().any(|entry| matches!(
                 entry,

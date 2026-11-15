@@ -383,7 +383,7 @@ fn inhabited_time_production_tick_wal_recovers_and_closes_without_players_after_
         };
         let (output, _, _) = crate::tick::run_tick(&mut state, &input);
         assert_eq!(output.tick, tick);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         for entry in &entries {
             if let crate::journal::JournalEntry::InhabitedTime { image } = entry {
                 assert_eq!(
@@ -409,7 +409,7 @@ fn inhabited_time_production_tick_wal_recovers_and_closes_without_players_after_
     );
     for _ in 0..3 {
         let (output, _, _) = crate::tick::run_tick(&mut recovered, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut recovered, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut recovered, &output).unwrap();
         writer.append(output.tick, output.tick, &entries).unwrap();
         assert_eq!(
             recovered.world.inhabited_time(pos),
@@ -943,7 +943,7 @@ fn custom_name_visible_survives_native_store_restart_without_opaque_shadow() {
         Arc::make_mut(&mut state.entities.row_mut(slot).appearance).custom_name_visible = visible;
         state.appearance_changed.push(id);
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
         let replay =
             crate::journal::replay_batches(Replay::default(), &[(1, output.tick, entries)]);
         assert_eq!(
@@ -1210,7 +1210,7 @@ fn statistics_only_patch_and_non_statistics_full_player_postimage() {
             permission_level: 0,
         }],
     );
-    crate::core::journal_entries_for_tick(&mut state, &output);
+    crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let actor = state.connections.entity_of(ConnectionId(1)).unwrap();
     state
         .players
@@ -1218,7 +1218,7 @@ fn statistics_only_patch_and_non_statistics_full_player_postimage() {
         .unwrap()
         .statistics
         .increment_custom(CustomStat::Jump, 1);
-    let statistics_only = crate::core::journal_entries_for_tick(&mut state, &output);
+    let statistics_only = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(statistics_only.iter().any(|entry| matches!(entry,
         JournalEntry::Statistics { changes, .. } if changes.contains(&(8, CustomStat::Jump.id(), 1)))));
     assert!(
@@ -1230,7 +1230,7 @@ fn statistics_only_patch_and_non_statistics_full_player_postimage() {
     let player = state.players.get_mut(&actor).unwrap();
     player.inventory.selected = 1;
     player.statistics.increment_custom(CustomStat::Jump, 1);
-    let changed = crate::core::journal_entries_for_tick(&mut state, &output);
+    let changed = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(changed.iter().any(|entry| matches!(entry,
         JournalEntry::Player { selected: 1, statistics, .. } if statistics.get_custom(CustomStat::Jump) == 2)));
     assert!(
@@ -1261,14 +1261,14 @@ fn idle_statistics_wal_bytes_compare_full_compact_and_lazy_for_ten_players() {
         })
         .collect();
     let (joined, _, _) = crate::tick::run_tick(&mut state, &joins);
-    crate::core::journal_entries_for_tick(&mut state, &joined);
+    crate::core::journal_entries_for_tick(&mut state, &joined).unwrap();
     let mut full_bytes = 0_usize;
     let mut compact_bytes = 0_usize;
     let mut lazy_bytes = 0_usize;
     let mut lazy_statistics_bytes = 0_usize;
     for _ in 0..200 {
         let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-        for entry in crate::core::journal_entries_for_tick(&mut state, &output) {
+        for entry in crate::core::journal_entries_for_tick(&mut state, &output).unwrap() {
             match &entry {
                 JournalEntry::Player { .. } => {
                     lazy_bytes += serde_json::to_vec(&entry).unwrap().len() + 1;
@@ -1284,7 +1284,7 @@ fn idle_statistics_wal_bytes_compare_full_compact_and_lazy_for_ten_players() {
         // Force the previous eager/full-image strategy through the real writer
         // selection path. This test-only baseline is not another live owner.
         state.journaled_players.clear();
-        for mut entry in crate::core::journal_entries_for_tick(&mut state, &output) {
+        for mut entry in crate::core::journal_entries_for_tick(&mut state, &output).unwrap() {
             if let JournalEntry::Player {
                 uuid,
                 statistics,
@@ -1339,7 +1339,7 @@ fn idle_statistics_wal_bytes_compare_full_compact_and_lazy_for_ten_players() {
     // Exercise a zero-valued change without introducing another tick's real
     // warning mutation; the separate regression also checks full postimages.
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    crate::core::journal_entries_for_tick(&mut state, &output);
+    crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let actor = state.connections.entity_of(ConnectionId(1)).unwrap();
     state
         .players
@@ -1347,13 +1347,13 @@ fn idle_statistics_wal_bytes_compare_full_compact_and_lazy_for_ten_players() {
         .unwrap()
         .statistics
         .set_custom(CustomStat::Jump, 0);
-    let reset = crate::core::journal_entries_for_tick(&mut state, &output);
+    let reset = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(reset.iter().any(|entry| matches!(entry,
         JournalEntry::Statistics { changes, .. } if changes.contains(&(8, CustomStat::Jump.id(), 0)))));
     let player = state.players.get_mut(&actor).unwrap();
     player.inventory.selected = 1;
     player.statistics.increment_custom(CustomStat::Jump, 1);
-    let changed = crate::core::journal_entries_for_tick(&mut state, &output);
+    let changed = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(changed.iter().any(|entry| matches!(entry,
         JournalEntry::Player { selected: 1, statistics, .. } if statistics.get_custom(CustomStat::Jump) == 1)));
     assert!(

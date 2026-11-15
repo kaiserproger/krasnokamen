@@ -70,7 +70,7 @@ fn actual_region_checkpoint_and_wal_tail_restore_tame_owner_collar_and_equipment
     );
     hold(&mut state, actor, "blue_dye", 1);
     let (out, _, _) = run_tick(&mut state, &[use_entity(wolf)]);
-    let entries = journal_entries_for_tick(&mut state, &out);
+    let entries = journal_entries_for_tick(&mut state, &out).unwrap();
     let mut writer = JournalWriter::open(&dir, 1).unwrap();
     writer.append(1, state.tick, &entries).unwrap();
     writer.flush().unwrap();
@@ -140,14 +140,14 @@ fn happy_ghast_admission_leave_and_reconnect_survive_wal_recovery() {
             vec![first_uuid, second_uuid]
         );
         let (baseline, _, _) = run_tick(&mut state, &[]);
-        let initial = journal_entries_for_tick(&mut state, &baseline);
+        let initial = journal_entries_for_tick(&mut state, &baseline).unwrap();
         let (output, _, _) = run_tick(
             &mut state,
             &[PlayerInput::Leave {
                 connection: ConnectionId(leaving),
             }],
         );
-        let entries = journal_entries_for_tick(&mut state, &output);
+        let entries = journal_entries_for_tick(&mut state, &output).unwrap();
         let expected = if leaving == 1 {
             second_uuid
         } else {

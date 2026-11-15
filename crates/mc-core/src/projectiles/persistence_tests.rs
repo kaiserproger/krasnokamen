@@ -748,7 +748,7 @@ fn landed_battle_arrow() -> (crate::tick::TickState, crate::boundary::EntityId, 
     )
     .unwrap();
     let (output, _, _) = crate::tick::run_tick(&mut state, &[]);
-    crate::core::journal_entries_for_tick(&mut state, &output);
+    crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     let record = state
         .entities
         .row(state.entities.slot_of(arrow).unwrap())
@@ -819,7 +819,7 @@ fn battle_arrow_real_checkpoint_wal_restart_matches_uninterrupted_expiry() {
     let (mut live, arrow, landed_at) = landed_battle_arrow();
     for _ in 0..37 {
         let (output, _, _) = crate::tick::run_tick(&mut live, &[]);
-        crate::core::journal_entries_for_tick(&mut live, &output);
+        crate::core::journal_entries_for_tick(&mut live, &output).unwrap();
     }
     let checkpoint_tick = live.tick;
     let entity =
@@ -849,7 +849,7 @@ fn battle_arrow_real_checkpoint_wal_restart_matches_uninterrupted_expiry() {
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
     for _ in 0..13 {
         let (output, _, _) = crate::tick::run_tick(&mut live, &[]);
-        let entries = crate::core::journal_entries_for_tick(&mut live, &output);
+        let entries = crate::core::journal_entries_for_tick(&mut live, &output).unwrap();
         writer.append(output.tick, output.tick, &entries).unwrap();
     }
     writer.flush().unwrap();
@@ -895,7 +895,7 @@ fn battle_arrow_support_loss_clears_anchor_across_checkpoint_and_wal_restart() {
     let (mut live, arrow, landed_at) = landed_battle_arrow();
     for _ in 0..37 {
         let (output, _, _) = crate::tick::run_tick(&mut live, &[]);
-        crate::core::journal_entries_for_tick(&mut live, &output);
+        crate::core::journal_entries_for_tick(&mut live, &output).unwrap();
     }
     let checkpoint_tick = live.tick;
     let slot = live.entities.slot_of(arrow).unwrap();
@@ -943,7 +943,7 @@ fn battle_arrow_support_loss_clears_anchor_across_checkpoint_and_wal_restart() {
     let directory = tempfile::tempdir().unwrap();
     let mut writer = JournalWriter::open(directory.path(), 1).unwrap();
     let (output, _, _) = crate::tick::run_tick(&mut live, &[]);
-    let entries = crate::core::journal_entries_for_tick(&mut live, &output);
+    let entries = crate::core::journal_entries_for_tick(&mut live, &output).unwrap();
     writer.append(output.tick, output.tick, &entries).unwrap();
     writer.flush().unwrap();
     drop(writer);

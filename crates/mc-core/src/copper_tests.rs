@@ -141,7 +141,7 @@ fn step(state: &mut TickState) -> (u64, Vec<JournalEntry>) {
     let (output, _, _) = run_tick(state, &[]);
     (
         output.tick,
-        crate::core::journal_entries_for_tick(state, &output),
+        crate::core::journal_entries_for_tick(state, &output).unwrap(),
     )
 }
 fn golem(state: &mut TickState, pos: [f64; 3]) -> EntityId {
@@ -1006,7 +1006,7 @@ fn copper_carried_items_drop_on_non_player_death_once_after_double_wal_replay() 
     assert!(output.changes.entity_events.iter().any(|event| {
         matches!(event, crate::boundary::EntityEvent::Death { entity } if *entity == id)
     }));
-    let death_entries = crate::core::journal_entries_for_tick(&mut state, &output);
+    let death_entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
     assert!(death_entries.iter().any(|entry| match entry {
         JournalEntry::Entity {
             id: dead,

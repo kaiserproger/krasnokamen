@@ -227,7 +227,7 @@ fn generation_creature_groups_follow_biomes_and_are_claimed_once() {
             let (mut output, _, _) = crate::tick::run_tick(&mut state, &[]);
             let ids = changes.entities_spawned.clone();
             output.changes = Arc::new(std::mem::take(&mut changes));
-            let entries = crate::core::journal_entries_for_tick(&mut state, &output);
+            let entries = crate::core::journal_entries_for_tick(&mut state, &output).unwrap();
             let replay = crate::journal::replay_batches(
                 crate::journal::Replay::default(),
                 &[(output.tick, output.tick, entries)],
