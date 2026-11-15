@@ -153,6 +153,37 @@ fn locate_uses_non_village_start_and_actual_underground_height() {
     );
 }
 
+#[test]
+fn locate_namespaced_village_prefix_uses_structure_sites() {
+    struct Structures;
+    impl ChunkGenerator for Structures {
+        fn generate(&self, _: ChunkPos) -> Chunk {
+            panic!("locate must not generate chunks");
+        }
+        fn structure_sites_in_region(
+            &self,
+            _: (i32, i32),
+            _: (i32, i32),
+        ) -> Vec<mc_world::chunk::GeneratedStructureSite> {
+            vec![mc_world::chunk::GeneratedStructureSite {
+                structure: id("example:village_tower"),
+                position: BlockPos { x: 40, y: 70, z: 56 },
+                start_chunk: (2, 3),
+            }]
+        }
+    }
+    let hit = search_structure(
+        &Structures,
+        (0, 64, 0),
+        &[id("example:village_tower")],
+        &SavedStarts::new(),
+        &StructureSearchOptions::default(),
+    )
+    .expect("namespaced village-prefix structure is found");
+    assert_eq!(hit.found_id, id("example:village_tower"));
+    assert_eq!(hit.pos, (40, 70, 56));
+}
+
 fn fake_generator() -> FakeGenerator {
     let a = FakeGenerator::site((3, -2), "minecraft:village_plains");
     let b = FakeGenerator::site((-5, 4), "minecraft:village_desert");
@@ -437,6 +468,25 @@ fn invalid_structure_id_fails_without_queuing() {
         "commands.locate.structure.invalid"
     ));
     assert_eq!(state.locate.in_flight.get(&connection), None);
+}
+
+#[test]
+fn locate_admits_only_selected_datapack_structure_ids() {
+    let (mut state, connection) = locate_fixture();
+    Arc::make_mut(&mut state.registry).datapack_structures =
+        Arc::from([id("example:village_tower")]);
+    let executor = state.connections.entity_of(connection).unwrap();
+    let target = |name| LocateCommand::Structure(ResourceOrTag {
+        tag: false,
+        id: id(name),
+    });
+    super::execute(&mut state, connection, executor, &target("other:village_tower"));
+    assert!(styled_key(&state, connection, "commands.locate.structure.invalid"));
+    assert_eq!(state.locate.in_flight.get(&connection), None);
+    state.outbox.clear();
+    super::execute(&mut state, connection, executor, &target("example:village_tower"));
+    assert!(styled_key(&state, connection, "commands.locate.structure.searching"));
+    assert_eq!(state.locate.in_flight.get(&connection), Some(&1));
 }
 
 #[test]

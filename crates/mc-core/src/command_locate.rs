@@ -380,12 +380,15 @@ fn search_structure(
         centre.0.saturating_add(options.radius),
         centre.1.saturating_add(options.radius),
     );
-    let mut sites = if targets.iter().any(|id| !id.path().starts_with("village_")) {
+    let vanilla_village = |id: &Identifier| {
+        id.namespace() == "minecraft" && id.path().starts_with("village_")
+    };
+    let mut sites = if targets.iter().any(|id| !vanilla_village(id)) {
         generator.structure_sites_in_region(min, max)
     } else {
         Vec::new()
     };
-    if targets.iter().any(|id| id.path().starts_with("village_")) {
+    if targets.iter().any(vanilla_village) {
         let radius = MAX_STRUCTURE_SEARCH_RADIUS_CHUNKS.min(options.radius);
         for site in generator.village_sites_in_region(
             (
@@ -807,13 +810,14 @@ fn execute_structure(
     origin: (i32, i32, i32),
     target: &ResourceOrTag,
 ) {
-    let (targets, display) = match resolve_structure_target(target) {
-        Ok(resolved) => resolved,
-        Err(key) => {
-            failure(state, connection, key, vec![text(target.printable())]);
-            return;
-        }
-    };
+    let (targets, display) =
+        match resolve_structure_target(target, state.registry.datapack_structures()) {
+            Ok(resolved) => resolved,
+            Err(key) => {
+                failure(state, connection, key, vec![text(target.printable())]);
+                return;
+            }
+        };
     if submit(
         state,
         connection,
@@ -1000,17 +1004,20 @@ fn poi_type_of(block: &Identifier) -> Identifier {
     Identifier::parse("minecraft:meeting").expect("static POI id")
 }
 
-/// Resolve a structure target: id must be a known vanilla structure, tags
-/// expand to member structures. Returns member ids plus the display name.
+/// Resolve a structure target against vanilla and the enabled datapack catalog;
+/// tags expand to member structures. Returns member ids plus the display name.
 fn resolve_structure_target(
     target: &ResourceOrTag,
+    datapack_structures: &[Identifier],
 ) -> Result<(Vec<Identifier>, String), &'static str> {
     if target.tag {
         let members =
             resolve_structure_tag(&target.id).ok_or("commands.locate.structure.invalid")?;
         let display = format!("#{}", target.id.as_str());
         Ok((members, display))
-    } else if KNOWN_STRUCTURES.contains(&target.id.as_str()) {
+    } else if KNOWN_STRUCTURES.contains(&target.id.as_str())
+        || datapack_structures.contains(&target.id)
+    {
         let display = target.id.as_str().to_owned();
         Ok((vec![target.id.clone()], display))
     } else {
